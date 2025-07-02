@@ -1,34 +1,40 @@
 //! This module defines [Fact].
 
-use std::{fmt::Display, hash::Hash};
+use std::{
+    fmt::Display,
+    hash::Hash,
+    ops::{Deref, DerefMut, Index, IndexMut},
+};
 
 use crate::{
-    chase_model::components::{
-        atom::{ground_atom::GroundAtom, ChaseAtom},
-        ChaseComponent,
-    },
+    chase_model::components::atom::{ground_atom::GroundAtom, ChaseAtom},
     rule_model::{
-        error::{
-            hint::Hint, validation_error::ValidationErrorKind, ComponentParseError,
-            ValidationErrorBuilder,
-        },
+        error::{hint::Hint, validation_error::ValidationError, ValidationReport},
         origin::Origin,
-        translation::{literal::HeadAtom, TranslationComponent},
+        pipeline::id::ProgramComponentId,
+        translation::{literal::HeadAtom, ProgramParseReport, TranslationComponent},
     },
 };
 
 use super::{
     atom::Atom,
+    component_iterator, component_iterator_mut,
     tag::Tag,
-    term::{primitive::Primitive, Term},
-    IterablePrimitives, IterableVariables, ProgramComponent, ProgramComponentKind,
+    term::{
+        primitive::{variable::Variable, Primitive},
+        Term,
+    },
+    ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent, IterablePrimitives,
+    IterableVariables, ProgramComponent, ProgramComponentKind,
 };
 
 /// A (ground) fact
-#[derive(Debug, Clone, Eq)]
+#[derive(Debug, Clone)]
 pub struct Fact {
     /// Origin of this component
     origin: Origin,
+    /// Id of this component
+    id: ProgramComponentId,
 
     /// Predicate of the fact
     predicate: Tag,
@@ -41,12 +47,14 @@ impl Fact {
     pub fn new<Terms: IntoIterator<Item = Term>>(predicate: Tag, subterms: Terms) -> Self {
         Self {
             origin: Origin::Created,
+            id: ProgramComponentId::default(),
             predicate,
             terms: subterms.into_iter().collect(),
         }
     }
 
-    pub fn parse(input: &str) -> Result<Self, ComponentParseError> {
+    /// Construct this object from a string.
+    pub fn parse(input: &str) -> Result<Self, ProgramParseReport> {
         Ok(Fact::from(HeadAtom::parse(input)?.into_inner()))
     }
 
@@ -56,13 +64,26 @@ impl Fact {
     }
 
     /// Return an iterator over the subterms of this fact.
-    pub fn subterms(&self) -> impl Iterator<Item = &Term> {
+    pub fn terms(&self) -> impl Iterator<Item = &Term> {
         self.terms.iter()
     }
 
     /// Return an mutable iterator over the subterms of this fact.
-    pub fn subterms_mut(&mut self) -> impl Iterator<Item = &mut Term> {
+    pub fn terms_mut(&mut self) -> impl Iterator<Item = &mut Term> {
         self.terms.iter_mut()
+    }
+
+    /// Push a [Term] to the end of this atom.
+    pub fn push(&mut self, term: Term) {
+        self.terms.push(term);
+    }
+
+    /// Remove the [Term] at the given index and return it.
+    ///
+    /// # Panics
+    /// Panics if the index is out of bounds.
+    pub fn remove(&mut self, index: usize) -> Term {
+        self.terms.remove(index)
     }
 
     /// If the given [Term] is a function term,
@@ -77,12 +98,41 @@ impl Fact {
     }
 }
 
+impl Index<usize> for Fact {
+    type Output = Term;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.terms[index]
+    }
+}
+
+impl IndexMut<usize> for Fact {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.terms[index]
+    }
+}
+
+impl Deref for Fact {
+    type Target = [Term];
+
+    fn deref(&self) -> &Self::Target {
+        &self.terms
+    }
+}
+
+impl DerefMut for Fact {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.terms
+    }
+}
+
 impl From<Atom> for Fact {
     fn from(value: Atom) -> Self {
         Self {
-            origin: *value.origin(),
+            origin: value.origin(),
+            id: ProgramComponentId::default(),
             predicate: value.predicate(),
-            terms: value.arguments().cloned().collect(),
+            terms: value.terms().cloned().collect(),
         }
     }
 }
@@ -109,6 +159,8 @@ impl PartialEq for Fact {
     }
 }
 
+impl Eq for Fact {}
+
 impl Hash for Fact {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.predicate.hash(state);
@@ -116,62 +168,105 @@ impl Hash for Fact {
     }
 }
 
-impl ProgramComponent for Fact {
-    fn origin(&self) -> &Origin {
-        &self.origin
+impl ComponentBehavior for Fact {
+    fn kind(&self) -> ProgramComponentKind {
+        ProgramComponentKind::Fact
     }
 
-    fn set_origin(mut self, origin: Origin) -> Self
-    where
-        Self: Sized,
-    {
-        self.origin = origin;
-        self
-    }
+    fn validate(&self) -> Result<(), ValidationReport> {
+        let mut report = ValidationReport::default();
 
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()>
-    where
-        Self: Sized,
-    {
+        for child in self.children() {
+            report.merge(child.validate());
+        }
+
         if !self.predicate.is_valid() {
-            builder.report_error(
-                *self.predicate.origin(),
-                ValidationErrorKind::InvalidTermTag(self.predicate.to_string()),
+            report.add(
+                &self.predicate,
+                ValidationError::InvalidPredicateName {
+                    predicate_name: self.predicate.to_string(),
+                },
             );
         }
 
-        for term in self.subterms() {
+        if self.is_empty() {
+            report.add(self, ValidationError::UnsupportedAtomEmpty);
+        }
+
+        for term in self.terms() {
             if term.is_map() || term.is_tuple() || term.is_function() {
-                builder
-                    .report_error(*term.origin(), ValidationErrorKind::UnsupportedComplexTerm)
+                report
+                    .add(term, ValidationError::UnsupportedComplexTerm)
                     .add_hint_option(Self::hint_term_operation(term));
-                return None;
             }
 
             if term.is_aggregate() {
-                builder.report_error(*term.origin(), ValidationErrorKind::FactSubtermAggregate);
-                return None;
+                report.add(term, ValidationError::FactSubtermAggregate);
             }
 
             if let Some(variable) = term.variables().find(|variable| !variable.is_global()) {
-                builder.report_error(*variable.origin(), ValidationErrorKind::FactNonGround);
+                report.add(variable, ValidationError::FactNonGround);
                 continue;
             }
-
-            term.validate(builder)?;
         }
 
-        Some(())
+        report.result()
     }
 
-    fn kind(&self) -> ProgramComponentKind {
-        ProgramComponentKind::Fact
+    fn boxed_clone(&self) -> Box<dyn ProgramComponent> {
+        Box::new(self.clone())
+    }
+}
+
+impl ComponentSource for Fact {
+    type Source = Origin;
+
+    fn origin(&self) -> Origin {
+        self.origin.clone()
+    }
+
+    fn set_origin(&mut self, origin: Origin) {
+        self.origin = origin;
+    }
+}
+
+impl ComponentIdentity for Fact {
+    fn id(&self) -> ProgramComponentId {
+        self.id
+    }
+
+    fn set_id(&mut self, id: ProgramComponentId) {
+        self.id = id;
+    }
+}
+
+impl IterableVariables for Fact {
+    fn variables<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Variable> + 'a> {
+        Box::new(self.terms.iter().flat_map(|term| term.variables()))
+    }
+
+    fn variables_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Variable> + 'a> {
+        Box::new(self.terms.iter_mut().flat_map(|term| term.variables_mut()))
+    }
+}
+
+impl IterableComponent for Fact {
+    fn children<'a>(&'a self) -> Box<dyn Iterator<Item = &'a dyn ProgramComponent> + 'a> {
+        let subterm_iterator = component_iterator(self.terms.iter());
+        Box::new(subterm_iterator)
+    }
+
+    fn children_mut<'a>(
+        &'a mut self,
+    ) -> Box<dyn Iterator<Item = &'a mut dyn ProgramComponent> + 'a> {
+        let subterm_iterator = component_iterator_mut(self.terms.iter_mut());
+        Box::new(subterm_iterator)
     }
 }
 
 impl IterablePrimitives for Fact {
     fn primitive_terms<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Primitive> + 'a> {
-        Box::new(self.subterms().flat_map(|term| term.primitive_terms()))
+        Box::new(self.terms().flat_map(|term| term.primitive_terms()))
     }
 
     fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Term> + 'a> {
@@ -185,12 +280,13 @@ impl IterablePrimitives for Fact {
 
 impl From<GroundAtom> for Fact {
     fn from(value: GroundAtom) -> Self {
-        let origin = *value.origin();
+        let origin = Origin::Created; // TODO
         let predicate = value.predicate();
         let terms = value.terms().cloned().map(Term::from).collect();
 
         Self {
             origin,
+            id: ProgramComponentId::default(),
             predicate,
             terms,
         }

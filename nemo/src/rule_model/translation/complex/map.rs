@@ -8,7 +8,7 @@ use crate::{
             tag::Tag,
             term::{map::Map, Term},
         },
-        error::TranslationError,
+        origin::Origin,
         translation::{ASTProgramTranslation, TranslationComponent},
     },
 };
@@ -16,10 +16,10 @@ use crate::{
 impl TranslationComponent for Map {
     type Ast<'a> = ast::expression::complex::map::Map<'a>;
 
-    fn build_component<'a, 'b>(
-        translation: &mut ASTProgramTranslation<'a, 'b>,
-        map: &'b Self::Ast<'a>,
-    ) -> Result<Self, TranslationError> {
+    fn build_component<'a>(
+        translation: &mut ASTProgramTranslation,
+        map: &Self::Ast<'a>,
+    ) -> Option<Self> {
         let mut subterms = Vec::new();
         for (key, value) in map.key_value() {
             let key = Term::build_component(translation, key)?;
@@ -30,13 +30,12 @@ impl TranslationComponent for Map {
 
         let result = match map.tag() {
             Some(tag) => {
-                let tag = Tag::new(translation.resolve_tag(tag)?)
-                    .set_origin(translation.register_node(tag));
+                let tag = Origin::ast(Tag::new(translation.resolve_tag(tag)?), tag);
                 Map::new_tagged(Some(tag), subterms)
             }
             None => Map::new_unnamed(subterms),
         };
 
-        Ok(translation.register_component(result, map))
+        Some(Origin::ast(result, map))
     }
 }

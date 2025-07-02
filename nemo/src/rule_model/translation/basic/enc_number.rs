@@ -6,8 +6,8 @@ use nemo_physical::datavalues::AnyDataValue;
 use crate::newtype_wrapper;
 use crate::parser::ast;
 
+use crate::rule_model::translation::ASTProgramTranslation;
 use crate::rule_model::translation::TranslationComponent;
-use crate::rule_model::{error::TranslationError, translation::ASTProgramTranslation};
 
 pub(crate) struct EncodedNumberLiteral(AnyDataValue);
 newtype_wrapper!(EncodedNumberLiteral: AnyDataValue);
@@ -15,11 +15,11 @@ newtype_wrapper!(EncodedNumberLiteral: AnyDataValue);
 impl TranslationComponent for EncodedNumberLiteral {
     type Ast<'a> = ast::expression::basic::enc_number::EncodedNumber<'a>;
 
-    fn build_component<'a, 'b>(
-        _translation: &mut ASTProgramTranslation<'a, 'b>,
-        enc_number: &'b Self::Ast<'a>,
-    ) -> Result<Self, TranslationError> {
-        Ok(EncodedNumberLiteral(match enc_number.value() {
+    fn build_component<'a>(
+        _translation: &mut ASTProgramTranslation,
+        enc_number: &Self::Ast<'a>,
+    ) -> Option<Self> {
+        Some(EncodedNumberLiteral(match enc_number.value() {
             ast::expression::basic::enc_number::EncodedNumberValue::Integer(integer) => {
                 AnyDataValue::new_integer_from_i64(integer)
             }

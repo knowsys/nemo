@@ -2,24 +2,29 @@
 
 use crate::rule_model::{
     components::{
+        component_iterator, component_iterator_mut,
         tag::Tag,
         term::{
             primitive::{variable::Variable, Primitive},
             Term,
         },
+        ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent,
         IterablePrimitives, IterableVariables, ProgramComponent, ProgramComponentKind,
     },
-    error::ValidationErrorBuilder,
+    error::ValidationReport,
     origin::Origin,
+    pipeline::id::ProgramComponentId,
 };
 
 use super::attribute::ImportExportAttribute;
 
 /// Attribute value pairs defining import or export parameters
-#[derive(Debug, Clone, Eq)]
+#[derive(Debug, Clone)]
 pub struct ImportExportSpec {
     /// Origin of this component
     origin: Origin,
+    /// Id of this component
+    id: ProgramComponentId,
 
     /// File format
     format: Tag,
@@ -36,6 +41,7 @@ impl ImportExportSpec {
     ) -> Self {
         Self {
             origin: Origin::Created,
+            id: ProgramComponentId::default(),
             format: Tag::new(format.to_string()),
             map: map.into_iter().collect(),
         }
@@ -45,6 +51,7 @@ impl ImportExportSpec {
     pub fn empty(format: &str) -> Self {
         Self {
             origin: Origin::Created,
+            id: ProgramComponentId::default(),
             format: Tag::new(format.to_string()),
             map: Vec::default(),
         }
@@ -87,15 +94,16 @@ impl ImportExportSpec {
     }
 
     /// Reduce the [Term]s in each key-value pair returning a copy.
-    pub fn reduce(&self) -> Self {
-        Self {
-            origin: self.origin,
+    pub fn reduce(&self) -> Option<Self> {
+        Some(Self {
+            origin: self.origin.clone(),
+            id: ProgramComponentId::default(),
             format: self.format.clone(),
             map: self
                 .key_value()
-                .map(|(key, value)| (key.clone(), value.reduce()))
-                .collect(),
-        }
+                .map(|(key, value)| Some((key.clone(), value.reduce()?)))
+                .collect::<Option<Vec<_>>>()?,
+        })
     }
 }
 
@@ -121,6 +129,8 @@ impl PartialEq for ImportExportSpec {
     }
 }
 
+impl Eq for ImportExportSpec {}
+
 impl PartialOrd for ImportExportSpec {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         self.map.partial_cmp(&other.map)
@@ -134,33 +144,60 @@ impl std::hash::Hash for ImportExportSpec {
     }
 }
 
-impl ProgramComponent for ImportExportSpec {
-    fn origin(&self) -> &Origin {
-        &self.origin
-    }
-
-    fn set_origin(mut self, origin: Origin) -> Self
-    where
-        Self: Sized,
-    {
-        self.origin = origin;
-        self
-    }
-
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()>
-    where
-        Self: Sized,
-    {
-        for (key, value) in self.key_value() {
-            key.validate(builder)?;
-            value.validate(builder)?;
-        }
-
-        Some(())
-    }
-
+impl ComponentBehavior for ImportExportSpec {
     fn kind(&self) -> ProgramComponentKind {
         ProgramComponentKind::Map
+    }
+
+    fn validate(&self) -> Result<(), ValidationReport> {
+        let mut report = ValidationReport::default();
+
+        for (key, value) in self.key_value() {
+            report.merge(key.validate());
+            report.merge(value.validate());
+        }
+
+        report.result()
+    }
+
+    fn boxed_clone(&self) -> Box<dyn ProgramComponent> {
+        Box::new(self.clone())
+    }
+}
+
+impl ComponentSource for ImportExportSpec {
+    type Source = Origin;
+
+    fn origin(&self) -> Origin {
+        self.origin.clone()
+    }
+
+    fn set_origin(&mut self, origin: Origin) {
+        self.origin = origin;
+    }
+}
+
+impl ComponentIdentity for ImportExportSpec {
+    fn id(&self) -> ProgramComponentId {
+        self.id
+    }
+
+    fn set_id(&mut self, id: ProgramComponentId) {
+        self.id = id;
+    }
+}
+
+impl IterableComponent for ImportExportSpec {
+    fn children<'a>(&'a self) -> Box<dyn Iterator<Item = &'a dyn ProgramComponent> + 'a> {
+        Box::new(component_iterator(self.map.iter().map(|(_, term)| term)))
+    }
+
+    fn children_mut<'a>(
+        &'a mut self,
+    ) -> Box<dyn Iterator<Item = &'a mut dyn ProgramComponent> + 'a> {
+        Box::new(component_iterator_mut(
+            self.map.iter_mut().map(|(_, term)| term),
+        ))
     }
 }
 

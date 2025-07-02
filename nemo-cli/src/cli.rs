@@ -1,9 +1,8 @@
 //! Contains structures and functionality for the binary
 use std::path::PathBuf;
 
-use nemo::{
-    error::Error, io::ExportManager, rule_model::components::term::primitive::ground::GroundTerm,
-};
+use clap::ArgAction;
+use nemo::{error::Error, execution::execution_parameters::ExportParameters, io::ExportManager};
 
 /// Default export directory.
 const DEFAULT_OUTPUT_DIRECTORY: &str = "results";
@@ -22,6 +21,18 @@ pub(crate) enum Exporting {
     Edb,
     /// Export all predicates.
     All,
+}
+
+impl From<Exporting> for ExportParameters {
+    fn from(val: Exporting) -> Self {
+        match val {
+            Exporting::Keep => ExportParameters::Keep,
+            Exporting::None => ExportParameters::None,
+            Exporting::Idb => ExportParameters::Idb,
+            Exporting::Edb => ExportParameters::Edb,
+            Exporting::All => ExportParameters::All,
+        }
+    }
 }
 
 /// Possible settings for the fact-printing option.
@@ -182,50 +193,30 @@ pub struct CliApp {
     #[command(flatten)]
     pub(crate) logging: LoggingArgs,
     /// Overwrite global parameters in the rule file
-    #[arg(long = "param")]
+    #[arg(long = "param", value_parser = parse_key_val, action = ArgAction::Append)]
     pub(crate) parameters: Vec<ParamKeyValue>,
+    /// Disable warnings when validating rule files
+    #[arg(long = "no-warnings")]
+    pub(crate) disable_warnings: bool,
 }
 
+/// Key-Value pair for global variable
 #[derive(Debug, Clone)]
-pub(crate) struct ParamKeyValue {
-    #[allow(dead_code)]
-    pub(crate) key: String,
-    #[allow(dead_code)]
-    pub(crate) value: GroundTerm,
+pub struct ParamKeyValue {
+    /// Key: Global variable
+    pub key: String,
+    /// Value
+    pub value: String,
 }
 
-impl clap::builder::ValueParserFactory for ParamKeyValue {
-    type Parser = ParamKeyValueParser;
-
-    fn value_parser() -> Self::Parser {
-        ParamKeyValueParser
+/// Parse key value pairs.
+fn parse_key_val(s: &str) -> Result<ParamKeyValue, String> {
+    let parts: Vec<&str> = s.splitn(2, '=').collect();
+    if parts.len() != 2 {
+        return Err(format!("Invalid key=value: {s}"));
     }
-}
-
-#[derive(Clone, Copy)]
-pub(crate) struct ParamKeyValueParser;
-impl clap::builder::TypedValueParser for ParamKeyValueParser {
-    type Value = ParamKeyValue;
-
-    fn parse_ref(
-        &self,
-        cmd: &clap::Command,
-        arg: Option<&clap::Arg>,
-        value: &std::ffi::OsStr,
-    ) -> Result<Self::Value, clap::Error> {
-        let inner = clap::builder::StringValueParser::new();
-        let val = inner.parse_ref(cmd, arg, value)?;
-        let Some((key, value)) = val.split_once('=') else {
-            return Err(clap::Error::new(clap::error::ErrorKind::InvalidValue).with_cmd(cmd));
-        };
-
-        let Ok(value) = GroundTerm::parse(value) else {
-            return Err(clap::Error::new(clap::error::ErrorKind::InvalidValue).with_cmd(cmd));
-        };
-
-        Ok(ParamKeyValue {
-            key: key.into(),
-            value,
-        })
-    }
+    Ok(ParamKeyValue {
+        key: parts[0].to_owned(),
+        value: parts[1].to_owned(),
+    })
 }

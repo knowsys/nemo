@@ -4,13 +4,28 @@ use std::{fmt::Display, hash::Hash};
 
 use crate::rule_model::origin::Origin;
 
+use super::{symbols::Symbols, ComponentSource};
+
 /// Name of a term or predicate
-#[derive(Debug, Clone, Eq)]
+#[derive(Debug, Clone)]
 pub struct Tag {
     /// Origin of this component.
     origin: Origin,
+
     /// Content of this tag
     tag: String,
+}
+
+impl ComponentSource for Tag {
+    type Source = Origin;
+
+    fn origin(&self) -> Origin {
+        self.origin.clone()
+    }
+
+    fn set_origin(&mut self, origin: Origin) {
+        self.origin = origin
+    }
 }
 
 impl Tag {
@@ -22,28 +37,14 @@ impl Tag {
         }
     }
 
-    /// Validate term name.
-    pub fn is_valid(&self) -> bool {
-        !self.tag.starts_with("__")
-    }
-
-    /// Return the [Origin] associated with this tag.
-    pub fn origin(&self) -> &Origin {
-        &self.origin
-    }
-
-    /// Set the [Origin].
-    pub fn set_origin(mut self, origin: Origin) -> Self
-    where
-        Self: Sized,
-    {
-        self.origin = origin;
-        self
-    }
-
     /// Return the name of [Tag].
     pub fn name(&self) -> &str {
         &self.tag
+    }
+
+    /// Check if the [Tag] is valid.
+    pub fn is_valid(&self) -> bool {
+        !Symbols::is_reserved(self.name())
     }
 }
 
@@ -58,6 +59,8 @@ impl PartialEq for Tag {
         self.tag == other.tag
     }
 }
+
+impl Eq for Tag {}
 
 impl PartialOrd for Tag {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
@@ -84,7 +87,7 @@ impl From<&str> for Tag {
     fn from(value: &str) -> Self {
         Self {
             origin: Origin::Created,
-            tag: value.to_string(),
+            tag: value.to_owned(),
         }
     }
 }

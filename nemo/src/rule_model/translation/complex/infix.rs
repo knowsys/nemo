@@ -9,7 +9,7 @@ use crate::{
             operation::{operation_kind::OperationKind, Operation},
             Term,
         },
-        error::TranslationError,
+        origin::Origin,
         translation::{ASTProgramTranslation, TranslationComponent},
     },
 };
@@ -20,10 +20,10 @@ newtype_wrapper!(InfixOperation: Operation);
 impl TranslationComponent for InfixOperation {
     type Ast<'a> = ast::expression::complex::infix::InfixExpression<'a>;
 
-    fn build_component<'a, 'b>(
-        translation: &mut ASTProgramTranslation<'a, 'b>,
-        infix: &'b Self::Ast<'a>,
-    ) -> Result<Self, TranslationError> {
+    fn build_component<'a>(
+        translation: &mut ASTProgramTranslation,
+        infix: &Self::Ast<'a>,
+    ) -> Option<Self> {
         let kind = match infix.kind() {
             ast::expression::complex::infix::InfixExpressionKind::Equality => OperationKind::Equal,
             ast::expression::complex::infix::InfixExpressionKind::Inequality => {
@@ -50,8 +50,9 @@ impl TranslationComponent for InfixOperation {
             Term::build_component(translation, right)?,
         ];
 
-        Ok(InfixOperation(
-            translation.register_component(Operation::new(kind, subterms), infix),
-        ))
+        Some(InfixOperation(Origin::ast(
+            Operation::new(kind, subterms),
+            infix,
+        )))
     }
 }

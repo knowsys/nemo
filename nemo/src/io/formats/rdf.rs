@@ -36,7 +36,7 @@ use crate::{
     },
     rule_model::{
         components::{import_export::Direction, term::value_type::ValueType},
-        error::validation_error::ValidationErrorKind,
+        error::validation_error::ValidationError,
     },
     syntax::import_export::{attribute, file_format},
 };
@@ -170,7 +170,7 @@ impl FormatParameter<RdfTag> for RdfParameter {
             )
     }
 
-    fn is_value_valid(&self, value: AnyDataValue) -> Result<(), ValidationErrorKind> {
+    fn is_value_valid(&self, value: AnyDataValue) -> Result<(), ValidationError> {
         value_type_matches(self, &value, self.supported_types())?;
 
         match self {
@@ -180,10 +180,10 @@ impl FormatParameter<RdfTag> for RdfParameter {
             RdfParameter::Limit => value
                 .to_u64()
                 .and(Some(()))
-                .ok_or(ValidationErrorKind::ImportExportLimitNegative),
+                .ok_or(ValidationError::ImportExportLimitNegative),
             RdfParameter::Base => Ok(()),
             RdfParameter::Format => RdfValueFormats::try_from(value).and(Ok(())).map_err(|_| {
-                ValidationErrorKind::ImportExportValueFormat {
+                ValidationError::ImportExportValueFormat {
                     file_format: "rdf".to_string(),
                 }
             }),
@@ -205,7 +205,7 @@ impl FormatBuilder for RdfHandler {
         tag: Self::Tag,
         parameters: &Parameters<RdfHandler>,
         _direction: Direction,
-    ) -> Result<Self, ValidationErrorKind> {
+    ) -> Result<Self, ValidationError> {
         let variant = match tag {
             RdfTag::Rdf => {
                 let value = parameters
@@ -216,16 +216,16 @@ impl FormatBuilder for RdfHandler {
 
                 let Some(extension) = compression_format.uncompressed_file_extension(&resource)
                 else {
-                    return Err(ValidationErrorKind::RdfUnspecifiedMissingExtension);
+                    return Err(ValidationError::RdfUnspecifiedMissingExtension);
                 };
 
                 let Some(variant) = RdfVariant::VARIANTS
                     .iter()
                     .find(|variant| extension == variant.default_extension())
                 else {
-                    return Err(ValidationErrorKind::RdfUnknownExtension(
-                        extension.to_string(),
-                    ));
+                    return Err(ValidationError::RdfUnspecifiedUnknownExtension {
+                        format: extension.to_string(),
+                    });
                 };
 
                 *variant

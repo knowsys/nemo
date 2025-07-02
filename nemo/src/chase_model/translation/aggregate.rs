@@ -6,14 +6,10 @@ use crate::{
         operation::ChaseOperation,
         rule::ChaseRule,
         term::operation_term::{Operation, OperationTerm},
-        ChaseComponent,
     },
-    rule_model::components::{
-        term::{
-            primitive::{variable::Variable, Primitive},
-            Term,
-        },
-        ProgramComponent,
+    rule_model::components::term::{
+        primitive::{variable::Variable, Primitive},
+        Term,
     },
 };
 
@@ -32,31 +28,24 @@ impl ProgramChaseTranslation {
         group_by_variables: &[Variable],
         output_variable: Variable,
     ) -> ChaseAggregate {
-        let origin = *aggregate.origin();
         let kind = aggregate.aggregate_kind();
         let input_variable = match aggregate.aggregate_term() {
             Term::Primitive(Primitive::Variable(variable)) => variable.clone(),
             Term::Primitive(primitive) => {
                 let new_variable = self.create_fresh_variable();
-                result.add_positive_operation(
-                    ChaseOperation::new(
-                        new_variable.clone(),
-                        OperationTerm::Primitive(primitive.clone()),
-                    )
-                    .set_origin(origin),
-                );
+                result.add_positive_operation(ChaseOperation::new(
+                    new_variable.clone(),
+                    OperationTerm::Primitive(primitive.clone()),
+                ));
 
                 new_variable
             }
             Term::Operation(operation) => {
                 let new_variable = self.create_fresh_variable();
-                result.add_positive_operation(
-                    ChaseOperation::new(
-                        new_variable.clone(),
-                        Self::build_operation_term(operation),
-                    )
-                    .set_origin(origin),
-                );
+                result.add_positive_operation(ChaseOperation::new(
+                    new_variable.clone(),
+                    Self::build_operation_term(operation),
+                ));
 
                 new_variable
             }
@@ -66,7 +55,6 @@ impl ProgramChaseTranslation {
         let distinct_variables = aggregate.distinct().cloned().collect();
 
         ChaseAggregate::new(
-            origin,
             kind,
             input_variable,
             output_variable,
@@ -91,13 +79,12 @@ impl ProgramChaseTranslation {
         OperationTerm,
         Option<&'a crate::rule_model::components::term::aggregate::Aggregate>,
     ) {
-        let origin = *operation.origin();
         let kind = operation.operation_kind();
         let mut subterms = Vec::new();
 
         let mut aggregation_result = None;
 
-        for argument in operation.arguments() {
+        for argument in operation.terms() {
             match argument {
                 Term::Primitive(primitive) => {
                     subterms.push(OperationTerm::Primitive(primitive.clone()))
@@ -125,7 +112,7 @@ impl ProgramChaseTranslation {
         }
 
         (
-            OperationTerm::Operation(Operation::new(kind, subterms).set_origin(origin)),
+            OperationTerm::Operation(Operation::new(kind, subterms)),
             aggregation_result,
         )
     }
@@ -150,7 +137,7 @@ impl ProgramChaseTranslation {
             Self::build_operation_term_with_aggregate(operation, &aggregation_variable);
 
         (
-            ChaseOperation::new(output_variable, operation_term).set_origin(*operation.origin()),
+            ChaseOperation::new(output_variable, operation_term),
             aggregate,
         )
     }

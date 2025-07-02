@@ -386,7 +386,7 @@ pub enum OperationKind {
     #[assoc(num_arguments = OperationNumArguments::Arbitrary)]
     #[assoc(return_type = ValueType::Number)]
     NumericLukasiewicz,
-    /// Concatentation of two string values, correspondng to SPARQL function CONCAT.
+    /// Concatenation of two string values, corresponding to SPARQL function CONCAT.
     #[assoc(name = function::CONCAT)]
     #[assoc(num_arguments = OperationNumArguments::Arbitrary)]
     #[assoc(return_type = ValueType::String)]

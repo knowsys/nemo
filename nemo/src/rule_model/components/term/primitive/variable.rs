@@ -7,7 +7,13 @@ use global::GlobalVariable;
 use universal::UniversalVariable;
 
 use crate::rule_model::{
-    components::ProgramComponentKind, error::ValidationErrorBuilder, origin::Origin,
+    components::{
+        ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent,
+        ProgramComponentKind,
+    },
+    error::ValidationReport,
+    origin::Origin,
+    pipeline::id::ProgramComponentId,
 };
 
 use super::ProgramComponent;
@@ -15,28 +21,6 @@ use super::ProgramComponent;
 pub mod existential;
 pub mod global;
 pub mod universal;
-
-/// Name of a variable
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct VariableName(String);
-
-impl VariableName {
-    /// Create a new [VariableName].
-    pub fn new(name: String) -> Self {
-        Self(name)
-    }
-
-    /// Validate variable name.
-    pub fn is_valid(&self) -> bool {
-        !self.0.starts_with("__")
-    }
-}
-
-impl Display for VariableName {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
-    }
-}
 
 /// Variable
 ///
@@ -74,7 +58,7 @@ impl Variable {
     }
 
     /// Return the name of the variable or `None` if it is anonymous
-    pub fn name(&self) -> Option<String> {
+    pub fn name(&self) -> Option<&str> {
         match self {
             Variable::Universal(variable) => variable.name(),
             Variable::Existential(variable) => Some(variable.name()),
@@ -107,7 +91,7 @@ impl Variable {
     }
 
     /// Change the name of this variable.
-    pub fn rename(&mut self, name: VariableName) {
+    pub fn rename(&mut self, name: String) {
         match self {
             Variable::Universal(variable) => variable.rename(name),
             Variable::Existential(variable) => variable.rename(name),
@@ -144,8 +128,27 @@ impl Display for Variable {
     }
 }
 
-impl ProgramComponent for Variable {
-    fn origin(&self) -> &Origin {
+impl ComponentBehavior for Variable {
+    fn kind(&self) -> ProgramComponentKind {
+        ProgramComponentKind::Variable
+    }
+
+    fn validate(&self) -> Result<(), ValidationReport> {
+        match self {
+            Variable::Universal(variable) => variable.validate(),
+            Variable::Existential(variable) => variable.validate(),
+            Variable::Global(variable) => variable.validate(),
+        }
+    }
+
+    fn boxed_clone(&self) -> Box<dyn ProgramComponent> {
+        Box::new(self.clone())
+    }
+}
+impl ComponentSource for Variable {
+    type Source = Origin;
+
+    fn origin(&self) -> Origin {
         match self {
             Variable::Universal(variable) => variable.origin(),
             Variable::Existential(variable) => variable.origin(),
@@ -153,32 +156,34 @@ impl ProgramComponent for Variable {
         }
     }
 
-    fn set_origin(self, origin: Origin) -> Self
-    where
-        Self: Sized,
-    {
+    fn set_origin(&mut self, origin: Origin) {
         match self {
-            Variable::Universal(variable) => Self::Universal(variable.set_origin(origin)),
-            Variable::Existential(variable) => Self::Existential(variable.set_origin(origin)),
-            Variable::Global(variable) => Self::Global(variable.set_origin(origin)),
+            Variable::Universal(variable) => variable.set_origin(origin),
+            Variable::Existential(variable) => variable.set_origin(origin),
+            Variable::Global(variable) => variable.set_origin(origin),
         }
-    }
-
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()>
-    where
-        Self: Sized,
-    {
-        match &self {
-            Variable::Universal(universal) => universal.validate(builder),
-            Variable::Existential(existential) => existential.validate(builder),
-            Variable::Global(existential) => existential.validate(builder),
-        }
-    }
-
-    fn kind(&self) -> ProgramComponentKind {
-        ProgramComponentKind::Variable
     }
 }
+
+impl ComponentIdentity for Variable {
+    fn id(&self) -> ProgramComponentId {
+        match self {
+            Variable::Universal(variable) => variable.id(),
+            Variable::Existential(variable) => variable.id(),
+            Variable::Global(variable) => variable.id(),
+        }
+    }
+
+    fn set_id(&mut self, id: ProgramComponentId) {
+        match self {
+            Variable::Universal(variable) => variable.set_id(id),
+            Variable::Existential(variable) => variable.set_id(id),
+            Variable::Global(variable) => variable.set_id(id),
+        }
+    }
+}
+
+impl IterableComponent for Variable {}
 
 #[cfg(test)]
 mod test {

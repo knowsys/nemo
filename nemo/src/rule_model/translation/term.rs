@@ -1,14 +1,12 @@
 use crate::{
-    parser::ast::{self, ProgramAST},
+    parser::ast::{self},
     rule_model::{
-        components::{
-            term::{
-                aggregate::Aggregate, function::FunctionTerm, map::Map,
-                primitive::variable::Variable, tuple::Tuple, Term,
-            },
-            ProgramComponent,
+        components::term::{
+            aggregate::Aggregate, function::FunctionTerm, map::Map, primitive::variable::Variable,
+            tuple::Tuple, Term,
         },
-        error::{translation_error::TranslationErrorKind, TranslationError},
+        error::translation_error::TranslationError,
+        origin::Origin,
     },
 };
 
@@ -28,10 +26,10 @@ use super::{
 impl TranslationComponent for Term {
     type Ast<'a> = ast::expression::Expression<'a>;
 
-    fn build_component<'a, 'b>(
-        translation: &mut ASTProgramTranslation<'a, 'b>,
-        ast: &'b Self::Ast<'a>,
-    ) -> Result<Self, TranslationError> {
+    fn build_component<'a>(
+        translation: &mut ASTProgramTranslation,
+        ast: &Self::Ast<'a>,
+    ) -> Option<Self> {
         let inner = match ast {
             ast::expression::Expression::Arithmetic(arithmetic) => Term::from(
                 ArithmeticOperation::build_component(translation, arithmetic)?.into_inner(),
@@ -76,10 +74,10 @@ impl TranslationComponent for Term {
                 FunctionLikeOperation::build_component(translation, operation)?.into_inner(),
             ),
             ast::expression::Expression::Negation(negation) => {
-                return Err(TranslationError::new(
-                    negation.span(),
-                    TranslationErrorKind::InnerExpressionNegation,
-                ))
+                translation
+                    .report
+                    .add(negation, TranslationError::InnerExpressionNegation);
+                return None;
             }
             ast::expression::Expression::Parenthesized(parenthesized) => {
                 Term::build_component(translation, parenthesized.expression())?
@@ -89,6 +87,6 @@ impl TranslationComponent for Term {
             ),
         };
 
-        Ok(inner.set_origin(translation.register_node(ast)))
+        Some(Origin::ast(inner, ast))
     }
 }

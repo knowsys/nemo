@@ -1,21 +1,31 @@
 //! This module defines an [Atom].
 
-use std::{fmt::Display, hash::Hash};
+use std::{
+    fmt::Display,
+    hash::Hash,
+    ops::{Deref, DerefMut, Index, IndexMut},
+};
 
-use crate::rule_model::{
-    error::{validation_error::ValidationErrorKind, ComponentParseError, ValidationErrorBuilder},
-    origin::Origin,
-    translation::TranslationComponent,
+use crate::{
+    parser::ParserErrorReport,
+    rule_model::{
+        error::{validation_error::ValidationError, ValidationReport},
+        origin::Origin,
+        pipeline::id::ProgramComponentId,
+        translation::{ProgramParseReport, TranslationComponent},
+    },
 };
 
 use super::{
+    component_iterator, component_iterator_mut,
     literal::Literal,
     tag::Tag,
     term::{
         primitive::{variable::Variable, Primitive},
         Term,
     },
-    IterablePrimitives, IterableVariables, ProgramComponent, ProgramComponentKind,
+    ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent, IterablePrimitives,
+    IterableVariables, ProgramComponent, ProgramComponentKind,
 };
 
 /// Atom
@@ -23,10 +33,12 @@ use super::{
 /// Tagged list of [Term]s.
 /// It forms the core component of rules,
 /// representing a logical proposition that can be true or false.
-#[derive(Debug, Clone, Eq)]
+#[derive(Debug, Clone)]
 pub struct Atom {
-    /// Origin of this component.
+    /// Origin of this component
     origin: Origin,
+    /// Id of this component
+    id: ProgramComponentId,
 
     /// Predicate name associated with this atom
     predicate: Tag,
@@ -38,19 +50,19 @@ pub struct Atom {
 #[macro_export]
 macro_rules! atom {
     // Base case: no elements
-    ($name:tt) => {
+    ($name:ident) => {
         $crate::rule_model::components::atom::Atom::new(
-            $crate::rule_model::components::tag::Tag::from($name),
+            $crate::rule_model::components::tag::Tag::from(stringify!($name)),
             Vec::new()
         )
     };
     // Recursive case: handle each term, separated by commas
-    ($name:tt; $($tt:tt)*) => {{
+    ($name:ident($($tt:tt)*)) => {{
         #[allow(clippy::vec_init_then_push)] {
             let mut terms = Vec::new();
             term_list!(terms; $($tt)*);
             $crate::rule_model::components::atom::Atom::new(
-                $crate::rule_model::components::tag::Tag::from($name),
+                $crate::rule_model::components::tag::Tag::from(stringify!($name)),
                 terms
             )
         }
@@ -62,17 +74,19 @@ impl Atom {
     pub fn new<Terms: IntoIterator<Item = Term>>(predicate: Tag, subterms: Terms) -> Self {
         Self {
             origin: Origin::Created,
+            id: ProgramComponentId::default(),
             predicate,
             terms: subterms.into_iter().collect(),
         }
     }
 
-    pub fn parse(input: &str) -> Result<Self, ComponentParseError> {
-        let Literal::Positive(atom) = Literal::parse(input)? else {
-            return Err(ComponentParseError::ParseError);
-        };
-
-        Ok(atom)
+    /// Construct this object from a string.
+    pub fn parse(input: &str) -> Result<Self, ProgramParseReport> {
+        if let Literal::Positive(atom) = Literal::parse(input)? {
+            Ok(atom)
+        } else {
+            Err(ProgramParseReport::Parsing(ParserErrorReport::empty()))
+        }
     }
 
     /// Return the predicate of this atom.
@@ -80,19 +94,55 @@ impl Atom {
         self.predicate.clone()
     }
 
-    /// Return an iterator over the arguments of this atom.
-    pub fn arguments(&self) -> impl Iterator<Item = &Term> {
+    /// Return an iterator over the terms of this atom.
+    pub fn terms(&self) -> impl Iterator<Item = &Term> {
         self.terms.iter()
     }
 
-    /// Return the number of subterms in this atom.
-    pub fn len(&self) -> usize {
-        self.terms.len()
+    /// Return an iterator over the terms of this atom.
+    pub fn terms_mut(&mut self) -> impl Iterator<Item = &mut Term> {
+        self.terms.iter_mut()
     }
 
-    /// Return whether this atom contains no subterms.
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
+    /// Push a [Term] to the end of this atom.
+    pub fn push(&mut self, term: Term) {
+        self.terms.push(term);
+    }
+
+    /// Remove the [Term] at the given index and return it.
+    ///
+    /// # Panics
+    /// Panics if the index is out of bounds.
+    pub fn remove(&mut self, index: usize) -> Term {
+        self.terms.remove(index)
+    }
+}
+
+impl Index<usize> for Atom {
+    type Output = Term;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.terms[index]
+    }
+}
+
+impl IndexMut<usize> for Atom {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.terms[index]
+    }
+}
+
+impl Deref for Atom {
+    type Target = [Term];
+
+    fn deref(&self) -> &Self::Target {
+        &self.terms
+    }
+}
+
+impl DerefMut for Atom {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.terms
     }
 }
 
@@ -114,11 +164,11 @@ impl Display for Atom {
 
 impl PartialEq for Atom {
     fn eq(&self, other: &Self) -> bool {
-        self.origin == other.origin
-            && self.predicate == other.predicate
-            && self.terms == other.terms
+        self.predicate == other.predicate && self.terms == other.terms
     }
 }
+
+impl Eq for Atom {}
 
 impl Hash for Atom {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
@@ -127,43 +177,72 @@ impl Hash for Atom {
     }
 }
 
-impl ProgramComponent for Atom {
-    fn origin(&self) -> &Origin {
-        &self.origin
+impl ComponentBehavior for Atom {
+    fn kind(&self) -> ProgramComponentKind {
+        ProgramComponentKind::Atom
     }
 
-    fn set_origin(mut self, origin: Origin) -> Self
-    where
-        Self: Sized,
-    {
-        self.origin = origin;
-        self
-    }
+    fn validate(&self) -> Result<(), ValidationReport> {
+        let mut report = ValidationReport::default();
 
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()>
-    where
-        Self: Sized,
-    {
+        for child in self.children() {
+            report.merge(child.validate());
+        }
+
         if !self.predicate.is_valid() {
-            builder.report_error(
-                *self.predicate.origin(),
-                ValidationErrorKind::InvalidTermTag(self.predicate.to_string()),
+            report.add(
+                &self.predicate,
+                ValidationError::InvalidPredicateName {
+                    predicate_name: self.predicate.to_string(),
+                },
             );
         }
 
         if self.is_empty() {
-            builder.report_error(self.origin, ValidationErrorKind::UnsupportedAtomEmpty);
+            report.add(self, ValidationError::UnsupportedAtomEmpty);
         }
 
-        for term in self.arguments() {
-            term.validate(builder)?;
-        }
-
-        Some(())
+        report.result()
     }
 
-    fn kind(&self) -> ProgramComponentKind {
-        ProgramComponentKind::Atom
+    fn boxed_clone(&self) -> Box<dyn ProgramComponent> {
+        Box::new(self.clone())
+    }
+}
+
+impl ComponentSource for Atom {
+    type Source = Origin;
+
+    fn origin(&self) -> Origin {
+        self.origin.clone()
+    }
+
+    fn set_origin(&mut self, origin: Origin) {
+        self.origin = origin;
+    }
+}
+
+impl ComponentIdentity for Atom {
+    fn id(&self) -> ProgramComponentId {
+        self.id
+    }
+
+    fn set_id(&mut self, id: ProgramComponentId) {
+        self.id = id;
+    }
+}
+
+impl IterableComponent for Atom {
+    fn children<'a>(&'a self) -> Box<dyn Iterator<Item = &'a dyn ProgramComponent> + 'a> {
+        let subterm_iterator = component_iterator(self.terms.iter());
+        Box::new(subterm_iterator)
+    }
+
+    fn children_mut<'a>(
+        &'a mut self,
+    ) -> Box<dyn Iterator<Item = &'a mut dyn ProgramComponent> + 'a> {
+        let subterm_iterator = component_iterator_mut(self.terms.iter_mut());
+        Box::new(subterm_iterator)
     }
 }
 
@@ -198,7 +277,7 @@ mod test {
     #[test]
     fn atom_basic() {
         let variable = Variable::universal("u");
-        let atom = atom!("p"; 12, variable, !e, "abc", ?v);
+        let atom = atom!(p(12, variable, !e, "abc", ?v));
 
         let variables = atom.variables().cloned().collect::<Vec<_>>();
         assert_eq!(

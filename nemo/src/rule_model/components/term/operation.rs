@@ -14,11 +14,13 @@ use crate::{
     },
     rule_model::{
         components::{
-            IterablePrimitives, IterableVariables, ProgramComponent, ProgramComponentKind,
+            component_iterator, component_iterator_mut, ComponentBehavior, ComponentIdentity,
+            ComponentSource, IterableComponent, IterablePrimitives, IterableVariables,
+            ProgramComponent, ProgramComponentKind,
         },
-        error::{validation_error::ValidationErrorKind, ValidationErrorBuilder},
+        error::{validation_error::ValidationError, ValidationReport},
         origin::Origin,
-        substitution::Substitution,
+        pipeline::id::ProgramComponentId,
     },
 };
 
@@ -32,10 +34,12 @@ use super::{
 ///
 /// An action or computation performed on [Term]s.
 /// This can include for example arithmetic or string operations.
-#[derive(Debug, Clone, Eq)]
+#[derive(Debug, Clone)]
 pub struct Operation {
     /// Origin of this component
     origin: Origin,
+    /// Id of this component
+    id: ProgramComponentId,
 
     /// The kind of operation
     kind: OperationKind,
@@ -48,13 +52,14 @@ impl Operation {
     pub fn new(kind: OperationKind, subterms: Vec<Term>) -> Self {
         Self {
             origin: Origin::default(),
+            id: ProgramComponentId::default(),
             kind,
             subterms,
         }
     }
 
     /// Return an iterator over the arguments of this operation.
-    pub fn arguments(&self) -> impl Iterator<Item = &Term> {
+    pub fn terms(&self) -> impl Iterator<Item = &Term> {
         self.subterms.iter()
     }
 
@@ -96,23 +101,18 @@ impl Operation {
         self.subterms.iter().all(Term::is_ground)
     }
 
-    /// Reduce constant expressions returning a copy of the reduced [Term].
-    pub fn reduce_with_substitution(&self, bindings: &Substitution) -> Term {
-        let reduced_subterms = Operation {
-            origin: self.origin,
-            kind: self.kind,
-            subterms: self
-                .subterms
-                .iter()
-                .map(|term| term.reduce_with_substitution(bindings))
-                .collect(),
-        };
-
-        if !reduced_subterms.is_ground() {
-            return Term::Operation(reduced_subterms);
+    /// Reduce this term by evaluating the expression
+    /// returning a new [Term] with the same [Origin] as `self`.
+    ///
+    /// This function does nothing if `self` contains any variable.
+    ///
+    /// Returns `None` if any intermediate result is undefined.
+    pub fn reduce(&self) -> Option<Term> {
+        if !self.is_ground() {
+            return Some(Term::Operation(self.clone()));
         }
 
-        let chase_operation_term = ProgramChaseTranslation::build_operation_term(&reduced_subterms);
+        let chase_operation_term = ProgramChaseTranslation::build_operation_term(self);
 
         let empty_translation = VariableTranslation::new();
         let function_tree =
@@ -124,10 +124,33 @@ impl Operation {
             None,
         );
 
-        match stack_program.evaluate_data(&[]) {
-            Some(result) => Term::from(GroundTerm::new(result)),
-            None => Term::Operation(self.clone()),
+        stack_program
+            .evaluate_data(&[])
+            .map(|result| Term::from(GroundTerm::new(result)))
+    }
+
+    /// Check wether this term can be reduced to a ground value,
+    /// except for global variables that need to be resolved.
+    ///
+    /// This is the case if
+    ///     * This term does not contain non-global variables.
+    ///     * This term does not contain undefined intermediate values.
+    pub fn is_resolvable(&self) -> bool {
+        if self.is_ground() {
+            return self.reduce().is_some();
         }
+
+        for term in self.terms() {
+            if term.variables().any(|variable| variable.is_global()) {
+                continue;
+            }
+
+            if !term.is_resolvable() {
+                return false;
+            }
+        }
+
+        true
     }
 }
 
@@ -232,6 +255,8 @@ impl PartialEq for Operation {
     }
 }
 
+impl Eq for Operation {}
+
 impl PartialOrd for Operation {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         match self.kind.partial_cmp(&other.kind) {
@@ -249,53 +274,77 @@ impl Hash for Operation {
     }
 }
 
-impl ProgramComponent for Operation {
-    fn origin(&self) -> &Origin {
-        &self.origin
+impl ComponentBehavior for Operation {
+    fn kind(&self) -> ProgramComponentKind {
+        ProgramComponentKind::Operation
     }
 
-    fn set_origin(mut self, origin: Origin) -> Self
-    where
-        Self: Sized,
-    {
-        self.origin = origin;
-        self
-    }
+    fn validate(&self) -> Result<(), ValidationReport> {
+        let mut report = ValidationReport::default();
 
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()>
-    where
-        Self: Sized,
-    {
+        for child in self.children() {
+            report.merge(child.validate());
+        }
+
         if !self.kind.num_arguments().validate(self.subterms.len()) {
-            builder.report_error(
-                self.origin,
-                ValidationErrorKind::OperationArgumentNumber {
+            report.add(
+                self,
+                ValidationError::OperationArgumentNumber {
                     used: self.subterms.len(),
                     expected: self.kind.num_arguments().to_string(),
                 },
             );
-
-            return None;
         }
 
-        if self.is_ground()
-            && !self
-                .reduce_with_substitution(&Substitution::default())
-                .is_primitive()
-        {
-            builder.report_error(self.origin, ValidationErrorKind::InvalidGroundOperation);
-            return None;
+        if let Some(variable) = self.variables().find(|variable| variable.is_anonymous()) {
+            report.add(variable, ValidationError::OperationAnonymous);
         }
 
-        for argument in self.arguments() {
-            argument.validate(builder)?;
+        if self.reduce().is_none() {
+            report.add(self, ValidationError::InvalidGroundOperation);
         }
 
-        Some(())
+        report.result()
     }
 
-    fn kind(&self) -> ProgramComponentKind {
-        ProgramComponentKind::Operation
+    fn boxed_clone(&self) -> Box<dyn ProgramComponent> {
+        Box::new(self.clone())
+    }
+}
+
+impl ComponentSource for Operation {
+    type Source = Origin;
+
+    fn origin(&self) -> Origin {
+        self.origin.clone()
+    }
+
+    fn set_origin(&mut self, origin: Origin) {
+        self.origin = origin;
+    }
+}
+
+impl ComponentIdentity for Operation {
+    fn id(&self) -> ProgramComponentId {
+        self.id
+    }
+
+    fn set_id(&mut self, id: ProgramComponentId) {
+        self.id = id;
+    }
+}
+
+impl IterableComponent for Operation {
+    fn children<'a>(&'a self) -> Box<dyn Iterator<Item = &'a dyn ProgramComponent> + 'a> {
+        let subterm_iterator = component_iterator(self.subterms.iter());
+        Box::new(subterm_iterator)
+    }
+
+    fn children_mut<'a>(
+        &'a mut self,
+    ) -> Box<dyn Iterator<Item = &'a mut dyn ProgramComponent> + 'a> {
+        let subterm_iterator = component_iterator_mut(self.subterms.iter_mut());
+        Box::new(subterm_iterator)
     }
 }
 
@@ -332,21 +381,22 @@ mod test {
     use crate::rule_model::{
         components::{
             term::{operation::operation_kind::OperationKind, Term},
-            ProgramComponent,
+            ComponentBehavior,
         },
-        error::{ComponentParseError, ValidationErrorBuilder},
         translation::TranslationComponent,
     };
 
     use super::Operation;
 
     impl Operation {
-        fn parse(input: &str) -> Result<Operation, ComponentParseError> {
-            let Term::Operation(op) = Term::parse(input)? else {
-                return Err(ComponentParseError::ParseError);
-            };
+        fn parse(input: &str) -> Result<Operation, ()> {
+            let term = Term::parse(input).map_err(|_| ())?;
 
-            Ok(op)
+            if let Term::Operation(operation) = term {
+                Ok(operation)
+            } else {
+                Err(())
+            }
         }
     }
 
@@ -372,12 +422,10 @@ mod test {
             "STRLEN(123)",
             "LOG(1,\"3\")",
         ];
+
         for string in invalid_operations {
             let operation = Operation::parse(string).unwrap();
-            let mut builder = ValidationErrorBuilder::default();
-            let result = operation.validate(&mut builder);
-            assert!(result.is_none());
-            assert!(!builder.finalize().is_empty());
+            assert!(operation.validate().is_err());
         }
     }
 }

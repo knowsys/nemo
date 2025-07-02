@@ -1,12 +1,20 @@
 //! This module defines [Tuple].
 
-use std::{fmt::Display, hash::Hash};
+use std::{
+    fmt::Display,
+    hash::Hash,
+    ops::{Deref, DerefMut, Index, IndexMut},
+};
 
 use crate::rule_model::{
-    components::{IterablePrimitives, IterableVariables, ProgramComponent, ProgramComponentKind},
-    error::ValidationErrorBuilder,
+    components::{
+        component_iterator, component_iterator_mut, ComponentBehavior, ComponentIdentity,
+        ComponentSource, IterableComponent, IterablePrimitives, IterableVariables,
+        ProgramComponent, ProgramComponentKind,
+    },
+    error::ValidationReport,
     origin::Origin,
-    substitution::Substitution,
+    pipeline::id::ProgramComponentId,
 };
 
 use super::{
@@ -18,10 +26,12 @@ use super::{
 /// Tuple
 ///
 /// An ordered list of [Term]s.
-#[derive(Debug, Clone, Eq)]
+#[derive(Debug, Clone)]
 pub struct Tuple {
     /// Origin of this component
     origin: Origin,
+    /// Id of this component
+    id: ProgramComponentId,
 
     /// Ordered list of terms contained in this tuple
     terms: Vec<Term>,
@@ -49,6 +59,7 @@ impl Tuple {
     pub fn new<Terms: IntoIterator<Item = Term>>(terms: Terms) -> Self {
         Self {
             origin: Origin::default(),
+            id: ProgramComponentId::default(),
             terms: terms.into_iter().collect(),
         }
     }
@@ -58,9 +69,28 @@ impl Tuple {
         ValueType::Tuple
     }
 
-    /// Return an iterator over the arguments of this tuple.
-    pub fn arguments(&self) -> impl Iterator<Item = &Term> {
+    /// Return an iterator over the terms of this tuple.
+    pub fn terms(&self) -> impl Iterator<Item = &Term> {
         self.terms.iter()
+    }
+
+    /// Return a mutable iterator over the terms of this tuple.
+    pub fn terms_mut(&mut self) -> impl Iterator<Item = &mut Term> {
+        self.terms.iter_mut()
+    }
+
+    /// Push a [Term] to the end of this tuple.
+    pub fn push(&mut self, term: Term) {
+        self.terms.push(term);
+    }
+
+    /// Remove the [Term] at the given index from this tuple
+    /// and return it.
+    ///
+    /// # Panics
+    /// Panics if index out of bounds.
+    pub fn remove(&mut self, index: usize) -> Term {
+        self.terms.remove(index)
     }
 
     /// Return whether this term is ground,
@@ -69,16 +99,60 @@ impl Tuple {
         self.terms.iter().all(Term::is_ground)
     }
 
-    /// Reduce each sub [Term] in the tuple returning a copy.
-    pub fn reduce(&self, bindings: &Substitution) -> Self {
-        Self {
-            origin: self.origin,
+    /// Reduce this term by evaluating all contained expressions,
+    /// and return a new [Tuple] with the same [Origin] as `self`.
+    ///
+    /// This function does nothing if `self` is not ground.
+    ///
+    /// Returns `None` if
+    pub fn reduce(&self) -> Option<Self> {
+        Some(Self {
+            origin: self.origin.clone(),
+            id: ProgramComponentId::default(),
             terms: self
                 .terms
                 .iter()
-                .map(|term| term.reduce_with_substitution(bindings))
-                .collect(),
-        }
+                .map(|term| term.reduce())
+                .collect::<Option<Vec<_>>>()?,
+        })
+    }
+
+    /// Check wether this term can be reduced to a ground value,
+    /// except for global variables that need to be resolved.
+    ///
+    /// This is the case if
+    ///     * This term does not contain non-global variables.
+    ///     * This term does not contain undefined intermediate values.
+    pub fn is_resolvable(&self) -> bool {
+        self.terms().all(|term| term.is_resolvable())
+    }
+}
+
+impl Index<usize> for Tuple {
+    type Output = Term;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.terms[index]
+    }
+}
+
+impl IndexMut<usize> for Tuple {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.terms[index]
+    }
+}
+
+impl Deref for Tuple {
+    type Target = [Term];
+
+    fn deref(&self) -> &Self::Target {
+        &self.terms
+    }
+}
+
+impl DerefMut for Tuple {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.terms
     }
 }
 
@@ -104,6 +178,8 @@ impl PartialEq for Tuple {
     }
 }
 
+impl Eq for Tuple {}
+
 impl Hash for Tuple {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.terms.hash(state);
@@ -116,32 +192,59 @@ impl PartialOrd for Tuple {
     }
 }
 
-impl ProgramComponent for Tuple {
-    fn origin(&self) -> &Origin {
-        &self.origin
-    }
-
-    fn set_origin(mut self, origin: Origin) -> Self
-    where
-        Self: Sized,
-    {
-        self.origin = origin;
-        self
-    }
-
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()>
-    where
-        Self: Sized,
-    {
-        for term in self.arguments() {
-            term.validate(builder)?;
-        }
-
-        Some(())
-    }
-
+impl ComponentBehavior for Tuple {
     fn kind(&self) -> ProgramComponentKind {
         ProgramComponentKind::Tuple
+    }
+
+    fn validate(&self) -> Result<(), ValidationReport> {
+        let mut report = ValidationReport::default();
+
+        for child in self.children() {
+            report.merge(child.validate());
+        }
+
+        report.result()
+    }
+
+    fn boxed_clone(&self) -> Box<dyn ProgramComponent> {
+        Box::new(self.clone())
+    }
+}
+
+impl ComponentSource for Tuple {
+    type Source = Origin;
+
+    fn origin(&self) -> Origin {
+        self.origin.clone()
+    }
+
+    fn set_origin(&mut self, origin: Origin) {
+        self.origin = origin;
+    }
+}
+
+impl ComponentIdentity for Tuple {
+    fn id(&self) -> ProgramComponentId {
+        self.id
+    }
+
+    fn set_id(&mut self, id: ProgramComponentId) {
+        self.id = id;
+    }
+}
+
+impl IterableComponent for Tuple {
+    fn children<'a>(&'a self) -> Box<dyn Iterator<Item = &'a dyn ProgramComponent> + 'a> {
+        let subterm_iterator = component_iterator(self.terms.iter());
+        Box::new(subterm_iterator)
+    }
+
+    fn children_mut<'a>(
+        &'a mut self,
+    ) -> Box<dyn Iterator<Item = &'a mut dyn ProgramComponent> + 'a> {
+        let subterm_iterator = component_iterator_mut(self.terms.iter_mut());
+        Box::new(subterm_iterator)
     }
 }
 

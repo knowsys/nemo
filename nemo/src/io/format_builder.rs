@@ -10,7 +10,7 @@ use std::{
 
 use nemo_physical::{
     datavalues::{AnyDataValue, DataValue},
-    resource::{Resource, ResourceBuilder},
+    resource::{Resource, ResourceBuilder, ResourceValidationErrorKind},
 };
 use strum::IntoEnumIterator;
 
@@ -18,13 +18,10 @@ use crate::{
     rule_model::{
         components::{
             import_export::{specification::ImportExportSpec, Direction},
-            term::{operation::Operation, value_type::ValueType},
-            ProgramComponent,
+            term::{operation::Operation, primitive::ground::GroundTerm, value_type::ValueType},
+            ComponentSource,
         },
-        error::{
-            hint::Hint, info::Info, validation_error::ValidationErrorKind, ComplexErrorLabelKind,
-            ValidationErrorBuilder,
-        },
+        error::{hint::Hint, info::Info, validation_error::ValidationError, ValidationReport},
         substitution::Substitution,
     },
     syntax::import_export::attribute,
@@ -46,17 +43,17 @@ pub(crate) trait FormatParameter<Tag>:
     FromStr<Err = ()> + ToString + IntoEnumIterator + Copy + Eq + Hash
 {
     fn required_for(&self, tag: Tag) -> bool;
-    fn is_value_valid(&self, value: AnyDataValue) -> Result<(), ValidationErrorKind>;
+    fn is_value_valid(&self, value: AnyDataValue) -> Result<(), ValidationError>;
 }
 
 pub(super) fn value_type_matches(
     param: impl ToString,
     value: &AnyDataValue,
     supported_types: &[ValueType],
-) -> Result<(), ValidationErrorKind> {
+) -> Result<(), ValidationError> {
     let value_type = ValueType::from(value.value_domain());
     supported_types.contains(&value_type).then_some(()).ok_or(
-        ValidationErrorKind::ImportExportAttributeValueType {
+        ValidationError::ImportExportAttributeValueType {
             parameter: param.to_string(),
             given: value_type.name().into(),
             expected: format!(
@@ -232,18 +229,18 @@ impl<Tag> FormatParameter<Tag> for StandardParameter {
         false
     }
 
-    fn is_value_valid(&self, value: AnyDataValue) -> Result<(), ValidationErrorKind> {
+    fn is_value_valid(&self, value: AnyDataValue) -> Result<(), ValidationError> {
         value_type_matches(self, &value, self.supported_types())?;
 
         match self {
             StandardParameter::BaseParamType(no_parameters) => match *no_parameters {},
             StandardParameter::Resource => ResourceBuilder::try_from(value)
                 .and(Ok(()))
-                .map_err(ValidationErrorKind::from),
+                .map_err(ValidationError::from),
             StandardParameter::Compression => {
                 CompressionFormat::from_name(&value.to_plain_string_unchecked())
                     .and(Some(()))
-                    .ok_or(ValidationErrorKind::ImportExportUnknownCompression {
+                    .ok_or(ValidationError::ImportExportUnknownCompression {
                         format: value.to_string(),
                     })
             }
@@ -267,7 +264,7 @@ pub(crate) trait FormatBuilder: Sized + Into<AnyImportExportBuilder> {
         tag: Self::Tag,
         parameters: &Parameters<Self>,
         direction: Direction,
-    ) -> Result<Self, ValidationErrorKind>;
+    ) -> Result<Self, ValidationError>;
 
     fn expected_arity(&self) -> Option<usize>;
 
@@ -279,8 +276,8 @@ pub(crate) trait FormatBuilder: Sized + Into<AnyImportExportBuilder> {
         &self,
         _direction: Direction,
         builder: Option<ResourceBuilder>,
-    ) -> Option<ResourceBuilder> {
-        builder
+    ) -> Result<Option<ResourceBuilder>, ResourceValidationErrorKind> {
+        Ok(builder)
     }
 
     fn build_import(&self, arity: usize) -> Arc<dyn ImportHandler + Send + Sync + 'static>;
@@ -305,43 +302,31 @@ impl<B: FormatBuilder> Parameters<B> {
     /// and consturct a [Substitution].
     fn build_substitution(
         bindings: &[Operation],
-        builder: &mut ValidationErrorBuilder,
+        report: &mut ValidationReport,
     ) -> Option<Substitution> {
         let mut result = HashMap::new();
 
         for binding in bindings {
             let Some((left, right)) = binding.variable_assignment() else {
-                builder.report_error(
-                    *binding.origin(),
-                    ValidationErrorKind::DirectiveNonAssignment,
-                );
-                return None;
+                report.add(binding, ValidationError::DirectiveNonAssignment);
+                continue;
             };
 
-            if !right.is_ground() {
-                builder.report_error(
-                    *binding.origin(),
-                    ValidationErrorKind::DirectiveAssignmentNotGround,
-                );
-                return None;
+            if !right.is_resolvable() {
+                report.add(binding, ValidationError::DirectiveAssignmentNotGround);
             };
 
-            if let Some((_, previous_origin)) =
-                result.insert(left.clone(), (right.clone(), *binding.origin()))
+            if let Some((_, previous_binding)) =
+                result.insert(left.clone(), (right.clone(), binding))
             {
-                builder
-                    .report_error(
-                        *binding.origin(),
-                        ValidationErrorKind::DirectiveConflictingAssignments {
-                            variable: left.to_string(),
+                report
+                    .add(
+                        binding,
+                        ValidationError::DirectiveConflictingAssignments {
+                            variable: Box::new(left.clone()),
                         },
                     )
-                    .add_label(
-                        ComplexErrorLabelKind::Information,
-                        previous_origin,
-                        Info::FirstDefinition,
-                    );
-                return None;
+                    .add_context(previous_binding, Info::FirstDefinition);
             }
         }
 
@@ -353,20 +338,23 @@ impl<B: FormatBuilder> Parameters<B> {
     }
 
     pub(crate) fn validate(
-        mut spec: ImportExportSpec,
+        spec: &ImportExportSpec,
         bindings: &[Operation],
         direction: Direction,
-        builder: &mut ValidationErrorBuilder,
+        report: &mut ValidationReport,
     ) -> Option<Self> {
         let Ok(format_tag) = B::Tag::from_str(spec.format().name()) else {
-            builder.report_error(
-                *spec.format().origin(),
-                ValidationErrorKind::ImportExportFileFormatUnknown(spec.format().name().into()),
+            report.add(
+                spec,
+                ValidationError::ImportExportFileFormatUnknown {
+                    format: spec.format().name().to_owned(),
+                },
             );
             return None;
         };
 
-        let substitution = Self::build_substitution(bindings, builder)?;
+        let mut spec = spec.clone();
+        let substitution = Self::build_substitution(bindings, report)?;
         substitution.apply(&mut spec);
 
         let mut required_parameters: HashSet<_> = B::Parameter::iter()
@@ -377,10 +365,10 @@ impl<B: FormatBuilder> Parameters<B> {
 
         for (key, value_term) in spec.key_value() {
             let Ok(parameter) = B::Parameter::from_str(key.value()) else {
-                builder
-                    .report_error(
-                        *key.origin(),
-                        ValidationErrorKind::ImportExportUnrecognizedAttribute {
+                report
+                    .add(
+                        key,
+                        ValidationError::ImportExportUnrecognizedAttribute {
                             format: format_tag.to_string(),
                             attribute: key.to_string(),
                         },
@@ -391,44 +379,48 @@ impl<B: FormatBuilder> Parameters<B> {
                         B::Parameter::iter().map(|attribute| attribute.to_string()),
                     ));
 
-                return None;
+                continue;
             };
 
             required_parameters.remove(&parameter);
-            let value = match value_term.clone().try_into_ground(&Default::default()) {
+
+            if !value_term.is_resolvable() {
+                report.add(
+                    value_term,
+                    ValidationError::ImportExportParameterNotGround {
+                        term: Box::new(value_term.clone()),
+                    },
+                );
+
+                continue;
+            }
+
+            let value = match GroundTerm::try_from(value_term.clone()) {
                 Ok(ground_term) => ground_term.value(),
-                Err(value_term) => {
-                    builder.report_error(
-                        *value_term.origin(),
-                        ValidationErrorKind::ImportExportParameterNotGround(value_term),
-                    );
-                    return None;
+                Err(_) => {
+                    continue;
                 }
             };
 
-            if let Err(kind) = parameter.is_value_valid(value.clone()) {
-                builder.report_error(*value_term.origin(), kind);
-                return None;
+            if let Err(error) = parameter.is_value_valid(value.clone()) {
+                report.add(value_term, error);
+                continue;
             }
 
             result.insert(parameter, value);
         }
 
-        if required_parameters.is_empty() {
-            Some(Self(result))
-        } else {
-            for param in required_parameters {
-                builder.report_error(
-                    *spec.origin(),
-                    ValidationErrorKind::ImportExportMissingRequiredAttribute {
-                        attribute: param.to_string(),
-                        direction: direction.to_string(),
-                    },
-                );
-            }
-
-            None
+        for param in required_parameters {
+            report.add(
+                &spec,
+                ValidationError::ImportExportMissingRequiredAttribute {
+                    attribute: param.to_string(),
+                    direction: direction.to_string(),
+                },
+            );
         }
+
+        Some(Self(result))
     }
 }
 
@@ -485,22 +477,26 @@ impl ImportExportBuilder {
 
     fn new_with_tag<B: FormatBuilder>(
         tag: B::Tag,
-        spec: ImportExportSpec,
+        spec: &ImportExportSpec,
         bindings: &[Operation],
         direction: Direction,
-        builder: &mut ValidationErrorBuilder,
+        report: &mut ValidationReport,
     ) -> Option<ImportExportBuilder> {
-        let origin = *spec.origin();
-        let parameters = Parameters::<B>::validate(spec, bindings, direction, builder)?;
+        let origin = spec.origin();
+        let parameters = Parameters::<B>::validate(spec, bindings, direction, report)?;
 
-        let resource_builder = parameters
-            .get_optional(StandardParameter::Resource.into())
-            .and_then(|value| {
-                let resource = ResourceBuilder::try_from(value)
-                    .map_err(|err| builder.report_error(origin, err.into()))
-                    .ok()?;
-                Some(resource)
-            });
+        let resource_builder =
+            if let Some(value) = parameters.get_optional(StandardParameter::Resource.into()) {
+                match ResourceBuilder::try_from(value) {
+                    Ok(builder) => Some(builder),
+                    Err(error) => {
+                        report.add_source(origin.clone(), error.into());
+                        return None;
+                    }
+                }
+            } else {
+                None
+            };
 
         let compression = parameters
             .get_optional(StandardParameter::Compression.into())
@@ -510,109 +506,124 @@ impl ImportExportBuilder {
             .unwrap_or_else(|| CompressionFormat::from_resource_builder(&resource_builder));
 
         let inner = match B::new(tag, &parameters, direction) {
-            Ok(res) => Some(res),
-            Err(kind) => {
-                builder.report_error(origin, kind);
-                None
+            Ok(b) => b,
+            Err(error) => {
+                report.add_source(origin.clone(), error);
+                return None;
             }
-        }?;
+        };
 
-        let resource_builder = inner.customize_resource_builder(direction, resource_builder);
+        let resource_builder = match inner.customize_resource_builder(direction, resource_builder) {
+            Ok(builder) => builder,
+            Err(error) => {
+                report.add_source(origin.clone(), error.into());
+                return None;
+            }
+        };
 
-        let resource = resource_builder
-            .map(|mut rb| {
-                parameters
-                    .get_optional(StandardParameter::HttpHeaders.into())
-                    .map(|headers| {
-                        http_parameters::unpack_headers(headers).and_then(|mut headers| {
-                            headers.try_for_each(|(key, value)| {
-                                rb.add_header(key, value)
-                                    .and(Ok(()))
-                                    .map_err(ValidationErrorKind::from)
-                            })
-                        })
-                    })
-                    .transpose()?;
+        let Some(mut resource_builder) = resource_builder else {
+            return Some(ImportExportBuilder {
+                inner: inner.into(),
+                resource: None,
+                compression,
+            });
+        };
 
-                parameters
-                    .get_optional(StandardParameter::HttpGetParameters.into())
-                    .map(|parameters| {
-                        http_parameters::unpack_http_parameters(parameters).and_then(
-                            |mut parameters| {
-                                parameters.try_for_each(|(key, value)| {
-                                    rb.add_get_parameter(key, value)
-                                        .and(Ok(()))
-                                        .map_err(ValidationErrorKind::from)
-                                })
-                            },
-                        )
-                    })
-                    .transpose()?;
+        if let Some(headers) = parameters.get_optional(StandardParameter::HttpHeaders.into()) {
+            if let Err(error) = http_parameters::unpack_headers(headers).and_then(|mut headers| {
+                headers.try_for_each(|(key, value)| {
+                    resource_builder
+                        .add_header(key, value)
+                        .and(Ok(()))
+                        .map_err(ValidationError::from)
+                })
+            }) {
+                report.add_source(origin.clone(), error);
+            }
+        }
 
-                parameters
-                    .get_optional(StandardParameter::HttpPostParameters.into())
-                    .map(|parameters| {
-                        http_parameters::unpack_http_parameters(parameters).and_then(
-                            |mut parameters| {
-                                parameters.try_for_each(|(key, value)| {
-                                    rb.add_post_parameter(key, value)
-                                        .and(Ok(()))
-                                        .map_err(ValidationErrorKind::from)
-                                })
-                            },
-                        )
-                    })
-                    .transpose()?;
-
-                parameters
-                    .get_optional(StandardParameter::IriFragment.into())
-                    .map(|fragment| {
-                        rb.set_fragment(fragment.to_plain_string_unchecked())
+        if let Some(parameters) =
+            parameters.get_optional(StandardParameter::HttpGetParameters.into())
+        {
+            if let Err(error) =
+                http_parameters::unpack_http_parameters(parameters).and_then(|mut parameters| {
+                    parameters.try_for_each(|(key, value)| {
+                        resource_builder
+                            .add_get_parameter(key, value)
                             .and(Ok(()))
-                            .map_err(ValidationErrorKind::from)
+                            .map_err(ValidationError::from)
                     })
-                    .transpose()?;
+                })
+            {
+                report.add_source(origin.clone(), error);
+            }
+        }
 
-                Ok(rb.finalize())
-            })
-            .transpose()
-            .map_err(|err| builder.report_error(origin, err))
-            .ok()?;
+        if let Some(parameters) =
+            parameters.get_optional(StandardParameter::HttpPostParameters.into())
+        {
+            if let Err(error) =
+                http_parameters::unpack_http_parameters(parameters).and_then(|mut parameters| {
+                    parameters.try_for_each(|(key, value)| {
+                        resource_builder
+                            .add_post_parameter(key, value)
+                            .and(Ok(()))
+                            .map_err(ValidationError::from)
+                    })
+                })
+            {
+                report.add_source(origin.clone(), error);
+            }
+        }
+
+        if let Some(fragment) = parameters.get_optional(StandardParameter::IriFragment.into()) {
+            if let Err(error) = resource_builder
+                .set_fragment(fragment.to_plain_string_unchecked())
+                .and(Ok(()))
+                .map_err(ValidationError::from)
+            {
+                report.add_source(origin.clone(), error);
+            }
+        }
 
         Some(ImportExportBuilder {
             inner: inner.into(),
-            resource,
+            resource: Some(resource_builder.finalize()),
             compression,
         })
     }
 
+    /// Create a new [ImportExportBuilder].
     pub(crate) fn new(
-        spec: ImportExportSpec,
+        spec: &ImportExportSpec,
         bindings: &[Operation],
         direction: Direction,
-        error_builder: &mut ValidationErrorBuilder,
+        report: &mut ValidationReport,
     ) -> Option<Self> {
         let format_tag = spec.format().name().to_owned();
         let Ok(tag) = format_tag.parse::<SupportedFormatTag>() else {
-            error_builder.report_error(
-                *spec.format().origin(),
-                ValidationErrorKind::ImportExportFileFormatUnknown(format_tag.to_string()),
+            report.add(
+                spec,
+                ValidationError::ImportExportFileFormatUnknown {
+                    format: format_tag.to_string(),
+                },
             );
+
             return None;
         };
 
         match tag {
             SupportedFormatTag::Dsv(tag) => {
-                Self::new_with_tag::<DsvBuilder>(tag, spec, bindings, direction, error_builder)
+                Self::new_with_tag::<DsvBuilder>(tag, spec, bindings, direction, report)
             }
             SupportedFormatTag::Rdf(tag) => {
-                Self::new_with_tag::<RdfHandler>(tag, spec, bindings, direction, error_builder)
+                Self::new_with_tag::<RdfHandler>(tag, spec, bindings, direction, report)
             }
             SupportedFormatTag::Json(tag) => {
-                Self::new_with_tag::<JsonHandler>(tag, spec, bindings, direction, error_builder)
+                Self::new_with_tag::<JsonHandler>(tag, spec, bindings, direction, report)
             }
             SupportedFormatTag::Sparql(tag) => {
-                Self::new_with_tag::<SparqlBuilder>(tag, spec, bindings, direction, error_builder)
+                Self::new_with_tag::<SparqlBuilder>(tag, spec, bindings, direction, report)
             }
         }
     }

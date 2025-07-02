@@ -1,18 +1,10 @@
 //! This module defines [ChaseImport].
 
-use crate::{
-    io::formats::Import,
-    rule_model::{components::tag::Tag, origin::Origin},
-};
-
-use super::ChaseComponent;
+use crate::{io::formats::Import, rule_model::components::tag::Tag};
 
 /// Component for handling imports
 #[derive(Debug, Clone)]
 pub(crate) struct ChaseImport {
-    /// Origin of this component
-    origin: Origin,
-
     /// Predicate that will contain the data
     predicate: Tag,
     /// Handler object responsible for importing data
@@ -22,11 +14,7 @@ pub(crate) struct ChaseImport {
 impl ChaseImport {
     /// Create a new [ChaseImport].
     pub(crate) fn new(predicate: Tag, handler: Import) -> Self {
-        Self {
-            origin: Origin::default(),
-            predicate,
-            handler,
-        }
+        Self { predicate, handler }
     }
 
     /// Return the predicate.
@@ -42,19 +30,5 @@ impl ChaseImport {
     /// Return the arity of this import.
     pub(crate) fn arity(&self) -> usize {
         self.handler.predicate_arity()
-    }
-}
-
-impl ChaseComponent for ChaseImport {
-    fn origin(&self) -> &Origin {
-        &self.origin
-    }
-
-    fn set_origin(mut self, origin: Origin) -> Self
-    where
-        Self: Sized,
-    {
-        self.origin = origin;
-        self
     }
 }

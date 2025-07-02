@@ -196,7 +196,7 @@ impl RdfReader {
             }
 
             triple_count.set(triple_count.get() + 1);
-            if triple_count.get() % PROGRESS_NOTIFY_INCREMENT == 0 {
+            if triple_count.get().is_multiple_of(PROGRESS_NOTIFY_INCREMENT) {
                 log::info!("... processed {} triples", triple_count.get())
             }
 
@@ -279,7 +279,7 @@ impl RdfReader {
             }
 
             quad_count.set(quad_count.get() + 1);
-            if quad_count.get() % PROGRESS_NOTIFY_INCREMENT == 0 {
+            if quad_count.get().is_multiple_of(PROGRESS_NOTIFY_INCREMENT) {
                 log::info!("... processed {} triples", quad_count.get())
             }
 

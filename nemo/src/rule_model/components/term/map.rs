@@ -4,11 +4,13 @@ use std::{fmt::Display, hash::Hash};
 
 use crate::rule_model::{
     components::{
-        tag::Tag, IterablePrimitives, IterableVariables, ProgramComponent, ProgramComponentKind,
+        component_iterator, component_iterator_mut, tag::Tag, ComponentBehavior, ComponentIdentity,
+        ComponentSource, IterableComponent, IterablePrimitives, IterableVariables,
+        ProgramComponent, ProgramComponentKind,
     },
-    error::ValidationErrorBuilder,
+    error::ValidationReport,
     origin::Origin,
-    substitution::Substitution,
+    pipeline::id::ProgramComponentId,
 };
 
 use super::{
@@ -21,10 +23,12 @@ use super::{
 ///
 /// A collection of key-value pairs,
 /// associating [Term]s with each other.
-#[derive(Debug, Clone, Eq)]
+#[derive(Debug, Clone)]
 pub struct Map {
     /// Origin of this component
     origin: Origin,
+    /// Id of this component
+    id: ProgramComponentId,
 
     /// Name of the map
     tag: Option<Tag>,
@@ -37,7 +41,8 @@ impl Map {
     /// Create a new [Map].
     pub fn new<Pairs: IntoIterator<Item = (Term, Term)>>(name: &str, map: Pairs) -> Self {
         Self {
-            origin: Origin::Created,
+            origin: Origin::default(),
+            id: ProgramComponentId::default(),
             tag: Some(Tag::new(name.to_string())),
             map: map.into_iter().collect(),
         }
@@ -46,7 +51,8 @@ impl Map {
     /// Create a new [Map] without a name.
     pub fn new_unnamed<Pairs: IntoIterator<Item = (Term, Term)>>(map: Pairs) -> Self {
         Self {
-            origin: Origin::Created,
+            origin: Origin::default(),
+            id: ProgramComponentId::default(),
             tag: None,
             map: map.into_iter().collect(),
         }
@@ -58,7 +64,8 @@ impl Map {
         map: Pairs,
     ) -> Self {
         Self {
-            origin: Origin::Created,
+            origin: Origin::default(),
+            id: ProgramComponentId::default(),
             tag,
             map: map.into_iter().collect(),
         }
@@ -67,8 +74,19 @@ impl Map {
     /// Create a new empty [Map].
     pub fn empty(name: &str) -> Self {
         Self {
-            origin: Origin::Created,
+            origin: Origin::default(),
+            id: ProgramComponentId::default(),
             tag: Some(Tag::new(name.to_string())),
+            map: Vec::default(),
+        }
+    }
+
+    /// Create a new empty [Map].
+    pub fn empty_tagged(tag: Option<Tag>) -> Self {
+        Self {
+            origin: Origin::default(),
+            id: ProgramComponentId::default(),
+            tag,
             map: Vec::default(),
         }
     }
@@ -76,7 +94,8 @@ impl Map {
     /// Create a new empty [Map].
     pub fn empty_unnamed() -> Self {
         Self {
-            origin: Origin::Created,
+            origin: Origin::default(),
+            id: ProgramComponentId::default(),
             tag: None,
             map: Vec::default(),
         }
@@ -97,6 +116,11 @@ impl Map {
         self.map.iter()
     }
 
+    /// Return an iterator over the key value pairs in this map.
+    pub fn key_value_mut(&mut self) -> impl Iterator<Item = &mut (Term, Term)> {
+        self.map.iter_mut()
+    }
+
     /// Return the number of entries in this map.
     pub fn len(&self) -> usize {
         self.map.len()
@@ -107,6 +131,45 @@ impl Map {
         self.len() == 0
     }
 
+    /// Find the given key and return a reference to the corresponding value,
+    /// if it exists.
+    pub fn get(&self, key: &Term) -> Option<&Term> {
+        for (map_key, value) in self.key_value() {
+            if map_key == key {
+                return Some(value);
+            }
+        }
+
+        None
+    }
+
+    /// Find the given key and return a mutable reference to the corresponding value,
+    /// if it exists.
+    pub fn get_mut(&mut self, key: &Term) -> Option<&mut Term> {
+        for (map_key, value) in self.key_value_mut() {
+            if map_key == key {
+                return Some(value);
+            }
+        }
+
+        None
+    }
+
+    /// Insert a new key-value-pair into the map.
+    pub fn insert(&mut self, key: Term, value: Term) {
+        self.map.push((key, value));
+    }
+
+    /// Remove all occurrences of the given key from the map.
+    pub fn remove(&mut self, key: &Term) {
+        self.map.retain(|(key_map, _)| key_map != key);
+    }
+
+    /// Check whether the given key is contained in this map.
+    pub fn contains_key(&self, key: &Term) -> bool {
+        self.map.iter().any(|(key_map, _)| key_map == key)
+    }
+
     /// Return whether this term is ground,
     /// i.e. if it does not contain any variables.
     pub fn is_ground(&self) -> bool {
@@ -114,21 +177,31 @@ impl Map {
             .all(|(key, value)| key.is_ground() && value.is_ground())
     }
 
-    /// Reduce the [Term]s in each key-value pair returning a copy.
-    pub fn reduce_with_substitution(&self, bindings: &Substitution) -> Self {
-        Self {
-            origin: self.origin,
+    /// Reduce this term by evaluating all contained expressions,
+    /// and return a new [Map] with the same [Origin] as `self`.
+    ///
+    /// This function does nothing if `self` is not ground.
+    pub fn reduce(&self) -> Option<Self> {
+        Some(Self {
+            origin: self.origin.clone(),
+            id: ProgramComponentId::default(),
             tag: self.tag.clone(),
             map: self
                 .key_value()
-                .map(|(key, value)| {
-                    (
-                        key.reduce_with_substitution(bindings),
-                        value.reduce_with_substitution(bindings),
-                    )
-                })
-                .collect(),
-        }
+                .map(|(key, value)| Some((key.reduce()?, value.reduce()?)))
+                .collect::<Option<Vec<_>>>()?,
+        })
+    }
+
+    /// Check wether this term can be reduced to a ground value,
+    /// except for global variables that need to be resolved.
+    ///
+    /// This is the case if
+    ///     * This term does not contain non-global variables.
+    ///     * This term does not contain undefined intermediate values.
+    pub fn is_resolvable(&self) -> bool {
+        self.key_value()
+            .all(|(key, value)| key.is_resolvable() && value.is_resolvable())
     }
 }
 
@@ -159,6 +232,8 @@ impl PartialEq for Map {
     }
 }
 
+impl Eq for Map {}
+
 impl PartialOrd for Map {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         self.map.partial_cmp(&other.map)
@@ -172,33 +247,63 @@ impl Hash for Map {
     }
 }
 
-impl ProgramComponent for Map {
-    fn origin(&self) -> &Origin {
-        &self.origin
-    }
-
-    fn set_origin(mut self, origin: Origin) -> Self
-    where
-        Self: Sized,
-    {
-        self.origin = origin;
-        self
-    }
-
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()>
-    where
-        Self: Sized,
-    {
-        for (key, value) in self.key_value() {
-            key.validate(builder)?;
-            value.validate(builder)?;
-        }
-
-        Some(())
-    }
-
+impl ComponentBehavior for Map {
     fn kind(&self) -> ProgramComponentKind {
         ProgramComponentKind::Map
+    }
+
+    fn validate(&self) -> Result<(), ValidationReport> {
+        let mut report = ValidationReport::default();
+
+        for child in self.children() {
+            report.merge(child.validate());
+        }
+
+        report.result()
+    }
+
+    fn boxed_clone(&self) -> Box<dyn ProgramComponent> {
+        Box::new(self.clone())
+    }
+}
+
+impl ComponentSource for Map {
+    type Source = Origin;
+
+    fn origin(&self) -> Origin {
+        self.origin.clone()
+    }
+
+    fn set_origin(&mut self, origin: Origin) {
+        self.origin = origin;
+    }
+}
+
+impl ComponentIdentity for Map {
+    fn id(&self) -> ProgramComponentId {
+        self.id
+    }
+
+    fn set_id(&mut self, id: ProgramComponentId) {
+        self.id = id;
+    }
+}
+
+impl IterableComponent for Map {
+    fn children<'a>(&'a self) -> Box<dyn Iterator<Item = &'a dyn ProgramComponent> + 'a> {
+        let key_value_iterator =
+            component_iterator(self.key_value().flat_map(|(a, b)| [a, b].into_iter()));
+
+        Box::new(key_value_iterator)
+    }
+
+    fn children_mut<'a>(
+        &'a mut self,
+    ) -> Box<dyn Iterator<Item = &'a mut dyn ProgramComponent> + 'a> {
+        let key_value_iterator =
+            component_iterator_mut(self.map.iter_mut().flat_map(|(a, b)| [a, b].into_iter()));
+
+        Box::new(key_value_iterator)
     }
 }
 

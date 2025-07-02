@@ -5,7 +5,7 @@ use crate::{
     parser::ast,
     rule_model::{
         components::term::{tuple::Tuple, Term},
-        error::TranslationError,
+        origin::Origin,
         translation::{ASTProgramTranslation, TranslationComponent},
     },
 };
@@ -13,15 +13,15 @@ use crate::{
 impl TranslationComponent for Tuple {
     type Ast<'a> = ast::expression::complex::tuple::Tuple<'a>;
 
-    fn build_component<'a, 'b>(
-        translation: &mut ASTProgramTranslation<'a, 'b>,
-        tuple: &'b Self::Ast<'a>,
-    ) -> Result<Self, TranslationError> {
+    fn build_component<'a>(
+        translation: &mut ASTProgramTranslation,
+        tuple: &Self::Ast<'a>,
+    ) -> Option<Self> {
         let mut subterms = Vec::new();
         for expression in tuple.expressions() {
             subterms.push(Term::build_component(translation, expression)?);
         }
 
-        Ok(translation.register_component(Tuple::new(subterms), tuple))
+        Some(Origin::ast(Tuple::new(subterms), tuple))
     }
 }

@@ -8,18 +8,19 @@ use std::{
 };
 
 use enum_assoc::Assoc;
-use log::warn;
 use nemo_physical::aggregates::operation::AggregateOperation;
 use strum_macros::EnumIter;
 
 use crate::{
     rule_model::{
         components::{
-            IterablePrimitives, IterableVariables, ProgramComponent, ProgramComponentKind,
+            component_iterator, component_iterator_mut, ComponentBehavior, ComponentIdentity,
+            ComponentSource, IterableComponent, IterablePrimitives, IterableVariables,
+            ProgramComponent, ProgramComponentKind,
         },
-        error::{validation_error::ValidationErrorKind, ValidationErrorBuilder},
+        error::{info::Info, validation_error::ValidationError, ValidationReport},
         origin::Origin,
-        substitution::Substitution,
+        pipeline::id::ProgramComponentId,
     },
     syntax::builtin::aggregate,
 };
@@ -79,10 +80,12 @@ impl From<AggregateKind> for AggregateOperation {
 ///
 /// Function that performs a computation over a set of [Term]s
 /// and returns a single value.
-#[derive(Debug, Clone, Eq)]
+#[derive(Debug, Clone)]
 pub struct Aggregate {
     /// Origin of this component
     origin: Origin,
+    /// Id of this component
+    id: ProgramComponentId,
 
     /// Type of aggregate operation
     kind: AggregateKind,
@@ -101,6 +104,7 @@ impl Aggregate {
     ) -> Self {
         Self {
             origin: Origin::default(),
+            id: ProgramComponentId::default(),
             kind,
             aggregate: Box::new(aggregate),
             distinct: distinct.into_iter().collect(),
@@ -144,9 +148,14 @@ impl Aggregate {
         self.kind.value_type()
     }
 
-    /// Return a reference to aggregated term.
+    /// Return a reference to the aggregated term.
     pub fn aggregate_term(&self) -> &Term {
         &self.aggregate
+    }
+
+    /// Return a mutable reference to the aggregated term.
+    pub fn aggregate_term_mut(&mut self) -> &mut Term {
+        &mut self.aggregate
     }
 
     /// Return the kind of aggregate.
@@ -154,9 +163,28 @@ impl Aggregate {
         self.kind
     }
 
-    /// Return a iterator over the distinct variables
+    /// Return a iterator over the distinct variables.
     pub fn distinct(&self) -> impl Iterator<Item = &Variable> {
         self.distinct.iter()
+    }
+
+    /// Return a mutable iterator over the distinct variables.
+    pub fn distinct_mut(&mut self) -> impl Iterator<Item = &mut Variable> {
+        self.distinct.iter_mut()
+    }
+
+    /// Add a new distinct variable.
+    pub fn push_distinct(&mut self, variable: Variable) {
+        self.distinct.push(variable);
+    }
+
+    /// Remove a distinct variable at the given index
+    /// and return it.
+    ///
+    /// # Panics
+    /// Panics if the index is out of bounds.
+    pub fn remove_distinct(&mut self, index: usize) -> Variable {
+        self.distinct.remove(index)
     }
 
     /// Return whether the aggregate expression is ground.
@@ -164,14 +192,30 @@ impl Aggregate {
         self.aggregate.is_ground()
     }
 
-    /// Reduce the [Term] in the aggregate expression returning a copy.
-    pub fn reduce_with_substitution(&self, bindings: &Substitution) -> Self {
-        Self {
-            origin: self.origin,
+    /// Reduce this term by evaluating all contained expressions,
+    /// and return a new [Aggregate] with the same [Origin] as `self`.
+    ///
+    /// This function does nothing if `self` is not ground.
+    ///
+    /// Returns `None` if any intermediate result is undefined.
+    pub fn reduce(&self) -> Option<Self> {
+        Some(Self {
+            origin: self.origin.clone(),
+            id: ProgramComponentId::default(),
             kind: self.kind,
-            aggregate: Box::new(self.aggregate.reduce_with_substitution(bindings)),
+            aggregate: Box::new(self.aggregate.reduce()?),
             distinct: self.distinct.clone(),
-        }
+        })
+    }
+
+    /// Check wether this term can be reduced to a ground value,
+    /// except for global variables that need to be resolved.
+    ///
+    /// This is the case if
+    ///     * This term does not contain non-global variables.
+    ///     * This term does not contain undefined intermediate values.
+    pub fn is_resolvable(&self) -> bool {
+        self.aggregate.is_resolvable()
     }
 }
 
@@ -225,35 +269,28 @@ impl PartialOrd for Aggregate {
     }
 }
 
-impl ProgramComponent for Aggregate {
-    fn origin(&self) -> &Origin {
-        &self.origin
+impl ComponentBehavior for Aggregate {
+    fn kind(&self) -> ProgramComponentKind {
+        ProgramComponentKind::Aggregation
     }
 
-    fn set_origin(mut self, origin: Origin) -> Self
-    where
-        Self: Sized,
-    {
-        self.origin = origin;
-        self
-    }
+    fn validate(&self) -> Result<(), ValidationReport> {
+        let mut report = ValidationReport::default();
 
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()>
-    where
-        Self: Sized,
-    {
+        for child in self.children() {
+            report.merge(child.validate());
+        }
+
         let input_type = self.aggregate.value_type();
         if let Some(expected_type) = self.kind.input_type() {
             if input_type != ValueType::Any && input_type != expected_type {
-                builder.report_error(
-                    *self.aggregate.origin(),
-                    ValidationErrorKind::AggregateInvalidValueType {
+                report.add(
+                    &*self.aggregate,
+                    ValidationError::AggregateInvalidValueType {
                         found: input_type.name().to_string(),
                         expected: expected_type.name().to_string(),
                     },
                 );
-
-                return None;
             }
         }
 
@@ -262,42 +299,90 @@ impl ProgramComponent for Aggregate {
         } else {
             HashSet::new()
         };
-        for variable in &self.distinct {
-            let name = if variable.is_universal() {
-                if let Some(name) = variable.name() {
-                    name
-                } else {
-                    builder.report_error(
-                        *variable.origin(),
-                        ValidationErrorKind::AggregateDistinctNonNamedUniversal {
-                            variable_type: String::from("anonymous"),
-                        },
-                    );
-                    return None;
-                }
-            } else {
-                builder.report_error(
-                    *variable.origin(),
-                    ValidationErrorKind::AggregateDistinctNonNamedUniversal {
-                        variable_type: String::from("existential"),
-                    },
-                );
-                return None;
-            };
 
-            if !distinct_set.insert(variable) {
-                warn!(
-                    "found duplicate variable `{name}` in aggregate `{}`",
-                    self.aggregate_kind()
+        for variable in &self.distinct {
+            if !variable.is_universal() {
+                let variable_type = match variable {
+                    Variable::Universal(_) => "",
+                    Variable::Existential(_) => "existential",
+                    Variable::Global(_) => "global",
+                }
+                .to_owned();
+
+                report.add(
+                    variable,
+                    ValidationError::AggregateDistinctNonNamedUniversal { variable_type },
                 );
             }
+
+            if !variable.is_anonymous() {
+                if let Some(found) = distinct_set.get(variable) {
+                    report
+                        .add(
+                            variable,
+                            ValidationError::AggregateRepeatedDistinctVariable {
+                                variable: Box::new(variable.clone()),
+                            },
+                        )
+                        .add_context(*found, Info::FirstDefinition);
+                } else {
+                    distinct_set.insert(variable);
+                }
+            } else {
+                report.add(
+                    variable,
+                    ValidationError::AggregateDistinctNonNamedUniversal {
+                        variable_type: String::from("anonymous"),
+                    },
+                );
+            };
         }
 
-        Some(())
+        report.result()
     }
 
-    fn kind(&self) -> ProgramComponentKind {
-        ProgramComponentKind::Aggregation
+    fn boxed_clone(&self) -> Box<dyn ProgramComponent> {
+        Box::new(self.clone())
+    }
+}
+
+impl ComponentSource for Aggregate {
+    type Source = Origin;
+
+    fn origin(&self) -> Origin {
+        self.origin.clone()
+    }
+
+    fn set_origin(&mut self, origin: Origin) {
+        self.origin = origin;
+    }
+}
+
+impl ComponentIdentity for Aggregate {
+    fn id(&self) -> ProgramComponentId {
+        self.id
+    }
+
+    fn set_id(&mut self, id: ProgramComponentId) {
+        self.id = id;
+    }
+}
+
+impl IterableComponent for Aggregate {
+    fn children<'a>(&'a self) -> Box<dyn Iterator<Item = &'a dyn ProgramComponent> + 'a> {
+        let aggregate_iter = component_iterator(std::iter::once(&*self.aggregate));
+        let distinct_iter = component_iterator(self.distinct());
+
+        Box::new(aggregate_iter.chain(distinct_iter))
+    }
+
+    fn children_mut<'a>(
+        &'a mut self,
+    ) -> Box<dyn Iterator<Item = &'a mut dyn ProgramComponent> + 'a> {
+        let aggregate_iter = component_iterator_mut(std::iter::once(&mut *self.aggregate));
+        let distinct_iter = component_iterator_mut(self.distinct.iter_mut());
+
+        Box::new(aggregate_iter.chain(distinct_iter))
     }
 }
 

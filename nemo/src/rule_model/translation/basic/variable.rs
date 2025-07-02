@@ -1,8 +1,12 @@
+//! This module contains a function to create a variable
+//! from the corresponding ast node.
+
 use crate::{
     parser::ast::{self, ProgramAST},
     rule_model::{
-        components::{term::primitive::variable::Variable, ProgramComponent},
-        error::{hint::Hint, translation_error::TranslationErrorKind, TranslationError},
+        components::term::primitive::variable::Variable,
+        error::{hint::Hint, translation_error::TranslationError},
+        origin::Origin,
         translation::{ASTProgramTranslation, TranslationComponent},
     },
 };
@@ -10,57 +14,60 @@ use crate::{
 impl TranslationComponent for Variable {
     type Ast<'a> = ast::expression::basic::variable::Variable<'a>;
 
-    fn build_component<'a, 'b>(
-        translation: &mut ASTProgramTranslation<'a, 'b>,
-        variable: &'b Self::Ast<'a>,
-    ) -> Result<Self, TranslationError> {
+    fn build_component<'a>(
+        translation: &mut ASTProgramTranslation,
+        variable: &Self::Ast<'a>,
+    ) -> Option<Self> {
         let result = match variable.kind() {
             ast::expression::basic::variable::VariableType::Universal => {
                 if let Some(variable_name) = variable.name() {
                     Variable::universal(&variable_name)
-                        .set_origin(translation.register_node(variable))
                 } else {
-                    return Err(TranslationError::new(
-                        variable.span(),
-                        TranslationErrorKind::UnnamedVariable,
-                    )
-                    .add_hint(Hint::AnonymousVariables));
+                    translation
+                        .report
+                        .add(variable, TranslationError::UnnamedVariable)
+                        .add_hint(Hint::AnonymousVariables);
+
+                    return None;
                 }
             }
             ast::expression::basic::variable::VariableType::Existential => {
                 if let Some(variable_name) = variable.name() {
                     Variable::existential(&variable_name)
-                        .set_origin(translation.register_node(variable))
                 } else {
-                    return Err(TranslationError::new(
-                        variable.span(),
-                        TranslationErrorKind::UnnamedVariable,
-                    ));
+                    translation
+                        .report
+                        .add(variable, TranslationError::UnnamedVariable);
+
+                    return None;
                 }
             }
             ast::expression::basic::variable::VariableType::Anonymous => {
                 if variable.name().is_none() {
-                    Variable::anonymous().set_origin(translation.register_node(variable))
+                    Variable::anonymous()
                 } else {
-                    return Err(TranslationError::new(
-                        variable.span(),
-                        TranslationErrorKind::NamedAnonymous(
-                            variable.span().fragment().to_string(),
-                        ),
-                    ));
+                    translation.report.add(
+                        variable,
+                        TranslationError::NamedAnonymous {
+                            name: variable.span().fragment().to_string(),
+                        },
+                    );
+
+                    return None;
                 }
             }
             ast::expression::basic::variable::VariableType::Global => {
                 let Some(variable_name) = variable.name() else {
-                    return Err(TranslationError::new(
-                        variable.span(),
-                        TranslationErrorKind::UnnamedVariable,
-                    ));
+                    translation
+                        .report
+                        .add(variable, TranslationError::UnnamedVariable);
+                    return None;
                 };
-                Variable::global(&variable_name).set_origin(translation.register_node(variable))
+
+                Variable::global(&variable_name)
             }
         };
 
-        Ok(translation.register_component(result, variable))
+        Some(Origin::ast(result, variable))
     }
 }

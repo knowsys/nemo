@@ -2,42 +2,62 @@
 
 use std::{fmt::Display, hash::Hash};
 
-use crate::rule_model::{
-    components::{ProgramComponent, ProgramComponentKind},
-    error::{validation_error::ValidationErrorKind, ValidationErrorBuilder},
-    origin::Origin,
+use crate::{
+    parser::ParserErrorReport,
+    rule_model::{
+        components::{
+            symbols::Symbols, ComponentBehavior, ComponentIdentity, ComponentSource,
+            IterableComponent, ProgramComponent, ProgramComponentKind,
+        },
+        error::{validation_error::ValidationError, ValidationReport},
+        origin::Origin,
+        pipeline::id::ProgramComponentId,
+        translation::{ProgramParseReport, TranslationComponent},
+    },
 };
 
-use super::VariableName;
+use super::Variable;
 
 /// Existentially quantified variable
 ///
 /// Variable that implies the existence of a value satisfying a certain pattern.
-#[derive(Debug, Clone, Eq)]
+#[derive(Debug, Clone)]
 pub struct ExistentialVariable {
     /// Origin of this component
     origin: Origin,
+    /// Id of this component
+    id: ProgramComponentId,
 
     /// Name of the variable
-    name: VariableName,
+    name: String,
 }
 
 impl ExistentialVariable {
     /// Create a new [ExistentialVariable].
     pub fn new(name: &str) -> Self {
         Self {
-            origin: Origin::Created,
-            name: VariableName::new(name.to_string()),
+            origin: Origin::default(),
+            id: ProgramComponentId::default(),
+            name: name.to_owned(),
+        }
+    }
+
+    /// Construct this object from a string.
+    pub fn parse(input: &str) -> Result<Self, ProgramParseReport> {
+        if let Variable::Existential(result) = Variable::parse(input)? {
+            Ok(result)
+        } else {
+            Err(ProgramParseReport::Parsing(ParserErrorReport::empty()))
         }
     }
 
     /// Return the name of this variable.
-    pub fn name(&self) -> String {
-        self.name.to_string()
+    pub fn name(&self) -> &str {
+        &self.name
     }
 
     /// Change the name of this variable.
-    pub fn rename(&mut self, name: VariableName) {
+    pub fn rename(&mut self, name: String) {
         self.name = name;
     }
 }
@@ -54,6 +74,8 @@ impl PartialEq for ExistentialVariable {
     }
 }
 
+impl Eq for ExistentialVariable {}
+
 impl PartialOrd for ExistentialVariable {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         self.name.partial_cmp(&other.name)
@@ -66,34 +88,51 @@ impl Hash for ExistentialVariable {
     }
 }
 
-impl ProgramComponent for ExistentialVariable {
-    fn origin(&self) -> &Origin {
-        &self.origin
-    }
-
-    fn set_origin(mut self, origin: Origin) -> Self
-    where
-        Self: Sized,
-    {
-        self.origin = origin;
-        self
-    }
-
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()>
-    where
-        Self: Sized,
-    {
-        if !self.name.is_valid() {
-            builder.report_error(
-                self.origin,
-                ValidationErrorKind::InvalidVariableName(self.name()),
-            );
-        }
-
-        Some(())
-    }
-
+impl ComponentBehavior for ExistentialVariable {
     fn kind(&self) -> ProgramComponentKind {
         ProgramComponentKind::Variable
     }
+
+    fn validate(&self) -> Result<(), ValidationReport> {
+        let mut report = ValidationReport::default();
+
+        if Symbols::is_reserved(self.name()) {
+            report.add(
+                self,
+                ValidationError::InvalidVariableName {
+                    variable_name: self.name().to_owned(),
+                },
+            );
+        }
+
+        report.result()
+    }
+
+    fn boxed_clone(&self) -> Box<dyn ProgramComponent> {
+        Box::new(self.clone())
+    }
 }
+
+impl ComponentSource for ExistentialVariable {
+    type Source = Origin;
+
+    fn origin(&self) -> Origin {
+        self.origin.clone()
+    }
+
+    fn set_origin(&mut self, origin: Origin) {
+        self.origin = origin;
+    }
+}
+
+impl ComponentIdentity for ExistentialVariable {
+    fn id(&self) -> ProgramComponentId {
+        self.id
+    }
+
+    fn set_id(&mut self, id: ProgramComponentId) {
+        self.id = id;
+    }
+}
+
+impl IterableComponent for ExistentialVariable {}

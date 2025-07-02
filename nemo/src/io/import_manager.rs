@@ -8,7 +8,7 @@ use super::formats::{FileFormatMeta, Import, ImportHandler};
 
 /// Manages everything related to resolving the inputs of a Nemo program.
 /// Currently, this is only the resource providers.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ImportManager {
     resource_providers: ResourceProviders,
 }
