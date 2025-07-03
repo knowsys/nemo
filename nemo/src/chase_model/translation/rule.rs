@@ -7,20 +7,16 @@ use crate::{
         atom::{primitive_atom::PrimitiveAtom, variable_atom::VariableAtom},
         filter::ChaseFilter,
         rule::ChaseRule,
-        ChaseComponent,
     },
     rule_model::components::{
         atom::Atom,
         literal::Literal,
         term::{
             aggregate::Aggregate,
-            primitive::{
-                variable::{Variable, VariableName},
-                Primitive,
-            },
+            primitive::{variable::Variable, Primitive},
             Term,
         },
-        IterableVariables, ProgramComponent,
+        IterableVariables,
     },
 };
 
@@ -36,12 +32,13 @@ impl ProgramChaseTranslation {
     ///     * the body contains any aggregates
     pub(crate) fn build_rule(
         &mut self,
-        rule: &mut crate::rule_model::components::rule::Rule,
+        rule: &crate::rule_model::components::rule::Rule,
     ) -> ChaseRule {
+        let mut rule = rule.clone();
         let mut result = ChaseRule::default();
 
-        let variable_assignments = Self::variables_assignments(rule);
-        Self::apply_variable_assignment(rule, &variable_assignments);
+        let variable_assignments = Self::variables_assignments(&rule);
+        Self::apply_variable_assignment(&mut rule, &variable_assignments);
 
         // Handle positive and negative atoms
         for literal in rule.body() {
@@ -71,7 +68,7 @@ impl ProgramChaseTranslation {
         }
 
         // Handle operations
-        self.handle_operations(&mut result, rule);
+        self.handle_operations(&mut result, &rule);
 
         // Handle head
         self.handle_head(&mut result, rule.head());
@@ -114,8 +111,7 @@ impl ProgramChaseTranslation {
         for variable in rule.variables_mut() {
             if let Some(new_variable) = assignment.get(variable) {
                 if let Some(name) = new_variable.name() {
-                    let new_name = VariableName::new(name);
-                    variable.rename(new_name);
+                    variable.rename(name.to_owned());
                 }
             }
         }
@@ -126,7 +122,6 @@ impl ProgramChaseTranslation {
     /// # Panics
     /// Panics if atom contains a structured term or an aggregate.
     fn build_body_atom(&mut self, atom: &Atom) -> (VariableAtom, Vec<ChaseFilter>) {
-        let origin = *atom.origin();
         let predicate = atom.predicate().clone();
         let mut variables = Vec::new();
 
@@ -134,7 +129,7 @@ impl ProgramChaseTranslation {
 
         let mut used_variables = HashSet::<&Variable>::new();
 
-        for argument in atom.arguments() {
+        for argument in atom.terms() {
             match argument {
                 Term::Primitive(Primitive::Variable(variable)) => {
                     if variable.is_anonymous() {
@@ -176,7 +171,7 @@ impl ProgramChaseTranslation {
             }
         }
 
-        let variable_atom = VariableAtom::new(predicate, variables).set_origin(origin);
+        let variable_atom = VariableAtom::new(predicate, variables);
         (variable_atom, filters)
     }
 
@@ -238,7 +233,7 @@ impl ProgramChaseTranslation {
 
             if let Literal::Operation(operation) = literal {
                 let new_operation = Self::build_operation_term(operation);
-                let new_filter = ChaseFilter::new(new_operation).set_origin(*operation.origin());
+                let new_filter = ChaseFilter::new(new_operation);
 
                 result.add_positive_filter(new_filter);
             }
@@ -249,14 +244,13 @@ impl ProgramChaseTranslation {
     /// while taking care of operations and aggregates.
     fn handle_head(&mut self, result: &mut ChaseRule, head: &[Atom]) {
         for (head_index, atom) in head.iter().enumerate() {
-            let origin = *atom.origin();
             let predicate = atom.predicate().clone();
             let mut terms = Vec::new();
 
             let mut aggregate: Option<(&Aggregate, usize, HashSet<Variable>)> = None;
             let aggregate_variable = Variable::universal("__AGGREGATE");
 
-            for (argument_index, argument) in atom.arguments().enumerate() {
+            for (argument_index, argument) in atom.terms().enumerate() {
                 match argument {
                     Term::Primitive(primitive) => terms.push(primitive.clone()),
                     Term::Aggregate(term_aggregate) => {
@@ -307,7 +301,7 @@ impl ProgramChaseTranslation {
             }
 
             self.predicate_arity.insert(predicate.clone(), terms.len());
-            result.add_head_atom(PrimitiveAtom::new(predicate, terms).set_origin(origin));
+            result.add_head_atom(PrimitiveAtom::new(predicate, terms));
         }
     }
 

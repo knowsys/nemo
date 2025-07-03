@@ -88,7 +88,7 @@ impl DsvWriter {
             if complete {
                 self.writer.write_record(string_record)?;
                 line_count += 1;
-                if (line_count % PROGRESS_NOTIFY_INCREMENT) == 0 {
+                if line_count.is_multiple_of(PROGRESS_NOTIFY_INCREMENT) {
                     log::info!("... processed {line_count} tuples");
                 }
                 if line_count == stop_limit {

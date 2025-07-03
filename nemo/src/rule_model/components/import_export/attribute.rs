@@ -1,16 +1,22 @@
 //! This module defines [ImportExportAttribute].
 
 use crate::rule_model::{
-    components::{ProgramComponent, ProgramComponentKind},
-    error::ValidationErrorBuilder,
+    components::{
+        ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent, ProgramComponent,
+        ProgramComponentKind,
+    },
+    error::ValidationReport,
     origin::Origin,
+    pipeline::id::ProgramComponentId,
 };
 
 /// Attribute value pairs defining import or export parameters
-#[derive(Debug, Clone, Eq)]
+#[derive(Debug, Clone)]
 pub struct ImportExportAttribute {
     /// Origin of this component
     origin: Origin,
+    /// Id of this component
+    id: ProgramComponentId,
 
     /// The attribute
     attribute: String,
@@ -21,6 +27,7 @@ impl ImportExportAttribute {
     pub fn new(attribute: String) -> Self {
         Self {
             origin: Origin::Created,
+            id: ProgramComponentId::default(),
             attribute,
         }
     }
@@ -43,6 +50,8 @@ impl PartialEq for ImportExportAttribute {
     }
 }
 
+impl Eq for ImportExportAttribute {}
+
 impl PartialOrd for ImportExportAttribute {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         self.attribute.partial_cmp(&other.attribute)
@@ -55,27 +64,40 @@ impl std::hash::Hash for ImportExportAttribute {
     }
 }
 
-impl ProgramComponent for ImportExportAttribute {
-    fn origin(&self) -> &Origin {
-        &self.origin
-    }
-
-    fn set_origin(mut self, origin: Origin) -> Self
-    where
-        Self: Sized,
-    {
-        self.origin = origin;
-        self
-    }
-
-    fn validate(&self, _builder: &mut ValidationErrorBuilder) -> Option<()>
-    where
-        Self: Sized,
-    {
-        Some(())
-    }
-
+impl ComponentBehavior for ImportExportAttribute {
     fn kind(&self) -> ProgramComponentKind {
         ProgramComponentKind::Attribute
     }
+
+    fn validate(&self) -> Result<(), ValidationReport> {
+        Ok(())
+    }
+
+    fn boxed_clone(&self) -> Box<dyn ProgramComponent> {
+        Box::new(self.clone())
+    }
 }
+
+impl ComponentSource for ImportExportAttribute {
+    type Source = Origin;
+
+    fn origin(&self) -> Origin {
+        self.origin.clone()
+    }
+
+    fn set_origin(&mut self, origin: Origin) {
+        self.origin = origin;
+    }
+}
+
+impl ComponentIdentity for ImportExportAttribute {
+    fn id(&self) -> ProgramComponentId {
+        self.id
+    }
+
+    fn set_id(&mut self, id: ProgramComponentId) {
+        self.id = id;
+    }
+}
+
+impl IterableComponent for ImportExportAttribute {}

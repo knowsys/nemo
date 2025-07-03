@@ -24,11 +24,18 @@
 use std::{fs::read_to_string, path::PathBuf};
 
 use crate::{
-    error::{Error, ReadingError},
-    execution::{DefaultExecutionEngine, ExecutionEngine},
-    io::{resource_providers::ResourceProviders, ImportManager},
-    parser::Parser,
-    rule_model::{components::tag::Tag, translation::ASTProgramTranslation},
+    error::{report::ProgramReport, Error, ReadingError},
+    execution::{
+        execution_parameters::ExecutionParameters, DefaultExecutionEngine, ExecutionEngine,
+    },
+    rule_file::RuleFile,
+    rule_model::{
+        components::tag::Tag,
+        pipeline::transformations::{
+            default::TransformationDefault, validate::TransformationValidate,
+        },
+        programs::{handle::ProgramHandle, program::Program},
+    },
 };
 use nemo_physical::resource::Resource;
 
@@ -51,14 +58,52 @@ pub fn load(file: PathBuf) -> Result<Engine, Error> {
 /// # Error
 /// Returns an appropriate [Error] variant on parsing and feature check issues.
 pub fn load_string(input: String) -> Result<Engine, Error> {
-    let program_ast = Parser::initialize(&input, String::default())
-        .parse()
-        .map_err(|_| Error::ProgramParseError)?;
-    let program = ASTProgramTranslation::initialize(&input, String::default())
-        .translate(&program_ast)
-        .map_err(|_| Error::ProgramParseError)?;
+    let parameters = ExecutionParameters::default();
+    let file = RuleFile::new(input, String::default());
 
-    ExecutionEngine::initialize(program, ImportManager::new(ResourceProviders::default()))
+    Ok(ExecutionEngine::from_file(file, parameters)?.into_object())
+}
+
+/// Parse a program in the given `input`-string and return a [Program].
+///
+/// # Error
+/// Returns a [ProgramReport] if parsing or validation fails.
+pub fn load_program(input: String, label: String) -> Result<Program, ProgramReport> {
+    let file = RuleFile::new(input, label);
+    let parameters = ExecutionParameters::default();
+
+    let handle = ProgramHandle::from_file(&file);
+    let report = ProgramReport::new(file);
+
+    let (program, report) = report.merge_program_parser_report(handle)?;
+    let (program, report) = report.merge_validation_report(
+        &program,
+        program.transform(TransformationDefault::new(&parameters)),
+    )?;
+
+    report.result(program.materialize())
+}
+
+/// Validate the `input` and create a [ProgramReport] for error reporting
+pub fn validate(input: String, label: String) -> ProgramReport {
+    let file = RuleFile::new(input, label);
+    let handle = ProgramHandle::from_file(&file);
+    let report = ProgramReport::new(file);
+
+    let (program, report) = match report.merge_program_parser_report(handle) {
+        Ok(result) => result,
+        Err(report) => return report,
+    };
+
+    let (_program, report) = match report.merge_validation_report(
+        &program,
+        program.transform(TransformationValidate::default()),
+    ) {
+        Ok(result) => result,
+        Err(report) => return report,
+    };
+
+    report
 }
 
 /// Executes the reasoning process of the [Engine].
@@ -74,7 +119,7 @@ pub fn reason(engine: &mut Engine) -> Result<(), Error> {
 /// Get a [Vec] of all output predicates that are computed by the engine.
 pub fn output_predicates(engine: &Engine) -> Vec<Tag> {
     engine
-        .program()
+        .chase_program()
         .exports()
         .iter()
         .map(|export| export.predicate())

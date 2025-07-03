@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use nemo_physical::{
     datavalues::{AnyDataValue, DataValue},
-    resource::ResourceBuilder,
+    resource::{ResourceBuilder, ResourceValidationErrorKind},
 };
 use oxiri::Iri;
 
@@ -16,7 +16,7 @@ use crate::{
     },
     rule_model::{
         components::{import_export::Direction, term::value_type::ValueType},
-        error::validation_error::ValidationErrorKind,
+        error::validation_error::ValidationError,
     },
     syntax::import_export::{attribute, file_format},
 };
@@ -48,7 +48,7 @@ impl FormatParameter<SparqlTag> for SparqlParameter {
         matches!(tag, SparqlTag::Sparql) && matches!(self, Self::Endpoint | Self::Query)
     }
 
-    fn is_value_valid(&self, value: AnyDataValue) -> Result<(), ValidationErrorKind> {
+    fn is_value_valid(&self, value: AnyDataValue) -> Result<(), ValidationError> {
         value_type_matches(self, &value, self.supported_types())?;
 
         match self {
@@ -57,25 +57,25 @@ impl FormatParameter<SparqlTag> for SparqlParameter {
             }
             SparqlParameter::Base => Ok(()),
             SparqlParameter::Format => DsvValueFormats::try_from(value).and(Ok(())).map_err(|_| {
-                ValidationErrorKind::ImportExportValueFormat {
+                ValidationError::ImportExportValueFormat {
                     file_format: "sparql".to_string(),
                 }
             }),
 
             SparqlParameter::Endpoint => {
                 let resource = ResourceBuilder::try_from(value)
-                    .map_err(ValidationErrorKind::from)?
+                    .map_err(ValidationError::from)?
                     .finalize();
                 if resource.is_http() {
                     Ok(())
                 } else {
-                    Err(ValidationErrorKind::InvalidHttpIri)
+                    Err(ValidationError::InvalidHttpIri)
                 }
             }
             SparqlParameter::Query => {
                 Query::parse(value.to_plain_string_unchecked().as_str(), None)
                     .and(Ok(()))
-                    .map_err(|e| ValidationErrorKind::InvalidSparqlQuery {
+                    .map_err(|e| ValidationError::InvalidSparqlQuery {
                         oxi_error: e.to_string(),
                     })
             }
@@ -102,7 +102,7 @@ impl FormatBuilder for SparqlBuilder {
         _tag: Self::Tag,
         parameters: &Parameters<SparqlBuilder>,
         _direction: Direction,
-    ) -> Result<Self, ValidationErrorKind> {
+    ) -> Result<Self, ValidationError> {
         // Copied from DsvBuilder
         let value_formats = parameters
             .get_optional(SparqlParameter::Format)
@@ -136,23 +136,19 @@ impl FormatBuilder for SparqlBuilder {
         &self,
         direction: Direction,
         _builder: Option<ResourceBuilder>,
-    ) -> Option<ResourceBuilder> {
+    ) -> Result<Option<ResourceBuilder>, ResourceValidationErrorKind> {
         match direction {
             Direction::Import => {
-                let mut resource_builder = ResourceBuilder::try_from(self.endpoint.clone()).ok()?;
+                let mut resource_builder = ResourceBuilder::try_from(self.endpoint.clone())?;
                 let query = self.query.to_string();
                 if query.len() > HTTP_GET_CHAR_LIMIT {
-                    resource_builder
-                        .add_post_parameter(String::from("query"), query)
-                        .ok()?;
+                    resource_builder.add_post_parameter(String::from("query"), query)?;
                 } else {
-                    resource_builder
-                        .add_get_parameter(String::from("query"), query)
-                        .ok()?;
+                    resource_builder.add_get_parameter(String::from("query"), query)?;
                 }
-                Some(resource_builder)
+                Ok(Some(resource_builder))
             }
-            _ => None,
+            _ => Ok(None),
         }
     }
 

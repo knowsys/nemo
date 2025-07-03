@@ -1,15 +1,12 @@
 //! This module contains functions for building [ChaseImport]s.
 
 use crate::{
-    chase_model::components::{export::ChaseExport, import::ChaseImport, ChaseComponent},
+    chase_model::components::{export::ChaseExport, import::ChaseImport},
     io::{
         format_builder::ImportExportBuilder,
         formats::{Export, Import},
     },
-    rule_model::components::{
-        import_export::{ExportDirective, ImportDirective},
-        ProgramComponent,
-    },
+    rule_model::components::import_export::{ExportDirective, ImportDirective},
 };
 
 use super::ProgramChaseTranslation;
@@ -22,7 +19,6 @@ impl ProgramChaseTranslation {
         import_directive: &ImportDirective,
         import_builder: &ImportExportBuilder,
     ) -> ChaseImport {
-        let origin = *import_directive.origin();
         let predicate = import_directive.predicate().clone();
         let arity = *self
             .predicate_arity
@@ -31,7 +27,7 @@ impl ProgramChaseTranslation {
 
         let handler: Import = import_builder.build_import(predicate.name(), arity);
 
-        ChaseImport::new(predicate, handler).set_origin(origin)
+        ChaseImport::new(predicate, handler)
     }
 
     /// Build a [ChaseExport] from a given
@@ -41,7 +37,6 @@ impl ProgramChaseTranslation {
         export_directive: &ExportDirective,
         export_builder: &ImportExportBuilder,
     ) -> ChaseExport {
-        let origin = *export_directive.origin();
         let predicate = export_directive.predicate().clone();
         let arity = *self
             .predicate_arity
@@ -50,6 +45,6 @@ impl ProgramChaseTranslation {
 
         let handler: Export = export_builder.build_export(predicate.name(), arity);
 
-        ChaseExport::new(predicate, handler).set_origin(origin)
+        ChaseExport::new(predicate, handler)
     }
 }

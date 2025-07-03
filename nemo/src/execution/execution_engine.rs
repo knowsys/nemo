@@ -19,22 +19,25 @@ use crate::{
         },
         translation::ProgramChaseTranslation,
     },
-    error::Error,
+    error::{report::ProgramReport, warned::Warned, Error},
     execution::{planning::plan_tracing::TracingStrategy, tracing::trace::TraceDerivation},
     io::{formats::Export, import_manager::ImportManager},
+    rule_file::RuleFile,
     rule_model::{
         components::{
             fact::Fact,
             tag::Tag,
             term::primitive::{ground::GroundTerm, variable::Variable, Primitive},
         },
-        program::Program,
+        pipeline::transformations::default::TransformationDefault,
+        programs::{handle::ProgramHandle, program::Program},
         substitution::Substitution,
     },
     table_manager::{MemoryUsage, SubtableExecutionPlan, TableManager},
 };
 
 use super::{
+    execution_parameters::ExecutionParameters,
     rule_execution::RuleExecution,
     selection_strategy::strategy::RuleSelectionStrategy,
     tracing::{
@@ -65,33 +68,63 @@ impl RuleInfo {
 /// Object which handles the evaluation of the program.
 #[derive(Debug)]
 pub struct ExecutionEngine<RuleSelectionStrategy> {
+    /// Logical program
+    nemo_program: Program,
+
+    /// Normalized program
     program: ChaseProgram,
+    /// Auxillary information for `program`
     analysis: ProgramAnalysis,
 
+    /// The picked selection strategy for rules
     rule_strategy: RuleSelectionStrategy,
 
-    #[allow(dead_code)]
-    input_manager: ImportManager,
+    /// Management of tables that represent predicates
     table_manager: TableManager,
 
+    /// Stores for each predicate the number of subtables
     predicate_fragmentation: HashMap<Tag, usize>,
+    /// Stores for each predicate the step up until subtables have been combined
     predicate_last_union: HashMap<Tag, usize>,
 
+    /// For each rule in `program` additional information
     rule_infos: Vec<RuleInfo>,
+    /// For each step the rule index of the applied rule
     rule_history: Vec<usize>,
+    /// Current step
     current_step: usize,
 }
 
 impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
+    /// Initialize a [ExecutionEngine] by parsing and translating
+    /// the contents of the given file.
+    pub fn from_file(
+        file: RuleFile,
+        parameters: ExecutionParameters,
+    ) -> Result<Warned<Self, ProgramReport>, Error> {
+        let handle = ProgramHandle::from_file(&file);
+        let report = ProgramReport::new(file);
+
+        let (program, report) = report.merge_program_parser_report(handle)?;
+        let (program, report) = report.merge_validation_report(
+            &program,
+            program.transform(TransformationDefault::new(&parameters)),
+        )?;
+
+        let engine = Self::initialize(program.materialize(), parameters.import_manager)?;
+
+        report.warned(engine)
+    }
+
     /// Initialize [ExecutionEngine].
-    pub fn initialize(program: Program, input_manager: ImportManager) -> Result<Self, Error> {
-        let chase_program = ProgramChaseTranslation::new().translate(program);
+    pub fn initialize(program: Program, import_manager: ImportManager) -> Result<Self, Error> {
+        let chase_program = ProgramChaseTranslation::new().translate(&program);
         let analysis = chase_program.analyze();
 
         let mut table_manager = TableManager::new();
         Self::register_all_predicates(&mut table_manager, &analysis);
         Self::add_all_constants(&mut table_manager, &chase_program);
-        Self::add_imports(&mut table_manager, &input_manager, &chase_program)?;
+        Self::add_imports(&mut table_manager, &import_manager, &chase_program)?;
 
         let mut rule_infos = Vec::<RuleInfo>::new();
         chase_program
@@ -105,10 +138,10 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         )?;
 
         Ok(Self {
+            nemo_program: program,
             program: chase_program,
             analysis,
             rule_strategy,
-            input_manager,
             table_manager,
             predicate_fragmentation: HashMap::new(),
             predicate_last_union: HashMap::new(),
@@ -136,14 +169,14 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     /// based on the import declaration of the given progam.
     fn add_imports(
         table_manager: &mut TableManager,
-        input_manager: &ImportManager,
+        import_manager: &ImportManager,
         program: &ChaseProgram,
     ) -> Result<(), Error> {
         let mut predicate_to_sources = HashMap::<Tag, Vec<TableSource>>::new();
 
         // Add all the import specifications
         for import in program.imports() {
-            let table_source = input_manager.table_provider_from_handler(import.handler())?;
+            let table_source = import_manager.table_provider_from_handler(import.handler())?;
 
             predicate_to_sources
                 .entry(import.predicate().clone())
@@ -254,8 +287,13 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         Ok(())
     }
 
+    /// Return a reference to the current [Program].
+    pub fn program(&self) -> &Program {
+        &self.nemo_program
+    }
+
     /// Get a reference to the loaded program.
-    pub(crate) fn program(&self) -> &ChaseProgram {
+    pub(crate) fn chase_program(&self) -> &ChaseProgram {
         &self.program
     }
 
@@ -472,21 +510,20 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     /// TODO: Verify that Fact is ground
     pub fn trace(
         &mut self,
-        program: Program,
         facts: Vec<Fact>,
     ) -> Result<(ExecutionTrace, Vec<TraceFactHandle>), Error> {
         let chase_facts: Vec<_> = facts
             .into_iter()
-            .map(|fact| ProgramChaseTranslation::new().build_fact(&fact))
+            .filter_map(|fact| ProgramChaseTranslation::new().build_fact(&fact))
             .collect();
 
-        let mut trace = ExecutionTrace::new(program);
+        let mut trace = ExecutionTrace::new(self.nemo_program.clone());
         let mut handles = Vec::new();
 
         let num_chase_facts = chase_facts.len();
 
         for (i, chase_fact) in chase_facts.into_iter().enumerate() {
-            if i > 0 && i % 500 == 0 {
+            if i > 0 && i.is_multiple_of(500) {
                 log::info!(
                     "{i}/{num_chase_facts} facts traced. ({}%)",
                     i * 100 / num_chase_facts

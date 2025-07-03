@@ -1,133 +1,105 @@
 //! This module defines different kinds of errors that can occur
 //! while working with nemo programs.
 
-pub mod hint;
-pub mod info;
-pub mod translation_error;
-pub mod validation_error;
-
 use std::{
     fmt::{Debug, Display},
     ops::Range,
 };
 
-use ariadne::{Color, Config, Label, ReportBuilder};
-use hint::Hint;
-use translation_error::TranslationErrorKind;
-use validation_error::ValidationErrorKind;
+use translation_error::TranslationError;
+use validation_error::ValidationError;
 
-use crate::parser::span::{CharacterRange, Span};
+use crate::{
+    error::{context::ContextError, report::ProgramReport, rich::RichError, warned::Warned},
+    rule_file::RuleFile,
+    rule_model::{
+        error::info::Info, pipeline::id::ProgramComponentId, programs::handle::ProgramHandle,
+    },
+};
 
-use super::origin::Origin;
+use super::{components::ComponentSource, origin::Origin};
 
-/// An error, which may stem either from parsing a component
-/// or from translating that object into the rule model
-#[derive(Debug)]
-pub enum ComponentParseError {
-    /// Parse Error
-    ParseError,
-    /// Translation Error
-    TranslationError(TranslationError),
-}
+pub mod hint;
+pub mod info;
+pub mod translation_error;
+pub mod validation_error;
 
-impl Display for ComponentParseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ComponentParseError::ParseError => f.write_str("error while parsing string"),
-            ComponentParseError::TranslationError(error) => error.fmt(f),
-        }
-    }
-}
-
-/// Types of [ComplexError]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ComplexErrorKind {
-    /// Error
-    Error,
-    /// Warning,
-    Warning,
-}
-
-/// Types of [ComplexErrorLabel]s
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ComplexErrorLabelKind {
-    /// Error
-    Error,
-    /// Warning,
-    Warning,
-    /// Information
-    Information,
-}
-
-/// Label of a [ComplexError]
-#[derive(Clone, Debug)]
-pub struct ComplexErrorLabel<Reference>
+/// Error message associated with a source
+#[derive(Debug, Clone)]
+pub(crate) struct SourceMessage<Source>
 where
-    Reference: Debug,
+    Source: Clone,
 {
-    /// Kind of label
-    kind: ComplexErrorLabelKind,
-    /// Reference to the source code
-    reference: Reference,
+    /// Source
+    source: Source,
     /// Message
     message: String,
 }
 
-/// Complex error that additional information to an error
-#[derive(Clone, Debug)]
-pub struct ComplexError<Reference>
+/// Error associated wiht a source
+#[derive(Debug, Clone)]
+pub struct SourceError<Source, Error>
 where
-    Reference: Debug,
+    Error: Debug + Clone + RichError,
+    Source: Debug + Clone,
 {
-    /// Type of error
-    pub kind: ComplexErrorKind,
-    /// Where this error occurred
-    pub reference: Reference,
-    /// Labels
-    pub labels: Vec<ComplexErrorLabel<Reference>>,
-    /// Hints
-    pub hints: Vec<Hint>,
+    /// Error
+    error: Error,
+    /// Source
+    source: Source,
+    /// Additional information
+    context: Vec<SourceMessage<Source>>,
+    /// Hint
+    hints: Vec<String>,
 }
 
-impl<Reference> ComplexError<Reference>
+impl<Source, Error> SourceError<Source, Error>
 where
-    Reference: Debug,
+    Error: Debug + Clone + RichError,
+    Source: Debug + Clone,
 {
-    /// Check whether this is a error (and not a warning).
-    pub fn is_error(&self) -> bool {
-        matches!(self.kind, ComplexErrorKind::Error)
-    }
-
-    /// Create a new error.
-    pub fn new_error(reference: Reference) -> Self {
+    /// Create a new [SourceError].
+    pub fn new<Object: ComponentSource<Source = Source>>(error: Error, object: &Object) -> Self {
         Self {
-            kind: ComplexErrorKind::Error,
-            reference,
-            labels: Vec::default(),
+            error,
+            source: object.origin(),
+            context: Vec::default(),
             hints: Vec::default(),
         }
     }
 
-    /// Create a new warning
-    pub fn new_warning(reference: Reference) -> Self {
+    /// Create a new [SourceError] from a source.
+    pub fn new_source(error: Error, source: Source) -> Self {
         Self {
-            kind: ComplexErrorKind::Warning,
-            reference,
-            labels: Vec::default(),
+            error,
+            source,
+            context: Vec::default(),
             hints: Vec::default(),
         }
     }
 
-    /// Add a new label to the error.
-    pub fn add_label<Message: Display>(
+    /// Check if this error should be treated as a warning.
+    pub fn is_warning(&self) -> bool {
+        self.error.is_warning()
+    }
+
+    /// Add more context to the error.
+    pub fn add_context<Message: Display, Object: ComponentSource<Source = Source> + ?Sized>(
         &mut self,
-        kind: ComplexErrorLabelKind,
-        reference: Reference,
+        object: &Object,
         message: Message,
     ) -> &mut Self {
-        self.labels.push(ComplexErrorLabel {
-            kind,
-            reference,
+        self.add_context_source(object.origin(), message)
+    }
+
+    /// Add more context to the error attached to a source.
+    pub fn add_context_source<Message: Display>(
+        &mut self,
+        source: Source,
+        message: Message,
+    ) -> &mut Self {
+        self.context.push(SourceMessage {
+            source,
             message: message.to_string(),
         });
 
@@ -135,255 +107,431 @@ where
     }
 
     /// Add a new hint to the error.
-    pub fn add_hint(&mut self, hint: Hint) -> &mut Self {
-        self.hints.push(hint);
-
+    pub fn add_hint<Message: Display>(&mut self, hint: Message) -> &mut Self {
+        self.hints.push(hint.to_string());
         self
     }
 
     /// Add a new hint to the error if `hint` is Some.
     /// Does nothing otherwise.
-    pub fn add_hint_option(&mut self, hint: Option<Hint>) -> &mut Self {
+    pub fn add_hint_option<Message: Display>(&mut self, hint: Option<Message>) -> &mut Self {
         if let Some(hint) = hint {
-            self.hints.push(hint);
+            self.add_hint(hint);
         }
 
         self
     }
+}
 
-    /// Add this information to a [ReportBuilder].
-    pub fn report<'a, Translation>(
-        &self,
-        mut report: ReportBuilder<'a, (String, Range<usize>)>,
-        source_label: String,
-        translation: Translation,
-    ) -> ReportBuilder<'a, (String, Range<usize>)>
-    where
-        Translation: Fn(&Reference) -> Range<usize>,
-    {
-        for label in &self.labels {
-            let color = match label.kind {
-                ComplexErrorLabelKind::Error => Color::Red,
-                ComplexErrorLabelKind::Warning => Color::Yellow,
-                ComplexErrorLabelKind::Information => Color::BrightBlue,
-            };
+/// Report containing multiple errors
+#[derive(Debug, Clone)]
+pub struct SourceErrorReport<Source, Error>
+where
+    Error: Debug + Clone + RichError,
+    Source: Debug + Clone,
+{
+    /// List of errors
+    errors: Vec<SourceError<Source, Error>>,
+}
 
-            report = report
-                .with_label(
-                    Label::new((source_label.clone(), translation(&label.reference)))
-                        .with_message(label.message.clone())
-                        .with_color(color),
-                )
-                .with_config(Config::default().with_index_type(ariadne::IndexType::Byte));
+impl<Source, Error> Display for SourceErrorReport<Source, Error>
+where
+    Error: Debug + Clone + Display + RichError,
+    Source: Debug + Clone,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (index, error) in self.errors.iter().enumerate() {
+            if index > 0 {
+                writeln!(f)?;
+            }
+
+            write!(f, "{}", error.error)?;
         }
 
-        for hint in &self.hints {
-            report = report.with_help(hint.message());
-        }
+        Ok(())
+    }
+}
 
+impl<Source, Error> Default for SourceErrorReport<Source, Error>
+where
+    Error: Debug + Clone + RichError,
+    Source: Debug + Clone,
+{
+    fn default() -> Self {
+        Self {
+            errors: Default::default(),
+        }
+    }
+}
+
+impl<Source, Error> SourceErrorReport<Source, Error>
+where
+    Error: Debug + Clone + RichError,
+    Source: Debug + Clone,
+{
+    /// Create a new report containing the given error.
+    pub fn single<Object: ComponentSource<Source = Source>>(object: &Object, error: Error) -> Self {
+        let mut report = Self::default();
+        report.errors.push(SourceError::new(error, object));
         report
     }
-}
 
-/// Error that occurs during validation of a program.
-#[derive(Clone, Debug)]
-pub struct ValidationError {
-    /// The kind of error
-    kind: ValidationErrorKind,
-    /// Additional information
-    info: ComplexError<Origin>,
-}
-
-impl ValidationError {
-    /// Construct a new [`ValidationError`] with given [`Origin`] and [`ValidationErrorKind`]
-    pub fn new(origin: Origin, kind: ValidationErrorKind) -> Self {
-        let mut info = ComplexError::new_error(origin);
-        info.add_label(ComplexErrorLabelKind::Error, origin, kind.to_string());
-
-        ValidationError { kind, info }
-    }
-
-    /// Modify additional information stored in this error.
-    pub fn info(&mut self) -> &mut ComplexError<Origin> {
-        &mut self.info
-    }
-}
-
-/// Builder for [ValidationError]
-#[derive(Debug, Default)]
-pub struct ValidationErrorBuilder {
-    /// Current stack of [ValidationError]s
-    errors: Vec<ValidationError>,
-}
-
-impl ValidationErrorBuilder {
-    /// Add a new error.
-    pub fn report_error(
+    /// Add a new error to the report.
+    pub fn add<Object: ComponentSource<Source = Source>>(
         &mut self,
-        origin: Origin,
-        kind: ValidationErrorKind,
-    ) -> &mut ComplexError<Origin> {
-        self.errors.push(ValidationError::new(origin, kind));
-        self.errors.last_mut().unwrap().info()
-    }
-
-    /// Finish building and return a list of [ValidationError]s.
-    pub fn finalize(self) -> Vec<ValidationError> {
+        object: &Object,
+        error: Error,
+    ) -> &mut SourceError<Source, Error> {
+        self.errors.push(SourceError::new(error, object));
         self.errors
-    }
-}
-
-/// Error that occurs while translating the ast into the logical representation
-#[derive(Clone, Debug)]
-pub struct TranslationError {
-    /// The type of error that occurred
-    kind: TranslationErrorKind,
-    /// Additional information
-    info: Box<ComplexError<CharacterRange>>,
-}
-
-impl TranslationError {
-    /// Create a new [TranslationError] from a given [Span].
-    pub fn new(span: Span<'_>, kind: TranslationErrorKind) -> Self {
-        let message = kind.to_string();
-
-        let mut result = Self {
-            kind,
-            info: Box::new(ComplexError::new_error(span.range())),
-        };
-
-        result
-            .info
-            .add_label(ComplexErrorLabelKind::Error, span.range(), message);
-
-        result
+            .last_mut()
+            .expect("error was pushed in last line")
     }
 
-    /// Add a new label to the error.
-    pub fn add_label<Message: Display>(
-        mut self,
-        kind: ComplexErrorLabelKind,
-        range: CharacterRange,
-        message: Message,
-    ) -> Self {
-        self.info.add_label(kind, range, message);
-
-        self
+    /// Add a new error to the report by providing the source.
+    pub fn add_source(&mut self, source: Source, error: Error) -> &mut SourceError<Source, Error> {
+        self.errors.push(SourceError::new_source(error, source));
+        self.errors
+            .last_mut()
+            .expect("error was pushed in last line")
     }
 
-    /// Add a new hint to the error.
-    pub fn add_hint(mut self, hint: Hint) -> Self {
-        self.info.add_hint(hint);
-
-        self
-    }
-
-    /// Add a new hint to the error if `hint` is Some.
-    /// Does nothing otherwise.
-    pub fn add_hint_option(&mut self, hint: Option<Hint>) -> &mut Self {
-        if let Some(hint) = hint {
-            self.info.add_hint(hint);
-        }
-
-        self
-    }
-}
-
-/// Error that may occur while translating or validating a nemo program
-#[derive(Clone, Debug)]
-pub enum ProgramError {
-    /// Error occurred while translating
-    /// the AST representation into the logical representation
-    TranslationError(TranslationError),
-    /// Error occurred while validating a certain program component
-    ValidationError(ValidationError),
-}
-
-impl ProgramError {
-    /// Return the message of the error.
-    pub fn message(&self) -> String {
-        match self {
-            ProgramError::TranslationError(error) => error.kind.to_string(),
-            ProgramError::ValidationError(error) => error.kind.to_string(),
+    /// Convert this report into a [Result],
+    /// depending on whether it contains any errors.
+    pub fn result(self) -> Result<(), Self> {
+        if self.errors.is_empty() {
+            Ok(())
+        } else {
+            Err(self)
         }
     }
 
-    /// Return the error code of the message.
-    pub fn error_code(&self) -> usize {
-        match self {
-            ProgramError::TranslationError(error) => error.kind.code(),
-            ProgramError::ValidationError(error) => error.kind.code(),
-        }
+    /// Check whether this report contains any errors.
+    pub fn contains_errors(&self) -> bool {
+        self.errors.iter().any(|error| !error.is_warning())
     }
 
-    /// Return the range indicating where the error occurred
-    pub fn range<Translation>(&self, translation: Translation) -> Range<usize>
+    /// Check if report is empty.
+    pub fn is_empty(&self) -> bool {
+        self.errors.is_empty()
+    }
+
+    /// Convert this report into a [Warned] object,
+    /// depending whether this report contains any errors or warnings.
+    pub fn warned<Object, W, E>(self, object: Object) -> Result<Warned<Object, W>, E>
     where
-        Translation: Fn(&Origin) -> Range<usize>,
+        Object: Debug,
+        W: Debug + From<Self>,
+        E: Debug + From<Self>,
     {
-        match self {
-            ProgramError::TranslationError(error) => error.info.reference.range(),
-            ProgramError::ValidationError(error) => translation(&error.info.reference),
+        if self.contains_errors() {
+            Err(E::from(self))
+        } else {
+            Ok(Warned::new(object, W::from(self)))
         }
     }
 
-    /// Return the [`CharacterRange`] where the error occurred
-    pub fn character_range<Translation>(&self, translation: Translation) -> Option<CharacterRange>
-    where
-        Translation: Fn(&Origin) -> Option<CharacterRange>,
-    {
-        match self {
-            ProgramError::TranslationError(error) => Some(error.info.reference),
-            ProgramError::ValidationError(error) => translation(&error.info.reference),
+    /// Merge another report given as a `Result`.
+    pub fn merge(&mut self, other: Result<(), Self>) {
+        if let Err(report) = other {
+            self.errors.extend(report.errors);
         }
     }
 
-    /// Return the note attached to this error, if it exists.
-    pub fn note(&self) -> Option<String> {
-        match self {
-            ProgramError::TranslationError(error) => error.kind.note(),
-            ProgramError::ValidationError(error) => error.kind.note(),
-        }
-        .map(|string| string.to_string())
-    }
-
-    /// Return the [`Hint`]s attached to this error.
-    pub fn hints(&self) -> &Vec<Hint> {
-        match self {
-            ProgramError::TranslationError(error) => &error.info.hints,
-            ProgramError::ValidationError(error) => &error.info.hints,
+    /// Merge another report given as a `Result`.
+    pub fn merge_option(&mut self, other: Option<Self>) {
+        if let Some(report) = other {
+            self.errors.extend(report.errors);
         }
     }
 
-    /// Append the information of this error to a [ReportBuilder].
-    pub fn report<'a, Translation>(
-        &'a self,
-        mut report: ReportBuilder<'a, (String, Range<usize>)>,
-        source_label: String,
+    /// Merge another report.
+    pub fn merge_report(&mut self, other: Self) {
+        self.errors.extend(other.errors);
+    }
+
+    /// Return an iterator over all [ValidationError]s.
+    pub fn errors(&self) -> impl Iterator<Item = &Error> {
+        self.errors.iter().map(|error| &error.error)
+    }
+
+    /// Translate this [SourceErrorReport] into a list of [ContextError].
+    pub fn context_errors<Translation>(
+        self,
         translation: Translation,
-    ) -> ReportBuilder<'a, (String, Range<usize>)>
+    ) -> impl Iterator<Item = (ContextError, bool)>
     where
-        Translation: Fn(&Origin) -> Range<usize>,
+        Translation: Fn(Source) -> Option<Range<usize>>,
     {
-        let config = Config::default().with_index_type(ariadne::IndexType::Byte);
-        report = report
-            .with_code(self.error_code())
-            .with_message(self.message())
-            .with_config(config);
+        self.errors.into_iter().flat_map(move |error| {
+            let is_warning = error.is_warning();
+            let range = translation(error.source)?;
 
-        if let Some(note) = self.note() {
-            report = report.with_note(note);
-        }
+            let mut context_error = ContextError::new(error.error, range).add_hints(error.hints);
 
-        match self {
-            ProgramError::TranslationError(error) => {
-                error
-                    .info
-                    .report(report, source_label, |range| range.range())
+            for context in error.context {
+                let Some(range) = translation(context.source) else {
+                    continue;
+                };
+
+                context_error.add_context(context.message, range);
             }
-            ProgramError::ValidationError(error) => {
-                error.info.report(report, source_label, translation)
+
+            Some((context_error, is_warning))
+        })
+    }
+}
+
+/// Error that can occur because of incorrectly constructed program components
+#[derive(Debug, Clone, Default)]
+pub struct ValidationReport(SourceErrorReport<Origin, ValidationError>);
+
+impl Display for ValidationReport {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl ValidationReport {
+    /// Create a new report containing the given error.
+    pub fn single<Object: ComponentSource<Source = Origin>>(
+        object: &Object,
+        error: ValidationError,
+    ) -> Self {
+        Self(SourceErrorReport::single(object, error))
+    }
+
+    /// Add a new error to the report.
+    pub fn add<Object: ComponentSource<Source = Origin>>(
+        &mut self,
+        object: &Object,
+        error: ValidationError,
+    ) -> &mut SourceError<Origin, ValidationError> {
+        self.0.add(object, error)
+    }
+
+    /// Add a new error to the report by providing the source.
+    pub fn add_source(
+        &mut self,
+        source: Origin,
+        error: ValidationError,
+    ) -> &mut SourceError<Origin, ValidationError> {
+        self.0.add_source(source, error)
+    }
+
+    /// Convert this report into a [Result],
+    /// depending on whether it contains any errors.
+    pub fn result(self) -> Result<(), Self> {
+        self.0.result().map_err(Self)
+    }
+
+    /// Convert this report into a [Warned] object,
+    /// depending whether this report contains any errors or warnings.
+    pub fn warned<Object, W, E>(self, object: Object) -> Result<Warned<Object, W>, E>
+    where
+        Object: Debug,
+        W: Debug + From<Self>,
+        E: Debug + From<Self>,
+    {
+        if self.contains_errors() {
+            Err(E::from(self))
+        } else {
+            Ok(Warned::new(object, W::from(self)))
+        }
+    }
+
+    /// Merge another report given as a `Result`.
+    pub fn merge(&mut self, other: Result<(), Self>) {
+        self.0.merge(other.map_err(|report| report.0));
+    }
+
+    /// Merge another report.
+    pub fn merge_report(&mut self, other: Self) {
+        self.0.merge_report(other.0);
+    }
+
+    /// Check whether this report contains any errors.
+    pub fn contains_errors(&self) -> bool {
+        self.0.contains_errors()
+    }
+
+    /// Check if report is empty.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// Return an iterator over all [ValidationError]s.
+    pub fn errors(&self) -> impl Iterator<Item = &ValidationError> {
+        self.0.errors()
+    }
+
+    /// For a given [ProgramComponentId],
+    /// return the character range pointing to the assoicated program component
+    /// in the source filee, if it exists.
+    fn id_to_range(
+        program: &ProgramHandle,
+        id: ProgramComponentId,
+        error: &mut ContextError,
+    ) -> Option<Range<usize>> {
+        Self::origin_to_range(program, &program.component(id)?.origin(), error)
+    }
+
+    /// Resolve a given [Origin] returning a character range,
+    /// pointing to the component in the source file,
+    /// if it exists.
+    fn origin_to_range(
+        program: &ProgramHandle,
+        origin: &Origin,
+        error: &mut ContextError,
+    ) -> Option<Range<usize>> {
+        match origin {
+            Origin::Created => None,
+            Origin::File { start, end } => Some(*start..*end),
+            Origin::Reference(id) => Self::id_to_range(program, *id, error),
+            Origin::Component(component) => {
+                let component_origin = component.origin();
+                Self::origin_to_range(program, &component_origin, error)
+            }
+            Origin::Substitution {
+                replaced,
+                replacing,
+            } => {
+                if let Some(range) = Self::id_to_range(program, *replacing, error) {
+                    error.add_context(Info::ValueDefined, range);
+                }
+
+                Self::id_to_range(program, *replaced, error)
+            }
+            Origin::Extern => {
+                error.add_hint(Info::DefinedExternally);
+                None
             }
         }
+    }
+
+    /// Translate this [ValidationReport] into a list of [ContextError].
+    pub fn context_errors(
+        self,
+        program: &ProgramHandle,
+    ) -> impl Iterator<Item = (ContextError, bool)> + '_ {
+        self.0.errors.into_iter().flat_map(move |error| {
+            let is_warning = error.is_warning();
+
+            let mut context_error = ContextError::new(error.error, 0..0).add_hints(error.hints);
+            match Self::origin_to_range(program, &error.source, &mut context_error) {
+                Some(range) => {
+                    context_error.set_range(range);
+                }
+                None => return None, // TODO: Error handling for components without origin
+            }
+
+            for context in error.context {
+                match Self::origin_to_range(program, &context.source, &mut context_error) {
+                    Some(range) => {
+                        context_error.add_context(context.message, range);
+                    }
+                    None => continue,
+                }
+            }
+
+            Some((context_error, is_warning))
+        })
+    }
+}
+
+/// Error that can occur due to syntactically ill formed statements
+#[derive(Debug, Clone, Default)]
+pub struct TranslationReport(SourceErrorReport<Range<usize>, TranslationError>);
+
+impl Display for TranslationReport {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl TranslationReport {
+    /// Create a new report containing the given error.
+    pub fn single<Object: ComponentSource<Source = Range<usize>>>(
+        object: &Object,
+        error: TranslationError,
+    ) -> Self {
+        Self(SourceErrorReport::single(object, error))
+    }
+
+    /// Add a new error to the report.
+    pub fn add<Object: ComponentSource<Source = Range<usize>>>(
+        &mut self,
+        object: &Object,
+        error: TranslationError,
+    ) -> &mut SourceError<Range<usize>, TranslationError> {
+        self.0.add(object, error)
+    }
+
+    /// Add a new error to the report by providing the source.
+    pub fn add_source(
+        &mut self,
+        source: Range<usize>,
+        error: TranslationError,
+    ) -> &mut SourceError<Range<usize>, TranslationError> {
+        self.0.add_source(source, error)
+    }
+
+    /// Convert this report into a [Result],
+    /// depending on whether it contains any errors.
+    pub fn result(self) -> Result<(), Self> {
+        self.0.result().map_err(Self)
+    }
+
+    /// Convert this report into a [Warned] object,
+    /// depending whether this report contains any errors or warnings.
+    pub fn warned<Object, W, E>(self, object: Object) -> Result<Warned<Object, W>, E>
+    where
+        Object: Debug,
+        W: Debug + From<Self>,
+        E: Debug + From<Self>,
+    {
+        if self.contains_errors() {
+            Err(E::from(self))
+        } else {
+            Ok(Warned::new(object, W::from(self)))
+        }
+    }
+
+    /// Check whether this report contains any errors.
+    pub fn contains_errors(&self) -> bool {
+        self.0.contains_errors()
+    }
+
+    /// Check if report is empty.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// Merge another report given as a `Result`.
+    pub fn merge(&mut self, other: Result<(), Self>) {
+        self.0.merge(other.map_err(|report| report.0));
+    }
+
+    /// Merge another report.
+    pub fn merge_report(&mut self, other: Self) {
+        self.0.merge_report(other.0);
+    }
+
+    /// Return an iterator over all [TranslationError]s.
+    pub fn errors(&self) -> impl Iterator<Item = &TranslationError> {
+        self.0.errors()
+    }
+
+    /// Translate this [TranslationReport] into a list of [ContextError].
+    pub fn context_errors(self) -> impl Iterator<Item = (ContextError, bool)> {
+        let translation = |range| Some(range);
+        self.0.context_errors(translation)
+    }
+
+    /// Translate this [TranslationReport] into a [ProgramReport].
+    pub fn program_report(self, file: RuleFile) -> ProgramReport {
+        let mut report = ProgramReport::new(file);
+        report.merge_translation_report(self);
+        report
     }
 }

@@ -110,7 +110,7 @@ impl<T: BufRead> DsvReader<T> {
             }
 
             line_count += 1;
-            if (line_count % PROGRESS_NOTIFY_INCREMENT) == 0 {
+            if line_count.is_multiple_of(PROGRESS_NOTIFY_INCREMENT) {
                 log::info!("... processed {line_count} lines");
             }
             if line_count == stop_limit {

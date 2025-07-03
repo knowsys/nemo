@@ -19,7 +19,7 @@ pub enum ValueType {
     #[assoc(name = "string")]
     String,
     /// Language string
-    #[assoc(name = "lang-string")]
+    #[assoc(name = "language string")]
     LanguageString,
     /// Constant
     #[assoc(name = "constant")]
