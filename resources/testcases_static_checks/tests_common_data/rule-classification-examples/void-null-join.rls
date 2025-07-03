@@ -1,3 +1,5 @@
 N1(!X), N2(!X) :- Top(?YUnaryPredsNotAllowedSoWeJustPutAUniversalVariableHere) .
 A(?X) :- N1(?X), N2(?X) .
 
+@export A :- csv {} .
+@export N1 :- csv {} .

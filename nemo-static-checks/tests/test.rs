@@ -2,6 +2,15 @@
 use nemo_static_checks::static_checks::rule_set::RuleSet;
 use nemo_static_checks::static_checks::rules_properties::RulesProperties;
 
+use nemo::{
+    execution::{
+        execution_engine::ExecutionEngine, execution_parameters::ExecutionParameters,
+        DefaultExecutionEngine,
+    },
+    rule_file::RuleFile,
+    rule_model::programs::program::Program,
+};
+
 use std::{assert_eq, fs::read_to_string, path::PathBuf, str::FromStr};
 
 use dir_test::{dir_test, Fixture};
@@ -378,20 +387,13 @@ impl<'a> TestCase<'a> {
     }
 }
 
-fn run_until_rule_model(rule_file: PathBuf) -> Result<RuleSet, Box<dyn std::error::Error>> {
-    log::info!("Parsing rules ...");
-    let program_filename = rule_file.to_string_lossy().to_string();
-    let program_content = read_to_string(rule_file.clone())?;
-    let program_ast = nemo::parser::Parser::initialize(&program_content, program_filename.clone())
-        .parse()
-        .expect("Error while parsing");
-    let program = nemo::rule_model::translation::ASTProgramTranslation::initialize(
-        &program_content,
-        program_filename.clone(),
-    )
-    .translate(&program_ast)
-    .expect("Error while translating");
-    let rule_set: RuleSet = RuleSet(program.rules().cloned().collect());
+fn run_until_rule_model(file_path: PathBuf) -> Result<RuleSet, Box<dyn std::error::Error>> {
+    let rule_file: RuleFile = RuleFile::load(file_path)?;
+    let execution_parameters: ExecutionParameters = ExecutionParameters::default();
+    let (engine, _) =
+        DefaultExecutionEngine::from_file(rule_file, execution_parameters)?.into_pair();
+    let program: &Program = engine.program();
+    let rule_set: RuleSet = RuleSet(program.all_rules());
     Ok(rule_set)
 }
 

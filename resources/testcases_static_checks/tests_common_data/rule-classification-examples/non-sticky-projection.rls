@@ -1,2 +1,5 @@
 C(?X, !Y) :- A(?X), B(?X) .
 D(?Y) :- C(?X, ?Y) .
+
+@export C :- csv {} .
+@export D :- csv {} .

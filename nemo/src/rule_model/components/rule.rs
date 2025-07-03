@@ -131,7 +131,7 @@ impl Rule {
 
     pub fn positive_variables_iter(&self) -> impl Iterator<Item = &Variable> {
         self.body_positive().flat_map(|atom| {
-            atom.arguments()
+            atom.terms()
                 .filter_map(|term| match term {
                     Term::Primitive(Primitive::Variable(variable)) => Some(variable),
                     _ => None,

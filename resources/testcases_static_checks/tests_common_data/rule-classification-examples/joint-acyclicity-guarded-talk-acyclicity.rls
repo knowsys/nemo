@@ -2,3 +2,5 @@ Person(?X) :- Mother(?X) .
 Parent(!V, ?X), Person(!V) :- Person(?X), Mother(?X) .
 Parent(?X, !W), Parent(?Y, !W), Mother(!W) :- Sibling(?X, ?Y) .
 
+@export Person :- csv {} .
+@export Parent :- csv {} .

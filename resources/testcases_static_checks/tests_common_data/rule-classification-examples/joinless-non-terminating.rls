@@ -1,1 +1,3 @@
 R(?X, ?Y, !Z), A(!Z) :- A(?X), A(?Y) .
+
+@export A :- csv {} .

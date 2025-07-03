@@ -1,2 +1,5 @@
 T(?X, ?Y, !W) :- R(?X, ?Y), P(?Y, ?Z) .
 S(?Y, !W) :- T(?X, ?Y, ?Z) .
+
+@export T :- csv {} .
+@export S :- csv {} .

@@ -1,2 +1,5 @@
 A(!Z), E(?X, ?Y) :- A(?X), B(?X), A(?Y), B(?Y) .
 B(!Z), E(?X, ?Y) :- A(?X), B(?X), A(?Y), B(?Y) .
+
+@export A :- csv {} .
+@export B :- csv {} .
