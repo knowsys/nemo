@@ -79,7 +79,7 @@ pub struct RuleAndVariablePair<'a>(pub [RuleAndVariable<'a>; 2]);
 
 pub trait ExistentialVariables {
     /// Returns all the existential Variables of a rule.
-    fn existential_variables(&self) -> HashSet<&Variable>;
+    // fn existential_variables(&self) -> HashSet<&Variable>;
     /// Returns all existential variables combined with its rule of a rule.
     fn existential_rule_and_variables(&self) -> HashSet<RuleAndVariable>;
     /// Returns the positions of the existential Variables of the rule as a set.
@@ -89,11 +89,11 @@ pub trait ExistentialVariables {
 }
 
 impl ExistentialVariables for Rule {
-    fn existential_variables(&self) -> HashSet<&Variable> {
-        self.variables()
-            .filter(|var| var.is_existential())
-            .collect()
-    }
+    // fn existential_variables(&self) -> HashSet<&Variable> {
+    //     self.variables()
+    //         .filter(|var| var.is_existential())
+    //         .collect()
+    // }
 
     fn existential_rule_and_variables(&self) -> HashSet<RuleAndVariable> {
         let ex_vars_of_rule: HashSet<&Variable> = self.existential_variables();

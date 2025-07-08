@@ -53,13 +53,6 @@ pub trait RuleProperties {
     ) -> bool;
     /// Determines if the rule is shy.
     fn is_shy(&self, attacked_pos_by_vars: &PositionsByRuleAndVariables) -> bool;
-    // fn is_mfa(&self) -> bool;
-    // fn is_dmfa(&self) -> bool;
-    // fn is_rmfa(&self) -> bool;
-    // fn is_mfc(&self) -> bool;
-    // fn is_dmfc(&self) -> bool;
-    // fn is_drpc(&self) -> bool;
-    // fn is_rpc(&self) -> bool;
 }
 
 impl RuleProperties for Rule {

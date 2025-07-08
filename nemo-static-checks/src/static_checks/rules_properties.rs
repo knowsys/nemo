@@ -46,6 +46,8 @@ pub trait RulesProperties {
     fn is_shy(&self) -> bool;
     /// Determines if the ruleset is mfa.
     fn is_mfa(&self) -> bool;
+    /// Determines if the ruleset is msa.
+    fn is_msa(&self) -> bool;
     /// Determines if the ruleset is dmfa.
     fn is_dmfa(&self) -> bool;
     /// Determines if the ruleset is rmfa.
@@ -166,6 +168,11 @@ impl RulesProperties for RuleSet {
     }
 
     fn is_mfa(&self) -> bool {
+        todo!("IMPLEMENT");
+        // TODO: IMPLEMENT
+    }
+
+    fn is_msa(&self) -> bool {
         todo!("IMPLEMENT");
         // TODO: IMPLEMENT
     }

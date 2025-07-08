@@ -129,6 +129,12 @@ impl Rule {
         &mut self.head
     }
 
+    pub fn existential_variables(&self) -> HashSet<&Variable> {
+        self.variables()
+            .filter(|var| var.is_existential())
+            .collect()
+    }
+
     pub fn positive_variables_iter(&self) -> impl Iterator<Item = &Variable> {
         self.body_positive().flat_map(|atom| {
             atom.terms()
