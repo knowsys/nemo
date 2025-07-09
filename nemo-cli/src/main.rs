@@ -36,7 +36,7 @@ use nemo::{
     datavalues::AnyDataValue,
     error::Error,
     execution::{
-        execution_parameters::ExecutionParameters, DefaultExecutionEngine, ExecutionEngine,
+        execution_parameters::ExecutionParameters, DefaultExecutionStrategy, ExecutionEngine,
     },
     io::{resource_providers::ResourceProviders, ImportManager},
     meta::timing::{TimedCode, TimedDisplay},
@@ -148,7 +148,7 @@ fn print_timing_details() {
 }
 
 /// Prints detailed memory information.
-fn print_memory_details(engine: &DefaultExecutionEngine) {
+fn print_memory_details(engine: &ExecutionEngine) {
     println!("\nMemory report:\n\n{}", engine.memory_usage());
 }
 
@@ -167,7 +167,7 @@ fn parse_trace_facts(cli: &CliApp) -> Result<Vec<String>, Error> {
 }
 
 /// Deal with tracing
-fn handle_tracing(cli: &CliApp, engine: &mut DefaultExecutionEngine) -> Result<(), CliError> {
+fn handle_tracing(cli: &CliApp, engine: &mut ExecutionEngine) -> Result<(), CliError> {
     let tracing_facts = parse_trace_facts(cli)?;
     if !tracing_facts.is_empty() {
         log::info!("Starting tracing of {} facts...", tracing_facts.len());
@@ -256,7 +256,7 @@ fn run(mut cli: CliApp) -> Result<(), CliError> {
 
     TimedCode::instance().sub("Reasoning").start();
     log::info!("Reasoning ... ");
-    engine.execute()?;
+    engine.execute::<DefaultExecutionStrategy>()?;
     log::info!("Reasoning done");
     TimedCode::instance().sub("Reasoning").stop();
 

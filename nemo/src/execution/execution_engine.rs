@@ -20,7 +20,10 @@ use crate::{
         translation::ProgramChaseTranslation,
     },
     error::{report::ProgramReport, warned::Warned, Error},
-    execution::{planning::plan_tracing::TracingStrategy, tracing::trace::TraceDerivation},
+    execution::{
+        planning::plan_tracing::TracingStrategy, selection_strategy::strategy::ExecutionStep,
+        tracing::trace::TraceDerivation,
+    },
     io::{formats::Export, import_manager::ImportManager},
     rule_file::RuleFile,
     rule_model::{
@@ -39,7 +42,7 @@ use crate::{
 use super::{
     execution_parameters::ExecutionParameters,
     rule_execution::RuleExecution,
-    selection_strategy::strategy::RuleSelectionStrategy,
+    selection_strategy::strategy::ExecutionStrategy,
     tracing::{
         error::TracingError,
         trace::{ExecutionTrace, TraceFactHandle, TraceRuleApplication, TraceStatus},
@@ -67,7 +70,7 @@ impl RuleInfo {
 
 /// Object which handles the evaluation of the program.
 #[derive(Debug)]
-pub struct ExecutionEngine<RuleSelectionStrategy> {
+pub struct ExecutionEngine {
     /// Logical program
     nemo_program: Program,
 
@@ -75,9 +78,6 @@ pub struct ExecutionEngine<RuleSelectionStrategy> {
     program: ChaseProgram,
     /// Auxillary information for `program`
     analysis: ProgramAnalysis,
-
-    /// The picked selection strategy for rules
-    rule_strategy: RuleSelectionStrategy,
 
     /// Management of tables that represent predicates
     table_manager: TableManager,
@@ -95,7 +95,7 @@ pub struct ExecutionEngine<RuleSelectionStrategy> {
     current_step: usize,
 }
 
-impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
+impl ExecutionEngine {
     /// Initialize a [ExecutionEngine] by parsing and translating
     /// the contents of the given file.
     pub fn from_file(
@@ -132,16 +132,10 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             .iter()
             .for_each(|_| rule_infos.push(RuleInfo::new()));
 
-        let rule_strategy = Strategy::new(
-            chase_program.rules().iter().collect(),
-            analysis.rule_analysis.iter().collect(),
-        )?;
-
         Ok(Self {
             nemo_program: program,
             program: chase_program,
             analysis,
-            rule_strategy,
             table_manager,
             predicate_fragmentation: HashMap::new(),
             predicate_last_union: HashMap::new(),
@@ -261,22 +255,20 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     }
 
     /// Executes the program.
-    pub fn execute(&mut self) -> Result<(), Error> {
+    pub fn execute<Strategy: ExecutionStrategy>(&mut self) -> Result<(), Error> {
         TimedCode::instance().sub("Reasoning/Rules").start();
         TimedCode::instance().sub("Reasoning/Execution").start();
 
-        let rule_execution: Vec<RuleExecution> = self
-            .program
-            .rules()
-            .iter()
-            .zip(self.analysis.rule_analysis.iter())
-            .map(|(r, a)| RuleExecution::initialize(r, a))
-            .collect();
-
         let mut new_derivations: Option<bool> = None;
 
-        while let Some(index) = self.rule_strategy.next_rule(new_derivations) {
-            let updated_predicates = self.step(index, &rule_execution[index])?;
+        let mut rule_strategy = Strategy::new(
+            self.program.rules().iter().collect(),
+            self.analysis.rule_analysis.iter().collect(),
+        )?;
+
+        while let Some(step) = rule_strategy.next_step(new_derivations) {
+            let ExecutionStep::ExecuteRule { execution, index } = step;
+            let updated_predicates = self.step(index, execution)?;
             new_derivations = Some(!updated_predicates.is_empty());
 
             self.defrag(updated_predicates)?;

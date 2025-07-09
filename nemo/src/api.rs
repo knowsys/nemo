@@ -26,7 +26,7 @@ use std::{fs::read_to_string, path::PathBuf};
 use crate::{
     error::{report::ProgramReport, Error, ReadingError},
     execution::{
-        execution_parameters::ExecutionParameters, DefaultExecutionEngine, ExecutionEngine,
+        execution_parameters::ExecutionParameters, DefaultExecutionStrategy, ExecutionEngine,
     },
     rule_file::RuleFile,
     rule_model::{
@@ -40,7 +40,7 @@ use crate::{
 use nemo_physical::resource::Resource;
 
 /// Reasoning Engine exposed by the API
-pub type Engine = DefaultExecutionEngine;
+pub type Engine = ExecutionEngine;
 
 /// Load the given `file` and load the program from the file.
 ///
@@ -113,7 +113,7 @@ pub fn validate(input: String, label: String) -> ProgramReport {
 /// parsed rules, all relative paths are resolved with the current
 /// working directory
 pub fn reason(engine: &mut Engine) -> Result<(), Error> {
-    engine.execute()
+    engine.execute::<DefaultExecutionStrategy>()
 }
 
 /// Get a [Vec] of all output predicates that are computed by the engine.

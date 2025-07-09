@@ -12,7 +12,7 @@ use nemo::{
     error::ReadingError,
     execution::{
         tracing::trace::{ExecutionTrace, ExecutionTraceTree, TraceFactHandle},
-        ExecutionEngine,
+        DefaultExecutionStrategy, ExecutionEngine,
     },
     io::{
         formats::FileFormatMeta,
@@ -221,7 +221,7 @@ impl ResourceProvider for BlobResourceProvider {
 
 #[wasm_bindgen]
 pub struct NemoEngine {
-    engine: nemo::execution::DefaultExecutionEngine,
+    engine: nemo::execution::ExecutionEngine,
 }
 
 #[cfg(feature = "web_sys_unstable_apis")]
@@ -306,7 +306,7 @@ impl NemoEngine {
     #[wasm_bindgen]
     pub fn reason(&mut self) -> Result<(), NemoError> {
         self.engine
-            .execute()
+            .execute::<DefaultExecutionStrategy>()
             .map_err(WasmOrInternalNemoError::Nemo)
             .map_err(NemoError)
     }

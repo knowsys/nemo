@@ -27,7 +27,7 @@ pub(crate) type VariableTranslation = OperationTableGenerator<Variable>;
 
 /// Object responsible for executing a "normal" rule.
 #[derive(Debug)]
-pub(crate) struct RuleExecution {
+pub struct RuleExecution {
     /// Translation of variables into markers used for creating execution plans
     variable_translation: VariableTranslation,
     /// List of variable orders which might be considered for this rule

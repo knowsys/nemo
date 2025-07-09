@@ -5,7 +5,7 @@ use nemo::{
     chase_model::ChaseAtom,
     datavalues::{AnyDataValue, DataValue},
     error::Error,
-    execution::{tracing::trace::ExecutionTraceTree, ExecutionEngine},
+    execution::{tracing::trace::ExecutionTraceTree, DefaultExecutionStrategy, ExecutionEngine},
     io::{resource_providers::ResourceProviders, ExportManager, ImportManager},
     meta::timing::TimedCode,
     rule_model::{
@@ -331,7 +331,7 @@ impl NemoResults {
 
 #[pyclass(unsendable)]
 struct NemoEngine {
-    engine: nemo::execution::DefaultExecutionEngine,
+    engine: nemo::execution::ExecutionEngine,
 }
 
 #[pyclass]
@@ -412,7 +412,7 @@ impl NemoEngine {
         TimedCode::instance().start();
         TimedCode::instance().sub("Reasoning").start();
 
-        self.engine.execute().py_res()?;
+        self.engine.execute::<DefaultExecutionStrategy>().py_res()?;
 
         TimedCode::instance().sub("Reasoning").stop();
         TimedCode::instance().stop();
