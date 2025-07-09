@@ -5,10 +5,118 @@ use itertools::Itertools;
 use nemo_physical::datavalues::AnyDataValue;
 use serde::{Deserialize, Serialize};
 
-use crate::rule_model::components::term::primitive::ground::GroundTerm;
+use crate::{
+    chase_model::{
+        components::{
+            atom::{primitive_atom::PrimitiveAtom, variable_atom::VariableAtom},
+            rule::ChaseRule,
+        },
+        ChaseAtom,
+    },
+    rule_model::components::{tag::Tag, term::primitive::ground::GroundTerm},
+};
 
-/// Identifier for a rule
+/// A predicate name with the parameters used with it in a rule (essentially an atom)
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PredicateWithParameters {
+    /// The predicate name
+    pub name: String,
+    /// The list of stringified parameters
+    pub parameters: Vec<String>,
+}
+
+impl PredicateWithParameters {
+    fn from_positive_variable_atom(atom: &VariableAtom) -> Self {
+        Self {
+            name: atom.predicate().to_string(),
+            parameters: atom.terms().map(ToString::to_string).collect(),
+        }
+    }
+
+    fn from_negative_variable_atom(atom: &VariableAtom) -> Self {
+        Self {
+            name: format!("~ {}", atom.predicate()),
+            parameters: atom.terms().map(ToString::to_string).collect(),
+        }
+    }
+}
+
+impl From<&PrimitiveAtom> for PredicateWithParameters {
+    fn from(atom: &PrimitiveAtom) -> Self {
+        Self {
+            name: atom.predicate().to_string(),
+            parameters: atom.terms().map(ToString::to_string).collect(),
+        }
+    }
+}
+
+/// Identifies for a rule (i.e. its index)
 pub type RuleId = usize;
+
+/// Necessary Information for a rule
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Rule {
+    /// The rule's index
+    pub id: RuleId,
+    /// The rule's head predicte used to derive the node further up in the tree
+    pub relevant_head_predicate: PredicateWithParameters,
+    /// The head index of the relevant head predicate
+    pub relevant_head_predicate_index: usize,
+    /// The rule's body predictes (in order)
+    pub body_predicates: Vec<PredicateWithParameters>,
+    /// The rule as is occurs in the program
+    pub string_representation: String,
+}
+
+impl Rule {
+    pub(crate) fn from_rule_and_head(
+        rule_idx: usize,
+        rule: &ChaseRule,
+        head_idx: usize,
+        head: &PrimitiveAtom,
+    ) -> Self {
+        Self {
+            id: rule_idx,
+            relevant_head_predicate: PredicateWithParameters::from(head),
+            relevant_head_predicate_index: head_idx,
+            body_predicates: rule
+                .positive_body()
+                .into_iter()
+                .map(PredicateWithParameters::from_positive_variable_atom)
+                .chain(
+                    rule.negative_body()
+                        .into_iter()
+                        .map(PredicateWithParameters::from_negative_variable_atom),
+                )
+                .collect(),
+            string_representation:
+                "WE SHOULD REBASE THIS BRANCH ON THE CURRENT MAIN TO MAKE THIS WORK".to_string(),
+        }
+    }
+
+    pub(crate) fn all_possible_single_head_rules(
+        rule_idx: usize,
+        rule: &ChaseRule,
+    ) -> impl Iterator<Item = Self> + '_ {
+        rule.head()
+            .iter()
+            .enumerate()
+            .map(move |(head_idx, head)| Self::from_rule_and_head(rule_idx, rule, head_idx, head))
+    }
+
+    pub(crate) fn possible_rules_for_head_predicate<'a, 'b>(
+        rule_idx: usize,
+        rule: &'a ChaseRule,
+        head_predicate: &'a Tag,
+    ) -> impl Iterator<Item = Self> + 'a {
+        rule.head()
+            .iter()
+            .enumerate()
+            .filter(|(_, head)| head.predicate() == *head_predicate)
+            .map(move |(head_idx, head)| Self::from_rule_and_head(rule_idx, rule, head_idx, head))
+    }
+}
+
 /// Identifier for a table entry
 pub type TableEntryId = usize;
 

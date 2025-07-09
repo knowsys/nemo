@@ -10,7 +10,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::TableResponseBaseTableEntries;
+use super::{Rule, TableResponseBaseTableEntries};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct TableEntriesForTreeNodesResponseInner {
@@ -21,9 +21,9 @@ pub struct TableEntriesForTreeNodesResponseInner {
     #[serde(rename = "tableEntries")]
     pub table_entries: Box<TableResponseBaseTableEntries>,
     #[serde(rename = "possibleRulesAbove")]
-    pub possible_rules_above: Vec<usize>,
+    pub possible_rules_above: Vec<Rule>,
     #[serde(rename = "possibleRulesBelow")]
-    pub possible_rules_below: Vec<usize>,
+    pub possible_rules_below: Vec<Rule>,
 }
 
 impl From<TableEntriesForTreeNodesResponseInner>
@@ -42,8 +42,16 @@ impl From<TableEntriesForTreeNodesResponseInner>
             predicate: value.predicate,
             entries,
             pagination,
-            possible_rules_above: value.possible_rules_above,
-            possible_rules_below: value.possible_rules_below,
+            possible_rules_above: value
+                .possible_rules_above
+                .into_iter()
+                .map(Into::into)
+                .collect(),
+            possible_rules_below: value
+                .possible_rules_below
+                .into_iter()
+                .map(Into::into)
+                .collect(),
             address: value.address_in_tree.unwrap_or_default(),
         }
     }
@@ -64,8 +72,16 @@ impl From<nemo::execution::tracing::node_query::TableEntriesForTreeNodesResponse
             address_in_tree: Some(value.address),
             predicate: value.predicate,
             table_entries,
-            possible_rules_above: value.possible_rules_above,
-            possible_rules_below: value.possible_rules_below,
+            possible_rules_above: value
+                .possible_rules_above
+                .into_iter()
+                .map(Into::into)
+                .collect(),
+            possible_rules_below: value
+                .possible_rules_below
+                .into_iter()
+                .map(Into::into)
+                .collect(),
         }
     }
 }

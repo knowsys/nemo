@@ -589,7 +589,26 @@ impl NemoEngine {
             possible_rules_above: vec![], // empty for now...
             possible_rules_below: vec![], // empty for now...
             child_information: Some(Box::new(models::TreeForTableResponseChildInformation {
-                rule: 1,
+                rule: models::Rule {
+                    id: 1,
+                    relevant_head_predicate: Box::new(models::PredicateWithParameters {
+                        name: "ancestor".to_string(),
+                        parameters: vec!["?X".to_string(), "?Z".to_string()],
+                    }),
+                    relevant_head_predicate_index: 0,
+                    body_predicates: vec![
+                        models::PredicateWithParameters {
+                            name: "ancestor".to_string(),
+                            parameters: vec!["?X".to_string(), "?Y".to_string()],
+                        },
+                        models::PredicateWithParameters {
+                            name: "parent".to_string(),
+                            parameters: vec!["?Y".to_string(), "?Z".to_string()],
+                        },
+                    ],
+                    string_representation: "ancestor(?X, ?Z) :- ancestor(?X, ?Y), parent(?Y, ?Z)"
+                        .to_string(),
+                },
                 children: vec![
                     models::TreeForTableResponse {
                         predicate: "ancestor".to_string(),
@@ -604,7 +623,22 @@ impl NemoEngine {
                         possible_rules_below: vec![], // empty for now...
                         child_information: Some(Box::new(
                             models::TreeForTableResponseChildInformation {
-                                rule: 0,
+                                rule: models::Rule {
+                                    id: 0,
+                                    relevant_head_predicate: Box::new(
+                                        models::PredicateWithParameters {
+                                            name: "ancestor".to_string(),
+                                            parameters: vec!["?X".to_string(), "?Y".to_string()],
+                                        },
+                                    ),
+                                    relevant_head_predicate_index: 0,
+                                    body_predicates: vec![models::PredicateWithParameters {
+                                        name: "parent".to_string(),
+                                        parameters: vec!["?X".to_string(), "?Y".to_string()],
+                                    }],
+                                    string_representation: "ancestor(?X, ?Y) :- parent(?X, ?Y)"
+                                        .to_string(),
+                                },
                                 children: vec![models::TreeForTableResponse {
                                     predicate: "parent".to_string(),
                                     table_entries: Box::new(TableResponseBaseTableEntries {

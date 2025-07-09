@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::shared::{
-    PaginationQuery, PaginationResponse, RuleId, TableEntryQuery, TableEntryResponse,
+    PaginationQuery, PaginationResponse, Rule, TableEntryQuery, TableEntryResponse,
 };
 
 /// Request for a trace of a set of facts
@@ -24,7 +24,7 @@ pub struct TreeForTableQuery {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TreeForTableResponseSuccessor {
     /// Rule deriving this facts
-    pub rule: RuleId,
+    pub rule: Rule,
     /// Child nodes used in this rule application
     pub children: Vec<TreeForTableResponse>,
 }
@@ -48,9 +48,9 @@ pub struct TreeForTableResponse {
     pub pagination: PaginationResponse,
 
     /// All rules that may use facts in this table
-    pub possible_rules_above: Vec<RuleId>,
+    pub possible_rules_above: Vec<Rule>,
     /// All rules that derived facts in this table
-    pub possible_rules_below: Vec<RuleId>,
+    pub possible_rules_below: Vec<Rule>,
 
     /// Children of this tree node
     pub next: Option<TreeForTableResponseSuccessor>,
