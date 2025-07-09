@@ -25,7 +25,10 @@ use crate::{
     error::{report::ProgramReport, warned::Warned, Error},
     execution::{
         planning::plan_tracing::TracingStrategy,
-        tracing::{shared::TableEntryQuery, trace::TraceDerivation},
+        tracing::{
+            shared::{Rule as TraceRule, TableEntryQuery},
+            trace::TraceDerivation,
+        },
     },
     io::{formats::Export, import_manager::ImportManager},
     rule_file::RuleFile,
@@ -613,6 +616,9 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             .cloned()
             .unwrap_or_default()
             .into_iter()
+            .flat_map(|idx| {
+                TraceRule::all_possible_single_head_rules(idx, &self.program().rules()[idx])
+            })
             .collect::<Vec<_>>();
 
         let possible_rules_below = self
@@ -622,6 +628,13 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             .cloned()
             .unwrap_or_default()
             .into_iter()
+            .flat_map(|idx| {
+                TraceRule::possible_rules_for_head_predicate(
+                    idx,
+                    &self.program().rules()[idx],
+                    &predicate,
+                )
+            })
             .collect::<Vec<_>>();
 
         let mut result = TreeForTableResponse {
@@ -660,28 +673,20 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             return Some(result);
         }
 
-        let grounding_iterators = {
-            let rule = &self.program.rules()[rule_index];
+        let rule = &self.program.rules()[rule_index].clone();
 
-            facts
-                .iter()
-                .cloned()
-                .map(|fact| TraceGroundingIterator::new(rule.clone(), fact))
-                .collect::<Vec<_>>()
-        };
+        for (head_index, _) in rule.head().into_iter().enumerate() {
+            let combination = facts.iter().cloned().map(|fact| {
+                partial_grounding_for_rule_head_and_fact(rule.clone(), head_index, fact)
+            });
 
-        for (combination, &step) in grounding_iterators
-            .into_iter()
-            .multi_cartesian_product()
-            .zip(steps.iter())
-        {
             let mut query_results = Vec::new();
 
-            for partial_grounding in combination {
+            for (partial_grounding, &step) in combination.into_iter().zip(steps.iter()) {
                 let rule = &self.program.rules()[rule_index];
                 let analysis = &self.analysis.rule_analysis[rule_index];
 
-                let trace_strategy = TracingStrategy::initialize(&rule, partial_grounding).ok()?;
+                let trace_strategy = TracingStrategy::initialize(&rule, partial_grounding?).ok()?;
 
                 let mut execution_plan = SubtableExecutionPlan::default();
                 let mut variable_order = analysis.promising_variable_orders[0].clone(); // TODO: This selection is arbitrary
@@ -705,15 +710,15 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 query_results.push(query_result);
             }
 
-            let result_iterators = query_results
+            let results = query_results
                 .iter()
-                .map(|query_result| self.table_manager.trie_row_iterator(query_result))
+                .map(|query_result| {
+                    self.table_manager
+                        .trie_row_iterator(query_result)
+                        .map(|res| res.collect::<Vec<_>>())
+                })
                 .collect::<Result<Vec<_>, Error>>()
                 .ok()?;
-            let results = result_iterators
-                .into_iter()
-                .map(|iter| iter.collect::<Vec<_>>())
-                .collect::<Vec<_>>();
 
             if self.program.rules()[rule_index].aggregate().is_some() {
                 // If rule is an aggregate rule then we continue with all matches
@@ -739,7 +744,12 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
                 if let Some(children) = children_option {
                     result.next = Some(TreeForTableResponseSuccessor {
-                        rule: rule_index,
+                        rule: TraceRule::from_rule_and_head(
+                            rule_index,
+                            rule,
+                            head_index,
+                            &rule.head()[head_index],
+                        ),
                         children,
                     });
 
@@ -769,7 +779,12 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
                     if let Some(children) = children_option {
                         result.next = Some(TreeForTableResponseSuccessor {
-                            rule: rule_index,
+                            rule: TraceRule::from_rule_and_head(
+                                rule_index,
+                                rule,
+                                head_index,
+                                &rule.head()[head_index],
+                            ),
                             children,
                         });
 
@@ -806,22 +821,34 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         if let Some(result) = self.trace_tree_recursive(&mut store, facts) {
             Ok(result)
         } else {
+            let predicate = Tag::new(query.predicate.clone());
+
             let possible_rules_above = self
                 .analysis
                 .predicate_to_rule_body
-                .get(&Tag::new(query.predicate.clone()))
+                .get(&predicate)
                 .cloned()
                 .unwrap_or_default()
                 .into_iter()
+                .flat_map(|idx| {
+                    TraceRule::all_possible_single_head_rules(idx, &self.program().rules()[idx])
+                })
                 .collect::<Vec<_>>();
 
             let possible_rules_below = self
                 .analysis
                 .predicate_to_rule_head
-                .get(&Tag::new(query.predicate.clone()))
+                .get(&predicate)
                 .cloned()
                 .unwrap_or_default()
                 .into_iter()
+                .flat_map(|idx| {
+                    TraceRule::possible_rules_for_head_predicate(
+                        idx,
+                        &self.program().rules()[idx],
+                        &predicate,
+                    )
+                })
                 .collect::<Vec<_>>();
 
             Ok(TreeForTableResponse {
@@ -923,9 +950,20 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         }
 
         let rule_index = self.rule_history[step];
+        let rule = self.program.rules()[rule_index].clone();
 
         if let Some(successor) = &inner.next {
             if rule_index != successor.rule {
+                return TraceNodeResult::default();
+            }
+
+            let partial_grounding = partial_grounding_for_rule_head_and_fact(
+                rule.clone(),
+                successor.head_index,
+                fact.clone(),
+            );
+
+            if partial_grounding.is_none() {
                 return TraceNodeResult::default();
             }
         }
@@ -939,8 +977,6 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         } else {
             unreachable!("no_restriction is false")
         };
-
-        let rule = self.program.rules()[rule_index].clone();
 
         // Iterate over all head atoms which could have derived the given fact
         for (head_index, head_atom) in rule.head().iter().enumerate() {
@@ -1153,22 +1189,33 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
             let more = entries.len() + start < len_facts;
 
+            let predicate_as_tag = Tag::new(predicate.clone());
             let possible_rules_above = self
                 .analysis
                 .predicate_to_rule_body
-                .get(&Tag::new(predicate.clone()))
+                .get(&predicate_as_tag)
                 .cloned()
                 .unwrap_or_default()
                 .into_iter()
+                .flat_map(|idx| {
+                    TraceRule::all_possible_single_head_rules(idx, &self.program().rules()[idx])
+                })
                 .collect::<Vec<_>>();
 
             let possible_rules_below = self
                 .analysis
                 .predicate_to_rule_head
-                .get(&Tag::new(predicate.clone()))
+                .get(&predicate_as_tag)
                 .cloned()
                 .unwrap_or_default()
                 .into_iter()
+                .flat_map(|idx| {
+                    TraceRule::possible_rules_for_head_predicate(
+                        idx,
+                        &self.program().rules()[idx],
+                        &predicate_as_tag,
+                    )
+                })
                 .collect::<Vec<_>>();
 
             let element = TableEntriesForTreeNodesResponseElement {
@@ -1187,95 +1234,70 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     }
 }
 
-#[derive(Clone)]
-struct TraceGroundingIterator {
+fn partial_grounding_for_rule_head_and_fact(
     rule: ChaseRule,
+    head_index: usize,
     fact: GroundAtom,
+) -> Option<HashMap<Variable, AnyDataValue>> {
+    let head_atom = &rule.head()[head_index];
 
-    head_index: Option<usize>,
-}
+    let is_aggregate_atom = Some(head_index) == rule.aggregate_head_index();
+    let aggregate_variable = rule
+        .aggregate()
+        .map(|aggregate| aggregate.output_variable());
 
-impl TraceGroundingIterator {
-    pub fn new(rule: ChaseRule, fact: GroundAtom) -> Self {
-        Self {
-            rule,
-            fact,
-            head_index: None,
-        }
+    if head_atom.predicate() != fact.predicate() {
+        return None;
     }
-}
 
-impl Iterator for TraceGroundingIterator {
-    type Item = HashMap<Variable, AnyDataValue>;
+    // Unify the head atom with the given fact
 
-    fn next(&mut self) -> Option<Self::Item> {
-        let head_index = self.head_index.get_or_insert(0);
+    // If unification is possible `compatible` remains true
+    let mut compatible = true;
+    // Contains the head variable and the ground term it aligns with.
+    let mut grounding = HashMap::<Variable, AnyDataValue>::new();
 
-        for head_atom in self.rule.head().iter().skip(*head_index) {
-            let is_aggregate_atom = Some(*head_index) == self.rule.aggregate_head_index();
-            let aggregate_variable = self
-                .rule
-                .aggregate()
-                .map(|aggregate| aggregate.output_variable());
-
-            *head_index += 1;
-
-            if head_atom.predicate() != self.fact.predicate() {
-                continue;
+    for (head_term, fact_term) in head_atom.terms().zip(fact.terms()) {
+        match head_term {
+            Primitive::Ground(ground) => {
+                if ground != fact_term {
+                    compatible = false;
+                    break;
+                }
             }
+            Primitive::Variable(variable) => {
+                // Matching with existential variables should not produce any restrictions,
+                // so we just consider universal variables here
+                if variable.is_existential() {
+                    continue;
+                }
 
-            // Unify the head atom with the given fact
+                // Aggregate variables are not grounded
+                if is_aggregate_atom && Some(variable) == aggregate_variable {
+                    continue;
+                }
 
-            // If unification is possible `compatible` remains true
-            let mut compatible = true;
-            // Contains the head variable and the ground term it aligns with.
-            let mut grounding = HashMap::<Variable, AnyDataValue>::new();
-
-            for (head_term, fact_term) in head_atom.terms().zip(self.fact.terms()) {
-                match head_term {
-                    Primitive::Ground(ground) => {
-                        if ground != fact_term {
+                match grounding.entry(variable.clone()) {
+                    Entry::Occupied(entry) => {
+                        if *entry.get() != fact_term.value() {
                             compatible = false;
                             break;
                         }
                     }
-                    Primitive::Variable(variable) => {
-                        // Matching with existential variables should not produce any restrictions,
-                        // so we just consider universal variables here
-                        if variable.is_existential() {
-                            continue;
-                        }
-
-                        // Aggregate variables are not grounded
-                        if is_aggregate_atom && Some(variable) == aggregate_variable {
-                            continue;
-                        }
-
-                        match grounding.entry(variable.clone()) {
-                            Entry::Occupied(entry) => {
-                                if *entry.get() != fact_term.value() {
-                                    compatible = false;
-                                    break;
-                                }
-                            }
-                            Entry::Vacant(entry) => {
-                                entry.insert(fact_term.value());
-                            }
-                        }
+                    Entry::Vacant(entry) => {
+                        entry.insert(fact_term.value());
                     }
                 }
             }
-
-            if !compatible {
-                // Fact could not have been unified
-                continue;
-            }
-
-            return Some(grounding);
         }
-
-        None
     }
+
+    if !compatible {
+        // Fact could not have been unified
+        return None;
+    }
+
+    Some(grounding)
 }
 
 #[derive(Debug, Default)]

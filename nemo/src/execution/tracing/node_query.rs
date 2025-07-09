@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::shared::{
-    PaginationQuery, PaginationResponse, RuleId, TableEntryQuery, TableEntryResponse,
+    PaginationQuery, PaginationResponse, Rule, RuleId, TableEntryQuery, TableEntryResponse,
 };
 
 /// Defines the next layer in a [TableEntriesForTreeNodesQueryInner]
@@ -11,6 +11,8 @@ use super::shared::{
 pub struct TableEntriesForTreeNodesQuerySuccessor {
     /// Rule deriving this facts
     pub rule: RuleId,
+    /// The head index in the rule deriving the facts
+    pub head_index: usize,
     /// Child nodes used in this rule application
     pub children: Vec<TableEntriesForTreeNodesQueryInner>,
 }
@@ -60,9 +62,9 @@ pub struct TableEntriesForTreeNodesResponseElement {
     pub pagination: PaginationResponse,
 
     /// All rules that may use facts in this table
-    pub possible_rules_above: Vec<RuleId>,
+    pub possible_rules_above: Vec<Rule>,
     /// All rules that derived facts in this table
-    pub possible_rules_below: Vec<RuleId>,
+    pub possible_rules_below: Vec<Rule>,
 
     /// Identifying the query node for which
     pub address: TreeAddress,

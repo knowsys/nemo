@@ -10,12 +10,12 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::TreeForTableResponse;
+use super::{Rule, TreeForTableResponse};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct TreeForTableResponseChildInformation {
     #[serde(rename = "rule")]
-    pub rule: usize,
+    pub rule: Rule,
     #[serde(rename = "children")]
     pub children: Vec<TreeForTableResponse>,
 }
@@ -25,7 +25,7 @@ impl From<TreeForTableResponseChildInformation>
 {
     fn from(value: TreeForTableResponseChildInformation) -> Self {
         Self {
-            rule: value.rule,
+            rule: value.rule.into(),
             children: value.children.into_iter().map(Into::into).collect(),
         }
     }
@@ -36,7 +36,7 @@ impl From<nemo::execution::tracing::tree_query::TreeForTableResponseSuccessor>
 {
     fn from(value: nemo::execution::tracing::tree_query::TreeForTableResponseSuccessor) -> Self {
         Self {
-            rule: value.rule,
+            rule: value.rule.into(),
             children: value.children.into_iter().map(Into::into).collect(),
         }
     }

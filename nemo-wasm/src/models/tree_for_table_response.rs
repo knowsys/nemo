@@ -10,7 +10,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::{TableResponseBaseTableEntries, TreeForTableResponseChildInformation};
+use super::{Rule, TableResponseBaseTableEntries, TreeForTableResponseChildInformation};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct TreeForTableResponse {
@@ -21,9 +21,9 @@ pub struct TreeForTableResponse {
     #[serde(rename = "tableEntries")]
     pub table_entries: Box<TableResponseBaseTableEntries>,
     #[serde(rename = "possibleRulesAbove")]
-    pub possible_rules_above: Vec<usize>,
+    pub possible_rules_above: Vec<Rule>,
     #[serde(rename = "possibleRulesBelow")]
-    pub possible_rules_below: Vec<usize>,
+    pub possible_rules_below: Vec<Rule>,
 }
 
 impl From<TreeForTableResponse> for nemo::execution::tracing::tree_query::TreeForTableResponse {
@@ -40,8 +40,16 @@ impl From<TreeForTableResponse> for nemo::execution::tracing::tree_query::TreeFo
             predicate: value.predicate,
             entries,
             pagination,
-            possible_rules_above: value.possible_rules_above,
-            possible_rules_below: value.possible_rules_below,
+            possible_rules_above: value
+                .possible_rules_above
+                .into_iter()
+                .map(Into::into)
+                .collect(),
+            possible_rules_below: value
+                .possible_rules_below
+                .into_iter()
+                .map(Into::into)
+                .collect(),
             next: value.child_information.map(|info| (*info).into()),
         }
     }
@@ -58,8 +66,16 @@ impl From<nemo::execution::tracing::tree_query::TreeForTableResponse> for TreeFo
             child_information: value.next.map(|next| Box::new(next.into())),
             predicate: value.predicate,
             table_entries,
-            possible_rules_above: value.possible_rules_above,
-            possible_rules_below: value.possible_rules_below,
+            possible_rules_above: value
+                .possible_rules_above
+                .into_iter()
+                .map(Into::into)
+                .collect(),
+            possible_rules_below: value
+                .possible_rules_below
+                .into_iter()
+                .map(Into::into)
+                .collect(),
         }
     }
 }

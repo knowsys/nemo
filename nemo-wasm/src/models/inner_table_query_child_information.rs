@@ -16,6 +16,8 @@ use super::InnerTableQuery;
 pub struct InnerTableQueryChildInformation {
     #[serde(rename = "rule")]
     pub rule: usize,
+    #[serde(rename = "headIndex")]
+    pub head_index: usize,
     #[serde(rename = "children")]
     pub children: Vec<InnerTableQuery>,
 }
@@ -26,6 +28,7 @@ impl From<InnerTableQueryChildInformation>
     fn from(value: InnerTableQueryChildInformation) -> Self {
         Self {
             rule: value.rule,
+            head_index: value.head_index,
             children: value.children.into_iter().map(Into::into).collect(),
         }
     }
