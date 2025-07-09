@@ -3,3 +3,6 @@ A(?Y) :- R(?X, ?Y), B(?X) .
 R(?Y, ?X) :- R(?X, ?Y) .
 B(?Y) :- R(?X, ?Y), A(?X) .
 
+@export R :- csv {} .
+@export A :- csv {} .
+@export B :- csv {} .

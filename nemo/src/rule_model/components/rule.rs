@@ -15,6 +15,7 @@ use super::{
     atom::Atom,
     component_iterator, component_iterator_mut,
     literal::Literal,
+    tag::Tag,
     term::{
         primitive::{variable::Variable, Primitive},
         Term,
@@ -164,6 +165,46 @@ impl Rule {
     /// including the head and the positive and negative body.
     pub fn atoms(&self) -> impl Iterator<Item = &Atom> {
         self.head.iter().chain(self.body_atoms())
+    }
+
+    /// Return the predicates of all Literals (no Operations) of the Rule.
+    pub fn predicates_ref(&self) -> Vec<&Tag> {
+        self.body()
+            .iter()
+            .filter_map(|literal| literal.predicate_ref())
+            .chain(self.head().iter().map(|atom| atom.predicate_ref()))
+            .collect()
+    }
+
+    pub fn predicates_ref_and_lens(&self) -> Vec<(&Tag, usize)> {
+        self.body()
+            .iter()
+            .filter_map(|literal| literal.predicate_ref_and_len())
+            .chain(self.head().iter().map(|atom| atom.predicate_ref_and_len()))
+            .collect()
+    }
+
+    pub fn frontier_variables(&self) -> HashSet<&Variable> {
+        let positive_body_variables: HashSet<&Variable> = self.positive_variables();
+        let universal_head_variables: HashSet<&Variable> = self.universal_head_variables();
+        positive_body_variables
+            .intersection(&universal_head_variables)
+            .copied()
+            .collect()
+    }
+
+    fn universal_head_variables(&self) -> HashSet<&Variable> {
+        self.head().iter().fold(
+            HashSet::<&Variable>::new(),
+            |mut universal_head_variables: HashSet<&Variable>, atom| {
+                let un_vars_of_atom: HashSet<&Variable> = atom.universal_variables();
+                un_vars_of_atom.into_iter().for_each(|var| {
+                    universal_head_variables.insert(var);
+                });
+                universal_head_variables
+                // universal_head_variables.insert_all_take_ret(un_vars_of_atom)
+            },
+        )
     }
 
     /// Return a set of "safe" variables.

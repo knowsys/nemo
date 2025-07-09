@@ -361,6 +361,24 @@ fn weakly_sticky_positive(fixture: Fixture<&str>) {
     test(fixture, true, &RulesProperties::is_weakly_sticky)
 }
 
+#[dir_test(
+    dir: "$CARGO_MANIFEST_DIR/../resources/testcases_static_checks/tests/negative/isDmfa",
+    glob: "*.rls",
+    postfix: "msa_negative",
+)]
+fn msa_negative(fixture: Fixture<&str>) {
+    test(fixture, false, &RulesProperties::is_msa)
+}
+
+#[dir_test(
+    dir: "$CARGO_MANIFEST_DIR/../resources/testcases_static_checks/tests/positive/isDmfa",
+    glob: "*.rls",
+    postfix: "msa_positive",
+)]
+fn msa_positive(fixture: Fixture<&str>) {
+    test(fixture, true, &RulesProperties::is_msa)
+}
+
 struct TestCase<'a> {
     expected_result: bool,
     rule_set: RuleSet,

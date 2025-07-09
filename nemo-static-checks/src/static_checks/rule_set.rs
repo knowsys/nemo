@@ -247,10 +247,10 @@ pub trait SpecialVariables {
     /// Returns the join Variables of a Rule.
     fn join_variables(&self) -> HashSet<&Variable>;
     /// Returns the frontier Variables of a Rule.
-    fn frontier_variables(&self) -> HashSet<&Variable>;
+    // fn frontier_variables(&self) -> HashSet<&Variable>;
     /// Returns all pairs of frontier Variables of a Rule excluding the reflexive pairs.
     fn frontier_rule_and_variable_pairs(&self) -> HashSet<RuleAndVariablePair>;
-    fn universal_head_variables(&self) -> HashSet<&Variable>;
+    // fn universal_head_variables(&self) -> HashSet<&Variable>;
 }
 
 impl SpecialVariables for Rule {
@@ -263,14 +263,14 @@ impl SpecialVariables for Rule {
             .collect()
     }
 
-    fn frontier_variables(&self) -> HashSet<&Variable> {
-        let positive_body_variables: HashSet<&Variable> = self.positive_variables();
-        let universal_head_variables: HashSet<&Variable> = self.universal_head_variables();
-        positive_body_variables
-            .intersection(&universal_head_variables)
-            .copied()
-            .collect()
-    }
+    // fn frontier_variables(&self) -> HashSet<&Variable> {
+    //     let positive_body_variables: HashSet<&Variable> = self.positive_variables();
+    //     let universal_head_variables: HashSet<&Variable> = self.universal_head_variables();
+    //     positive_body_variables
+    //         .intersection(&universal_head_variables)
+    //         .copied()
+    //         .collect()
+    // }
 
     fn frontier_rule_and_variable_pairs(&self) -> HashSet<RuleAndVariablePair> {
         let frontier_variables: HashSet<&Variable> = self.frontier_variables();
@@ -290,15 +290,15 @@ impl SpecialVariables for Rule {
             })
     }
 
-    fn universal_head_variables(&self) -> HashSet<&Variable> {
-        self.head().iter().fold(
-            HashSet::<&Variable>::new(),
-            |universal_head_variables: HashSet<&Variable>, atom| {
-                let un_vars_of_atom: HashSet<&Variable> = atom.universal_variables();
-                universal_head_variables.insert_all_take_ret(un_vars_of_atom)
-            },
-        )
-    }
+    // fn universal_head_variables(&self) -> HashSet<&Variable> {
+    //     self.head().iter().fold(
+    //         HashSet::<&Variable>::new(),
+    //         |universal_head_variables: HashSet<&Variable>, atom| {
+    //             let un_vars_of_atom: HashSet<&Variable> = atom.universal_variables();
+    //             universal_head_variables.insert_all_take_ret(un_vars_of_atom)
+    //         },
+    //     )
+    // }
 }
 
 /// This Impl-Block contains methods for a rule to get all of the positions of its (positive body / head) variables.

@@ -99,6 +99,11 @@ impl Atom {
         &self.predicate
     }
 
+    /// Return the predicate of this atom as a reference with its length.
+    pub fn predicate_ref_and_len(&self) -> (&Tag, usize) {
+        (self.predicate_ref(), self.len())
+    }
+
     /// Return an iterator over the terms of this atom.
     pub fn terms(&self) -> impl Iterator<Item = &Term> {
         self.terms.iter()

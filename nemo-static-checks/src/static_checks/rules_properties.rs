@@ -1,8 +1,12 @@
 //! Functionality that provides the static checks for a RuleSet.
 use crate::static_checks::acyclicity_graphs::{JointAcyclicityGraph, WeakAcyclicityGraph};
+use crate::static_checks::msa::msa_execution_engine_from_rules;
 use crate::static_checks::positions::PositionsByRuleAndVariables;
 use crate::static_checks::rule_set::RuleSet;
 use crate::static_checks::{positions::Positions, rule_properties::RuleProperties};
+use nemo::datavalues::AnyDataValue;
+use nemo::execution::DefaultExecutionEngine;
+use nemo::rule_model::components::tag::Tag;
 
 /// This trait gives some static checks for some ruleset.
 pub trait RulesProperties {
@@ -173,8 +177,17 @@ impl RulesProperties for RuleSet {
     }
 
     fn is_msa(&self) -> bool {
-        todo!("IMPLEMENT");
-        // TODO: IMPLEMENT
+        let mut msa_exec_eng: DefaultExecutionEngine = msa_execution_engine_from_rules(&self.0);
+        msa_exec_eng.execute().expect("no errors possible");
+        let c_pred: Tag = Tag::from("_msa_C");
+        if msa_exec_eng
+            .predicate_rows(&c_pred)
+            .expect("no errors possible")
+            .is_none()
+        {
+            return true;
+        }
+        false
     }
 
     fn is_dmfa(&self) -> bool {
