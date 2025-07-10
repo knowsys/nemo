@@ -592,14 +592,14 @@ fn node_path_deepest_identifier<'a>(
                 }
             }
             Some(ref info) => {
-                if let Some(parent_identifier) = node.identifier()
-                    && parent_identifier.identifier().0 == info.identifier_scope
-                {
-                    return Some(IdentifiedNode {
-                        node: info.node,
-                        identifier: info.identifier.clone(),
-                        scoping_node: *node,
-                    });
+                if let Some(parent_identifier) = node.identifier() {
+                    if parent_identifier.identifier().0 == info.identifier_scope {
+                        return Some(IdentifiedNode {
+                            node: info.node,
+                            identifier: info.identifier.clone(),
+                            scoping_node: *node,
+                        });
+                    }
                 }
             }
         }
