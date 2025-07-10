@@ -560,7 +560,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
     fn trace_next_facts(
         grounding: &[AnyDataValue],
-        next_facts: &mut Vec<Vec<GroundAtom>>,
+        next_facts: &mut [Vec<GroundAtom>],
         rule: &ChaseRule,
         variable_order: &VariableOrder,
     ) {
@@ -617,7 +617,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             .unwrap_or_default()
             .into_iter()
             .flat_map(|idx| {
-                TraceRule::all_possible_single_head_rules(idx, &self.program().rules()[idx])
+                TraceRule::all_possible_single_head_rules(idx, self.program().rule(idx))
             })
             .collect::<Vec<_>>();
 
@@ -631,7 +631,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             .flat_map(|idx| {
                 TraceRule::possible_rules_for_head_predicate(
                     idx,
-                    &self.program().rules()[idx],
+                    self.program().rule(idx),
                     &predicate,
                 )
             })
@@ -659,7 +659,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             .collect::<Option<Vec<usize>>>()?;
 
         // Some of the traced facts come from the input database
-        if steps.iter().any(|&step| step == 0) {
+        if steps.iter().contains(&0) {
             return Some(result);
         }
 
@@ -673,11 +673,12 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             return Some(result);
         }
 
-        let rule = &self.program.rules()[rule_index].clone();
+        let chase_rule = &self.chase_program().rules()[rule_index].clone();
+        let rule = &self.program().rule(rule_index).clone();
 
-        for (head_index, _) in rule.head().into_iter().enumerate() {
+        for (head_index, _) in rule.head().iter().enumerate() {
             let combination = facts.iter().cloned().map(|fact| {
-                partial_grounding_for_rule_head_and_fact(rule.clone(), head_index, fact)
+                partial_grounding_for_rule_head_and_fact(chase_rule.clone(), head_index, fact)
             });
 
             let mut query_results = Vec::new();
@@ -686,7 +687,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 let rule = &self.program.rules()[rule_index];
                 let analysis = &self.analysis.rule_analysis[rule_index];
 
-                let trace_strategy = TracingStrategy::initialize(&rule, partial_grounding?).ok()?;
+                let trace_strategy = TracingStrategy::initialize(rule, partial_grounding?).ok()?;
 
                 let mut execution_plan = SubtableExecutionPlan::default();
                 let mut variable_order = analysis.promising_variable_orders[0].clone(); // TODO: This selection is arbitrary
@@ -831,7 +832,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 .unwrap_or_default()
                 .into_iter()
                 .flat_map(|idx| {
-                    TraceRule::all_possible_single_head_rules(idx, &self.program().rules()[idx])
+                    TraceRule::all_possible_single_head_rules(idx, self.program().rule(idx))
                 })
                 .collect::<Vec<_>>();
 
@@ -845,7 +846,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 .flat_map(|idx| {
                     TraceRule::possible_rules_for_head_predicate(
                         idx,
-                        &self.program().rules()[idx],
+                        self.program().rule(idx),
                         &predicate,
                     )
                 })
@@ -919,15 +920,15 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         address: TreeAddress,
     ) -> TraceNodeResult {
         // Check if fact passes the query filter
-        if !inner.queries.is_empty() {
-            if inner.queries.iter().all(|query| match query {
+        if !inner.queries.is_empty()
+            && inner.queries.iter().all(|query| match query {
                 TableEntryQuery::Entry(_) => {
                     unimplemented!("querying a fact by entry not implemented")
                 }
                 TableEntryQuery::Query(query_string) => !Self::check_fact(&fact, query_string),
-            }) {
-                return TraceNodeResult::default();
-            }
+            })
+        {
+            return TraceNodeResult::default();
         }
 
         let step = if let Some(step) = self
@@ -1178,7 +1179,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             };
 
             let entries = facts
-                .into_iter()
+                .iter()
                 .map(|fact| TableEntryResponse {
                     entry_id: 0, // TODO: Include entry id
                     terms: fact.terms().map(|term| term.value()).collect(),
@@ -1198,7 +1199,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 .unwrap_or_default()
                 .into_iter()
                 .flat_map(|idx| {
-                    TraceRule::all_possible_single_head_rules(idx, &self.program().rules()[idx])
+                    TraceRule::all_possible_single_head_rules(idx, self.program().rule(idx))
                 })
                 .collect::<Vec<_>>();
 
@@ -1212,7 +1213,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 .flat_map(|idx| {
                     TraceRule::possible_rules_for_head_predicate(
                         idx,
-                        &self.program().rules()[idx],
+                        self.program().rule(idx),
                         &predicate_as_tag,
                     )
                 })

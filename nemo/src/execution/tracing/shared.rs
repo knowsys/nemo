@@ -1,19 +1,12 @@
 //! This module contains shared data structures
 //! for defining tracing queries and responses.
 
-use itertools::Itertools;
 use nemo_physical::datavalues::AnyDataValue;
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    chase_model::{
-        components::{
-            atom::{primitive_atom::PrimitiveAtom, variable_atom::VariableAtom},
-            rule::ChaseRule,
-        },
-        ChaseAtom,
-    },
-    rule_model::components::{tag::Tag, term::primitive::ground::GroundTerm},
+use crate::rule_model::components::{
+    atom::Atom, literal::Literal, rule::Rule as ModelRule, tag::Tag,
+    term::primitive::ground::GroundTerm,
 };
 
 /// A predicate name with the parameters used with it in a rule (essentially an atom)
@@ -25,28 +18,29 @@ pub struct PredicateWithParameters {
     pub parameters: Vec<String>,
 }
 
-impl PredicateWithParameters {
-    fn from_positive_variable_atom(atom: &VariableAtom) -> Self {
+impl From<&Atom> for PredicateWithParameters {
+    fn from(atom: &Atom) -> Self {
         Self {
             name: atom.predicate().to_string(),
-            parameters: atom.terms().map(ToString::to_string).collect(),
-        }
-    }
-
-    fn from_negative_variable_atom(atom: &VariableAtom) -> Self {
-        Self {
-            name: format!("~ {}", atom.predicate()),
             parameters: atom.terms().map(ToString::to_string).collect(),
         }
     }
 }
 
-impl From<&PrimitiveAtom> for PredicateWithParameters {
-    fn from(atom: &PrimitiveAtom) -> Self {
-        Self {
-            name: atom.predicate().to_string(),
-            parameters: atom.terms().map(ToString::to_string).collect(),
-        }
+impl TryFrom<&Literal> for PredicateWithParameters {
+    type Error = ();
+
+    fn try_from(literal: &Literal) -> Result<Self, ()> {
+        let name = match literal {
+            Literal::Positive(ref atom) => atom.predicate().to_string(),
+            Literal::Negative(ref atom) => format!("~{}", atom.predicate()),
+            Literal::Operation(_) => return Err(()),
+        };
+
+        Ok(Self {
+            name,
+            parameters: literal.terms().map(ToString::to_string).collect(),
+        })
     }
 }
 
@@ -71,32 +65,26 @@ pub struct Rule {
 impl Rule {
     pub(crate) fn from_rule_and_head(
         rule_idx: usize,
-        rule: &ChaseRule,
+        rule: &ModelRule,
         head_idx: usize,
-        head: &PrimitiveAtom,
+        head: &Atom,
     ) -> Self {
         Self {
             id: rule_idx,
             relevant_head_predicate: PredicateWithParameters::from(head),
             relevant_head_predicate_index: head_idx,
             body_predicates: rule
-                .positive_body()
-                .into_iter()
-                .map(PredicateWithParameters::from_positive_variable_atom)
-                .chain(
-                    rule.negative_body()
-                        .into_iter()
-                        .map(PredicateWithParameters::from_negative_variable_atom),
-                )
+                .body()
+                .iter()
+                .filter_map(|lit| PredicateWithParameters::try_from(lit).ok())
                 .collect(),
-            string_representation:
-                "WE SHOULD REBASE THIS BRANCH ON THE CURRENT MAIN TO MAKE THIS WORK".to_string(),
+            string_representation: rule.to_string(),
         }
     }
 
     pub(crate) fn all_possible_single_head_rules(
         rule_idx: usize,
-        rule: &ChaseRule,
+        rule: &ModelRule,
     ) -> impl Iterator<Item = Self> + '_ {
         rule.head()
             .iter()
@@ -104,9 +92,9 @@ impl Rule {
             .map(move |(head_idx, head)| Self::from_rule_and_head(rule_idx, rule, head_idx, head))
     }
 
-    pub(crate) fn possible_rules_for_head_predicate<'a, 'b>(
+    pub(crate) fn possible_rules_for_head_predicate<'a>(
         rule_idx: usize,
-        rule: &'a ChaseRule,
+        rule: &'a ModelRule,
         head_predicate: &'a Tag,
     ) -> impl Iterator<Item = Self> + 'a {
         rule.head()
