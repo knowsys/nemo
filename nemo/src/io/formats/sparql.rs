@@ -171,6 +171,7 @@ impl FormatBuilder for SparqlBuilder {
                 .unwrap_or(DsvValueFormats::default(arity)),
             None,
             true,
+            false,
         ))
     }
 
