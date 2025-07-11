@@ -397,6 +397,8 @@ pub mod import_export {
         pub const BASE: &str = "base";
         /// Name of the attribute for specifying a delimiter in import/export directives for delimiter-separated values format.
         pub const DSV_DELIMITER: &str = "delimiter";
+        /// Name of the attribute for specifying whether quoting should be respected in import/export directives for delimiter-separated values format.
+        pub const DSV_QUOTING: &str = "quoting";
         /// Name of the attribute for specifying the compression in import/export directives.
         pub const COMPRESSION: &str = "compression";
         /// Name of the attribute for specifying the limit in import/export directives.
