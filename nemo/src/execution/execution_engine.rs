@@ -950,6 +950,10 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             return TraceNodeResult::default();
         }
 
+        if no_restriction {
+            return TraceNodeResult::single(address, inner.pagination, fact);
+        }
+
         let rule_index = self.rule_history[step];
         let rule = self.program.rules()[rule_index].clone();
 
@@ -967,10 +971,6 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             if partial_grounding.is_none() {
                 return TraceNodeResult::default();
             }
-        }
-
-        if no_restriction {
-            return TraceNodeResult::single(address, inner.pagination, fact);
         }
 
         let children = if let Some(successor) = &inner.next {
