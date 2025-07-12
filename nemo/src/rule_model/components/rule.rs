@@ -15,6 +15,7 @@ use super::{
     atom::Atom,
     component_iterator, component_iterator_mut,
     literal::Literal,
+    tag::Tag,
     term::{
         primitive::{variable::Variable, Primitive},
         Term,
@@ -129,6 +130,28 @@ impl Rule {
         &mut self.head
     }
 
+    pub fn existential_variables(&self) -> HashSet<&Variable> {
+        self.variables()
+            .filter(|var| var.is_existential())
+            .collect()
+    }
+
+    pub fn positive_variables_iter(&self) -> impl Iterator<Item = &Variable> {
+        self.body_positive().flat_map(|atom| {
+            atom.terms()
+                .filter_map(|term| match term {
+                    Term::Primitive(Primitive::Variable(variable)) => Some(variable),
+                    _ => None,
+                })
+                .filter(|variable| variable.is_universal() && variable.name().is_some())
+        })
+    }
+
+    /// Return the set of variables that are bound in positive body atoms.
+    pub fn positive_variables(&self) -> HashSet<&Variable> {
+        self.positive_variables_iter().collect()
+    }
+
     /// Return an iterator over all positive and negative [Atom]s
     /// contained in the body of this rule.
     pub fn body_atoms(&self) -> impl Iterator<Item = &Atom> {
@@ -144,23 +167,44 @@ impl Rule {
         self.head.iter().chain(self.body_atoms())
     }
 
-    /// Return the set of variables that are bound in positive body atoms.
-    pub fn positive_variables(&self) -> HashSet<&Variable> {
-        let mut result = HashSet::new();
+    /// Return the predicates of all Literals (no Operations) of the Rule.
+    pub fn predicates_ref(&self) -> Vec<&Tag> {
+        self.body()
+            .iter()
+            .filter_map(|literal| literal.predicate_ref())
+            .chain(self.head().iter().map(|atom| atom.predicate_ref()))
+            .collect()
+    }
 
-        for literal in &self.body {
-            if let Literal::Positive(atom) = literal {
-                for term in atom.terms() {
-                    if let Term::Primitive(Primitive::Variable(variable)) = term {
-                        if variable.is_universal() && variable.name().is_some() {
-                            result.insert(variable);
-                        }
-                    }
-                }
-            }
-        }
+    pub fn predicates_ref_and_lens(&self) -> Vec<(&Tag, usize)> {
+        self.body()
+            .iter()
+            .filter_map(|literal| literal.predicate_ref_and_len())
+            .chain(self.head().iter().map(|atom| atom.predicate_ref_and_len()))
+            .collect()
+    }
 
-        result
+    pub fn frontier_variables(&self) -> HashSet<&Variable> {
+        let positive_body_variables: HashSet<&Variable> = self.positive_variables();
+        let universal_head_variables: HashSet<&Variable> = self.universal_head_variables();
+        positive_body_variables
+            .intersection(&universal_head_variables)
+            .copied()
+            .collect()
+    }
+
+    fn universal_head_variables(&self) -> HashSet<&Variable> {
+        self.head().iter().fold(
+            HashSet::<&Variable>::new(),
+            |mut universal_head_variables: HashSet<&Variable>, atom| {
+                let un_vars_of_atom: HashSet<&Variable> = atom.universal_variables();
+                un_vars_of_atom.into_iter().for_each(|var| {
+                    universal_head_variables.insert(var);
+                });
+                universal_head_variables
+                // universal_head_variables.insert_all_take_ret(un_vars_of_atom)
+            },
+        )
     }
 
     /// Return a set of "safe" variables.
@@ -406,8 +450,8 @@ impl ComponentBehavior for Rule {
             if let Literal::Negative(negative) = literal {
                 for negative_subterm in negative.terms() {
                     if let Term::Primitive(Primitive::Variable(variable)) = negative_subterm {
-                        if !safe_variables.contains(variable) {
-                            current_negative_variables.insert(variable);
+                        if !safe_variables.contains(&variable) {
+                            current_negative_variables.insert(&variable);
                         }
                     }
                 }

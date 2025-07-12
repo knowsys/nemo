@@ -102,7 +102,13 @@ impl Eq for UniversalVariable {}
 
 impl PartialOrd for UniversalVariable {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.name.partial_cmp(&other.name)
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for UniversalVariable {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.name.cmp(&other.name)
     }
 }
 
