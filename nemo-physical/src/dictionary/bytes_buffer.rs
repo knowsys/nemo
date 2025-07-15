@@ -158,7 +158,7 @@ impl BytesBuffer {
         let page_size: usize = self
             .pages
             .iter()
-            .filter(|(idx, _)| (*idx == buffer))
+            .filter(|(idx, _)| *idx == buffer)
             .map(|(_, page)| page.capacity())
             .sum();
         // Add size of usize, the space used for the current page number of that buffer:
