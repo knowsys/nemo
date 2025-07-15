@@ -200,6 +200,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 
 [[package]]
+name = "atty"
+version = "0.2.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d9b39be18770d11421cdb1b9947a45dd3f37e93092cbf377614828a319d5fee8"
+dependencies = [
+ "hermit-abi 0.1.19",
+ "libc",
+ "winapi",
+]
+
+[[package]]
 name = "auto_impl"
 version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -701,7 +712,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "186e05a59d4c50738528153b83b0b0194d3a29507dfec16eccd4b342903397d0"
 dependencies = [
  "log",
- "regex",
 ]
 
 [[package]]
@@ -710,8 +720,11 @@ version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a19187fea3ac7e84da7dacf48de0c45d63c6a76f9490dae389aead16c243fce3"
 dependencies = [
+ "atty",
+ "humantime",
  "log",
  "regex",
+ "termcolor",
 ]
 
 [[package]]
@@ -723,7 +736,6 @@ dependencies = [
  "anstream",
  "anstyle",
  "env_filter",
- "jiff",
  "log",
 ]
 
@@ -1033,6 +1045,15 @@ checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
 name = "hermit-abi"
+version = "0.1.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "62b467343b94ba476dcb2500d242dadbb39557df889310ac77c5d99100aaac33"
+dependencies = [
+ "libc",
+]
+
+[[package]]
+name = "hermit-abi"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc0fef456e4baa96da950455cd02c081ca953b141298e41db3fc7e36b1da849c"
@@ -1076,6 +1097,12 @@ name = "httparse"
 version = "1.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6dbf3de79e51f3d586ab4cb9d5c3e2c14aa28ed23d180cf89b4df0454a69cc87"
+
+[[package]]
+name = "humantime"
+version = "2.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9b112acc8b3adf4b107a8ec20977da0273a8c386765a3ec0229bd500a1443f9f"
 
 [[package]]
 name = "hyper"
@@ -1333,7 +1360,7 @@ version = "0.4.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e04d7f318608d35d4b61ddd75cbdaee86b023ebe2bd5a66ee0915f0bf93095a9"
 dependencies = [
- "hermit-abi",
+ "hermit-abi 0.5.2",
  "libc",
  "windows-sys 0.59.0",
 ]
@@ -1358,30 +1385,6 @@ name = "itoa"
 version = "1.0.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4a5f13b858c8d314ee3e8f639011f7ccefe71f97f96e50151fb991f267928e2c"
-
-[[package]]
-name = "jiff"
-version = "0.2.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "be1f93b8b1eb69c77f24bbb0afdf66f54b632ee39af40ca21c4365a1d7347e49"
-dependencies = [
- "jiff-static",
- "log",
- "portable-atomic",
- "portable-atomic-util",
- "serde",
-]
-
-[[package]]
-name = "jiff-static"
-version = "0.2.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "03343451ff899767262ec32146f6d559dd759fdadf42ff0e227c7c48f72594b4"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
 
 [[package]]
 name = "jobserver"
@@ -1606,7 +1609,7 @@ dependencies = [
 
 [[package]]
 name = "nemo"
-version = "0.8.0"
+version = "0.8.1-dev"
 dependencies = [
  "ariadne",
  "ascii_tree",
@@ -1617,7 +1620,7 @@ dependencies = [
  "delegate",
  "dyn-clone",
  "enum-assoc",
- "env_logger 0.11.8",
+ "env_logger 0.8.4",
  "flate2",
  "getrandom 0.2.16",
  "log",
@@ -1653,7 +1656,7 @@ dependencies = [
 
 [[package]]
 name = "nemo-cli"
-version = "0.8.0"
+version = "0.8.1-dev"
 dependencies = [
  "ariadne",
  "assert_cmd",
@@ -1661,7 +1664,7 @@ dependencies = [
  "clap",
  "colored",
  "dir-test",
- "env_logger 0.11.8",
+ "env_logger 0.8.4",
  "log",
  "nemo",
  "predicates",
@@ -1672,7 +1675,7 @@ dependencies = [
 
 [[package]]
 name = "nemo-language-server"
-version = "0.8.0"
+version = "0.8.1-dev"
 dependencies = [
  "anyhow",
  "futures",
@@ -1688,7 +1691,7 @@ dependencies = [
 
 [[package]]
 name = "nemo-physical"
-version = "0.8.0"
+version = "0.8.1-dev"
 dependencies = [
  "arbitrary",
  "ascii_tree",
@@ -1696,7 +1699,7 @@ dependencies = [
  "cpu-time",
  "delegate",
  "enum_dispatch",
- "env_logger 0.11.8",
+ "env_logger 0.8.4",
  "flate2",
  "hashbrown 0.15.4",
  "itertools",
@@ -1726,7 +1729,7 @@ dependencies = [
 
 [[package]]
 name = "nemo-python"
-version = "0.8.0"
+version = "0.8.1-dev"
 dependencies = [
  "nemo",
  "pyo3",
@@ -1734,7 +1737,7 @@ dependencies = [
 
 [[package]]
 name = "nemo-wasm"
-version = "0.8.0"
+version = "0.8.1-dev"
 dependencies = [
  "console_error_panic_hook",
  "futures",
@@ -2251,15 +2254,6 @@ name = "portable-atomic"
 version = "1.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f84267b20a16ea918e43c6a88433c2d54fa145c92a811b5b047ccbe153674483"
-
-[[package]]
-name = "portable-atomic-util"
-version = "0.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d8a2f0d8d040d7848a709caf78912debcc3f33ee4b3cac47d73d1e1069e83507"
-dependencies = [
- "portable-atomic",
-]
 
 [[package]]
 name = "potential_utf"
@@ -2973,6 +2967,15 @@ dependencies = [
  "once_cell",
  "rustix",
  "windows-sys 0.59.0",
+]
+
+[[package]]
+name = "termcolor"
+version = "1.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "06794f8f6c5c898b3275aebefa6b8a1cb24cd2c6c79397ab15774837a0bc5755"
+dependencies = [
+ "winapi-util",
 ]
 
 [[package]]
@@ -3904,7 +3907,7 @@ checksum = "6fd8403733700263c6eb89f192880191f1b83e332f7a20371ddcf421c4a337c7"
 
 [[package]]
 name = "xtask"
-version = "0.8.0"
+version = "0.8.1-dev"
 dependencies = [
  "cargo-util-schemas",
  "cargo_metadata",
