@@ -353,6 +353,7 @@ impl<B: FormatBuilder> Parameters<B> {
             return None;
         };
 
+        let mut has_errors = false;
         let mut spec = spec.clone();
         let substitution = Self::build_substitution(bindings, report)?;
         substitution.apply(&mut spec);
@@ -379,6 +380,7 @@ impl<B: FormatBuilder> Parameters<B> {
                         B::Parameter::iter().map(|attribute| attribute.to_string()),
                     ));
 
+                has_errors = true;
                 continue;
             };
 
@@ -392,6 +394,7 @@ impl<B: FormatBuilder> Parameters<B> {
                     },
                 );
 
+                has_errors = true;
                 continue;
             }
 
@@ -404,6 +407,7 @@ impl<B: FormatBuilder> Parameters<B> {
 
             if let Err(error) = parameter.is_value_valid(value.clone()) {
                 report.add(value_term, error);
+                has_errors = true;
                 continue;
             }
 
@@ -418,9 +422,14 @@ impl<B: FormatBuilder> Parameters<B> {
                     direction: direction.to_string(),
                 },
             );
+            has_errors = true;
         }
 
-        Some(Self(result))
+        if has_errors {
+            None
+        } else {
+            Some(Self(result))
+        }
     }
 }
 
