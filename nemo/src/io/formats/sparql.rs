@@ -83,7 +83,7 @@ impl FormatParameter<SparqlTag> for SparqlParameter {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct SparqlBuilder {
     value_formats: Option<DsvValueFormats>,
     endpoint: Iri<String>,

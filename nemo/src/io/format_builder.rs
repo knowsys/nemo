@@ -40,7 +40,7 @@ use super::{
 };
 
 pub(crate) trait FormatParameter<Tag>:
-    FromStr<Err = ()> + ToString + IntoEnumIterator + Copy + Eq + Hash
+    FromStr<Err = ()> + Debug + ToString + IntoEnumIterator + Copy + Eq + Hash
 {
     fn required_for(&self, tag: Tag) -> bool;
     fn is_value_valid(&self, value: AnyDataValue) -> Result<(), ValidationError>;
@@ -69,7 +69,7 @@ pub(super) fn value_type_matches(
 }
 
 pub(crate) trait FormatTag:
-    FromStr<Err = ()> + ToString + Copy + Eq + 'static + Into<SupportedFormatTag>
+    FromStr<Err = ()> + Debug + ToString + Copy + Eq + 'static + Into<SupportedFormatTag>
 {
     // NOTE: the only implementations of this trait happen in macros and are for some reason not recognized
     #[allow(dead_code)]
@@ -256,7 +256,7 @@ impl<Tag> FormatParameter<Tag> for StandardParameter {
     }
 }
 
-pub(crate) trait FormatBuilder: Sized + Into<AnyImportExportBuilder> {
+pub(crate) trait FormatBuilder: Debug + Sized + Into<AnyImportExportBuilder> {
     type Tag: FormatTag + 'static;
     type Parameter: FormatParameter<Self::Tag> + From<StandardParameter> + 'static;
 

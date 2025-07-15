@@ -197,7 +197,7 @@ impl FormatParameter<DsvTag> for DsvParameter {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct DsvBuilder {
     limit: Option<u64>,
     delimiter: u8,
