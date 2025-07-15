@@ -73,11 +73,13 @@ impl FormatParameter<SparqlTag> for SparqlParameter {
                 }
             }
             SparqlParameter::Query => {
-                Query::parse(value.to_plain_string_unchecked().as_str(), None)
-                    .and(Ok(()))
-                    .map_err(|e| ValidationError::InvalidSparqlQuery {
+                let query = value.to_plain_string_unchecked();
+                Query::parse(query.as_str(), None).and(Ok(())).map_err(|e| {
+                    ValidationError::InvalidSparqlQuery {
+                        query,
                         oxi_error: e.to_string(),
-                    })
+                    }
+                })
             }
         }
     }
