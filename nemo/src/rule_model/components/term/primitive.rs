@@ -100,17 +100,11 @@ impl Primitive {
         }
     }
 
-    /// Check wether this term can be reduced to a ground value,
-    /// except for global variables that need to be resolved.
+    /// Check wether this term can be reduced to a ground value.
     ///
-    /// This is the case if
-    ///     * This term is ground
-    ///     * This term is a global variable
+    /// This is the case if the term is ground.
     pub fn is_resolvable(&self) -> bool {
-        match self {
-            Primitive::Variable(variable) => variable.is_global(),
-            Primitive::Ground(_) => true,
-        }
+        matches!(self, &Primitive::Ground(_))
     }
 }
 

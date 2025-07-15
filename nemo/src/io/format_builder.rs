@@ -401,6 +401,7 @@ impl<B: FormatBuilder> Parameters<B> {
             let value = match GroundTerm::try_from(value_term.clone()) {
                 Ok(ground_term) => ground_term.value(),
                 Err(_) => {
+                    has_errors = true;
                     continue;
                 }
             };
