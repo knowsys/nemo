@@ -60,7 +60,6 @@ use super::{
             TableEntriesForTreeNodesResponse, TableEntriesForTreeNodesResponseElement, TreeAddress,
         },
         shared::{PaginationQuery, PaginationResponse, TableEntryResponse},
-        store::FactStore,
         trace::{ExecutionTrace, TraceFactHandle, TraceRuleApplication, TraceStatus},
         tree_query::{TreeForTableQuery, TreeForTableResponse, TreeForTableResponseSuccessor},
     },
@@ -589,11 +588,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         }
     }
 
-    fn trace_tree_recursive(
-        &mut self,
-        store: &mut FactStore,
-        facts: Vec<GroundAtom>,
-    ) -> Option<TreeForTableResponse> {
+    fn trace_tree_recursive(&mut self, facts: Vec<GroundAtom>) -> Option<TreeForTableResponse> {
         let predicate = if let Some(first_fact) = facts.first() {
             first_fact.predicate() // We assume that all facts have the same predicate
         } else {
@@ -601,13 +596,18 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         };
 
         // Prepare the result, which contains some information independant of tracing results below
-        let entries = facts
-            .iter()
-            .map(|fact| TableEntryResponse {
-                entry_id: store.add_fact(fact.clone()),
-                terms: fact.terms().map(|term| term.value()).collect(),
-            })
-            .collect::<Vec<_>>();
+        let entries =
+            facts
+                .iter()
+                .map(|fact| {
+                    Some(TableEntryResponse {
+                        entry_id: self.predicate_rows(&predicate).ok().flatten()?.position(
+                            |row| fact.terms().map(|t| t.value()).collect::<Vec<_>>() == row,
+                        )?,
+                        terms: fact.terms().map(|term| term.value()).collect(),
+                    })
+                })
+                .collect::<Option<Vec<_>>>()?;
 
         let possible_rules_above = self
             .analysis
@@ -740,7 +740,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
                 let children_option = next_facts
                     .into_iter()
-                    .map(|facts| self.trace_tree_recursive(store, facts))
+                    .map(|facts| self.trace_tree_recursive(facts))
                     .collect::<Option<Vec<TreeForTableResponse>>>();
 
                 if let Some(children) = children_option {
@@ -775,7 +775,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
                     let children_option = next_facts
                         .into_iter()
-                        .map(|facts| self.trace_tree_recursive(store, facts))
+                        .map(|facts| self.trace_tree_recursive(facts))
                         .collect::<Option<Vec<TreeForTableResponse>>>();
 
                     if let Some(children) = children_option {
@@ -801,25 +801,50 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     /// Evaluate a [TreeForTableQuery].
     pub fn trace_tree(&mut self, query: TreeForTableQuery) -> Result<TreeForTableResponse, Error> {
         let mut facts = Vec::new();
-        let mut store = FactStore::default();
 
         for fact_query in query.queries {
             let fact = match fact_query {
-                TableEntryQuery::Entry(_entry) => {
-                    unimplemented!("querying a fact by entry not implemented")
+                TableEntryQuery::Entry(row_index) => {
+                    let terms_to_trace: Vec<AnyDataValue> = self
+                        .predicate_rows(&Tag::new(query.predicate.clone()))?
+                        .into_iter()
+                        .flatten()
+                        .nth(row_index)
+                        .ok_or(Error::TracingError(TracingError::InvalidFactId {
+                            predicate: query.predicate.clone(),
+                            id: row_index,
+                        }))?;
+
+                    GroundAtom::new(
+                        Tag::new(query.predicate.clone()),
+                        terms_to_trace
+                            .into_iter()
+                            .map(GroundTerm::from)
+                            .collect(),
+                    )
                 }
                 TableEntryQuery::Query(query_string) => {
                     // TODO: Support patterns
                     let atom = Atom::parse(&format!("{}({})", query.predicate, query_string))
-                        .expect("ill formed query");
-                    GroundAtom::try_from(atom).expect("only support fact queries for now")
+                        .map_err(|_| {
+                            Error::TracingError(TracingError::InvalidFactQuery {
+                                predicate: query.predicate.clone(),
+                                query: query_string.clone(),
+                            })
+                        })?;
+                    GroundAtom::try_from(atom).map_err(|_| {
+                        Error::TracingError(TracingError::InvalidFactQuery {
+                            predicate: query.predicate.clone(),
+                            query: query_string,
+                        })
+                    })?
                 }
             };
 
             facts.push(fact);
         }
 
-        if let Some(result) = self.trace_tree_recursive(&mut store, facts) {
+        if let Some(result) = self.trace_tree_recursive(facts) {
             Ok(result)
         } else {
             let predicate = Tag::new(query.predicate.clone());
@@ -922,8 +947,26 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         // Check if fact passes the query filter
         if !inner.queries.is_empty()
             && inner.queries.iter().all(|query| match query {
-                TableEntryQuery::Entry(_) => {
-                    unimplemented!("querying a fact by entry not implemented")
+                TableEntryQuery::Entry(row_index) => {
+                    let terms_to_trace_opt: Option<Vec<AnyDataValue>> = self
+                        .predicate_rows(&fact.predicate())
+                        .ok()
+                        .flatten()
+                        .into_iter()
+                        .flatten()
+                        .nth(*row_index);
+
+                    let fact_at_index_opt = terms_to_trace_opt.map(|terms_to_trace| {
+                        GroundAtom::new(
+                            fact.predicate(),
+                            terms_to_trace
+                                .into_iter()
+                                .map(GroundTerm::from)
+                                .collect(),
+                        )
+                    });
+
+                    fact_at_index_opt.map(|f| f != fact).unwrap_or(true)
                 }
                 TableEntryQuery::Query(query_string) => !Self::check_fact(&fact, query_string),
             })
@@ -1166,7 +1209,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
         for (address, pagination, facts) in result.iter() {
             let predicate = if let Some(fact) = facts.first() {
-                fact.predicate().to_string()
+                fact.predicate()
             } else {
                 continue;
             };
@@ -1180,21 +1223,25 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
             let entries = facts
                 .iter()
-                .map(|fact| TableEntryResponse {
-                    entry_id: 0, // TODO: Include entry id
-                    terms: fact.terms().map(|term| term.value()).collect(),
+                .map(|fact| {
+                    Some(TableEntryResponse {
+                        entry_id: self.predicate_rows(&predicate).ok().flatten()?.position(
+                            |row| fact.terms().map(|t| t.value()).collect::<Vec<_>>() == row,
+                        )?,
+                        terms: fact.terms().map(|term| term.value()).collect(),
+                    })
                 })
                 .skip(start)
                 .take(count)
-                .collect::<Vec<_>>();
+                .collect::<Option<Vec<_>>>()
+                .unwrap_or(vec![]);
 
             let more = entries.len() + start < len_facts;
 
-            let predicate_as_tag = Tag::new(predicate.clone());
             let possible_rules_above = self
                 .analysis
                 .predicate_to_rule_body
-                .get(&predicate_as_tag)
+                .get(&predicate)
                 .cloned()
                 .unwrap_or_default()
                 .into_iter()
@@ -1206,7 +1253,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             let possible_rules_below = self
                 .analysis
                 .predicate_to_rule_head
-                .get(&predicate_as_tag)
+                .get(&predicate)
                 .cloned()
                 .unwrap_or_default()
                 .into_iter()
@@ -1214,13 +1261,13 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                     TraceRule::possible_rules_for_head_predicate(
                         idx,
                         self.program().rule(idx),
-                        &predicate_as_tag,
+                        &predicate,
                     )
                 })
                 .collect::<Vec<_>>();
 
             let element = TableEntriesForTreeNodesResponseElement {
-                predicate,
+                predicate: predicate.to_string(),
                 entries,
                 pagination: PaginationResponse { start, more },
                 possible_rules_above,
