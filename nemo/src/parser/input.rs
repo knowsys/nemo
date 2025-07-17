@@ -1,6 +1,9 @@
 //! This module defines [ParserInput].
 
-use std::str::{CharIndices, Chars};
+use std::{
+    cell::RefCell,
+    str::{CharIndices, Chars},
+};
 
 use nom::{
     AsBytes, IResult, InputIter, InputLength, InputTake, InputTakeAtPosition, error::ErrorKind,
@@ -22,6 +25,15 @@ impl<'a> ParserInput<'a> {
             span: Span::new(input),
             state,
         }
+    }
+
+    pub(crate) fn stateless(input: &'a str) -> Self {
+        Self::new(
+            input,
+            ParserState {
+                errors: Rc::new(RefCell::new(Vec::new())),
+            },
+        )
     }
 }
 
