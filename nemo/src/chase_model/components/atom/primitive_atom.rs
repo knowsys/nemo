@@ -32,6 +32,10 @@ impl PrimitiveAtom {
     pub(crate) fn new(predicate: Tag, terms: Vec<Primitive>) -> Self {
         Self { predicate, terms }
     }
+
+    pub fn set_predicate(&mut self, predicate: Tag) {
+        self.predicate = predicate;
+    }
 }
 
 impl ChaseAtom for PrimitiveAtom {
