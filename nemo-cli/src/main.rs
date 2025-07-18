@@ -237,7 +237,7 @@ fn handle_tracing_node(cli: &CliApp, engine: &mut DefaultExecutionEngine) -> Res
                 fact: String::from("placeholder"),
             })?;
 
-        let result = engine.trace_node(node_query);
+        let result = engine.trace_node_rule(node_query);
 
         let json = serde_json::to_string_pretty(&result).unwrap();
         println!("{}", json);
