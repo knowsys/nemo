@@ -1,5 +1,7 @@
 //! This module defines [ChaseFilter].
 
+use std::fmt::{Debug, Display};
+
 use crate::rule_model::{
     components::{
         term::primitive::{variable::Variable, Primitive},
@@ -20,6 +22,15 @@ pub(crate) struct ChaseFilter {
 
     /// Operation the will be evaluated
     filter: OperationTerm,
+}
+
+impl Display for ChaseFilter {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.filter {
+            OperationTerm::Primitive(primitive) => f.write_str(&format!("{primitive}")),
+            OperationTerm::Operation(operation) => f.write_str(&format!("{operation}")),
+        }
+    }
 }
 
 impl ChaseFilter {

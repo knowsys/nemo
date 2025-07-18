@@ -543,6 +543,31 @@ impl TableManager {
             .unwrap_or_default()
     }
 
+    pub fn tables_in_range_rule(
+        &self,
+        predicate: &Tag,
+        range: Range<usize>,
+        rules: &[usize],
+        rule: usize,
+    ) -> Vec<PermanentTableId> {
+        self.predicate_subtables
+            .get(predicate)
+            .map(|handler| {
+                handler
+                    .single
+                    .iter()
+                    .filter_map(|(step, id)| {
+                        if rules[*step] == rule {
+                            Some(*id)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default()
+    }
+
     /// Combine subtables in a certain range into one larger table.
     pub fn combine_tables(
         &mut self,

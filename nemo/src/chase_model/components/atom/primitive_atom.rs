@@ -43,6 +43,10 @@ impl PrimitiveAtom {
             terms,
         }
     }
+
+    pub fn set_predicate(&mut self, predicate: Tag) {
+        self.predicate = predicate;
+    }
 }
 
 impl ChaseAtom for PrimitiveAtom {

@@ -1,8 +1,19 @@
 //! This module defines [ChaseRule].
 
-use crate::rule_model::{
-    components::{term::primitive::variable::Variable, IterablePrimitives, IterableVariables},
-    origin::Origin,
+use std::fmt::Display;
+
+use crate::{
+    chase_model::{analysis::variable_order::VariableOrder, ChaseAtom},
+    rule_model::{
+        components::{
+            tag::Tag,
+            term::primitive::{variable::Variable, Primitive},
+            IterablePrimitives, IterableVariables,
+        },
+        origin::Origin,
+    },
+    syntax,
+    util::seperated_list::DisplaySeperatedList,
 };
 
 use super::{
@@ -13,11 +24,113 @@ use super::{
     ChaseComponent,
 };
 
+#[derive(Debug, Clone)]
+pub struct VariableRuleAtom {
+    origin: Origin,
+
+    predicate: Tag,
+    rule: Option<usize>,
+    variables: Vec<Variable>,
+}
+
+impl Display for VariableRuleAtom {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let terms = DisplaySeperatedList::display(
+            self.terms(),
+            &format!("{} ", syntax::SEQUENCE_SEPARATOR),
+        );
+        let predicate = self.predicate();
+
+        let rule = if let Some(rule) = self.rule {
+            rule.to_string()
+        } else {
+            String::default()
+        };
+
+        f.write_str(&format!(
+            "{predicate}_{}{}{terms}{}",
+            rule,
+            syntax::expression::atom::OPEN,
+            syntax::expression::atom::CLOSE
+        ))
+    }
+}
+
+impl VariableRuleAtom {
+    /// Construct a new [VariableAtom].
+    pub(crate) fn new(predicate: Tag, rule: Option<usize>, variables: Vec<Variable>) -> Self {
+        Self {
+            origin: Origin::default(),
+            predicate,
+            rule,
+            variables,
+        }
+    }
+
+    pub fn to_primitive_atom(&self) -> PrimitiveAtom {
+        let terms = self
+            .variables
+            .iter()
+            .map(|variable| Primitive::Variable(variable.clone()))
+            .collect::<Vec<_>>();
+
+        PrimitiveAtom::new(self.predicate.clone(), terms)
+    }
+
+    pub fn rule(&self) -> Option<usize> {
+        self.rule.clone()
+    }
+
+    pub fn push(&mut self, variable: Variable) {
+        self.variables.push(variable);
+    }
+}
+
+impl ChaseAtom for VariableRuleAtom {
+    type TypeTerm = Variable;
+
+    fn predicate(&self) -> Tag {
+        self.predicate.clone()
+    }
+
+    fn terms(&self) -> impl Iterator<Item = &Self::TypeTerm> {
+        self.variables.iter()
+    }
+
+    fn terms_mut(&mut self) -> impl Iterator<Item = &mut Self::TypeTerm> {
+        self.variables.iter_mut()
+    }
+}
+
+impl IterableVariables for VariableRuleAtom {
+    fn variables<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Variable> + 'a> {
+        Box::new(self.terms())
+    }
+
+    fn variables_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Variable> + 'a> {
+        Box::new(self.terms_mut())
+    }
+}
+
+impl ChaseComponent for VariableRuleAtom {
+    fn origin(&self) -> &Origin {
+        &self.origin
+    }
+
+    fn set_origin(mut self, origin: Origin) -> Self
+    where
+        Self: Sized,
+    {
+        self.origin = origin;
+        self
+    }
+}
+
 /// The positive body of a [ChaseRule]
 #[derive(Debug, Default, Clone)]
-struct ChaseRuleBodyPositive {
+struct TracingChaseRuleBodyPositive {
     /// Atoms that bind variables
-    atoms: Vec<VariableAtom>,
+    atoms: Vec<VariableRuleAtom>,
     /// Computation of new bindings
     operations: Vec<ChaseOperation>,
     /// Filtering of results
@@ -26,7 +139,7 @@ struct ChaseRuleBodyPositive {
 
 /// The negative body of a [ChaseRule]
 #[derive(Debug, Default, Clone)]
-struct ChaseRuleBodyNegative {
+struct TracingChaseRuleBodyNegative {
     /// Negated atoms
     atoms: Vec<VariableAtom>,
     /// For each negated atom, the filters that are applied
@@ -35,7 +148,7 @@ struct ChaseRuleBodyNegative {
 
 /// Handling of aggregation within a [ChaseRule]
 #[derive(Debug, Default, Clone)]
-struct ChaseRuleAggregation {
+struct TracingChaseRuleAggregation {
     /// Aggregate
     aggregate: Option<ChaseAggregate>,
 
@@ -47,7 +160,7 @@ struct ChaseRuleAggregation {
 
 /// Head of a [ChaseRule]
 #[derive(Debug, Default, Clone)]
-struct ChaseRuleHead {
+struct TracingChaseRuleHead {
     /// Head atoms of the rule
     atoms: Vec<PrimitiveAtom>,
     /// Index of the head atom which contains the aggregate
@@ -57,26 +170,26 @@ struct ChaseRuleHead {
 /// Representation of a rule in a [ChaseProgram][super::program::ChaseProgram]
 #[allow(dead_code)]
 #[derive(Debug, Default, Clone)]
-pub struct ChaseRule {
+pub struct TracingChaseRule {
     /// Origin of this component
     origin: Origin,
 
     /// Positive part of the body
-    positive: ChaseRuleBodyPositive,
+    positive: TracingChaseRuleBodyPositive,
     /// Negative part of the body
-    negative: ChaseRuleBodyNegative,
+    negative: TracingChaseRuleBodyNegative,
     /// Aggregation
-    aggregation: ChaseRuleAggregation,
+    aggregation: TracingChaseRuleAggregation,
     /// Head of the rule
-    head: ChaseRuleHead,
+    head: TracingChaseRuleHead,
 }
 
-impl ChaseRule {
+impl TracingChaseRule {
     /// Create a simple positive rule.
     #[cfg(test)]
     pub(crate) fn positive_rule(
         head: Vec<PrimitiveAtom>,
-        body: Vec<VariableAtom>,
+        body: Vec<VariableRuleAtom>,
         filters: Vec<ChaseFilter>,
     ) -> Self {
         let mut result = Self::default();
@@ -88,14 +201,25 @@ impl ChaseRule {
     }
 }
 
-impl ChaseRule {
+impl TracingChaseRule {
+    /// Return a default variable order
+    pub fn default_order(&self) -> VariableOrder {
+        let mut result = VariableOrder::default();
+
+        for variable in self.positive.atoms.iter().flat_map(|atom| atom.variables()) {
+            result.push(variable.clone());
+        }
+
+        result
+    }
+
     /// Return the list of head atoms contained in this rule.
     pub(crate) fn head(&self) -> &Vec<PrimitiveAtom> {
         &self.head.atoms
     }
 
     /// Return the list of positive body atoms contained in this rule.
-    pub(crate) fn positive_body(&self) -> &Vec<VariableAtom> {
+    pub(crate) fn positive_body(&self) -> &Vec<VariableRuleAtom> {
         &self.positive.atoms
     }
 
@@ -140,9 +264,9 @@ impl ChaseRule {
     }
 }
 
-impl ChaseRule {
+impl TracingChaseRule {
     /// Add an atom to the positive part of the body.
-    pub(crate) fn add_positive_atom(&mut self, atom: VariableAtom) {
+    pub(crate) fn add_positive_atom(&mut self, atom: VariableRuleAtom) {
         self.positive.atoms.push(atom);
     }
 
@@ -196,7 +320,7 @@ impl ChaseRule {
     }
 }
 
-impl ChaseComponent for ChaseRule {
+impl ChaseComponent for TracingChaseRule {
     fn origin(&self) -> &Origin {
         &self.origin
     }
@@ -210,7 +334,28 @@ impl ChaseComponent for ChaseRule {
     }
 }
 
-impl IterableVariables for ChaseRule {
+impl Display for TracingChaseRule {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let head = DisplaySeperatedList::display(
+            self.head().iter(),
+            &format!("{} ", syntax::SEQUENCE_SEPARATOR),
+        );
+
+        let body = DisplaySeperatedList::display(
+            self.positive_body().iter(),
+            &format!("{} ", syntax::SEQUENCE_SEPARATOR),
+        );
+
+        let filters = DisplaySeperatedList::display(
+            self.positive_filters().iter(),
+            &format!("{} ", syntax::SEQUENCE_SEPARATOR),
+        );
+
+        f.write_str(&format!("{head} :- {body} {filters}"))
+    }
+}
+
+impl IterableVariables for TracingChaseRule {
     fn variables<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Variable> + 'a> {
         let head_variables = self.head().iter().flat_map(|atom| atom.variables());
         let positive_body_variables = self
@@ -327,7 +472,7 @@ impl IterableVariables for ChaseRule {
     }
 }
 
-impl IterablePrimitives for ChaseRule {
+impl IterablePrimitives for TracingChaseRule {
     fn primitive_terms<'a>(
         &'a self,
     ) -> Box<dyn Iterator<Item = &'a crate::rule_model::components::term::primitive::Primitive> + 'a>
@@ -372,54 +517,6 @@ impl IterablePrimitives for ChaseRule {
     ) -> Box<
         dyn Iterator<Item = &'a mut crate::rule_model::components::term::primitive::Primitive> + 'a,
     > {
-        let head_terms = self
-            .head
-            .atoms
-            .iter_mut()
-            .flat_map(|atom| atom.primitive_terms_mut());
-        // let positive_terms = self
-        //     .positive
-        //     .atoms
-        //     .iter_mut()
-        //     .flat_map(|atom| atom.primitive_terms_mut());
-
-        let positive_operation_terms = self
-            .positive
-            .operations
-            .iter_mut()
-            .flat_map(|operation| operation.primitive_terms_mut());
-        let positive_filter_terms = self
-            .positive
-            .filters
-            .iter_mut()
-            .flat_map(|filter| filter.primitive_terms_mut());
-
-        let negative_filter_terms = self
-            .negative
-            .filters
-            .iter_mut()
-            .flatten()
-            .flat_map(|filter| filter.primitive_terms_mut());
-
-        let aggregation_operation_terms = self
-            .aggregation
-            .operations
-            .iter_mut()
-            .flat_map(|operation| operation.primitive_terms_mut());
-        let aggregation_filter_terms = self
-            .aggregation
-            .filters
-            .iter_mut()
-            .flat_map(|filter| filter.primitive_terms_mut());
-
-        Box::new(
-            head_terms
-                // .chain(positive_temrs)
-                .chain(positive_operation_terms)
-                .chain(positive_filter_terms)
-                .chain(negative_filter_terms)
-                .chain(aggregation_operation_terms)
-                .chain(aggregation_filter_terms),
-        )
+        todo!()
     }
 }

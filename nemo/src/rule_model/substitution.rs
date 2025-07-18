@@ -46,6 +46,7 @@ impl Substitution {
     pub fn apply<Component: IterablePrimitives>(&self, component: &mut Component) {
         for primitive in component.primitive_terms_mut() {
             if let Some(term) = self.map.get(primitive) {
+                println!("{} -> {}", primitive, term);
                 *primitive = term.clone();
             }
         }

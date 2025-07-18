@@ -12,7 +12,7 @@ use crate::{
                 primitive::{variable::Variable, Primitive},
                 Term,
             },
-            IterableVariables, ProgramComponent,
+            IterablePrimitives, IterableVariables, ProgramComponent,
         },
         origin::Origin,
     },
