@@ -1,6 +1,8 @@
 //! This module contains shared data structures
 //! for defining tracing queries and responses.
 
+use std::hash::Hash;
+
 use nemo_physical::datavalues::AnyDataValue;
 use serde::{Deserialize, Serialize};
 
@@ -109,7 +111,7 @@ impl Rule {
 pub type TableEntryId = usize;
 
 /// Query selecting one or multiple table entries
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum TableEntryQuery {
     /// Specific table entry identified by [TableEntryId]
     Entry(TableEntryId),
@@ -118,7 +120,7 @@ pub enum TableEntryQuery {
 }
 
 /// Structure for requesting only a part of the results
-#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct PaginationQuery {
     /// Starting index of the result
     pub start: usize,
