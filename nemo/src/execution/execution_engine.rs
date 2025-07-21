@@ -65,6 +65,8 @@ use super::{
     },
 };
 
+pub mod experiments;
+
 // Number of tables that are periodically combined into one.
 const MAX_FRAGMENTATION: usize = 8;
 
@@ -817,10 +819,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
                     GroundAtom::new(
                         Tag::new(query.predicate.clone()),
-                        terms_to_trace
-                            .into_iter()
-                            .map(GroundTerm::from)
-                            .collect(),
+                        terms_to_trace.into_iter().map(GroundTerm::from).collect(),
                     )
                 }
                 TableEntryQuery::Query(query_string) => {
@@ -959,10 +958,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                     let fact_at_index_opt = terms_to_trace_opt.map(|terms_to_trace| {
                         GroundAtom::new(
                             fact.predicate(),
-                            terms_to_trace
-                                .into_iter()
-                                .map(GroundTerm::from)
-                                .collect(),
+                            terms_to_trace.into_iter().map(GroundTerm::from).collect(),
                         )
                     });
 

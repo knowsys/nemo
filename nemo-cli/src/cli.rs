@@ -154,6 +154,13 @@ impl OutputArgs {
     }
 }
 
+/// Cli arguments related to experiments
+#[derive(Debug, clap::Args)]
+pub(crate) struct ExperimentArgs {
+    #[arg(long = "x-create-queries")]
+    pub create_queries: bool,
+}
+
 /// Cli arguments related to tracing
 #[derive(Debug, clap::Args)]
 pub(crate) struct TracingArgs {
@@ -220,6 +227,9 @@ pub struct CliApp {
     /// Disable warnings when validating rule files
     #[arg(long = "no-warnings")]
     pub(crate) disable_warnings: bool,
+    /// Experiments
+    #[command(flatten)]
+    pub(crate) experiments: ExperimentArgs,
 }
 
 /// Key-Value pair for global variable

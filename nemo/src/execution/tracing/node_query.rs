@@ -1,5 +1,7 @@
 //! This module defines [TableEntriesForTreeNodesQuery] and [TableEntriesForTreeNodesResponse].
 
+use std::hash::Hash;
+
 use serde::{Deserialize, Serialize};
 
 use super::shared::{
@@ -7,7 +9,7 @@ use super::shared::{
 };
 
 /// Defines the next layer in a [TableEntriesForTreeNodesQueryInner]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct TableEntriesForTreeNodesQuerySuccessor {
     /// Rule deriving this facts
     pub rule: RuleId,
@@ -18,7 +20,7 @@ pub struct TableEntriesForTreeNodesQuerySuccessor {
 }
 
 /// Inner query in [TableEntriesForTreeNodesQuery]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct TableEntriesForTreeNodesQueryInner {
     /// List of queries
     pub queries: Vec<TableEntryQuery>,
@@ -33,7 +35,7 @@ pub struct TableEntriesForTreeNodesQueryInner {
 /// Request for a trace which follows the given tree structure
 ///
 /// The expected result has the form of [TableEntriesForTreeNodesResponse].
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct TableEntriesForTreeNodesQuery {
     /// Predicate of the root node
     pub predicate: String,

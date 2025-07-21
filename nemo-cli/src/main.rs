@@ -246,6 +246,14 @@ fn handle_tracing_node(cli: &CliApp, engine: &mut DefaultExecutionEngine) -> Res
     Ok(())
 }
 
+fn handle_exeriments(cli: &CliApp, engine: &mut DefaultExecutionEngine) -> Result<(), CliError> {
+    if cli.experiments.create_queries {
+        engine.collect_node_queries();
+    }
+
+    Ok(())
+}
+
 fn run(mut cli: CliApp) -> Result<(), CliError> {
     TimedCode::instance().start();
     TimedCode::instance().sub("Reading & Preprocessing").start();
@@ -355,6 +363,8 @@ fn run(mut cli: CliApp) -> Result<(), CliError> {
     if print_memory {
         print_memory_details(&engine);
     }
+
+    handle_exeriments(&cli, &mut engine)?;
 
     handle_tracing(&cli, &mut engine)?;
     handle_tracing_tree(&cli, &mut engine)?;

@@ -12,6 +12,10 @@ use serde::Serialize;
 
 use crate::{
     chase_model::components::atom::{ground_atom::GroundAtom, ChaseAtom},
+    execution::tracing::node_query::{
+        TableEntriesForTreeNodesQuery, TableEntriesForTreeNodesQueryInner,
+        TableEntriesForTreeNodesQuerySuccessor,
+    },
     rule_model::{
         components::{fact::Fact, rule::Rule},
         programs::program::Program,
@@ -206,6 +210,10 @@ impl ToGraphMl for DiGraph<TracePetGraphNodeLabel, ()> {
 pub struct TraceTreeRuleApplication {
     /// Rule that was applied
     pub rule: Rule,
+    /// Index of the applied rule
+    pub rule_index: usize,
+    /// Head index
+    pub head_index: usize,
     /// Variable assignment used during the rule application
     pub assignment: Substitution,
     /// Index of the head atom which produced the fact under consideration
@@ -329,6 +337,48 @@ impl ExecutionTraceTree {
     pub fn to_graphml(&self) -> String {
         self.to_petgraph().to_graphml()
     }
+
+    /// Inner function of `to_node_query`.
+    fn to_node_query_inner(&self) -> TableEntriesForTreeNodesQueryInner {
+        match self {
+            ExecutionTraceTree::Fact(_) => TableEntriesForTreeNodesQueryInner {
+                queries: Vec::default(),
+                pagination: None,
+                next: None,
+            },
+            ExecutionTraceTree::Rule(rule_application, trees) => {
+                let successor = TableEntriesForTreeNodesQuerySuccessor {
+                    rule: rule_application.rule_index,
+                    head_index: rule_application.head_index,
+                    children: trees
+                        .iter()
+                        .map(|tree| tree.to_node_query_inner())
+                        .collect::<Vec<_>>(),
+                };
+
+                TableEntriesForTreeNodesQueryInner {
+                    queries: Vec::default(),
+                    pagination: None,
+                    next: Some(successor),
+                }
+            }
+        }
+    }
+
+    /// Return a [TableEntriesForTreeNodesQuery] that would be answered by this tree.
+    pub fn to_node_query(&self) -> TableEntriesForTreeNodesQuery {
+        let predicate = match self {
+            ExecutionTraceTree::Fact(fact) => fact.predicate(),
+            ExecutionTraceTree::Rule(rule_application, _) => {
+                rule_application.rule.head()[rule_application.head_index].predicate()
+            }
+        };
+
+        TableEntriesForTreeNodesQuery {
+            predicate: predicate.to_string(),
+            inner: self.to_node_query_inner(),
+        }
+    }
 }
 
 impl ExecutionTrace {
@@ -352,6 +402,8 @@ impl ExecutionTrace {
 
                     let tree_application = TraceTreeRuleApplication {
                         rule: self.program.rule(application.rule_index).clone(),
+                        rule_index: application.rule_index,
+                        head_index: application._position,
                         assignment: application.assignment.clone(),
                         _position: application._position,
                     };
