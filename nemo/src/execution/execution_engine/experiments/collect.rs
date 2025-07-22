@@ -71,13 +71,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
     /// Compute all possible node queries and save them to a csv
     pub fn collect_node_queries(&mut self) {
-        let all_facts = self.all_facts();
-        // let facts = all_facts[1000000..1010000]
-        // let facts = all_facts[1000000..1000001]
-        //     .iter()
-        //     .cloned()
-        //     .collect::<Vec<_>>();
-        let facts = all_facts;
+        let facts = self.all_facts();
 
         let (trace, handles) = self.trace(facts).expect("error while tracing");
         let num_facts = handles.len();
@@ -98,21 +92,20 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             }
         }
 
-        let data_path = Path::new(COLLECT_OUTPUT_DIR).join("data.txt");
+        let path = Path::new(COLLECT_OUTPUT_DIR);
+        create_dir_all(path).expect("failed to create directory");
+
+        let data_path = path.join("data.txt");
         let mut data_file = File::create(&data_path).expect("failed to create file");
-        data_file
-            .write_fmt(format_args!("{}\n\n", query_map.len()))
-            .expect("failed to write in file");
 
         for (index, (query, multiplicity)) in query_map.iter().enumerate() {
             let json = serde_json::to_string_pretty(&query).unwrap();
 
-            let query_path = Path::new(COLLECT_OUTPUT_DIR);
-            create_dir_all(query_path).expect("failed to create directory");
+            let query_path = path.join(format!("query_{}.json", index));
+            let mut query_file = File::create(&query_path).expect("failed to create file");
 
-            let query_path = query_path.join(format!("query_{}.json", index));
-            let mut file = File::create(&query_path).expect("failed to create file");
-            file.write_all(json.as_bytes())
+            query_file
+                .write_all(json.as_bytes())
                 .expect("failed to write file");
 
             data_file

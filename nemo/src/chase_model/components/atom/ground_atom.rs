@@ -21,18 +21,12 @@ use crate::{
 use super::ChaseAtom;
 
 /// An atom which may only use [GroundTerm]s
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct GroundAtom {
     /// Predicate name of this atom
     predicate: Tag,
     /// Terms contained in this atom
     terms: Vec<GroundTerm>,
-}
-
-impl PartialEq for GroundAtom {
-    fn eq(&self, other: &Self) -> bool {
-        self.predicate == other.predicate && self.terms == other.terms
-    }
 }
 
 impl GroundAtom {
