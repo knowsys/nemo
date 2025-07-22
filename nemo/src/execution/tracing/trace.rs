@@ -3,9 +3,11 @@
 use std::{
     borrow::Cow,
     collections::{HashMap, HashSet},
+    hash::Hash,
 };
 
 use ascii_tree::write_tree;
+use indexmap::{set::MutableValues, IndexSet};
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph_graphml::GraphMl;
 use serde::Serialize;
@@ -95,6 +97,20 @@ struct TracedFact {
     status: TraceStatus,
 }
 
+impl PartialEq for TracedFact {
+    fn eq(&self, other: &Self) -> bool {
+        self.fact == other.fact
+    }
+}
+
+impl Eq for TracedFact {}
+
+impl Hash for TracedFact {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.fact.hash(state);
+    }
+}
+
 /// Structure for recording execution traces
 /// while not recomputing traces for the same facts occurring multiple times
 #[derive(Debug)]
@@ -103,7 +119,7 @@ pub struct ExecutionTrace {
     program: Program,
 
     /// All the facts considered during tracing
-    facts: Vec<TracedFact>,
+    facts: IndexSet<TracedFact>,
 }
 
 impl ExecutionTrace {
@@ -111,44 +127,33 @@ impl ExecutionTrace {
     pub(crate) fn new(program: Program) -> Self {
         Self {
             program,
-            facts: Vec::new(),
+            facts: IndexSet::default(),
         }
     }
 
     /// Given a [TraceFactHandle] return a reference to the corresponding [TracedFact].
     fn get_fact(&self, handle: TraceFactHandle) -> &TracedFact {
-        &self.facts[handle.0]
+        self.facts.get_index(handle.0).expect("invalid fact handle")
     }
 
     /// Given a [TraceFactHandle] return a mutable reference to the corresponding [TracedFact].
     fn get_fact_mut(&mut self, handle: TraceFactHandle) -> &mut TracedFact {
-        &mut self.facts[handle.0]
+        self.facts
+            .get_index_mut2(handle.0)
+            .expect("invalid fact handle")
     }
 
     /// Search a given [GroundAtom] in self.facts.
     /// Also takes into account that the interpretation of a constant depends on its type.
     fn find_fact(&self, fact: &GroundAtom) -> Option<TraceFactHandle> {
-        for (fact_index, traced_fact) in self.facts.iter().enumerate() {
-            if traced_fact.fact.predicate() != fact.predicate()
-                || traced_fact.fact.arity() != fact.arity()
-            {
-                continue;
-            }
+        let traced_fact = TracedFact {
+            fact: fact.clone(),
+            status: TraceStatus::Unknown,
+        };
 
-            let mut identical = true;
-            for (term_fact, term_traced_fact) in fact.terms().zip(traced_fact.fact.terms()) {
-                if term_fact != term_traced_fact {
-                    identical = false;
-                    break;
-                }
-            }
-
-            if identical {
-                return Some(TraceFactHandle(fact_index));
-            }
-        }
-
-        None
+        self.facts
+            .get_index_of(&traced_fact)
+            .map(|index| TraceFactHandle(index))
     }
 
     /// Registers a new [GroundAtom].
@@ -161,7 +166,7 @@ impl ExecutionTrace {
             handle
         } else {
             let handle = TraceFactHandle(self.facts.len());
-            self.facts.push(TracedFact {
+            self.facts.insert(TracedFact {
                 fact,
                 status: TraceStatus::Unknown,
             });

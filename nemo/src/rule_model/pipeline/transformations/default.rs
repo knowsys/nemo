@@ -11,10 +11,7 @@ use crate::{
     },
 };
 
-use super::{
-    active::TransformationActive, exports::TransformationExports, global::TransformationGlobal,
-    ProgramTransformation,
-};
+use super::{exports::TransformationExports, global::TransformationGlobal, ProgramTransformation};
 
 /// Default transformation
 ///
@@ -51,7 +48,7 @@ impl<'a> ProgramTransformation for TransformationDefault<'a> {
             .transform(TransformationExports::new(
                 self.parameters.export_parameters,
             ))?
-            .transform(TransformationValidate::default())?
-            .transform(TransformationActive::default())
+            .transform(TransformationValidate::default())
+        // .transform(TransformationActive::default())
     }
 }
