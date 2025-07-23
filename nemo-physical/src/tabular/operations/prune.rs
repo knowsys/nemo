@@ -264,9 +264,12 @@ impl<'a> TrieScanPruneState<'a> {
             self.input_up();
         }
         for _ in self.input_trie_scan_current_layer..target_layer {
-            if self.current_input_value().is_none() {
-                return false;
+            unsafe {
+                if self.current_input_value().is_none() {
+                    return false;
+                }
             }
+
             self.input_down();
         }
 
@@ -337,7 +340,7 @@ impl<'a> TrieScanPruneState<'a> {
     unsafe fn current_input_value(&self) -> Option<StorageValueT> {
         debug_assert!(self.initialized);
 
-        self.current_input_trie_value(self.input_trie_scan_current_layer)
+        unsafe { self.current_input_trie_value(self.input_trie_scan_current_layer) }
     }
 
     /// Helper method for the `advance_on_layer()` and `advance_on_layer_with_seek()`
