@@ -18,7 +18,7 @@ mod test {
         let length: usize = 10_000_000;
 
         let mut rng = thread_rng();
-        let mut numbers: Vec<u64> = (0..length).map(|_| rng.gen()).collect();
+        let mut numbers: Vec<u64> = (0..length).map(|_| rng.r#gen()).collect();
 
         numbers.sort();
         numbers.dedup();

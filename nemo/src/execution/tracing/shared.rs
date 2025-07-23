@@ -34,8 +34,8 @@ impl TryFrom<&Literal> for PredicateWithParameters {
 
     fn try_from(literal: &Literal) -> Result<Self, ()> {
         let name = match literal {
-            Literal::Positive(ref atom) => atom.predicate().to_string(),
-            Literal::Negative(ref atom) => format!("~{}", atom.predicate()),
+            Literal::Positive(atom) => atom.predicate().to_string(),
+            Literal::Negative(atom) => format!("~{}", atom.predicate()),
             Literal::Operation(_) => return Err(()),
         };
 

@@ -259,7 +259,7 @@ where
         Some(
             self.map
                 .iter()
-                .find(|(_, &operation)| operation == *marker)?
+                .find(|(_, operation)| **operation == *marker)?
                 .0,
         )
     }
