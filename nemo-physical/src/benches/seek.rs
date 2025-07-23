@@ -20,7 +20,7 @@ mod test {
         let mut data: Vec<usize> = Vec::new();
 
         for _ in 0..length {
-            data.push(rng.gen::<usize>());
+            data.push(rng.r#gen::<usize>());
         }
         data.sort_unstable();
 

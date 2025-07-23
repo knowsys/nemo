@@ -159,7 +159,7 @@ impl OutputArgs {
 pub(crate) struct ExperimentArgs {
     #[arg(long = "x-create-queries")]
     pub create_queries: bool,
-    #[arg(logn = "x-trace-node-query")]
+    #[arg(long = "x-trace-node-query")]
     pub trace_node_query: Option<PathBuf>,
 }
 
