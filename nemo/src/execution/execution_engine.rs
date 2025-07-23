@@ -12,6 +12,7 @@ use nemo_physical::{
     dictionary::DvDict,
     management::database::sources::{SimpleTable, TableSource},
     meta::timing::TimedCode,
+    tabular::trie::Trie,
 };
 
 use crate::{
@@ -74,6 +75,13 @@ use super::{
 };
 
 pub mod experiments;
+
+#[derive(Debug, Default)]
+struct NodeQueryRuleResult {
+    pub rule: TracingChaseRule,
+    pub step: usize,
+    pub elements: Vec<TableEntriesForTreeNodesResponseElement>,
+}
 
 // Number of tables that are periodically combined into one.
 const MAX_FRAGMENTATION: usize = 8;
@@ -1285,7 +1293,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         TableEntriesForTreeNodesResponse { elements }
     }
 
-    fn query_to_rule(&self, query: TableEntriesForTreeNodesQuery) -> (TracingChaseRule, usize) {
+    fn query_to_rule(&self, query: TableEntriesForTreeNodesQuery) -> NodeQueryRuleResult {
         struct UniqueVariable {
             count: usize,
             prefix: String,
@@ -1304,7 +1312,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
         let mut unique = UniqueVariable::initialize(String::from("_VAR"));
 
-        let mut result = TracingChaseRule::default();
+        let mut result = NodeQueryRuleResult::default();
         let mut output_table_counter: usize = 0;
 
         let mut query_queue =
@@ -1318,7 +1326,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             .map(|_| unique.next_variable())
             .collect::<Vec<_>>();
 
-        let step = if let Some(start_rule) = query.inner.next.as_ref().map(|sub| &sub.rule) {
+        result.step = if let Some(start_rule) = query.inner.next.as_ref().map(|sub| &sub.rule) {
             self.rule_history
                 .iter()
                 .rposition(|rule| *rule == *start_rule)
@@ -1340,10 +1348,10 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             if let Some(children) = &query.next {
                 let mut chase_rule = self.program.rules()[children.rule].clone();
                 for filter in chase_rule.positive_filters() {
-                    result.add_positive_filter(filter.clone());
+                    result.rule.add_positive_filter(filter.clone());
                 }
 
-                let head_atom = &chase_rule.head()[0]; // Multi-head rules currently unsupported
+                let head_atom = &chase_rule.head()[children.head_index];
 
                 let mut next_atom =
                     VariableRuleAtom::new(predicate.clone(), Some(children.rule), Vec::default());
@@ -1370,8 +1378,8 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                         Primitive::Ground(ground) => {
                             next_atom.push(mapping[term_index].clone());
 
-                            result.add_positive_filter(ChaseFilter::new(OperationTerm::Operation(
-                                Operation::new(
+                            result.rule.add_positive_filter(ChaseFilter::new(
+                                OperationTerm::Operation(Operation::new(
                                     OperationKind::Equal,
                                     vec![
                                         OperationTerm::Primitive(Primitive::Variable(
@@ -1379,8 +1387,8 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                                         )),
                                         OperationTerm::Primitive(Primitive::Ground(ground.clone())),
                                     ],
-                                ),
-                            )));
+                                )),
+                            ));
                         }
                     }
                 }
@@ -1389,8 +1397,8 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 next_head_atom.set_predicate(Tag::new(format!("out_{}", output_table_counter)));
                 output_table_counter += 1;
 
-                result.add_head_atom(next_head_atom);
-                result.add_positive_atom(next_atom);
+                result.rule.add_head_atom(next_head_atom);
+                result.rule.add_positive_atom(next_atom);
 
                 for variable in chase_rule.variables_mut() {
                     if let Some(new) = substitution.get(variable) {
@@ -1418,24 +1426,51 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 next_head_atom.set_predicate(Tag::new(format!("out_{}", output_table_counter)));
                 output_table_counter += 1;
 
-                result.add_head_atom(next_head_atom);
-                result.add_positive_atom(next_atom);
+                result.rule.add_head_atom(next_head_atom);
+                result.rule.add_positive_atom(next_atom);
             }
         }
 
-        (result, step)
+        result
+    }
+
+    fn answer_from_node_result(&mut self, predicate: &Tag, trie: &Trie) -> Vec<TableEntryResponse> {
+        let mut result = Vec::with_capacity(trie.num_rows());
+
+        let trie_rows = self
+            .table_manager
+            .trie_row_iterator(trie)
+            .expect("error while constructing trie iterator")
+            .collect::<Vec<_>>();
+
+        for row in trie_rows {
+            let response = TableEntryResponse {
+                entry_id: self
+                    .table_manager
+                    .find_table_row(predicate, &row)
+                    .expect("unable to find row"),
+                terms: row,
+            };
+
+            result.push(response);
+        }
+
+        result
     }
 
     /// Tracing with CQs
     pub fn trace_node_rule(&mut self, query: TableEntriesForTreeNodesQuery) {
-        // TableEntriesForTreeNodesResponse
-        let (execution_rule, step) = self.query_to_rule(query);
-        let mut variable_order = execution_rule.default_order();
+        let NodeQueryRuleResult {
+            rule,
+            step,
+            elements,
+        } = self.query_to_rule(query);
+        let mut variable_order = rule.default_order();
 
-        println!("{}", execution_rule);
+        println!("{}", rule);
 
         let trace_strategy =
-            RuleTracingStrategy::initialize(&execution_rule, self.rule_history.clone()).unwrap();
+            RuleTracingStrategy::initialize(&rule, self.rule_history.clone()).unwrap();
 
         let mut execution_plan = SubtableExecutionPlan::default();
 
