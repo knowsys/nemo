@@ -16,6 +16,8 @@ use std::{
     fmt::Debug,
 };
 
+use ascii_tree::write_tree;
+
 use crate::{
     datasources::table_providers::TableProvider,
     datavalues::AnyDataValue,
@@ -23,7 +25,7 @@ use crate::{
     management::{bytesized::ByteSized, database::execution_series::ExecutionTreeNode},
     meta::timing::TimedCode,
     tabular::{
-        operations::{projectreorder::ProjectReordering, OperationGenerator},
+        operations::{OperationGenerator, projectreorder::ProjectReordering},
         rowscan::RowScan,
         trie::Trie,
         triescan::TrieScanEnum,
@@ -293,6 +295,14 @@ impl DatabaseInstance {
             result.push(
                 self.reference_manager
                     .trie_id(&self.dictionary, id, order)?,
+            );
+
+            let storage_id = *result.last().unwrap();
+
+            println!(
+                "storage id: {}, rows: {}",
+                storage_id,
+                self.reference_manager.trie(storage_id).num_rows()
             );
         }
 
@@ -568,6 +578,10 @@ impl DatabaseInstance {
             if temporary_storage.computed_tables[tree_index].is_some() {
                 continue;
             }
+
+            let mut string_tree = String::new();
+            let _ = write_tree(&mut string_tree, &tree.ascii_tree());
+            println!("{}", string_tree);
 
             let dependent_reorderings = tree
                 .dependents

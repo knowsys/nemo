@@ -32,6 +32,21 @@ pub struct TableEntriesForTreeNodesQueryInner {
     pub next: Option<TableEntriesForTreeNodesQuerySuccessor>,
 }
 
+impl TableEntriesForTreeNodesQueryInner {
+    /// Return the number of nodes contained in this query
+    pub fn num_nodes(&self) -> usize {
+        if let Some(successor) = &self.next {
+            successor
+                .children
+                .iter()
+                .map(|child| child.num_nodes())
+                .sum()
+        } else {
+            1
+        }
+    }
+}
+
 /// Request for a trace which follows the given tree structure
 ///
 /// The expected result has the form of [TableEntriesForTreeNodesResponse].
@@ -42,6 +57,13 @@ pub struct TableEntriesForTreeNodesQuery {
 
     /// Inner query
     pub inner: TableEntriesForTreeNodesQueryInner,
+}
+
+impl TableEntriesForTreeNodesQuery {
+    /// Return the number of nodes contained in this query
+    pub fn num_nodes(&self) -> usize {
+        self.inner.num_nodes()
+    }
 }
 
 /// Represents an address in a tree structure using a vector of indices.
