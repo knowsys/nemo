@@ -2,19 +2,21 @@
 
 use std::{
     collections::HashMap,
-    fs::{create_dir_all, File},
+    fs::{File, create_dir_all},
     io::Write,
     path::Path,
 };
+
+use rand::{seq::SliceRandom, thread_rng};
 
 use itertools::Itertools;
 
 use crate::{
     chase_model::GroundAtom,
     execution::{
+        ExecutionEngine,
         selection_strategy::strategy::RuleSelectionStrategy,
         tracing::{node_query::TableEntriesForTreeNodesQuery, trace::ExecutionTraceTree},
-        ExecutionEngine,
     },
     rule_model::components::{fact::Fact, tag::Tag, term::Term},
 };
@@ -61,7 +63,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
         let mut results = Vec::default();
 
-        for combination in subtree_list.into_iter().multi_cartesian_product() {
+        for combination in subtree_list.into_iter().multi_cartesian_product().take(100) {
             let new_tree = ExecutionTraceTree::Rule(rule_application.clone(), combination);
             results.push(new_tree);
         }
@@ -71,7 +73,13 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
     /// Compute all possible node queries and save them to a csv
     pub fn collect_node_queries(&mut self) {
-        let facts = self.all_facts();
+        let mut rng = thread_rng();
+
+        let facts = self
+            .all_facts()
+            .choose_multiple(&mut rng, 10000)
+            .cloned()
+            .collect::<Vec<_>>();
 
         let (trace, handles) = self.trace(facts).expect("error while tracing");
         let num_facts = handles.len();

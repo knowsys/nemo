@@ -97,6 +97,8 @@ impl GeneratorProjectReorder {
 
         let mut rowscan = RowScan::new(trie_scan, cut);
 
+        println!("PROJECTION REORDER; CUT: {}", cut);
+
         if projectreordering.is_empty() {
             let no_results = StreamingIterator::next(&mut rowscan).is_none();
             return Trie::zero_arity(!no_results);

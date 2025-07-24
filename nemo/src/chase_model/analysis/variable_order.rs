@@ -11,7 +11,7 @@ use nemo_physical::{
 
 use crate::{
     chase_model::components::{
-        atom::{variable_atom::VariableAtom, ChaseAtom},
+        atom::{ChaseAtom, variable_atom::VariableAtom},
         program::ChaseProgram,
         rule::ChaseRule,
     },
@@ -239,11 +239,7 @@ impl RuleVariableList for Vec<Variable> {
             .cloned()
             .collect();
 
-        if result.is_empty() {
-            self
-        } else {
-            result
-        }
+        if result.is_empty() { self } else { result }
     }
 
     fn filter_tries<P: FnMut(&Tag) -> bool>(
@@ -484,15 +480,15 @@ impl VariableOrderBuilder<'_> {
 }
 
 /// Contains the result of the function `build_preferable_variable_orders`.
-pub(super) struct BuilderResultVariants {
+pub(crate) struct BuilderResultVariants {
     /// [Vec] where the ith entry contains a [Vec] of with good variable orders for the ith rule
-    pub(super) all_variable_orders: Vec<Vec<VariableOrder>>,
+    pub(crate) all_variable_orders: Vec<Vec<VariableOrder>>,
     /// For each variant of the variable order computation
     /// contains one [HashSet] mapping each predicate to its available [ColumnOrder]s.
-    pub(super) all_column_orders: Vec<HashMap<Tag, HashSet<ColumnOrder>>>,
+    pub(crate) all_column_orders: Vec<HashMap<Tag, HashSet<ColumnOrder>>>,
 }
 
-pub(super) fn build_preferable_variable_orders(
+pub(crate) fn build_preferable_variable_orders(
     program: &ChaseProgram,
     initial_column_orders: Option<HashMap<Tag, HashSet<ColumnOrder>>>,
 ) -> BuilderResultVariants {
@@ -556,7 +552,7 @@ mod test {
         io::formats::{Import, MockHandler},
         rule_model::components::{
             tag::Tag,
-            term::primitive::{variable::Variable, Primitive},
+            term::primitive::{Primitive, variable::Variable},
         },
     };
 
@@ -858,8 +854,8 @@ mod test {
         );
     }
 
-    fn get_part_of_galen_test_ruleset_ie_first_5_rules_without_constant(
-    ) -> TestRuleSetWithAdditionalInfo {
+    fn get_part_of_galen_test_ruleset_ie_first_5_rules_without_constant()
+    -> TestRuleSetWithAdditionalInfo {
         let init = Tag::new("init".to_string());
         let sub_class_of = Tag::new("sub_class_of".to_string());
         let is_main_class = Tag::new("is_main_class".to_string());

@@ -1,10 +1,12 @@
-use std::collections::{hash_map::Entry, HashMap, HashSet};
+use std::collections::{HashMap, HashSet, hash_map::Entry};
 
-use nemo_physical::management::execution_plan::ColumnOrder;
+use nemo_physical::{
+    management::execution_plan::ColumnOrder, util::mapping::permutation::Permutation,
+};
 
 use crate::{
     chase_model::components::{
-        atom::{primitive_atom::PrimitiveAtom, variable_atom::VariableAtom, ChaseAtom},
+        atom::{ChaseAtom, primitive_atom::PrimitiveAtom, variable_atom::VariableAtom},
         filter::ChaseFilter,
         program::ChaseProgram,
         rule::ChaseRule,
@@ -14,13 +16,13 @@ use crate::{
         tag::Tag,
         term::{
             operation::operation_kind::OperationKind,
-            primitive::{variable::Variable, Primitive},
+            primitive::{Primitive, variable::Variable},
         },
     },
 };
 
 use super::variable_order::{
-    build_preferable_variable_orders, BuilderResultVariants, VariableOrder,
+    BuilderResultVariants, VariableOrder, build_preferable_variable_orders,
 };
 
 /// Contains useful information for a (existential) rule
@@ -241,6 +243,9 @@ pub struct ProgramAnalysis {
     pub predicate_to_rule_body: HashMap<Tag, HashSet<usize>>,
     /// Map from a predicate to all the rules where that predicate appears in its head
     pub predicate_to_rule_head: HashMap<Tag, HashSet<usize>>,
+
+    /// All computed column orders
+    pub column_orders: HashMap<Tag, HashSet<Permutation>>,
 }
 
 impl ChaseProgram {
@@ -379,6 +384,7 @@ impl ChaseProgram {
             all_predicates,
             predicate_to_rule_body,
             predicate_to_rule_head,
+            column_orders: all_column_orders[0].clone(),
         }
     }
 }

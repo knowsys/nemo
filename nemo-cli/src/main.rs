@@ -21,9 +21,9 @@ pub mod cli;
 pub mod error;
 
 use std::{
-    fs::{read_to_string, File},
-    io::stdout,
+    fs::{File, read_to_string},
     io::Write,
+    io::stdout,
 };
 
 use clap::Parser;
@@ -36,16 +36,16 @@ use nemo::{
     datavalues::AnyDataValue,
     error::Error,
     execution::{
+        DefaultExecutionEngine, ExecutionEngine,
         execution_parameters::ExecutionParameters,
         tracing::{node_query::TableEntriesForTreeNodesQuery, tree_query::TreeForTableQuery},
-        DefaultExecutionEngine, ExecutionEngine,
     },
-    io::{resource_providers::ResourceProviders, ImportManager},
+    io::{ImportManager, resource_providers::ResourceProviders},
     meta::timing::{TimedCode, TimedDisplay},
     rule_file::RuleFile,
     rule_model::{
-        components::{fact::Fact, tag::Tag, term::Term, ComponentBehavior},
-        programs::{program::Program, ProgramRead},
+        components::{ComponentBehavior, fact::Fact, tag::Tag, term::Term},
+        programs::{ProgramRead, program::Program},
     },
 };
 
@@ -249,6 +249,10 @@ fn handle_tracing_node(cli: &CliApp, engine: &mut DefaultExecutionEngine) -> Res
 fn handle_exeriments(cli: &CliApp, engine: &mut DefaultExecutionEngine) -> Result<(), CliError> {
     if cli.experiments.create_queries {
         engine.collect_node_queries();
+    }
+
+    if let Some(directory) = &cli.experiments.trace_node_query {
+        engine.experiment_node_queries(directory);
     }
 
     Ok(())

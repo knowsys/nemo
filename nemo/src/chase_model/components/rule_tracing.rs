@@ -3,15 +3,17 @@
 use std::fmt::Display;
 
 use crate::{
-    chase_model::{analysis::variable_order::VariableOrder, ChaseAtom},
+    chase_model::{
+        ChaseAtom, analysis::variable_order::VariableOrder, components::rule::ChaseRule,
+    },
     rule_model::{
         components::{
+            IterablePrimitives, IterableVariables,
             tag::Tag,
             term::{
-                primitive::{variable::Variable, Primitive},
                 Term,
+                primitive::{Primitive, variable::Variable},
             },
-            IterablePrimitives, IterableVariables,
         },
         origin::Origin,
     },
@@ -74,6 +76,10 @@ impl VariableRuleAtom {
             .collect::<Vec<_>>();
 
         PrimitiveAtom::new(self.predicate.clone(), terms)
+    }
+
+    pub fn to_variable_atom(&self) -> VariableAtom {
+        VariableAtom::new(self.predicate.clone(), self.variables.clone())
     }
 
     pub fn rule(&self) -> Option<usize> {
@@ -193,6 +199,51 @@ impl TracingChaseRule {
 
         for variable in self.positive.atoms.iter().flat_map(|atom| atom.variables()) {
             result.push(variable.clone());
+        }
+
+        result
+    }
+
+    /// Return a [ChaseRule] of the same form.
+    pub fn to_chase_rule(&self) -> ChaseRule {
+        let mut result = ChaseRule::default();
+
+        for atom in self.head() {
+            result.add_head_atom(atom.clone());
+        }
+
+        for atom in self.positive_body() {
+            result.add_positive_atom(atom.to_variable_atom());
+        }
+
+        for filter in self.positive_filters() {
+            result.add_positive_filter(filter.clone());
+        }
+
+        for operation in self.positive_operations() {
+            result.add_positive_operation(operation.clone());
+        }
+
+        for (atom, filters) in self.negative_body().iter().zip(self.negative_filters()) {
+            result.add_negative_atom(atom.clone());
+
+            for filter in filters {
+                result.add_negative_filter_last(filter.clone());
+            }
+        }
+
+        if let Some(aggregate) = self.aggregate() {
+            if let Some(index) = self._aggregate_head_index() {
+                result.add_aggregation(aggregate.clone(), index);
+            }
+        }
+
+        for filter in self.aggregate_filters() {
+            result._add_aggregation_filter(filter.clone());
+        }
+
+        for operation in self.aggregate_operations() {
+            result.add_aggregation_operation(operation.clone());
         }
 
         result
