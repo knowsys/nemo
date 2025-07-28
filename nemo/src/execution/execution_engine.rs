@@ -892,7 +892,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     }
 
     fn trace_node_prepare_response_recursive(
-        &self,
+        &mut self,
         elements: &mut Vec<TableEntriesForTreeNodesResponseElement>,
         node: &TableEntriesForTreeNodesQueryInner,
         address: TreeAddress,
@@ -948,7 +948,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         elements.push(element);
 
         if let Some(successor) = &node.next {
-            let rule = &self.chase_program().rules()[successor.rule];
+            let rule = self.chase_program().rules()[successor.rule].clone();
 
             for (index, (child, atom)) in successor
                 .children
@@ -968,11 +968,55 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                     &next_predicate,
                 );
             }
+
+            for (index, negative_atom) in rule.negative_body().iter().enumerate() {
+                let mut next_address = address.clone();
+                next_address.push(rule.positive_body().len() + index);
+
+                let rows = if let Some(rows) = self
+                    .predicate_rows(&negative_atom.predicate())
+                    .expect("collect negation rows failed")
+                {
+                    rows.collect::<Vec<_>>()
+                } else {
+                    Vec::default()
+                };
+
+                let mut entries = Vec::default();
+
+                for row in rows {
+                    let entry_id = self
+                        .table_manager
+                        .table_row_id(&negative_atom.predicate(), &row)
+                        .expect("row should be contained somewhere");
+
+                    let table_response = TableEntryResponse {
+                        entry_id,
+                        terms: row,
+                    };
+
+                    entries.push(table_response);
+                }
+
+                let negation_element = TableEntriesForTreeNodesResponseElement {
+                    predicate: negative_atom.predicate().to_string(),
+                    entries,
+                    pagination: PaginationResponse {
+                        start: 0,
+                        more: false,
+                    },
+                    possible_rules_above: Vec::default(),
+                    possible_rules_below: Vec::default(),
+                    address: next_address,
+                };
+
+                elements.push(negation_element);
+            }
         }
     }
 
     pub(crate) fn trace_node_prepare_response(
-        &self,
+        &mut self,
         query: &TableEntriesForTreeNodesQuery,
     ) -> TableEntriesForTreeNodesResponse {
         let mut elements = Vec::<TableEntriesForTreeNodesResponseElement>::default();
