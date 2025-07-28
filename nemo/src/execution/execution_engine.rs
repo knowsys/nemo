@@ -841,7 +841,8 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             facts.push(fact);
         }
 
-        if let Some(result) = self.trace_tree_recursive(facts) {
+        if let Some(mut result) = self.trace_tree_recursive(facts) {
+            self.trace_tree_add_negation(&mut result);
             Ok(result)
         } else {
             let predicate = Tag::new(query.predicate.clone());
@@ -888,6 +889,52 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 possible_rules_below,
                 next: None,
             })
+        }
+    }
+
+    fn trace_tree_add_negation(&mut self, response: &mut TreeForTableResponse) {
+        if let Some(next) = &mut response.next {
+            for child in &mut next.children {
+                self.trace_tree_add_negation(child);
+            }
+
+            let rule = self.chase_program().rules()[next.rule.id].clone();
+            for negative_atom in rule.negative_body() {
+                let rows = if let Ok(Some(rows)) = self.predicate_rows(&negative_atom.predicate()) {
+                    rows.collect::<Vec<_>>()
+                } else {
+                    Vec::default()
+                };
+
+                let mut entries = Vec::default();
+                for row in rows {
+                    let entry_id = self
+                        .table_manager
+                        .table_row_id(&negative_atom.predicate(), &row)
+                        .expect("row should be contained somewhere");
+
+                    let table_response = TableEntryResponse {
+                        entry_id,
+                        terms: row,
+                    };
+
+                    entries.push(table_response);
+                }
+
+                let negative_response = TreeForTableResponse {
+                    predicate: negative_atom.predicate().to_string(),
+                    entries,
+                    pagination: PaginationResponse {
+                        start: 0,
+                        more: false,
+                    },
+                    possible_rules_above: Vec::default(),
+                    possible_rules_below: Vec::default(),
+                    next: None,
+                };
+
+                next.children.push(negative_response);
+            }
         }
     }
 

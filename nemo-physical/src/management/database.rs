@@ -620,7 +620,6 @@ impl DatabaseInstance {
 
             let mut string_tree = String::new();
             let _ = write_tree(&mut string_tree, &tree.ascii_tree());
-            println!("{}", string_tree);
 
             let dependent_reorderings = tree
                 .dependents
