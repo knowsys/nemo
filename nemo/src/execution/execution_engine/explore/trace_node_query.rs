@@ -288,12 +288,6 @@ fn valid_tables_plan(
         node_join.add_subnode(node_union);
     }
 
-    let node_join = if single_exist {
-        plan.single(node_join, single_markers)
-    } else {
-        node_join
-    };
-
     let node_body_functions = node_functions(
         &mut plan,
         &variable_translation,
@@ -317,6 +311,12 @@ fn valid_tables_plan(
         rule.negative_body(),
         rule.negative_filters(),
     );
+
+    let node_negation = if single_exist {
+        plan.single(node_negation, single_markers)
+    } else {
+        node_negation
+    };
 
     let id_assignment = plan.write_permanent(node_negation.clone(), "assignment", "assignment");
 
@@ -530,6 +530,9 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             if let Some(id) =
                 consolidate_valid_tables(self.table_manager.database_mut(), manager, &address)
             {
+                let valid_final_count = self.table_manager.database().count_rows_in_memory(id);
+                println!("Address: {:?}, count: {}", address, valid_final_count);
+
                 manager.add_final_valid_table(&address, id);
             } else {
                 println!("consolidation failed (valid)");
