@@ -4,19 +4,21 @@ use std::collections::{HashMap, HashSet};
 
 use itertools::Itertools;
 use nemo_physical::{
+    datavalues::AnyDataValue,
     management::{
         database::{
             DatabaseInstance,
             id::{ExecutionId, PermanentTableId},
+            sources::SimpleTable,
         },
-        execution_plan::ExecutionPlan,
+        execution_plan::{ColumnOrder, ExecutionPlan},
     },
     tabular::operations::OperationTable,
 };
 
 use crate::{
     chase_model::{
-        ChaseAtom, analysis::variable_order::VariableOrder, components::rule::ChaseRule,
+        ChaseAtom, GroundAtom, analysis::variable_order::VariableOrder, components::rule::ChaseRule,
     },
     execution::{
         ExecutionEngine,
@@ -30,11 +32,12 @@ use crate::{
                 TableEntriesForTreeNodesQuery, TableEntriesForTreeNodesQueryInner,
                 TableEntriesForTreeNodesResponse, TreeAddress,
             },
-            shared::TableEntryResponse,
+            shared::{TableEntryQuery, TableEntryResponse},
         },
     },
     rule_model::components::{
         IterableVariables,
+        atom::Atom,
         tag::Tag,
         term::primitive::{Primitive, variable::Variable},
     },
@@ -80,6 +83,7 @@ pub(crate) struct TreeTableManager {
     result: HashMap<TreeAddress, PermanentTableId>,
     valid_final: HashMap<TreeAddress, PermanentTableId>,
     assignment_final: HashMap<TreeAddress, PermanentTableId>,
+    query: HashMap<TreeAddress, PermanentTableId>,
 }
 
 impl TreeTableManager {
@@ -112,6 +116,10 @@ impl TreeTableManager {
 
     pub fn add_final_assignment_table(&mut self, address: &TreeAddress, id: PermanentTableId) {
         self.assignment_final.insert(address.clone(), id);
+    }
+
+    pub fn add_query_table(&mut self, address: &TreeAddress, id: PermanentTableId) {
+        self.query.insert(address.clone(), id);
     }
 
     pub fn valid_tables_before(
@@ -261,6 +269,11 @@ fn valid_tables_plan(
     let mut node_join = plan.join_empty(markers_join);
     node_join.add_subnode(node_head);
 
+    if let Some(query_id) = manager.query.get(address) {
+        let node_query = plan.fetch_table(markers_head.clone(), *query_id);
+        node_join.add_subnode(node_query);
+    }
+
     for (body_index, body_atom) in rule.positive_body().iter().enumerate() {
         let mut body_address = address.clone();
         body_address.push(body_index);
@@ -379,6 +392,72 @@ fn consolidate_assignment_tables(
 }
 
 impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
+    fn build_query_restriction(
+        &mut self,
+        manager: &mut TreeTableManager,
+        node: &TableEntriesForTreeNodesQueryInner,
+        address: TreeAddress,
+        predicate: &Tag,
+    ) {
+        if !node.queries.is_empty() {
+            let arity = self.predicate_arity(predicate).expect("invalid predicate");
+            let mut simple_table = SimpleTable::new(arity);
+
+            for query in &node.queries {
+                let terms = match query {
+                    TableEntryQuery::Entry(row_index) => {
+                        let terms_to_trace: Vec<AnyDataValue> = self
+                            .predicate_rows(&predicate)
+                            .expect("unknown predicate")
+                            .into_iter()
+                            .flatten()
+                            .nth(*row_index)
+                            .expect("invalid id");
+
+                        terms_to_trace
+                    }
+                    TableEntryQuery::Query(query_string) => {
+                        let atom = Atom::parse(&format!("P({})", query_string))
+                            .expect("invalid query string");
+
+                        let ground = GroundAtom::try_from(atom).expect("only support ground fact");
+                        ground.datavalues().collect::<Vec<_>>()
+                    }
+                };
+
+                simple_table.add_row(terms);
+            }
+
+            let id = self
+                .table_manager
+                .database_mut()
+                .register_table("query", arity);
+            self.table_manager.database_mut().add_source_table(
+                id,
+                ColumnOrder::default(),
+                simple_table,
+            );
+
+            manager.add_query_table(&address, id);
+        }
+
+        if let Some(successor) = &node.next {
+            let rule = self.program.rules()[successor.rule].clone();
+
+            for (index, (atom, node_atom)) in rule
+                .positive_body()
+                .iter()
+                .zip(successor.children.iter())
+                .enumerate()
+            {
+                let mut next_address = address.clone();
+                next_address.push(index);
+
+                self.build_query_restriction(manager, node_atom, next_address, &atom.predicate());
+            }
+        }
+    }
+
     pub(crate) fn build_valid_nodes(
         &mut self,
         manager: &mut TreeTableManager,
@@ -560,6 +639,8 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         let node = &query.inner;
         let before_step = self.rule_history.len();
 
+        self.build_query_restriction(&mut manager, node, address.clone(), &predicate);
+
         self.build_valid_nodes(&mut manager, node, address.clone(), &predicate, before_step);
 
         let _ = self.filter_nodes(&mut manager, node, address.clone());
@@ -573,7 +654,9 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         mut response: TableEntriesForTreeNodesResponse,
     ) -> Option<TableEntriesForTreeNodesResponse> {
         for element in &mut response.elements {
-            let table_id = manager.result_table(&element.address)?;
+            let Some(table_id) = manager.result_table(&element.address) else {
+                continue;
+            };
             let rows_iter = self
                 .table_manager
                 .database_mut()
