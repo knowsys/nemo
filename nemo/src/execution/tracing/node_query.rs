@@ -98,7 +98,7 @@ pub struct TableEntriesForTreeNodesResponseElement {
 ///
 /// For each query node contains the set of facts
 /// that are consistent with a trace in the query tree.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Default)]
 pub struct TableEntriesForTreeNodesResponse {
     /// Responses for each node
     pub elements: Vec<TableEntriesForTreeNodesResponseElement>,

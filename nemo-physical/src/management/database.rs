@@ -194,6 +194,37 @@ impl DatabaseInstance {
 
         trie.contains_row(&row_storage)
     }
+
+    /// Return the position of a row within a table (with respect to the standard ordering)
+    ///
+    /// # Panics
+    /// Panics if the given id does not exist.
+    pub fn table_row_position(
+        &mut self,
+        id: PermanentTableId,
+        row: &[AnyDataValue],
+    ) -> Option<usize> {
+        let storage_id = self
+            .reference_manager
+            .trie_id(&self.dictionary, id, ColumnOrder::default())
+            .unwrap_or_else(|err| panic!("No table with the id {id} exists: {err}"));
+        let trie = self.reference_manager.trie(storage_id);
+
+        let dictionary: &Dict = &self.dictionary();
+
+        let mut row_storage = Vec::with_capacity(row.len());
+        for data_value in row.iter() {
+            if let Some(storage_value) = data_value.try_to_storage_value_t(dictionary) {
+                row_storage.push(storage_value);
+            } else {
+                // `value` is not know to the dictionary and therefore
+                // not be part of a table.
+                return None;
+            }
+        }
+
+        trie.row_position(&row_storage)
+    }
 }
 
 // Add new tables to the database
@@ -296,14 +327,6 @@ impl DatabaseInstance {
                 self.reference_manager
                     .trie_id(&self.dictionary, id, order)?,
             );
-
-            let storage_id = *result.last().unwrap();
-
-            println!(
-                "storage id: {}, rows: {}",
-                storage_id,
-                self.reference_manager.trie(storage_id).num_rows()
-            );
         }
 
         Ok(result)
@@ -405,6 +428,14 @@ impl DatabaseInstance {
                         .map(|scan| generator.apply_operation(scan))
                         .unwrap_or(Trie::empty(0))
                 };
+
+                (trie, vec![])
+            }
+            ExecutionTreeNode::Single { generator, subnode } => {
+                let trie = self
+                    .evaluate_tree_leaf(storage, subnode)
+                    .map(|scan| generator.apply_operation(scan))
+                    .unwrap_or(Trie::empty(0));
 
                 (trie, vec![])
             }
@@ -540,12 +571,20 @@ impl DatabaseInstance {
                                 operation,
                             );
                             trie_scan.and_then(|scan| {
-                                Iterator::next(&mut RowScan::new(scan, tree.cut_layers))
+                                Iterator::next(&mut RowScan::new(
+                                    scan,
+                                    tree.cut_layers,
+                                    tree.cut_layers,
+                                ))
                             })
                         }
                         ExecutionTreeNode::ProjectReorder { generator, subnode } => self
                             .evaluate_tree_leaf(&temporary_storage, subnode)
                             .and_then(|scan| generator.apply_operation_first(scan)),
+                        ExecutionTreeNode::Single {
+                            generator: _,
+                            subnode: _,
+                        } => todo!(),
                     }?;
 
                     let row_datavalue = row_storage

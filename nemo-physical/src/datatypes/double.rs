@@ -3,13 +3,14 @@
 use std::{
     cmp::Ordering,
     fmt,
+    hash::{Hash, Hasher},
     iter::{Product, Sum},
     ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Rem, Sub, SubAssign},
 };
 
 use num::{
-    traits::CheckedNeg, Bounded, CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, FromPrimitive,
-    One, Zero,
+    Bounded, CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, FromPrimitive, One, Zero,
+    traits::CheckedNeg,
 };
 
 use crate::{
@@ -17,7 +18,7 @@ use crate::{
     function::definitions::numeric::traits::{CheckedPow, CheckedSquareRoot},
 };
 
-use super::{run_length_encodable::FloatingStep, FloorToUsize, RunLengthEncodable};
+use super::{FloorToUsize, RunLengthEncodable, run_length_encodable::FloatingStep};
 
 #[cfg(test)]
 use quickcheck::{Arbitrary, Gen};
@@ -25,6 +26,12 @@ use quickcheck::{Arbitrary, Gen};
 /// Wrapper for [f64] that excludes [f64::NAN] and infinite values
 #[derive(Copy, Clone, Debug, PartialEq, Default)]
 pub struct Double(f64);
+
+impl Hash for Double {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write_u64(self.0.to_bits());
+    }
+}
 
 impl Double {
     /// Wraps the given [f64]-`value` as a value over [Double].
@@ -321,11 +328,7 @@ impl RunLengthEncodable for Double {
     type Step = FloatingStep;
 
     fn diff_step(a: Self, b: Self) -> Option<Self::Step> {
-        if a == b {
-            Some(FloatingStep {})
-        } else {
-            None
-        }
+        if a == b { Some(FloatingStep {}) } else { None }
     }
 
     fn get_step_increment(_: Self::Step) -> Option<Self> {

@@ -7,7 +7,7 @@ use crate::{
         columnscan::{ColumnScanEnum, ColumnScanT},
         operations::{constant::ColumnScanConstant, pass::ColumnScanPass},
     },
-    datatypes::{storage_type_name::StorageTypeBitSet, StorageTypeName, StorageValueT},
+    datatypes::{StorageTypeName, StorageValueT, storage_type_name::StorageTypeBitSet},
     datavalues::ValueDomain,
     dictionary::DvDict,
     management::database::Dict,
@@ -49,14 +49,18 @@ impl GeneratorNull {
     /// In this case the fresh null will appear multiple times.
     pub(crate) fn new(output: OperationTable, input: OperationTable) -> Self {
         debug_assert!(output.arity() >= input.arity());
-        debug_assert!(input
-            .iter()
-            .zip(output.iter())
-            .all(|(input_marker, output_marker)| input_marker == output_marker));
-        debug_assert!(output
-            .iter()
-            .skip(input.arity())
-            .all(|marker| input.position(marker).is_none()));
+        debug_assert!(
+            input
+                .iter()
+                .zip(output.iter())
+                .all(|(input_marker, output_marker)| input_marker == output_marker)
+        );
+        debug_assert!(
+            output
+                .iter()
+                .skip(input.arity())
+                .all(|marker| input.position(marker).is_none())
+        );
 
         let mut instructions = Vec::new();
 
@@ -250,7 +254,7 @@ mod test {
     use std::cell::RefCell;
 
     use crate::{
-        datatypes::{into_datavalue::IntoDataValue, StorageValueT},
+        datatypes::{StorageValueT, into_datavalue::IntoDataValue},
         datavalues::{AnyDataValue, DataValue, ValueDomain},
         dictionary::DvDict,
         management::database::Dict,
@@ -302,7 +306,7 @@ mod test {
             .generate(vec![Some(trie_scan)], &dictionary)
             .unwrap();
 
-        let result = RowScan::new(null_scan, 0)
+        let result = RowScan::new_full(null_scan)
             .map(|row| {
                 row.into_iter()
                     .map(|value| value.into_datavalue(&dictionary.borrow()).unwrap())
@@ -354,7 +358,7 @@ mod test {
             .generate(vec![Some(trie_scan)], &dictionary)
             .unwrap();
 
-        let result = RowScan::new(null_scan, 0)
+        let result = RowScan::new_full(null_scan)
             .map(|row| {
                 row.into_iter()
                     .map(|value| value.into_datavalue(&dictionary.borrow()).unwrap())

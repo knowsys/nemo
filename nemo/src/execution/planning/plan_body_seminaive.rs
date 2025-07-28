@@ -15,10 +15,10 @@ use crate::{
 };
 
 use super::{
+    BodyStrategy,
     operations::{
         filter::node_filter, functions::node_functions, join::node_join, negation::node_negation,
     },
-    BodyStrategy,
 };
 
 /// Implementation of the semi-naive existential rule evaluation strategy.

@@ -11,5 +11,4 @@ pub(crate) mod import;
 pub(crate) mod operation;
 pub(crate) mod program;
 pub(crate) mod rule;
-pub(crate) mod rule_tracing;
 pub(crate) mod term;

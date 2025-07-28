@@ -95,9 +95,7 @@ impl GeneratorProjectReorder {
         let cut = trie_scan.arity() - self.last_used_layer - 1;
         let projectreordering = self.projectreordering.as_vector();
 
-        let mut rowscan = RowScan::new(trie_scan, cut);
-
-        println!("PROJECTION REORDER; CUT: {}", cut);
+        let mut rowscan = RowScan::new(trie_scan, cut, cut);
 
         if projectreordering.is_empty() {
             let no_results = StreamingIterator::next(&mut rowscan).is_none();
@@ -128,7 +126,7 @@ impl GeneratorProjectReorder {
     ) -> Option<Vec<StorageValueT>> {
         let cut = trie_scan.arity() - self.last_used_layer - 1;
 
-        let mut rowscan = RowScan::new(trie_scan, cut);
+        let mut rowscan = RowScan::new(trie_scan, cut, cut);
 
         let first_row = Iterator::next(&mut rowscan)?;
         Some(self.projectreordering.transform(&first_row))

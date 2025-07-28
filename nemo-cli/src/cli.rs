@@ -192,7 +192,7 @@ pub(crate) struct TracingTreeArgs {
 pub(crate) struct TracingNodeArgs {
     /// Query formatted as json specifying the facts that should be traced
     #[arg(long = "trace-node")]
-    pub(crate) trace_node_json: Option<String>,
+    pub(crate) trace_node_json: Option<PathBuf>,
 }
 
 /// Nemo CLI
