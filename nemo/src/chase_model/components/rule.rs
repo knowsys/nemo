@@ -1,11 +1,17 @@
 //! This module defines [ChaseRule].
 
-use crate::rule_model::{
-    components::{
-        term::primitive::{variable::Variable, Primitive},
-        IterablePrimitives, IterableVariables,
+use std::fmt::Display;
+
+use crate::{
+    rule_model::{
+        components::{
+            IterablePrimitives, IterableVariables,
+            term::primitive::{Primitive, variable::Variable},
+        },
+        origin::Origin,
     },
-    origin::Origin,
+    syntax,
+    util::seperated_list::DisplaySeperatedList,
 };
 
 use super::{
@@ -87,6 +93,27 @@ impl ChaseRule {
         result.positive.filters = filters;
 
         result
+    }
+}
+
+impl Display for ChaseRule {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let head = DisplaySeperatedList::display(
+            self.head().iter(),
+            &format!("{} ", syntax::SEQUENCE_SEPARATOR),
+        );
+
+        let body = DisplaySeperatedList::display(
+            self.positive_body().iter(),
+            &format!("{} ", syntax::SEQUENCE_SEPARATOR),
+        );
+
+        let filters = DisplaySeperatedList::display(
+            self.positive_filters().iter(),
+            &format!("{} ", syntax::SEQUENCE_SEPARATOR),
+        );
+
+        f.write_str(&format!("{head} :- {body} {filters}"))
     }
 }
 

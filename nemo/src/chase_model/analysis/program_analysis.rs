@@ -1,8 +1,6 @@
 use std::collections::{HashMap, HashSet, hash_map::Entry};
 
-use nemo_physical::{
-    management::execution_plan::ColumnOrder, util::mapping::permutation::Permutation,
-};
+use nemo_physical::management::execution_plan::ColumnOrder;
 
 use crate::{
     chase_model::components::{
@@ -243,9 +241,6 @@ pub struct ProgramAnalysis {
     pub predicate_to_rule_body: HashMap<Tag, HashSet<usize>>,
     /// Map from a predicate to all the rules where that predicate appears in its head
     pub predicate_to_rule_head: HashMap<Tag, HashSet<usize>>,
-
-    /// All computed column orders
-    pub column_orders: HashMap<Tag, HashSet<Permutation>>,
 }
 
 impl ChaseProgram {
@@ -384,7 +379,6 @@ impl ChaseProgram {
             all_predicates,
             predicate_to_rule_body,
             predicate_to_rule_head,
-            column_orders: all_column_orders[0].clone(),
         }
     }
 }

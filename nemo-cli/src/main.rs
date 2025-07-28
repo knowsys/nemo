@@ -231,13 +231,13 @@ fn handle_tracing_tree(cli: &CliApp, engine: &mut DefaultExecutionEngine) -> Res
 }
 
 fn handle_tracing_node(cli: &CliApp, engine: &mut DefaultExecutionEngine) -> Result<(), CliError> {
-    if let Some(query_json) = &cli.tracing_node.trace_node_json {
-        let node_query: TableEntriesForTreeNodesQuery =
-            serde_json::from_str(&query_json).map_err(|_| CliError::TracingInvalidFact {
-                fact: String::from("placeholder"),
-            })?;
+    if let Some(query_file) = &cli.tracing_node.trace_node_json {
+        let query_string = read_to_string(query_file).expect("Unable to read file");
 
-        let result = engine.trace_node_rule(node_query);
+        let node_query: TableEntriesForTreeNodesQuery =
+            serde_json::from_str(&query_string).expect("Unable to parse json file");
+
+        let result = engine.trace_node(node_query);
 
         let json = serde_json::to_string_pretty(&result).unwrap();
         println!("{}", json);

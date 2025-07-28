@@ -7,9 +7,9 @@ use nemo_physical::{
     management::{
         bytesized::ByteSized,
         database::{
+            DatabaseInstance, Dict,
             id::{ExecutionId, PermanentTableId},
             sources::TableSource,
-            DatabaseInstance, Dict,
         },
         execution_plan::{ColumnOrder, ExecutionNodeRef, ExecutionPlan},
     },
@@ -345,6 +345,14 @@ impl TableManager {
         }
     }
 
+    pub(crate) fn database_mut(&mut self) -> &mut DatabaseInstance {
+        &mut self.database
+    }
+
+    pub(crate) fn database(&self) -> &DatabaseInstance {
+        &self.database
+    }
+
     /// Return the [PermanentTableId] that is associated with a given subtable.
     /// Returns None if the predicate does not exist.
     fn table_id(&self, subtable: &SubtableIdentifier) -> Option<PermanentTableId> {
@@ -528,6 +536,54 @@ impl TableManager {
             .arity
     }
 
+    pub fn tables_in_range_steps(
+        &self,
+        predicate: &Tag,
+        range: Range<usize>,
+    ) -> Vec<(usize, PermanentTableId)> {
+        self.predicate_subtables
+            .get(predicate)
+            .map(|handler| {
+                handler
+                    .single
+                    .iter()
+                    .filter_map(|(step, id)| {
+                        if range.contains(step) {
+                            Some((*step, *id))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default()
+    }
+
+    pub fn tables_in_range_rule_steps(
+        &self,
+        predicate: &Tag,
+        range: Range<usize>,
+        rules: &[usize],
+        rule: usize,
+    ) -> Vec<(usize, PermanentTableId)> {
+        self.predicate_subtables
+            .get(predicate)
+            .map(|handler| {
+                handler
+                    .single
+                    .iter()
+                    .filter_map(|(step, id)| {
+                        if rules[*step] == rule && range.contains(step) {
+                            Some((*step, *id))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default()
+    }
+
     /// Return the ids of all subtables of a predicate within a certain range of steps.
     pub fn tables_in_range(&self, predicate: &Tag, range: &Range<usize>) -> Vec<PermanentTableId> {
         self.predicate_subtables
@@ -536,7 +592,7 @@ impl TableManager {
             .unwrap_or_default()
     }
 
-    pub fn tables_in_range_rule(
+    pub fn _tables_in_range_rule(
         &self,
         predicate: &Tag,
         range: Range<usize>,
@@ -667,6 +723,24 @@ impl TableManager {
             if self.database.table_contains_row(*id, row) {
                 return Some(*step);
             }
+        }
+
+        None
+    }
+
+    /// Return an id for a given row and predicate, if it exists.
+    ///
+    /// Returns `None` if there is no such row for this predicate.
+    pub fn table_row_id(&mut self, predicate: &Tag, row: &[AnyDataValue]) -> Option<usize> {
+        let handler = self.predicate_subtables.get(predicate)?;
+
+        let mut skipped: usize = 0;
+        for (_, id) in &handler.single {
+            if let Some(row_index) = self.database.table_row_position(*id, row) {
+                return Some(skipped + row_index);
+            }
+
+            skipped += self.database.count_rows_in_memory(*id);
         }
 
         None

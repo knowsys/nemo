@@ -1,9 +1,6 @@
 //! Functionality which handles the execution of a program
 
-use std::{
-    collections::{hash_map::Entry, HashMap},
-    time::Instant,
-};
+use std::collections::{HashMap, hash_map::Entry};
 
 use itertools::Itertools;
 
@@ -12,26 +9,22 @@ use nemo_physical::{
     dictionary::DvDict,
     management::database::sources::{SimpleTable, TableSource},
     meta::timing::TimedCode,
-    tabular::trie::Trie,
 };
 
 use crate::{
     chase_model::{
         analysis::{program_analysis::ProgramAnalysis, variable_order::VariableOrder},
         components::{
-            atom::{ground_atom::GroundAtom, ChaseAtom},
+            atom::{ChaseAtom, ground_atom::GroundAtom},
             export::ChaseExport,
-            filter::ChaseFilter,
             program::ChaseProgram,
             rule::ChaseRule,
-            rule_tracing::{TracingChaseRule, VariableRuleAtom},
-            term::operation_term::{Operation, OperationTerm},
         },
         translation::ProgramChaseTranslation,
     },
-    error::{report::ProgramReport, warned::Warned, Error},
+    error::{Error, report::ProgramReport, warned::Warned},
     execution::{
-        planning::{plan_tracing::TracingStrategy, plan_tracing_rule::RuleTracingStrategy},
+        planning::plan_tracing::TracingStrategy,
         tracing::{
             shared::{Rule as TraceRule, TableEntryQuery},
             trace::TraceDerivation,
@@ -44,12 +37,7 @@ use crate::{
             atom::Atom,
             fact::Fact,
             tag::Tag,
-            term::{
-                operation::operation_kind::OperationKind,
-                primitive::{ground::GroundTerm, variable::Variable, Primitive},
-                Term,
-            },
-            IterableVariables,
+            term::primitive::{Primitive, ground::GroundTerm, variable::Variable},
         },
         pipeline::transformations::default::TransformationDefault,
         programs::{handle::ProgramHandle, program::Program},
@@ -68,20 +56,14 @@ use super::{
             TableEntriesForTreeNodesQuery, TableEntriesForTreeNodesQueryInner,
             TableEntriesForTreeNodesResponse, TableEntriesForTreeNodesResponseElement, TreeAddress,
         },
-        shared::{PaginationQuery, PaginationResponse, TableEntryResponse},
+        shared::{PaginationResponse, TableEntryResponse},
         trace::{ExecutionTrace, TraceFactHandle, TraceRuleApplication, TraceStatus},
         tree_query::{TreeForTableQuery, TreeForTableResponse, TreeForTableResponseSuccessor},
     },
 };
 
 pub mod experiments;
-
-#[derive(Debug, Default)]
-struct NodeQueryRuleResult {
-    pub rule: TracingChaseRule,
-    pub step: usize,
-    pub elements: Vec<TableEntriesForTreeNodesResponseElement>,
-}
+pub mod explore;
 
 // Number of tables that are periodically combined into one.
 const MAX_FRAGMENTATION: usize = 8;
@@ -909,284 +891,100 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         }
     }
 
-    fn check_fact(fact: &GroundAtom, query_string: &str) -> bool {
-        let atom = if let Ok(atom) = Atom::parse(&format!("{}({})", fact.predicate(), query_string))
-        {
-            atom
-        } else {
-            return false;
+    fn trace_node_prepare_response_recursive(
+        &self,
+        elements: &mut Vec<TableEntriesForTreeNodesResponseElement>,
+        node: &TableEntriesForTreeNodesQueryInner,
+        address: TreeAddress,
+        predicate: &Tag,
+    ) {
+        let possible_rules_above = self
+            .analysis
+            .predicate_to_rule_body
+            .get(&predicate)
+            .cloned()
+            .unwrap_or_default()
+            .into_iter()
+            .flat_map(|idx| {
+                TraceRule::all_possible_single_head_rules(idx, self.program().rule(idx))
+            })
+            .collect::<Vec<_>>();
+
+        let possible_rules_below = self
+            .analysis
+            .predicate_to_rule_head
+            .get(&predicate)
+            .cloned()
+            .unwrap_or_default()
+            .into_iter()
+            .flat_map(|idx| {
+                TraceRule::possible_rules_for_head_predicate(
+                    idx,
+                    self.program().rule(idx),
+                    &predicate,
+                )
+            })
+            .collect::<Vec<_>>();
+
+        let element = TableEntriesForTreeNodesResponseElement {
+            predicate: predicate.to_string(),
+            entries: Vec::with_capacity(
+                node.pagination
+                    .map(|pagination| pagination.count)
+                    .unwrap_or_default(),
+            ),
+            pagination: PaginationResponse {
+                start: node
+                    .pagination
+                    .map(|pagination| pagination.start)
+                    .unwrap_or_default(),
+                more: false,
+            },
+            possible_rules_above,
+            possible_rules_below,
+            address: address.clone(),
         };
 
-        let mut assignment = HashMap::<Variable, AnyDataValue>::new();
+        elements.push(element);
 
-        if fact.terms().count() != atom.len() {
-            return false;
-        }
+        if let Some(successor) = &node.next {
+            let rule = &self.chase_program().rules()[successor.rule];
 
-        for (fact_term, atom_term) in fact.terms().zip(atom.terms()) {
-            match atom_term {
-                Term::Primitive(primitive) => match primitive {
-                    Primitive::Variable(variable) => match assignment.entry(variable.clone()) {
-                        Entry::Occupied(entry) => {
-                            if &fact_term.value() != entry.get() {
-                                return false;
-                            }
-                        }
-                        Entry::Vacant(entry) => {
-                            entry.insert(fact_term.value());
-                        }
-                    },
-                    Primitive::Ground(ground) => {
-                        if fact_term.value() != ground.value() {
-                            return false;
-                        }
-                    }
-                },
-                Term::Aggregate(_)
-                | Term::FunctionTerm(_)
-                | Term::Map(_)
-                | Term::Operation(_)
-                | Term::Tuple(_) => return false,
+            for (index, (child, atom)) in successor
+                .children
+                .iter()
+                .zip(rule.positive_body())
+                .enumerate()
+            {
+                let next_predicate = atom.predicate();
+
+                let mut next_address = address.clone();
+                next_address.push(index);
+
+                self.trace_node_prepare_response_recursive(
+                    elements,
+                    child,
+                    next_address,
+                    &next_predicate,
+                );
             }
         }
-
-        true
     }
 
-    fn trace_node_recursive(
-        &mut self,
-        inner: &TableEntriesForTreeNodesQueryInner,
-        fact: GroundAtom,
-        address: TreeAddress,
-    ) -> TraceNodeResult {
-        // Check if fact passes the query filter
-        if !inner.queries.is_empty()
-            && inner.queries.iter().all(|query| match query {
-                TableEntryQuery::Entry(row_index) => {
-                    let terms_to_trace_opt: Option<Vec<AnyDataValue>> = self
-                        .predicate_rows(&fact.predicate())
-                        .ok()
-                        .flatten()
-                        .into_iter()
-                        .flatten()
-                        .nth(*row_index);
+    pub(crate) fn trace_node_prepare_response(
+        &self,
+        query: &TableEntriesForTreeNodesQuery,
+    ) -> TableEntriesForTreeNodesResponse {
+        let mut elements = Vec::<TableEntriesForTreeNodesResponseElement>::default();
 
-                    let fact_at_index_opt = terms_to_trace_opt.map(|terms_to_trace| {
-                        GroundAtom::new(
-                            fact.predicate(),
-                            terms_to_trace.into_iter().map(GroundTerm::from).collect(),
-                        )
-                    });
+        self.trace_node_prepare_response_recursive(
+            &mut elements,
+            &query.inner,
+            Vec::default(),
+            &Tag::new(query.predicate.clone()),
+        );
 
-                    fact_at_index_opt.map(|f| f != fact).unwrap_or(true)
-                }
-                TableEntryQuery::Query(query_string) => !Self::check_fact(&fact, query_string),
-            })
-        {
-            return TraceNodeResult::default();
-        }
-
-        let step = if let Some(step) = self
-            .table_manager
-            .find_table_row(&fact.predicate(), &fact.datavalues().collect::<Vec<_>>())
-        {
-            step
-        } else {
-            return TraceNodeResult::default();
-        };
-
-        let no_restriction = if let Some(successor) = &inner.next {
-            successor.children.is_empty()
-        } else {
-            true
-        };
-
-        if step == 0 && !no_restriction {
-            return TraceNodeResult::default();
-        }
-
-        if no_restriction {
-            return TraceNodeResult::single(address, inner.pagination, fact);
-        }
-
-        let rule_index = self.rule_history[step];
-        let rule = self.program.rules()[rule_index].clone();
-
-        if let Some(successor) = &inner.next {
-            if rule_index != successor.rule {
-                return TraceNodeResult::default();
-            }
-
-            let partial_grounding = partial_grounding_for_rule_head_and_fact(
-                rule.clone(),
-                successor.head_index,
-                fact.clone(),
-            );
-
-            if partial_grounding.is_none() {
-                return TraceNodeResult::default();
-            }
-        }
-
-        let children = if let Some(successor) = &inner.next {
-            &successor.children
-        } else {
-            unreachable!("no_restriction is false")
-        };
-
-        // Iterate over all head atoms which could have derived the given fact
-        for (head_index, head_atom) in rule.head().iter().enumerate() {
-            let is_aggregate_atom = Some(head_index) == rule.aggregate_head_index();
-            let aggregate_variable = rule
-                .aggregate()
-                .map(|aggregate| aggregate.output_variable());
-
-            if head_atom.predicate() != fact.predicate() {
-                continue;
-            }
-
-            // Unify the head atom with the given fact
-
-            // If unification is possible `compatible` remains true
-            let mut compatible = true;
-            // Contains the head variable and the ground term it aligns with.
-            let mut grounding = HashMap::<Variable, AnyDataValue>::new();
-
-            for (head_term, fact_term) in head_atom.terms().zip(fact.terms()) {
-                match head_term {
-                    Primitive::Ground(ground) => {
-                        if ground != fact_term {
-                            compatible = false;
-                            break;
-                        }
-                    }
-                    Primitive::Variable(variable) => {
-                        // Matching with existential variables should not produce any restrictions,
-                        // so we just consider universal variables here
-                        if variable.is_existential() {
-                            continue;
-                        }
-
-                        // Aggregate variables are not grounded
-                        if is_aggregate_atom && Some(variable) == aggregate_variable {
-                            continue;
-                        }
-
-                        match grounding.entry(variable.clone()) {
-                            Entry::Occupied(entry) => {
-                                if *entry.get() != fact_term.value() {
-                                    compatible = false;
-                                    break;
-                                }
-                            }
-                            Entry::Vacant(entry) => {
-                                entry.insert(fact_term.value());
-                            }
-                        }
-                    }
-                }
-            }
-
-            if !compatible {
-                // Fact could not have been unified
-                continue;
-            }
-
-            let rule = self.program.rules()[rule_index].clone();
-            let analysis = &self.analysis.rule_analysis[rule_index];
-            let mut variable_order = analysis.promising_variable_orders[0].clone(); // TODO: This selection is arbitrary
-            let trace_strategy = if let Ok(strategy) = TracingStrategy::initialize(&rule, grounding)
-            {
-                strategy
-            } else {
-                return TraceNodeResult::default();
-            };
-
-            let mut execution_plan = SubtableExecutionPlan::default();
-
-            trace_strategy.add_plan(
-                &self.table_manager,
-                &mut execution_plan,
-                &mut variable_order,
-                step,
-            );
-
-            let query_trie =
-                if let Ok(mut trie) = self.table_manager.execute_plan_trie(execution_plan) {
-                    trie.pop().unwrap()
-                } else {
-                    return TraceNodeResult::default();
-                };
-
-            let query_result = if let Ok(result) = self.table_manager.trie_row_iterator(&query_trie)
-            {
-                result.collect::<Vec<_>>()
-            } else {
-                return TraceNodeResult::default();
-            };
-
-            let mut result =
-                TraceNodeResult::single(address.clone(), inner.pagination, fact.clone());
-            let mut accept = is_aggregate_atom;
-
-            for grounding in query_result {
-                let variable_assignment: HashMap<Variable, AnyDataValue> = variable_order
-                    .as_ordered_list()
-                    .into_iter()
-                    .zip(grounding.iter().cloned())
-                    .collect();
-
-                let mut fully_derived = true;
-                for (body_index, (body_atom, child)) in
-                    rule.positive_body().iter().zip(children.iter()).enumerate()
-                {
-                    let next_fact_predicate = body_atom.predicate();
-                    let next_fact_terms = body_atom
-                        .terms()
-                        .map(|variable| {
-                            GroundTerm::from(
-                                variable_assignment
-                                    .get(variable)
-                                    .expect("Query must assign value to each variable.")
-                                    .clone(),
-                            )
-                        })
-                        .collect::<Vec<_>>();
-
-                    let next_fact = GroundAtom::new(next_fact_predicate, next_fact_terms);
-                    let mut next_address = address.clone();
-                    next_address.push(body_index);
-
-                    let derived_next = self.trace_node_recursive(child, next_fact, next_address);
-
-                    if derived_next.is_empty() {
-                        fully_derived = false;
-
-                        break;
-                    }
-
-                    result.combine(derived_next);
-                }
-
-                if is_aggregate_atom && !fully_derived {
-                    accept = false;
-                    break;
-                }
-
-                if !is_aggregate_atom && fully_derived {
-                    accept = true;
-                    break;
-                }
-            }
-
-            if accept {
-                return result;
-            } else {
-                return TraceNodeResult::default();
-            }
-        }
-
-        TraceNodeResult::default()
+        TableEntriesForTreeNodesResponse { elements }
     }
 
     /// Evauate a [TableEntriesForTreeNodesQuery].
@@ -1194,309 +992,11 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         &mut self,
         query: TableEntriesForTreeNodesQuery,
     ) -> TableEntriesForTreeNodesResponse {
-        let query_predicate = Tag::new(query.predicate.clone());
+        let response = self.trace_node_prepare_response(&query);
+        let manager = self.execute_node_query(query);
 
-        let initial_facts = self
-            .predicate_rows(&query_predicate)
-            .ok()
-            .flatten()
-            .map(|iter| {
-                iter.map(|row| {
-                    GroundAtom::new(
-                        query_predicate.clone(),
-                        row.into_iter().map(GroundTerm::from).collect::<Vec<_>>(),
-                    )
-                })
-                .collect::<Vec<_>>()
-            })
-            .unwrap_or_default();
-
-        let mut result = TraceNodeResult::default();
-
-        for fact in initial_facts {
-            result.combine(self.trace_node_recursive(&query.inner, fact, Vec::new()));
-        }
-
-        let mut elements = Vec::new();
-
-        for (address, pagination, facts) in result.iter() {
-            let predicate = if let Some(fact) = facts.first() {
-                fact.predicate()
-            } else {
-                continue;
-            };
-
-            let len_facts = facts.len();
-            let (start, count) = if let Some(pagination) = pagination {
-                (pagination.start, pagination.count)
-            } else {
-                (0, len_facts)
-            };
-
-            let entries = facts
-                .iter()
-                .map(|fact| {
-                    Some(TableEntryResponse {
-                        entry_id: self.predicate_rows(&predicate).ok().flatten()?.position(
-                            |row| fact.terms().map(|t| t.value()).collect::<Vec<_>>() == row,
-                        )?,
-                        terms: fact.terms().map(|term| term.value()).collect(),
-                    })
-                })
-                .skip(start)
-                .take(count)
-                .collect::<Option<Vec<_>>>()
-                .unwrap_or(vec![]);
-
-            let more = entries.len() + start < len_facts;
-
-            let possible_rules_above = self
-                .analysis
-                .predicate_to_rule_body
-                .get(&predicate)
-                .cloned()
-                .unwrap_or_default()
-                .into_iter()
-                .flat_map(|idx| {
-                    TraceRule::all_possible_single_head_rules(idx, self.program().rule(idx))
-                })
-                .collect::<Vec<_>>();
-
-            let possible_rules_below = self
-                .analysis
-                .predicate_to_rule_head
-                .get(&predicate)
-                .cloned()
-                .unwrap_or_default()
-                .into_iter()
-                .flat_map(|idx| {
-                    TraceRule::possible_rules_for_head_predicate(
-                        idx,
-                        self.program().rule(idx),
-                        &predicate,
-                    )
-                })
-                .collect::<Vec<_>>();
-
-            let element = TableEntriesForTreeNodesResponseElement {
-                predicate: predicate.to_string(),
-                entries,
-                pagination: PaginationResponse { start, more },
-                possible_rules_above,
-                possible_rules_below,
-                address: address.clone(),
-            };
-
-            elements.push(element);
-        }
-
-        TableEntriesForTreeNodesResponse { elements }
-    }
-
-    fn query_to_rule(&self, query: TableEntriesForTreeNodesQuery) -> NodeQueryRuleResult {
-        struct UniqueVariable {
-            count: usize,
-            prefix: String,
-        }
-
-        impl UniqueVariable {
-            pub fn initialize(prefix: String) -> Self {
-                Self { count: 0, prefix }
-            }
-
-            pub fn next_variable(&mut self) -> Variable {
-                self.count += 1;
-                Variable::universal(&format!("{}_{}", self.prefix, self.count))
-            }
-        }
-
-        let mut unique = UniqueVariable::initialize(String::from("_VAR"));
-
-        let mut result = NodeQueryRuleResult::default();
-        let mut output_table_counter: usize = 0;
-
-        let mut query_queue =
-            Vec::<(&TableEntriesForTreeNodesQueryInner, Tag, Vec<Variable>)>::new();
-
-        let start_predicate = Tag::new(query.predicate.clone());
-        let start_arity = self
-            .predicate_arity(&start_predicate)
-            .expect("predicate should exist");
-        let start_mapping = (0..start_arity)
-            .map(|_| unique.next_variable())
-            .collect::<Vec<_>>();
-
-        result.step = if let Some(start_rule) = query.inner.next.as_ref().map(|sub| &sub.rule) {
-            self.rule_history
-                .iter()
-                .rposition(|rule| *rule == *start_rule)
-                .unwrap_or(self.rule_history.len())
-        } else {
-            self.rule_history.len()
-        };
-
-        query_queue.push((&query.inner, start_predicate, start_mapping));
-
-        while let Some((query, predicate, mapping)) = query_queue.pop() {
-            for filter in &query.queries {
-                match filter {
-                    TableEntryQuery::Entry(_id) => unimplemented!(),
-                    TableEntryQuery::Query(_query_string) => continue, // TODO: Handle filters
-                }
-            }
-
-            if let Some(children) = &query.next {
-                let mut chase_rule = self.program.rules()[children.rule].clone();
-                for filter in chase_rule.positive_filters() {
-                    result.rule.add_positive_filter(filter.clone());
-                }
-
-                let head_atom = &chase_rule.head()[children.head_index];
-
-                let mut next_atom =
-                    VariableRuleAtom::new(predicate.clone(), Some(children.rule), Vec::default());
-
-                let mut substitution = HashMap::<Variable, Variable>::new();
-
-                // TODO: Consider aggregation
-                for (term_index, term) in head_atom.terms().enumerate() {
-                    match term {
-                        Primitive::Variable(variable) => {
-                            let target_variable = mapping[term_index].clone();
-                            substitution.insert(variable.clone(), target_variable.clone());
-
-                            if next_atom
-                                .terms()
-                                .find(|&term| term == &target_variable)
-                                .is_some()
-                            {
-                                next_atom.push(unique.next_variable());
-                            } else {
-                                next_atom.push(target_variable);
-                            }
-                        }
-                        Primitive::Ground(ground) => {
-                            next_atom.push(mapping[term_index].clone());
-
-                            result.rule.add_positive_filter(ChaseFilter::new(
-                                OperationTerm::Operation(Operation::new(
-                                    OperationKind::Equal,
-                                    vec![
-                                        OperationTerm::Primitive(Primitive::Variable(
-                                            mapping[term_index].clone(),
-                                        )),
-                                        OperationTerm::Primitive(Primitive::Ground(ground.clone())),
-                                    ],
-                                )),
-                            ));
-                        }
-                    }
-                }
-
-                let mut next_head_atom = next_atom.to_primitive_atom();
-                next_head_atom.set_predicate(Tag::new(format!("out_{}", output_table_counter)));
-                output_table_counter += 1;
-
-                result.rule.add_head_atom(next_head_atom);
-                result.rule.add_positive_atom(next_atom);
-
-                for variable in chase_rule.variables_mut() {
-                    if let Some(new) = substitution.get(variable) {
-                        *variable = new.clone();
-                    } else {
-                        let new_variable = unique.next_variable();
-                        substitution.insert(variable.clone(), new_variable.clone());
-                        *variable = new_variable;
-                    }
-                }
-
-                for (child, body_atom) in children
-                    .children
-                    .iter()
-                    .zip(chase_rule.positive_body().iter())
-                {
-                    let next_predicate = body_atom.predicate().clone();
-                    let next_mapping = body_atom.terms().cloned().collect::<Vec<_>>();
-
-                    query_queue.push((child, next_predicate, next_mapping));
-                }
-            } else {
-                let next_atom = VariableRuleAtom::new(predicate.clone(), None, mapping.clone());
-                let mut next_head_atom = next_atom.to_primitive_atom();
-                next_head_atom.set_predicate(Tag::new(format!("out_{}", output_table_counter)));
-                output_table_counter += 1;
-
-                result.rule.add_head_atom(next_head_atom);
-                result.rule.add_positive_atom(next_atom);
-            }
-        }
-
-        result
-    }
-
-    fn answer_from_node_result(&mut self, predicate: &Tag, trie: &Trie) -> Vec<TableEntryResponse> {
-        let mut result = Vec::with_capacity(trie.num_rows());
-
-        let trie_rows = self
-            .table_manager
-            .trie_row_iterator(trie)
-            .expect("error while constructing trie iterator")
-            .collect::<Vec<_>>();
-
-        for row in trie_rows {
-            let response = TableEntryResponse {
-                entry_id: self
-                    .table_manager
-                    .find_table_row(predicate, &row)
-                    .expect("unable to find row"),
-                terms: row,
-            };
-
-            result.push(response);
-        }
-
-        result
-    }
-
-    /// Tracing with CQs
-    pub fn trace_node_rule(&mut self, query: TableEntriesForTreeNodesQuery) {
-        let NodeQueryRuleResult {
-            rule,
-            step,
-            elements,
-        } = self.query_to_rule(query);
-        let mut variable_order = rule.default_order();
-
-        println!("{}", rule);
-
-        let trace_strategy =
-            RuleTracingStrategy::initialize(&rule, self.rule_history.clone()).unwrap();
-
-        let mut execution_plan = SubtableExecutionPlan::default();
-
-        trace_strategy.add_plan(
-            &self.table_manager,
-            &mut execution_plan,
-            &mut variable_order,
-            step,
-        );
-
-        let start = Instant::now();
-
-        let result = self
-            .table_manager
-            .execute_plan_trie(execution_plan)
-            .unwrap();
-
-        let duration = start.elapsed();
-
-        let num_rows = result
-            .iter()
-            .map(|table| table.num_rows())
-            .collect::<Vec<_>>();
-
-        println!("time: {:?}", duration);
-        println!("num_rows: {:?}", num_rows);
+        self.node_query_answer(&manager, response)
+            .unwrap_or_default()
     }
 }
 
@@ -1564,61 +1064,4 @@ fn partial_grounding_for_rule_head_and_fact(
     }
 
     Some(grounding)
-}
-
-#[derive(Debug, Default)]
-struct TraceNodeResult {
-    map: HashMap<TreeAddress, Vec<GroundAtom>>,
-    pagination: HashMap<TreeAddress, Option<PaginationQuery>>,
-}
-
-impl TraceNodeResult {
-    pub fn single(
-        address: TreeAddress,
-        pagination_query: Option<PaginationQuery>,
-        fact: GroundAtom,
-    ) -> Self {
-        let mut map = HashMap::new();
-        let mut pagination = HashMap::new();
-
-        map.insert(address.clone(), vec![fact]);
-        pagination.insert(address, pagination_query);
-
-        Self { map, pagination }
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.map.is_empty()
-    }
-
-    pub fn combine(&mut self, other: Self) {
-        for (address, atoms) in other.map {
-            match self.map.entry(address) {
-                Entry::Occupied(mut entry) => {
-                    entry.get_mut().extend(atoms);
-                }
-                Entry::Vacant(entry) => {
-                    entry.insert(atoms);
-                }
-            }
-        }
-
-        for (address, pagination) in other.pagination {
-            match self.pagination.entry(address) {
-                Entry::Occupied(_) => {}
-                Entry::Vacant(entry) => {
-                    entry.insert(pagination);
-                }
-            }
-        }
-    }
-
-    pub fn iter(
-        &self,
-    ) -> impl Iterator<Item = (&TreeAddress, Option<&PaginationQuery>, &Vec<GroundAtom>)> {
-        self.map.iter().map(move |(addr, atoms)| {
-            let pagination_opt = self.pagination.get(addr).and_then(|x| x.as_ref());
-            (addr, pagination_opt, atoms)
-        })
-    }
 }
