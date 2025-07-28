@@ -19,8 +19,8 @@ use crate::{
 };
 
 use super::{
-    operations::append::{head_instruction_from_atom, node_head_instruction, HeadInstruction},
     HeadStrategy,
+    operations::append::{HeadInstruction, head_instruction_from_atom, node_head_instruction},
 };
 
 /// Strategy for computing the results for a datalog (non-existential) rule.

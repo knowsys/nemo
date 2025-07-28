@@ -2,6 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 
+use itertools::Itertools;
 use nemo_physical::{
     management::{
         database::{
@@ -180,6 +181,15 @@ fn variable_translation(
                             .aggregate()
                             .map(|aggregate| aggregate.output_variable()))
                 {
+                    if !rule
+                        .positive_body()
+                        .iter()
+                        .flat_map(|atom| atom.variables())
+                        .contains(variable)
+                    {
+                        order.push(variable.clone());
+                    }
+
                     head_variables.push(variable.clone());
 
                     false
@@ -443,7 +453,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             {
                 manager.add_final_valid_table(&address, id);
             } else {
-                println!("consolidation failed");
+                println!("consolidation failed (valid)");
             }
 
             if let Some(id) =
@@ -451,7 +461,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             {
                 manager.add_final_assignment_table(&address, id);
             } else {
-                println!("consolidation failed");
+                println!("consolidation failed (assignment)");
             }
         } else {
             // TODO: Projection optimization
@@ -468,7 +478,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             {
                 manager.add_final_valid_table(&address, id);
             } else {
-                println!("consolidation failed");
+                println!("consolidation failed (leaf)");
             }
         }
     }
