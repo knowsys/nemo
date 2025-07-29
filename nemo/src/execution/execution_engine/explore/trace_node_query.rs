@@ -1,4 +1,4 @@
-//! This module contains code for executing experiments regarding node queries.
+//! This module contains code for implementing trace node queries.
 
 use std::collections::{HashMap, HashSet};
 
@@ -164,6 +164,10 @@ impl TreeTableManager {
     pub fn final_assignment_table(&self, address: &TreeAddress) -> Option<PermanentTableId> {
         self.assignment_final.get(address).cloned()
     }
+
+    pub fn results(&self) -> impl Iterator<Item = PermanentTableId> {
+        self.result.iter().map(|(_, id)| *id)
+    }
 }
 
 fn variable_translation(
@@ -227,10 +231,12 @@ fn valid_tables_plan(
     address: &TreeAddress,
     rule: &ChaseRule,
     head_index: usize,
+    discarded_columns: &[usize],
     order: &VariableOrder,
     head_id: PermanentTableId,
     step: usize,
-) -> (ExecutionPlan, ExecutionId, ExecutionId) {
+    need_valid: bool,
+) -> (ExecutionPlan, Option<ExecutionId>, ExecutionId) {
     let mut plan = ExecutionPlan::default();
 
     let (variable_translation, order, head_variables) =
@@ -253,7 +259,17 @@ fn valid_tables_plan(
     };
 
     let order_set = order.iter().cloned().collect::<HashSet<_>>();
-    let head_set = head_variables.iter().cloned().collect::<HashSet<_>>();
+    let head_set = head_variables
+        .iter()
+        .enumerate()
+        .filter_map(|(index, variable)| {
+            if !discarded_columns.contains(&index) {
+                Some(variable.clone())
+            } else {
+                None
+            }
+        })
+        .collect::<HashSet<_>>();
     let head_set = head_set
         .union(&aggregate_set)
         .cloned()
@@ -320,10 +336,29 @@ fn valid_tables_plan(
 
     let id_assignment = plan.write_permanent(node_negation.clone(), "assignment", "assignment");
 
-    let node_result = plan.projectreorder(markers_head, node_negation);
-    let id_valid = plan.write_permanent(node_result, "valid", "valid");
+    let id_valid = if need_valid {
+        let node_result = plan.projectreorder(markers_head, node_negation);
+        let id_valid = plan.write_permanent(node_result, "valid", "valid");
+        Some(id_valid)
+    } else {
+        None
+    };
 
     (plan, id_valid, id_assignment)
+}
+
+fn unique_variables(rule: &ChaseRule) -> HashSet<Variable> {
+    let mut result = HashMap::<Variable, usize>::new();
+
+    for variable in rule.variables() {
+        let value = result.entry(variable.clone()).or_insert(0);
+        *value += 1;
+    }
+
+    result
+        .into_iter()
+        .filter_map(|(variable, count)| if count == 1 { Some(variable) } else { None })
+        .collect::<HashSet<_>>()
 }
 
 fn result_tables_plan(
@@ -364,6 +399,10 @@ fn consolidate_valid_tables(
     manager: &TreeTableManager,
     address: &TreeAddress,
 ) -> Option<PermanentTableId> {
+    if manager.valid_tables(address).count() == 1 {
+        return Some(manager.valid_tables(address).next().unwrap());
+    }
+
     let mut plan = ExecutionPlan::default();
     let mut node_union = plan.union_empty(OperationTable::default());
     for table in manager.valid_tables(address) {
@@ -375,11 +414,41 @@ fn consolidate_valid_tables(
     Some(result_id)
 }
 
+fn ignore_discarded_columns_base(
+    database: &mut DatabaseInstance,
+    id: PermanentTableId,
+    arity: usize,
+    discarded_columns: &[usize],
+) -> Option<PermanentTableId> {
+    let markers = OperationTable::new_unique(arity);
+    let mut single_markers = OperationTable::default();
+    for discarded in discarded_columns {
+        single_markers.push(markers.get(*discarded).clone());
+    }
+
+    let mut plan = ExecutionPlan::default();
+    let node_load = plan.fetch_table(markers, id);
+    let node_single = plan.single(node_load, single_markers);
+
+    plan.write_permanent(node_single, "single", "single");
+    database
+        .execute_plan(plan)
+        .ok()
+        .expect("error while executing plan")
+        .iter()
+        .next()
+        .map(|(_, &result_id)| result_id)
+}
+
 fn consolidate_assignment_tables(
     database: &mut DatabaseInstance,
     manager: &TreeTableManager,
     address: &TreeAddress,
 ) -> Option<PermanentTableId> {
+    if manager.assignment_tables(address).count() == 1 {
+        return Some(manager.assignment_tables(address).next().unwrap());
+    }
+
     let mut plan = ExecutionPlan::default();
     let mut node_union = plan.union_empty(OperationTable::default());
     for table in manager.assignment_tables(address) {
@@ -458,15 +527,18 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         }
     }
 
-    pub(crate) fn build_valid_nodes(
+    fn build_valid_nodes(
         &mut self,
         manager: &mut TreeTableManager,
         node: &TableEntriesForTreeNodesQueryInner,
         address: TreeAddress,
         predicate: &Tag,
+        discarded_columns: &[usize],
         before_step: usize,
     ) {
         if let Some(successor) = &node.next {
+            let simple_successor = successor.children.iter().all(|child| child.is_simple());
+
             let rule = self.program.rules()[successor.rule].clone();
             let order =
                 self.analysis.rule_analysis[successor.rule].promising_variable_orders[0].clone();
@@ -478,6 +550,8 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                     .unwrap_or(self.rule_history.len())
             };
 
+            let unique_variables = unique_variables(&rule);
+
             for (index, (atom, node_atom)) in rule
                 .positive_body()
                 .iter()
@@ -487,11 +561,19 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 let mut next_address = address.clone();
                 next_address.push(index);
 
+                let mut discarded_columns = Vec::default();
+                for (term_index, variable) in atom.terms().enumerate() {
+                    if unique_variables.contains(variable) {
+                        discarded_columns.push(term_index);
+                    }
+                }
+
                 self.build_valid_nodes(
                     manager,
                     node_atom,
                     next_address,
                     &atom.predicate(),
+                    &discarded_columns,
                     next_step,
                 );
             }
@@ -508,9 +590,11 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                     &address,
                     &rule,
                     successor.head_index,
+                    discarded_columns,
                     &order,
                     id,
                     step,
+                    !simple_successor,
                 );
 
                 let execution_results = self
@@ -519,9 +603,14 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                     .execute_plan(plan)
                     .expect("execute plan failed");
 
-                if let Some(result_id) = execution_results.get(&id_valid) {
-                    manager.add_valid_table(&address, step, *result_id);
+                if let Some(id_valid) = id_valid {
+                    if let Some(result_id) = execution_results.get(&id_valid) {
+                        manager.add_valid_table(&address, step, *result_id);
+                    }
+                } else {
+                    manager.add_valid_table(&address, step, id);
                 }
+
                 if let Some(result_id) = execution_results.get(&id_assignment) {
                     manager.add_assignment_table(&address, step, *result_id);
                 }
@@ -530,12 +619,9 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             if let Some(id) =
                 consolidate_valid_tables(self.table_manager.database_mut(), manager, &address)
             {
-                let valid_final_count = self.table_manager.database().count_rows_in_memory(id);
-                println!("Address: {:?}, count: {}", address, valid_final_count);
-
                 manager.add_final_valid_table(&address, id);
             } else {
-                println!("consolidation failed (valid)");
+                println!("consolidation failed (valid): {:?}", address);
             }
 
             if let Some(id) =
@@ -546,13 +632,26 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 println!("consolidation failed (assignment)");
             }
         } else {
-            // TODO: Projection optimization
-
             for (step, id) in self
                 .table_manager
                 .tables_in_range_steps(predicate, 0..before_step)
             {
-                manager.add_valid_table(&address, step, id);
+                if discarded_columns.is_empty() {
+                    manager.add_valid_table(&address, step, id);
+                } else {
+                    let arity = self.table_manager.arity(predicate);
+
+                    if let Some(ignored_id) = ignore_discarded_columns_base(
+                        self.table_manager.database_mut(),
+                        id,
+                        arity,
+                        discarded_columns,
+                    ) {
+                        manager.add_valid_table(&address, step, ignored_id);
+                    } else {
+                        manager.add_valid_table(&address, step, id);
+                    }
+                }
             }
 
             if let Some(id) =
@@ -565,7 +664,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         }
     }
 
-    pub(crate) fn filter_nodes(
+    fn filter_nodes(
         &mut self,
         manager: &mut TreeTableManager,
         node: &TableEntriesForTreeNodesQueryInner,
@@ -581,6 +680,16 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         }
 
         if let Some(successor) = &node.next {
+            // let mut probe_address = address.clone();
+            // probe_address.push(0);
+            // if !successor.children.is_empty()
+            //     && manager.final_assignment_table(&probe_address).is_none()
+            // {
+            //     todo!();
+
+            //     return true;
+            // }
+
             let rule = self.program.rules()[successor.rule].clone();
             let order =
                 self.analysis.rule_analysis[successor.rule].promising_variable_orders[0].clone();
@@ -634,17 +743,25 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
     pub(crate) fn execute_node_query(
         &mut self,
-        query: TableEntriesForTreeNodesQuery,
+        query: &TableEntriesForTreeNodesQuery,
     ) -> TreeTableManager {
         let mut manager = TreeTableManager::default();
         let address = TreeAddress::default();
-        let predicate = Tag::new(query.predicate);
+        let predicate = Tag::new(query.predicate.clone());
         let node = &query.inner;
         let before_step = self.rule_history.len();
+        let discarded_columns = Vec::default();
 
         self.build_query_restriction(&mut manager, node, address.clone(), &predicate);
 
-        self.build_valid_nodes(&mut manager, node, address.clone(), &predicate, before_step);
+        self.build_valid_nodes(
+            &mut manager,
+            node,
+            address.clone(),
+            &predicate,
+            &discarded_columns,
+            before_step,
+        );
 
         let _ = self.filter_nodes(&mut manager, node, address.clone());
 

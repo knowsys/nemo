@@ -47,7 +47,7 @@ pub(crate) enum ExecutionTreeNode {
     },
     Single {
         generator: GeneratorSingle,
-        subnode: ExecutionTreeLeaf,
+        subnode: ExecutionTreeOperation,
     },
 }
 
@@ -135,14 +135,7 @@ impl ExecutionTree {
                 ascii_tree::Tree::Node(format!("{generator:?}"), vec![subnode_tree])
             }
             ExecutionTreeNode::Single { generator, subnode } => {
-                let subnode_tree = match subnode {
-                    ExecutionTreeLeaf::LoadTable(_) => {
-                        ascii_tree::Tree::Leaf(vec![format!("Permanent Table")])
-                    }
-                    ExecutionTreeLeaf::FetchComputedTable(_) => {
-                        ascii_tree::Tree::Leaf(vec![format!("New Table")])
-                    }
-                };
+                let subnode_tree = Self::ascii_tree_recursive(subnode);
 
                 ascii_tree::Tree::Node(format!("{generator:?}"), vec![subnode_tree])
             }

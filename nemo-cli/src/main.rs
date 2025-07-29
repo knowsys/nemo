@@ -237,7 +237,7 @@ fn handle_tracing_node(cli: &CliApp, engine: &mut DefaultExecutionEngine) -> Res
         let node_query: TableEntriesForTreeNodesQuery =
             serde_json::from_str(&query_string).expect("Unable to parse json file");
 
-        let result = engine.trace_node(node_query);
+        let result = engine.trace_node(&node_query);
 
         let json = serde_json::to_string_pretty(&result).unwrap();
         println!("{}", json);
@@ -246,13 +246,36 @@ fn handle_tracing_node(cli: &CliApp, engine: &mut DefaultExecutionEngine) -> Res
     Ok(())
 }
 
-fn handle_exeriments(cli: &CliApp, engine: &mut DefaultExecutionEngine) -> Result<(), CliError> {
-    if cli.experiments.create_queries {
-        engine.collect_node_queries();
+fn handle_provenance_node(
+    cli: &CliApp,
+    engine: &mut DefaultExecutionEngine,
+) -> Result<(), CliError> {
+    if let Some(query_file) = &cli.provenance_node.provenance_node_json {
+        let query_string = read_to_string(query_file).expect("Unable to read file");
+
+        let node_query: TableEntriesForTreeNodesQuery =
+            serde_json::from_str(&query_string).expect("Unable to parse json file");
+
+        let result = engine.provenance_node(&node_query);
+
+        let json = serde_json::to_string_pretty(&result).unwrap();
+        println!("{}", json);
+    }
+
+    Ok(())
+}
+
+fn handle_experiments(cli: &CliApp, engine: &mut DefaultExecutionEngine) -> Result<(), CliError> {
+    if let Some(num_queries) = cli.experiments.create_queries {
+        engine.collect_node_queries(num_queries);
     }
 
     if let Some(directory) = &cli.experiments.trace_node_query {
         engine.experiment_node_queries(directory);
+    }
+
+    if let Some(directory) = &cli.experiments.provenance_node_query {
+        engine.experiment_provenance_queries(directory);
     }
 
     Ok(())
@@ -346,7 +369,7 @@ fn run(mut cli: CliApp) -> Result<(), CliError> {
 
     TimedCode::instance().stop();
 
-    let (print_summary, print_times, print_memory) = match cli.reporting {
+    let (mut print_summary, print_times, print_memory) = match cli.reporting {
         Reporting::All => (true, true, true),
         Reporting::Short => (true, false, false),
         Reporting::Time => (true, true, false),
@@ -354,6 +377,13 @@ fn run(mut cli: CliApp) -> Result<(), CliError> {
         Reporting::None => (false, false, false),
         Reporting::Auto => (!stdout_used, false, false),
     };
+
+    if cli.experiments.create_queries.is_some()
+        || cli.experiments.trace_node_query.is_some()
+        || cli.experiments.provenance_node_query.is_some()
+    {
+        print_summary = false;
+    }
 
     if print_summary {
         print_finished_message(
@@ -368,11 +398,12 @@ fn run(mut cli: CliApp) -> Result<(), CliError> {
         print_memory_details(&engine);
     }
 
-    handle_exeriments(&cli, &mut engine)?;
+    handle_experiments(&cli, &mut engine)?;
 
     handle_tracing(&cli, &mut engine)?;
     handle_tracing_tree(&cli, &mut engine)?;
-    handle_tracing_node(&cli, &mut engine)
+    handle_tracing_node(&cli, &mut engine)?;
+    handle_provenance_node(&cli, &mut engine)
 }
 
 fn main() {

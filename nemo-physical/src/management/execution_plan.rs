@@ -337,7 +337,6 @@ impl ExecutionPlan {
         let new_operation = ExecutionOperation::Single(subnode.clone(), single_columns);
 
         let single_node = self.push_and_return_reference(new_operation, subnode.markers_cloned());
-        self.write_temporary(subnode, "Input for Single");
         self.write_temporary(single_node.clone(), "Single");
 
         single_node
@@ -825,23 +824,35 @@ impl ExecutionPlan {
             }
             ExecutionOperation::Single(subnode, single) => {
                 let marker_subnode = subnode.markers_cloned();
-                let subtree: ExecutionTreeLeaf = if let ExecutionTreeOperation::Leaf(leaf) =
-                    Self::execution_node(
-                        root_node_id,
-                        subnode.clone(),
-                        ColumnOrder::default(),
-                        output_nodes,
-                        computed_trees,
-                        computed_trees_map,
-                        loaded_tables,
-                    )
-                    .operation()
-                    .expect("No sub node should be a project")
-                {
-                    leaf
-                } else {
-                    unreachable!("Subnode of a project must be a load instruction");
-                };
+                let subtree = Self::execution_node(
+                    root_node_id,
+                    subnode.clone(),
+                    order,
+                    output_nodes,
+                    computed_trees,
+                    computed_trees_map,
+                    loaded_tables,
+                )
+                .operation()
+                .expect("No sub node should be a project");
+
+                // let subtree: ExecutionTreeLeaf = if let ExecutionTreeOperation::Leaf(leaf) =
+                //     Self::execution_node(
+                //         root_node_id,
+                //         subnode.clone(),
+                //         ColumnOrder::default(),
+                //         output_nodes,
+                //         computed_trees,
+                //         computed_trees_map,
+                //         loaded_tables,
+                //     )
+                //     .operation()
+                //     .expect("No sub node should be a project")
+                // {
+                //     leaf
+                // } else {
+                //     unreachable!("Subnode of a project must be a load instruction");
+                // };
 
                 ExecutionTreeNode::Single {
                     generator: GeneratorSingle::new(marker_subnode, single.clone()),

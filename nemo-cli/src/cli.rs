@@ -158,9 +158,11 @@ impl OutputArgs {
 #[derive(Debug, clap::Args)]
 pub(crate) struct ExperimentArgs {
     #[arg(long = "x-create-queries")]
-    pub create_queries: bool,
+    pub create_queries: Option<usize>,
     #[arg(long = "x-trace-node-query")]
     pub trace_node_query: Option<PathBuf>,
+    #[arg(long = "x-provenance-node-query")]
+    pub provenance_node_query: Option<PathBuf>,
 }
 
 /// Cli arguments related to tracing
@@ -195,6 +197,14 @@ pub(crate) struct TracingNodeArgs {
     pub(crate) trace_node_json: Option<PathBuf>,
 }
 
+/// Cli arguments related to type 2 provenance
+#[derive(Debug, clap::Args)]
+pub(crate) struct ProvenanceNodeArgs {
+    /// Query formatted as json specifying the facts that should be traced
+    #[arg(long = "provenance-node")]
+    pub(crate) provenance_node_json: Option<PathBuf>,
+}
+
 /// Nemo CLI
 #[derive(clap::Parser, Debug)]
 #[command(author, version, about)]
@@ -217,6 +227,9 @@ pub struct CliApp {
     /// Arguments related to advanded tracing (node queries)
     #[command(flatten)]
     pub(crate) tracing_node: TracingNodeArgs,
+    /// Arguments related to advanded tracing (provenancenode queries)
+    #[command(flatten)]
+    pub(crate) provenance_node: ProvenanceNodeArgs,
     /// Control amount of reporting printed by the program
     #[arg(long = "report", value_enum, default_value_t)]
     pub(crate) reporting: Reporting,

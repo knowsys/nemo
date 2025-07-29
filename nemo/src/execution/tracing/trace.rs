@@ -7,13 +7,13 @@ use std::{
 };
 
 use ascii_tree::write_tree;
-use indexmap::{set::MutableValues, IndexSet};
+use indexmap::{IndexSet, set::MutableValues};
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph_graphml::GraphMl;
 use serde::Serialize;
 
 use crate::{
-    chase_model::components::atom::{ground_atom::GroundAtom, ChaseAtom},
+    chase_model::components::atom::{ChaseAtom, ground_atom::GroundAtom},
     execution::tracing::node_query::{
         TableEntriesForTreeNodesQuery, TableEntriesForTreeNodesQueryInner,
         TableEntriesForTreeNodesQuerySuccessor,
@@ -260,6 +260,18 @@ pub enum ExecutionTraceTree {
     Fact(GroundAtom),
     /// Node represents a derived fact
     Rule(TraceTreeRuleApplication, Vec<ExecutionTraceTree>),
+}
+
+impl ExecutionTraceTree {
+    /// Return the number of nodes in this tree.
+    pub fn node_count(&self) -> usize {
+        match self {
+            ExecutionTraceTree::Fact(_) => 1,
+            ExecutionTraceTree::Rule(_, trees) => {
+                1 + trees.iter().map(|tree| tree.node_count()).sum::<usize>()
+            }
+        }
+    }
 }
 
 /// Type of labels for [DiGraph] representation of [ExecutionTrace]
@@ -663,9 +675,9 @@ mod test {
             components::{
                 atom::Atom,
                 rule::Rule,
-                term::primitive::{variable::Variable, Primitive},
+                term::primitive::{Primitive, variable::Variable},
             },
-            programs::{program::Program, ProgramWrite},
+            programs::{ProgramWrite, program::Program},
             substitution::Substitution,
             translation::TranslationComponent,
         },

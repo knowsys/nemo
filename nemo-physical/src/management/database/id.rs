@@ -21,7 +21,7 @@ pub trait TableId: Debug + Default + Display + Copy + Clone + Eq + PartialEq + H
 ///
 /// Note that an one [PermanentTableId] may represent tables,
 /// which contain the same content but in different orders.
-#[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Hash)]
+#[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub struct PermanentTableId(usize);
 
 impl Display for PermanentTableId {

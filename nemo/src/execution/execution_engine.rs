@@ -1078,15 +1078,27 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         TableEntriesForTreeNodesResponse { elements }
     }
 
-    /// Evauate a [TableEntriesForTreeNodesQuery].
+    /// Evaluate a [TableEntriesForTreeNodesQuery].
     pub fn trace_node(
         &mut self,
-        query: TableEntriesForTreeNodesQuery,
+        query: &TableEntriesForTreeNodesQuery,
     ) -> TableEntriesForTreeNodesResponse {
-        let response = self.trace_node_prepare_response(&query);
+        let response = self.trace_node_prepare_response(query);
         let manager = self.execute_node_query(query);
 
         self.node_query_answer(&manager, response)
+            .unwrap_or_default()
+    }
+
+    /// Evaluate a [TableEntriesForTreeNodesQuery] (provenance).
+    pub fn provenance_node(
+        &mut self,
+        query: &TableEntriesForTreeNodesQuery,
+    ) -> TableEntriesForTreeNodesResponse {
+        let response = self.trace_node_prepare_response(query);
+        let manager = self.execute_provenance_query(query);
+
+        self.node_query_answer_provenance(&manager, response)
             .unwrap_or_default()
     }
 }
