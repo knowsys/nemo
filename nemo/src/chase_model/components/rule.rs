@@ -148,6 +148,10 @@ impl ChaseRule {
         &self.negative.filters
     }
 
+    pub(crate) fn negative_atoms(&self) -> &Vec<VariableAtom> {
+        &self.negative.atoms
+    }
+
     /// Return the aggregation that will be evaluated during this rule's application.
     pub(crate) fn aggregate(&self) -> Option<&ChaseAggregate> {
         self.aggregation.aggregate.as_ref()

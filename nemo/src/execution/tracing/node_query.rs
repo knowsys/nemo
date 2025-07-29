@@ -36,14 +36,33 @@ impl TableEntriesForTreeNodesQueryInner {
     /// Return the number of nodes contained in this query
     pub fn num_nodes(&self) -> usize {
         if let Some(successor) = &self.next {
-            successor
+            1 + successor
                 .children
                 .iter()
                 .map(|child| child.num_nodes())
-                .sum()
+                .sum::<usize>()
         } else {
             1
         }
+    }
+
+    /// Return the maximal depth of this tree
+    pub fn max_depth(&self) -> usize {
+        if let Some(successor) = &self.next {
+            1 + successor
+                .children
+                .iter()
+                .map(|child| child.num_nodes())
+                .max()
+                .unwrap_or_default()
+        } else {
+            1
+        }
+    }
+
+    /// Return whether there is no restriction expressed in this node.
+    pub fn is_simple(&self) -> bool {
+        self.queries.is_empty() && self.next.is_none()
     }
 }
 
@@ -63,6 +82,11 @@ impl TableEntriesForTreeNodesQuery {
     /// Return the number of nodes contained in this query
     pub fn num_nodes(&self) -> usize {
         self.inner.num_nodes()
+    }
+
+    /// Return the maximal depth of this query
+    pub fn max_depth(&self) -> usize {
+        self.inner.max_depth()
     }
 }
 

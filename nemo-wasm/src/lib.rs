@@ -6,29 +6,29 @@ use gloo_utils::format::JsValueSerdeExt;
 use js_sys::{Array, Reflect, Set, Uint8Array};
 use models::TableResponseBaseTableEntries;
 use thiserror::Error;
-use wasm_bindgen::{prelude::wasm_bindgen, JsCast, JsValue};
+use wasm_bindgen::{JsCast, JsValue, prelude::wasm_bindgen};
 use web_sys::{Blob, FileReaderSync};
 
 use nemo::{
     datavalues::{AnyDataValue, DataValue},
     error::ReadingError,
     execution::{
-        tracing::trace::{ExecutionTrace, ExecutionTraceTree, TraceFactHandle},
         ExecutionEngine,
+        tracing::trace::{ExecutionTrace, ExecutionTraceTree, TraceFactHandle},
     },
     io::{
+        ImportManager,
         formats::FileFormatMeta,
         resource_providers::{ResourceProvider, ResourceProviders},
-        ImportManager,
     },
     rule_model::{
         components::{
             fact::Fact,
             output::Output,
             tag::Tag,
-            term::{primitive::Primitive, Term},
+            term::{Term, primitive::Primitive},
         },
-        programs::{program::Program, ProgramRead, ProgramWrite},
+        programs::{ProgramRead, ProgramWrite, program::Program},
         translation::ProgramParseReport,
     },
 };
@@ -97,7 +97,7 @@ impl NemoProgram {
             Err((_, report)) => {
                 return Err(NemoError(WasmOrInternalNemoError::Parser(format!(
                     "{report}"
-                ))))
+                ))));
             }
         };
 
@@ -347,7 +347,7 @@ impl NemoEngine {
         predicate: String,
         sync_access_handle: web_sys::FileSystemSyncAccessHandle,
     ) -> Result<(), NemoError> {
-        use nemo::io::{formats::dsv::DsvHandler, ExportManager};
+        use nemo::io::{ExportManager, formats::dsv::DsvHandler};
 
         let identifier = Tag::from(predicate.clone());
 
@@ -552,7 +552,7 @@ impl NemoEngine {
             table_entries_for_tree_nodes_query,
         );
 
-        let response = self.engine.trace_node(query);
+        let response = self.engine.trace_node(&query);
 
         let table_entries_for_tree_nodes_response = response
             .elements

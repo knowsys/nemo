@@ -7,7 +7,7 @@ use std::{
     path::Path,
 };
 
-use rand::{seq::SliceRandom, thread_rng};
+use rand::{rngs::ThreadRng, seq::SliceRandom, thread_rng};
 
 use itertools::Itertools;
 
@@ -22,6 +22,7 @@ use crate::{
 };
 
 const COLLECT_OUTPUT_DIR: &'static str = "output";
+const MAX_TREE_PER_FACT: usize = 10;
 
 impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     /// Collect all facts derived during the chase.
@@ -41,7 +42,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         facts
     }
 
-    fn all_subtrees(tree: &ExecutionTraceTree) -> Vec<ExecutionTraceTree> {
+    fn all_subtrees(tree: &ExecutionTraceTree, rng: &mut ThreadRng) -> Vec<ExecutionTraceTree> {
         let tree_empty =
             ExecutionTraceTree::Fact(GroundAtom::new(Tag::new(String::default()), vec![]));
 
@@ -51,8 +52,9 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 let mut subtree_list = Vec::default();
 
                 for subtree in subtrees {
-                    let mut choices = Self::all_subtrees(subtree);
-                    choices.push(tree_empty.clone());
+                    let mut choices = Self::all_subtrees(subtree, rng);
+                    choices.shuffle(rng);
+                    choices.insert(0, tree_empty.clone());
 
                     subtree_list.push(choices);
                 }
@@ -63,7 +65,11 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
         let mut results = Vec::default();
 
-        for combination in subtree_list.into_iter().multi_cartesian_product().take(100) {
+        for combination in subtree_list
+            .into_iter()
+            .multi_cartesian_product()
+            .take(MAX_TREE_PER_FACT)
+        {
             let new_tree = ExecutionTraceTree::Rule(rule_application.clone(), combination);
             results.push(new_tree);
         }
@@ -72,30 +78,41 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     }
 
     /// Compute all possible node queries and save them to a csv
-    pub fn collect_node_queries(&mut self) {
+    pub fn collect_node_queries(&mut self, num_queries: usize) {
         let mut rng = thread_rng();
 
-        let facts = self
-            .all_facts()
-            .choose_multiple(&mut rng, 10000)
-            .cloned()
-            .collect::<Vec<_>>();
+        let mut facts = self.all_facts();
+        facts.shuffle(&mut rng);
+        facts = facts
+            .into_iter()
+            .take(num_queries * MAX_TREE_PER_FACT * 100)
+            .collect();
 
-        let (trace, handles) = self.trace(facts).expect("error while tracing");
+        let (trace, mut handles) = self.trace(facts).expect("error while tracing");
+        handles.shuffle(&mut rng);
+
         let num_facts = handles.len();
 
         let mut query_map = HashMap::<TableEntriesForTreeNodesQuery, usize>::default();
 
-        for (index, handle) in handles.into_iter().enumerate() {
+        'fact_loop: for (index, handle) in handles.into_iter().enumerate() {
             if let Some(tree) = trace.tree(handle) {
-                for subtree in Self::all_subtrees(&tree) {
+                for subtree in Self::all_subtrees(&tree, &mut rng) {
+                    if subtree.node_count() <= 1 {
+                        continue;
+                    }
+
                     let query = subtree.to_node_query();
 
                     *query_map.entry(query).or_insert(0) += 1;
+
+                    if num_queries > 0 && query_map.len() >= num_queries {
+                        break 'fact_loop;
+                    }
                 }
             }
 
-            if index % 1000 == 0 {
+            if index % 10 == 0 {
                 println!("Progress: {}/{}", index + 1, num_facts);
             }
         }
@@ -117,7 +134,11 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 .expect("failed to write file");
 
             data_file
-                .write_fmt(format_args!("{multiplicity}\n"))
+                .write_fmt(format_args!(
+                    "{multiplicity},{},{}\n",
+                    query.num_nodes(),
+                    query.max_depth()
+                ))
                 .expect("failed to write in file");
         }
     }

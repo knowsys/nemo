@@ -82,6 +82,22 @@ pub struct DatabaseInstance {
 
 // Return basic information about tables managed by the database
 impl DatabaseInstance {
+    /// Return the current id
+    pub fn current_id(&self) -> (PermanentTableId, StorageId) {
+        (self.current_id, self.reference_manager.current_storage_id())
+    }
+
+    /// Delete everything starting from the given id
+    pub fn delete_from(&mut self, permanent_id: PermanentTableId, storage_id: StorageId) {
+        self.reference_manager
+            .delete_tables_from(storage_id, permanent_id);
+
+        self.table_infos
+            .retain(|existing_id, _| *existing_id < permanent_id);
+
+        self.current_id = permanent_id;
+    }
+
     /// Return the current number of tables.
     pub fn num_tables(&self) -> usize {
         self.table_infos.len()
@@ -432,12 +448,13 @@ impl DatabaseInstance {
                 (trie, vec![])
             }
             ExecutionTreeNode::Single { generator, subnode } => {
-                let trie = self
-                    .evaluate_tree_leaf(storage, subnode)
-                    .map(|scan| generator.apply_operation(scan))
-                    .unwrap_or(Trie::empty(0));
-
-                (trie, vec![])
+                if let Some(trie_scan) = self.evaluate_operation(&self.dictionary, storage, subnode)
+                {
+                    let trie = generator.apply_operation(trie_scan);
+                    (trie, vec![])
+                } else {
+                    (Trie::empty(0), vec![Trie::empty(0); dependent.len()])
+                }
             }
         }
     }
