@@ -84,9 +84,19 @@ pub(crate) struct TreeTableManager {
     valid_final: HashMap<TreeAddress, PermanentTableId>,
     assignment_final: HashMap<TreeAddress, PermanentTableId>,
     query: HashMap<TreeAddress, PermanentTableId>,
+    discard: HashMap<TreeAddress, Vec<usize>>,
 }
 
 impl TreeTableManager {
+    pub fn add_discard(&mut self, address: &TreeAddress, discard: &[usize]) {
+        self.discard
+            .insert(address.clone(), discard.iter().cloned().collect::<Vec<_>>());
+    }
+
+    pub fn discard(&self, address: &TreeAddress) -> &[usize] {
+        self.discard.get(address).expect("missing discard")
+    }
+
     pub fn add_valid_table(&mut self, address: &TreeAddress, step: usize, id: PermanentTableId) {
         self.valid
             .entry(address.clone())
@@ -239,7 +249,7 @@ fn valid_tables_plan(
 ) -> (ExecutionPlan, Option<ExecutionId>, ExecutionId) {
     let mut plan = ExecutionPlan::default();
 
-    let (variable_translation, order, head_variables) =
+    let (variable_translation, mut order, head_variables) =
         variable_translation(rule, head_index, order);
 
     let is_aggregate = Some(head_index) == rule.aggregate_head_index();
@@ -258,18 +268,27 @@ fn valid_tables_plan(
         HashSet::default()
     };
 
-    let order_set = order.iter().cloned().collect::<HashSet<_>>();
+    let body_set = rule.non_head_variables().cloned().collect::<HashSet<_>>();
     let head_set = head_variables
         .iter()
         .enumerate()
         .filter_map(|(index, variable)| {
-            if !discarded_columns.contains(&index) {
+            if !discarded_columns.contains(&index)
+            // && rule.head()[head_index].get(index).is_universal()
+            {
                 Some(variable.clone())
             } else {
                 None
             }
         })
         .collect::<HashSet<_>>();
+    let disjoint = head_set.is_disjoint(&body_set);
+
+    if disjoint {
+        order = order._restrict_to(&body_set);
+    }
+
+    let order_set = order.iter().cloned().collect::<HashSet<_>>();
     let head_set = head_set
         .union(&aggregate_set)
         .cloned()
@@ -282,8 +301,12 @@ fn valid_tables_plan(
     let node_head = plan.fetch_table(markers_head.clone(), head_id);
 
     let markers_join = variable_translation.operation_table(order.iter());
+
     let mut node_join = plan.join_empty(markers_join);
-    node_join.add_subnode(node_head);
+
+    if !disjoint {
+        node_join.add_subnode(node_head);
+    }
 
     if let Some(query_id) = manager.query.get(address) {
         let node_query = plan.fetch_table(markers_head.clone(), *query_id);
@@ -336,12 +359,16 @@ fn valid_tables_plan(
 
     let id_assignment = plan.write_permanent(node_negation.clone(), "assignment", "assignment");
 
-    let id_valid = if need_valid {
-        let node_result = plan.projectreorder(markers_head, node_negation);
-        let id_valid = plan.write_permanent(node_result, "valid", "valid");
-        Some(id_valid)
-    } else {
+    let id_valid = if disjoint {
         None
+    } else {
+        if need_valid {
+            let node_result = plan.projectreorder(markers_head, node_negation);
+            let id_valid = plan.write_permanent(node_result, "valid", "valid");
+            Some(id_valid)
+        } else {
+            None
+        }
     };
 
     (plan, id_valid, id_assignment)
@@ -536,6 +563,8 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         discarded_columns: &[usize],
         before_step: usize,
     ) {
+        manager.add_discard(&address, discarded_columns);
+
         if let Some(successor) = &node.next {
             let simple_successor = successor.children.iter().all(|child| child.is_simple());
 
@@ -629,7 +658,8 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             {
                 manager.add_final_assignment_table(&address, id);
             } else {
-                println!("consolidation failed (assignment)");
+                println!("consolidation failed (assignment): {:?}", address);
+                std::process::exit(0);
             }
         } else {
             for (step, id) in self
@@ -679,23 +709,31 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             }
         }
 
+        let discarded_columns = manager.discard(&address);
+
         if let Some(successor) = &node.next {
-            // let mut probe_address = address.clone();
-            // probe_address.push(0);
-            // if !successor.children.is_empty()
-            //     && manager.final_assignment_table(&probe_address).is_none()
-            // {
-            //     todo!();
-
-            //     return true;
-            // }
-
             let rule = self.program.rules()[successor.rule].clone();
             let order =
                 self.analysis.rule_analysis[successor.rule].promising_variable_orders[0].clone();
 
             let (variable_translation, order, head_variables) =
                 variable_translation(&rule, successor.head_index, &order);
+
+            let body_set = rule.non_head_variables().cloned().collect::<HashSet<_>>();
+            let head_set = head_variables
+                .iter()
+                .enumerate()
+                .filter_map(|(index, variable)| {
+                    if !discarded_columns.contains(&index)
+                    // && rule.head()[head_index].get(index).is_universal()
+                    {
+                        Some(variable.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect::<HashSet<_>>();
+            let disjoint = head_set.is_disjoint(&body_set);
 
             for (index, (atom, node_atom)) in rule
                 .positive_body()
@@ -708,28 +746,38 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
                 let atom_variables = atom.variables().cloned().collect::<Vec<_>>();
 
-                if let Some(plan) = result_tables_plan(
-                    manager,
-                    &next_address,
-                    &variable_translation,
-                    &head_variables,
-                    &order,
-                    &atom_variables,
-                ) {
-                    let Ok(results) = self.table_manager.database_mut().execute_plan(plan) else {
-                        println!("filter join failed");
-                        return false;
-                    };
+                if !disjoint {
+                    if let Some(plan) = result_tables_plan(
+                        manager,
+                        &next_address,
+                        &variable_translation,
+                        &head_variables,
+                        &order,
+                        &atom_variables,
+                    ) {
+                        let Ok(results) = self.table_manager.database_mut().execute_plan(plan)
+                        else {
+                            println!("filter join failed");
+                            return false;
+                        };
 
-                    let Some((_, result_id)) = results.iter().next() else {
-                        println!("filter join empty");
-                        return false;
-                    };
+                        let Some((_, result_id)) = results.iter().next() else {
+                            println!("filter join empty");
+                            return false;
+                        };
 
-                    manager.add_result_table(&next_address, *result_id);
+                        manager.add_result_table(&next_address, *result_id);
+                    } else {
+                        println!("no plan");
+                        return false;
+                    }
                 } else {
-                    println!("no plan");
-                    return false;
+                    if let Some(result_id) = manager.final_valid_table(&next_address) {
+                        manager.add_result_table(&next_address, result_id);
+                    } else {
+                        println!("missing valid table");
+                        return false;
+                    }
                 }
 
                 if !self.filter_nodes(manager, node_atom, next_address) {

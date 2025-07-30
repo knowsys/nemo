@@ -96,6 +96,13 @@ pub(crate) struct Row {
     pub change: usize,
 }
 
+#[derive(Debug, Clone)]
+enum Single {
+    Before,
+    At,
+    After,
+}
+
 /// A [StreamingIterator] for a [PartialTrieScan]
 #[derive(Debug, Clone)]
 pub(crate) struct RowScan<'a, Scan: PartialTrieScan<'a>> {
@@ -109,6 +116,8 @@ pub(crate) struct RowScan<'a, Scan: PartialTrieScan<'a>> {
     empty: bool,
     /// For each layer, holds the possible [StorageTypeName]s of that column in `trie_scan`
     possible_types: PossibleTypes,
+    /// Single
+    single: Single,
 
     /// Only derive one value for the last `existential` columns
     existential: usize,
@@ -143,6 +152,7 @@ impl<'a, Scan: PartialTrieScan<'a>> RowScan<'a, Scan> {
                 row: vec![StorageValueT::Id32(0); used_columns],
                 change: 0,
             },
+            single: Single::Before,
         }
     }
 
@@ -185,6 +195,13 @@ impl<'a, Scan: PartialTrieScan<'a>> StreamingIterator for RowScan<'a, Scan> {
             return;
         }
 
+        if self.existential == self.trie_scan.arity() {
+            if let Single::At = self.single {
+                self.single = Single::After;
+                return;
+            }
+        }
+
         if self.trie_scan.current_layer().is_none() {
             let first_type = self.possible_types.first_type(0);
             self.trie_scan.down(first_type);
@@ -194,6 +211,7 @@ impl<'a, Scan: PartialTrieScan<'a>> StreamingIterator for RowScan<'a, Scan> {
 
         while let Some(current_layer) = self.trie_scan.current_layer() {
             let is_last_layer = current_layer == self.trie_scan.arity() - 1;
+
             let current_type = self.possible_types.current_type(current_layer);
 
             if current_layer < self.current_row.change {
@@ -207,6 +225,8 @@ impl<'a, Scan: PartialTrieScan<'a>> StreamingIterator for RowScan<'a, Scan> {
                         let value = self.column_scan_current(layer, layer_type);
                         self.current_row.row[layer] = value;
                     }
+
+                    self.single = Single::At;
 
                     for _ in 0..self.existential {
                         self.trie_scan.up();
@@ -230,7 +250,9 @@ impl<'a, Scan: PartialTrieScan<'a>> StreamingIterator for RowScan<'a, Scan> {
     }
 
     fn get(&self) -> Option<&Self::Item> {
-        if self.trie_scan.current_layer().is_some() {
+        if self.trie_scan.current_layer().is_some()
+            || (self.existential == self.trie_scan.arity() && matches!(self.single, Single::At))
+        {
             Some(&self.current_row)
         } else {
             None
@@ -244,7 +266,9 @@ impl<'a, Scan: PartialTrieScan<'a>> Iterator for RowScan<'a, Scan> {
     fn next(&mut self) -> Option<Self::Item> {
         StreamingIterator::advance(self);
 
-        if self.trie_scan.current_layer().is_some() {
+        if self.trie_scan.current_layer().is_some()
+            || (self.existential == self.trie_scan.arity() && matches!(self.single, Single::At))
+        {
             Some(self.current_row.row.clone())
         } else {
             None
@@ -329,6 +353,27 @@ mod test {
             vec![StorageValueT::Int64(4)],
             vec![StorageValueT::Int64(5)],
         ];
+
+        let result: Vec<_> = project_1.collect();
+
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn empty() {
+        let trie = Trie::from_rows(vec![
+            vec![StorageValueT::Id32(0), StorageValueT::Id32(1)],
+            vec![StorageValueT::Int64(0), StorageValueT::Int64(42)],
+            vec![StorageValueT::Int64(1), StorageValueT::Int64(42)],
+            vec![StorageValueT::Int64(2), StorageValueT::Int64(42)],
+            vec![StorageValueT::Int64(3), StorageValueT::Int64(42)],
+            vec![StorageValueT::Int64(4), StorageValueT::Int64(42)],
+            vec![StorageValueT::Int64(5), StorageValueT::Int64(42)],
+        ]);
+
+        let project_1 = RowScan::new(trie.partial_iterator(), 2, 0);
+
+        let expected = vec![vec![StorageValueT::Id32(0), StorageValueT::Id32(1)]];
 
         let result: Vec<_> = project_1.collect();
 

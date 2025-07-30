@@ -8,8 +8,8 @@ use std::{fmt::Display, hash::Hash};
 use ground::GroundTerm;
 use nemo_physical::datavalues::AnyDataValue;
 use variable::{
-    existential::ExistentialVariable, global::GlobalVariable, universal::UniversalVariable,
-    Variable,
+    Variable, existential::ExistentialVariable, global::GlobalVariable,
+    universal::UniversalVariable,
 };
 
 use crate::rule_model::{
@@ -23,7 +23,7 @@ use crate::rule_model::{
     translation::{ProgramParseReport, TranslationComponent},
 };
 
-use super::{value_type::ValueType, Term};
+use super::{Term, value_type::ValueType};
 
 /// Primitive term
 ///
@@ -110,6 +110,13 @@ impl Primitive {
         match self {
             Primitive::Variable(variable) => variable.is_global(),
             Primitive::Ground(_) => true,
+        }
+    }
+
+    pub fn is_universal(&self) -> bool {
+        match self {
+            Primitive::Variable(variable) => variable.is_universal(),
+            Primitive::Ground(_) => false,
         }
     }
 }
