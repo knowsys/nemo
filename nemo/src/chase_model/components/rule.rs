@@ -227,6 +227,55 @@ impl ChaseRule {
     pub(crate) fn add_head_atom(&mut self, atom: PrimitiveAtom) {
         self.head.atoms.push(atom)
     }
+
+    pub(crate) fn non_head_variables(&self) -> Box<dyn Iterator<Item = &Variable> + '_> {
+        let positive_body_variables = self
+            .positive_body()
+            .iter()
+            .flat_map(|atom| atom.variables());
+        let positive_operation_variables = self
+            .positive_operations()
+            .iter()
+            .flat_map(|operation| operation.variables());
+        let positive_filter_variables = self
+            .positive_filters()
+            .iter()
+            .flat_map(|filter| filter.variables());
+
+        let negative_body_variables = self
+            .negative_body()
+            .iter()
+            .flat_map(|atom| atom.variables());
+        let negative_filter_variables = self
+            .negative_filters()
+            .iter()
+            .flatten()
+            .flat_map(|filter| filter.variables());
+
+        let aggregation_variables = self
+            .aggregate()
+            .into_iter()
+            .flat_map(|aggregate| aggregate.variables());
+        let aggregation_operation_variables = self
+            .aggregate_operations()
+            .iter()
+            .flat_map(|operation| operation.variables());
+        let aggregation_filter_variables = self
+            .aggregate_filters()
+            .iter()
+            .flat_map(|filter| filter.variables());
+
+        Box::new(
+            positive_body_variables
+                .chain(positive_operation_variables)
+                .chain(positive_filter_variables)
+                .chain(negative_body_variables)
+                .chain(negative_filter_variables)
+                .chain(aggregation_variables)
+                .chain(aggregation_operation_variables)
+                .chain(aggregation_filter_variables),
+        )
+    }
 }
 
 impl IterableVariables for ChaseRule {

@@ -2,7 +2,7 @@
 
 use std::{
     cell::{RefCell, UnsafeCell},
-    collections::{hash_map::Entry, HashMap},
+    collections::{HashMap, hash_map::Entry},
 };
 
 use crate::{
@@ -10,7 +10,7 @@ use crate::{
         columnscan::{ColumnScanCell, ColumnScanEnum, ColumnScanT},
         operations::join::ColumnScanJoin,
     },
-    datatypes::{storage_type_name::StorageTypeBitSet, Double, Float, StorageTypeName},
+    datatypes::{Double, Float, StorageTypeName, storage_type_name::StorageTypeBitSet},
     management::database::Dict,
     tabular::{
         operations::OperationColumnMarker,

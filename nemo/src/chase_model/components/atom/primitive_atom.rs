@@ -36,6 +36,10 @@ impl PrimitiveAtom {
     pub fn _set_predicate(&mut self, predicate: Tag) {
         self.predicate = predicate;
     }
+
+    pub fn _get(&self, index: usize) -> &Primitive {
+        &self.terms[index]
+    }
 }
 
 impl ChaseAtom for PrimitiveAtom {
