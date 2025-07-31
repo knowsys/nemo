@@ -4,11 +4,15 @@ use std::collections::{HashMap, HashSet};
 
 use itertools::Itertools;
 use nemo_physical::{
+    datavalues::AnyDataValue,
     management::{
         database::id::{ExecutionId, PermanentTableId},
         execution_plan::{ExecutionNodeRef, ExecutionPlan},
     },
-    tabular::operations::OperationTable,
+    tabular::{
+        operations::{FunctionAssignment, OperationColumnMarker, OperationTable},
+        trie::Trie,
+    },
 };
 
 use crate::{
@@ -17,7 +21,10 @@ use crate::{
         analysis::variable_order::VariableOrder,
         components::{
             atom::{primitive_atom::PrimitiveAtom, variable_atom::VariableAtom},
+            filter::ChaseFilter,
+            operation::ChaseOperation,
             rule::ChaseRule,
+            term::operation_term::{Operation, OperationTerm},
         },
     },
     execution::{
@@ -36,12 +43,16 @@ use crate::{
                 TableEntriesForTreeNodesResponse, TreeAddress,
             },
             shared::TableEntryResponse,
+            tree_query::{TreeForTableResponse, TreeForTableResponseSuccessor},
         },
     },
     rule_model::components::{
         IterableVariables,
         tag::Tag,
-        term::primitive::{Primitive, variable::Variable},
+        term::{
+            operation::operation_kind::OperationKind,
+            primitive::{Primitive, variable::Variable},
+        },
     },
     table_manager::TableManager,
 };
@@ -145,6 +156,36 @@ fn union_input(table_manager: &mut TableManager, predicate: &Tag) -> PermanentTa
         .expect("none in union input")
 }
 
+fn union_predicate_rule(
+    table_manager: &mut TableManager,
+    predicate: &Tag,
+    rule: usize,
+    rules: &[usize],
+) -> PermanentTableId {
+    let markers = OperationTable::new_unique(table_manager.arity(predicate));
+
+    let mut plan = ExecutionPlan::default();
+    let mut node_union = plan.union_empty(markers.clone());
+
+    for (_, id) in
+        table_manager.tables_in_range_rule_steps(predicate, 0..(usize::MAX - 1), rules, rule)
+    {
+        let node_fetch = plan.fetch_table(markers.clone(), id);
+        node_union.add_subnode(node_fetch);
+    }
+
+    plan.write_permanent(node_union, "union", "union");
+    let (_, id) = table_manager
+        .database_mut()
+        .execute_plan(plan)
+        .expect("error")
+        .into_iter()
+        .next()
+        .expect("no tables");
+
+    id
+}
+
 fn node_join(
     plan: &mut ExecutionPlan,
     manager: &ProvenanceTableManager,
@@ -169,6 +210,48 @@ fn node_join(
     node_join
 }
 
+fn add_simplicity_restriction_rule(
+    positive_filters: &mut Vec<ChaseFilter>,
+    rule: &ChaseRule,
+    head_index: usize,
+) {
+    let head_atom = &rule.head()[head_index];
+
+    for body in rule.positive_body() {
+        if body.predicate() != head_atom.predicate() {
+            continue;
+        }
+
+        let mut disjunction_subterms = Vec::default();
+
+        for (head_term, body_variable) in head_atom.terms().zip(body.terms()) {
+            let same = match head_term {
+                Primitive::Variable(variable) => variable == body_variable,
+                Primitive::Ground(_) => false,
+            };
+
+            if !same {
+                let operation_head = OperationTerm::Primitive(head_term.clone());
+                let operation_body =
+                    OperationTerm::Primitive(Primitive::Variable(body_variable.clone()));
+                let unequal = OperationTerm::Operation(Operation::new(
+                    OperationKind::Unequals,
+                    vec![operation_head, operation_body],
+                ));
+
+                println!("add: {} != {}", head_term, body_variable);
+
+                disjunction_subterms.push(unequal);
+            }
+        }
+
+        positive_filters.push(ChaseFilter::new(OperationTerm::Operation(Operation::new(
+            OperationKind::BooleanDisjunction,
+            disjunction_subterms,
+        ))));
+    }
+}
+
 fn body_plan(
     plan: &mut ExecutionPlan,
     manager: &ProvenanceTableManager,
@@ -177,8 +260,10 @@ fn body_plan(
     rule: &ChaseRule,
     variable_order: &VariableOrder,
     variable_translation: &VariableTranslation,
+    head_index: usize,
 ) -> (ExecutionNodeRef, ExecutionId) {
     let join_output_markers = variable_translation.operation_table(variable_order.iter());
+
     let node_join = node_join(
         plan,
         manager,
@@ -194,6 +279,9 @@ fn body_plan(
         node_join,
         rule.positive_operations(),
     );
+
+    let mut filters = rule.positive_filters().clone();
+    add_simplicity_restriction_rule(&mut filters, rule, head_index);
 
     let node_body_filter = node_filter(
         plan,
@@ -230,13 +318,114 @@ fn head_plan(
     plan.write_permanent(node_result, "head", "head")
 }
 
+fn head_plan_existential(
+    plan: &mut ExecutionPlan,
+    table_manager: &mut TableManager,
+    base_node: ExecutionNodeRef,
+    rule_index: usize,
+    rule: &ChaseRule,
+    variable_order: &VariableOrder,
+    head_index: usize,
+    rule_history: &[usize],
+) -> ExecutionId {
+    println!("PLAN EXISTENTIAL");
+
+    println!("rule: {}", rule);
+
+    // let rule_head_variables = rule
+    //     .head()
+    //     .iter()
+    //     .flat_map(|atom| atom.variables())
+    //     .cloned()
+    //     .collect::<HashSet<_>>();
+
+    let predicate = rule.head()[head_index].predicate();
+
+    let (variable_translation, full_variable_order, head_variables) =
+        variable_translation(&rule, head_index, &variable_order);
+
+    let body_variables = rule
+        .positive_body()
+        .iter()
+        .flat_map(|atom| atom.variables())
+        .cloned()
+        .collect::<HashSet<_>>();
+    let head_variable_set = head_variables.iter().cloned().collect::<HashSet<_>>();
+
+    let frontier_variables = head_variable_set
+        .intersection(&body_variables)
+        .cloned()
+        .collect::<HashSet<_>>();
+
+    // println!("body vars: {}", body_variables.iter().join(","));
+    // println!("head vars: {}", rule_head_variables.iter().join(","));
+    // println!("frontier vars: {}", frontier_variables.iter().join(","));
+
+    // let head_single_variables = head_variable_set.difference(&body_variables);
+    let mut head_single_variables_mut = head_variable_set.difference(&body_variables);
+
+    // println!("head_variable_set {}", head_variable_set.iter().join(","));
+    // println!(
+    //     "head_single_variables {}",
+    //     head_single_variables_mut.join(",")
+    // );
+
+    let frontier_order = variable_order._restrict_to(&frontier_variables);
+    let frontier_markers = variable_translation.operation_table(frontier_order.iter());
+
+    println!("frontier_order: {}", frontier_order.iter().join(","));
+    println!("frontier_markers: {:?}", frontier_markers);
+
+    let node_frontier_projection = plan.projectreorder(frontier_markers, base_node);
+
+    // let id_existential_predicate =
+    //     union_predicate_rule(table_manager, &predicate, rule_index, rule_history);
+    let id_existential_predicate = union_input(table_manager, &predicate);
+    let markers_existential_predicate = variable_translation.operation_table(head_variables.iter());
+
+    println!("markers existential: {:?}", markers_existential_predicate);
+
+    let node_existential_predicate = plan.fetch_table(
+        markers_existential_predicate.clone(),
+        id_existential_predicate,
+    );
+
+    if frontier_variables.is_empty() {
+        // let node_single = plan.single(node_existential_predicate, markers_existential_predicate);
+        // println!("EARLY EXIT");
+        // return plan.write_permanent(node_single, "existential", "existential");
+        return plan.write_permanent(node_existential_predicate, "load existing", "load existing");
+    }
+
+    let join_variables = head_variable_set
+        .union(&frontier_variables)
+        .cloned()
+        .collect::<HashSet<_>>();
+    let join_order = full_variable_order._restrict_to(&join_variables);
+    let markers_join = variable_translation.operation_table(join_order.iter());
+    println!("markers_join: {:?}", markers_join);
+    let node_join = plan.join(
+        markers_join,
+        vec![node_frontier_projection, node_existential_predicate],
+    );
+
+    // let single_markers = variable_translation.operation_table(head_single_variables);
+    // println!("single markers: {:?}", single_markers);
+    // let node_single = plan.single(node_join, single_markers);
+
+    plan.write_permanent(node_join, "existential", "existential")
+}
+
 fn valid_tables_plan(
     manager: &ProvenanceTableManager,
-    table_manager: &TableManager,
+    table_manager: &mut TableManager,
     address: &TreeAddress,
     rule: &ChaseRule,
     variable_order: &VariableOrder,
     head_index: usize,
+    rule_index: usize,
+    rule_history: &[usize],
+    same_predicates: &[usize],
 ) -> (ExecutionPlan, ExecutionId, ExecutionId) {
     let mut plan = ExecutionPlan::default();
 
@@ -253,10 +442,28 @@ fn valid_tables_plan(
         rule,
         variable_order,
         &variable_translation,
+        head_index,
     );
 
     let head_atom = &rule.head()[head_index];
-    let id_valid = head_plan(&mut plan, head_atom, &variable_translation, node_body);
+    let is_existential = head_atom
+        .variables()
+        .find(|variable| variable.is_existential())
+        .is_some();
+    let id_valid = if !is_existential {
+        head_plan(&mut plan, head_atom, &variable_translation, node_body)
+    } else {
+        head_plan_existential(
+            &mut plan,
+            table_manager,
+            node_body,
+            rule_index,
+            rule,
+            variable_order,
+            head_index,
+            rule_history,
+        )
+    };
 
     (plan, id_valid, id_assignment)
 }
@@ -268,13 +475,15 @@ fn result_tables_plan(
     variable_order: &VariableOrder,
     head_variables: &[Variable],
     body_variables: &[Variable],
+    join_variables: &[Variable],
 ) -> Option<ExecutionPlan> {
     let mut parent_address = address.clone();
     parent_address.pop();
 
     let markers_head = variable_translation.operation_table(head_variables.iter());
-    let markers_join = variable_translation.operation_table(variable_order.iter());
+    let markers_join = variable_translation.operation_table(join_variables.iter());
     let markers_body = variable_translation.operation_table(body_variables.iter());
+    let markers_full = variable_translation.operation_table(variable_order.iter());
 
     let id_head = manager.result_table(&parent_address)?;
     let id_join = manager.assignment_table(&parent_address)?;
@@ -282,16 +491,204 @@ fn result_tables_plan(
 
     let mut plan = ExecutionPlan::default();
 
-    let node_head = plan.fetch_table(markers_head.clone(), id_head);
-    let node_join = plan.fetch_table(markers_join.clone(), id_join);
+    let node_head = plan.fetch_table(markers_head, id_head);
+    let node_join = plan.fetch_table(markers_join, id_join);
     let node_body = plan.fetch_table(markers_body.clone(), id_body);
 
-    let node_filter_results = plan.join(markers_join, vec![node_head, node_join, node_body]);
+    let node_filter_results = plan.join(markers_full, vec![node_head, node_join, node_body]);
 
     let node_project = plan.projectreorder(markers_body, node_filter_results);
     plan.write_permanent(node_project, "filter", "filter");
 
     Some(plan)
+}
+
+// fn compute_predicate_pairs_for_address(
+//     pairs: &mut Vec<(TreeAddress, TreeAddress)>,
+//     map: &HashMap<TreeAddress, Tag>,
+//     address: &TreeAddress,
+//     predicate: &Tag,
+// ) {
+//     for cut in (0..(address.len() - 1)).rev() {
+//         let parent_address = address[0..cut].iter().cloned().collect::<Vec<_>>();
+//         let parent_predicate = map.get(&parent_address).expect("must be filled");
+
+//         if predicate == parent_predicate {
+//             pairs.push((parent_address, address.clone()));
+//         }
+//     }
+// }
+
+// fn compute_predicate_on_each_node(
+//     map: &mut HashMap<TreeAddress, Tag>,
+//     pairs: &mut Vec<(TreeAddress, TreeAddress)>,
+//     node: &TableEntriesForTreeNodesQueryInner,
+//     rules: &Vec<ChaseRule>,
+//     address: &TreeAddress,
+//     predicate: &Tag,
+// ) {
+//     map.insert(address.clone(), predicate.clone());
+
+//     if let Some(successor) = &node.next {
+//         let rule = &rules[successor.rule];
+
+//         for (index, (atom, node_atom)) in rule
+//             .positive_body()
+//             .iter()
+//             .zip(successor.children.iter())
+//             .enumerate()
+//         {
+//             let mut next_address = address.clone();
+//             next_address.push(index);
+
+//             compute_predicate_on_each_node(
+//                 map,
+//                 pairs,
+//                 node_atom,
+//                 rules,
+//                 &next_address,
+//                 &atom.predicate(),
+//             );
+//         }
+//     }
+
+//     compute_predicate_pairs_for_address(pairs, map, address, predicate)
+// }
+
+fn check_repeated_predicate(
+    repeat_in_address: &mut Vec<TreeAddress>,
+    search_predicate: &Tag,
+    node: &TableEntriesForTreeNodesQueryInner,
+    rules: &Vec<ChaseRule>,
+    address: &TreeAddress,
+    current_predicate: &Tag,
+) {
+    if search_predicate == current_predicate {
+        repeat_in_address.push(address.clone());
+    }
+
+    if let Some(successor) = &node.next {
+        let rule = &rules[successor.rule];
+
+        for (index, (atom, node_atom)) in rule
+            .positive_body()
+            .iter()
+            .zip(successor.children.iter())
+            .enumerate()
+        {
+            let mut next_address = address.clone();
+            next_address.push(index);
+
+            check_repeated_predicate(
+                repeat_in_address,
+                search_predicate,
+                node_atom,
+                rules,
+                &next_address,
+                &atom.predicate(),
+            );
+        }
+    }
+}
+
+fn compute_repeating_subtrees(
+    repeated: &mut Vec<(Tag, TreeAddress, Vec<TreeAddress>)>,
+    node: &TableEntriesForTreeNodesQueryInner,
+    rules: &Vec<ChaseRule>,
+    address: &TreeAddress,
+    current_predicate: &Tag,
+) {
+    if let Some(successor) = &node.next {
+        let rule = &rules[successor.rule];
+        let head_predicate = rule.head()[successor.head_index].predicate();
+
+        let mut repeat = Vec::<TreeAddress>::new();
+        for (index, (atom, node_atom)) in rule
+            .positive_body()
+            .iter()
+            .zip(successor.children.iter())
+            .enumerate()
+        {
+            let mut next_address = address.clone();
+            next_address.push(index);
+
+            compute_repeating_subtrees(
+                repeated,
+                node_atom,
+                rules,
+                &next_address,
+                &atom.predicate(),
+            );
+
+            let mut repeated_child = Vec::default();
+            check_repeated_predicate(
+                &mut repeated_child,
+                &head_predicate,
+                node_atom,
+                rules,
+                &next_address,
+                &atom.predicate(),
+            );
+            repeat.extend(repeated_child);
+        }
+
+        if !repeat.is_empty() {
+            repeated.push((current_predicate.clone(), address.clone(), repeat));
+        }
+    }
+}
+
+fn compute_check_trees(
+    node: &TableEntriesForTreeNodesQuery,
+    rules: &Vec<ChaseRule>,
+) -> Vec<(Tag, TreeAddress, Vec<TreeAddress>)> {
+    let mut repeated = Vec::default();
+    let predicate = Tag::new(node.predicate.clone());
+    let address = Vec::default();
+
+    compute_repeating_subtrees(&mut repeated, &node.inner, rules, &address, &predicate);
+
+    repeated
+}
+
+fn intersect_pairs(
+    table_manager: &mut TableManager,
+    manager: &ProvenanceTableManager,
+    predicate: &Tag,
+    parent: &TreeAddress,
+    child: &TreeAddress,
+) -> Option<Trie> {
+    let mut plan = ExecutionPlan::default();
+
+    println!("Addresses: {:?}, {:?}", parent, child);
+
+    // if child.len() - parent.len() < 2 {
+    //     return None;
+    // }
+
+    let arity = table_manager.arity(predicate);
+    let markers = OperationTable::new_unique(arity);
+
+    let id_parent = manager.result_table(parent).expect("result parent");
+    let id_child = manager.result_table(child).expect("result child");
+
+    println!(
+        "lens: {}, {}",
+        table_manager.database().count_rows_in_memory(id_parent),
+        table_manager.database().count_rows_in_memory(id_child)
+    );
+
+    let node_parent = plan.fetch_table(markers.clone(), id_parent);
+    let node_child = plan.fetch_table(markers.clone(), id_child);
+
+    let node_join = plan.join(markers, vec![node_parent, node_child]);
+    plan.write_permanent(node_join, "intersection", "intersection");
+
+    table_manager
+        .database_mut()
+        .execute_plan_trie(plan)
+        .expect("error")
+        .pop()
 }
 
 impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
@@ -304,8 +701,10 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     ) {
         if let Some(successor) = &node.next {
             let rule = self.program.rules()[successor.rule].clone();
+            let head_predicate = rule.head()[successor.head_index].predicate();
             let variable_order =
                 self.analysis.rule_analysis[successor.rule].promising_variable_orders[0].clone();
+            let mut same_predicate = Vec::default();
 
             for (index, (atom, node_atom)) in rule
                 .positive_body()
@@ -313,6 +712,10 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 .zip(successor.children.iter())
                 .enumerate()
             {
+                if atom.predicate() == head_predicate {
+                    same_predicate.push(index);
+                }
+
                 let mut next_address = address.clone();
                 next_address.push(index);
 
@@ -321,11 +724,14 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
             let (plan, id_valid, id_assignment) = valid_tables_plan(
                 manager,
-                &self.table_manager,
+                &mut self.table_manager,
                 &address,
                 &rule,
                 &variable_order,
                 successor.head_index,
+                successor.rule,
+                &self.rule_history,
+                &same_predicate,
             );
 
             let execution_results = self
@@ -335,10 +741,30 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 .expect("execute plan failed");
 
             if let Some(result_id) = execution_results.get(&id_valid) {
+                // for same in same_predicate {
+                //     let mut same_address = address.clone();
+                //     same_address.push(same);
+
+                //     let previous_id =
+                // }
+
+                if !same_predicate.is_empty() {
+                    let count = self
+                        .table_manager
+                        .database()
+                        .count_rows_in_memory(*result_id);
+                    println!("COUNT: {count}");
+                    std::process::exit(0);
+                }
+
                 manager.add_valid_table(&address, *result_id);
+            } else {
+                println!("failed ot build valid table: {:?}", address);
             }
             if let Some(result_id) = execution_results.get(&id_assignment) {
                 manager.add_assignment_table(&address, *result_id);
+            } else {
+                println!("failed to build assignment table: {:?}", address)
             }
         } else {
             let id = union_input(&mut self.table_manager, predicate);
@@ -365,8 +791,9 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             let rule = self.program.rules()[successor.rule].clone();
             let variable_order =
                 self.analysis.rule_analysis[successor.rule].promising_variable_orders[0].clone();
+            let join_variables = variable_order.iter().cloned().collect::<Vec<_>>();
 
-            let (variable_translation, variable_order, head_variables) =
+            let (variable_translation, full_variable_order, head_variables) =
                 variable_translation(&rule, successor.head_index, &variable_order);
 
             for (index, (atom, node_atom)) in rule
@@ -384,9 +811,10 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                     manager,
                     &next_address,
                     &variable_translation,
-                    &variable_order,
+                    &full_variable_order,
                     &head_variables,
                     &atom_variables,
+                    &join_variables,
                 ) {
                     let Ok(results) = self.table_manager.database_mut().execute_plan(plan) else {
                         println!("filter join failed");
@@ -413,6 +841,30 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         true
     }
 
+    fn p_ensure_simplicity(
+        &mut self,
+        manager: &mut ProvenanceTableManager,
+        query: &TableEntriesForTreeNodesQuery,
+    ) {
+        let repeated = compute_check_trees(query, self.chase_program().rules());
+
+        for (predicate, parent, children) in repeated {
+            for child in children {
+                if let Some(trie_intersection) = intersect_pairs(
+                    &mut self.table_manager,
+                    manager,
+                    &predicate,
+                    &parent,
+                    &child,
+                ) {
+                    println!("intersection: {}", trie_intersection.num_rows());
+                } else {
+                    println!("no intersection");
+                }
+            }
+        }
+    }
+
     pub(crate) fn execute_provenance_query(
         &mut self,
         query: &TableEntriesForTreeNodesQuery,
@@ -425,6 +877,8 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         self.p_build_valid_nodes(&mut manager, node, address.clone(), &predicate);
 
         let _ = self.p_filter_nodes(&mut manager, node, address.clone());
+
+        self.p_ensure_simplicity(&mut manager, query);
 
         manager
     }
