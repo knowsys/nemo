@@ -58,9 +58,7 @@ impl OrderedReferenceManager {
     }
 
     pub(crate) fn delete_tables_from(&mut self, storage_id: StorageId, table_id: PermanentTableId) {
-        unsafe {
-            self.stored_tables.set_len(storage_id);
-        }
+        self.stored_tables.truncate(storage_id);
 
         self.storage_map
             .retain(|existing_id, _| *existing_id < table_id);
