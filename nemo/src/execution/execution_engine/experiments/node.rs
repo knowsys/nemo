@@ -56,44 +56,46 @@ impl Display for ExperimentNodeQueryResults {
 
 impl ExperimentNodeQueryResults {
     pub fn write_header(writer: &mut dyn Write) -> std::io::Result<()> {
-        let mut header_prepare = String::default();
+        // let mut header_prepare = String::default();
         let mut header_execute = String::default();
-        let mut header_answer = String::default();
+        // let mut header_answer = String::default();
 
         for index in 0..REPEAT_MEASUREMENT {
-            header_prepare += &format!(",prepare-{}", index + 1);
+            // header_prepare += &format!(",prepare-{}", index + 1);
             header_execute += &format!(",execute-{}", index + 1);
-            header_answer += &format!(",answer-{}", index + 1);
+            // header_answer += &format!(",answer-{}", index + 1);
         }
 
         writeln!(
             writer,
-            "name,size_query,depth_query,size_answer{}{}{}",
-            header_prepare, header_execute, header_answer
+            "name,size_query,depth_query,size_answer{}",
+            // header_prepare,
+            header_execute,
+            // header_answer
         )
     }
 
     pub fn write_content(&self, writer: &mut dyn Write) -> std::io::Result<()> {
-        let mut content_prepare = String::default();
+        // let mut content_prepare = String::default();
         let mut content_execute = String::default();
-        let mut content_answer = String::default();
+        // let mut content_answer = String::default();
 
         for index in 0..REPEAT_MEASUREMENT {
-            content_prepare += &format!(",{}", self.times_prepare[index].as_millis());
+            // content_prepare += &format!(",{}", self.times_prepare[index].as_millis());
             content_execute += &format!(",{}", self.times_execute[index].as_millis());
-            content_answer += &format!(",{}", self.times_answer[index].as_millis());
+            // content_answer += &format!(",{}", self.times_answer[index].as_millis());
         }
 
         writeln!(
             writer,
-            "{},{},{},{}{}{}{}",
+            "{},{},{},{}{}",
             self.name,
             self.query_size,
             self.query_depth,
             self.answer_size,
-            content_prepare,
+            // content_prepare,
             content_execute,
-            content_answer
+            // content_answer
         )
     }
 }
@@ -107,21 +109,21 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         let (reset_permanent, reset_storage) = self.table_manager.database().current_id();
 
         for _ in 0..REPEAT_MEASUREMENT {
-            // PREPARE
-            let time = Instant::now();
-            let response = self.trace_node_prepare_response(query);
-            result.times_prepare.push(time.elapsed());
+            // // PREPARE
+            // let time = Instant::now();
+            // let response = self.trace_node_prepare_response(query);
+            // result.times_prepare.push(time.elapsed());
 
             // EXECUTE
             let time = Instant::now();
             let manager = self.execute_node_query(query);
             result.times_execute.push(time.elapsed());
 
-            // ANSWER
-            let time = Instant::now();
-            self.node_query_answer(&manager, response)
-                .unwrap_or_default();
-            result.times_answer.push(time.elapsed());
+            // // ANSWER
+            // let time = Instant::now();
+            // self.node_query_answer(&manager, response)
+            //     .unwrap_or_default();
+            // result.times_answer.push(time.elapsed());
 
             // POST
             result.answer_size = manager

@@ -148,7 +148,7 @@ impl ChaseRule {
         &self.negative.filters
     }
 
-    pub(crate) fn negative_atoms(&self) -> &Vec<VariableAtom> {
+    pub(crate) fn _negative_atoms(&self) -> &Vec<VariableAtom> {
         &self.negative.atoms
     }
 

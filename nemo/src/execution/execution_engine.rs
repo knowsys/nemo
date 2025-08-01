@@ -1089,18 +1089,6 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         self.node_query_answer(&manager, response)
             .unwrap_or_default()
     }
-
-    /// Evaluate a [TableEntriesForTreeNodesQuery] (provenance).
-    pub fn provenance_node(
-        &mut self,
-        query: &TableEntriesForTreeNodesQuery,
-    ) -> TableEntriesForTreeNodesResponse {
-        let response = self.trace_node_prepare_response(query);
-        let manager = self.execute_provenance_query(query);
-
-        self.node_query_answer_provenance(&manager, response)
-            .unwrap_or_default()
-    }
 }
 
 fn partial_grounding_for_rule_head_and_fact(
