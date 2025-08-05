@@ -71,7 +71,27 @@ jobs:
           else
             sha256sum "$asset" > "$asset.sha256sum"
           fi
+      - name: Create (draft) release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Nemo ${{ github.ref_name }}"
+          fail_on_unmatched_files: false
+          generate_release_notes: true
+          make_latest: true
+          draft: true
+          files: |
+            nemo_*.zip
+            nemo_*.tar.gz
+            nemo_*.zip.sha256sum
+            nemo_*.tar.gz.sha256sum
 
+  docker-image:
+    name: build and push docker image ${{ matrix.platform.os-name }}
+    needs: release
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v31
       - uses: jlumbroso/free-disk-space@v1.3.1
         with:
@@ -94,23 +114,9 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build and push docker image 
+      - name: Build and push docker image
         run: |
           nix build .\#docker
           docker load < result
           docker image tag nemo:latest ${{ env.REGISTRY }}/knowsys/nemo:${{ github.ref_name }}
           docker push ${{ env.REGISTRY }}/knowsys/nemo:${{ github.ref_name }}
-
-      - name: Create (draft) release
-        uses: softprops/action-gh-release@v2
-        with:
-          name: "Nemo ${{ github.ref_name }}"
-          fail_on_unmatched_files: false
-          generate_release_notes: true
-          make_latest: true
-          draft: true
-          files: |
-            nemo_*.zip
-            nemo_*.tar.gz
-            nemo_*.zip.sha256sum
-            nemo_*.tar.gz.sha256sum

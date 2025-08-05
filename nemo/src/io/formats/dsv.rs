@@ -44,6 +44,8 @@ pub struct DsvHandler {
     limit: Option<u64>,
     /// Whether to ignore headers
     ignore_headers: bool,
+    /// Whether to respect quoting in values
+    quoting: bool,
 }
 
 impl DsvHandler {
@@ -54,6 +56,7 @@ impl DsvHandler {
             value_formats: DsvValueFormats::default(arity),
             limit: None,
             ignore_headers: false,
+            quoting: true,
         }
     }
 
@@ -62,12 +65,14 @@ impl DsvHandler {
         value_formats: DsvValueFormats,
         limit: Option<u64>,
         ignore_headers: bool,
+        quoting: bool,
     ) -> Self {
         DsvHandler {
             delimiter,
             value_formats,
             limit,
             ignore_headers,
+            quoting,
         }
     }
 }
@@ -106,6 +111,7 @@ impl ImportHandler for DsvHandler {
             None,
             self.limit,
             self.ignore_headers,
+            self.quoting,
         )))
     }
 }
@@ -153,6 +159,7 @@ format_parameter! {
         Delimiter(name = attribute::DSV_DELIMITER, supported_types = &[ValueType::String]),
         Format(name = attribute::FORMAT, supported_types = &[ValueType::Constant, ValueType::Tuple]),
         IgnoreHeaders(name = attribute::IGNORE_HEADERS, supported_types = &[ValueType::Boolean]),
+        Quoting(name = attribute::DSV_QUOTING, supported_types = &[ValueType::Boolean]),
     }
 }
 
@@ -185,16 +192,18 @@ impl FormatParameter<DsvTag> for DsvParameter {
                 }
             }),
             DsvParameter::IgnoreHeaders => Ok(()),
+            DsvParameter::Quoting => Ok(()),
         }
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct DsvBuilder {
     limit: Option<u64>,
     delimiter: u8,
     value_formats: Option<DsvValueFormats>,
     ignore_headers: bool,
+    quoting: bool,
 }
 
 impl From<DsvBuilder> for AnyImportExportBuilder {
@@ -238,11 +247,18 @@ impl FormatBuilder for DsvBuilder {
             .map(AnyDataValue::to_boolean_unchecked)
             .unwrap_or(false);
 
+        let quoting = parameters
+            .get_optional(DsvParameter::Quoting)
+            .as_ref()
+            .map(AnyDataValue::to_boolean_unchecked)
+            .unwrap_or(true);
+
         Ok(Self {
             delimiter,
             value_formats,
             limit,
             ignore_headers,
+            quoting,
         })
     }
 
@@ -259,6 +275,7 @@ impl FormatBuilder for DsvBuilder {
                 .unwrap_or(DsvValueFormats::default(arity)),
             limit: self.limit,
             ignore_headers: self.ignore_headers,
+            quoting: self.quoting,
         })
     }
 
@@ -271,6 +288,7 @@ impl FormatBuilder for DsvBuilder {
                 .unwrap_or(DsvValueFormats::default(arity)),
             limit: self.limit,
             ignore_headers: self.ignore_headers,
+            quoting: self.quoting,
         })
     }
 }

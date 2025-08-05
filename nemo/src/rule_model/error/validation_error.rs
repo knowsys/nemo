@@ -181,8 +181,8 @@ pub enum ValidationError {
     InvalidHttpIri,
     /// Invalid SPARQL query
     #[assoc(code = 234)]
-    #[error(r#"invalid SPARQL query: {oxi_error}"#)]
-    InvalidSparqlQuery { oxi_error: String },
+    #[error(r#"invalid SPARQL query: {oxi_error} in {query}"#)]
+    InvalidSparqlQuery { query: String, oxi_error: String },
     /// Error during resource validation
     #[assoc(code = 235)]
     #[error(transparent)]

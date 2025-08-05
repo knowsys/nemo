@@ -36,6 +36,8 @@ pub(super) struct DsvReader<T> {
     limit: Option<u64>,
     /// Whether to ignore headers (i.e., the first record)
     ignore_headers: bool,
+    /// Whether to respect quoting inside values
+    quoting: bool,
 }
 
 impl<T: BufRead> DsvReader<T> {
@@ -47,6 +49,7 @@ impl<T: BufRead> DsvReader<T> {
         escape: Option<u8>,
         limit: Option<u64>,
         ignore_headers: bool,
+        quoting: bool,
     ) -> Self {
         Self {
             read,
@@ -55,6 +58,7 @@ impl<T: BufRead> DsvReader<T> {
             escape,
             limit,
             ignore_headers,
+            quoting,
         }
     }
 
@@ -65,6 +69,7 @@ impl<T: BufRead> DsvReader<T> {
             .escape(self.escape)
             .has_headers(self.ignore_headers)
             .double_quote(true)
+            .quoting(self.quoting)
             .from_reader(self.read)
     }
 
@@ -191,6 +196,7 @@ mod test {
                 None,
                 None,
                 ignore_headers,
+                true,
             );
             let dict = RefCell::new(Dict::default());
             let mut tuple_writer = TupleWriter::new(&dict, 4);

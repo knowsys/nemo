@@ -1,5 +1,3 @@
-#![feature(let_chains)]
-
 pub use language_server::Backend;
 
 pub use tower_lsp::{

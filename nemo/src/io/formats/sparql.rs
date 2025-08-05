@@ -73,17 +73,19 @@ impl FormatParameter<SparqlTag> for SparqlParameter {
                 }
             }
             SparqlParameter::Query => {
-                Query::parse(value.to_plain_string_unchecked().as_str(), None)
-                    .and(Ok(()))
-                    .map_err(|e| ValidationError::InvalidSparqlQuery {
+                let query = value.to_plain_string_unchecked();
+                Query::parse(query.as_str(), None).and(Ok(())).map_err(|e| {
+                    ValidationError::InvalidSparqlQuery {
+                        query,
                         oxi_error: e.to_string(),
-                    })
+                    }
+                })
             }
         }
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct SparqlBuilder {
     value_formats: Option<DsvValueFormats>,
     endpoint: Iri<String>,
@@ -171,6 +173,7 @@ impl FormatBuilder for SparqlBuilder {
                 .unwrap_or(DsvValueFormats::default(arity)),
             None,
             true,
+            false,
         ))
     }
 

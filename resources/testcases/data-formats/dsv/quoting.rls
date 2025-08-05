@@ -1,0 +1,8 @@
+@import noQuoting :- csv{resource="sources/langstrings.csv", quoting=false} .
+@import quoting :- csv{resource="sources/langstrings.csv"} .
+
+withQuoting(?X, ?Y) :- quoting(?X, ?Y) .
+withoutQuoting(?X, ?Y) :- noQuoting(?X, ?Y) .
+
+@export withQuoting :- csv{} .
+@export withoutQuoting :- csv{} .
