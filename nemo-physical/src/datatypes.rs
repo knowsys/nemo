@@ -5,7 +5,7 @@ pub(crate) mod storage_type_name;
 pub(crate) use storage_type_name::StorageTypeName;
 /// Module for defining [StorageValueT]
 pub(crate) mod storage_value;
-pub(crate) use storage_value::StorageValueT;
+pub use storage_value::StorageValueT;
 /// Module for defining [Double]
 pub mod double;
 pub use double::Double;
