@@ -7,6 +7,7 @@ pub mod global;
 pub mod skolem;
 pub mod split;
 pub mod validate;
+pub mod projection_pushing;
 
 use crate::rule_model::{error::ValidationReport, programs::handle::ProgramHandle};
 
