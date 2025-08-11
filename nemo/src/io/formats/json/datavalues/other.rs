@@ -2,7 +2,7 @@ pub(crate) mod default {
     use nemo_physical::datavalues::DataValue;
     use serde::{Deserializer, Serializer};
 
-    pub(crate) fn deserialize<'de, T, D>(deserializer: D) -> Result<T, D::Error>
+    pub(crate) fn deserialize<'de, T, D>(_deserializer: D) -> Result<T, D::Error>
     where
         D: Deserializer<'de>,
     {

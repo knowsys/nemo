@@ -2,6 +2,7 @@
 
 use std::{
     cell::RefCell,
+    rc::Rc,
     str::{CharIndices, Chars},
 };
 

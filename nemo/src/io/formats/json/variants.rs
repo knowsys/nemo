@@ -69,16 +69,16 @@ macro_rules! json_variant {
 // successful variant, so we need to try, e.g., values serialized into
 // strings (such as IRIs or language strings) before plain strings.
 json_variant!(default;
-              Null(NullDataValue) => "datavalues::any::default",
-              Tuple(TupleDataValue) => "datavalues::other::default",
-              Map(MapDataValue) => "datavalues::other::default",
-              LanguageTaggedString(LangStringDataValue) => "datavalues::any::default",
-              Iri(IriDataValue) => "datavalues::any::default",
+              Null(NullDataValue) => "datavalues::null::default",
+              Tuple(TupleDataValue) => "datavalues::tuple::default",
+              Map(MapDataValue) => "datavalues::map::default",
+              LanguageTaggedString(LangStringDataValue) => "datavalues::language_string::default",
+              Iri(IriDataValue) => "datavalues::iri::default",
               PlainString(StringDataValue) => "datavalues::plain_string::default",
-              UnsignedLong(UnsignedLongDataValue) => "datavalues::other::default",
-              Long(LongDataValue) => "datavalues::other::default",
+              UnsignedLong(UnsignedLongDataValue) => "datavalues::unsigned::default",
+              Long(LongDataValue) => "datavalues::long::default",
               Float(FloatDataValue) => "datavalues::float::default",
               Double(DoubleDataValue) => "datavalues::double::default",
-              Boolean(BooleanDataValue) => "datavalues::other::default",
+              Boolean(BooleanDataValue) => "datavalues::boolean::default",
               Other(OtherDataValue) => "datavalues::other::default"
 );

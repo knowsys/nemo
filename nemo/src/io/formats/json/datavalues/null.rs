@@ -1,5 +1,5 @@
 pub(crate) mod default {
-    use nemo_physical::datavalues::{DataValue, NullDataValue, StringDataValue};
+    use nemo_physical::datavalues::{DataValue, NullDataValue};
     use nom::InputLength;
     use serde::{
         de::{Error, Visitor},
@@ -24,7 +24,7 @@ pub(crate) mod default {
         where
             E: Error,
         {
-            let (rest, blank) = Blank::parse(ParserInput::stateless(v))
+            let (rest, _blank) = Blank::parse(ParserInput::stateless(v))
                 .map_err(|err| Error::custom(err.to_string()))?;
 
             if rest.input_len() > 0 {
@@ -32,8 +32,22 @@ pub(crate) mod default {
                     "unexpected `{rest}` after named null"
                 )))
             } else {
-                Ok(NullDataValue::new(blank.name()))
+                todo!("figure out how to turn this into a null")
             }
         }
+    }
+
+    pub(crate) fn deserialize<'de, D>(deserializer: D) -> Result<NullDataValue, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_str(NullVisitor {})
+    }
+
+    pub(crate) fn serialize<S>(value: &NullDataValue, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&value.canonical_string())
     }
 }
