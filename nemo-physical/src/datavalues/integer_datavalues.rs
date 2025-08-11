@@ -30,7 +30,7 @@ pub struct UnsignedLongDataValue(u64);
 
 impl UnsignedLongDataValue {
     /// Constructor.
-    pub(crate) fn new(value: u64) -> Self {
+    pub fn new(value: u64) -> Self {
         UnsignedLongDataValue(value)
     }
 }
@@ -114,7 +114,7 @@ pub struct LongDataValue(i64);
 
 impl LongDataValue {
     /// Constructor.
-    pub(crate) fn new(value: i64) -> Self {
+    pub fn new(value: i64) -> Self {
         LongDataValue(value)
     }
 }
