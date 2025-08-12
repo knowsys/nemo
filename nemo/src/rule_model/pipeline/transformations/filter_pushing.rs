@@ -6,7 +6,7 @@ use std::{collections::{HashMap, HashSet}, fmt::Display};
 use crate::rule_model::{
     components::{atom::Atom, literal::Literal, rule::Rule, statement::Statement, tag::Tag, term::{operation::Operation, primitive::{variable::{positional::PositionalMarker, Variable}, Primitive}, Term}},
     error::ValidationReport,
-    programs::{handle::ProgramHandle, ProgramRead},
+    programs::{handle::ProgramHandle, ProgramRead, ProgramWrite},
 };
 
 use super::ProgramTransformation;
@@ -81,36 +81,18 @@ impl TransformationFilterPushing {
     fn push_filter(rule: &Rule, from: &Atom, to: &Atom, filter_expressions: &mut HashMap<Tag,FilterExpression>) -> bool {
         // get the filter expression to be pushed
         if let Some(from_filter) = filter_expressions.get(&from.predicate()) {
-            // construct the mapping used to instantiate the filter expression for the from atom
-            // according to the terms occuring in the from atom
-            let mut unmarkings: HashMap<PositionalMarker,Variable> = HashMap::new();
-            for (i,term) in from.terms().enumerate() {
-                if let Term::Primitive(Primitive::Variable(var)) = term {
-                    let position = PositionalMarker::new(i);
-                    unmarkings.insert(position, var.clone());
-                }
-            }
-
             // construct filter of the rule body filter and the instantiated from filter expression
             // initialize filter with instantiated filter expression
+            let unmarkings = Self::get_unmarkings(from);
             let mut rule_filter: HashSet<Literal> = match from_filter {
                 FilterExpression::Top => HashSet::new(),
                 FilterExpression::Bot => return false,
                 FilterExpression::Conjunction(flt) => flt.iter().filter_map(|literal|Self::unmark(literal, &unmarkings)).collect(),
             };
             // add filter atom in the rule body
-            for literal in rule.body() {
-                match literal {
-                    Literal::Operation(_) => {rule_filter.insert(literal.clone());},
-                    Literal::Positive(atom) => {
-                        if !filter_expressions.contains_key(&atom.predicate()) {
-                            rule_filter.insert(literal.clone());
-                        }
-                    }
-                    Literal::Negative(_) => {},
-                };
+            for literal in Self::get_filter_atoms(rule, filter_expressions) {
+                rule_filter.insert(literal.clone());
             }
-
 
             // get new filter expression, using positional markers
             let new_flt = match filter_expressions.get(&to.predicate()) {
@@ -121,16 +103,7 @@ impl TransformationFilterPushing {
 
                 // if old filter is bottom, use the complete closure
                 Some(FilterExpression::Bot) => {
-                    // construct the mapping used to map variables to positional markersaccoring
-                    // according to to atom
-                    let mut markings: HashMap<Variable,PositionalMarker> = HashMap::new();
-                    for (i,term) in to.terms().enumerate() {
-                        if let Term::Primitive(Primitive::Variable(var)) = term {
-                            let position = PositionalMarker::new(i);
-                            markings.insert(var.clone(), position.clone());
-                        }
-                    }
-
+                    let markings = Self::get_markings(to);
                     let mut to_filter: HashSet<Literal> = HashSet::new();
                     for literal in Self::closure(rule_filter) {
                         if let Some(literal) = Self::mark(&literal, &markings) {
@@ -147,14 +120,7 @@ impl TransformationFilterPushing {
                 // if old filter is conjunction, keep those literals that are entailed by closure
                 Some(FilterExpression::Conjunction(old_flt)) => {
                     let closure = Self::closure(rule_filter);
-                    let mut unmarkings: HashMap<PositionalMarker,Variable> = HashMap::new();
-                    for (i,term) in to.terms().enumerate() {
-                        if let Term::Primitive(Primitive::Variable(var)) = term {
-                            let position = PositionalMarker::new(i);
-                            unmarkings.insert(position, var.clone());
-                        }
-                    }
-
+                    let unmarkings = Self::get_unmarkings(to);
                     let mut new_flt: HashSet<Literal> = HashSet::new();
                     for flt_literal in old_flt {
                         if let Some(literal) = Self::unmark(flt_literal, &unmarkings) {
@@ -194,6 +160,10 @@ impl TransformationFilterPushing {
         atoms
     }
 
+    fn get_filter_atoms<'a>(rule: &'a Rule, filter_expressions: &'a HashMap<Tag,FilterExpression>) -> Vec<&'a Literal>  {
+        rule.body().iter().filter(|literal|Self::is_filter_literal(literal, filter_expressions)).collect()
+    }
+
     // replace all variables with positional markers according to map
     // returns None if a term is encountered that cannot be mapped
     fn mark(literal: &Literal, map: &HashMap<Variable,PositionalMarker>) -> Option<Literal> {
@@ -221,19 +191,17 @@ impl TransformationFilterPushing {
 
     // replace all positional marker with variables according to map
     // returns None if a term is encountered that cannot be mapped
-    fn unmark(literal: &Literal, map: &HashMap<PositionalMarker,Variable>) -> Option<Literal> {
+    fn unmark(literal: &Literal, map: &HashMap<PositionalMarker,Term>) -> Option<Literal> {
         let mut terms: Vec<Term> = Vec::new();
         for term in literal.terms() {
-            match term {
-                Term::Primitive(Primitive::Ground(_)) => terms.push(term.clone()),
-                Term::Primitive(Primitive::Variable(Variable::Positional(marker))) => {
-                    if let Some(var) = map.get(marker) {
-                        terms.push(var.clone().into());
-                    } else {
-                        return None
-                    }
+            if let Term::Primitive(Primitive::Variable(Variable::Positional(marker))) = term {
+                if let Some(var) = map.get(marker) {
+                    terms.push(var.clone());
+                } else {
+                    return None
                 }
-                _ => return None,
+            } else {
+                terms.push(term.clone());
             }
         }
 
@@ -243,6 +211,96 @@ impl TransformationFilterPushing {
             _ => None,
         }
     }
+
+    // get a mapping that maps the variables in atom to their positional markers
+    fn get_markings(atom: &Atom) -> HashMap<Variable,PositionalMarker> {
+        let mut markings: HashMap<Variable,PositionalMarker> = HashMap::new();
+        for (i,term) in atom.terms().enumerate() {
+            if let Term::Primitive(Primitive::Variable(var)) = term {
+                let position = PositionalMarker::new(i);
+                markings.insert(var.clone(), position.clone());
+            }
+        }
+        markings
+    }
+
+    // get a mapping that maps the positional markers to their corresponding terms in atom
+    fn get_unmarkings(atom: &Atom) -> HashMap<PositionalMarker,Term> {
+        let mut unmarkings: HashMap<PositionalMarker,Term> = HashMap::new();
+        for (i,term) in atom.terms().enumerate() {
+            if let Term::Primitive(_) = term {
+                let position = PositionalMarker::new(i);
+                unmarkings.insert(position, term.clone());
+            }
+        }
+        unmarkings
+    }
+
+    fn get_f_plus(rule: &Rule, atom: &Atom, filter_expressions: &HashMap<Tag,FilterExpression>) -> Option<Vec<Literal>> {
+        let mut f: Vec<Literal> = Vec::new();
+
+        let unmarkings = Self::get_unmarkings(atom);
+        match filter_expressions.get(&atom.predicate()) {
+            None | Some(FilterExpression::Bot) => return None,
+            Some(FilterExpression::Top) => {},
+            Some(FilterExpression::Conjunction(conj)) => {
+                for flt in conj {
+                    if let Some(flt_lit) = Self::unmark(flt, &unmarkings) {
+                        f.push(flt_lit);
+                    }
+                }
+            }
+        }
+
+        for literal in Self::get_filter_atoms(rule, filter_expressions) {
+            f.push(literal.clone());
+        }
+
+        Some(f)
+    }
+
+    fn get_f_minus(rule: &Rule, filter_expressions: &HashMap<Tag,FilterExpression>) -> Vec<Literal> {
+        let mut f: Vec<Literal> = Vec::new();
+
+        for literal in rule.body() {
+            if let Literal::Positive(atom) = literal {
+                if let Some(FilterExpression::Conjunction(conj)) = filter_expressions.get(&atom.predicate()) {
+                    let unmarkings = Self::get_unmarkings(atom);
+                    for flt in conj {
+                        f.push(Self::unmark(flt, &unmarkings).expect("All positional markers should be mapped to a term by construction."));
+                    }
+                }
+            }
+        }
+
+        f
+    }
+
+    fn is_filter_literal(literal: &Literal, filter_expressions: &HashMap<Tag,FilterExpression>) -> bool {
+        match literal {
+            Literal::Operation(_) => true,
+            Literal::Positive(atom) => !filter_expressions.contains_key(&atom.predicate()),
+            Literal::Negative(_) => false,
+        }
+    }
+
+    fn simplify(f_plus: Vec<Literal>, f_minus: Vec<Literal>) -> Vec<Literal> {
+        let mut simpl: Vec<Literal> = Vec::new();
+        let mut f_plus: Vec<Literal> = f_plus.clone();
+
+        while let Some(literal) = f_plus.pop() {
+            let mut comb = HashSet::new();
+            comb.extend(f_minus.clone());
+            comb.extend(simpl.clone());
+            comb.extend(f_plus.clone());
+            if !Self::closure(comb).contains(&literal) {
+                simpl.push(literal.clone());
+
+            }
+        }
+
+        simpl
+    }
 }
 
 impl ProgramTransformation for TransformationFilterPushing {
@@ -250,13 +308,29 @@ impl ProgramTransformation for TransformationFilterPushing {
         // apply normalization: no repeated variables in body
 
         let mut commit = program.fork();
-        let _filter_expressions = Self::compute_filters(program);
+        let filter_expressions = Self::compute_filters(program);
 
         for statement in program.statements() {
             match statement {
                 Statement::Rule(rule) => {
-                    // TODO: update rule
-                    commit.keep(rule);
+                    for atom in rule.head() {
+                        if let Some(f_plus) = Self::get_f_plus(rule, atom, &filter_expressions) {
+                            let head = vec![atom.clone()];
+                            let mut body: Vec<Literal> = Vec::new();
+                            for literal in rule.body() {
+                                if !Self::is_filter_literal(literal, &filter_expressions){
+                                    body.push(literal.clone());
+                                }
+                            }
+
+                            let f_minus = Self::get_f_minus(rule, &filter_expressions);
+                            for literal in Self::simplify(f_plus, f_minus) {
+                                body.push(literal);
+                            }
+
+                            commit.add_rule(Rule::new(head, body));
+                        }
+                    }
                 }
                 Statement::Fact(fact) => {
                     // TODO: update fact
