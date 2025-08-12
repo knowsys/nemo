@@ -306,6 +306,7 @@ impl ComponentBehavior for Aggregate {
                     Variable::Universal(_) => "",
                     Variable::Existential(_) => "existential",
                     Variable::Global(_) => "global",
+                    Variable::Positional(_) => "positional",
                 }
                 .to_owned();
 

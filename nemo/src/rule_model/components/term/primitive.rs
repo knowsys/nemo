@@ -14,8 +14,7 @@ use variable::{
 
 use crate::rule_model::{
     components::{
-        ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent,
-        IterableVariables, ProgramComponent, ProgramComponentKind,
+        term::primitive::variable::positional::PositionalMarker, ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent, IterableVariables, ProgramComponent, ProgramComponentKind
     },
     error::{TranslationReport, ValidationReport},
     origin::Origin,
@@ -122,6 +121,12 @@ impl From<UniversalVariable> for Primitive {
 
 impl From<ExistentialVariable> for Primitive {
     fn from(value: ExistentialVariable) -> Self {
+        Self::from(Variable::from(value))
+    }
+}
+
+impl From<PositionalMarker> for Primitive {
+    fn from(value: PositionalMarker) -> Self {
         Self::from(Variable::from(value))
     }
 }

@@ -33,7 +33,7 @@ use tuple::Tuple;
 use value_type::ValueType;
 
 use crate::rule_model::{
-    error::ValidationReport, origin::Origin, pipeline::id::ProgramComponentId,
+    components::term::primitive::variable::positional::PositionalMarker, error::ValidationReport, origin::Origin, pipeline::id::ProgramComponentId
 };
 
 use super::{
@@ -276,6 +276,12 @@ impl From<UniversalVariable> for Term {
 
 impl From<ExistentialVariable> for Term {
     fn from(value: ExistentialVariable) -> Self {
+        Self::Primitive(Primitive::from(value))
+    }
+}
+
+impl From<PositionalMarker> for Term {
+    fn from(value: PositionalMarker) -> Self {
         Self::Primitive(Primitive::from(value))
     }
 }

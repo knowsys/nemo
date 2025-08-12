@@ -1,13 +1,10 @@
 //! This module defines [TransformationProjectionPushing].
 
-use std::{collections::{HashMap, HashSet}, usize};
-
-use csv::Position;
+use std::{collections::{HashMap, HashSet}};
 
 use crate::rule_model::{
-    components::{atom::{self, Atom}, literal::{self, Literal}, rule::Rule, statement::Statement, tag::Tag, term::{primitive::{variable::Variable, Primitive}, Term}, ComponentIdentity, IterablePrimitives},
+    components::{atom::Atom, literal::Literal, rule::Rule, statement::Statement, tag::Tag, term::{primitive::Primitive, Term}, IterablePrimitives},
     error::ValidationReport,
-    pipeline::id::ProgramComponentId,
     programs::{handle::ProgramHandle, ProgramRead, ProgramWrite},
 };
 

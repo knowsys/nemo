@@ -23,7 +23,7 @@ use super::{
 /// An [Atom], its negation, or an [Operation].
 /// Literals are used to represent conditions that must be satisfied
 /// for a rule to be applicable.
-#[derive(Debug, Clone, PartialEq, Hash)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum Literal {
     /// Positive atom
     Positive(Atom),

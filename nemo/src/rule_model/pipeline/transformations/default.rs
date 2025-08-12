@@ -13,7 +13,7 @@ use crate::{
 
 use super::{
     active::TransformationActive, exports::TransformationExports, global::TransformationGlobal,
-    ProgramTransformation, projection_pushing::TransformationProjectionPushing
+    ProgramTransformation, projection_pushing::TransformationProjectionPushing, filter_pushing::TransformationFilterPushing
 };
 
 /// Default transformation
@@ -53,6 +53,7 @@ impl<'a> ProgramTransformation for TransformationDefault<'a> {
             ))?
             .transform(TransformationValidate::default())?
             .transform(TransformationActive::default())?
+            .transform(TransformationFilterPushing::default())?
             .transform(TransformationProjectionPushing::default())
     }
 }

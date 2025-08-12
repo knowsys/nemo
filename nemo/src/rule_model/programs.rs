@@ -134,6 +134,13 @@ pub trait ProgramRead {
             .collect()
     }
 
+    /// Return the set of all predicates that are defined by export statements.
+    fn export_predicates(&self) -> HashSet<Tag> {
+        self.exports()
+            .map(|export| export.predicate().clone())
+            .collect()
+    }
+
     /// Return the set of all predicates that can be derived by applying rules.
     fn derived_predicates(&self) -> HashSet<Tag> {
         let rule_head = self

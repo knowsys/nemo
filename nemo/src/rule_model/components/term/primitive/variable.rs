@@ -5,11 +5,11 @@ use std::fmt::Display;
 use existential::ExistentialVariable;
 use global::GlobalVariable;
 use universal::UniversalVariable;
+use positional::PositionalMarker;
 
 use crate::rule_model::{
     components::{
-        ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent,
-        ProgramComponentKind,
+        ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent, ProgramComponentKind
     },
     error::ValidationReport,
     origin::Origin,
@@ -21,6 +21,7 @@ use super::ProgramComponent;
 pub mod existential;
 pub mod global;
 pub mod universal;
+pub mod positional;
 
 /// Variable
 ///
@@ -34,6 +35,8 @@ pub enum Variable {
     Existential(ExistentialVariable),
     /// Global variable
     Global(GlobalVariable),
+    /// PositionalMarker
+    Positional(PositionalMarker),
 }
 
 impl Variable {
@@ -63,6 +66,7 @@ impl Variable {
             Variable::Universal(variable) => variable.name(),
             Variable::Existential(variable) => Some(variable.name()),
             Variable::Global(global_variable) => Some(global_variable.name()),
+            Variable::Positional(_) => None,
         }
     }
 
@@ -81,6 +85,11 @@ impl Variable {
         matches!(self, Variable::Global(_))
     }
 
+    /// Return whether this is a positional marker.
+    pub fn is_positional(&self) -> bool {
+        matches!(self, Variable::Positional(_))
+    }
+
     /// Return whether this is an anonymous universal variable.
     pub fn is_anonymous(&self) -> bool {
         if let Variable::Universal(universal) = self {
@@ -96,6 +105,7 @@ impl Variable {
             Variable::Universal(variable) => variable.rename(name),
             Variable::Existential(variable) => variable.rename(name),
             Variable::Global(variable) => variable.rename(name),
+            Variable::Positional(_) => (),
         }
     }
 }
@@ -112,6 +122,13 @@ impl From<ExistentialVariable> for Variable {
     }
 }
 
+impl From<PositionalMarker> for Variable {
+    fn from(value: PositionalMarker) -> Self {
+        Self::Positional(value)
+    }
+}
+
+
 impl From<GlobalVariable> for Variable {
     fn from(value: GlobalVariable) -> Self {
         Self::Global(value)
@@ -124,6 +141,7 @@ impl Display for Variable {
             Variable::Universal(variable) => variable.fmt(f),
             Variable::Existential(variable) => variable.fmt(f),
             Variable::Global(variable) => variable.fmt(f),
+            Variable::Positional(variable) => variable.fmt(f),
         }
     }
 }
@@ -138,6 +156,7 @@ impl ComponentBehavior for Variable {
             Variable::Universal(variable) => variable.validate(),
             Variable::Existential(variable) => variable.validate(),
             Variable::Global(variable) => variable.validate(),
+            Variable::Positional(variable) => variable.validate(),
         }
     }
 
@@ -153,6 +172,7 @@ impl ComponentSource for Variable {
             Variable::Universal(variable) => variable.origin(),
             Variable::Existential(variable) => variable.origin(),
             Variable::Global(variable) => variable.origin(),
+            Variable::Positional(variable) => variable.origin(),
         }
     }
 
@@ -161,6 +181,7 @@ impl ComponentSource for Variable {
             Variable::Universal(variable) => variable.set_origin(origin),
             Variable::Existential(variable) => variable.set_origin(origin),
             Variable::Global(variable) => variable.set_origin(origin),
+            Variable::Positional(variable) => variable.set_origin(origin),
         }
     }
 }
@@ -171,6 +192,7 @@ impl ComponentIdentity for Variable {
             Variable::Universal(variable) => variable.id(),
             Variable::Existential(variable) => variable.id(),
             Variable::Global(variable) => variable.id(),
+            Variable::Positional(variable) => variable.id(),
         }
     }
 
@@ -179,6 +201,7 @@ impl ComponentIdentity for Variable {
             Variable::Universal(variable) => variable.set_id(id),
             Variable::Existential(variable) => variable.set_id(id),
             Variable::Global(variable) => variable.set_id(id),
+            Variable::Positional(variable) => variable.set_id(id),
         }
     }
 }
