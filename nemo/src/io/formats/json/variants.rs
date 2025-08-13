@@ -22,6 +22,7 @@ macro_rules! json_variant {
             use crate::io::formats::json::datavalues;
 
             #[derive(Deserialize, Serialize)]
+            #[serde(untagged)]
             pub(crate) enum JsonAnyDataValue {
                 $(
                     #[serde(with = $policy)]
