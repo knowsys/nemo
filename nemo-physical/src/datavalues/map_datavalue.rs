@@ -22,7 +22,6 @@ pub struct MapDataValue {
 
 impl MapDataValue {
     /// Constructor.
-    #[allow(dead_code)]
     pub fn new<T: IntoIterator<Item = (AnyDataValue, AnyDataValue)>>(
         label: Option<IriDataValue>,
         pairs_iter: T,
@@ -121,7 +120,7 @@ impl DataValue for MapDataValue {
         let pair = index / 2;
         let (key, value) = self.pairs.iter().nth(pair).expect("unchecked method");
 
-        match index % 2 == 0 {
+        match index.is_multiple_of(2) {
             true => key,
             false => value,
         }
