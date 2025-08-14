@@ -50,6 +50,16 @@ pub(crate) mod default {
                 ))
             }
         }
+
+        fn visit_none<E>(self) -> Result<Self::Value, E>
+        where
+            E: Error,
+        {
+            Ok(OtherDataValue::new(
+                "null".to_string(),
+                "http://www.w3.org/1999/02/22-rdf-syntax-ns#JSON".to_string(),
+            ))
+        }
     }
 
     pub(crate) fn deserialize<'de, D>(deserializer: D) -> Result<OtherDataValue, D::Error>
