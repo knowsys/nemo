@@ -23,7 +23,7 @@ pub(crate) mod default {
     where
         D: Deserializer<'de>,
     {
-        deserializer.deserialize_string(BooleanVisitor {})
+        deserializer.deserialize_bool(BooleanVisitor {})
     }
 
     pub(crate) fn serialize<S>(value: &BooleanDataValue, serializer: S) -> Result<S::Ok, S::Error>
