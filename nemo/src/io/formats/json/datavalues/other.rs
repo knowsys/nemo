@@ -51,7 +51,7 @@ pub(crate) mod default {
             }
         }
 
-        fn visit_none<E>(self) -> Result<Self::Value, E>
+        fn visit_unit<E>(self) -> Result<Self::Value, E>
         where
             E: Error,
         {
@@ -64,9 +64,11 @@ pub(crate) mod default {
 
     pub(crate) fn deserialize<'de, D>(deserializer: D) -> Result<OtherDataValue, D::Error>
     where
-        D: Deserializer<'de>,
+        D: Deserializer<'de> + Copy,
     {
-        deserializer.deserialize_string(OtherVisitor {})
+        deserializer
+            .deserialize_string(OtherVisitor {})
+            .or_else(|_| deserializer.deserialize_unit(OtherVisitor {}))
     }
 
     pub(crate) fn serialize<T, S>(value: &T, serializer: S) -> Result<S::Ok, S::Error>
@@ -74,6 +76,37 @@ pub(crate) mod default {
         T: DataValue,
         S: Serializer,
     {
-        serializer.serialize_str(&value.canonical_string())
+        if value.datatype_iri() == "http://www.w3.org/1999/02/22-rdf-syntax-ns#JSON"
+            && value.lexical_value() == "null"
+        {
+            serializer.serialize_none()
+        } else {
+            serializer.serialize_str(&value.canonical_string())
+        }
+    }
+
+    #[cfg(test)]
+    mod test {
+        use std::assert_matches::assert_matches;
+
+        use crate::io::formats::json::variants::default::JsonAnyDataValue;
+        use nemo_physical::datavalues::{AnyDataValue, DataValue};
+        use serde_json::{from_value, Value};
+        use test_log::test;
+
+        #[test]
+        fn null() {
+            let value: Result<JsonAnyDataValue, _> = from_value(Value::Null);
+            assert_matches!(value, Ok(_));
+            let value = value.unwrap();
+
+            assert_matches!(value, JsonAnyDataValue::Other(_));
+            let value = AnyDataValue::from(value);
+            assert_eq!("null", value.lexical_value());
+            assert_eq!(
+                "http://www.w3.org/1999/02/22-rdf-syntax-ns#JSON",
+                value.datatype_iri()
+            );
+        }
     }
 }

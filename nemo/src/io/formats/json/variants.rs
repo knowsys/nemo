@@ -21,7 +21,7 @@ macro_rules! json_variant {
             use nemo_physical::datavalues::{any_datavalue::AnyDataValueEnum, *};
             use crate::io::formats::json::datavalues;
 
-            #[derive(Deserialize, Serialize)]
+            #[derive(Debug, Deserialize, Serialize)]
             #[serde(untagged)]
             pub(crate) enum JsonAnyDataValue {
                 $(
