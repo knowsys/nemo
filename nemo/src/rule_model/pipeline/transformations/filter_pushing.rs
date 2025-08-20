@@ -4,7 +4,7 @@
 use std::{collections::{HashMap, HashSet, VecDeque}, fmt::Display};
 
 use crate::rule_model::{
-    components::{atom::Atom, literal::Literal, rule::Rule, statement::Statement, tag::Tag, term::{operation::{operation_kind::OperationKind, Operation}, primitive::{variable::{positional::PositionalMarker, Variable}, Primitive}, value_type::ValueType, Term}},
+    components::{atom::Atom, literal::Literal, rule::Rule, statement::Statement, tag::Tag, term::{operation::{operation_kind::OperationKind, Operation}, primitive::{variable::{positional::PositionalMarker, Variable}, Primitive}, Term}},
     error::ValidationReport,
     programs::{handle::ProgramHandle, ProgramRead, ProgramWrite},
 };
@@ -26,6 +26,9 @@ enum FilterExpression {
 }
 
 impl TransformationFilterPushing {
+
+    // initialize filters, i.e., set filters for output predicates to true and for all remaining
+    // idb predicates to false
     fn init_filters(program: &ProgramHandle) -> HashMap<Tag,FilterExpression> {
         let mut filter_expressions: HashMap<Tag, FilterExpression> = HashMap::new();
         let output_predicates: HashSet<&Tag> = program.exports().map(|export|export.predicate()).collect();
@@ -41,13 +44,14 @@ impl TransformationFilterPushing {
         filter_expressions
     }
 
+    // compute the filters iteratively, until nothing changes any more
     fn compute_filters(program: &ProgramHandle) -> HashMap<Tag,FilterExpression> {
         let mut filter_expressions = Self::init_filters(program);
         let mut queue: Vec<Tag> = program.exports().map(|export|export.predicate().clone()).collect();
 
         while let Some(predicate) = queue.pop() {
             for (tag, flt) in filter_expressions.iter() {
-                log::info!("{}: {}", tag, flt);
+                log::info!("{tag}: {flt}");
             }
 
             for rule in program.rules() {
@@ -71,18 +75,82 @@ impl TransformationFilterPushing {
     fn update_filters(rule: &Rule, head: &Atom, filter_expressions: &mut HashMap<Tag,FilterExpression>) -> HashSet<Tag> {
         let mut updated_predicates: HashSet<Tag> = HashSet::new();
 
-        for atom in rule.body_positive() {
-            if filter_expressions.contains_key(&atom.predicate()) && Self::push_filter(rule, head, atom, filter_expressions) {
-                updated_predicates.insert(atom.predicate());
+        for literal in rule.body() {
+            match literal {
+                Literal::Positive(atom) | Literal::Negative(atom) => {
+                    if filter_expressions.contains_key(&atom.predicate()) && Self::push_filter_for_atom(rule, head, atom, filter_expressions) {
+                        updated_predicates.insert(atom.predicate());
+                    }
+                },
+                _ => {},
             }
         }
-
-        // TODO: handle negative body atoms
 
         updated_predicates
     }
 
-    fn push_filter(rule: &Rule, from: &Atom, to: &Atom, filter_expressions: &mut HashMap<Tag,FilterExpression>) -> bool {
+    // push the filter atoms to the atom
+    fn push_filter(filter_atoms: &HashSet<Literal>, to: &Atom, filter_expressions: &mut HashMap<Tag,FilterExpression>) -> bool {
+        // get new filter expression, using positional markers
+        let new_flt = match filter_expressions.get(&to.predicate()) {
+            // if old filter is top, nothing to be done
+            Some(FilterExpression::Top) => {
+                None
+            },
+
+            // if old filter is bottom, use the complete closure
+            Some(FilterExpression::Bot) => {
+                let markings = Self::get_markings(to);
+                let mut to_filter: HashSet<Literal> = HashSet::new();
+                for literal in Self::closure(filter_atoms) {
+                    if let Some(literal) = Self::mark(&literal, &markings) {
+                        to_filter.insert(literal);
+                    }
+                }
+                if to_filter.is_empty() {
+                    Some(FilterExpression::Top)
+                } else {
+                    Some(FilterExpression::Conjunction(to_filter))
+                }
+            },
+
+            // if old filter is conjunction, keep those literals that are entailed by closure
+            Some(FilterExpression::Conjunction(old_flt)) => {
+                let closure = Self::closure(filter_atoms);
+                let unmarkings = Self::get_unmarkings(to);
+                let mut new_flt: HashSet<Literal> = HashSet::new();
+                for flt_literal in old_flt {
+                    if let Some(literal) = Self::unmark(flt_literal, &unmarkings) {
+                        if closure.contains(&literal) {
+                            new_flt.insert(flt_literal.clone());
+                        }
+                    }
+                }
+
+                // the empty set is defined as top
+                if new_flt.is_empty() {
+                    Some(FilterExpression::Top)
+                // check if the filter expression has become more general, i.e., smaller
+                } else if old_flt.is_subset(&new_flt) {
+                    None
+                } else {
+                    Some(FilterExpression::Conjunction(new_flt))
+                }
+            },
+            // if to predicate is not in filter expression, it is EDB and nothing to be done
+                None => None,
+        };
+
+        if let Some(new_flt) = new_flt {
+            filter_expressions.insert(to.predicate(), new_flt);
+            true
+        } else {
+            false
+        }
+    }
+
+    // push filter expression for an atom
+    fn push_filter_for_atom(rule: &Rule, from: &Atom, to: &Atom, filter_expressions: &mut HashMap<Tag,FilterExpression>) -> bool {
         // get the filter expression to be pushed
         if let Some(from_filter) = filter_expressions.get(&from.predicate()) {
             // construct filter of the rule body filter and the instantiated from filter expression
@@ -93,73 +161,20 @@ impl TransformationFilterPushing {
                 FilterExpression::Bot => return false,
                 FilterExpression::Conjunction(flt) => flt.iter().filter_map(|literal|Self::unmark(literal, &unmarkings)).collect(),
             };
+
             // add filter atom in the rule body
-            for literal in Self::get_filter_atoms(rule, filter_expressions) {
+            for literal in Self::get_filter_literals(rule, filter_expressions) {
                 rule_filter.insert(literal.clone());
             }
 
-            // get new filter expression, using positional markers
-            let new_flt = match filter_expressions.get(&to.predicate()) {
-                // if old filter is top, nothing to be done
-                Some(FilterExpression::Top) => {
-                    None
-                },
-
-                // if old filter is bottom, use the complete closure
-                Some(FilterExpression::Bot) => {
-                    let markings = Self::get_markings(to);
-                    let mut to_filter: HashSet<Literal> = HashSet::new();
-                    for literal in Self::closure(&rule_filter) {
-                        if let Some(literal) = Self::mark(&literal, &markings) {
-                            to_filter.insert(literal);
-                        }
-                    }
-                    if to_filter.is_empty() {
-                        Some(FilterExpression::Top)
-                    } else {
-                        Some(FilterExpression::Conjunction(to_filter))
-                    }
-                },
-
-                // if old filter is conjunction, keep those literals that are entailed by closure
-                Some(FilterExpression::Conjunction(old_flt)) => {
-                    let closure = Self::closure(&rule_filter);
-                    let unmarkings = Self::get_unmarkings(to);
-                    let mut new_flt: HashSet<Literal> = HashSet::new();
-                    for flt_literal in old_flt {
-                        if let Some(literal) = Self::unmark(flt_literal, &unmarkings) {
-                            if closure.contains(&literal) {
-                                new_flt.insert(flt_literal.clone());
-                            }
-                        }
-                    }
-
-                    // the empty set is defined as top
-                    if new_flt.is_empty() {
-                        Some(FilterExpression::Top)
-                    // check if the filter expression has become more general, i.e., smaller
-                    } else if old_flt.is_subset(&new_flt) {
-                        None
-                    } else {
-                        Some(FilterExpression::Conjunction(new_flt))
-                    }
-                },
-
-                // if to predicate is not in filter expression, it is EDB and nothing to be done
-                None => None,
-            };
-
-            if let Some(new_flt) = new_flt {
-                filter_expressions.insert(to.predicate(), new_flt);
-                true
-            } else {
-                false
-            }
+            // push the constructed filter atoms
+            Self::push_filter(&rule_filter, to, filter_expressions)
         } else {
             false
         }
     }
 
+    // add the terms to hash map entry for key, if not present yet
     fn insert(kind: &OperationKind, terms: Vec<Term>, map: &mut HashMap<OperationKind,Vec<Vec<Term>>>) {
         if let Some(set) = map.get_mut(kind) {
             if !set.contains(&terms) {
@@ -170,6 +185,7 @@ impl TransformationFilterPushing {
         }
     }
 
+    // compute the logical closure of the given literals
     fn closure(literals: &HashSet<Literal>) -> Vec<Literal> {
         let mut queue: VecDeque<Literal> = VecDeque::new();
         let mut ops: HashMap<OperationKind,Vec<Vec<Term>>> = HashMap::new();
@@ -312,7 +328,8 @@ impl TransformationFilterPushing {
         out
     }
 
-    fn get_filter_atoms<'a>(rule: &'a Rule, filter_expressions: &'a HashMap<Tag,FilterExpression>) -> Vec<&'a Literal>  {
+    // get filter literal for a rule
+    fn get_filter_literals<'a>(rule: &'a Rule, filter_expressions: &'a HashMap<Tag,FilterExpression>) -> Vec<&'a Literal>  {
         rule.body().iter().filter(|literal|Self::is_filter_literal(literal, filter_expressions)).collect()
     }
 
@@ -388,6 +405,7 @@ impl TransformationFilterPushing {
         unmarkings
     }
 
+    // get instantiated filter expression for the head atom and the filter literals in rule body
     fn get_f_plus(rule: &Rule, atom: &Atom, filter_expressions: &HashMap<Tag,FilterExpression>) -> Option<Vec<Literal>> {
         let mut f: Vec<Literal> = Vec::new();
 
@@ -404,13 +422,14 @@ impl TransformationFilterPushing {
             }
         }
 
-        for literal in Self::get_filter_atoms(rule, filter_expressions) {
+        for literal in Self::get_filter_literals(rule, filter_expressions) {
             f.push(literal.clone());
         }
 
         Some(f)
     }
 
+    // get conjunction of instantiated filter expression for idb body atoms
     fn get_f_minus(rule: &Rule, filter_expressions: &HashMap<Tag,FilterExpression>) -> Vec<Literal> {
         let mut f: Vec<Literal> = Vec::new();
 
@@ -428,6 +447,8 @@ impl TransformationFilterPushing {
         f
     }
 
+    // check whether a literal is a filter literal, i.e., it is an operation or a positive atom
+    // over a filter predicate
     fn is_filter_literal(literal: &Literal, filter_expressions: &HashMap<Tag,FilterExpression>) -> bool {
         match literal {
             Literal::Operation(_) => true,
@@ -436,6 +457,8 @@ impl TransformationFilterPushing {
         }
     }
 
+    // simplify filter expression f_plus by iteratively replacing atoms with false and check if it
+    // is still entailed by remainder and f_minus
     fn simplify(f_plus: Vec<Literal>, f_minus: Vec<Literal>) -> Vec<Literal> {
         let mut simpl: Vec<Literal> = Vec::new();
         let mut f_plus: Vec<Literal> = f_plus.clone();
