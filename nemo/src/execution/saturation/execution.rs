@@ -1,11 +1,15 @@
 use std::{
-    collections::{btree_set, BTreeSet},
+    collections::{btree_set, BTreeSet, HashMap},
     ops::{Bound, Index},
+    sync::Arc,
 };
 
 use nemo_physical::datatypes::StorageValueT;
 
-use crate::execution::planning::operations::join;
+use crate::{
+    execution::saturation::model::{Head, JoinOp},
+    rule_model::substitution::Substitution,
+};
 
 use super::model::{
     BodyTerm, JoinOrder, SaturationAtom, SaturationFact, SaturationRule, VariableIdx,
@@ -101,7 +105,7 @@ struct Triggers<'a, 'b> {
 }
 
 impl Iterator for Triggers<'_, '_> {
-    type Item = (SaturationSubstitution, JoinOrder);
+    type Item = ExecutionTree;
 
     fn next(&mut self) -> Option<Self::Item> {
         while self.index < self.rule.body_atoms.len() {
@@ -110,10 +114,16 @@ impl Iterator for Triggers<'_, '_> {
                 continue;
             };
 
-            let join_order = self.rule.join_order(self.index);
+            let ops = self.rule.join_order(self.index);
+            let index = ops.len();
+
             self.index += 1;
 
-            return Some((substitution, join_order));
+            return Some(ExecutionTree {
+                init: substitution,
+                ops,
+                index,
+            });
         }
 
         None
@@ -124,7 +134,7 @@ impl SaturationRule {
     fn trigger<'a, 'b>(
         &'a mut self,
         fact: &'b SaturationFact,
-    ) -> impl Iterator<Item = (SaturationSubstitution, JoinOrder)> + use<'a, 'b> {
+    ) -> impl Iterator<Item = ExecutionTree> + use<'a, 'b> {
         Triggers {
             rule: self,
             fact,
@@ -266,14 +276,185 @@ fn find_all_matches<'a>(pattern: Row, table: &'a BTreeSet<Row>) -> RowIterator<'
     }
 }
 
-fn join<'a, 'b, 'c>(
-    subst: &'a SaturationSubstitution,
-    terms: &'b [BodyTerm],
-    table: &'c BTreeSet<Row>,
-) -> impl Iterator<Item = SaturationSubstitution> + use<'a, 'b, 'c> {
-    find_all_matches(subst.bind(terms), table).map(|row| {
-        let mut subst = subst.clone();
-        subst.update(terms, row);
-        subst
-    })
+struct RowMatcher<'a> {
+    substitution: SaturationSubstitution,
+    atom: SaturationAtom,
+    cursor: RowIterator<'a>,
+}
+
+impl Iterator for RowMatcher<'_> {
+    type Item = SaturationSubstitution;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let row = self.cursor.next()?;
+        let mut subst = self.substitution.clone();
+        subst.update(&self.atom.terms, row);
+        Some(subst)
+    }
+}
+
+fn join<'a>(
+    substitution: SaturationSubstitution,
+    atom: SaturationAtom,
+    table: &'a BTreeSet<Row>,
+) -> RowMatcher<'a> {
+    let cursor = find_all_matches(substitution.bind(&atom.terms), table);
+
+    RowMatcher {
+        substitution,
+        atom,
+        cursor,
+    }
+}
+struct ExecutionTree {
+    init: SaturationSubstitution,
+    ops: Arc<[JoinOp]>,
+    index: usize,
+}
+
+enum JoinIter<'a> {
+    Done,
+    NoOp(SaturationSubstitution),
+    Join {
+        inner: Box<JoinIter<'a>>,
+        atom: SaturationAtom,
+        table: &'a BTreeSet<Row>,
+        current: Option<RowMatcher<'a>>,
+    },
+}
+
+type DataBase = HashMap<Arc<str>, BTreeSet<Row>>;
+
+impl ExecutionTree {
+    fn pop(&mut self) -> Option<&JoinOp> {
+        if self.index > 0 {
+            self.index -= 1;
+            Some(&self.ops[self.index])
+        } else {
+            None
+        }
+    }
+
+    fn execute<'a>(mut self, tables: &'a DataBase) -> JoinIter<'a> {
+        let Some(op) = self.pop() else {
+            return JoinIter::NoOp(self.init);
+        };
+
+        match op {
+            JoinOp::Join(atom) => {
+                let table = tables.get(&atom.predicate).unwrap();
+                let atom = atom.clone();
+                let inner = Box::new(self.execute(&tables));
+
+                JoinIter::Join {
+                    inner,
+                    atom,
+                    table,
+                    current: None,
+                }
+            }
+            // todo: more efficient implementation?
+            JoinOp::Filter(atom) => {
+                let table = tables.get(&atom.predicate).unwrap();
+                let atom = atom.clone();
+                let inner = Box::new(self.execute(&tables));
+
+                JoinIter::Join {
+                    inner,
+                    atom,
+                    table,
+                    current: None,
+                }
+            }
+        }
+    }
+}
+
+impl Iterator for JoinIter<'_> {
+    type Item = SaturationSubstitution;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            JoinIter::NoOp(saturation_substitution) => {
+                let res = saturation_substitution.clone();
+                *self = Self::Done;
+                Some(res)
+            }
+            JoinIter::Join {
+                inner,
+                atom,
+                table,
+                current,
+            } => loop {
+                if let Some(current) = current {
+                    if let Some(next) = current.next() {
+                        return Some(next);
+                    }
+                }
+
+                let substitution = inner.next()?;
+                *current = Some(join(substitution, atom.clone(), table));
+            },
+            JoinIter::Done => None,
+        }
+    }
+}
+
+fn fact_from_row(row: &Row, predicate: Arc<str>) -> SaturationFact {
+    let values = row
+        .iter()
+        .map(|element| match element {
+            RowElement::Value(value) => Some(*value),
+            _ => None,
+        })
+        .collect::<Option<_>>()
+        .unwrap();
+
+    SaturationFact { predicate, values }
+}
+
+fn saturate(db: &mut DataBase, mut rules: Vec<SaturationRule>) {
+    let mut todo = Vec::new();
+
+    for (predicate, table) in db.iter() {
+        for row in table.iter() {
+            todo.push(fact_from_row(row, predicate.clone()));
+        }
+    }
+
+    while !todo.is_empty() {
+        let mut matches = Vec::new();
+
+        for (rule_index, rule) in rules.iter_mut().enumerate() {
+            for fact in &todo {
+                for trigger in rule.trigger(&fact) {
+                    matches.extend(trigger.execute(&db).map(|row| (row, rule_index)));
+                }
+            }
+        }
+
+        todo.clear();
+
+        for (substitution, rule_index) in matches {
+            let rule = &rules[rule_index];
+
+            match &rule.head {
+                Head::Datalog(atoms) => {
+                    for atom in atoms {
+                        let row = substitution.bind(&atom.terms);
+                        let table = db.entry(atom.predicate.clone()).or_default();
+
+                        let mut cursor = table.lower_bound_mut(Bound::Included(&row));
+
+                        if cursor.peek_next() != Some(&row) {
+                            let fact = fact_from_row(&row, atom.predicate.clone());
+
+                            cursor.insert_after(row).unwrap();
+                            todo.push(fact);
+                        }
+                    }
+                }
+            }
+        }
+    }
 }

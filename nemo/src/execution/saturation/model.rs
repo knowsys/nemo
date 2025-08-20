@@ -59,12 +59,13 @@ struct HeadAtom {
     terms: Box<[HeadTerm]>,
 }
 
-enum Head {
+pub(crate) enum Head {
     Datalog(Box<[SaturationAtom]>),
 }
 
 pub(crate) type JoinOrder = Arc<[JoinOp]>;
 
+#[derive(Clone)]
 pub(crate) enum JoinOp {
     Join(SaturationAtom),
     Filter(SaturationAtom),
