@@ -261,10 +261,7 @@ impl ExecutionEngine {
 
         let mut new_derivations: Option<bool> = None;
 
-        let mut rule_strategy = Strategy::new(
-            self.program.rules().iter().collect(),
-            self.analysis.rule_analysis.iter().collect(),
-        )?;
+        let mut rule_strategy = Strategy::new(self.program.rules(), &self.analysis.rule_analysis)?;
 
         while let Some(step) = rule_strategy.next_step(new_derivations) {
             let ExecutionStep::ExecuteRule { execution, index } = step;

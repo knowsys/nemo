@@ -11,10 +11,7 @@ use super::{
 
 /// Defines a rule execution strategy which respects certain dependencies between rules
 #[derive(Debug)]
-pub struct StrategyDependencyGraph<
-    GraphConstructor: DependencyGraphConstructor,
-    SubStrategy: RuleSelectionStrategy,
-> {
+pub struct StrategyDependencyGraph<GraphConstructor, SubStrategy: RuleSelectionStrategy> {
     _constructor: PhantomData<GraphConstructor>,
 
     ordered_sccs: Vec<Vec<usize>>,
@@ -23,14 +20,16 @@ pub struct StrategyDependencyGraph<
     current_scc_index: usize,
 }
 
-impl<GraphConstructor: DependencyGraphConstructor, SubStrategy: RuleSelectionStrategy>
-    RuleSelectionStrategy for StrategyDependencyGraph<GraphConstructor, SubStrategy>
+impl<
+        GraphConstructor: for<'a> DependencyGraphConstructor<&'a RuleAnalysis>,
+        SubStrategy: RuleSelectionStrategy,
+    > RuleSelectionStrategy for StrategyDependencyGraph<GraphConstructor, SubStrategy>
 {
     fn new(
         rules: Vec<&ChaseRule>,
         rule_analyses: Vec<&RuleAnalysis>,
     ) -> Result<Self, SelectionStrategyError> {
-        let dependency_graph = GraphConstructor::build_graph(rules.clone(), rule_analyses.clone());
+        let dependency_graph = GraphConstructor::build_graph(&rule_analyses);
         let graph_scc = petgraph::algo::condensation(dependency_graph, true);
         let scc_sorted = petgraph::algo::toposort(&graph_scc, None)
             .expect("The input graph is assured to be acyclic");

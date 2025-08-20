@@ -35,8 +35,8 @@ pub trait RuleSelectionStrategy: std::fmt::Debug + Sized {
 pub trait ExecutionStrategy: std::fmt::Debug + Sized {
     /// Create a new [ExecutionStrategy] object.
     fn new(
-        rules: Vec<&ChaseRule>,
-        rule_analyses: Vec<&RuleAnalysis>,
+        rules: &[ChaseRule],
+        rule_analyses: &[RuleAnalysis],
     ) -> Result<Self, SelectionStrategyError>;
 
     /// Return the next step that should be executed.
@@ -66,17 +66,17 @@ pub struct SingleStepStrategy<T> {
 
 impl<T: RuleSelectionStrategy> ExecutionStrategy for SingleStepStrategy<T> {
     fn new(
-        rules: Vec<&ChaseRule>,
-        rule_analyses: Vec<&RuleAnalysis>,
+        rules: &[ChaseRule],
+        rule_analyses: &[RuleAnalysis],
     ) -> Result<Self, SelectionStrategyError> {
         let rule_execution = rules
             .iter()
-            .zip(&rule_analyses)
+            .zip(rule_analyses)
             .map(|(r, a)| RuleExecution::initialize(r, a))
             .collect();
 
         Ok(SingleStepStrategy {
-            inner: T::new(rules, rule_analyses)?,
+            inner: T::new(rules.iter().collect(), rule_analyses.iter().collect())?,
             rule_execution,
         })
     }
