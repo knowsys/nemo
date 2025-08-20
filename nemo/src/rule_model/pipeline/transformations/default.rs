@@ -5,9 +5,7 @@ use std::collections::HashSet;
 use crate::{
     execution::execution_parameters::ExecutionParameters,
     rule_model::{
-        error::ValidationReport,
-        pipeline::transformations::validate::TransformationValidate,
-        programs::{handle::ProgramHandle, ProgramRead},
+        components::term::Term, error::ValidationReport, pipeline::transformations::validate::TransformationValidate, programs::{handle::ProgramHandle, ProgramRead}
     },
 };
 
@@ -31,6 +29,33 @@ impl<'a> TransformationDefault<'a> {
     pub fn new(parameters: &'a ExecutionParameters) -> Self {
         Self { parameters }
     }
+
+    // check whether filter pushing can and should be applied
+    fn check_application_filter_pushing(program: &ProgramHandle) -> bool {
+        for rule in program.rules() {
+            if rule.body().len() > 5 || rule.positive_variables().len() > 5 {
+                return false;
+            }
+
+            for literal in rule.body() {
+                for term in literal.terms() {
+                    if !Self::supported_for_filter_pushing(term) {
+                        return false;
+                    }
+                }
+            }
+        }
+        true
+    }
+
+    // check whether a term is supported for filter pushing
+    fn supported_for_filter_pushing(term: &Term) -> bool {
+        match term {
+            Term::Primitive(_) => true,
+            Term::Operation(op) => op.terms().all(Self::supported_for_filter_pushing),
+            _ => false,
+        }
+    }
 }
 
 impl<'a> ProgramTransformation for TransformationDefault<'a> {
@@ -45,7 +70,7 @@ impl<'a> ProgramTransformation for TransformationDefault<'a> {
                 .collect::<HashSet<_>>(),
         );
 
-        commit
+        let mut commit = commit
             .submit()?
             .transform(TransformationGlobal::new(&self.parameters.global_variables))?
             .transform(TransformationExports::new(
@@ -53,7 +78,13 @@ impl<'a> ProgramTransformation for TransformationDefault<'a> {
             ))?
             .transform(TransformationValidate::default())?
             .transform(TransformationActive::default())?
-            .transform(TransformationFilterPushing::default())?
-            .transform(TransformationProjectionPushing::default())
+            .transform(TransformationFilterPushing::default());
+
+        if Self::check_application_filter_pushing(program) {
+            commit = commit?
+                .transform(TransformationProjectionPushing::default());
+        }
+
+        commit
     }
 }
