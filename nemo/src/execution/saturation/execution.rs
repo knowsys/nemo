@@ -1,19 +1,15 @@
+//! Executing a set of saturation rules
+
 use std::{
     collections::{btree_set, BTreeSet, HashMap},
-    iter::repeat_n,
     ops::{Bound, Index},
     sync::Arc,
 };
 
 use nemo_physical::datatypes::StorageValueT;
 
-use crate::{
-    execution::saturation::model::{Head, JoinOp},
-    rule_model::substitution::Substitution,
-};
-
 use super::model::{
-    BodyTerm, JoinOrder, SaturationAtom, SaturationFact, SaturationRule, VariableIdx,
+    BodyTerm, Head, JoinOp, SaturationAtom, SaturationFact, SaturationRule, VariableIdx,
 };
 
 #[derive(Debug, Default, Clone)]
@@ -324,7 +320,8 @@ enum JoinIter<'a> {
     },
 }
 
-type DataBase = HashMap<Arc<str>, BTreeSet<Row>>;
+#[derive(Debug)]
+pub(crate) struct DataBase(HashMap<Arc<str>, BTreeSet<Row>>);
 
 impl ExecutionTree {
     fn pop(&mut self) -> Option<&JoinOp> {
@@ -343,7 +340,7 @@ impl ExecutionTree {
 
         match op {
             JoinOp::Join(atom) => {
-                let table = tables.get(&atom.predicate).unwrap();
+                let table = tables.0.get(&atom.predicate).unwrap();
                 let atom = atom.clone();
                 let inner = Box::new(self.execute(&tables));
 
@@ -356,7 +353,7 @@ impl ExecutionTree {
             }
             // todo: more efficient implementation?
             JoinOp::Filter(atom) => {
-                let table = tables.get(&atom.predicate).unwrap();
+                let table = tables.0.get(&atom.predicate).unwrap();
                 let atom = atom.clone();
                 let inner = Box::new(self.execute(&tables));
 
@@ -414,10 +411,10 @@ fn fact_from_row(row: &Row, predicate: Arc<str>) -> SaturationFact {
     SaturationFact { predicate, values }
 }
 
-fn saturate(db: &mut DataBase, mut rules: Vec<SaturationRule>) {
+pub(crate) fn saturate(db: &mut DataBase, rules: &mut [SaturationRule]) {
     let mut todo = Vec::new();
 
-    for (predicate, table) in db.iter() {
+    for (predicate, table) in db.0.iter() {
         for row in table.iter() {
             todo.push(fact_from_row(row, predicate.clone()));
         }
@@ -443,7 +440,7 @@ fn saturate(db: &mut DataBase, mut rules: Vec<SaturationRule>) {
                 Head::Datalog(atoms) => {
                     for atom in atoms {
                         let row = substitution.bind(&atom.terms);
-                        let table = db.entry(atom.predicate.clone()).or_default();
+                        let table = db.0.entry(atom.predicate.clone()).or_default();
 
                         let mut cursor = table.lower_bound_mut(Bound::Included(&row));
 
@@ -460,6 +457,25 @@ fn saturate(db: &mut DataBase, mut rules: Vec<SaturationRule>) {
     }
 }
 
+impl DataBase {
+    pub fn new() -> Self {
+        Self(Default::default())
+    }
+
+    pub fn add_table(
+        &mut self,
+        predicate: Arc<str>,
+        table: impl Iterator<Item = Vec<StorageValueT>>,
+    ) {
+        let table = table
+            .map(|row| row.into_iter().map(RowElement::Value).collect())
+            .collect();
+
+        self.0.insert(predicate, table);
+    }
+}
+
+#[cfg(test)]
 mod test {
     use std::{
         collections::{BTreeSet, HashMap},
@@ -469,7 +485,7 @@ mod test {
     use nemo_physical::datatypes::StorageValueT;
 
     use crate::execution::saturation::{
-        execution::{find_all_matches, saturate, Row, RowElement},
+        execution::{find_all_matches, saturate, DataBase, Row, RowElement},
         model::bench_rules,
     };
 
@@ -549,13 +565,13 @@ mod test {
 
     #[test]
     fn saturate_bench_rules() {
-        let (rules, predicate) = bench_rules(5);
+        let (mut rules, predicate) = bench_rules(5);
         let row: Row = repeat_n(RowElement::Value(StorageValueT::Int64(0)), 5).collect();
 
-        let mut db = HashMap::from([(predicate.clone(), BTreeSet::from([row]))]);
+        let mut db = DataBase(HashMap::from([(predicate.clone(), BTreeSet::from([row]))]));
 
-        saturate(&mut db, rules);
+        saturate(&mut db, &mut rules);
 
-        assert_eq!(db.get(&predicate).unwrap().len(), 32);
+        assert_eq!(db.0.get(&predicate).unwrap().len(), 32);
     }
 }
