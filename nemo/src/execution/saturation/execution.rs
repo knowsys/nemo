@@ -1,5 +1,6 @@
 use std::{
     collections::{btree_set, BTreeSet, HashMap},
+    iter::repeat_n,
     ops::{Bound, Index},
     sync::Arc,
 };
@@ -456,5 +457,105 @@ fn saturate(db: &mut DataBase, mut rules: Vec<SaturationRule>) {
                 }
             }
         }
+    }
+}
+
+mod test {
+    use std::{
+        collections::{BTreeSet, HashMap},
+        iter::repeat_n,
+    };
+
+    use nemo_physical::datatypes::StorageValueT;
+
+    use crate::execution::saturation::{
+        execution::{find_all_matches, saturate, Row, RowElement},
+        model::bench_rules,
+    };
+
+    #[test]
+    fn find_all_matches_works() {
+        macro_rules! table {
+        [ $([ $($v:expr),* ],)* ] => {
+            BTreeSet::from([ $( Box::from([ $(RowElement::Value(StorageValueT::Id32($v))),* ]), )* ])
+        };
+    }
+
+        let table: BTreeSet<Row> = table![
+            [0, 0, 0, 1, 0],
+            [0, 1, 0, 0, 0],
+            [0, 1, 0, 1, 2],
+            [0, 1, 1, 0, 0],
+            [0, 1, 2, 1, 2],
+            [1, 0, 0, 0, 0],
+            [1, 1, 0, 1, 2],
+            [2, 1, 0, 0, 0],
+        ];
+
+        let pattern1: Row = Box::from([
+            RowElement::Value(StorageValueT::Id32(0)),
+            RowElement::Bottom,
+            RowElement::Value(StorageValueT::Id32(0)),
+            RowElement::Value(StorageValueT::Id32(1)),
+            RowElement::Bottom,
+        ]);
+
+        let matches: Vec<_> = find_all_matches(pattern1, &table).collect();
+        let expected: Vec<&[RowElement]> = vec![
+            &[
+                RowElement::Value(StorageValueT::Id32(0)),
+                RowElement::Value(StorageValueT::Id32(0)),
+                RowElement::Value(StorageValueT::Id32(0)),
+                RowElement::Value(StorageValueT::Id32(1)),
+                RowElement::Value(StorageValueT::Id32(0)),
+            ],
+            &[
+                RowElement::Value(StorageValueT::Id32(0)),
+                RowElement::Value(StorageValueT::Id32(1)),
+                RowElement::Value(StorageValueT::Id32(0)),
+                RowElement::Value(StorageValueT::Id32(1)),
+                RowElement::Value(StorageValueT::Id32(2)),
+            ],
+        ];
+
+        assert_eq!(matches, expected);
+
+        let pattern = Box::from([
+            RowElement::Value(StorageValueT::Id32(1)),
+            RowElement::Bottom,
+            RowElement::Value(StorageValueT::Id32(0)),
+            RowElement::Value(StorageValueT::Id32(0)),
+            RowElement::Bottom,
+        ]);
+
+        let mut iter = find_all_matches(pattern, &table);
+        let expected: &[RowElement] = &[
+            RowElement::Value(StorageValueT::Id32(1)),
+            RowElement::Value(StorageValueT::Id32(0)),
+            RowElement::Value(StorageValueT::Id32(0)),
+            RowElement::Value(StorageValueT::Id32(0)),
+            RowElement::Value(StorageValueT::Id32(0)),
+        ];
+        assert_eq!(
+            iter.lower_cursor.peek_next().map(|row| {
+                let row: &[RowElement] = row;
+                row
+            }),
+            Some(expected)
+        );
+        assert_eq!(iter.next(), Some(expected));
+        assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    fn saturate_bench_rules() {
+        let (rules, predicate) = bench_rules(5);
+        let row: Row = repeat_n(RowElement::Value(StorageValueT::Int64(0)), 5).collect();
+
+        let mut db = HashMap::from([(predicate.clone(), BTreeSet::from([row]))]);
+
+        saturate(&mut db, rules);
+
+        assert_eq!(db.get(&predicate).unwrap().len(), 32);
     }
 }

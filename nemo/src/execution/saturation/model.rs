@@ -3,7 +3,7 @@
 use std::{
     borrow::Cow,
     collections::{HashMap, HashSet},
-    iter::repeat,
+    iter::{repeat, repeat_n},
     sync::Arc,
 };
 
@@ -279,4 +279,42 @@ fn compute_join_order(
             variables.extend(body[index].variables());
         }
     }
+}
+
+pub(super) fn bench_rules(n: usize) -> (Vec<SaturationRule>, Arc<str>) {
+    let one = BodyTerm::Constant(StorageValueT::Int64(1));
+    let zero = BodyTerm::Constant(StorageValueT::Int64(0));
+    let predicate: Arc<str> = Arc::from("p");
+
+    let rules: Vec<_> = (0..n)
+        .map(|i| {
+            let head = (0..VariableIdx::try_from(i).unwrap())
+                .map(BodyTerm::Variable)
+                .chain(Some(one))
+                .chain(repeat_n(zero, n - i - 1));
+
+            let head = SaturationAtom {
+                predicate: predicate.clone(),
+                terms: head.collect(),
+            };
+
+            let body = (0..VariableIdx::try_from(i).unwrap())
+                .map(BodyTerm::Variable)
+                .chain(Some(zero))
+                .chain(repeat_n(one, n - i - 1));
+
+            let body = SaturationAtom {
+                predicate: predicate.clone(),
+                terms: body.collect(),
+            };
+
+            SaturationRule {
+                body_atoms: Arc::from([body]),
+                join_orders: Box::from([None]),
+                head: Head::Datalog(Box::from([head])),
+            }
+        })
+        .collect();
+
+    (rules, predicate)
 }
