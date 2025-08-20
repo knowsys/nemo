@@ -5,7 +5,7 @@ use std::collections::HashSet;
 use crate::{
     execution::execution_parameters::ExecutionParameters,
     rule_model::{
-        components::term::Term, error::ValidationReport, pipeline::transformations::validate::TransformationValidate, programs::{handle::ProgramHandle, ProgramRead}
+        components::term::Term, error::ValidationReport, pipeline::transformations::{normalization::TransformationNormalization, validate::TransformationValidate}, programs::{handle::ProgramHandle, ProgramRead}
     },
 };
 
@@ -77,14 +77,14 @@ impl<'a> ProgramTransformation for TransformationDefault<'a> {
                 self.parameters.export_parameters,
             ))?
             .transform(TransformationValidate::default())?
-            .transform(TransformationActive::default())?
-            .transform(TransformationFilterPushing::default());
+            .transform(TransformationActive::default());
 
         if Self::check_application_filter_pushing(program) {
             commit = commit?
-                .transform(TransformationProjectionPushing::default());
+                .transform(TransformationNormalization::default())?
+                .transform(TransformationFilterPushing::default());
         }
 
-        commit
+        commit?.transform(TransformationProjectionPushing::default())
     }
 }

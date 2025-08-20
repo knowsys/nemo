@@ -8,6 +8,7 @@ pub mod skolem;
 pub mod split;
 pub mod validate;
 pub mod projection_pushing;
+pub mod normalization;
 pub mod filter_pushing;
 
 use crate::rule_model::{error::ValidationReport, programs::handle::ProgramHandle};
