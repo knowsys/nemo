@@ -575,6 +575,17 @@ impl AnyDataValue {
             panic!("not a null value");
         }
     }
+
+    /// Check whether the value represents a positive number
+    pub fn is_positive_number(&self) -> bool {
+        match &self.0 {
+            AnyDataValueEnum::Long(value) => value.to_i64_unchecked() > 0,
+            AnyDataValueEnum::UnsignedLong(value) => value.to_i64_unchecked() > 0,
+            AnyDataValueEnum::Float(value) => value.to_f32_unchecked() > 0.,
+            AnyDataValueEnum::Double(value) => value.to_i64_unchecked() > 0,
+            _ => false,
+        }
+    }
 }
 
 impl DataValue for AnyDataValue {
