@@ -47,9 +47,10 @@ impl TransformationFilterPushing {
     }
 
     // compute the filters iteratively, until nothing changes any more
-    fn compute_filters(program: &ProgramHandle, ground_terms: &HashSet<GroundTerm>) -> HashMap<Tag,FilterExpression> {
+    fn compute_filters(program: &ProgramHandle) -> HashMap<Tag,FilterExpression> {
         let mut filter_expressions = Self::init_filters(program);
         let mut queue: Vec<Tag> = program.exports().map(|export|export.predicate().clone()).collect();
+        let ground_terms = program.ground_terms();
 
         while let Some(predicate) = queue.pop() {
             for (tag, flt) in filter_expressions.iter() {
@@ -59,7 +60,7 @@ impl TransformationFilterPushing {
             for rule in program.rules() {
                 for head in rule.head() {
                     if head.predicate().eq(&predicate) {
-                        for changed_predicate in Self::update_filters(rule, head, &mut filter_expressions, ground_terms) {
+                        for changed_predicate in Self::update_filters(rule, head, &mut filter_expressions, &ground_terms) {
                             if !queue.contains(&changed_predicate) {
                                 queue.push(changed_predicate);
                             }
@@ -97,78 +98,6 @@ impl TransformationFilterPushing {
         updated_predicates
     }
 
-    // push the filter atoms to the atom
-    fn push_filter(
-        filter_atoms: &HashSet<Literal>,
-        to: &Atom,
-        filter_expressions: &mut HashMap<Tag,FilterExpression>,
-        ground_terms: &HashSet<GroundTerm>
-    ) -> bool {
-        // get new filter expression, using positional markers
-        let new_flt = match filter_expressions.get(&to.predicate()) {
-            // if old filter is top, nothing to be done
-            Some(FilterExpression::Top) => {
-                None
-            },
-
-            // if old filter is bottom, use the complete closure
-            Some(FilterExpression::Bot) => {
-                if let Some(closure) = Self::closure(filter_atoms, ground_terms) {
-                    let markings = Self::get_markings(to);
-                    let mut to_filter: HashSet<Literal> = HashSet::new();
-                    for literal in closure {
-                        if let Some(literal) = Self::mark(&literal, &markings) {
-                            to_filter.insert(literal);
-                        }
-                    }
-                    if to_filter.is_empty() {
-                        Some(FilterExpression::Top)
-                    } else {
-                        Some(FilterExpression::Conjunction(to_filter))
-                    }
-                } else {
-                    None
-                }
-            },
-
-            // if old filter is conjunction, keep those literals that are entailed by closure
-            Some(FilterExpression::Conjunction(old_flt)) => {
-                if let Some(closure) = Self::closure(filter_atoms, ground_terms) {
-                    let unmarkings = Self::get_unmarkings(to);
-                    let mut new_flt: HashSet<Literal> = HashSet::new();
-                    for flt_literal in old_flt {
-                        if let Some(literal) = Self::unmark(flt_literal, &unmarkings) {
-                            if closure.contains(&literal) {
-                                new_flt.insert(flt_literal.clone());
-                            }
-                        }
-                    }
-
-                    // the empty set is defined as top
-                    if new_flt.is_empty() {
-                        Some(FilterExpression::Top)
-                    // check if the filter expression has become more general, i.e., smaller
-                    } else if old_flt.is_subset(&new_flt) {
-                        None
-                    } else {
-                        Some(FilterExpression::Conjunction(new_flt))
-                    }
-                } else {
-                    None
-                }
-            },
-            // if to predicate is not in filter expression, it is EDB and nothing to be done
-            None => None,
-        };
-
-        if let Some(new_flt) = new_flt {
-            filter_expressions.insert(to.predicate(), new_flt);
-            true
-        } else {
-            false
-        }
-    }
-
     // push filter expression for an atom
     fn push_filter_for_atom(
         rule: &Rule,
@@ -200,6 +129,90 @@ impl TransformationFilterPushing {
         }
     }
 
+    // push the filter atoms to the atom
+    fn push_filter(
+        filter_atoms: &HashSet<Literal>,
+        target: &Atom,
+        filter_expressions: &mut HashMap<Tag,FilterExpression>,
+        ground_terms: &HashSet<GroundTerm>
+    ) -> bool {
+        // get new filter expression, using positional markers
+        let new_flt = match filter_expressions.get(&target.predicate()) {
+            // if old filter is top, nothing to be done
+            Some(FilterExpression::Top) => None,
+            // if old filter is bottom, use the complete closure
+            Some(FilterExpression::Bot) => Self::push_filter_to_bot(target, filter_atoms, ground_terms),
+            // if old filter is conjunction, keep those literals that are entailed by closure
+            Some(FilterExpression::Conjunction(conj)) => Self::push_filter_to_conjunction(target, conj, filter_atoms, ground_terms),
+            // if to predicate is not in filter expression, it is EDB and nothing to be done
+            None => None,
+        };
+
+        // check if there is a new filter expression
+        if let Some(new_flt) = new_flt {
+            filter_expressions.insert(target.predicate(), new_flt);
+            true
+        } else {
+            false
+        }
+    }
+
+    // push filter atoms to the target atom, whose current filter expression is bottom
+    fn push_filter_to_bot(
+        target: &Atom,
+        filter_atoms: &HashSet<Literal>,
+        ground_terms: &HashSet<GroundTerm>
+    ) -> Option<FilterExpression> {
+        if let Some(closure) = Self::closure(filter_atoms, ground_terms) {
+            let markings = Self::get_markings(target);
+            let mut to_filter: HashSet<Literal> = HashSet::new();
+            for literal in closure {
+                if let Some(literal) = Self::mark(&literal, &markings) {
+                    to_filter.insert(literal);
+                }
+            }
+            if to_filter.is_empty() {
+                Some(FilterExpression::Top)
+            } else {
+                Some(FilterExpression::Conjunction(to_filter))
+            }
+        } else {
+            None
+        }
+    }
+
+    // push filter atoms to the target atom, whose current filter expression is a conjunction
+    fn push_filter_to_conjunction(
+        target: &Atom,
+        conjunction: &HashSet<Literal>,
+        filter_atoms: &HashSet<Literal>,
+        ground_terms: &HashSet<GroundTerm>
+    ) -> Option<FilterExpression> {
+        if let Some(closure) = Self::closure(filter_atoms, ground_terms) {
+            let unmarkings = Self::get_unmarkings(target);
+            let mut new_flt: HashSet<Literal> = HashSet::new();
+            for flt_literal in conjunction {
+                if let Some(literal) = Self::unmark(flt_literal, &unmarkings) {
+                    if closure.contains(&literal) {
+                        new_flt.insert(flt_literal.clone());
+                    }
+                }
+            }
+
+            // the empty set is defined as top
+            if new_flt.is_empty() {
+                Some(FilterExpression::Top)
+            // check if the filter expression has become more general, i.e., smaller
+            } else if conjunction.is_subset(&new_flt) {
+                None
+            } else {
+                Some(FilterExpression::Conjunction(new_flt))
+            }
+        } else {
+            None
+        }
+    }
+        
     // add the terms to hash map entry for key, if not present yet
     fn insert(kind: &OperationKind, terms: Vec<Term>, map: &mut HashMap<OperationKind,Vec<Vec<Term>>>) {
         if let Some(set) = map.get_mut(kind) {
@@ -212,135 +225,174 @@ impl TransformationFilterPushing {
     }
 
     // compute the logical closure of the given literals
-    fn closure(literals: &HashSet<Literal>, ground_terms: &HashSet<GroundTerm>) -> Option<Vec<Literal>> {
+    fn closure(literals: &HashSet<Literal>, ground_terms: &HashSet<GroundTerm>) -> Option<HashSet<Literal>> {
         let mut queue: VecDeque<Literal> = VecDeque::new();
         let mut ops: HashMap<OperationKind,Vec<Vec<Term>>> = HashMap::new();
-        let mut out: Vec<Literal> = Vec::new();
+        let mut out: HashSet<Literal> = HashSet::new();
 
-        for literal in literals {
-            if let Literal::Operation(op) = literal {
-                match op.operation_kind() {
-                    OperationKind::NumericLessthaneq => {
-                        let terms: Vec<Term> = literal.terms().cloned().collect();
-                        Self::insert(&OperationKind::NumericLessthaneq, terms, &mut ops);
-                        if !queue.contains(literal) {
-                            queue.push_back(literal.clone());
-                        }
-                    },
-                    OperationKind::NumericLessthan => {
-                        let terms: Vec<Term> = literal.terms().cloned().collect();
-                        Self::insert(&OperationKind::NumericLessthan, terms, &mut ops);
-                        if !queue.contains(literal) {
-                            queue.push_back(literal.clone());
-                        }
-                    },
-                    OperationKind::Equal => {
-                        queue.push_back(literal.clone());
-                        let terms: Vec<Term> = literal.terms().cloned().collect();
-                        if let Term::Operation(op) = &terms[1] {
-                            if op.operation_kind().eq(&OperationKind::NumericSum) {
-                                let op_terms: Vec<Term> = op.terms().cloned().collect();
-                                if let Term::Primitive(Primitive::Ground(val)) = &op_terms[0] {
-                                    if val.value().is_positive_number() {
-                                        queue.push_back(Literal::Operation(Operation::new(OperationKind::NumericLessthan, vec![op_terms[1].clone(), terms[0].clone()])));
-                                    }
-                                }
-                                if let Term::Primitive(Primitive::Ground(val)) = &op_terms[1] {
-                                    if val.value().is_positive_number() {
-                                        queue.push_back(Literal::Operation(Operation::new(OperationKind::NumericLessthan, vec![op_terms[0].clone(), terms[0].clone()])));
-                                    }
-                                }
-                            }
-                        }
-
-                    }
-                    _ => {
-                        out.push(literal.clone());
-                    },
-                }
-            } else {
-                out.push(literal.clone());
-            }
-        }
+        Self::closure_init(literals, &mut queue, &mut ops, &mut out);
 
         while let Some(literal) = queue.pop_front() {
-            if !out.contains(&literal) {
-                if let Literal::Operation(op) = literal {
-                    if op.is_resolvable() {
-                        if let Some(Term::Primitive(Primitive::Ground(ground))) = op.reduce() {
-                            if let Some(false) = ground.value().to_boolean() {
-                                return None;
-                            }
-                        }
-                    } else {
-                        out.push(Literal::Operation(op.clone()));
-
-                        let terms: Vec<Term> = op.terms().cloned().collect();
-                        Self::insert(&op.operation_kind(), terms.clone(), &mut ops);
-                        match op.operation_kind() {
-                            OperationKind::NumericLessthan => {
-                                queue.push_back(Literal::Operation(Operation::new(OperationKind::NumericLessthaneq, terms)));
-
-                                if let Some(qs) = ops.get(&OperationKind::NumericLessthaneq) {
-                                    for res in Self::transitivity_left(op.terms().cloned().collect(), qs) {
-                                        queue.push_back(Literal::Operation(Operation::new(OperationKind::NumericLessthan, res)));
-                                    }
-                                }
-                                if let Some(ps) = ops.get(&OperationKind::NumericLessthan) {
-                                    for res in Self::transitivity_right(op.terms().cloned().collect(), ps) {
-                                        queue.push_back(Literal::Operation(Operation::new(OperationKind::NumericLessthan, res)));
-                                    }
-                                }
-                                if let Some(ps) = ops.get(&OperationKind::NumericLessthaneq) {
-                                    for res in Self::transitivity_right(op.terms().cloned().collect(), ps) {
-                                        queue.push_back(Literal::Operation(Operation::new(OperationKind::NumericLessthan, res)));
-                                    }
-                                }
-                                if let Some(ps) = ops.get(&OperationKind::NumericLessthan) {
-                                    for res in Self::transitivity_right(op.terms().cloned().collect(), ps) {
-                                        queue.push_back(Literal::Operation(Operation::new(OperationKind::NumericLessthan, res)));
-                                    }
-                                }
-                            },
-                            OperationKind::NumericLessthaneq => {
-                                if let Some(qs) = ops.get(&OperationKind::NumericLessthaneq) {
-                                    for res in Self::symmetry(terms.clone(), qs) {
-                                        queue.push_back(Literal::Operation(Operation::new(OperationKind::Equal, res)));
-                                    }
-                                }
-                                if let Some(qs) = ops.get(&OperationKind::NumericLessthaneq) {
-                                    for res in Self::transitivity_left(terms.clone(), qs) {
-                                        queue.push_back(Literal::Operation(Operation::new(OperationKind::NumericLessthaneq, res)));
-                                    }
-                                }
-                                if let Some(ps) = ops.get(&OperationKind::NumericLessthaneq) {
-                                    for res in Self::transitivity_right(op.terms().cloned().collect(), ps) {
-                                        queue.push_back(Literal::Operation(Operation::new(OperationKind::NumericLessthaneq, res)));
-                                    }
-                                }
-                            },
-                            OperationKind::Equal => {
-                                if let Term::Primitive(Primitive::Ground(first)) = terms[0].clone() {
-                                    for res in Self::apply_equality_for_ground_terms(&first, &terms[1], &ground_terms) {
-                                        queue.push_back(res);
-                                    }
-                                }
-                                if let Term::Primitive(Primitive::Ground(second)) = terms[1].clone() {
-                                    for res in Self::apply_equality_for_ground_terms(&second, &terms[0], &ground_terms) {
-                                        queue.push_back(res);
-                                    }
-                                }
-                            }
-                            _ => {},
+            if let Literal::Operation(op) = literal {
+                if op.is_resolvable() {
+                    if let Some(Term::Primitive(Primitive::Ground(ground))) = op.reduce() {
+                        if let Some(false) = ground.value().to_boolean() {
+                            return None;
                         }
                     }
-                } else {
-                    out.push(literal.clone());
+                } else if out.insert(Literal::Operation(op.clone())) {
+                    Self::closure_process_operation(&op, &mut queue, &mut ops, ground_terms);
                 }
+            } else {
+                out.insert(literal.clone());
             }
         }
 
         Some(out)
+    }
+
+    // initialize the queue, operation map, and output literal set
+    fn closure_init(
+        literals: &HashSet<Literal>,
+        queue: &mut VecDeque<Literal>,
+        ops: &mut HashMap<OperationKind,Vec<Vec<Term>>>,
+        out: &mut HashSet<Literal>
+    ) {
+        for literal in literals {
+            if let Literal::Operation(op) = literal {
+                match op.operation_kind() {
+                    kind @ OperationKind::NumericLessthaneq
+                    | kind @ OperationKind::NumericLessthan
+                    | kind @ OperationKind::Equal => {
+                        let terms: Vec<Term> = literal.terms().cloned().collect();
+                        Self::insert(&kind, terms, ops);
+                        if !queue.contains(literal) {
+                            queue.push_back(literal.clone());
+                        }
+                    },
+                    _ => {
+                        out.insert(literal.clone());
+                    },
+                }
+            } else {
+                out.insert(literal.clone());
+            }
+        }
+    }
+
+    // process operation op, i.e., derive logical consequences and add them to queue
+    fn closure_process_operation(
+        op: &Operation,
+        queue: &mut VecDeque<Literal>,
+        ops: &mut HashMap<OperationKind,Vec<Vec<Term>>>,
+        ground_terms: &HashSet<GroundTerm>
+    ) {
+        let terms: Vec<Term> = op.terms().cloned().collect();
+        Self::insert(&op.operation_kind(), terms.clone(), ops);
+        match op.operation_kind() {
+            OperationKind::NumericLessthan => Self::closure_process_lt(op, queue, ops),
+            OperationKind::NumericLessthaneq => Self::closure_process_lte(op, queue, ops),
+            OperationKind::Equal => Self::closure_process_eq(op, queue, ground_terms),
+           _ => {},
+        }
+    }
+
+    // process NumericLessthan, i.e., derive logical consequences and add them to queue
+    fn closure_process_lt(
+        op: &Operation,
+        queue: &mut VecDeque<Literal>,
+        ops: &mut HashMap<OperationKind,Vec<Vec<Term>>>,
+    ) {
+        let terms: Vec<Term> = op.terms().cloned().collect();
+        queue.push_back(Literal::Operation(Operation::new(OperationKind::NumericLessthaneq, terms)));
+
+        if let Some(qs) = ops.get(&OperationKind::NumericLessthaneq) {
+            for res in Self::transitivity_left(op.terms().cloned().collect(), qs) {
+                queue.push_back(Literal::Operation(Operation::new(OperationKind::NumericLessthan, res)));
+            }
+        }
+        if let Some(ps) = ops.get(&OperationKind::NumericLessthan) {
+            for res in Self::transitivity_right(op.terms().cloned().collect(), ps) {
+                queue.push_back(Literal::Operation(Operation::new(OperationKind::NumericLessthan, res)));
+            }
+        }
+        if let Some(ps) = ops.get(&OperationKind::NumericLessthaneq) {
+            for res in Self::transitivity_right(op.terms().cloned().collect(), ps) {
+                queue.push_back(Literal::Operation(Operation::new(OperationKind::NumericLessthan, res)));
+            }
+        }
+        if let Some(ps) = ops.get(&OperationKind::NumericLessthan) {
+            for res in Self::transitivity_right(op.terms().cloned().collect(), ps) {
+                queue.push_back(Literal::Operation(Operation::new(OperationKind::NumericLessthan, res)));
+            }
+        }
+    }
+
+    // process NumericLessthaneq, i.e., derive logical consequences and add them to queue
+    fn closure_process_lte(
+        op: &Operation,
+        queue: &mut VecDeque<Literal>,
+        ops: &mut HashMap<OperationKind,Vec<Vec<Term>>>,
+    ) {
+        let terms: Vec<Term> = op.terms().cloned().collect();
+        if let Some(qs) = ops.get(&OperationKind::NumericLessthaneq) {
+            for res in Self::symmetry(terms.clone(), qs) {
+                queue.push_back(Literal::Operation(Operation::new(OperationKind::Equal, res)));
+            }
+        }
+        if let Some(qs) = ops.get(&OperationKind::NumericLessthaneq) {
+            for res in Self::transitivity_left(terms.clone(), qs) {
+                queue.push_back(Literal::Operation(Operation::new(OperationKind::NumericLessthaneq, res)));
+            }
+        }
+        if let Some(ps) = ops.get(&OperationKind::NumericLessthaneq) {
+            for res in Self::transitivity_right(op.terms().cloned().collect(), ps) {
+                queue.push_back(Literal::Operation(Operation::new(OperationKind::NumericLessthaneq, res)));
+            }
+        }
+    }
+
+    // process Equal, i.e., derive logical consequences and add them to queue
+    fn closure_process_eq(
+        op: &Operation,
+        queue: &mut VecDeque<Literal>,
+        ground_terms: &HashSet<GroundTerm>
+    ) {
+        let terms: Vec<Term> = op.terms().cloned().collect();
+        if let Term::Operation(inner_op) = &terms[1] {
+            if inner_op.operation_kind().eq(&OperationKind::NumericSum) {
+                let inner_op_terms: Vec<Term> = inner_op.terms().cloned().collect();
+                // if op = 't0 = t1 + t2' and 't1 > 0' then 't2 < t0'
+                if let Term::Primitive(Primitive::Ground(val)) = &inner_op_terms[0] {
+                    if val.value().is_positive_number() {
+                        queue.push_back(Literal::Operation(Operation::new(
+                            OperationKind::NumericLessthan,
+                            vec![inner_op_terms[1].clone(), terms[0].clone()])));
+                    }
+                }
+                // if op = 't0 = t1 + t2' and 't2 > 0' then 't1 < t0'
+                if let Term::Primitive(Primitive::Ground(val)) = &inner_op_terms[1] {
+                    if val.value().is_positive_number() {
+                        queue.push_back(Literal::Operation(Operation::new(
+                            OperationKind::NumericLessthan,
+                            vec![inner_op_terms[0].clone(), terms[0].clone()])));
+                    }
+                }
+            }
+        }
+
+        // if op = 't0 = t1' and t0 is ground, compute all inequalities for t1 involving ground terms
+        if let Term::Primitive(Primitive::Ground(first)) = terms[0].clone() {
+            for res in Self::apply_equality_for_ground_terms(&first, &terms[1], ground_terms) {
+                queue.push_back(res);
+            }
+        }
+        // if op = 't0 = t1' and t1 is ground, compute all inequalities for t0 involving ground terms
+        if let Term::Primitive(Primitive::Ground(second)) = terms[1].clone() {
+            for res in Self::apply_equality_for_ground_terms(&second, &terms[0], ground_terms) {
+                queue.push_back(res);
+            }
+        }
     }
 
     // collect literals that follow from ground = term and the natural inequalities for ground
@@ -545,28 +597,6 @@ impl TransformationFilterPushing {
         }
         result
     }
-
-    // collect ground terms in program
-    fn get_ground_terms(program: &ProgramHandle) -> HashSet<GroundTerm> {
-        program.rules().flat_map(|rule|{
-            let mut terms: HashSet<GroundTerm> = HashSet::new();
-            for atom in rule.head() {
-                for term in atom.terms() {
-                    if let Term::Primitive(Primitive::Ground(ground)) = term {
-                        terms.insert(ground.clone());
-                    }
-                }
-            }
-            for literal in rule.body() {
-                for term in literal.terms() {
-                    if let Term::Primitive(Primitive::Ground(ground)) = term {
-                        terms.insert(ground.clone());
-                    }
-                }
-            }
-            terms
-        }).collect()
-    }
 }
 
 impl ProgramTransformation for TransformationFilterPushing {
@@ -574,8 +604,7 @@ impl ProgramTransformation for TransformationFilterPushing {
         // apply normalization: no repeated variables in body
 
         let mut commit = program.fork();
-        let ground_terms = Self::get_ground_terms(program);
-        let filter_expressions = Self::compute_filters(program, &ground_terms);
+        let filter_expressions = Self::compute_filters(program);
 
         for statement in program.statements() {
             match statement {
@@ -591,7 +620,7 @@ impl ProgramTransformation for TransformationFilterPushing {
                             }
 
                             let f_minus = Self::get_f_minus(rule, &filter_expressions);
-                            if let Some(simplification) = Self::simplify(f_plus, f_minus, &ground_terms) {
+                            if let Some(simplification) = Self::simplify(f_plus, f_minus, &program.ground_terms()) {
                                 for literal in simplification {
                                     body.push(literal);
                                 }

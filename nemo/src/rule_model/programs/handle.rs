@@ -1,13 +1,13 @@
 //! This module defines [ProgramHandle].
 
-use std::rc::Rc;
+use std::{collections::HashSet, rc::Rc};
 
 use crate::{
     error::warned::Warned,
     parser::Parser,
     rule_file::RuleFile,
     rule_model::{
-        components::{statement::Statement, ProgramComponent},
+        components::{statement::Statement, term::{primitive::{ground::GroundTerm, Primitive}, Term}, ProgramComponent},
         error::{TranslationReport, ValidationReport},
         pipeline::{
             commit::ProgramCommit, id::ProgramComponentId, transformations::ProgramTransformation,
@@ -94,6 +94,28 @@ impl ProgramHandle {
     /// if it exists.
     pub fn component(&self, id: ProgramComponentId) -> Option<&dyn ProgramComponent> {
         self.pipeline.find_component(id)
+    }
+
+    /// Returns a [HashSet] of [GroundTerm]s used by the program of this handle
+    pub fn ground_terms(&self) -> HashSet<GroundTerm> {
+        self.rules().flat_map(|rule|{
+            let mut terms: HashSet<GroundTerm> = HashSet::new();
+            for atom in rule.head() {
+                for term in atom.terms() {
+                    if let Term::Primitive(Primitive::Ground(ground)) = term {
+                        terms.insert(ground.clone());
+                    }
+                }
+            }
+            for literal in rule.body() {
+                for term in literal.terms() {
+                    if let Term::Primitive(Primitive::Ground(ground)) = term {
+                        terms.insert(ground.clone());
+                    }
+                }
+            }
+            terms
+        }).collect()
     }
 }
 
