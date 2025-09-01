@@ -11,7 +11,10 @@ use crate::{
     io::format_builder::{
         format_tag, AnyImportExportBuilder, FormatBuilder, Parameters, StandardParameter,
     },
-    rule_model::{components::import_export::Direction, error::validation_error::ValidationError},
+    rule_model::{
+        components::{import_export::Direction, rule::Rule},
+        error::validation_error::ValidationError,
+    },
     syntax::import_export::file_format,
 };
 
@@ -55,8 +58,13 @@ impl FormatBuilder for JsonHandler {
     fn new(
         _tag: Self::Tag,
         _parameters: &Parameters<Self>,
+        filter_rules: &[Rule],
         direction: Direction,
     ) -> Result<Self, ValidationError> {
+        if !filter_rules.is_empty() {
+            unimplemented!("filtered JSON import is not implemented.")
+        }
+
         if matches!(direction, Direction::Export) {
             return Err(ValidationError::UnsupportedJsonExport);
         }

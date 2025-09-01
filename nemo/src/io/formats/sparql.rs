@@ -15,7 +15,7 @@ use crate::{
         Parameters, StandardParameter,
     },
     rule_model::{
-        components::{import_export::Direction, term::value_type::ValueType},
+        components::{import_export::Direction, rule::Rule, term::value_type::ValueType},
         error::validation_error::ValidationError,
     },
     syntax::import_export::{attribute, file_format},
@@ -103,8 +103,13 @@ impl FormatBuilder for SparqlBuilder {
     fn new(
         _tag: Self::Tag,
         parameters: &Parameters<SparqlBuilder>,
+        filter_rules: &[Rule],
         _direction: Direction,
     ) -> Result<Self, ValidationError> {
+        if !filter_rules.is_empty() {
+            unimplemented!("filtered SPARQL import is not implemented.")
+        }
+
         // Copied from DsvBuilder
         let value_formats = parameters
             .get_optional(SparqlParameter::Format)

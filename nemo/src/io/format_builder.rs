@@ -18,6 +18,8 @@ use crate::{
     rule_model::{
         components::{
             import_export::{specification::ImportExportSpec, Direction},
+            rule::Rule,
+            tag::Tag,
             term::{operation::Operation, primitive::ground::GroundTerm, value_type::ValueType},
             ComponentSource,
         },
@@ -263,6 +265,7 @@ pub(crate) trait FormatBuilder: Debug + Sized + Into<AnyImportExportBuilder> {
     fn new(
         tag: Self::Tag,
         parameters: &Parameters<Self>,
+        filter_rules: &[Rule],
         direction: Direction,
     ) -> Result<Self, ValidationError>;
 
@@ -337,9 +340,33 @@ impl<B: FormatBuilder> Parameters<B> {
         ))
     }
 
+    pub(crate) fn validate_filter_rule(
+        predicate: &Tag,
+        rule: &Rule,
+        report: &mut ValidationReport,
+    ) -> Option<()> {
+        let mut valid = true;
+
+        for literal in rule.body() {
+            match literal.predicate() {
+                None => (),
+                Some(filter_predicate) => {
+                    if *predicate != filter_predicate {
+                        valid = false;
+                        report.add(literal, todo!("add new error code"));
+                    }
+                }
+            }
+        }
+
+        valid.then_some(())
+    }
+
     pub(crate) fn validate(
+        predicate: Tag,
         spec: &ImportExportSpec,
         bindings: &[Operation],
+        filter_rules: &[Rule],
         direction: Direction,
         report: &mut ValidationReport,
     ) -> Option<Self> {
@@ -352,6 +379,10 @@ impl<B: FormatBuilder> Parameters<B> {
             );
             return None;
         };
+
+        for rule in filter_rules {
+            Self::validate_filter_rule(&predicate, rule, report)?;
+        }
 
         let mut has_errors = false;
         let mut spec = spec.clone();
@@ -486,14 +517,17 @@ impl ImportExportBuilder {
     }
 
     fn new_with_tag<B: FormatBuilder>(
+        predicate: Tag,
         tag: B::Tag,
         spec: &ImportExportSpec,
         bindings: &[Operation],
+        filter_rules: &[Rule],
         direction: Direction,
         report: &mut ValidationReport,
     ) -> Option<ImportExportBuilder> {
         let origin = spec.origin();
-        let parameters = Parameters::<B>::validate(spec, bindings, direction, report)?;
+        let parameters =
+            Parameters::<B>::validate(predicate, spec, bindings, filter_rules, direction, report)?;
 
         let resource_builder =
             if let Some(value) = parameters.get_optional(StandardParameter::Resource.into()) {
@@ -515,7 +549,7 @@ impl ImportExportBuilder {
             })
             .unwrap_or_else(|| CompressionFormat::from_resource_builder(&resource_builder));
 
-        let inner = match B::new(tag, &parameters, direction) {
+        let inner = match B::new(tag, &parameters, filter_rules, direction) {
             Ok(b) => b,
             Err(error) => {
                 report.add_source(origin.clone(), error);
@@ -605,8 +639,10 @@ impl ImportExportBuilder {
 
     /// Create a new [ImportExportBuilder].
     pub(crate) fn new(
+        predicate: Tag,
         spec: &ImportExportSpec,
         bindings: &[Operation],
+        filter_rules: &[Rule],
         direction: Direction,
         report: &mut ValidationReport,
     ) -> Option<Self> {
@@ -623,18 +659,42 @@ impl ImportExportBuilder {
         };
 
         match tag {
-            SupportedFormatTag::Dsv(tag) => {
-                Self::new_with_tag::<DsvBuilder>(tag, spec, bindings, direction, report)
-            }
-            SupportedFormatTag::Rdf(tag) => {
-                Self::new_with_tag::<RdfHandler>(tag, spec, bindings, direction, report)
-            }
-            SupportedFormatTag::Json(tag) => {
-                Self::new_with_tag::<JsonHandler>(tag, spec, bindings, direction, report)
-            }
-            SupportedFormatTag::Sparql(tag) => {
-                Self::new_with_tag::<SparqlBuilder>(tag, spec, bindings, direction, report)
-            }
+            SupportedFormatTag::Dsv(tag) => Self::new_with_tag::<DsvBuilder>(
+                predicate,
+                tag,
+                spec,
+                bindings,
+                filter_rules,
+                direction,
+                report,
+            ),
+            SupportedFormatTag::Rdf(tag) => Self::new_with_tag::<RdfHandler>(
+                predicate,
+                tag,
+                spec,
+                bindings,
+                filter_rules,
+                direction,
+                report,
+            ),
+            SupportedFormatTag::Json(tag) => Self::new_with_tag::<JsonHandler>(
+                predicate,
+                tag,
+                spec,
+                bindings,
+                filter_rules,
+                direction,
+                report,
+            ),
+            SupportedFormatTag::Sparql(tag) => Self::new_with_tag::<SparqlBuilder>(
+                predicate,
+                tag,
+                spec,
+                bindings,
+                filter_rules,
+                direction,
+                report,
+            ),
         }
     }
 
