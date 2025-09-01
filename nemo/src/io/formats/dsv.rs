@@ -25,7 +25,7 @@ use crate::{
         format_tag, value_type_matches,
     },
     rule_model::{
-        components::{import_export::Direction, term::value_type::ValueType},
+        components::{import_export::Direction, rule::Rule, term::value_type::ValueType},
         error::validation_error::ValidationError,
     },
     syntax::import_export::{attribute, file_format},
@@ -220,8 +220,13 @@ impl FormatBuilder for DsvBuilder {
     fn new(
         tag: Self::Tag,
         parameters: &Parameters<DsvBuilder>,
+        filter_rules: &[Rule],
         _direction: Direction,
     ) -> Result<Self, ValidationError> {
+        if !filter_rules.is_empty() {
+            unimplemented!("filtered DSV import/export is not implemented.")
+        }
+
         let value_formats = parameters.get_optional(DsvParameter::Format).map(|value| {
             DsvValueFormats::try_from(value).expect("value formats have already been validated")
         });

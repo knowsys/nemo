@@ -14,7 +14,7 @@ use oxiri::Iri;
 use oxrdf::{BlankNode, GraphName, Literal, NamedNode, Quad, Subject, Term};
 use oxrdfio::{RdfFormat, RdfParser};
 
-use crate::io::formats::PROGRESS_NOTIFY_INCREMENT;
+use crate::{io::formats::PROGRESS_NOTIFY_INCREMENT, rule_model::components::rule::Rule};
 
 use super::{
     DEFAULT_GRAPH_IRI, RdfVariant,
@@ -34,6 +34,8 @@ pub(super) struct RdfReader {
     value_formats: RdfValueFormats,
     /// If given, this reader will only consider the first `limit` entries
     limit: Option<u64>,
+    /// Filtering rules
+    filter_rules: Vec<Rule>,
     /// Map to store how nulls relate to blank nodes.
     ///
     /// TODO: An RdfReader is specific to one BufRead, which it consumes when reading.
@@ -51,6 +53,7 @@ impl RdfReader {
         base: Option<Iri<String>>,
         value_formats: RdfValueFormats,
         limit: Option<u64>,
+        filter_rules: Vec<Rule>,
     ) -> Self {
         Self {
             read,
@@ -58,6 +61,7 @@ impl RdfReader {
             base,
             value_formats,
             limit,
+            filter_rules,
             bnode_map: Default::default(),
         }
     }
@@ -402,6 +406,7 @@ mod test {
             None,
             RdfValueFormats::default(3),
             None,
+            Vec::new(),
         );
         let dict = RefCell::new(Dict::default());
         let mut tuple_writer = TupleWriter::new(&dict, 3);
@@ -426,6 +431,7 @@ mod test {
             None,
             RdfValueFormats::default(3),
             None,
+            Vec::new(),
         );
         let dict = RefCell::new(Dict::default());
         let mut tuple_writer = TupleWriter::new(&dict, 3);
@@ -449,6 +455,7 @@ mod test {
             None,
             RdfValueFormats::default(3),
             None,
+            Vec::new(),
         );
         let dict = RefCell::new(Dict::default());
         let mut tuple_writer = TupleWriter::new(&dict, 3);

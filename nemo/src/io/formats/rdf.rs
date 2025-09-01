@@ -35,7 +35,7 @@ use crate::{
         },
     },
     rule_model::{
-        components::{import_export::Direction, term::value_type::ValueType},
+        components::{import_export::Direction, rule::Rule, term::value_type::ValueType},
         error::validation_error::ValidationError,
     },
     syntax::import_export::{attribute, file_format},
@@ -107,6 +107,8 @@ pub struct RdfHandler {
     value_formats: RdfValueFormats,
     /// Maximum number of statements that should be imported/exported.
     limit: Option<u64>,
+    /// Filtering rules
+    filter_rules: Vec<Rule>,
 }
 
 impl FileFormatMeta for RdfHandler {
@@ -127,6 +129,7 @@ impl ImportHandler for RdfHandler {
             self.base.clone(),
             self.value_formats.clone(),
             self.limit,
+            self.filter_rules.clone(),
         )))
     }
 }
@@ -204,6 +207,7 @@ impl FormatBuilder for RdfHandler {
     fn new(
         tag: Self::Tag,
         parameters: &Parameters<RdfHandler>,
+        filter_rules: &[Rule],
         _direction: Direction,
     ) -> Result<Self, ValidationError> {
         let variant = match tag {
@@ -256,6 +260,7 @@ impl FormatBuilder for RdfHandler {
             variant,
             value_formats,
             limit,
+            filter_rules: filter_rules.to_vec(),
         })
     }
 

@@ -5,7 +5,10 @@ use specification::ImportExportSpec;
 
 use crate::{
     io::format_builder::ImportExportBuilder,
-    rule_model::{error::ValidationReport, origin::Origin, pipeline::id::ProgramComponentId},
+    rule_model::{
+        components::rule::Rule, error::ValidationReport, origin::Origin,
+        pipeline::id::ProgramComponentId,
+    },
     syntax,
 };
 
@@ -59,6 +62,8 @@ pub(crate) struct ImportExportDirective {
     spec: ImportExportSpec,
     /// Additional variable bindings
     bindings: Vec<Operation>,
+    /// Sub-rules for filtered import/export
+    filter_rules: Vec<Rule>,
 }
 
 impl std::fmt::Display for ImportExportDirective {
@@ -155,18 +160,43 @@ impl ImportDirective {
             predicate,
             spec,
             bindings,
+            filter_rules: Vec::new(),
         })
+    }
+
+    /// Add a new sub-[Rule] for filtered imports.
+    pub fn add_filter_rule(&mut self, rule: Rule) {
+        self.0.filter_rules.push(rule);
+    }
+
+    /// Return the filter rules
+    pub fn filter_rules(&self) -> &[Rule] {
+        &self.0.filter_rules
     }
 
     /// Return the corresponding [ImportExportBuilder] if this component is valid.
     pub fn builder_report(&self, report: &mut ValidationReport) -> Option<ImportExportBuilder> {
-        ImportExportBuilder::new(self.spec(), self.bindings(), Direction::Import, report)
+        ImportExportBuilder::new(
+            self.predicate().clone(),
+            self.spec(),
+            self.bindings(),
+            self.filter_rules(),
+            Direction::Import,
+            report,
+        )
     }
 
     /// Return the corresponding [ImportExportBuilder] if this component is valid.
     pub fn builder(&self) -> Option<ImportExportBuilder> {
         let mut report = ValidationReport::default();
-        ImportExportBuilder::new(self.spec(), self.bindings(), Direction::Import, &mut report)
+        ImportExportBuilder::new(
+            self.predicate().clone(),
+            self.spec(),
+            self.bindings(),
+            self.filter_rules(),
+            Direction::Import,
+            &mut report,
+        )
     }
 
     /// Return the predicate.
@@ -306,6 +336,7 @@ impl ExportDirective {
             predicate,
             spec,
             bindings,
+            filter_rules: Vec::new(),
         })
     }
 
@@ -318,15 +349,39 @@ impl ExportDirective {
         )
     }
 
+    /// Add a new sub-[Rule] for filtered exports.
+    pub fn add_filter_rule(&mut self, rule: Rule) {
+        self.0.filter_rules.push(rule);
+    }
+
+    /// Return the filter rules
+    pub fn filter_rules(&self) -> &[Rule] {
+        &self.0.filter_rules
+    }
+
     /// Return the corresponding [ImportExportBuilder] if this component is valid.
     pub fn builder_report(&self, report: &mut ValidationReport) -> Option<ImportExportBuilder> {
-        ImportExportBuilder::new(self.spec(), self.bindings(), Direction::Export, report)
+        ImportExportBuilder::new(
+            self.predicate().clone(),
+            self.spec(),
+            self.bindings(),
+            self.filter_rules(),
+            Direction::Export,
+            report,
+        )
     }
 
     /// Return the corresponding [ImportExportBuilder] if this component is valid.
     pub fn builder(&self) -> Option<ImportExportBuilder> {
         let mut report = ValidationReport::default();
-        ImportExportBuilder::new(self.spec(), self.bindings(), Direction::Export, &mut report)
+        ImportExportBuilder::new(
+            self.predicate().clone(),
+            self.spec(),
+            self.bindings(),
+            self.filter_rules(),
+            Direction::Export,
+            &mut report,
+        )
     }
 
     /// Return the predicate.
