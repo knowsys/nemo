@@ -45,7 +45,7 @@ use super::{
 /// Term
 ///
 /// Basic building block for expressions like atoms or facts.
-#[derive(Debug, Clone, PartialEq, Hash, PartialOrd)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd)]
 pub enum Term {
     /// Unstructured, primitive term
     Primitive(Primitive),
@@ -187,6 +187,24 @@ impl Term {
             Term::Map(term) => term.is_resolvable(),
             Term::Operation(term) => term.is_resolvable(),
             Term::Tuple(term) => term.is_resolvable(),
+        }
+    }
+
+    /// Replaces all occurences of t with u
+    pub fn replace_all(&self, t: &Term, u: &Term) -> Self {
+        if self.eq(t) {
+            u.clone()
+        } else {
+            match self {
+                Term::Primitive(_term) => self.clone(),
+                Term::Operation(term) => Term::Operation(Operation::new(
+                    term.operation_kind(),
+                    term.terms().map(|term|term.replace_all(t, u)).collect())),
+                Term::Aggregate(_term) => todo!(),
+                Term::FunctionTerm(_term) => todo!(),
+                Term::Map(_term) => todo!(),
+                Term::Tuple(_term) => todo!(),
+            }
         }
     }
 }

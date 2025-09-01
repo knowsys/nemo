@@ -239,6 +239,9 @@ impl Display for Aggregate {
     }
 }
 
+impl Eq for Aggregate {
+}
+
 impl PartialEq for Aggregate {
     fn eq(&self, other: &Self) -> bool {
         self.kind == other.kind

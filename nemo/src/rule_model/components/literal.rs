@@ -52,6 +52,17 @@ impl Literal {
             Literal::Operation(_) => None,
         }
     }
+
+    /// Replaces all occurences of t with u
+    pub fn replace_all(&self, t: &Term, u: &Term) -> Self {
+        let terms: Vec<Term> = self.terms().map(|term|term.replace_all(t, u)).collect();
+        match self {
+            Literal::Positive(atom) => Literal::Positive(Atom::new(atom.predicate(), terms)),
+            Literal::Negative(atom) => Literal::Negative(Atom::new(atom.predicate(), terms)),
+            Literal::Operation(op) => Literal::Operation(Operation::new(op.operation_kind(), terms)),
+        }
+
+    }
 }
 
 impl Display for Literal {
