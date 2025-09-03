@@ -412,28 +412,25 @@ fn fact_from_row(row: &Row, predicate: Arc<str>) -> SaturationFact {
 }
 
 pub(crate) fn saturate(db: &mut DataBase, rules: &mut [SaturationRule]) {
-    let mut todo = Vec::new();
+    let mut matches = Vec::new();
 
     for (predicate, table) in db.0.iter() {
-        for row in table.iter() {
-            todo.push(fact_from_row(row, predicate.clone()));
-        }
-    }
-
-    while !todo.is_empty() {
-        let mut matches = Vec::new();
-
         for (rule_index, rule) in rules.iter_mut().enumerate() {
-            for fact in &todo {
+            for row in table.iter() {
+                let fact = fact_from_row(row, predicate.clone());
+
                 for trigger in rule.trigger(&fact) {
                     matches.extend(trigger.execute(&db).map(|row| (row, rule_index)));
                 }
             }
         }
+    }
 
+    let mut todo = Vec::new();
+    while !matches.is_empty() {
         todo.clear();
 
-        for (substitution, rule_index) in matches {
+        for (substitution, rule_index) in matches.drain(..) {
             let rule = &rules[rule_index];
 
             match &rule.head {
@@ -451,6 +448,14 @@ pub(crate) fn saturate(db: &mut DataBase, rules: &mut [SaturationRule]) {
                             todo.push(fact);
                         }
                     }
+                }
+            }
+        }
+
+        for fact in &todo {
+            for (rule_index, rule) in rules.iter_mut().enumerate() {
+                for trigger in rule.trigger(&fact) {
+                    matches.extend(trigger.execute(&db).map(|row| (row, rule_index)));
                 }
             }
         }
@@ -565,13 +570,14 @@ mod test {
 
     #[test]
     fn saturate_bench_rules() {
-        let (mut rules, predicate) = bench_rules(5);
-        let row: Row = repeat_n(RowElement::Value(StorageValueT::Int64(0)), 5).collect();
+        let n = 10;
+        let (mut rules, predicate) = bench_rules(n);
+        let row: Row = repeat_n(RowElement::Value(StorageValueT::Int64(0)), n).collect();
 
         let mut db = DataBase(HashMap::from([(predicate.clone(), BTreeSet::from([row]))]));
 
         saturate(&mut db, &mut rules);
 
-        assert_eq!(db.0.get(&predicate).unwrap().len(), 32);
+        assert_eq!(db.0.get(&predicate).unwrap().len(), 2_usize.pow(n as u32));
     }
 }
