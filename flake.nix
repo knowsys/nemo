@@ -328,13 +328,15 @@
               tag = "latest";
               copyToRoot = pkgs.buildEnv {
                 name = "image-root";
-                paths = [ 
+                paths = [
                   pkgs.cacert
                   pkgs.openssl
                   nemo
                 ];
               };
-              config = { Entrypoint = [ "/bin/nmo" ]; };
+              config = {
+                Entrypoint = [ "/bin/nmo" ];
+              };
             };
 
             nemo-language-server = buildCrate { crate = "nemo-language-server"; };
@@ -562,6 +564,7 @@
             ) self.checks.${system};
 
             NMO_LOG = "debug";
+            RUST_LOG = "debug";
             RUST_BACKTRACE = 1;
             RUST_SRC_PATH = "${toolchain}/lib/rustlib/src/rust/library";
             inherit (commonArgs.env)
