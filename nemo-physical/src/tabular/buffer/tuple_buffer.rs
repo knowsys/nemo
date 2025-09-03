@@ -354,6 +354,8 @@ impl TupleBuffer {
     /// Provide the next value for the current tuple. Values are added in in order.
     /// When the value for the last column was provided, the tuple is committed to the buffer.
     /// Alternatively, a partially built tuple can be abandonded by calling `drop_current_tuple`.
+    ///
+    /// This must not be mixed with [add_tuple_data_value] on the same tuple.
     pub(crate) fn add_tuple_value(&mut self, value: StorageValueT) {
         self.current_tuple_types[self.current_tuple_index] = value.get_type();
         self.current_tuple[self.current_tuple_index] = value;
@@ -368,11 +370,10 @@ impl TupleBuffer {
     /// Add the next value for the current tuple, also providing the
     /// dictionary and the underlying [AnyDataValue] (allowing
     /// filtering and transformations).
+    ///
+    /// This must not be mixed with [add_tuple_value] on the same tuple.
     pub(crate) fn add_tuple_data_value(&mut self, dictionary: &mut Dict, data_value: AnyDataValue) {
-        let value = data_value.to_storage_value_t_dict(dictionary);
         self.current_tuple_data_values[self.current_tuple_index] = data_value;
-        self.current_tuple[self.current_tuple_index] = value;
-        self.current_tuple_types[self.current_tuple_index] = value.get_type();
         self.current_tuple_index += 1;
 
         if self.current_tuple_index >= self.column_number() {
@@ -383,6 +384,13 @@ impl TupleBuffer {
                     "tuple {:?} matched a filter",
                     self.current_tuple_data_values
                 );
+
+                for (index, value) in self.current_tuple_data_values.iter().enumerate() {
+                    let value = value.to_storage_value_t_dict(dictionary);
+                    self.current_tuple[index] = value;
+                    self.current_tuple_types[index] = value.get_type();
+                }
+
                 self.write_tuple();
             }
         }
@@ -497,8 +505,7 @@ impl TupleBuffer {
                     .program
                     .evaluate_data(&self.current_tuple_data_values)
                     .expect("should evaluate to a value");
-                self.current_tuple[transformation.position] =
-                    value.to_storage_value_t_dict(dictionary);
+                self.current_tuple_data_values[transformation.position] = value;
             }
 
             // first matching pattern wins
