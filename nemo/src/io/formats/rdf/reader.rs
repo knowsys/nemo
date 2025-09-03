@@ -406,6 +406,7 @@ mod test {
             None,
             RdfValueFormats::default(3),
             None,
+            Vec::new(),
         );
         let dict = RefCell::new(Dict::default());
         let mut tuple_writer = TupleWriter::new(&dict, 3);
@@ -430,6 +431,7 @@ mod test {
             None,
             RdfValueFormats::default(3),
             None,
+            Vec::new(),
         );
         let dict = RefCell::new(Dict::default());
         let mut tuple_writer = TupleWriter::new(&dict, 3);
@@ -453,6 +455,7 @@ mod test {
             None,
             RdfValueFormats::default(3),
             None,
+            Vec::new(),
         );
         let dict = RefCell::new(Dict::default());
         let mut tuple_writer = TupleWriter::new(&dict, 3);
