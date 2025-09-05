@@ -60,8 +60,23 @@ impl ExecutionNodeOwned {
 /// Reference to a node in an [ExecutionPlan]
 ///
 /// Internally, uses a `Weak<RefCell<T>>`.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ExecutionNodeRef(Weak<RefCell<ExecutionNode>>);
+
+impl Debug for ExecutionNodeRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.0.upgrade() {
+            Some(node) => f
+                .debug_tuple("ExecutionNodeRef")
+                .field(&node.borrow().id)
+                .finish(),
+            _ => f
+                .debug_tuple("ExecutionNodeRef")
+                .field(&"<failed to upgrade weak reference>".to_string())
+                .finish(),
+        }
+    }
+}
 
 impl ExecutionNodeRef {
     /// Return an referenced counted cell of an [ExecutionNode].
