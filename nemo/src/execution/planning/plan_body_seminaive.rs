@@ -6,11 +6,15 @@ use crate::{
     chase_model::{
         analysis::{program_analysis::RuleAnalysis, variable_order::VariableOrder},
         components::{
-            atom::variable_atom::VariableAtom, filter::ChaseFilter, operation::ChaseOperation,
-            rule::ChaseRule,
+            atom::variable_atom::VariableAtom, filter::ChaseFilter, import::ChaseImportClause,
+            operation::ChaseOperation, rule::ChaseRule,
         },
     },
-    execution::{execution_engine::RuleInfo, rule_execution::VariableTranslation},
+    execution::{
+        execution_engine::RuleInfo, planning::operations::import::node_imports,
+        rule_execution::VariableTranslation,
+    },
+    io::ImportManager,
     table_manager::{SubtableExecutionPlan, TableManager},
 };
 
@@ -30,6 +34,8 @@ pub(crate) struct SeminaiveStrategy {
 
     negative_atoms: Vec<VariableAtom>,
     negative_filters: Vec<Vec<ChaseFilter>>,
+
+    imports: Vec<ChaseImportClause>,
 }
 
 impl SeminaiveStrategy {
@@ -41,6 +47,7 @@ impl SeminaiveStrategy {
             negative_atoms: rule.negative_body().clone(),
             negative_filters: rule.negative_filters().clone(),
             positive_operations: rule.positive_operations().clone(),
+            imports: rule.imports().clone(),
         }
     }
 }
@@ -49,6 +56,7 @@ impl BodyStrategy for SeminaiveStrategy {
     fn add_plan_body(
         &self,
         table_manager: &TableManager,
+        import_manager: &ImportManager,
         current_plan: &mut SubtableExecutionPlan,
         variable_translation: &VariableTranslation,
         rule_info: &RuleInfo,
@@ -90,7 +98,18 @@ impl BodyStrategy for SeminaiveStrategy {
             &self.negative_filters,
         );
 
-        let node_result = node_negation;
+        let node_imports = node_imports(
+            current_plan.plan_mut(),
+            table_manager,
+            import_manager,
+            variable_translation,
+            step_number,
+            variable_order,
+            node_negation,
+            &self.imports,
+        );
+
+        let node_result = node_imports;
 
         current_plan.add_temporary_table(node_result.clone(), "Body");
         node_result

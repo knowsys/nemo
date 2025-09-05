@@ -351,13 +351,13 @@ impl DatabaseInstance {
     fn execute_tree<'a>(
         &'a mut self,
         storage: &'a TemporaryStorage,
-        tree: &ExecutionTree,
+        tree: ExecutionTree,
         dependent: Vec<ProjectReordering>,
     ) -> (Trie, Vec<Trie>) {
-        match &tree.root {
+        match tree.root {
             ExecutionTreeNode::Operation(operation) => {
                 if let Some(trie_scan) =
-                    self.evaluate_operation(&self.dictionary, storage, operation)
+                    self.evaluate_operation(&self.dictionary, storage, &operation)
                 {
                     if matches!(trie_scan, TrieScanEnum::AggregateWrapper(_)) {
                         // Aggregates do not support dependenent tables yet
@@ -379,23 +379,33 @@ impl DatabaseInstance {
                 );
 
                 let trie = if generator.is_noop() {
-                    self.evaluate_tree_leaf(storage, subnode)
+                    self.evaluate_tree_leaf(storage, &subnode)
                         .map(|scan| Trie::from_partial_trie_scan(scan, tree.cut_layers))
                         .unwrap_or(Trie::empty(0))
                 } else {
-                    self.evaluate_tree_leaf(storage, subnode)
+                    self.evaluate_tree_leaf(storage, &subnode)
                         .map(|scan| generator.apply_operation(scan))
                         .unwrap_or(Trie::empty(0))
                 };
 
                 (trie, vec![])
             }
+            ExecutionTreeNode::IncrementalImport { generator, subnode } => {
+                let dict = &self.dictionary;
+                let trie = self
+                    .evaluate_tree_leaf(storage, &subnode)
+                    .map(move |scan| generator.apply_operation(scan, dict))
+                    .unwrap_or(Ok(Trie::empty(0)))
+                    .expect("error while reading"); // TODO: This error should somehow be caught
+
+                (trie, vec![])
+            }
         }
     }
 
-    fn log_new_trie(tree: &ExecutionTree, trie: &Trie) {
+    fn log_new_trie(tree_result: &ExecutionResult, trie: &Trie) {
         if !trie.is_empty() {
-            match &tree.result {
+            match &tree_result {
                 ExecutionResult::Temporary => {
                     log::info!(
                         "Saved temporary table: {} entries ({})",
@@ -422,6 +432,11 @@ impl DatabaseInstance {
         plan: ExecutionPlan,
     ) -> Result<HashMap<ExecutionId, PermanentTableId>, Error> {
         let execution_series = plan.finalize();
+        let execution_results = execution_series
+            .trees
+            .iter()
+            .map(|tree| (tree.result.clone(), tree.id))
+            .collect::<Vec<_>>();
 
         TimedCode::instance()
             .sub("Reasoning/Execution/Load Table")
@@ -436,7 +451,7 @@ impl DatabaseInstance {
             .sub("Reasoning/Execution/Load Table")
             .stop();
 
-        for (tree_index, tree) in execution_series.trees.iter().enumerate() {
+        for (tree_index, tree) in execution_series.trees.into_iter().enumerate() {
             if temporary_storage.computed_tables[tree_index].is_some() {
                 continue;
             }
@@ -449,38 +464,41 @@ impl DatabaseInstance {
                 .map(|(_, projectreordering)| projectreordering.clone())
                 .collect::<Vec<_>>();
 
+            let tree_result = tree.result.clone();
+            let tree_dependents = tree.dependents.clone();
+            let tree_used = tree.used;
+
             let timed_string = format!("Reasoning/Execution/{}", tree.operation_name);
             TimedCode::instance().sub(&timed_string).start();
             let (result_tree, results_dependent) =
                 self.execute_tree(&temporary_storage, tree, dependent_reorderings);
             TimedCode::instance().sub(&timed_string).stop();
 
-            if tree.used > 0 {
-                Self::log_new_trie(tree, &result_tree);
+            if tree_used > 0 {
+                Self::log_new_trie(&tree_result, &result_tree);
             }
 
             temporary_storage.computed_tables[tree_index] = Some(result_tree);
             for ((computed_id, _), result_dependent) in
-                tree.dependents.iter().zip(results_dependent)
+                tree_dependents.iter().zip(results_dependent)
             {
-                Self::log_new_trie(tree, &result_dependent);
+                Self::log_new_trie(&tree_result, &result_dependent);
                 temporary_storage.computed_tables[*computed_id] = Some(result_dependent);
             }
         }
 
         let mut result = HashMap::new();
-        for (tree, trie) in execution_series
-            .trees
+        for ((tree_result, tree_id), trie) in execution_results
             .into_iter()
             .zip(temporary_storage.computed_tables)
         {
-            match tree.result {
+            match tree_result {
                 ExecutionResult::Temporary => {} // Temporary table will be dropped at the end of the function
                 ExecutionResult::Permanent(order, name) => {
                     let trie = trie.expect("Trie should have been computed.");
                     if !trie.is_empty() {
                         let permanent_id = self.register_add_trie(&name, order, trie);
-                        let execution_id = tree.id;
+                        let execution_id = tree_id;
 
                         result.insert(execution_id, permanent_id);
                     }
@@ -509,7 +527,7 @@ impl DatabaseInstance {
         for (tree_index, tree) in execution_series.trees.into_iter().enumerate() {
             match &tree.result {
                 ExecutionResult::Temporary => {
-                    let (result, _) = self.execute_tree(&temporary_storage, &tree, vec![]);
+                    let (result, _) = self.execute_tree(&temporary_storage, tree, vec![]);
 
                     temporary_storage.computed_tables[tree_index] = Some(result);
                 }
@@ -528,6 +546,11 @@ impl DatabaseInstance {
                         ExecutionTreeNode::ProjectReorder { generator, subnode } => self
                             .evaluate_tree_leaf(&temporary_storage, subnode)
                             .and_then(|scan| generator.apply_operation_first(scan)),
+                        ExecutionTreeNode::IncrementalImport { .. } => {
+                            unimplemented!(
+                                "Returning only the first match not supported for this operation"
+                            )
+                        }
                     }?;
 
                     let row_datavalue = row_storage

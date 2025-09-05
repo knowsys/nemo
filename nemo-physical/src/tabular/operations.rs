@@ -3,6 +3,7 @@
 pub mod aggregate;
 pub(crate) mod filter;
 pub(crate) mod function;
+pub(crate) mod incremental_import;
 pub(crate) mod join;
 pub(crate) mod null;
 pub(crate) mod projectreorder;

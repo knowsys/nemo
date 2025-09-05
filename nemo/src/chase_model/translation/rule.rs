@@ -73,6 +73,16 @@ impl ProgramChaseTranslation {
         // Handle head
         self.handle_head(&mut result, rule.head());
 
+        // Handle imports
+        for import in rule.imports() {
+            let import_builder = import
+                .import_directive()
+                .builder()
+                .expect("invalid import directive");
+            let clause = self.build_import_clause(import, &import_builder);
+            result.add_import_clause(clause);
+        }
+
         result
     }
 

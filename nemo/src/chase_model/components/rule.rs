@@ -1,11 +1,14 @@
 //! This module defines [ChaseRule].
 
-use crate::rule_model::{
-    components::{
-        term::primitive::{variable::Variable, Primitive},
-        IterablePrimitives, IterableVariables,
+use crate::{
+    chase_model::components::import::ChaseImportClause,
+    rule_model::{
+        components::{
+            term::primitive::{variable::Variable, Primitive},
+            IterablePrimitives, IterableVariables,
+        },
+        origin::Origin,
     },
-    origin::Origin,
 };
 
 use super::{
@@ -71,6 +74,9 @@ pub struct ChaseRule {
     aggregation: ChaseRuleAggregation,
     /// Head of the rule
     head: ChaseRuleHead,
+
+    /// Imports during rule evaluation
+    imports: Vec<ChaseImportClause>,
 }
 
 impl ChaseRule {
@@ -140,6 +146,11 @@ impl ChaseRule {
     pub(crate) fn aggregate_head_index(&self) -> Option<usize> {
         self.head.aggregate_head_index
     }
+
+    /// Return the list of imports that will be executed as part of this rule evaluation.
+    pub(crate) fn imports(&self) -> &Vec<ChaseImportClause> {
+        &self.imports
+    }
 }
 
 impl ChaseRule {
@@ -195,6 +206,11 @@ impl ChaseRule {
     /// Add a new atom to the head of the rule.
     pub(crate) fn add_head_atom(&mut self, atom: PrimitiveAtom) {
         self.head.atoms.push(atom)
+    }
+
+    /// Add a new import clause to the rule.
+    pub(crate) fn add_import_clause(&mut self, import: ChaseImportClause) {
+        self.imports.push(import);
     }
 }
 
