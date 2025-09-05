@@ -5,6 +5,7 @@ use std::{collections::HashSet, fmt::Display, hash::Hash};
 use nemo_physical::datavalues::DataValue;
 
 use crate::rule_model::{
+    components::import_export::clause::ImportClause,
     error::{ValidationReport, hint::Hint, info::Info, validation_error::ValidationError},
     origin::Origin,
     pipeline::id::ProgramComponentId,
@@ -45,6 +46,9 @@ pub struct Rule {
     head: Vec<Atom>,
     /// Body of the rule
     body: Vec<Literal>,
+
+    /// Imports that are evaluated as part of the rule
+    imports: Vec<ImportClause>,
 }
 
 impl Rule {
@@ -57,6 +61,7 @@ impl Rule {
             display: None,
             head,
             body,
+            imports: Vec::default(),
         }
     }
 
@@ -69,6 +74,7 @@ impl Rule {
             display: None,
             head: Vec::default(),
             body: Vec::default(),
+            imports: Vec::default(),
         }
     }
 
@@ -142,6 +148,17 @@ impl Rule {
     /// including the head and the positive and negative body.
     pub fn atoms(&self) -> impl Iterator<Item = &Atom> {
         self.head.iter().chain(self.body_atoms())
+    }
+
+    /// Return an iterator over all [ImportClause]s
+    /// that are evaluated as part of this rule.
+    pub fn imports(&self) -> impl Iterator<Item = &ImportClause> {
+        self.imports.iter()
+    }
+
+    /// Add an [ImportClause] to this rule.
+    pub fn add_import(&mut self, import: ImportClause) {
+        self.imports.push(import);
     }
 
     /// Return the set of variables that are bound in positive body atoms.

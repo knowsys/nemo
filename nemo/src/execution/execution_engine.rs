@@ -68,6 +68,8 @@ pub struct ExecutionEngine<RuleSelectionStrategy> {
 
     /// Management of tables that represent predicates
     table_manager: TableManager,
+    /// Managermet of imports
+    import_manager: ImportManager,
 
     /// Stores for each predicate the number of subtables
     predicate_fragmentation: HashMap<Tag, usize>,
@@ -130,6 +132,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             analysis,
             rule_strategy,
             table_manager,
+            import_manager,
             predicate_fragmentation: HashMap::new(),
             predicate_last_union: HashMap::new(),
             rule_infos,
@@ -206,8 +209,12 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
         let current_info = &mut self.rule_infos[rule_index];
 
-        let updated_predicates =
-            execution.execute(&mut self.table_manager, current_info, self.current_step)?;
+        let updated_predicates = execution.execute(
+            &mut self.table_manager,
+            &self.import_manager,
+            current_info,
+            self.current_step,
+        )?;
 
         current_info.step_last_applied = self.current_step;
 

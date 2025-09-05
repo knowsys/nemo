@@ -21,6 +21,7 @@ use super::{
 };
 
 pub mod attribute;
+pub mod clause;
 pub mod io_type;
 pub mod specification;
 

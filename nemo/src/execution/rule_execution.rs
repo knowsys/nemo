@@ -8,6 +8,7 @@ use crate::{
         components::rule::ChaseRule,
     },
     error::Error,
+    io::ImportManager,
     rule_model::components::{IterableVariables, tag::Tag, term::primitive::variable::Variable},
     table_manager::{SubtableExecutionPlan, TableManager},
 };
@@ -81,6 +82,7 @@ impl RuleExecution {
     pub(crate) fn execute(
         &self,
         table_manager: &mut TableManager,
+        import_manager: &ImportManager,
         rule_info: &RuleInfo,
         step_number: usize,
     ) -> Result<Vec<Tag>, Error> {
@@ -99,6 +101,7 @@ impl RuleExecution {
         let mut subtable_execution_plan = SubtableExecutionPlan::default();
         let body_node = self.body_strategy.add_plan_body(
             table_manager,
+            import_manager,
             &mut subtable_execution_plan,
             &self.variable_translation,
             rule_info,

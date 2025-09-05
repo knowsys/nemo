@@ -1,12 +1,17 @@
 //! This module contains functions for building [ChaseImport]s.
 
 use crate::{
-    chase_model::components::{export::ChaseExport, import::ChaseImport},
+    chase_model::components::{
+        export::ChaseExport,
+        import::{ChaseImport, ChaseImportClause},
+    },
     io::{
         format_builder::ImportExportBuilder,
         formats::{Export, Import},
     },
-    rule_model::components::import_export::{ExportDirective, ImportDirective},
+    rule_model::components::import_export::{
+        clause::ImportClause, ExportDirective, ImportDirective,
+    },
 };
 
 use super::ProgramChaseTranslation;
@@ -46,5 +51,24 @@ impl ProgramChaseTranslation {
         let handler: Export = export_builder.build_export(predicate.name(), arity);
 
         ChaseExport::new(predicate, handler)
+    }
+
+    /// Build a [ChaseImportClause] from a given
+    /// [ImportClause][crate::rule_model::components::import_export::clause::ImportClause].
+    pub(crate) fn build_import_clause(
+        &self,
+        import_clause: &ImportClause,
+        import_builder: &ImportExportBuilder,
+    ) -> ChaseImportClause {
+        let predicate = import_clause.import_directive().predicate().clone();
+        let arity = *self
+            .predicate_arity
+            .get(&predicate)
+            .expect("arity has been determined in validation");
+
+        let handler: Import = import_builder.build_import(predicate.name(), arity);
+        let bindings = import_clause.output_variables().clone();
+
+        ChaseImportClause::new(predicate, handler, bindings)
     }
 }

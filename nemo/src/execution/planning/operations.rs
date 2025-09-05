@@ -5,6 +5,7 @@ pub(crate) mod aggregate;
 pub(crate) mod append;
 pub(crate) mod filter;
 pub(crate) mod functions;
+pub(crate) mod import;
 pub(crate) mod join;
 pub(crate) mod negation;
 pub(crate) mod operation;

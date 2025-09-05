@@ -3,6 +3,7 @@
 use std::fmt::Display;
 
 use crate::{
+    chase_model::components::import::ChaseImportClause,
     rule_model::{
         components::{
             IterablePrimitives, IterableVariables,
@@ -77,6 +78,9 @@ pub struct ChaseRule {
     aggregation: ChaseRuleAggregation,
     /// Head of the rule
     head: ChaseRuleHead,
+
+    /// Imports during rule evaluation
+    imports: Vec<ChaseImportClause>,
 }
 
 impl ChaseRule {
@@ -171,6 +175,11 @@ impl ChaseRule {
     pub(crate) fn aggregate_head_index(&self) -> Option<usize> {
         self.head.aggregate_head_index
     }
+
+    /// Return the list of imports that will be executed as part of this rule evaluation.
+    pub(crate) fn imports(&self) -> &Vec<ChaseImportClause> {
+        &self.imports
+    }
 }
 
 impl ChaseRule {
@@ -263,6 +272,11 @@ impl ChaseRule {
                 .chain(aggregation_operation_terms)
                 .chain(aggregation_filter_terms),
         )
+    }
+
+    /// Add a new import clause to the rule.
+    pub(crate) fn add_import_clause(&mut self, import: ChaseImportClause) {
+        self.imports.push(import);
     }
 }
 
