@@ -674,6 +674,8 @@ mod test {
         let dv2 = AnyDataValue::new_integer_from_u64(23);
         let dv3 = AnyDataValue::new_integer_from_u64(42);
         let dv4 = AnyDataValue::new_plain_string("quux".to_string());
+        let v1 = dv1.to_storage_value_t_dict(&mut dictionary);
+        let v4 = dv4.to_storage_value_t_dict(&mut dictionary);
 
         tuple_buffer.add_tuple_data_value(&mut dictionary, dv1.clone());
         tuple_buffer.add_tuple_data_value(&mut dictionary, dv2.clone());
@@ -689,10 +691,10 @@ mod test {
 
         assert_eq!(tuple_buffer.subtable_lengths().collect::<Vec<_>>(), &[&3]);
 
-        assert_eq!(tuple_buffer.stored_value(0, 0, 0), StorageValueT::Id32(0));
+        assert_eq!(tuple_buffer.stored_value(0, 0, 0), v1);
         assert_eq!(tuple_buffer.stored_value(0, 0, 1), StorageValueT::Int64(23));
 
-        assert_eq!(tuple_buffer.stored_value(0, 1, 0), StorageValueT::Id32(1));
+        assert_eq!(tuple_buffer.stored_value(0, 1, 0), v4);
         assert_eq!(tuple_buffer.stored_value(0, 1, 1), StorageValueT::Int64(23));
 
         assert_eq!(tuple_buffer.stored_value(0, 2, 0), StorageValueT::Id32(1));
