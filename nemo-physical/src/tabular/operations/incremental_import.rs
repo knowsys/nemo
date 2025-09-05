@@ -64,7 +64,7 @@ impl GeneratorIncrementalImport {
         dictionary: &'a RefCell<Dict>,
     ) -> Result<Trie, ReadingError> {
         if trie_scan.arity() == 0 {
-            Trie::zero_arity(true);
+            return Ok(Trie::zero_arity(true));
         }
 
         let mut tuple_writer = TupleWriter::new(dictionary, self.arity_output);
