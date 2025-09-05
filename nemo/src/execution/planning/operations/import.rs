@@ -63,6 +63,10 @@ pub(crate) fn node_imports(
         );
     }
 
+    if imported_tables.is_empty() {
+        return input_node;
+    }
+
     // Extend variable order
     extend_variable_order(variable_order, imports);
 
