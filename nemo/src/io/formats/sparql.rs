@@ -10,6 +10,7 @@ use nemo_physical::{
 use oxiri::Iri;
 
 use crate::{
+    chase_model::components::rule::ChaseRule,
     io::format_builder::{
         AnyImportExportBuilder, FormatParameter, Parameters, StandardParameter, format_parameter,
         format_tag, value_type_matches,
@@ -103,13 +104,8 @@ impl FormatBuilder for SparqlBuilder {
     fn new(
         _tag: Self::Tag,
         parameters: &Parameters<SparqlBuilder>,
-        filter_rules: &[Rule],
         _direction: Direction,
     ) -> Result<Self, ValidationError> {
-        if !filter_rules.is_empty() {
-            unimplemented!("filtered SPARQL import is not implemented.")
-        }
-
         // Copied from DsvBuilder
         let value_formats = parameters
             .get_optional(SparqlParameter::Format)
@@ -170,7 +166,11 @@ impl FormatBuilder for SparqlBuilder {
         Some(var_count)
     }
 
-    fn build_import(&self, arity: usize) -> Arc<dyn ImportHandler + Send + Sync + 'static> {
+    fn build_import(
+        &self,
+        arity: usize,
+        filter_rules: Vec<ChaseRule>,
+    ) -> Arc<dyn ImportHandler + Send + Sync + 'static> {
         Arc::new(DsvHandler::with_value_formats(
             b'\t',
             self.value_formats
@@ -182,7 +182,11 @@ impl FormatBuilder for SparqlBuilder {
         ))
     }
 
-    fn build_export(&self, _arity: usize) -> Arc<dyn ExportHandler + Send + Sync + 'static> {
+    fn build_export(
+        &self,
+        _arity: usize,
+        _filter_rules: Vec<ChaseRule>,
+    ) -> Arc<dyn ExportHandler + Send + Sync + 'static> {
         unimplemented!("SPARQL export is currently not supported")
     }
 }

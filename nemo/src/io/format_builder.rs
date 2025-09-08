@@ -15,6 +15,7 @@ use nemo_physical::{
 use strum::IntoEnumIterator;
 
 use crate::{
+    chase_model::components::rule::ChaseRule,
     rule_model::{
         components::{
             ComponentSource,
@@ -265,7 +266,6 @@ pub(crate) trait FormatBuilder: Debug + Sized + Into<AnyImportExportBuilder> {
     fn new(
         tag: Self::Tag,
         parameters: &Parameters<Self>,
-        filter_rules: &[Rule],
         direction: Direction,
     ) -> Result<Self, ValidationError>;
 
@@ -283,8 +283,16 @@ pub(crate) trait FormatBuilder: Debug + Sized + Into<AnyImportExportBuilder> {
         Ok(builder)
     }
 
-    fn build_import(&self, arity: usize) -> Arc<dyn ImportHandler + Send + Sync + 'static>;
-    fn build_export(&self, arity: usize) -> Arc<dyn ExportHandler + Send + Sync + 'static>;
+    fn build_import(
+        &self,
+        arity: usize,
+        filter_rules: Vec<ChaseRule>,
+    ) -> Arc<dyn ImportHandler + Send + Sync + 'static>;
+    fn build_export(
+        &self,
+        arity: usize,
+        filter_rules: Vec<ChaseRule>,
+    ) -> Arc<dyn ExportHandler + Send + Sync + 'static>;
 }
 
 #[derive(Debug)]
@@ -545,7 +553,7 @@ impl ImportExportBuilder {
             })
             .unwrap_or_else(|| CompressionFormat::from_resource_builder(&resource_builder));
 
-        let inner = match B::new(tag, &parameters, filter_rules, direction) {
+        let inner = match B::new(tag, &parameters, direction) {
             Ok(b) => b,
             Err(error) => {
                 report.add_source(origin.clone(), error);
@@ -690,12 +698,25 @@ impl ImportExportBuilder {
     }
 
     /// Finalize and create an [`Import`] with the specified parameters
-    pub fn build_import(&self, predicate_name: &str, arity: usize) -> Import {
+    pub fn build_import(
+        &self,
+        predicate_name: &str,
+        arity: usize,
+        filter_rules: Vec<ChaseRule>,
+    ) -> Import {
         let handler = match &self.inner {
-            AnyImportExportBuilder::Dsv(dsv_builder) => dsv_builder.build_import(arity),
-            AnyImportExportBuilder::Rdf(rdf_handler) => rdf_handler.build_import(arity),
-            AnyImportExportBuilder::Json(json_handler) => json_handler.build_import(arity),
-            AnyImportExportBuilder::Sparql(sparql_builder) => sparql_builder.build_import(arity),
+            AnyImportExportBuilder::Dsv(dsv_builder) => {
+                dsv_builder.build_import(arity, filter_rules)
+            }
+            AnyImportExportBuilder::Rdf(rdf_handler) => {
+                rdf_handler.build_import(arity, filter_rules)
+            }
+            AnyImportExportBuilder::Json(json_handler) => {
+                json_handler.build_import(arity, filter_rules)
+            }
+            AnyImportExportBuilder::Sparql(sparql_builder) => {
+                sparql_builder.build_import(arity, filter_rules)
+            }
         };
 
         let resource = self.resource.clone().unwrap_or(
@@ -715,12 +736,25 @@ impl ImportExportBuilder {
     }
 
     /// Finalize and create an [`Export`] with the specified parameters
-    pub fn build_export(&self, predicate_name: &str, arity: usize) -> Export {
+    pub fn build_export(
+        &self,
+        predicate_name: &str,
+        arity: usize,
+        filter_rules: Vec<ChaseRule>,
+    ) -> Export {
         let handler = match &self.inner {
-            AnyImportExportBuilder::Dsv(dsv_builder) => dsv_builder.build_export(arity),
-            AnyImportExportBuilder::Rdf(rdf_handler) => rdf_handler.build_export(arity),
-            AnyImportExportBuilder::Json(json_handler) => json_handler.build_export(arity),
-            AnyImportExportBuilder::Sparql(sparql_builder) => sparql_builder.build_export(arity),
+            AnyImportExportBuilder::Dsv(dsv_builder) => {
+                dsv_builder.build_export(arity, filter_rules)
+            }
+            AnyImportExportBuilder::Rdf(rdf_handler) => {
+                rdf_handler.build_export(arity, filter_rules)
+            }
+            AnyImportExportBuilder::Json(json_handler) => {
+                json_handler.build_export(arity, filter_rules)
+            }
+            AnyImportExportBuilder::Sparql(sparql_builder) => {
+                sparql_builder.build_export(arity, filter_rules)
+            }
         };
 
         let resource = self.resource.clone().unwrap_or(

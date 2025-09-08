@@ -2,6 +2,8 @@
 
 use std::fmt::Display;
 
+use nemo_physical::tabular::filters::FilterTransformPattern;
+
 use crate::{
     chase_model::components::import::ChaseImportClause,
     rule_model::{
@@ -394,5 +396,63 @@ impl IterableVariables for ChaseRule {
                 .chain(aggregation_operation_variables)
                 .chain(aggregation_filter_variables),
         )
+    }
+}
+
+impl ChaseRule {
+    fn into_filter_patterns(self) -> Result<impl Iterator<Item = FilterTransformPattern>, ()> {
+        if self.head.aggregate_head_index.is_some() {
+            return Err(todo!("add error code"));
+        }
+
+        if !self.imports.is_empty() {
+            return Err(todo!("add error code"));
+        }
+
+        Ok(todo!())
+    }
+}
+
+impl IterablePrimitives for ChaseRule {
+    type TermType = Primitive;
+
+    fn primitive_terms<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Primitive> + 'a> {
+        let head_terms = self.head().iter().flat_map(|atom| atom.primitive_terms());
+        let positive_operation_terms = self
+            .positive_operations()
+            .iter()
+            .flat_map(|operation| operation.primitive_terms());
+        let positive_filter_terms = self
+            .positive_filters()
+            .iter()
+            .flat_map(|filter| filter.primitive_terms());
+
+        let negative_filter_terms = self
+            .negative_filters()
+            .iter()
+            .flatten()
+            .flat_map(|filter| filter.primitive_terms());
+
+        let aggregation_operation_terms = self
+            .aggregate_operations()
+            .iter()
+            .flat_map(|operation| operation.primitive_terms());
+        let aggregation_filter_terms = self
+            .aggregate_filters()
+            .iter()
+            .flat_map(|filter| filter.primitive_terms());
+
+        Box::new(
+            head_terms
+                .chain(positive_operation_terms)
+                .chain(positive_filter_terms)
+                .chain(negative_filter_terms)
+                .chain(aggregation_operation_terms)
+                .chain(aggregation_filter_terms),
+        )
+    }
+
+    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Primitive> + 'a> {
+        unimplemented!("currently unused, needs support in the entire chase model")
     }
 }

@@ -26,6 +26,7 @@ use value_format::RdfValueFormats;
 use writer::RdfWriter;
 
 use crate::{
+    chase_model::components::rule::ChaseRule,
     error::Error,
     io::{
         compression_format::CompressionFormat,
@@ -35,7 +36,7 @@ use crate::{
         },
     },
     rule_model::{
-        components::{import_export::Direction, rule::Rule, term::value_type::ValueType},
+        components::{import_export::Direction, term::value_type::ValueType},
         error::validation_error::ValidationError,
     },
     syntax::import_export::{attribute, file_format},
@@ -108,7 +109,7 @@ pub struct RdfHandler {
     /// Maximum number of statements that should be imported/exported.
     limit: Option<u64>,
     /// Filtering rules
-    filter_rules: Vec<Rule>,
+    filter_rules: Vec<ChaseRule>,
 }
 
 impl FileFormatMeta for RdfHandler {
@@ -207,7 +208,6 @@ impl FormatBuilder for RdfHandler {
     fn new(
         tag: Self::Tag,
         parameters: &Parameters<RdfHandler>,
-        filter_rules: &[Rule],
         _direction: Direction,
     ) -> Result<Self, ValidationError> {
         let variant = match tag {
@@ -260,7 +260,7 @@ impl FormatBuilder for RdfHandler {
             variant,
             value_formats,
             limit,
-            filter_rules: filter_rules.to_vec(),
+            filter_rules: Vec::new(),
         })
     }
 
@@ -268,11 +268,21 @@ impl FormatBuilder for RdfHandler {
         Some(self.variant.arity())
     }
 
-    fn build_import(&self, _arity: usize) -> Arc<dyn ImportHandler + Send + Sync + 'static> {
-        Arc::new(self.clone())
+    fn build_import(
+        &self,
+        _arity: usize,
+        filter_rules: Vec<ChaseRule>,
+    ) -> Arc<dyn ImportHandler + Send + Sync + 'static> {
+        let mut handler = self.clone();
+        handler.filter_rules = filter_rules;
+        Arc::new(handler)
     }
 
-    fn build_export(&self, _arity: usize) -> Arc<dyn ExportHandler + Send + Sync + 'static> {
+    fn build_export(
+        &self,
+        _arity: usize,
+        filter_rules: Vec<ChaseRule>,
+    ) -> Arc<dyn ExportHandler + Send + Sync + 'static> {
         Arc::new(self.clone())
     }
 }

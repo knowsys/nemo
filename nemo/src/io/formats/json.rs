@@ -8,6 +8,7 @@ use nemo_physical::datasources::table_providers::TableProvider;
 use reader::JsonReader;
 
 use crate::{
+    chase_model::components::rule::ChaseRule,
     io::format_builder::{
         AnyImportExportBuilder, FormatBuilder, Parameters, StandardParameter, format_tag,
     },
@@ -58,13 +59,8 @@ impl FormatBuilder for JsonHandler {
     fn new(
         _tag: Self::Tag,
         _parameters: &Parameters<Self>,
-        filter_rules: &[Rule],
         direction: Direction,
     ) -> Result<Self, ValidationError> {
-        if !filter_rules.is_empty() {
-            unimplemented!("filtered JSON import is not implemented.")
-        }
-
         if matches!(direction, Direction::Export) {
             return Err(ValidationError::UnsupportedJsonExport);
         }
@@ -76,11 +72,19 @@ impl FormatBuilder for JsonHandler {
         Some(3)
     }
 
-    fn build_import(&self, _arity: usize) -> Arc<dyn ImportHandler + Send + Sync + 'static> {
+    fn build_import(
+        &self,
+        _arity: usize,
+        filter_rules: Vec<ChaseRule>,
+    ) -> Arc<dyn ImportHandler + Send + Sync + 'static> {
         Arc::new(Self)
     }
 
-    fn build_export(&self, _arity: usize) -> Arc<dyn super::ExportHandler + Send + Sync + 'static> {
+    fn build_export(
+        &self,
+        _arity: usize,
+        _filter_rules: Vec<ChaseRule>,
+    ) -> Arc<dyn super::ExportHandler + Send + Sync + 'static> {
         unimplemented!("json export is currently not supported")
     }
 }
