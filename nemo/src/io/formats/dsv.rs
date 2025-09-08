@@ -19,6 +19,7 @@ use value_format::DsvValueFormats;
 use writer::DsvWriter;
 
 use crate::{
+    chase_model::components::rule::ChaseRule,
     error::Error,
     io::format_builder::{
         format_parameter, format_tag, value_type_matches, AnyImportExportBuilder, FormatParameter,
@@ -220,13 +221,8 @@ impl FormatBuilder for DsvBuilder {
     fn new(
         tag: Self::Tag,
         parameters: &Parameters<DsvBuilder>,
-        filter_rules: &[Rule],
         _direction: Direction,
     ) -> Result<Self, ValidationError> {
-        if !filter_rules.is_empty() {
-            unimplemented!("filtered DSV import/export is not implemented.")
-        }
-
         let value_formats = parameters.get_optional(DsvParameter::Format).map(|value| {
             DsvValueFormats::try_from(value).expect("value formats have already been validated")
         });
@@ -271,7 +267,11 @@ impl FormatBuilder for DsvBuilder {
         self.value_formats.as_ref().map(DsvValueFormats::arity)
     }
 
-    fn build_import(&self, arity: usize) -> Arc<dyn ImportHandler + Send + Sync + 'static> {
+    fn build_import(
+        &self,
+        arity: usize,
+        filter_rules: Vec<ChaseRule>,
+    ) -> Arc<dyn ImportHandler + Send + Sync + 'static> {
         Arc::new(DsvHandler {
             delimiter: self.delimiter,
             value_formats: self
@@ -284,7 +284,11 @@ impl FormatBuilder for DsvBuilder {
         })
     }
 
-    fn build_export(&self, arity: usize) -> Arc<dyn ExportHandler + Send + Sync + 'static> {
+    fn build_export(
+        &self,
+        arity: usize,
+        filter_rules: Vec<ChaseRule>,
+    ) -> Arc<dyn ExportHandler + Send + Sync + 'static> {
         Arc::new(DsvHandler {
             delimiter: self.delimiter,
             value_formats: self

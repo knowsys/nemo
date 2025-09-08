@@ -9,6 +9,7 @@ use crate::{
     datavalues::AnyDataValue,
     function::{evaluation::StackProgram, tree::FunctionTree},
     management::database::Dict,
+    tabular::filters::FilterTransformPattern,
 };
 
 use super::sorted_tuple_buffer::SortedTupleBuffer;
@@ -247,29 +248,6 @@ impl TransformPosition {
         let program = StackProgram::from_function_tree(&value, &reference_map, None);
 
         Self { position, program }
-    }
-}
-
-/// A pattern that can be used to filter and transform the tuples in a [TupleBuffer].
-#[derive(Debug)]
-pub struct FilterTransformPattern {
-    filter: StackProgram,
-    transformations: Vec<TransformPosition>,
-}
-
-impl FilterTransformPattern {
-    /// Construct a new [FilterTransformPattern] from a filter and transformations.
-    pub fn new(filter: FunctionTree<usize>, transformations: Vec<TransformPosition>) -> Self {
-        let reference_map = filter
-            .references()
-            .into_iter()
-            .map(|position| (position, position))
-            .collect::<HashMap<_, _>>();
-        let filter_program = StackProgram::from_function_tree(&filter, &reference_map, None);
-        Self {
-            filter: filter_program,
-            transformations,
-        }
     }
 }
 

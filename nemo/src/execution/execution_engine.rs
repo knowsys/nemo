@@ -206,7 +206,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
         // Add all the sources to the table manager
         for (predicate, sources) in predicate_to_sources {
-            table_manager.add_edb(predicate, sources);
+            table_manager.add_edb(predicate.clone(), sources);
         }
 
         Ok(())

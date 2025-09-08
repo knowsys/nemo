@@ -14,7 +14,7 @@ use oxiri::Iri;
 use oxrdf::{BlankNode, GraphName, Literal, NamedNode, Quad, Subject, Term};
 use oxrdfio::{RdfFormat, RdfParser};
 
-use crate::{io::formats::PROGRESS_NOTIFY_INCREMENT, rule_model::components::rule::Rule};
+use crate::{chase_model::components::rule::ChaseRule, io::formats::PROGRESS_NOTIFY_INCREMENT};
 
 use super::{
     error::RdfFormatError,
@@ -35,7 +35,7 @@ pub(super) struct RdfReader {
     /// If given, this reader will only consider the first `limit` entries
     limit: Option<u64>,
     /// Filtering rules
-    filter_rules: Vec<Rule>,
+    filter_rules: Vec<ChaseRule>,
     /// Map to store how nulls relate to blank nodes.
     ///
     /// TODO: An RdfReader is specific to one BufRead, which it consumes when reading.
@@ -53,7 +53,7 @@ impl RdfReader {
         base: Option<Iri<String>>,
         value_formats: RdfValueFormats,
         limit: Option<u64>,
-        filter_rules: Vec<Rule>,
+        filter_rules: Vec<ChaseRule>,
     ) -> Self {
         Self {
             read,

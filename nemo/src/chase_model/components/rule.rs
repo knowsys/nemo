@@ -1,5 +1,7 @@
 //! This module defines [ChaseRule].
 
+use nemo_physical::tabular::filters::FilterTransformPattern;
+
 use crate::{
     chase_model::components::import::ChaseImportClause,
     rule_model::{
@@ -328,6 +330,22 @@ impl IterableVariables for ChaseRule {
                 .chain(aggregation_operation_variables)
                 .chain(aggregation_filter_variables),
         )
+    }
+}
+
+impl ChaseRule {
+    fn into_filter_patterns(self) -> Result<impl Iterator<Item = FilterTransformPattern>, ()> {
+        if self.head.aggregate_head_index.is_some() {
+            return Err(todo!("add error code"));
+        }
+
+        if !self.imports.is_empty() {
+            return Err(todo!("add error code"));
+        }
+
+
+
+        Ok(todo!())
     }
 }
 
