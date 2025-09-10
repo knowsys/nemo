@@ -22,7 +22,7 @@ use super::ProgramTransformation;
 
 /// Program transformation
 ///
-/// TODO ...
+/// Inlines certain import statements into rules.
 #[derive(Debug, Clone, Copy)]
 pub struct TransformationIncremental {}
 
