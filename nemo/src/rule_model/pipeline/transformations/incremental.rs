@@ -144,21 +144,6 @@ impl ProgramTransformation for TransformationIncremental {
             }
         }
 
-        // let substitution = Self::subsitution(self.external, program);
-
-        // for statement in program.statements() {
-        //     if !statement.is_parameter()
-        //         && statement.variables().any(|variable| variable.is_global())
-        //     {
-        //         let mut new_statement = statement.clone();
-        //         substitution.apply(&mut new_statement);
-
-        //         commit.add_statement(new_statement);
-        //     } else {
-        //         commit.keep(statement);
-        //     }
-        // }
-
         commit.submit()
     }
 }
