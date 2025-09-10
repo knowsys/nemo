@@ -157,7 +157,12 @@ impl<SubStrategy: RuleSelectionStrategy> RuleSelectionStrategy
 }
 
 impl<SubStrategy: MetaStrategy> MetaStrategy for StrategyStratifiedNegation<SubStrategy> {
-    fn current_scc(&self) -> &[usize] {
-        self.substrategies[self.current_stratum].current_scc()
+    fn current_scc(&self) -> Box<[usize]> {
+        let inner = self.substrategies[self.current_stratum].current_scc();
+
+        inner
+            .iter()
+            .map(|i| self.ordered_strata[self.current_stratum][*i])
+            .collect()
     }
 }

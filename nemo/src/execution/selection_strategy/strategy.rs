@@ -28,5 +28,5 @@ pub trait RuleSelectionStrategy: std::fmt::Debug + Sized {
 }
 
 pub trait MetaStrategy: RuleSelectionStrategy {
-    fn current_scc(&self) -> &[usize];
+    fn current_scc(&self) -> Box<[usize]>;
 }

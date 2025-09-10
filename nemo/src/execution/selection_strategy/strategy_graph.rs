@@ -76,7 +76,10 @@ impl<
         SubStrategy: RuleSelectionStrategy,
     > MetaStrategy for StrategyDependencyGraph<GraphConstructor, SubStrategy>
 {
-    fn current_scc(&self) -> &[usize] {
-        &self.ordered_sccs[self.current_scc_index]
+    fn current_scc(&self) -> Box<[usize]> {
+        self.ordered_sccs[self.current_scc_index]
+            .iter()
+            .cloned()
+            .collect()
     }
 }

@@ -358,17 +358,16 @@ impl ExecutionEngine {
         while let Some(index) = rule_strategy.next_rule(new_derivations) {
             let scc = rule_strategy.current_scc();
             if let Some(last) = &last_scc {
-                let last: &[usize] = &last;
-                if scc == last {
+                if &scc == last {
                     log::debug!("skipping application of {index}");
                     new_derivations = Some(false);
                     continue;
                 }
             }
 
-            self.fill_saturation_rules(scc, &mut saturation_rules);
+            self.fill_saturation_rules(&scc, &mut saturation_rules);
 
-            if let Some(Some(rules)) = saturation_rules.get_mut(scc) {
+            if let Some(Some(rules)) = saturation_rules.get_mut(&scc) {
                 log::info!("<<< {0}: APPLYING SCC {scc:?} >>>", self.current_step);
 
                 new_derivations = Some(self.saturation_step(rules)?);
