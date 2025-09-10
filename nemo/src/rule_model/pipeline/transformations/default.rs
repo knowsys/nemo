@@ -7,7 +7,7 @@ use crate::{
     rule_model::{
         error::ValidationReport,
         pipeline::transformations::{
-            active::TransformationActive, empty::TransformationEmpty,
+            empty::TransformationEmpty, filter_imorts::TransformationFilterImports,
             incremental::TransformationIncremental, validate::TransformationValidate,
         },
         programs::{ProgramRead, handle::ProgramHandle},
@@ -51,9 +51,10 @@ impl<'a> ProgramTransformation for TransformationDefault<'a> {
             .transform(TransformationExports::new(
                 self.parameters.export_parameters,
             ))?
+            .transform(TransformationFilterImports::new())?
             .transform(TransformationIncremental::new())?
             .transform(TransformationEmpty::new())?
             .transform(TransformationValidate::default())?
-            .transform(TransformationActive::default())
+            .transform(TransformationEmpty::new())
     }
 }
