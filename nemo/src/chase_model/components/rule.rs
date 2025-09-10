@@ -343,9 +343,8 @@ impl ChaseRule {
             return Err(todo!("add error code"));
         }
 
-
-
-        Ok(todo!())
+        todo!();
+        Ok(std::iter::empty())
     }
 }
 

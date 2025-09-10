@@ -13,7 +13,7 @@ use crate::{
     chase_model::components::rule::ChaseRule,
     io::format_builder::{
         format_parameter, format_tag, value_type_matches, AnyImportExportBuilder, FormatParameter,
-        Parameters, StandardParameter,
+        Parameters, StandardParameter, SupportedFormatTag,
     },
     rule_model::{
         components::{import_export::Direction, rule::Rule, term::value_type::ValueType},
@@ -30,7 +30,7 @@ use crate::io::formats::dsv::{value_format::DsvValueFormats, DsvHandler};
 const HTTP_GET_CHAR_LIMIT: usize = 2000;
 
 format_tag! {
-    pub(crate) enum SparqlTag(SupportedFormatTag::Sparql) {
+    pub enum SparqlTag(SupportedFormatTag::Sparql) {
         Sparql => file_format::SPARQL,
     }
 }
@@ -91,6 +91,13 @@ pub(crate) struct SparqlBuilder {
     value_formats: Option<DsvValueFormats>,
     endpoint: Iri<String>,
     query: Query,
+}
+
+impl SparqlBuilder {
+    /// Return the [SupportedFormatTag] for this builder.
+    pub fn format_tag(&self) -> SupportedFormatTag {
+        SupportedFormatTag::Sparql(SparqlTag::Sparql)
+    }
 }
 
 impl From<SparqlBuilder> for AnyImportExportBuilder {

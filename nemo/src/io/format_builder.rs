@@ -482,11 +482,16 @@ pub struct ImportExportBuilder {
     compression: CompressionFormat,
 }
 
-#[derive(Clone, Debug)]
-pub(crate) enum SupportedFormatTag {
+/// Supported import formats
+#[derive(Debug, Clone, Copy)]
+pub enum SupportedFormatTag {
+    /// Delimiter-separated values
     Dsv(DsvTag),
+    /// Resource Description Framework
     Rdf(RdfTag),
+    /// JSON
     Json(JsonTag),
+    /// SPARQL
     Sparql(SparqlTag),
 }
 
@@ -517,6 +522,11 @@ impl ImportExportBuilder {
             AnyImportExportBuilder::Json(inner) => inner.expected_arity(),
             AnyImportExportBuilder::Sparql(inner) => inner.expected_arity(),
         }
+    }
+
+    /// Return the [SupportedFormatTag] of this file format.
+    pub fn format(&self) -> SupportedFormatTag {
+        self.inner.format_tag()
     }
 
     /// The resource as specified in the parameters
@@ -789,6 +799,18 @@ pub(crate) enum AnyImportExportBuilder {
     Rdf(RdfHandler),
     Json(JsonHandler),
     Sparql(Box<SparqlBuilder>),
+}
+
+impl AnyImportExportBuilder {
+    /// Return the format of this builder.
+    pub fn format_tag(&self) -> SupportedFormatTag {
+        match self {
+            AnyImportExportBuilder::Dsv(dsv) => dsv.format_tag(),
+            AnyImportExportBuilder::Rdf(rdf) => rdf.format_tag(),
+            AnyImportExportBuilder::Json(json) => json.format_tag(),
+            AnyImportExportBuilder::Sparql(sparql) => sparql.format_tag(),
+        }
+    }
 }
 
 impl Debug for AnyImportExportBuilder {
