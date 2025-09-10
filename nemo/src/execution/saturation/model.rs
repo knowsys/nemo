@@ -156,6 +156,18 @@ impl SaturationRuleTranslation<'_> {
             .map(|term| self.convert_term(term))
             .collect::<Result<_, ()>>()?;
 
+        for (i, t) in terms.iter().enumerate() {
+            if let BodyTerm::Variable(v) = t {
+                if terms[i + 1..]
+                    .iter()
+                    .find(|other| *other == &BodyTerm::Variable(*v))
+                    .is_some()
+                {
+                    return Err(());
+                }
+            }
+        }
+
         Ok(SaturationAtom { predicate, terms })
     }
 
