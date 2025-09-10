@@ -4,6 +4,7 @@ pub mod active;
 pub mod default;
 pub mod exports;
 pub mod global;
+pub mod incremental;
 pub mod skolem;
 pub mod split;
 pub mod validate;

@@ -22,8 +22,8 @@ use crate::{
     chase_model::components::rule::ChaseRule,
     error::Error,
     io::format_builder::{
-        AnyImportExportBuilder, FormatParameter, Parameters, StandardParameter, format_parameter,
-        format_tag, value_type_matches,
+        AnyImportExportBuilder, FormatParameter, Parameters, StandardParameter, SupportedFormatTag,
+        format_parameter, format_tag, value_type_matches,
     },
     rule_model::{
         components::{import_export::Direction, rule::Rule, term::value_type::ValueType},
@@ -147,7 +147,7 @@ enum DsvVariant {
 }
 
 format_tag! {
-    pub(crate) enum DsvTag(SupportedFormatTag::Dsv) {
+    pub enum DsvTag(SupportedFormatTag::Dsv) {
         Dsv => file_format::DSV,
         Tsv => file_format::TSV,
         Csv => file_format::CSV,
@@ -205,6 +205,17 @@ pub(crate) struct DsvBuilder {
     value_formats: Option<DsvValueFormats>,
     ignore_headers: bool,
     quoting: bool,
+}
+
+impl DsvBuilder {
+    /// Return the [SupportedFormatTag] for this builder.
+    pub fn format_tag(&self) -> SupportedFormatTag {
+        SupportedFormatTag::Dsv(match self.delimiter {
+            b',' => DsvTag::Csv,
+            b'\t' => DsvTag::Tsv,
+            _ => DsvTag::Dsv,
+        })
+    }
 }
 
 impl From<DsvBuilder> for AnyImportExportBuilder {

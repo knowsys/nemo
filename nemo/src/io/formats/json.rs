@@ -10,7 +10,8 @@ use reader::JsonReader;
 use crate::{
     chase_model::components::rule::ChaseRule,
     io::format_builder::{
-        AnyImportExportBuilder, FormatBuilder, Parameters, StandardParameter, format_tag,
+        AnyImportExportBuilder, FormatBuilder, Parameters, StandardParameter, SupportedFormatTag,
+        format_tag,
     },
     rule_model::{
         components::{import_export::Direction, rule::Rule},
@@ -23,6 +24,13 @@ use super::{FileFormatMeta, ImportHandler};
 
 #[derive(Debug, Clone)]
 pub(crate) struct JsonHandler;
+
+impl JsonHandler {
+    /// Return the [SupportedFormatTag] for this handler.
+    pub fn format_tag(&self) -> SupportedFormatTag {
+        SupportedFormatTag::Json(JsonTag::Json)
+    }
+}
 
 impl FileFormatMeta for JsonHandler {
     fn default_extension(&self) -> String {
@@ -41,7 +49,7 @@ impl ImportHandler for JsonHandler {
 }
 
 format_tag! {
-    pub(crate) enum JsonTag(SupportedFormatTag::Json) {
+    pub enum JsonTag(SupportedFormatTag::Json) {
         Json => file_format::JSON,
     }
 }

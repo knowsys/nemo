@@ -32,7 +32,7 @@ use crate::{
         compression_format::CompressionFormat,
         format_builder::{
             AnyImportExportBuilder, FormatParameter, Parameters, StandardParameter,
-            format_parameter, format_tag, value_type_matches,
+            SupportedFormatTag, format_parameter, format_tag, value_type_matches,
         },
     },
     rule_model::{
@@ -112,6 +112,19 @@ pub struct RdfHandler {
     filter_rules: Vec<ChaseRule>,
 }
 
+impl RdfHandler {
+    /// Return the [SupportedFormatTag] for this handler.
+    pub fn format_tag(&self) -> SupportedFormatTag {
+        SupportedFormatTag::Rdf(match self.variant {
+            RdfVariant::NTriples => RdfTag::NTriples,
+            RdfVariant::NQuads => RdfTag::NQuads,
+            RdfVariant::Turtle => RdfTag::Turtle,
+            RdfVariant::RDFXML => RdfTag::RdfXml,
+            RdfVariant::TriG => RdfTag::Trig,
+        })
+    }
+}
+
 impl FileFormatMeta for RdfHandler {
     fn default_extension(&self) -> String {
         self.variant.default_extension().to_string()
@@ -147,7 +160,7 @@ impl ExportHandler for RdfHandler {
 }
 
 format_tag! {
-    pub(crate) enum RdfTag(SupportedFormatTag::Rdf) {
+    pub enum RdfTag(SupportedFormatTag::Rdf) {
         Rdf => file_format::RDF_UNSPECIFIED,
         NTriples => file_format::RDF_NTRIPLES,
         NQuads => file_format::RDF_NQUADS,

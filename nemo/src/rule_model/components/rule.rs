@@ -120,6 +120,14 @@ impl Rule {
         })
     }
 
+    /// Return an iterator over the negative literals in the body of this rule.
+    pub fn body_negative(&self) -> impl Iterator<Item = &Atom> {
+        self.body.iter().filter_map(|literal| match literal {
+            Literal::Negative(atom) => Some(atom),
+            Literal::Positive(_) | Literal::Operation(_) => None,
+        })
+    }
+
     /// Return a mutable reference to the body of the rule.
     pub fn body_mut(&mut self) -> &mut Vec<Literal> {
         &mut self.body
