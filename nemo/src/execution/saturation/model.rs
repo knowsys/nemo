@@ -54,26 +54,29 @@ enum HeadTerm {
     Constant(StorageValueT),
 }
 
+#[derive(Debug)]
 struct HeadAtom {
     predicate: Arc<str>,
     terms: Box<[HeadTerm]>,
 }
 
+#[derive(Debug, Clone)]
 pub(crate) enum Head {
     Datalog(Box<[SaturationAtom]>),
 }
 
 pub(crate) type JoinOrder = Arc<[JoinOp]>;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub(crate) enum JoinOp {
     Join(SaturationAtom),
     Filter(SaturationAtom),
 }
 
+#[derive(Debug, Clone)]
 pub(crate) struct SaturationRule {
     pub(super) body_atoms: Arc<[SaturationAtom]>,
-    join_orders: Box<[Option<JoinOrder>]>,
+    pub(super) join_orders: Box<[Option<JoinOrder>]>,
     pub(super) head: Head,
 }
 
@@ -164,7 +167,7 @@ impl SaturationRuleTranslation<'_> {
         }
     }
 
-    fn convert(&mut self, rule: Rule) -> Result<SaturationRule, ()> {
+    pub(crate) fn convert(&mut self, rule: &Rule) -> Result<SaturationRule, ()> {
         let body: Arc<[SaturationAtom]> = rule
             .body()
             .iter()
@@ -193,7 +196,7 @@ impl SaturationRuleTranslation<'_> {
     }
 }
 
-struct SaturationRuleTranslation<'a> {
+pub(crate) struct SaturationRuleTranslation<'a> {
     variables: Variables,
     interner: Interner,
     dict: &'a mut Dict,
@@ -201,7 +204,7 @@ struct SaturationRuleTranslation<'a> {
 
 impl<'a> SaturationRuleTranslation<'a> {
     /// Create at [`SaturationRuleTranslation`] referring to a [`Dict`]
-    fn new(dict: &'a mut Dict) -> Self {
+    pub(crate) fn new(dict: &'a mut Dict) -> Self {
         Self {
             variables: Variables(HashMap::new()),
             interner: Interner(HashSet::new()),

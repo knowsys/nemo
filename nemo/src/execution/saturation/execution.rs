@@ -1,7 +1,7 @@
 //! Executing a set of saturation rules
 
 use std::{
-    collections::{btree_map, btree_set, BTreeMap, BTreeSet, HashMap},
+    collections::{btree_map, BTreeMap, HashMap},
     ops::{Bound, Index},
     sync::Arc,
 };
@@ -221,6 +221,7 @@ fn match_rows(pattern: &[RowElement], row: &[RowElement]) -> MatchResult {
     MatchResult::Matches
 }
 
+#[derive(Debug)]
 struct RowIterator<'a> {
     lower_cursor: btree_map::Cursor<'a, Row, Age>,
     upper_cursor: btree_map::Cursor<'a, Row, Age>,
@@ -241,7 +242,12 @@ impl<'a> Iterator for RowIterator<'a> {
             match match_rows(&self.pattern, row) {
                 MatchResult::Matches => return Some(row),
                 MatchResult::InBounds => continue,
-                MatchResult::OutOfBounds => unreachable!("this should have been caught early"),
+                MatchResult::OutOfBounds => {
+                    log::trace!("OutOfBounds {row:?}, {:?}", self.pattern);
+                    log::trace!("upper cursor next {:?}", self.upper_cursor.peek_next());
+                    log::trace!("upper cursor prev {:?}", self.upper_cursor.peek_prev());
+                    unreachable!("this should have been caught early")
+                }
             }
         }
 
@@ -266,8 +272,8 @@ impl GhostBound for Row {
 }
 
 fn find_all_matches<'a>(pattern: Row, table: &'a BTreeMap<Row, Age>) -> RowIterator<'a> {
-    let lower_cursor = table.lower_bound(Bound::Excluded(&pattern));
-    let upper_cursor = table.upper_bound(Bound::Excluded(&pattern.invert_bound()));
+    let lower_cursor = table.lower_bound(Bound::Included(&pattern));
+    let upper_cursor = table.upper_bound(Bound::Included(&pattern.invert_bound()));
     RowIterator {
         lower_cursor,
         upper_cursor,
@@ -275,6 +281,7 @@ fn find_all_matches<'a>(pattern: Row, table: &'a BTreeMap<Row, Age>) -> RowItera
     }
 }
 
+#[derive(Debug)]
 struct RowMatcher<'a> {
     substitution: SaturationSubstitution,
     atom: SaturationAtom,
@@ -305,12 +312,15 @@ fn join<'a>(
         cursor,
     }
 }
+
+#[derive(Debug)]
 struct ExecutionTree {
     init: SaturationSubstitution,
     ops: Arc<[JoinOp]>,
     index: usize,
 }
 
+#[derive(Debug)]
 enum JoinIter<'a> {
     Done,
     NoOp(SaturationSubstitution),
@@ -322,10 +332,10 @@ enum JoinIter<'a> {
     },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 enum Age {
-    old,
-    new,
+    Old,
+    New,
 }
 
 #[derive(Debug, Default)]
@@ -348,7 +358,10 @@ impl ExecutionTree {
 
         match op {
             JoinOp::Join(atom) => {
-                let table = tables.0.get(&atom.predicate).unwrap();
+                let Some(table) = tables.0.get(&atom.predicate) else {
+                    return JoinIter::Done;
+                };
+
                 let atom = atom.clone();
                 let inner = Box::new(self.execute(&tables));
 
@@ -361,7 +374,10 @@ impl ExecutionTree {
             }
             // todo: more efficient implementation?
             JoinOp::Filter(atom) => {
-                let table = tables.0.get(&atom.predicate).unwrap();
+                let Some(table) = tables.0.get(&atom.predicate) else {
+                    return JoinIter::Done;
+                };
+
                 let atom = atom.clone();
                 let inner = Box::new(self.execute(&tables));
 
@@ -457,7 +473,7 @@ pub(crate) fn saturate(db: &mut DataBase, rules: &mut [SaturationRule]) {
 
                         let fact = fact_from_row(&row, atom.predicate.clone());
 
-                        cursor.insert_after(row, Age::new).unwrap();
+                        cursor.insert_after(row, Age::New).unwrap();
                         todo.push(fact);
                     }
                 }
@@ -475,28 +491,40 @@ pub(crate) fn saturate(db: &mut DataBase, rules: &mut [SaturationRule]) {
 }
 
 impl DataBase {
-    pub fn new() -> Self {
-        Self(Default::default())
-    }
-
     pub fn add_table(
         &mut self,
         predicate: Arc<str>,
         table: impl Iterator<Item = Vec<StorageValueT>>,
     ) {
         let table = table
-            .map(|row| (row.into_iter().map(RowElement::Value).collect(), Age::old))
+            .map(|row| (row.into_iter().map(RowElement::Value).collect(), Age::Old))
             .collect();
 
         self.0.insert(predicate, table);
+    }
+
+    pub fn new_facts(&self, predicate: &str) -> impl Iterator<Item = StorageValueT> + use<'_> {
+        self.0.get(predicate).into_iter().flat_map(|table| {
+            table.iter().flat_map(|(row, age)| {
+                (matches!(age, Age::New))
+                    .then_some(row.iter().map(|v| match v {
+                        RowElement::Value(storage_value_t) => *storage_value_t,
+                        RowElement::Bottom => unreachable!("sentinel elements are never written"),
+                        RowElement::Top => unreachable!("sentinel elements are never written"),
+                    }))
+                    .into_iter()
+                    .flatten()
+            })
+        })
     }
 }
 
 #[cfg(test)]
 mod test {
     use std::{
-        collections::{BTreeMap, BTreeSet, HashMap},
+        collections::{BTreeMap, HashMap},
         iter::repeat_n,
+        sync::Arc,
     };
 
     use nemo_physical::datatypes::StorageValueT;
@@ -505,17 +533,17 @@ mod test {
 
     use crate::execution::saturation::{
         execution::{find_all_matches, saturate, DataBase, Row, RowElement},
-        model::bench_rules,
+        model::{bench_rules, BodyTerm, Head, SaturationAtom, SaturationRule},
     };
+
+    macro_rules! table {
+        [ $([ $($v:expr),* ],)* ] => {
+            BTreeMap::from([ $( (Box::from([ $(RowElement::Value(StorageValueT::Id32($v))),* ]), Age::Old), )* ])
+        };
+    }
 
     #[test]
     fn find_all_matches_works() {
-        macro_rules! table {
-            [ $([ $($v:expr),* ],)* ] => {
-                BTreeMap::from([ $( (Box::from([ $(RowElement::Value(StorageValueT::Id32($v))),* ]), Age::old), )* ])
-            };
-        }
-
         let table: BTreeMap<Row, Age> = table![
             [0, 0, 0, 1, 0],
             [0, 1, 0, 0, 0],
@@ -590,11 +618,76 @@ mod test {
 
         let mut db = DataBase(HashMap::from([(
             predicate.clone(),
-            BTreeMap::from([(row, Age::old)]),
+            BTreeMap::from([(row, Age::Old)]),
         )]));
 
         saturate(&mut db, &mut rules);
 
         assert_eq!(db.0.get(&predicate).unwrap().len(), 2_usize.pow(n as u32));
+
+        let new_len = db.new_facts(&predicate).count() / n;
+        assert_eq!(new_len, 2_usize.pow(n as u32) - 1);
+    }
+
+    #[test]
+    fn saturate_multi_join() {
+        let p1: Arc<str> = Arc::from("p1");
+        let p2: Arc<str> = Arc::from("p2");
+        let p3: Arc<str> = Arc::from("p3");
+        let p4: Arc<str> = Arc::from("p4");
+
+        let x = BodyTerm::Variable(0);
+        let y = BodyTerm::Variable(1);
+        let z = BodyTerm::Variable(2);
+
+        let head = Head::Datalog(Box::from([SaturationAtom {
+            predicate: p1.clone(),
+            terms: Box::from([x.clone(), y.clone(), z.clone()]),
+        }]));
+
+        let p2_atom = SaturationAtom {
+            predicate: p2.clone(),
+            terms: Box::from([x.clone(), y.clone()]),
+        };
+
+        let p2_table: BTreeMap<Row, Age> = table![[0, 0],];
+
+        let p3_atom = SaturationAtom {
+            predicate: p3.clone(),
+            terms: Box::from([x.clone(), y.clone()]),
+        };
+
+        let p3_table: BTreeMap<Row, Age> = table![[0, 0],];
+
+        let p4_atom = SaturationAtom {
+            predicate: p4.clone(),
+            terms: Box::from([x.clone(), y.clone(), z.clone()]),
+        };
+
+        let p4_table: BTreeMap<Row, Age> = table![[0, 0, 0], [0, 0, 1],];
+
+        let mut db = HashMap::new();
+        db.insert(p2.clone(), p2_table);
+        db.insert(p3.clone(), p3_table);
+        db.insert(p4.clone(), p4_table.clone());
+
+        let rule = SaturationRule {
+            body_atoms: Arc::new([p2_atom, p3_atom, p4_atom]),
+            join_orders: Box::from([None, None, None]),
+            head,
+        };
+
+        let mut db = DataBase(db);
+        let mut rules = vec![rule];
+
+        saturate(&mut db, &mut rules);
+
+        assert_eq!(
+            db.0.get(&p1)
+                .unwrap_or(&BTreeMap::new())
+                .keys()
+                .collect::<Vec<_>>(),
+            p4_table.keys().collect::<Vec<_>>()
+        );
     }
 }

@@ -146,7 +146,7 @@ impl Trie {
     }
 
     /// Create a new [Trie] from a [SortedTupleBuffer].
-    pub(crate) fn from_tuple_buffer(buffer: SortedTupleBuffer) -> Self {
+    pub fn from_tuple_buffer(buffer: SortedTupleBuffer) -> Self {
         let mut intervalcolumn_builders = (0..buffer.column_number())
             .map(|_| IntervalColumnTBuilderMatrix::<IntervalLookupMethod>::default())
             .collect::<Vec<_>>();

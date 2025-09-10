@@ -226,7 +226,7 @@ pub(super) struct TypedTableRecord {
 
 /// Represents a row-based table containing values of arbitrary data types
 #[derive(Debug)]
-pub(crate) struct TupleBuffer {
+pub struct TupleBuffer {
     /// Conceptionally, one may imagine the table represented by the [TupleBuffer]
     /// to be split into several subtables that only contain rows with certain fixed types.
     /// E.g. one subtable might contain tuples of type ([StorageTypeName::Id32], [StorageTypeName::Int64])
@@ -250,7 +250,7 @@ pub(crate) struct TupleBuffer {
 
 impl TupleBuffer {
     /// Create a new [TupleBuffer].
-    pub(crate) fn new(column_number: usize) -> Self {
+    pub fn new(column_number: usize) -> Self {
         Self {
             typed_subtables: Vec::new(),
             table_lookup: TypedTableLookup::new(),
@@ -289,7 +289,7 @@ impl TupleBuffer {
     /// Provide the next value for the current tuple. Values are added in in order.
     /// When the value for the last column was provided, the tuple is committed to the buffer.
     /// Alternatively, a partially built tuple can be abandonded by calling `drop_current_tuple`.
-    pub(crate) fn add_tuple_value(&mut self, value: StorageValueT) {
+    pub fn add_tuple_value(&mut self, value: StorageValueT) {
         self.current_tuple_types[self.current_tuple_index] = value.get_type();
         self.current_tuple[self.current_tuple_index] = value;
         self.current_tuple_index += 1;
@@ -307,7 +307,7 @@ impl TupleBuffer {
     }
 
     /// Finish writing to the [TupleBuffer] and return a [SortedTupleBuffer].
-    pub(crate) fn finalize(self) -> SortedTupleBuffer {
+    pub fn finalize(self) -> SortedTupleBuffer {
         SortedTupleBuffer::new(self)
     }
 
@@ -318,7 +318,7 @@ impl TupleBuffer {
     }
 
     /// Returns the number of rows in the [TupleBuffer]
-    pub(crate) fn size(&self) -> usize {
+    pub fn size(&self) -> usize {
         self.typed_subtables
             .iter()
             .map(|record| record.current_length)

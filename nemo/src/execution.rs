@@ -3,8 +3,6 @@
 pub mod execution_engine;
 pub use execution_engine::ExecutionEngine;
 
-use crate::execution::selection_strategy::strategy::SingleStepStrategy;
-
 use self::selection_strategy::{
     dependency_graph::graph_positive::GraphConstructorPositive,
     strategy_graph::StrategyDependencyGraph, strategy_round_robin::StrategyRoundRobin,
@@ -19,8 +17,6 @@ pub mod selection_strategy;
 pub mod tracing;
 
 /// The default strategy that will be used for reasoning
-pub type DefaultExecutionStrategy = SingleStepStrategy<
-    StrategyStratifiedNegation<
-        StrategyDependencyGraph<GraphConstructorPositive, StrategyRoundRobin>,
-    >,
+pub type DefaultExecutionStrategy = StrategyStratifiedNegation<
+    StrategyDependencyGraph<GraphConstructorPositive, StrategyRoundRobin>,
 >;
