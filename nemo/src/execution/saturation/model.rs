@@ -149,7 +149,7 @@ impl SaturationRuleTranslation<'_> {
     }
 
     fn convert_atom(&mut self, atom: &Atom) -> Result<SaturationAtom, ()> {
-        let predicate = Arc::from(atom.predicate().name());
+        let predicate = self.interner.create(atom.predicate().name());
 
         let terms: Box<[BodyTerm]> = atom
             .terms()
