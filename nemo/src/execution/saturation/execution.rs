@@ -1,7 +1,7 @@
 //! Executing a set of saturation rules
 
 use std::{
-    collections::{btree_set, BTreeSet, HashMap},
+    collections::{btree_map, btree_set, BTreeMap, BTreeSet, HashMap},
     ops::{Bound, Index},
     sync::Arc,
 };
@@ -222,8 +222,8 @@ fn match_rows(pattern: &[RowElement], row: &[RowElement]) -> MatchResult {
 }
 
 struct RowIterator<'a> {
-    lower_cursor: btree_set::Cursor<'a, Row>,
-    upper_cursor: btree_set::Cursor<'a, Row>,
+    lower_cursor: btree_map::Cursor<'a, Row, Age>,
+    upper_cursor: btree_map::Cursor<'a, Row, Age>,
     pattern: Row,
 }
 
@@ -231,9 +231,11 @@ impl<'a> Iterator for RowIterator<'a> {
     type Item = &'a [RowElement];
 
     fn next(&mut self) -> Option<Self::Item> {
-        while let Some(row) = self.lower_cursor.next() {
-            if Some(row) == self.upper_cursor.peek_next() {
-                return None;
+        while let Some((row, _)) = self.lower_cursor.next() {
+            if let Some((other_row, _)) = self.upper_cursor.peek_next() {
+                if other_row == row {
+                    return None;
+                }
             }
 
             match match_rows(&self.pattern, row) {
@@ -263,7 +265,7 @@ impl GhostBound for Row {
     }
 }
 
-fn find_all_matches<'a>(pattern: Row, table: &'a BTreeSet<Row>) -> RowIterator<'a> {
+fn find_all_matches<'a>(pattern: Row, table: &'a BTreeMap<Row, Age>) -> RowIterator<'a> {
     let lower_cursor = table.lower_bound(Bound::Excluded(&pattern));
     let upper_cursor = table.upper_bound(Bound::Excluded(&pattern.invert_bound()));
     RowIterator {
@@ -293,7 +295,7 @@ impl Iterator for RowMatcher<'_> {
 fn join<'a>(
     substitution: SaturationSubstitution,
     atom: SaturationAtom,
-    table: &'a BTreeSet<Row>,
+    table: &'a BTreeMap<Row, Age>,
 ) -> RowMatcher<'a> {
     let cursor = find_all_matches(substitution.bind(&atom.terms), table);
 
@@ -315,13 +317,19 @@ enum JoinIter<'a> {
     Join {
         inner: Box<JoinIter<'a>>,
         atom: SaturationAtom,
-        table: &'a BTreeSet<Row>,
+        table: &'a BTreeMap<Row, Age>,
         current: Option<RowMatcher<'a>>,
     },
 }
 
 #[derive(Debug)]
-pub(crate) struct DataBase(HashMap<Arc<str>, BTreeSet<Row>>);
+enum Age {
+    old,
+    new,
+}
+
+#[derive(Debug, Default)]
+pub(crate) struct DataBase(HashMap<Arc<str>, BTreeMap<Row, Age>>);
 
 impl ExecutionTree {
     fn pop(&mut self) -> Option<&JoinOp> {
@@ -416,7 +424,7 @@ pub(crate) fn saturate(db: &mut DataBase, rules: &mut [SaturationRule]) {
 
     for (predicate, table) in db.0.iter() {
         for (rule_index, rule) in rules.iter_mut().enumerate() {
-            for row in table.iter() {
+            for (row, _) in table.iter() {
                 let fact = fact_from_row(row, predicate.clone());
 
                 for trigger in rule.trigger(&fact) {
@@ -441,12 +449,16 @@ pub(crate) fn saturate(db: &mut DataBase, rules: &mut [SaturationRule]) {
 
                         let mut cursor = table.lower_bound_mut(Bound::Included(&row));
 
-                        if cursor.peek_next() != Some(&row) {
-                            let fact = fact_from_row(&row, atom.predicate.clone());
-
-                            cursor.insert_after(row).unwrap();
-                            todo.push(fact);
+                        if let Some((other_row, _)) = cursor.peek_next() {
+                            if other_row == &row {
+                                continue;
+                            }
                         }
+
+                        let fact = fact_from_row(&row, atom.predicate.clone());
+
+                        cursor.insert_after(row, Age::new).unwrap();
+                        todo.push(fact);
                     }
                 }
             }
@@ -473,7 +485,7 @@ impl DataBase {
         table: impl Iterator<Item = Vec<StorageValueT>>,
     ) {
         let table = table
-            .map(|row| row.into_iter().map(RowElement::Value).collect())
+            .map(|row| (row.into_iter().map(RowElement::Value).collect(), Age::old))
             .collect();
 
         self.0.insert(predicate, table);
@@ -483,11 +495,13 @@ impl DataBase {
 #[cfg(test)]
 mod test {
     use std::{
-        collections::{BTreeSet, HashMap},
+        collections::{BTreeMap, BTreeSet, HashMap},
         iter::repeat_n,
     };
 
     use nemo_physical::datatypes::StorageValueT;
+
+    use super::Age;
 
     use crate::execution::saturation::{
         execution::{find_all_matches, saturate, DataBase, Row, RowElement},
@@ -497,12 +511,12 @@ mod test {
     #[test]
     fn find_all_matches_works() {
         macro_rules! table {
-        [ $([ $($v:expr),* ],)* ] => {
-            BTreeSet::from([ $( Box::from([ $(RowElement::Value(StorageValueT::Id32($v))),* ]), )* ])
-        };
-    }
+            [ $([ $($v:expr),* ],)* ] => {
+                BTreeMap::from([ $( (Box::from([ $(RowElement::Value(StorageValueT::Id32($v))),* ]), Age::old), )* ])
+            };
+        }
 
-        let table: BTreeSet<Row> = table![
+        let table: BTreeMap<Row, Age> = table![
             [0, 0, 0, 1, 0],
             [0, 1, 0, 0, 0],
             [0, 1, 0, 1, 2],
@@ -558,7 +572,7 @@ mod test {
             RowElement::Value(StorageValueT::Id32(0)),
         ];
         assert_eq!(
-            iter.lower_cursor.peek_next().map(|row| {
+            iter.lower_cursor.peek_next().map(|(row, _)| {
                 let row: &[RowElement] = row;
                 row
             }),
@@ -574,7 +588,10 @@ mod test {
         let (mut rules, predicate) = bench_rules(n);
         let row: Row = repeat_n(RowElement::Value(StorageValueT::Int64(0)), n).collect();
 
-        let mut db = DataBase(HashMap::from([(predicate.clone(), BTreeSet::from([row]))]));
+        let mut db = DataBase(HashMap::from([(
+            predicate.clone(),
+            BTreeMap::from([(row, Age::old)]),
+        )]));
 
         saturate(&mut db, &mut rules);
 
