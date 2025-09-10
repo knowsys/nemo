@@ -1,0 +1,12 @@
+a(1) .
+a(2) .
+
+@import b :- csv{resource="b.csv"} .
+
+c(?x, ?y) :- a(?y), b(?x, ?y) .
+a(3) :- c(23, 1) .
+
+goal(42) :- c(42, 3) .
+
+@output c .
+@output goal .

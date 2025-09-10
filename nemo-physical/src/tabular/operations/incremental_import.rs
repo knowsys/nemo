@@ -6,7 +6,7 @@ use crate::{
     datasources::{table_providers::TableProvider, tuple_writer::TupleWriter},
     error::ReadingError,
     management::database::Dict,
-    tabular::{trie::Trie, triescan::PartialTrieScan},
+    tabular::{rowscan::RowScan, trie::Trie, triescan::PartialTrieScan},
 };
 
 use super::OperationTable;
@@ -63,8 +63,15 @@ impl GeneratorIncrementalImport {
         trie_scan: Scan,
         dictionary: &'a RefCell<Dict>,
     ) -> Result<Trie, ReadingError> {
+        log::trace!("doing incremental import");
+
         if trie_scan.arity() == 0 {
             return Ok(Trie::zero_arity(true));
+        }
+
+        let bindings = RowScan::new_full(trie_scan);
+        for binding in bindings {
+            log::trace!("binding: {binding:#?}");
         }
 
         let mut tuple_writer = TupleWriter::new(dictionary, self.arity_output);
