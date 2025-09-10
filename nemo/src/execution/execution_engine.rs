@@ -291,7 +291,7 @@ impl ExecutionEngine {
 
         let predicates: Vec<Tag> = self.table_manager.known_predicates().cloned().collect();
         for predicate in &predicates {
-            let Some(table_id) = self.table_manager.combine_predicate(&predicate)? else {
+            let Some(table_id) = self.table_manager.combine_predicate(predicate)? else {
                 continue;
             };
 
@@ -370,7 +370,7 @@ impl ExecutionEngine {
                 log::info!("<<< {0}: APPLYING SCC {scc:?} >>>", self.current_step);
 
                 new_derivations = Some(self.saturation_step(rules)?);
-                last_scc = Some(Box::from(scc));
+                last_scc = Some(scc);
             } else {
                 let updated_predicates = self.step(index, &executions[index])?;
                 last_scc = None;

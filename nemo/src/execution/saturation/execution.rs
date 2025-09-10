@@ -363,7 +363,7 @@ impl ExecutionTree {
                 };
 
                 let atom = atom.clone();
-                let inner = Box::new(self.execute(&tables));
+                let inner = Box::new(self.execute(tables));
 
                 JoinIter::Join {
                     inner,
@@ -379,7 +379,7 @@ impl ExecutionTree {
                 };
 
                 let atom = atom.clone();
-                let inner = Box::new(self.execute(&tables));
+                let inner = Box::new(self.execute(tables));
 
                 JoinIter::Join {
                     inner,
@@ -444,7 +444,7 @@ pub(crate) fn saturate(db: &mut DataBase, rules: &mut [SaturationRule]) {
                 let fact = fact_from_row(row, predicate.clone());
 
                 for trigger in rule.trigger(&fact) {
-                    matches.extend(trigger.execute(&db).map(|row| (row, rule_index)));
+                    matches.extend(trigger.execute(db).map(|row| (row, rule_index)));
                 }
             }
         }
@@ -482,8 +482,8 @@ pub(crate) fn saturate(db: &mut DataBase, rules: &mut [SaturationRule]) {
 
         for fact in &todo {
             for (rule_index, rule) in rules.iter_mut().enumerate() {
-                for trigger in rule.trigger(&fact) {
-                    matches.extend(trigger.execute(&db).map(|row| (row, rule_index)));
+                for trigger in rule.trigger(fact) {
+                    matches.extend(trigger.execute(db).map(|row| (row, rule_index)));
                 }
             }
         }

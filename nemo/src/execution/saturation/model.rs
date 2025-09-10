@@ -3,7 +3,6 @@
 use std::{
     borrow::Cow,
     collections::{HashMap, HashSet},
-    iter::repeat,
     sync::Arc,
 };
 
@@ -147,8 +146,7 @@ impl SaturationRuleTranslation<'_> {
             if let BodyTerm::Variable(v) = t {
                 if terms[i + 1..]
                     .iter()
-                    .find(|other| *other == &BodyTerm::Variable(*v))
-                    .is_some()
+                    .any(|other| other == &BodyTerm::Variable(*v))
                 {
                     return Err(());
                 }
@@ -173,7 +171,7 @@ impl SaturationRuleTranslation<'_> {
             .map(|lit| self.convert_literal(lit))
             .collect::<Result<_, ()>>()?;
 
-        let join_orders: Box<[_]> = repeat(None).take(body.len()).collect();
+        let join_orders: Box<[_]> = std::iter::repeat_n(None, body.len()).collect();
 
         let head = if rule.variables().any(Variable::is_existential) {
             // existential variable are not supported yet
@@ -217,7 +215,7 @@ struct Interner(HashSet<Arc<str>>);
 impl Interner {
     fn create(&mut self, input: &str) -> Arc<str> {
         if let Some(res) = self.0.get(input) {
-            return res.clone();
+            res.clone()
         } else {
             self.0.insert(Arc::from(input));
             self.0.get(input).unwrap().clone()
