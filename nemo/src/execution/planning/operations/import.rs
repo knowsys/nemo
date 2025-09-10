@@ -1,7 +1,7 @@
 //! This module contains helper functions for implementing incremental imports
 
 use nemo_physical::{
-    management::execution_plan::{ExecutionNodeRef, ExecutionPlan},
+    management::execution_plan::{ColumnOrder, ExecutionNodeRef},
     tabular::operations::OperationTable,
 };
 
@@ -10,12 +10,12 @@ use crate::{
     execution::{planning::operations::union::subplan_union, rule_execution::VariableTranslation},
     io::ImportManager,
     rule_model::components::{tag::Tag, term::primitive::variable::Variable},
-    table_manager::TableManager,
+    table_manager::{SubtableExecutionPlan, SubtableIdentifier, TableManager},
 };
 
 /// Compute an exeuction plan for on-demand importing of tables.
 pub(crate) fn node_imports(
-    plan: &mut ExecutionPlan,
+    subtable_plan: &mut SubtableExecutionPlan,
     table_manager: &TableManager,
     import_manager: &ImportManager,
     variable_translation: &VariableTranslation,
@@ -24,7 +24,6 @@ pub(crate) fn node_imports(
     input_node: ExecutionNodeRef,
     imports: &Vec<ChaseImportClause>,
 ) -> ExecutionNodeRef {
-    // plan.import(marked_columns, subnode, provider);
     let mut imported_tables = Vec::<ExecutionNodeRef>::default();
 
     // Perform the import operations
@@ -32,19 +31,22 @@ pub(crate) fn node_imports(
         // First we project the content of the input node to the required columns
         let markers_projection =
             binding_table_markers(variable_translation, variable_order, import.bindings());
-        let node_import_bindings =
-            plan.projectreorder(markers_projection.clone(), input_node.clone());
+        let node_import_bindings = subtable_plan
+            .plan_mut()
+            .projectreorder(markers_projection.clone(), input_node.clone());
 
         // To only request new information, we subtract the old bindings
         let binding_predicate = binding_table_predicate_name(variable_order, import);
         let old_bindings = subplan_union(
-            plan,
+            subtable_plan.plan_mut(),
             table_manager,
             &binding_predicate,
             0..current_step_number,
             markers_projection.clone(),
         );
-        let node_new_bindings = plan.subtract(node_import_bindings, vec![old_bindings]);
+        let node_new_bindings = subtable_plan
+            .plan_mut()
+            .subtract(node_import_bindings, vec![old_bindings]);
 
         // Now we can add the import
         let markers_import = variable_translation.operation_table(import.bindings().iter());
@@ -52,14 +54,30 @@ pub(crate) fn node_imports(
             .table_provider_from_handler(import.handler())
             .expect("invalid import");
 
-        let node_import = plan.import(markers_import, node_new_bindings.clone(), provider);
-        imported_tables.push(node_import);
+        let node_import =
+            subtable_plan
+                .plan_mut()
+                .import(markers_import, node_new_bindings.clone(), provider);
+        imported_tables.push(node_import.clone());
 
-        // We also save the input binding table
-        plan.write_permanent(
+        let import_table_name = table_manager.generate_table_name(
+            import.predicate(),
+            &ColumnOrder::default(),
+            current_step_number,
+        );
+
+        subtable_plan.add_permanent_table(
+            node_import,
+            "Rule Import",
+            &import_table_name,
+            SubtableIdentifier::new(import.predicate().clone(), current_step_number),
+        );
+
+        subtable_plan.add_permanent_table(
             node_new_bindings,
             "Import Bindings",
-            binding_predicate.name(),
+            "Import Bindings",
+            SubtableIdentifier::new(binding_predicate, current_step_number),
         );
     }
 
@@ -72,7 +90,7 @@ pub(crate) fn node_imports(
 
     // Join imported tables
     let join_markers = variable_translation.operation_table(variable_order.iter());
-    let mut node_join = plan.join_empty(join_markers);
+    let mut node_join = subtable_plan.plan_mut().join_empty(join_markers);
 
     node_join.add_subnode(input_node);
     for node_import in imported_tables {
