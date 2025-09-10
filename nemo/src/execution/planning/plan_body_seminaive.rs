@@ -99,7 +99,7 @@ impl BodyStrategy for SeminaiveStrategy {
         );
 
         let node_imports = node_imports(
-            current_plan.plan_mut(),
+            current_plan,
             table_manager,
             import_manager,
             variable_translation,
