@@ -3,7 +3,7 @@
 use std::{
     borrow::Cow,
     collections::{HashMap, HashSet},
-    iter::{repeat, repeat_n},
+    iter::repeat,
     sync::Arc,
 };
 
@@ -45,19 +45,6 @@ impl SaturationAtom {
             _ => None,
         })
     }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-enum HeadTerm {
-    Existential(VariableIdx),
-    Universal(VariableIdx),
-    Constant(StorageValueT),
-}
-
-#[derive(Debug)]
-struct HeadAtom {
-    predicate: Arc<str>,
-    terms: Box<[HeadTerm]>,
 }
 
 #[derive(Debug, Clone)]
@@ -296,7 +283,10 @@ fn compute_join_order(
     }
 }
 
+#[cfg(test)]
 pub(super) fn bench_rules(n: usize) -> (Vec<SaturationRule>, Arc<str>) {
+    use std::iter::repeat_n;
+
     let one = BodyTerm::Constant(StorageValueT::Int64(1));
     let zero = BodyTerm::Constant(StorageValueT::Int64(0));
     let predicate: Arc<str> = Arc::from("p");

@@ -2,7 +2,6 @@
 
 use std::{
     collections::{hash_map::Entry, HashMap},
-    ops::Deref,
     sync::Arc,
 };
 
@@ -45,7 +44,7 @@ use crate::{
             term::primitive::{ground::GroundTerm, variable::Variable, Primitive},
         },
         pipeline::transformations::default::TransformationDefault,
-        programs::{handle::ProgramHandle, program::Program, ProgramRead},
+        programs::{handle::ProgramHandle, program::Program},
         substitution::Substitution,
     },
     table_manager::{MemoryUsage, SubtableExecutionPlan, TableManager},

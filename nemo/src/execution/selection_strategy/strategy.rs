@@ -2,10 +2,7 @@
 
 use thiserror::Error;
 
-use crate::{
-    chase_model::{analysis::program_analysis::RuleAnalysis, components::rule::ChaseRule},
-    execution::rule_execution::RuleExecution,
-};
+use crate::chase_model::analysis::program_analysis::RuleAnalysis;
 
 /// Errors that can occur while creating a strategy.
 #[derive(Error, Debug, Copy, Clone)]
@@ -27,6 +24,8 @@ pub trait RuleSelectionStrategy: std::fmt::Debug + Sized {
     fn next_rule(&mut self, new_derivations: Option<bool>) -> Option<usize>;
 }
 
+/// A [`RuleSelectionStrategy`] which is aware of the SCCs of a program
 pub trait MetaStrategy: RuleSelectionStrategy {
+    /// Get the SCC which the currently selected rule belongs to
     fn current_scc(&self) -> Box<[usize]>;
 }
