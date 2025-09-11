@@ -165,6 +165,11 @@ impl ImportDirective {
         })
     }
 
+    /// Change the predicate that this import writes to.
+    pub fn set_predicate(&mut self, predicate: Tag) {
+        self.0.predicate = predicate;
+    }
+
     /// Add a new sub-[Rule] for filtered imports.
     pub fn add_filter_rule(&mut self, rule: Rule) {
         self.0.filter_rules.push(rule);

@@ -3,7 +3,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::rule_model::{
-    components::{literal::Literal, rule::Rule, statement::Statement, tag::Tag, ComponentIdentity},
+    components::{rule::Rule, statement::Statement, tag::Tag, ComponentIdentity},
     error::ValidationReport,
     pipeline::id::ProgramComponentId,
     programs::{handle::ProgramHandle, ProgramRead, ProgramWrite},
@@ -24,13 +24,15 @@ impl TransformationFilterImports {
     }
 
     /// Check if rule can be internalized into an import.
-    fn check_import_rule(rule: &Rule) -> bool {
-        if rule.body().len() != 1 {
-            return false;
+    ///
+    /// If this is the case, it returns the predicate that is imported.
+    fn check_rule(rule: &Rule) -> Option<Tag> {
+        if rule.body_positive().count() != 1 {
+            return None;
         }
 
-        let Literal::Positive(_) = &rule.body()[0] else {
-            return false;
+        let Some(import_atom) = &rule.body_positive().next() else {
+            return None;
         };
 
         let head_predicates = rule
@@ -39,18 +41,35 @@ impl TransformationFilterImports {
             .map(|atom| atom.predicate())
             .collect::<HashSet<_>>();
 
-        head_predicates.len() == 1
+        if head_predicates.len() != 1 {
+            return None;
+        }
+
+        Some(import_atom.predicate())
     }
 
-    /// Return a set of predicates such that if imported cannot be internalized
+    /// Check if there is only a single predicate used in all heads of all given rules.
+    fn same_head_predicate(rules: &Vec<&Rule>) -> bool {
+        let predicates = rules
+            .iter()
+            .flat_map(|rule| rule.head().iter().map(|atom| atom.predicate()))
+            .collect::<HashSet<_>>();
+
+        predicates.len() == 1
+    }
+
+    /// Return a set of predicates that need to be imported fully
     fn forbidden_predicates(program: &ProgramHandle) -> HashSet<Tag> {
         let mut forbidden = HashSet::<Tag>::default();
 
         for statement in program.statements() {
             match statement {
                 Statement::Rule(rule) => {
-                    if !Self::check_import_rule(rule) {
-                        for atom in rule.head() {
+                    if Self::check_rule(rule).is_none() {
+                        for head in rule.head() {
+                            forbidden.insert(head.predicate());
+                        }
+                        for atom in rule.body_positive().chain(rule.body_negative()) {
                             forbidden.insert(atom.predicate());
                         }
                     }
@@ -58,37 +77,18 @@ impl TransformationFilterImports {
                 Statement::Fact(fact) => {
                     forbidden.insert(fact.predicate().clone());
                 }
-                Statement::Import(_)
-                | Statement::Export(_)
-                | Statement::Output(_)
-                | Statement::Parameter(_) => {}
+                Statement::Export(export) => {
+                    forbidden.insert(export.predicate().clone());
+                }
+                Statement::Output(output) => {
+                    forbidden.insert(output.predicate().clone());
+                }
+                Statement::Import(_) => {}
+                Statement::Parameter(_) => {}
             }
         }
 
         forbidden
-    }
-
-    /// Check if rule can be internalized into an import.
-    ///
-    /// Returns the ids of the import statement if this is the case.
-    fn internalize_rule(
-        rule: &Rule,
-        forbidden: &HashSet<Tag>,
-        map: &HashMap<Tag, Vec<ProgramComponentId>>,
-    ) -> Option<Vec<ProgramComponentId>> {
-        if !Self::check_import_rule(rule) {
-            return None;
-        }
-
-        let Some(head) = rule.head().first() else {
-            return None;
-        };
-
-        if forbidden.contains(&head.predicate()) {
-            return None;
-        }
-
-        map.get(&head.predicate()).cloned()
     }
 
     /// Return a set of internalized rules and
@@ -103,30 +103,39 @@ impl TransformationFilterImports {
         let mut import_map = HashMap::<ProgramComponentId, Vec<&Rule>>::default();
         let mut predicate_map = HashMap::<Tag, Vec<ProgramComponentId>>::default();
 
+        let forbidden = Self::forbidden_predicates(program);
+
         for import in program.imports() {
+            if forbidden.contains(import.predicate()) {
+                continue;
+            }
+
             import_predicates.insert(import.predicate().clone());
-            import_map.insert(import.id(), Vec::default());
             predicate_map
                 .entry(import.predicate().clone())
                 .or_insert_with(Vec::default)
                 .push(import.id());
         }
 
-        let forbidden = Self::forbidden_predicates(program);
-        let mut internalized_rules = HashSet::<ProgramComponentId>::new();
-
         for rule in program.rules() {
-            if let Some(imports) = Self::internalize_rule(rule, &forbidden, &predicate_map) {
-                internalized_rules.insert(rule.id());
-
-                for import in imports {
-                    import_map
-                        .entry(import)
-                        .or_insert_with(Vec::default)
-                        .push(rule);
+            if let Some(import_predicate) = Self::check_rule(rule) {
+                if let Some(imports) = predicate_map.get(&import_predicate) {
+                    for &import in imports {
+                        import_map
+                            .entry(import)
+                            .or_insert_with(Vec::default)
+                            .push(rule);
+                    }
                 }
             }
         }
+
+        import_map.retain(|_, rules| Self::same_head_predicate(rules));
+
+        let internalized_rules = import_map
+            .iter()
+            .flat_map(|(_, rules)| rules.iter().map(|rule| rule.id()))
+            .collect::<HashSet<_>>();
 
         (import_map, internalized_rules)
     }
@@ -141,21 +150,17 @@ impl ProgramTransformation for TransformationFilterImports {
         for statement in program.statements() {
             match statement {
                 Statement::Rule(rule) => {
-                    if internalized_rules.contains(&rule.id()) {
-                        let mut copy_rule = rule.clone();
-                        copy_rule.body_mut().retain(|literal| match literal {
-                            Literal::Positive(_) | Literal::Negative(_) => true,
-                            Literal::Operation(_) => false,
-                        });
-
-                        commit.add_rule(copy_rule);
-                    } else {
+                    if !internalized_rules.contains(&rule.id()) {
                         commit.keep(statement);
                     }
                 }
                 Statement::Import(import) => {
                     if let Some(rules) = import_map.get(&import.id()) {
                         let mut new_import = import.clone();
+
+                        // All head predicates of all rules are the same
+                        let new_predicate = rules[0].head()[0].predicate();
+                        new_import.set_predicate(new_predicate);
 
                         for &rule in rules.iter() {
                             new_import.add_filter_rule(rule.clone());
