@@ -4,6 +4,7 @@ use std::{cell::RefCell, rc::Rc};
 
 use crate::{
     datasources::{table_providers::TableProvider, tuple_writer::TupleWriter},
+    datatypes::into_datavalue::IntoDataValue,
     error::ReadingError,
     management::database::Dict,
     tabular::{rowscan::RowScan, trie::Trie, triescan::PartialTrieScan},
@@ -20,7 +21,7 @@ pub(crate) struct GeneratorIncrementalImport {
 
     /// Encodes for which columns of the input trie
     /// bind the values of which columns in the output trie
-    _bindings: Vec<usize>,
+    bound_positions: Vec<usize>,
 
     /// Arity of the output table
     arity_output: usize,
@@ -38,12 +39,12 @@ impl GeneratorIncrementalImport {
         input: OperationTable,
         provider: Rc<Box<dyn TableProvider>>,
     ) -> Self {
-        let mut bindings = Vec::default();
+        let mut bound_positions = Vec::default();
 
         let arity_output = output.arity();
 
         for column in input {
-            bindings.push(
+            bound_positions.push(
                 output.position(&column).expect(
                     "function assumes that every input column is present in the output table",
                 ),
@@ -52,7 +53,7 @@ impl GeneratorIncrementalImport {
 
         Self {
             provider,
-            _bindings: bindings,
+            bound_positions,
             arity_output,
         }
     }
@@ -65,19 +66,41 @@ impl GeneratorIncrementalImport {
     ) -> Result<Trie, ReadingError> {
         log::trace!("doing incremental import");
 
-        if trie_scan.arity() == 0 {
-            return Ok(Trie::zero_arity(true));
-        }
-
-        let bindings = RowScan::new_full(trie_scan);
-        for binding in bindings {
-            log::trace!("binding: {binding:#?}");
-        }
-
         let mut tuple_writer = TupleWriter::new(dictionary, self.arity_output);
 
         if let Ok(provider) = Rc::try_unwrap(self.provider) {
-            provider.provide_table_data(&mut tuple_writer)?;
+            let num_bindings = 0; // TODO: figure out how many bindings we have.
+
+            if trie_scan.arity() == 0
+                || !provider.should_import_with_bindings(&self.bound_positions, num_bindings)
+            {
+                // do ordinary import instead
+                provider.provide_table_data(&mut tuple_writer)?;
+            } else {
+                let scan = RowScan::new_full(trie_scan);
+                let bindings = scan
+                    .map(|row| {
+                        row.into_iter()
+                            .map(|value| {
+                                value
+                                    .into_datavalue(
+                                        &dictionary
+                                            .try_borrow()
+                                            .expect("should not be borrowed already"),
+                                    )
+                                    .expect("value is in the dictionary")
+                            })
+                            .collect()
+                    })
+                    .collect::<Vec<_>>();
+
+                provider.provide_table_data_with_bindings(
+                    &mut tuple_writer,
+                    &self.bound_positions,
+                    &bindings,
+                    bindings.len(),
+                )?;
+            }
 
             Ok(Trie::from_tuple_writer(tuple_writer))
         } else {

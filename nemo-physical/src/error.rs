@@ -4,7 +4,10 @@ use std::{convert::Infallible, fmt::Display};
 
 use thiserror::Error;
 
-use crate::{datavalues::DataValueCreationError, resource::Resource};
+use crate::{
+    datavalues::DataValueCreationError,
+    resource::{Resource, ResourceValidationError},
+};
 
 /// Trait that can be used by external libraries extending Nemo to communicate a error during reading
 pub trait ExternalReadingError: Display + std::fmt::Debug {}
@@ -138,6 +141,9 @@ pub enum Error {
     /// Error that happened while reading a Table
     #[error(transparent)]
     ReadingError(#[from] ReadingError),
+    /// Error that happened while validating a Resource
+    #[error(transparent)]
+    ResourceValidationError(#[from] ResourceValidationError),
     /// Error computing the memory requirements for a stack program
     #[error("the supplied stack program was malformed")]
     MalformedStackProgram,

@@ -28,10 +28,14 @@ impl ImportManager {
         &self,
         handler: &Import,
     ) -> Result<Box<dyn TableProvider>, Error> {
-        let reader = self
-            .resource_providers
-            .open_resource(handler.resource(), &handler.media_type())?;
+        if handler.deferred() {
+            handler.read_deferred()
+        } else {
+            let reader = self
+                .resource_providers
+                .open_resource(handler.resource(), &handler.media_type())?;
 
-        handler.reader(reader)
+            handler.reader(reader)
+        }
     }
 }

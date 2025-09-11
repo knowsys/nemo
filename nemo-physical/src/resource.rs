@@ -21,7 +21,7 @@ use thiserror::Error;
 
 /// Type of error that is returned when parsing of Iri fails
 #[derive(Clone, Debug, Error, PartialEq)]
-pub enum ResourceValidationErrorKind {
+pub enum ResourceValidationError {
     /// IRI is not valid
     #[error("Invalid IRI: {0}")]
     InvalidIri(String),
@@ -221,9 +221,9 @@ impl fmt::Display for Resource {
 }
 
 /// Returns the path of a local iri
-fn strip_local_iri(iri: Iri<String>) -> Result<String, ResourceValidationErrorKind> {
+fn strip_local_iri(iri: Iri<String>) -> Result<String, ResourceValidationError> {
     if !iri.path().starts_with('/') {
-        return Err(ResourceValidationErrorKind::InvalidIri(format!(
+        return Err(ResourceValidationError::InvalidIri(format!(
             "Local IRI path `{}` should start with '/'",
             iri.path()
         )));
@@ -239,7 +239,7 @@ fn strip_local_iri(iri: Iri<String>) -> Result<String, ResourceValidationErrorKi
                 .map(|query| format!("#{query}"))
                 .unwrap_or_default()
         )),
-        _ => Err(ResourceValidationErrorKind::InvalidIri(format!(
+        _ => Err(ResourceValidationError::InvalidIri(format!(
             "Authority `{}`is not supported in local IRI",
             iri.authority().unwrap_or_default()
         ))),
@@ -259,17 +259,17 @@ impl ResourceBuilder {
         &mut self,
         key: String,
         value: String,
-    ) -> Result<&mut Self, ResourceValidationErrorKind> {
+    ) -> Result<&mut Self, ResourceValidationError> {
         match &mut self.resource {
             Resource::Http { parameters, .. } => {
                 if self.header_names.insert(key.clone()) {
                     parameters.headers.push((key, value));
                     Ok(self)
                 } else {
-                    Err(ResourceValidationErrorKind::DuplicateHttpHeader(key))
+                    Err(ResourceValidationError::DuplicateHttpHeader(key))
                 }
             }
-            _ => Err(ResourceValidationErrorKind::UnexpectedHttpParameter),
+            _ => Err(ResourceValidationError::UnexpectedHttpParameter),
         }
     }
 
@@ -278,31 +278,28 @@ impl ResourceBuilder {
         &mut self,
         key: String,
         value: String,
-    ) -> Result<&mut Self, ResourceValidationErrorKind> {
+    ) -> Result<&mut Self, ResourceValidationError> {
         match &mut self.resource {
             Resource::Http { parameters, .. } => {
                 parameters.get_parameters.push((key, value));
                 Ok(self)
             }
-            _ => Err(ResourceValidationErrorKind::UnexpectedHttpParameter),
+            _ => Err(ResourceValidationError::UnexpectedHttpParameter),
         }
     }
 
     /// Add fragment to IRI
-    pub fn set_fragment(
-        &mut self,
-        value: String,
-    ) -> Result<&mut Self, ResourceValidationErrorKind> {
+    pub fn set_fragment(&mut self, value: String) -> Result<&mut Self, ResourceValidationError> {
         match &mut self.resource {
             Resource::Http { parameters, .. } => {
                 if parameters.fragment.is_some() {
-                    Err(ResourceValidationErrorKind::DuplicateFragment)
+                    Err(ResourceValidationError::DuplicateFragment)
                 } else {
                     parameters.fragment = Some(value);
                     Ok(self)
                 }
             }
-            _ => Err(ResourceValidationErrorKind::UnexpectedHttpParameter),
+            _ => Err(ResourceValidationError::UnexpectedHttpParameter),
         }
     }
 
@@ -311,13 +308,13 @@ impl ResourceBuilder {
         &mut self,
         key: String,
         value: String,
-    ) -> Result<&mut Self, ResourceValidationErrorKind> {
+    ) -> Result<&mut Self, ResourceValidationError> {
         match &mut self.resource {
             Resource::Http { parameters, .. } => {
                 parameters.post_parameters.push((key, value));
                 Ok(self)
             }
-            _ => Err(ResourceValidationErrorKind::UnexpectedHttpParameter),
+            _ => Err(ResourceValidationError::UnexpectedHttpParameter),
         }
     }
 
@@ -354,7 +351,7 @@ impl ResourceBuilder {
 }
 
 impl TryFrom<Iri<String>> for ResourceBuilder {
-    type Error = ResourceValidationErrorKind;
+    type Error = ResourceValidationError;
 
     fn try_from(iri: Iri<String>) -> Result<Self, Self::Error> {
         match iri.scheme() {
@@ -370,7 +367,7 @@ impl TryFrom<Iri<String>> for ResourceBuilder {
                 let get_parameters = serde_urlencoded::from_str::<Vec<(String, String)>>(
                     iri.query().unwrap_or_default(),
                 )
-                .map_err(|err| ResourceValidationErrorKind::InvalidIri(err.to_string()))?;
+                .map_err(|err| ResourceValidationError::InvalidIri(err.to_string()))?;
 
                 Ok(Self {
                     resource: Resource::Http {
@@ -390,15 +387,15 @@ impl TryFrom<Iri<String>> for ResourceBuilder {
                     header_names: HashSet::new(),
                 })
             }
-            _ => Err(ResourceValidationErrorKind::UnsupportedIriScheme(
-                String::from(iri.scheme()),
-            )),
+            _ => Err(ResourceValidationError::UnsupportedIriScheme(String::from(
+                iri.scheme(),
+            ))),
         }
     }
 }
 
 impl TryFrom<String> for ResourceBuilder {
-    type Error = ResourceValidationErrorKind;
+    type Error = ResourceValidationError;
 
     fn try_from(string: String) -> Result<Self, Self::Error> {
         if let Ok(iri) = Iri::parse(string.to_owned()) {
@@ -418,15 +415,15 @@ impl TryFrom<String> for ResourceBuilder {
 }
 
 impl TryFrom<AnyDataValue> for ResourceBuilder {
-    type Error = ResourceValidationErrorKind;
+    type Error = ResourceValidationError;
 
     fn try_from(value: AnyDataValue) -> Result<Self, Self::Error> {
         match value.value_domain() {
             ValueDomain::PlainString => value.to_plain_string_unchecked().try_into(),
             ValueDomain::Iri => Iri::parse(value.to_iri_unchecked())
-                .map_err(|err| ResourceValidationErrorKind::InvalidIri(err.to_string()))?
+                .map_err(|err| ResourceValidationError::InvalidIri(err.to_string()))?
                 .try_into(),
-            _ => Err(ResourceValidationErrorKind::InvalidResourceFormat {
+            _ => Err(ResourceValidationError::InvalidResourceFormat {
                 expected: vec![ValueDomain::PlainString, ValueDomain::Iri],
                 given: value.value_domain(),
             }),
@@ -436,11 +433,11 @@ impl TryFrom<AnyDataValue> for ResourceBuilder {
 
 #[cfg(test)]
 mod test {
-    use super::{Resource, ResourceBuilder, ResourceValidationErrorKind};
+    use super::{Resource, ResourceBuilder, ResourceValidationError};
     use test_log::test;
 
     #[test]
-    fn create_http_resource() -> Result<(), ResourceValidationErrorKind> {
+    fn create_http_resource() -> Result<(), ResourceValidationError> {
         let valid_iri = String::from("http://example.org/directory?query=A&query=B#fragment");
         let builder = ResourceBuilder::try_from(valid_iri.clone()).expect("IRI is valid");
         assert_eq!(builder.finalize().to_string(), valid_iri);
@@ -455,17 +452,17 @@ mod test {
     }
 
     #[test]
-    fn duplicate_http_parameters() -> Result<(), ResourceValidationErrorKind> {
+    fn duplicate_http_parameters() -> Result<(), ResourceValidationError> {
         let valid_iri = String::from("http://example.org#fragment");
         let mut builder = ResourceBuilder::try_from(valid_iri.clone()).expect("IRI is valid");
         let err = builder.set_fragment(String::from("fragment")).unwrap_err();
-        assert_eq!(err, ResourceValidationErrorKind::DuplicateFragment);
+        assert_eq!(err, ResourceValidationError::DuplicateFragment);
 
         let key = String::from("Accept");
         let value = String::from("text/html");
         builder.add_header(key.clone(), value.clone())?;
         let err = builder.add_header(key.clone(), value).unwrap_err();
-        assert_eq!(err, ResourceValidationErrorKind::DuplicateHttpHeader(key));
+        assert_eq!(err, ResourceValidationError::DuplicateHttpHeader(key));
 
         Ok(())
     }

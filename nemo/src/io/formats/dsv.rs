@@ -38,15 +38,15 @@ use super::{ExportHandler, FileFormatMeta, FormatBuilder, ImportHandler, TableWr
 #[derive(Debug, Clone)]
 pub struct DsvHandler {
     /// The specific delimiter for this format.
-    delimiter: u8,
+    pub(crate) delimiter: u8,
     /// The list of value formats to be used for importing/exporting data.
-    value_formats: DsvValueFormats,
+    pub(crate) value_formats: DsvValueFormats,
     /// Maximum number of statements that should be imported/exported.
-    limit: Option<u64>,
+    pub(crate) limit: Option<u64>,
     /// Whether to ignore headers
-    ignore_headers: bool,
+    pub(crate) ignore_headers: bool,
     /// Whether to respect quoting in values
-    quoting: bool,
+    pub(crate) quoting: bool,
 }
 
 impl DsvHandler {

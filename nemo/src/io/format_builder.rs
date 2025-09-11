@@ -10,7 +10,7 @@ use std::{
 
 use nemo_physical::{
     datavalues::{AnyDataValue, DataValue},
-    resource::{Resource, ResourceBuilder, ResourceValidationErrorKind},
+    resource::{Resource, ResourceBuilder, ResourceValidationError},
 };
 use strum::IntoEnumIterator;
 
@@ -86,6 +86,7 @@ macro_rules! format_tag {
         #[allow(unused_imports)]
         use enum_assoc::Assoc;
 
+        #[allow(missing_docs)]
         #[derive(Assoc, Debug, Copy, Clone, PartialEq, Eq, Hash)]
         #[func(pub fn from_str(input: &str) -> Option<Self>)]
         #[func(pub fn name(&self) -> &'static str)]
@@ -279,7 +280,7 @@ pub(crate) trait FormatBuilder: Debug + Sized + Into<AnyImportExportBuilder> {
         &self,
         _direction: Direction,
         builder: Option<ResourceBuilder>,
-    ) -> Result<Option<ResourceBuilder>, ResourceValidationErrorKind> {
+    ) -> Result<Option<ResourceBuilder>, ResourceValidationError> {
         Ok(builder)
     }
 

@@ -2,7 +2,7 @@
 #![allow(missing_docs)]
 
 use enum_assoc::Assoc;
-use nemo_physical::{datavalues::ValueDomain, resource::ResourceValidationErrorKind};
+use nemo_physical::{datavalues::ValueDomain, resource::ResourceValidationError};
 use thiserror::Error;
 
 use crate::{
@@ -186,7 +186,7 @@ pub enum ValidationError {
     /// Error during resource validation
     #[assoc(code = 235)]
     #[error(transparent)]
-    ResourceValidationError(#[from] ResourceValidationErrorKind),
+    ResourceValidationError(#[from] ResourceValidationError),
     /// HTTP parameter is invalid
     #[assoc(code = 236)]
     #[error("HTTP parameter was given as `{given:?}`, expected one of: `{expected:?}`")]
