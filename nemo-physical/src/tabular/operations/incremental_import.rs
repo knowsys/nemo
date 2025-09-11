@@ -42,9 +42,9 @@ impl GeneratorIncrementalImport {
 
         let arity_output = output.arity();
 
-        for column in output {
+        for column in input {
             bindings.push(
-                input.position(&column).expect(
+                output.position(&column).expect(
                     "function assumes that every input column is present in the output table",
                 ),
             );
