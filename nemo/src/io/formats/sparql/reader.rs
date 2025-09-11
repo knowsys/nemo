@@ -2,16 +2,19 @@
 
 use std::io::{BufReader, Read};
 
-use nemo_physical::datasources::table_providers::TableProvider;
-use nemo_physical::error::ReadingError;
 use nemo_physical::management::bytesized::ByteSized;
-use nemo_physical::resource::ResourceBuilder;
-use nemo_physical::{datasources::tuple_writer::TupleWriter, datavalues::AnyDataValue};
+use nemo_physical::{datasources::table_providers::TableProvider, error::ReadingError};
+use nemo_physical::{
+    datasources::tuple_writer::TupleWriter,
+    datavalues::{AnyDataValue, DataValue},
+};
 use oxiri::Iri;
+use oxrdf::{Literal, NamedNode};
+use spargebra::algebra::GraphPattern;
+use spargebra::term::GroundTerm;
 use spargebra::Query;
 
 use crate::chase_model::components::rule::ChaseRule;
-use crate::error::Error;
 use crate::io::format_builder::FormatBuilder;
 use crate::io::formats::dsv::reader::DsvReader;
 use crate::io::formats::dsv::value_format::DsvValueFormats;
@@ -80,6 +83,78 @@ impl SparqlReader {
 
         reader.read(tuple_writer)
     }
+
+    fn ground_term_from_datavalue(value: &AnyDataValue) -> Option<GroundTerm> {
+        use nemo_physical::datavalues::ValueDomain;
+
+        match value.value_domain() {
+            ValueDomain::PlainString => Some(GroundTerm::Literal(Literal::new_simple_literal(
+                value.to_plain_string_unchecked(),
+            ))),
+            ValueDomain::LanguageTaggedString => {
+                let (content, language) = value.to_language_tagged_string_unchecked();
+                Some(GroundTerm::Literal(
+                    Literal::new_language_tagged_literal(content, language)
+                        .expect("should be valid"),
+                ))
+            }
+            ValueDomain::Iri => Some(GroundTerm::NamedNode(NamedNode::new_unchecked(
+                value.to_iri_unchecked(),
+            ))),
+            ValueDomain::Float
+            | ValueDomain::Double
+            | ValueDomain::UnsignedLong
+            | ValueDomain::NonNegativeLong
+            | ValueDomain::UnsignedInt
+            | ValueDomain::NonNegativeInt
+            | ValueDomain::Long
+            | ValueDomain::Int
+            | ValueDomain::Boolean
+            | ValueDomain::Other => Some(GroundTerm::Literal(Literal::new_typed_literal(
+                value.lexical_value(),
+                NamedNode::new_unchecked(value.datatype_iri()),
+            ))),
+            ValueDomain::Null => None,
+
+            ValueDomain::Tuple | ValueDomain::Map => {
+                unimplemented!("no support for complex values yet")
+            }
+        }
+    }
+
+    fn pattern_with_bindings(
+        pattern: &GraphPattern,
+        bound_positions: &[usize],
+        bindings: &[Vec<AnyDataValue>],
+    ) -> GraphPattern {
+        match pattern {
+            GraphPattern::Project { inner, variables } => {
+                let bound_variables = bound_positions
+                    .iter()
+                    .map(|idx| variables[*idx].clone())
+                    .collect::<Vec<_>>();
+                let bindings = bindings
+                    .iter()
+                    .map(|row| row.iter().map(Self::ground_term_from_datavalue).collect())
+                    .collect();
+
+                let values = GraphPattern::Values {
+                    variables: bound_variables,
+                    bindings,
+                };
+                let join = GraphPattern::Join {
+                    left: inner.clone(),
+                    right: Box::new(values),
+                };
+
+                GraphPattern::Project {
+                    inner: Box::new(join),
+                    variables: variables.clone(),
+                }
+            }
+            _ => pattern.clone(),
+        }
+    }
 }
 
 impl ByteSized for SparqlReader {
@@ -120,7 +195,29 @@ impl TableProvider for SparqlReader {
     ) -> Result<(), ReadingError> {
         log::debug!("doing SPARQL query with given {num_bindings} bindings: {bindings:?}");
 
-        let mut query = self.builder.query.clone();
+        let query = match &self.builder.query {
+            q @ &Query::Construct { .. } | q @ &Query::Describe { .. } => q.clone(),
+            Query::Select {
+                dataset,
+                pattern,
+                base_iri,
+            } => Query::Select {
+                dataset: dataset.clone(),
+                base_iri: base_iri.clone(),
+                pattern: Self::pattern_with_bindings(pattern, bound_positions, bindings),
+            },
+            Query::Ask {
+                dataset,
+                pattern,
+                base_iri,
+            } => Query::Ask {
+                dataset: dataset.clone(),
+                base_iri: base_iri.clone(),
+                pattern: Self::pattern_with_bindings(pattern, bound_positions, bindings),
+            },
+        };
+
+        log::debug!("query: {:?}", query.to_string());
 
         let response = self
             .execute_query(&self.builder.endpoint, &query)?

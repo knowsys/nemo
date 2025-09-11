@@ -64,8 +64,6 @@ impl GeneratorIncrementalImport {
         trie_scan: Scan,
         dictionary: &'a RefCell<Dict>,
     ) -> Result<Trie, ReadingError> {
-        log::trace!("doing incremental import");
-
         let mut tuple_writer = TupleWriter::new(dictionary, self.arity_output);
 
         if let Ok(provider) = Rc::try_unwrap(self.provider) {
