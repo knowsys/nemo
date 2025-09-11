@@ -345,7 +345,6 @@ impl ResourceBuilder {
 
     /// Build a [Resource] with the collected parameters
     pub fn finalize(self) -> Resource {
-        log::debug!("Created resource: {:?}", self.resource);
         self.resource
     }
 }

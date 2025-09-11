@@ -193,8 +193,6 @@ impl TableProvider for SparqlReader {
         bindings: &[Vec<AnyDataValue>],
         num_bindings: usize,
     ) -> Result<(), ReadingError> {
-        log::debug!("doing SPARQL query with given {num_bindings} bindings: {bindings:?}");
-
         let query = match &self.builder.query {
             q @ &Query::Construct { .. } | q @ &Query::Describe { .. } => q.clone(),
             Query::Select {
@@ -216,8 +214,6 @@ impl TableProvider for SparqlReader {
                 pattern: Self::pattern_with_bindings(pattern, bound_positions, bindings),
             },
         };
-
-        log::debug!("query: {:?}", query.to_string());
 
         let response = self
             .execute_query(&self.builder.endpoint, &query)?
