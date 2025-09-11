@@ -358,11 +358,6 @@ impl TupleBuffer {
             self.current_tuple_index = 0;
 
             if self.match_filters_and_transform(dictionary) {
-                log::trace!(
-                    "tuple {:?} matched a filter",
-                    self.current_tuple_data_values
-                );
-
                 for (index, value) in self.current_tuple_data_values.iter().enumerate() {
                     let value = value.to_storage_value_t_dict(dictionary);
                     self.current_tuple[index] = value;
@@ -452,10 +447,6 @@ impl TupleBuffer {
     }
 
     fn pattern_matches(&self, pattern: &FilterTransformPattern) -> bool {
-        log::trace!(
-            "checking pattern {pattern:?} on tuple {:?}",
-            self.current_tuple_data_values
-        );
         pattern
             .filter
             .evaluate_bool(&self.current_tuple_data_values, None)
@@ -464,17 +455,12 @@ impl TupleBuffer {
 
     fn match_filters_and_transform(&mut self, dictionary: &mut Dict) -> bool {
         if self.patterns.is_empty() {
-            log::trace!("no patterns to check");
             // we don't have any patterns to check, let everything through
             return true;
         }
 
         for pattern in &self.patterns {
             if !self.pattern_matches(pattern) {
-                log::trace!(
-                    "pattern {pattern:?} did not match on tuple: {:?}",
-                    self.current_tuple_data_values
-                );
                 continue;
             }
 
