@@ -166,7 +166,9 @@ impl ProgramTransformation for TransformationFilterImports {
                         commit.keep(statement);
                     }
                 }
-                _ => {}
+                _ => {
+                    commit.keep(statement);
+                }
             }
         }
 
