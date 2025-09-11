@@ -189,6 +189,14 @@ impl Rule {
         result
     }
 
+    // Return the set of variables that are bound by import statements
+    pub fn import_variables(&self) -> HashSet<&Variable> {
+        self.imports
+            .iter()
+            .flat_map(|import| import.variables())
+            .collect::<HashSet<_>>()
+    }
+
     /// Return a set of "safe" variables.
     ///
     /// A variable is considered safe,
@@ -196,7 +204,11 @@ impl Rule {
     /// or is derived via the equality operation
     /// from other safe variables.
     pub fn safe_variables(&self) -> HashSet<&Variable> {
-        let mut result = self.positive_variables();
+        let mut result = self
+            .positive_variables()
+            .union(&self.import_variables())
+            .cloned()
+            .collect::<HashSet<&Variable>>();
 
         loop {
             let current_count = result.len();

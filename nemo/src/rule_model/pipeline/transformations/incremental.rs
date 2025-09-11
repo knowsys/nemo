@@ -99,6 +99,7 @@ impl TransformationIncremental {
                     let clause = ImportClause::new(import.clone(), variables);
 
                     import_clauses.push(clause);
+                    return false;
                 }
             }
 

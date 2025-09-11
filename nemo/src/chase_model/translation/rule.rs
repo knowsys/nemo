@@ -75,11 +75,18 @@ impl ProgramChaseTranslation {
 
         // Handle imports
         for import in rule.imports() {
+            self.predicate_arity.insert(
+                import.import_directive().predicate().clone(),
+                import.output_variables().len(),
+            );
+
             let import_builder = import
                 .import_directive()
                 .builder()
                 .expect("invalid import directive");
+
             let clause = self.build_import_clause(import, &import_builder);
+
             result.add_import_clause(clause);
         }
 

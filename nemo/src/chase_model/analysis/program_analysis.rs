@@ -10,12 +10,14 @@ use crate::{
         rule::ChaseRule,
         term::operation_term::{Operation, OperationTerm},
     },
+    execution::planning::operations::import::binding_table_predicate_name,
     rule_model::components::{
         tag::Tag,
         term::{
             operation::operation_kind::OperationKind,
             primitive::{Primitive, variable::Variable},
         },
+        IterableVariables,
     },
 };
 
@@ -293,6 +295,26 @@ impl ChaseProgram {
                 .chain(rule.negative_body().iter())
             {
                 add_arity(atom.predicate(), atom.arity(), &mut result);
+            }
+
+            for import in rule.imports() {
+                add_arity(
+                    import.predicate().clone(),
+                    import.bindings().len(),
+                    &mut result,
+                );
+
+                let positive_variables = rule
+                    .positive_body()
+                    .iter()
+                    .flat_map(|atom| atom.variables());
+                let mut order = VariableOrder::default();
+                for variable in positive_variables {
+                    order.push(variable.clone());
+                }
+
+                let (binding_table_aname, arity) = binding_table_predicate_name(&order, import);
+                add_arity(binding_table_aname, arity, &mut result);
             }
         }
 

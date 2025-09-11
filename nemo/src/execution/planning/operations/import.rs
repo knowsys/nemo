@@ -36,7 +36,7 @@ pub(crate) fn node_imports(
             .projectreorder(markers_projection.clone(), input_node.clone());
 
         // To only request new information, we subtract the old bindings
-        let binding_predicate = binding_table_predicate_name(variable_order, import);
+        let (binding_predicate, _arity) = binding_table_predicate_name(variable_order, import);
         let old_bindings = subplan_union(
             subtable_plan.plan_mut(),
             table_manager,
@@ -101,7 +101,7 @@ pub(crate) fn node_imports(
 }
 
 /// Compute the column markers for the binding table.
-fn binding_table_markers(
+pub fn binding_table_markers(
     variable_translation: &VariableTranslation,
     variable_order: &VariableOrder,
     bindings: &Vec<Variable>,
@@ -116,19 +116,24 @@ fn binding_table_markers(
     variable_translation.operation_table(input_variables.iter())
 }
 
-/// Compute the predicate name for the binding table.
-fn binding_table_predicate_name(variable_order: &VariableOrder, import: &ChaseImportClause) -> Tag {
+/// Compute the predicate name and arity for the binding table.
+pub(crate) fn binding_table_predicate_name(
+    variable_order: &VariableOrder,
+    import: &ChaseImportClause,
+) -> (Tag, usize) {
     let mut name = format!("__IMPORT_{}_", import.predicate().name());
+    let mut arity = 0;
 
     for variable in import.bindings() {
         if variable_order.contains(variable) {
             name.push('b');
+            arity += 1;
         } else {
             name.push('f');
         }
     }
 
-    Tag::new(name)
+    (Tag::new(name), arity)
 }
 
 /// Extend the initial variable order with variables used in imports.
