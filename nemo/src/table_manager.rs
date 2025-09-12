@@ -1,8 +1,6 @@
 //! Managing of tables
 
-use crate::{
-    chase_model::components::rule::ChaseRule, error::Error, rule_model::components::tag::Tag,
-};
+use crate::{error::Error, rule_model::components::tag::Tag};
 
 use nemo_physical::{
     datavalues::any_datavalue::AnyDataValue,

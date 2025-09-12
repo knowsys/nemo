@@ -2,10 +2,9 @@
 
 pub(crate) mod reader;
 
-use delegate::delegate;
 use reader::SparqlReader;
 use spargebra::Query;
-use std::{io::BufReader, sync::Arc};
+use std::sync::Arc;
 
 use nemo_physical::{
     datasources::table_providers::TableProvider,
@@ -24,12 +23,9 @@ use crate::{
         components::{import_export::Direction, term::value_type::ValueType},
         error::validation_error::ValidationError,
     },
-    syntax::{
-        directive::value_formats,
-        import_export::{
-            attribute,
-            file_format::{self, EXTENSION_TSV, MEDIA_TYPE_TSV},
-        },
+    syntax::import_export::{
+        attribute,
+        file_format::{self, EXTENSION_TSV, MEDIA_TYPE_TSV},
     },
 };
 
@@ -214,7 +210,7 @@ impl FormatBuilder for SparqlBuilder {
 }
 
 #[derive(Debug)]
-pub struct SparqlHandler {
+pub(crate) struct SparqlHandler {
     builder: SparqlBuilder,
     filter_rules: Vec<ChaseRule>,
 }

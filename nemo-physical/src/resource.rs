@@ -1,8 +1,6 @@
 //! This modules defines the [Resource] type, which is part of the public interface of this crate.
 //!
 
-use log;
-
 use super::datavalues::{AnyDataValue, DataValue, ValueDomain};
 
 /// Resource that can be referenced in source declarations in Nemo programs

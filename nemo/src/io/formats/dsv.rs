@@ -26,7 +26,7 @@ use crate::{
         format_parameter, format_tag, value_type_matches,
     },
     rule_model::{
-        components::{import_export::Direction, rule::Rule, term::value_type::ValueType},
+        components::{import_export::Direction, term::value_type::ValueType},
         error::validation_error::ValidationError,
     },
     syntax::import_export::{attribute, file_format},
@@ -50,17 +50,18 @@ pub struct DsvHandler {
 }
 
 impl DsvHandler {
-    /// Create new [`DsvHandler`] with given delimiter and arity
+    /// Create a new [DsvHandler] with given delimiter and arity.
     pub fn new(delimiter: u8, arity: usize) -> Self {
-        DsvHandler {
+        Self::with_value_formats(
             delimiter,
-            value_formats: DsvValueFormats::default(arity),
-            limit: None,
-            ignore_headers: false,
-            quoting: true,
-        }
+            DsvValueFormats::default(arity),
+            None,
+            false,
+            true,
+        )
     }
 
+    /// Create a new [DsvHandler] with the given parameters.
     pub(crate) fn with_value_formats(
         delimiter: u8,
         value_formats: DsvValueFormats,
@@ -281,7 +282,7 @@ impl FormatBuilder for DsvBuilder {
     fn build_import(
         &self,
         arity: usize,
-        filter_rules: Vec<ChaseRule>,
+        _filter_rules: Vec<ChaseRule>,
     ) -> Arc<dyn ImportHandler + Send + Sync + 'static> {
         Arc::new(DsvHandler {
             delimiter: self.delimiter,
@@ -298,7 +299,7 @@ impl FormatBuilder for DsvBuilder {
     fn build_export(
         &self,
         arity: usize,
-        filter_rules: Vec<ChaseRule>,
+        _filter_rules: Vec<ChaseRule>,
     ) -> Arc<dyn ExportHandler + Send + Sync + 'static> {
         Arc::new(DsvHandler {
             delimiter: self.delimiter,

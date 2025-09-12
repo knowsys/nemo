@@ -86,10 +86,10 @@ macro_rules! format_tag {
         #[allow(unused_imports)]
         use enum_assoc::Assoc;
 
-        #[allow(missing_docs)]
         #[derive(Assoc, Debug, Copy, Clone, PartialEq, Eq, Hash)]
-        #[func(pub fn from_str(input: &str) -> Option<Self>)]
-        #[func(pub fn name(&self) -> &'static str)]
+        #[func(pub(crate) fn from_str(input: &str) -> Option<Self>)]
+        #[func(pub(crate) fn name(&self) -> &'static str)]
+        #[allow(missing_docs)]
         $vis enum $type_name {
             $(
                 #[assoc(from_str = $tag_value)]
@@ -361,6 +361,9 @@ impl<B: FormatBuilder> Parameters<B> {
                 None => (),
                 Some(filter_predicate) => {
                     if *predicate != filter_predicate {
+                        log::debug!(
+                            "filter predicate {filter_predicate:?} /= predicate {predicate:?}"
+                        );
                         valid = false;
                         report.add(literal, todo!("add new error code"));
                     }

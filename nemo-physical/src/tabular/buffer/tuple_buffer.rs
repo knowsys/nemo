@@ -357,7 +357,7 @@ impl TupleBuffer {
         if self.current_tuple_index >= self.column_number() {
             self.current_tuple_index = 0;
 
-            if self.match_filters_and_transform(dictionary) {
+            if self.match_filters_and_transform() {
                 for (index, value) in self.current_tuple_data_values.iter().enumerate() {
                     let value = value.to_storage_value_t_dict(dictionary);
                     self.current_tuple[index] = value;
@@ -453,7 +453,7 @@ impl TupleBuffer {
             == Some(true)
     }
 
-    fn match_filters_and_transform(&mut self, dictionary: &mut Dict) -> bool {
+    fn match_filters_and_transform(&mut self) -> bool {
         if self.patterns.is_empty() {
             // we don't have any patterns to check, let everything through
             return true;
