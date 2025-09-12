@@ -320,7 +320,7 @@ impl ExecutionEngine {
 
         let predicates: Vec<Tag> = self.table_manager.known_predicates().cloned().collect();
         for predicate in &predicates {
-            let Some(table_id) = self.table_manager.combine_predicate(&predicate)? else {
+            let Some(table_id) = self.table_manager.combine_predicate(predicate)? else {
                 continue;
             };
 
@@ -340,7 +340,7 @@ impl ExecutionEngine {
 
         log::info!("Saturation took {}ms", duration.as_millis());
 
-        let timing_string = format!("Reasoning/Saturation/Save Tables");
+        let timing_string = "Reasoning/Saturation/Save Tables".to_string();
 
         TimedCode::instance().sub(&timing_string).start();
         for predicate in &predicates {

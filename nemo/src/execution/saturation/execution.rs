@@ -459,7 +459,7 @@ fn fact_from_row(row: &Row, predicate: Arc<str>) -> SaturationFact {
             _ => None,
         })
         .collect::<Option<_>>()
-        .expect(format!("{row:?}").as_str());
+        .unwrap_or_else(|| panic!("{row:?}"));
 
     SaturationFact { predicate, values }
 }
