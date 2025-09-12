@@ -52,6 +52,7 @@ impl<'a> ProgramTransformation for TransformationDefault<'a> {
             .transform(TransformationExports::new(
                 self.parameters.export_parameters,
             ))?
+            .transform(TransformationValidate::default())?
             .transform(TransformationFilterImports::new())?
             .transform(TransformationIncremental::new())?
             .transform(TransformationEmpty::new())?
