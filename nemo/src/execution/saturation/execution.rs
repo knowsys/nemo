@@ -1,12 +1,13 @@
 //! Executing a set of saturation rules
 
+use core::panic;
 use std::{
     collections::{btree_map, BTreeMap, HashMap},
     ops::{Bound, Index},
     sync::Arc,
 };
 
-use nemo_physical::datatypes::StorageValueT;
+use nemo_physical::{datatypes::StorageValueT, meta::timing::TimedCode};
 
 use super::model::{
     BodyTerm, Head, JoinOp, SaturationAtom, SaturationFact, SaturationRule, VariableIdx,
@@ -53,14 +54,25 @@ impl SaturationSubstitution {
             .collect()
     }
 
-    fn update(&mut self, terms: &[BodyTerm], row: &[RowElement]) {
+    #[must_use]
+    fn update(&mut self, terms: &[BodyTerm], row: &[RowElement]) -> bool {
         for (term, value) in terms.iter().zip(row) {
             let BodyTerm::Variable(var) = term else {
                 continue;
             };
 
-            self.insert(*var, value.value());
+            if let Some(prev) = self.insert(*var, value.value()) {
+                if prev != value.value() {
+                    return false;
+                }
+            }
         }
+
+        true
+    }
+
+    fn satisfies(&self, equality: (VariableIdx, VariableIdx)) -> bool {
+        self.0[equality.0 as usize].unwrap() == self.0[equality.1 as usize].unwrap()
     }
 }
 
@@ -88,6 +100,12 @@ impl SaturationAtom {
                     }
                 }
                 BodyTerm::Ignore => {}
+            }
+        }
+
+        if let Some(equality) = self.equality {
+            if !res.satisfies(equality) {
+                return None;
             }
         }
 
@@ -292,10 +310,19 @@ impl Iterator for RowMatcher<'_> {
     type Item = SaturationSubstitution;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let row = self.cursor.next()?;
-        let mut subst = self.substitution.clone();
-        subst.update(&self.atom.terms, row);
-        Some(subst)
+        loop {
+            let row = self.cursor.next()?;
+            let mut subst = self.substitution.clone();
+            if subst.update(&self.atom.terms, row) {
+                if let Some(equality) = &self.atom.equality {
+                    if !subst.satisfies(*equality) {
+                        continue;
+                    }
+                }
+
+                return Some(subst);
+            }
+        }
     }
 }
 
@@ -430,7 +457,7 @@ fn fact_from_row(row: &Row, predicate: Arc<str>) -> SaturationFact {
             _ => None,
         })
         .collect::<Option<_>>()
-        .unwrap();
+        .expect(format!("{row:?}").as_str());
 
     SaturationFact { predicate, values }
 }
@@ -438,17 +465,31 @@ fn fact_from_row(row: &Row, predicate: Arc<str>) -> SaturationFact {
 pub(crate) fn saturate(db: &mut DataBase, rules: &mut [SaturationRule]) {
     let mut matches = Vec::new();
 
-    for (predicate, table) in db.0.iter() {
-        for (rule_index, rule) in rules.iter_mut().enumerate() {
-            for (row, _) in table.iter() {
-                let fact = fact_from_row(row, predicate.clone());
+    #[cfg(not(test))]
+    TimedCode::instance()
+        .sub("Reasoning/Saturation/update")
+        .start();
 
-                for trigger in rule.trigger(&fact) {
-                    matches.extend(trigger.execute(db).map(|row| (row, rule_index)));
-                }
+    for (rule_index, rule) in rules.iter_mut().enumerate() {
+        let predicate = rule.body_atoms[0].predicate.clone();
+
+        for (row, _) in db.0.get(&predicate).iter().flat_map(|table| table.iter()) {
+            let fact = fact_from_row(row, predicate.clone());
+
+            for trigger in rule.trigger(&fact) {
+                matches.extend(trigger.execute(db).map(|row| (row, rule_index)));
             }
         }
     }
+
+    #[cfg(not(test))]
+    TimedCode::instance()
+        .sub("Reasoning/Saturation/update")
+        .stop();
+    #[cfg(not(test))]
+    TimedCode::instance()
+        .sub("Reasoning/Saturation/loop")
+        .start();
 
     let mut todo = Vec::new();
     while !matches.is_empty() {
@@ -488,6 +529,11 @@ pub(crate) fn saturate(db: &mut DataBase, rules: &mut [SaturationRule]) {
             }
         }
     }
+
+    #[cfg(not(test))]
+    TimedCode::instance()
+        .sub("Reasoning/Saturation/loop")
+        .stop();
 }
 
 impl DataBase {
@@ -643,11 +689,13 @@ mod test {
         let head = Head::Datalog(Box::from([SaturationAtom {
             predicate: p1.clone(),
             terms: Box::from([x.clone(), y.clone(), z.clone()]),
+            equality: Default::default(),
         }]));
 
         let p2_atom = SaturationAtom {
             predicate: p2.clone(),
             terms: Box::from([x.clone(), y.clone()]),
+            equality: Default::default(),
         };
 
         let p2_table: BTreeMap<Row, Age> = table![[0, 0],];
@@ -655,6 +703,7 @@ mod test {
         let p3_atom = SaturationAtom {
             predicate: p3.clone(),
             terms: Box::from([x.clone(), y.clone()]),
+            equality: Default::default(),
         };
 
         let p3_table: BTreeMap<Row, Age> = table![[0, 0],];
@@ -662,6 +711,7 @@ mod test {
         let p4_atom = SaturationAtom {
             predicate: p4.clone(),
             terms: Box::from([x.clone(), y.clone(), z.clone()]),
+            equality: Default::default(),
         };
 
         let p4_table: BTreeMap<Row, Age> = table![[0, 0, 0], [0, 0, 1],];
