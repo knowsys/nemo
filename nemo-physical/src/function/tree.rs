@@ -2,7 +2,7 @@
 
 use std::{collections::HashMap, fmt::Debug, hash::Hash};
 
-use crate::datavalues::AnyDataValue;
+use crate::{datavalues::AnyDataValue, function::definitions::language::LanguageString};
 
 use super::{
     definitions::{
@@ -248,6 +248,16 @@ where
     /// Create a tree node that evaluates to the data type string of the sub node.
     pub fn datatype(sub: Self) -> Self {
         Self::Unary(UnaryFunctionEnum::Datatype(Datatype), Box::new(sub))
+    }
+
+    /// Create a tree not that evaluates to a language tagged string
+    /// constructed from the input trees.
+    pub fn language_string(left: Self, right: Self) -> Self {
+        Self::Binary {
+            function: BinaryFunctionEnum::LanguageString(LanguageString),
+            left: Box::new(left),
+            right: Box::new(right),
+        }
     }
 
     /// Create a tree node that evaluates to the language tag of the sub node.

@@ -261,6 +261,8 @@ pub mod builtin {
         pub(crate) const FLOOR: &str = "FLOOR";
         /// Return the datatype of the value
         pub(crate) const DATATYPE: &str = "DATATYPE";
+        /// Construct a language tagged string
+        pub(crate) const STRLANG: &str = "STRLANG";
         /// Return the language tag of the value
         pub(crate) const LANG: &str = "LANG";
         /// Convert the value to an integer

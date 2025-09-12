@@ -70,6 +70,7 @@ pub(crate) fn operation_to_function_tree(
     match operation.operation_kind() {
         OperationKind::Equal => binary!(equals, sub),
         OperationKind::Unequals => binary!(unequals, sub),
+        OperationKind::LanguageString => binary!(language_string, sub),
         OperationKind::NumericSubtraction => binary!(numeric_subtraction, sub),
         OperationKind::NumericDivision => binary!(numeric_division, sub),
         OperationKind::NumericLogarithm => binary!(numeric_logarithm, sub),
