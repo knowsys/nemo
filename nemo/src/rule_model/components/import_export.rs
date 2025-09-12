@@ -236,7 +236,19 @@ impl ImportDirective {
     /// Return the expected arity of this directive, if any.
     pub fn expected_arity(&self) -> Option<usize> {
         // TODO: There must be a better way
-        self.builder()?.expected_arity()
+        let expected_arity = self.builder()?.expected_arity();
+
+        if expected_arity.is_some() {
+            return expected_arity;
+        }
+
+        let head = self.filter_rules().first()?.head().first()?;
+
+        if head.predicate() == *self.predicate() {
+            return Some(head.variables().count());
+        }
+
+        None
     }
 }
 

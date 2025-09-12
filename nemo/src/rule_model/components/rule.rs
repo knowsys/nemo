@@ -189,7 +189,7 @@ impl Rule {
         result
     }
 
-    // Return the set of variables that are bound by import statements
+    /// Return the set of variables that are bound by import statements
     pub fn import_variables(&self) -> HashSet<&Variable> {
         self.imports
             .iter()

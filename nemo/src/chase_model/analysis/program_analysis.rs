@@ -267,7 +267,7 @@ impl ChaseProgram {
         fn add_arity(predicate: Tag, arity: usize, arities: &mut HashMap<Tag, usize>) {
             if let Some(current) = arities.get(&predicate) {
                 if *current != arity {
-                    unreachable!("invalid program: same predicate used with different arities");
+                    unreachable!("invalid program: predicate {predicate} used with different arities {arity} and {current}");
                 }
             } else {
                 arities.insert(predicate, arity);

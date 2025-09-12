@@ -22,7 +22,7 @@ pub struct ImportClause {
     id: ProgramComponentId,
 
     /// Import
-    import: ImportDirective,
+    pub(crate) import: ImportDirective,
 
     /// Output variables
     variables: Vec<Variable>,

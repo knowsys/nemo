@@ -359,15 +359,7 @@ impl<B: FormatBuilder> Parameters<B> {
         for literal in rule.body() {
             match literal.predicate() {
                 None => (),
-                Some(filter_predicate) => {
-                    if *predicate != filter_predicate {
-                        log::debug!(
-                            "filter predicate {filter_predicate:?} /= predicate {predicate:?}"
-                        );
-                        valid = false;
-                        report.add(literal, todo!("add new error code"));
-                    }
-                }
+                Some(filter_predicate) => (),
             }
         }
 
