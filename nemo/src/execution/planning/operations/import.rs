@@ -6,8 +6,15 @@ use nemo_physical::{
 };
 
 use crate::{
-    chase_model::components::import::ChaseImportClause,
-    execution::{planning::operations::union::subplan_union, rule_execution::VariableTranslation},
+    chase_model::components::{
+        filter::ChaseFilter, import::ChaseImportClause, operation::ChaseOperation,
+    },
+    execution::{
+        planning::operations::{
+            filter::node_filter, functions::node_functions, union::subplan_union,
+        },
+        rule_execution::VariableTranslation,
+    },
     io::ImportManager,
     rule_model::components::tag::Tag,
     table_manager::{SubtableExecutionPlan, SubtableIdentifier, TableManager},
@@ -22,6 +29,8 @@ pub(crate) fn node_imports(
     current_step_number: usize,
     input_node: ExecutionNodeRef,
     imports: &Vec<ChaseImportClause>,
+    import_operations: &Vec<ChaseOperation>,
+    import_filters: &Vec<ChaseFilter>,
 ) -> ExecutionNodeRef {
     let mut imported_tables = Vec::<ExecutionNodeRef>::default();
 
@@ -96,7 +105,23 @@ pub(crate) fn node_imports(
         node_join.add_subnode(node_import);
     }
 
-    node_join
+    // Finally, apply operations and filters
+
+    let node_import_functions = node_functions(
+        subtable_plan.plan_mut(),
+        variable_translation,
+        node_join,
+        import_operations,
+    );
+
+    let node_import_filter = node_filter(
+        subtable_plan.plan_mut(),
+        variable_translation,
+        node_import_functions,
+        import_filters,
+    );
+
+    node_import_filter
 }
 
 /// Compute the column markers for the binding table.

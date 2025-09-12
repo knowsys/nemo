@@ -65,6 +65,18 @@ struct ChaseRuleHead {
     aggregate_head_index: Option<usize>,
 }
 
+/// Import of a [ChaseRule]
+#[derive(Debug, Default, Clone)]
+struct ChaseRuleImports {
+    /// Imports
+    imports: Vec<ChaseImportClause>,
+
+    /// Operations applied after executing the imports
+    operations: Vec<ChaseOperation>,
+    /// Filters applied after executing the imports
+    filters: Vec<ChaseFilter>,
+}
+
 /// Representation of a rule in a [ChaseProgram][super::program::ChaseProgram]
 #[allow(dead_code)]
 #[derive(Debug, Default, Clone)]
@@ -82,7 +94,7 @@ pub struct ChaseRule {
     head: ChaseRuleHead,
 
     /// Imports during rule evaluation
-    imports: Vec<ChaseImportClause>,
+    imports: ChaseRuleImports,
 }
 
 impl ChaseRule {
@@ -180,7 +192,17 @@ impl ChaseRule {
 
     /// Return the list of imports that will be executed as part of this rule evaluation.
     pub(crate) fn imports(&self) -> &Vec<ChaseImportClause> {
-        &self.imports
+        &self.imports.imports
+    }
+
+    /// Return the list of operations applied after the imports.
+    pub(crate) fn imports_operations(&self) -> &Vec<ChaseOperation> {
+        &self.imports.operations
+    }
+
+    /// return the list of filters applied after the imports.
+    pub(crate) fn imports_filters(&self) -> &Vec<ChaseFilter> {
+        &self.imports.filters
     }
 
     /// Return an iterator over the body variables.
@@ -208,28 +230,12 @@ impl ChaseRule {
             .flatten()
             .flat_map(|filter| filter.variables());
 
-        let aggregation_variables = self
-            .aggregate()
-            .into_iter()
-            .flat_map(|aggregate| aggregate.variables());
-        let aggregation_operation_variables = self
-            .aggregate_operations()
-            .iter()
-            .flat_map(|operation| operation.variables());
-        let aggregation_filter_variables = self
-            .aggregate_filters()
-            .iter()
-            .flat_map(|filter| filter.variables());
-
         Box::new(
             positive_body_variables
                 .chain(positive_operation_variables)
                 .chain(positive_filter_variables)
                 .chain(negative_body_variables)
-                .chain(negative_filter_variables)
-                .chain(aggregation_variables)
-                .chain(aggregation_operation_variables)
-                .chain(aggregation_filter_variables),
+                .chain(negative_filter_variables),
         )
     }
 }
@@ -328,7 +334,17 @@ impl ChaseRule {
 
     /// Add a new import clause to the rule.
     pub(crate) fn add_import_clause(&mut self, import: ChaseImportClause) {
-        self.imports.push(import);
+        self.imports.imports.push(import);
+    }
+
+    /// Add a new operation applied after imports.
+    pub(crate) fn add_import_operation(&mut self, operation: ChaseOperation) {
+        self.imports.operations.push(operation);
+    }
+
+    /// Add a new filter applied after imports.
+    pub(crate) fn add_import_filter(&mut self, filter: ChaseFilter) {
+        self.imports.filters.push(filter);
     }
 }
 
@@ -370,7 +386,17 @@ impl IterableVariables for ChaseRule {
             .aggregate_filters()
             .iter()
             .flat_map(|filter| filter.variables());
-        let import_variables = self.imports.iter().flat_map(|import| import.variables());
+        let import_variables = self.imports().iter().flat_map(|import| import.variables());
+        let import_operation_variables = self
+            .imports
+            .operations
+            .iter()
+            .flat_map(|operation| operation.variables());
+        let import_filter_variables = self
+            .imports
+            .filters
+            .iter()
+            .flat_map(|filter| filter.variables());
 
         Box::new(
             head_variables
@@ -382,7 +408,9 @@ impl IterableVariables for ChaseRule {
                 .chain(aggregation_variables)
                 .chain(aggregation_operation_variables)
                 .chain(aggregation_filter_variables)
-                .chain(import_variables),
+                .chain(import_variables)
+                .chain(import_operation_variables)
+                .chain(import_filter_variables),
         )
     }
 
@@ -436,10 +464,22 @@ impl IterableVariables for ChaseRule {
             .filters
             .iter_mut()
             .flat_map(|filter| filter.variables_mut());
+
         let import_variables = self
+            .imports
             .imports
             .iter_mut()
             .flat_map(|import| import.variables_mut());
+        let import_operation_variables = self
+            .imports
+            .operations
+            .iter_mut()
+            .flat_map(|operation| operation.variables_mut());
+        let import_filter_variables = self
+            .imports
+            .filters
+            .iter_mut()
+            .flat_map(|filter| filter.variables_mut());
 
         Box::new(
             head_variables
@@ -451,7 +491,9 @@ impl IterableVariables for ChaseRule {
                 .chain(aggregation_variables)
                 .chain(aggregation_operation_variables)
                 .chain(aggregation_filter_variables)
-                .chain(import_variables),
+                .chain(import_variables)
+                .chain(import_operation_variables)
+                .chain(import_filter_variables),
         )
     }
 }
@@ -462,7 +504,7 @@ impl ChaseRule {
             return Err(todo!("add error code"));
         }
 
-        if !self.imports.is_empty() {
+        if !self.imports().is_empty() {
             return Err(todo!("add error code"));
         }
 

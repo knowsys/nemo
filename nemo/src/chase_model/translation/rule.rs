@@ -6,6 +6,7 @@ use crate::{
     chase_model::components::{
         atom::{primitive_atom::PrimitiveAtom, variable_atom::VariableAtom},
         filter::ChaseFilter,
+        operation::ChaseOperation,
         rule::ChaseRule,
     },
     rule_model::components::{
@@ -246,10 +247,27 @@ impl ProgramChaseTranslation {
             }
 
             if let Literal::Operation(operation) = literal {
+                if let Some((variable, term)) = operation.variable_assignment() {
+                    if variable.is_universal()
+                        && variable.name().is_some()
+                        && !derived_variables.contains(variable)
+                    {
+                        result.add_import_operation(Self::build_operation(variable, term));
+                        continue;
+                    }
+                }
+
                 let new_operation = Self::build_operation_term(operation);
                 let new_filter = ChaseFilter::new(new_operation);
 
-                result.add_positive_filter(new_filter);
+                if new_filter
+                    .variables()
+                    .all(|variable| derived_variables.contains(variable))
+                {
+                    result.add_positive_filter(new_filter);
+                } else {
+                    result.add_import_filter(new_filter);
+                }
             }
         }
     }
