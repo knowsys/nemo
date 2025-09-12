@@ -84,6 +84,7 @@ impl SaturationRule {
         }
     }
 
+    #[allow(unused)]
     pub(crate) fn input_predicates(&self) -> impl Iterator<Item = Arc<str>> + use<'_> {
         self.body_atoms.iter().map(|a| a.predicate.clone())
     }

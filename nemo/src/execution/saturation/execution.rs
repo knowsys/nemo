@@ -7,7 +7,9 @@ use std::{
     sync::Arc,
 };
 
-use nemo_physical::{datatypes::StorageValueT, meta::timing::TimedCode};
+use nemo_physical::datatypes::StorageValueT;
+#[cfg(not(test))]
+use nemo_physical::meta::timing::TimedCode;
 
 use super::model::{
     BodyTerm, Head, JoinOp, SaturationAtom, SaturationFact, SaturationRule, VariableIdx,

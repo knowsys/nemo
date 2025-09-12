@@ -320,7 +320,6 @@ impl ExecutionEngine {
 
         let predicates: Vec<Tag> = self.table_manager.known_predicates().cloned().collect();
         for predicate in &predicates {
-            //  rules.iter().flat_map(|r| r.input_predicates()) {
             let Some(table_id) = self.table_manager.combine_predicate(&predicate)? else {
                 continue;
             };
