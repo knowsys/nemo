@@ -104,7 +104,6 @@ impl BodyStrategy for SeminaiveStrategy {
             import_manager,
             variable_translation,
             step_number,
-            variable_order,
             node_negation,
             &self.imports,
         );

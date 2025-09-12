@@ -2,7 +2,7 @@
 
 use crate::{
     io::formats::Import,
-    rule_model::components::{tag::Tag, term::primitive::variable::Variable},
+    rule_model::components::{tag::Tag, term::primitive::variable::Variable, IterableVariables},
 };
 
 /// Component for handling imports
@@ -68,5 +68,15 @@ impl ChaseImportClause {
     /// Return a reference to the bindings.
     pub(crate) fn bindings(&self) -> &Vec<Variable> {
         &self.bindings
+    }
+}
+
+impl IterableVariables for ChaseImportClause {
+    fn variables<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Variable> + 'a> {
+        Box::new(self.bindings.iter())
+    }
+
+    fn variables_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Variable> + 'a> {
+        Box::new(self.bindings.iter_mut())
     }
 }

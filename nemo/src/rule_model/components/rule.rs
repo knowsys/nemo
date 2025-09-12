@@ -204,11 +204,7 @@ impl Rule {
     /// or is derived via the equality operation
     /// from other safe variables.
     pub fn safe_variables(&self) -> HashSet<&Variable> {
-        let mut result = self
-            .positive_variables()
-            .union(&self.import_variables())
-            .cloned()
-            .collect::<HashSet<&Variable>>();
+        let mut result = self.positive_variables();
 
         loop {
             let current_count = result.len();
@@ -384,7 +380,10 @@ impl ComponentBehavior for Rule {
         for atom in self.head() {
             for variable in atom.variables() {
                 if let Some(variable_name) = variable.name() {
-                    if !variable.is_existential() && !safe_variables.contains(variable) {
+                    if !variable.is_existential()
+                        && !safe_variables.contains(variable)
+                        && self.import_variables().contains(variable)
+                    {
                         report
                             .add(
                                 variable,

@@ -16,7 +16,6 @@ use crate::{
                 primitive::{variable::Variable, Primitive},
                 Term,
             },
-            IterableVariables,
         },
         error::ValidationReport,
         programs::{handle::ProgramHandle, ProgramRead, ProgramWrite},
@@ -118,8 +117,6 @@ impl TransformationIncremental {
                             computed_terms.push((new_variable, term.clone()));
                         }
                     }
-
-                    let variables = atom.variables().cloned().collect::<Vec<_>>();
 
                     let clause = ImportClause::new(import.clone(), variables);
 

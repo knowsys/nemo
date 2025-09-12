@@ -6,10 +6,10 @@ use nemo_physical::{
 };
 
 use crate::{
-    chase_model::{analysis::variable_order::VariableOrder, components::import::ChaseImportClause},
+    chase_model::components::import::ChaseImportClause,
     execution::{planning::operations::union::subplan_union, rule_execution::VariableTranslation},
     io::ImportManager,
-    rule_model::components::{tag::Tag, term::primitive::variable::Variable},
+    rule_model::components::tag::Tag,
     table_manager::{SubtableExecutionPlan, SubtableIdentifier, TableManager},
 };
 
@@ -20,23 +20,26 @@ pub(crate) fn node_imports(
     import_manager: &ImportManager,
     variable_translation: &VariableTranslation,
     current_step_number: usize,
-    variable_order: &mut VariableOrder,
     input_node: ExecutionNodeRef,
     imports: &Vec<ChaseImportClause>,
 ) -> ExecutionNodeRef {
     let mut imported_tables = Vec::<ExecutionNodeRef>::default();
 
+    let markers_input = input_node.markers_cloned();
+
     // Perform the import operations
     for import in imports {
+        let markers_import = variable_translation.operation_table(import.bindings().iter());
+
         // First we project the content of the input node to the required columns
-        let markers_projection =
-            binding_table_markers(variable_translation, variable_order, import.bindings());
+        let markers_projection = binding_table_markers(&markers_input, &markers_import);
         let node_import_bindings = subtable_plan
             .plan_mut()
             .projectreorder(markers_projection.clone(), input_node.clone());
 
         // To only request new information, we subtract the old bindings
-        let (binding_predicate, _arity) = binding_table_predicate_name(variable_order, import);
+        let (binding_predicate, _arity) =
+            binding_table_predicate_name(import.predicate(), &markers_input, &markers_import);
         let old_bindings = subplan_union(
             subtable_plan.plan_mut(),
             table_manager,
@@ -49,7 +52,6 @@ pub(crate) fn node_imports(
             .subtract(node_import_bindings, vec![old_bindings]);
 
         // Now we can add the import
-        let markers_import = variable_translation.operation_table(import.bindings().iter());
         let provider = import_manager
             .table_provider_from_handler(import.handler())
             .expect("invalid import");
@@ -85,11 +87,8 @@ pub(crate) fn node_imports(
         return input_node;
     }
 
-    // Extend variable order
-    extend_variable_order(variable_order, imports);
-
     // Join imported tables
-    let join_markers = variable_translation.operation_table(variable_order.iter());
+    let join_markers = join_markers(&markers_input, &imported_tables);
     let mut node_join = subtable_plan.plan_mut().join_empty(join_markers);
 
     node_join.add_subnode(input_node);
@@ -101,31 +100,35 @@ pub(crate) fn node_imports(
 }
 
 /// Compute the column markers for the binding table.
-pub fn binding_table_markers(
-    variable_translation: &VariableTranslation,
-    variable_order: &VariableOrder,
-    bindings: &Vec<Variable>,
+fn binding_table_markers(
+    input_markers: &OperationTable,
+    import_markers: &OperationTable,
 ) -> OperationTable {
-    let mut input_variables = Vec::default();
-    for variable in bindings {
-        if variable_order.contains(variable) {
-            input_variables.push(variable.clone());
+    let mut result = OperationTable::default();
+
+    for &marker in import_markers.iter() {
+        if input_markers.contains(&marker) {
+            result.push(marker);
         }
     }
 
-    variable_translation.operation_table(input_variables.iter())
+    result
 }
 
 /// Compute the predicate name and arity for the binding table.
-pub(crate) fn binding_table_predicate_name(
-    variable_order: &VariableOrder,
-    import: &ChaseImportClause,
-) -> (Tag, usize) {
-    let mut name = format!("__IMPORT_{}_", import.predicate().name());
+pub(crate) fn binding_table_predicate_name<T>(
+    predicate: &Tag,
+    input_markers: &[T],
+    import_markers: &[T],
+) -> (Tag, usize)
+where
+    T: Eq + std::fmt::Debug,
+{
+    let mut name = format!("__IMPORT_{}_", predicate.name());
     let mut arity = 0;
 
-    for variable in import.bindings() {
-        if variable_order.contains(variable) {
+    for marker in import_markers {
+        if input_markers.contains(marker) {
             name.push('b');
             arity += 1;
         } else {
@@ -136,13 +139,19 @@ pub(crate) fn binding_table_predicate_name(
     (Tag::new(name), arity)
 }
 
-/// Extend the initial variable order with variables used in imports.
-fn extend_variable_order(variable_order: &mut VariableOrder, imports: &Vec<ChaseImportClause>) {
+/// Extend the initial column markers with markers used in imports.
+fn join_markers(input_markers: &OperationTable, imports: &Vec<ExecutionNodeRef>) -> OperationTable {
+    let mut result = input_markers.clone();
+
     for import in imports {
-        for variable in import.bindings() {
-            if !variable_order.contains(variable) {
-                variable_order.push(variable.clone());
+        let import_markers = import.markers_cloned();
+
+        for marker in import_markers {
+            if !input_markers.contains(&marker) {
+                result.push(marker);
             }
         }
     }
+
+    result
 }

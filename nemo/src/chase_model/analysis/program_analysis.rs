@@ -17,7 +17,6 @@ use crate::{
             operation::operation_kind::OperationKind,
             primitive::{Primitive, variable::Variable},
         },
-        IterableVariables,
     },
 };
 
@@ -304,17 +303,14 @@ impl ChaseProgram {
                     &mut result,
                 );
 
-                let positive_variables = rule
-                    .positive_body()
-                    .iter()
-                    .flat_map(|atom| atom.variables());
-                let mut order = VariableOrder::default();
-                for variable in positive_variables {
-                    order.push(variable.clone());
-                }
+                let body_variables = rule.body_variables().cloned().collect::<Vec<_>>();
 
-                let (binding_table_aname, arity) = binding_table_predicate_name(&order, import);
-                add_arity(binding_table_aname, arity, &mut result);
+                let (binding_table_name, arity) = binding_table_predicate_name(
+                    import.predicate(),
+                    &body_variables,
+                    &import.bindings(),
+                );
+                add_arity(binding_table_name, arity, &mut result);
             }
         }
 
