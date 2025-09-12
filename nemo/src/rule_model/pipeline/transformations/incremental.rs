@@ -11,6 +11,11 @@ use crate::{
             rule::Rule,
             statement::Statement,
             tag::Tag,
+            term::{
+                operation::{operation_kind::OperationKind, Operation},
+                primitive::{variable::Variable, Primitive},
+                Term,
+            },
             IterableVariables,
         },
         error::ValidationReport,
@@ -82,6 +87,12 @@ impl TransformationIncremental {
         incremental_predicates
     }
 
+    /// Create a new variable which hold the value of computed terms.
+    fn new_variable(predicate: &Tag, index: usize) -> Variable {
+        let name = format!("_VAR_IMPORT_{}_{}", predicate.name(), index);
+        Variable::universal(&name)
+    }
+
     /// Given a rule with inlined import predicates,
     /// compute a rule that includes the corresponding import statements.
     fn incremental_rule(
@@ -91,11 +102,25 @@ impl TransformationIncremental {
         let mut result = rule.clone();
 
         let mut import_clauses = Vec::<ImportClause>::default();
+        let mut computed_terms = Vec::<(Variable, Term)>::default();
 
         result.body_mut().retain(|literal| {
             if let Literal::Positive(atom) = literal {
                 if let Some(&import) = incremental_predicates.get(&atom.predicate()) {
+                    let mut variables = Vec::<Variable>::new();
+                    for (term_index, term) in atom.terms().enumerate() {
+                        if let Term::Primitive(Primitive::Variable(variable)) = term {
+                            variables.push(variable.clone());
+                        } else {
+                            let new_variable = Self::new_variable(&atom.predicate(), term_index);
+
+                            variables.push(new_variable.clone());
+                            computed_terms.push((new_variable, term.clone()));
+                        }
+                    }
+
                     let variables = atom.variables().cloned().collect::<Vec<_>>();
+
                     let clause = ImportClause::new(import.clone(), variables);
 
                     import_clauses.push(clause);
@@ -108,6 +133,11 @@ impl TransformationIncremental {
 
         for import in import_clauses {
             result.add_import(import);
+        }
+
+        for (variable, term) in computed_terms {
+            let operation = Operation::new(OperationKind::Equal, vec![Term::from(variable), term]);
+            result.body_mut().push(Literal::Operation(operation));
         }
 
         result
