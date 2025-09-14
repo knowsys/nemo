@@ -268,46 +268,6 @@ impl ExecutionEngine {
         Ok(())
     }
 
-    fn fill_saturation_rules(
-        &mut self,
-        scc: &[usize],
-        store: &mut HashMap<
-            Box<[usize]>,
-            Result<Vec<SaturationRule>, HashMap<usize, SaturationRule>>,
-        >,
-    ) {
-        if store.contains_key(scc) {
-            return;
-        }
-
-        let saturation_rules: Vec<Option<SaturationRule>> = {
-            let mut dict = self.table_manager.dictionary_mut();
-            let mut translation = SaturationRuleTranslation::new(&mut dict);
-            scc.iter()
-                .map(|index| {
-                    translation
-                        .convert(self.nemo_program.rule(*index))
-                        .inspect_err(|reason| {
-                            log::debug!("rule {index} does not support saturation ({reason})")
-                        })
-                        .ok()
-                })
-                .collect()
-        };
-
-        let saturation_rules = if saturation_rules.iter().all(Option::is_some) {
-            Ok(saturation_rules.into_iter().map(Option::unwrap).collect())
-        } else {
-            Err(saturation_rules
-                .into_iter()
-                .zip(scc)
-                .flat_map(|(r, i)| Some(*i).zip(r))
-                .collect())
-        };
-
-        store.insert(Box::from(scc), saturation_rules);
-    }
-
     fn saturation_step(
         &mut self,
         rules: &mut [SaturationRule],
@@ -380,10 +340,47 @@ impl ExecutionEngine {
 
         let mut new_derivations: Option<bool> = None;
 
-        let mut saturation_rules: HashMap<
-            Box<[usize]>,
-            Result<Vec<SaturationRule>, HashMap<usize, SaturationRule>>,
-        > = Default::default();
+        fn fill_saturation_rules(
+            this: &mut ExecutionEngine,
+            scc: &[usize],
+            store: &mut HashMap<
+                Box<[usize]>,
+                Result<Vec<SaturationRule>, HashMap<usize, SaturationRule>>,
+            >,
+        ) {
+            if store.contains_key(scc) {
+                return;
+            }
+
+            let saturation_rules: Vec<Option<SaturationRule>> = {
+                let mut dict = this.table_manager.dictionary_mut();
+                let mut translation = SaturationRuleTranslation::new(&mut dict);
+                scc.iter()
+                    .map(|index| {
+                        translation
+                            .convert(this.nemo_program.rule(*index))
+                            .inspect_err(|reason| {
+                                log::debug!("rule {index} does not support saturation ({reason})")
+                            })
+                            .ok()
+                    })
+                    .collect()
+            };
+
+            let saturation_rules = if saturation_rules.iter().all(Option::is_some) {
+                Ok(saturation_rules.into_iter().map(Option::unwrap).collect())
+            } else {
+                Err(saturation_rules
+                    .into_iter()
+                    .zip(scc)
+                    .flat_map(|(r, i)| Some(*i).zip(r))
+                    .collect())
+            };
+
+            store.insert(Box::from(scc), saturation_rules);
+        }
+
+        let mut saturation_rules = Default::default();
 
         let executions: Vec<_> = self
             .program
@@ -406,7 +403,7 @@ impl ExecutionEngine {
                 }
             }
 
-            self.fill_saturation_rules(&scc, &mut saturation_rules);
+            fill_saturation_rules(self, &scc, &mut saturation_rules);
 
             match saturation_rules.get_mut(&scc).unwrap() {
                 Ok(rules) => {
