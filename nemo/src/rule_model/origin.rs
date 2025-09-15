@@ -8,8 +8,7 @@ use super::{
 };
 
 /// Origin of a [super::components::ProgramComponent]
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub enum Origin {
     /// Component has no special origin
     #[default]
@@ -38,7 +37,6 @@ pub enum Origin {
         replacing: ProgramComponentId,
     },
 }
-
 
 impl Origin {
     /// Create an Oriign pointing to character range represented
