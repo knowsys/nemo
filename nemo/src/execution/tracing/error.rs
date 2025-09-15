@@ -21,10 +21,16 @@ pub enum TracingError {
     },
     /// No fact matching the query exists
     #[error("No fact found for predicate {predicate} with query {query}.")]
-    InvalidFactQuery {
+    EmptyFactQuery {
         /// Prediacte name of the fact in question
         predicate: String,
         /// The query for the arguments of the fact that did not match
         query: String,
+    },
+    /// Invalid fact supplied given as input to tracing
+    #[error("Invalid tracing fact: {fact}.")]
+    InvalidFact {
+        /// The invalid fact
+        fact: String,
     },
 }

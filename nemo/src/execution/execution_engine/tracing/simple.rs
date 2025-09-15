@@ -20,6 +20,7 @@ use crate::{
     },
     rule_model::{
         components::{
+            ComponentBehavior,
             fact::Fact,
             term::primitive::{Primitive, ground::GroundTerm, variable::Variable},
         },
@@ -196,6 +197,15 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         &mut self,
         facts: Vec<Fact>,
     ) -> Result<(ExecutionTrace, Vec<TraceFactHandle>), Error> {
+        for fact in &facts {
+            if fact.validate().is_err() {
+                return Err(TracingError::InvalidFact {
+                    fact: fact.to_string(),
+                }
+                .into());
+            }
+        }
+
         let chase_facts: Vec<_> = facts
             .into_iter()
             .filter_map(|fact| ProgramChaseTranslation::new().build_fact(&fact))

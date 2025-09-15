@@ -418,13 +418,13 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                     // TODO: Support patterns
                     let atom = Atom::parse(&format!("{}({})", query.predicate, query_string))
                         .map_err(|_| {
-                            Error::TracingError(TracingError::InvalidFactQuery {
+                            Error::TracingError(TracingError::EmptyFactQuery {
                                 predicate: query.predicate.clone(),
                                 query: query_string.clone(),
                             })
                         })?;
                     GroundAtom::try_from(atom).map_err(|_| {
-                        Error::TracingError(TracingError::InvalidFactQuery {
+                        Error::TracingError(TracingError::EmptyFactQuery {
                             predicate: query.predicate.clone(),
                             query: query_string,
                         })

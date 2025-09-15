@@ -834,24 +834,6 @@ impl ExecutionPlan {
                 .operation()
                 .expect("No sub node should be a project");
 
-                // let subtree: ExecutionTreeLeaf = if let ExecutionTreeOperation::Leaf(leaf) =
-                //     Self::execution_node(
-                //         root_node_id,
-                //         subnode.clone(),
-                //         ColumnOrder::default(),
-                //         output_nodes,
-                //         computed_trees,
-                //         computed_trees_map,
-                //         loaded_tables,
-                //     )
-                //     .operation()
-                //     .expect("No sub node should be a project")
-                // {
-                //     leaf
-                // } else {
-                //     unreachable!("Subnode of a project must be a load instruction");
-                // };
-
                 ExecutionTreeNode::Single {
                     generator: GeneratorSingle::new(marker_subnode, single.clone()),
                     subnode: subtree,

@@ -16,7 +16,7 @@ use crate::{
 
 use super::OperationTable;
 
-///
+/// Operation to project certain columns down to one entry
 ///
 /// Note: This does not follow the usual pattern of implementing [OperationGenerator][super::OperationGenerator],
 /// since this operation is not done via a [PartialTrieScan].

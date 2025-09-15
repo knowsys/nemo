@@ -440,6 +440,9 @@ impl IterablePrimitives for ChaseRule {
             .atoms
             .iter_mut()
             .flat_map(|atom| atom.primitive_terms_mut());
+
+        // TODO: Fix this iterator
+        //
         // let positive_terms = self
         //     .positive
         //     .atoms

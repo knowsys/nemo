@@ -6,7 +6,9 @@ use crate::{
     execution::execution_parameters::ExecutionParameters,
     rule_model::{
         error::ValidationReport,
-        pipeline::transformations::validate::TransformationValidate,
+        pipeline::transformations::{
+            active::TransformationActive, validate::TransformationValidate,
+        },
         programs::{ProgramRead, handle::ProgramHandle},
     },
 };
@@ -48,7 +50,7 @@ impl<'a> ProgramTransformation for TransformationDefault<'a> {
             .transform(TransformationExports::new(
                 self.parameters.export_parameters,
             ))?
-            .transform(TransformationValidate::default())
-        // .transform(TransformationActive::default())
+            .transform(TransformationValidate::default())?
+            .transform(TransformationActive::default())
     }
 }
