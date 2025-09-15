@@ -18,7 +18,6 @@
 #![feature(assert_matches)]
 #![feature(iter_intersperse)]
 #![feature(str_from_raw_parts)]
-#![feature(path_add_extension)]
 #![feature(associated_type_defaults)]
 
 /// The crate for underlying physical operations.
