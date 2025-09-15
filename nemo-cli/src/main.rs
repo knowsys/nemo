@@ -246,18 +246,6 @@ fn handle_tracing_node(cli: &CliApp, engine: &mut DefaultExecutionEngine) -> Res
     Ok(())
 }
 
-fn handle_experiments(cli: &CliApp, engine: &mut DefaultExecutionEngine) -> Result<(), CliError> {
-    if let Some(num_queries) = cli.experiments.create_queries {
-        engine.collect_node_queries(num_queries);
-    }
-
-    if let Some(directory) = &cli.experiments.trace_node_query {
-        engine.experiment_node_queries(directory);
-    }
-
-    Ok(())
-}
-
 fn run(mut cli: CliApp) -> Result<(), CliError> {
     TimedCode::instance().start();
     TimedCode::instance().sub("Reading & Preprocessing").start();
@@ -346,7 +334,7 @@ fn run(mut cli: CliApp) -> Result<(), CliError> {
 
     TimedCode::instance().stop();
 
-    let (mut print_summary, print_times, print_memory) = match cli.reporting {
+    let (print_summary, print_times, print_memory) = match cli.reporting {
         Reporting::All => (true, true, true),
         Reporting::Short => (true, false, false),
         Reporting::Time => (true, true, false),
@@ -354,13 +342,6 @@ fn run(mut cli: CliApp) -> Result<(), CliError> {
         Reporting::None => (false, false, false),
         Reporting::Auto => (!stdout_used, false, false),
     };
-
-    if cli.experiments.create_queries.is_some()
-        || cli.experiments.trace_node_query.is_some()
-        || cli.experiments.provenance_node_query.is_some()
-    {
-        print_summary = false;
-    }
 
     if print_summary {
         print_finished_message(
@@ -374,8 +355,6 @@ fn run(mut cli: CliApp) -> Result<(), CliError> {
     if print_memory {
         print_memory_details(&engine);
     }
-
-    handle_experiments(&cli, &mut engine)?;
 
     handle_tracing(&cli, &mut engine)?;
     handle_tracing_tree(&cli, &mut engine)?;
