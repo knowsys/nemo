@@ -153,7 +153,7 @@ impl ExecutionTrace {
 
         self.facts
             .get_index_of(&traced_fact)
-            .map(|index| TraceFactHandle(index))
+            .map(TraceFactHandle)
     }
 
     /// Registers a new [GroundAtom].

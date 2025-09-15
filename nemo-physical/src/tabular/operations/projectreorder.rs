@@ -48,11 +48,10 @@ impl GeneratorProjectReorder {
         let mut last_used_layer: usize = 0;
 
         for output_marker in output.iter() {
-            if let Some(input_layer) = input.position(output_marker) {
-                if input_layer > last_used_layer {
+            if let Some(input_layer) = input.position(output_marker)
+                && input_layer > last_used_layer {
                     last_used_layer = input_layer;
                 }
-            }
         }
 
         Self {

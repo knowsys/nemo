@@ -151,11 +151,10 @@ impl Rule {
         for literal in &self.body {
             if let Literal::Positive(atom) = literal {
                 for term in atom.terms() {
-                    if let Term::Primitive(Primitive::Variable(variable)) = term {
-                        if variable.is_universal() && variable.name().is_some() {
+                    if let Term::Primitive(Primitive::Variable(variable)) = term
+                        && variable.is_universal() && variable.name().is_some() {
                             result.insert(variable);
                         }
-                    }
                 }
             }
         }
@@ -176,16 +175,14 @@ impl Rule {
             let current_count = result.len();
 
             for literal in &self.body {
-                if let Literal::Operation(operation) = literal {
-                    if let Some((variable, term)) = operation.variable_assignment() {
-                        if variable.is_universal()
+                if let Literal::Operation(operation) = literal
+                    && let Some((variable, term)) = operation.variable_assignment()
+                        && variable.is_universal()
                             && variable.name().is_some()
                             && term.variables().all(|variable| result.contains(variable))
                         {
                             result.insert(variable);
                         }
-                    }
-                }
             }
 
             if result.len() == current_count {
@@ -214,8 +211,7 @@ impl Rule {
         let mut first_aggregate = if let Term::Aggregate(aggregate) = term {
             if let Term::Primitive(Primitive::Variable(aggregate_variable)) =
                 aggregate.aggregate_term()
-            {
-                if group_by_variable.contains(aggregate_variable) {
+                && group_by_variable.contains(aggregate_variable) {
                     report.add(
                         aggregate.aggregate_term(),
                         ValidationError::AggregateOverGroupByVariable {
@@ -223,7 +219,6 @@ impl Rule {
                         },
                     );
                 }
-            }
 
             true
         } else {
@@ -405,11 +400,10 @@ impl ComponentBehavior for Rule {
             let mut current_negative_variables = HashSet::<&Variable>::new();
             if let Literal::Negative(negative) = literal {
                 for negative_subterm in negative.terms() {
-                    if let Term::Primitive(Primitive::Variable(variable)) = negative_subterm {
-                        if !safe_variables.contains(variable) {
+                    if let Term::Primitive(Primitive::Variable(variable)) = negative_subterm
+                        && !safe_variables.contains(variable) {
                             current_negative_variables.insert(variable);
                         }
-                    }
                 }
             }
 

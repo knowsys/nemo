@@ -183,14 +183,12 @@ impl DsvValueFormat {
                     } else if input.as_bytes()[input.len() - 1] == b'>'
                         && input.len() > pos + 4
                         && &input[pos..pos + 4] == "\"^^<"
-                    {
-                        if let Ok(dv) = AnyDataValue::new_from_typed_literal(
+                        && let Ok(dv) = AnyDataValue::new_from_typed_literal(
                             input[1..pos].to_string(),
                             input[pos + 4..input.len() - 1].to_string(),
                         ) {
                             return Ok(dv);
                         }
-                    }
                 }
             }
             _ => {}
@@ -198,19 +196,17 @@ impl DsvValueFormat {
 
         // Check if it's a valid tag name
         let parser_input = ParserInput::new(input, ParserState::default());
-        if let Ok((rest, _)) = Token::name(parser_input) {
-            if rest.span.fragment().is_empty() {
+        if let Ok((rest, _)) = Token::name(parser_input)
+            && rest.span.fragment().is_empty() {
                 return Ok(AnyDataValue::new_iri(input.to_string()));
             }
-        }
 
         // Might still be a full IRI
         let parser_input = ParserInput::new(input, ParserState::default());
-        if let Ok((rest, iri)) = Token::iri(parser_input) {
-            if rest.span.fragment().is_empty() {
+        if let Ok((rest, iri)) = Token::iri(parser_input)
+            && rest.span.fragment().is_empty() {
                 return Ok(AnyDataValue::new_iri(iri.to_string()));
             }
-        }
 
         // Otherwise treat the input as a string literal
         Ok(AnyDataValue::new_plain_string(input.to_string()))

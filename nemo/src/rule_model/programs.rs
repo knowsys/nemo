@@ -344,8 +344,8 @@ pub trait ProgramRead {
                     continue;
                 }
 
-                if let Some(expression) = parameter.expression() {
-                    if expression.variables().all(|variable| {
+                if let Some(expression) = parameter.expression()
+                    && expression.variables().all(|variable| {
                         if let Variable::Global(global) = variable {
                             defined.contains(global)
                         } else {
@@ -354,7 +354,6 @@ pub trait ProgramRead {
                     }) {
                         defined.insert(parameter.variable());
                     }
-                }
             }
 
             if defined_count == defined.len() {

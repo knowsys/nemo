@@ -83,8 +83,8 @@ impl ProgramChaseTranslation {
         let mut assignment = HashMap::<Variable, Variable>::new();
 
         for literal in rule.body() {
-            if let Literal::Operation(operation) = literal {
-                if let Some((left, Term::Primitive(Primitive::Variable(right)))) =
+            if let Literal::Operation(operation) = literal
+                && let Some((left, Term::Primitive(Primitive::Variable(right)))) =
                     operation.variable_assignment()
                 {
                     // Operation has the form ?left = ?right
@@ -96,7 +96,6 @@ impl ProgramChaseTranslation {
                         assignment.insert(left.clone(), right.clone());
                     }
                 }
-            }
         }
 
         assignment
@@ -109,11 +108,10 @@ impl ProgramChaseTranslation {
         assignment: &HashMap<Variable, Variable>,
     ) {
         for variable in rule.variables_mut() {
-            if let Some(new_variable) = assignment.get(variable) {
-                if let Some(name) = new_variable.name() {
+            if let Some(new_variable) = assignment.get(variable)
+                && let Some(name) = new_variable.name() {
                     variable.rename(name.to_owned());
                 }
-            }
         }
     }
 
@@ -200,9 +198,9 @@ impl ProgramChaseTranslation {
                     continue;
                 }
 
-                if let Literal::Operation(operation) = literal {
-                    if let Some((variable, term)) = operation.variable_assignment() {
-                        if variable.is_universal()
+                if let Literal::Operation(operation) = literal
+                    && let Some((variable, term)) = operation.variable_assignment()
+                        && variable.is_universal()
                             && variable.name().is_some()
                             && term
                                 .variables()
@@ -216,8 +214,6 @@ impl ProgramChaseTranslation {
 
                             handled_literals.insert(literal_index);
                         }
-                    }
-                }
             }
 
             if derived_variables.len() == current_count {

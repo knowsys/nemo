@@ -195,12 +195,11 @@ impl<'a, Scan: PartialTrieScan<'a>> StreamingIterator for RowScan<'a, Scan> {
             return;
         }
 
-        if self.existential == self.trie_scan.arity() {
-            if let Single::At = self.single {
+        if self.existential == self.trie_scan.arity()
+            && let Single::At = self.single {
                 self.single = Single::After;
                 return;
             }
-        }
 
         if self.trie_scan.current_layer().is_none() {
             let first_type = self.possible_types.first_type(0);

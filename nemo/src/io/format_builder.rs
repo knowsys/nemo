@@ -535,8 +535,8 @@ impl ImportExportBuilder {
             });
         };
 
-        if let Some(headers) = parameters.get_optional(StandardParameter::HttpHeaders.into()) {
-            if let Err(error) = http_parameters::unpack_headers(headers).and_then(|mut headers| {
+        if let Some(headers) = parameters.get_optional(StandardParameter::HttpHeaders.into())
+            && let Err(error) = http_parameters::unpack_headers(headers).and_then(|mut headers| {
                 headers.try_for_each(|(key, value)| {
                     resource_builder
                         .add_header(key, value)
@@ -546,12 +546,10 @@ impl ImportExportBuilder {
             }) {
                 report.add_source(origin.clone(), error);
             }
-        }
 
         if let Some(parameters) =
             parameters.get_optional(StandardParameter::HttpGetParameters.into())
-        {
-            if let Err(error) =
+            && let Err(error) =
                 http_parameters::unpack_http_parameters(parameters).and_then(|mut parameters| {
                     parameters.try_for_each(|(key, value)| {
                         resource_builder
@@ -563,12 +561,10 @@ impl ImportExportBuilder {
             {
                 report.add_source(origin.clone(), error);
             }
-        }
 
         if let Some(parameters) =
             parameters.get_optional(StandardParameter::HttpPostParameters.into())
-        {
-            if let Err(error) =
+            && let Err(error) =
                 http_parameters::unpack_http_parameters(parameters).and_then(|mut parameters| {
                     parameters.try_for_each(|(key, value)| {
                         resource_builder
@@ -580,17 +576,15 @@ impl ImportExportBuilder {
             {
                 report.add_source(origin.clone(), error);
             }
-        }
 
-        if let Some(fragment) = parameters.get_optional(StandardParameter::IriFragment.into()) {
-            if let Err(error) = resource_builder
+        if let Some(fragment) = parameters.get_optional(StandardParameter::IriFragment.into())
+            && let Err(error) = resource_builder
                 .set_fragment(fragment.to_plain_string_unchecked())
                 .and(Ok(()))
                 .map_err(ValidationError::from)
             {
                 report.add_source(origin.clone(), error);
             }
-        }
 
         Some(ImportExportBuilder {
             inner: inner.into(),

@@ -123,11 +123,10 @@ impl<'a> Number<'a> {
             return NumberValue::Integer(integer);
         }
 
-        if let Some(NumberTypeMarker::Float) = self.type_marker {
-            if let Ok(float) = str::parse::<f32>(&string) {
+        if let Some(NumberTypeMarker::Float) = self.type_marker
+            && let Ok(float) = str::parse::<f32>(&string) {
                 return NumberValue::Float(float);
             }
-        }
 
         if let Ok(double) = str::parse::<f64>(&string) {
             return NumberValue::Double(double);

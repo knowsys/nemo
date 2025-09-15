@@ -82,7 +82,7 @@ pub(super) fn variable_translation(
         };
 
         if create_new_variable {
-            let new_variable = Variable::universal(&format!("_VH_{}", index));
+            let new_variable = Variable::universal(&format!("_VH_{index}"));
 
             order.push(new_variable.clone());
             variable_translation.add_marker(new_variable.clone());
@@ -95,6 +95,7 @@ pub(super) fn variable_translation(
 }
 
 /// Compute the execution plan to obtain valid tables.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn valid_tables_plan(
     manager: &TraceNodeManager,
     table_manager: &TableManager,
@@ -219,14 +220,12 @@ pub(super) fn valid_tables_plan(
 
     let id_valid = if disjoint {
         None
+    } else if need_valid {
+        let node_result = plan.projectreorder(markers_head, node_negation);
+        let id_valid = plan.write_permanent(node_result, "valid", "valid");
+        Some(id_valid)
     } else {
-        if need_valid {
-            let node_result = plan.projectreorder(markers_head, node_negation);
-            let id_valid = plan.write_permanent(node_result, "valid", "valid");
-            Some(id_valid)
-        } else {
-            None
-        }
+        None
     };
 
     (plan, id_valid, id_assignment)
@@ -334,7 +333,7 @@ pub(super) fn ignore_discarded_columns_base(
     let markers = OperationTable::new_unique(arity);
     let mut single_markers = OperationTable::default();
     for discarded in discarded_columns {
-        single_markers.push(markers.get(*discarded).clone());
+        single_markers.push(*markers.get(*discarded));
     }
 
     let mut plan = ExecutionPlan::default();
@@ -344,7 +343,6 @@ pub(super) fn ignore_discarded_columns_base(
     plan.write_permanent(node_single, "single", "single");
     database
         .execute_plan(plan)
-        .ok()
         .expect("error while executing plan")
         .iter()
         .next()

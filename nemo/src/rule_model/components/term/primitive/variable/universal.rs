@@ -120,8 +120,8 @@ impl ComponentBehavior for UniversalVariable {
     fn validate(&self) -> Result<(), ValidationReport> {
         let mut report = ValidationReport::default();
 
-        if let Some(name) = self.name() {
-            if Symbols::is_reserved(name) {
+        if let Some(name) = self.name()
+            && Symbols::is_reserved(name) {
                 report.add(
                     self,
                     ValidationError::InvalidVariableName {
@@ -129,7 +129,6 @@ impl ComponentBehavior for UniversalVariable {
                     },
                 );
             }
-        }
 
         report.result()
     }

@@ -217,14 +217,14 @@ fn handle_tracing(cli: &CliApp, engine: &mut DefaultExecutionEngine) -> Result<(
 fn handle_tracing_tree(cli: &CliApp, engine: &mut DefaultExecutionEngine) -> Result<(), CliError> {
     if let Some(query_json) = &cli.tracing_tree.trace_tree_json {
         let tree_query: TreeForTableQuery =
-            serde_json::from_str(&query_json).map_err(|_| CliError::TracingInvalidFact {
+            serde_json::from_str(query_json).map_err(|_| CliError::TracingInvalidFact {
                 fact: String::from("placeholder"),
             })?;
 
         let result = engine.trace_tree(tree_query)?;
 
         let json = serde_json::to_string_pretty(&result).unwrap();
-        println!("{}", json);
+        println!("{json}");
     }
 
     Ok(())
@@ -240,7 +240,7 @@ fn handle_tracing_node(cli: &CliApp, engine: &mut DefaultExecutionEngine) -> Res
         let result = engine.trace_node(&node_query);
 
         let json = serde_json::to_string_pretty(&result).unwrap();
-        println!("{}", json);
+        println!("{json}");
     }
 
     Ok(())

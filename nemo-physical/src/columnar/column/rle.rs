@@ -375,11 +375,10 @@ where
                 .get_internal(self.element_index, self.increment_index)
         });
 
-        if let Some(cur) = self.current {
-            if cur >= value {
+        if let Some(cur) = self.current
+            && cur >= value {
                 return Some(cur);
             }
-        }
 
         self.find(|&next| next >= value)
     }

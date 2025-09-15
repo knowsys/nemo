@@ -107,14 +107,13 @@ impl ComponentBehavior for ParameterDeclaration {
             report.merge(child.validate());
         }
 
-        if let Some(expression) = self.expression() {
-            if !expression.is_resolvable() {
+        if let Some(expression) = self.expression()
+            && !expression.is_resolvable() {
                 report.add(
                     expression,
                     ValidationError::ParameterDeclarationNotGroundish,
                 );
             }
-        }
 
         report.result()
     }

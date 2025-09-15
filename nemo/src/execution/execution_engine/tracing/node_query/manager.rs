@@ -82,7 +82,7 @@ impl TraceNodeManager {
     /// For a node, add which of its columns can be ignored.
     pub fn add_discard(&mut self, address: &TreeAddress, discard: &[usize]) {
         self.discard
-            .insert(address.clone(), discard.iter().cloned().collect::<Vec<_>>());
+            .insert(address.clone(), discard.to_vec());
     }
 
     /// Return the discarded table for the given node.
@@ -191,6 +191,6 @@ impl TraceNodeManager {
 
     /// Return an iterator over all result tables.
     pub fn _results(&self) -> impl Iterator<Item = PermanentTableId> {
-        self.result.iter().map(|(_, id)| *id)
+        self.result.values().copied()
     }
 }

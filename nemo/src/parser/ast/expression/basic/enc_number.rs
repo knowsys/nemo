@@ -173,11 +173,10 @@ mod test {
             let result = all_consuming(EncodedNumber::parse)(input);
             assert!(result.is_ok());
 
-            if let Ok((_, ast_node)) = result {
-                if let EncodedNumberValue::Integer(integer) = ast_node.value() {
+            if let Ok((_, ast_node)) = result
+                && let EncodedNumberValue::Integer(integer) = ast_node.value() {
                     assert_eq!(integer, exp_value);
-                }
-            };
+                };
         }
 
         for invalid in invalid_numbers {

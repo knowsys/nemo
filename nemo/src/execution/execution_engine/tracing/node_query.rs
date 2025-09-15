@@ -58,7 +58,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 let terms = match query {
                     TableEntryQuery::Entry(row_index) => {
                         let terms_to_trace: Vec<AnyDataValue> = self
-                            .predicate_rows(&predicate)
+                            .predicate_rows(predicate)
                             .expect("unknown predicate")
                             .into_iter()
                             .flatten()
@@ -68,7 +68,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                         terms_to_trace
                     }
                     TableEntryQuery::Query(query_string) => {
-                        let atom = Atom::parse(&format!("P({})", query_string))
+                        let atom = Atom::parse(&format!("P({query_string})"))
                             .expect("invalid query string");
 
                         let ground = GroundAtom::try_from(atom).expect("only support ground fact");
@@ -349,12 +349,10 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                     } else {
                         return false;
                     }
+                } else if let Some(result_id) = manager.final_valid_table(&next_address) {
+                    manager.add_result_table(&next_address, result_id);
                 } else {
-                    if let Some(result_id) = manager.final_valid_table(&next_address) {
-                        manager.add_result_table(&next_address, result_id);
-                    } else {
-                        return false;
-                    }
+                    return false;
                 }
 
                 if !self.trace_node_filter(manager, node_atom, next_address) {
@@ -461,7 +459,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         let possible_rules_above = self
             .analysis
             .predicate_to_rule_body
-            .get(&predicate)
+            .get(predicate)
             .cloned()
             .unwrap_or_default()
             .into_iter()
@@ -473,7 +471,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         let possible_rules_below = self
             .analysis
             .predicate_to_rule_head
-            .get(&predicate)
+            .get(predicate)
             .cloned()
             .unwrap_or_default()
             .into_iter()
@@ -481,7 +479,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 TraceRule::possible_rules_for_head_predicate(
                     idx,
                     self.program().rule(idx),
-                    &predicate,
+                    predicate,
                 )
             })
             .collect::<Vec<_>>();

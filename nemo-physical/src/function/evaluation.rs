@@ -370,8 +370,8 @@ mod test {
         let program = StackProgram::from_function_tree(tree, &HashMap::new(), None);
         let result = program.evaluate(&[], None);
 
-        if let Some(result) = &result {
-            if let Some(expected_value) = &expected_value {
+        if let Some(result) = &result
+            && let Some(expected_value) = &expected_value {
                 match (result.value_domain(), expected_value.value_domain()) {
                     (ValueDomain::Float, ValueDomain::Float) => {
                         assert!(
@@ -390,7 +390,6 @@ mod test {
                     _ => {}
                 }
             }
-        }
 
         assert_eq!(result, expected_value)
     }

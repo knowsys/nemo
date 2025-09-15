@@ -39,10 +39,8 @@ impl GeneratorSingle {
         let mut last_full_column: Option<usize> = None;
 
         for (column, marker) in table.iter().enumerate() {
-            if single_columns
-                .iter()
-                .find(|&single| single == marker)
-                .is_none()
+            if !single_columns
+                .iter().any(|single| single == marker)
             {
                 last_full_column = Some(column);
             }
@@ -61,10 +59,8 @@ impl GeneratorSingle {
                 break;
             }
 
-            if single_columns
-                .iter()
-                .find(|&single| single == marker)
-                .is_none()
+            if !single_columns
+                .iter().any(|single| single == marker)
             {
                 full_columns.push(column);
             }

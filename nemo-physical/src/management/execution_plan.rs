@@ -533,14 +533,12 @@ impl ExecutionPlan {
                 generator,
                 subnode: ExecutionTreeLeaf::FetchComputedTable(computed),
             } = &root
-            {
-                if !&computed_trees[*computed].result.is_permanent() {
+                && !&computed_trees[*computed].result.is_permanent() {
                     computed_trees[*computed]
                         .dependents
                         .push((computed_table_id, generator.projectreordering()));
                     computed_trees[*computed].used -= 1;
                 }
-            }
 
             ExecutionTree {
                 root,
@@ -572,8 +570,8 @@ impl ExecutionPlan {
         computed_trees_map: &mut HashMap<ExecutionId, Vec<(ColumnOrder, ComputedTableId)>>,
         loaded_tables: &mut HashMap<(PermanentTableId, ColumnOrder), LoadedTableId>,
     ) -> ExecutionTreeNode {
-        if node.id() != root_node_id {
-            if let Some(output_node) = output_nodes
+        if node.id() != root_node_id
+            && let Some(output_node) = output_nodes
                 .iter()
                 .find(|output_node| node.id() == output_node.node.id())
             {
@@ -590,7 +588,6 @@ impl ExecutionPlan {
                     ExecutionTreeLeaf::FetchComputedTable(computed_id),
                 ));
             }
-        }
 
         let node_rc = node.get_rc();
         let node_operation = &node_rc.borrow().operation;
