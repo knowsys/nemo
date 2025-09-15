@@ -532,9 +532,9 @@ impl NemoEngine {
 
         let tree_for_table_response = models::TreeForTableResponse::from(response);
 
-        Ok(JsValue::from_serde(&tree_for_table_response)
+        JsValue::from_serde(&tree_for_table_response)
             .map_err(|err| WasmOrInternalNemoError::Reflection(err.to_string().into()))
-            .map_err(NemoError)?)
+            .map_err(NemoError)
     }
 
     #[wasm_bindgen(js_name = "experimentalNewTracingTableEntriesForTreeNodes")]

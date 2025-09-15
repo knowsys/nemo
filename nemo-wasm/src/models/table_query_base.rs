@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use super::TableQueryBaseTableEntries;
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct TableQueryBase {
     #[serde(rename = "tableEntries", skip_serializing_if = "Option::is_none")]
     pub table_entries: Option<Box<TableQueryBaseTableEntries>>,

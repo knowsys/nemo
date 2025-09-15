@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use super::{Rule, TableResponseBaseTableEntries};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct TableResponseBase {
     #[serde(rename = "predicate")]
     pub predicate: String,
