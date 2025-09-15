@@ -5,10 +5,10 @@ use crate::datavalues::{
 };
 use crate::management::bytesized::ByteSized;
 
+use super::DvDict;
 use super::bytes_buffer::{BytesBuffer, GlobalBytesBuffer};
 use super::meta_dv_dict::MetaDvDictionary;
-use super::DvDict;
-use super::{ranked_pair_dictionary::GenericRankedPairDictionary, AddResult};
+use super::{AddResult, ranked_pair_dictionary::GenericRankedPairDictionary};
 
 /// Type constant that signifies no type in a tuple
 const TUPLE_TYPE_NOTYPE: u8 = 0;
@@ -96,7 +96,9 @@ impl DvDict for TupleDvDict {
     }
 
     fn datavalue_to_id(&self, _dv: &AnyDataValue) -> Option<usize> {
-        panic!("tuple dictionaries do not support local `datavalue_to_id`; use the callback `datavalue_to_id_with_parent_fn`");
+        panic!(
+            "tuple dictionaries do not support local `datavalue_to_id`; use the callback `datavalue_to_id_with_parent_fn`"
+        );
     }
 
     fn datavalue_to_id_with_parent_fn(
@@ -106,7 +108,9 @@ impl DvDict for TupleDvDict {
     }
 
     fn id_to_datavalue(&self, _id: usize) -> Option<AnyDataValue> {
-        panic!("tuple dictionaries do not support local `id_to_datavalue`; use the callback `id_to_datavalue_with_parent_fn`");
+        panic!(
+            "tuple dictionaries do not support local `id_to_datavalue`; use the callback `id_to_datavalue_with_parent_fn`"
+        );
     }
 
     fn id_to_datavalue_with_parent_fn(
@@ -405,7 +409,9 @@ fn add_tuple_datavalue_with_parent(
     if let Some(tuple_dict) = myself.as_any_mut().downcast_mut::<TupleDvDict>() {
         tuple_dict.dict.add_pair(&tuple_type, &tuple_content)
     } else {
-        panic!("tuple dictionary called with a subdictionary id that does not belong to a tuple dict; this is a bug")
+        panic!(
+            "tuple dictionary called with a subdictionary id that does not belong to a tuple dict; this is a bug"
+        )
     }
 }
 
@@ -426,7 +432,9 @@ fn tuple_datavalue_to_id_with_parent(
     if let Some(tuple_dict) = myself.as_any().downcast_ref::<TupleDvDict>() {
         tuple_dict.dict.pair_to_id(&tuple_type, &tuple_content)
     } else {
-        panic!("tuple dictionary called with a subdictionary id that does not belong to a tuple dict; this is a bug")
+        panic!(
+            "tuple dictionary called with a subdictionary id that does not belong to a tuple dict; this is a bug"
+        )
     }
 }
 
@@ -461,7 +469,9 @@ fn id_to_tuple_datavalue_with_parent(
     if let Some(tuple_dict) = myself.as_any().downcast_ref::<TupleDvDict>() {
         (tuple_type, tuple_content) = tuple_dict.dict.id_to_pair(id)?;
     } else {
-        panic!("tuple dictionary called with a subdictionary id that does not belong to a tuple dict; this is a bug")
+        panic!(
+            "tuple dictionary called with a subdictionary id that does not belong to a tuple dict; this is a bug"
+        )
     }
 
     // read label, if any
@@ -519,7 +529,9 @@ fn id_to_tuple_datavalue_with_parent(
                             .expect("value used within tuple not found in dictionary"),
                     );
                 } else {
-                    panic!("failed to convert u64 to usize; dictionary surpasses the capabilities of this platform");
+                    panic!(
+                        "failed to convert u64 to usize; dictionary surpasses the capabilities of this platform"
+                    );
                 }
             }
             TUPLE_TYPE_DICTID32 => {
@@ -532,7 +544,9 @@ fn id_to_tuple_datavalue_with_parent(
                             .expect("value used within tuple not found in dictionary"),
                     );
                 } else {
-                    panic!("failed to convert u32 to usize; platforms with less that 32bits are not supported");
+                    panic!(
+                        "failed to convert u32 to usize; platforms with less that 32bits are not supported"
+                    );
                 }
             }
             TUPLE_TYPE_NULLID64 => {
@@ -541,7 +555,9 @@ fn id_to_tuple_datavalue_with_parent(
                 if let Ok(u_id) = usize::try_from(id) {
                     values.push(NullDataValue::new(u_id).into());
                 } else {
-                    panic!("failed to convert u64 to usize; dictionary surpasses the capabilities of this platform");
+                    panic!(
+                        "failed to convert u64 to usize; dictionary surpasses the capabilities of this platform"
+                    );
                 }
             }
             TUPLE_TYPE_NULLID32 => {
@@ -550,7 +566,9 @@ fn id_to_tuple_datavalue_with_parent(
                 if let Ok(u_id) = usize::try_from(id) {
                     values.push(NullDataValue::new(u_id).into());
                 } else {
-                    panic!("failed to convert u32 to usize; platforms with less that 32bits are not supported");
+                    panic!(
+                        "failed to convert u32 to usize; platforms with less that 32bits are not supported"
+                    );
                 }
             }
             TUPLE_TYPE_I64 => {

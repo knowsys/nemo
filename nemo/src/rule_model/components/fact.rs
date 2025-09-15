@@ -7,25 +7,25 @@ use std::{
 };
 
 use crate::{
-    chase_model::components::atom::{ground_atom::GroundAtom, ChaseAtom},
+    chase_model::components::atom::{ChaseAtom, ground_atom::GroundAtom},
     rule_model::{
-        error::{hint::Hint, validation_error::ValidationError, ValidationReport},
+        error::{ValidationReport, hint::Hint, validation_error::ValidationError},
         origin::Origin,
         pipeline::id::ProgramComponentId,
-        translation::{literal::HeadAtom, ProgramParseReport, TranslationComponent},
+        translation::{ProgramParseReport, TranslationComponent, literal::HeadAtom},
     },
 };
 
 use super::{
+    ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent, IterablePrimitives,
+    IterableVariables, ProgramComponent, ProgramComponentKind,
     atom::Atom,
     component_iterator, component_iterator_mut,
     tag::Tag,
     term::{
-        primitive::{variable::Variable, Primitive},
         Term,
+        primitive::{Primitive, variable::Variable},
     },
-    ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent, IterablePrimitives,
-    IterableVariables, ProgramComponent, ProgramComponentKind,
 };
 
 /// A (ground) fact

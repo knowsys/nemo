@@ -5,22 +5,22 @@ use std::{collections::HashSet, fmt::Display, hash::Hash};
 use nemo_physical::datavalues::DataValue;
 
 use crate::rule_model::{
-    error::{hint::Hint, info::Info, validation_error::ValidationError, ValidationReport},
+    error::{ValidationReport, hint::Hint, info::Info, validation_error::ValidationError},
     origin::Origin,
     pipeline::id::ProgramComponentId,
     substitution::Substitution,
 };
 
 use super::{
+    ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent, IterablePrimitives,
+    IterableVariables, ProgramComponentKind,
     atom::Atom,
     component_iterator, component_iterator_mut,
     literal::Literal,
     term::{
-        primitive::{variable::Variable, Primitive},
         Term,
+        primitive::{Primitive, variable::Variable},
     },
-    ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent, IterablePrimitives,
-    IterableVariables, ProgramComponentKind,
 };
 
 /// Rule

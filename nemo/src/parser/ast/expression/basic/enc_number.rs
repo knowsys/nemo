@@ -5,13 +5,13 @@ use enum_assoc::Assoc;
 use nom::{branch::alt, sequence::preceded};
 
 use crate::parser::{
-    ast::{
-        token::{Token, TokenKind},
-        ProgramAST,
-    },
-    context::{context, ParserContext},
-    span::Span,
     ParserInput, ParserResult,
+    ast::{
+        ProgramAST,
+        token::{Token, TokenKind},
+    },
+    context::{ParserContext, context},
+    span::Span,
 };
 use num::{BigInt, Num};
 
@@ -147,11 +147,11 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
-        ast::{
-            expression::basic::enc_number::{EncodedNumber, EncodedNumberValue},
-            ProgramAST,
-        },
         ParserInput, ParserState,
+        ast::{
+            ProgramAST,
+            expression::basic::enc_number::{EncodedNumber, EncodedNumberValue},
+        },
     };
 
     #[test]

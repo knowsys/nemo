@@ -144,7 +144,7 @@ mod test {
     use std::{cell::UnsafeCell, rc::Rc};
 
     use crate::columnar::{
-        column::{vector::ColumnVector, Column},
+        column::{Column, vector::ColumnVector},
         columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum},
     };
 

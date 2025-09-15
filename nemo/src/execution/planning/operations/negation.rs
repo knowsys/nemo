@@ -5,7 +5,7 @@ use nemo_physical::management::execution_plan::{ExecutionNodeRef, ExecutionPlan}
 
 use crate::{
     chase_model::components::{
-        atom::{variable_atom::VariableAtom, ChaseAtom},
+        atom::{ChaseAtom, variable_atom::VariableAtom},
         filter::ChaseFilter,
     },
     execution::rule_execution::VariableTranslation,

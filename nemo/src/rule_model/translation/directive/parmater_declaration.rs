@@ -3,7 +3,7 @@ use crate::{
     rule_model::{
         components::{
             parameter::ParameterDeclaration,
-            term::{primitive::variable::Variable, Term},
+            term::{Term, primitive::variable::Variable},
         },
         error::translation_error::TranslationError,
         origin::Origin,

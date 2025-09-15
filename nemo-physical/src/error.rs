@@ -122,7 +122,9 @@ pub enum Error {
     #[error("the provided data-structures do not have the same length: {0:?}")]
     PermutationSortLen(Vec<usize>),
     /// Permutation shall be applied to a too small amount of data
-    #[error("permutation data length ({0}) is smaller than the sort_vec length ({1}) + the offset of {2}")]
+    #[error(
+        "permutation data length ({0}) is smaller than the sort_vec length ({1}) + the offset of {2}"
+    )]
     PermutationApplyWrongLen(usize, usize, usize),
     /// Error when giving invalid execution plan to the database instance
     #[error("the given execution plan is invalid.")]

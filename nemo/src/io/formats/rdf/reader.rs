@@ -17,9 +17,9 @@ use oxrdfio::{RdfFormat, RdfParser};
 use crate::io::formats::PROGRESS_NOTIFY_INCREMENT;
 
 use super::{
+    DEFAULT_GRAPH_IRI, RdfVariant,
     error::RdfFormatError,
     value_format::{RdfValueFormat, RdfValueFormats},
-    RdfVariant, DEFAULT_GRAPH_IRI,
 };
 
 /// A [TableProvider] for RDF 1.1 files containing triples.
@@ -372,7 +372,7 @@ impl ByteSized for RdfReader {
 
 #[cfg(test)]
 mod test {
-    use super::{RdfReader, DEFAULT_GRAPH_IRI};
+    use super::{DEFAULT_GRAPH_IRI, RdfReader};
     use std::cell::RefCell;
 
     use nemo_physical::{
@@ -385,7 +385,7 @@ mod test {
     #[cfg(not(miri))]
     use test_log::test;
 
-    use crate::io::formats::rdf::{value_format::RdfValueFormats, RdfVariant};
+    use crate::io::formats::rdf::{RdfVariant, value_format::RdfValueFormats};
 
     #[test]
     fn parse_triples_nt() {

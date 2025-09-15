@@ -3,10 +3,10 @@
 use crate::dictionary::AddResult;
 use crate::dictionary::KNOWN_ID_MARK;
 
-use super::dictionary::Dictionary;
 use super::DictionaryString;
 use super::HashMapDictionary;
 use super::InfixDictionary;
+use super::dictionary::Dictionary;
 
 use lru::LruCache;
 use std::borrow::Borrow;
@@ -376,7 +376,9 @@ impl MetaDictionary {
                                     self.dicts[best_dict_idx].dict.mark_str(string.as_str());
                                 }
                             }
-                            log::info!("Marked {c} older strings of that type, iterating {i} strings overall.");
+                            log::info!(
+                                "Marked {c} older strings of that type, iterating {i} strings overall."
+                            );
                         }
                     }
                 } else {
@@ -455,12 +457,12 @@ impl Dictionary for MetaDictionary {
 
 #[cfg(test)]
 mod test {
+    use crate::dictionary::AddResult;
     use crate::dictionary::old_dictionaries::dictionary::Dictionary;
     use crate::dictionary::old_dictionaries::dictionary_string::LONG_STRING_THRESHOLD;
-    use crate::dictionary::AddResult;
 
-    use super::MetaDictionary;
     use super::DICT_THRESHOLD;
+    use super::MetaDictionary;
 
     /// Pads a string to make it longer than the threshold applied to distinguish blobs.
     fn long_string(s: &str) -> String {

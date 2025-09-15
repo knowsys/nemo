@@ -3,14 +3,14 @@
 use nom::{branch::alt, combinator::map, multi::many0};
 
 use crate::parser::{
+    ParserResult,
     ast::{
+        ProgramAST,
         comment::{closed::ClosedComment, line::LineComment},
         token::Token,
-        ProgramAST,
     },
     input::ParserInput,
     span::Span,
-    ParserResult,
 };
 
 /// Type of comment that can appear in any "whit-space position"
@@ -71,7 +71,7 @@ impl<'a> WSoC<'a> {
 mod test {
     use nom::combinator::all_consuming;
 
-    use crate::parser::{ast::comment::wsoc::WSoC, input::ParserInput, ParserState};
+    use crate::parser::{ParserState, ast::comment::wsoc::WSoC, input::ParserInput};
 
     #[test]
     fn parse_wsoc() {

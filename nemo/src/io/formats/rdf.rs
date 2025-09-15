@@ -30,8 +30,8 @@ use crate::{
     io::{
         compression_format::CompressionFormat,
         format_builder::{
-            format_parameter, format_tag, value_type_matches, AnyImportExportBuilder,
-            FormatParameter, Parameters, StandardParameter,
+            AnyImportExportBuilder, FormatParameter, Parameters, StandardParameter,
+            format_parameter, format_tag, value_type_matches,
         },
     },
     rule_model::{

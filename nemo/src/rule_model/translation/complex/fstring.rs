@@ -3,8 +3,8 @@ use crate::{
     parser::ast::{self},
     rule_model::{
         components::term::{
-            operation::{operation_kind::OperationKind, Operation},
             Term,
+            operation::{Operation, operation_kind::OperationKind},
         },
         origin::Origin,
         translation::TranslationComponent,

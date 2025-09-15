@@ -17,12 +17,12 @@ use crate::{
     },
     execution::{rule_execution::VariableTranslation, tracing::error::TracingError},
     rule_model::components::{
+        IterableVariables,
         tag::Tag,
         term::{
             operation::operation_kind::OperationKind,
-            primitive::{variable::Variable, Primitive},
+            primitive::{Primitive, variable::Variable},
         },
-        IterableVariables,
     },
     table_manager::{SubtableExecutionPlan, SubtableIdentifier, TableManager},
 };

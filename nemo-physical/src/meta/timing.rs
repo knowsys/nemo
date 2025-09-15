@@ -1,6 +1,6 @@
 //! Code for timing blocks of code
 
-use ascii_tree::{write_tree, Tree};
+use ascii_tree::{Tree, write_tree};
 #[cfg(not(target_family = "wasm"))]
 use cpu_time::ProcessTime;
 #[cfg(all(not(test), not(target_family = "wasm")))]

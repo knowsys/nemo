@@ -5,11 +5,11 @@
 use std::fmt::Debug;
 
 use crate::{
-    columnar::column::{vector::ColumnVector, Column, ColumnEnum},
+    columnar::column::{Column, ColumnEnum, vector::ColumnVector},
     datatypes::{ColumnDataType, RunLengthEncodable},
 };
 
-use super::{rle::ColumnBuilderRle, ColumnBuilder};
+use super::{ColumnBuilder, rle::ColumnBuilderRle};
 
 /// Number of rle elements in rle column builder after which to decide which column type to use.
 #[derive(Copy, Clone, Debug, PartialEq)]

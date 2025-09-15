@@ -2,16 +2,16 @@
 
 #[cfg(test)]
 mod test {
-    use rand::{thread_rng, Rng};
+    use rand::{Rng, thread_rng};
 
     use crate::{
-        benches::test::{black_box, Bencher},
+        benches::test::{Bencher, black_box},
         columnar::{
             column::vector::{ColumnScanVector, ColumnVector},
             columnscan::{ColumnScanEnum, ColumnScanT},
             operations::constant::ColumnScanConstant,
         },
-        datatypes::{storage_type_name::NUM_STORAGETYPES, StorageTypeName, StorageValueT},
+        datatypes::{StorageTypeName, StorageValueT, storage_type_name::NUM_STORAGETYPES},
     };
 
     fn vector() -> Vec<u64> {

@@ -6,7 +6,7 @@ use std::{
     hash::Hash,
 };
 
-use crate::datatypes::{storage_type_name::StorageTypeBitSet, StorageTypeName};
+use crate::datatypes::{StorageTypeName, storage_type_name::StorageTypeBitSet};
 
 use super::{AnyDataValue, IriDataValue, NullDataValue};
 
@@ -98,12 +98,16 @@ impl ValueDomain {
     pub(crate) fn type_iri(&self) -> String {
         match self {
             ValueDomain::PlainString => "http://www.w3.org/2001/XMLSchema#string".to_string(),
-            ValueDomain::LanguageTaggedString => "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString".to_string(),
+            ValueDomain::LanguageTaggedString => {
+                "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString".to_string()
+            }
             ValueDomain::Iri => "http://www.w3.org/2001/XMLSchema#anyURI".to_string(),
             ValueDomain::Float => "http://www.w3.org/2001/XMLSchema#float".to_string(),
             ValueDomain::Double => "http://www.w3.org/2001/XMLSchema#double".to_string(),
             // We prefer long and int for integer types where possible, since they are most widely supported:
-            ValueDomain::UnsignedLong => "http://www.w3.org/2001/XMLSchema#unsignedLong".to_string(),
+            ValueDomain::UnsignedLong => {
+                "http://www.w3.org/2001/XMLSchema#unsignedLong".to_string()
+            }
             ValueDomain::Long => "http://www.w3.org/2001/XMLSchema#long".to_string(),
             ValueDomain::NonNegativeLong => "http://www.w3.org/2001/XMLSchema#long".to_string(),
             ValueDomain::UnsignedInt => "http://www.w3.org/2001/XMLSchema#long".to_string(),
@@ -114,9 +118,13 @@ impl ValueDomain {
             // Maps have no type in RDF
             ValueDomain::Map => "nemo:map".to_string(),
             // Other literals cannot have a fixed canonical type by definition
-            ValueDomain::Other => panic!("There is no canonical datatype for {self:?}. Use the type of the value directly."),
+            ValueDomain::Other => panic!(
+                "There is no canonical datatype for {self:?}. Use the type of the value directly."
+            ),
             ValueDomain::Boolean => "http://www.w3.org/2001/XMLSchema#boolean".to_string(),
-            ValueDomain::Null => panic!("There is no canonical datatype for {self:?} defined in Nemo yet. Nulls can be serialized as blank nodes."),
+            ValueDomain::Null => panic!(
+                "There is no canonical datatype for {self:?} defined in Nemo yet. Nulls can be serialized as blank nodes."
+            ),
         }
     }
 

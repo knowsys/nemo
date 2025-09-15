@@ -10,8 +10,8 @@ use crate::{
     parser::ast::{self},
     rule_model::{
         components::{
-            term::{value_type::ValueType, Term},
             ComponentBehavior, ProgramComponentKind,
+            term::{Term, value_type::ValueType},
         },
         error::{hint::Hint, info::Info, translation_error::TranslationError},
     },

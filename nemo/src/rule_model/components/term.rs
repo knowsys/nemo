@@ -25,9 +25,9 @@ use map::Map;
 use nemo_physical::datavalues::AnyDataValue;
 use operation::Operation;
 use primitive::{
-    ground::GroundTerm,
-    variable::{existential::ExistentialVariable, universal::UniversalVariable, Variable},
     Primitive,
+    ground::GroundTerm,
+    variable::{Variable, existential::ExistentialVariable, universal::UniversalVariable},
 };
 use tuple::Tuple;
 use value_type::ValueType;
@@ -37,9 +37,8 @@ use crate::rule_model::{
 };
 
 use super::{
-    import_export::io_type::IOType, ComponentBehavior, ComponentIdentity, ComponentSource,
-    IterableComponent, IterablePrimitives, IterableVariables, ProgramComponent,
-    ProgramComponentKind,
+    ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent, IterablePrimitives,
+    IterableVariables, ProgramComponent, ProgramComponentKind, import_export::io_type::IOType,
 };
 
 /// Term

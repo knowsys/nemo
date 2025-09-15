@@ -14,11 +14,11 @@ use strum_macros::EnumIter;
 use crate::{
     rule_model::{
         components::{
-            component_iterator, component_iterator_mut, ComponentBehavior, ComponentIdentity,
-            ComponentSource, IterableComponent, IterablePrimitives, IterableVariables,
-            ProgramComponent, ProgramComponentKind,
+            ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent,
+            IterablePrimitives, IterableVariables, ProgramComponent, ProgramComponentKind,
+            component_iterator, component_iterator_mut,
         },
-        error::{info::Info, validation_error::ValidationError, ValidationReport},
+        error::{ValidationReport, info::Info, validation_error::ValidationError},
         origin::Origin,
         pipeline::id::ProgramComponentId,
     },
@@ -26,9 +26,9 @@ use crate::{
 };
 
 use super::{
-    primitive::{variable::Variable, Primitive},
-    value_type::ValueType,
     Term,
+    primitive::{Primitive, variable::Variable},
+    value_type::ValueType,
 };
 
 /// Aggregate operation on logical values
@@ -413,7 +413,7 @@ impl IterablePrimitives for Aggregate {
 #[cfg(test)]
 mod test {
     use crate::rule_model::{
-        components::term::{aggregate::AggregateKind, primitive::variable::Variable, Term},
+        components::term::{Term, aggregate::AggregateKind, primitive::variable::Variable},
         translation::TranslationComponent,
     };
 

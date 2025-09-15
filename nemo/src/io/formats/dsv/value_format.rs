@@ -6,7 +6,7 @@ use enum_assoc::Assoc;
 use nemo_physical::datavalues::{AnyDataValue, DataValue, DataValueCreationError};
 
 use crate::{
-    parser::{ast::token::Token, input::ParserInput, ParserState},
+    parser::{ParserState, ast::token::Token, input::ParserInput},
     syntax::directive::value_formats,
 };
 

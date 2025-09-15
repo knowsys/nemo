@@ -3,7 +3,7 @@
 use std::cmp::Ordering;
 
 use crate::datatypes::{
-    storage_type_name::NUM_STORAGETYPES, Double, Float, StorageTypeName, StorageValueT,
+    Double, Float, StorageTypeName, StorageValueT, storage_type_name::NUM_STORAGETYPES,
 };
 
 use super::sorted_tuple_buffer::SortedTupleBuffer;

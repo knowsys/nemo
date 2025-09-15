@@ -4,13 +4,13 @@ use std::fmt::Display;
 
 use crate::{
     rule_model::components::{
+        IterableVariables,
         atom::Atom,
         tag::Tag,
         term::{
-            primitive::{variable::Variable, Primitive},
             Term,
+            primitive::{Primitive, variable::Variable},
         },
-        IterableVariables,
     },
     syntax,
     util::seperated_list::DisplaySeperatedList,

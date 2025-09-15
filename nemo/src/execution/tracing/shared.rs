@@ -141,7 +141,7 @@ pub struct PaginationResponse {
 // Serialization for any datavalues
 mod any_datavalue_serde {
     use nemo_physical::datavalues::AnyDataValue;
-    use serde::{ser::SerializeSeq, Deserialize, Deserializer, Serializer};
+    use serde::{Deserialize, Deserializer, Serializer, ser::SerializeSeq};
 
     use crate::rule_model::components::term::primitive::ground::GroundTerm;
 

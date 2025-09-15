@@ -53,7 +53,7 @@ where
     /// Constructs a new [ColumnRle] from a vector of the suitable type.
     #[cfg(test)]
     pub(crate) fn new(data: Vec<T>) -> ColumnRle<T> {
-        use crate::columnar::columnbuilder::{rle::ColumnBuilderRle, ColumnBuilder};
+        use crate::columnar::columnbuilder::{ColumnBuilder, rle::ColumnBuilderRle};
 
         let mut builder = ColumnBuilderRle::new();
         for value in data {

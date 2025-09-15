@@ -2,8 +2,8 @@ use crate::{
     parser::ast::{self},
     rule_model::{
         components::term::{
-            aggregate::Aggregate, function::FunctionTerm, map::Map, primitive::variable::Variable,
-            tuple::Tuple, Term,
+            Term, aggregate::Aggregate, function::FunctionTerm, map::Map,
+            primitive::variable::Variable, tuple::Tuple,
         },
         error::translation_error::TranslationError,
         origin::Origin,
@@ -11,6 +11,7 @@ use crate::{
 };
 
 use super::{
+    ASTProgramTranslation, TranslationComponent,
     basic::{
         blank::BlankLiteral, boolean::BooleanLiteral, constant::ConstantLiteral,
         enc_number::EncodedNumberLiteral, number::NumberLiteral, rdf::RdfLiteral,
@@ -20,7 +21,6 @@ use super::{
         arithmetic::ArithmeticOperation, fstring::FormatStringLiteral,
         operation::FunctionLikeOperation,
     },
-    ASTProgramTranslation, TranslationComponent,
 };
 
 impl TranslationComponent for Term {

@@ -24,9 +24,9 @@
 use std::{fs::read_to_string, path::PathBuf};
 
 use crate::{
-    error::{report::ProgramReport, Error, ReadingError},
+    error::{Error, ReadingError, report::ProgramReport},
     execution::{
-        execution_parameters::ExecutionParameters, DefaultExecutionEngine, ExecutionEngine,
+        DefaultExecutionEngine, ExecutionEngine, execution_parameters::ExecutionParameters,
     },
     rule_file::RuleFile,
     rule_model::{

@@ -9,14 +9,14 @@ use crate::{
         rule::ChaseRule,
     },
     rule_model::components::{
+        IterableVariables,
         atom::Atom,
         literal::Literal,
         term::{
-            aggregate::Aggregate,
-            primitive::{variable::Variable, Primitive},
             Term,
+            aggregate::Aggregate,
+            primitive::{Primitive, variable::Variable},
         },
-        IterableVariables,
     },
 };
 

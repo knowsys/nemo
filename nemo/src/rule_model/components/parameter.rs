@@ -4,19 +4,18 @@ use std::fmt;
 
 use crate::rule_model::{
     components::{
-        term::primitive::{variable::Variable, Primitive},
         IterablePrimitives, IterableVariables,
+        term::primitive::{Primitive, variable::Variable},
     },
-    error::{validation_error::ValidationError, ValidationReport},
+    error::{ValidationReport, validation_error::ValidationError},
     origin::Origin,
     pipeline::id::ProgramComponentId,
 };
 
 use super::{
-    component_iterator, component_iterator_mut,
-    term::{primitive::variable::global::GlobalVariable, Term},
     ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent, ProgramComponent,
-    ProgramComponentKind,
+    ProgramComponentKind, component_iterator, component_iterator_mut,
+    term::{Term, primitive::variable::global::GlobalVariable},
 };
 
 /// Parameter declaration

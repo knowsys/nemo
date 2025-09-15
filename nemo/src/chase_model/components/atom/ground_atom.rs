@@ -6,13 +6,13 @@ use nemo_physical::datavalues::AnyDataValue;
 
 use crate::{
     rule_model::components::{
+        IterableVariables,
         atom::Atom,
         tag::Tag,
         term::{
-            primitive::{ground::GroundTerm, variable::Variable, Primitive},
             Term,
+            primitive::{Primitive, ground::GroundTerm, variable::Variable},
         },
-        IterableVariables,
     },
     syntax,
     util::seperated_list::DisplaySeperatedList,

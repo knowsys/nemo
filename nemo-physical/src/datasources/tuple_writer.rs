@@ -81,7 +81,7 @@ mod test {
         datasources::tuple_writer::TupleWriter,
         datatypes::{Float, StorageValueT},
         datavalues::AnyDataValue,
-        dictionary::{meta_dv_dict::MetaDvDictionary, DvDict},
+        dictionary::{DvDict, meta_dv_dict::MetaDvDictionary},
         management::database::Dict,
     };
 

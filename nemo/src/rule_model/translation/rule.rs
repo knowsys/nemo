@@ -8,14 +8,14 @@ use crate::{
         components::{
             literal::Literal,
             rule::Rule,
-            term::{primitive::Primitive, Term},
+            term::{Term, primitive::Primitive},
         },
         origin::Origin,
     },
 };
 
 use super::{
-    attribute::KnownAttributes, literal::HeadAtom, ASTProgramTranslation, TranslationComponent,
+    ASTProgramTranslation, TranslationComponent, attribute::KnownAttributes, literal::HeadAtom,
 };
 
 impl Rule {

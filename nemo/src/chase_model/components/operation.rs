@@ -1,8 +1,8 @@
 //! This module defines [ChaseOperation].
 
 use crate::rule_model::components::{
-    term::primitive::{variable::Variable, Primitive},
     IterablePrimitives, IterableVariables,
+    term::primitive::{Primitive, variable::Variable},
 };
 
 use super::term::operation_term::OperationTerm;

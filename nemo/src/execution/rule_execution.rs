@@ -8,16 +8,16 @@ use crate::{
         components::rule::ChaseRule,
     },
     error::Error,
-    rule_model::components::{tag::Tag, term::primitive::variable::Variable, IterableVariables},
+    rule_model::components::{IterableVariables, tag::Tag, term::primitive::variable::Variable},
     table_manager::{SubtableExecutionPlan, TableManager},
 };
 
 use super::{
     execution_engine::RuleInfo,
     planning::{
-        plan_aggregate::AggregateStategy, plan_body_seminaive::SeminaiveStrategy,
-        plan_head_datalog::DatalogStrategy, plan_head_restricted::RestrictedChaseStrategy,
-        BodyStrategy, HeadStrategy,
+        BodyStrategy, HeadStrategy, plan_aggregate::AggregateStategy,
+        plan_body_seminaive::SeminaiveStrategy, plan_head_datalog::DatalogStrategy,
+        plan_head_restricted::RestrictedChaseStrategy,
     },
 };
 

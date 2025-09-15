@@ -2,7 +2,7 @@
 
 use std::{
     cell::{RefCell, UnsafeCell},
-    collections::{hash_map::Entry, HashMap, HashSet},
+    collections::{HashMap, HashSet, hash_map::Entry},
     rc::Rc,
 };
 
@@ -15,8 +15,8 @@ use crate::{
         },
     },
     datatypes::{
-        into_datavalue::IntoDataValue, storage_type_name::StorageTypeBitSet, StorageTypeName,
-        StorageValueT,
+        StorageTypeName, StorageValueT, into_datavalue::IntoDataValue,
+        storage_type_name::StorageTypeBitSet,
     },
     datavalues::AnyDataValue,
     function::{

@@ -6,6 +6,7 @@ use crate::datavalues::AnyDataValue;
 
 use super::{
     definitions::{
+        BinaryFunctionEnum, NaryFunctionEnum, TernaryFunctionEnum, UnaryFunctionEnum,
         boolean::{BooleanConjunction, BooleanDisjunction, BooleanNegation},
         casting::{CastingIntoDouble, CastingIntoFloat, CastingIntoInteger64, CastingIntoIri},
         checktype::{
@@ -29,7 +30,6 @@ use super::{
             StringReverse, StringStarts, StringSubstring, StringSubstringLength, StringUppercase,
             StringUriDecode, StringUriEncode,
         },
-        BinaryFunctionEnum, NaryFunctionEnum, TernaryFunctionEnum, UnaryFunctionEnum,
     },
     evaluation::StackProgram,
 };

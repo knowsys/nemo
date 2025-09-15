@@ -1,12 +1,12 @@
 //! This module defines types of nemo programs and common traits.
 
-use std::collections::{hash_map::Entry, HashMap, HashSet};
+use std::collections::{HashMap, HashSet, hash_map::Entry};
 
 use crate::rule_model::{components::statement::Statement, error::info::Info};
 
 use super::{
     components::{
-        component_iterator,
+        IterableVariables, ProgramComponent, component_iterator,
         fact::Fact,
         import_export::{ExportDirective, ImportDirective},
         literal::Literal,
@@ -14,10 +14,9 @@ use super::{
         parameter::ParameterDeclaration,
         rule::Rule,
         tag::Tag,
-        term::primitive::variable::{global::GlobalVariable, Variable},
-        IterableVariables, ProgramComponent,
+        term::primitive::variable::{Variable, global::GlobalVariable},
     },
-    error::{validation_error::ValidationError, ValidationReport},
+    error::{ValidationReport, validation_error::ValidationError},
 };
 
 pub mod handle;

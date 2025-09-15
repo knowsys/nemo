@@ -2,7 +2,7 @@
 
 use crate::dictionary::{AddResult, StringDictionary};
 
-use super::{dictionary::Dictionary, DictionaryString};
+use super::{DictionaryString, dictionary::Dictionary};
 
 /// A read-only, hashmap-based [Dictionary] to implement a bijection between strings and integers.  
 /// Strings are stored in a compact buffer to reduce memory overhead and fragmentation.
@@ -54,7 +54,7 @@ impl Dictionary for HashMapDictionary {
 
 #[cfg(test)]
 mod test {
-    use crate::dictionary::{old_dictionaries::dictionary::Dictionary, AddResult};
+    use crate::dictionary::{AddResult, old_dictionaries::dictionary::Dictionary};
 
     use super::HashMapDictionary;
 

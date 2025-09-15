@@ -5,11 +5,11 @@ use std::fmt::Display;
 use nom::{branch::alt, combinator::map, sequence::separated_pair};
 
 use crate::parser::{
-    ast::{expression::basic::iri::Iri, token::Token, ProgramAST},
-    context::{context, ParserContext},
+    ParserResult,
+    ast::{ProgramAST, expression::basic::iri::Iri, token::Token},
+    context::{ParserContext, context},
     input::ParserInput,
     span::Span,
-    ParserResult,
 };
 
 /// Types of [StructureTag]s
@@ -115,9 +115,9 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
-        ast::{tag::structure::StructureTag, ProgramAST},
-        input::ParserInput,
         ParserState,
+        ast::{ProgramAST, tag::structure::StructureTag},
+        input::ParserInput,
     };
 
     #[test]

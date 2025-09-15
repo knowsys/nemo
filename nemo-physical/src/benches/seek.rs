@@ -6,9 +6,9 @@ mod test {
     use rand_pcg::Pcg64;
 
     use crate::{
-        benches::test::{black_box, Bencher},
+        benches::test::{Bencher, black_box},
         columnar::{
-            column::{rle::ColumnRle, vector::ColumnVector, Column},
+            column::{Column, rle::ColumnRle, vector::ColumnVector},
             columnscan::ColumnScan,
         },
     };

@@ -11,12 +11,12 @@ use crate::{
         processors::processor::{AggregateGroupProcessor, AggregateProcessor},
     },
     columnar::columnscan::ColumnScanT,
-    datatypes::{storage_type_name::StorageTypeBitSet, StorageTypeName, StorageValueT},
+    datatypes::{StorageTypeName, StorageValueT, storage_type_name::StorageTypeBitSet},
     management::database::Dict,
     tabular::triescan::{PartialTrieScan, TrieScan, TrieScanEnum},
 };
 
-use super::{prune::TrieScanPrune, OperationColumnMarker, OperationGenerator, OperationTable};
+use super::{OperationColumnMarker, OperationGenerator, OperationTable, prune::TrieScanPrune};
 
 /// Holds information on how to perform an aggregation, e.g. column markers and the type of aggregation.
 #[derive(Debug, Clone)]

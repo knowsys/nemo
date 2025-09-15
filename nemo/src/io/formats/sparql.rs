@@ -11,8 +11,8 @@ use oxiri::Iri;
 
 use crate::{
     io::format_builder::{
-        format_parameter, format_tag, value_type_matches, AnyImportExportBuilder, FormatParameter,
-        Parameters, StandardParameter,
+        AnyImportExportBuilder, FormatParameter, Parameters, StandardParameter, format_parameter,
+        format_tag, value_type_matches,
     },
     rule_model::{
         components::{import_export::Direction, term::value_type::ValueType},
@@ -23,7 +23,7 @@ use crate::{
 
 use super::{ExportHandler, FormatBuilder, ImportHandler};
 
-use crate::io::formats::dsv::{value_format::DsvValueFormats, DsvHandler};
+use crate::io::formats::dsv::{DsvHandler, value_format::DsvValueFormats};
 
 /// A char limit to decide if a query is send as GET or POST request
 const HTTP_GET_CHAR_LIMIT: usize = 2000;
@@ -185,9 +185,9 @@ impl FormatBuilder for SparqlBuilder {
 #[cfg(test)]
 mod test {
     use crate::parser::{
-        ast::{directive::import::Import, ProgramAST},
-        input::ParserInput,
         ParserState,
+        ast::{ProgramAST, directive::import::Import},
+        input::ParserInput,
     };
     use nom::combinator::all_consuming;
 

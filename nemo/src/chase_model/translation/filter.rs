@@ -7,7 +7,7 @@ use crate::{
     },
     rule_model::components::term::{
         operation::operation_kind::OperationKind,
-        primitive::{variable::Variable, Primitive},
+        primitive::{Primitive, variable::Variable},
     },
 };
 

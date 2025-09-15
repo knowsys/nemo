@@ -14,20 +14,20 @@ use crate::{
     },
     rule_model::{
         components::{
-            component_iterator, component_iterator_mut, ComponentBehavior, ComponentIdentity,
-            ComponentSource, IterableComponent, IterablePrimitives, IterableVariables,
-            ProgramComponent, ProgramComponentKind,
+            ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent,
+            IterablePrimitives, IterableVariables, ProgramComponent, ProgramComponentKind,
+            component_iterator, component_iterator_mut,
         },
-        error::{validation_error::ValidationError, ValidationReport},
+        error::{ValidationReport, validation_error::ValidationError},
         origin::Origin,
         pipeline::id::ProgramComponentId,
     },
 };
 
 use super::{
-    primitive::{ground::GroundTerm, variable::Variable, Primitive},
-    value_type::ValueType,
     Term,
+    primitive::{Primitive, ground::GroundTerm, variable::Variable},
+    value_type::ValueType,
 };
 
 /// Operation
@@ -380,8 +380,8 @@ impl IterablePrimitives for Operation {
 mod test {
     use crate::rule_model::{
         components::{
-            term::{operation::operation_kind::OperationKind, Term},
             ComponentBehavior,
+            term::{Term, operation::operation_kind::OperationKind},
         },
         translation::TranslationComponent,
     };

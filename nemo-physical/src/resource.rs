@@ -494,15 +494,21 @@ mod test {
         let mut builder =
             ResourceBuilder::try_from(String::from("file:///directory/file.extension#fragment"))
                 .expect("Path is valid");
-        assert!(builder
-            .add_get_parameter(String::from("query"), String::from("Select"))
-            .is_err());
-        assert!(builder
-            .add_post_parameter(String::from("query"), String::from("Select"))
-            .is_err());
-        assert!(builder
-            .add_header(String::from("query"), String::from("Select"))
-            .is_err());
+        assert!(
+            builder
+                .add_get_parameter(String::from("query"), String::from("Select"))
+                .is_err()
+        );
+        assert!(
+            builder
+                .add_post_parameter(String::from("query"), String::from("Select"))
+                .is_err()
+        );
+        assert!(
+            builder
+                .add_header(String::from("query"), String::from("Select"))
+                .is_err()
+        );
         assert!(builder.set_fragment(String::from("fragment")).is_err());
 
         assert!(

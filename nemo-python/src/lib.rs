@@ -5,15 +5,15 @@ use nemo::{
     chase_model::ChaseAtom,
     datavalues::{AnyDataValue, DataValue},
     error::Error,
-    execution::{tracing::trace::ExecutionTraceTree, ExecutionEngine},
-    io::{resource_providers::ResourceProviders, ExportManager, ImportManager},
+    execution::{ExecutionEngine, tracing::trace::ExecutionTraceTree},
+    io::{ExportManager, ImportManager, resource_providers::ResourceProviders},
     meta::timing::TimedCode,
     rule_model::{
         components::{
+            ComponentBehavior,
             fact::Fact,
             tag::Tag,
-            term::{primitive::Primitive, Term},
-            ComponentBehavior,
+            term::{Term, primitive::Primitive},
         },
         programs::ProgramRead,
         substitution::Substitution,
@@ -21,7 +21,7 @@ use nemo::{
 };
 
 use pyo3::{
-    create_exception, exceptions::PyNotImplementedError, prelude::*, types::PyDict, IntoPyObjectExt,
+    IntoPyObjectExt, create_exception, exceptions::PyNotImplementedError, prelude::*, types::PyDict,
 };
 
 create_exception!(module, NemoError, pyo3::exceptions::PyException);

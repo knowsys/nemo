@@ -17,11 +17,11 @@ use strum::IntoEnumIterator;
 use crate::{
     rule_model::{
         components::{
-            import_export::{specification::ImportExportSpec, Direction},
-            term::{operation::Operation, primitive::ground::GroundTerm, value_type::ValueType},
             ComponentSource,
+            import_export::{Direction, specification::ImportExportSpec},
+            term::{operation::Operation, primitive::ground::GroundTerm, value_type::ValueType},
         },
-        error::{hint::Hint, info::Info, validation_error::ValidationError, ValidationReport},
+        error::{ValidationReport, hint::Hint, info::Info, validation_error::ValidationError},
         substitution::Substitution,
     },
     syntax::import_export::attribute,
@@ -30,11 +30,11 @@ use crate::{
 use super::{
     compression_format::CompressionFormat,
     formats::{
+        Export, ExportHandler, Import, ImportHandler,
         dsv::{DsvBuilder, DsvTag},
         json::{JsonHandler, JsonTag},
         rdf::{RdfHandler, RdfTag},
         sparql::{SparqlBuilder, SparqlTag},
-        Export, ExportHandler, Import, ImportHandler,
     },
     http_parameters,
 };
@@ -426,11 +426,7 @@ impl<B: FormatBuilder> Parameters<B> {
             has_errors = true;
         }
 
-        if has_errors {
-            None
-        } else {
-            Some(Self(result))
-        }
+        if has_errors { None } else { Some(Self(result)) }
     }
 }
 

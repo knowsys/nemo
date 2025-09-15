@@ -8,8 +8,8 @@ use crate::{
         term::operation_term::{Operation, OperationTerm},
     },
     rule_model::components::term::{
-        primitive::{variable::Variable, Primitive},
         Term,
+        primitive::{Primitive, variable::Variable},
     },
 };
 

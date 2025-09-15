@@ -8,11 +8,11 @@ use nom::{
 };
 
 use crate::parser::{
-    ast::{token::Token, ProgramAST},
-    context::{context, ParserContext},
+    ParserResult,
+    ast::{ProgramAST, token::Token},
+    context::{ParserContext, context},
     input::ParserInput,
     span::Span,
-    ParserResult,
 };
 
 /// Line comment
@@ -76,9 +76,9 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
-        ast::{comment::line::LineComment, ProgramAST},
-        input::ParserInput,
         ParserState,
+        ast::{ProgramAST, comment::line::LineComment},
+        input::ParserInput,
     };
 
     #[test]

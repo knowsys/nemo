@@ -1,6 +1,6 @@
 use std::io::{Read, Write};
 
-use flate2::{read::MultiGzDecoder, write::GzEncoder, Compression};
+use flate2::{Compression, read::MultiGzDecoder, write::GzEncoder};
 use nemo_physical::error::{ReadingError, ReadingErrorKind};
 
 use crate::syntax::import_export::attribute::VALUE_COMPRESSION_GZIP;

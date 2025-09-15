@@ -9,13 +9,13 @@ use nom::{
 };
 
 use crate::parser::{
-    ast::{
-        token::{Token, TokenKind},
-        ProgramAST,
-    },
-    context::{context, ParserContext},
-    span::Span,
     ParserInput, ParserResult,
+    ast::{
+        ProgramAST,
+        token::{Token, TokenKind},
+    },
+    context::{ParserContext, context},
+    span::Span,
 };
 
 /// Marker that indicates the type of a number
@@ -237,8 +237,8 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
-        ast::{expression::basic::number::Number, ProgramAST},
         ParserInput, ParserState,
+        ast::{ProgramAST, expression::basic::number::Number},
     };
 
     #[test]

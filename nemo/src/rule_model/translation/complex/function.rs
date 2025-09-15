@@ -2,8 +2,8 @@
 //! from the corresponding ast node.
 
 use crate::rule_model::components::tag::Tag;
-use crate::rule_model::components::term::function::FunctionTerm;
 use crate::rule_model::components::term::Term;
+use crate::rule_model::components::term::function::FunctionTerm;
 use crate::rule_model::origin::Origin;
 use crate::rule_model::translation::TranslationComponent;
 use crate::{

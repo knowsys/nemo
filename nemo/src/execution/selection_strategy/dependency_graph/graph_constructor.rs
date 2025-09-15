@@ -1,6 +1,6 @@
 //! Trait that defines a dependency graph constructor.
 
-use petgraph::{adj::NodeIndex, Directed, Graph};
+use petgraph::{Directed, Graph, adj::NodeIndex};
 
 use crate::chase_model::{analysis::program_analysis::RuleAnalysis, components::rule::ChaseRule};
 
