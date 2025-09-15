@@ -1,10 +1,10 @@
 //! Module for defining a graph that checks
 //! when the application of a rule might lead to the application of another.
 
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Debug};
 
 use crate::{
-    chase_model::{analysis::program_analysis::RuleAnalysis, components::rule::ChaseRule},
+    execution::selection_strategy::dependency_graph::graph_constructor::PositivePredicateAnalysis,
     rule_model::components::tag::Tag,
 };
 
@@ -15,16 +15,17 @@ use super::graph_constructor::{DependencyGraph, DependencyGraphConstructor};
 #[derive(Debug, Copy, Clone)]
 pub struct GraphConstructorPositive {}
 
-impl DependencyGraphConstructor for GraphConstructorPositive {
-    fn build_graph(rules: Vec<&ChaseRule>, rule_analyses: Vec<&RuleAnalysis>) -> DependencyGraph {
-        debug_assert!(rules.len() == rule_analyses.len());
-        let rule_count = rules.len();
+impl<T: PositivePredicateAnalysis + Debug> DependencyGraphConstructor<T>
+    for GraphConstructorPositive
+{
+    fn build_graph(rule_analyses: &[T]) -> DependencyGraph {
+        let rule_count = rule_analyses.len();
 
         let mut predicate_to_rules_body = HashMap::<Tag, Vec<usize>>::new();
         let mut predicate_to_rules_head = HashMap::<Tag, Vec<usize>>::new();
 
         for (rule_index, rule_analysis) in rule_analyses.iter().enumerate() {
-            for body_predicate in &rule_analysis.positive_body_predicates {
+            for body_predicate in rule_analysis.positive_body_predicates() {
                 let indices = predicate_to_rules_body
                     .entry(body_predicate.clone())
                     .or_default();
@@ -32,7 +33,7 @@ impl DependencyGraphConstructor for GraphConstructorPositive {
                 indices.push(rule_index);
             }
 
-            for head_predicate in &rule_analysis.head_predicates {
+            for head_predicate in rule_analysis.head_predicates() {
                 let indices = predicate_to_rules_head
                     .entry(head_predicate.clone())
                     .or_default();

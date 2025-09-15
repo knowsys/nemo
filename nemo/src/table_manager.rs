@@ -3,6 +3,7 @@
 use crate::{error::Error, rule_model::components::tag::Tag};
 
 use nemo_physical::{
+    datatypes::StorageValueT,
     datavalues::any_datavalue::AnyDataValue,
     management::{
         bytesized::ByteSized,
@@ -374,6 +375,13 @@ impl TableManager {
         Ok(self.database.table_row_iterator(id)?)
     }
 
+    pub(crate) fn table_raw_row_iterator(
+        &mut self,
+        id: PermanentTableId,
+    ) -> Result<impl Iterator<Item = Vec<StorageValueT>> + '_, Error> {
+        Ok(self.database.table_raw_row_iterator(id)?)
+    }
+
     /// Combine all subtables of a predicate into one table
     /// and return the [PermanentTableId] of that new table.
     pub(crate) fn combine_predicate(
@@ -473,7 +481,7 @@ impl TableManager {
     /// Add a [Trie] as a subtable of a predicate.
     /// Predicate must be registered before calling this function.
     #[allow(dead_code)]
-    fn add_table(&mut self, predicate: Tag, step: usize, order: ColumnOrder, trie: Trie) {
+    pub fn add_table(&mut self, predicate: Tag, step: usize, order: ColumnOrder, trie: Trie) {
         let name = self.generate_table_name(&predicate, &order, step);
 
         let table_id = self.database.register_add_trie(&name, order, trie);
@@ -652,6 +660,10 @@ impl TableManager {
     ) -> Option<Vec<AnyDataValue>> {
         self.database
             .execute_first_match(subtable_plan.execution_plan)
+    }
+
+    pub fn known_predicates(&self) -> impl Iterator<Item = &Tag> {
+        self.predicate_subtables.keys()
     }
 }
 

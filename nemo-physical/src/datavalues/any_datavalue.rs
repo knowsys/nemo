@@ -515,7 +515,7 @@ impl AnyDataValue {
     /// The correct process in this case is to use the dictionary to create any null value on which this
     /// method will later be called. It is not possible to newly create a dictionary id for an arbitrary
     /// null value (in such a way that the same ID will be returned if an equal null value is converted).
-    pub(crate) fn to_storage_value_t_dict(&self, dictionary: &mut Dict) -> StorageValueT {
+    pub fn to_storage_value_t_dict(&self, dictionary: &mut Dict) -> StorageValueT {
         match self.value_domain() {
             ValueDomain::Tuple
             | ValueDomain::Map

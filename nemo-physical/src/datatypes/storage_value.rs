@@ -12,7 +12,7 @@ use super::{double::Double, float::Float, into_datavalue::IntoDataValue, Storage
 /// Ord and PartialOrd assume U32 < U64 < I64 < Float < Double.
 /// More information at <https://doc.rust-lang.org/std/cmp/trait.PartialOrd.html#derivable>
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Ord, PartialOrd)]
-pub(crate) enum StorageValueT {
+pub enum StorageValueT {
     /// A value of type [StorageTypeName::Id32]. Such values always refer to an entry in a
     /// dictionary, rather than to the literal numerical integer value.
     Id32(u32),

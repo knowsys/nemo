@@ -18,6 +18,7 @@ use std::{
 
 use crate::{
     datasources::table_providers::TableProvider,
+    datatypes::StorageValueT,
     datavalues::AnyDataValue,
     error::Error,
     management::{bytesized::ByteSized, database::execution_series::ExecutionTreeNode},
@@ -132,6 +133,26 @@ impl DatabaseInstance {
         self.reference_manager.count_rows_in_memory(id)
     }
 
+    /// Provide an iterator over the rows of the table with the given [PermanentTableId]
+    /// which directly yields rows of [`StorageValueT`], without translation through a
+    /// dictionary.
+    ///
+    /// # Panics
+    /// Panics if the given id does not exist.
+    pub fn table_raw_row_iterator(
+        &mut self,
+        id: PermanentTableId,
+    ) -> Result<impl Iterator<Item = Vec<StorageValueT>> + '_, Error> {
+        // Make sure trie is loaded
+        let storage_id = self
+            .reference_manager
+            .trie_id(&self.dictionary, id, ColumnOrder::default())
+            .unwrap_or_else(|err| panic!("No table with the id {id} exists: {err}"));
+        let trie = self.reference_manager.trie(storage_id);
+
+        Ok(trie.row_iterator())
+    }
+
     /// Provide an iterator over the rows of the table with the given [PermanentTableId].
     ///
     /// # Panics
@@ -140,7 +161,6 @@ impl DatabaseInstance {
         &mut self,
         id: PermanentTableId,
     ) -> Result<impl Iterator<Item = Vec<AnyDataValue>> + '_, Error> {
-        // Make sure trie is loaded
         let storage_id = self
             .reference_manager
             .trie_id(&self.dictionary, id, ColumnOrder::default())

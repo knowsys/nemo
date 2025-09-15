@@ -9,8 +9,10 @@ use super::{
 
 /// Origin of a [super::components::ProgramComponent]
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub enum Origin {
     /// Component has no special origin
+    #[default]
     Created,
     /// Component was created by parsing a file
     File {
@@ -37,11 +39,6 @@ pub enum Origin {
     },
 }
 
-impl Default for Origin {
-    fn default() -> Self {
-        Self::Created
-    }
-}
 
 impl Origin {
     /// Create an Oriign pointing to character range represented

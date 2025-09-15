@@ -1,6 +1,6 @@
 //! Defines the execution strategy by which each rule is applied in the order it appears.
 
-use crate::chase_model::{analysis::program_analysis::RuleAnalysis, components::rule::ChaseRule};
+use crate::chase_model::analysis::program_analysis::RuleAnalysis;
 
 use super::strategy::{RuleSelectionStrategy, SelectionStrategyError};
 
@@ -21,10 +21,7 @@ pub struct StrategyRoundRobin {
 
 impl RuleSelectionStrategy for StrategyRoundRobin {
     /// Create new [StrategyRoundRobin].
-    fn new(
-        _rules: Vec<&ChaseRule>,
-        rule_analyses: Vec<&RuleAnalysis>,
-    ) -> Result<Self, SelectionStrategyError> {
+    fn new(rule_analyses: Vec<&RuleAnalysis>) -> Result<Self, SelectionStrategyError> {
         let self_recursive = rule_analyses.iter().map(|a| a.is_recursive).collect();
 
         Ok(Self {

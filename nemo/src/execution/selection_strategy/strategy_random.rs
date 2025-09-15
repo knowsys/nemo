@@ -4,7 +4,7 @@ use std::collections::HashSet;
 
 use rand::Rng;
 
-use crate::chase_model::{analysis::program_analysis::RuleAnalysis, components::rule::ChaseRule};
+use crate::chase_model::analysis::program_analysis::RuleAnalysis;
 
 use super::strategy::{RuleSelectionStrategy, SelectionStrategyError};
 
@@ -20,10 +20,7 @@ pub struct StrategyRandom {
 
 impl RuleSelectionStrategy for StrategyRandom {
     /// Create new [StrategyRandom].
-    fn new(
-        _rules: Vec<&ChaseRule>,
-        rule_analyses: Vec<&RuleAnalysis>,
-    ) -> Result<Self, SelectionStrategyError> {
+    fn new(rule_analyses: Vec<&RuleAnalysis>) -> Result<Self, SelectionStrategyError> {
         Ok(Self {
             rule_count: rule_analyses.len(),
             no_derivations: HashSet::new(),

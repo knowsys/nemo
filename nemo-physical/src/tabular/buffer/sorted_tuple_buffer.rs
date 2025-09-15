@@ -8,7 +8,7 @@ use super::tuple_buffer::TupleBuffer;
 
 /// Read-only wrapper for [TupleBuffer] which allows the retrieval of its tuples in a sorted manner
 #[derive(Debug)]
-pub(crate) struct SortedTupleBuffer {
+pub struct SortedTupleBuffer {
     /// Underlying [TupleBuffer] containing the actual values
     tuple_buffer: TupleBuffer,
     /// We imagine the tuple of the `tuple_buffer` to be arranged one after another in the order of its subtables.
