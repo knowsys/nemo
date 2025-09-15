@@ -6,7 +6,6 @@ use crate::{
     chase_model::components::{
         atom::{primitive_atom::PrimitiveAtom, variable_atom::VariableAtom},
         filter::ChaseFilter,
-        operation::ChaseOperation,
         rule::ChaseRule,
     },
     rule_model::components::{
@@ -69,10 +68,10 @@ impl ProgramChaseTranslation {
         }
 
         // Handle operations
-        self.handle_operations(&mut result, &rule);
+        let derived_variables = self.handle_operations(&mut result, &rule);
 
         // Handle head
-        self.handle_head(&mut result, rule.head());
+        self.handle_head(&mut result, rule.head(), &derived_variables);
 
         // Handle imports
         for import in rule.imports() {
@@ -199,7 +198,7 @@ impl ProgramChaseTranslation {
         &mut self,
         result: &mut ChaseRule,
         rule: &crate::rule_model::components::rule::Rule,
-    ) {
+    ) -> HashSet<Variable> {
         let mut derived_variables = rule.positive_variables();
         let mut handled_literals = HashSet::new();
 
@@ -270,11 +269,21 @@ impl ProgramChaseTranslation {
                 }
             }
         }
+
+        derived_variables
+            .into_iter()
+            .cloned()
+            .collect::<HashSet<_>>()
     }
 
     /// Translates each head atom into the [PrimitiveAtom],
     /// while taking care of operations and aggregates.
-    fn handle_head(&mut self, result: &mut ChaseRule, head: &[Atom]) {
+    fn handle_head(
+        &mut self,
+        result: &mut ChaseRule,
+        head: &[Atom],
+        derived_variales: &HashSet<Variable>,
+    ) {
         for (head_index, atom) in head.iter().enumerate() {
             let predicate = atom.predicate().clone();
             let mut terms = Vec::new();
@@ -309,7 +318,15 @@ impl ProgramChaseTranslation {
                                 Some((operation_aggregate, argument_index, operation_variables));
                             result.add_aggregation_operation(new_operation);
                         } else {
-                            result.add_positive_operation(new_operation)
+                            if new_operation
+                                .operation()
+                                .variables()
+                                .all(|variable| derived_variales.contains(variable))
+                            {
+                                result.add_positive_operation(new_operation)
+                            } else {
+                                result.add_import_operation(new_operation);
+                            }
                         }
 
                         terms.push(Primitive::Variable(new_variable));
