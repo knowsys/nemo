@@ -151,9 +151,7 @@ impl ExecutionTrace {
             status: TraceStatus::Unknown,
         };
 
-        self.facts
-            .get_index_of(&traced_fact)
-            .map(TraceFactHandle)
+        self.facts.get_index_of(&traced_fact).map(TraceFactHandle)
     }
 
     /// Registers a new [GroundAtom].

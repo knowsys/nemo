@@ -124,9 +124,10 @@ impl<'a> Number<'a> {
         }
 
         if let Some(NumberTypeMarker::Float) = self.type_marker
-            && let Ok(float) = str::parse::<f32>(&string) {
-                return NumberValue::Float(float);
-            }
+            && let Ok(float) = str::parse::<f32>(&string)
+        {
+            return NumberValue::Float(float);
+        }
 
         if let Ok(double) = str::parse::<f64>(&string) {
             return NumberValue::Double(double);

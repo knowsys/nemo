@@ -86,16 +86,16 @@ impl ProgramChaseTranslation {
             if let Literal::Operation(operation) = literal
                 && let Some((left, Term::Primitive(Primitive::Variable(right)))) =
                     operation.variable_assignment()
-                {
-                    // Operation has the form ?left = ?right
-                    if let Some(assigned) = assignment.get(left) {
-                        assignment.insert(right.clone(), assigned.clone());
-                    } else if let Some(assigned) = assignment.get(right) {
-                        assignment.insert(left.clone(), assigned.clone());
-                    } else {
-                        assignment.insert(left.clone(), right.clone());
-                    }
+            {
+                // Operation has the form ?left = ?right
+                if let Some(assigned) = assignment.get(left) {
+                    assignment.insert(right.clone(), assigned.clone());
+                } else if let Some(assigned) = assignment.get(right) {
+                    assignment.insert(left.clone(), assigned.clone());
+                } else {
+                    assignment.insert(left.clone(), right.clone());
                 }
+            }
         }
 
         assignment
@@ -109,9 +109,10 @@ impl ProgramChaseTranslation {
     ) {
         for variable in rule.variables_mut() {
             if let Some(new_variable) = assignment.get(variable)
-                && let Some(name) = new_variable.name() {
-                    variable.rename(name.to_owned());
-                }
+                && let Some(name) = new_variable.name()
+            {
+                variable.rename(name.to_owned());
+            }
         }
     }
 
@@ -200,20 +201,20 @@ impl ProgramChaseTranslation {
 
                 if let Literal::Operation(operation) = literal
                     && let Some((variable, term)) = operation.variable_assignment()
-                        && variable.is_universal()
-                            && variable.name().is_some()
-                            && term
-                                .variables()
-                                .all(|variable| derived_variables.contains(variable))
-                            && !derived_variables.contains(variable)
-                        {
-                            derived_variables.insert(variable);
+                    && variable.is_universal()
+                    && variable.name().is_some()
+                    && term
+                        .variables()
+                        .all(|variable| derived_variables.contains(variable))
+                    && !derived_variables.contains(variable)
+                {
+                    derived_variables.insert(variable);
 
-                            let new_operation = Self::build_operation(variable, term);
-                            result.add_positive_operation(new_operation);
+                    let new_operation = Self::build_operation(variable, term);
+                    result.add_positive_operation(new_operation);
 
-                            handled_literals.insert(literal_index);
-                        }
+                    handled_literals.insert(literal_index);
+                }
             }
 
             if derived_variables.len() == current_count {

@@ -81,8 +81,7 @@ pub(super) struct TraceNodeManager {
 impl TraceNodeManager {
     /// For a node, add which of its columns can be ignored.
     pub fn add_discard(&mut self, address: &TreeAddress, discard: &[usize]) {
-        self.discard
-            .insert(address.clone(), discard.to_vec());
+        self.discard.insert(address.clone(), discard.to_vec());
     }
 
     /// Return the discarded table for the given node.

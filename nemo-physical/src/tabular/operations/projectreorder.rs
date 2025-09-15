@@ -49,9 +49,10 @@ impl GeneratorProjectReorder {
 
         for output_marker in output.iter() {
             if let Some(input_layer) = input.position(output_marker)
-                && input_layer > last_used_layer {
-                    last_used_layer = input_layer;
-                }
+                && input_layer > last_used_layer
+            {
+                last_used_layer = input_layer;
+            }
         }
 
         Self {

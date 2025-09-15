@@ -240,9 +240,10 @@ impl Operation {
 impl Display for Operation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Some(infix) = self.infix_representation()
-            && self.subterms.len() == 2 {
-                return self.format_infix_operation(f, infix, &self.subterms[0], &self.subterms[1]);
-            }
+            && self.subterms.len() == 2
+        {
+            return self.format_infix_operation(f, infix, &self.subterms[0], &self.subterms[1]);
+        }
 
         self.format_operation(f)
     }

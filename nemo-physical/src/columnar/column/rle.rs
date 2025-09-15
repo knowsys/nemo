@@ -376,9 +376,10 @@ where
         });
 
         if let Some(cur) = self.current
-            && cur >= value {
-                return Some(cur);
-            }
+            && cur >= value
+        {
+            return Some(cur);
+        }
 
         self.find(|&next| next >= value)
     }

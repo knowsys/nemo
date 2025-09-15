@@ -35,9 +35,10 @@ impl TranslationComponent for Rule {
 
         if let Some(rule_name) = attributes.get_unique(&KnownAttributes::Name)
             && let Term::Primitive(Primitive::Ground(ground)) = &rule_name[0]
-                && let Some(name) = ground.value().to_plain_string() {
-                    result.set_name(&name);
-                }
+            && let Some(name) = ground.value().to_plain_string()
+        {
+            result.set_name(&name);
+        }
 
         if let Some(rule_display) = attributes.get_unique(&KnownAttributes::Display) {
             result.set_display(rule_display[0].clone());

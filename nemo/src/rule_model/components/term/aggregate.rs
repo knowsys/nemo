@@ -283,15 +283,17 @@ impl ComponentBehavior for Aggregate {
 
         let input_type = self.aggregate.value_type();
         if let Some(expected_type) = self.kind.input_type()
-            && input_type != ValueType::Any && input_type != expected_type {
-                report.add(
-                    &*self.aggregate,
-                    ValidationError::AggregateInvalidValueType {
-                        found: input_type.name().to_string(),
-                        expected: expected_type.name().to_string(),
-                    },
-                );
-            }
+            && input_type != ValueType::Any
+            && input_type != expected_type
+        {
+            report.add(
+                &*self.aggregate,
+                ValidationError::AggregateInvalidValueType {
+                    found: input_type.name().to_string(),
+                    expected: expected_type.name().to_string(),
+                },
+            );
+        }
 
         let mut distinct_set = if self.aggregate.is_primitive() {
             self.aggregate.variables().collect()

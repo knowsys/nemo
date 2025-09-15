@@ -114,9 +114,10 @@ impl Trie {
             };
 
             if let Some(found) = column_scan.seek(*value)
-                && found == *value {
-                    continue;
-                }
+                && found == *value
+            {
+                continue;
+            }
 
             return false;
         }
@@ -146,9 +147,10 @@ impl Trie {
             };
 
             if let Some(found) = column_scan.seek(*value)
-                && found == *value {
-                    continue;
-                }
+                && found == *value
+            {
+                continue;
+            }
 
             return None;
         }

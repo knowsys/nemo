@@ -152,9 +152,11 @@ impl Rule {
             if let Literal::Positive(atom) = literal {
                 for term in atom.terms() {
                     if let Term::Primitive(Primitive::Variable(variable)) = term
-                        && variable.is_universal() && variable.name().is_some() {
-                            result.insert(variable);
-                        }
+                        && variable.is_universal()
+                        && variable.name().is_some()
+                    {
+                        result.insert(variable);
+                    }
                 }
             }
         }
@@ -177,12 +179,12 @@ impl Rule {
             for literal in &self.body {
                 if let Literal::Operation(operation) = literal
                     && let Some((variable, term)) = operation.variable_assignment()
-                        && variable.is_universal()
-                            && variable.name().is_some()
-                            && term.variables().all(|variable| result.contains(variable))
-                        {
-                            result.insert(variable);
-                        }
+                    && variable.is_universal()
+                    && variable.name().is_some()
+                    && term.variables().all(|variable| result.contains(variable))
+                {
+                    result.insert(variable);
+                }
             }
 
             if result.len() == current_count {
@@ -211,14 +213,15 @@ impl Rule {
         let mut first_aggregate = if let Term::Aggregate(aggregate) = term {
             if let Term::Primitive(Primitive::Variable(aggregate_variable)) =
                 aggregate.aggregate_term()
-                && group_by_variable.contains(aggregate_variable) {
-                    report.add(
-                        aggregate.aggregate_term(),
-                        ValidationError::AggregateOverGroupByVariable {
-                            variable: Box::new(aggregate_variable.clone()),
-                        },
-                    );
-                }
+                && group_by_variable.contains(aggregate_variable)
+            {
+                report.add(
+                    aggregate.aggregate_term(),
+                    ValidationError::AggregateOverGroupByVariable {
+                        variable: Box::new(aggregate_variable.clone()),
+                    },
+                );
+            }
 
             true
         } else {
@@ -401,9 +404,10 @@ impl ComponentBehavior for Rule {
             if let Literal::Negative(negative) = literal {
                 for negative_subterm in negative.terms() {
                     if let Term::Primitive(Primitive::Variable(variable)) = negative_subterm
-                        && !safe_variables.contains(variable) {
-                            current_negative_variables.insert(variable);
-                        }
+                        && !safe_variables.contains(variable)
+                    {
+                        current_negative_variables.insert(variable);
+                    }
                 }
             }
 

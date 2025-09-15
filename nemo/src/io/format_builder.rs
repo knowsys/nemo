@@ -543,9 +543,10 @@ impl ImportExportBuilder {
                         .and(Ok(()))
                         .map_err(ValidationError::from)
                 })
-            }) {
-                report.add_source(origin.clone(), error);
-            }
+            })
+        {
+            report.add_source(origin.clone(), error);
+        }
 
         if let Some(parameters) =
             parameters.get_optional(StandardParameter::HttpGetParameters.into())
@@ -558,9 +559,9 @@ impl ImportExportBuilder {
                             .map_err(ValidationError::from)
                     })
                 })
-            {
-                report.add_source(origin.clone(), error);
-            }
+        {
+            report.add_source(origin.clone(), error);
+        }
 
         if let Some(parameters) =
             parameters.get_optional(StandardParameter::HttpPostParameters.into())
@@ -573,18 +574,18 @@ impl ImportExportBuilder {
                             .map_err(ValidationError::from)
                     })
                 })
-            {
-                report.add_source(origin.clone(), error);
-            }
+        {
+            report.add_source(origin.clone(), error);
+        }
 
         if let Some(fragment) = parameters.get_optional(StandardParameter::IriFragment.into())
             && let Err(error) = resource_builder
                 .set_fragment(fragment.to_plain_string_unchecked())
                 .and(Ok(()))
                 .map_err(ValidationError::from)
-            {
-                report.add_source(origin.clone(), error);
-            }
+        {
+            report.add_source(origin.clone(), error);
+        }
 
         Some(ImportExportBuilder {
             inner: inner.into(),

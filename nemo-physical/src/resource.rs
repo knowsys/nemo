@@ -155,9 +155,10 @@ impl Resource {
                 let mut the_path = PathBuf::from(path);
 
                 if let Some(extension) = path.extension()
-                    && extension.to_str() == compression_extension {
-                        the_path = PathBuf::from(path.file_stem().unwrap_or_default());
-                    };
+                    && extension.to_str() == compression_extension
+                {
+                    the_path = PathBuf::from(path.file_stem().unwrap_or_default());
+                };
 
                 the_path
                     .extension()

@@ -316,10 +316,11 @@ impl<'a> PartialTrieScan<'a> for TrieScanFunction<'a> {
         }
 
         if let Some(previous_layer) = previous_layer
-            && let InputMarker::Used(_) = &self.layer_information[previous_layer].input {
-                // The input value is no longer valid
-                self.input_values.pop();
-            }
+            && let InputMarker::Used(_) = &self.layer_information[previous_layer].input
+        {
+            // The input value is no longer valid
+            self.input_values.pop();
+        }
 
         self.path_types.pop();
     }

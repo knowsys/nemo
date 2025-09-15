@@ -75,9 +75,10 @@ impl<B: GlobalBytesBuffer> BytesDictionary<B> {
                 return Some(IdUtils::id32_to_id(id));
             }
         } else if !self.map_long.is_empty()
-            && let Some(id) = self.map_long.get(bytes).copied() {
-                return Some(IdUtils::id64_to_id(id));
-            }
+            && let Some(id) = self.map_long.get(bytes).copied()
+        {
+            return Some(IdUtils::id64_to_id(id));
+        }
         None
     }
 

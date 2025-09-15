@@ -76,9 +76,10 @@ impl TracingStrategy {
                 positive_filters.push(filter);
             } else {
                 if let Some(aggregate) = rule.aggregate()
-                    && &variable == aggregate.output_variable() {
-                        variable = aggregate.input_variable().clone();
-                    }
+                    && &variable == aggregate.output_variable()
+                {
+                    variable = aggregate.input_variable().clone();
+                }
 
                 let filter = ChaseFilter::new(OperationTerm::Operation(Operation::new(
                     OperationKind::Equal,

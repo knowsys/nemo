@@ -113,9 +113,10 @@ where
     fn add(&mut self, value: T) {
         if let ColumnImplDecisionThreshold::NumberOfRleElements(threshold) = self.decision_threshold
             && let ColumnBuilderType::ColumnRle(rle_builder) = &mut self.builder
-                && rle_builder.number_of_rle_elements() > threshold {
-                    self.expand_sparse_rle_columns();
-                }
+            && rle_builder.number_of_rle_elements() > threshold
+        {
+            self.expand_sparse_rle_columns();
+        }
 
         match &mut self.builder {
             ColumnBuilderType::ColumnVector(vec) => vec.push(value),

@@ -533,12 +533,13 @@ impl ExecutionPlan {
                 generator,
                 subnode: ExecutionTreeLeaf::FetchComputedTable(computed),
             } = &root
-                && !&computed_trees[*computed].result.is_permanent() {
-                    computed_trees[*computed]
-                        .dependents
-                        .push((computed_table_id, generator.projectreordering()));
-                    computed_trees[*computed].used -= 1;
-                }
+                && !&computed_trees[*computed].result.is_permanent()
+            {
+                computed_trees[*computed]
+                    .dependents
+                    .push((computed_table_id, generator.projectreordering()));
+                computed_trees[*computed].used -= 1;
+            }
 
             ExecutionTree {
                 root,
@@ -574,20 +575,20 @@ impl ExecutionPlan {
             && let Some(output_node) = output_nodes
                 .iter()
                 .find(|output_node| node.id() == output_node.node.id())
-            {
-                let computed_id = Self::execution_tree(
-                    output_node,
-                    order,
-                    output_nodes,
-                    computed_trees,
-                    computed_trees_map,
-                    loaded_tables,
-                );
+        {
+            let computed_id = Self::execution_tree(
+                output_node,
+                order,
+                output_nodes,
+                computed_trees,
+                computed_trees_map,
+                loaded_tables,
+            );
 
-                return ExecutionTreeNode::Operation(ExecutionTreeOperation::Leaf(
-                    ExecutionTreeLeaf::FetchComputedTable(computed_id),
-                ));
-            }
+            return ExecutionTreeNode::Operation(ExecutionTreeOperation::Leaf(
+                ExecutionTreeLeaf::FetchComputedTable(computed_id),
+            ));
+        }
 
         let node_rc = node.get_rc();
         let node_operation = &node_rc.borrow().operation;

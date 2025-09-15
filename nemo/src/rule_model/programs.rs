@@ -351,9 +351,10 @@ pub trait ProgramRead {
                         } else {
                             true
                         }
-                    }) {
-                        defined.insert(parameter.variable());
-                    }
+                    })
+                {
+                    defined.insert(parameter.variable());
+                }
             }
 
             if defined_count == defined.len() {

@@ -92,10 +92,11 @@ where
                     .expect("This vector should not point to None entries.");
 
                 if let Some(subtract_value) = subtract_scan.seek(next_value)
-                    && next_value == subtract_value {
-                        next_value = self.scan_main.next()?;
-                        subtracted_values = true;
-                    }
+                    && next_value == subtract_value
+                {
+                    next_value = self.scan_main.next()?;
+                    subtracted_values = true;
+                }
             }
         }
 

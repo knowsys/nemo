@@ -273,10 +273,11 @@ impl<'a> PartialTrieScan<'a> for TrieScanFilter<'a> {
         let next_layer = previous_layer.checked_sub(1);
 
         if let Some(layer) = next_layer
-            && self.input_indices[layer] {
-                // The input value is no longer valid
-                self.input_values.borrow_mut().pop();
-            }
+            && self.input_indices[layer]
+        {
+            // The input value is no longer valid
+            self.input_values.borrow_mut().pop();
+        }
 
         self.trie_scan.up();
         self.path_types.pop();
@@ -289,12 +290,20 @@ impl<'a> PartialTrieScan<'a> for TrieScanFilter<'a> {
         let next_layer = previous_layer.map_or(0, |layer| layer + 1);
 
         if let Some((previous_layer, previous_type)) = previous_layer.zip(previous_type)
-            && self.input_indices[previous_layer] {
-                // This value will be used in some future layer as an input to a function,
-                // so we translate it to an AnyDataValue and store it in `self.input_values`.
-                let column_value = self.column_scans[previous_layer].get_mut().current(*previous_type).expect("It is only allowed to call down while the previous scan points to some value.").into_datavalue(&self.dictionary.borrow()).expect("All ids occuring in a column must be known to the dictionary");
-                self.input_values.borrow_mut().push(column_value);
-            }
+            && self.input_indices[previous_layer]
+        {
+            // This value will be used in some future layer as an input to a function,
+            // so we translate it to an AnyDataValue and store it in `self.input_values`.
+            let column_value = self.column_scans[previous_layer]
+                .get_mut()
+                .current(*previous_type)
+                .expect(
+                    "It is only allowed to call down while the previous scan points to some value.",
+                )
+                .into_datavalue(&self.dictionary.borrow())
+                .expect("All ids occuring in a column must be known to the dictionary");
+            self.input_values.borrow_mut().push(column_value);
+        }
 
         self.trie_scan.down(next_type);
         self.path_types.push(next_type);

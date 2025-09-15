@@ -121,14 +121,15 @@ impl ComponentBehavior for UniversalVariable {
         let mut report = ValidationReport::default();
 
         if let Some(name) = self.name()
-            && Symbols::is_reserved(name) {
-                report.add(
-                    self,
-                    ValidationError::InvalidVariableName {
-                        variable_name: name.to_owned(),
-                    },
-                );
-            }
+            && Symbols::is_reserved(name)
+        {
+            report.add(
+                self,
+                ValidationError::InvalidVariableName {
+                    variable_name: name.to_owned(),
+                },
+            );
+        }
 
         report.result()
     }

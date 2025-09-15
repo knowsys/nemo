@@ -111,10 +111,9 @@ impl ExportManager {
 
         pred_path.push(file_name);
 
-        if add_compression
-            && let Some(ext) = self.default_compression_format.extension() {
-                pred_path.add_extension(ext);
-            }
+        if add_compression && let Some(ext) = self.default_compression_format.extension() {
+            pred_path.add_extension(ext);
+        }
 
         pred_path
     }
