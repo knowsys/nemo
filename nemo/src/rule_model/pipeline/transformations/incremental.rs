@@ -74,6 +74,10 @@ impl TransformationIncremental {
                 continue;
             }
 
+            if atom.terms().any(|term| !term.is_variable()) {
+                continue;
+            }
+
             if atom
                 .variables()
                 .all(|variable| !available_variables.contains(variable))
@@ -87,10 +91,17 @@ impl TransformationIncremental {
 
     /// Check if the positive body of rule contains
     /// two atoms with the same predicate.
-    fn has_repeated_predicate(rule: &Rule) -> bool {
+    fn has_repeated_predicate(
+        rule: &Rule,
+        incremental_predicates: &HashMap<Tag, &ImportDirective>,
+    ) -> bool {
         let mut body_predicates = HashSet::<Tag>::default();
 
         for atom in rule.body_positive() {
+            if !incremental_predicates.contains_key(&atom.predicate()) {
+                continue;
+            }
+
             if !body_predicates.insert(atom.predicate()) {
                 return true;
             }
@@ -101,7 +112,14 @@ impl TransformationIncremental {
 
     /// Check whether a rule would allow for incremental import
     fn possible_rule(rule: &Rule, incremental_predicates: &HashMap<Tag, &ImportDirective>) -> bool {
-        !Self::has_repeated_predicate(rule)
+        if rule
+            .body_positive()
+            .all(|atom| !incremental_predicates.contains_key(&atom.predicate()))
+        {
+            return false;
+        }
+
+        !Self::has_repeated_predicate(rule, &incremental_predicates)
             && !Self::has_unrestricted_atom(rule, &incremental_predicates)
     }
 

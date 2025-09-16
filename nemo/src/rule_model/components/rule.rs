@@ -212,7 +212,11 @@ impl Rule {
     /// or is derived via the equality operation
     /// from other safe variables.
     pub fn safe_variables(&self) -> HashSet<&Variable> {
-        let mut result = self.positive_variables();
+        let mut result = self
+            .positive_variables()
+            .union(&self.import_variables())
+            .cloned()
+            .collect::<HashSet<_>>();
 
         loop {
             let current_count = result.len();
