@@ -47,7 +47,7 @@ pub(crate) struct RuleExecution {
 
 impl RuleExecution {
     /// Create new [RuleExecution].
-    pub(crate) fn initialize(rule: &ChaseRule, analysis: &RuleAnalysis) -> Self {
+    pub(crate) fn initialize(rule: &ChaseRule, rule_index: usize, analysis: &RuleAnalysis) -> Self {
         let mut variable_translation = VariableTranslation::new();
         for variable in rule.variables().cloned() {
             variable_translation.add_marker(variable);
@@ -56,7 +56,7 @@ impl RuleExecution {
             variable_translation.add_marker(variable);
         }
 
-        let body_strategy = Box::new(SeminaiveStrategy::initialize(rule, analysis));
+        let body_strategy = Box::new(SeminaiveStrategy::initialize(rule, rule_index, analysis));
         let head_strategy: Box<dyn HeadStrategy> = if analysis.is_existential {
             Box::new(RestrictedChaseStrategy::initialize(rule, analysis))
         } else {

@@ -27,12 +27,14 @@ pub(crate) fn node_imports(
     import_manager: &ImportManager,
     variable_translation: &VariableTranslation,
     current_step_number: usize,
+    current_rule: usize,
     input_node: ExecutionNodeRef,
     imports: &Vec<ChaseImportClause>,
     import_operations: &Vec<ChaseOperation>,
     import_filters: &Vec<ChaseFilter>,
 ) -> ExecutionNodeRef {
     let mut imported_tables = Vec::<ExecutionNodeRef>::default();
+    let mut old_imported_tables = Vec::<ExecutionNodeRef>::default();
 
     let markers_input = input_node.markers_cloned();
 
@@ -41,14 +43,20 @@ pub(crate) fn node_imports(
         let markers_import = variable_translation.operation_table(import.bindings().iter());
 
         // First we project the content of the input node to the required columns
+
         let markers_projection = binding_table_markers(&markers_input, &markers_import);
         let node_import_bindings = subtable_plan
             .plan_mut()
             .projectreorder(markers_projection.clone(), input_node.clone());
 
         // To only request new information, we subtract the old bindings
-        let (binding_predicate, _arity) =
-            binding_table_predicate_name(import.predicate(), &markers_input, &markers_import);
+
+        let (binding_predicate, _arity) = binding_table_predicate_name(
+            import.predicate(),
+            current_rule,
+            &markers_input,
+            &markers_import,
+        );
         let old_bindings = subplan_union(
             subtable_plan.plan_mut(),
             table_manager,
@@ -61,14 +69,16 @@ pub(crate) fn node_imports(
             .subtract(node_import_bindings, vec![old_bindings]);
 
         // Now we can add the import
+
         let provider = import_manager
             .table_provider_from_handler(import.handler())
             .expect("invalid import");
 
-        let node_import =
-            subtable_plan
-                .plan_mut()
-                .import(markers_import, node_new_bindings.clone(), provider);
+        let node_import = subtable_plan.plan_mut().import(
+            markers_import.clone(),
+            node_new_bindings.clone(),
+            provider,
+        );
         imported_tables.push(node_import.clone());
 
         let import_table_name = table_manager.generate_table_name(
@@ -76,6 +86,20 @@ pub(crate) fn node_imports(
             &ColumnOrder::default(),
             current_step_number,
         );
+
+        // We also need to compute the union of all old imported tables, in case something matches with this
+
+        let node_old_imports = subplan_union(
+            subtable_plan.plan_mut(),
+            table_manager,
+            import.predicate(),
+            0..current_step_number,
+            markers_import,
+        );
+
+        old_imported_tables.push(node_old_imports);
+
+        // We save the imported table and the input bindings
 
         subtable_plan.add_permanent_table(
             node_import,
@@ -98,19 +122,30 @@ pub(crate) fn node_imports(
 
     // Join imported tables
     let join_markers = join_markers(&markers_input, &imported_tables);
-    let mut node_join = subtable_plan.plan_mut().join_empty(join_markers);
+    let mut node_join = subtable_plan.plan_mut().join_empty(join_markers.clone());
 
-    node_join.add_subnode(input_node);
+    node_join.add_subnode(input_node.clone());
     for node_import in imported_tables {
         node_join.add_subnode(node_import);
     }
+
+    let mut node_join_old = subtable_plan.plan_mut().join_empty(join_markers.clone());
+    node_join_old.add_subnode(input_node);
+    for node_import in old_imported_tables {
+        node_join_old.add_subnode(node_import);
+    }
+
+    // Union of matches for old and new tables
+    let node_union = subtable_plan
+        .plan_mut()
+        .union(join_markers, vec![node_join, node_join_old]);
 
     // Finally, apply operations and filters
 
     let node_import_functions = node_functions(
         subtable_plan.plan_mut(),
         variable_translation,
-        node_join,
+        node_union,
         import_operations,
     );
 
@@ -143,13 +178,14 @@ fn binding_table_markers(
 /// Compute the predicate name and arity for the binding table.
 pub(crate) fn binding_table_predicate_name<T>(
     predicate: &Tag,
+    rule_index: usize,
     input_markers: &[T],
     import_markers: &[T],
 ) -> (Tag, usize)
 where
     T: Eq + std::fmt::Debug,
 {
-    let mut name = format!("__IMPORT_{}_", predicate.name());
+    let mut name = format!("__IMPORT_{}_{}_", predicate.name(), rule_index);
     let mut arity = 0;
 
     for marker in import_markers {

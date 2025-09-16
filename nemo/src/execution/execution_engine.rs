@@ -263,8 +263,9 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             .program
             .rules()
             .iter()
+            .enumerate()
             .zip(self.analysis.rule_analysis.iter())
-            .map(|(r, a)| RuleExecution::initialize(r, a))
+            .map(|((index, rule), analysis)| RuleExecution::initialize(rule, index, analysis))
             .collect();
 
         let mut new_derivations: Option<bool> = None;
