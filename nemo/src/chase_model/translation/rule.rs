@@ -40,35 +40,41 @@ impl ProgramChaseTranslation {
         let variable_assignments = Self::variables_assignments(&rule);
         Self::apply_variable_assignment(&mut rule, &variable_assignments);
 
-        // Handle positive and negative atoms
-        for literal in rule.body() {
-            match literal {
-                Literal::Positive(atom) => {
-                    let (variable_atom, filters) = self.build_body_atom(atom);
+        // Handle positive atoms
+        for atom in rule.body_positive() {
+            let (variable_atom, filters) = self.build_body_atom(atom);
 
-                    result.add_positive_atom(variable_atom);
-                    for filter in filters {
-                        result.add_positive_filter(filter);
-                    }
-                    self.predicate_arity.insert(atom.predicate(), atom.len());
-                }
-                Literal::Negative(atom) => {
-                    let (variable_atom, filters) = self.build_body_atom(atom);
-
-                    result.add_negative_atom(variable_atom);
-                    for filter in filters {
-                        result.add_negative_filter_last(filter);
-                    }
-                    self.predicate_arity.insert(atom.predicate(), atom.len());
-                }
-                Literal::Operation(_) => {
-                    // Will be handled below
-                }
+            result.add_positive_atom(variable_atom);
+            for filter in filters {
+                result.add_positive_filter(filter);
             }
+            self.predicate_arity.insert(atom.predicate(), atom.len());
         }
 
         // Handle operations
         let derived_variables = self.handle_operations(&mut result, &rule);
+
+        // Handle negative atoms
+        for atom in rule.body_negative() {
+            let (variable_atom, filters) = self.build_body_atom(atom);
+
+            if variable_atom
+                .variables()
+                .all(|variable| derived_variables.contains(variable))
+            {
+                result.add_negative_atom(variable_atom);
+                for filter in filters {
+                    result.add_negative_filter_last(filter);
+                }
+            } else {
+                result.add_import_negative_atom(variable_atom);
+                for filter in filters {
+                    result.add_import_negative_filter_last(filter);
+                }
+            }
+
+            self.predicate_arity.insert(atom.predicate(), atom.len());
+        }
 
         // Handle head
         self.handle_head(&mut result, rule.head(), &derived_variables);

@@ -75,6 +75,9 @@ struct ChaseRuleImports {
     operations: Vec<ChaseOperation>,
     /// Filters applied after executing the imports
     filters: Vec<ChaseFilter>,
+
+    /// Negations applied to import
+    negation: ChaseRuleBodyNegative,
 }
 
 /// Representation of a rule in a [ChaseProgram][super::program::ChaseProgram]
@@ -204,7 +207,17 @@ impl ChaseRule {
         &self.imports.filters
     }
 
-    /// Return an iterator over the body variables.
+    /// Return the list of negative body atoms contained in this rule.
+    pub(crate) fn imports_negative_body(&self) -> &Vec<VariableAtom> {
+        &self.imports.negation.atoms
+    }
+
+    /// Return the list of filters that will be applied to the negative part of the body.
+    pub(crate) fn imports_negative_filters(&self) -> &Vec<Vec<ChaseFilter>> {
+        &self.imports.negation.filters
+    }
+
+    /// Return an iterator over the body variables (without imports).
     pub(crate) fn body_variables(&self) -> Box<dyn Iterator<Item = &Variable> + '_> {
         let positive_body_variables = self
             .positive_body()
@@ -345,6 +358,25 @@ impl ChaseRule {
     pub(crate) fn add_import_filter(&mut self, filter: ChaseFilter) {
         self.imports.filters.push(filter);
     }
+
+    /// Add an atom to the negative part of the body.
+    pub(crate) fn add_import_negative_atom(&mut self, atom: VariableAtom) {
+        self.imports.negation.atoms.push(atom);
+        self.imports.negation.filters.push(Vec::default())
+    }
+
+    /// Add a filter to the negative part of the body.
+    ///
+    /// # Panics
+    /// Panics if the current filter vector is empty.
+    pub(crate) fn add_import_negative_filter_last(&mut self, filter: ChaseFilter) {
+        self.imports
+            .negation
+            .filters
+            .last_mut()
+            .expect("expected a filter slot")
+            .push(filter)
+    }
 }
 
 impl IterableVariables for ChaseRule {
@@ -396,6 +428,15 @@ impl IterableVariables for ChaseRule {
             .filters
             .iter()
             .flat_map(|filter| filter.variables());
+        let import_negative_body_variables = self
+            .imports_negative_body()
+            .iter()
+            .flat_map(|atom| atom.variables());
+        let import_negative_filter_variables = self
+            .imports_negative_filters()
+            .iter()
+            .flatten()
+            .flat_map(|filter| filter.variables());
 
         Box::new(
             head_variables
@@ -409,7 +450,9 @@ impl IterableVariables for ChaseRule {
                 .chain(aggregation_filter_variables)
                 .chain(import_variables)
                 .chain(import_operation_variables)
-                .chain(import_filter_variables),
+                .chain(import_filter_variables)
+                .chain(import_negative_body_variables)
+                .chain(import_negative_filter_variables),
         )
     }
 
@@ -479,6 +522,19 @@ impl IterableVariables for ChaseRule {
             .filters
             .iter_mut()
             .flat_map(|filter| filter.variables_mut());
+        let imports_negative_body_variables = self
+            .imports
+            .negation
+            .atoms
+            .iter_mut()
+            .flat_map(|atom| atom.variables_mut());
+        let imports_negative_filter_variables = self
+            .imports
+            .negation
+            .filters
+            .iter_mut()
+            .flatten()
+            .flat_map(|filter| filter.variables_mut());
 
         Box::new(
             head_variables
@@ -492,7 +548,9 @@ impl IterableVariables for ChaseRule {
                 .chain(aggregation_filter_variables)
                 .chain(import_variables)
                 .chain(import_operation_variables)
-                .chain(import_filter_variables),
+                .chain(import_filter_variables)
+                .chain(imports_negative_body_variables)
+                .chain(imports_negative_filter_variables),
         )
     }
 }

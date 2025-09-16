@@ -38,6 +38,8 @@ pub(crate) struct SeminaiveStrategy {
     imports: Vec<ChaseImportClause>,
     import_operations: Vec<ChaseOperation>,
     import_filters: Vec<ChaseFilter>,
+    import_negative_atoms: Vec<VariableAtom>,
+    import_negative_filters: Vec<Vec<ChaseFilter>>,
 }
 
 impl SeminaiveStrategy {
@@ -56,6 +58,8 @@ impl SeminaiveStrategy {
             imports: rule.imports().clone(),
             import_operations: rule.imports_operations().clone(),
             import_filters: rule.imports_filters().clone(),
+            import_negative_atoms: rule.imports_negative_body().clone(),
+            import_negative_filters: rule.imports_negative_filters().clone(),
         }
     }
 }
@@ -116,6 +120,8 @@ impl BodyStrategy for SeminaiveStrategy {
             &self.imports,
             &self.import_operations,
             &self.import_filters,
+            &self.import_negative_atoms,
+            &self.import_negative_filters,
         );
 
         let node_result = node_imports;
