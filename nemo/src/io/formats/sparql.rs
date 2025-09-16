@@ -31,7 +31,7 @@ use crate::{
 
 use super::{ExportHandler, FileFormatMeta, FormatBuilder, ImportHandler};
 
-use crate::io::formats::dsv::{DsvHandler, value_format::DsvValueFormats};
+use crate::io::formats::dsv::value_format::DsvValueFormats;
 
 /// A char limit to decide if a query is send as GET or POST request
 const HTTP_GET_CHAR_LIMIT: usize = 2000;

@@ -13,10 +13,7 @@ use crate::{
         AnyImportExportBuilder, FormatBuilder, Parameters, StandardParameter, SupportedFormatTag,
         format_tag,
     },
-    rule_model::{
-        components::import_export::Direction,
-        error::validation_error::ValidationError,
-    },
+    rule_model::{components::import_export::Direction, error::validation_error::ValidationError},
     syntax::import_export::file_format,
 };
 
@@ -80,6 +77,7 @@ impl FormatBuilder for JsonHandler {
         Some(3)
     }
 
+    #[allow(unused)]
     fn build_import(
         &self,
         _arity: usize,

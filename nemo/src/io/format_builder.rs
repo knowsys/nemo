@@ -349,6 +349,7 @@ impl<B: FormatBuilder> Parameters<B> {
         ))
     }
 
+    #[allow(unused)]
     pub(crate) fn validate_filter_rule(
         predicate: &Tag,
         rule: &Rule,

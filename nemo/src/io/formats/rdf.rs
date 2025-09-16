@@ -291,6 +291,7 @@ impl FormatBuilder for RdfHandler {
         Arc::new(handler)
     }
 
+    #[allow(unused)]
     fn build_export(
         &self,
         _arity: usize,

@@ -78,11 +78,10 @@ struct ChaseRuleImports {
 }
 
 /// Representation of a rule in a [ChaseProgram][super::program::ChaseProgram]
-#[allow(dead_code)]
 #[derive(Debug, Default, Clone)]
 pub struct ChaseRule {
     /// Origin of this component
-    origin: Origin,
+    _origin: Origin,
 
     /// Positive part of the body
     positive: ChaseRuleBodyPositive,
@@ -499,6 +498,7 @@ impl IterableVariables for ChaseRule {
 }
 
 impl ChaseRule {
+    #[allow(unused)]
     fn into_filter_patterns(self) -> Result<impl Iterator<Item = FilterTransformPattern>, ()> {
         if self.head.aggregate_head_index.is_some() {
             return Err(todo!("add error code"));
@@ -508,7 +508,7 @@ impl ChaseRule {
             return Err(todo!("add error code"));
         }
 
-        Ok(todo!())
+        Ok(std::iter::empty())
     }
 }
 

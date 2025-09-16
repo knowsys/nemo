@@ -26,6 +26,7 @@ use crate::syntax::import_export::file_format::MEDIA_TYPE_TSV;
 use super::SparqlBuilder;
 
 #[derive(Debug)]
+#[allow(unused)]
 pub(crate) struct SparqlReader {
     builder: SparqlBuilder,
     filter_rules: Vec<ChaseRule>,
@@ -186,6 +187,7 @@ impl TableProvider for SparqlReader {
         true // TODO: use a better heuristic here
     }
 
+    #[allow(unused)]
     fn provide_table_data_with_bindings(
         self: Box<Self>,
         tuple_writer: &mut TupleWriter,

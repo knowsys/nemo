@@ -23,6 +23,7 @@ use super::{
 };
 
 /// A [TableProvider] for RDF 1.1 files containing triples.
+#[allow(unused)]
 pub(super) struct RdfReader {
     /// Buffer from which content is read
     read: Box<dyn Read>,

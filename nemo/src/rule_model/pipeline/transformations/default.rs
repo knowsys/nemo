@@ -8,8 +8,7 @@ use crate::{
         error::ValidationReport,
         pipeline::transformations::{
             active::TransformationActive, empty::TransformationEmpty,
-            filter_imports::TransformationFilterImports, incremental::TransformationIncremental,
-            validate::TransformationValidate,
+            incremental::TransformationIncremental, validate::TransformationValidate,
         },
         programs::{ProgramRead, handle::ProgramHandle},
     },
