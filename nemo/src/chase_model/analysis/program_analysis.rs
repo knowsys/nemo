@@ -284,7 +284,7 @@ impl ChaseProgram {
         }
 
         // Predicates in rules
-        for (rule_index, rule) in self.rules().iter().enumerate() {
+        for rule in self.rules() {
             for atom in rule.head() {
                 add_arity(atom.predicate(), atom.arity(), &mut result);
             }
@@ -307,7 +307,6 @@ impl ChaseProgram {
 
                 let (binding_table_name, arity) = binding_table_predicate_name(
                     import.predicate(),
-                    rule_index,
                     &body_variables,
                     &import.bindings(),
                 );

@@ -38,15 +38,13 @@ pub(crate) struct SeminaiveStrategy {
     imports: Vec<ChaseImportClause>,
     import_operations: Vec<ChaseOperation>,
     import_filters: Vec<ChaseFilter>,
-
-    rule_index: usize,
 }
 
 impl SeminaiveStrategy {
     /// Create new [SeminaiveStrategy] object.
     pub(crate) fn initialize(
         rule: &ChaseRule,
-        rule_index: usize,
+        _rule_index: usize,
         _analysis: &RuleAnalysis,
     ) -> Self {
         Self {
@@ -58,7 +56,6 @@ impl SeminaiveStrategy {
             imports: rule.imports().clone(),
             import_operations: rule.imports_operations().clone(),
             import_filters: rule.imports_filters().clone(),
-            rule_index,
         }
     }
 }
@@ -115,7 +112,6 @@ impl BodyStrategy for SeminaiveStrategy {
             import_manager,
             variable_translation,
             step_number,
-            self.rule_index,
             node_negation,
             &self.imports,
             &self.import_operations,

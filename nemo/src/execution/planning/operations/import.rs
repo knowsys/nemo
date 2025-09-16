@@ -27,7 +27,6 @@ pub(crate) fn node_imports(
     import_manager: &ImportManager,
     variable_translation: &VariableTranslation,
     current_step_number: usize,
-    current_rule: usize,
     input_node: ExecutionNodeRef,
     imports: &Vec<ChaseImportClause>,
     import_operations: &Vec<ChaseOperation>,
@@ -51,12 +50,8 @@ pub(crate) fn node_imports(
 
         // To only request new information, we subtract the old bindings
 
-        let (binding_predicate, _arity) = binding_table_predicate_name(
-            import.predicate(),
-            current_rule,
-            &markers_input,
-            &markers_import,
-        );
+        let (binding_predicate, _arity) =
+            binding_table_predicate_name(import.predicate(), &markers_input, &markers_import);
         let old_bindings = subplan_union(
             subtable_plan.plan_mut(),
             table_manager,
@@ -178,14 +173,13 @@ fn binding_table_markers(
 /// Compute the predicate name and arity for the binding table.
 pub(crate) fn binding_table_predicate_name<T>(
     predicate: &Tag,
-    rule_index: usize,
     input_markers: &[T],
     import_markers: &[T],
 ) -> (Tag, usize)
 where
     T: Eq + std::fmt::Debug,
 {
-    let mut name = format!("__IMPORT_{}_{}_", predicate.name(), rule_index);
+    let mut name = format!("__IMPORT_{}_", predicate.name());
     let mut arity = 0;
 
     for marker in import_markers {
