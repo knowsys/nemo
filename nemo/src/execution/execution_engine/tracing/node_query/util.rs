@@ -129,7 +129,7 @@ pub(super) fn valid_tables_plan(
         HashSet::default()
     };
 
-    let body_set = rule.non_head_variables().cloned().collect::<HashSet<_>>();
+    let body_set = rule.variables().cloned().collect::<HashSet<_>>();
     let head_set = head_variables
         .iter()
         .enumerate()

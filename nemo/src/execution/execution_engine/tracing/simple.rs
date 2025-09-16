@@ -191,8 +191,6 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
     /// Build an [ExecutionTrace] for a list of facts.
     /// Also returns a list containing a [TraceFactHandle] for each fact.
-    ///
-    /// TODO: Verify that Fact is ground
     pub fn trace(
         &mut self,
         facts: Vec<Fact>,

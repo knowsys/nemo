@@ -4,7 +4,7 @@ use std::collections::HashSet;
 
 use nemo_physical::datavalues::AnyDataValue;
 
-use crate::rule_model::components::{IterablePrimitives, tag::Tag, term::primitive::Primitive};
+use crate::rule_model::components::{tag::Tag, term::primitive::Primitive};
 
 use super::{
     atom::{ChaseAtom, ground_atom::GroundAtom},

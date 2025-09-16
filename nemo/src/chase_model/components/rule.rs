@@ -228,52 +228,40 @@ impl ChaseRule {
         self.head.atoms.push(atom)
     }
 
-    pub(crate) fn non_head_variables(&self) -> Box<dyn Iterator<Item = &Variable> + '_> {
-        let positive_body_variables = self
-            .positive_body()
-            .iter()
-            .flat_map(|atom| atom.variables());
-        let positive_operation_variables = self
+    /// Return an iterator over primitive terms
+    pub(crate) fn primitive_terms(&self) -> Box<dyn Iterator<Item = &Primitive> + '_> {
+        let head_terms = self.head().iter().flat_map(|atom| atom.primitive_terms());
+        let positive_operation_terms = self
             .positive_operations()
             .iter()
-            .flat_map(|operation| operation.variables());
-        let positive_filter_variables = self
+            .flat_map(|operation| operation.primitive_terms());
+        let positive_filter_terms = self
             .positive_filters()
             .iter()
-            .flat_map(|filter| filter.variables());
+            .flat_map(|filter| filter.primitive_terms());
 
-        let negative_body_variables = self
-            .negative_body()
-            .iter()
-            .flat_map(|atom| atom.variables());
-        let negative_filter_variables = self
+        let negative_filter_terms = self
             .negative_filters()
             .iter()
             .flatten()
-            .flat_map(|filter| filter.variables());
+            .flat_map(|filter| filter.primitive_terms());
 
-        let aggregation_variables = self
-            .aggregate()
-            .into_iter()
-            .flat_map(|aggregate| aggregate.variables());
-        let aggregation_operation_variables = self
+        let aggregation_operation_terms = self
             .aggregate_operations()
             .iter()
-            .flat_map(|operation| operation.variables());
-        let aggregation_filter_variables = self
+            .flat_map(|operation| operation.primitive_terms());
+        let aggregation_filter_terms = self
             .aggregate_filters()
             .iter()
-            .flat_map(|filter| filter.variables());
+            .flat_map(|filter| filter.primitive_terms());
 
         Box::new(
-            positive_body_variables
-                .chain(positive_operation_variables)
-                .chain(positive_filter_variables)
-                .chain(negative_body_variables)
-                .chain(negative_filter_variables)
-                .chain(aggregation_variables)
-                .chain(aggregation_operation_variables)
-                .chain(aggregation_filter_variables),
+            head_terms
+                .chain(positive_operation_terms)
+                .chain(positive_filter_terms)
+                .chain(negative_filter_terms)
+                .chain(aggregation_operation_terms)
+                .chain(aggregation_filter_terms),
         )
     }
 }
@@ -391,101 +379,6 @@ impl IterableVariables for ChaseRule {
                 .chain(aggregation_variables)
                 .chain(aggregation_operation_variables)
                 .chain(aggregation_filter_variables),
-        )
-    }
-}
-
-impl IterablePrimitives for ChaseRule {
-    type TermType = Primitive;
-
-    fn primitive_terms<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Primitive> + 'a> {
-        let head_terms = self.head().iter().flat_map(|atom| atom.primitive_terms());
-        let positive_operation_terms = self
-            .positive_operations()
-            .iter()
-            .flat_map(|operation| operation.primitive_terms());
-        let positive_filter_terms = self
-            .positive_filters()
-            .iter()
-            .flat_map(|filter| filter.primitive_terms());
-
-        let negative_filter_terms = self
-            .negative_filters()
-            .iter()
-            .flatten()
-            .flat_map(|filter| filter.primitive_terms());
-
-        let aggregation_operation_terms = self
-            .aggregate_operations()
-            .iter()
-            .flat_map(|operation| operation.primitive_terms());
-        let aggregation_filter_terms = self
-            .aggregate_filters()
-            .iter()
-            .flat_map(|filter| filter.primitive_terms());
-
-        Box::new(
-            head_terms
-                .chain(positive_operation_terms)
-                .chain(positive_filter_terms)
-                .chain(negative_filter_terms)
-                .chain(aggregation_operation_terms)
-                .chain(aggregation_filter_terms),
-        )
-    }
-
-    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Primitive> + 'a> {
-        let head_terms = self
-            .head
-            .atoms
-            .iter_mut()
-            .flat_map(|atom| atom.primitive_terms_mut());
-
-        // TODO: Fix this iterator
-        //
-        // let positive_terms = self
-        //     .positive
-        //     .atoms
-        //     .iter_mut()
-        //     .flat_map(|atom| atom.primitive_terms_mut());
-
-        let positive_operation_terms = self
-            .positive
-            .operations
-            .iter_mut()
-            .flat_map(|operation| operation.primitive_terms_mut());
-        let positive_filter_terms = self
-            .positive
-            .filters
-            .iter_mut()
-            .flat_map(|filter| filter.primitive_terms_mut());
-
-        let negative_filter_terms = self
-            .negative
-            .filters
-            .iter_mut()
-            .flatten()
-            .flat_map(|filter| filter.primitive_terms_mut());
-
-        let aggregation_operation_terms = self
-            .aggregation
-            .operations
-            .iter_mut()
-            .flat_map(|operation| operation.primitive_terms_mut());
-        let aggregation_filter_terms = self
-            .aggregation
-            .filters
-            .iter_mut()
-            .flat_map(|filter| filter.primitive_terms_mut());
-
-        Box::new(
-            head_terms
-                // .chain(positive_temrs)
-                .chain(positive_operation_terms)
-                .chain(positive_filter_terms)
-                .chain(negative_filter_terms)
-                .chain(aggregation_operation_terms)
-                .chain(aggregation_filter_terms),
         )
     }
 }
