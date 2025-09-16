@@ -7,8 +7,9 @@ use std::fmt::Debug;
 use crate::{
     management::execution_plan::{ColumnOrder, ExecutionResult},
     tabular::operations::{
-        projectreorder::{GeneratorProjectReorder, ProjectReordering},
         OperationGeneratorEnum,
+        projectreorder::{GeneratorProjectReorder, ProjectReordering},
+        single::GeneratorSingle,
     },
 };
 
@@ -43,6 +44,10 @@ pub(crate) enum ExecutionTreeNode {
     ProjectReorder {
         generator: GeneratorProjectReorder,
         subnode: ExecutionTreeLeaf,
+    },
+    Single {
+        generator: GeneratorSingle,
+        subnode: ExecutionTreeOperation,
     },
 }
 
@@ -126,6 +131,11 @@ impl ExecutionTree {
                         ascii_tree::Tree::Leaf(vec![format!("New Table")])
                     }
                 };
+
+                ascii_tree::Tree::Node(format!("{generator:?}"), vec![subnode_tree])
+            }
+            ExecutionTreeNode::Single { generator, subnode } => {
+                let subnode_tree = Self::ascii_tree_recursive(subnode);
 
                 ascii_tree::Tree::Node(format!("{generator:?}"), vec![subnode_tree])
             }

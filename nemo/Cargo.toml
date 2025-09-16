@@ -56,6 +56,8 @@ oxrdfio = "0.1.6"
 oxrdf = "0.2.4"
 delegate = "0.13.3"
 orx-imp-vec = "2.14"
+itertools = "0.14.0"
+indexmap = "2.10.0"
 
 [dev-dependencies]
 env_logger = "*"

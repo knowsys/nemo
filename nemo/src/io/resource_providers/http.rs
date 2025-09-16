@@ -121,7 +121,9 @@ impl HttpResourceProvider {
             .unwrap_or_default();
         // Use 'contains()', because response_type contains content type and encoding information
         if !response_type.contains(media_type) {
-            warn!("HTTP response to the request: \n {full_url} \n is of content type {response_type:?}, expected {media_type:?}. Make sure you specified the correct IRI and parameters.");
+            warn!(
+                "HTTP response to the request: \n {full_url} \n is of content type {response_type:?}, expected {media_type:?}. Make sure you specified the correct IRI and parameters."
+            );
         }
 
         // we're expecting potentially compressed data, don't try to
@@ -129,7 +131,9 @@ impl HttpResourceProvider {
         let content = response.bytes().await.map_err(err_mapping)?;
 
         if content.is_empty() {
-            warn!("HTTP response to the request: \n {full_url} \n contains no content. Make sure you specified the correct IRI and parameters.");
+            warn!(
+                "HTTP response to the request: \n {full_url} \n contains no content. Make sure you specified the correct IRI and parameters."
+            );
         }
 
         Ok(HttpResource {

@@ -6,16 +6,16 @@ use nom::{
 };
 
 use crate::parser::{
+    ParserResult,
     ast::{
+        ProgramAST,
         comment::wsoc::WSoC,
         tag::{datatype::DataTypeTag, parameter::ParameterName},
         token::Token,
-        ProgramAST,
     },
     context::ParserContext,
     input::ParserInput,
     span::Span,
-    ParserResult,
 };
 
 const CONTEXT: ParserContext = ParserContext::DeclareNameTypePair;
@@ -77,13 +77,13 @@ mod test {
 
     use crate::{
         parser::{
+            ParserState,
             ast::{
-                sequence::{declare::NameTypePair, Sequence},
-                tag::parameter::Parameter,
                 ProgramAST,
+                sequence::{Sequence, declare::NameTypePair},
+                tag::parameter::Parameter,
             },
             input::ParserInput,
-            ParserState,
         },
         rule_model::components::import_export::io_type::IOType,
     };

@@ -4,14 +4,14 @@ use nom::sequence::{delimited, pair};
 
 use crate::{
     parser::{
+        ParserResult,
         ast::{
-            comment::wsoc::WSoC, expression::Expression, sequence::Sequence,
-            tag::operation::OperationTag, token::Token, ProgramAST,
+            ProgramAST, comment::wsoc::WSoC, expression::Expression, sequence::Sequence,
+            tag::operation::OperationTag, token::Token,
         },
-        context::{context, ParserContext},
+        context::{ParserContext, context},
         input::ParserInput,
         span::Span,
-        ParserResult,
     },
     rule_model::components::term::operation::operation_kind::OperationKind,
 };
@@ -102,9 +102,9 @@ mod test {
 
     use crate::{
         parser::{
-            ast::{expression::complex::operation::Operation, ProgramAST},
-            input::ParserInput,
             ParserState,
+            ast::{ProgramAST, expression::complex::operation::Operation},
+            input::ParserInput,
         },
         rule_model::components::term::operation::operation_kind::OperationKind,
     };

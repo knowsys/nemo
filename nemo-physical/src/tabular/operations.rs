@@ -7,6 +7,7 @@ pub(crate) mod join;
 pub(crate) mod null;
 pub(crate) mod projectreorder;
 pub(crate) mod prune;
+pub(crate) mod single;
 pub(crate) mod subtract;
 pub(crate) mod trim;
 pub(crate) mod union;
@@ -17,7 +18,7 @@ pub use function::FunctionAssignment;
 
 use std::{
     cell::RefCell,
-    collections::{hash_map::Entry, HashMap},
+    collections::{HashMap, hash_map::Entry},
     fmt::Debug,
     hash::Hash,
     ops::Deref,
@@ -259,7 +260,7 @@ where
         Some(
             self.map
                 .iter()
-                .find(|(_, &operation)| operation == *marker)?
+                .find(|(_, operation)| **operation == *marker)?
                 .0,
         )
     }

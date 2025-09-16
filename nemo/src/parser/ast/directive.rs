@@ -14,13 +14,13 @@ use strum_macros::EnumIter;
 use unknown::UnknownDirective;
 
 use crate::parser::{
-    context::{context, ParserContext},
+    ParserResult,
+    context::{ParserContext, context},
     input::ParserInput,
     span::Span,
-    ParserResult,
 };
 
-use super::{token::TokenKind, ProgramAST};
+use super::{ProgramAST, token::TokenKind};
 
 pub mod base;
 pub mod declare;
@@ -164,10 +164,10 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
-        ast::{directive::Directive, ProgramAST},
+        ParserState,
+        ast::{ProgramAST, directive::Directive},
         context::ParserContext,
         input::ParserInput,
-        ParserState,
     };
 
     #[test]

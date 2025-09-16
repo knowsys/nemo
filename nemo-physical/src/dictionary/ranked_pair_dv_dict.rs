@@ -3,7 +3,7 @@
 //! types of datavalues (e.g., strings or IRIs), which allows them to use more direct
 //! string representations without any risk of confusion.
 
-use super::{ranked_pair_dictionary::StringPairDictionary, AddResult, DvDict};
+use super::{AddResult, DvDict, ranked_pair_dictionary::StringPairDictionary};
 use crate::{
     datavalues::{AnyDataValue, ValueDomain},
     management::bytesized::ByteSized,

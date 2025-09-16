@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 
-use super::{syntax::tuple, AnyDataValue, DataValue, IriDataValue, ValueDomain};
+use super::{AnyDataValue, DataValue, IriDataValue, ValueDomain, syntax::tuple};
 
 /// Physical representation of a fixed-length tuple of [DataValue]s.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]

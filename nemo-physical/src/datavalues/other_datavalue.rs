@@ -1,7 +1,7 @@
 //! This module provides implementations [DataValue]s that represent datavalues for
 //! which we have no specific handling.
 
-use super::{syntax::RDF_DATATYPE_INDICATOR, DataValue, ValueDomain};
+use super::{DataValue, ValueDomain, syntax::RDF_DATATYPE_INDICATOR};
 
 /// Physical representation of arbitrary datavalues using two Strings, one
 /// for the lexical value and one for the datatype IRI.

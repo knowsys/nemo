@@ -8,11 +8,11 @@ use nom::{
 };
 
 use crate::parser::{
-    ast::{token::Token, ProgramAST},
-    context::{context, ParserContext},
+    ParserResult,
+    ast::{ProgramAST, token::Token},
+    context::{ParserContext, context},
     input::ParserInput,
     span::Span,
-    ParserResult,
 };
 
 /// AST node representing a string
@@ -105,9 +105,9 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
-        ast::{expression::basic::string::StringLiteral, ProgramAST},
-        input::ParserInput,
         ParserState,
+        ast::{ProgramAST, expression::basic::string::StringLiteral},
+        input::ParserInput,
     };
 
     #[test]

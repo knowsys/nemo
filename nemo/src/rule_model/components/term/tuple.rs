@@ -8,9 +8,9 @@ use std::{
 
 use crate::rule_model::{
     components::{
-        component_iterator, component_iterator_mut, ComponentBehavior, ComponentIdentity,
-        ComponentSource, IterableComponent, IterablePrimitives, IterableVariables,
-        ProgramComponent, ProgramComponentKind,
+        ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent,
+        IterablePrimitives, IterableVariables, ProgramComponent, ProgramComponentKind,
+        component_iterator, component_iterator_mut,
     },
     error::ValidationReport,
     origin::Origin,
@@ -18,9 +18,9 @@ use crate::rule_model::{
 };
 
 use super::{
-    primitive::{variable::Variable, Primitive},
-    value_type::ValueType,
     Term,
+    primitive::{Primitive, variable::Variable},
+    value_type::ValueType,
 };
 
 /// Tuple
@@ -285,8 +285,8 @@ impl IntoIterator for Tuple {
 mod test {
     use crate::rule_model::{
         components::{
-            term::{primitive::variable::Variable, tuple::Tuple, Term},
             IterableVariables,
+            term::{Term, primitive::variable::Variable, tuple::Tuple},
         },
         translation::TranslationComponent,
     };

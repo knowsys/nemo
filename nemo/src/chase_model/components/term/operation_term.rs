@@ -1,11 +1,17 @@
 //! This module defines [Operation] and [OperationTerm].
 
-use crate::rule_model::components::{
-    term::{
-        operation::operation_kind::OperationKind,
-        primitive::{variable::Variable, Primitive},
+use std::fmt::Display;
+
+use crate::{
+    rule_model::components::{
+        IterablePrimitives, IterableVariables,
+        term::{
+            operation::operation_kind::OperationKind,
+            primitive::{Primitive, variable::Variable},
+        },
     },
-    IterablePrimitives, IterableVariables,
+    syntax,
+    util::seperated_list::DisplaySeperatedList,
 };
 
 /// Operation
@@ -18,6 +24,17 @@ pub(crate) struct Operation {
     kind: OperationKind,
     /// The input arguments for the operation
     subterms: Vec<OperationTerm>,
+}
+
+impl Display for Operation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let terms = DisplaySeperatedList::display(
+            self.subterms.iter(),
+            &format!("{} ", syntax::SEQUENCE_SEPARATOR),
+        );
+
+        f.write_str(&format!("{:?}({})", self.kind, terms))
+    }
 }
 
 impl Operation {
@@ -72,6 +89,15 @@ impl IterablePrimitives for Operation {
 pub(crate) enum OperationTerm {
     Primitive(Primitive),
     Operation(Operation),
+}
+
+impl Display for OperationTerm {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            OperationTerm::Primitive(primitive) => f.write_str(&format!("{primitive}")),
+            OperationTerm::Operation(operation) => f.write_str(&format!("{operation}")),
+        }
+    }
 }
 
 impl IterableVariables for OperationTerm {

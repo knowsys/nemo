@@ -2,14 +2,14 @@
 
 use crate::rule_model::{
     components::{
+        ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent,
+        IterablePrimitives, IterableVariables, ProgramComponent, ProgramComponentKind,
         component_iterator, component_iterator_mut,
         tag::Tag,
         term::{
-            primitive::{variable::Variable, Primitive},
             Term,
+            primitive::{Primitive, variable::Variable},
         },
-        ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent,
-        IterablePrimitives, IterableVariables, ProgramComponent, ProgramComponentKind,
     },
     error::ValidationReport,
     origin::Origin,

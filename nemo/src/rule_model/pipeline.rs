@@ -11,10 +11,10 @@ use crate::rule_model::{
         arena::{Arena, Id},
         revision::ProgramRevision,
     },
-    programs::{program::Program, ProgramWrite},
+    programs::{ProgramWrite, program::Program},
 };
 
-use super::components::{atom::Atom, rule::Rule, IterableComponent, ProgramComponent};
+use super::components::{IterableComponent, ProgramComponent, atom::Atom, rule::Rule};
 
 pub mod arena;
 pub mod commit;

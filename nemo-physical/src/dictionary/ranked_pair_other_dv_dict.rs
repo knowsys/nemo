@@ -48,7 +48,7 @@ mod test {
     use crate::{
         datavalues::AnyDataValue,
         dictionary::{
-            ranked_pair_other_dv_dict::OtherSplittingDvDictionary, AddResult, DvDict, KNOWN_ID_MARK,
+            AddResult, DvDict, KNOWN_ID_MARK, ranked_pair_other_dv_dict::OtherSplittingDvDictionary,
         },
     };
 

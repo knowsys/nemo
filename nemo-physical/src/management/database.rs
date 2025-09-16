@@ -16,6 +16,8 @@ use std::{
     fmt::Debug,
 };
 
+use ascii_tree::write_tree;
+
 use crate::{
     datasources::table_providers::TableProvider,
     datavalues::AnyDataValue,
@@ -23,7 +25,7 @@ use crate::{
     management::{bytesized::ByteSized, database::execution_series::ExecutionTreeNode},
     meta::timing::TimedCode,
     tabular::{
-        operations::{projectreorder::ProjectReordering, OperationGenerator},
+        operations::{OperationGenerator, projectreorder::ProjectReordering},
         rowscan::RowScan,
         trie::Trie,
         triescan::TrieScanEnum,
@@ -80,6 +82,22 @@ pub struct DatabaseInstance {
 
 // Return basic information about tables managed by the database
 impl DatabaseInstance {
+    /// Return the current id
+    pub fn current_id(&self) -> (PermanentTableId, StorageId) {
+        (self.current_id, self.reference_manager.current_storage_id())
+    }
+
+    /// Delete everything starting from the given id
+    pub fn delete_from(&mut self, permanent_id: PermanentTableId, storage_id: StorageId) {
+        self.reference_manager
+            .delete_tables_from(storage_id, permanent_id);
+
+        self.table_infos
+            .retain(|existing_id, _| *existing_id < permanent_id);
+
+        self.current_id = permanent_id;
+    }
+
     /// Return the current number of tables.
     pub fn num_tables(&self) -> usize {
         self.table_infos.len()
@@ -147,6 +165,14 @@ impl DatabaseInstance {
             .unwrap_or_else(|err| panic!("No table with the id {id} exists: {err}"));
         let trie = self.reference_manager.trie(storage_id);
 
+        self.trie_row_iterator(trie)
+    }
+
+    /// Provide an iterator over the rows of the table with the given [Trie].
+    pub fn trie_row_iterator<'a>(
+        &'a self,
+        trie: &'a Trie,
+    ) -> Result<impl Iterator<Item = Vec<AnyDataValue>> + 'a, Error> {
         Ok(trie.row_iterator().map(|values| {
             values
                 .into_iter()
@@ -183,6 +209,37 @@ impl DatabaseInstance {
         }
 
         trie.contains_row(&row_storage)
+    }
+
+    /// Return the position of a row within a table (with respect to the standard ordering)
+    ///
+    /// # Panics
+    /// Panics if the given id does not exist.
+    pub fn table_row_position(
+        &mut self,
+        id: PermanentTableId,
+        row: &[AnyDataValue],
+    ) -> Option<usize> {
+        let storage_id = self
+            .reference_manager
+            .trie_id(&self.dictionary, id, ColumnOrder::default())
+            .unwrap_or_else(|err| panic!("No table with the id {id} exists: {err}"));
+        let trie = self.reference_manager.trie(storage_id);
+
+        let dictionary: &Dict = &self.dictionary();
+
+        let mut row_storage = Vec::with_capacity(row.len());
+        for data_value in row.iter() {
+            if let Some(storage_value) = data_value.try_to_storage_value_t(dictionary) {
+                row_storage.push(storage_value);
+            } else {
+                // `value` is not know to the dictionary and therefore
+                // not be part of a table.
+                return None;
+            }
+        }
+
+        trie.row_position(&row_storage)
     }
 }
 
@@ -349,7 +406,7 @@ impl DatabaseInstance {
     /// Returns a pair containing a (possibly empty) [Trie]
     /// and a list of reordered [Trie]s, one for each provided [ProjectReordering].
     fn execute_tree<'a>(
-        &'a mut self,
+        &'a self,
         storage: &'a TemporaryStorage,
         tree: &ExecutionTree,
         dependent: Vec<ProjectReordering>,
@@ -389,6 +446,15 @@ impl DatabaseInstance {
                 };
 
                 (trie, vec![])
+            }
+            ExecutionTreeNode::Single { generator, subnode } => {
+                if let Some(trie_scan) = self.evaluate_operation(&self.dictionary, storage, subnode)
+                {
+                    let trie = generator.apply_operation(trie_scan);
+                    (trie, vec![])
+                } else {
+                    (Trie::empty(0), vec![Trie::empty(0); dependent.len()])
+                }
             }
         }
     }
@@ -522,12 +588,20 @@ impl DatabaseInstance {
                                 operation,
                             );
                             trie_scan.and_then(|scan| {
-                                Iterator::next(&mut RowScan::new(scan, tree.cut_layers))
+                                Iterator::next(&mut RowScan::new(
+                                    scan,
+                                    tree.cut_layers,
+                                    tree.cut_layers,
+                                ))
                             })
                         }
                         ExecutionTreeNode::ProjectReorder { generator, subnode } => self
                             .evaluate_tree_leaf(&temporary_storage, subnode)
                             .and_then(|scan| generator.apply_operation_first(scan)),
+                        ExecutionTreeNode::Single {
+                            generator: _,
+                            subnode: _,
+                        } => todo!(),
                     }?;
 
                     let row_datavalue = row_storage
@@ -544,6 +618,60 @@ impl DatabaseInstance {
         }
 
         None
+    }
+
+    /// Evaluate the given [ExecutionPlan] and return a [Trie] without
+    /// saving anything to the permanent storage.
+    pub fn execute_plan_trie(&mut self, plan: ExecutionPlan) -> Result<Vec<Trie>, Error> {
+        let execution_series = plan.finalize();
+
+        let mut temporary_storage = TemporaryStorage {
+            loaded_tables: self.collect_requiured_tries(&execution_series.loaded_tries)?,
+            computed_tables: vec![None; execution_series.trees.len()],
+        };
+
+        for (tree_index, tree) in execution_series.trees.iter().enumerate() {
+            if temporary_storage.computed_tables[tree_index].is_some() {
+                continue;
+            }
+
+            let mut string_tree = String::new();
+            let _ = write_tree(&mut string_tree, &tree.ascii_tree());
+
+            let dependent_reorderings = tree
+                .dependents
+                .iter()
+                .map(|(_, projectreordering)| projectreordering.clone())
+                .collect::<Vec<_>>();
+
+            let (result_tree, results_dependent) =
+                self.execute_tree(&temporary_storage, tree, dependent_reorderings);
+
+            temporary_storage.computed_tables[tree_index] = Some(result_tree);
+            for ((computed_id, _), result_dependent) in
+                tree.dependents.iter().zip(results_dependent)
+            {
+                Self::log_new_trie(tree, &result_dependent);
+                temporary_storage.computed_tables[*computed_id] = Some(result_dependent);
+            }
+        }
+
+        let mut result = Vec::new();
+        for (tree, trie) in execution_series
+            .trees
+            .into_iter()
+            .zip(temporary_storage.computed_tables)
+        {
+            match tree.result {
+                ExecutionResult::Temporary => {} // Temporary table will be dropped at the end of the function
+                ExecutionResult::Permanent(_order, _name) => {
+                    let trie = trie.expect("Trie should have been computed.");
+                    result.push(trie);
+                }
+            }
+        }
+
+        Ok(result)
     }
 }
 

@@ -8,8 +8,8 @@ use crate::{
 };
 
 use super::{
-    complex::{infix::InfixOperation, operation::FunctionLikeOperation},
     TranslationComponent,
+    complex::{infix::InfixOperation, operation::FunctionLikeOperation},
 };
 
 impl TranslationComponent for Literal {

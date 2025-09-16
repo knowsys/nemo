@@ -3,10 +3,10 @@
 use std::str::{CharIndices, Chars};
 
 use nom::{
-    error::ErrorKind, AsBytes, IResult, InputIter, InputLength, InputTake, InputTakeAtPosition,
+    AsBytes, IResult, InputIter, InputLength, InputTake, InputTakeAtPosition, error::ErrorKind,
 };
 
-use super::{span::Span, ParserState};
+use super::{ParserState, span::Span};
 
 /// Input to a nom parser function
 #[derive(Debug, Clone)]

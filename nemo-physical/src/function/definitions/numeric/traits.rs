@@ -2,7 +2,7 @@
 //! in order for them to be used in all the supported arithmetic expressions
 
 use num::{
-    integer::Roots, traits::CheckedNeg, CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, One, Zero,
+    CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, One, Zero, integer::Roots, traits::CheckedNeg,
 };
 
 /// Trait for a type that allows a square root operation

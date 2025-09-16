@@ -4,7 +4,7 @@
 use crate::{
     columnar::{
         column::{Column, ColumnEnum},
-        columnbuilder::{adaptive::ColumnBuilderAdaptive, ColumnBuilder},
+        columnbuilder::{ColumnBuilder, adaptive::ColumnBuilderAdaptive},
     },
     management::bytesized::ByteSized,
 };

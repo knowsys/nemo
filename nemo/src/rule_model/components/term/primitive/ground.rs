@@ -10,9 +10,9 @@ use crate::{
     parser::ParserErrorReport,
     rule_model::{
         components::{
-            term::{value_type::ValueType, Term},
             ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent,
             ProgramComponent, ProgramComponentKind,
+            term::{Term, value_type::ValueType},
         },
         error::ValidationReport,
         origin::Origin,

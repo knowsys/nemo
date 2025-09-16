@@ -31,7 +31,9 @@ impl FloatDataValue {
     /// The given `value` is NaN.
     pub(crate) fn from_f32_unchecked(value: f32) -> Self {
         if !value.is_finite() {
-            panic!("floating point number must represent a finite value (neither infinity nor NaN are allowed).");
+            panic!(
+                "floating point number must represent a finite value (neither infinity nor NaN are allowed)."
+            );
         }
 
         FloatDataValue(value)
@@ -112,7 +114,9 @@ impl DoubleDataValue {
     /// The given `value` is NaN or an infinity.
     pub(crate) fn from_f64_unchecked(value: f64) -> Self {
         if !value.is_finite() {
-            panic!("floating point number must represent a finite value (neither infinity nor NaN are allowed).");
+            panic!(
+                "floating point number must represent a finite value (neither infinity nor NaN are allowed)."
+            );
         }
 
         DoubleDataValue(value)

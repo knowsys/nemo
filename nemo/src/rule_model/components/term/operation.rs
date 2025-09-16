@@ -14,20 +14,20 @@ use crate::{
     },
     rule_model::{
         components::{
-            component_iterator, component_iterator_mut, ComponentBehavior, ComponentIdentity,
-            ComponentSource, IterableComponent, IterablePrimitives, IterableVariables,
-            ProgramComponent, ProgramComponentKind,
+            ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent,
+            IterablePrimitives, IterableVariables, ProgramComponent, ProgramComponentKind,
+            component_iterator, component_iterator_mut,
         },
-        error::{validation_error::ValidationError, ValidationReport},
+        error::{ValidationReport, validation_error::ValidationError},
         origin::Origin,
         pipeline::id::ProgramComponentId,
     },
 };
 
 use super::{
-    primitive::{ground::GroundTerm, variable::Variable, Primitive},
-    value_type::ValueType,
     Term,
+    primitive::{Primitive, ground::GroundTerm, variable::Variable},
+    value_type::ValueType,
 };
 
 /// Operation
@@ -239,10 +239,10 @@ impl Operation {
 
 impl Display for Operation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some(infix) = self.infix_representation() {
-            if self.subterms.len() == 2 {
-                return self.format_infix_operation(f, infix, &self.subterms[0], &self.subterms[1]);
-            }
+        if let Some(infix) = self.infix_representation()
+            && self.subterms.len() == 2
+        {
+            return self.format_infix_operation(f, infix, &self.subterms[0], &self.subterms[1]);
         }
 
         self.format_operation(f)
@@ -380,8 +380,8 @@ impl IterablePrimitives for Operation {
 mod test {
     use crate::rule_model::{
         components::{
-            term::{operation::operation_kind::OperationKind, Term},
             ComponentBehavior,
+            term::{Term, operation::operation_kind::OperationKind},
         },
         translation::TranslationComponent,
     };

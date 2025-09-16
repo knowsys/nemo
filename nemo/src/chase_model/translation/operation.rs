@@ -6,7 +6,7 @@ use crate::{
         operation::ChaseOperation,
         term::operation_term::{Operation, OperationTerm},
     },
-    rule_model::components::term::{primitive::variable::Variable, Term},
+    rule_model::components::term::{Term, primitive::variable::Variable},
 };
 
 use super::ProgramChaseTranslation;

@@ -3,10 +3,10 @@
 use std::collections::HashSet;
 
 use crate::rule_model::{
-    components::{statement::Statement, tag::Tag, ComponentIdentity},
+    components::{ComponentIdentity, statement::Statement, tag::Tag},
     error::ValidationReport,
     pipeline::id::ProgramComponentId,
-    programs::{handle::ProgramHandle, ProgramRead},
+    programs::{ProgramRead, handle::ProgramHandle},
 };
 
 use super::ProgramTransformation;

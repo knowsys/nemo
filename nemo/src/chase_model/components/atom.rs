@@ -6,7 +6,7 @@ pub(crate) mod variable_atom;
 
 use std::fmt::Display;
 
-use crate::rule_model::components::{tag::Tag, IterableVariables};
+use crate::rule_model::components::{IterableVariables, tag::Tag};
 
 /// Tagged list of terms.
 pub trait ChaseAtom: IterableVariables + Display {

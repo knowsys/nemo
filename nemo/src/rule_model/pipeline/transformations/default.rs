@@ -6,15 +6,14 @@ use crate::{
     execution::execution_parameters::ExecutionParameters,
     rule_model::{
         error::ValidationReport,
-        pipeline::transformations::validate::TransformationValidate,
-        programs::{handle::ProgramHandle, ProgramRead},
+        pipeline::transformations::{
+            active::TransformationActive, validate::TransformationValidate,
+        },
+        programs::{ProgramRead, handle::ProgramHandle},
     },
 };
 
-use super::{
-    active::TransformationActive, exports::TransformationExports, global::TransformationGlobal,
-    ProgramTransformation,
-};
+use super::{ProgramTransformation, exports::TransformationExports, global::TransformationGlobal};
 
 /// Default transformation
 ///

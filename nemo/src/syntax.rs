@@ -360,12 +360,12 @@ pub mod datatypes {
 
 pub mod datavalues {
     //! This module defines the syntax for datavalues.
+    pub use nemo_physical::datavalues::syntax::RDF_DATATYPE_INDICATOR;
     pub use nemo_physical::datavalues::syntax::boolean;
     pub use nemo_physical::datavalues::syntax::iri;
     pub use nemo_physical::datavalues::syntax::map;
     pub use nemo_physical::datavalues::syntax::string;
     pub use nemo_physical::datavalues::syntax::tuple;
-    pub use nemo_physical::datavalues::syntax::RDF_DATATYPE_INDICATOR;
 
     /// Anonymous values such as variables or names
     pub const ANONYMOUS: &str = "_";

@@ -4,9 +4,9 @@ use std::{fmt::Display, hash::Hash};
 
 use crate::rule_model::{
     components::{
-        component_iterator, component_iterator_mut, tag::Tag, ComponentBehavior, ComponentIdentity,
-        ComponentSource, IterableComponent, IterablePrimitives, IterableVariables,
-        ProgramComponent, ProgramComponentKind,
+        ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent,
+        IterablePrimitives, IterableVariables, ProgramComponent, ProgramComponentKind,
+        component_iterator, component_iterator_mut, tag::Tag,
     },
     error::ValidationReport,
     origin::Origin,
@@ -14,9 +14,9 @@ use crate::rule_model::{
 };
 
 use super::{
-    primitive::{variable::Variable, Primitive},
-    value_type::ValueType,
     Term,
+    primitive::{Primitive, variable::Variable},
+    value_type::ValueType,
 };
 
 /// Map
@@ -355,7 +355,7 @@ impl IntoIterator for Map {
 #[cfg(test)]
 mod test {
     use crate::rule_model::{
-        components::term::{primitive::variable::Variable, Term},
+        components::term::{Term, primitive::variable::Variable},
         translation::TranslationComponent,
     };
 

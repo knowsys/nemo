@@ -18,7 +18,9 @@ pub enum DataValueCreationError {
     #[error("integer number could not be parsed")]
     IntegerNotParsed(#[from] ParseIntError),
     /// Error for problems with integer ranges
-    #[error("integer number {value} is not in supported range [{min},{max}] for datatype {datatype_name}")]
+    #[error(
+        "integer number {value} is not in supported range [{min},{max}] for datatype {datatype_name}"
+    )]
     IntegerRange {
         /// Smallest value that would have been allowed
         min: i64,

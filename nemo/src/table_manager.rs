@@ -7,9 +7,9 @@ use nemo_physical::{
     management::{
         bytesized::ByteSized,
         database::{
+            DatabaseInstance, Dict,
             id::{ExecutionId, PermanentTableId},
             sources::TableSource,
-            DatabaseInstance, Dict,
         },
         execution_plan::{ColumnOrder, ExecutionNodeRef, ExecutionPlan},
     },
@@ -345,6 +345,16 @@ impl TableManager {
         }
     }
 
+    /// Return a mutbale reference to the [DatabaseInstance].
+    pub(crate) fn database_mut(&mut self) -> &mut DatabaseInstance {
+        &mut self.database
+    }
+
+    /// Return a reference to the [DatabaseInstance].
+    pub(crate) fn database(&self) -> &DatabaseInstance {
+        &self.database
+    }
+
     /// Return the [PermanentTableId] that is associated with a given subtable.
     /// Returns None if the predicate does not exist.
     fn table_id(&self, subtable: &SubtableIdentifier) -> Option<PermanentTableId> {
@@ -372,6 +382,14 @@ impl TableManager {
         id: PermanentTableId,
     ) -> Result<impl Iterator<Item = Vec<AnyDataValue>> + '_, Error> {
         Ok(self.database.table_row_iterator(id)?)
+    }
+
+    /// Get a an iterator over the rows of a trie
+    pub(crate) fn trie_row_iterator<'a>(
+        &'a self,
+        trie: &'a Trie,
+    ) -> Result<impl Iterator<Item = Vec<AnyDataValue>> + 'a, Error> {
+        Ok(self.database.trie_row_iterator(trie)?)
     }
 
     /// Combine all subtables of a predicate into one table
@@ -520,6 +538,63 @@ impl TableManager {
             .arity
     }
 
+    /// For a predicate,
+    /// return all tables that are within a given range of steps.
+    ///
+    /// Returns a list of pairs consisting of step and id.
+    pub fn tables_in_range_steps(
+        &self,
+        predicate: &Tag,
+        range: Range<usize>,
+    ) -> Vec<(usize, PermanentTableId)> {
+        self.predicate_subtables
+            .get(predicate)
+            .map(|handler| {
+                handler
+                    .single
+                    .iter()
+                    .filter_map(|(step, id)| {
+                        if range.contains(step) {
+                            Some((*step, *id))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default()
+    }
+
+    /// For a predicate,
+    /// return all tables within a given range of steps
+    /// derived a given rule.
+    ///
+    /// Returns a list of pairs consisting of step and id.
+    pub fn tables_in_range_rule_steps(
+        &self,
+        predicate: &Tag,
+        range: Range<usize>,
+        rules: &[usize],
+        rule: usize,
+    ) -> Vec<(usize, PermanentTableId)> {
+        self.predicate_subtables
+            .get(predicate)
+            .map(|handler| {
+                handler
+                    .single
+                    .iter()
+                    .filter_map(|(step, id)| {
+                        if rules[*step] == rule && range.contains(step) {
+                            Some((*step, *id))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default()
+    }
+
     /// Return the ids of all subtables of a predicate within a certain range of steps.
     pub fn tables_in_range(&self, predicate: &Tag, range: &Range<usize>) -> Vec<PermanentTableId> {
         self.predicate_subtables
@@ -639,6 +714,24 @@ impl TableManager {
         None
     }
 
+    /// Return an id for a given row and predicate, if it exists.
+    ///
+    /// Returns `None` if there is no such row for this predicate.
+    pub fn table_row_id(&mut self, predicate: &Tag, row: &[AnyDataValue]) -> Option<usize> {
+        let handler = self.predicate_subtables.get(predicate)?;
+
+        let mut skipped: usize = 0;
+        for (_, id) in &handler.single {
+            if let Some(row_index) = self.database.table_row_position(*id, row) {
+                return Some(skipped + row_index);
+            }
+
+            skipped += self.database.count_rows_in_memory(*id);
+        }
+
+        None
+    }
+
     /// Execute a given [SubtableExecutionPlan]
     /// but evaluate it only until the first row of the result table
     /// or return None if it is empty.
@@ -652,6 +745,18 @@ impl TableManager {
     ) -> Option<Vec<AnyDataValue>> {
         self.database
             .execute_first_match(subtable_plan.execution_plan)
+    }
+
+    /// Execute a given [SubtableExecutionPlan]
+    /// and return a list of [Trie]s for each permanent table
+    /// instead of saving it to the database.
+    pub fn execute_plan_trie(
+        &mut self,
+        subtable_plan: SubtableExecutionPlan,
+    ) -> Result<Vec<Trie>, Error> {
+        Ok(self
+            .database
+            .execute_plan_trie(subtable_plan.execution_plan)?)
     }
 }
 

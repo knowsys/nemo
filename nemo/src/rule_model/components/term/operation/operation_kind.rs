@@ -441,9 +441,11 @@ mod test {
                 break;
             }
 
-            assert!(names[(name_index + 1)..]
-                .iter()
-                .all(|remaining| !remaining.starts_with(name)))
+            assert!(
+                names[(name_index + 1)..]
+                    .iter()
+                    .all(|remaining| !remaining.starts_with(name))
+            )
         }
     }
 }

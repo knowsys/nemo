@@ -2,38 +2,31 @@
 
 use std::{alloc::Layout, collections::HashMap, fmt::Formatter, io::Cursor};
 
+use gloo_utils::format::JsValueSerdeExt;
 use js_sys::{Array, Reflect, Set, Uint8Array};
 use thiserror::Error;
-use wasm_bindgen::{prelude::wasm_bindgen, JsCast, JsValue};
+use wasm_bindgen::{JsCast, JsValue, prelude::wasm_bindgen};
 use web_sys::{Blob, FileReaderSync};
 
 use nemo::{
     datavalues::{AnyDataValue, DataValue},
     error::ReadingError,
-    execution::{
-        tracing::trace::{ExecutionTrace, ExecutionTraceTree, TraceFactHandle},
-        ExecutionEngine,
-    },
+    execution::ExecutionEngine,
     io::{
+        ImportManager,
         formats::FileFormatMeta,
         resource_providers::{ResourceProvider, ResourceProviders},
-        ImportManager,
     },
     rule_model::{
-        components::{
-            fact::Fact,
-            output::Output,
-            tag::Tag,
-            term::{primitive::Primitive, Term},
-        },
-        programs::{program::Program, ProgramRead, ProgramWrite},
-        translation::ProgramParseReport,
+        components::{output::Output, tag::Tag},
+        programs::{ProgramRead, ProgramWrite, program::Program},
     },
 };
 
 use nemo_physical::{error::ExternalReadingError, resource::Resource};
 
 mod language_server;
+mod models;
 
 #[wasm_bindgen]
 #[derive(Clone)]
@@ -44,8 +37,6 @@ enum WasmOrInternalNemoError {
     /// Nemo-internal error
     #[error(transparent)]
     Nemo(#[from] nemo::error::Error),
-    #[error("Unable to parse component:\n {0}")]
-    ComponentParse(ProgramParseReport),
     #[error("Unable to parse program:\n {0}")]
     Parser(String),
     #[error("Invalid program:\n {0}")]
@@ -94,7 +85,7 @@ impl NemoProgram {
             Err((_, report)) => {
                 return Err(NemoError(WasmOrInternalNemoError::Parser(format!(
                     "{report}"
-                ))))
+                ))));
             }
         };
 
@@ -344,7 +335,7 @@ impl NemoEngine {
         predicate: String,
         sync_access_handle: web_sys::FileSystemSyncAccessHandle,
     ) -> Result<(), NemoError> {
-        use nemo::io::{formats::dsv::DsvHandler, ExportManager};
+        use nemo::io::{ExportManager, formats::dsv::DsvHandler};
 
         let identifier = Tag::from(predicate.clone());
 
@@ -372,135 +363,58 @@ impl NemoEngine {
             .map_err(NemoError)
     }
 
-    fn trace_fact_at_index(
+    #[wasm_bindgen(js_name = "traceTreeForTable")]
+    pub fn trace_tree_for_table(
         &mut self,
-        predicate: String,
-        row_index: usize,
-    ) -> Result<Option<(ExecutionTrace, Vec<TraceFactHandle>)>, NemoError> {
-        let predicate_tag = Tag::from(predicate.clone());
+        tree_for_table_query: JsValue,
+    ) -> Result<JsValue, NemoError> {
+        let tree_for_table_query: models::TreeForTableQuery = tree_for_table_query
+            .into_serde()
+            .map_err(|err| WasmOrInternalNemoError::Reflection(err.to_string().into()))
+            .map_err(NemoError)?;
 
-        let iter = self
+        let query =
+            nemo::execution::tracing::tree_query::TreeForTableQuery::from(tree_for_table_query);
+
+        let response = self
             .engine
-            .predicate_rows(&predicate_tag)
+            .trace_tree(query)
             .map_err(WasmOrInternalNemoError::Nemo)
             .map_err(NemoError)?;
 
-        let terms_to_trace_opt: Option<Vec<AnyDataValue>> =
-            iter.into_iter().flatten().nth(row_index);
+        let tree_for_table_response = models::TreeForTableResponse::from(response);
 
-        if let Some(terms_to_trace) = terms_to_trace_opt {
-            let fact_to_trace = Fact::new(
-                predicate_tag,
-                terms_to_trace
-                    .into_iter()
-                    .map(|term| Term::Primitive(Primitive::from(term))),
-            );
+        JsValue::from_serde(&tree_for_table_response)
+            .map_err(|err| WasmOrInternalNemoError::Reflection(err.to_string().into()))
+            .map_err(NemoError)
+    }
 
-            let (trace, handles) = self
-                .engine
-                .trace(vec![fact_to_trace])
-                .map_err(WasmOrInternalNemoError::Nemo)
+    #[wasm_bindgen(js_name = "traceTableEntriesForTreeNodes")]
+    pub fn trace_table_entries_for_tree_nodes(
+        &mut self,
+        table_entries_for_tree_nodes_query: JsValue,
+    ) -> Result<JsValue, JsValue> {
+        let table_entries_for_tree_nodes_query: models::TableEntriesForTreeNodesQuery =
+            table_entries_for_tree_nodes_query
+                .into_serde()
+                .map_err(|err| WasmOrInternalNemoError::Reflection(err.to_string().into()))
                 .map_err(NemoError)?;
 
-            Ok(Some((trace, handles)))
-        } else {
-            Ok(None)
-        }
-    }
+        let query = nemo::execution::tracing::node_query::TableEntriesForTreeNodesQuery::from(
+            table_entries_for_tree_nodes_query,
+        );
 
-    #[wasm_bindgen(js_name = "traceFactAtIndexAscii")]
-    pub fn trace_fact_at_index_ascii(
-        &mut self,
-        predicate: String,
-        row_index: usize,
-    ) -> Result<Option<String>, NemoError> {
-        self.trace_fact_at_index(predicate, row_index).map(|opt| {
-            opt.and_then(|(trace, handles)| {
-                trace
-                    .tree(handles[0])
-                    .as_ref()
-                    .map(ExecutionTraceTree::to_ascii_art)
-            })
-        })
-    }
+        let response = self.engine.trace_node(&query);
 
-    #[wasm_bindgen(js_name = "traceFactAtIndexGraphMlTree")]
-    pub fn trace_fact_at_index_graphml_tree(
-        &mut self,
-        predicate: String,
-        row_index: usize,
-    ) -> Result<Option<String>, NemoError> {
-        self.trace_fact_at_index(predicate, row_index).map(|opt| {
-            opt.and_then(|(trace, handles)| {
-                trace
-                    .tree(handles[0])
-                    .as_ref()
-                    .map(ExecutionTraceTree::to_graphml)
-            })
-        })
-    }
+        let table_entries_for_tree_nodes_response = response
+            .elements
+            .into_iter()
+            .map(models::TableEntriesForTreeNodesResponseInner::from)
+            .collect::<Vec<_>>();
 
-    #[wasm_bindgen(js_name = "traceFactAtIndexGraphMlDag")]
-    pub fn trace_fact_at_index_graphml_dag(
-        &mut self,
-        predicate: String,
-        row_index: usize,
-    ) -> Result<Option<String>, NemoError> {
-        self.trace_fact_at_index(predicate, row_index)
-            .map(|opt| opt.map(|(trace, handles)| trace.graphml(&handles)))
-    }
-
-    fn parse_and_trace_fact(
-        &mut self,
-        fact: &str,
-    ) -> Result<Option<(ExecutionTrace, Vec<TraceFactHandle>)>, NemoError> {
-        let parsed_fact = Fact::parse(fact)
-            .map_err(WasmOrInternalNemoError::ComponentParse)
-            .map_err(NemoError)?;
-
-        let (trace, handles) = self
-            .engine
-            .trace(vec![parsed_fact])
-            .map_err(WasmOrInternalNemoError::Nemo)
-            .map_err(NemoError)?;
-
-        Ok(Some((trace, handles)))
-    }
-
-    #[wasm_bindgen(js_name = "parseAndTraceFactAscii")]
-    pub fn parse_and_trace_fact_ascii(&mut self, fact: &str) -> Result<Option<String>, NemoError> {
-        self.parse_and_trace_fact(fact).map(|opt| {
-            opt.and_then(|(trace, handles)| {
-                trace
-                    .tree(handles[0])
-                    .as_ref()
-                    .map(ExecutionTraceTree::to_ascii_art)
-            })
-        })
-    }
-
-    #[wasm_bindgen(js_name = "parseAndTraceFactGraphMlTree")]
-    pub fn parse_and_trace_fact_graphml_tree(
-        &mut self,
-        fact: &str,
-    ) -> Result<Option<String>, NemoError> {
-        self.parse_and_trace_fact(fact).map(|opt| {
-            opt.and_then(|(trace, handles)| {
-                trace
-                    .tree(handles[0])
-                    .as_ref()
-                    .map(ExecutionTraceTree::to_graphml)
-            })
-        })
-    }
-
-    #[wasm_bindgen(js_name = "parseAndTraceFactGraphMlDag")]
-    pub fn parse_and_trace_fact_graphml_dag(
-        &mut self,
-        fact: &str,
-    ) -> Result<Option<String>, NemoError> {
-        self.parse_and_trace_fact(fact)
-            .map(|opt| opt.map(|(trace, handles)| trace.graphml(&handles)))
+        Ok(JsValue::from_serde(&table_entries_for_tree_nodes_response)
+            .map_err(|err| WasmOrInternalNemoError::Reflection(err.to_string().into()))
+            .map_err(NemoError)?)
     }
 }
 

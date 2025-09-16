@@ -23,8 +23,8 @@ use std::{
 use atom::Atom;
 use enum_assoc::Assoc;
 use import_export::{
-    attribute::ImportExportAttribute, specification::ImportExportSpec, ExportDirective,
-    ImportDirective,
+    ExportDirective, ImportDirective, attribute::ImportExportAttribute,
+    specification::ImportExportSpec,
 };
 use literal::Literal;
 use nemo_physical::dictionary::datavalue_dictionary::AsAny;
@@ -32,19 +32,19 @@ use output::Output;
 use parameter::ParameterDeclaration;
 use rule::Rule;
 use term::{
+    Term,
     aggregate::Aggregate,
     function::FunctionTerm,
     map::Map,
     primitive::{
+        Primitive,
         ground::GroundTerm,
         variable::{
-            existential::ExistentialVariable, global::GlobalVariable, universal::UniversalVariable,
-            Variable,
+            Variable, existential::ExistentialVariable, global::GlobalVariable,
+            universal::UniversalVariable,
         },
-        Primitive,
     },
     tuple::Tuple,
-    Term,
 };
 
 use crate::rule_model::{components::statement::Statement, programs::program::Program};

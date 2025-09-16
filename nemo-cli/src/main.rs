@@ -21,9 +21,9 @@ pub mod cli;
 pub mod error;
 
 use std::{
-    fs::{read_to_string, File},
-    io::stdout,
+    fs::{File, read_to_string},
     io::Write,
+    io::stdout,
 };
 
 use clap::Parser;
@@ -36,14 +36,16 @@ use nemo::{
     datavalues::AnyDataValue,
     error::Error,
     execution::{
-        execution_parameters::ExecutionParameters, DefaultExecutionEngine, ExecutionEngine,
+        DefaultExecutionEngine, ExecutionEngine,
+        execution_parameters::ExecutionParameters,
+        tracing::{node_query::TableEntriesForTreeNodesQuery, tree_query::TreeForTableQuery},
     },
-    io::{resource_providers::ResourceProviders, ImportManager},
+    io::{ImportManager, resource_providers::ResourceProviders},
     meta::timing::{TimedCode, TimedDisplay},
     rule_file::RuleFile,
     rule_model::{
-        components::{fact::Fact, tag::Tag, term::Term, ComponentBehavior},
-        programs::{program::Program, ProgramRead},
+        components::{ComponentBehavior, fact::Fact, tag::Tag, term::Term},
+        programs::{ProgramRead, program::Program},
     },
 };
 
@@ -212,6 +214,38 @@ fn handle_tracing(cli: &CliApp, engine: &mut DefaultExecutionEngine) -> Result<(
     Ok(())
 }
 
+fn handle_tracing_tree(cli: &CliApp, engine: &mut DefaultExecutionEngine) -> Result<(), CliError> {
+    if let Some(query_json) = &cli.tracing_tree.trace_tree_json {
+        let tree_query: TreeForTableQuery =
+            serde_json::from_str(query_json).map_err(|_| CliError::TracingInvalidFact {
+                fact: String::from("placeholder"),
+            })?;
+
+        let result = engine.trace_tree(tree_query)?;
+
+        let json = serde_json::to_string_pretty(&result).unwrap();
+        println!("{json}");
+    }
+
+    Ok(())
+}
+
+fn handle_tracing_node(cli: &CliApp, engine: &mut DefaultExecutionEngine) -> Result<(), CliError> {
+    if let Some(query_file) = &cli.tracing_node.trace_node_json {
+        let query_string = read_to_string(query_file).expect("Unable to read file");
+
+        let node_query: TableEntriesForTreeNodesQuery =
+            serde_json::from_str(&query_string).expect("Unable to parse json file");
+
+        let result = engine.trace_node(&node_query);
+
+        let json = serde_json::to_string_pretty(&result).unwrap();
+        println!("{json}");
+    }
+
+    Ok(())
+}
+
 fn run(mut cli: CliApp) -> Result<(), CliError> {
     TimedCode::instance().start();
     TimedCode::instance().sub("Reading & Preprocessing").start();
@@ -322,7 +356,9 @@ fn run(mut cli: CliApp) -> Result<(), CliError> {
         print_memory_details(&engine);
     }
 
-    handle_tracing(&cli, &mut engine)
+    handle_tracing(&cli, &mut engine)?;
+    handle_tracing_tree(&cli, &mut engine)?;
+    handle_tracing_node(&cli, &mut engine)
 }
 
 fn main() {

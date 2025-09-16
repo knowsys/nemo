@@ -1,11 +1,17 @@
 //! This module defines [ChaseRule].
 
-use crate::rule_model::{
-    components::{
-        term::primitive::{variable::Variable, Primitive},
-        IterablePrimitives, IterableVariables,
+use std::fmt::Display;
+
+use crate::{
+    rule_model::{
+        components::{
+            IterablePrimitives, IterableVariables,
+            term::primitive::{Primitive, variable::Variable},
+        },
+        origin::Origin,
     },
-    origin::Origin,
+    syntax,
+    util::seperated_list::DisplaySeperatedList,
 };
 
 use super::{
@@ -90,6 +96,27 @@ impl ChaseRule {
     }
 }
 
+impl Display for ChaseRule {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let head = DisplaySeperatedList::display(
+            self.head().iter(),
+            &format!("{} ", syntax::SEQUENCE_SEPARATOR),
+        );
+
+        let body = DisplaySeperatedList::display(
+            self.positive_body().iter(),
+            &format!("{} ", syntax::SEQUENCE_SEPARATOR),
+        );
+
+        let filters = DisplaySeperatedList::display(
+            self.positive_filters().iter(),
+            &format!("{} ", syntax::SEQUENCE_SEPARATOR),
+        );
+
+        f.write_str(&format!("{head} :- {body} {filters}"))
+    }
+}
+
 impl ChaseRule {
     /// Return the list of head atoms contained in this rule.
     pub(crate) fn head(&self) -> &Vec<PrimitiveAtom> {
@@ -119,6 +146,10 @@ impl ChaseRule {
     /// Return the list of filters that will be applied to the negative part of the body.
     pub(crate) fn negative_filters(&self) -> &Vec<Vec<ChaseFilter>> {
         &self.negative.filters
+    }
+
+    pub(crate) fn _negative_atoms(&self) -> &Vec<VariableAtom> {
+        &self.negative.atoms
     }
 
     /// Return the aggregation that will be evaluated during this rule's application.
@@ -195,6 +226,43 @@ impl ChaseRule {
     /// Add a new atom to the head of the rule.
     pub(crate) fn add_head_atom(&mut self, atom: PrimitiveAtom) {
         self.head.atoms.push(atom)
+    }
+
+    /// Return an iterator over primitive terms
+    pub(crate) fn primitive_terms(&self) -> Box<dyn Iterator<Item = &Primitive> + '_> {
+        let head_terms = self.head().iter().flat_map(|atom| atom.primitive_terms());
+        let positive_operation_terms = self
+            .positive_operations()
+            .iter()
+            .flat_map(|operation| operation.primitive_terms());
+        let positive_filter_terms = self
+            .positive_filters()
+            .iter()
+            .flat_map(|filter| filter.primitive_terms());
+
+        let negative_filter_terms = self
+            .negative_filters()
+            .iter()
+            .flatten()
+            .flat_map(|filter| filter.primitive_terms());
+
+        let aggregation_operation_terms = self
+            .aggregate_operations()
+            .iter()
+            .flat_map(|operation| operation.primitive_terms());
+        let aggregation_filter_terms = self
+            .aggregate_filters()
+            .iter()
+            .flat_map(|filter| filter.primitive_terms());
+
+        Box::new(
+            head_terms
+                .chain(positive_operation_terms)
+                .chain(positive_filter_terms)
+                .chain(negative_filter_terms)
+                .chain(aggregation_operation_terms)
+                .chain(aggregation_filter_terms),
+        )
     }
 }
 
@@ -312,49 +380,5 @@ impl IterableVariables for ChaseRule {
                 .chain(aggregation_operation_variables)
                 .chain(aggregation_filter_variables),
         )
-    }
-}
-
-impl IterablePrimitives for ChaseRule {
-    type TermType = Primitive;
-
-    fn primitive_terms<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Primitive> + 'a> {
-        let head_terms = self.head().iter().flat_map(|atom| atom.primitive_terms());
-        let positive_operation_terms = self
-            .positive_operations()
-            .iter()
-            .flat_map(|operation| operation.primitive_terms());
-        let positive_filter_terms = self
-            .positive_filters()
-            .iter()
-            .flat_map(|filter| filter.primitive_terms());
-
-        let negative_filter_terms = self
-            .negative_filters()
-            .iter()
-            .flatten()
-            .flat_map(|filter| filter.primitive_terms());
-
-        let aggregation_operation_terms = self
-            .aggregate_operations()
-            .iter()
-            .flat_map(|operation| operation.primitive_terms());
-        let aggregation_filter_terms = self
-            .aggregate_filters()
-            .iter()
-            .flat_map(|filter| filter.primitive_terms());
-
-        Box::new(
-            head_terms
-                .chain(positive_operation_terms)
-                .chain(positive_filter_terms)
-                .chain(negative_filter_terms)
-                .chain(aggregation_operation_terms)
-                .chain(aggregation_filter_terms),
-        )
-    }
-
-    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Primitive> + 'a> {
-        unimplemented!("currently unused, needs support in the entire chase model")
     }
 }

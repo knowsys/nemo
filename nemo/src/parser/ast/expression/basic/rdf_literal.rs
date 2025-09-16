@@ -4,11 +4,11 @@
 use nom::sequence::{separated_pair, tuple};
 
 use crate::parser::{
-    ast::{tag::structure::StructureTag, token::Token, ProgramAST},
-    context::{context, ParserContext},
+    ParserResult,
+    ast::{ProgramAST, tag::structure::StructureTag, token::Token},
+    context::{ParserContext, context},
     input::ParserInput,
     span::Span,
-    ParserResult,
 };
 
 /// AST node representing an rdf literal
@@ -90,9 +90,9 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
-        ast::{expression::basic::rdf_literal::RdfLiteral, ProgramAST},
-        input::ParserInput,
         ParserState,
+        ast::{ProgramAST, expression::basic::rdf_literal::RdfLiteral},
+        input::ParserInput,
     };
 
     #[test]

@@ -9,7 +9,7 @@ use crate::{
     tabular::trie::Trie,
 };
 
-use super::{sources::TableSource, Dict};
+use super::{Dict, sources::TableSource};
 
 /// Represents the stored table
 #[derive(Debug)]
@@ -125,7 +125,7 @@ mod test {
     use crate::{
         datatypes::{Float, StorageValueT},
         datavalues::AnyDataValue,
-        management::database::{sources::SimpleTable, Dict},
+        management::database::{Dict, sources::SimpleTable},
     };
 
     use super::TableStorage;

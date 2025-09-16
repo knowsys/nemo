@@ -3,7 +3,7 @@
 
 use std::{
     cell::RefCell,
-    collections::{hash_map::Entry, HashMap},
+    collections::{HashMap, hash_map::Entry},
     fmt::Debug,
     rc::{Rc, Weak},
 };
@@ -13,15 +13,16 @@ use crate::{
         ExecutionTreeLeaf, ExecutionTreeNode, ExecutionTreeOperation,
     },
     tabular::operations::{
+        OperationGeneratorEnum, OperationTable,
         aggregate::{AggregateAssignment, GeneratorAggregate},
         filter::{Filters, GeneratorFilter},
         function::{FunctionAssignment, GeneratorFunction},
         join::GeneratorJoin,
         null::GeneratorNull,
         projectreorder::GeneratorProjectReorder,
+        single::GeneratorSingle,
         subtract::GeneratorSubtract,
         union::GeneratorUnion,
-        OperationGeneratorEnum, OperationTable,
     },
     util::mapping::{permutation::Permutation, traits::NatMapping},
 };
@@ -132,6 +133,7 @@ impl ExecutionNodeRef {
                 result
             }
             ExecutionOperation::ProjectReorder(subnode)
+            | ExecutionOperation::Single(subnode, _)
             | ExecutionOperation::Filter(subnode, _)
             | ExecutionOperation::Function(subnode, _)
             | ExecutionOperation::Null(subnode)
@@ -165,6 +167,8 @@ pub(crate) enum ExecutionOperation {
     Subtract(ExecutionNodeRef, Vec<ExecutionNodeRef>),
     /// Reorder or remove columns from the table represented by the subnode
     ProjectReorder(ExecutionNodeRef),
+    /// Retain only single elements from certain columns
+    Single(ExecutionNodeRef, OperationTable),
     /// Apply a filter to the table represented by the subnode
     Filter(ExecutionNodeRef, Filters),
     /// Introduce new columns by applying a function to the columns of the table represented by the subnode
@@ -322,6 +326,20 @@ impl ExecutionPlan {
         self.write_temporary(project_node.clone(), "Project/Reorder");
 
         project_node
+    }
+
+    /// Return an [ExecutionNodeRef]
+    pub fn single(
+        &mut self,
+        subnode: ExecutionNodeRef,
+        single_columns: OperationTable,
+    ) -> ExecutionNodeRef {
+        let new_operation = ExecutionOperation::Single(subnode.clone(), single_columns);
+
+        let single_node = self.push_and_return_reference(new_operation, subnode.markers_cloned());
+        self.write_temporary(single_node.clone(), "Single");
+
+        single_node
     }
 
     /// Return an [ExecutionNodeRef] for restricing a column to a certain value.
@@ -515,13 +533,12 @@ impl ExecutionPlan {
                 generator,
                 subnode: ExecutionTreeLeaf::FetchComputedTable(computed),
             } = &root
+                && !&computed_trees[*computed].result.is_permanent()
             {
-                if !&computed_trees[*computed].result.is_permanent() {
-                    computed_trees[*computed]
-                        .dependents
-                        .push((computed_table_id, generator.projectreordering()));
-                    computed_trees[*computed].used -= 1;
-                }
+                computed_trees[*computed]
+                    .dependents
+                    .push((computed_table_id, generator.projectreordering()));
+                computed_trees[*computed].used -= 1;
             }
 
             ExecutionTree {
@@ -554,24 +571,23 @@ impl ExecutionPlan {
         computed_trees_map: &mut HashMap<ExecutionId, Vec<(ColumnOrder, ComputedTableId)>>,
         loaded_tables: &mut HashMap<(PermanentTableId, ColumnOrder), LoadedTableId>,
     ) -> ExecutionTreeNode {
-        if node.id() != root_node_id {
-            if let Some(output_node) = output_nodes
+        if node.id() != root_node_id
+            && let Some(output_node) = output_nodes
                 .iter()
                 .find(|output_node| node.id() == output_node.node.id())
-            {
-                let computed_id = Self::execution_tree(
-                    output_node,
-                    order,
-                    output_nodes,
-                    computed_trees,
-                    computed_trees_map,
-                    loaded_tables,
-                );
+        {
+            let computed_id = Self::execution_tree(
+                output_node,
+                order,
+                output_nodes,
+                computed_trees,
+                computed_trees_map,
+                loaded_tables,
+            );
 
-                return ExecutionTreeNode::Operation(ExecutionTreeOperation::Leaf(
-                    ExecutionTreeLeaf::FetchComputedTable(computed_id),
-                ));
-            }
+            return ExecutionTreeNode::Operation(ExecutionTreeOperation::Leaf(
+                ExecutionTreeLeaf::FetchComputedTable(computed_id),
+            ));
         }
 
         let node_rc = node.get_rc();
@@ -803,6 +819,25 @@ impl ExecutionPlan {
                     )),
                     subnodes: vec![subtree],
                 })
+            }
+            ExecutionOperation::Single(subnode, single) => {
+                let marker_subnode = subnode.markers_cloned();
+                let subtree = Self::execution_node(
+                    root_node_id,
+                    subnode.clone(),
+                    order,
+                    output_nodes,
+                    computed_trees,
+                    computed_trees_map,
+                    loaded_tables,
+                )
+                .operation()
+                .expect("No sub node should be a project");
+
+                ExecutionTreeNode::Single {
+                    generator: GeneratorSingle::new(marker_subnode, single.clone()),
+                    subnode: subtree,
+                }
             }
         }
     }

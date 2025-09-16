@@ -9,13 +9,13 @@ use nom::{
 };
 
 use crate::parser::{
-    ast::{
-        token::{Token, TokenKind},
-        ProgramAST,
-    },
-    context::{context, ParserContext},
-    span::Span,
     ParserInput, ParserResult,
+    ast::{
+        ProgramAST,
+        token::{Token, TokenKind},
+    },
+    context::{ParserContext, context},
+    span::Span,
 };
 
 /// Marker that indicates the type of a number
@@ -123,10 +123,10 @@ impl<'a> Number<'a> {
             return NumberValue::Integer(integer);
         }
 
-        if let Some(NumberTypeMarker::Float) = self.type_marker {
-            if let Ok(float) = str::parse::<f32>(&string) {
-                return NumberValue::Float(float);
-            }
+        if let Some(NumberTypeMarker::Float) = self.type_marker
+            && let Ok(float) = str::parse::<f32>(&string)
+        {
+            return NumberValue::Float(float);
         }
 
         if let Ok(double) = str::parse::<f64>(&string) {
@@ -237,8 +237,8 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
-        ast::{expression::basic::number::Number, ProgramAST},
         ParserInput, ParserState,
+        ast::{ProgramAST, expression::basic::number::Number},
     };
 
     #[test]

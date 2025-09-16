@@ -5,14 +5,14 @@ use enum_assoc::Assoc;
 use nom::{branch::alt, combinator::opt, sequence::pair};
 
 use crate::parser::{
+    ParserResult,
     ast::{
-        token::{Token, TokenKind},
         ProgramAST,
+        token::{Token, TokenKind},
     },
-    context::{context, ParserContext},
+    context::{ParserContext, context},
     input::ParserInput,
     span::Span,
-    ParserResult,
 };
 
 /// Marker that indicates the type of variable
@@ -124,9 +124,9 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
-        ast::{expression::basic::variable::Variable, ProgramAST},
-        input::ParserInput,
         ParserState,
+        ast::{ProgramAST, expression::basic::variable::Variable},
+        input::ParserInput,
     };
 
     use super::VariableType;

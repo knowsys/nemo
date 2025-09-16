@@ -17,11 +17,11 @@ use strum::IntoEnumIterator;
 use crate::{
     rule_model::{
         components::{
-            import_export::{specification::ImportExportSpec, Direction},
-            term::{operation::Operation, primitive::ground::GroundTerm, value_type::ValueType},
             ComponentSource,
+            import_export::{Direction, specification::ImportExportSpec},
+            term::{operation::Operation, primitive::ground::GroundTerm, value_type::ValueType},
         },
-        error::{hint::Hint, info::Info, validation_error::ValidationError, ValidationReport},
+        error::{ValidationReport, hint::Hint, info::Info, validation_error::ValidationError},
         substitution::Substitution,
     },
     syntax::import_export::attribute,
@@ -30,11 +30,11 @@ use crate::{
 use super::{
     compression_format::CompressionFormat,
     formats::{
+        Export, ExportHandler, Import, ImportHandler,
         dsv::{DsvBuilder, DsvTag},
         json::{JsonHandler, JsonTag},
         rdf::{RdfHandler, RdfTag},
         sparql::{SparqlBuilder, SparqlTag},
-        Export, ExportHandler, Import, ImportHandler,
     },
     http_parameters,
 };
@@ -426,11 +426,7 @@ impl<B: FormatBuilder> Parameters<B> {
             has_errors = true;
         }
 
-        if has_errors {
-            None
-        } else {
-            Some(Self(result))
-        }
+        if has_errors { None } else { Some(Self(result)) }
     }
 }
 
@@ -539,23 +535,22 @@ impl ImportExportBuilder {
             });
         };
 
-        if let Some(headers) = parameters.get_optional(StandardParameter::HttpHeaders.into()) {
-            if let Err(error) = http_parameters::unpack_headers(headers).and_then(|mut headers| {
+        if let Some(headers) = parameters.get_optional(StandardParameter::HttpHeaders.into())
+            && let Err(error) = http_parameters::unpack_headers(headers).and_then(|mut headers| {
                 headers.try_for_each(|(key, value)| {
                     resource_builder
                         .add_header(key, value)
                         .and(Ok(()))
                         .map_err(ValidationError::from)
                 })
-            }) {
-                report.add_source(origin.clone(), error);
-            }
+            })
+        {
+            report.add_source(origin.clone(), error);
         }
 
         if let Some(parameters) =
             parameters.get_optional(StandardParameter::HttpGetParameters.into())
-        {
-            if let Err(error) =
+            && let Err(error) =
                 http_parameters::unpack_http_parameters(parameters).and_then(|mut parameters| {
                     parameters.try_for_each(|(key, value)| {
                         resource_builder
@@ -564,15 +559,13 @@ impl ImportExportBuilder {
                             .map_err(ValidationError::from)
                     })
                 })
-            {
-                report.add_source(origin.clone(), error);
-            }
+        {
+            report.add_source(origin.clone(), error);
         }
 
         if let Some(parameters) =
             parameters.get_optional(StandardParameter::HttpPostParameters.into())
-        {
-            if let Err(error) =
+            && let Err(error) =
                 http_parameters::unpack_http_parameters(parameters).and_then(|mut parameters| {
                     parameters.try_for_each(|(key, value)| {
                         resource_builder
@@ -581,19 +574,17 @@ impl ImportExportBuilder {
                             .map_err(ValidationError::from)
                     })
                 })
-            {
-                report.add_source(origin.clone(), error);
-            }
+        {
+            report.add_source(origin.clone(), error);
         }
 
-        if let Some(fragment) = parameters.get_optional(StandardParameter::IriFragment.into()) {
-            if let Err(error) = resource_builder
+        if let Some(fragment) = parameters.get_optional(StandardParameter::IriFragment.into())
+            && let Err(error) = resource_builder
                 .set_fragment(fragment.to_plain_string_unchecked())
                 .and(Ok(()))
                 .map_err(ValidationError::from)
-            {
-                report.add_source(origin.clone(), error);
-            }
+        {
+            report.add_source(origin.clone(), error);
         }
 
         Some(ImportExportBuilder {

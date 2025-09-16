@@ -1,18 +1,18 @@
 //! This module defines [Substitution].
 
 use std::collections::{
-    hash_map::{IntoIter, Iter, IterMut},
     HashMap,
+    hash_map::{IntoIter, Iter, IterMut},
 };
 
 use crate::rule_model::origin::Origin;
 
 use super::components::{
-    term::{
-        primitive::{variable::Variable, Primitive},
-        Term,
-    },
     IterablePrimitives,
+    term::{
+        Term,
+        primitive::{Primitive, variable::Variable},
+    },
 };
 
 /// Map from [Primitive] terms to each other

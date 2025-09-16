@@ -5,22 +5,22 @@ use std::{collections::HashSet, fmt::Display, hash::Hash};
 use nemo_physical::datavalues::DataValue;
 
 use crate::rule_model::{
-    error::{hint::Hint, info::Info, validation_error::ValidationError, ValidationReport},
+    error::{ValidationReport, hint::Hint, info::Info, validation_error::ValidationError},
     origin::Origin,
     pipeline::id::ProgramComponentId,
     substitution::Substitution,
 };
 
 use super::{
+    ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent, IterablePrimitives,
+    IterableVariables, ProgramComponentKind,
     atom::Atom,
     component_iterator, component_iterator_mut,
     literal::Literal,
     term::{
-        primitive::{variable::Variable, Primitive},
         Term,
+        primitive::{Primitive, variable::Variable},
     },
-    ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent, IterablePrimitives,
-    IterableVariables, ProgramComponentKind,
 };
 
 /// Rule
@@ -151,10 +151,11 @@ impl Rule {
         for literal in &self.body {
             if let Literal::Positive(atom) = literal {
                 for term in atom.terms() {
-                    if let Term::Primitive(Primitive::Variable(variable)) = term {
-                        if variable.is_universal() && variable.name().is_some() {
-                            result.insert(variable);
-                        }
+                    if let Term::Primitive(Primitive::Variable(variable)) = term
+                        && variable.is_universal()
+                        && variable.name().is_some()
+                    {
+                        result.insert(variable);
                     }
                 }
             }
@@ -176,15 +177,13 @@ impl Rule {
             let current_count = result.len();
 
             for literal in &self.body {
-                if let Literal::Operation(operation) = literal {
-                    if let Some((variable, term)) = operation.variable_assignment() {
-                        if variable.is_universal()
-                            && variable.name().is_some()
-                            && term.variables().all(|variable| result.contains(variable))
-                        {
-                            result.insert(variable);
-                        }
-                    }
+                if let Literal::Operation(operation) = literal
+                    && let Some((variable, term)) = operation.variable_assignment()
+                    && variable.is_universal()
+                    && variable.name().is_some()
+                    && term.variables().all(|variable| result.contains(variable))
+                {
+                    result.insert(variable);
                 }
             }
 
@@ -214,15 +213,14 @@ impl Rule {
         let mut first_aggregate = if let Term::Aggregate(aggregate) = term {
             if let Term::Primitive(Primitive::Variable(aggregate_variable)) =
                 aggregate.aggregate_term()
+                && group_by_variable.contains(aggregate_variable)
             {
-                if group_by_variable.contains(aggregate_variable) {
-                    report.add(
-                        aggregate.aggregate_term(),
-                        ValidationError::AggregateOverGroupByVariable {
-                            variable: Box::new(aggregate_variable.clone()),
-                        },
-                    );
-                }
+                report.add(
+                    aggregate.aggregate_term(),
+                    ValidationError::AggregateOverGroupByVariable {
+                        variable: Box::new(aggregate_variable.clone()),
+                    },
+                );
             }
 
             true
@@ -405,10 +403,10 @@ impl ComponentBehavior for Rule {
             let mut current_negative_variables = HashSet::<&Variable>::new();
             if let Literal::Negative(negative) = literal {
                 for negative_subterm in negative.terms() {
-                    if let Term::Primitive(Primitive::Variable(variable)) = negative_subterm {
-                        if !safe_variables.contains(variable) {
-                            current_negative_variables.insert(variable);
-                        }
+                    if let Term::Primitive(Primitive::Variable(variable)) = negative_subterm
+                        && !safe_variables.contains(variable)
+                    {
+                        current_negative_variables.insert(variable);
                     }
                 }
             }

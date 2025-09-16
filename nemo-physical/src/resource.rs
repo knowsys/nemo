@@ -154,10 +154,10 @@ impl Resource {
             Self::Path(path) => {
                 let mut the_path = PathBuf::from(path);
 
-                if let Some(extension) = path.extension() {
-                    if extension.to_str() == compression_extension {
-                        the_path = PathBuf::from(path.file_stem().unwrap_or_default());
-                    }
+                if let Some(extension) = path.extension()
+                    && extension.to_str() == compression_extension
+                {
+                    the_path = PathBuf::from(path.file_stem().unwrap_or_default());
                 };
 
                 the_path
@@ -494,15 +494,21 @@ mod test {
         let mut builder =
             ResourceBuilder::try_from(String::from("file:///directory/file.extension#fragment"))
                 .expect("Path is valid");
-        assert!(builder
-            .add_get_parameter(String::from("query"), String::from("Select"))
-            .is_err());
-        assert!(builder
-            .add_post_parameter(String::from("query"), String::from("Select"))
-            .is_err());
-        assert!(builder
-            .add_header(String::from("query"), String::from("Select"))
-            .is_err());
+        assert!(
+            builder
+                .add_get_parameter(String::from("query"), String::from("Select"))
+                .is_err()
+        );
+        assert!(
+            builder
+                .add_post_parameter(String::from("query"), String::from("Select"))
+                .is_err()
+        );
+        assert!(
+            builder
+                .add_header(String::from("query"), String::from("Select"))
+                .is_err()
+        );
         assert!(builder.set_fragment(String::from("fragment")).is_err());
 
         assert!(

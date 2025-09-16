@@ -9,14 +9,14 @@ use crate::{
         rule::ChaseRule,
     },
     rule_model::components::{
+        IterableVariables,
         atom::Atom,
         literal::Literal,
         term::{
-            aggregate::Aggregate,
-            primitive::{variable::Variable, Primitive},
             Term,
+            aggregate::Aggregate,
+            primitive::{Primitive, variable::Variable},
         },
-        IterableVariables,
     },
 };
 
@@ -83,18 +83,17 @@ impl ProgramChaseTranslation {
         let mut assignment = HashMap::<Variable, Variable>::new();
 
         for literal in rule.body() {
-            if let Literal::Operation(operation) = literal {
-                if let Some((left, Term::Primitive(Primitive::Variable(right)))) =
+            if let Literal::Operation(operation) = literal
+                && let Some((left, Term::Primitive(Primitive::Variable(right)))) =
                     operation.variable_assignment()
-                {
-                    // Operation has the form ?left = ?right
-                    if let Some(assigned) = assignment.get(left) {
-                        assignment.insert(right.clone(), assigned.clone());
-                    } else if let Some(assigned) = assignment.get(right) {
-                        assignment.insert(left.clone(), assigned.clone());
-                    } else {
-                        assignment.insert(left.clone(), right.clone());
-                    }
+            {
+                // Operation has the form ?left = ?right
+                if let Some(assigned) = assignment.get(left) {
+                    assignment.insert(right.clone(), assigned.clone());
+                } else if let Some(assigned) = assignment.get(right) {
+                    assignment.insert(left.clone(), assigned.clone());
+                } else {
+                    assignment.insert(left.clone(), right.clone());
                 }
             }
         }
@@ -109,10 +108,10 @@ impl ProgramChaseTranslation {
         assignment: &HashMap<Variable, Variable>,
     ) {
         for variable in rule.variables_mut() {
-            if let Some(new_variable) = assignment.get(variable) {
-                if let Some(name) = new_variable.name() {
-                    variable.rename(name.to_owned());
-                }
+            if let Some(new_variable) = assignment.get(variable)
+                && let Some(name) = new_variable.name()
+            {
+                variable.rename(name.to_owned());
             }
         }
     }
@@ -200,23 +199,21 @@ impl ProgramChaseTranslation {
                     continue;
                 }
 
-                if let Literal::Operation(operation) = literal {
-                    if let Some((variable, term)) = operation.variable_assignment() {
-                        if variable.is_universal()
-                            && variable.name().is_some()
-                            && term
-                                .variables()
-                                .all(|variable| derived_variables.contains(variable))
-                            && !derived_variables.contains(variable)
-                        {
-                            derived_variables.insert(variable);
+                if let Literal::Operation(operation) = literal
+                    && let Some((variable, term)) = operation.variable_assignment()
+                    && variable.is_universal()
+                    && variable.name().is_some()
+                    && term
+                        .variables()
+                        .all(|variable| derived_variables.contains(variable))
+                    && !derived_variables.contains(variable)
+                {
+                    derived_variables.insert(variable);
 
-                            let new_operation = Self::build_operation(variable, term);
-                            result.add_positive_operation(new_operation);
+                    let new_operation = Self::build_operation(variable, term);
+                    result.add_positive_operation(new_operation);
 
-                            handled_literals.insert(literal_index);
-                        }
-                    }
+                    handled_literals.insert(literal_index);
                 }
             }
 

@@ -53,7 +53,7 @@ where
     /// Constructs a new [ColumnRle] from a vector of the suitable type.
     #[cfg(test)]
     pub(crate) fn new(data: Vec<T>) -> ColumnRle<T> {
-        use crate::columnar::columnbuilder::{rle::ColumnBuilderRle, ColumnBuilder};
+        use crate::columnar::columnbuilder::{ColumnBuilder, rle::ColumnBuilderRle};
 
         let mut builder = ColumnBuilderRle::new();
         for value in data {
@@ -375,10 +375,10 @@ where
                 .get_internal(self.element_index, self.increment_index)
         });
 
-        if let Some(cur) = self.current {
-            if cur >= value {
-                return Some(cur);
-            }
+        if let Some(cur) = self.current
+            && cur >= value
+        {
+            return Some(cur);
         }
 
         self.find(|&next| next >= value)

@@ -4,17 +4,17 @@ use std::collections::HashSet;
 
 use crate::rule_model::{
     components::{
+        IterableVariables,
         literal::Literal,
         statement::Statement,
         term::{
-            function::FunctionTerm,
-            primitive::{variable::Variable, Primitive},
             Term,
+            function::FunctionTerm,
+            primitive::{Primitive, variable::Variable},
         },
-        IterableVariables,
     },
     error::ValidationReport,
-    programs::{handle::ProgramHandle, ProgramRead},
+    programs::{ProgramRead, handle::ProgramHandle},
 };
 
 use super::ProgramTransformation;

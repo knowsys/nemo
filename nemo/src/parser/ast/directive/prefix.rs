@@ -6,11 +6,11 @@ use nom::{
 };
 
 use crate::parser::{
-    ast::{comment::wsoc::WSoC, expression::basic::iri::Iri, token::Token, ProgramAST},
-    context::{context, ParserContext},
+    ParserResult,
+    ast::{ProgramAST, comment::wsoc::WSoC, expression::basic::iri::Iri, token::Token},
+    context::{ParserContext, context},
     input::ParserInput,
     span::Span,
-    ParserResult,
 };
 
 /// Prefix directive
@@ -106,9 +106,9 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
-        ast::{directive::prefix::Prefix, ProgramAST},
-        input::ParserInput,
         ParserState,
+        ast::{ProgramAST, directive::prefix::Prefix},
+        input::ParserInput,
     };
 
     #[test]

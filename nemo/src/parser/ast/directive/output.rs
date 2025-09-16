@@ -3,14 +3,14 @@
 use nom::sequence::{preceded, tuple};
 
 use crate::parser::{
+    ParserResult,
     ast::{
-        comment::wsoc::WSoC, sequence::Sequence, tag::structure::StructureTag, token::Token,
-        ProgramAST,
+        ProgramAST, comment::wsoc::WSoC, sequence::Sequence, tag::structure::StructureTag,
+        token::Token,
     },
-    context::{context, ParserContext},
+    context::{ParserContext, context},
     input::ParserInput,
     span::Span,
-    ParserResult,
 };
 
 /// Output directive
@@ -88,9 +88,9 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
-        ast::{directive::output::Output, ProgramAST},
-        input::ParserInput,
         ParserState,
+        ast::{ProgramAST, directive::output::Output},
+        input::ParserInput,
     };
 
     #[test]

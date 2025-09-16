@@ -6,13 +6,13 @@ use nemo_physical::datavalues::AnyDataValue;
 
 use crate::{
     rule_model::components::{
+        IterableVariables,
         atom::Atom,
         tag::Tag,
         term::{
-            primitive::{ground::GroundTerm, variable::Variable, Primitive},
             Term,
+            primitive::{Primitive, ground::GroundTerm, variable::Variable},
         },
-        IterableVariables,
     },
     syntax,
     util::seperated_list::DisplaySeperatedList,
@@ -21,7 +21,7 @@ use crate::{
 use super::ChaseAtom;
 
 /// An atom which may only use [GroundTerm]s
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct GroundAtom {
     /// Predicate name of this atom
     predicate: Tag,

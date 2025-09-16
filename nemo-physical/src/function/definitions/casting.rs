@@ -2,7 +2,7 @@
 
 use crate::{
     datatypes::StorageTypeName,
-    datavalues::{syntax::encodings, AnyDataValue, DataValue},
+    datavalues::{AnyDataValue, DataValue, syntax::encodings},
 };
 
 use super::{FunctionTypePropagation, UnaryFunction};

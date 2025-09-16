@@ -10,11 +10,11 @@ use crate::{
 };
 
 use super::{
-    component_iterator, component_iterator_mut,
-    tag::Tag,
-    term::{operation::Operation, primitive::variable::Variable, Term},
     ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent, IterablePrimitives,
-    IterableVariables, ProgramComponent, ProgramComponentKind,
+    IterableVariables, ProgramComponent, ProgramComponentKind, component_iterator,
+    component_iterator_mut,
+    tag::Tag,
+    term::{Term, operation::Operation, primitive::variable::Variable},
 };
 
 pub mod attribute;

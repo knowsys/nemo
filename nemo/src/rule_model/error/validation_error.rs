@@ -8,8 +8,8 @@ use thiserror::Error;
 use crate::{
     error::rich::RichError,
     rule_model::components::term::{
-        primitive::variable::{existential::ExistentialVariable, global::GlobalVariable, Variable},
         Term,
+        primitive::variable::{Variable, existential::ExistentialVariable, global::GlobalVariable},
     },
 };
 
@@ -229,9 +229,7 @@ pub enum ValidationError {
     ParameterDeclarationCyclic { variable: GlobalVariable },
     /// Parameter declaration has no definition
     #[error("undefined parameter")]
-    #[assoc(
-        note = "parameters can be defined via assignment or externally via --param on the cli"
-    )]
+    #[assoc(note = "parameters can be defined via assignment or externally via --param on the cli")]
     #[assoc(code = 241)]
     ParameterMissingDefinition,
     /// parameter definition referencing local variable

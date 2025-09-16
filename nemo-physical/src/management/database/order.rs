@@ -2,7 +2,7 @@
 
 use std::{
     cell::RefCell,
-    collections::{hash_map::Entry, HashMap},
+    collections::{HashMap, hash_map::Entry},
 };
 
 use crate::{
@@ -13,7 +13,7 @@ use crate::{
     util::mapping::{permutation::Permutation, traits::NatMapping},
 };
 
-use super::{id::PermanentTableId, sources::TableSource, storage::TableStorage, Dict};
+use super::{Dict, id::PermanentTableId, sources::TableSource, storage::TableStorage};
 
 /// [OrderedReferenceManager] stores its tables in a [Vec].
 /// This id refers to an index in this vector.
@@ -53,6 +53,23 @@ pub(super) struct OrderedReferenceManager {
 }
 
 impl OrderedReferenceManager {
+    pub(crate) fn current_storage_id(&self) -> StorageId {
+        self.stored_tables.len()
+    }
+
+    pub(crate) fn delete_tables_from(&mut self, storage_id: StorageId, table_id: PermanentTableId) {
+        self.stored_tables.truncate(storage_id);
+
+        self.storage_map
+            .retain(|existing_id, _| *existing_id < table_id);
+        self.reference_map
+            .retain(|existing_id, _| *existing_id < table_id);
+
+        for (_, map) in self.storage_map.iter_mut() {
+            map.retain(|_, existing_id| *existing_id < storage_id);
+        }
+    }
+
     /// If the table with the given [PermanentTableId] is a reference,
     /// this returns the id and order of the actually stored table.
     ///

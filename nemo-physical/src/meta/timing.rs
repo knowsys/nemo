@@ -1,6 +1,6 @@
 //! Code for timing blocks of code
 
-use ascii_tree::{write_tree, Tree};
+use ascii_tree::{Tree, write_tree};
 #[cfg(not(target_family = "wasm"))]
 use cpu_time::ProcessTime;
 #[cfg(all(not(test), not(target_family = "wasm")))]
@@ -83,20 +83,15 @@ impl fmt::Debug for TimedCodeInfo {
 }
 
 /// How to sort the elements of a [TimedCode] object
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Default)]
 pub enum TimedSorting {
     /// The order the code got called in
+    #[default]
     Default,
     /// Alphabetical by the title of the block
     Alphabetical,
     /// Show the blocks which took longest first
     LongestThreadTime,
-}
-
-impl Default for TimedSorting {
-    fn default() -> Self {
-        Self::Default
-    }
 }
 
 /// How to display a layer of a [TimedCode] object

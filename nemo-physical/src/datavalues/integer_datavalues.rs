@@ -202,8 +202,8 @@ impl std::fmt::Display for LongDataValue {
 #[cfg(test)]
 mod test {
     use super::{
-        LongDataValue, UnsignedLongDataValue, I32MAX_AS_I64, I32MAX_AS_U64, I32MIN_AS_I64,
-        U32MAX_AS_I64, U32MAX_AS_U64, U64MAX_AS_U64,
+        I32MAX_AS_I64, I32MAX_AS_U64, I32MIN_AS_I64, LongDataValue, U32MAX_AS_I64, U32MAX_AS_U64,
+        U64MAX_AS_U64, UnsignedLongDataValue,
     };
     use crate::datavalues::{DataValue, ValueDomain};
     use std::{

@@ -8,7 +8,7 @@ use crate::datatypes::{StorageTypeName, StorageValueT};
 
 use super::triescan::PartialTrieScan;
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 struct TypeIndex {
     start: usize,
     used: usize,
@@ -16,7 +16,7 @@ struct TypeIndex {
 
 /// Stores the possible [StorageTypeName] for each layer,
 /// and which of those are currently in use
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct PossibleTypes {
     /// All possible storage types
     storage_types: Vec<StorageTypeName>,
@@ -88,7 +88,7 @@ impl PossibleTypes {
 /// Additionally also contains the first row index which differes from the last call to `next`.
 ///
 /// TODO: It would be nice if the next operation could return `(usize, &[StorageValueT])` instead of &Row
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct Row {
     /// Row as a vector of [StorageValueT]
     pub row: Vec<StorageValueT>,
@@ -96,8 +96,15 @@ pub(crate) struct Row {
     pub change: usize,
 }
 
+#[derive(Debug, Clone)]
+enum Single {
+    Before,
+    At,
+    After,
+}
+
 /// A [StreamingIterator] for a [PartialTrieScan]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct RowScan<'a, Scan: PartialTrieScan<'a>> {
     /// Using 'a in the trait bound doesn't count
     _phantom: PhantomData<&'a usize>,
@@ -109,6 +116,11 @@ pub(crate) struct RowScan<'a, Scan: PartialTrieScan<'a>> {
     empty: bool,
     /// For each layer, holds the possible [StorageTypeName]s of that column in `trie_scan`
     possible_types: PossibleTypes,
+    /// Single
+    single: Single,
+
+    /// Only derive one value for the last `existential` columns
+    existential: usize,
 
     /// The current row
     /// and the first row index that has been changed by the most recent call to `next`
@@ -117,9 +129,12 @@ pub(crate) struct RowScan<'a, Scan: PartialTrieScan<'a>> {
 
 impl<'a, Scan: PartialTrieScan<'a>> RowScan<'a, Scan> {
     /// Create a new [RowScan].
-    pub(crate) fn new(trie_scan: Scan, cut: usize) -> Self {
+    ///
+    /// For the last `existential` columns only one value will be derived.
+    /// The last `ignore_last` columns will not be stored
+    pub(crate) fn new(trie_scan: Scan, existential: usize, ignore_last: usize) -> Self {
         let arity = trie_scan.arity();
-        let used_columns = arity - cut;
+        let used_columns = arity - ignore_last;
 
         let possible_types = (0..arity)
             .map(|layer| trie_scan.possible_types(layer).storage_types())
@@ -132,11 +147,17 @@ impl<'a, Scan: PartialTrieScan<'a>> RowScan<'a, Scan> {
             trie_scan,
             empty,
             possible_types: PossibleTypes::new(possible_types),
+            existential,
             current_row: Row {
                 row: vec![StorageValueT::Id32(0); used_columns],
                 change: 0,
             },
+            single: Single::Before,
         }
+    }
+
+    pub(crate) fn new_full(trie_scan: Scan) -> Self {
+        Self::new(trie_scan, 0, 0)
     }
 
     /// Advance the column scan of the current layer for the given [StorageTypeName]
@@ -174,6 +195,13 @@ impl<'a, Scan: PartialTrieScan<'a>> StreamingIterator for RowScan<'a, Scan> {
             return;
         }
 
+        if self.existential == self.trie_scan.arity()
+            && let Single::At = self.single
+        {
+            self.single = Single::After;
+            return;
+        }
+
         if self.trie_scan.current_layer().is_none() {
             let first_type = self.possible_types.first_type(0);
             self.trie_scan.down(first_type);
@@ -183,6 +211,7 @@ impl<'a, Scan: PartialTrieScan<'a>> StreamingIterator for RowScan<'a, Scan> {
 
         while let Some(current_layer) = self.trie_scan.current_layer() {
             let is_last_layer = current_layer == self.trie_scan.arity() - 1;
+
             let current_type = self.possible_types.current_type(current_layer);
 
             if current_layer < self.current_row.change {
@@ -197,7 +226,9 @@ impl<'a, Scan: PartialTrieScan<'a>> StreamingIterator for RowScan<'a, Scan> {
                         self.current_row.row[layer] = value;
                     }
 
-                    for _ in self.current_row.row.len()..=current_layer {
+                    self.single = Single::At;
+
+                    for _ in 0..self.existential {
                         self.trie_scan.up();
                     }
 
@@ -219,7 +250,9 @@ impl<'a, Scan: PartialTrieScan<'a>> StreamingIterator for RowScan<'a, Scan> {
     }
 
     fn get(&self) -> Option<&Self::Item> {
-        if self.trie_scan.current_layer().is_some() {
+        if self.trie_scan.current_layer().is_some()
+            || (self.existential == self.trie_scan.arity() && matches!(self.single, Single::At))
+        {
             Some(&self.current_row)
         } else {
             None
@@ -233,7 +266,9 @@ impl<'a, Scan: PartialTrieScan<'a>> Iterator for RowScan<'a, Scan> {
     fn next(&mut self) -> Option<Self::Item> {
         StreamingIterator::advance(self);
 
-        if self.trie_scan.current_layer().is_some() {
+        if self.trie_scan.current_layer().is_some()
+            || (self.existential == self.trie_scan.arity() && matches!(self.single, Single::At))
+        {
             Some(self.current_row.row.clone())
         } else {
             None
@@ -249,7 +284,7 @@ mod test {
         datatypes::StorageValueT,
         management::database::Dict,
         tabular::{
-            operations::{union::GeneratorUnion, OperationGenerator},
+            operations::{OperationGenerator, union::GeneratorUnion},
             trie::Trie,
             triescan::TrieScanEnum,
         },
@@ -289,7 +324,7 @@ mod test {
             vec![StorageValueT::Int64(2), StorageValueT::Int64(4)],
         ];
 
-        let row_scan = RowScan::new(trie_scan, 0);
+        let row_scan = RowScan::new_full(trie_scan);
         let result = row_scan.collect::<Vec<_>>();
 
         assert_eq!(result, expected);
@@ -307,7 +342,7 @@ mod test {
             vec![StorageValueT::Int64(5), StorageValueT::Int64(42)],
         ]);
 
-        let project_1 = RowScan::new(trie.partial_iterator(), 1);
+        let project_1 = RowScan::new(trie.partial_iterator(), 1, 1);
 
         let expected = vec![
             vec![StorageValueT::Id32(0)],
@@ -318,6 +353,27 @@ mod test {
             vec![StorageValueT::Int64(4)],
             vec![StorageValueT::Int64(5)],
         ];
+
+        let result: Vec<_> = project_1.collect();
+
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn empty() {
+        let trie = Trie::from_rows(vec![
+            vec![StorageValueT::Id32(0), StorageValueT::Id32(1)],
+            vec![StorageValueT::Int64(0), StorageValueT::Int64(42)],
+            vec![StorageValueT::Int64(1), StorageValueT::Int64(42)],
+            vec![StorageValueT::Int64(2), StorageValueT::Int64(42)],
+            vec![StorageValueT::Int64(3), StorageValueT::Int64(42)],
+            vec![StorageValueT::Int64(4), StorageValueT::Int64(42)],
+            vec![StorageValueT::Int64(5), StorageValueT::Int64(42)],
+        ]);
+
+        let project_1 = RowScan::new(trie.partial_iterator(), 2, 0);
+
+        let expected = vec![vec![StorageValueT::Id32(0), StorageValueT::Id32(1)]];
 
         let result: Vec<_> = project_1.collect();
 

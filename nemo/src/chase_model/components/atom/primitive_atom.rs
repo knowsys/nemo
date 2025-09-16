@@ -4,13 +4,13 @@ use std::fmt::Display;
 
 use crate::{
     rule_model::components::{
+        IterablePrimitives, IterableVariables,
         atom::Atom,
         tag::Tag,
         term::{
-            primitive::{variable::Variable, Primitive},
             Term,
+            primitive::{Primitive, variable::Variable},
         },
-        IterablePrimitives, IterableVariables,
     },
     syntax,
     util::seperated_list::DisplaySeperatedList,
@@ -31,6 +31,14 @@ impl PrimitiveAtom {
     /// Construct a new [PrimitiveAtom].
     pub(crate) fn new(predicate: Tag, terms: Vec<Primitive>) -> Self {
         Self { predicate, terms }
+    }
+
+    pub fn _set_predicate(&mut self, predicate: Tag) {
+        self.predicate = predicate;
+    }
+
+    pub fn _get(&self, index: usize) -> &Primitive {
+        &self.terms[index]
     }
 }
 

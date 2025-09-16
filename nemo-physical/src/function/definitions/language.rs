@@ -33,7 +33,7 @@ impl UnaryFunction for LanguageTag {
 mod test {
     use crate::{
         datavalues::AnyDataValue,
-        function::definitions::{language::LanguageTag, UnaryFunction},
+        function::definitions::{UnaryFunction, language::LanguageTag},
     };
 
     #[test]

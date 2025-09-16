@@ -6,16 +6,16 @@ use nom::{
 };
 
 use crate::parser::{
+    ParserResult,
     ast::{
-        comment::wsoc::WSoC,
-        expression::{basic::variable::Variable, Expression},
-        token::Token,
         ProgramAST,
+        comment::wsoc::WSoC,
+        expression::{Expression, basic::variable::Variable},
+        token::Token,
     },
-    context::{context, ParserContext},
+    context::{ParserContext, context},
     input::ParserInput,
     span::Span,
-    ParserResult,
 };
 
 /// Parameter directive, indicating a global parameter (i.e. global variable)
@@ -104,9 +104,9 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
-        ast::{directive::parameter::ParameterDeclaration, ProgramAST},
-        input::ParserInput,
         ParserState,
+        ast::{ProgramAST, directive::parameter::ParameterDeclaration},
+        input::ParserInput,
     };
 
     #[test]

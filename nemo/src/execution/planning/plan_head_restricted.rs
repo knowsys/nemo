@@ -15,7 +15,7 @@ use crate::{
     chase_model::{
         analysis::{program_analysis::RuleAnalysis, variable_order::VariableOrder},
         components::{
-            atom::{variable_atom::VariableAtom, ChaseAtom},
+            atom::{ChaseAtom, variable_atom::VariableAtom},
             filter::ChaseFilter,
             rule::ChaseRule,
         },
@@ -30,14 +30,14 @@ use crate::{
     },
     rule_model::components::{
         tag::Tag,
-        term::primitive::{variable::Variable, Primitive},
+        term::primitive::{Primitive, variable::Variable},
     },
     table_manager::{SubtableExecutionPlan, SubtableIdentifier, TableManager},
 };
 
 use super::{
-    operations::append::{head_instruction_from_atom, HeadInstruction},
     HeadStrategy,
+    operations::append::{HeadInstruction, head_instruction_from_atom},
 };
 
 /// Strategy for the restricted chase.

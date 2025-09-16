@@ -2,7 +2,7 @@
 
 use std::{
     cell::{RefCell, UnsafeCell},
-    collections::{hash_map::Entry, HashMap, HashSet},
+    collections::{HashMap, HashSet, hash_map::Entry},
 };
 
 use crate::{
@@ -10,7 +10,7 @@ use crate::{
         columnscan::{ColumnScanEnum, ColumnScanT},
         operations::{constant::ColumnScanConstant, pass::ColumnScanPass},
     },
-    datatypes::{storage_type_name::StorageTypeBitSet, StorageTypeName},
+    datatypes::{StorageTypeName, storage_type_name::StorageTypeBitSet},
     datavalues::{AnyDataValue, DataValue},
     function::{
         evaluation::StackProgram,
@@ -315,11 +315,11 @@ impl<'a> PartialTrieScan<'a> for TrieScanFunction<'a> {
             self.trie_scan.up();
         }
 
-        if let Some(previous_layer) = previous_layer {
-            if let InputMarker::Used(_) = &self.layer_information[previous_layer].input {
-                // The input value is no longer valid
-                self.input_values.pop();
-            }
+        if let Some(previous_layer) = previous_layer
+            && let InputMarker::Used(_) = &self.layer_information[previous_layer].input
+        {
+            // The input value is no longer valid
+            self.input_values.pop();
         }
 
         self.path_types.pop();
@@ -409,7 +409,7 @@ mod test {
     use std::cell::RefCell;
 
     use crate::{
-        datatypes::{into_datavalue::IntoDataValue, StorageTypeName, StorageValueT},
+        datatypes::{StorageTypeName, StorageValueT, into_datavalue::IntoDataValue},
         datavalues::AnyDataValue,
         dictionary::DvDict,
         function::tree::FunctionTree,
@@ -845,7 +845,7 @@ mod test {
                 .union(StorageTypeName::Id64.bitset()),
         );
 
-        let result = RowScan::new(function_scan, 0)
+        let result = RowScan::new_full(function_scan)
             .map(|row| {
                 row.into_iter()
                     .map(|value| value.into_datavalue(&dictionary.borrow()).unwrap())
@@ -909,7 +909,7 @@ mod test {
             .generate(vec![Some(trie_scan)], &dictionary)
             .unwrap();
 
-        let result = RowScan::new(function_scan, 0)
+        let result = RowScan::new_full(function_scan)
             .map(|row| {
                 row.into_iter()
                     .map(|value| value.into_datavalue(&dictionary.borrow()).unwrap())
@@ -969,7 +969,7 @@ mod test {
             .generate(vec![Some(trie_scan)], &dictionary)
             .unwrap();
 
-        let result = RowScan::new(function_scan, 0)
+        let result = RowScan::new_full(function_scan)
             .map(|row| {
                 row.into_iter()
                     .map(|value| value.into_datavalue(&dictionary.borrow()).unwrap())

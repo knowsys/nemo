@@ -7,15 +7,15 @@ use crate::rule_model::{
 };
 
 use super::{
+    ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent, IterablePrimitives,
+    IterableVariables, ProgramComponent, ProgramComponentKind,
     atom::Atom,
     tag::Tag,
     term::{
-        operation::Operation,
-        primitive::{variable::Variable, Primitive},
         Term,
+        operation::Operation,
+        primitive::{Primitive, variable::Variable},
     },
-    ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent, IterablePrimitives,
-    IterableVariables, ProgramComponent, ProgramComponentKind,
 };
 
 /// Literal
