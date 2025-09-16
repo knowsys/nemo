@@ -8,7 +8,8 @@ use crate::{
         error::ValidationReport,
         pipeline::transformations::{
             active::TransformationActive, empty::TransformationEmpty,
-            incremental::TransformationIncremental, validate::TransformationValidate,
+            incremental::TransformationIncremental,
+            set_default_outputs::TransformationSetDefaultOutputs, validate::TransformationValidate,
         },
         programs::{ProgramRead, handle::ProgramHandle},
     },
@@ -48,6 +49,7 @@ impl<'a> ProgramTransformation for TransformationDefault<'a> {
         commit
             .submit()?
             .transform(TransformationGlobal::new(&self.parameters.global_variables))?
+            .transform(TransformationSetDefaultOutputs::default())?
             .transform(TransformationExports::new(
                 self.parameters.export_parameters,
             ))?

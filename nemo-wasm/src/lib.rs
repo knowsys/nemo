@@ -10,16 +10,18 @@ use web_sys::{Blob, FileReaderSync};
 
 use nemo::{
     datavalues::{AnyDataValue, DataValue},
-    error::ReadingError,
-    execution::ExecutionEngine,
+    error::{ReadingError, report::ProgramReport},
+    execution::{ExecutionEngine, execution_parameters::ExecutionParameters},
     io::{
         ImportManager,
         formats::FileFormatMeta,
         resource_providers::{ResourceProvider, ResourceProviders},
     },
+    rule_file::RuleFile,
     rule_model::{
-        components::{output::Output, tag::Tag},
-        programs::{ProgramRead, ProgramWrite, program::Program},
+        components::tag::Tag,
+        pipeline::transformations::default::TransformationDefault,
+        programs::{ProgramRead, handle::ProgramHandle, program::Program},
     },
 };
 
@@ -80,34 +82,28 @@ impl NemoResource {
 impl NemoProgram {
     #[wasm_bindgen(constructor)]
     pub fn new(input: &str) -> Result<NemoProgram, NemoError> {
-        let ast = match nemo::parser::Parser::initialize(input).parse() {
-            Ok(ast) => ast,
-            Err((_, report)) => {
-                return Err(NemoError(WasmOrInternalNemoError::Parser(format!(
-                    "{report}"
-                ))));
-            }
-        };
+        let rule_file = RuleFile::new(input.to_string(), "NemoWasmFile".to_string());
+        let handle = ProgramHandle::from_file(&rule_file);
+        let report = ProgramReport::new(rule_file);
 
-        let mut program = Program::default();
-        let report = nemo::rule_model::translation::ASTProgramTranslation::default()
-            .translate(&ast, &mut program);
+        let (program, report) = report
+            .merge_program_parser_report(handle)
+            .map_err(|report| NemoError(WasmOrInternalNemoError::Parser(format!("{report}"))))?;
 
-        if report.contains_errors() {
-            return Err(NemoError(WasmOrInternalNemoError::Program(format!(
-                "{report}"
-            ))));
-        }
+        let (program, _report) = report
+            .merge_validation_report(
+                &program,
+                program.transform(TransformationDefault::new(&ExecutionParameters::default())),
+            )
+            .map_err(|report| NemoError(WasmOrInternalNemoError::Program(format!("{report}"))))?;
 
-        Ok(NemoProgram(program))
+        // We do not return warnings here since we do not have a good way
+        // of displaying them. The language server should take care of reporting warnings instead.
+        Ok(NemoProgram(program.materialize()))
     }
 
     /// Get all resources that are referenced in import directives of the program.
     /// Returns an error if there are problems in some import directive.
-    ///
-    /// TODO: Maybe rethink the validation mechanism of NemoProgram. We could also
-    /// just make sure that things validate upon creation, and make sure that problems
-    /// are detected early.
     #[wasm_bindgen(js_name = "getResourcesUsedInImports")]
     pub fn resources_used_in_imports(&self) -> Vec<NemoResource> {
         let mut result: Vec<NemoResource> = vec![];
@@ -127,16 +123,6 @@ impl NemoProgram {
         }
 
         result
-    }
-
-    // If there are no outputs, marks all predicates as outputs.
-    #[wasm_bindgen(js_name = "markDefaultOutputs")]
-    pub fn mark_default_output_predicates(&mut self) {
-        if self.0.outputs().next().is_none() {
-            for predicate in self.0.all_predicates() {
-                self.0.add_output(Output::new(predicate))
-            }
-        }
     }
 
     #[wasm_bindgen(js_name = "getOutputPredicates")]
