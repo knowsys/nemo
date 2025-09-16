@@ -4,7 +4,6 @@ use std::{alloc::Layout, collections::HashMap, fmt::Formatter, io::Cursor};
 
 use gloo_utils::format::JsValueSerdeExt;
 use js_sys::{Array, Reflect, Set, Uint8Array};
-use models::TableResponseBaseTableEntries;
 use thiserror::Error;
 use wasm_bindgen::{JsCast, JsValue, prelude::wasm_bindgen};
 use web_sys::{Blob, FileReaderSync};
@@ -12,24 +11,15 @@ use web_sys::{Blob, FileReaderSync};
 use nemo::{
     datavalues::{AnyDataValue, DataValue},
     error::ReadingError,
-    execution::{
-        ExecutionEngine,
-        tracing::trace::{ExecutionTrace, ExecutionTraceTree, TraceFactHandle},
-    },
+    execution::ExecutionEngine,
     io::{
         ImportManager,
         formats::FileFormatMeta,
         resource_providers::{ResourceProvider, ResourceProviders},
     },
     rule_model::{
-        components::{
-            fact::Fact,
-            output::Output,
-            tag::Tag,
-            term::{Term, primitive::Primitive},
-        },
+        components::{output::Output, tag::Tag},
         programs::{ProgramRead, ProgramWrite, program::Program},
-        translation::ProgramParseReport,
     },
 };
 
@@ -47,8 +37,6 @@ enum WasmOrInternalNemoError {
     /// Nemo-internal error
     #[error(transparent)]
     Nemo(#[from] nemo::error::Error),
-    #[error("Unable to parse component:\n {0}")]
-    ComponentParse(ProgramParseReport),
     #[error("Unable to parse program:\n {0}")]
     Parser(String),
     #[error("Invalid program:\n {0}")]
@@ -375,144 +363,8 @@ impl NemoEngine {
             .map_err(NemoError)
     }
 
-    fn trace_fact_at_index(
-        &mut self,
-        predicate: String,
-        row_index: usize,
-    ) -> Result<Option<(ExecutionTrace, Vec<TraceFactHandle>)>, NemoError> {
-        let predicate_tag = Tag::from(predicate.clone());
-
-        let iter = self
-            .engine
-            .predicate_rows(&predicate_tag)
-            .map_err(WasmOrInternalNemoError::Nemo)
-            .map_err(NemoError)?;
-
-        let terms_to_trace_opt: Option<Vec<AnyDataValue>> =
-            iter.into_iter().flatten().nth(row_index);
-
-        if let Some(terms_to_trace) = terms_to_trace_opt {
-            let fact_to_trace = Fact::new(
-                predicate_tag,
-                terms_to_trace
-                    .into_iter()
-                    .map(|term| Term::Primitive(Primitive::from(term))),
-            );
-
-            let (trace, handles) = self
-                .engine
-                .trace(vec![fact_to_trace])
-                .map_err(WasmOrInternalNemoError::Nemo)
-                .map_err(NemoError)?;
-
-            Ok(Some((trace, handles)))
-        } else {
-            Ok(None)
-        }
-    }
-
-    #[wasm_bindgen(js_name = "traceFactAtIndexAscii")]
-    pub fn trace_fact_at_index_ascii(
-        &mut self,
-        predicate: String,
-        row_index: usize,
-    ) -> Result<Option<String>, NemoError> {
-        self.trace_fact_at_index(predicate, row_index).map(|opt| {
-            opt.and_then(|(trace, handles)| {
-                trace
-                    .tree(handles[0])
-                    .as_ref()
-                    .map(ExecutionTraceTree::to_ascii_art)
-            })
-        })
-    }
-
-    #[wasm_bindgen(js_name = "traceFactAtIndexGraphMlTree")]
-    pub fn trace_fact_at_index_graphml_tree(
-        &mut self,
-        predicate: String,
-        row_index: usize,
-    ) -> Result<Option<String>, NemoError> {
-        self.trace_fact_at_index(predicate, row_index).map(|opt| {
-            opt.and_then(|(trace, handles)| {
-                trace
-                    .tree(handles[0])
-                    .as_ref()
-                    .map(ExecutionTraceTree::to_graphml)
-            })
-        })
-    }
-
-    #[wasm_bindgen(js_name = "traceFactAtIndexGraphMlDag")]
-    pub fn trace_fact_at_index_graphml_dag(
-        &mut self,
-        predicate: String,
-        row_index: usize,
-    ) -> Result<Option<String>, NemoError> {
-        self.trace_fact_at_index(predicate, row_index)
-            .map(|opt| opt.map(|(trace, handles)| trace.graphml(&handles)))
-    }
-
-    fn parse_and_trace_fact(
-        &mut self,
-        fact: &str,
-    ) -> Result<Option<(ExecutionTrace, Vec<TraceFactHandle>)>, NemoError> {
-        let parsed_fact = Fact::parse(fact)
-            .map_err(WasmOrInternalNemoError::ComponentParse)
-            .map_err(NemoError)?;
-
-        let (trace, handles) = self
-            .engine
-            .trace(vec![parsed_fact])
-            .map_err(WasmOrInternalNemoError::Nemo)
-            .map_err(NemoError)?;
-
-        Ok(Some((trace, handles)))
-    }
-
-    #[wasm_bindgen(js_name = "parseAndTraceFactAscii")]
-    pub fn parse_and_trace_fact_ascii(&mut self, fact: &str) -> Result<Option<String>, NemoError> {
-        self.parse_and_trace_fact(fact).map(|opt| {
-            opt.and_then(|(trace, handles)| {
-                trace
-                    .tree(handles[0])
-                    .as_ref()
-                    .map(ExecutionTraceTree::to_ascii_art)
-            })
-        })
-    }
-
-    #[wasm_bindgen(js_name = "parseAndTraceFactGraphMlTree")]
-    pub fn parse_and_trace_fact_graphml_tree(
-        &mut self,
-        fact: &str,
-    ) -> Result<Option<String>, NemoError> {
-        self.parse_and_trace_fact(fact).map(|opt| {
-            opt.and_then(|(trace, handles)| {
-                trace
-                    .tree(handles[0])
-                    .as_ref()
-                    .map(ExecutionTraceTree::to_graphml)
-            })
-        })
-    }
-
-    #[wasm_bindgen(js_name = "parseAndTraceFactGraphMlDag")]
-    pub fn parse_and_trace_fact_graphml_dag(
-        &mut self,
-        fact: &str,
-    ) -> Result<Option<String>, NemoError> {
-        self.parse_and_trace_fact(fact)
-            .map(|opt| opt.map(|(trace, handles)| trace.graphml(&handles)))
-    }
-}
-
-// This is the new tracing stuff. It got its own impl block just to keep it visually separate.
-// The mock is the example from https://github.com/knowsys/EvonNemo-API-Spec/tree/main/examples/common-descendants
-#[wasm_bindgen]
-impl NemoEngine {
-    #[wasm_bindgen(js_name = "experimentalNewTracingTreeForTable")]
-    pub fn experimental_new_tracing_tree_for_table(
+    #[wasm_bindgen(js_name = "traceTreeForTable")]
+    pub fn trace_tree_for_table(
         &mut self,
         tree_for_table_query: JsValue,
     ) -> Result<JsValue, NemoError> {
@@ -537,8 +389,8 @@ impl NemoEngine {
             .map_err(NemoError)
     }
 
-    #[wasm_bindgen(js_name = "experimentalNewTracingTableEntriesForTreeNodes")]
-    pub fn experimental_new_tracing_table_entries_for_tree_nodes(
+    #[wasm_bindgen(js_name = "traceTableEntriesForTreeNodes")]
+    pub fn trace_table_entries_for_tree_nodes(
         &mut self,
         table_entries_for_tree_nodes_query: JsValue,
     ) -> Result<JsValue, JsValue> {
@@ -563,190 +415,6 @@ impl NemoEngine {
         Ok(JsValue::from_serde(&table_entries_for_tree_nodes_response)
             .map_err(|err| WasmOrInternalNemoError::Reflection(err.to_string().into()))
             .map_err(NemoError)?)
-    }
-
-    #[wasm_bindgen(js_name = "experimentalNewTracingTreeForTableMock")]
-    pub fn experimental_new_tracing_tree_for_table_mock(
-        tree_for_table_query: JsValue,
-    ) -> Result<JsValue, JsValue> {
-        // in this mock, we ignore the query and always return the same tree
-        let _tree_for_table_query: models::TreeForTableQuery = tree_for_table_query
-            .into_serde()
-            .map_err(|err| err.to_string())?;
-
-        let response: models::TreeForTableResponse = models::TreeForTableResponse {
-            predicate: "ancestor".to_string(),
-            table_entries: Box::new(TableResponseBaseTableEntries {
-                entries: vec![models::TableEntryResponse {
-                    entry_id: 42,
-                    term_tuple: vec!["alice".to_string(), "edward".to_string()],
-                }],
-                pagination: Box::new(models::TableResponseBaseTableEntriesPagination {
-                    start: 0,
-                    more_entries_exist: false,
-                }),
-            }),
-            possible_rules_above: vec![], // empty for now...
-            possible_rules_below: vec![], // empty for now...
-            child_information: Some(Box::new(models::TreeForTableResponseChildInformation {
-                rule: models::Rule {
-                    id: 1,
-                    relevant_head_predicate: Box::new(models::PredicateWithParameters {
-                        name: "ancestor".to_string(),
-                        parameters: vec!["?X".to_string(), "?Z".to_string()],
-                    }),
-                    relevant_head_predicate_index: 0,
-                    body_predicates: vec![
-                        models::PredicateWithParameters {
-                            name: "ancestor".to_string(),
-                            parameters: vec!["?X".to_string(), "?Y".to_string()],
-                        },
-                        models::PredicateWithParameters {
-                            name: "parent".to_string(),
-                            parameters: vec!["?Y".to_string(), "?Z".to_string()],
-                        },
-                    ],
-                    string_representation: "ancestor(?X, ?Z) :- ancestor(?X, ?Y), parent(?Y, ?Z)"
-                        .to_string(),
-                },
-                children: vec![
-                    models::TreeForTableResponse {
-                        predicate: "ancestor".to_string(),
-                        table_entries: Box::new(TableResponseBaseTableEntries {
-                            entries: vec![],
-                            pagination: Box::new(models::TableResponseBaseTableEntriesPagination {
-                                start: 0,
-                                more_entries_exist: true,
-                            }),
-                        }),
-                        possible_rules_above: vec![], // empty for now...
-                        possible_rules_below: vec![], // empty for now...
-                        child_information: Some(Box::new(
-                            models::TreeForTableResponseChildInformation {
-                                rule: models::Rule {
-                                    id: 0,
-                                    relevant_head_predicate: Box::new(
-                                        models::PredicateWithParameters {
-                                            name: "ancestor".to_string(),
-                                            parameters: vec!["?X".to_string(), "?Y".to_string()],
-                                        },
-                                    ),
-                                    relevant_head_predicate_index: 0,
-                                    body_predicates: vec![models::PredicateWithParameters {
-                                        name: "parent".to_string(),
-                                        parameters: vec!["?X".to_string(), "?Y".to_string()],
-                                    }],
-                                    string_representation: "ancestor(?X, ?Y) :- parent(?X, ?Y)"
-                                        .to_string(),
-                                },
-                                children: vec![models::TreeForTableResponse {
-                                    predicate: "parent".to_string(),
-                                    table_entries: Box::new(TableResponseBaseTableEntries {
-                                        entries: vec![models::TableEntryResponse {
-                                            entry_id: 3,
-                                            term_tuple: vec![
-                                                "alice".to_string(),
-                                                "charlotte".to_string(),
-                                            ],
-                                        }],
-                                        pagination: Box::new(
-                                            models::TableResponseBaseTableEntriesPagination {
-                                                start: 0,
-                                                more_entries_exist: false,
-                                            },
-                                        ),
-                                    }),
-                                    possible_rules_above: vec![], // empty for now
-                                    possible_rules_below: vec![], // empty for now
-                                    child_information: None,
-                                }],
-                            },
-                        )),
-                    },
-                    models::TreeForTableResponse {
-                        predicate: "parent".to_string(),
-                        table_entries: Box::new(TableResponseBaseTableEntries {
-                            entries: vec![],
-                            pagination: Box::new(models::TableResponseBaseTableEntriesPagination {
-                                start: 0,
-                                more_entries_exist: true,
-                            }),
-                        }),
-                        possible_rules_above: vec![], // empty for now
-                        possible_rules_below: vec![], // empty for now
-                        child_information: None,
-                    },
-                ],
-            })),
-        };
-
-        Ok(JsValue::from_serde(&response).map_err(|err| err.to_string())?)
-    }
-
-    #[wasm_bindgen(js_name = "experimentalNewTracingTableEntriesForTreeNodesMock")]
-    pub fn experimental_new_tracing_table_entries_for_tree_nodes_mock(
-        table_entries_for_tree_nodes_query: JsValue,
-    ) -> Result<JsValue, JsValue> {
-        // in this mock, we ignore the query and always return the same entries for the same nodes
-        let _table_entries_for_tree_nodes_query: models::TableEntriesForTreeNodesQuery =
-            table_entries_for_tree_nodes_query
-                .into_serde()
-                .map_err(|err| err.to_string())?;
-
-        let response: Vec<models::TableEntriesForTreeNodesResponseInner> = vec![
-            models::TableEntriesForTreeNodesResponseInner {
-                address_in_tree: Some(vec![]), // this should not be an Option, I'm unsure why this
-                // is currently generated like that...;
-                // anyway, works for now
-                predicate: "ancestor".to_string(),
-                table_entries: Box::new(TableResponseBaseTableEntries {
-                    entries: vec![models::TableEntryResponse {
-                        entry_id: 42,
-                        term_tuple: vec!["alice".to_string(), "edward".to_string()],
-                    }],
-                    pagination: Box::new(models::TableResponseBaseTableEntriesPagination {
-                        start: 0,
-                        more_entries_exist: false,
-                    }),
-                }),
-                possible_rules_above: vec![], // empty for now...
-                possible_rules_below: vec![], // empty for now...
-            },
-            models::TableEntriesForTreeNodesResponseInner {
-                address_in_tree: Some(vec![0]),
-                predicate: "ancestor".to_string(),
-                table_entries: Box::new(TableResponseBaseTableEntries {
-                    entries: vec![models::TableEntryResponse {
-                        entry_id: 73,
-                        term_tuple: vec!["alice".to_string(), "charlotte".to_string()],
-                    }],
-                    pagination: Box::new(models::TableResponseBaseTableEntriesPagination {
-                        start: 0,
-                        more_entries_exist: false,
-                    }),
-                }),
-                possible_rules_above: vec![], // empty for now...
-                possible_rules_below: vec![], // empty for now...
-            },
-            models::TableEntriesForTreeNodesResponseInner {
-                address_in_tree: Some(vec![1]),
-                predicate: "parent".to_string(),
-                table_entries: Box::new(TableResponseBaseTableEntries {
-                    entries: vec![models::TableEntryResponse {
-                        entry_id: 21,
-                        term_tuple: vec!["charlotte".to_string(), "edward".to_string()],
-                    }],
-                    pagination: Box::new(models::TableResponseBaseTableEntriesPagination {
-                        start: 0,
-                        more_entries_exist: false,
-                    }),
-                }),
-                possible_rules_above: vec![], // empty for now...
-                possible_rules_below: vec![], // empty for now...
-            },
-        ];
-
-        Ok(JsValue::from_serde(&response).map_err(|err| err.to_string())?)
     }
 }
 
