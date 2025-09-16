@@ -53,15 +53,20 @@ impl ProgramChaseTranslation {
 
         // Handle operations
         let derived_variables = self.handle_operations(&mut result, &rule);
+        let import_variables = result
+            .imports()
+            .iter()
+            .flat_map(|import| import.bindings().iter())
+            .cloned()
+            .collect::<HashSet<_>>();
 
         // Handle negative atoms
         for atom in rule.body_negative() {
             let (variable_atom, filters) = self.build_body_atom(atom);
 
-            if variable_atom
-                .variables()
-                .all(|variable| derived_variables.contains(variable))
-            {
+            if variable_atom.variables().all(|variable| {
+                derived_variables.contains(variable) && import_variables.contains(variable)
+            }) {
                 result.add_negative_atom(variable_atom);
                 for filter in filters {
                     result.add_negative_filter_last(filter);
