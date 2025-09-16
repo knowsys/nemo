@@ -16,6 +16,7 @@ use crate::{
                 primitive::{variable::Variable, Primitive},
                 Term,
             },
+            IterableVariables,
         },
         error::ValidationReport,
         programs::{handle::ProgramHandle, ProgramRead, ProgramWrite},
@@ -36,30 +37,104 @@ impl TransformationIncremental {
         Self {}
     }
 
+    /// Check if there are no restrictions on an atom.
+    fn has_unrestricted_atom(
+        rule: &Rule,
+        incremental_predicates: &HashMap<Tag, &ImportDirective>,
+    ) -> bool {
+        let mut available_variables = rule
+            .body_positive()
+            .filter(|atom| !incremental_predicates.contains_key(&atom.predicate()))
+            .flat_map(|atom| atom.variables())
+            .collect::<HashSet<_>>();
+
+        let mut available_variables_len = available_variables.len();
+
+        loop {
+            for operation in rule.body_operations() {
+                if let Some((variable, assignment)) = operation.variable_assignment() {
+                    if assignment
+                        .variables()
+                        .all(|variable| available_variables.contains(variable))
+                    {
+                        available_variables.insert(variable);
+                    }
+                }
+            }
+
+            if available_variables_len == available_variables.len() {
+                break;
+            } else {
+                available_variables_len = available_variables.len();
+            }
+        }
+
+        for atom in rule.body_positive() {
+            if !incremental_predicates.contains_key(&atom.predicate()) {
+                continue;
+            }
+
+            if atom
+                .variables()
+                .all(|variable| !available_variables.contains(variable))
+            {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    /// Check if the positive body of rule contains
+    /// two atoms with the same predicate.
+    fn has_repeated_predicate(rule: &Rule) -> bool {
+        let mut body_predicates = HashSet::<Tag>::default();
+
+        for atom in rule.body_positive() {
+            if !body_predicates.insert(atom.predicate()) {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    /// Check whether a rule would allow for incremental import
+    fn possible_rule(rule: &Rule, incremental_predicates: &HashMap<Tag, &ImportDirective>) -> bool {
+        !Self::has_repeated_predicate(rule)
+            && !Self::has_unrestricted_atom(rule, &incremental_predicates)
+    }
+
     /// Compute the predicates that will be inlined in this transformation.
     ///
     /// Returns a hash map containing those predicates together with the
     /// associated import statement from which they originated.
     fn incremental_predicates(program: &ProgramHandle) -> HashMap<Tag, &ImportDirective> {
+        // All predicates that will be incrementally imported
         let mut incremental_predicates = HashMap::<Tag, &ImportDirective>::default();
+
+        // Predicates that have to be evaluated fully
         let mut normal_predicates = HashSet::<Tag>::default();
+
+        for import in program.imports() {
+            if let Some(builder) = import.builder() {
+                if let SupportedFormatTag::Sparql(SparqlTag::Sparql) = builder.format() {
+                    if incremental_predicates
+                        .insert(import.predicate().clone(), import)
+                        .is_some()
+                    {
+                        normal_predicates.insert(import.predicate().clone());
+                    }
+                } else {
+                    normal_predicates.insert(import.predicate().clone());
+                }
+            }
+        }
+
+        incremental_predicates.retain(|predicate, _| !normal_predicates.contains(predicate));
 
         for statement in program.statements() {
             match statement {
-                Statement::Import(import) => {
-                    if let Some(builder) = import.builder() {
-                        if let SupportedFormatTag::Sparql(SparqlTag::Sparql) = builder.format() {
-                            if incremental_predicates
-                                .insert(import.predicate().clone(), import)
-                                .is_some()
-                            {
-                                normal_predicates.insert(import.predicate().clone());
-                            }
-                        } else {
-                            normal_predicates.insert(import.predicate().clone());
-                        }
-                    }
-                }
                 Statement::Fact(fact) => {
                     normal_predicates.insert(fact.predicate().clone());
                 }
@@ -70,6 +145,12 @@ impl TransformationIncremental {
                     for atom in rule.body_negative() {
                         normal_predicates.insert(atom.predicate().clone());
                     }
+
+                    if !Self::possible_rule(rule, &incremental_predicates) {
+                        for atom in rule.body_positive() {
+                            normal_predicates.insert(atom.predicate());
+                        }
+                    }
                 }
                 Statement::Export(export) => {
                     normal_predicates.insert(export.predicate().clone());
@@ -77,7 +158,7 @@ impl TransformationIncremental {
                 Statement::Output(output) => {
                     normal_predicates.insert(output.predicate().clone());
                 }
-                Statement::Parameter(_) => {}
+                Statement::Parameter(_) | Statement::Import(_) => {}
             }
         }
 

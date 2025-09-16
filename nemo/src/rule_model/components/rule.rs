@@ -5,7 +5,7 @@ use std::{collections::HashSet, fmt::Display, hash::Hash};
 use nemo_physical::datavalues::DataValue;
 
 use crate::rule_model::{
-    components::import_export::clause::ImportClause,
+    components::{import_export::clause::ImportClause, term::operation::Operation},
     error::{ValidationReport, hint::Hint, info::Info, validation_error::ValidationError},
     origin::Origin,
     pipeline::id::ProgramComponentId,
@@ -125,6 +125,14 @@ impl Rule {
         self.body.iter().filter_map(|literal| match literal {
             Literal::Negative(atom) => Some(atom),
             Literal::Positive(_) | Literal::Operation(_) => None,
+        })
+    }
+
+    /// Return an iterator over the operations in the body of this rule.
+    pub fn body_operations(&self) -> impl Iterator<Item = &Operation> {
+        self.body.iter().filter_map(|literal| match literal {
+            Literal::Operation(operation) => Some(operation),
+            Literal::Positive(_) | Literal::Negative(_) => None,
         })
     }
 
