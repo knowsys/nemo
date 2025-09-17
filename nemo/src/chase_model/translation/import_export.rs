@@ -10,7 +10,7 @@ use crate::{
         formats::{Export, Import},
     },
     rule_model::components::import_export::{
-        clause::ImportClause, ExportDirective, ImportDirective,
+        ExportDirective, ImportDirective, clause::ImportClause,
     },
 };
 

@@ -6,20 +6,20 @@ use crate::{
     io::{format_builder::SupportedFormatTag, formats::sparql::SparqlTag},
     rule_model::{
         components::{
-            import_export::{clause::ImportClause, ImportDirective},
+            IterableVariables,
+            import_export::{ImportDirective, clause::ImportClause},
             literal::Literal,
             rule::Rule,
             statement::Statement,
             tag::Tag,
             term::{
-                operation::{operation_kind::OperationKind, Operation},
-                primitive::{variable::Variable, Primitive},
                 Term,
+                operation::{Operation, operation_kind::OperationKind},
+                primitive::{Primitive, variable::Variable},
             },
-            IterableVariables,
         },
         error::ValidationReport,
-        programs::{handle::ProgramHandle, ProgramRead, ProgramWrite},
+        programs::{ProgramRead, ProgramWrite, handle::ProgramHandle},
     },
 };
 

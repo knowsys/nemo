@@ -5,7 +5,7 @@ use crate::rule_model::{
         atom::Atom, fact::Fact, literal::Literal, statement::Statement, tag::Tag, term::Term,
     },
     error::ValidationReport,
-    programs::{handle::ProgramHandle, ProgramRead, ProgramWrite},
+    programs::{ProgramRead, ProgramWrite, handle::ProgramHandle},
 };
 
 use super::ProgramTransformation;

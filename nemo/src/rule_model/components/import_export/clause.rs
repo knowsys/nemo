@@ -4,9 +4,10 @@ use std::fmt::Display;
 
 use crate::rule_model::{
     components::{
-        component_iterator, component_iterator_mut, import_export::ImportDirective,
-        term::primitive::variable::Variable, ComponentBehavior, ComponentIdentity, ComponentSource,
-        IterableComponent, IterableVariables, ProgramComponent, ProgramComponentKind,
+        ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent,
+        IterableVariables, ProgramComponent, ProgramComponentKind, component_iterator,
+        component_iterator_mut, import_export::ImportDirective,
+        term::primitive::variable::Variable,
     },
     error::ValidationReport,
     origin::Origin,

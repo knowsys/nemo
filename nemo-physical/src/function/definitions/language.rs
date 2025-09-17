@@ -1,8 +1,8 @@
 //! This module defines functions relating to language tagged strings
 
 use crate::datavalues::DataValue;
-use crate::function::definitions::string::LangTaggedString;
 use crate::function::definitions::BinaryFunction;
+use crate::function::definitions::string::LangTaggedString;
 use crate::{datatypes::StorageTypeName, datavalues::AnyDataValue};
 
 use super::{FunctionTypePropagation, UnaryFunction};

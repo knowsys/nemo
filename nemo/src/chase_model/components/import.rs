@@ -2,7 +2,7 @@
 
 use crate::{
     io::formats::Import,
-    rule_model::components::{tag::Tag, term::primitive::variable::Variable, IterableVariables},
+    rule_model::components::{IterableVariables, tag::Tag, term::primitive::variable::Variable},
 };
 
 /// Component for handling imports

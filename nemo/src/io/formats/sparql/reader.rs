@@ -10,16 +10,16 @@ use nemo_physical::{
 };
 use oxiri::Iri;
 use oxrdf::{Literal, NamedNode};
+use spargebra::Query;
 use spargebra::algebra::GraphPattern;
 use spargebra::term::GroundTerm;
-use spargebra::Query;
 
 use crate::chase_model::components::rule::ChaseRule;
 use crate::io::format_builder::FormatBuilder;
 use crate::io::formats::dsv::reader::DsvReader;
 use crate::io::formats::dsv::value_format::DsvValueFormats;
-use crate::io::resource_providers::http::HttpResourceProvider;
 use crate::io::resource_providers::ResourceProvider;
+use crate::io::resource_providers::http::HttpResourceProvider;
 use crate::rule_model::components::import_export::Direction;
 use crate::syntax::import_export::file_format::MEDIA_TYPE_TSV;
 
