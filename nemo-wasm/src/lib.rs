@@ -1,6 +1,11 @@
 #![feature(alloc_error_hook)]
 
-use std::{alloc::Layout, collections::HashMap, fmt::Formatter, io::Cursor};
+use std::{
+    alloc::Layout,
+    collections::{HashMap, HashSet},
+    fmt::Formatter,
+    io::Cursor,
+};
 
 use gloo_utils::format::JsValueSerdeExt;
 use js_sys::{Array, Reflect, Set, Uint8Array};
@@ -88,14 +93,34 @@ impl NemoProgram {
 
         let (program, report) = report
             .merge_program_parser_report(handle)
-            .map_err(|report| NemoError(WasmOrInternalNemoError::Parser(format!("{report}"))))?;
+            .map_err(|report| {
+                // This is cursed. The report only allows writing the proper error message to
+                // std::io::Write but not std::fmt::Write. (Strings only implement the latter...)
+                let mut bytes: Vec<u8> = vec![];
+                report
+                    .write(&mut bytes)
+                    .expect("We should always be able to write to a Vec<u8>.");
+                let string =
+                    std::str::from_utf8(&bytes).expect("Our error messages should be valid UTF-8.");
+                NemoError(WasmOrInternalNemoError::Parser(string.to_string()))
+            })?;
 
         let (program, _report) = report
             .merge_validation_report(
                 &program,
                 program.transform(TransformationDefault::new(&ExecutionParameters::default())),
             )
-            .map_err(|report| NemoError(WasmOrInternalNemoError::Program(format!("{report}"))))?;
+            .map_err(|report| {
+                // This is cursed. The report only allows writing the proper error message to
+                // std::io::Write but not std::fmt::Write. (Strings only implement the latter...)
+                let mut bytes: Vec<u8> = vec![];
+                report
+                    .write(&mut bytes)
+                    .expect("We should always be able to write to a Vec<u8>.");
+                let string =
+                    std::str::from_utf8(&bytes).expect("Our error messages should be valid UTF-8.");
+                NemoError(WasmOrInternalNemoError::Program(string.to_string()))
+            })?;
 
         // We do not return warnings here since we do not have a good way
         // of displaying them. The language server should take care of reporting warnings instead.
@@ -127,10 +152,14 @@ impl NemoProgram {
 
     #[wasm_bindgen(js_name = "getOutputPredicates")]
     pub fn output_predicates(&self) -> Array {
-        self.0
+        let target_predicates: HashSet<_> = self
+            .0
             .outputs()
-            .map(|o| JsValue::from(o.predicate().to_string()))
-            .collect()
+            .map(|o| o.predicate().to_string())
+            .chain(self.0.exports().map(|o| o.predicate().to_string()))
+            .collect();
+
+        target_predicates.into_iter().map(JsValue::from).collect()
     }
 
     #[wasm_bindgen(js_name = "getEDBPredicates")]
