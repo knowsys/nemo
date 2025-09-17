@@ -877,7 +877,6 @@ impl ExecutionPlan {
                 }
             }
             ExecutionOperation::IncrementalImport(subnode, table_provider) => {
-                // TODO: Figure out what to put here
                 let marker_subnode = subnode.markers_cloned();
                 let subtree: ExecutionTreeLeaf = if let ExecutionTreeOperation::Leaf(leaf) =
                     Self::execution_node(
