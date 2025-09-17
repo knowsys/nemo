@@ -10,15 +10,18 @@ use std::{
 
 use nemo_physical::{
     datavalues::{AnyDataValue, DataValue},
-    resource::{Resource, ResourceBuilder, ResourceValidationErrorKind},
+    resource::{Resource, ResourceBuilder, ResourceValidationError},
 };
 use strum::IntoEnumIterator;
 
 use crate::{
+    chase_model::components::rule::ChaseRule,
     rule_model::{
         components::{
             ComponentSource,
             import_export::{Direction, specification::ImportExportSpec},
+            rule::Rule,
+            tag::Tag,
             term::{operation::Operation, primitive::ground::GroundTerm, value_type::ValueType},
         },
         error::{ValidationReport, hint::Hint, info::Info, validation_error::ValidationError},
@@ -84,8 +87,9 @@ macro_rules! format_tag {
         use enum_assoc::Assoc;
 
         #[derive(Assoc, Debug, Copy, Clone, PartialEq, Eq, Hash)]
-        #[func(pub fn from_str(input: &str) -> Option<Self>)]
-        #[func(pub fn name(&self) -> &'static str)]
+        #[func(pub(crate) fn from_str(input: &str) -> Option<Self>)]
+        #[func(pub(crate) fn name(&self) -> &'static str)]
+        #[allow(missing_docs)]
         $vis enum $type_name {
             $(
                 #[assoc(from_str = $tag_value)]
@@ -276,12 +280,20 @@ pub(crate) trait FormatBuilder: Debug + Sized + Into<AnyImportExportBuilder> {
         &self,
         _direction: Direction,
         builder: Option<ResourceBuilder>,
-    ) -> Result<Option<ResourceBuilder>, ResourceValidationErrorKind> {
+    ) -> Result<Option<ResourceBuilder>, ResourceValidationError> {
         Ok(builder)
     }
 
-    fn build_import(&self, arity: usize) -> Arc<dyn ImportHandler + Send + Sync + 'static>;
-    fn build_export(&self, arity: usize) -> Arc<dyn ExportHandler + Send + Sync + 'static>;
+    fn build_import(
+        &self,
+        arity: usize,
+        filter_rules: Vec<ChaseRule>,
+    ) -> Arc<dyn ImportHandler + Send + Sync + 'static>;
+    fn build_export(
+        &self,
+        arity: usize,
+        filter_rules: Vec<ChaseRule>,
+    ) -> Arc<dyn ExportHandler + Send + Sync + 'static>;
 }
 
 #[derive(Debug)]
@@ -337,9 +349,29 @@ impl<B: FormatBuilder> Parameters<B> {
         ))
     }
 
+    #[allow(unused)]
+    pub(crate) fn validate_filter_rule(
+        predicate: &Tag,
+        rule: &Rule,
+        report: &mut ValidationReport,
+    ) -> Option<()> {
+        let mut valid = true;
+
+        for literal in rule.body() {
+            match literal.predicate() {
+                None => (),
+                Some(filter_predicate) => (),
+            }
+        }
+
+        valid.then_some(())
+    }
+
     pub(crate) fn validate(
+        predicate: Tag,
         spec: &ImportExportSpec,
         bindings: &[Operation],
+        filter_rules: &[Rule],
         direction: Direction,
         report: &mut ValidationReport,
     ) -> Option<Self> {
@@ -352,6 +384,10 @@ impl<B: FormatBuilder> Parameters<B> {
             );
             return None;
         };
+
+        for rule in filter_rules {
+            Self::validate_filter_rule(&predicate, rule, report)?;
+        }
 
         let mut has_errors = false;
         let mut spec = spec.clone();
@@ -439,11 +475,16 @@ pub struct ImportExportBuilder {
     compression: CompressionFormat,
 }
 
-#[derive(Clone, Debug)]
-pub(crate) enum SupportedFormatTag {
+/// Supported import formats
+#[derive(Debug, Clone, Copy)]
+pub enum SupportedFormatTag {
+    /// Delimiter-separated values
     Dsv(DsvTag),
+    /// Resource Description Framework
     Rdf(RdfTag),
+    /// JSON
     Json(JsonTag),
+    /// SPARQL
     Sparql(SparqlTag),
 }
 
@@ -476,20 +517,28 @@ impl ImportExportBuilder {
         }
     }
 
+    /// Return the [SupportedFormatTag] of this file format.
+    pub fn format(&self) -> SupportedFormatTag {
+        self.inner.format_tag()
+    }
+
     /// The resource as specified in the parameters
     pub fn resource(&self) -> Option<Resource> {
         self.resource.clone()
     }
 
     fn new_with_tag<B: FormatBuilder>(
+        predicate: Tag,
         tag: B::Tag,
         spec: &ImportExportSpec,
         bindings: &[Operation],
+        filter_rules: &[Rule],
         direction: Direction,
         report: &mut ValidationReport,
     ) -> Option<ImportExportBuilder> {
         let origin = spec.origin();
-        let parameters = Parameters::<B>::validate(spec, bindings, direction, report)?;
+        let parameters =
+            Parameters::<B>::validate(predicate, spec, bindings, filter_rules, direction, report)?;
 
         let resource_builder =
             if let Some(value) = parameters.get_optional(StandardParameter::Resource.into()) {
@@ -596,8 +645,10 @@ impl ImportExportBuilder {
 
     /// Create a new [ImportExportBuilder].
     pub(crate) fn new(
+        predicate: Tag,
         spec: &ImportExportSpec,
         bindings: &[Operation],
+        filter_rules: &[Rule],
         direction: Direction,
         report: &mut ValidationReport,
     ) -> Option<Self> {
@@ -614,28 +665,65 @@ impl ImportExportBuilder {
         };
 
         match tag {
-            SupportedFormatTag::Dsv(tag) => {
-                Self::new_with_tag::<DsvBuilder>(tag, spec, bindings, direction, report)
-            }
-            SupportedFormatTag::Rdf(tag) => {
-                Self::new_with_tag::<RdfHandler>(tag, spec, bindings, direction, report)
-            }
-            SupportedFormatTag::Json(tag) => {
-                Self::new_with_tag::<JsonHandler>(tag, spec, bindings, direction, report)
-            }
-            SupportedFormatTag::Sparql(tag) => {
-                Self::new_with_tag::<SparqlBuilder>(tag, spec, bindings, direction, report)
-            }
+            SupportedFormatTag::Dsv(tag) => Self::new_with_tag::<DsvBuilder>(
+                predicate,
+                tag,
+                spec,
+                bindings,
+                filter_rules,
+                direction,
+                report,
+            ),
+            SupportedFormatTag::Rdf(tag) => Self::new_with_tag::<RdfHandler>(
+                predicate,
+                tag,
+                spec,
+                bindings,
+                filter_rules,
+                direction,
+                report,
+            ),
+            SupportedFormatTag::Json(tag) => Self::new_with_tag::<JsonHandler>(
+                predicate,
+                tag,
+                spec,
+                bindings,
+                filter_rules,
+                direction,
+                report,
+            ),
+            SupportedFormatTag::Sparql(tag) => Self::new_with_tag::<SparqlBuilder>(
+                predicate,
+                tag,
+                spec,
+                bindings,
+                filter_rules,
+                direction,
+                report,
+            ),
         }
     }
 
     /// Finalize and create an [`Import`] with the specified parameters
-    pub fn build_import(&self, predicate_name: &str, arity: usize) -> Import {
+    pub fn build_import(
+        &self,
+        predicate_name: &str,
+        arity: usize,
+        filter_rules: Vec<ChaseRule>,
+    ) -> Import {
         let handler = match &self.inner {
-            AnyImportExportBuilder::Dsv(dsv_builder) => dsv_builder.build_import(arity),
-            AnyImportExportBuilder::Rdf(rdf_handler) => rdf_handler.build_import(arity),
-            AnyImportExportBuilder::Json(json_handler) => json_handler.build_import(arity),
-            AnyImportExportBuilder::Sparql(sparql_builder) => sparql_builder.build_import(arity),
+            AnyImportExportBuilder::Dsv(dsv_builder) => {
+                dsv_builder.build_import(arity, filter_rules)
+            }
+            AnyImportExportBuilder::Rdf(rdf_handler) => {
+                rdf_handler.build_import(arity, filter_rules)
+            }
+            AnyImportExportBuilder::Json(json_handler) => {
+                json_handler.build_import(arity, filter_rules)
+            }
+            AnyImportExportBuilder::Sparql(sparql_builder) => {
+                sparql_builder.build_import(arity, filter_rules)
+            }
         };
 
         let resource = self.resource.clone().unwrap_or(
@@ -655,12 +743,25 @@ impl ImportExportBuilder {
     }
 
     /// Finalize and create an [`Export`] with the specified parameters
-    pub fn build_export(&self, predicate_name: &str, arity: usize) -> Export {
+    pub fn build_export(
+        &self,
+        predicate_name: &str,
+        arity: usize,
+        filter_rules: Vec<ChaseRule>,
+    ) -> Export {
         let handler = match &self.inner {
-            AnyImportExportBuilder::Dsv(dsv_builder) => dsv_builder.build_export(arity),
-            AnyImportExportBuilder::Rdf(rdf_handler) => rdf_handler.build_export(arity),
-            AnyImportExportBuilder::Json(json_handler) => json_handler.build_export(arity),
-            AnyImportExportBuilder::Sparql(sparql_builder) => sparql_builder.build_export(arity),
+            AnyImportExportBuilder::Dsv(dsv_builder) => {
+                dsv_builder.build_export(arity, filter_rules)
+            }
+            AnyImportExportBuilder::Rdf(rdf_handler) => {
+                rdf_handler.build_export(arity, filter_rules)
+            }
+            AnyImportExportBuilder::Json(json_handler) => {
+                json_handler.build_export(arity, filter_rules)
+            }
+            AnyImportExportBuilder::Sparql(sparql_builder) => {
+                sparql_builder.build_export(arity, filter_rules)
+            }
         };
 
         let resource = self.resource.clone().unwrap_or(
@@ -686,6 +787,18 @@ pub(crate) enum AnyImportExportBuilder {
     Rdf(RdfHandler),
     Json(JsonHandler),
     Sparql(Box<SparqlBuilder>),
+}
+
+impl AnyImportExportBuilder {
+    /// Return the format of this builder.
+    pub fn format_tag(&self) -> SupportedFormatTag {
+        match self {
+            AnyImportExportBuilder::Dsv(dsv) => dsv.format_tag(),
+            AnyImportExportBuilder::Rdf(rdf) => rdf.format_tag(),
+            AnyImportExportBuilder::Json(json) => json.format_tag(),
+            AnyImportExportBuilder::Sparql(sparql) => sparql.format_tag(),
+        }
+    }
 }
 
 impl Debug for AnyImportExportBuilder {

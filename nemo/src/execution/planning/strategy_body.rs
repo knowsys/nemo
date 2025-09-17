@@ -6,6 +6,7 @@ use nemo_physical::management::execution_plan::ExecutionNodeRef;
 use crate::{
     chase_model::analysis::variable_order::VariableOrder,
     execution::{execution_engine::RuleInfo, rule_execution::VariableTranslation},
+    io::ImportManager,
     table_manager::{SubtableExecutionPlan, TableManager},
 };
 
@@ -16,9 +17,11 @@ pub(crate) trait BodyStrategy: Debug {
     /// Calculate the concrete plan given a variable order.
     /// Returns the root node of the tree that represents the calculation for the body.
     /// Updates the variable order according to changes by e.g. aggregates and arithmetic operations.
+    #[allow(clippy::too_many_arguments)]
     fn add_plan_body(
         &self,
         table_manager: &TableManager,
+        import_manager: &ImportManager,
         current_plan: &mut SubtableExecutionPlan,
         variable_translation: &VariableTranslation,
         rule_info: &RuleInfo,

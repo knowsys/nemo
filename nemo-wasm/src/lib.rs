@@ -117,7 +117,7 @@ impl NemoProgram {
                 continue;
             };
 
-            let format: String = builder.build_import("", 0).media_type();
+            let format: String = builder.build_import("", 0, Vec::default()).media_type();
             if let Some(resource) = builder.resource() {
                 result.push(NemoResource {
                     accept: format.to_string(),

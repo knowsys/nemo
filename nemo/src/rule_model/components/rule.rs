@@ -5,6 +5,7 @@ use std::{collections::HashSet, fmt::Display, hash::Hash};
 use nemo_physical::datavalues::DataValue;
 
 use crate::rule_model::{
+    components::{import_export::clause::ImportClause, term::operation::Operation},
     error::{ValidationReport, hint::Hint, info::Info, validation_error::ValidationError},
     origin::Origin,
     pipeline::id::ProgramComponentId,
@@ -45,6 +46,9 @@ pub struct Rule {
     head: Vec<Atom>,
     /// Body of the rule
     body: Vec<Literal>,
+
+    /// Imports that are evaluated as part of the rule
+    imports: Vec<ImportClause>,
 }
 
 impl Rule {
@@ -57,6 +61,7 @@ impl Rule {
             display: None,
             head,
             body,
+            imports: Vec::default(),
         }
     }
 
@@ -69,6 +74,7 @@ impl Rule {
             display: None,
             head: Vec::default(),
             body: Vec::default(),
+            imports: Vec::default(),
         }
     }
 
@@ -114,6 +120,22 @@ impl Rule {
         })
     }
 
+    /// Return an iterator over the negative literals in the body of this rule.
+    pub fn body_negative(&self) -> impl Iterator<Item = &Atom> {
+        self.body.iter().filter_map(|literal| match literal {
+            Literal::Negative(atom) => Some(atom),
+            Literal::Positive(_) | Literal::Operation(_) => None,
+        })
+    }
+
+    /// Return an iterator over the operations in the body of this rule.
+    pub fn body_operations(&self) -> impl Iterator<Item = &Operation> {
+        self.body.iter().filter_map(|literal| match literal {
+            Literal::Operation(operation) => Some(operation),
+            Literal::Positive(_) | Literal::Negative(_) => None,
+        })
+    }
+
     /// Return a mutable reference to the body of the rule.
     pub fn body_mut(&mut self) -> &mut Vec<Literal> {
         &mut self.body
@@ -144,6 +166,17 @@ impl Rule {
         self.head.iter().chain(self.body_atoms())
     }
 
+    /// Return an iterator over all [ImportClause]s
+    /// that are evaluated as part of this rule.
+    pub fn imports(&self) -> impl Iterator<Item = &ImportClause> {
+        self.imports.iter()
+    }
+
+    /// Add an [ImportClause] to this rule.
+    pub fn add_import(&mut self, import: ImportClause) {
+        self.imports.push(import);
+    }
+
     /// Return the set of variables that are bound in positive body atoms.
     pub fn positive_variables(&self) -> HashSet<&Variable> {
         let mut result = HashSet::new();
@@ -164,6 +197,14 @@ impl Rule {
         result
     }
 
+    /// Return the set of variables that are bound by import statements
+    pub fn import_variables(&self) -> HashSet<&Variable> {
+        self.imports
+            .iter()
+            .flat_map(|import| import.variables())
+            .collect::<HashSet<_>>()
+    }
+
     /// Return a set of "safe" variables.
     ///
     /// A variable is considered safe,
@@ -171,7 +212,11 @@ impl Rule {
     /// or is derived via the equality operation
     /// from other safe variables.
     pub fn safe_variables(&self) -> HashSet<&Variable> {
-        let mut result = self.positive_variables();
+        let mut result = self
+            .positive_variables()
+            .union(&self.import_variables())
+            .cloned()
+            .collect::<HashSet<_>>();
 
         loop {
             let current_count = result.len();
@@ -347,7 +392,10 @@ impl ComponentBehavior for Rule {
         for atom in self.head() {
             for variable in atom.variables() {
                 if let Some(variable_name) = variable.name() {
-                    if !variable.is_existential() && !safe_variables.contains(variable) {
+                    if !variable.is_existential()
+                        && !safe_variables.contains(variable)
+                        && self.import_variables().contains(variable)
+                    {
                         report
                             .add(
                                 variable,

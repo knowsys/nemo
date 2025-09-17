@@ -15,6 +15,7 @@ use string::StringLevenshtein;
 use crate::{
     datatypes::{StorageTypeName, storage_type_name::StorageTypeBitSet},
     datavalues::AnyDataValue,
+    function::definitions::language::LanguageString,
 };
 
 use self::{
@@ -225,6 +226,7 @@ pub trait BinaryFunction {
 pub enum BinaryFunctionEnum {
     Equals(Equals),
     Unequals(Unequals),
+    LanguageString(LanguageString),
     NumericAddition(NumericAddition),
     NumericSubtraction(NumericSubtraction),
     NumericMultiplication(NumericMultiplication),
@@ -255,6 +257,7 @@ impl BinaryFunction for BinaryFunctionEnum {
         to match self {
             Self::Equals(function) => function,
             Self::Unequals(function) => function,
+            Self::LanguageString(function) => function,
             Self::NumericAddition(function) => function,
             Self::NumericSubtraction(function) => function,
             Self::NumericMultiplication(function) => function,

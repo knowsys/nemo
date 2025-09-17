@@ -1,9 +1,15 @@
 //! This module defines [TupleBuffer].
 
-use std::cmp::Ordering;
+use std::{cmp::Ordering, collections::HashMap};
 
-use crate::datatypes::{
-    Double, Float, StorageTypeName, StorageValueT, storage_type_name::NUM_STORAGETYPES,
+use crate::{
+    datatypes::{
+        Double, Float, StorageTypeName, StorageValueT, storage_type_name::NUM_STORAGETYPES,
+    },
+    datavalues::AnyDataValue,
+    function::{evaluation::StackProgram, tree::FunctionTree},
+    management::database::Dict,
+    tabular::filters::FilterTransformPattern,
 };
 
 use super::sorted_tuple_buffer::SortedTupleBuffer;
@@ -224,6 +230,27 @@ pub(super) struct TypedTableRecord {
     current_length: usize,
 }
 
+/// A filter or transformation applied to a position
+#[derive(Debug)]
+pub struct TransformPosition {
+    position: usize,
+    program: StackProgram,
+}
+
+impl TransformPosition {
+    /// Construct a new transformation.
+    pub fn new(position: usize, value: FunctionTree<usize>) -> Self {
+        let reference_map = value
+            .references()
+            .into_iter()
+            .map(|position| (position, position))
+            .collect::<HashMap<_, _>>();
+        let program = StackProgram::from_function_tree(&value, &reference_map, None);
+
+        Self { position, program }
+    }
+}
+
 /// Represents a row-based table containing values of arbitrary data types
 #[derive(Debug)]
 pub(crate) struct TupleBuffer {
@@ -242,22 +269,38 @@ pub(crate) struct TupleBuffer {
 
     /// Current tuple
     current_tuple: Box<[StorageValueT]>,
+    /// Current tuple, as data values
+    current_tuple_data_values: Box<[AnyDataValue]>,
     /// T ypes of the current tuple
     current_tuple_types: Box<[StorageTypeName]>,
     /// Column Index of the currently written tuple
     current_tuple_index: usize,
+
+    /// Patterns to filter and transform the tuples before committing.
+    patterns: Vec<FilterTransformPattern>,
 }
 
 impl TupleBuffer {
     /// Create a new [TupleBuffer].
     pub(crate) fn new(column_number: usize) -> Self {
+        Self::with_patterns(column_number, Vec::new())
+    }
+
+    /// Create a new [TupleBuffer] with the given [FilterTransformPattern]s.
+    pub(crate) fn with_patterns(
+        column_number: usize,
+        patterns: Vec<FilterTransformPattern>,
+    ) -> Self {
         Self {
             typed_subtables: Vec::new(),
             table_lookup: TypedTableLookup::new(),
             table_storage: TypedTableStorage::default(),
             current_tuple: vec![StorageValueT::Id32(0); column_number].into_boxed_slice(), // Picked arbitrarily
+            current_tuple_data_values: vec![AnyDataValue::new_integer_from_u64(0); column_number]
+                .into_boxed_slice(), // Picked arbitrarily
             current_tuple_types: vec![StorageTypeName::Id32; column_number].into_boxed_slice(), // Picked arbitrarily
             current_tuple_index: 0,
+            patterns,
         }
     }
 
@@ -289,6 +332,8 @@ impl TupleBuffer {
     /// Provide the next value for the current tuple. Values are added in in order.
     /// When the value for the last column was provided, the tuple is committed to the buffer.
     /// Alternatively, a partially built tuple can be abandonded by calling `drop_current_tuple`.
+    ///
+    /// This must not be mixed with [add_tuple_data_value] on the same tuple.
     pub(crate) fn add_tuple_value(&mut self, value: StorageValueT) {
         self.current_tuple_types[self.current_tuple_index] = value.get_type();
         self.current_tuple[self.current_tuple_index] = value;
@@ -297,6 +342,30 @@ impl TupleBuffer {
         if self.current_tuple_index >= self.column_number() {
             self.current_tuple_index = 0;
             self.write_tuple();
+        }
+    }
+
+    /// Add the next value for the current tuple, also providing the
+    /// dictionary and the underlying [AnyDataValue] (allowing
+    /// filtering and transformations).
+    ///
+    /// This must not be mixed with [add_tuple_value] on the same tuple.
+    pub(crate) fn add_tuple_data_value(&mut self, dictionary: &mut Dict, data_value: AnyDataValue) {
+        self.current_tuple_data_values[self.current_tuple_index] = data_value;
+        self.current_tuple_index += 1;
+
+        if self.current_tuple_index >= self.column_number() {
+            self.current_tuple_index = 0;
+
+            if self.match_filters_and_transform() {
+                for (index, value) in self.current_tuple_data_values.iter().enumerate() {
+                    let value = value.to_storage_value_t_dict(dictionary);
+                    self.current_tuple[index] = value;
+                    self.current_tuple_types[index] = value.get_type();
+                }
+
+                self.write_tuple();
+            }
         }
     }
 
@@ -359,7 +428,7 @@ impl TupleBuffer {
         )
     }
 
-    /// Compare two stored values of the same type-
+    /// Compare two stored values of the same type.
     pub(super) fn compare_stored_values(
         &self,
         storage_type: StorageTypeName,
@@ -376,11 +445,51 @@ impl TupleBuffer {
             local_index_second,
         )
     }
+
+    fn pattern_matches(&self, pattern: &FilterTransformPattern) -> bool {
+        pattern
+            .filter
+            .evaluate_bool(&self.current_tuple_data_values, None)
+            == Some(true)
+    }
+
+    fn match_filters_and_transform(&mut self) -> bool {
+        if self.patterns.is_empty() {
+            // we don't have any patterns to check, let everything through
+            return true;
+        }
+
+        for pattern in &self.patterns {
+            if !self.pattern_matches(pattern) {
+                continue;
+            }
+
+            for transformation in &pattern.transformations {
+                let value = transformation
+                    .program
+                    .evaluate_data(&self.current_tuple_data_values)
+                    .expect("should evaluate to a value");
+                self.current_tuple_data_values[transformation.position] = value;
+            }
+
+            // first matching pattern wins
+            return true;
+        }
+
+        false
+    }
 }
 
 #[cfg(test)]
 mod test {
-    use crate::{datatypes::StorageValueT, tabular::buffer::tuple_buffer::TupleBuffer};
+    use crate::{
+        datatypes::StorageValueT,
+        datavalues::AnyDataValue,
+        dictionary::meta_dv_dict::MetaDvDictionary,
+        function::tree::FunctionTree,
+        tabular::buffer::tuple_buffer::{FilterTransformPattern, TransformPosition, TupleBuffer},
+    };
+    use test_log::test;
 
     #[test]
     fn tuple_buffer_internals() {
@@ -496,5 +605,66 @@ mod test {
         assert_eq!(tuple_buffer.stored_value(2, 2, 0), v1);
         assert_eq!(tuple_buffer.stored_value(2, 2, 1), v1);
         assert_eq!(tuple_buffer.stored_value(2, 2, 2), v2);
+    }
+
+    #[test]
+    fn filter_and_transform() {
+        let patterns = vec![
+            FilterTransformPattern::new(
+                FunctionTree::equals(
+                    FunctionTree::constant(AnyDataValue::new_integer_from_u64(23)),
+                    FunctionTree::reference(1),
+                ),
+                Vec::new(),
+            ),
+            FilterTransformPattern::new(
+                FunctionTree::numeric_greaterthaneq(
+                    FunctionTree::string_length(FunctionTree::reference(0)),
+                    FunctionTree::constant(AnyDataValue::new_integer_from_u64(4)),
+                ),
+                vec![TransformPosition::new(
+                    1,
+                    FunctionTree::numeric_addition(
+                        FunctionTree::reference(1),
+                        FunctionTree::constant(AnyDataValue::new_integer_from_u64(1295)),
+                    ),
+                )],
+            ),
+        ];
+        let mut tuple_buffer = TupleBuffer::with_patterns(2, patterns);
+        let mut dictionary = MetaDvDictionary::new();
+
+        let dv1 = AnyDataValue::new_plain_string("foo".to_string());
+        let dv2 = AnyDataValue::new_integer_from_u64(23);
+        let dv3 = AnyDataValue::new_integer_from_u64(42);
+        let dv4 = AnyDataValue::new_plain_string("quux".to_string());
+        let v1 = dv1.to_storage_value_t_dict(&mut dictionary);
+        let v4 = dv4.to_storage_value_t_dict(&mut dictionary);
+
+        tuple_buffer.add_tuple_data_value(&mut dictionary, dv1.clone());
+        tuple_buffer.add_tuple_data_value(&mut dictionary, dv2.clone());
+
+        tuple_buffer.add_tuple_data_value(&mut dictionary, dv1.clone());
+        tuple_buffer.add_tuple_data_value(&mut dictionary, dv3.clone());
+
+        tuple_buffer.add_tuple_data_value(&mut dictionary, dv4.clone());
+        tuple_buffer.add_tuple_data_value(&mut dictionary, dv2.clone());
+
+        tuple_buffer.add_tuple_data_value(&mut dictionary, dv4.clone());
+        tuple_buffer.add_tuple_data_value(&mut dictionary, dv3.clone());
+
+        assert_eq!(tuple_buffer.subtable_lengths().collect::<Vec<_>>(), &[&3]);
+
+        assert_eq!(tuple_buffer.stored_value(0, 0, 0), v1);
+        assert_eq!(tuple_buffer.stored_value(0, 0, 1), StorageValueT::Int64(23));
+
+        assert_eq!(tuple_buffer.stored_value(0, 1, 0), v4);
+        assert_eq!(tuple_buffer.stored_value(0, 1, 1), StorageValueT::Int64(23));
+
+        assert_eq!(tuple_buffer.stored_value(0, 2, 0), StorageValueT::Id32(1));
+        assert_eq!(
+            tuple_buffer.stored_value(0, 2, 1),
+            StorageValueT::Int64(1337)
+        );
     }
 }

@@ -10,6 +10,7 @@ use crate::{
         rule::ChaseRule,
         term::operation_term::{Operation, OperationTerm},
     },
+    execution::planning::operations::import::binding_table_predicate_name,
     rule_model::components::{
         tag::Tag,
         term::{
@@ -265,7 +266,9 @@ impl ChaseProgram {
         fn add_arity(predicate: Tag, arity: usize, arities: &mut HashMap<Tag, usize>) {
             if let Some(current) = arities.get(&predicate) {
                 if *current != arity {
-                    unreachable!("invalid program: same predicate used with different arities");
+                    unreachable!(
+                        "invalid program: predicate {predicate} used with different arities {arity} and {current}"
+                    );
                 }
             } else {
                 arities.insert(predicate, arity);
@@ -293,6 +296,23 @@ impl ChaseProgram {
                 .chain(rule.negative_body().iter())
             {
                 add_arity(atom.predicate(), atom.arity(), &mut result);
+            }
+
+            for import in rule.imports() {
+                add_arity(
+                    import.predicate().clone(),
+                    import.bindings().len(),
+                    &mut result,
+                );
+
+                let body_variables = rule.body_variables().cloned().collect::<Vec<_>>();
+
+                let (binding_table_name, arity) = binding_table_predicate_name(
+                    import.predicate(),
+                    &body_variables,
+                    import.bindings(),
+                );
+                add_arity(binding_table_name, arity, &mut result);
             }
         }
 

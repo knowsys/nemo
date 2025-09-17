@@ -37,6 +37,16 @@ pub trait ImportHandler: FileFormatMeta {
     ///
     /// If reading is not supported, an error will be returned.
     fn reader(&self, read: Box<dyn Read>) -> Result<Box<dyn TableProvider>, Error>;
+
+    /// Whether to defer reading the resource.
+    fn deferred(&self) -> bool {
+        false
+    }
+
+    /// Obtain a [TableProvider] for this format that defers reading, if supported.
+    fn read_deferred(&self) -> Result<Box<dyn TableProvider>, Error> {
+        unimplemented!("deferred reading is not supported for this format")
+    }
 }
 
 /// A file format handler, that can write by wrapping a [`Write`] into a [`TableWriter`]
@@ -169,6 +179,14 @@ impl ImportHandler for Import {
     fn reader(&self, read: Box<dyn Read>) -> Result<Box<dyn TableProvider>, Error> {
         let read = self.compression.implementation().decompress(read)?;
         self.handler.reader(read)
+    }
+
+    fn deferred(&self) -> bool {
+        self.handler.deferred()
+    }
+
+    fn read_deferred(&self) -> Result<Box<dyn TableProvider>, Error> {
+        self.handler.read_deferred()
     }
 }
 
