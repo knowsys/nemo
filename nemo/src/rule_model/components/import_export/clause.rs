@@ -31,8 +31,6 @@ pub struct ImportClause {
 
 impl Display for ImportClause {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // TODO: This component does not have a representation in syntax
-
         f.write_fmt(format_args!("{}(", self.import.predicate()))?;
 
         for (term_index, term) in self.variables.iter().enumerate() {
@@ -75,7 +73,9 @@ impl ComponentBehavior for ImportClause {
     }
 
     fn validate(&self) -> Result<(), ValidationReport> {
-        // TODO: Variables
+        for variable in &self.variables {
+            variable.validate()?;
+        }
 
         self.import.validate()
     }
