@@ -310,7 +310,7 @@ impl ChaseProgram {
                 let (binding_table_name, arity) = binding_table_predicate_name(
                     import.predicate(),
                     &body_variables,
-                    &import.bindings(),
+                    import.bindings(),
                 );
                 add_arity(binding_table_name, arity, &mut result);
             }

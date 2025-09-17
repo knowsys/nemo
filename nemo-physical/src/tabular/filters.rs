@@ -6,7 +6,7 @@ use crate::function::{evaluation::StackProgram, tree::FunctionTree};
 
 use super::buffer::tuple_buffer::TransformPosition;
 
-/// A pattern that can be used to filter and transform the tuples in a [super::buffer::TupleBuffer].
+/// A pattern that can be used to filter and transform the tuples in a tuple buffer.
 #[derive(Debug)]
 pub struct FilterTransformPattern {
     pub(crate) filter: StackProgram,

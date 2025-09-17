@@ -559,11 +559,11 @@ impl ChaseRule {
     #[allow(unused)]
     fn into_filter_patterns(self) -> Result<impl Iterator<Item = FilterTransformPattern>, ()> {
         if self.head.aggregate_head_index.is_some() {
-            return Err(todo!("add error code"));
+            todo!("add error code");
         }
 
         if !self.imports().is_empty() {
-            return Err(todo!("add error code"));
+            todo!("add error code");
         }
 
         Ok(std::iter::empty())

@@ -14,7 +14,7 @@ use super::ProgramTransformation;
 /// Program transformation
 ///
 /// Pushes conditions of simple rule into the import statement
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct TransformationFilterImports {}
 
 impl TransformationFilterImports {
@@ -118,14 +118,14 @@ impl TransformationFilterImports {
         }
 
         for rule in program.rules() {
-            if let Some(import_predicate) = Self::check_rule(rule) {
-                if let Some(imports) = predicate_map.get(&import_predicate) {
-                    for &import in imports {
-                        import_map
-                            .entry(import)
-                            .or_insert_with(Vec::default)
-                            .push(rule);
-                    }
+            if let Some(import_predicate) = Self::check_rule(rule)
+                && let Some(imports) = predicate_map.get(&import_predicate)
+            {
+                for &import in imports {
+                    import_map
+                        .entry(import)
+                        .or_insert_with(Vec::default)
+                        .push(rule);
                 }
             }
         }

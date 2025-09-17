@@ -13,7 +13,7 @@ use super::ProgramTransformation;
 /// Program transformation
 ///
 /// Adds an additional atom to rules with an empty positive body.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct TransformationEmpty {}
 
 impl TransformationEmpty {

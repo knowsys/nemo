@@ -257,14 +257,13 @@ impl ProgramChaseTranslation {
             }
 
             if let Literal::Operation(operation) = literal {
-                if let Some((variable, term)) = operation.variable_assignment() {
-                    if variable.is_universal()
-                        && variable.name().is_some()
-                        && !derived_variables.contains(variable)
-                    {
-                        result.add_import_operation(Self::build_operation(variable, term));
-                        continue;
-                    }
+                if let Some((variable, term)) = operation.variable_assignment()
+                    && variable.is_universal()
+                    && variable.name().is_some()
+                    && !derived_variables.contains(variable)
+                {
+                    result.add_import_operation(Self::build_operation(variable, term));
+                    continue;
                 }
 
                 let new_operation = Self::build_operation_term(operation);
@@ -328,16 +327,14 @@ impl ProgramChaseTranslation {
                             aggregate =
                                 Some((operation_aggregate, argument_index, operation_variables));
                             result.add_aggregation_operation(new_operation);
+                        } else if new_operation
+                            .operation()
+                            .variables()
+                            .all(|variable| derived_variales.contains(variable))
+                        {
+                            result.add_positive_operation(new_operation)
                         } else {
-                            if new_operation
-                                .operation()
-                                .variables()
-                                .all(|variable| derived_variales.contains(variable))
-                            {
-                                result.add_positive_operation(new_operation)
-                            } else {
-                                result.add_import_operation(new_operation);
-                            }
+                            result.add_import_operation(new_operation);
                         }
 
                         terms.push(Primitive::Variable(new_variable));

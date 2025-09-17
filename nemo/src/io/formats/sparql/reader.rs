@@ -50,7 +50,7 @@ impl SparqlReader {
         let resource = resource_builder.finalize();
         let provider = HttpResourceProvider {};
 
-        Ok(provider.open_resource(&resource, MEDIA_TYPE_TSV)?)
+        provider.open_resource(&resource, MEDIA_TYPE_TSV)
     }
 
     fn execute_query(

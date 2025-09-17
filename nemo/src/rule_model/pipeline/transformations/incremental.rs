@@ -28,7 +28,7 @@ use super::ProgramTransformation;
 /// Program transformation
 ///
 /// Inlines certain import statements into rules.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct TransformationIncremental {}
 
 impl TransformationIncremental {
@@ -52,13 +52,12 @@ impl TransformationIncremental {
 
         loop {
             for operation in rule.body_operations() {
-                if let Some((variable, assignment)) = operation.variable_assignment() {
-                    if assignment
+                if let Some((variable, assignment)) = operation.variable_assignment()
+                    && assignment
                         .variables()
                         .all(|variable| available_variables.contains(variable))
-                    {
-                        available_variables.insert(variable);
-                    }
+                {
+                    available_variables.insert(variable);
                 }
             }
 
@@ -119,8 +118,8 @@ impl TransformationIncremental {
             return false;
         }
 
-        !Self::has_repeated_predicate(rule, &incremental_predicates)
-            && !Self::has_unrestricted_atom(rule, &incremental_predicates)
+        !Self::has_repeated_predicate(rule, incremental_predicates)
+            && !Self::has_unrestricted_atom(rule, incremental_predicates)
     }
 
     /// Compute the predicates that will be inlined in this transformation.
@@ -203,25 +202,25 @@ impl TransformationIncremental {
         let mut computed_terms = Vec::<(Variable, Term)>::default();
 
         result.body_mut().retain(|literal| {
-            if let Literal::Positive(atom) = literal {
-                if let Some(&import) = incremental_predicates.get(&atom.predicate()) {
-                    let mut variables = Vec::<Variable>::new();
-                    for (term_index, term) in atom.terms().enumerate() {
-                        if let Term::Primitive(Primitive::Variable(variable)) = term {
-                            variables.push(variable.clone());
-                        } else {
-                            let new_variable = Self::new_variable(&atom.predicate(), term_index);
+            if let Literal::Positive(atom) = literal
+                && let Some(&import) = incremental_predicates.get(&atom.predicate())
+            {
+                let mut variables = Vec::<Variable>::new();
+                for (term_index, term) in atom.terms().enumerate() {
+                    if let Term::Primitive(Primitive::Variable(variable)) = term {
+                        variables.push(variable.clone());
+                    } else {
+                        let new_variable = Self::new_variable(&atom.predicate(), term_index);
 
-                            variables.push(new_variable.clone());
-                            computed_terms.push((new_variable, term.clone()));
-                        }
+                        variables.push(new_variable.clone());
+                        computed_terms.push((new_variable, term.clone()));
                     }
-
-                    let clause = ImportClause::new(import.clone(), variables);
-
-                    import_clauses.push(clause);
-                    return false;
                 }
+
+                let clause = ImportClause::new(import.clone(), variables);
+
+                import_clauses.push(clause);
+                return false;
             }
 
             true

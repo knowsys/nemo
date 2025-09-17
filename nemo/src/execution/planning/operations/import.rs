@@ -23,6 +23,7 @@ use crate::{
 };
 
 /// Compute an exeuction plan for on-demand importing of tables.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn node_imports(
     subtable_plan: &mut SubtableExecutionPlan,
     table_manager: &TableManager,
@@ -31,8 +32,8 @@ pub(crate) fn node_imports(
     current_step_number: usize,
     input_node: ExecutionNodeRef,
     imports: &Vec<ChaseImportClause>,
-    import_operations: &Vec<ChaseOperation>,
-    import_filters: &Vec<ChaseFilter>,
+    import_operations: &[ChaseOperation],
+    import_filters: &[ChaseFilter],
     import_subtracted_atoms: &[VariableAtom],
     import_subtracted_filters: &[Vec<ChaseFilter>],
 ) -> ExecutionNodeRef {
@@ -155,7 +156,7 @@ pub(crate) fn node_imports(
         import_filters,
     );
 
-    let node_import_negation = node_negation(
+    node_negation(
         subtable_plan.plan_mut(),
         table_manager,
         variable_translation,
@@ -163,9 +164,7 @@ pub(crate) fn node_imports(
         current_step_number,
         import_subtracted_atoms,
         import_subtracted_filters,
-    );
-
-    node_import_negation
+    )
 }
 
 /// Compute the column markers for the binding table.

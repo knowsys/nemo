@@ -3,6 +3,4 @@
 use test_log::test;
 
 #[test]
-fn incremental_import() {
-    ()
-}
+fn incremental_import() {}
