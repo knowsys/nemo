@@ -104,25 +104,27 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     /// The results for negated nodes is not computed as part of the normal
     /// evaluation of the query, and instead appendning the the full table,
     /// as an explanation for negated facts.
-    fn trace_tree_add_negation(&mut self, response: &mut TreeForTableResponse) {
+    async fn trace_tree_add_negation(&mut self, response: &mut TreeForTableResponse) {
         if let Some(next) = &mut response.next {
             for child in &mut next.children {
-                self.trace_tree_add_negation(child);
+                Box::pin(self.trace_tree_add_negation(child)).await;
             }
 
             let rule = self.chase_program().rules()[next.rule.id].clone();
             for negative_atom in rule.negative_body() {
-                let rows = if let Ok(Some(rows)) = self.predicate_rows(&negative_atom.predicate()) {
-                    rows.collect::<Vec<_>>()
-                } else {
-                    Vec::default()
-                };
+                let rows =
+                    if let Ok(Some(rows)) = self.predicate_rows(&negative_atom.predicate()).await {
+                        rows.collect::<Vec<_>>()
+                    } else {
+                        Vec::default()
+                    };
 
                 let mut entries = Vec::default();
                 for row in rows {
                     let entry_id = self
                         .table_manager
                         .table_row_id(&negative_atom.predicate(), &row)
+                        .await
                         .expect("row should be contained somewhere");
 
                     let table_response = TableEntryResponse {
@@ -182,7 +184,10 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     }
 
     /// Recursive part of `trace_tree`
-    fn trace_tree_recursive(&mut self, facts: Vec<GroundAtom>) -> Option<TreeForTableResponse> {
+    async fn trace_tree_recursive(
+        &mut self,
+        facts: Vec<GroundAtom>,
+    ) -> Option<TreeForTableResponse> {
         let predicate = if let Some(first_fact) = facts.first() {
             first_fact.predicate() // We assume that all facts have the same predicate
         } else {
@@ -190,18 +195,25 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         };
 
         // Prepare the result, which contains some information independant of tracing results below
-        let entries =
+        let entries = {
+            let predicate_rows = self
+                .predicate_rows(&predicate)
+                .await
+                .ok()
+                .flatten()?
+                .collect::<Vec<_>>();
             facts
                 .iter()
                 .map(|fact| {
                     Some(TableEntryResponse {
-                        entry_id: self.predicate_rows(&predicate).ok().flatten()?.position(
-                            |row| fact.terms().map(|t| t.value()).collect::<Vec<_>>() == row,
-                        )?,
+                        entry_id: predicate_rows.iter().position(|row| {
+                            fact.terms().map(|t| t.value()).collect::<Vec<_>>() == *row
+                        })?,
                         terms: fact.terms().map(|term| term.value()).collect(),
                     })
                 })
-                .collect::<Option<Vec<_>>>()?;
+                .collect::<Option<Vec<_>>>()?
+        };
 
         let possible_rules_above = self
             .analysis
@@ -244,13 +256,15 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         };
 
         // Get the steps
-        let steps = facts
-            .iter()
-            .map(|fact| {
-                self.table_manager
-                    .find_table_row(&predicate, &fact.datavalues().collect::<Vec<_>>())
-            })
-            .collect::<Option<Vec<usize>>>()?;
+        let steps = {
+            let mut entries: Vec<_> = vec![];
+            for fact in &facts {
+                let dvs = fact.datavalues().collect::<Vec<_>>();
+                let entry = self.table_manager.find_table_row(&predicate, &dvs);
+                entries.push(entry.await);
+            }
+            entries.into_iter().collect::<Option<Vec<usize>>>()?
+        };
 
         // Some of the traced facts come from the input database
         if steps.iter().contains(&0) {
@@ -298,6 +312,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 let query_result = self
                     .table_manager
                     .execute_plan_trie(execution_plan)
+                    .await
                     .ok()?
                     .pop()
                     .unwrap();
@@ -332,10 +347,14 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                     }
                 }
 
-                let children_option = next_facts
-                    .into_iter()
-                    .map(|facts| self.trace_tree_recursive(facts))
-                    .collect::<Option<Vec<TreeForTableResponse>>>();
+                let children_option = {
+                    let mut entries: Vec<_> = vec![];
+                    for facts in next_facts {
+                        let entry = self.trace_tree_recursive(facts);
+                        entries.push(Box::pin(entry).await);
+                    }
+                    entries.into_iter().collect::<Option<Vec<_>>>()
+                };
 
                 if let Some(children) = children_option {
                     result.next = Some(TreeForTableResponseSuccessor {
@@ -367,10 +386,14 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                         Self::trace_next_facts(&grounding, &mut next_facts, rule, &variable_order);
                     }
 
-                    let children_option = next_facts
-                        .into_iter()
-                        .map(|facts| self.trace_tree_recursive(facts))
-                        .collect::<Option<Vec<TreeForTableResponse>>>();
+                    let children_option = {
+                        let mut entries: Vec<_> = vec![];
+                        for facts in next_facts {
+                            let entry = self.trace_tree_recursive(facts);
+                            entries.push(Box::pin(entry).await);
+                        }
+                        entries.into_iter().collect::<Option<Vec<_>>>()
+                    };
 
                     if let Some(children) = children_option {
                         result.next = Some(TreeForTableResponseSuccessor {
@@ -393,14 +416,18 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     }
 
     /// Evaluate a [TreeForTableQuery].
-    pub fn trace_tree(&mut self, query: TreeForTableQuery) -> Result<TreeForTableResponse, Error> {
+    pub async fn trace_tree(
+        &mut self,
+        query: TreeForTableQuery,
+    ) -> Result<TreeForTableResponse, Error> {
         let mut facts = Vec::new();
 
         for fact_query in query.queries {
             let fact = match fact_query {
                 TableEntryQuery::Entry(row_index) => {
                     let terms_to_trace: Vec<AnyDataValue> = self
-                        .predicate_rows(&Tag::new(query.predicate.clone()))?
+                        .predicate_rows(&Tag::new(query.predicate.clone()))
+                        .await?
                         .into_iter()
                         .flatten()
                         .nth(row_index)
@@ -435,8 +462,8 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             facts.push(fact);
         }
 
-        if let Some(mut result) = self.trace_tree_recursive(facts) {
-            self.trace_tree_add_negation(&mut result);
+        if let Some(mut result) = self.trace_tree_recursive(facts).await {
+            self.trace_tree_add_negation(&mut result).await;
             Ok(result)
         } else {
             let predicate = Tag::new(query.predicate.clone());

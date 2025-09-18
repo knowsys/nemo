@@ -83,6 +83,8 @@ impl NemoResource {
     }
 }
 
+// TODO: Since we can have http requests in wasm now, we can drop the NemoProgram and create an
+// Engine directly with the local imports as Blob Resource Provider and the standard http provider
 #[wasm_bindgen]
 impl NemoProgram {
     #[wasm_bindgen(constructor)]
@@ -201,8 +203,9 @@ impl std::fmt::Display for BlobReadingError {
 
 impl ExternalReadingError for BlobReadingError {}
 
+#[async_trait::async_trait(?Send)]
 impl ResourceProvider for BlobResourceProvider {
-    fn open_resource(
+    async fn open_resource(
         &self,
         resource: &Resource,
         _media_type: &str,
@@ -271,7 +274,7 @@ impl std::io::Write for SyncAccessHandleWriter {
 #[wasm_bindgen]
 impl NemoEngine {
     #[wasm_bindgen(constructor)]
-    pub fn new(
+    pub async fn new(
         program: &NemoProgram,
         resource_blobs_js_value: JsValue,
     ) -> Result<NemoEngine, NemoError> {
@@ -303,6 +306,7 @@ impl NemoEngine {
         let import_manager = ImportManager::new(resource_providers);
 
         let engine = ExecutionEngine::initialize(program.0.clone(), import_manager)
+            .await
             .map_err(WasmOrInternalNemoError::Nemo)
             .map_err(NemoError)?;
 
@@ -310,9 +314,10 @@ impl NemoEngine {
     }
 
     #[wasm_bindgen]
-    pub fn reason(&mut self) -> Result<(), NemoError> {
+    pub async fn reason(&mut self) -> Result<(), NemoError> {
         self.engine
             .execute()
+            .await
             .map_err(WasmOrInternalNemoError::Nemo)
             .map_err(NemoError)
     }
@@ -329,10 +334,11 @@ impl NemoEngine {
     }
 
     #[wasm_bindgen(js_name = "getResult")]
-    pub fn result(&mut self, predicate: String) -> Result<NemoResults, NemoError> {
+    pub async fn result(&mut self, predicate: String) -> Result<NemoResults, NemoError> {
         let iter = self
             .engine
             .predicate_rows(&Tag::from(predicate))
+            .await
             .map_err(WasmOrInternalNemoError::Nemo)
             .map_err(NemoError)?;
 
@@ -345,7 +351,7 @@ impl NemoEngine {
 
     #[cfg(feature = "web_sys_unstable_apis")]
     #[wasm_bindgen(js_name = "savePredicate")]
-    pub fn write_result_to_sync_access_handle(
+    pub async fn write_result_to_sync_access_handle(
         &mut self,
         predicate: String,
         sync_access_handle: web_sys::FileSystemSyncAccessHandle,
@@ -361,6 +367,7 @@ impl NemoEngine {
         let Some(record_iter) = self
             .engine
             .predicate_rows(&identifier)
+            .await
             .map_err(WasmOrInternalNemoError::Nemo)
             .map_err(NemoError)?
         else {
@@ -379,7 +386,7 @@ impl NemoEngine {
     }
 
     #[wasm_bindgen(js_name = "traceTreeForTable")]
-    pub fn trace_tree_for_table(
+    pub async fn trace_tree_for_table(
         &mut self,
         tree_for_table_query: JsValue,
     ) -> Result<JsValue, NemoError> {
@@ -394,6 +401,7 @@ impl NemoEngine {
         let response = self
             .engine
             .trace_tree(query)
+            .await
             .map_err(WasmOrInternalNemoError::Nemo)
             .map_err(NemoError)?;
 
@@ -405,7 +413,7 @@ impl NemoEngine {
     }
 
     #[wasm_bindgen(js_name = "traceTableEntriesForTreeNodes")]
-    pub fn trace_table_entries_for_tree_nodes(
+    pub async fn trace_table_entries_for_tree_nodes(
         &mut self,
         table_entries_for_tree_nodes_query: JsValue,
     ) -> Result<JsValue, JsValue> {
@@ -419,7 +427,7 @@ impl NemoEngine {
             table_entries_for_tree_nodes_query,
         );
 
-        let response = self.engine.trace_node(&query);
+        let response = self.engine.trace_node(&query).await;
 
         let table_entries_for_tree_nodes_response = response
             .elements

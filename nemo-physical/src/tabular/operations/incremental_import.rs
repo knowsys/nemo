@@ -59,7 +59,7 @@ impl GeneratorIncrementalImport {
     }
 
     /// Apply the operation to a [PartialTrieScan].
-    pub(crate) fn apply_operation<'a, Scan: PartialTrieScan<'a>>(
+    pub(crate) async fn apply_operation<'a, Scan: PartialTrieScan<'a>>(
         self,
         trie_scan: Scan,
         dictionary: &'a RefCell<Dict>,
@@ -73,7 +73,7 @@ impl GeneratorIncrementalImport {
                 || !provider.should_import_with_bindings(&self.bound_positions, num_bindings)
             {
                 // do ordinary import instead
-                provider.provide_table_data(&mut tuple_writer)?;
+                provider.provide_table_data(&mut tuple_writer).await?;
             } else {
                 let scan = RowScan::new_full(trie_scan);
                 let bindings = scan
@@ -92,12 +92,14 @@ impl GeneratorIncrementalImport {
                     })
                     .collect::<Vec<_>>();
 
-                provider.provide_table_data_with_bindings(
-                    &mut tuple_writer,
-                    &self.bound_positions,
-                    &bindings,
-                    bindings.len(),
-                )?;
+                provider
+                    .provide_table_data_with_bindings(
+                        &mut tuple_writer,
+                        &self.bound_positions,
+                        &bindings,
+                        bindings.len(),
+                    )
+                    .await?;
             }
 
             Ok(Trie::from_tuple_writer(tuple_writer))

@@ -143,8 +143,9 @@ impl HttpResourceProvider {
     }
 }
 
+#[async_trait::async_trait(?Send)]
 impl ResourceProvider for HttpResourceProvider {
-    fn open_resource(
+    async fn open_resource(
         &self,
         resource: &Resource,
         media_type: &str,
@@ -154,12 +155,12 @@ impl ResourceProvider for HttpResourceProvider {
             return Ok(None);
         }
 
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .map_err(|e| ReadingError::from(e).with_resource(resource.clone()))?;
+        // let rt = tokio::runtime::Builder::new_current_thread()
+        //     .enable_all()
+        //     .build()
+        //     .map_err(|e| ReadingError::from(e).with_resource(resource.clone()))?;
 
-        let response = rt.block_on(Self::fetch(resource, media_type))?;
+        let response = Self::fetch(resource, media_type).await?;
 
         Ok(Some(Box::new(response)))
     }

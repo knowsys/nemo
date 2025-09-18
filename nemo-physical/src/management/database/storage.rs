@@ -29,7 +29,10 @@ impl TableStorage {
     /// Load the table from a list of [TableSource]s and convert it into a [Trie].
     ///
     /// This function assumes that at least one source is provided.
-    fn load_sources(sources: Vec<TableSource>, dictionary: &RefCell<Dict>) -> Result<Trie, Error> {
+    async fn load_sources(
+        sources: Vec<TableSource>,
+        dictionary: &RefCell<Dict>,
+    ) -> Result<Trie, Error> {
         debug_assert!(!sources.is_empty());
 
         let arity = sources
@@ -42,7 +45,7 @@ impl TableStorage {
             log::info!("Loading source {source:?}");
             debug_assert!(source.arity() == arity);
 
-            source.provide_table_data(&mut tuple_writer)?;
+            source.provide_table_data(&mut tuple_writer).await?;
         }
 
         Ok(Trie::from_tuple_writer(tuple_writer))
@@ -52,13 +55,16 @@ impl TableStorage {
     ///
     /// If the table is not already loaded into memory as a [Trie],
     /// this function will load the [TableSource] and transform it into a [Trie].
-    pub(crate) fn trie<'a>(&'a mut self, dictionary: &RefCell<Dict>) -> Result<&'a Trie, Error> {
+    pub(crate) async fn trie<'a>(
+        &'a mut self,
+        dictionary: &RefCell<Dict>,
+    ) -> Result<&'a Trie, Error> {
         // Load trie if not already in memory
         match self {
             TableStorage::InMemory(_) => {}
             TableStorage::FromSources(sources) => {
                 let sources = std::mem::take(sources);
-                let trie = Self::load_sources(sources, dictionary)?;
+                let trie = Self::load_sources(sources, dictionary).await?;
 
                 *self = TableStorage::InMemory(trie);
             }
@@ -130,8 +136,8 @@ mod test {
 
     use super::TableStorage;
 
-    #[test]
-    fn load_sources() {
+    #[tokio::test]
+    async fn load_sources() {
         let arity: usize = 2;
 
         let mut table_a = SimpleTable::new(arity);
@@ -157,7 +163,7 @@ mod test {
         let dictionary = RefCell::new(Dict::default());
 
         let mut storage = TableStorage::FromSources(vec![Box::new(table_a), Box::new(table_b)]);
-        let trie = storage.trie(&dictionary).unwrap();
+        let trie = storage.trie(&dictionary).await.unwrap();
 
         let expected_rows = vec![
             vec![
