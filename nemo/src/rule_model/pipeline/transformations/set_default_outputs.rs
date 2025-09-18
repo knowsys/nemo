@@ -21,7 +21,7 @@ impl ProgramTransformation for TransformationSetDefaultOutputs {
         program.statements().for_each(|s| commit.keep(s));
 
         if program.outputs().next().is_none() && program.exports().next().is_none() {
-            for predicate in program.all_predicates() {
+            for predicate in program.derived_predicates() {
                 commit.add_output(Output::new(predicate))
             }
         }
