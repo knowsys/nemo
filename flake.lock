@@ -1506,11 +1506,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1758035553,
-        "narHash": "sha256-KR4P/4+QEUJ8NQAJK2V5QLAlNHKHXOvE+fzBWCRmiK0=",
+        "lastModified": 1758173278,
+        "narHash": "sha256-FG0EOn9wMFvosLImR7XQIkjbC9hZxRo3826h7mX65zQ=",
         "owner": "knowsys",
         "repo": "nemo-web",
-        "rev": "0317439cdca1a26aa36181c01faf195b7afd1e5e",
+        "rev": "fbcfd0b7cc6eea17e8f2c4c4da44ddafee2e7d46",
         "type": "github"
       },
       "original": {
