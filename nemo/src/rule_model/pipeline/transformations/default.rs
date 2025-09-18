@@ -8,7 +8,8 @@ use crate::{
         error::ValidationReport,
         pipeline::transformations::{
             active::TransformationActive, empty::TransformationEmpty,
-            incremental::TransformationIncremental, validate::TransformationValidate,
+            incremental::TransformationIncremental,
+            set_default_outputs::TransformationSetDefaultOutputs, validate::TransformationValidate,
         },
         programs::{ProgramRead, handle::ProgramHandle},
     },
@@ -51,6 +52,7 @@ impl<'a> ProgramTransformation for TransformationDefault<'a> {
             .transform(TransformationExports::new(
                 self.parameters.export_parameters,
             ))?
+            .transform(TransformationSetDefaultOutputs::default())?
             // .transform(TransformationFilterImports::new())? // Feature not yet implemented
             .transform(TransformationIncremental::new())?
             .transform(TransformationEmpty::new())?

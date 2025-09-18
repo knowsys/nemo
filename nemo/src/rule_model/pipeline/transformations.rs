@@ -7,6 +7,7 @@ pub mod exports;
 pub mod filter_imports;
 pub mod global;
 pub mod incremental;
+pub mod set_default_outputs;
 pub mod skolem;
 pub mod split;
 pub mod validate;
