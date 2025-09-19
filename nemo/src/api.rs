@@ -7,7 +7,7 @@
 //! # #[cfg(miri)]
 //! # fn main() {}
 //! # #[cfg(not(miri))]
-//! # #[tokio::main]
+//! # #[tokio::main(flavor = "current_thread")]
 //! # async fn main() {
 //! use nemo::api::{load, reason, output_predicates};
 //! std::env::set_current_dir("../resources/testcases/lcs-diff-computation/").unwrap();

@@ -368,7 +368,7 @@ async fn run(mut cli: CliApp) -> Result<(), CliError> {
     handle_tracing_node(&cli, &mut engine).await
 }
 
-#[tokio::main]
+#[tokio::main(flavor = "current_thread")]
 async fn main() {
     let cli = CliApp::parse();
 
