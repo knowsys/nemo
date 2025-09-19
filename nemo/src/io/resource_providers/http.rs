@@ -53,21 +53,27 @@ impl HttpResourceProvider {
                     .with_resource(resource.clone())
             })?,
         );
-        headers.insert(
-            reqwest::header::USER_AGENT,
-            format!(
-                "{}/{} ({})",
-                option_env!("CARGO_PKG_NAME").unwrap_or("Nemo"),
-                option_env!("CARGO_PKG_VERSION").unwrap_or("unknown-version"),
-                option_env!("CARGO_PKG_HOMEPAGE")
-                    .unwrap_or("https://iccl.inf.tu-dresden.de/web/Nemo/en")
-            )
-            .parse()
-            .map_err(|err: InvalidHeaderValue| {
-                ReadingError::new(ReadingErrorKind::ExternalError(err.into()))
-                    .with_resource(resource.clone())
-            })?,
-        );
+
+        // It looks like CORS OPTIONS request sometimes fail (e.g. for GitHub) when
+        // the user agent is not the browser's. Not setting the user agent here
+        // will default to the browser's user agent, which is what we want on the web.
+        if cfg!(not(target_family = "wasm")) {
+            headers.insert(
+                reqwest::header::USER_AGENT,
+                format!(
+                    "{}/{} ({})",
+                    option_env!("CARGO_PKG_NAME").unwrap_or("Nemo"),
+                    option_env!("CARGO_PKG_VERSION").unwrap_or("unknown-version"),
+                    option_env!("CARGO_PKG_HOMEPAGE")
+                        .unwrap_or("https://iccl.inf.tu-dresden.de/web/Nemo/en")
+                )
+                .parse()
+                .map_err(|err: InvalidHeaderValue| {
+                    ReadingError::new(ReadingErrorKind::ExternalError(err.into()))
+                        .with_resource(resource.clone())
+                })?,
+            );
+        }
 
         let new_headers = resource
             .headers()
@@ -154,11 +160,6 @@ impl ResourceProvider for HttpResourceProvider {
             // We cannot handle this resource
             return Ok(None);
         }
-
-        // let rt = tokio::runtime::Builder::new_current_thread()
-        //     .enable_all()
-        //     .build()
-        //     .map_err(|e| ReadingError::from(e).with_resource(resource.clone()))?;
 
         let response = Self::fetch(resource, media_type).await?;
 
