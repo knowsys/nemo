@@ -54,7 +54,7 @@ Run the following command for an overview of current options:
 
 `nmo --help`
 
-Further details are found in the [Nemo client documentation](https://knowsys.github.io/nemo-doc/guides/cli/).
+Further details are found in the [Nemo CLI documentation](https://knowsys.github.io/nemo-doc/installation/cli/).
 Example Nemo programs and datasets can be found in the [Nemo Examples repository](https://github.com/knowsys/nemo-examples).
 
 ## Help

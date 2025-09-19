@@ -101,7 +101,6 @@ impl OrderedReferenceManager {
             } else {
                 order_map
                     .keys()
-                    .cloned()
                     .map(|order| {
                         reorder
                             .invert()
@@ -273,7 +272,7 @@ impl OrderedReferenceManager {
     ///
     /// # Panics
     /// Panics if the given id does not exist.
-    pub(crate) fn trie_id(
+    pub(crate) async fn trie_id(
         &mut self,
         dictionary: &RefCell<Dict>,
         id: PermanentTableId,
@@ -283,7 +282,7 @@ impl OrderedReferenceManager {
 
         if let Some(order_map) = self.storage_map.get(&id) {
             if let Some(&storage_id) = order_map.get(&column_order) {
-                self.stored_tables[storage_id].trie(dictionary)?;
+                self.stored_tables[storage_id].trie(dictionary).await?;
                 return Ok(storage_id);
             } else {
                 let (_, closest_order) = closest_order(order_map.keys(), &column_order)
@@ -304,7 +303,9 @@ impl OrderedReferenceManager {
                         .sub("Reasoning/Execution/Required Reorder")
                         .start();
 
-                    let closest_trie = self.stored_tables[closest_storage_id].trie(dictionary)?;
+                    let closest_trie = self.stored_tables[closest_storage_id]
+                        .trie(dictionary)
+                        .await?;
                     let trie_reordered = generator.apply_operation(closest_trie.partial_iterator());
                     let result_storage_id = self.add_trie(id, column_order, trie_reordered);
 
@@ -314,7 +315,9 @@ impl OrderedReferenceManager {
 
                     return Ok(result_storage_id);
                 } else {
-                    self.stored_tables[closest_storage_id].trie(dictionary)?;
+                    self.stored_tables[closest_storage_id]
+                        .trie(dictionary)
+                        .await?;
                     return Ok(closest_storage_id);
                 };
             }

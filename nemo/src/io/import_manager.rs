@@ -24,7 +24,7 @@ impl ImportManager {
     /// The expected arity can reflect additional knowledge of the caller (or might be taken
     /// from the handler, if it has an arity). It is validated if the import directive is
     /// compatible with this assumption.
-    pub(crate) fn table_provider_from_handler(
+    pub(crate) async fn table_provider_from_handler(
         &self,
         handler: &Import,
     ) -> Result<Box<dyn TableProvider>, Error> {
@@ -33,7 +33,8 @@ impl ImportManager {
         } else {
             let reader = self
                 .resource_providers
-                .open_resource(handler.resource(), &handler.media_type())?;
+                .open_resource(handler.resource(), &handler.media_type())
+                .await?;
 
             handler.reader(reader)
         }

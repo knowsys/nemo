@@ -20,6 +20,7 @@ web_sys_unstable_apis = []
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(wasm_bindgen_unstable_test_coverage)'] }
 
 [dependencies]
+async-trait = "0.1.89"
 console_error_panic_hook = "0.1.7"
 js-sys = "0.3.63"
 nemo = { path = "../nemo", features = [ "js" ], default-features = false }

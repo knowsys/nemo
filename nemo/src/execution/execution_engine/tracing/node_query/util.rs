@@ -282,7 +282,7 @@ pub(super) fn result_tables_plan(
 }
 
 /// Compute the union of all valid tables associated with the given node.
-pub(super) fn consolidate_valid_tables(
+pub(super) async fn consolidate_valid_tables(
     database: &mut DatabaseInstance,
     manager: &TraceNodeManager,
     address: &TreeAddress,
@@ -297,13 +297,13 @@ pub(super) fn consolidate_valid_tables(
         node_union.add_subnode(plan.fetch_table(OperationTable::default(), table));
     }
     plan.write_permanent(node_union, "union", "union");
-    let (_, &result_id) = database.execute_plan(plan).ok()?.iter().next()?;
+    let (_, &result_id) = database.execute_plan(plan).await.ok()?.iter().next()?;
 
     Some(result_id)
 }
 
 /// Compute the union of all assignment tables associated with the given node.
-pub(super) fn consolidate_assignment_tables(
+pub(super) async fn consolidate_assignment_tables(
     database: &mut DatabaseInstance,
     manager: &TraceNodeManager,
     address: &TreeAddress,
@@ -318,13 +318,13 @@ pub(super) fn consolidate_assignment_tables(
         node_union.add_subnode(plan.fetch_table(OperationTable::default(), table));
     }
     plan.write_permanent(node_union, "union", "union");
-    let (_, &result_id) = database.execute_plan(plan).ok()?.iter().next()?;
+    let (_, &result_id) = database.execute_plan(plan).await.ok()?.iter().next()?;
 
     Some(result_id)
 }
 
 /// Project away discarded columns in leaf nodes.
-pub(super) fn ignore_discarded_columns_base(
+pub(super) async fn ignore_discarded_columns_base(
     database: &mut DatabaseInstance,
     id: PermanentTableId,
     arity: usize,
@@ -343,6 +343,7 @@ pub(super) fn ignore_discarded_columns_base(
     plan.write_permanent(node_single, "single", "single");
     database
         .execute_plan(plan)
+        .await
         .expect("error while executing plan")
         .iter()
         .next()

@@ -87,7 +87,7 @@ pub struct ExecutionEngine<RuleSelectionStrategy> {
 impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     /// Initialize a [ExecutionEngine] by parsing and translating
     /// the contents of the given file.
-    pub fn from_file(
+    pub async fn from_file(
         file: RuleFile,
         parameters: ExecutionParameters,
     ) -> Result<Warned<Self, ProgramReport>, Error> {
@@ -100,20 +100,23 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             program.transform(TransformationDefault::new(&parameters)),
         )?;
 
-        let engine = Self::initialize(program.materialize(), parameters.import_manager)?;
+        let engine = Self::initialize(program.materialize(), parameters.import_manager).await?;
 
         report.warned(engine)
     }
 
     /// Initialize [ExecutionEngine].
-    pub fn initialize(program: Program, import_manager: ImportManager) -> Result<Self, Error> {
+    pub async fn initialize(
+        program: Program,
+        import_manager: ImportManager,
+    ) -> Result<Self, Error> {
         let chase_program = ProgramChaseTranslation::new().translate(&program);
         let analysis = chase_program.analyze();
 
         let mut table_manager = TableManager::new();
         Self::register_all_predicates(&mut table_manager, &analysis);
         Self::add_all_constants(&mut table_manager, &chase_program);
-        Self::add_imports(&mut table_manager, &import_manager, &chase_program)?;
+        Self::add_imports(&mut table_manager, &import_manager, &chase_program).await?;
 
         let mut rule_infos = Vec::<RuleInfo>::new();
         chase_program
@@ -157,7 +160,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
     /// Add edb tables to the [TableManager]
     /// based on the import declaration of the given progam.
-    fn add_imports(
+    async fn add_imports(
         table_manager: &mut TableManager,
         import_manager: &ImportManager,
         program: &ChaseProgram,
@@ -166,7 +169,9 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
         // Add all the import specifications
         for import in program.imports() {
-            let table_source = import_manager.table_provider_from_handler(import.handler())?;
+            let table_source = import_manager
+                .table_provider_from_handler(import.handler())
+                .await?;
 
             predicate_to_sources
                 .entry(import.predicate().clone())
@@ -199,7 +204,11 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         Ok(())
     }
 
-    fn step(&mut self, rule_index: usize, execution: &RuleExecution) -> Result<Vec<Tag>, Error> {
+    async fn step(
+        &mut self,
+        rule_index: usize,
+        execution: &RuleExecution,
+    ) -> Result<Vec<Tag>, Error> {
         let timing_string = format!("Reasoning/Rules/Rule {rule_index}");
 
         TimedCode::instance().sub(&timing_string).start();
@@ -209,12 +218,14 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
         let current_info = &mut self.rule_infos[rule_index];
 
-        let updated_predicates = execution.execute(
-            &mut self.table_manager,
-            &self.import_manager,
-            current_info,
-            self.current_step,
-        )?;
+        let updated_predicates = execution
+            .execute(
+                &mut self.table_manager,
+                &self.import_manager,
+                current_info,
+                self.current_step,
+            )
+            .await?;
 
         current_info.step_last_applied = self.current_step;
 
@@ -225,7 +236,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         Ok(updated_predicates)
     }
 
-    fn defrag(&mut self, updated_predicates: Vec<Tag>) -> Result<(), Error> {
+    async fn defrag(&mut self, updated_predicates: Vec<Tag>) -> Result<(), Error> {
         for updated_pred in updated_predicates {
             let counter = self
                 .predicate_fragmentation
@@ -242,7 +253,9 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
                 let range = start..(self.current_step + 1);
 
-                self.table_manager.combine_tables(&updated_pred, range)?;
+                self.table_manager
+                    .combine_tables(&updated_pred, range)
+                    .await?;
 
                 self.predicate_last_union
                     .insert(updated_pred, self.current_step);
@@ -255,7 +268,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     }
 
     /// Executes the program.
-    pub fn execute(&mut self) -> Result<(), Error> {
+    pub async fn execute(&mut self) -> Result<(), Error> {
         TimedCode::instance().sub("Reasoning/Rules").start();
         TimedCode::instance().sub("Reasoning/Execution").start();
 
@@ -271,10 +284,10 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         let mut new_derivations: Option<bool> = None;
 
         while let Some(index) = self.rule_strategy.next_rule(new_derivations) {
-            let updated_predicates = self.step(index, &rule_execution[index])?;
+            let updated_predicates = self.step(index, &rule_execution[index]).await?;
             new_derivations = Some(!updated_predicates.is_empty());
 
-            self.defrag(updated_predicates)?;
+            self.defrag(updated_predicates).await?;
         }
 
         TimedCode::instance().sub("Reasoning/Rules").stop();
@@ -294,15 +307,15 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     }
 
     /// Creates an [Iterator] over all facts of a predicate.
-    pub fn predicate_rows(
+    pub async fn predicate_rows(
         &mut self,
         predicate: &Tag,
     ) -> Result<Option<impl Iterator<Item = Vec<AnyDataValue>> + '_>, Error> {
-        let Some(table_id) = self.table_manager.combine_predicate(predicate)? else {
+        let Some(table_id) = self.table_manager.combine_predicate(predicate).await? else {
             return Ok(None);
         };
 
-        Ok(Some(self.table_manager.table_row_iterator(table_id)?))
+        Ok(Some(self.table_manager.table_row_iterator(table_id).await?))
     }
 
     /// Returns the arity of the predicate if the predicate is known to the engine,

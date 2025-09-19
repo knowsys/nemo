@@ -42,7 +42,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     /// Phase 1 of `trace_node_execute`
     ///
     /// Collect the fact restriction in each node into tables.
-    fn trace_node_restriction(
+    async fn trace_node_restriction(
         &mut self,
         manager: &mut TraceNodeManager,
         node: &TableEntriesForTreeNodesQueryInner,
@@ -63,6 +63,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                     TableEntryQuery::Entry(row_index) => {
                         let terms_to_trace: Vec<AnyDataValue> = self
                             .predicate_rows(predicate)
+                            .await
                             .expect("unknown predicate")
                             .into_iter()
                             .flatten()
@@ -110,13 +111,14 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 let mut next_address = address.clone();
                 next_address.push(index);
 
-                self.trace_node_restriction(
+                Box::pin(self.trace_node_restriction(
                     manager,
                     node_atom,
                     next_address,
                     &atom.predicate(),
                     program,
-                );
+                ))
+                .await;
             }
         }
     }
@@ -126,7 +128,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     /// Bottom-up computation of "valid" facts per query node,
     /// meaning that every such fact satisfies all constraints
     /// imposed by its subtree.
-    fn trace_node_valid(
+    async fn trace_node_valid(
         &mut self,
         manager: &mut TraceNodeManager,
         node: &TableEntriesForTreeNodesQueryInner,
@@ -175,7 +177,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 }
 
                 // Recursive call to this function
-                self.trace_node_valid(
+                Box::pin(self.trace_node_valid(
                     manager,
                     node_atom,
                     next_address,
@@ -183,7 +185,8 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                     &discarded_columns,
                     next_step,
                     program,
-                );
+                ))
+                .await;
             }
 
             for (step, id) in self.table_manager.tables_in_range_rule_steps(
@@ -221,6 +224,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                     .table_manager
                     .database_mut()
                     .execute_plan(plan)
+                    .await
                     .expect("execute plan failed");
 
                 if let Some(id_valid) = id_valid {
@@ -239,13 +243,14 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             // Valid facts for each step are combined into a single table
 
             if let Some(id) =
-                consolidate_valid_tables(self.table_manager.database_mut(), manager, &address)
+                consolidate_valid_tables(self.table_manager.database_mut(), manager, &address).await
             {
                 manager.add_final_valid_table(&address, id);
             }
 
             if let Some(id) =
                 consolidate_assignment_tables(self.table_manager.database_mut(), manager, &address)
+                    .await
             {
                 manager.add_final_assignment_table(&address, id);
             }
@@ -267,7 +272,9 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                         id,
                         arity,
                         discarded_columns,
-                    ) {
+                    )
+                    .await
+                    {
                         manager.add_valid_table(&address, step, ignored_id);
                     } else {
                         manager.add_valid_table(&address, step, id);
@@ -276,7 +283,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             }
 
             if let Some(id) =
-                consolidate_valid_tables(self.table_manager.database_mut(), manager, &address)
+                consolidate_valid_tables(self.table_manager.database_mut(), manager, &address).await
             {
                 manager.add_final_valid_table(&address, id);
             }
@@ -289,7 +296,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     /// thereby pushing constraints from the sibling and parent nodes.
     ///
     /// Return whether the result contains elements.
-    fn trace_node_filter(
+    async fn trace_node_filter(
         &mut self,
         manager: &mut TraceNodeManager,
         node: &TableEntriesForTreeNodesQueryInner,
@@ -352,7 +359,8 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                         &order,
                         &atom_variables,
                     ) {
-                        let Ok(results) = self.table_manager.database_mut().execute_plan(plan)
+                        let Ok(results) =
+                            self.table_manager.database_mut().execute_plan(plan).await
                         else {
                             return false;
                         };
@@ -371,13 +379,15 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                     return false;
                 }
 
-                if !self.trace_node_filter(
+                if !Box::pin(self.trace_node_filter(
                     manager,
                     node_atom,
                     next_address,
                     program,
                     program_analysis,
-                ) {
+                ))
+                .await
+                {
                     return false;
                 }
             }
@@ -387,7 +397,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     }
 
     /// Compute the results for a [TableEntriesForTreeNodesQuery].
-    fn trace_node_execute(
+    async fn trace_node_execute(
         &mut self,
         query: &TableEntriesForTreeNodesQuery,
         program: &ChaseProgram,
@@ -400,7 +410,8 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         let before_step = self.rule_history.len();
         let discarded_columns = Vec::default();
 
-        self.trace_node_restriction(&mut manager, node, address.clone(), &predicate, program);
+        self.trace_node_restriction(&mut manager, node, address.clone(), &predicate, program)
+            .await;
 
         self.trace_node_valid(
             &mut manager,
@@ -410,22 +421,25 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             &discarded_columns,
             before_step,
             program,
-        );
+        )
+        .await;
 
-        let _ = self.trace_node_filter(
-            &mut manager,
-            node,
-            address.clone(),
-            program,
-            program_analysis,
-        );
+        let _ = self
+            .trace_node_filter(
+                &mut manager,
+                node,
+                address.clone(),
+                program,
+                program_analysis,
+            )
+            .await;
 
         manager
     }
 
     /// Collect the answer to the node query using [TreeTableManager]
     /// and write it into the prepared [TableEntriesForTreeNodesResponse]
-    fn trace_node_answer(
+    async fn trace_node_answer(
         &mut self,
         manager: &TraceNodeManager,
         mut response: TableEntriesForTreeNodesResponse,
@@ -444,6 +458,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 .table_manager
                 .database_mut()
                 .table_row_iterator(table_id)
+                .await
                 .ok()?
                 .skip(element.pagination.start);
 
@@ -462,6 +477,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 let entry_id = self
                     .table_manager
                     .table_row_id(&Tag::new(element.predicate.clone()), &row)
+                    .await
                     .expect("row should be contained somewhere");
 
                 let table_response = TableEntryResponse {
@@ -479,7 +495,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     /// From a given [TableEntriesForTreeNodesQueryInner]
     /// precompute the structure of the [TableEntriesForTreeNodesResponse],
     /// leaving empty the fields for the actual response.
-    fn trace_node_prepare_recursive(
+    async fn trace_node_prepare_recursive(
         &mut self,
         elements: &mut Vec<TableEntriesForTreeNodesResponseElement>,
         node: &TableEntriesForTreeNodesQueryInner,
@@ -559,7 +575,13 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 let mut next_address = address.clone();
                 next_address.push(index);
 
-                self.trace_node_prepare_recursive(elements, child, next_address, &next_predicate);
+                Box::pin(self.trace_node_prepare_recursive(
+                    elements,
+                    child,
+                    next_address,
+                    &next_predicate,
+                ))
+                .await;
             }
 
             // The content of the negated nodes is just the complete table
@@ -571,6 +593,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
                 let rows = if let Some(rows) = self
                     .predicate_rows(&negative_atom.predicate())
+                    .await
                     .expect("collect negation rows failed")
                 {
                     rows.collect::<Vec<_>>()
@@ -584,6 +607,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                     let entry_id = self
                         .table_manager
                         .table_row_id(&negative_atom.predicate(), &row)
+                        .await
                         .expect("row should be contained somewhere");
 
                     let table_response = TableEntryResponse {
@@ -614,7 +638,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     /// For a given [TableEntriesForTreeNodesQuery]
     /// precompute the structure of the [TableEntriesForTreeNodesResponse],
     /// leaving empty the fields for the actual response.
-    fn trace_node_prepare(
+    async fn trace_node_prepare(
         &mut self,
         query: &TableEntriesForTreeNodesQuery,
     ) -> TableEntriesForTreeNodesResponse {
@@ -625,22 +649,24 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             &query.inner,
             Vec::default(),
             &Tag::new(query.predicate.clone()),
-        );
+        )
+        .await;
 
         TableEntriesForTreeNodesResponse { elements }
     }
 
     /// Evaluate a [TableEntriesForTreeNodesQuery].
-    pub fn trace_node(
+    pub async fn trace_node(
         &mut self,
         query: &TableEntriesForTreeNodesQuery,
     ) -> TableEntriesForTreeNodesResponse {
         let (program, analysis) = self.program.prepare_tracing();
 
-        let response = self.trace_node_prepare(query);
-        let manager = self.trace_node_execute(query, &program, &analysis);
+        let response = self.trace_node_prepare(query).await;
+        let manager = self.trace_node_execute(query, &program, &analysis).await;
 
         self.trace_node_answer(&manager, response)
+            .await
             .unwrap_or_default()
     }
 }

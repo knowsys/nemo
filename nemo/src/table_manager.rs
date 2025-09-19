@@ -377,11 +377,11 @@ impl TableManager {
     }
 
     /// Get a list of column iterators for the full table (i.e. the expanded trie)
-    pub(crate) fn table_row_iterator(
+    pub(crate) async fn table_row_iterator(
         &mut self,
         id: PermanentTableId,
     ) -> Result<impl Iterator<Item = Vec<AnyDataValue>> + '_, Error> {
-        Ok(self.database.table_row_iterator(id)?)
+        Ok(self.database.table_row_iterator(id).await?)
     }
 
     /// Get a an iterator over the rows of a trie
@@ -394,12 +394,12 @@ impl TableManager {
 
     /// Combine all subtables of a predicate into one table
     /// and return the [PermanentTableId] of that new table.
-    pub(crate) fn combine_predicate(
+    pub(crate) async fn combine_predicate(
         &mut self,
         predicate: &Tag,
     ) -> Result<Option<PermanentTableId>, Error> {
         match self.last_step(predicate) {
-            Some(last_step) => self.combine_tables(predicate, 0..(last_step + 1)),
+            Some(last_step) => self.combine_tables(predicate, 0..(last_step + 1)).await,
             None => Ok(None),
         }
     }
@@ -604,7 +604,7 @@ impl TableManager {
     }
 
     /// Combine subtables in a certain range into one larger table.
-    pub fn combine_tables(
+    pub async fn combine_tables(
         &mut self,
         predicate: &Tag,
         range: Range<usize>,
@@ -630,7 +630,7 @@ impl TableManager {
         let union_node = union_plan.union(OperationTable::default(), fetch_nodes);
         let plan_id = union_plan.write_permanent(union_node, "Combining Tables", &name);
 
-        let execution_result = self.database.execute_plan(union_plan)?;
+        let execution_result = self.database.execute_plan(union_plan).await?;
         let table_id = execution_result
             .get(&plan_id)
             .expect("Combining multiple non-empty tables should result in a non-empty table.");
@@ -641,11 +641,14 @@ impl TableManager {
     }
 
     /// Execute a plan and add the results as subtables to the manager.
-    pub fn execute_plan(
+    pub async fn execute_plan(
         &mut self,
         subtable_plan: SubtableExecutionPlan,
     ) -> Result<Vec<Tag>, Error> {
-        let result = self.database.execute_plan(subtable_plan.execution_plan)?;
+        let result = self
+            .database
+            .execute_plan(subtable_plan.execution_plan)
+            .await?;
 
         let mut updated_predicates = Vec::new();
         for (plan_id, table_id) in result {
@@ -702,11 +705,11 @@ impl TableManager {
 
     /// Return the chase step of the sub table that contains the given row within the given predicate.
     /// Returns None if the row does not exist.
-    pub fn find_table_row(&mut self, predicate: &Tag, row: &[AnyDataValue]) -> Option<usize> {
+    pub async fn find_table_row(&mut self, predicate: &Tag, row: &[AnyDataValue]) -> Option<usize> {
         let handler = self.predicate_subtables.get(predicate)?;
 
         for (step, id) in &handler.single {
-            if self.database.table_contains_row(*id, row) {
+            if self.database.table_contains_row(*id, row).await {
                 return Some(*step);
             }
         }
@@ -717,12 +720,12 @@ impl TableManager {
     /// Return an id for a given row and predicate, if it exists.
     ///
     /// Returns `None` if there is no such row for this predicate.
-    pub fn table_row_id(&mut self, predicate: &Tag, row: &[AnyDataValue]) -> Option<usize> {
+    pub async fn table_row_id(&mut self, predicate: &Tag, row: &[AnyDataValue]) -> Option<usize> {
         let handler = self.predicate_subtables.get(predicate)?;
 
         let mut skipped: usize = 0;
         for (_, id) in &handler.single {
-            if let Some(row_index) = self.database.table_row_position(*id, row) {
+            if let Some(row_index) = self.database.table_row_position(*id, row).await {
                 return Some(skipped + row_index);
             }
 
@@ -739,24 +742,26 @@ impl TableManager {
     ///
     /// Assumes that the given plan has only one output node.
     /// No tables will be saved in the database.
-    pub fn execute_plan_first_match(
+    pub async fn execute_plan_first_match(
         &mut self,
         subtable_plan: SubtableExecutionPlan,
     ) -> Option<Vec<AnyDataValue>> {
         self.database
             .execute_first_match(subtable_plan.execution_plan)
+            .await
     }
 
     /// Execute a given [SubtableExecutionPlan]
     /// and return a list of [Trie]s for each permanent table
     /// instead of saving it to the database.
-    pub fn execute_plan_trie(
+    pub async fn execute_plan_trie(
         &mut self,
         subtable_plan: SubtableExecutionPlan,
     ) -> Result<Vec<Trie>, Error> {
         Ok(self
             .database
-            .execute_plan_trie(subtable_plan.execution_plan)?)
+            .execute_plan_trie(subtable_plan.execution_plan)
+            .await?)
     }
 }
 

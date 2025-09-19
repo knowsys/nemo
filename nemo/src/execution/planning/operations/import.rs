@@ -24,7 +24,7 @@ use crate::{
 
 /// Compute an exeuction plan for on-demand importing of tables.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn node_imports(
+pub(crate) async fn node_imports(
     subtable_plan: &mut SubtableExecutionPlan,
     table_manager: &TableManager,
     import_manager: &ImportManager,
@@ -72,6 +72,7 @@ pub(crate) fn node_imports(
 
         let provider = import_manager
             .table_provider_from_handler(import.handler())
+            .await
             .expect("invalid import");
 
         let node_import = subtable_plan.plan_mut().import(

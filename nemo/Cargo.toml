@@ -27,7 +27,6 @@ flate2 = "1"
 sanitise-file-name = "1.0.0"
 getrandom = { version = "0.2.9", default-features = false }
 oxiri = "0.2.2"
-tokio = { version = "1.40.0", features = ["rt"] }
 reqwest = { version = "0.12.2", features = [
     "gzip",
     "brotli",
@@ -36,6 +35,7 @@ reqwest = { version = "0.12.2", features = [
 ] }
 num = "0.4.0"
 ascii_tree = "0.1.1"
+async-trait = "0.1.89"
 serde_json = "1.0.108"
 serde = { version = "1.0.138", features = ["derive"] }
 tower-lsp = "0.20.0"
@@ -65,3 +65,5 @@ assert_fs = "1.0"
 test-log = "0.2"
 quickcheck = "1"
 quickcheck_macros = "1"
+tokio = "1.47.1"
+

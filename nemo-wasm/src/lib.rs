@@ -15,19 +15,14 @@ use web_sys::{Blob, FileReaderSync};
 
 use nemo::{
     datavalues::{AnyDataValue, DataValue},
-    error::{ReadingError, report::ProgramReport},
+    error::ReadingError,
     execution::{ExecutionEngine, execution_parameters::ExecutionParameters},
     io::{
         ImportManager,
-        formats::FileFormatMeta,
-        resource_providers::{ResourceProvider, ResourceProviders},
+        resource_providers::{ResourceProvider, ResourceProviders, http},
     },
     rule_file::RuleFile,
-    rule_model::{
-        components::tag::Tag,
-        pipeline::transformations::default::TransformationDefault,
-        programs::{ProgramRead, handle::ProgramHandle, program::Program},
-    },
+    rule_model::{components::tag::Tag, programs::ProgramRead},
 };
 
 use nemo_physical::{error::ExternalReadingError, resource::Resource};
@@ -35,17 +30,11 @@ use nemo_physical::{error::ExternalReadingError, resource::Resource};
 mod language_server;
 mod models;
 
-#[wasm_bindgen]
-#[derive(Clone)]
-pub struct NemoProgram(Program);
-
 #[derive(Error, Debug)]
 enum WasmOrInternalNemoError {
     /// Nemo-internal error
     #[error(transparent)]
     Nemo(#[from] nemo::error::Error),
-    #[error("Unable to parse program:\n {0}")]
-    Parser(String),
     #[error("Invalid program:\n {0}")]
     Program(String),
     #[error("Internal reflection error: {0:#?}")]
@@ -83,97 +72,6 @@ impl NemoResource {
     }
 }
 
-#[wasm_bindgen]
-impl NemoProgram {
-    #[wasm_bindgen(constructor)]
-    pub fn new(input: &str) -> Result<NemoProgram, NemoError> {
-        let rule_file = RuleFile::new(input.to_string(), "NemoWasmFile".to_string());
-        let handle = ProgramHandle::from_file(&rule_file);
-        let report = ProgramReport::new(rule_file);
-
-        let (program, report) = report
-            .merge_program_parser_report(handle)
-            .map_err(|report| {
-                // This is cursed. The report only allows writing the proper error message to
-                // std::io::Write but not std::fmt::Write. (Strings only implement the latter...)
-                let mut bytes: Vec<u8> = vec![];
-                report
-                    .write(&mut bytes)
-                    .expect("We should always be able to write to a Vec<u8>.");
-                let string =
-                    std::str::from_utf8(&bytes).expect("Our error messages should be valid UTF-8.");
-                NemoError(WasmOrInternalNemoError::Parser(string.to_string()))
-            })?;
-
-        let (program, _report) = report
-            .merge_validation_report(
-                &program,
-                program.transform(TransformationDefault::new(&ExecutionParameters::default())),
-            )
-            .map_err(|report| {
-                // This is cursed. The report only allows writing the proper error message to
-                // std::io::Write but not std::fmt::Write. (Strings only implement the latter...)
-                let mut bytes: Vec<u8> = vec![];
-                report
-                    .write(&mut bytes)
-                    .expect("We should always be able to write to a Vec<u8>.");
-                let string =
-                    std::str::from_utf8(&bytes).expect("Our error messages should be valid UTF-8.");
-                NemoError(WasmOrInternalNemoError::Program(string.to_string()))
-            })?;
-
-        // We do not return warnings here since we do not have a good way
-        // of displaying them. The language server should take care of reporting warnings instead.
-        Ok(NemoProgram(program.materialize()))
-    }
-
-    /// Get all resources that are referenced in import directives of the program.
-    /// Returns an error if there are problems in some import directive.
-    #[wasm_bindgen(js_name = "getResourcesUsedInImports")]
-    pub fn resources_used_in_imports(&self) -> Vec<NemoResource> {
-        let mut result: Vec<NemoResource> = vec![];
-
-        for import in self.0.imports() {
-            let Some(builder) = import.builder() else {
-                continue;
-            };
-
-            let format: String = builder.build_import("", 0, Vec::default()).media_type();
-            if let Some(resource) = builder.resource() {
-                result.push(NemoResource {
-                    accept: format.to_string(),
-                    url: resource.to_string(),
-                });
-            }
-        }
-
-        result
-    }
-
-    #[wasm_bindgen(js_name = "getOutputPredicates")]
-    pub fn output_predicates(&self) -> Array {
-        let target_predicates: HashSet<_> = self
-            .0
-            .outputs()
-            .map(|o| o.predicate().to_string())
-            .chain(self.0.exports().map(|o| o.predicate().to_string()))
-            .collect();
-
-        target_predicates.into_iter().map(JsValue::from).collect()
-    }
-
-    #[wasm_bindgen(js_name = "getEDBPredicates")]
-    pub fn edb_predicates(&self) -> Set {
-        let js_set = Set::new(&JsValue::undefined());
-
-        for tag in self.0.import_predicates().into_iter() {
-            js_set.add(&JsValue::from(tag.to_string()));
-        }
-
-        js_set
-    }
-}
-
 #[derive(Debug)]
 pub struct BlobResourceProvider {
     blobs: HashMap<String, Blob>,
@@ -201,8 +99,9 @@ impl std::fmt::Display for BlobReadingError {
 
 impl ExternalReadingError for BlobReadingError {}
 
+#[async_trait::async_trait(?Send)]
 impl ResourceProvider for BlobResourceProvider {
-    fn open_resource(
+    async fn open_resource(
         &self,
         resource: &Resource,
         _media_type: &str,
@@ -270,9 +169,11 @@ impl std::io::Write for SyncAccessHandleWriter {
 
 #[wasm_bindgen]
 impl NemoEngine {
-    #[wasm_bindgen(constructor)]
-    pub fn new(
-        program: &NemoProgram,
+    // Not using wasm_bindgen(constructor) here since this does not seem
+    // to generate the right types for async functions.
+    #[wasm_bindgen]
+    pub async fn new(
+        input: &str,
         resource_blobs_js_value: JsValue,
     ) -> Result<NemoEngine, NemoError> {
         // Parse JavaScript object into `HashMap`
@@ -292,27 +193,79 @@ impl NemoEngine {
         }
 
         let resource_providers = if resource_blobs.is_empty() {
-            ResourceProviders::empty()
+            ResourceProviders::from(vec![Box::<http::HttpResourceProvider>::default()])
         } else {
-            ResourceProviders::from(vec![Box::new(
-                BlobResourceProvider::new(resource_blobs)
-                    .map_err(WasmOrInternalNemoError::Reflection)
-                    .map_err(NemoError)?,
-            )])
+            ResourceProviders::from(vec![
+                Box::new(
+                    BlobResourceProvider::new(resource_blobs)
+                        .map_err(WasmOrInternalNemoError::Reflection)
+                        .map_err(NemoError)?,
+                ),
+                Box::<http::HttpResourceProvider>::default(),
+            ])
         };
         let import_manager = ImportManager::new(resource_providers);
 
-        let engine = ExecutionEngine::initialize(program.0.clone(), import_manager)
-            .map_err(WasmOrInternalNemoError::Nemo)
-            .map_err(NemoError)?;
+        let rule_file = RuleFile::new(input.to_string(), "NemoWasmFile".to_string());
+        let mut execution_parameters = ExecutionParameters::default();
+        execution_parameters.set_import_manager(import_manager);
+
+        let (engine, _warnings) = ExecutionEngine::from_file(rule_file, execution_parameters)
+            .await
+            .map_err(|error| {
+                if let nemo::error::Error::ProgramReport(report) = error {
+                    // This is cursed. The report only allows writing the proper error message to
+                    // std::io::Write but not std::fmt::Write. (Strings only implement the latter...)
+                    let mut bytes: Vec<u8> = vec![];
+                    report
+                        .write(&mut bytes)
+                        .expect("We should always be able to write to a Vec<u8>.");
+                    let string = std::str::from_utf8(&bytes)
+                        .expect("Our error messages should be valid UTF-8.");
+                    NemoError(WasmOrInternalNemoError::Program(string.to_string()))
+                } else {
+                    NemoError(WasmOrInternalNemoError::Nemo(error))
+                }
+            })?
+            .into_pair();
 
         Ok(NemoEngine { engine })
     }
 
+    #[wasm_bindgen(js_name = "getOutputPredicates")]
+    pub fn output_predicates(&self) -> Array {
+        let target_predicates: HashSet<_> = self
+            .engine
+            .program()
+            .outputs()
+            .map(|o| o.predicate().to_string())
+            .chain(
+                self.engine
+                    .program()
+                    .exports()
+                    .map(|o| o.predicate().to_string()),
+            )
+            .collect();
+
+        target_predicates.into_iter().map(JsValue::from).collect()
+    }
+
+    #[wasm_bindgen(js_name = "getEDBPredicates")]
+    pub fn edb_predicates(&self) -> Set {
+        let js_set = Set::new(&JsValue::undefined());
+
+        for tag in self.engine.program().import_predicates().into_iter() {
+            js_set.add(&JsValue::from(tag.to_string()));
+        }
+
+        js_set
+    }
+
     #[wasm_bindgen]
-    pub fn reason(&mut self) -> Result<(), NemoError> {
+    pub async fn reason(&mut self) -> Result<(), NemoError> {
         self.engine
             .execute()
+            .await
             .map_err(WasmOrInternalNemoError::Nemo)
             .map_err(NemoError)
     }
@@ -329,10 +282,11 @@ impl NemoEngine {
     }
 
     #[wasm_bindgen(js_name = "getResult")]
-    pub fn result(&mut self, predicate: String) -> Result<NemoResults, NemoError> {
+    pub async fn result(&mut self, predicate: String) -> Result<NemoResults, NemoError> {
         let iter = self
             .engine
             .predicate_rows(&Tag::from(predicate))
+            .await
             .map_err(WasmOrInternalNemoError::Nemo)
             .map_err(NemoError)?;
 
@@ -345,7 +299,7 @@ impl NemoEngine {
 
     #[cfg(feature = "web_sys_unstable_apis")]
     #[wasm_bindgen(js_name = "savePredicate")]
-    pub fn write_result_to_sync_access_handle(
+    pub async fn write_result_to_sync_access_handle(
         &mut self,
         predicate: String,
         sync_access_handle: web_sys::FileSystemSyncAccessHandle,
@@ -361,6 +315,7 @@ impl NemoEngine {
         let Some(record_iter) = self
             .engine
             .predicate_rows(&identifier)
+            .await
             .map_err(WasmOrInternalNemoError::Nemo)
             .map_err(NemoError)?
         else {
@@ -379,7 +334,7 @@ impl NemoEngine {
     }
 
     #[wasm_bindgen(js_name = "traceTreeForTable")]
-    pub fn trace_tree_for_table(
+    pub async fn trace_tree_for_table(
         &mut self,
         tree_for_table_query: JsValue,
     ) -> Result<JsValue, NemoError> {
@@ -394,6 +349,7 @@ impl NemoEngine {
         let response = self
             .engine
             .trace_tree(query)
+            .await
             .map_err(WasmOrInternalNemoError::Nemo)
             .map_err(NemoError)?;
 
@@ -405,7 +361,7 @@ impl NemoEngine {
     }
 
     #[wasm_bindgen(js_name = "traceTableEntriesForTreeNodes")]
-    pub fn trace_table_entries_for_tree_nodes(
+    pub async fn trace_table_entries_for_tree_nodes(
         &mut self,
         table_entries_for_tree_nodes_query: JsValue,
     ) -> Result<JsValue, JsValue> {
@@ -419,7 +375,7 @@ impl NemoEngine {
             table_entries_for_tree_nodes_query,
         );
 
-        let response = self.engine.trace_node(&query);
+        let response = self.engine.trace_node(&query).await;
 
         let table_entries_for_tree_nodes_response = response
             .elements

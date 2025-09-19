@@ -43,8 +43,9 @@ impl From<JsonReadingError> for ReadingError {
     }
 }
 
+#[async_trait::async_trait(?Send)]
 impl<T: Read> TableProvider for JsonReader<T> {
-    fn provide_table_data(
+    async fn provide_table_data(
         self: Box<Self>,
         tuple_writer: &mut TupleWriter,
     ) -> Result<(), ReadingError> {
