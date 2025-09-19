@@ -392,10 +392,7 @@ impl ComponentBehavior for Rule {
         for atom in self.head() {
             for variable in atom.variables() {
                 if let Some(variable_name) = variable.name() {
-                    if !variable.is_existential()
-                        && !safe_variables.contains(variable)
-                        && self.import_variables().contains(variable)
-                    {
+                    if !variable.is_existential() && !safe_variables.contains(variable) {
                         report
                             .add(
                                 variable,
@@ -453,6 +450,7 @@ impl ComponentBehavior for Rule {
                 for negative_subterm in negative.terms() {
                     if let Term::Primitive(Primitive::Variable(variable)) = negative_subterm
                         && !safe_variables.contains(variable)
+                        && !variable.is_anonymous()
                     {
                         current_negative_variables.insert(variable);
                     }
