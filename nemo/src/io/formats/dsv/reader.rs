@@ -128,8 +128,9 @@ impl<T: BufRead> DsvReader<T> {
     }
 }
 
+#[async_trait::async_trait(?Send)]
 impl<T: BufRead> TableProvider for DsvReader<T> {
-    fn provide_table_data(
+    async fn provide_table_data(
         self: Box<Self>,
         tuple_writer: &mut TupleWriter,
     ) -> Result<(), ReadingError> {

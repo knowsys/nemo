@@ -5,8 +5,10 @@ use std::io::Read;
 #[derive(Debug, Clone, Copy, Default)]
 /// Resolves resources for Stdin
 pub struct StdinResourceProvider {}
+
+#[async_trait::async_trait(?Send)]
 impl ResourceProvider for StdinResourceProvider {
-    fn open_resource(
+    async fn open_resource(
         &self,
         resource: &Resource,
         _media_type: &str,

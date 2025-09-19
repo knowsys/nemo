@@ -79,7 +79,7 @@ impl RuleExecution {
 
     /// Execute the current rule.
     /// Returns the predicates which received new elements.
-    pub(crate) fn execute(
+    pub(crate) async fn execute(
         &self,
         table_manager: &mut TableManager,
         import_manager: &ImportManager,
@@ -99,15 +99,18 @@ impl RuleExecution {
         let mut best_variable_order = self.promising_variable_orders[0].clone();
 
         let mut subtable_execution_plan = SubtableExecutionPlan::default();
-        let body_node = self.body_strategy.add_plan_body(
-            table_manager,
-            import_manager,
-            &mut subtable_execution_plan,
-            &self.variable_translation,
-            rule_info,
-            &mut best_variable_order, // Variable order possibly gets updated
-            step_number,
-        );
+        let body_node = self
+            .body_strategy
+            .add_plan_body(
+                table_manager,
+                import_manager,
+                &mut subtable_execution_plan,
+                &self.variable_translation,
+                rule_info,
+                &mut best_variable_order, // Variable order possibly gets updated
+                step_number,
+            )
+            .await;
 
         let aggregate_node = self.aggregate_strategy.as_ref().map(|strategy| {
             strategy.add_plan_aggregate(
@@ -127,6 +130,6 @@ impl RuleExecution {
             step_number,
         );
 
-        table_manager.execute_plan(subtable_execution_plan)
+        table_manager.execute_plan(subtable_execution_plan).await
     }
 }
