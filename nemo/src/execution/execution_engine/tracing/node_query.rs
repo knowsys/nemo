@@ -128,6 +128,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     /// Bottom-up computation of "valid" facts per query node,
     /// meaning that every such fact satisfies all constraints
     /// imposed by its subtree.
+    #[allow(clippy::too_many_arguments)]
     async fn trace_node_valid(
         &mut self,
         manager: &mut TraceNodeManager,

@@ -403,10 +403,10 @@ impl ChaseRule {
 
         let mut result = self.clone();
 
-        if result.positive.atoms.len() == 1 {
-            if result.positive.atoms[0].predicate().name() == "_EMPTY" {
-                result.positive.atoms.clear();
-            }
+        if result.positive.atoms.len() == 1
+            && result.positive.atoms[0].predicate().name() == "_EMPTY"
+        {
+            result.positive.atoms.clear();
         }
 
         for clause in result.imports.imports.drain(..) {
