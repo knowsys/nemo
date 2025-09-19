@@ -13,12 +13,13 @@ use crate::{
 use std::fmt::Debug;
 
 /// Strategies for calculating all matches for a rule application.
+#[async_trait::async_trait(?Send)]
 pub(crate) trait BodyStrategy: Debug {
     /// Calculate the concrete plan given a variable order.
     /// Returns the root node of the tree that represents the calculation for the body.
     /// Updates the variable order according to changes by e.g. aggregates and arithmetic operations.
     #[allow(clippy::too_many_arguments)]
-    fn add_plan_body(
+    async fn add_plan_body(
         &self,
         table_manager: &TableManager,
         import_manager: &ImportManager,

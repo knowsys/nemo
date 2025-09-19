@@ -154,7 +154,7 @@ impl DatabaseInstance {
     ///
     /// # Panics
     /// Panics if the given id does not exist.
-    pub fn table_row_iterator(
+    pub async fn table_row_iterator(
         &mut self,
         id: PermanentTableId,
     ) -> Result<impl Iterator<Item = Vec<AnyDataValue>> + '_, Error> {
@@ -162,6 +162,7 @@ impl DatabaseInstance {
         let storage_id = self
             .reference_manager
             .trie_id(&self.dictionary, id, ColumnOrder::default())
+            .await
             .unwrap_or_else(|err| panic!("No table with the id {id} exists: {err}"));
         let trie = self.reference_manager.trie(storage_id);
 
@@ -188,10 +189,11 @@ impl DatabaseInstance {
     ///
     /// # Panics
     /// Panics if the given id does not exist.
-    pub fn table_contains_row(&mut self, id: PermanentTableId, row: &[AnyDataValue]) -> bool {
+    pub async fn table_contains_row(&mut self, id: PermanentTableId, row: &[AnyDataValue]) -> bool {
         let storage_id = self
             .reference_manager
             .trie_id(&self.dictionary, id, ColumnOrder::default())
+            .await
             .unwrap_or_else(|err| panic!("No table with the id {id} exists: {err}"));
         let trie = self.reference_manager.trie(storage_id);
 
@@ -215,7 +217,7 @@ impl DatabaseInstance {
     ///
     /// # Panics
     /// Panics if the given id does not exist.
-    pub fn table_row_position(
+    pub async fn table_row_position(
         &mut self,
         id: PermanentTableId,
         row: &[AnyDataValue],
@@ -223,6 +225,7 @@ impl DatabaseInstance {
         let storage_id = self
             .reference_manager
             .trie_id(&self.dictionary, id, ColumnOrder::default())
+            .await
             .unwrap_or_else(|err| panic!("No table with the id {id} exists: {err}"));
         let trie = self.reference_manager.trie(storage_id);
 
@@ -332,7 +335,7 @@ impl DatabaseInstance {
     /// make sure that the tables represented by those ids and orders
     /// exist as [Trie]s and return a list with the [StorageId]s
     /// to obtain them from `self.reference_manager`
-    fn collect_requiured_tries(
+    async fn collect_requiured_tries(
         &mut self,
         tables: &[(PermanentTableId, ColumnOrder)],
     ) -> Result<Vec<StorageId>, Error> {
@@ -341,7 +344,8 @@ impl DatabaseInstance {
         for (id, order) in tables.iter().cloned() {
             result.push(
                 self.reference_manager
-                    .trie_id(&self.dictionary, id, order)?,
+                    .trie_id(&self.dictionary, id, order)
+                    .await?,
             );
         }
 
@@ -405,7 +409,7 @@ impl DatabaseInstance {
     ///
     /// Returns a pair containing a (possibly empty) [Trie]
     /// and a list of reordered [Trie]s, one for each provided [ProjectReordering].
-    fn execute_tree<'a>(
+    async fn execute_tree<'a>(
         &'a self,
         storage: &'a TemporaryStorage,
         tree: ExecutionTree,
@@ -459,11 +463,11 @@ impl DatabaseInstance {
             }
             ExecutionTreeNode::IncrementalImport { generator, subnode } => {
                 let dict = &self.dictionary;
-                let trie = self
-                    .evaluate_tree_leaf(storage, &subnode)
-                    .map(move |scan| generator.apply_operation(scan, dict))
-                    .unwrap_or(Ok(Trie::empty(0)))
-                    .expect("error while reading"); // TODO: This error should somehow be caught
+                let trie = match self.evaluate_tree_leaf(storage, &subnode) {
+                    Some(scan) => generator.apply_operation(scan, dict).await,
+                    None => Ok(Trie::empty(0)),
+                }
+                .expect("error while reading"); // TODO: This error should somehow be caught
 
                 (trie, vec![])
             }
@@ -494,7 +498,7 @@ impl DatabaseInstance {
     }
 
     /// Evaluate the given [ExecutionPlan].
-    pub fn execute_plan(
+    pub async fn execute_plan(
         &mut self,
         plan: ExecutionPlan,
     ) -> Result<HashMap<ExecutionId, PermanentTableId>, Error> {
@@ -510,7 +514,9 @@ impl DatabaseInstance {
             .start();
 
         let mut temporary_storage = TemporaryStorage {
-            loaded_tables: self.collect_requiured_tries(&execution_series.loaded_tries)?,
+            loaded_tables: self
+                .collect_requiured_tries(&execution_series.loaded_tries)
+                .await?,
             computed_tables: vec![None; execution_series.trees.len()],
         };
 
@@ -537,8 +543,9 @@ impl DatabaseInstance {
 
             let timed_string = format!("Reasoning/Execution/{}", tree.operation_name);
             TimedCode::instance().sub(&timed_string).start();
-            let (result_tree, results_dependent) =
-                self.execute_tree(&temporary_storage, tree, dependent_reorderings);
+            let (result_tree, results_dependent) = self
+                .execute_tree(&temporary_storage, tree, dependent_reorderings)
+                .await;
             TimedCode::instance().sub(&timed_string).stop();
 
             if tree_used > 0 {
@@ -581,12 +588,13 @@ impl DatabaseInstance {
     /// Assumes that it only contains one permanent output node.
     ///
     /// Returns `None` if this evaluates to an empty table.
-    pub fn execute_first_match(&mut self, plan: ExecutionPlan) -> Option<Vec<AnyDataValue>> {
+    pub async fn execute_first_match(&mut self, plan: ExecutionPlan) -> Option<Vec<AnyDataValue>> {
         let execution_series = plan.finalize();
 
         let mut temporary_storage = TemporaryStorage {
             loaded_tables: self
                 .collect_requiured_tries(&execution_series.loaded_tries)
+                .await
                 .ok()?,
             computed_tables: vec![None; execution_series.trees.len()],
         };
@@ -594,7 +602,7 @@ impl DatabaseInstance {
         for (tree_index, tree) in execution_series.trees.into_iter().enumerate() {
             match &tree.result {
                 ExecutionResult::Temporary => {
-                    let (result, _) = self.execute_tree(&temporary_storage, tree, vec![]);
+                    let (result, _) = self.execute_tree(&temporary_storage, tree, vec![]).await;
 
                     temporary_storage.computed_tables[tree_index] = Some(result);
                 }
@@ -650,7 +658,7 @@ impl DatabaseInstance {
 
     /// Evaluate the given [ExecutionPlan] and return a [Trie] without
     /// saving anything to the permanent storage.
-    pub fn execute_plan_trie(&mut self, plan: ExecutionPlan) -> Result<Vec<Trie>, Error> {
+    pub async fn execute_plan_trie(&mut self, plan: ExecutionPlan) -> Result<Vec<Trie>, Error> {
         let execution_series = plan.finalize();
         let execution_results = execution_series
             .trees
@@ -659,7 +667,9 @@ impl DatabaseInstance {
             .collect::<Vec<_>>();
 
         let mut temporary_storage = TemporaryStorage {
-            loaded_tables: self.collect_requiured_tries(&execution_series.loaded_tries)?,
+            loaded_tables: self
+                .collect_requiured_tries(&execution_series.loaded_tries)
+                .await?,
             computed_tables: vec![None; execution_series.trees.len()],
         };
 
@@ -680,8 +690,9 @@ impl DatabaseInstance {
             let tree_result = tree.result.clone();
             let tree_dependents = tree.dependents.clone();
 
-            let (result_tree, results_dependent) =
-                self.execute_tree(&temporary_storage, tree, dependent_reorderings);
+            let (result_tree, results_dependent) = self
+                .execute_tree(&temporary_storage, tree, dependent_reorderings)
+                .await;
 
             temporary_storage.computed_tables[tree_index] = Some(result_tree);
             for ((computed_id, _), result_dependent) in

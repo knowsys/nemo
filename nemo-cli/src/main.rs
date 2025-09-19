@@ -169,7 +169,7 @@ fn parse_trace_facts(cli: &CliApp) -> Result<Vec<String>, Error> {
 }
 
 /// Deal with tracing
-fn handle_tracing(cli: &CliApp, engine: &mut DefaultExecutionEngine) -> Result<(), CliError> {
+async fn handle_tracing(cli: &CliApp, engine: &mut DefaultExecutionEngine) -> Result<(), CliError> {
     let tracing_facts = parse_trace_facts(cli)?;
     if !tracing_facts.is_empty() {
         log::info!("Starting tracing of {} facts...", tracing_facts.len());
@@ -187,7 +187,7 @@ fn handle_tracing(cli: &CliApp, engine: &mut DefaultExecutionEngine) -> Result<(
             facts.push(fact);
         }
 
-        let (trace, handles) = engine.trace(facts)?;
+        let (trace, handles) = engine.trace(facts).await?;
 
         match &cli.tracing.output_file {
             Some(output_file) => {
@@ -214,14 +214,17 @@ fn handle_tracing(cli: &CliApp, engine: &mut DefaultExecutionEngine) -> Result<(
     Ok(())
 }
 
-fn handle_tracing_tree(cli: &CliApp, engine: &mut DefaultExecutionEngine) -> Result<(), CliError> {
+async fn handle_tracing_tree(
+    cli: &CliApp,
+    engine: &mut DefaultExecutionEngine,
+) -> Result<(), CliError> {
     if let Some(query_json) = &cli.tracing_tree.trace_tree_json {
         let tree_query: TreeForTableQuery =
             serde_json::from_str(query_json).map_err(|_| CliError::TracingInvalidFact {
                 fact: String::from("placeholder"),
             })?;
 
-        let result = engine.trace_tree(tree_query)?;
+        let result = engine.trace_tree(tree_query).await?;
 
         let json = serde_json::to_string_pretty(&result).unwrap();
         println!("{json}");
@@ -230,14 +233,17 @@ fn handle_tracing_tree(cli: &CliApp, engine: &mut DefaultExecutionEngine) -> Res
     Ok(())
 }
 
-fn handle_tracing_node(cli: &CliApp, engine: &mut DefaultExecutionEngine) -> Result<(), CliError> {
+async fn handle_tracing_node(
+    cli: &CliApp,
+    engine: &mut DefaultExecutionEngine,
+) -> Result<(), CliError> {
     if let Some(query_file) = &cli.tracing_node.trace_node_json {
         let query_string = read_to_string(query_file).expect("Unable to read file");
 
         let node_query: TableEntriesForTreeNodesQuery =
             serde_json::from_str(&query_string).expect("Unable to parse json file");
 
-        let result = engine.trace_node(&node_query);
+        let result = engine.trace_node(&node_query).await;
 
         let json = serde_json::to_string_pretty(&result).unwrap();
         println!("{json}");
@@ -246,7 +252,7 @@ fn handle_tracing_node(cli: &CliApp, engine: &mut DefaultExecutionEngine) -> Res
     Ok(())
 }
 
-fn run(mut cli: CliApp) -> Result<(), CliError> {
+async fn run(mut cli: CliApp) -> Result<(), CliError> {
     TimedCode::instance().start();
     TimedCode::instance().sub("Reading & Preprocessing").start();
 
@@ -276,8 +282,9 @@ fn run(mut cli: CliApp) -> Result<(), CliError> {
         return Err(CliError::InvalidParameter { parameter });
     }
 
-    let (mut engine, warnings) =
-        ExecutionEngine::from_file(program_file, execution_parameters)?.into_pair();
+    let (mut engine, warnings) = ExecutionEngine::from_file(program_file, execution_parameters)
+        .await?
+        .into_pair();
     warnings.eprint(cli.disable_warnings)?;
 
     log::info!("Rules parsed");
@@ -290,7 +297,7 @@ fn run(mut cli: CliApp) -> Result<(), CliError> {
 
     TimedCode::instance().sub("Reasoning").start();
     log::info!("Reasoning ... ");
-    engine.execute()?;
+    engine.execute().await?;
     log::info!("Reasoning done");
     TimedCode::instance().sub("Reasoning").stop();
 
@@ -306,7 +313,7 @@ fn run(mut cli: CliApp) -> Result<(), CliError> {
             stdout_used |= export_manager.export_table(
                 &predicate,
                 &handler,
-                engine.predicate_rows(&predicate)?,
+                engine.predicate_rows(&predicate).await?,
             )?;
         }
 
@@ -324,7 +331,7 @@ fn run(mut cli: CliApp) -> Result<(), CliError> {
         for predicate in
             predicates_to_print_facts_for(cli.output.print_facts_setting, engine.program())
         {
-            if let Some(table) = engine.predicate_rows(&predicate)? {
+            if let Some(table) = engine.predicate_rows(&predicate).await? {
                 print_facts_for_table(&mut stdout, table, predicate)?;
             }
         }
@@ -356,12 +363,13 @@ fn run(mut cli: CliApp) -> Result<(), CliError> {
         print_memory_details(&engine);
     }
 
-    handle_tracing(&cli, &mut engine)?;
-    handle_tracing_tree(&cli, &mut engine)?;
-    handle_tracing_node(&cli, &mut engine)
+    handle_tracing(&cli, &mut engine).await?;
+    handle_tracing_tree(&cli, &mut engine).await?;
+    handle_tracing_node(&cli, &mut engine).await
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let cli = CliApp::parse();
 
     let disable_warnings = cli.disable_warnings;
@@ -370,7 +378,7 @@ fn main() {
     log::info!("Version: {}", clap::crate_version!());
     log::debug!("Rule files: {:?}", cli.rules);
 
-    if let Err(error) = run(cli) {
+    if let Err(error) = run(cli).await {
         if let CliError::NemoError(Error::ProgramReport(report)) = error {
             let _ = report.eprint(disable_warnings);
 

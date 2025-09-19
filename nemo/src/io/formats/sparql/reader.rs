@@ -40,7 +40,7 @@ impl SparqlReader {
         }
     }
 
-    fn execute_from_builder(
+    async fn execute_from_builder(
         builder: &SparqlBuilder,
     ) -> Result<Option<Box<dyn Read>>, ReadingError> {
         let resource_builder = builder
@@ -50,10 +50,10 @@ impl SparqlReader {
         let resource = resource_builder.finalize();
         let provider = HttpResourceProvider {};
 
-        provider.open_resource(&resource, MEDIA_TYPE_TSV)
+        provider.open_resource(&resource, MEDIA_TYPE_TSV).await
     }
 
-    fn execute_query(
+    async fn execute_query(
         &self,
         endpoint: &Iri<String>,
         query: &Query,
@@ -64,7 +64,7 @@ impl SparqlReader {
             self.builder.value_formats.clone(),
         );
 
-        Self::execute_from_builder(&builder)
+        Self::execute_from_builder(&builder).await
     }
 
     fn read_table_data(
@@ -164,17 +164,19 @@ impl ByteSized for SparqlReader {
     }
 }
 
+#[async_trait::async_trait(?Send)]
 impl TableProvider for SparqlReader {
     fn arity(&self) -> usize {
         self.builder.expected_arity().unwrap_or_default()
     }
 
-    fn provide_table_data(
+    async fn provide_table_data(
         self: Box<Self>,
         tuple_writer: &mut TupleWriter,
     ) -> Result<(), ReadingError> {
         let response = self
-            .execute_query(&self.builder.endpoint, &self.builder.query)?
+            .execute_query(&self.builder.endpoint, &self.builder.query)
+            .await?
             .expect("should not be empty");
         Self::read_table_data(response, tuple_writer, self.builder.value_formats)
     }
@@ -188,7 +190,7 @@ impl TableProvider for SparqlReader {
     }
 
     #[allow(unused)]
-    fn provide_table_data_with_bindings(
+    async fn provide_table_data_with_bindings(
         self: Box<Self>,
         tuple_writer: &mut TupleWriter,
         bound_positions: &[usize],
@@ -218,7 +220,8 @@ impl TableProvider for SparqlReader {
         };
 
         let response = self
-            .execute_query(&self.builder.endpoint, &query)?
+            .execute_query(&self.builder.endpoint, &query)
+            .await?
             .expect("should not be empty");
         Self::read_table_data(response, tuple_writer, self.builder.value_formats)
     }

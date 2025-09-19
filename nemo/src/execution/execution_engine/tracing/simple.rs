@@ -31,7 +31,7 @@ use crate::{
 
 impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     /// Recursive part of `trace`.
-    fn trace_recursive(
+    async fn trace_recursive(
         &mut self,
         trace: &mut ExecutionTrace,
         fact: GroundAtom,
@@ -46,6 +46,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         let step = match self
             .table_manager
             .find_table_row(&fact.predicate(), &fact.datavalues().collect::<Vec<_>>())
+            .await
         {
             Some(s) => s,
             None => {
@@ -128,7 +129,10 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 step,
             );
 
-            if let Some(query_result) = self.table_manager.execute_plan_first_match(execution_plan)
+            if let Some(query_result) = self
+                .table_manager
+                .execute_plan_first_match(execution_plan)
+                .await
             {
                 let variable_assignment: HashMap<Variable, AnyDataValue> = variable_order
                     .as_ordered_list()
@@ -154,7 +158,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
                     let next_fact = GroundAtom::new(next_fact_predicate, next_fact_terms);
 
-                    let next_handle = self.trace_recursive(trace, next_fact)?;
+                    let next_handle = Box::pin(self.trace_recursive(trace, next_fact)).await?;
 
                     if trace.status(next_handle).is_success() {
                         subtraces.push(next_handle);
@@ -191,7 +195,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
     /// Build an [ExecutionTrace] for a list of facts.
     /// Also returns a list containing a [TraceFactHandle] for each fact.
-    pub fn trace(
+    pub async fn trace(
         &mut self,
         facts: Vec<Fact>,
     ) -> Result<(ExecutionTrace, Vec<TraceFactHandle>), Error> {
@@ -222,7 +226,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 );
             }
 
-            handles.push(self.trace_recursive(&mut trace, chase_fact)?);
+            handles.push(self.trace_recursive(&mut trace, chase_fact).await?);
         }
 
         log::info!("{num_chase_facts}/{num_chase_facts} facts traced. (100%)");

@@ -1613,6 +1613,7 @@ dependencies = [
  "ariadne",
  "ascii_tree",
  "assert_fs",
+ "async-trait",
  "bytecount",
  "colored",
  "csv",
@@ -1673,6 +1674,7 @@ dependencies = [
  "serde_json",
  "test-log",
  "thiserror 2.0.16",
+ "tokio",
 ]
 
 [[package]]
@@ -1697,6 +1699,7 @@ version = "0.8.1-dev"
 dependencies = [
  "arbitrary",
  "ascii_tree",
+ "async-trait",
  "bitvec",
  "cpu-time",
  "delegate",
@@ -1724,6 +1727,7 @@ dependencies = [
  "streaming-iterator",
  "test-log",
  "thiserror 2.0.16",
+ "tokio",
  "unicode-segmentation",
  "urlencoding",
  "wasmtimer",
@@ -1735,12 +1739,14 @@ version = "0.8.1-dev"
 dependencies = [
  "nemo",
  "pyo3",
+ "tokio",
 ]
 
 [[package]]
 name = "nemo-wasm"
 version = "0.8.1-dev"
 dependencies = [
+ "async-trait",
  "console_error_panic_hook",
  "futures",
  "gloo-utils",

@@ -19,6 +19,7 @@ pub mod stdin;
 ///
 /// This allows specifying how to resolve a resource independent of how the
 /// file format is going to be parsed.
+#[async_trait::async_trait(?Send)]
 pub trait ResourceProvider: std::fmt::Debug {
     /// Resolve and open a resource.
     ///
@@ -29,7 +30,7 @@ pub trait ResourceProvider: std::fmt::Debug {
     ///
     /// If the resource is supported, the provider must try to open it with the
     /// given compression format, and return an error if this fails.
-    fn open_resource(
+    async fn open_resource(
         &self,
         resource: &Resource,
         media_type: &str,
@@ -66,13 +67,16 @@ impl ResourceProviders {
     }
 
     /// Opens a resource.
-    pub fn open_resource(
+    pub async fn open_resource(
         &self,
         resource: &Resource,
         media_type: &str,
     ) -> Result<Box<dyn Read>, ReadingError> {
         for resource_provider in self.0.iter() {
-            if let Some(reader) = resource_provider.open_resource(resource, media_type)? {
+            if let Some(reader) = resource_provider
+                .open_resource(resource, media_type)
+                .await?
+            {
                 return Ok(reader);
             }
         }

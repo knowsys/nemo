@@ -64,8 +64,9 @@ impl SeminaiveStrategy {
     }
 }
 
+#[async_trait::async_trait(?Send)]
 impl BodyStrategy for SeminaiveStrategy {
-    fn add_plan_body(
+    async fn add_plan_body(
         &self,
         table_manager: &TableManager,
         import_manager: &ImportManager,
@@ -124,7 +125,7 @@ impl BodyStrategy for SeminaiveStrategy {
             &self.import_negative_filters,
         );
 
-        let node_result = node_imports;
+        let node_result = node_imports.await;
 
         current_plan.add_temporary_table(node_result.clone(), "Body");
         node_result
