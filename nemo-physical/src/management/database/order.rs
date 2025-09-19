@@ -101,7 +101,6 @@ impl OrderedReferenceManager {
             } else {
                 order_map
                     .keys()
-                    .cloned()
                     .map(|order| {
                         reorder
                             .invert()
