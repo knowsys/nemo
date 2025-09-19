@@ -105,7 +105,7 @@ pub(crate) fn node_imports(
             node_import,
             "Rule Import",
             &import_table_name,
-            SubtableIdentifier::new(import.predicate().clone(), current_step_number),
+            SubtableIdentifier::new(import.predicate().clone(), current_step_number - 1),
         );
 
         subtable_plan.add_permanent_table(

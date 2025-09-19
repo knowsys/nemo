@@ -8,7 +8,10 @@ use nemo_physical::{
 };
 
 use crate::{
-    chase_model::{ChaseAtom, GroundAtom},
+    chase_model::{
+        ChaseAtom, GroundAtom, analysis::program_analysis::ProgramAnalysis,
+        components::program::ChaseProgram,
+    },
     execution::{
         ExecutionEngine,
         execution_engine::tracing::node_query::{
@@ -45,6 +48,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         node: &TableEntriesForTreeNodesQueryInner,
         address: TreeAddress,
         predicate: &Tag,
+        program: &ChaseProgram,
     ) {
         if !node.queries.is_empty() {
             let arity = self.predicate_arity(predicate).expect("invalid predicate");
@@ -95,7 +99,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         // Recursive call to this function for all successor nodes
 
         if let Some(successor) = &node.next {
-            let rule = self.program.rules()[successor.rule].clone();
+            let rule = program.rules()[successor.rule].clone();
 
             for (index, (atom, node_atom)) in rule
                 .positive_body()
@@ -106,14 +110,22 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 let mut next_address = address.clone();
                 next_address.push(index);
 
-                self.trace_node_restriction(manager, node_atom, next_address, &atom.predicate());
+                self.trace_node_restriction(
+                    manager,
+                    node_atom,
+                    next_address,
+                    &atom.predicate(),
+                    program,
+                );
             }
         }
     }
 
     /// Phase 2 of `trace_node_execute`
     ///
-    ///
+    /// Bottom-up computation of "valid" facts per query node,
+    /// meaning that every such fact satisfies all constraints
+    /// imposed by its subtree.
     fn trace_node_valid(
         &mut self,
         manager: &mut TraceNodeManager,
@@ -122,6 +134,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         predicate: &Tag,
         discarded_columns: &[usize],
         before_step: usize,
+        program: &ChaseProgram,
     ) {
         manager.add_discard(&address, discarded_columns);
 
@@ -129,7 +142,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             // True if all children do not have any restrictions
             let simple_successor = successor.children.iter().all(|child| child.is_simple());
 
-            let rule = self.program.rules()[successor.rule].clone();
+            let rule = program.rules()[successor.rule].clone();
             let order =
                 self.analysis.rule_analysis[successor.rule].promising_variable_orders[0].clone();
 
@@ -169,6 +182,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                     &atom.predicate(),
                     &discarded_columns,
                     next_step,
+                    program,
                 );
             }
 
@@ -280,6 +294,8 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         manager: &mut TraceNodeManager,
         node: &TableEntriesForTreeNodesQueryInner,
         address: TreeAddress,
+        program: &ChaseProgram,
+        program_analysis: &ProgramAnalysis,
     ) -> bool {
         if address.is_empty() {
             if let Some(root_table) = manager.final_valid_table(&address) {
@@ -292,9 +308,9 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         let discarded_columns = manager.discard(&address);
 
         if let Some(successor) = &node.next {
-            let rule = self.program.rules()[successor.rule].clone();
+            let rule = program.rules()[successor.rule].clone();
             let order =
-                self.analysis.rule_analysis[successor.rule].promising_variable_orders[0].clone();
+                program_analysis.rule_analysis[successor.rule].promising_variable_orders[0].clone();
 
             let (variable_translation, order, head_variables) =
                 variable_translation(&rule, successor.head_index, &order);
@@ -355,7 +371,13 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                     return false;
                 }
 
-                if !self.trace_node_filter(manager, node_atom, next_address) {
+                if !self.trace_node_filter(
+                    manager,
+                    node_atom,
+                    next_address,
+                    program,
+                    program_analysis,
+                ) {
                     return false;
                 }
             }
@@ -365,7 +387,12 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     }
 
     /// Compute the results for a [TableEntriesForTreeNodesQuery].
-    fn trace_node_execute(&mut self, query: &TableEntriesForTreeNodesQuery) -> TraceNodeManager {
+    fn trace_node_execute(
+        &mut self,
+        query: &TableEntriesForTreeNodesQuery,
+        program: &ChaseProgram,
+        program_analysis: &ProgramAnalysis,
+    ) -> TraceNodeManager {
         let mut manager = TraceNodeManager::default();
         let address = TreeAddress::default();
         let predicate = Tag::new(query.predicate.clone());
@@ -373,7 +400,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         let before_step = self.rule_history.len();
         let discarded_columns = Vec::default();
 
-        self.trace_node_restriction(&mut manager, node, address.clone(), &predicate);
+        self.trace_node_restriction(&mut manager, node, address.clone(), &predicate, program);
 
         self.trace_node_valid(
             &mut manager,
@@ -382,9 +409,16 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             &predicate,
             &discarded_columns,
             before_step,
+            program,
         );
 
-        let _ = self.trace_node_filter(&mut manager, node, address.clone());
+        let _ = self.trace_node_filter(
+            &mut manager,
+            node,
+            address.clone(),
+            program,
+            program_analysis,
+        );
 
         manager
     }
@@ -601,8 +635,10 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         &mut self,
         query: &TableEntriesForTreeNodesQuery,
     ) -> TableEntriesForTreeNodesResponse {
+        let (program, analysis) = self.program.prepare_tracing();
+
         let response = self.trace_node_prepare(query);
-        let manager = self.trace_node_execute(query);
+        let manager = self.trace_node_execute(query, &program, &analysis);
 
         self.trace_node_answer(&manager, response)
             .unwrap_or_default()
