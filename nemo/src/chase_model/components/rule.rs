@@ -1,15 +1,24 @@
 //! This module defines [ChaseRule].
 
-use std::fmt::Display;
+use std::{collections::HashSet, fmt::Display};
 
 use nemo_physical::tabular::filters::FilterTransformPattern;
 
 use crate::{
-    chase_model::components::import::ChaseImportClause,
+    chase_model::{
+        ChaseAtom,
+        components::{
+            import::ChaseImportClause,
+            term::operation_term::{Operation, OperationTerm},
+        },
+    },
     rule_model::{
         components::{
             IterablePrimitives, IterableVariables,
-            term::primitive::{Primitive, variable::Variable},
+            term::{
+                operation::operation_kind::OperationKind,
+                primitive::{Primitive, variable::Variable},
+            },
         },
         origin::Origin,
     },
@@ -128,12 +137,17 @@ impl Display for ChaseRule {
             &format!("{} ", syntax::SEQUENCE_SEPARATOR),
         );
 
+        let operations = DisplaySeperatedList::display(
+            self.positive_operations().iter(),
+            &format!("{} ", syntax::SEQUENCE_SEPARATOR),
+        );
+
         let filters = DisplaySeperatedList::display(
             self.positive_filters().iter(),
             &format!("{} ", syntax::SEQUENCE_SEPARATOR),
         );
 
-        f.write_str(&format!("{head} :- {body} {filters}"))
+        f.write_str(&format!("{head} :- {body} {operations} {filters}"))
     }
 }
 
@@ -376,6 +390,79 @@ impl ChaseRule {
             .last_mut()
             .expect("expected a filter slot")
             .push(filter)
+    }
+
+    /// Prepare the rule in such a way that it is suitable for tracing.
+    ///
+    /// This includes
+    ///     * Moving all statements from import to the positive and negative body of the rule
+    pub(crate) fn prepare_tracing(&self) -> Self {
+        if self.imports.imports.is_empty() {
+            return self.clone();
+        }
+
+        let mut result = self.clone();
+
+        if result.positive.atoms.len() == 1
+            && result.positive.atoms[0].predicate().name() == "_EMPTY"
+        {
+            result.positive.atoms.clear();
+        }
+
+        for clause in result.imports.imports.drain(..) {
+            let atom = VariableAtom::new(clause.predicate().clone(), clause.bindings().clone());
+            result.positive.atoms.push(atom);
+        }
+
+        result
+            .positive
+            .operations
+            .append(&mut result.imports.operations);
+
+        result.positive.filters.append(&mut result.imports.filters);
+
+        let derived_variables = result
+            .positive_body()
+            .iter()
+            .flat_map(|atom| atom.variables())
+            .chain(
+                result
+                    .imports_operations()
+                    .iter()
+                    .map(|operation| operation.variable()),
+            )
+            .cloned()
+            .collect::<HashSet<_>>();
+
+        let mut new_filters = Vec::<ChaseFilter>::default();
+        result.positive.operations.retain(|operation| {
+            if derived_variables.contains(operation.variable()) {
+                let new_filter = ChaseFilter::new(OperationTerm::Operation(Operation::new(
+                    OperationKind::Equal,
+                    vec![
+                        OperationTerm::Primitive(Primitive::Variable(operation.variable().clone())),
+                        operation.operation().clone(),
+                    ],
+                )));
+                new_filters.push(new_filter);
+                false
+            } else {
+                true
+            }
+        });
+
+        result.positive.filters.extend(new_filters);
+
+        result
+            .negative
+            .atoms
+            .append(&mut result.imports.negation.atoms);
+        result
+            .negative
+            .filters
+            .append(&mut result.imports.negation.filters);
+
+        result
     }
 }
 

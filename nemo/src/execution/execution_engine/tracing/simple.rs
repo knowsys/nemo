@@ -5,7 +5,10 @@ use std::collections::{HashMap, hash_map::Entry};
 use nemo_physical::datavalues::AnyDataValue;
 
 use crate::{
-    chase_model::{ChaseAtom, GroundAtom, translation::ProgramChaseTranslation},
+    chase_model::{
+        ChaseAtom, GroundAtom, analysis::program_analysis::ProgramAnalysis,
+        components::program::ChaseProgram, translation::ProgramChaseTranslation,
+    },
     error::Error,
     execution::{
         ExecutionEngine,
@@ -35,6 +38,8 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         &mut self,
         trace: &mut ExecutionTrace,
         fact: GroundAtom,
+        program: &ChaseProgram,
+        program_analysis: &ProgramAnalysis,
     ) -> Result<TraceFactHandle, TracingError> {
         let trace_handle = trace.register_fact(fact.clone());
 
@@ -57,15 +62,20 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             }
         };
 
-        if step == 0 {
-            // If a fact was derived in step 0 it must have been given as an EDB fact
+        // If the traced fact is edb or derived at step 0,
+        // then the derivation was successful
+        if !program_analysis
+            .derived_predicates
+            .contains(&fact.predicate())
+            || step == 0
+        {
             trace.update_status(trace_handle, TraceStatus::Success(TraceDerivation::Input));
             return Ok(trace_handle);
         }
 
         // Rule index of the rule that was applied to derive the given fact
         let rule_index = self.rule_history[step];
-        let rule = self.program.rules()[rule_index].clone();
+        let rule = program.rules()[rule_index].clone();
 
         // Iterate over all head atoms which could have derived the given fact
         for (head_index, head_atom) in rule.head().iter().enumerate() {
@@ -115,8 +125,8 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 continue;
             }
 
-            let rule = self.program.rules()[rule_index].clone();
-            let analysis = &self.analysis.rule_analysis[rule_index];
+            let rule = program.rules()[rule_index].clone();
+            let analysis = &program_analysis.rule_analysis[rule_index];
             let mut variable_order = analysis.promising_variable_orders[0].clone(); // TODO: This selection is arbitrary
             let trace_strategy = TracingStrategy::initialize(&rule, grounding)?;
 
@@ -158,7 +168,9 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
                     let next_fact = GroundAtom::new(next_fact_predicate, next_fact_terms);
 
-                    let next_handle = Box::pin(self.trace_recursive(trace, next_fact)).await?;
+                    let next_handle =
+                        Box::pin(self.trace_recursive(trace, next_fact, program, program_analysis))
+                            .await?;
 
                     if trace.status(next_handle).is_success() {
                         subtraces.push(next_handle);
@@ -190,6 +202,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         }
 
         trace.update_status(trace_handle, TraceStatus::Fail);
+
         Ok(trace_handle)
     }
 
@@ -207,6 +220,8 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 .into());
             }
         }
+
+        let (program, analysis) = self.program.prepare_tracing();
 
         let chase_facts: Vec<_> = facts
             .into_iter()
@@ -226,7 +241,10 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 );
             }
 
-            handles.push(self.trace_recursive(&mut trace, chase_fact).await?);
+            handles.push(
+                self.trace_recursive(&mut trace, chase_fact, &program, &analysis)
+                    .await?,
+            );
         }
 
         log::info!("{num_chase_facts}/{num_chase_facts} facts traced. (100%)");

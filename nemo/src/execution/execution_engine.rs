@@ -292,6 +292,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
         TimedCode::instance().sub("Reasoning/Rules").stop();
         TimedCode::instance().sub("Reasoning/Execution").stop();
+
         Ok(())
     }
 

@@ -7,7 +7,9 @@ use nemo_physical::datavalues::AnyDataValue;
 
 use crate::{
     chase_model::{
-        ChaseAtom, GroundAtom, analysis::variable_order::VariableOrder, components::rule::ChaseRule,
+        ChaseAtom, GroundAtom,
+        analysis::{program_analysis::ProgramAnalysis, variable_order::VariableOrder},
+        components::{program::ChaseProgram, rule::ChaseRule},
     },
     error::Error,
     execution::{
@@ -187,6 +189,8 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     async fn trace_tree_recursive(
         &mut self,
         facts: Vec<GroundAtom>,
+        program: &ChaseProgram,
+        program_analysis: &ProgramAnalysis,
     ) -> Option<TreeForTableResponse> {
         let predicate = if let Some(first_fact) = facts.first() {
             first_fact.predicate() // We assume that all facts have the same predicate
@@ -281,10 +285,10 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             return Some(result);
         }
 
-        let chase_rule = &self.chase_program().rules()[rule_index].clone();
-        let rule = &self.program().rule(rule_index).clone();
+        let chase_rule = &program.rules()[rule_index].clone();
+        let logical_rule = self.program().rule(rule_index).clone();
 
-        for (head_index, _) in rule.head().iter().enumerate() {
+        for (head_index, _) in chase_rule.head().iter().enumerate() {
             let combination = facts.iter().cloned().map(|fact| {
                 partial_grounding_for_rule_head_and_fact(chase_rule.clone(), head_index, fact)
             });
@@ -330,16 +334,16 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 .collect::<Result<Vec<_>, Error>>()
                 .ok()?;
 
-            if self.program.rules()[rule_index].aggregate().is_some() {
+            if program.rules()[rule_index].aggregate().is_some() {
                 // If rule is an aggregate rule then we continue with all matches
 
                 let mut next_facts =
-                    vec![Vec::new(); self.program.rules()[rule_index].positive_body().len()];
+                    vec![Vec::new(); program.rules()[rule_index].positive_body().len()];
 
                 for groundings in results {
                     for grounding in groundings {
-                        let rule = &self.program.rules()[rule_index];
-                        let analysis = &self.analysis.rule_analysis[rule_index];
+                        let rule = &program.rules()[rule_index];
+                        let analysis = &program_analysis.rule_analysis[rule_index];
 
                         let variable_order = analysis.promising_variable_orders[0].clone(); // TODO: This selection is arbitrary
 
@@ -350,7 +354,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 let children_option = {
                     let mut entries: Vec<_> = vec![];
                     for facts in next_facts {
-                        let entry = self.trace_tree_recursive(facts);
+                        let entry = self.trace_tree_recursive(facts, program, program_analysis);
                         entries.push(Box::pin(entry).await);
                     }
                     entries.into_iter().collect::<Option<Vec<_>>>()
@@ -360,9 +364,9 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                     result.next = Some(TreeForTableResponseSuccessor {
                         rule: TraceRule::from_rule_and_head(
                             rule_index,
-                            rule,
+                            &logical_rule,
                             head_index,
-                            &rule.head()[head_index],
+                            &logical_rule.head()[head_index],
                         ),
                         children,
                     });
@@ -375,11 +379,11 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
                 for groundings in results.into_iter().multi_cartesian_product() {
                     let mut next_facts =
-                        vec![Vec::new(); self.program.rules()[rule_index].positive_body().len()];
+                        vec![Vec::new(); program.rules()[rule_index].positive_body().len()];
 
                     for grounding in groundings {
-                        let rule = &self.program.rules()[rule_index];
-                        let analysis = &self.analysis.rule_analysis[rule_index];
+                        let rule = &program.rules()[rule_index];
+                        let analysis = &program_analysis.rule_analysis[rule_index];
 
                         let variable_order = analysis.promising_variable_orders[0].clone(); // TODO: This selection is arbitrary
 
@@ -389,7 +393,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                     let children_option = {
                         let mut entries: Vec<_> = vec![];
                         for facts in next_facts {
-                            let entry = self.trace_tree_recursive(facts);
+                            let entry = self.trace_tree_recursive(facts, program, program_analysis);
                             entries.push(Box::pin(entry).await);
                         }
                         entries.into_iter().collect::<Option<Vec<_>>>()
@@ -399,9 +403,9 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                         result.next = Some(TreeForTableResponseSuccessor {
                             rule: TraceRule::from_rule_and_head(
                                 rule_index,
-                                rule,
+                                &logical_rule,
                                 head_index,
-                                &rule.head()[head_index],
+                                &logical_rule.head()[head_index],
                             ),
                             children,
                         });
@@ -420,6 +424,8 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         &mut self,
         query: TreeForTableQuery,
     ) -> Result<TreeForTableResponse, Error> {
+        let (program, analysis) = self.program.prepare_tracing();
+
         let mut facts = Vec::new();
 
         for fact_query in query.queries {
@@ -462,7 +468,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             facts.push(fact);
         }
 
-        if let Some(mut result) = self.trace_tree_recursive(facts).await {
+        if let Some(mut result) = self.trace_tree_recursive(facts, &program, &analysis).await {
             self.trace_tree_add_negation(&mut result).await;
             Ok(result)
         } else {

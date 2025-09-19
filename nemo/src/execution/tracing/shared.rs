@@ -160,8 +160,6 @@ mod any_datavalue_serde {
     where
         D: Deserializer<'de>,
     {
-        println!("deserialize anydatavalue:");
-
         let string_vec = Vec::<String>::deserialize(deserializer)?;
         string_vec
             .into_iter()
