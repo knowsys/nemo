@@ -13,7 +13,6 @@ use crate::{
     execution::{
         ExecutionEngine,
         planning::plan_tracing::TracingStrategy,
-        selection_strategy::strategy::RuleSelectionStrategy,
         tracing::{
             error::TracingError,
             trace::{

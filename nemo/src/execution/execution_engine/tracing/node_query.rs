@@ -22,7 +22,6 @@ use crate::{
                 valid_tables_plan, variable_translation,
             },
         },
-        selection_strategy::strategy::RuleSelectionStrategy,
         tracing::{
             node_query::{
                 TableEntriesForTreeNodesQuery, TableEntriesForTreeNodesQueryInner,

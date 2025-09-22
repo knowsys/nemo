@@ -154,8 +154,8 @@ impl SaturationRuleTranslation<'_> {
 
         for i in 0..terms.len() {
             let (left, right) = terms.split_at_mut(i + 1);
-            if let BodyTerm::Variable(v) = &mut left[i] {
-                if right.iter().any(|other| other == &BodyTerm::Variable(*v)) {
+            if let BodyTerm::Variable(v) = &mut left[i]
+                && right.iter().any(|other| other == &BodyTerm::Variable(*v)) {
                     if equality.is_some() {
                         return Err("only supports a single equality");
                     }
@@ -165,7 +165,6 @@ impl SaturationRuleTranslation<'_> {
 
                     equality = Some((orig, *v));
                 }
-            }
         }
 
         Ok(SaturationAtom {

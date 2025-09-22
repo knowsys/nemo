@@ -63,11 +63,10 @@ impl SaturationSubstitution {
                 continue;
             };
 
-            if let Some(prev) = self.insert(*var, value.value()) {
-                if prev != value.value() {
+            if let Some(prev) = self.insert(*var, value.value())
+                && prev != value.value() {
                     return false;
                 }
-            }
         }
 
         true
@@ -95,21 +94,19 @@ impl SaturationAtom {
                     }
                 }
                 BodyTerm::Variable(idx) => {
-                    if let Some(prev) = res.insert(*idx, *value) {
-                        if prev != *value {
+                    if let Some(prev) = res.insert(*idx, *value)
+                        && prev != *value {
                             return None;
                         }
-                    }
                 }
                 BodyTerm::Ignore => {}
             }
         }
 
-        if let Some(equality) = self.equality {
-            if !res.satisfies(equality) {
+        if let Some(equality) = self.equality
+            && !res.satisfies(equality) {
                 return None;
             }
-        }
 
         Some(res)
     }
@@ -253,11 +250,10 @@ impl<'a> Iterator for RowIterator<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         while let Some((row, _)) = self.lower_cursor.next() {
-            if let Some((other_row, _)) = self.upper_cursor.peek_next() {
-                if other_row == row {
+            if let Some((other_row, _)) = self.upper_cursor.peek_next()
+                && other_row == row {
                     return None;
                 }
-            }
 
             match match_rows(&self.pattern, row) {
                 MatchResult::Matches => return Some(row),
@@ -316,11 +312,10 @@ impl Iterator for RowMatcher<'_> {
             let row = self.cursor.next()?;
             let mut subst = self.substitution.clone();
             if subst.update(&self.atom.terms, row) {
-                if let Some(equality) = &self.atom.equality {
-                    if !subst.satisfies(*equality) {
+                if let Some(equality) = &self.atom.equality
+                    && !subst.satisfies(*equality) {
                         continue;
                     }
-                }
 
                 return Some(subst);
             }
@@ -437,11 +432,10 @@ impl Iterator for JoinIter<'_> {
                 table,
                 current,
             } => loop {
-                if let Some(current) = current {
-                    if let Some(next) = current.next() {
+                if let Some(current) = current
+                    && let Some(next) = current.next() {
                         return Some(next);
                     }
-                }
 
                 let substitution = inner.next()?;
                 *current = Some(join(substitution, atom.clone(), table));
@@ -508,11 +502,10 @@ pub(crate) fn saturate(db: &mut DataBase, rules: &mut [SaturationRule]) {
 
                         let mut cursor = table.lower_bound_mut(Bound::Included(&row));
 
-                        if let Some((other_row, _)) = cursor.peek_next() {
-                            if other_row == &row {
+                        if let Some((other_row, _)) = cursor.peek_next()
+                            && other_row == &row {
                                 continue;
                             }
-                        }
 
                         let fact = fact_from_row(&row, atom.predicate.clone());
 

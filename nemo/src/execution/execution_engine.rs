@@ -21,14 +21,10 @@ use crate::{
         translation::ProgramChaseTranslation,
     },
     error::{Error, report::ProgramReport, warned::Warned},
-    execution::{
-        planning::plan_tracing::TracingStrategy,
-        saturation::{
+    execution::saturation::{
             execution::{DataBase, saturate},
             model::{SaturationRule, SaturationRuleTranslation},
         },
-        tracing::trace::TraceDerivation,
-    },
     io::{formats::Export, import_manager::ImportManager},
     rule_file::RuleFile,
     rule_model::{
@@ -401,13 +397,12 @@ impl ExecutionEngine {
 
         while let Some(index) = rule_strategy.next_rule(new_derivations) {
             let scc = rule_strategy.current_scc();
-            if let Some(last) = &last_scc {
-                if &scc == last {
+            if let Some(last) = &last_scc
+                && &scc == last {
                     log::debug!("skipping application of {index}");
                     new_derivations = Some(false);
                     continue;
                 }
-            }
 
             fill_saturation_rules(self, &scc, &mut saturation_rules);
 
