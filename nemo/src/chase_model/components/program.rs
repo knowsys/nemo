@@ -4,7 +4,10 @@ use std::collections::HashSet;
 
 use nemo_physical::datavalues::AnyDataValue;
 
-use crate::rule_model::components::{tag::Tag, term::primitive::Primitive};
+use crate::{
+    chase_model::analysis::program_analysis::ProgramAnalysis,
+    rule_model::components::{tag::Tag, term::primitive::Primitive},
+};
 
 use super::{
     atom::{ChaseAtom, ground_atom::GroundAtom},
@@ -104,5 +107,20 @@ impl ChaseProgram {
         let datavalues_facts = self.facts.iter().flat_map(|fact| fact.datavalues());
 
         datavalues_facts.chain(datavalues_rules)
+    }
+
+    /// Transform this program in a way that is
+    pub fn prepare_tracing(&self) -> (Self, ProgramAnalysis) {
+        let mut result_program = self.clone();
+
+        result_program.rules.clear();
+
+        for rule in self.rules() {
+            result_program.add_rule(rule.prepare_tracing());
+        }
+
+        let result_analysis = result_program.analyze();
+
+        (result_program, result_analysis)
     }
 }
