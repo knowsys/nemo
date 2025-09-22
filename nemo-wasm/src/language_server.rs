@@ -5,10 +5,10 @@ use futures::{Sink, Stream};
 use gloo_utils::format::JsValueSerdeExt;
 use js_sys::{Array, Promise};
 use nemo_language_server::{
-    create_language_server, Backend, ExitedError, LspService, Request, Response, Service,
+    Backend, ExitedError, LspService, Request, Response, Service, create_language_server,
 };
-use wasm_bindgen::prelude::wasm_bindgen;
 use wasm_bindgen::JsValue;
+use wasm_bindgen::prelude::wasm_bindgen;
 use wasm_bindgen_futures::future_to_promise;
 
 /// Creates a Nemo language server

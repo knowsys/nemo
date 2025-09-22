@@ -11,12 +11,12 @@ use crate::{
         processors::processor::{AggregateGroupProcessor, AggregateProcessor},
     },
     columnar::columnscan::ColumnScanT,
-    datatypes::{storage_type_name::StorageTypeBitSet, StorageTypeName, StorageValueT},
+    datatypes::{StorageTypeName, StorageValueT, storage_type_name::StorageTypeBitSet},
     management::database::Dict,
     tabular::triescan::{PartialTrieScan, TrieScan, TrieScanEnum},
 };
 
-use super::{prune::TrieScanPrune, OperationColumnMarker, OperationGenerator, OperationTable};
+use super::{OperationColumnMarker, OperationGenerator, OperationTable, prune::TrieScanPrune};
 
 /// Holds information on how to perform an aggregation, e.g. column markers and the type of aggregation.
 #[derive(Debug, Clone)]
@@ -202,14 +202,12 @@ impl<T: TrieScan> TrieScan for TrieScanAggregate<T> {
     fn advance_on_layer(&mut self, layer: usize) -> Option<usize> {
         let mut advancement_result = None;
 
-        if let Some(peeked_row_information) = &self.peeked_row_information {
-            if let Some(uppermost_modified_column_index) =
+        if let Some(peeked_row_information) = &self.peeked_row_information
+            && let Some(uppermost_modified_column_index) =
                 peeked_row_information.uppermost_modified_column_index
-            {
-                if uppermost_modified_column_index <= layer {
-                    advancement_result = Some(uppermost_modified_column_index);
-                }
-            }
+            && uppermost_modified_column_index <= layer
+        {
+            advancement_result = Some(uppermost_modified_column_index);
         }
         self.peeked_row_information = None;
 

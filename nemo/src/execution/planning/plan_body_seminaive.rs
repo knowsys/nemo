@@ -6,19 +6,23 @@ use crate::{
     chase_model::{
         analysis::{program_analysis::RuleAnalysis, variable_order::VariableOrder},
         components::{
-            atom::variable_atom::VariableAtom, filter::ChaseFilter, operation::ChaseOperation,
-            rule::ChaseRule,
+            atom::variable_atom::VariableAtom, filter::ChaseFilter, import::ChaseImportClause,
+            operation::ChaseOperation, rule::ChaseRule,
         },
     },
-    execution::{execution_engine::RuleInfo, rule_execution::VariableTranslation},
+    execution::{
+        execution_engine::RuleInfo, planning::operations::import::node_imports,
+        rule_execution::VariableTranslation,
+    },
+    io::ImportManager,
     table_manager::{SubtableExecutionPlan, TableManager},
 };
 
 use super::{
+    BodyStrategy,
     operations::{
         filter::node_filter, functions::node_functions, join::node_join, negation::node_negation,
     },
-    BodyStrategy,
 };
 
 /// Implementation of the semi-naive existential rule evaluation strategy.
@@ -30,25 +34,42 @@ pub(crate) struct SeminaiveStrategy {
 
     negative_atoms: Vec<VariableAtom>,
     negative_filters: Vec<Vec<ChaseFilter>>,
+
+    imports: Vec<ChaseImportClause>,
+    import_operations: Vec<ChaseOperation>,
+    import_filters: Vec<ChaseFilter>,
+    import_negative_atoms: Vec<VariableAtom>,
+    import_negative_filters: Vec<Vec<ChaseFilter>>,
 }
 
 impl SeminaiveStrategy {
     /// Create new [SeminaiveStrategy] object.
-    pub(crate) fn initialize(rule: &ChaseRule, _analysis: &RuleAnalysis) -> Self {
+    pub(crate) fn initialize(
+        rule: &ChaseRule,
+        _rule_index: usize,
+        _analysis: &RuleAnalysis,
+    ) -> Self {
         Self {
             positive_atoms: rule.positive_body().clone(),
             positive_filters: rule.positive_filters().clone(),
             negative_atoms: rule.negative_body().clone(),
             negative_filters: rule.negative_filters().clone(),
             positive_operations: rule.positive_operations().clone(),
+            imports: rule.imports().clone(),
+            import_operations: rule.imports_operations().clone(),
+            import_filters: rule.imports_filters().clone(),
+            import_negative_atoms: rule.imports_negative_body().clone(),
+            import_negative_filters: rule.imports_negative_filters().clone(),
         }
     }
 }
 
+#[async_trait::async_trait(?Send)]
 impl BodyStrategy for SeminaiveStrategy {
-    fn add_plan_body(
+    async fn add_plan_body(
         &self,
         table_manager: &TableManager,
+        import_manager: &ImportManager,
         current_plan: &mut SubtableExecutionPlan,
         variable_translation: &VariableTranslation,
         rule_info: &RuleInfo,
@@ -90,7 +111,21 @@ impl BodyStrategy for SeminaiveStrategy {
             &self.negative_filters,
         );
 
-        let node_result = node_negation;
+        let node_imports = node_imports(
+            current_plan,
+            table_manager,
+            import_manager,
+            variable_translation,
+            step_number,
+            node_negation,
+            &self.imports,
+            &self.import_operations,
+            &self.import_filters,
+            &self.import_negative_atoms,
+            &self.import_negative_filters,
+        );
+
+        let node_result = node_imports.await;
 
         current_plan.add_temporary_table(node_result.clone(), "Body");
         node_result

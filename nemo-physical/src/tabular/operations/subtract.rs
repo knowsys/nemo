@@ -10,7 +10,7 @@ use crate::{
         columnscan::{ColumnScanCell, ColumnScanEnum, ColumnScanT},
         operations::subtract::ColumnScanSubtract,
     },
-    datatypes::{storage_type_name::StorageTypeBitSet, Double, Float, StorageTypeName},
+    datatypes::{Double, Float, StorageTypeName, storage_type_name::StorageTypeBitSet},
     management::database::Dict,
     tabular::triescan::{PartialTrieScan, TrieScanEnum},
 };

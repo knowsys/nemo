@@ -9,19 +9,19 @@ use std::{
 
 use crate::rule_model::{
     components::{
-        component_iterator, component_iterator_mut, tag::Tag, ComponentBehavior, ComponentIdentity,
-        ComponentSource, IterableComponent, IterablePrimitives, IterableVariables,
-        ProgramComponent, ProgramComponentKind,
+        ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent,
+        IterablePrimitives, IterableVariables, ProgramComponent, ProgramComponentKind,
+        component_iterator, component_iterator_mut, tag::Tag,
     },
-    error::{validation_error::ValidationError, ValidationReport},
+    error::{ValidationReport, validation_error::ValidationError},
     origin::Origin,
     pipeline::id::ProgramComponentId,
 };
 
 use super::{
-    primitive::{variable::Variable, Primitive},
-    value_type::ValueType,
     Term,
+    primitive::{Primitive, variable::Variable},
+    value_type::ValueType,
 };
 
 /// Function term
@@ -327,8 +327,8 @@ impl IterablePrimitives for FunctionTerm {
 mod test {
     use crate::rule_model::{
         components::{
-            term::{function::FunctionTerm, primitive::variable::Variable, Term},
             IterableVariables,
+            term::{Term, function::FunctionTerm, primitive::variable::Variable},
         },
         translation::TranslationComponent,
     };

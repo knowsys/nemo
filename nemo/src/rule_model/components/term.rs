@@ -25,9 +25,9 @@ use map::Map;
 use nemo_physical::datavalues::AnyDataValue;
 use operation::Operation;
 use primitive::{
-    ground::GroundTerm,
-    variable::{existential::ExistentialVariable, universal::UniversalVariable, Variable},
     Primitive,
+    ground::GroundTerm,
+    variable::{Variable, existential::ExistentialVariable, universal::UniversalVariable},
 };
 use tuple::Tuple;
 use value_type::ValueType;
@@ -37,9 +37,8 @@ use crate::rule_model::{
 };
 
 use super::{
-    import_export::io_type::IOType, ComponentBehavior, ComponentIdentity, ComponentSource,
-    IterableComponent, IterablePrimitives, IterableVariables, ProgramComponent,
-    ProgramComponentKind,
+    ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent, IterablePrimitives,
+    IterableVariables, ProgramComponent, ProgramComponentKind, import_export::io_type::IOType,
 };
 
 /// Term
@@ -132,6 +131,11 @@ impl Term {
     /// Return whether this term is a tuple.
     pub fn is_tuple(&self) -> bool {
         matches!(self, Term::Tuple(_))
+    }
+
+    /// Return whetehr this term is a variable.
+    pub fn is_variable(&self) -> bool {
+        matches!(self, Term::Primitive(Primitive::Variable(_)))
     }
 
     /// Return an iterator over the arguments to this term.

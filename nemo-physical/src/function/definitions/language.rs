@@ -1,5 +1,7 @@
 //! This module defines functions relating to language tagged strings
 
+use crate::datavalues::DataValue;
+use crate::function::definitions::BinaryFunction;
 use crate::function::definitions::string::LangTaggedString;
 use crate::{datatypes::StorageTypeName, datavalues::AnyDataValue};
 
@@ -29,11 +31,40 @@ impl UnaryFunction for LanguageTag {
     }
 }
 
+/// Language String
+///
+/// Construct a language tagged string from two strings
+/// the first being the tagged string and the second the language tag.
+///
+/// Returns `None` if the input parameters are not strings.
+#[derive(Debug, Copy, Clone)]
+pub struct LanguageString;
+impl BinaryFunction for LanguageString {
+    fn evaluate(
+        &self,
+        parameter_first: AnyDataValue,
+        parameter_second: AnyDataValue,
+    ) -> Option<AnyDataValue> {
+        let string = parameter_first.to_plain_string()?;
+        let tag = parameter_second.to_plain_string()?;
+
+        Some(AnyDataValue::new_language_tagged_string(string, tag))
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::KnownOutput(
+            StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Id64.bitset()),
+        )
+    }
+}
+
 #[cfg(test)]
 mod test {
     use crate::{
         datavalues::AnyDataValue,
-        function::definitions::{language::LanguageTag, UnaryFunction},
+        function::definitions::{UnaryFunction, language::LanguageTag},
     };
 
     #[test]

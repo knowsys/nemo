@@ -7,8 +7,10 @@ use std::fmt::Debug;
 use crate::{
     management::execution_plan::{ColumnOrder, ExecutionResult},
     tabular::operations::{
-        projectreorder::{GeneratorProjectReorder, ProjectReordering},
         OperationGeneratorEnum,
+        incremental_import::GeneratorIncrementalImport,
+        projectreorder::{GeneratorProjectReorder, ProjectReordering},
+        single::GeneratorSingle,
     },
 };
 
@@ -42,6 +44,14 @@ pub(crate) enum ExecutionTreeNode {
     Operation(ExecutionTreeOperation),
     ProjectReorder {
         generator: GeneratorProjectReorder,
+        subnode: ExecutionTreeLeaf,
+    },
+    Single {
+        generator: GeneratorSingle,
+        subnode: ExecutionTreeOperation,
+    },
+    IncrementalImport {
+        generator: GeneratorIncrementalImport,
         subnode: ExecutionTreeLeaf,
     },
 }
@@ -118,6 +128,22 @@ impl ExecutionTree {
                 Self::ascii_tree_recursive(operation_tree)
             }
             ExecutionTreeNode::ProjectReorder { generator, subnode } => {
+                let subnode_tree = match subnode {
+                    ExecutionTreeLeaf::LoadTable(_) => {
+                        ascii_tree::Tree::Leaf(vec![format!("Permanent Table")])
+                    }
+                    ExecutionTreeLeaf::FetchComputedTable(_) => {
+                        ascii_tree::Tree::Leaf(vec![format!("New Table")])
+                    }
+                };
+
+                ascii_tree::Tree::Node(format!("{generator:?}"), vec![subnode_tree])
+            }
+            ExecutionTreeNode::Single { generator, subnode } => {
+                let subnode_tree = Self::ascii_tree_recursive(subnode);
+                ascii_tree::Tree::Node(format!("{generator:?}"), vec![subnode_tree])
+            }
+            ExecutionTreeNode::IncrementalImport { generator, subnode } => {
                 let subnode_tree = match subnode {
                     ExecutionTreeLeaf::LoadTable(_) => {
                         ascii_tree::Tree::Leaf(vec![format!("Permanent Table")])

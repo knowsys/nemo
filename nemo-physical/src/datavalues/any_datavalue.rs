@@ -11,10 +11,10 @@ use crate::{
 };
 
 use super::{
-    boolean_datavalue::BooleanDataValue, errors::InternalDataValueCreationError,
-    float_datavalues::FloatDataValue, syntax::XSD_PREFIX, DataValue, DataValueCreationError,
-    DoubleDataValue, IriDataValue, LangStringDataValue, LongDataValue, MapDataValue, NullDataValue,
-    OtherDataValue, StringDataValue, TupleDataValue, UnsignedLongDataValue, ValueDomain,
+    DataValue, DataValueCreationError, DoubleDataValue, IriDataValue, LangStringDataValue,
+    LongDataValue, MapDataValue, NullDataValue, OtherDataValue, StringDataValue, TupleDataValue,
+    UnsignedLongDataValue, ValueDomain, boolean_datavalue::BooleanDataValue,
+    errors::InternalDataValueCreationError, float_datavalues::FloatDataValue, syntax::XSD_PREFIX,
 };
 
 /// Supported kinds of arbitrary size numbers.
@@ -869,8 +869,8 @@ mod test {
 
     use super::{AnyDataValue, XSD_PREFIX};
     use crate::datavalues::{
-        any_datavalue::AnyDataValueEnum, DataValue, DataValueCreationError, UnsignedLongDataValue,
-        ValueDomain,
+        DataValue, DataValueCreationError, UnsignedLongDataValue, ValueDomain,
+        any_datavalue::AnyDataValueEnum,
     };
     use std::{
         collections::hash_map::DefaultHasher,

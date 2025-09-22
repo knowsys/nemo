@@ -3,25 +3,25 @@
 use std::fmt::Display;
 
 use nom::{
+    Parser,
     branch::alt,
     bytes::complete::{take_until, take_while},
     character::complete::line_ending,
     combinator::map,
     sequence::{preceded, terminated},
-    Parser,
 };
 use nom_supreme::error::{GenericErrorTree, StackContext};
 
 use crate::error::rich::RichError;
 
 use super::{
+    ParserInput, ParserResult,
     ast::{
         statement::{Statement, StatementKind},
         token::Token,
     },
     context::ParserContext,
     span::{CharacterPosition, Span},
-    ParserInput, ParserResult,
 };
 
 /// Error tree used by nom parser
@@ -294,7 +294,7 @@ fn _get_deepest_error<'a>(e: &'a ParserErrorTree<'a>) -> Vec<ParserError> {
 
 #[cfg(test)]
 mod test {
-    use crate::parser::{error::skip_statement, input::ParserInput, ParserState};
+    use crate::parser::{ParserState, error::skip_statement, input::ParserInput};
 
     #[test]
     fn skip_to_statement_end() {

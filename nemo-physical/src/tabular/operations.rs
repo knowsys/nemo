@@ -3,10 +3,12 @@
 pub mod aggregate;
 pub(crate) mod filter;
 pub(crate) mod function;
+pub(crate) mod incremental_import;
 pub(crate) mod join;
 pub(crate) mod null;
 pub(crate) mod projectreorder;
 pub(crate) mod prune;
+pub(crate) mod single;
 pub(crate) mod subtract;
 pub(crate) mod trim;
 pub(crate) mod union;
@@ -17,7 +19,7 @@ pub use function::FunctionAssignment;
 
 use std::{
     cell::RefCell,
-    collections::{hash_map::Entry, HashMap},
+    collections::{HashMap, hash_map::Entry},
     fmt::Debug,
     hash::Hash,
     ops::Deref,
@@ -194,13 +196,26 @@ impl Deref for OperationTable {
 /// mainly by providing a translation between
 /// user defined "markers" (supplied as a generic parameter to this object)
 /// and [OperationColumnMarker]s.
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct OperationTableGenerator<ExternalMarker>
 where
     ExternalMarker: Clone + PartialEq + Eq + Hash,
 {
     /// Associates an external marker with an [OperationColumnMarker]
     map: HashMap<ExternalMarker, OperationColumnMarker>,
+}
+
+impl<ExternalMarker> Debug for OperationTableGenerator<ExternalMarker>
+where
+    ExternalMarker: std::fmt::Display + Clone + PartialEq + Eq + Hash,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (external, marker) in self.map.iter() {
+            f.write_fmt(format_args!("{external} -> {marker:?}\n"))?;
+        }
+
+        Ok(())
+    }
 }
 
 impl<ExternalMarker> OperationTableGenerator<ExternalMarker>
@@ -259,7 +274,7 @@ where
         Some(
             self.map
                 .iter()
-                .find(|(_, &operation)| operation == *marker)?
+                .find(|(_, operation)| **operation == *marker)?
                 .0,
         )
     }

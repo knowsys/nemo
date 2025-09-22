@@ -1,8 +1,8 @@
 //! This module defines [ChaseAggregate].
 
 use crate::rule_model::components::{
-    term::{aggregate::AggregateKind, primitive::variable::Variable},
     IterableVariables,
+    term::{aggregate::AggregateKind, primitive::variable::Variable},
 };
 
 /// Specifies how the values for a placeholder aggregate variable will get computed.

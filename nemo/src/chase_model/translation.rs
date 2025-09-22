@@ -11,7 +11,7 @@ use std::collections::HashMap;
 
 use crate::rule_model::{
     components::{tag::Tag, term::primitive::variable::Variable},
-    programs::{program::Program, ProgramRead},
+    programs::{ProgramRead, program::Program},
 };
 
 use super::components::program::ChaseProgram;

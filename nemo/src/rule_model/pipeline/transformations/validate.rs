@@ -2,7 +2,7 @@
 
 use crate::rule_model::{
     error::ValidationReport,
-    programs::{handle::ProgramHandle, ProgramRead},
+    programs::{ProgramRead, handle::ProgramHandle},
 };
 
 use super::ProgramTransformation;

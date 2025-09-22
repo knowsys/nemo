@@ -6,17 +6,17 @@ use delegate::delegate;
 
 use crate::rule_model::{
     components::{
+        ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent,
+        IterablePrimitives, IterableVariables, ProgramComponent, ProgramComponentKind,
         fact::Fact,
         import_export::{ExportDirective, ImportDirective},
         output::Output,
         parameter::ParameterDeclaration,
         rule::Rule,
         term::{
-            primitive::{variable::Variable, Primitive},
             Term,
+            primitive::{Primitive, variable::Variable},
         },
-        ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent,
-        IterablePrimitives, IterableVariables, ProgramComponent, ProgramComponentKind,
     },
     error::ValidationReport,
     origin::Origin,

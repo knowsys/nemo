@@ -5,14 +5,14 @@ use enum_assoc::Assoc;
 use nom::branch::alt;
 
 use crate::parser::{
+    ParserResult,
     ast::{
-        token::{Token, TokenKind},
         ProgramAST,
+        token::{Token, TokenKind},
     },
-    context::{context, ParserContext},
+    context::{ParserContext, context},
     input::ParserInput,
     span::Span,
-    ParserResult,
 };
 
 /// Boolean values
@@ -95,9 +95,9 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
-        ast::{expression::basic::boolean::Boolean, ProgramAST},
-        input::ParserInput,
         ParserState,
+        ast::{ProgramAST, expression::basic::boolean::Boolean},
+        input::ParserInput,
     };
 
     use super::BooleanValue;

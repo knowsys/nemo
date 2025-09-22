@@ -53,21 +53,27 @@ impl HttpResourceProvider {
                     .with_resource(resource.clone())
             })?,
         );
-        headers.insert(
-            reqwest::header::USER_AGENT,
-            format!(
-                "{}/{} ({})",
-                option_env!("CARGO_PKG_NAME").unwrap_or("Nemo"),
-                option_env!("CARGO_PKG_VERSION").unwrap_or("unknown-version"),
-                option_env!("CARGO_PKG_HOMEPAGE")
-                    .unwrap_or("https://iccl.inf.tu-dresden.de/web/Nemo/en")
-            )
-            .parse()
-            .map_err(|err: InvalidHeaderValue| {
-                ReadingError::new(ReadingErrorKind::ExternalError(err.into()))
-                    .with_resource(resource.clone())
-            })?,
-        );
+
+        // It looks like CORS OPTIONS request sometimes fail (e.g. for GitHub) when
+        // the user agent is not the browser's. Not setting the user agent here
+        // will default to the browser's user agent, which is what we want on the web.
+        if cfg!(not(target_family = "wasm")) {
+            headers.insert(
+                reqwest::header::USER_AGENT,
+                format!(
+                    "{}/{} ({})",
+                    option_env!("CARGO_PKG_NAME").unwrap_or("Nemo"),
+                    option_env!("CARGO_PKG_VERSION").unwrap_or("unknown-version"),
+                    option_env!("CARGO_PKG_HOMEPAGE")
+                        .unwrap_or("https://iccl.inf.tu-dresden.de/web/Nemo/en")
+                )
+                .parse()
+                .map_err(|err: InvalidHeaderValue| {
+                    ReadingError::new(ReadingErrorKind::ExternalError(err.into()))
+                        .with_resource(resource.clone())
+                })?,
+            );
+        }
 
         let new_headers = resource
             .headers()
@@ -121,7 +127,9 @@ impl HttpResourceProvider {
             .unwrap_or_default();
         // Use 'contains()', because response_type contains content type and encoding information
         if !response_type.contains(media_type) {
-            warn!("HTTP response to the request: \n {full_url} \n is of content type {response_type:?}, expected {media_type:?}. Make sure you specified the correct IRI and parameters.");
+            warn!(
+                "HTTP response to the request: \n {full_url} \n is of content type {response_type:?}, expected {media_type:?}. Make sure you specified the correct IRI and parameters."
+            );
         }
 
         // we're expecting potentially compressed data, don't try to
@@ -129,7 +137,9 @@ impl HttpResourceProvider {
         let content = response.bytes().await.map_err(err_mapping)?;
 
         if content.is_empty() {
-            warn!("HTTP response to the request: \n {full_url} \n contains no content. Make sure you specified the correct IRI and parameters.");
+            warn!(
+                "HTTP response to the request: \n {full_url} \n contains no content. Make sure you specified the correct IRI and parameters."
+            );
         }
 
         Ok(HttpResource {
@@ -139,8 +149,9 @@ impl HttpResourceProvider {
     }
 }
 
+#[async_trait::async_trait(?Send)]
 impl ResourceProvider for HttpResourceProvider {
-    fn open_resource(
+    async fn open_resource(
         &self,
         resource: &Resource,
         media_type: &str,
@@ -150,12 +161,7 @@ impl ResourceProvider for HttpResourceProvider {
             return Ok(None);
         }
 
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .map_err(|e| ReadingError::from(e).with_resource(resource.clone()))?;
-
-        let response = rt.block_on(Self::fetch(resource, media_type))?;
+        let response = Self::fetch(resource, media_type).await?;
 
         Ok(Some(Box::new(response)))
     }

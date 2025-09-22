@@ -5,10 +5,10 @@ use std::vec::IntoIter;
 use nom::{branch::alt, combinator::map, multi::separated_list1, sequence::tuple};
 
 use crate::parser::{
-    ast::{comment::wsoc::WSoC, expression::Expression, token::Token, ProgramAST},
+    ParserResult,
+    ast::{ProgramAST, comment::wsoc::WSoC, expression::Expression, token::Token},
     input::ParserInput,
     span::Span,
-    ParserResult,
 };
 
 /// Sequence of comma-delimited expressions
@@ -98,7 +98,7 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
-        ast::sequence::one::ExpressionSequenceOne, input::ParserInput, ParserState,
+        ParserState, ast::sequence::one::ExpressionSequenceOne, input::ParserInput,
     };
 
     #[test]

@@ -2,22 +2,22 @@
 
 use crate::{
     parser::{
-        ast::{self, tag::structure::StructureTag, ProgramAST},
+        ast::{self, ProgramAST, tag::structure::StructureTag},
         context::ParserContext,
     },
     rule_model::{
         components::{
             import_export::{
-                attribute::ImportExportAttribute, specification::ImportExportSpec, ExportDirective,
-                ImportDirective,
+                ExportDirective, ImportDirective, attribute::ImportExportAttribute,
+                specification::ImportExportSpec,
             },
             tag::Tag,
-            term::{operation::Operation, Term},
+            term::{Term, operation::Operation},
         },
         error::translation_error::TranslationError,
         origin::Origin,
         translation::{
-            complex::infix::InfixOperation, ASTProgramTranslation, TranslationComponent,
+            ASTProgramTranslation, TranslationComponent, complex::infix::InfixOperation,
         },
     },
 };

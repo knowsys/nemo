@@ -6,7 +6,7 @@ use nemo_physical::{
 };
 
 use crate::{
-    chase_model::components::atom::{variable_atom::VariableAtom, ChaseAtom},
+    chase_model::components::atom::{ChaseAtom, variable_atom::VariableAtom},
     execution::rule_execution::VariableTranslation,
     rule_model::components::IterableVariables,
     table_manager::TableManager,

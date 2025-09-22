@@ -4,7 +4,7 @@
 
 use nemo_physical::{
     management::execution_plan::{ExecutionNodeRef, ExecutionPlan},
-    tabular::operations::{aggregate::AggregateAssignment, OperationColumnMarker, OperationTable},
+    tabular::operations::{OperationColumnMarker, OperationTable, aggregate::AggregateAssignment},
 };
 
 use crate::{

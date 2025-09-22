@@ -9,14 +9,14 @@ use crate::{
         rule::ChaseRule,
     },
     rule_model::components::{
+        IterableVariables,
         atom::Atom,
         literal::Literal,
         term::{
-            aggregate::Aggregate,
-            primitive::{variable::Variable, Primitive},
             Term,
+            aggregate::Aggregate,
+            primitive::{Primitive, variable::Variable},
         },
-        IterableVariables,
     },
 };
 
@@ -40,38 +40,66 @@ impl ProgramChaseTranslation {
         let variable_assignments = Self::variables_assignments(&rule);
         Self::apply_variable_assignment(&mut rule, &variable_assignments);
 
-        // Handle positive and negative atoms
-        for literal in rule.body() {
-            match literal {
-                Literal::Positive(atom) => {
-                    let (variable_atom, filters) = self.build_body_atom(atom);
+        // Handle positive atoms
+        for atom in rule.body_positive() {
+            let (variable_atom, filters) = self.build_body_atom(atom);
 
-                    result.add_positive_atom(variable_atom);
-                    for filter in filters {
-                        result.add_positive_filter(filter);
-                    }
-                    self.predicate_arity.insert(atom.predicate(), atom.len());
-                }
-                Literal::Negative(atom) => {
-                    let (variable_atom, filters) = self.build_body_atom(atom);
-
-                    result.add_negative_atom(variable_atom);
-                    for filter in filters {
-                        result.add_negative_filter_last(filter);
-                    }
-                    self.predicate_arity.insert(atom.predicate(), atom.len());
-                }
-                Literal::Operation(_) => {
-                    // Will be handled below
-                }
+            result.add_positive_atom(variable_atom);
+            for filter in filters {
+                result.add_positive_filter(filter);
             }
+            self.predicate_arity.insert(atom.predicate(), atom.len());
         }
 
         // Handle operations
-        self.handle_operations(&mut result, &rule);
+        let derived_variables = self.handle_operations(&mut result, &rule);
+        let import_variables = result
+            .imports()
+            .iter()
+            .flat_map(|import| import.bindings().iter())
+            .cloned()
+            .collect::<HashSet<_>>();
+
+        // Handle negative atoms
+        for atom in rule.body_negative() {
+            let (variable_atom, filters) = self.build_body_atom(atom);
+
+            if variable_atom.variables().any(|variable| {
+                !derived_variables.contains(variable) && import_variables.contains(variable)
+            }) {
+                result.add_import_negative_atom(variable_atom);
+                for filter in filters {
+                    result.add_import_negative_filter_last(filter);
+                }
+            } else {
+                result.add_negative_atom(variable_atom);
+                for filter in filters {
+                    result.add_negative_filter_last(filter);
+                }
+            }
+
+            self.predicate_arity.insert(atom.predicate(), atom.len());
+        }
 
         // Handle head
-        self.handle_head(&mut result, rule.head());
+        self.handle_head(&mut result, rule.head(), &derived_variables);
+
+        // Handle imports
+        for import in rule.imports() {
+            self.predicate_arity.insert(
+                import.import_directive().predicate().clone(),
+                import.output_variables().len(),
+            );
+
+            let import_builder = import
+                .import_directive()
+                .builder()
+                .expect("invalid import directive");
+
+            let clause = self.build_import_clause(import, &import_builder);
+
+            result.add_import_clause(clause);
+        }
 
         result
     }
@@ -83,18 +111,17 @@ impl ProgramChaseTranslation {
         let mut assignment = HashMap::<Variable, Variable>::new();
 
         for literal in rule.body() {
-            if let Literal::Operation(operation) = literal {
-                if let Some((left, Term::Primitive(Primitive::Variable(right)))) =
+            if let Literal::Operation(operation) = literal
+                && let Some((left, Term::Primitive(Primitive::Variable(right)))) =
                     operation.variable_assignment()
-                {
-                    // Operation has the form ?left = ?right
-                    if let Some(assigned) = assignment.get(left) {
-                        assignment.insert(right.clone(), assigned.clone());
-                    } else if let Some(assigned) = assignment.get(right) {
-                        assignment.insert(left.clone(), assigned.clone());
-                    } else {
-                        assignment.insert(left.clone(), right.clone());
-                    }
+            {
+                // Operation has the form ?left = ?right
+                if let Some(assigned) = assignment.get(left) {
+                    assignment.insert(right.clone(), assigned.clone());
+                } else if let Some(assigned) = assignment.get(right) {
+                    assignment.insert(left.clone(), assigned.clone());
+                } else {
+                    assignment.insert(left.clone(), right.clone());
                 }
             }
         }
@@ -109,10 +136,10 @@ impl ProgramChaseTranslation {
         assignment: &HashMap<Variable, Variable>,
     ) {
         for variable in rule.variables_mut() {
-            if let Some(new_variable) = assignment.get(variable) {
-                if let Some(name) = new_variable.name() {
-                    variable.rename(name.to_owned());
-                }
+            if let Some(new_variable) = assignment.get(variable)
+                && let Some(name) = new_variable.name()
+            {
+                variable.rename(name.to_owned());
             }
         }
     }
@@ -182,7 +209,7 @@ impl ProgramChaseTranslation {
         &mut self,
         result: &mut ChaseRule,
         rule: &crate::rule_model::components::rule::Rule,
-    ) {
+    ) -> HashSet<Variable> {
         let mut derived_variables = rule.positive_variables();
         let mut handled_literals = HashSet::new();
 
@@ -200,23 +227,21 @@ impl ProgramChaseTranslation {
                     continue;
                 }
 
-                if let Literal::Operation(operation) = literal {
-                    if let Some((variable, term)) = operation.variable_assignment() {
-                        if variable.is_universal()
-                            && variable.name().is_some()
-                            && term
-                                .variables()
-                                .all(|variable| derived_variables.contains(variable))
-                            && !derived_variables.contains(variable)
-                        {
-                            derived_variables.insert(variable);
+                if let Literal::Operation(operation) = literal
+                    && let Some((variable, term)) = operation.variable_assignment()
+                    && variable.is_universal()
+                    && variable.name().is_some()
+                    && term
+                        .variables()
+                        .all(|variable| derived_variables.contains(variable))
+                    && !derived_variables.contains(variable)
+                {
+                    derived_variables.insert(variable);
 
-                            let new_operation = Self::build_operation(variable, term);
-                            result.add_positive_operation(new_operation);
+                    let new_operation = Self::build_operation(variable, term);
+                    result.add_positive_operation(new_operation);
 
-                            handled_literals.insert(literal_index);
-                        }
-                    }
+                    handled_literals.insert(literal_index);
                 }
             }
 
@@ -232,17 +257,43 @@ impl ProgramChaseTranslation {
             }
 
             if let Literal::Operation(operation) = literal {
+                if let Some((variable, term)) = operation.variable_assignment()
+                    && variable.is_universal()
+                    && variable.name().is_some()
+                    && !derived_variables.contains(variable)
+                {
+                    result.add_import_operation(Self::build_operation(variable, term));
+                    continue;
+                }
+
                 let new_operation = Self::build_operation_term(operation);
                 let new_filter = ChaseFilter::new(new_operation);
 
-                result.add_positive_filter(new_filter);
+                if new_filter
+                    .variables()
+                    .all(|variable| derived_variables.contains(variable))
+                {
+                    result.add_positive_filter(new_filter);
+                } else {
+                    result.add_import_filter(new_filter);
+                }
             }
         }
+
+        derived_variables
+            .into_iter()
+            .cloned()
+            .collect::<HashSet<_>>()
     }
 
     /// Translates each head atom into the [PrimitiveAtom],
     /// while taking care of operations and aggregates.
-    fn handle_head(&mut self, result: &mut ChaseRule, head: &[Atom]) {
+    fn handle_head(
+        &mut self,
+        result: &mut ChaseRule,
+        head: &[Atom],
+        derived_variales: &HashSet<Variable>,
+    ) {
         for (head_index, atom) in head.iter().enumerate() {
             let predicate = atom.predicate().clone();
             let mut terms = Vec::new();
@@ -276,8 +327,14 @@ impl ProgramChaseTranslation {
                             aggregate =
                                 Some((operation_aggregate, argument_index, operation_variables));
                             result.add_aggregation_operation(new_operation);
-                        } else {
+                        } else if new_operation
+                            .operation()
+                            .variables()
+                            .all(|variable| derived_variales.contains(variable))
+                        {
                             result.add_positive_operation(new_operation)
+                        } else {
+                            result.add_import_operation(new_operation);
                         }
 
                         terms.push(Primitive::Variable(new_variable));

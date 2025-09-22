@@ -9,18 +9,18 @@ use nom::{
 };
 
 use crate::parser::{
+    ParserResult,
     ast::ast_to_ascii_tree,
-    context::{context, ParserContext},
+    context::{ParserContext, context},
     error::{recover, report_error},
     input::ParserInput,
     span::Span,
-    ParserResult,
 };
 
 use super::{
+    ProgramAST,
     comment::{toplevel::TopLevelComment, wsoc::WSoC},
     statement::Statement,
-    ProgramAST,
 };
 
 /// AST representation of a nemo program
@@ -122,7 +122,7 @@ impl std::fmt::Display for Program<'_> {
 mod test {
     use nom::combinator::all_consuming;
 
-    use crate::parser::{ast::ProgramAST, input::ParserInput, ParserState, Program};
+    use crate::parser::{ParserState, Program, ast::ProgramAST, input::ParserInput};
 
     #[test]
     #[cfg_attr(miri, ignore)]

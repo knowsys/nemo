@@ -4,9 +4,9 @@ use std::fmt::Write;
 
 use crate::rule_model::{
     components::{
-        component_iterator, component_iterator_mut, rule::Rule, statement::Statement,
         ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent, ProgramComponent,
-        ProgramComponentKind,
+        ProgramComponentKind, component_iterator, component_iterator_mut, rule::Rule,
+        statement::Statement,
     },
     error::ValidationReport,
     origin::Origin,

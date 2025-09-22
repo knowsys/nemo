@@ -3,11 +3,11 @@
 use nom::{branch::alt, sequence::preceded};
 
 use crate::parser::{
-    ast::{token::Token, ProgramAST},
-    context::{context, ParserContext},
+    ParserResult,
+    ast::{ProgramAST, token::Token},
+    context::{ParserContext, context},
     input::ParserInput,
     span::Span,
-    ParserResult,
 };
 
 /// AST node representing a blank node
@@ -76,9 +76,9 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
-        ast::{expression::basic::blank::Blank, ProgramAST},
-        input::ParserInput,
         ParserState,
+        ast::{ProgramAST, expression::basic::blank::Blank},
+        input::ParserInput,
     };
 
     #[test]

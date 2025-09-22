@@ -1,10 +1,7 @@
 //! Functionality which handles the execution of a program
 
 use core::slice;
-use std::{
-    collections::{hash_map::Entry, HashMap},
-    sync::Arc,
-};
+use std::{collections::HashMap, sync::Arc};
 
 use nemo_physical::{
     datavalues::AnyDataValue,
@@ -20,18 +17,14 @@ use nemo_physical::{
 use crate::{
     chase_model::{
         analysis::program_analysis::ProgramAnalysis,
-        components::{
-            atom::{ground_atom::GroundAtom, ChaseAtom},
-            export::ChaseExport,
-            program::ChaseProgram,
-        },
+        components::{atom::ChaseAtom, export::ChaseExport, program::ChaseProgram},
         translation::ProgramChaseTranslation,
     },
-    error::{report::ProgramReport, warned::Warned, Error},
+    error::{Error, report::ProgramReport, warned::Warned},
     execution::{
         planning::plan_tracing::TracingStrategy,
         saturation::{
-            execution::{saturate, DataBase},
+            execution::{DataBase, saturate},
             model::{SaturationRule, SaturationRuleTranslation},
         },
         tracing::trace::TraceDerivation,
@@ -39,27 +32,19 @@ use crate::{
     io::{formats::Export, import_manager::ImportManager},
     rule_file::RuleFile,
     rule_model::{
-        components::{
-            fact::Fact,
-            tag::Tag,
-            term::primitive::{ground::GroundTerm, variable::Variable, Primitive},
-        },
+        components::tag::Tag,
         pipeline::transformations::default::TransformationDefault,
         programs::{handle::ProgramHandle, program::Program},
-        substitution::Substitution,
     },
-    table_manager::{MemoryUsage, SubtableExecutionPlan, TableManager},
+    table_manager::{MemoryUsage, TableManager},
 };
 
 use super::{
-    execution_parameters::ExecutionParameters,
-    rule_execution::RuleExecution,
+    execution_parameters::ExecutionParameters, rule_execution::RuleExecution,
     selection_strategy::strategy::MetaStrategy,
-    tracing::{
-        error::TracingError,
-        trace::{ExecutionTrace, TraceFactHandle, TraceRuleApplication, TraceStatus},
-    },
 };
+
+pub mod tracing;
 
 // Number of tables that are periodically combined into one.
 const MAX_FRAGMENTATION: usize = 8;
@@ -93,6 +78,8 @@ pub struct ExecutionEngine {
 
     /// Management of tables that represent predicates
     table_manager: TableManager,
+    /// Managermet of imports
+    import_manager: ImportManager,
 
     /// Stores for each predicate the number of subtables
     predicate_fragmentation: HashMap<Tag, usize>,
@@ -110,7 +97,7 @@ pub struct ExecutionEngine {
 impl ExecutionEngine {
     /// Initialize a [ExecutionEngine] by parsing and translating
     /// the contents of the given file.
-    pub fn from_file(
+    pub async fn from_file(
         file: RuleFile,
         parameters: ExecutionParameters,
     ) -> Result<Warned<Self, ProgramReport>, Error> {
@@ -123,20 +110,23 @@ impl ExecutionEngine {
             program.transform(TransformationDefault::new(&parameters)),
         )?;
 
-        let engine = Self::initialize(program.materialize(), parameters.import_manager)?;
+        let engine = Self::initialize(program.materialize(), parameters.import_manager).await?;
 
         report.warned(engine)
     }
 
     /// Initialize [ExecutionEngine].
-    pub fn initialize(program: Program, import_manager: ImportManager) -> Result<Self, Error> {
+    pub async fn initialize(
+        program: Program,
+        import_manager: ImportManager,
+    ) -> Result<Self, Error> {
         let chase_program = ProgramChaseTranslation::new().translate(&program);
         let analysis = chase_program.analyze();
 
         let mut table_manager = TableManager::new();
         Self::register_all_predicates(&mut table_manager, &analysis);
         Self::add_all_constants(&mut table_manager, &chase_program);
-        Self::add_imports(&mut table_manager, &import_manager, &chase_program)?;
+        Self::add_imports(&mut table_manager, &import_manager, &chase_program).await?;
 
         let mut rule_infos = Vec::<RuleInfo>::new();
         chase_program
@@ -149,6 +139,7 @@ impl ExecutionEngine {
             program: chase_program,
             analysis,
             table_manager,
+            import_manager,
             predicate_fragmentation: HashMap::new(),
             predicate_last_union: HashMap::new(),
             rule_infos,
@@ -173,7 +164,7 @@ impl ExecutionEngine {
 
     /// Add edb tables to the [TableManager]
     /// based on the import declaration of the given progam.
-    fn add_imports(
+    async fn add_imports(
         table_manager: &mut TableManager,
         import_manager: &ImportManager,
         program: &ChaseProgram,
@@ -182,7 +173,9 @@ impl ExecutionEngine {
 
         // Add all the import specifications
         for import in program.imports() {
-            let table_source = import_manager.table_provider_from_handler(import.handler())?;
+            let table_source = import_manager
+                .table_provider_from_handler(import.handler())
+                .await?;
 
             predicate_to_sources
                 .entry(import.predicate().clone())
@@ -209,13 +202,17 @@ impl ExecutionEngine {
 
         // Add all the sources to the table manager
         for (predicate, sources) in predicate_to_sources {
-            table_manager.add_edb(predicate, sources);
+            table_manager.add_edb(predicate.clone(), sources);
         }
 
         Ok(())
     }
 
-    fn step(&mut self, rule_index: usize, execution: &RuleExecution) -> Result<Vec<Tag>, Error> {
+    async fn step(
+        &mut self,
+        rule_index: usize,
+        execution: &RuleExecution,
+    ) -> Result<Vec<Tag>, Error> {
         TimedCode::instance().sub("Reasoning/Rules").start();
         let timing_string = format!("Reasoning/Rules/Rule {rule_index}");
 
@@ -226,8 +223,14 @@ impl ExecutionEngine {
 
         let current_info = &mut self.rule_infos[rule_index];
 
-        let updated_predicates =
-            execution.execute(&mut self.table_manager, current_info, self.current_step)?;
+        let updated_predicates = execution
+            .execute(
+                &mut self.table_manager,
+                &self.import_manager,
+                current_info,
+                self.current_step,
+            )
+            .await?;
 
         current_info.step_last_applied = self.current_step;
 
@@ -239,7 +242,7 @@ impl ExecutionEngine {
         Ok(updated_predicates)
     }
 
-    fn defrag(&mut self, updated_predicates: Vec<Tag>) -> Result<(), Error> {
+    async fn defrag(&mut self, updated_predicates: Vec<Tag>) -> Result<(), Error> {
         for updated_pred in updated_predicates {
             let counter = self
                 .predicate_fragmentation
@@ -256,7 +259,9 @@ impl ExecutionEngine {
 
                 let range = start..(self.current_step + 1);
 
-                self.table_manager.combine_tables(&updated_pred, range)?;
+                self.table_manager
+                    .combine_tables(&updated_pred, range)
+                    .await?;
 
                 self.predicate_last_union
                     .insert(updated_pred, self.current_step);
@@ -268,7 +273,7 @@ impl ExecutionEngine {
         Ok(())
     }
 
-    fn saturation_step(
+    async fn saturation_step(
         &mut self,
         rules: &mut [SaturationRule],
         scc: &[usize],
@@ -280,13 +285,13 @@ impl ExecutionEngine {
 
         let predicates: Vec<Tag> = self.table_manager.known_predicates().cloned().collect();
         for predicate in &predicates {
-            let Some(table_id) = self.table_manager.combine_predicate(predicate)? else {
+            let Some(table_id) = self.table_manager.combine_predicate(predicate).await? else {
                 continue;
             };
 
             db.add_table(
                 Arc::from(predicate.name()),
-                self.table_manager.table_raw_row_iterator(table_id)?,
+                self.table_manager.table_raw_row_iterator(table_id).await?,
             );
         }
 
@@ -335,7 +340,7 @@ impl ExecutionEngine {
     }
 
     /// Executes the program.
-    pub fn execute<Strategy: MetaStrategy>(&mut self) -> Result<(), Error> {
+    pub async fn execute<Strategy: MetaStrategy>(&mut self) -> Result<(), Error> {
         TimedCode::instance().sub("Reasoning/Execution").start();
 
         let mut new_derivations: Option<bool> = None;
@@ -386,8 +391,9 @@ impl ExecutionEngine {
             .program
             .rules()
             .iter()
-            .zip(&self.analysis.rule_analysis)
-            .map(|(rule, analysis)| RuleExecution::initialize(rule, analysis))
+            .enumerate()
+            .zip(self.analysis.rule_analysis.iter())
+            .map(|((index, rule), analysis)| RuleExecution::initialize(rule, index, analysis))
             .collect();
         let mut rule_strategy = Strategy::new(self.analysis.rule_analysis.iter().collect())?;
 
@@ -409,26 +415,29 @@ impl ExecutionEngine {
                 Ok(rules) => {
                     log::info!("<<< {0}: APPLYING SCC {scc:?} >>>", self.current_step);
 
-                    new_derivations = Some(self.saturation_step(rules, &scc)?);
+                    new_derivations = Some(self.saturation_step(rules, &scc).await?);
                     last_scc = Some(scc);
                 }
                 Err(rules) => {
                     if let Some(rule) = rules.get_mut(&index) {
-                        new_derivations =
-                            Some(self.saturation_step(slice::from_mut(rule), &[index])?);
+                        new_derivations = Some(
+                            self.saturation_step(slice::from_mut(rule), &[index])
+                                .await?,
+                        );
                         last_scc = None;
                     } else {
-                        let updated_predicates = self.step(index, &executions[index])?;
+                        let updated_predicates = self.step(index, &executions[index]).await?;
                         last_scc = None;
                         new_derivations = Some(!updated_predicates.is_empty());
 
-                        self.defrag(updated_predicates)?;
+                        self.defrag(updated_predicates).await?;
                     }
                 }
             }
         }
 
         TimedCode::instance().sub("Reasoning/Execution").stop();
+
         Ok(())
     }
 
@@ -443,15 +452,15 @@ impl ExecutionEngine {
     }
 
     /// Creates an [Iterator] over all facts of a predicate.
-    pub fn predicate_rows(
+    pub async fn predicate_rows(
         &mut self,
         predicate: &Tag,
     ) -> Result<Option<impl Iterator<Item = Vec<AnyDataValue>> + '_>, Error> {
-        let Some(table_id) = self.table_manager.combine_predicate(predicate)? else {
+        let Some(table_id) = self.table_manager.combine_predicate(predicate).await? else {
             return Ok(None);
         };
 
-        Ok(Some(self.table_manager.table_row_iterator(table_id)?))
+        Ok(Some(self.table_manager.table_row_iterator(table_id).await?))
     }
 
     /// Returns the arity of the predicate if the predicate is known to the engine,
@@ -489,197 +498,5 @@ impl ExecutionEngine {
     /// Return the amount of consumed memory for the tables used by the chase.
     pub fn memory_usage(&self) -> MemoryUsage {
         self.table_manager.memory_usage()
-    }
-
-    fn trace_recursive(
-        &mut self,
-        trace: &mut ExecutionTrace,
-        fact: GroundAtom,
-    ) -> Result<TraceFactHandle, TracingError> {
-        let trace_handle = trace.register_fact(fact.clone());
-
-        if trace.status(trace_handle).is_known() {
-            return Ok(trace_handle);
-        }
-
-        // Find the origin of the given fact
-        let step = match self
-            .table_manager
-            .find_table_row(&fact.predicate(), &fact.datavalues().collect::<Vec<_>>())
-        {
-            Some(s) => s,
-            None => {
-                // If the table manager does not know the predicate of the fact
-                // then it could not have been derived
-                trace.update_status(trace_handle, TraceStatus::Fail);
-                return Ok(trace_handle);
-            }
-        };
-
-        if step == 0 {
-            // If a fact was derived in step 0 it must have been given as an EDB fact
-            trace.update_status(trace_handle, TraceStatus::Success(TraceDerivation::Input));
-            return Ok(trace_handle);
-        }
-
-        // Rule index of the rule that was applied to derive the given fact
-        let rule_index = self.rule_history[step];
-        let rule = self.program.rules()[rule_index].clone();
-
-        // Iterate over all head atoms which could have derived the given fact
-        for (head_index, head_atom) in rule.head().iter().enumerate() {
-            if head_atom.predicate() != fact.predicate() {
-                continue;
-            }
-
-            // Unify the head atom with the given fact
-
-            // If unification is possible `compatible` remains true
-            let mut compatible = true;
-            // Contains the head variable and the ground term it aligns with.
-            let mut grounding = HashMap::<Variable, AnyDataValue>::new();
-
-            for (head_term, fact_term) in head_atom.terms().zip(fact.terms()) {
-                match head_term {
-                    Primitive::Ground(ground) => {
-                        if ground != fact_term {
-                            compatible = false;
-                            break;
-                        }
-                    }
-                    Primitive::Variable(variable) => {
-                        // Matching with existential variables should not produce any restrictions,
-                        // so we just consider universal variables here
-                        if variable.is_existential() {
-                            continue;
-                        }
-
-                        match grounding.entry(variable.clone()) {
-                            Entry::Occupied(entry) => {
-                                if *entry.get() != fact_term.value() {
-                                    compatible = false;
-                                    break;
-                                }
-                            }
-                            Entry::Vacant(entry) => {
-                                entry.insert(fact_term.value());
-                            }
-                        }
-                    }
-                }
-            }
-
-            if !compatible {
-                // Fact could not have been unified
-                continue;
-            }
-
-            let rule = self.program.rules()[rule_index].clone();
-            let analysis = &self.analysis.rule_analysis[rule_index];
-            let mut variable_order = analysis.promising_variable_orders[0].clone(); // TODO: This selection is arbitrary
-            let trace_strategy = TracingStrategy::initialize(&rule, grounding)?;
-
-            let mut execution_plan = SubtableExecutionPlan::default();
-
-            trace_strategy.add_plan(
-                &self.table_manager,
-                &mut execution_plan,
-                &mut variable_order,
-                step,
-            );
-
-            if let Some(query_result) = self.table_manager.execute_plan_first_match(execution_plan)
-            {
-                let variable_assignment: HashMap<Variable, AnyDataValue> = variable_order
-                    .as_ordered_list()
-                    .into_iter()
-                    .zip(query_result.iter().cloned())
-                    .collect();
-
-                let mut fully_derived = true;
-                let mut subtraces = Vec::<TraceFactHandle>::new();
-                for body_atom in rule.positive_body() {
-                    let next_fact_predicate = body_atom.predicate();
-                    let next_fact_terms = body_atom
-                        .terms()
-                        .map(|variable| {
-                            GroundTerm::from(
-                                variable_assignment
-                                    .get(variable)
-                                    .expect("Query must assign value to each variable.")
-                                    .clone(),
-                            )
-                        })
-                        .collect::<Vec<_>>();
-
-                    let next_fact = GroundAtom::new(next_fact_predicate, next_fact_terms);
-
-                    let next_handle = self.trace_recursive(trace, next_fact)?;
-
-                    if trace.status(next_handle).is_success() {
-                        subtraces.push(next_handle);
-                    } else {
-                        fully_derived = false;
-                        break;
-                    }
-                }
-
-                if !fully_derived {
-                    continue;
-                }
-
-                let rule_application = TraceRuleApplication::new(
-                    rule_index,
-                    Substitution::new(variable_assignment.into_iter().map(|(variable, value)| {
-                        (Primitive::from(variable), Primitive::from(value))
-                    })),
-                    head_index,
-                );
-
-                let derivation = TraceDerivation::Derived(rule_application, subtraces);
-                trace.update_status(trace_handle, TraceStatus::Success(derivation));
-
-                return Ok(trace_handle);
-            } else {
-                continue;
-            }
-        }
-
-        trace.update_status(trace_handle, TraceStatus::Fail);
-        Ok(trace_handle)
-    }
-
-    /// Build an [ExecutionTrace] for a list of facts.
-    /// Also returns a list containing a [TraceFactHandle] for each fact.
-    ///
-    /// TODO: Verify that Fact is ground
-    pub fn trace(
-        &mut self,
-        facts: Vec<Fact>,
-    ) -> Result<(ExecutionTrace, Vec<TraceFactHandle>), Error> {
-        let chase_facts: Vec<_> = facts
-            .into_iter()
-            .filter_map(|fact| ProgramChaseTranslation::new().build_fact(&fact))
-            .collect();
-
-        let mut trace = ExecutionTrace::new(self.nemo_program.clone());
-        let mut handles = Vec::new();
-
-        let num_chase_facts = chase_facts.len();
-
-        for (i, chase_fact) in chase_facts.into_iter().enumerate() {
-            if i > 0 && i.is_multiple_of(500) {
-                log::info!(
-                    "{i}/{num_chase_facts} facts traced. ({}%)",
-                    i * 100 / num_chase_facts
-                );
-            }
-
-            handles.push(self.trace_recursive(&mut trace, chase_fact)?);
-        }
-
-        log::info!("{num_chase_facts}/{num_chase_facts} facts traced. (100%)");
-
-        Ok((trace, handles))
     }
 }

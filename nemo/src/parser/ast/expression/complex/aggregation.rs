@@ -7,15 +7,15 @@ use nom::{
 
 use crate::{
     parser::{
+        ParserResult,
         ast::{
-            comment::wsoc::WSoC, expression::Expression,
+            ProgramAST, comment::wsoc::WSoC, expression::Expression,
             sequence::simple::ExpressionSequenceSimple, tag::aggregation::AggregationTag,
-            token::Token, ProgramAST,
+            token::Token,
         },
-        context::{context, ParserContext},
+        context::{ParserContext, context},
         input::ParserInput,
         span::Span,
-        ParserResult,
     },
     rule_model::components::term::aggregate::AggregateKind,
 };
@@ -128,9 +128,9 @@ mod test {
 
     use crate::{
         parser::{
-            ast::{expression::complex::aggregation::Aggregation, ProgramAST},
-            input::ParserInput,
             ParserState,
+            ast::{ProgramAST, expression::complex::aggregation::Aggregation},
+            input::ParserInput,
         },
         rule_model::components::term::aggregate::AggregateKind,
     };

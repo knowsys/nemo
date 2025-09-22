@@ -2,18 +2,18 @@ use flate2::read::MultiGzDecoder;
 use nemo_physical::datavalues::AnyDataValue;
 use nemo_physical::datavalues::DataValue;
 use nemo_physical::datavalues::ValueDomain;
+use nemo_physical::dictionary::DvDict;
 use nemo_physical::dictionary::meta_dv_dict::MetaDvDictionary;
 use nemo_physical::dictionary::old_dictionaries::dictionary::Dictionary;
 use nemo_physical::dictionary::old_dictionaries::hash_map_dictionary::HashMapDictionary;
 use nemo_physical::dictionary::old_dictionaries::meta_dictionary::MetaDictionary;
 use nemo_physical::dictionary::string_dictionary::BenchmarkStringDictionary;
-use nemo_physical::dictionary::DvDict;
 use nemo_physical::management::bytesized::ByteSized;
 use std::env;
 use std::fs::File;
+use std::io::BufReader;
 use std::io::prelude::*;
 use std::io::stdin;
-use std::io::BufReader;
 
 use core::cmp;
 

@@ -6,14 +6,14 @@ use nom::{
 };
 
 use crate::parser::{
+    ParserResult,
     ast::{
-        comment::wsoc::WSoC, expression::complex::map::Map, guard::Guard, sequence::Sequence,
-        tag::structure::StructureTag, token::Token, ProgramAST,
+        ProgramAST, comment::wsoc::WSoC, expression::complex::map::Map, guard::Guard,
+        sequence::Sequence, tag::structure::StructureTag, token::Token,
     },
-    context::{context, ParserContext},
+    context::{ParserContext, context},
     input::ParserInput,
     span::Span,
-    ParserResult,
 };
 
 /// Import directive
@@ -121,14 +121,14 @@ mod test {
     use std::assert_matches::assert_matches;
 
     use crate::parser::{
+        ParserState,
         ast::{
-            directive::import::Import,
-            expression::{complex::infix::InfixExpressionKind, Expression},
-            guard::Guard,
             ProgramAST,
+            directive::import::Import,
+            expression::{Expression, complex::infix::InfixExpressionKind},
+            guard::Guard,
         },
         input::ParserInput,
-        ParserState,
     };
 
     #[test]

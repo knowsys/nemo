@@ -17,13 +17,12 @@ use crate::{
     },
     execution::{rule_execution::VariableTranslation, tracing::error::TracingError},
     rule_model::components::{
+        IterableVariables,
         tag::Tag,
         term::{
-            aggregate::AggregateKind,
             operation::operation_kind::OperationKind,
-            primitive::{variable::Variable, Primitive},
+            primitive::{Primitive, variable::Variable},
         },
-        IterableVariables,
     },
     table_manager::{SubtableExecutionPlan, SubtableIdentifier, TableManager},
 };
@@ -51,19 +50,6 @@ impl TracingStrategy {
         rule: &ChaseRule,
         grounding: HashMap<Variable, AnyDataValue>,
     ) -> Result<Self, TracingError> {
-        if let Some(aggregate) = rule.aggregate() {
-            match aggregate.aggregate_kind() {
-                AggregateKind::CountValues | AggregateKind::SumOfNumbers => {
-                    return Err(TracingError::UnsupportedFeatureNonMinMaxAggregation)
-                }
-                AggregateKind::MinNumber | AggregateKind::MaxNumber => {}
-            }
-        }
-
-        if !rule.aggregate_operations().is_empty() || !rule.aggregate_filters().is_empty() {
-            return Err(TracingError::UnsupportedFeatureComplexAggregates);
-        }
-
         let mut variable_translation = VariableTranslation::new();
         for variable in rule.variables().cloned() {
             variable_translation.add_marker(variable);
@@ -89,10 +75,10 @@ impl TracingStrategy {
                 )));
                 positive_filters.push(filter);
             } else {
-                if let Some(aggregate) = rule.aggregate() {
-                    if &variable == aggregate.output_variable() {
-                        variable = aggregate.input_variable().clone();
-                    }
+                if let Some(aggregate) = rule.aggregate()
+                    && &variable == aggregate.output_variable()
+                {
+                    variable = aggregate.input_variable().clone();
                 }
 
                 let filter = ChaseFilter::new(OperationTerm::Operation(Operation::new(

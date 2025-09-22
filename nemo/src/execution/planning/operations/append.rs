@@ -11,12 +11,12 @@ use nemo_physical::{
 
 use crate::{
     chase_model::components::atom::{
-        primitive_atom::PrimitiveAtom, variable_atom::VariableAtom, ChaseAtom,
+        ChaseAtom, primitive_atom::PrimitiveAtom, variable_atom::VariableAtom,
     },
     execution::rule_execution::VariableTranslation,
     rule_model::components::{
-        term::primitive::{variable::Variable, Primitive},
         IterableVariables,
+        term::primitive::{Primitive, variable::Variable},
     },
 };
 

@@ -8,16 +8,17 @@ use crate::{
         components::rule::ChaseRule,
     },
     error::Error,
-    rule_model::components::{tag::Tag, term::primitive::variable::Variable, IterableVariables},
+    io::ImportManager,
+    rule_model::components::{IterableVariables, tag::Tag, term::primitive::variable::Variable},
     table_manager::{SubtableExecutionPlan, TableManager},
 };
 
 use super::{
     execution_engine::RuleInfo,
     planning::{
-        plan_aggregate::AggregateStategy, plan_body_seminaive::SeminaiveStrategy,
-        plan_head_datalog::DatalogStrategy, plan_head_restricted::RestrictedChaseStrategy,
-        BodyStrategy, HeadStrategy,
+        BodyStrategy, HeadStrategy, plan_aggregate::AggregateStategy,
+        plan_body_seminaive::SeminaiveStrategy, plan_head_datalog::DatalogStrategy,
+        plan_head_restricted::RestrictedChaseStrategy,
     },
 };
 
@@ -46,7 +47,7 @@ pub struct RuleExecution {
 
 impl RuleExecution {
     /// Create new [RuleExecution].
-    pub(crate) fn initialize(rule: &ChaseRule, analysis: &RuleAnalysis) -> Self {
+    pub(crate) fn initialize(rule: &ChaseRule, rule_index: usize, analysis: &RuleAnalysis) -> Self {
         let mut variable_translation = VariableTranslation::new();
         for variable in rule.variables().cloned() {
             variable_translation.add_marker(variable);
@@ -55,7 +56,7 @@ impl RuleExecution {
             variable_translation.add_marker(variable);
         }
 
-        let body_strategy = Box::new(SeminaiveStrategy::initialize(rule, analysis));
+        let body_strategy = Box::new(SeminaiveStrategy::initialize(rule, rule_index, analysis));
         let head_strategy: Box<dyn HeadStrategy> = if analysis.is_existential {
             Box::new(RestrictedChaseStrategy::initialize(rule, analysis))
         } else {
@@ -78,9 +79,10 @@ impl RuleExecution {
 
     /// Execute the current rule.
     /// Returns the predicates which received new elements.
-    pub(crate) fn execute(
+    pub(crate) async fn execute(
         &self,
         table_manager: &mut TableManager,
+        import_manager: &ImportManager,
         rule_info: &RuleInfo,
         step_number: usize,
     ) -> Result<Vec<Tag>, Error> {
@@ -97,14 +99,18 @@ impl RuleExecution {
         let mut best_variable_order = self.promising_variable_orders[0].clone();
 
         let mut subtable_execution_plan = SubtableExecutionPlan::default();
-        let body_node = self.body_strategy.add_plan_body(
-            table_manager,
-            &mut subtable_execution_plan,
-            &self.variable_translation,
-            rule_info,
-            &mut best_variable_order, // Variable order possibly gets updated
-            step_number,
-        );
+        let body_node = self
+            .body_strategy
+            .add_plan_body(
+                table_manager,
+                import_manager,
+                &mut subtable_execution_plan,
+                &self.variable_translation,
+                rule_info,
+                &mut best_variable_order, // Variable order possibly gets updated
+                step_number,
+            )
+            .await;
 
         let aggregate_node = self.aggregate_strategy.as_ref().map(|strategy| {
             strategy.add_plan_aggregate(
@@ -124,6 +130,6 @@ impl RuleExecution {
             step_number,
         );
 
-        table_manager.execute_plan(subtable_execution_plan)
+        table_manager.execute_plan(subtable_execution_plan).await
     }
 }

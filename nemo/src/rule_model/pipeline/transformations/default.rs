@@ -6,15 +6,16 @@ use crate::{
     execution::execution_parameters::ExecutionParameters,
     rule_model::{
         error::ValidationReport,
-        pipeline::transformations::validate::TransformationValidate,
-        programs::{handle::ProgramHandle, ProgramRead},
+        pipeline::transformations::{
+            active::TransformationActive, empty::TransformationEmpty,
+            incremental::TransformationIncremental,
+            set_default_outputs::TransformationSetDefaultOutputs, validate::TransformationValidate,
+        },
+        programs::{ProgramRead, handle::ProgramHandle},
     },
 };
 
-use super::{
-    active::TransformationActive, exports::TransformationExports, global::TransformationGlobal,
-    ProgramTransformation,
-};
+use super::{ProgramTransformation, exports::TransformationExports, global::TransformationGlobal};
 
 /// Default transformation
 ///
@@ -51,7 +52,12 @@ impl<'a> ProgramTransformation for TransformationDefault<'a> {
             .transform(TransformationExports::new(
                 self.parameters.export_parameters,
             ))?
+            .transform(TransformationSetDefaultOutputs::default())?
+            // .transform(TransformationFilterImports::new())? // Feature not yet implemented
+            .transform(TransformationIncremental::new())?
+            .transform(TransformationEmpty::new())?
             .transform(TransformationValidate::default())?
+            .transform(TransformationEmpty::new())?
             .transform(TransformationActive::default())
     }
 }

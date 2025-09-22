@@ -1,8 +1,10 @@
 //! This module defines [ChaseOperation].
 
+use std::fmt::Display;
+
 use crate::rule_model::components::{
-    term::primitive::{variable::Variable, Primitive},
     IterablePrimitives, IterableVariables,
+    term::primitive::{Primitive, variable::Variable},
 };
 
 use super::term::operation_term::OperationTerm;
@@ -16,6 +18,15 @@ pub(crate) struct ChaseOperation {
     output_variable: Variable,
     /// Operation the will be evaluated
     operation: OperationTerm,
+}
+
+impl Display for ChaseOperation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!(
+            "{} = {}",
+            self.output_variable, self.operation
+        ))
+    }
 }
 
 impl ChaseOperation {

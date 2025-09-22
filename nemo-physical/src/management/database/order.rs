@@ -2,7 +2,7 @@
 
 use std::{
     cell::RefCell,
-    collections::{hash_map::Entry, HashMap},
+    collections::{HashMap, hash_map::Entry},
 };
 
 use crate::{
@@ -13,7 +13,7 @@ use crate::{
     util::mapping::{permutation::Permutation, traits::NatMapping},
 };
 
-use super::{id::PermanentTableId, sources::TableSource, storage::TableStorage, Dict};
+use super::{Dict, id::PermanentTableId, sources::TableSource, storage::TableStorage};
 
 /// [OrderedReferenceManager] stores its tables in a [Vec].
 /// This id refers to an index in this vector.
@@ -53,6 +53,23 @@ pub(super) struct OrderedReferenceManager {
 }
 
 impl OrderedReferenceManager {
+    pub(crate) fn current_storage_id(&self) -> StorageId {
+        self.stored_tables.len()
+    }
+
+    pub(crate) fn delete_tables_from(&mut self, storage_id: StorageId, table_id: PermanentTableId) {
+        self.stored_tables.truncate(storage_id);
+
+        self.storage_map
+            .retain(|existing_id, _| *existing_id < table_id);
+        self.reference_map
+            .retain(|existing_id, _| *existing_id < table_id);
+
+        for (_, map) in self.storage_map.iter_mut() {
+            map.retain(|_, existing_id| *existing_id < storage_id);
+        }
+    }
+
     /// If the table with the given [PermanentTableId] is a reference,
     /// this returns the id and order of the actually stored table.
     ///
@@ -84,7 +101,6 @@ impl OrderedReferenceManager {
             } else {
                 order_map
                     .keys()
-                    .cloned()
                     .map(|order| {
                         reorder
                             .invert()
@@ -256,7 +272,7 @@ impl OrderedReferenceManager {
     ///
     /// # Panics
     /// Panics if the given id does not exist.
-    pub(crate) fn trie_id(
+    pub(crate) async fn trie_id(
         &mut self,
         dictionary: &RefCell<Dict>,
         id: PermanentTableId,
@@ -266,7 +282,7 @@ impl OrderedReferenceManager {
 
         if let Some(order_map) = self.storage_map.get(&id) {
             if let Some(&storage_id) = order_map.get(&column_order) {
-                self.stored_tables[storage_id].trie(dictionary)?;
+                self.stored_tables[storage_id].trie(dictionary).await?;
                 return Ok(storage_id);
             } else {
                 let (_, closest_order) = closest_order(order_map.keys(), &column_order)
@@ -287,7 +303,9 @@ impl OrderedReferenceManager {
                         .sub("Reasoning/Execution/Required Reorder")
                         .start();
 
-                    let closest_trie = self.stored_tables[closest_storage_id].trie(dictionary)?;
+                    let closest_trie = self.stored_tables[closest_storage_id]
+                        .trie(dictionary)
+                        .await?;
                     let trie_reordered = generator.apply_operation(closest_trie.partial_iterator());
                     let result_storage_id = self.add_trie(id, column_order, trie_reordered);
 
@@ -297,7 +315,9 @@ impl OrderedReferenceManager {
 
                     return Ok(result_storage_id);
                 } else {
-                    self.stored_tables[closest_storage_id].trie(dictionary)?;
+                    self.stored_tables[closest_storage_id]
+                        .trie(dictionary)
+                        .await?;
                     return Ok(closest_storage_id);
                 };
             }

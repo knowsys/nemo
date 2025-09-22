@@ -26,12 +26,13 @@ use value_format::RdfValueFormats;
 use writer::RdfWriter;
 
 use crate::{
+    chase_model::components::rule::ChaseRule,
     error::Error,
     io::{
         compression_format::CompressionFormat,
         format_builder::{
-            format_parameter, format_tag, value_type_matches, AnyImportExportBuilder,
-            FormatParameter, Parameters, StandardParameter,
+            AnyImportExportBuilder, FormatParameter, Parameters, StandardParameter,
+            SupportedFormatTag, format_parameter, format_tag, value_type_matches,
         },
     },
     rule_model::{
@@ -107,6 +108,21 @@ pub struct RdfHandler {
     value_formats: RdfValueFormats,
     /// Maximum number of statements that should be imported/exported.
     limit: Option<u64>,
+    /// Filtering rules
+    filter_rules: Vec<ChaseRule>,
+}
+
+impl RdfHandler {
+    /// Return the [SupportedFormatTag] for this handler.
+    pub fn format_tag(&self) -> SupportedFormatTag {
+        SupportedFormatTag::Rdf(match self.variant {
+            RdfVariant::NTriples => RdfTag::NTriples,
+            RdfVariant::NQuads => RdfTag::NQuads,
+            RdfVariant::Turtle => RdfTag::Turtle,
+            RdfVariant::RDFXML => RdfTag::RdfXml,
+            RdfVariant::TriG => RdfTag::Trig,
+        })
+    }
 }
 
 impl FileFormatMeta for RdfHandler {
@@ -127,6 +143,7 @@ impl ImportHandler for RdfHandler {
             self.base.clone(),
             self.value_formats.clone(),
             self.limit,
+            self.filter_rules.clone(),
         )))
     }
 }
@@ -143,7 +160,7 @@ impl ExportHandler for RdfHandler {
 }
 
 format_tag! {
-    pub(crate) enum RdfTag(SupportedFormatTag::Rdf) {
+    pub enum RdfTag(SupportedFormatTag::Rdf) {
         Rdf => file_format::RDF_UNSPECIFIED,
         NTriples => file_format::RDF_NTRIPLES,
         NQuads => file_format::RDF_NQUADS,
@@ -256,6 +273,7 @@ impl FormatBuilder for RdfHandler {
             variant,
             value_formats,
             limit,
+            filter_rules: Vec::new(),
         })
     }
 
@@ -263,11 +281,22 @@ impl FormatBuilder for RdfHandler {
         Some(self.variant.arity())
     }
 
-    fn build_import(&self, _arity: usize) -> Arc<dyn ImportHandler + Send + Sync + 'static> {
-        Arc::new(self.clone())
+    fn build_import(
+        &self,
+        _arity: usize,
+        filter_rules: Vec<ChaseRule>,
+    ) -> Arc<dyn ImportHandler + Send + Sync + 'static> {
+        let mut handler = self.clone();
+        handler.filter_rules = filter_rules;
+        Arc::new(handler)
     }
 
-    fn build_export(&self, _arity: usize) -> Arc<dyn ExportHandler + Send + Sync + 'static> {
+    #[allow(unused)]
+    fn build_export(
+        &self,
+        _arity: usize,
+        filter_rules: Vec<ChaseRule>,
+    ) -> Arc<dyn ExportHandler + Send + Sync + 'static> {
         Arc::new(self.clone())
     }
 }

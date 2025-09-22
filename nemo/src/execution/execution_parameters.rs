@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    io::{resource_providers::ResourceProviders, ImportManager},
+    io::{ImportManager, resource_providers::ResourceProviders},
     rule_model::components::term::primitive::{
         ground::GroundTerm, variable::global::GlobalVariable,
     },

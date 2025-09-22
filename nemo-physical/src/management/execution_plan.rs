@@ -3,25 +3,28 @@
 
 use std::{
     cell::RefCell,
-    collections::{hash_map::Entry, HashMap},
+    collections::{HashMap, hash_map::Entry},
     fmt::Debug,
     rc::{Rc, Weak},
 };
 
 use crate::{
+    datasources::table_providers::TableProvider,
     management::database::execution_series::{
         ExecutionTreeLeaf, ExecutionTreeNode, ExecutionTreeOperation,
     },
     tabular::operations::{
+        OperationGeneratorEnum, OperationTable,
         aggregate::{AggregateAssignment, GeneratorAggregate},
         filter::{Filters, GeneratorFilter},
         function::{FunctionAssignment, GeneratorFunction},
+        incremental_import::GeneratorIncrementalImport,
         join::GeneratorJoin,
         null::GeneratorNull,
         projectreorder::GeneratorProjectReorder,
+        single::GeneratorSingle,
         subtract::GeneratorSubtract,
         union::GeneratorUnion,
-        OperationGeneratorEnum, OperationTable,
     },
     util::mapping::{permutation::Permutation, traits::NatMapping},
 };
@@ -58,8 +61,23 @@ impl ExecutionNodeOwned {
 /// Reference to a node in an [ExecutionPlan]
 ///
 /// Internally, uses a `Weak<RefCell<T>>`.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ExecutionNodeRef(Weak<RefCell<ExecutionNode>>);
+
+impl Debug for ExecutionNodeRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.0.upgrade() {
+            Some(node) => f
+                .debug_tuple("ExecutionNodeRef")
+                .field(&node.borrow().id)
+                .finish(),
+            _ => f
+                .debug_tuple("ExecutionNodeRef")
+                .field(&"<failed to upgrade weak reference>".to_string())
+                .finish(),
+        }
+    }
+}
 
 impl ExecutionNodeRef {
     /// Return an referenced counted cell of an [ExecutionNode].
@@ -132,10 +150,12 @@ impl ExecutionNodeRef {
                 result
             }
             ExecutionOperation::ProjectReorder(subnode)
+            | ExecutionOperation::Single(subnode, _)
             | ExecutionOperation::Filter(subnode, _)
             | ExecutionOperation::Function(subnode, _)
             | ExecutionOperation::Null(subnode)
-            | ExecutionOperation::Aggregate(subnode, _) => vec![subnode.clone()],
+            | ExecutionOperation::Aggregate(subnode, _)
+            | ExecutionOperation::IncrementalImport(subnode, _) => vec![subnode.clone()],
         }
     }
 }
@@ -165,6 +185,8 @@ pub(crate) enum ExecutionOperation {
     Subtract(ExecutionNodeRef, Vec<ExecutionNodeRef>),
     /// Reorder or remove columns from the table represented by the subnode
     ProjectReorder(ExecutionNodeRef),
+    /// Retain only single elements from certain columns
+    Single(ExecutionNodeRef, OperationTable),
     /// Apply a filter to the table represented by the subnode
     Filter(ExecutionNodeRef, Filters),
     /// Introduce new columns by applying a function to the columns of the table represented by the subnode
@@ -173,6 +195,8 @@ pub(crate) enum ExecutionOperation {
     Null(ExecutionNodeRef),
     /// Perform aggregate operation
     Aggregate(ExecutionNodeRef, AggregateAssignment),
+    /// Perform an incremental import
+    IncrementalImport(ExecutionNodeRef, Rc<Box<dyn TableProvider>>),
 }
 
 /// Declares whether the resulting table form executing a plan should be kept temporarily or permamently
@@ -324,6 +348,20 @@ impl ExecutionPlan {
         project_node
     }
 
+    /// Return an [ExecutionNodeRef]
+    pub fn single(
+        &mut self,
+        subnode: ExecutionNodeRef,
+        single_columns: OperationTable,
+    ) -> ExecutionNodeRef {
+        let new_operation = ExecutionOperation::Single(subnode.clone(), single_columns);
+
+        let single_node = self.push_and_return_reference(new_operation, subnode.markers_cloned());
+        self.write_temporary(single_node.clone(), "Single");
+
+        single_node
+    }
+
     /// Return an [ExecutionNodeRef] for restricing a column to a certain value.
     pub fn filter(&mut self, subnode: ExecutionNodeRef, filters: Filters) -> ExecutionNodeRef {
         let marked_columns = subnode.markers_cloned();
@@ -365,6 +403,23 @@ impl ExecutionPlan {
     ) -> ExecutionNodeRef {
         let new_operation = ExecutionOperation::Null(subnode);
         self.push_and_return_reference(new_operation, marked_columns)
+    }
+
+    /// Return an [ExecutionNodeRef] for performing an import.
+    pub fn import(
+        &mut self,
+        marked_columns: OperationTable,
+        subnode: ExecutionNodeRef,
+        provider: Box<dyn TableProvider>,
+    ) -> ExecutionNodeRef {
+        let new_operation =
+            ExecutionOperation::IncrementalImport(subnode.clone(), Rc::new(provider));
+        let import_node = self.push_and_return_reference(new_operation, marked_columns);
+
+        self.write_temporary(subnode, "Input for Import");
+        self.write_temporary(import_node.clone(), "Import");
+
+        import_node
     }
 }
 
@@ -515,13 +570,12 @@ impl ExecutionPlan {
                 generator,
                 subnode: ExecutionTreeLeaf::FetchComputedTable(computed),
             } = &root
+                && !&computed_trees[*computed].result.is_permanent()
             {
-                if !&computed_trees[*computed].result.is_permanent() {
-                    computed_trees[*computed]
-                        .dependents
-                        .push((computed_table_id, generator.projectreordering()));
-                    computed_trees[*computed].used -= 1;
-                }
+                computed_trees[*computed]
+                    .dependents
+                    .push((computed_table_id, generator.projectreordering()));
+                computed_trees[*computed].used -= 1;
             }
 
             ExecutionTree {
@@ -554,24 +608,23 @@ impl ExecutionPlan {
         computed_trees_map: &mut HashMap<ExecutionId, Vec<(ColumnOrder, ComputedTableId)>>,
         loaded_tables: &mut HashMap<(PermanentTableId, ColumnOrder), LoadedTableId>,
     ) -> ExecutionTreeNode {
-        if node.id() != root_node_id {
-            if let Some(output_node) = output_nodes
+        if node.id() != root_node_id
+            && let Some(output_node) = output_nodes
                 .iter()
                 .find(|output_node| node.id() == output_node.node.id())
-            {
-                let computed_id = Self::execution_tree(
-                    output_node,
-                    order,
-                    output_nodes,
-                    computed_trees,
-                    computed_trees_map,
-                    loaded_tables,
-                );
+        {
+            let computed_id = Self::execution_tree(
+                output_node,
+                order,
+                output_nodes,
+                computed_trees,
+                computed_trees_map,
+                loaded_tables,
+            );
 
-                return ExecutionTreeNode::Operation(ExecutionTreeOperation::Leaf(
-                    ExecutionTreeLeaf::FetchComputedTable(computed_id),
-                ));
-            }
+            return ExecutionTreeNode::Operation(ExecutionTreeOperation::Leaf(
+                ExecutionTreeLeaf::FetchComputedTable(computed_id),
+            ));
         }
 
         let node_rc = node.get_rc();
@@ -803,6 +856,54 @@ impl ExecutionPlan {
                     )),
                     subnodes: vec![subtree],
                 })
+            }
+            ExecutionOperation::Single(subnode, single) => {
+                let marker_subnode = subnode.markers_cloned();
+                let subtree = Self::execution_node(
+                    root_node_id,
+                    subnode.clone(),
+                    order,
+                    output_nodes,
+                    computed_trees,
+                    computed_trees_map,
+                    loaded_tables,
+                )
+                .operation()
+                .expect("No sub node should be a project");
+
+                ExecutionTreeNode::Single {
+                    generator: GeneratorSingle::new(marker_subnode, single.clone()),
+                    subnode: subtree,
+                }
+            }
+            ExecutionOperation::IncrementalImport(subnode, table_provider) => {
+                let marker_subnode = subnode.markers_cloned();
+                let subtree: ExecutionTreeLeaf = if let ExecutionTreeOperation::Leaf(leaf) =
+                    Self::execution_node(
+                        root_node_id,
+                        subnode.clone(),
+                        ColumnOrder::default(),
+                        output_nodes,
+                        computed_trees,
+                        computed_trees_map,
+                        loaded_tables,
+                    )
+                    .operation()
+                    .expect("No sub node should be a project")
+                {
+                    leaf
+                } else {
+                    unreachable!("Subnode of a project must be a load instruction");
+                };
+
+                ExecutionTreeNode::IncrementalImport {
+                    generator: GeneratorIncrementalImport::new(
+                        node_markers,
+                        marker_subnode,
+                        table_provider.clone(),
+                    ),
+                    subnode: subtree,
+                }
             }
         }
     }

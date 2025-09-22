@@ -5,11 +5,11 @@
 use std::fmt::Debug;
 
 use crate::{
-    columnar::column::{vector::ColumnVector, Column, ColumnEnum},
+    columnar::column::{Column, ColumnEnum, vector::ColumnVector},
     datatypes::{ColumnDataType, RunLengthEncodable},
 };
 
-use super::{rle::ColumnBuilderRle, ColumnBuilder};
+use super::{ColumnBuilder, rle::ColumnBuilderRle};
 
 /// Number of rle elements in rle column builder after which to decide which column type to use.
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -112,12 +112,10 @@ where
 
     fn add(&mut self, value: T) {
         if let ColumnImplDecisionThreshold::NumberOfRleElements(threshold) = self.decision_threshold
+            && let ColumnBuilderType::ColumnRle(rle_builder) = &mut self.builder
+            && rle_builder.number_of_rle_elements() > threshold
         {
-            if let ColumnBuilderType::ColumnRle(rle_builder) = &mut self.builder {
-                if rle_builder.number_of_rle_elements() > threshold {
-                    self.expand_sparse_rle_columns();
-                }
-            }
+            self.expand_sparse_rle_columns();
         }
 
         match &mut self.builder {

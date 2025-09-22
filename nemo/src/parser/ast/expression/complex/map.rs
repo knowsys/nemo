@@ -6,18 +6,18 @@ use nom::{
 };
 
 use crate::parser::{
+    ParserResult,
     ast::{
+        ProgramAST,
         comment::wsoc::WSoC,
         expression::Expression,
-        sequence::{key_value::KeyValuePair, Sequence},
+        sequence::{Sequence, key_value::KeyValuePair},
         tag::structure::StructureTag,
         token::Token,
-        ProgramAST,
     },
-    context::{context, ParserContext},
+    context::{ParserContext, context},
     input::ParserInput,
     span::Span,
-    ParserResult,
 };
 
 /// A possibly tagged sequence of [Expression]s.
@@ -106,9 +106,9 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
-        ast::{expression::complex::map::Map, ProgramAST},
-        input::ParserInput,
         ParserState,
+        ast::{ProgramAST, expression::complex::map::Map},
+        input::ParserInput,
     };
 
     #[test]

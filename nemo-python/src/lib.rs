@@ -5,15 +5,15 @@ use nemo::{
     chase_model::ChaseAtom,
     datavalues::{AnyDataValue, DataValue},
     error::Error,
-    execution::{tracing::trace::ExecutionTraceTree, DefaultExecutionStrategy, ExecutionEngine},
-    io::{resource_providers::ResourceProviders, ExportManager, ImportManager},
+    execution::{DefaultExecutionStrategy, ExecutionEngine, tracing::trace::ExecutionTraceTree},
+    io::{ExportManager, ImportManager, resource_providers::ResourceProviders},
     meta::timing::TimedCode,
     rule_model::{
         components::{
+            ComponentBehavior,
             fact::Fact,
             tag::Tag,
-            term::{primitive::Primitive, Term},
-            ComponentBehavior,
+            term::{Term, primitive::Primitive},
         },
         programs::ProgramRead,
         substitution::Substitution,
@@ -21,7 +21,7 @@ use nemo::{
 };
 
 use pyo3::{
-    create_exception, exceptions::PyNotImplementedError, prelude::*, types::PyDict, IntoPyObjectExt,
+    IntoPyObjectExt, create_exception, exceptions::PyNotImplementedError, prelude::*, types::PyDict,
 };
 
 create_exception!(module, NemoError, pyo3::exceptions::PyException);
@@ -403,8 +403,18 @@ impl NemoEngine {
     #[new]
     fn py_new(program: NemoProgram) -> PyResult<Self> {
         TimedCode::instance().reset();
+
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()?;
+
         let import_manager = ImportManager::new(ResourceProviders::default());
-        let engine = ExecutionEngine::initialize(program.0.clone(), import_manager).py_res()?;
+        let engine = rt
+            .block_on(ExecutionEngine::initialize(
+                program.0.clone(),
+                import_manager,
+            ))
+            .py_res()?;
         Ok(NemoEngine { engine })
     }
 
@@ -412,7 +422,12 @@ impl NemoEngine {
         TimedCode::instance().start();
         TimedCode::instance().sub("Reasoning").start();
 
-        self.engine.execute::<DefaultExecutionStrategy>().py_res()?;
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()?;
+
+        rt.block_on(self.engine.execute::<DefaultExecutionStrategy>())
+            .py_res()?;
 
         TimedCode::instance().sub("Reasoning").stop();
         TimedCode::instance().stop();
@@ -420,10 +435,15 @@ impl NemoEngine {
     }
 
     fn trace(&mut self, fact_string: String) -> Option<NemoTrace> {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .ok()?;
+
         let fact = Fact::parse(&fact_string).ok()?;
         fact.validate().ok()?;
 
-        let (trace, handles) = self.engine.trace(vec![fact]).ok()?;
+        let (trace, handles) = rt.block_on(self.engine.trace(vec![fact])).ok()?;
         let handle = *handles
             .first()
             .expect("Function trace always returns a handle for each input fact");
@@ -443,6 +463,10 @@ impl NemoEngine {
         predicate: String,
         output_manager: &Bound<NemoOutputManager>,
     ) -> PyResult<()> {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()?;
+
         let tag = Tag::new(predicate);
 
         let Some(_arity) = self.engine.predicate_arity(&tag) else {
@@ -466,7 +490,7 @@ impl NemoEngine {
             .export_table(
                 &tag,
                 &export_handler,
-                self.engine.predicate_rows(&tag).py_res()?,
+                rt.block_on(self.engine.predicate_rows(&tag)).py_res()?,
             )
             .py_res()?;
 
@@ -474,7 +498,13 @@ impl NemoEngine {
     }
 
     fn result(mut slf: PyRefMut<'_, Self>, predicate: String) -> PyResult<Py<NemoResults>> {
-        let iter = slf.engine.predicate_rows(&Tag::new(predicate)).py_res()?;
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()?;
+
+        let iter = rt
+            .block_on(slf.engine.predicate_rows(&Tag::new(predicate)))
+            .py_res()?;
         let results = NemoResults(Box::new(
             iter.into_iter().flatten().collect::<Vec<_>>().into_iter(),
         ));

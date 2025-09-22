@@ -1,35 +1,43 @@
-//! Handler for resources of type SPARQL (SPARQL query language for RDF)).
+//! Handler for resources of type SPARQL (SPARQL query language for RDF).
 
+pub(crate) mod reader;
+
+use reader::SparqlReader;
 use spargebra::Query;
 use std::sync::Arc;
 
 use nemo_physical::{
+    datasources::table_providers::TableProvider,
     datavalues::{AnyDataValue, DataValue},
-    resource::{ResourceBuilder, ResourceValidationErrorKind},
+    resource::{ResourceBuilder, ResourceValidationError},
 };
 use oxiri::Iri;
 
 use crate::{
+    chase_model::components::rule::ChaseRule,
     io::format_builder::{
-        format_parameter, format_tag, value_type_matches, AnyImportExportBuilder, FormatParameter,
-        Parameters, StandardParameter,
+        AnyImportExportBuilder, FormatParameter, Parameters, StandardParameter, SupportedFormatTag,
+        format_parameter, format_tag, value_type_matches,
     },
     rule_model::{
         components::{import_export::Direction, term::value_type::ValueType},
         error::validation_error::ValidationError,
     },
-    syntax::import_export::{attribute, file_format},
+    syntax::import_export::{
+        attribute,
+        file_format::{self, EXTENSION_TSV, MEDIA_TYPE_TSV},
+    },
 };
 
-use super::{ExportHandler, FormatBuilder, ImportHandler};
+use super::{ExportHandler, FileFormatMeta, FormatBuilder, ImportHandler};
 
-use crate::io::formats::dsv::{value_format::DsvValueFormats, DsvHandler};
+use crate::io::formats::dsv::value_format::DsvValueFormats;
 
 /// A char limit to decide if a query is send as GET or POST request
 const HTTP_GET_CHAR_LIMIT: usize = 2000;
 
 format_tag! {
-    pub(crate) enum SparqlTag(SupportedFormatTag::Sparql) {
+    pub enum SparqlTag(SupportedFormatTag::Sparql) {
         Sparql => file_format::SPARQL,
     }
 }
@@ -92,6 +100,25 @@ pub(crate) struct SparqlBuilder {
     query: Query,
 }
 
+impl SparqlBuilder {
+    /// Return the [SupportedFormatTag] for this builder.
+    pub fn format_tag(&self) -> SupportedFormatTag {
+        SupportedFormatTag::Sparql(SparqlTag::Sparql)
+    }
+
+    fn with_endpoint_and_query(
+        endpoint: Iri<String>,
+        query: Query,
+        value_formats: Option<DsvValueFormats>,
+    ) -> Self {
+        Self {
+            endpoint,
+            query,
+            value_formats,
+        }
+    }
+}
+
 impl From<SparqlBuilder> for AnyImportExportBuilder {
     fn from(value: SparqlBuilder) -> Self {
         AnyImportExportBuilder::Sparql(Box::new(value))
@@ -100,12 +127,12 @@ impl From<SparqlBuilder> for AnyImportExportBuilder {
 impl FormatBuilder for SparqlBuilder {
     type Parameter = SparqlParameter;
     type Tag = SparqlTag;
+
     fn new(
         _tag: Self::Tag,
         parameters: &Parameters<SparqlBuilder>,
         _direction: Direction,
     ) -> Result<Self, ValidationError> {
-        // Copied from DsvBuilder
         let value_formats = parameters
             .get_optional(SparqlParameter::Format)
             .map(|value| {
@@ -138,7 +165,7 @@ impl FormatBuilder for SparqlBuilder {
         &self,
         direction: Direction,
         _builder: Option<ResourceBuilder>,
-    ) -> Result<Option<ResourceBuilder>, ResourceValidationErrorKind> {
+    ) -> Result<Option<ResourceBuilder>, ResourceValidationError> {
         match direction {
             Direction::Import => {
                 let mut resource_builder = ResourceBuilder::try_from(self.endpoint.clone())?;
@@ -165,29 +192,74 @@ impl FormatBuilder for SparqlBuilder {
         Some(var_count)
     }
 
-    fn build_import(&self, arity: usize) -> Arc<dyn ImportHandler + Send + Sync + 'static> {
-        Arc::new(DsvHandler::with_value_formats(
-            b'\t',
-            self.value_formats
-                .clone()
-                .unwrap_or(DsvValueFormats::default(arity)),
-            None,
-            true,
-            false,
-        ))
+    fn build_import(
+        &self,
+        _arity: usize,
+        filter_rules: Vec<ChaseRule>,
+    ) -> Arc<dyn ImportHandler + Send + Sync + 'static> {
+        Arc::new(SparqlHandler::new(self.clone(), filter_rules))
     }
 
-    fn build_export(&self, _arity: usize) -> Arc<dyn ExportHandler + Send + Sync + 'static> {
+    fn build_export(
+        &self,
+        _arity: usize,
+        _filter_rules: Vec<ChaseRule>,
+    ) -> Arc<dyn ExportHandler + Send + Sync + 'static> {
         unimplemented!("SPARQL export is currently not supported")
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct SparqlHandler {
+    builder: SparqlBuilder,
+    filter_rules: Vec<ChaseRule>,
+}
+
+impl SparqlHandler {
+    pub fn new(builder: SparqlBuilder, filter_rules: Vec<ChaseRule>) -> Self {
+        Self {
+            builder,
+            filter_rules,
+        }
+    }
+}
+
+impl FileFormatMeta for SparqlHandler {
+    fn media_type(&self) -> String {
+        MEDIA_TYPE_TSV.to_string()
+    }
+
+    fn default_extension(&self) -> String {
+        EXTENSION_TSV.to_string()
+    }
+}
+
+impl ImportHandler for SparqlHandler {
+    fn reader(
+        &self,
+        _read: Box<dyn std::io::Read>,
+    ) -> Result<Box<dyn TableProvider>, crate::error::Error> {
+        unimplemented!("SPARQL only supports deferred reading")
+    }
+
+    fn deferred(&self) -> bool {
+        true
+    }
+
+    fn read_deferred(&self) -> Result<Box<dyn TableProvider>, crate::error::Error> {
+        Ok(Box::new(SparqlReader::new(
+            self.builder.clone(),
+            self.filter_rules.clone(),
+        )))
     }
 }
 
 #[cfg(test)]
 mod test {
     use crate::parser::{
-        ast::{directive::import::Import, ProgramAST},
-        input::ParserInput,
         ParserState,
+        ast::{ProgramAST, directive::import::Import},
+        input::ParserInput,
     };
     use nom::combinator::all_consuming;
 

@@ -3,11 +3,11 @@
 use nom::{branch::alt, combinator::map, multi::many0, sequence::delimited};
 
 use crate::parser::{
-    ast::{expression::Expression, token::Token, ProgramAST},
-    context::{context, ParserContext},
+    ParserResult,
+    ast::{ProgramAST, expression::Expression, token::Token},
+    context::{ParserContext, context},
     input::ParserInput,
     span::Span,
-    ParserResult,
 };
 
 /// Elements that make up a [FormatString]
@@ -127,9 +127,9 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
-        ast::{expression::complex::fstring::FormatString, ProgramAST},
-        input::ParserInput,
         ParserState,
+        ast::{ProgramAST, expression::complex::fstring::FormatString},
+        input::ParserInput,
     };
 
     #[test]

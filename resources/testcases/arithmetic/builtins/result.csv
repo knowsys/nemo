@@ -12,6 +12,7 @@ fullstring,"""\""Hello\"""""
 fullstring,"""\""2\""^^<http://www.w3.org/2001/XMLSchema#double>"""
 fullstring,"""\""test\""@en"""
 tag,"""en"""
+langtag,"""Hello""@en"
 int,3
 int,5
 int,40

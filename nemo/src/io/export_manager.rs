@@ -1,6 +1,6 @@
 //! This module contains the [ExportManager].
 use std::{
-    fs::{create_dir_all, OpenOptions},
+    fs::{OpenOptions, create_dir_all},
     io::{ErrorKind, Write},
     path::PathBuf,
 };
@@ -8,7 +8,7 @@ use std::{
 use crate::{error::Error, rule_model::components::tag::Tag};
 
 use nemo_physical::{datavalues::AnyDataValue, resource::Resource};
-use sanitise_file_name::{sanitise_with_options, Options};
+use sanitise_file_name::{Options, sanitise_with_options};
 
 use super::{
     compression_format::CompressionFormat,
@@ -111,10 +111,8 @@ impl ExportManager {
 
         pred_path.push(file_name);
 
-        if add_compression {
-            if let Some(ext) = self.default_compression_format.extension() {
-                pred_path.add_extension(ext);
-            }
+        if add_compression && let Some(ext) = self.default_compression_format.extension() {
+            pred_path.add_extension(ext);
         }
 
         pred_path

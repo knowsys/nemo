@@ -19,10 +19,11 @@ use value_format::DsvValueFormats;
 use writer::DsvWriter;
 
 use crate::{
+    chase_model::components::rule::ChaseRule,
     error::Error,
     io::format_builder::{
-        format_parameter, format_tag, value_type_matches, AnyImportExportBuilder, FormatParameter,
-        Parameters, StandardParameter,
+        AnyImportExportBuilder, FormatParameter, Parameters, StandardParameter, SupportedFormatTag,
+        format_parameter, format_tag, value_type_matches,
     },
     rule_model::{
         components::{import_export::Direction, term::value_type::ValueType},
@@ -37,29 +38,30 @@ use super::{ExportHandler, FileFormatMeta, FormatBuilder, ImportHandler, TableWr
 #[derive(Debug, Clone)]
 pub struct DsvHandler {
     /// The specific delimiter for this format.
-    delimiter: u8,
+    pub(crate) delimiter: u8,
     /// The list of value formats to be used for importing/exporting data.
-    value_formats: DsvValueFormats,
+    pub(crate) value_formats: DsvValueFormats,
     /// Maximum number of statements that should be imported/exported.
-    limit: Option<u64>,
+    pub(crate) limit: Option<u64>,
     /// Whether to ignore headers
-    ignore_headers: bool,
+    pub(crate) ignore_headers: bool,
     /// Whether to respect quoting in values
-    quoting: bool,
+    pub(crate) quoting: bool,
 }
 
 impl DsvHandler {
-    /// Create new [`DsvHandler`] with given delimiter and arity
+    /// Create a new [DsvHandler] with given delimiter and arity.
     pub fn new(delimiter: u8, arity: usize) -> Self {
-        DsvHandler {
+        Self::with_value_formats(
             delimiter,
-            value_formats: DsvValueFormats::default(arity),
-            limit: None,
-            ignore_headers: false,
-            quoting: true,
-        }
+            DsvValueFormats::default(arity),
+            None,
+            false,
+            true,
+        )
     }
 
+    /// Create a new [DsvHandler] with the given parameters.
     pub(crate) fn with_value_formats(
         delimiter: u8,
         value_formats: DsvValueFormats,
@@ -146,7 +148,7 @@ enum DsvVariant {
 }
 
 format_tag! {
-    pub(crate) enum DsvTag(SupportedFormatTag::Dsv) {
+    pub enum DsvTag(SupportedFormatTag::Dsv) {
         Dsv => file_format::DSV,
         Tsv => file_format::TSV,
         Csv => file_format::CSV,
@@ -204,6 +206,17 @@ pub(crate) struct DsvBuilder {
     value_formats: Option<DsvValueFormats>,
     ignore_headers: bool,
     quoting: bool,
+}
+
+impl DsvBuilder {
+    /// Return the [SupportedFormatTag] for this builder.
+    pub fn format_tag(&self) -> SupportedFormatTag {
+        SupportedFormatTag::Dsv(match self.delimiter {
+            b',' => DsvTag::Csv,
+            b'\t' => DsvTag::Tsv,
+            _ => DsvTag::Dsv,
+        })
+    }
 }
 
 impl From<DsvBuilder> for AnyImportExportBuilder {
@@ -266,7 +279,11 @@ impl FormatBuilder for DsvBuilder {
         self.value_formats.as_ref().map(DsvValueFormats::arity)
     }
 
-    fn build_import(&self, arity: usize) -> Arc<dyn ImportHandler + Send + Sync + 'static> {
+    fn build_import(
+        &self,
+        arity: usize,
+        _filter_rules: Vec<ChaseRule>,
+    ) -> Arc<dyn ImportHandler + Send + Sync + 'static> {
         Arc::new(DsvHandler {
             delimiter: self.delimiter,
             value_formats: self
@@ -279,7 +296,11 @@ impl FormatBuilder for DsvBuilder {
         })
     }
 
-    fn build_export(&self, arity: usize) -> Arc<dyn ExportHandler + Send + Sync + 'static> {
+    fn build_export(
+        &self,
+        arity: usize,
+        _filter_rules: Vec<ChaseRule>,
+    ) -> Arc<dyn ExportHandler + Send + Sync + 'static> {
         Arc::new(DsvHandler {
             delimiter: self.delimiter,
             value_formats: self

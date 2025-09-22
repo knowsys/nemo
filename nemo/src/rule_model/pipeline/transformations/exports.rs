@@ -7,7 +7,7 @@ use crate::{
     rule_model::{
         components::{import_export::ExportDirective, statement::Statement, tag::Tag},
         error::ValidationReport,
-        programs::{handle::ProgramHandle, ProgramRead, ProgramWrite},
+        programs::{ProgramRead, ProgramWrite, handle::ProgramHandle},
     },
 };
 

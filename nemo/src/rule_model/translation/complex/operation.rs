@@ -5,7 +5,7 @@ use crate::{
     newtype_wrapper,
     parser::ast::{self},
     rule_model::{
-        components::term::{operation::Operation, Term},
+        components::term::{Term, operation::Operation},
         origin::Origin,
         translation::{ASTProgramTranslation, TranslationComponent},
     },

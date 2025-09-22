@@ -14,15 +14,16 @@ use oxiri::Iri;
 use oxrdf::{BlankNode, GraphName, Literal, NamedNode, Quad, Subject, Term};
 use oxrdfio::{RdfFormat, RdfParser};
 
-use crate::io::formats::PROGRESS_NOTIFY_INCREMENT;
+use crate::{chase_model::components::rule::ChaseRule, io::formats::PROGRESS_NOTIFY_INCREMENT};
 
 use super::{
+    DEFAULT_GRAPH_IRI, RdfVariant,
     error::RdfFormatError,
     value_format::{RdfValueFormat, RdfValueFormats},
-    RdfVariant, DEFAULT_GRAPH_IRI,
 };
 
 /// A [TableProvider] for RDF 1.1 files containing triples.
+#[allow(unused)]
 pub(super) struct RdfReader {
     /// Buffer from which content is read
     read: Box<dyn Read>,
@@ -34,6 +35,8 @@ pub(super) struct RdfReader {
     value_formats: RdfValueFormats,
     /// If given, this reader will only consider the first `limit` entries
     limit: Option<u64>,
+    /// Filtering rules
+    filter_rules: Vec<ChaseRule>,
     /// Map to store how nulls relate to blank nodes.
     ///
     /// TODO: An RdfReader is specific to one BufRead, which it consumes when reading.
@@ -51,6 +54,7 @@ impl RdfReader {
         base: Option<Iri<String>>,
         value_formats: RdfValueFormats,
         limit: Option<u64>,
+        filter_rules: Vec<ChaseRule>,
     ) -> Self {
         Self {
             read,
@@ -58,6 +62,7 @@ impl RdfReader {
             base,
             value_formats,
             limit,
+            filter_rules,
             bnode_map: Default::default(),
         }
     }
@@ -309,8 +314,9 @@ impl RdfReader {
     }
 }
 
+#[async_trait::async_trait(?Send)]
 impl TableProvider for RdfReader {
-    fn provide_table_data(
+    async fn provide_table_data(
         self: Box<Self>,
         tuple_writer: &mut TupleWriter,
     ) -> Result<(), ReadingError> {
@@ -372,7 +378,7 @@ impl ByteSized for RdfReader {
 
 #[cfg(test)]
 mod test {
-    use super::{RdfReader, DEFAULT_GRAPH_IRI};
+    use super::{DEFAULT_GRAPH_IRI, RdfReader};
     use std::cell::RefCell;
 
     use nemo_physical::{
@@ -385,7 +391,7 @@ mod test {
     #[cfg(not(miri))]
     use test_log::test;
 
-    use crate::io::formats::rdf::{value_format::RdfValueFormats, RdfVariant};
+    use crate::io::formats::rdf::{RdfVariant, value_format::RdfValueFormats};
 
     #[test]
     fn parse_triples_nt() {
@@ -402,6 +408,7 @@ mod test {
             None,
             RdfValueFormats::default(3),
             None,
+            Vec::new(),
         );
         let dict = RefCell::new(Dict::default());
         let mut tuple_writer = TupleWriter::new(&dict, 3);
@@ -426,6 +433,7 @@ mod test {
             None,
             RdfValueFormats::default(3),
             None,
+            Vec::new(),
         );
         let dict = RefCell::new(Dict::default());
         let mut tuple_writer = TupleWriter::new(&dict, 3);
@@ -449,6 +457,7 @@ mod test {
             None,
             RdfValueFormats::default(3),
             None,
+            Vec::new(),
         );
         let dict = RefCell::new(Dict::default());
         let mut tuple_writer = TupleWriter::new(&dict, 3);

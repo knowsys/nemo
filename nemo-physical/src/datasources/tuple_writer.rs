@@ -41,7 +41,7 @@ impl<'a> TupleWriter<'a> {
     /// Alternatively, a partially built tuple can be abandonded by calling `drop_current_tuple`.
     pub fn add_tuple_value(&mut self, value: AnyDataValue) {
         self.tuple_buffer
-            .add_tuple_value(value.to_storage_value_t_dict(&mut self.dictionary.borrow_mut()));
+            .add_tuple_data_value(&mut self.dictionary.borrow_mut(), value);
     }
 
     /// Create a fresh null value. This is the correct (and only) way to create nulls that
@@ -81,7 +81,7 @@ mod test {
         datasources::tuple_writer::TupleWriter,
         datatypes::{Float, StorageValueT},
         datavalues::AnyDataValue,
-        dictionary::{meta_dv_dict::MetaDvDictionary, DvDict},
+        dictionary::{DvDict, meta_dv_dict::MetaDvDictionary},
         management::database::Dict,
     };
 

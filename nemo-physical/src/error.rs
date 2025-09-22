@@ -4,7 +4,10 @@ use std::{convert::Infallible, fmt::Display};
 
 use thiserror::Error;
 
-use crate::{datavalues::DataValueCreationError, resource::Resource};
+use crate::{
+    datavalues::DataValueCreationError,
+    resource::{Resource, ResourceValidationError},
+};
 
 /// Trait that can be used by external libraries extending Nemo to communicate a error during reading
 pub trait ExternalReadingError: Display + std::fmt::Debug {}
@@ -122,7 +125,9 @@ pub enum Error {
     #[error("the provided data-structures do not have the same length: {0:?}")]
     PermutationSortLen(Vec<usize>),
     /// Permutation shall be applied to a too small amount of data
-    #[error("permutation data length ({0}) is smaller than the sort_vec length ({1}) + the offset of {2}")]
+    #[error(
+        "permutation data length ({0}) is smaller than the sort_vec length ({1}) + the offset of {2}"
+    )]
     PermutationApplyWrongLen(usize, usize, usize),
     /// Error when giving invalid execution plan to the database instance
     #[error("the given execution plan is invalid.")]
@@ -136,6 +141,9 @@ pub enum Error {
     /// Error that happened while reading a Table
     #[error(transparent)]
     ReadingError(#[from] ReadingError),
+    /// Error that happened while validating a Resource
+    #[error(transparent)]
+    ResourceValidationError(#[from] ResourceValidationError),
     /// Error computing the memory requirements for a stack program
     #[error("the supplied stack program was malformed")]
     MalformedStackProgram,

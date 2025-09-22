@@ -7,9 +7,9 @@ use std::num::NonZero;
 use crate::management::bytesized::ByteSized;
 
 use super::{
+    AddResult,
     bytes_buffer::{BytesBuffer, GlobalBytesBuffer},
     bytes_dictionary::BytesDictionary,
-    AddResult,
 };
 
 /// Smallest "frequent ID" that cannot be stored in a single byte.
@@ -159,7 +159,9 @@ impl<B: GlobalBytesBuffer> GenericRankedPairDictionary<B> {
                 pair_bytes[4..].copy_from_slice(rare);
             }
             _ => {
-                panic!("dictionary overflow: pair dictionary can hold at most 2^30 different frequent values");
+                panic!(
+                    "dictionary overflow: pair dictionary can hold at most 2^30 different frequent values"
+                );
             }
         };
 
@@ -407,8 +409,8 @@ pub(crate) type StringPairDictionary = GenericRankedStringPairDictionary<StringP
 #[cfg(test)]
 mod test {
     use crate::dictionary::{
-        bytes_buffer::{BytesBuffer, GlobalBytesBuffer},
         AddResult, KNOWN_ID_MARK,
+        bytes_buffer::{BytesBuffer, GlobalBytesBuffer},
     };
 
     use super::GenericRankedPairDictionary;

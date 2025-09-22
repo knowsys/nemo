@@ -1,6 +1,6 @@
 //! This module defines operations on 64-bit floating point numbers.
 
-use num::{traits::CheckedNeg, CheckedAdd, CheckedDiv, CheckedMul, CheckedSub};
+use num::{CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, traits::CheckedNeg};
 
 use crate::{
     datatypes::Double,

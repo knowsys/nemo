@@ -7,12 +7,13 @@
 //! # #[cfg(miri)]
 //! # fn main() {}
 //! # #[cfg(not(miri))]
-//! # fn main() {
+//! # #[tokio::main(flavor = "current_thread")]
+//! # async fn main() {
 //! use nemo::api::{load, reason, output_predicates};
 //! std::env::set_current_dir("../resources/testcases/lcs-diff-computation/").unwrap();
-//! let mut engine = load("run-lcs-10.rls".into()).unwrap();
+//! let mut engine = load("run-lcs-10.rls".into()).await.unwrap();
 //! // reasoning on the rule file
-//! reason(&mut engine).unwrap();
+//! reason(&mut engine).await.unwrap();
 //! // write the results to a temporary directory
 //! let temp_dir = TempDir::new().unwrap();
 //! let predicates = output_predicates(&engine);
@@ -24,9 +25,9 @@
 use std::{fs::read_to_string, path::PathBuf};
 
 use crate::{
-    error::{report::ProgramReport, Error, ReadingError},
+    error::{Error, ReadingError, report::ProgramReport},
     execution::{
-        execution_parameters::ExecutionParameters, DefaultExecutionStrategy, ExecutionEngine,
+        DefaultExecutionStrategy, ExecutionEngine, execution_parameters::ExecutionParameters,
     },
     rule_file::RuleFile,
     rule_model::{
@@ -45,10 +46,10 @@ pub type Engine = ExecutionEngine;
 /// Load the given `file` and load the program from the file.
 ///
 /// For details see [load_string]
-pub fn load(file: PathBuf) -> Result<Engine, Error> {
+pub async fn load(file: PathBuf) -> Result<Engine, Error> {
     let input = read_to_string(file.clone())
         .map_err(|err| ReadingError::from(err).with_resource(Resource::Path(file)))?;
-    load_string(input)
+    load_string(input).await
 }
 
 /// Parse a program in the given `input`-String and return an [Engine].
@@ -57,11 +58,13 @@ pub fn load(file: PathBuf) -> Result<Engine, Error> {
 ///
 /// # Error
 /// Returns an appropriate [Error] variant on parsing and feature check issues.
-pub fn load_string(input: String) -> Result<Engine, Error> {
+pub async fn load_string(input: String) -> Result<Engine, Error> {
     let parameters = ExecutionParameters::default();
     let file = RuleFile::new(input, String::default());
 
-    Ok(ExecutionEngine::from_file(file, parameters)?.into_object())
+    Ok(ExecutionEngine::from_file(file, parameters)
+        .await?
+        .into_object())
 }
 
 /// Parse a program in the given `input`-string and return a [Program].
@@ -112,8 +115,8 @@ pub fn validate(input: String, label: String) -> ProgramReport {
 /// If there are `@source` or `@import` directives in the
 /// parsed rules, all relative paths are resolved with the current
 /// working directory
-pub fn reason(engine: &mut Engine) -> Result<(), Error> {
-    engine.execute::<DefaultExecutionStrategy>()
+pub async fn reason(engine: &mut Engine) -> Result<(), Error> {
+    engine.execute::<DefaultExecutionStrategy>().await
 }
 
 /// Get a [Vec] of all output predicates that are computed by the engine.
@@ -166,11 +169,11 @@ mod test {
     use super::*;
 
     #[cfg_attr(miri, ignore)]
-    #[test]
-    fn reason() {
+    #[tokio::test]
+    async fn reason() {
         std::env::set_current_dir("../resources/testcases/lcs-diff-computation/").unwrap();
-        let mut engine = load("run-lcs-10.rls".into()).unwrap();
-        super::reason(&mut engine).unwrap();
+        let mut engine = load("run-lcs-10.rls".into()).await.unwrap();
+        super::reason(&mut engine).await.unwrap();
 
         // writing only the results where the predicates contain an "i"
         let results = output_predicates(&engine)

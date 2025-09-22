@@ -8,8 +8,10 @@ use nemo_physical::datasources::table_providers::TableProvider;
 use reader::JsonReader;
 
 use crate::{
+    chase_model::components::rule::ChaseRule,
     io::format_builder::{
-        format_tag, AnyImportExportBuilder, FormatBuilder, Parameters, StandardParameter,
+        AnyImportExportBuilder, FormatBuilder, Parameters, StandardParameter, SupportedFormatTag,
+        format_tag,
     },
     rule_model::{components::import_export::Direction, error::validation_error::ValidationError},
     syntax::import_export::file_format,
@@ -19,6 +21,13 @@ use super::{FileFormatMeta, ImportHandler};
 
 #[derive(Debug, Clone)]
 pub(crate) struct JsonHandler;
+
+impl JsonHandler {
+    /// Return the [SupportedFormatTag] for this handler.
+    pub fn format_tag(&self) -> SupportedFormatTag {
+        SupportedFormatTag::Json(JsonTag::Json)
+    }
+}
 
 impl FileFormatMeta for JsonHandler {
     fn default_extension(&self) -> String {
@@ -37,7 +46,7 @@ impl ImportHandler for JsonHandler {
 }
 
 format_tag! {
-    pub(crate) enum JsonTag(SupportedFormatTag::Json) {
+    pub enum JsonTag(SupportedFormatTag::Json) {
         Json => file_format::JSON,
     }
 }
@@ -68,11 +77,20 @@ impl FormatBuilder for JsonHandler {
         Some(3)
     }
 
-    fn build_import(&self, _arity: usize) -> Arc<dyn ImportHandler + Send + Sync + 'static> {
+    #[allow(unused)]
+    fn build_import(
+        &self,
+        _arity: usize,
+        filter_rules: Vec<ChaseRule>,
+    ) -> Arc<dyn ImportHandler + Send + Sync + 'static> {
         Arc::new(Self)
     }
 
-    fn build_export(&self, _arity: usize) -> Arc<dyn super::ExportHandler + Send + Sync + 'static> {
+    fn build_export(
+        &self,
+        _arity: usize,
+        _filter_rules: Vec<ChaseRule>,
+    ) -> Arc<dyn super::ExportHandler + Send + Sync + 'static> {
         unimplemented!("json export is currently not supported")
     }
 }

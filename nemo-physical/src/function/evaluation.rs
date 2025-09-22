@@ -370,25 +370,25 @@ mod test {
         let program = StackProgram::from_function_tree(tree, &HashMap::new(), None);
         let result = program.evaluate(&[], None);
 
-        if let Some(result) = &result {
-            if let Some(expected_value) = &expected_value {
-                match (result.value_domain(), expected_value.value_domain()) {
-                    (ValueDomain::Float, ValueDomain::Float) => {
-                        assert!(
-                            (result.to_f32_unchecked() - expected_value.to_f32_unchecked()).abs()
-                                < 0.01,
-                        );
-                        return;
-                    }
-                    (ValueDomain::Double, ValueDomain::Double) => {
-                        assert!(
-                            (result.to_f64_unchecked() - expected_value.to_f64_unchecked()).abs()
-                                < 0.01,
-                        );
-                        return;
-                    }
-                    _ => {}
+        if let Some(result) = &result
+            && let Some(expected_value) = &expected_value
+        {
+            match (result.value_domain(), expected_value.value_domain()) {
+                (ValueDomain::Float, ValueDomain::Float) => {
+                    assert!(
+                        (result.to_f32_unchecked() - expected_value.to_f32_unchecked()).abs()
+                            < 0.01,
+                    );
+                    return;
                 }
+                (ValueDomain::Double, ValueDomain::Double) => {
+                    assert!(
+                        (result.to_f64_unchecked() - expected_value.to_f64_unchecked()).abs()
+                            < 0.01,
+                    );
+                    return;
+                }
+                _ => {}
             }
         }
 

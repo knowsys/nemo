@@ -4,11 +4,11 @@ use std::{fmt::Display, hash::Hash};
 
 use crate::rule_model::{
     components::{
-        term::{
-            primitive::{variable::Variable, Primitive},
-            Term,
-        },
         IterablePrimitives, IterableVariables,
+        term::{
+            Term,
+            primitive::{Primitive, variable::Variable},
+        },
     },
     error::ValidationReport,
     origin::Origin,
@@ -16,8 +16,8 @@ use crate::rule_model::{
 };
 
 use super::{
-    tag::Tag, ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent,
-    ProgramComponent, ProgramComponentKind,
+    ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent, ProgramComponent,
+    ProgramComponentKind, tag::Tag,
 };
 
 /// Output directive

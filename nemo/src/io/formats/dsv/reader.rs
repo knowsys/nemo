@@ -21,7 +21,7 @@ use super::value_format::{DataValueParserFunction, DsvValueFormat, DsvValueForma
 ///
 /// Parsing of individual values can be done in several ways (DSV does not specify a data model at this level),
 /// as defined by [DsvValueFormat].
-pub(super) struct DsvReader<T> {
+pub(crate) struct DsvReader<T> {
     /// Buffer from which content is read
     read: T,
 
@@ -42,7 +42,7 @@ pub(super) struct DsvReader<T> {
 
 impl<T: BufRead> DsvReader<T> {
     /// Instantiate a [DsvReader] for a given delimiter
-    pub(super) fn new(
+    pub(crate) fn new(
         read: T,
         delimiter: u8,
         value_formats: DsvValueFormats,
@@ -75,7 +75,7 @@ impl<T: BufRead> DsvReader<T> {
 
     /// Actually reads the data from the file, using the given parsers to convert strings to [AnyDataValue]s.
     /// If a field cannot be read or parsed, the line will be ignored
-    fn read(self, tuple_writer: &mut TupleWriter) -> Result<(), ReadingError> {
+    pub(crate) fn read(self, tuple_writer: &mut TupleWriter) -> Result<(), ReadingError> {
         log::info!("Starting data import");
 
         let parsers: Vec<DataValueParserFunction> = self
@@ -128,8 +128,9 @@ impl<T: BufRead> DsvReader<T> {
     }
 }
 
+#[async_trait::async_trait(?Send)]
 impl<T: BufRead> TableProvider for DsvReader<T> {
-    fn provide_table_data(
+    async fn provide_table_data(
         self: Box<Self>,
         tuple_writer: &mut TupleWriter,
     ) -> Result<(), ReadingError> {

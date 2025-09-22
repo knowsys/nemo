@@ -3,7 +3,7 @@
 
 use crate::{
     chase_model::components::atom::ground_atom::GroundAtom,
-    rule_model::components::term::{primitive::Primitive, Term},
+    rule_model::components::term::{Term, primitive::Primitive},
 };
 
 use super::ProgramChaseTranslation;

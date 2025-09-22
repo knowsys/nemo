@@ -3,7 +3,7 @@
 
 use std::collections::BTreeMap;
 
-use super::{syntax::map, AnyDataValue, DataValue, IriDataValue, ValueDomain};
+use super::{AnyDataValue, DataValue, IriDataValue, ValueDomain, syntax::map};
 
 /// Physical representation of a finite map on [DataValue]s.
 ///
