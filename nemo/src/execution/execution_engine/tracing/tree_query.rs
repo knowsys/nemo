@@ -270,8 +270,14 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             entries.into_iter().collect::<Option<Vec<usize>>>()?
         };
 
+        let contains_edb = facts
+            .iter()
+            .find(|fact| !self.analysis.derived_predicates.contains(&fact.predicate()))
+            .is_some();
+        let loaded_edb = steps.iter().contains(&0);
+
         // Some of the traced facts come from the input database
-        if steps.iter().contains(&0) {
+        if contains_edb || loaded_edb {
             return Some(result);
         }
 
