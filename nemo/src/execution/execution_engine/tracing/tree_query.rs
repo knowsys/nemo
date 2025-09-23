@@ -272,8 +272,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
         let contains_edb = facts
             .iter()
-            .find(|fact| !self.analysis.derived_predicates.contains(&fact.predicate()))
-            .is_some();
+            .any(|fact| !self.analysis.derived_predicates.contains(&fact.predicate()));
         let loaded_edb = steps.iter().contains(&0);
 
         // Some of the traced facts come from the input database
