@@ -467,7 +467,10 @@ pub(crate) fn saturate(db: &mut DataBase, rules: &mut [SaturationRule]) {
         .start();
 
     for (rule_index, rule) in rules.iter_mut().enumerate() {
-        let predicate = rule.body_atoms[0].predicate.clone();
+        let predicate = rule
+            .input_predicates()
+            .min_by_key(|p| db.0.get(p).map(|t| t.len()).unwrap_or(0))
+            .unwrap();
 
         for (row, _) in db.0.get(&predicate).iter().flat_map(|table| table.iter()) {
             let fact = fact_from_row(row, predicate.clone());
