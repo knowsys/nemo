@@ -92,7 +92,7 @@ impl Trie {
     }
 
     /// Return a row based iterator over this trie.
-    pub(crate) fn row_iterator(&self) -> impl Iterator<Item = Vec<StorageValueT>> + '_ {
+    pub fn row_iterator(&self) -> impl Iterator<Item = Vec<StorageValueT>> + use<'_> {
         RowScan::new_full(self.partial_iterator())
     }
 
@@ -180,7 +180,7 @@ impl Trie {
     }
 
     /// Create a new [Trie] from a [SortedTupleBuffer].
-    pub(crate) fn from_tuple_buffer(buffer: SortedTupleBuffer) -> Self {
+    pub fn from_tuple_buffer(buffer: SortedTupleBuffer) -> Self {
         let mut intervalcolumn_builders = (0..buffer.column_number())
             .map(|_| IntervalColumnTBuilderMatrix::<IntervalLookupMethod>::default())
             .collect::<Vec<_>>();

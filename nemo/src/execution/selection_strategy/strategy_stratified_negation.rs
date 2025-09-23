@@ -5,8 +5,8 @@ use std::collections::HashMap;
 use petgraph::Directed;
 
 use crate::{
-    chase_model::{analysis::program_analysis::RuleAnalysis, components::rule::ChaseRule},
-    rule_model::components::tag::Tag,
+    chase_model::analysis::program_analysis::RuleAnalysis,
+    execution::selection_strategy::strategy::MetaStrategy, rule_model::components::tag::Tag,
     util::labeled_graph::LabeledGraph,
 };
 
@@ -22,7 +22,7 @@ type NegationGraph = LabeledGraph<usize, EdgeLabel, Directed>;
 
 /// Defines a strategy where rule are divided into different strata
 /// which are executed in succession.
-/// Entering a new statum implies that the table for every negated atom
+/// Entering a new stratum implies that the table for every negated atom
 /// will not get any new elements.
 #[derive(Debug)]
 pub struct StrategyStratifiedNegation<SubStrategy: RuleSelectionStrategy> {
@@ -107,10 +107,7 @@ impl<SubStrategy: RuleSelectionStrategy> RuleSelectionStrategy
     for StrategyStratifiedNegation<SubStrategy>
 {
     /// Create new [StrategyStratifiedNegation].
-    fn new(
-        rules: Vec<&ChaseRule>,
-        rule_analyses: Vec<&RuleAnalysis>,
-    ) -> Result<Self, SelectionStrategyError> {
+    fn new(rule_analyses: Vec<&RuleAnalysis>) -> Result<Self, SelectionStrategyError> {
         let graph = Self::build_graph(&rule_analyses);
 
         if let Some(mut strata) = graph.stratify(&[EdgeLabel::Negative]) {
@@ -119,11 +116,10 @@ impl<SubStrategy: RuleSelectionStrategy> RuleSelectionStrategy
             for stratum in &mut strata {
                 stratum.sort();
 
-                let sub_rules: Vec<&ChaseRule> = stratum.iter().map(|&i| rules[i]).collect();
                 let sub_analyses: Vec<&RuleAnalysis> =
                     stratum.iter().map(|&i| rule_analyses[i]).collect();
 
-                substrategies.push(SubStrategy::new(sub_rules, sub_analyses)?);
+                substrategies.push(SubStrategy::new(sub_analyses)?);
             }
 
             for stratum in &mut strata {
@@ -157,5 +153,16 @@ impl<SubStrategy: RuleSelectionStrategy> RuleSelectionStrategy
         }
 
         None
+    }
+}
+
+impl<SubStrategy: MetaStrategy> MetaStrategy for StrategyStratifiedNegation<SubStrategy> {
+    fn current_scc(&self) -> Box<[usize]> {
+        let inner = self.substrategies[self.current_stratum].current_scc();
+
+        inner
+            .iter()
+            .map(|i| self.ordered_strata[self.current_stratum][*i])
+            .collect()
     }
 }

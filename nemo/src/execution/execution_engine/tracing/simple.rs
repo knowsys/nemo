@@ -13,7 +13,6 @@ use crate::{
     execution::{
         ExecutionEngine,
         planning::plan_tracing::TracingStrategy,
-        selection_strategy::strategy::RuleSelectionStrategy,
         tracing::{
             error::TracingError,
             trace::{
@@ -32,7 +31,7 @@ use crate::{
     table_manager::SubtableExecutionPlan,
 };
 
-impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
+impl ExecutionEngine {
     /// Recursive part of `trace`.
     async fn trace_recursive(
         &mut self,

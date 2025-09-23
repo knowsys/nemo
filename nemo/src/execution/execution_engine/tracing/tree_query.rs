@@ -15,7 +15,6 @@ use crate::{
     execution::{
         ExecutionEngine,
         planning::plan_tracing::TracingStrategy,
-        selection_strategy::strategy::RuleSelectionStrategy,
         tracing::{
             error::TracingError,
             shared::{PaginationResponse, Rule as TraceRule, TableEntryQuery, TableEntryResponse},
@@ -102,7 +101,7 @@ fn partial_grounding_for_rule_head_and_fact(
     Some(grounding)
 }
 
-impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
+impl ExecutionEngine {
     /// The results for negated nodes is not computed as part of the normal
     /// evaluation of the query, and instead appendning the the full table,
     /// as an explanation for negated facts.

@@ -19,6 +19,7 @@
 #![feature(iter_intersperse)]
 #![feature(str_from_raw_parts)]
 #![feature(associated_type_defaults)]
+#![feature(btree_cursors)]
 
 /// The crate for underlying physical operations.
 pub extern crate nemo_physical;

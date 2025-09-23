@@ -22,7 +22,6 @@ use crate::{
                 valid_tables_plan, variable_translation,
             },
         },
-        selection_strategy::strategy::RuleSelectionStrategy,
         tracing::{
             node_query::{
                 TableEntriesForTreeNodesQuery, TableEntriesForTreeNodesQueryInner,
@@ -38,7 +37,7 @@ use crate::{
 mod manager;
 mod util;
 
-impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
+impl ExecutionEngine {
     /// Phase 1 of `trace_node_execute`
     ///
     /// Collect the fact restriction in each node into tables.

@@ -1,12 +1,17 @@
 //! Functionality which handles the execution of a program
 
-use std::collections::HashMap;
+use core::slice;
+use std::{collections::HashMap, sync::Arc};
 
 use nemo_physical::{
     datavalues::AnyDataValue,
     dictionary::DvDict,
-    management::database::sources::{SimpleTable, TableSource},
+    management::{
+        database::sources::{SimpleTable, TableSource},
+        execution_plan::ColumnOrder,
+    },
     meta::timing::TimedCode,
+    tabular::{buffer::TupleBuffer, trie::Trie},
 };
 
 use crate::{
@@ -16,6 +21,10 @@ use crate::{
         translation::ProgramChaseTranslation,
     },
     error::{Error, report::ProgramReport, warned::Warned},
+    execution::saturation::{
+            execution::{DataBase, saturate},
+            model::{SaturationRule, SaturationRuleTranslation},
+        },
     io::{formats::Export, import_manager::ImportManager},
     rule_file::RuleFile,
     rule_model::{
@@ -28,7 +37,7 @@ use crate::{
 
 use super::{
     execution_parameters::ExecutionParameters, rule_execution::RuleExecution,
-    selection_strategy::strategy::RuleSelectionStrategy,
+    selection_strategy::strategy::MetaStrategy,
 };
 
 pub mod tracing;
@@ -54,7 +63,7 @@ impl RuleInfo {
 
 /// Object which handles the evaluation of the program.
 #[derive(Debug)]
-pub struct ExecutionEngine<RuleSelectionStrategy> {
+pub struct ExecutionEngine {
     /// Logical program
     nemo_program: Program,
 
@@ -62,9 +71,6 @@ pub struct ExecutionEngine<RuleSelectionStrategy> {
     program: ChaseProgram,
     /// Auxillary information for `program`
     analysis: ProgramAnalysis,
-
-    /// The picked selection strategy for rules
-    rule_strategy: RuleSelectionStrategy,
 
     /// Management of tables that represent predicates
     table_manager: TableManager,
@@ -84,7 +90,7 @@ pub struct ExecutionEngine<RuleSelectionStrategy> {
     current_step: usize,
 }
 
-impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
+impl ExecutionEngine {
     /// Initialize a [ExecutionEngine] by parsing and translating
     /// the contents of the given file.
     pub async fn from_file(
@@ -124,16 +130,10 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             .iter()
             .for_each(|_| rule_infos.push(RuleInfo::new()));
 
-        let rule_strategy = Strategy::new(
-            chase_program.rules().iter().collect(),
-            analysis.rule_analysis.iter().collect(),
-        )?;
-
         Ok(Self {
             nemo_program: program,
             program: chase_program,
             analysis,
-            rule_strategy,
             table_manager,
             import_manager,
             predicate_fragmentation: HashMap::new(),
@@ -209,6 +209,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         rule_index: usize,
         execution: &RuleExecution,
     ) -> Result<Vec<Tag>, Error> {
+        TimedCode::instance().sub("Reasoning/Rules").start();
         let timing_string = format!("Reasoning/Rules/Rule {rule_index}");
 
         TimedCode::instance().sub(&timing_string).start();
@@ -233,6 +234,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         log::info!("Rule duration: {} ms", rule_duration.as_millis());
 
         self.current_step += 1;
+        TimedCode::instance().sub("Reasoning/Rules").stop();
         Ok(updated_predicates)
     }
 
@@ -267,12 +269,121 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         Ok(())
     }
 
+    async fn saturation_step(
+        &mut self,
+        rules: &mut [SaturationRule],
+        scc: &[usize],
+    ) -> Result<bool, Error> {
+        TimedCode::instance().sub("Reasoning/Saturation").start();
+
+        let mut db: DataBase = Default::default();
+        let mut new_facts = false;
+
+        let predicates: Vec<Tag> = self.table_manager.known_predicates().cloned().collect();
+        for predicate in &predicates {
+            let Some(table_id) = self.table_manager.combine_predicate(predicate).await? else {
+                continue;
+            };
+
+            db.add_table(
+                Arc::from(predicate.name()),
+                self.table_manager.table_raw_row_iterator(table_id).await?,
+            );
+        }
+
+        log::trace!("{db:?}");
+
+        let timing_string = format!("Reasoning/Saturation/Saturate/{scc:?}");
+
+        TimedCode::instance().sub(&timing_string).start();
+        saturate(&mut db, rules);
+        let duration = TimedCode::instance().sub(&timing_string).stop();
+
+        log::info!("Saturation took {}ms", duration.as_millis());
+
+        let timing_string = "Reasoning/Saturation/Save Tables".to_string();
+
+        TimedCode::instance().sub(&timing_string).start();
+        for predicate in &predicates {
+            let mut buffer = TupleBuffer::new(self.predicate_arity(predicate).unwrap());
+
+            for value in db.new_facts(predicate.name()) {
+                buffer.add_tuple_value(value);
+            }
+
+            if buffer.size() == 0 {
+                continue;
+            }
+
+            log::debug!("derived {} facts for {predicate}", buffer.size());
+
+            let trie = Trie::from_tuple_buffer(buffer.finalize());
+            self.table_manager.add_table(
+                predicate.clone(),
+                self.current_step,
+                ColumnOrder::default(),
+                trie,
+            );
+
+            new_facts = true;
+        }
+        let duration = TimedCode::instance().sub(&timing_string).stop();
+        log::info!("Saved saturation results: {}ms", duration.as_millis());
+
+        self.current_step += 1;
+        TimedCode::instance().sub("Reasoning/Saturation").stop();
+        Ok(new_facts)
+    }
+
     /// Executes the program.
-    pub async fn execute(&mut self) -> Result<(), Error> {
-        TimedCode::instance().sub("Reasoning/Rules").start();
+    pub async fn execute<Strategy: MetaStrategy>(&mut self) -> Result<(), Error> {
         TimedCode::instance().sub("Reasoning/Execution").start();
 
-        let rule_execution: Vec<RuleExecution> = self
+        let mut new_derivations: Option<bool> = None;
+
+        fn fill_saturation_rules(
+            this: &mut ExecutionEngine,
+            scc: &[usize],
+            store: &mut HashMap<
+                Box<[usize]>,
+                Result<Vec<SaturationRule>, HashMap<usize, SaturationRule>>,
+            >,
+        ) {
+            if store.contains_key(scc) {
+                return;
+            }
+
+            let saturation_rules: Vec<Option<SaturationRule>> = {
+                let mut dict = this.table_manager.dictionary_mut();
+                let mut translation = SaturationRuleTranslation::new(&mut dict);
+                scc.iter()
+                    .map(|index| {
+                        translation
+                            .convert(this.nemo_program.rule(*index))
+                            .inspect_err(|reason| {
+                                log::debug!("rule {index} does not support saturation ({reason})")
+                            })
+                            .ok()
+                    })
+                    .collect()
+            };
+
+            let saturation_rules = if saturation_rules.iter().all(Option::is_some) {
+                Ok(saturation_rules.into_iter().map(Option::unwrap).collect())
+            } else {
+                Err(saturation_rules
+                    .into_iter()
+                    .zip(scc)
+                    .flat_map(|(r, i)| Some(*i).zip(r))
+                    .collect())
+            };
+
+            store.insert(Box::from(scc), saturation_rules);
+        }
+
+        let mut saturation_rules = Default::default();
+
+        let executions: Vec<_> = self
             .program
             .rules()
             .iter()
@@ -280,17 +391,46 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             .zip(self.analysis.rule_analysis.iter())
             .map(|((index, rule), analysis)| RuleExecution::initialize(rule, index, analysis))
             .collect();
+        let mut rule_strategy = Strategy::new(self.analysis.rule_analysis.iter().collect())?;
 
-        let mut new_derivations: Option<bool> = None;
+        let mut last_scc: Option<Box<[usize]>> = None;
 
-        while let Some(index) = self.rule_strategy.next_rule(new_derivations) {
-            let updated_predicates = self.step(index, &rule_execution[index]).await?;
-            new_derivations = Some(!updated_predicates.is_empty());
+        while let Some(index) = rule_strategy.next_rule(new_derivations) {
+            let scc = rule_strategy.current_scc();
+            if let Some(last) = &last_scc
+                && &scc == last {
+                    log::debug!("skipping application of {index}");
+                    new_derivations = Some(false);
+                    continue;
+                }
 
-            self.defrag(updated_predicates).await?;
+            fill_saturation_rules(self, &scc, &mut saturation_rules);
+
+            match saturation_rules.get_mut(&scc).unwrap() {
+                Ok(rules) => {
+                    log::info!("<<< {0}: APPLYING SCC {scc:?} >>>", self.current_step);
+
+                    new_derivations = Some(self.saturation_step(rules, &scc).await?);
+                    last_scc = Some(scc);
+                }
+                Err(rules) => {
+                    if let Some(rule) = rules.get_mut(&index) {
+                        new_derivations = Some(
+                            self.saturation_step(slice::from_mut(rule), &[index])
+                                .await?,
+                        );
+                        last_scc = None;
+                    } else {
+                        let updated_predicates = self.step(index, &executions[index]).await?;
+                        last_scc = None;
+                        new_derivations = Some(!updated_predicates.is_empty());
+
+                        self.defrag(updated_predicates).await?;
+                    }
+                }
+            }
         }
 
-        TimedCode::instance().sub("Reasoning/Rules").stop();
         TimedCode::instance().sub("Reasoning/Execution").stop();
 
         Ok(())

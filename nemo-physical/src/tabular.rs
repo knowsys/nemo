@@ -5,5 +5,5 @@ pub mod operations;
 pub mod trie;
 pub(crate) mod triescan;
 
-pub(crate) mod buffer;
+pub mod buffer;
 pub(crate) mod rowscan;

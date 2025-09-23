@@ -36,7 +36,7 @@ use nemo::{
     datavalues::AnyDataValue,
     error::Error,
     execution::{
-        DefaultExecutionEngine, ExecutionEngine,
+        DefaultExecutionStrategy, ExecutionEngine,
         execution_parameters::ExecutionParameters,
         tracing::{node_query::TableEntriesForTreeNodesQuery, tree_query::TreeForTableQuery},
     },
@@ -150,7 +150,7 @@ fn print_timing_details() {
 }
 
 /// Prints detailed memory information.
-fn print_memory_details(engine: &DefaultExecutionEngine) {
+fn print_memory_details(engine: &ExecutionEngine) {
     println!("\nMemory report:\n\n{}", engine.memory_usage());
 }
 
@@ -169,7 +169,7 @@ fn parse_trace_facts(cli: &CliApp) -> Result<Vec<String>, Error> {
 }
 
 /// Deal with tracing
-async fn handle_tracing(cli: &CliApp, engine: &mut DefaultExecutionEngine) -> Result<(), CliError> {
+async fn handle_tracing(cli: &CliApp, engine: &mut ExecutionEngine) -> Result<(), CliError> {
     let tracing_facts = parse_trace_facts(cli)?;
     if !tracing_facts.is_empty() {
         log::info!("Starting tracing of {} facts...", tracing_facts.len());
@@ -214,10 +214,7 @@ async fn handle_tracing(cli: &CliApp, engine: &mut DefaultExecutionEngine) -> Re
     Ok(())
 }
 
-async fn handle_tracing_tree(
-    cli: &CliApp,
-    engine: &mut DefaultExecutionEngine,
-) -> Result<(), CliError> {
+async fn handle_tracing_tree(cli: &CliApp, engine: &mut ExecutionEngine) -> Result<(), CliError> {
     if let Some(query_json) = &cli.tracing_tree.trace_tree_json {
         let tree_query: TreeForTableQuery =
             serde_json::from_str(query_json).map_err(|_| CliError::TracingInvalidFact {
@@ -233,10 +230,7 @@ async fn handle_tracing_tree(
     Ok(())
 }
 
-async fn handle_tracing_node(
-    cli: &CliApp,
-    engine: &mut DefaultExecutionEngine,
-) -> Result<(), CliError> {
+async fn handle_tracing_node(cli: &CliApp, engine: &mut ExecutionEngine) -> Result<(), CliError> {
     if let Some(query_file) = &cli.tracing_node.trace_node_json {
         let query_string = read_to_string(query_file).expect("Unable to read file");
 
@@ -297,7 +291,7 @@ async fn run(mut cli: CliApp) -> Result<(), CliError> {
 
     TimedCode::instance().sub("Reasoning").start();
     log::info!("Reasoning ... ");
-    engine.execute().await?;
+    engine.execute::<DefaultExecutionStrategy>().await?;
     log::info!("Reasoning done");
     TimedCode::instance().sub("Reasoning").stop();
 

@@ -16,7 +16,9 @@ use web_sys::{Blob, FileReaderSync};
 use nemo::{
     datavalues::{AnyDataValue, DataValue},
     error::ReadingError,
-    execution::{ExecutionEngine, execution_parameters::ExecutionParameters},
+    execution::{
+        DefaultExecutionStrategy, ExecutionEngine, execution_parameters::ExecutionParameters,
+    },
     io::{
         ImportManager,
         resource_providers::{ResourceProvider, ResourceProviders, http},
@@ -126,7 +128,7 @@ impl ResourceProvider for BlobResourceProvider {
 
 #[wasm_bindgen]
 pub struct NemoEngine {
-    engine: nemo::execution::DefaultExecutionEngine,
+    engine: nemo::execution::ExecutionEngine,
 }
 
 #[cfg(feature = "web_sys_unstable_apis")]
@@ -264,7 +266,7 @@ impl NemoEngine {
     #[wasm_bindgen]
     pub async fn reason(&mut self) -> Result<(), NemoError> {
         self.engine
-            .execute()
+            .execute::<DefaultExecutionStrategy>()
             .await
             .map_err(WasmOrInternalNemoError::Nemo)
             .map_err(NemoError)
