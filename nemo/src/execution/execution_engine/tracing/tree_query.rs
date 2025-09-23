@@ -270,8 +270,13 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             entries.into_iter().collect::<Option<Vec<usize>>>()?
         };
 
+        let contains_edb = facts
+            .iter()
+            .any(|fact| !self.analysis.derived_predicates.contains(&fact.predicate()));
+        let loaded_edb = steps.iter().contains(&0);
+
         // Some of the traced facts come from the input database
-        if steps.iter().contains(&0) {
+        if contains_edb || loaded_edb {
             return Some(result);
         }
 
@@ -296,8 +301,8 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             let mut query_results = Vec::new();
 
             for (partial_grounding, &step) in combination.into_iter().zip(steps.iter()) {
-                let rule = &self.program.rules()[rule_index];
-                let analysis = &self.analysis.rule_analysis[rule_index];
+                let rule = &program.rules()[rule_index];
+                let analysis = &program_analysis.rule_analysis[rule_index];
 
                 let trace_strategy = TracingStrategy::initialize(rule, partial_grounding?).ok()?;
 
