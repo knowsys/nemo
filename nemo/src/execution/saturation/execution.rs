@@ -2,8 +2,8 @@
 
 use core::panic;
 use std::{
-    collections::{btree_map, BTreeMap, HashMap},
-    ops::{Bound, Index},
+    collections::{BTreeMap, HashMap, btree_map},
+    ops::{Bound, Deref, DerefMut, Index},
     sync::Arc,
 };
 
@@ -64,9 +64,10 @@ impl SaturationSubstitution {
             };
 
             if let Some(prev) = self.insert(*var, value.value())
-                && prev != value.value() {
-                    return false;
-                }
+                && prev != value.value()
+            {
+                return false;
+            }
         }
 
         true
@@ -95,18 +96,20 @@ impl SaturationAtom {
                 }
                 BodyTerm::Variable(idx) => {
                     if let Some(prev) = res.insert(*idx, *value)
-                        && prev != *value {
-                            return None;
-                        }
+                        && prev != *value
+                    {
+                        return None;
+                    }
                 }
                 BodyTerm::Ignore => {}
             }
         }
 
         if let Some(equality) = self.equality
-            && !res.satisfies(equality) {
-                return None;
-            }
+            && !res.satisfies(equality)
+        {
+            return None;
+        }
 
         Some(res)
     }
@@ -241,7 +244,7 @@ fn match_rows(pattern: &[RowElement], row: &[RowElement]) -> MatchResult {
 #[derive(Debug)]
 struct RowIterator<'a> {
     lower_cursor: btree_map::Cursor<'a, Row, Age>,
-    upper_cursor: btree_map::Cursor<'a, Row, Age>,
+    upper_cursor_next: Option<&'a Row>,
     pattern: Row,
 }
 
@@ -250,18 +253,18 @@ impl<'a> Iterator for RowIterator<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         while let Some((row, _)) = self.lower_cursor.next() {
-            if let Some((other_row, _)) = self.upper_cursor.peek_next()
-                && other_row == row {
-                    return None;
-                }
+            if let Some(other_row) = self.upper_cursor_next
+                && other_row == row
+            {
+                return None;
+            }
 
             match match_rows(&self.pattern, row) {
                 MatchResult::Matches => return Some(row),
                 MatchResult::InBounds => continue,
                 MatchResult::OutOfBounds => {
                     log::trace!("OutOfBounds {row:?}, {:?}", self.pattern);
-                    log::trace!("upper cursor next {:?}", self.upper_cursor.peek_next());
-                    log::trace!("upper cursor prev {:?}", self.upper_cursor.peek_prev());
+                    log::trace!("upper cursor next {:?}", self.upper_cursor_next);
                     unreachable!("this should have been caught early")
                 }
             }
@@ -290,9 +293,10 @@ impl GhostBound for Row {
 fn find_all_matches<'a>(pattern: Row, table: &'a BTreeMap<Row, Age>) -> RowIterator<'a> {
     let lower_cursor = table.lower_bound(Bound::Included(&pattern));
     let upper_cursor = table.upper_bound(Bound::Included(&pattern.invert_bound()));
+    let upper_cursor_next = upper_cursor.peek_next().map(|(r, _)| r);
     RowIterator {
         lower_cursor,
-        upper_cursor,
+        upper_cursor_next,
         pattern,
     }
 }
@@ -313,9 +317,10 @@ impl Iterator for RowMatcher<'_> {
             let mut subst = self.substitution.clone();
             if subst.update(&self.atom.terms, row) {
                 if let Some(equality) = &self.atom.equality
-                    && !subst.satisfies(*equality) {
-                        continue;
-                    }
+                    && !subst.satisfies(*equality)
+                {
+                    continue;
+                }
 
                 return Some(subst);
             }
@@ -362,8 +367,41 @@ enum Age {
     New,
 }
 
+#[derive(Debug)]
+enum Singular<'a, T> {
+    #[allow(unused)]
+    Ref(&'a mut T),
+    Owned(T),
+}
+
+impl<T: Default> Default for Singular<'_, T> {
+    fn default() -> Self {
+        Self::Owned(T::default())
+    }
+}
+
+impl<'a, T> Deref for Singular<'a, T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Singular::Ref(r) => &*r,
+            Singular::Owned(o) => o,
+        }
+    }
+}
+
+impl<'a, T> DerefMut for Singular<'a, T> {
+    fn deref_mut(&mut self) -> &mut T {
+        match self {
+            Singular::Ref(r) => r,
+            Singular::Owned(o) => o,
+        }
+    }
+}
+
 #[derive(Debug, Default)]
-pub(crate) struct DataBase(HashMap<Arc<str>, BTreeMap<Row, Age>>);
+pub(crate) struct DataBase<'a>(HashMap<Arc<str>, Singular<'a, BTreeMap<Row, Age>>>);
 
 impl ExecutionTree {
     fn pop(&mut self) -> Option<&JoinOp> {
@@ -433,9 +471,10 @@ impl Iterator for JoinIter<'_> {
                 current,
             } => loop {
                 if let Some(current) = current
-                    && let Some(next) = current.next() {
-                        return Some(next);
-                    }
+                    && let Some(next) = current.next()
+                {
+                    return Some(next);
+                }
 
                 let substitution = inner.next()?;
                 *current = Some(join(substitution, atom.clone(), table));
@@ -506,9 +545,10 @@ pub(crate) fn saturate(db: &mut DataBase, rules: &mut [SaturationRule]) {
                         let mut cursor = table.lower_bound_mut(Bound::Included(&row));
 
                         if let Some((other_row, _)) = cursor.peek_next()
-                            && other_row == &row {
-                                continue;
-                            }
+                            && other_row == &row
+                        {
+                            continue;
+                        }
 
                         let fact = fact_from_row(&row, atom.predicate.clone());
 
@@ -534,15 +574,17 @@ pub(crate) fn saturate(db: &mut DataBase, rules: &mut [SaturationRule]) {
         .stop();
 }
 
-impl DataBase {
+impl DataBase<'_> {
     pub fn add_table(
         &mut self,
         predicate: Arc<str>,
         table: impl Iterator<Item = Vec<StorageValueT>>,
     ) {
-        let table = table
-            .map(|row| (row.into_iter().map(RowElement::Value).collect(), Age::Old))
-            .collect();
+        let table = Singular::Owned(
+            table
+                .map(|row| (row.into_iter().map(RowElement::Value).collect(), Age::Old))
+                .collect(),
+        );
 
         self.0.insert(predicate, table);
     }
@@ -576,8 +618,8 @@ mod test {
     use super::Age;
 
     use crate::execution::saturation::{
-        execution::{find_all_matches, saturate, DataBase, Row, RowElement},
-        model::{bench_rules, BodyTerm, Head, SaturationAtom, SaturationRule},
+        execution::{DataBase, Row, RowElement, Singular, find_all_matches, saturate},
+        model::{BodyTerm, Head, SaturationAtom, SaturationRule, bench_rules},
     };
 
     macro_rules! table {
@@ -662,7 +704,7 @@ mod test {
 
         let mut db = DataBase(HashMap::from([(
             predicate.clone(),
-            BTreeMap::from([(row, Age::Old)]),
+            Singular::Owned(BTreeMap::from([(row, Age::Old)])),
         )]));
 
         saturate(&mut db, &mut rules);
@@ -715,9 +757,9 @@ mod test {
         let p4_table: BTreeMap<Row, Age> = table![[0, 0, 0], [0, 0, 1],];
 
         let mut db = HashMap::new();
-        db.insert(p2.clone(), p2_table);
-        db.insert(p3.clone(), p3_table);
-        db.insert(p4.clone(), p4_table.clone());
+        db.insert(p2.clone(), Singular::Owned(p2_table));
+        db.insert(p3.clone(), Singular::Owned(p3_table));
+        db.insert(p4.clone(), Singular::Owned(p4_table.clone()));
 
         let rule = SaturationRule {
             body_atoms: Arc::new([p2_atom, p3_atom, p4_atom]),
@@ -732,7 +774,7 @@ mod test {
 
         assert_eq!(
             db.0.get(&p1)
-                .unwrap_or(&BTreeMap::new())
+                .unwrap_or(&Default::default())
                 .keys()
                 .collect::<Vec<_>>(),
             p4_table.keys().collect::<Vec<_>>()
