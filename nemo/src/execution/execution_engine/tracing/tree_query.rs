@@ -296,8 +296,8 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             let mut query_results = Vec::new();
 
             for (partial_grounding, &step) in combination.into_iter().zip(steps.iter()) {
-                let rule = &self.program.rules()[rule_index];
-                let analysis = &self.analysis.rule_analysis[rule_index];
+                let rule = &program.rules()[rule_index];
+                let analysis = &program_analysis.rule_analysis[rule_index];
 
                 let trace_strategy = TracingStrategy::initialize(rule, partial_grounding?).ok()?;
 

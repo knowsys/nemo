@@ -218,15 +218,19 @@ async fn handle_tracing_tree(
     cli: &CliApp,
     engine: &mut DefaultExecutionEngine,
 ) -> Result<(), CliError> {
-    if let Some(query_json) = &cli.tracing_tree.trace_tree_json {
+    if let Some(query_file) = &cli.tracing_tree.trace_tree_json {
+        let query_string = read_to_string(query_file)?;
+
         let tree_query: TreeForTableQuery =
-            serde_json::from_str(query_json).map_err(|_| CliError::TracingInvalidFact {
-                fact: String::from("placeholder"),
+            serde_json::from_str(&query_string).map_err(|error| {
+                CliError::TracingInvalidJsonInput {
+                    error: error.to_string(),
+                }
             })?;
 
         let result = engine.trace_tree(tree_query).await?;
 
-        let json = serde_json::to_string_pretty(&result).unwrap();
+        let json = serde_json::to_string_pretty(&result).expect("json serialization failed");
         println!("{json}");
     }
 
@@ -238,14 +242,16 @@ async fn handle_tracing_node(
     engine: &mut DefaultExecutionEngine,
 ) -> Result<(), CliError> {
     if let Some(query_file) = &cli.tracing_node.trace_node_json {
-        let query_string = read_to_string(query_file).expect("Unable to read file");
+        let query_string = read_to_string(query_file)?;
 
-        let node_query: TableEntriesForTreeNodesQuery =
-            serde_json::from_str(&query_string).expect("Unable to parse json file");
+        let node_query: TableEntriesForTreeNodesQuery = serde_json::from_str(&query_string)
+            .map_err(|error| CliError::TracingInvalidJsonInput {
+                error: error.to_string(),
+            })?;
 
         let result = engine.trace_node(&node_query).await;
 
-        let json = serde_json::to_string_pretty(&result).unwrap();
+        let json = serde_json::to_string_pretty(&result).expect("json serialization failed");
         println!("{json}");
     }
 
