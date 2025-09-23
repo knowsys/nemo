@@ -16,8 +16,8 @@ use oxiri::Iri;
 use crate::{
     chase_model::components::rule::ChaseRule,
     io::format_builder::{
-        AnyImportExportBuilder, FormatParameter, Parameters, StandardParameter, SupportedFormatTag,
-        format_parameter, format_tag, value_type_matches,
+        format_parameter, format_tag, value_type_matches, AnyImportExportBuilder, FormatParameter,
+        Parameters, StandardParameter, SupportedFormatTag,
     },
     rule_model::{
         components::{import_export::Direction, term::value_type::ValueType},
@@ -34,7 +34,13 @@ use super::{ExportHandler, FileFormatMeta, FormatBuilder, ImportHandler};
 use crate::io::formats::dsv::value_format::DsvValueFormats;
 
 /// A char limit to decide if a query is send as GET or POST request
-const HTTP_GET_CHAR_LIMIT: usize = 2000;
+const HTTP_GET_CHAR_LIMIT: usize = 2_000;
+
+/// How many bindings to push into a single query
+const MAX_BINDINGS_PER_PAGE: usize = 32_000;
+
+/// How many characters can fit into a single query page
+const QUERY_PAGE_CHAR_LIMIT: usize = 740_000;
 
 format_tag! {
     pub enum SparqlTag(SupportedFormatTag::Sparql) {
@@ -257,9 +263,9 @@ impl ImportHandler for SparqlHandler {
 #[cfg(test)]
 mod test {
     use crate::parser::{
-        ParserState,
-        ast::{ProgramAST, directive::import::Import},
+        ast::{directive::import::Import, ProgramAST},
         input::ParserInput,
+        ParserState,
     };
     use nom::combinator::all_consuming;
 
