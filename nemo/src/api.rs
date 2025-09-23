@@ -32,9 +32,7 @@ use crate::{
     rule_file::RuleFile,
     rule_model::{
         components::tag::Tag,
-        pipeline::transformations::{
-            default::TransformationDefault, validate::TransformationValidate,
-        },
+        pipeline::transformations::default::TransformationDefault,
         programs::{handle::ProgramHandle, program::Program},
     },
 };
@@ -92,6 +90,7 @@ pub fn validate(input: String, label: String) -> ProgramReport {
     let file = RuleFile::new(input, label);
     let handle = ProgramHandle::from_file(&file);
     let report = ProgramReport::new(file);
+    let parameters = ExecutionParameters::default();
 
     let (program, report) = match report.merge_program_parser_report(handle) {
         Ok(result) => result,
@@ -100,7 +99,7 @@ pub fn validate(input: String, label: String) -> ProgramReport {
 
     let (_program, report) = match report.merge_validation_report(
         &program,
-        program.transform(TransformationValidate::default()),
+        program.transform(TransformationDefault::new(&parameters)),
     ) {
         Ok(result) => result,
         Err(report) => return report,

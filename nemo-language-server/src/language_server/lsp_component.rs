@@ -105,6 +105,12 @@ where
                     name: "Declare".to_string(),
                 });
             }
+            ParserContext::ParameterDecl => {
+                return Some(LSPSymbolInfo {
+                    kind: SymbolKind::PROPERTY,
+                    name: "ParameterDeclare".to_string(),
+                });
+            }
             ParserContext::Import => {
                 return Some(LSPSymbolInfo {
                     kind: SymbolKind::PROPERTY,
