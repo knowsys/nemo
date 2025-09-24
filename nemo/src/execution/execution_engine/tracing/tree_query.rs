@@ -106,13 +106,17 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     /// The results for negated nodes is not computed as part of the normal
     /// evaluation of the query, and instead appendning the the full table,
     /// as an explanation for negated facts.
-    async fn trace_tree_add_negation(&mut self, response: &mut TreeForTableResponse) {
+    async fn trace_tree_add_negation(
+        &mut self,
+        response: &mut TreeForTableResponse,
+        program: &ChaseProgram,
+    ) {
         if let Some(next) = &mut response.next {
             for child in &mut next.children {
-                Box::pin(self.trace_tree_add_negation(child)).await;
+                Box::pin(self.trace_tree_add_negation(child, program)).await;
             }
 
-            let rule = self.chase_program().rules()[next.rule.id].clone();
+            let rule = program.rules()[next.rule.id].clone();
             for negative_atom in rule.negative_body() {
                 let rows =
                     if let Ok(Some(rows)) = self.predicate_rows(&negative_atom.predicate()).await {
@@ -294,9 +298,16 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         let logical_rule = self.program().rule(rule_index).clone();
 
         for (head_index, _) in chase_rule.head().iter().enumerate() {
-            let combination = facts.iter().cloned().map(|fact| {
-                partial_grounding_for_rule_head_and_fact(chase_rule.clone(), head_index, fact)
-            });
+            let Some(combination) = facts
+                .iter()
+                .cloned()
+                .map(|fact| {
+                    partial_grounding_for_rule_head_and_fact(chase_rule.clone(), head_index, fact)
+                })
+                .collect::<Option<Vec<_>>>()
+            else {
+                continue;
+            };
 
             let mut query_results = Vec::new();
 
@@ -304,7 +315,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 let rule = &program.rules()[rule_index];
                 let analysis = &program_analysis.rule_analysis[rule_index];
 
-                let trace_strategy = TracingStrategy::initialize(rule, partial_grounding?).ok()?;
+                let trace_strategy = TracingStrategy::initialize(rule, partial_grounding).ok()?;
 
                 let mut execution_plan = SubtableExecutionPlan::default();
                 let mut variable_order = analysis.promising_variable_orders[0].clone(); // TODO: This selection is arbitrary
@@ -474,7 +485,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         }
 
         if let Some(mut result) = self.trace_tree_recursive(facts, &program, &analysis).await {
-            self.trace_tree_add_negation(&mut result).await;
+            self.trace_tree_add_negation(&mut result, &program).await;
             Ok(result)
         } else {
             let predicate = Tag::new(query.predicate.clone());

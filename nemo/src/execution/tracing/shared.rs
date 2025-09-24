@@ -48,7 +48,7 @@ impl TryFrom<&Literal> for PredicateWithParameters {
 
 impl From<&ImportClause> for PredicateWithParameters {
     fn from(clause: &ImportClause) -> Self {
-        let name = clause.import_directive().predicate().to_string();
+        let name = clause.predicate().to_string();
 
         Self {
             name,

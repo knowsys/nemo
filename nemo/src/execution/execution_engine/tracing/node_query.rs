@@ -505,6 +505,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         node: &TableEntriesForTreeNodesQueryInner,
         address: TreeAddress,
         predicate: &Tag,
+        program: &ChaseProgram,
     ) {
         // Collect all (syntactly) possible rules
         // that could be triggered by or could trigger
@@ -564,7 +565,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         elements.push(element);
 
         if let Some(successor) = &node.next {
-            let rule = self.chase_program().rules()[successor.rule].clone();
+            let rule = program.rules()[successor.rule].clone();
 
             // Call this function recursively for each successor
 
@@ -584,6 +585,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                     child,
                     next_address,
                     &next_predicate,
+                    program,
                 ))
                 .await;
             }
@@ -645,6 +647,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     async fn trace_node_prepare(
         &mut self,
         query: &TableEntriesForTreeNodesQuery,
+        program: &ChaseProgram,
     ) -> TableEntriesForTreeNodesResponse {
         let mut elements = Vec::<TableEntriesForTreeNodesResponseElement>::default();
 
@@ -653,6 +656,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             &query.inner,
             Vec::default(),
             &Tag::new(query.predicate.clone()),
+            program,
         )
         .await;
 
@@ -666,7 +670,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     ) -> TableEntriesForTreeNodesResponse {
         let (program, analysis) = self.program.prepare_tracing();
 
-        let response = self.trace_node_prepare(query).await;
+        let response = self.trace_node_prepare(query, &program).await;
         let manager = self.trace_node_execute(query, &program, &analysis).await;
 
         self.trace_node_answer(&manager, response)

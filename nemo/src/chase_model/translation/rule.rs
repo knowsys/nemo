@@ -86,10 +86,8 @@ impl ProgramChaseTranslation {
 
         // Handle imports
         for import in rule.imports() {
-            self.predicate_arity.insert(
-                import.import_directive().predicate().clone(),
-                import.output_variables().len(),
-            );
+            self.predicate_arity
+                .insert(import.predicate().clone(), import.output_variables().len());
 
             let import_builder = import
                 .import_directive()

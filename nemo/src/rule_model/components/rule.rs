@@ -546,6 +546,14 @@ impl Display for Rule {
             }
         }
 
+        for (import_index, import) in self.imports.iter().enumerate() {
+            if import_index > 0 || (import_index == 0 && !self.body.is_empty()) {
+                f.write_str(", ")?;
+            }
+
+            write!(f, "{import}")?;
+        }
+
         f.write_str(" .")
     }
 }
