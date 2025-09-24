@@ -91,6 +91,11 @@ impl ReadingError {
         self.predicate = Some(predicate);
         self
     }
+
+    /// Return the underlying [ReadingErrorKind]
+    pub fn kind(self) -> ReadingErrorKind {
+        self.kind
+    }
 }
 
 impl<T> From<T> for ReadingError

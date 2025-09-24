@@ -2,6 +2,7 @@
 
 use std::io::{BufReader, Read};
 
+use nemo_physical::error::ReadingErrorKind;
 use nemo_physical::management::bytesized::ByteSized;
 use nemo_physical::{datasources::table_providers::TableProvider, error::ReadingError};
 use nemo_physical::{
@@ -85,8 +86,22 @@ impl SparqlReader {
         bindings: &[Vec<AnyDataValue>],
         tuple_writer: &mut TupleWriter<'_>,
     ) -> Result<(), ReadingError> {
-        for query in self.queries_with_bindings(bound_positions, bindings, MAX_BINDINGS_PER_PAGE) {
-            self.load_from_query(&query, tuple_writer).await?
+        log::debug!("got {} bindings", bindings.len());
+
+        for (page, query) in
+            self.queries_with_bindings(bound_positions, bindings, MAX_BINDINGS_PER_PAGE)
+        {
+            let result = self.load_from_query(&query, tuple_writer).await;
+
+            if let Err(error) = result &&
+                let ReadingErrorKind::HttpTransfer(error) = error.kind()
+                && let Some(code) = error.status() && code == reqwest::StatusCode::PAYLOAD_TOO_LARGE
+            {
+                // the page size is still too large, try half
+                for page in page.chunks(page.len().div_ceil(2)) {
+                    Box::pin(self.load_from_bindings(bound_positions, page, tuple_writer)).await?;
+                }
+            }
         }
 
         Ok(())
@@ -216,18 +231,18 @@ impl SparqlReader {
         }
     }
 
-    fn queries_with_bindings(
+    fn queries_with_bindings<'bindings>(
         &self,
         bound_positions: &[usize],
-        bindings: &[Vec<AnyDataValue>],
+        bindings: &'bindings [Vec<AnyDataValue>],
         page_size: usize,
-    ) -> impl Iterator<Item = Query> {
+    ) -> impl Iterator<Item = (&'bindings [Vec<AnyDataValue>], Query)> {
         let mut queries = Vec::new();
 
         for page in bindings.chunks(page_size) {
             match self.query_with_bindings(bound_positions, page) {
                 Some(query) => {
-                    queries.push(query);
+                    queries.push((page, query));
                 }
                 None => queries.extend(self.queries_with_bindings(
                     bound_positions,
