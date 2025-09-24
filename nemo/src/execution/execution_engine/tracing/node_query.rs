@@ -138,6 +138,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         discarded_columns: &[usize],
         before_step: usize,
         program: &ChaseProgram,
+        program_analysis: &ProgramAnalysis,
     ) {
         manager.add_discard(&address, discarded_columns);
 
@@ -147,7 +148,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
             let rule = program.rules()[successor.rule].clone();
             let order =
-                self.analysis.rule_analysis[successor.rule].promising_variable_orders[0].clone();
+                program_analysis.rule_analysis[successor.rule].promising_variable_orders[0].clone();
 
             // Any facts derived after this point are not relevant for this node
             let next_step = {
@@ -186,6 +187,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                     &discarded_columns,
                     next_step,
                     program,
+                    program_analysis,
                 ))
                 .await;
             }
@@ -422,6 +424,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             &discarded_columns,
             before_step,
             program,
+            program_analysis,
         )
         .await;
 
