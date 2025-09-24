@@ -98,7 +98,7 @@ impl SparqlReader {
                 && let Some(code) = error.status() && code == reqwest::StatusCode::PAYLOAD_TOO_LARGE
             {
                 // the page size is still too large, try half
-                for page in page.chunks(page.len().div_ceil(2)) {
+                for page in page.chunks(page.len().div_ceil(2).max(1)) {
                     Box::pin(self.load_from_bindings(bound_positions, page, tuple_writer)).await?;
                 }
             }
@@ -239,7 +239,7 @@ impl SparqlReader {
     ) -> impl Iterator<Item = (&'bindings [Vec<AnyDataValue>], Query)> {
         let mut queries = Vec::new();
 
-        for page in bindings.chunks(page_size) {
+        for page in bindings.chunks(page_size.max(1)) {
             match self.query_with_bindings(bound_positions, page) {
                 Some(query) => {
                     queries.push((page, query));
