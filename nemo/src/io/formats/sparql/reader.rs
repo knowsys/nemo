@@ -11,20 +11,20 @@ use nemo_physical::{
 };
 use oxiri::Iri;
 use oxrdf::{Literal, NamedNode};
+use spargebra::Query;
 use spargebra::algebra::GraphPattern;
 use spargebra::term::GroundTerm;
-use spargebra::Query;
 
 use crate::chase_model::components::rule::ChaseRule;
 use crate::io::format_builder::FormatBuilder;
 use crate::io::formats::dsv::reader::DsvReader;
 use crate::io::formats::dsv::value_format::DsvValueFormats;
-use crate::io::resource_providers::http::HttpResourceProvider;
 use crate::io::resource_providers::ResourceProvider;
+use crate::io::resource_providers::http::HttpResourceProvider;
 use crate::rule_model::components::import_export::Direction;
 use crate::syntax::import_export::file_format::MEDIA_TYPE_TSV;
 
-use super::{SparqlBuilder, MAX_BINDINGS_PER_PAGE, QUERY_PAGE_CHAR_LIMIT};
+use super::{MAX_BINDINGS_PER_PAGE, QUERY_PAGE_CHAR_LIMIT, SparqlBuilder};
 
 #[derive(Debug)]
 pub(crate) struct SparqlReader {
@@ -86,17 +86,20 @@ impl SparqlReader {
         bindings: &[Vec<AnyDataValue>],
         tuple_writer: &mut TupleWriter<'_>,
     ) -> Result<(), ReadingError> {
-        log::debug!("got {} bindings", bindings.len());
-
         for (page, query) in
             self.queries_with_bindings(bound_positions, bindings, MAX_BINDINGS_PER_PAGE)
         {
             let result = self.load_from_query(&query, tuple_writer).await;
 
-            if let Err(error) = result &&
-                let ReadingErrorKind::HttpTransfer(error) = error.kind()
-                && let Some(code) = error.status() && code == reqwest::StatusCode::PAYLOAD_TOO_LARGE
+            if let Err(error) = result
+                && let ReadingErrorKind::HttpTransfer(error) = error.kind()
+                && let Some(code) = error.status()
+                && code == reqwest::StatusCode::PAYLOAD_TOO_LARGE
             {
+                if bindings.len() == 1 {
+                    return Err(ReadingError::new_external(Box::new(error)));
+                }
+
                 // the page size is still too large, try half
                 for page in page.chunks(page.len().div_ceil(2).max(1)) {
                     Box::pin(self.load_from_bindings(bound_positions, page, tuple_writer)).await?;

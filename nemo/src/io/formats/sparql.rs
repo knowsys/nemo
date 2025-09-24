@@ -16,8 +16,8 @@ use oxiri::Iri;
 use crate::{
     chase_model::components::rule::ChaseRule,
     io::format_builder::{
-        format_parameter, format_tag, value_type_matches, AnyImportExportBuilder, FormatParameter,
-        Parameters, StandardParameter, SupportedFormatTag,
+        AnyImportExportBuilder, FormatParameter, Parameters, StandardParameter, SupportedFormatTag,
+        format_parameter, format_tag, value_type_matches,
     },
     rule_model::{
         components::{import_export::Direction, term::value_type::ValueType},
@@ -263,9 +263,9 @@ impl ImportHandler for SparqlHandler {
 #[cfg(test)]
 mod test {
     use crate::parser::{
-        ast::{directive::import::Import, ProgramAST},
-        input::ParserInput,
         ParserState,
+        ast::{ProgramAST, directive::import::Import},
+        input::ParserInput,
     };
     use nom::combinator::all_consuming;
 
