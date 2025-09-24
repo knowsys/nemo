@@ -2,6 +2,7 @@
 
 use std::io::{BufReader, Read};
 
+use nemo_physical::error::ReadingErrorKind;
 use nemo_physical::management::bytesized::ByteSized;
 use nemo_physical::{datasources::table_providers::TableProvider, error::ReadingError};
 use nemo_physical::{
@@ -23,12 +24,12 @@ use crate::io::resource_providers::http::HttpResourceProvider;
 use crate::rule_model::components::import_export::Direction;
 use crate::syntax::import_export::file_format::MEDIA_TYPE_TSV;
 
-use super::SparqlBuilder;
+use super::{MAX_BINDINGS_PER_PAGE, QUERY_PAGE_CHAR_LIMIT, SparqlBuilder};
 
 #[derive(Debug)]
-#[allow(unused)]
 pub(crate) struct SparqlReader {
     builder: SparqlBuilder,
+    #[allow(unused)]
     filter_rules: Vec<ChaseRule>,
 }
 
@@ -65,6 +66,48 @@ impl SparqlReader {
         );
 
         Self::execute_from_builder(&builder).await
+    }
+
+    async fn load_from_query(
+        &self,
+        query: &Query,
+        tuple_writer: &mut TupleWriter<'_>,
+    ) -> Result<(), ReadingError> {
+        let response = self
+            .execute_query(&self.builder.endpoint, query)
+            .await?
+            .expect("query result should not be empty");
+        Self::read_table_data(response, tuple_writer, self.builder.value_formats.clone())
+    }
+
+    async fn load_from_bindings(
+        &self,
+        bound_positions: &[usize],
+        bindings: &[Vec<AnyDataValue>],
+        tuple_writer: &mut TupleWriter<'_>,
+    ) -> Result<(), ReadingError> {
+        for (page, query) in
+            self.queries_with_bindings(bound_positions, bindings, MAX_BINDINGS_PER_PAGE)
+        {
+            let result = self.load_from_query(&query, tuple_writer).await;
+
+            if let Err(error) = result
+                && let ReadingErrorKind::HttpTransfer(error) = error.kind()
+                && let Some(code) = error.status()
+                && code == reqwest::StatusCode::PAYLOAD_TOO_LARGE
+            {
+                if bindings.len() == 1 {
+                    return Err(ReadingError::new_external(Box::new(error)));
+                }
+
+                // the page size is still too large, try half
+                for page in page.chunks(page.len().div_ceil(2).max(1)) {
+                    Box::pin(self.load_from_bindings(bound_positions, page, tuple_writer)).await?;
+                }
+            }
+        }
+
+        Ok(())
     }
 
     fn read_table_data(
@@ -156,47 +199,12 @@ impl SparqlReader {
             _ => pattern.clone(),
         }
     }
-}
 
-impl ByteSized for SparqlReader {
-    fn size_bytes(&self) -> u64 {
-        size_of::<Self>() as u64
-    }
-}
-
-#[async_trait::async_trait(?Send)]
-impl TableProvider for SparqlReader {
-    fn arity(&self) -> usize {
-        self.builder.expected_arity().unwrap_or_default()
-    }
-
-    async fn provide_table_data(
-        self: Box<Self>,
-        tuple_writer: &mut TupleWriter,
-    ) -> Result<(), ReadingError> {
-        let response = self
-            .execute_query(&self.builder.endpoint, &self.builder.query)
-            .await?
-            .expect("should not be empty");
-        Self::read_table_data(response, tuple_writer, self.builder.value_formats)
-    }
-
-    fn should_import_with_bindings(
+    fn query_with_bindings(
         &self,
-        _bound_positions: &[usize],
-        _num_bindings: usize,
-    ) -> bool {
-        true // TODO: use a better heuristic here
-    }
-
-    #[allow(unused)]
-    async fn provide_table_data_with_bindings(
-        self: Box<Self>,
-        tuple_writer: &mut TupleWriter,
         bound_positions: &[usize],
         bindings: &[Vec<AnyDataValue>],
-        num_bindings: usize,
-    ) -> Result<(), ReadingError> {
+    ) -> Option<Query> {
         let query = match &self.builder.query {
             q @ &Query::Construct { .. } | q @ &Query::Describe { .. } => q.clone(),
             Query::Select {
@@ -219,10 +227,74 @@ impl TableProvider for SparqlReader {
             },
         };
 
-        let response = self
-            .execute_query(&self.builder.endpoint, &query)
-            .await?
-            .expect("should not be empty");
-        Self::read_table_data(response, tuple_writer, self.builder.value_formats)
+        if query.to_string().len() < QUERY_PAGE_CHAR_LIMIT {
+            Some(query)
+        } else {
+            None
+        }
+    }
+
+    fn queries_with_bindings<'bindings>(
+        &self,
+        bound_positions: &[usize],
+        bindings: &'bindings [Vec<AnyDataValue>],
+        page_size: usize,
+    ) -> impl Iterator<Item = (&'bindings [Vec<AnyDataValue>], Query)> {
+        let mut queries = Vec::new();
+
+        for page in bindings.chunks(page_size.max(1)) {
+            match self.query_with_bindings(bound_positions, page) {
+                Some(query) => {
+                    queries.push((page, query));
+                }
+                None => queries.extend(self.queries_with_bindings(
+                    bound_positions,
+                    page,
+                    page_size.div_ceil(2),
+                )),
+            }
+        }
+
+        queries.into_iter()
+    }
+}
+
+impl ByteSized for SparqlReader {
+    fn size_bytes(&self) -> u64 {
+        size_of::<Self>() as u64
+    }
+}
+
+#[async_trait::async_trait(?Send)]
+impl TableProvider for SparqlReader {
+    fn arity(&self) -> usize {
+        self.builder.expected_arity().unwrap_or_default()
+    }
+
+    async fn provide_table_data(
+        self: Box<Self>,
+        tuple_writer: &mut TupleWriter,
+    ) -> Result<(), ReadingError> {
+        self.load_from_query(&self.builder.query, tuple_writer)
+            .await
+    }
+
+    fn should_import_with_bindings(
+        &self,
+        _bound_positions: &[usize],
+        _num_bindings: usize,
+    ) -> bool {
+        true // TODO: use a better heuristic here
+    }
+
+    async fn provide_table_data_with_bindings(
+        self: Box<Self>,
+        tuple_writer: &mut TupleWriter,
+        bound_positions: &[usize],
+        bindings: &[Vec<AnyDataValue>],
+        _num_bindings: usize,
+    ) -> Result<(), ReadingError> {
+        self.load_from_bindings(bound_positions, bindings, tuple_writer)
+            .await
     }
 }

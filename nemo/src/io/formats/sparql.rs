@@ -34,7 +34,13 @@ use super::{ExportHandler, FileFormatMeta, FormatBuilder, ImportHandler};
 use crate::io::formats::dsv::value_format::DsvValueFormats;
 
 /// A char limit to decide if a query is send as GET or POST request
-const HTTP_GET_CHAR_LIMIT: usize = 2000;
+const HTTP_GET_CHAR_LIMIT: usize = 2_000;
+
+/// How many bindings to push into a single query
+const MAX_BINDINGS_PER_PAGE: usize = 32_000;
+
+/// How many characters can fit into a single query page
+const QUERY_PAGE_CHAR_LIMIT: usize = 740_000;
 
 format_tag! {
     pub enum SparqlTag(SupportedFormatTag::Sparql) {
