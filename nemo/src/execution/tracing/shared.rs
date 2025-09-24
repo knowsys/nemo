@@ -7,8 +7,8 @@ use nemo_physical::datavalues::AnyDataValue;
 use serde::{Deserialize, Serialize};
 
 use crate::rule_model::components::{
-    atom::Atom, literal::Literal, rule::Rule as ModelRule, tag::Tag,
-    term::primitive::ground::GroundTerm,
+    IterableVariables, atom::Atom, import_export::clause::ImportClause, literal::Literal,
+    rule::Rule as ModelRule, tag::Tag, term::primitive::ground::GroundTerm,
 };
 
 /// A predicate name with the parameters used with it in a rule (essentially an atom)
@@ -46,6 +46,17 @@ impl TryFrom<&Literal> for PredicateWithParameters {
     }
 }
 
+impl From<&ImportClause> for PredicateWithParameters {
+    fn from(clause: &ImportClause) -> Self {
+        let name = clause.import_directive().predicate().to_string();
+
+        Self {
+            name,
+            parameters: clause.variables().map(ToString::to_string).collect(),
+        }
+    }
+}
+
 /// Identifies for a rule (i.e. its index)
 pub type RuleId = usize;
 
@@ -79,6 +90,7 @@ impl Rule {
                 .body()
                 .iter()
                 .filter_map(|lit| PredicateWithParameters::try_from(lit).ok())
+                .chain(rule.imports().map(PredicateWithParameters::from))
                 .collect(),
             string_representation: rule.to_string(),
         }
