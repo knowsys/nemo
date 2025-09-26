@@ -70,7 +70,7 @@ impl ProgramChaseTranslation {
         import_clause: &ImportClause,
         import_builder: &ImportExportBuilder,
     ) -> ChaseImportClause {
-        let predicate = import_clause.import_directive().predicate().clone();
+        let predicate = import_clause.predicate().clone();
         let arity = *self
             .predicate_arity
             .get(&predicate)

@@ -6,7 +6,7 @@ use crate::rule_model::{
     components::{
         ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent,
         IterableVariables, ProgramComponent, ProgramComponentKind, component_iterator,
-        component_iterator_mut, import_export::ImportDirective,
+        component_iterator_mut, import_export::ImportDirective, tag::Tag,
         term::primitive::variable::Variable,
     },
     error::ValidationReport,
@@ -23,7 +23,7 @@ pub struct ImportClause {
     id: ProgramComponentId,
 
     /// Import
-    pub(crate) import: ImportDirective,
+    import: ImportDirective,
 
     /// Output variables
     variables: Vec<Variable>,
@@ -64,6 +64,11 @@ impl ImportClause {
     /// Return a reference to the underlying [ImportDirective].
     pub fn import_directive(&self) -> &ImportDirective {
         &self.import
+    }
+
+    /// Return the predicate of the import clause.
+    pub fn predicate(&self) -> &Tag {
+        self.import.predicate()
     }
 }
 
