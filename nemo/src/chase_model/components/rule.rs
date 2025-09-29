@@ -15,20 +15,20 @@ use nemo_physical::{
 
 use crate::{
     chase_model::{
+        ChaseAtom,
         components::{
             import::ChaseImportClause,
             term::operation_term::{Operation, OperationTerm},
         },
-        ChaseAtom,
     },
     execution::planning::operations::operation::operation_term_to_function_tree,
     rule_model::{
         components::{
+            IterablePrimitives, IterableVariables,
             term::{
                 operation::operation_kind::OperationKind,
-                primitive::{variable::Variable, Primitive},
+                primitive::{Primitive, variable::Variable},
             },
-            IterablePrimitives, IterableVariables,
         },
         origin::Origin,
     },

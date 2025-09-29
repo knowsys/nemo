@@ -696,8 +696,12 @@ impl ImportExportBuilder {
             .collect();
 
         let handler = match &self.inner {
-            AnyImportExportBuilder::Dsv(dsv_builder) => dsv_builder.build_import(input_arity, patterns),
-            AnyImportExportBuilder::Rdf(rdf_handler) => rdf_handler.build_import(input_arity, patterns),
+            AnyImportExportBuilder::Dsv(dsv_builder) => {
+                dsv_builder.build_import(input_arity, patterns)
+            }
+            AnyImportExportBuilder::Rdf(rdf_handler) => {
+                rdf_handler.build_import(input_arity, patterns)
+            }
             AnyImportExportBuilder::Json(json_handler) => {
                 json_handler.build_import(input_arity, patterns)
             }

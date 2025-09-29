@@ -22,8 +22,8 @@ use writer::DsvWriter;
 use crate::{
     error::Error,
     io::format_builder::{
-        format_parameter, format_tag, value_type_matches, AnyImportExportBuilder, FormatParameter,
-        Parameters, StandardParameter, SupportedFormatTag,
+        AnyImportExportBuilder, FormatParameter, Parameters, StandardParameter, SupportedFormatTag,
+        format_parameter, format_tag, value_type_matches,
     },
     rule_model::{
         components::{import_export::Direction, term::value_type::ValueType},

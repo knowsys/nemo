@@ -3,9 +3,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::rule_model::{
-    components::{
-        ComponentIdentity, rule::Rule, statement::Statement, tag::Tag,
-    },
+    components::{ComponentIdentity, rule::Rule, statement::Statement, tag::Tag},
     error::ValidationReport,
     pipeline::id::ProgramComponentId,
     programs::{ProgramRead, ProgramWrite, handle::ProgramHandle},

@@ -4,7 +4,7 @@ use std::cmp::Ordering;
 
 use crate::{
     datatypes::{
-        storage_type_name::NUM_STORAGETYPES, Double, Float, StorageTypeName, StorageValueT,
+        Double, Float, StorageTypeName, StorageValueT, storage_type_name::NUM_STORAGETYPES,
     },
     datavalues::AnyDataValue,
     management::database::Dict,
