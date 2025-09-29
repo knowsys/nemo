@@ -53,7 +53,7 @@ impl<'a> TupleWriter<'a> {
         }
     }
 
-    /// Set the given [FilterTransformPattern]s on the underlying [TupleBuffer].
+    /// Set the given [FilterTransformPattern]s.
     pub fn set_patterns(&mut self, patterns: Vec<FilterTransformPattern>) {
         self.tuple_buffer.set_patterns(patterns);
     }
