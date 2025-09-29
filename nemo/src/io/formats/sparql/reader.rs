@@ -4,6 +4,7 @@ use std::io::{BufReader, Read};
 
 use nemo_physical::error::ReadingErrorKind;
 use nemo_physical::management::bytesized::ByteSized;
+use nemo_physical::tabular::filters::FilterTransformPattern;
 use nemo_physical::{datasources::table_providers::TableProvider, error::ReadingError};
 use nemo_physical::{
     datasources::tuple_writer::TupleWriter,
@@ -15,7 +16,6 @@ use spargebra::Query;
 use spargebra::algebra::GraphPattern;
 use spargebra::term::GroundTerm;
 
-use crate::chase_model::components::rule::ChaseRule;
 use crate::io::format_builder::FormatBuilder;
 use crate::io::formats::dsv::reader::DsvReader;
 use crate::io::formats::dsv::value_format::DsvValueFormats;
@@ -29,16 +29,12 @@ use super::{MAX_BINDINGS_PER_PAGE, QUERY_PAGE_CHAR_LIMIT, SparqlBuilder};
 #[derive(Debug)]
 pub(crate) struct SparqlReader {
     builder: SparqlBuilder,
-    #[allow(unused)]
-    filter_rules: Vec<ChaseRule>,
+    patterns: Vec<FilterTransformPattern>,
 }
 
 impl SparqlReader {
-    pub fn new(builder: SparqlBuilder, filter_rules: Vec<ChaseRule>) -> Self {
-        Self {
-            builder,
-            filter_rules,
-        }
+    pub fn new(builder: SparqlBuilder, patterns: Vec<FilterTransformPattern>) -> Self {
+        Self { builder, patterns }
     }
 
     async fn execute_from_builder(
@@ -77,7 +73,12 @@ impl SparqlReader {
             .execute_query(&self.builder.endpoint, query)
             .await?
             .expect("query result should not be empty");
-        Self::read_table_data(response, tuple_writer, self.builder.value_formats.clone())
+        Self::read_table_data(
+            response,
+            tuple_writer,
+            self.builder.value_formats.clone(),
+            self.patterns.clone(),
+        )
     }
 
     async fn load_from_bindings(
@@ -114,15 +115,17 @@ impl SparqlReader {
         read: Box<dyn Read>,
         tuple_writer: &mut TupleWriter,
         value_formats: Option<DsvValueFormats>,
+        patterns: Vec<FilterTransformPattern>,
     ) -> Result<(), ReadingError> {
         let reader = DsvReader::new(
             Box::new(BufReader::new(read)),
             b'\t',
-            value_formats.unwrap_or(DsvValueFormats::default(tuple_writer.column_number())),
+            value_formats.unwrap_or(DsvValueFormats::default(tuple_writer.input_column_number())),
             None,
             None,
             true,
             false,
+            patterns,
         );
 
         reader.read(tuple_writer)
@@ -275,6 +278,7 @@ impl TableProvider for SparqlReader {
         self: Box<Self>,
         tuple_writer: &mut TupleWriter,
     ) -> Result<(), ReadingError> {
+        tuple_writer.set_patterns(self.patterns.clone());
         self.load_from_query(&self.builder.query, tuple_writer)
             .await
     }
@@ -294,6 +298,7 @@ impl TableProvider for SparqlReader {
         bindings: &[Vec<AnyDataValue>],
         _num_bindings: usize,
     ) -> Result<(), ReadingError> {
+        tuple_writer.set_patterns(self.patterns.clone());
         self.load_from_bindings(bound_positions, bindings, tuple_writer)
             .await
     }

@@ -540,7 +540,7 @@ impl Trie {
         let result_reordered = tuple_buffers
             .into_iter()
             .map(|buffer| {
-                if buffer.column_number() == 0 {
+                if buffer.output_column_number() == 0 {
                     Self::zero_arity(true)
                 } else {
                     Self::from_tuple_buffer(buffer.finalize())

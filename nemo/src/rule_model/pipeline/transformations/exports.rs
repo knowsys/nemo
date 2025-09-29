@@ -45,7 +45,7 @@ impl ProgramTransformation for TransformationExports {
                     ExportParameters::None => false,
                     ExportParameters::Idb => derived_predicates.contains(export.predicate()),
                     ExportParameters::Edb => !derived_predicates.contains(export.predicate()),
-                    ExportParameters::All => todo!(),
+                    ExportParameters::All => false, // we'll add one below, no need to keep it
                 }
             } else {
                 true

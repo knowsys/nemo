@@ -180,7 +180,7 @@ pub trait ProgramRead {
         let mut arities = HashMap::<Tag, usize>::new();
 
         for import in self.imports() {
-            if let Some(arity) = import.expected_arity() {
+            if let Some(arity) = import.expected_output_arity() {
                 arities.insert(import.predicate().clone(), arity);
             }
         }
@@ -267,7 +267,7 @@ pub trait ProgramRead {
                 continue;
             }
 
-            if let Some(arity) = import.expected_arity() {
+            if let Some(arity) = import.expected_output_arity() {
                 add(&mut arities, report, predicate, arity, import);
             } else if !arities.contains_key(&predicate) {
                 report.add(

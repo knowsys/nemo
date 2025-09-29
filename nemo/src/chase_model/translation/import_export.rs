@@ -35,7 +35,12 @@ impl ProgramChaseTranslation {
             .map(|rule| self.build_rule(rule))
             .collect();
 
-        let handler: Import = import_builder.build_import(predicate.name(), arity, filter_rules);
+        let handler: Import = import_builder.build_import(
+            predicate.name(),
+            import_directive.expected_input_arity().unwrap_or(arity),
+            import_directive.expected_output_arity().unwrap_or(arity),
+            filter_rules,
+        );
 
         ChaseImport::new(predicate, handler)
     }
@@ -76,7 +81,18 @@ impl ProgramChaseTranslation {
             .get(&predicate)
             .expect("arity has been determined in validation");
 
-        let handler: Import = import_builder.build_import(predicate.name(), arity, Vec::new());
+        let handler: Import = import_builder.build_import(
+            predicate.name(),
+            import_clause
+                .import_directive()
+                .expected_input_arity()
+                .unwrap_or(arity),
+            import_clause
+                .import_directive()
+                .expected_output_arity()
+                .unwrap_or(arity),
+            Vec::new(),
+        );
         let bindings = import_clause.output_variables().clone();
 
         ChaseImportClause::new(predicate, handler, bindings)

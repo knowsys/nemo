@@ -12,6 +12,7 @@ use std::{
 use nemo_physical::{
     datasources::table_providers::TableProvider,
     datavalues::{AnyDataValue, DataValue},
+    tabular::filters::FilterTransformPattern,
 };
 use reader::DsvReader;
 use strum_macros::EnumIter;
@@ -19,7 +20,6 @@ use value_format::DsvValueFormats;
 use writer::DsvWriter;
 
 use crate::{
-    chase_model::components::rule::ChaseRule,
     error::Error,
     io::format_builder::{
         AnyImportExportBuilder, FormatParameter, Parameters, StandardParameter, SupportedFormatTag,
@@ -47,6 +47,8 @@ pub struct DsvHandler {
     pub(crate) ignore_headers: bool,
     /// Whether to respect quoting in values
     pub(crate) quoting: bool,
+    /// Filter/Transform patterns for imports
+    pub(crate) patterns: Vec<FilterTransformPattern>,
 }
 
 impl DsvHandler {
@@ -75,6 +77,7 @@ impl DsvHandler {
             limit,
             ignore_headers,
             quoting,
+            patterns: Vec::new(),
         }
     }
 }
@@ -114,6 +117,7 @@ impl ImportHandler for DsvHandler {
             self.limit,
             self.ignore_headers,
             self.quoting,
+            self.patterns.clone(),
         )))
     }
 }
@@ -282,7 +286,7 @@ impl FormatBuilder for DsvBuilder {
     fn build_import(
         &self,
         arity: usize,
-        _filter_rules: Vec<ChaseRule>,
+        patterns: Vec<FilterTransformPattern>,
     ) -> Arc<dyn ImportHandler + Send + Sync + 'static> {
         Arc::new(DsvHandler {
             delimiter: self.delimiter,
@@ -293,13 +297,14 @@ impl FormatBuilder for DsvBuilder {
             limit: self.limit,
             ignore_headers: self.ignore_headers,
             quoting: self.quoting,
+            patterns,
         })
     }
 
     fn build_export(
         &self,
         arity: usize,
-        _filter_rules: Vec<ChaseRule>,
+        patterns: Vec<FilterTransformPattern>,
     ) -> Arc<dyn ExportHandler + Send + Sync + 'static> {
         Arc::new(DsvHandler {
             delimiter: self.delimiter,
@@ -310,6 +315,7 @@ impl FormatBuilder for DsvBuilder {
             limit: self.limit,
             ignore_headers: self.ignore_headers,
             quoting: self.quoting,
+            patterns,
         })
     }
 }

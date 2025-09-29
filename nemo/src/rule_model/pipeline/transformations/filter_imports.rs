@@ -27,6 +27,10 @@ impl TransformationFilterImports {
     ///
     /// If this is the case, it returns the predicate that is imported.
     fn check_rule(rule: &Rule) -> Option<Tag> {
+        if rule.body_negative().next().is_some() {
+            return None;
+        }
+
         if rule.body_positive().count() != 1 {
             return None;
         }
@@ -42,6 +46,13 @@ impl TransformationFilterImports {
             .collect::<HashSet<_>>();
 
         if head_predicates.len() != 1 {
+            return None;
+        }
+
+        if rule.head().iter().any(|atom| {
+            atom.terms()
+                .any(|term| term.is_aggregate() || term.is_existential_variable())
+        }) {
             return None;
         }
 

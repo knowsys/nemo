@@ -318,11 +318,13 @@ where
     /// and returns `false` otherwise.
     /// Returns `true` if there are no subnodes.
     pub fn boolean_conjunction(mut parameters: Vec<Self>) -> Self {
-        if parameters.len() != 1 {
+        if parameters.len() > 1 {
             Self::Nary {
                 function: NaryFunctionEnum::BooleanConjunction(BooleanConjunction),
                 parameters,
             }
+        } else if parameters.is_empty() {
+            Self::constant(AnyDataValue::new_boolean(true))
         } else {
             parameters.remove(0)
         }
@@ -334,11 +336,13 @@ where
     /// and returns `false` otherwise.
     /// Returns `false` if there are no subnodes.
     pub fn boolean_disjunction(mut parameters: Vec<Self>) -> Self {
-        if parameters.len() != 1 {
+        if parameters.len() > 1 {
             Self::Nary {
                 function: NaryFunctionEnum::BooleanDisjunction(BooleanDisjunction),
                 parameters,
             }
+        } else if parameters.is_empty() {
+            Self::constant(AnyDataValue::new_boolean(false))
         } else {
             parameters.remove(0)
         }
