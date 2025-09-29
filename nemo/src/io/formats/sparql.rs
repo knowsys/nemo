@@ -10,11 +10,11 @@ use nemo_physical::{
     datasources::table_providers::TableProvider,
     datavalues::{AnyDataValue, DataValue},
     resource::{ResourceBuilder, ResourceValidationError},
+    tabular::filters::FilterTransformPattern,
 };
 use oxiri::Iri;
 
 use crate::{
-    chase_model::components::rule::ChaseRule,
     io::format_builder::{
         AnyImportExportBuilder, FormatParameter, Parameters, StandardParameter, SupportedFormatTag,
         format_parameter, format_tag, value_type_matches,
@@ -201,15 +201,15 @@ impl FormatBuilder for SparqlBuilder {
     fn build_import(
         &self,
         _arity: usize,
-        filter_rules: Vec<ChaseRule>,
+        patterns: Vec<FilterTransformPattern>,
     ) -> Arc<dyn ImportHandler + Send + Sync + 'static> {
-        Arc::new(SparqlHandler::new(self.clone(), filter_rules))
+        Arc::new(SparqlHandler::new(self.clone(), patterns))
     }
 
     fn build_export(
         &self,
         _arity: usize,
-        _filter_rules: Vec<ChaseRule>,
+        _patterns: Vec<FilterTransformPattern>,
     ) -> Arc<dyn ExportHandler + Send + Sync + 'static> {
         unimplemented!("SPARQL export is currently not supported")
     }
@@ -218,15 +218,12 @@ impl FormatBuilder for SparqlBuilder {
 #[derive(Debug)]
 pub(crate) struct SparqlHandler {
     builder: SparqlBuilder,
-    filter_rules: Vec<ChaseRule>,
+    patterns: Vec<FilterTransformPattern>,
 }
 
 impl SparqlHandler {
-    pub fn new(builder: SparqlBuilder, filter_rules: Vec<ChaseRule>) -> Self {
-        Self {
-            builder,
-            filter_rules,
-        }
+    pub fn new(builder: SparqlBuilder, patterns: Vec<FilterTransformPattern>) -> Self {
+        Self { builder, patterns }
     }
 }
 
@@ -255,7 +252,7 @@ impl ImportHandler for SparqlHandler {
     fn read_deferred(&self) -> Result<Box<dyn TableProvider>, crate::error::Error> {
         Ok(Box::new(SparqlReader::new(
             self.builder.clone(),
-            self.filter_rules.clone(),
+            self.patterns.clone(),
         )))
     }
 }

@@ -1,10 +1,10 @@
-use std::collections::{HashMap, HashSet, hash_map::Entry};
+use std::collections::{hash_map::Entry, HashMap, HashSet};
 
 use nemo_physical::management::execution_plan::ColumnOrder;
 
 use crate::{
     chase_model::components::{
-        atom::{ChaseAtom, primitive_atom::PrimitiveAtom, variable_atom::VariableAtom},
+        atom::{primitive_atom::PrimitiveAtom, variable_atom::VariableAtom, ChaseAtom},
         filter::ChaseFilter,
         program::ChaseProgram,
         rule::ChaseRule,
@@ -15,13 +15,13 @@ use crate::{
         tag::Tag,
         term::{
             operation::operation_kind::OperationKind,
-            primitive::{Primitive, variable::Variable},
+            primitive::{variable::Variable, Primitive},
         },
     },
 };
 
 use super::variable_order::{
-    BuilderResultVariants, VariableOrder, build_preferable_variable_orders,
+    build_preferable_variable_orders, BuilderResultVariants, VariableOrder,
 };
 
 /// Contains useful information for a (existential) rule

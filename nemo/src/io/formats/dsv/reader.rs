@@ -8,6 +8,7 @@ use nemo_physical::error::ReadingError;
 use nemo_physical::management::bytesized::ByteSized;
 
 use nemo_physical::datasources::{table_providers::TableProvider, tuple_writer::TupleWriter};
+use nemo_physical::tabular::filters::FilterTransformPattern;
 
 use crate::io::formats::PROGRESS_NOTIFY_INCREMENT;
 
@@ -38,6 +39,8 @@ pub(crate) struct DsvReader<T> {
     ignore_headers: bool,
     /// Whether to respect quoting inside values
     quoting: bool,
+    /// Filter & transformation patterns
+    patterns: Vec<FilterTransformPattern>,
 }
 
 impl<T: BufRead> DsvReader<T> {
@@ -50,6 +53,7 @@ impl<T: BufRead> DsvReader<T> {
         limit: Option<u64>,
         ignore_headers: bool,
         quoting: bool,
+        patterns: Vec<FilterTransformPattern>,
     ) -> Self {
         Self {
             read,
@@ -59,6 +63,7 @@ impl<T: BufRead> DsvReader<T> {
             limit,
             ignore_headers,
             quoting,
+            patterns,
         }
     }
 
@@ -90,7 +95,7 @@ impl<T: BufRead> DsvReader<T> {
             .collect();
         let expected_file_arity = parsers.len();
         assert_eq!(
-            tuple_writer.column_number(),
+            tuple_writer.input_column_number(),
             skip.iter().filter(|b| !*b).count()
         );
 
@@ -134,6 +139,7 @@ impl<T: BufRead> TableProvider for DsvReader<T> {
         self: Box<Self>,
         tuple_writer: &mut TupleWriter,
     ) -> Result<(), ReadingError> {
+        tuple_writer.set_patterns(self.patterns.clone());
         self.read(tuple_writer)
     }
 
@@ -198,6 +204,7 @@ mod test {
                 None,
                 ignore_headers,
                 true,
+                Vec::new(),
             );
             let dict = RefCell::new(Dict::default());
             let mut tuple_writer = TupleWriter::new(&dict, 4);

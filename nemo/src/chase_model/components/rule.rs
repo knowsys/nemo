@@ -1,24 +1,34 @@
 //! This module defines [ChaseRule].
 
-use std::{collections::HashSet, fmt::Display};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::Display,
+};
 
-use nemo_physical::tabular::filters::FilterTransformPattern;
+use nemo_physical::{
+    function::tree::FunctionTree,
+    tabular::{
+        filters::{FilterTransformPattern, TransformPosition},
+        operations::{OperationColumnMarker, OperationTableGenerator},
+    },
+};
 
 use crate::{
     chase_model::{
-        ChaseAtom,
         components::{
             import::ChaseImportClause,
             term::operation_term::{Operation, OperationTerm},
         },
+        ChaseAtom,
     },
+    execution::planning::operations::operation::operation_term_to_function_tree,
     rule_model::{
         components::{
-            IterablePrimitives, IterableVariables,
             term::{
                 operation::operation_kind::OperationKind,
-                primitive::{Primitive, variable::Variable},
+                primitive::{variable::Variable, Primitive},
             },
+            IterablePrimitives, IterableVariables,
         },
         origin::Origin,
     },
@@ -643,17 +653,66 @@ impl IterableVariables for ChaseRule {
 }
 
 impl ChaseRule {
-    #[allow(unused)]
-    fn into_filter_patterns(self) -> Result<impl Iterator<Item = FilterTransformPattern>, ()> {
-        if self.head.aggregate_head_index.is_some() {
-            todo!("add error code");
+    pub(crate) fn into_filter_transform_pattern(self) -> Option<FilterTransformPattern> {
+        let mut filters = Vec::new();
+        let mut transform_positions = Vec::new();
+
+        let mut variable_positions = HashMap::new();
+        let mut variable_operations = HashMap::new();
+
+        let mut variable_translation = OperationTableGenerator::new();
+
+        for (position, variable) in self.positive.atoms[0].terms().enumerate() {
+            variable_translation.add_marker(variable.clone());
+            variable_positions.insert(variable.clone(), position);
         }
 
-        if !self.imports().is_empty() {
-            todo!("add error code");
+        for filter in self.positive.filters {
+            let tree = operation_term_to_function_tree(&variable_translation, filter.filter());
+            filters.push(tree);
         }
 
-        Ok(std::iter::empty())
+        for operation in self.positive.operations {
+            let variable = operation.variable();
+            variable_translation.add_marker(variable.clone());
+            let tree =
+                operation_term_to_function_tree(&variable_translation, operation.operation());
+            variable_operations.insert(variable.clone(), tree);
+        }
+
+        for (position, term) in self.head.atoms[0].terms().enumerate() {
+            match term {
+                Primitive::Ground(ground) => {
+                    transform_positions.push(TransformPosition::new(
+                        position,
+                        FunctionTree::constant(ground.value()),
+                    ));
+                }
+                Primitive::Variable(variable) => {
+                    if let Some(&reference) = variable_positions.get(variable) {
+                        transform_positions.push(TransformPosition::new(
+                            position,
+                            FunctionTree::reference(OperationColumnMarker(reference)),
+                        ));
+                    } else {
+                        let operation = variable_operations
+                            .get(variable)
+                            .expect("every variable is bound");
+                        transform_positions
+                            .push(TransformPosition::new(position, operation.clone()));
+                    }
+                }
+            }
+        }
+
+        if filters.is_empty() && transform_positions.is_empty() {
+            None
+        } else {
+            Some(FilterTransformPattern::new(
+                FunctionTree::boolean_conjunction(filters),
+                transform_positions,
+            ))
+        }
     }
 }
 

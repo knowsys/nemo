@@ -7,6 +7,7 @@ use nemo_physical::{
     dictionary::string_map::NullMap,
     error::ReadingError,
     management::bytesized::ByteSized,
+    tabular::filters::FilterTransformPattern,
 };
 use std::{cell::Cell, io::Read, mem::size_of};
 
@@ -14,7 +15,7 @@ use oxiri::Iri;
 use oxrdf::{BlankNode, GraphName, Literal, NamedNode, Quad, Subject, Term};
 use oxrdfio::{RdfFormat, RdfParser};
 
-use crate::{chase_model::components::rule::ChaseRule, io::formats::PROGRESS_NOTIFY_INCREMENT};
+use crate::io::formats::PROGRESS_NOTIFY_INCREMENT;
 
 use super::{
     DEFAULT_GRAPH_IRI, RdfVariant,
@@ -23,7 +24,6 @@ use super::{
 };
 
 /// A [TableProvider] for RDF 1.1 files containing triples.
-#[allow(unused)]
 pub(super) struct RdfReader {
     /// Buffer from which content is read
     read: Box<dyn Read>,
@@ -35,8 +35,8 @@ pub(super) struct RdfReader {
     value_formats: RdfValueFormats,
     /// If given, this reader will only consider the first `limit` entries
     limit: Option<u64>,
-    /// Filtering rules
-    filter_rules: Vec<ChaseRule>,
+    /// Filter/Transformation patterns
+    patterns: Vec<FilterTransformPattern>,
     /// Map to store how nulls relate to blank nodes.
     ///
     /// TODO: An RdfReader is specific to one BufRead, which it consumes when reading.
@@ -54,7 +54,7 @@ impl RdfReader {
         base: Option<Iri<String>>,
         value_formats: RdfValueFormats,
         limit: Option<u64>,
-        filter_rules: Vec<ChaseRule>,
+        patterns: Vec<FilterTransformPattern>,
     ) -> Self {
         Self {
             read,
@@ -62,7 +62,7 @@ impl RdfReader {
             base,
             value_formats,
             limit,
-            filter_rules,
+            patterns,
             bnode_map: Default::default(),
         }
     }
@@ -168,7 +168,7 @@ impl RdfReader {
 
         assert_eq!(skip.len(), 3);
         assert_eq!(
-            tuple_writer.column_number(),
+            tuple_writer.input_column_number(),
             skip.iter().filter(|b| !*b).count()
         );
 
@@ -246,7 +246,7 @@ impl RdfReader {
 
         assert_eq!(skip.len(), 4);
         assert_eq!(
-            tuple_writer.column_number(),
+            tuple_writer.input_column_number(),
             skip.iter().filter(|b| !*b).count()
         );
 
@@ -320,6 +320,7 @@ impl TableProvider for RdfReader {
         self: Box<Self>,
         tuple_writer: &mut TupleWriter,
     ) -> Result<(), ReadingError> {
+        tuple_writer.set_patterns(self.patterns.clone());
         let base_iri = self.base.clone();
         let with_base_iri = |parser: RdfParser| {
             if let Some(base) = base_iri {

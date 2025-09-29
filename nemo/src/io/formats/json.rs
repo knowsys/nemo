@@ -4,11 +4,12 @@ pub(crate) mod reader;
 
 use std::{io::Read, sync::Arc};
 
-use nemo_physical::datasources::table_providers::TableProvider;
+use nemo_physical::{
+    datasources::table_providers::TableProvider, tabular::filters::FilterTransformPattern,
+};
 use reader::JsonReader;
 
 use crate::{
-    chase_model::components::rule::ChaseRule,
     io::format_builder::{
         AnyImportExportBuilder, FormatBuilder, Parameters, StandardParameter, SupportedFormatTag,
         format_tag,
@@ -20,7 +21,9 @@ use crate::{
 use super::{FileFormatMeta, ImportHandler};
 
 #[derive(Debug, Clone)]
-pub(crate) struct JsonHandler;
+pub(crate) struct JsonHandler {
+    patterns: Vec<FilterTransformPattern>,
+}
 
 impl JsonHandler {
     /// Return the [SupportedFormatTag] for this handler.
@@ -41,7 +44,10 @@ impl FileFormatMeta for JsonHandler {
 
 impl ImportHandler for JsonHandler {
     fn reader(&self, read: Box<dyn Read>) -> Result<Box<dyn TableProvider>, crate::error::Error> {
-        Ok(Box::new(JsonReader(read)))
+        Ok(Box::new(JsonReader {
+            read,
+            patterns: self.patterns.clone(),
+        }))
     }
 }
 
@@ -70,26 +76,27 @@ impl FormatBuilder for JsonHandler {
             return Err(ValidationError::UnsupportedJsonExport);
         }
 
-        Ok(Self)
+        Ok(Self {
+            patterns: Vec::new(),
+        })
     }
 
     fn expected_arity(&self) -> Option<usize> {
         Some(3)
     }
 
-    #[allow(unused)]
     fn build_import(
         &self,
         _arity: usize,
-        filter_rules: Vec<ChaseRule>,
+        patterns: Vec<FilterTransformPattern>,
     ) -> Arc<dyn ImportHandler + Send + Sync + 'static> {
-        Arc::new(Self)
+        Arc::new(Self { patterns })
     }
 
     fn build_export(
         &self,
         _arity: usize,
-        _filter_rules: Vec<ChaseRule>,
+        _patterns: Vec<FilterTransformPattern>,
     ) -> Arc<dyn super::ExportHandler + Send + Sync + 'static> {
         unimplemented!("json export is currently not supported")
     }

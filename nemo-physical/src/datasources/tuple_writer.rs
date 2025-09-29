@@ -7,7 +7,10 @@ use crate::{
     datavalues::{AnyDataValue, DataValue, NullDataValue},
     dictionary::DvDict,
     management::database::Dict,
-    tabular::buffer::{sorted_tuple_buffer::SortedTupleBuffer, tuple_buffer::TupleBuffer},
+    tabular::{
+        buffer::{sorted_tuple_buffer::SortedTupleBuffer, tuple_buffer::TupleBuffer},
+        filters::FilterTransformPattern,
+    },
 };
 
 use delegate::delegate;
@@ -36,6 +39,25 @@ impl<'a> TupleWriter<'a> {
         }
     }
 
+    /// Create a new [TupleWriter] with the given [FilterTransformPattern]s. This is public to allow
+    /// downstream implementations of [TableProvider][super::table_providers::TableProvider] to
+    /// test their code. In normal operation, it will be provided by the database.
+    pub fn with_patterns(
+        dictionary: &'a RefCell<Dict>,
+        column_count: usize,
+        patterns: Vec<FilterTransformPattern>,
+    ) -> Self {
+        Self {
+            dictionary,
+            tuple_buffer: TupleBuffer::with_patterns(column_count, patterns),
+        }
+    }
+
+    /// Set the given [FilterTransformPattern]s on the underlying [TupleBuffer].
+    pub fn set_patterns(&mut self, patterns: Vec<FilterTransformPattern>) {
+        self.tuple_buffer.set_patterns(patterns);
+    }
+
     /// Provide the next value for the current tuple. Values are added in in order.
     /// When the value for the last column was provided, the tuple is committed to the buffer.
     /// Alternatively, a partially built tuple can be abandonded by calling `drop_current_tuple`.
@@ -58,9 +80,12 @@ impl<'a> TupleWriter<'a> {
 
     delegate! {
         to self.tuple_buffer {
-            /// Returns the number of columns on the table, i.e., the
+            /// Returns the number of columns on the input table, i.e., the
             /// number of values that need to be written to make one tuple.
-            pub fn column_number(&self) -> usize;
+            pub fn input_column_number(&self) -> usize;
+            /// Returns the number of columns on the output table, i.e., the
+            /// number of values that make one tuple.
+            pub fn output_column_number(&self) -> usize;
             /// Returns the number of rows in the [TupleWriter].
             pub fn size(&self) -> usize;
             /// Forget about any previously added values that have not formed a complete tuple yet,
@@ -81,7 +106,7 @@ mod test {
         datasources::tuple_writer::TupleWriter,
         datatypes::{Float, StorageValueT},
         datavalues::AnyDataValue,
-        dictionary::{DvDict, meta_dv_dict::MetaDvDictionary},
+        dictionary::{meta_dv_dict::MetaDvDictionary, DvDict},
         management::database::Dict,
     };
 

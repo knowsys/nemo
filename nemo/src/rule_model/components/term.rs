@@ -133,9 +133,17 @@ impl Term {
         matches!(self, Term::Tuple(_))
     }
 
-    /// Return whetehr this term is a variable.
+    /// Return whether this term is a variable.
     pub fn is_variable(&self) -> bool {
         matches!(self, Term::Primitive(Primitive::Variable(_)))
+    }
+
+    /// Return whether this term is an existentially quantified variable.
+    pub fn is_existential_variable(&self) -> bool {
+        matches!(
+            self,
+            Term::Primitive(Primitive::Variable(Variable::Existential(_)))
+        )
     }
 
     /// Return an iterator over the arguments to this term.

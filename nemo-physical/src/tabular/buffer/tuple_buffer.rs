@@ -1,13 +1,12 @@
 //! This module defines [TupleBuffer].
 
-use std::{cmp::Ordering, collections::HashMap};
+use std::cmp::Ordering;
 
 use crate::{
     datatypes::{
-        Double, Float, StorageTypeName, StorageValueT, storage_type_name::NUM_STORAGETYPES,
+        storage_type_name::NUM_STORAGETYPES, Double, Float, StorageTypeName, StorageValueT,
     },
     datavalues::AnyDataValue,
-    function::{evaluation::StackProgram, tree::FunctionTree},
     management::database::Dict,
     tabular::filters::FilterTransformPattern,
 };
@@ -230,27 +229,6 @@ pub(super) struct TypedTableRecord {
     current_length: usize,
 }
 
-/// A filter or transformation applied to a position
-#[derive(Debug)]
-pub struct TransformPosition {
-    position: usize,
-    program: StackProgram,
-}
-
-impl TransformPosition {
-    /// Construct a new transformation.
-    pub fn new(position: usize, value: FunctionTree<usize>) -> Self {
-        let reference_map = value
-            .references()
-            .into_iter()
-            .map(|position| (position, position))
-            .collect::<HashMap<_, _>>();
-        let program = StackProgram::from_function_tree(&value, &reference_map, None);
-
-        Self { position, program }
-    }
-}
-
 /// Represents a row-based table containing values of arbitrary data types
 #[derive(Debug)]
 pub(crate) struct TupleBuffer {
@@ -276,31 +254,64 @@ pub(crate) struct TupleBuffer {
     /// Column Index of the currently written tuple
     current_tuple_index: usize,
 
+    /// Number of input columns that are needed for writing a single tuple
+    input_columns: usize,
+    /// Number of output columns that make up a single tuple
+    output_columns: usize,
     /// Patterns to filter and transform the tuples before committing.
     patterns: Vec<FilterTransformPattern>,
 }
 
 impl TupleBuffer {
     /// Create a new [TupleBuffer].
-    pub(crate) fn new(column_number: usize) -> Self {
-        Self::with_patterns(column_number, Vec::new())
+    pub(crate) fn new(input_columns: usize) -> Self {
+        Self::with_patterns(input_columns, Vec::new())
     }
 
     /// Create a new [TupleBuffer] with the given [FilterTransformPattern]s.
     pub(crate) fn with_patterns(
-        column_number: usize,
+        input_columns: usize,
         patterns: Vec<FilterTransformPattern>,
     ) -> Self {
+        let output_columns = Self::output_columns_from_patterns(&patterns).unwrap_or(input_columns);
+        let columns = input_columns.max(output_columns);
+
         Self {
             typed_subtables: Vec::new(),
             table_lookup: TypedTableLookup::new(),
             table_storage: TypedTableStorage::default(),
-            current_tuple: vec![StorageValueT::Id32(0); column_number].into_boxed_slice(), // Picked arbitrarily
-            current_tuple_data_values: vec![AnyDataValue::new_integer_from_u64(0); column_number]
+            current_tuple: vec![StorageValueT::Id32(0); columns].into_boxed_slice(), // Picked arbitrarily
+            current_tuple_data_values: vec![AnyDataValue::new_integer_from_u64(0); columns]
                 .into_boxed_slice(), // Picked arbitrarily
-            current_tuple_types: vec![StorageTypeName::Id32; column_number].into_boxed_slice(), // Picked arbitrarily
+            current_tuple_types: vec![StorageTypeName::Id32; columns].into_boxed_slice(), // Picked arbitrarily
             current_tuple_index: 0,
+            input_columns,
+            output_columns,
             patterns,
+        }
+    }
+
+    /// Set the given [FilterTransformPattern]s.
+    pub(crate) fn set_patterns(&mut self, patterns: Vec<FilterTransformPattern>) {
+        self.output_columns =
+            Self::output_columns_from_patterns(&patterns).unwrap_or(self.input_columns);
+        self.patterns = patterns;
+
+        let columns = self.input_columns.max(self.output_columns);
+
+        // Picked arbitrarily
+        self.current_tuple = vec![StorageValueT::Id32(0); columns].into_boxed_slice();
+        self.current_tuple_types = vec![StorageTypeName::Id32; columns].into_boxed_slice();
+        self.current_tuple_data_values =
+            vec![AnyDataValue::new_integer_from_u64(0); columns].into_boxed_slice();
+    }
+
+    fn output_columns_from_patterns(patterns: &[FilterTransformPattern]) -> Option<usize> {
+        let pattern = patterns.first()?;
+        if pattern.transformations.is_empty() {
+            None
+        } else {
+            Some(pattern.transformations.len())
         }
     }
 
@@ -308,15 +319,15 @@ impl TupleBuffer {
     /// potentially creating a new entry in `typed_subtables`
     /// and the appropriate information into `table_lookup`.
     fn write_tuple(&mut self) {
-        let current_record = if let Some(subtable_id) = self
-            .table_lookup
-            .subtable_id(&self.current_tuple_types, self.typed_subtables.len())
-        {
+        let current_record = if let Some(subtable_id) = self.table_lookup.subtable_id(
+            &self.current_tuple_types[..self.output_columns],
+            self.typed_subtables.len(),
+        ) {
             &mut self.typed_subtables[subtable_id]
         } else {
             let new_record = self
                 .table_storage
-                .initialize_new_subtable(&self.current_tuple_types);
+                .initialize_new_subtable(&self.current_tuple_types[..self.output_columns]);
             self.typed_subtables.push(new_record);
 
             self.typed_subtables
@@ -325,8 +336,9 @@ impl TupleBuffer {
         };
 
         current_record.current_length += 1;
+
         self.table_storage
-            .push_tuple(&self.current_tuple, current_record);
+            .push_tuple(&self.current_tuple[..self.output_columns], current_record);
     }
 
     /// Provide the next value for the current tuple. Values are added in in order.
@@ -339,7 +351,7 @@ impl TupleBuffer {
         self.current_tuple[self.current_tuple_index] = value;
         self.current_tuple_index += 1;
 
-        if self.current_tuple_index >= self.column_number() {
+        if self.current_tuple_index >= self.input_columns {
             self.current_tuple_index = 0;
             self.write_tuple();
         }
@@ -354,7 +366,7 @@ impl TupleBuffer {
         self.current_tuple_data_values[self.current_tuple_index] = data_value;
         self.current_tuple_index += 1;
 
-        if self.current_tuple_index >= self.column_number() {
+        if self.current_tuple_index >= self.input_columns {
             self.current_tuple_index = 0;
 
             if self.match_filters_and_transform() {
@@ -380,10 +392,16 @@ impl TupleBuffer {
         SortedTupleBuffer::new(self)
     }
 
-    /// Returns the number of columns on the table, i.e., the
+    /// Returns the number of columns on the input table, i.e., the
     /// number of values that need to be written to make one tuple.
-    pub(crate) fn column_number(&self) -> usize {
-        self.current_tuple.len()
+    pub(crate) fn input_column_number(&self) -> usize {
+        self.input_columns
+    }
+
+    /// Returns the number of columns on the table, i.e., the number
+    /// of values that make one tuple
+    pub(crate) fn output_column_number(&self) -> usize {
+        self.output_columns
     }
 
     /// Returns the number of rows in the [TupleBuffer]
@@ -449,7 +467,7 @@ impl TupleBuffer {
     fn pattern_matches(&self, pattern: &FilterTransformPattern) -> bool {
         pattern
             .filter
-            .evaluate_bool(&self.current_tuple_data_values, None)
+            .evaluate_bool(&self.current_tuple_data_values[..self.input_columns], None)
             == Some(true)
     }
 
@@ -464,10 +482,11 @@ impl TupleBuffer {
                 continue;
             }
 
+            let data_values = self.current_tuple_data_values.clone();
             for transformation in &pattern.transformations {
                 let value = transformation
                     .program
-                    .evaluate_data(&self.current_tuple_data_values)
+                    .evaluate_data(&data_values)
                     .expect("should evaluate to a value");
                 self.current_tuple_data_values[transformation.position] = value;
             }
@@ -487,7 +506,11 @@ mod test {
         datavalues::AnyDataValue,
         dictionary::meta_dv_dict::MetaDvDictionary,
         function::tree::FunctionTree,
-        tabular::buffer::tuple_buffer::{FilterTransformPattern, TransformPosition, TupleBuffer},
+        tabular::{
+            buffer::tuple_buffer::{FilterTransformPattern, TupleBuffer},
+            filters::TransformPosition,
+            operations::OperationColumnMarker,
+        },
     };
     use test_log::test;
 
@@ -613,19 +636,19 @@ mod test {
             FilterTransformPattern::new(
                 FunctionTree::equals(
                     FunctionTree::constant(AnyDataValue::new_integer_from_u64(23)),
-                    FunctionTree::reference(1),
+                    FunctionTree::reference(OperationColumnMarker(1)),
                 ),
                 Vec::new(),
             ),
             FilterTransformPattern::new(
                 FunctionTree::numeric_greaterthaneq(
-                    FunctionTree::string_length(FunctionTree::reference(0)),
+                    FunctionTree::string_length(FunctionTree::reference(OperationColumnMarker(0))),
                     FunctionTree::constant(AnyDataValue::new_integer_from_u64(4)),
                 ),
                 vec![TransformPosition::new(
                     1,
                     FunctionTree::numeric_addition(
-                        FunctionTree::reference(1),
+                        FunctionTree::reference(OperationColumnMarker(1)),
                         FunctionTree::constant(AnyDataValue::new_integer_from_u64(1295)),
                     ),
                 )],

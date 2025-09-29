@@ -11,6 +11,7 @@ use std::{
 use nemo_physical::{
     datavalues::{AnyDataValue, DataValue},
     resource::{Resource, ResourceBuilder, ResourceValidationError},
+    tabular::filters::FilterTransformPattern,
 };
 use strum::IntoEnumIterator;
 
@@ -287,12 +288,12 @@ pub(crate) trait FormatBuilder: Debug + Sized + Into<AnyImportExportBuilder> {
     fn build_import(
         &self,
         arity: usize,
-        filter_rules: Vec<ChaseRule>,
+        patterns: Vec<FilterTransformPattern>,
     ) -> Arc<dyn ImportHandler + Send + Sync + 'static>;
     fn build_export(
         &self,
         arity: usize,
-        filter_rules: Vec<ChaseRule>,
+        patterns: Vec<FilterTransformPattern>,
     ) -> Arc<dyn ExportHandler + Send + Sync + 'static>;
 }
 
@@ -349,29 +350,11 @@ impl<B: FormatBuilder> Parameters<B> {
         ))
     }
 
-    #[allow(unused)]
-    pub(crate) fn validate_filter_rule(
-        predicate: &Tag,
-        rule: &Rule,
-        report: &mut ValidationReport,
-    ) -> Option<()> {
-        let mut valid = true;
-
-        for literal in rule.body() {
-            match literal.predicate() {
-                None => (),
-                Some(filter_predicate) => (),
-            }
-        }
-
-        valid.then_some(())
-    }
-
     pub(crate) fn validate(
-        predicate: Tag,
+        _predicate: Tag,
         spec: &ImportExportSpec,
         bindings: &[Operation],
-        filter_rules: &[Rule],
+        _filter_rules: &[Rule],
         direction: Direction,
         report: &mut ValidationReport,
     ) -> Option<Self> {
@@ -384,11 +367,6 @@ impl<B: FormatBuilder> Parameters<B> {
             );
             return None;
         };
-
-        for rule in filter_rules {
-            Self::validate_filter_rule(&predicate, rule, report)?;
-        }
-
         let mut has_errors = false;
         let mut spec = spec.clone();
         let substitution = Self::build_substitution(bindings, report)?;
@@ -708,21 +686,23 @@ impl ImportExportBuilder {
     pub fn build_import(
         &self,
         predicate_name: &str,
-        arity: usize,
+        input_arity: usize,
+        predicate_arity: usize,
         filter_rules: Vec<ChaseRule>,
     ) -> Import {
+        let patterns = filter_rules
+            .into_iter()
+            .flat_map(|rule| rule.into_filter_transform_pattern())
+            .collect();
+
         let handler = match &self.inner {
-            AnyImportExportBuilder::Dsv(dsv_builder) => {
-                dsv_builder.build_import(arity, filter_rules)
-            }
-            AnyImportExportBuilder::Rdf(rdf_handler) => {
-                rdf_handler.build_import(arity, filter_rules)
-            }
+            AnyImportExportBuilder::Dsv(dsv_builder) => dsv_builder.build_import(input_arity, patterns),
+            AnyImportExportBuilder::Rdf(rdf_handler) => rdf_handler.build_import(input_arity, patterns),
             AnyImportExportBuilder::Json(json_handler) => {
-                json_handler.build_import(arity, filter_rules)
+                json_handler.build_import(input_arity, patterns)
             }
             AnyImportExportBuilder::Sparql(sparql_builder) => {
-                sparql_builder.build_import(arity, filter_rules)
+                sparql_builder.build_import(input_arity, patterns)
             }
         };
 
@@ -737,7 +717,7 @@ impl ImportExportBuilder {
         Import {
             resource,
             compression: self.compression,
-            predicate_arity: arity,
+            predicate_arity,
             handler,
         }
     }
@@ -749,18 +729,19 @@ impl ImportExportBuilder {
         arity: usize,
         filter_rules: Vec<ChaseRule>,
     ) -> Export {
+        let patterns = filter_rules
+            .into_iter()
+            .flat_map(|rule| rule.into_filter_transform_pattern())
+            .collect();
+
         let handler = match &self.inner {
-            AnyImportExportBuilder::Dsv(dsv_builder) => {
-                dsv_builder.build_export(arity, filter_rules)
-            }
-            AnyImportExportBuilder::Rdf(rdf_handler) => {
-                rdf_handler.build_export(arity, filter_rules)
-            }
+            AnyImportExportBuilder::Dsv(dsv_builder) => dsv_builder.build_export(arity, patterns),
+            AnyImportExportBuilder::Rdf(rdf_handler) => rdf_handler.build_export(arity, patterns),
             AnyImportExportBuilder::Json(json_handler) => {
-                json_handler.build_export(arity, filter_rules)
+                json_handler.build_export(arity, patterns)
             }
             AnyImportExportBuilder::Sparql(sparql_builder) => {
-                sparql_builder.build_export(arity, filter_rules)
+                sparql_builder.build_export(arity, patterns)
             }
         };
 

@@ -15,7 +15,10 @@ use crate::{
     },
 };
 
-use super::{ProgramTransformation, exports::TransformationExports, global::TransformationGlobal};
+use super::{
+    ProgramTransformation, exports::TransformationExports,
+    filter_imports::TransformationFilterImports, global::TransformationGlobal,
+};
 
 /// Default transformation
 ///
@@ -53,7 +56,7 @@ impl<'a> ProgramTransformation for TransformationDefault<'a> {
                 self.parameters.export_parameters,
             ))?
             .transform(TransformationSetDefaultOutputs::default())?
-            // .transform(TransformationFilterImports::new())? // Feature not yet implemented
+            .transform(TransformationFilterImports::new())?
             .transform(TransformationIncremental::new())?
             .transform(TransformationEmpty::new())?
             .transform(TransformationValidate::default())?

@@ -233,8 +233,17 @@ impl ImportDirective {
         }
     }
 
-    /// Return the expected arity of this directive, if any.
-    pub fn expected_arity(&self) -> Option<usize> {
+    /// Return the expected output arity of this directive, if any.
+    pub fn expected_output_arity(&self) -> Option<usize> {
+        // need to check this first, since, e.g., RDF hardcodes its
+        // arity
+        if let Some(rule) = self.filter_rules().first()
+            && let Some(head) = rule.head().first()
+            && head.predicate() == *self.predicate()
+        {
+            return Some(head.terms().count());
+        }
+
         // TODO: There must be a better way
         let expected_arity = self.builder()?.expected_arity();
 
@@ -242,10 +251,26 @@ impl ImportDirective {
             return expected_arity;
         }
 
-        let head = self.filter_rules().first()?.head().first()?;
+        None
+    }
 
-        if head.predicate() == *self.predicate() {
-            return Some(head.variables().count());
+    /// Return the expected input arity of this directive, if any.
+    pub fn expected_input_arity(&self) -> Option<usize> {
+        // need to check this first, since, e.g., RDF hardcodes its
+        // arity
+        if let Some(rule) = self.filter_rules().first()
+            && let Some(head) = rule.head().first()
+            && head.predicate() == *self.predicate()
+            && let Some(body) = rule.body_positive().next()
+        {
+            return Some(body.terms().count());
+        }
+
+        // TODO: There must be a better way
+        let expected_arity = self.builder()?.expected_arity();
+
+        if expected_arity.is_some() {
+            return expected_arity;
         }
 
         None

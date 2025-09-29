@@ -16,6 +16,7 @@ use nemo_physical::{
     datasources::table_providers::TableProvider,
     datavalues::{AnyDataValue, DataValue},
     resource::ResourceBuilder,
+    tabular::filters::FilterTransformPattern,
 };
 
 use oxiri::Iri;
@@ -26,7 +27,6 @@ use value_format::RdfValueFormats;
 use writer::RdfWriter;
 
 use crate::{
-    chase_model::components::rule::ChaseRule,
     error::Error,
     io::{
         compression_format::CompressionFormat,
@@ -108,8 +108,8 @@ pub struct RdfHandler {
     value_formats: RdfValueFormats,
     /// Maximum number of statements that should be imported/exported.
     limit: Option<u64>,
-    /// Filtering rules
-    filter_rules: Vec<ChaseRule>,
+    /// Filter/Transform patterns
+    patterns: Vec<FilterTransformPattern>,
 }
 
 impl RdfHandler {
@@ -143,7 +143,7 @@ impl ImportHandler for RdfHandler {
             self.base.clone(),
             self.value_formats.clone(),
             self.limit,
-            self.filter_rules.clone(),
+            self.patterns.clone(),
         )))
     }
 }
@@ -273,7 +273,7 @@ impl FormatBuilder for RdfHandler {
             variant,
             value_formats,
             limit,
-            filter_rules: Vec::new(),
+            patterns: Vec::new(),
         })
     }
 
@@ -284,19 +284,20 @@ impl FormatBuilder for RdfHandler {
     fn build_import(
         &self,
         _arity: usize,
-        filter_rules: Vec<ChaseRule>,
+        patterns: Vec<FilterTransformPattern>,
     ) -> Arc<dyn ImportHandler + Send + Sync + 'static> {
         let mut handler = self.clone();
-        handler.filter_rules = filter_rules;
+        handler.patterns = patterns;
         Arc::new(handler)
     }
 
-    #[allow(unused)]
     fn build_export(
         &self,
         _arity: usize,
-        filter_rules: Vec<ChaseRule>,
+        patterns: Vec<FilterTransformPattern>,
     ) -> Arc<dyn ExportHandler + Send + Sync + 'static> {
-        Arc::new(self.clone())
+        let mut handler = self.clone();
+        handler.patterns = patterns;
+        Arc::new(handler)
     }
 }
