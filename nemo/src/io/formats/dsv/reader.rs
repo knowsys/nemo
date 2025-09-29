@@ -44,6 +44,7 @@ pub(crate) struct DsvReader<T> {
 }
 
 impl<T: BufRead> DsvReader<T> {
+    #[allow(clippy::too_many_arguments)]
     /// Instantiate a [DsvReader] for a given delimiter
     pub(crate) fn new(
         read: T,
