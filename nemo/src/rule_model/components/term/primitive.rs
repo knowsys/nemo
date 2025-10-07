@@ -107,9 +107,18 @@ impl Primitive {
         matches!(self, &Primitive::Ground(_))
     }
 
+    /// Return whether this primitive is a universal variable.
     pub fn is_universal(&self) -> bool {
         match self {
             Primitive::Variable(variable) => variable.is_universal(),
+            Primitive::Ground(_) => false,
+        }
+    }
+
+    /// Return whether this primitive is an existential variable.
+    pub fn is_existential(&self) -> bool {
+        match self {
+            Primitive::Variable(variable) => variable.is_existential(),
             Primitive::Ground(_) => false,
         }
     }
