@@ -21,7 +21,6 @@ use nemo_physical::{
 
 use oxiri::Iri;
 use reader::RdfReader;
-use strum::VariantArray;
 use strum_macros::VariantArray;
 use value_format::RdfValueFormats;
 use writer::RdfWriter;
