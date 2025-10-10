@@ -58,8 +58,8 @@ impl<'a> ProgramTransformation for TransformationDefault<'a> {
             .transform(TransformationSetDefaultOutputs::default())?
             .transform(TransformationValidate::default())?
             .transform(TransformationActive::default())?
-            .transform(TransformationFilterImports::new())?
             .transform(TransformationIncremental::new())?
+            .transform(TransformationFilterImports::new())?
             .transform(TransformationEmpty::new())
     }
 }
