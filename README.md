@@ -4,6 +4,7 @@
 [![Documentations](https://img.shields.io/github/actions/workflow/status/knowsys/nemo/build.yml?branch=main&label=documentation)](https://knowsys.github.io/nemo-doc)
 [![dependency status](https://deps.rs/repo/github/knowsys/nemo/status.svg)](https://deps.rs/repo/github/knowsys/nemo)
 [![built with nix](https://img.shields.io/static/v1?logo=nixos&logoColor=white&label=&message=Built%20with%20Nix&color=41439a)](https://builtwithnix.org)
+[![Gitter](https://badges.gitter.im/nemo/community.svg)](https://gitter.im/nemo/community)
 
 *Nemo* is a datalog-based rule engine for fast and scalable analytic data processing in memory. It is available as a command-line tool ```nmo```,  through bindings to other programming languages, and via a [browser-based web application](https://tools.iccl.inf.tu-dresden.de/nemo/).
 
