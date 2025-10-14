@@ -208,7 +208,7 @@ impl NormalizedRule {
 
         let mut positive = self.positive.clone();
         for import in self.imports() {
-            let atom = BodyAtom::new(import.predicate().clone(), import.bindings().clone());
+            let atom = BodyAtom::new(import.predicate().clone(), import.variables_cloned());
             positive.push(atom);
         }
 

@@ -155,7 +155,8 @@ impl ExecutionNodeRef {
             | ExecutionOperation::Function(subnode, _)
             | ExecutionOperation::Null(subnode)
             | ExecutionOperation::Aggregate(subnode, _)
-            | ExecutionOperation::IncrementalImport(subnode, _) => vec![subnode.clone()],
+            | ExecutionOperation::IncrementalImport(subnode, _)
+            | ExecutionOperation::Rename(subnode) => vec![subnode.clone()],
         }
     }
 }
@@ -197,6 +198,8 @@ pub(crate) enum ExecutionOperation {
     Aggregate(ExecutionNodeRef, AggregateAssignment),
     /// Perform an incremental import
     IncrementalImport(ExecutionNodeRef, Rc<Box<dyn TableProvider>>),
+    /// Renaming of the columns of the table
+    Rename(ExecutionNodeRef),
 }
 
 /// Declares whether the resulting table form executing a plan should be kept temporarily or permamently
@@ -420,6 +423,16 @@ impl ExecutionPlan {
         self.write_temporary(import_node.clone(), "Import");
 
         import_node
+    }
+
+    /// Return an [ExecutionNodeRef] with renamed column markers.
+    pub fn rename(
+        &mut self,
+        subnode: ExecutionNodeRef,
+        markers: OperationTable,
+    ) -> ExecutionNodeRef {
+        let operation = ExecutionOperation::Rename(subnode);
+        self.push_and_return_reference(operation, markers)
     }
 }
 
@@ -905,6 +918,15 @@ impl ExecutionPlan {
                     subnode: subtree,
                 }
             }
+            ExecutionOperation::Rename(subnode) => Self::execution_node(
+                root_node_id,
+                subnode.clone(),
+                order,
+                output_nodes,
+                computed_trees,
+                computed_trees_map,
+                loaded_tables,
+            ),
         }
     }
 
