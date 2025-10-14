@@ -144,7 +144,7 @@ pub(super) fn valid_tables_plan(
     let disjoint = head_set.is_disjoint(&body_set);
 
     if disjoint {
-        order = order._restrict_to(&body_set);
+        order = order.restrict_to(&body_set);
     }
 
     let order_set = order.iter().cloned().collect::<HashSet<_>>();

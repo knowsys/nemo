@@ -18,13 +18,13 @@ pub struct ImportAtom {
 
     /// List of variables bound to values
     /// that will be input for the input
-    bindings: Vec<Variable>,
+    variables: Vec<Variable>,
 }
 
 impl Display for ImportAtom {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let terms = DisplaySeperatedList::display(
-            self.bindings.iter(),
+            self.variables.iter(),
             &format!("{} ", syntax::SEQUENCE_SEPARATOR),
         );
         let predicate = self.predicate();
@@ -42,7 +42,7 @@ impl ImportAtom {
     pub fn new(predicate: Tag, handler: Import, bindings: Vec<Variable>) -> Self {
         Self {
             import: ImportInstruction::new(predicate, handler),
-            bindings,
+            variables: bindings,
         }
     }
 
@@ -53,7 +53,7 @@ impl ImportAtom {
 
     /// Return the arity of this atom.
     pub fn arity(&self) -> usize {
-        self.bindings.len()
+        self.variables.len()
     }
 
     /// Return the handler.
@@ -61,9 +61,14 @@ impl ImportAtom {
         self.import.handler()
     }
 
-    /// Return a reference to the bindings.
-    pub fn bindings(&self) -> &Vec<Variable> {
-        &self.bindings
+    /// Return an iterator over the variables.
+    pub fn variables(&self) -> impl Iterator<Item = &Variable> {
+        self.variables.iter()
+    }
+
+    /// Return a (cloned) list of the contained variables.
+    pub fn variables_cloned(&self) -> Vec<Variable> {
+        self.variables.clone()
     }
 }
 
@@ -89,11 +94,11 @@ impl ImportAtom {
                 .unwrap_or(arity),
             Vec::new(),
         );
-        let bindings = import.output_variables().clone();
+        let variables = import.output_variables().clone();
 
         Self {
             import: ImportInstruction::new(predicate, handler),
-            bindings,
+            variables,
         }
     }
 }
