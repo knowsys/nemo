@@ -6,9 +6,7 @@ use nemo_physical::{
 };
 
 use crate::{
-    execution::planning_new::{
-        normalization::aggregate::Aggregation, operations::RuntimeInformation,
-    },
+    execution::planning_new::{RuntimeInformation, normalization::aggregate::Aggregation},
     table_manager::SubtableExecutionPlan,
 };
 

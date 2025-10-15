@@ -3,9 +3,7 @@
 use nemo_physical::management::execution_plan::ExecutionNodeRef;
 
 use crate::{
-    execution::planning_new::{
-        normalization::operation::Operation, operations::RuntimeInformation,
-    },
+    execution::planning_new::{RuntimeInformation, normalization::operation::Operation},
     rule_model::components::term::primitive::variable::Variable,
     table_manager::SubtableExecutionPlan,
 };
@@ -61,5 +59,15 @@ impl GeneratorFilter {
             .collect::<Vec<_>>();
 
         plan.plan_mut().filter(input_node, filters)
+    }
+
+    /// Returns `Some(self)` or `None` depending on whether this is a noop,
+    /// i.e. does not affect the result.
+    pub fn or_none(self) -> Option<Self> {
+        if !self.filters.is_empty() {
+            Some(self)
+        } else {
+            None
+        }
     }
 }

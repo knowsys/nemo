@@ -12,11 +12,9 @@ use nemo_physical::{
 use crate::{
     chase_model::analysis::variable_order::VariableOrder,
     execution::planning_new::{
+        RuntimeInformation,
         normalization::atom::import::ImportAtom,
-        operations::{
-            RuntimeInformation,
-            union::{GeneratorUnion, UnionRange},
-        },
+        operations::union::{GeneratorUnion, UnionRange},
     },
     rule_model::components::{tag::Tag, term::primitive::variable::Variable},
     table_manager::{SubtableExecutionPlan, SubtableIdentifier},
@@ -95,7 +93,11 @@ impl GeneratorImport {
         let mut bindings = VariableBindings::default();
         let mut atom_map = HashMap::<Tag, Vec<(ImportAtom, usize)>>::default();
 
+        let mut variables = input_variables.iter().cloned().collect::<HashSet<_>>();
+
         for atom in atoms {
+            variables.extend(atom.variables().cloned());
+
             let index = bindings.add(&input_variables, &atom);
             atom_map
                 .entry(atom.predicate())
@@ -103,8 +105,10 @@ impl GeneratorImport {
                 .push((atom, index));
         }
 
+        let order = order.restrict_to(&variables);
+
         Self {
-            order: order.clone(),
+            order: order,
             input_variables,
             bindings,
             atoms: atom_map,
@@ -257,5 +261,15 @@ impl GeneratorImport {
 
         let markers_join = runtime.translation.operation_table(self.order.iter());
         plan.plan_mut().join(markers_join, join_nodes)
+    }
+
+    /// Returns `Some(self)` or `None` depending on whether this is a noop,
+    /// i.e. does not affect the result.
+    pub fn or_none(self) -> Option<Self> {
+        if !self.atoms.is_empty() {
+            Some(self)
+        } else {
+            None
+        }
     }
 }

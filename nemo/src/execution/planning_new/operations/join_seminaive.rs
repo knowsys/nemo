@@ -5,8 +5,9 @@ use nemo_physical::management::execution_plan::ExecutionNodeRef;
 use crate::{
     chase_model::analysis::variable_order::VariableOrder,
     execution::planning_new::{
+        RuntimeInformation,
         normalization::atom::body::BodyAtom,
-        operations::{RuntimeInformation, join::GeneratorJoin, union::UnionRange},
+        operations::{join::GeneratorJoin, union::UnionRange},
     },
     rule_model::components::term::primitive::variable::Variable,
     table_manager::SubtableExecutionPlan,
@@ -16,8 +17,8 @@ use crate::{
 /// representing the seminaive join of body atoms
 #[derive(Debug)]
 pub struct GeneratorJoinSeminaive {
-    /// Atoms that define the join
-    atoms: Vec<BodyAtom>,
+    /// Seminaive variants
+    variants: Vec<GeneratorJoin>,
 
     /// Variable order
     order: VariableOrder,
@@ -25,8 +26,77 @@ pub struct GeneratorJoinSeminaive {
 
 impl GeneratorJoinSeminaive {
     /// Create a new [GeneratorJoinSeminaive].
-    pub fn new(atoms: Vec<BodyAtom>, order: VariableOrder) -> Self {
-        Self { atoms, order }
+    pub fn new(atoms: Vec<BodyAtom>, order: &VariableOrder) -> Self {
+        let variants = Self::create_variants(atoms, order, true);
+
+        Self {
+            variants,
+            order: order.clone(),
+        }
+    }
+
+    /// Create a new [GeneratorJoinSeminaive]
+    /// where tables created in the during the last rule application step
+    /// are considered as `old` tables.
+    pub fn new_exclusive(atoms: Vec<BodyAtom>, order: &VariableOrder) -> Self {
+        let variants = Self::create_variants(atoms, order, false);
+
+        Self {
+            variants,
+            order: order.clone(),
+        }
+    }
+
+    /// Create a generator for each seminaive variant.
+    fn create_variants(
+        atoms: Vec<BodyAtom>,
+        order: &VariableOrder,
+        last_is_new: bool,
+    ) -> Vec<GeneratorJoin> {
+        let mut result = Vec::<GeneratorJoin>::default();
+
+        for mid in 0..atoms.len() {
+            let mut ranges = Vec::<UnionRange>::default();
+
+            for atom_index in 0..atoms.len() {
+                let range = if atom_index < mid {
+                    Self::range_old(last_is_new)
+                } else if atom_index == mid {
+                    Self::range_new(last_is_new)
+                } else {
+                    UnionRange::All
+                };
+
+                ranges.push(range);
+            }
+
+            let node_join = GeneratorJoin::new(atoms.clone(), ranges, order);
+            result.push(node_join);
+        }
+
+        result
+    }
+
+    /// Return a [UnionRange] taking into account
+    /// whether a table derived at the last rule application
+    /// should be considered as `new`.
+    fn range_new(last_is_new: bool) -> UnionRange {
+        if last_is_new {
+            UnionRange::New
+        } else {
+            UnionRange::NewExclusive
+        }
+    }
+
+    /// Return a [UnionRange] taking into account
+    /// whether a table derived at the last rule application
+    /// should be considered as `old`.
+    fn range_old(last_is_new: bool) -> UnionRange {
+        if last_is_new {
+            UnionRange::Old
+        } else {
+            UnionRange::OldInclusive
+        }
     }
 
     /// Append this operation to the plan.
@@ -38,47 +108,12 @@ impl GeneratorJoinSeminaive {
         let markers_result = runtime.translation.operation_table(self.order.iter());
         let mut node_result = plan.plan_mut().union_empty(markers_result);
 
-        // Atoms of predicates that received new elements since the last rule application
-        let mut updated_atoms = Vec::<usize>::new();
-
-        for (atom_index, atom) in self.atoms.iter().enumerate() {
-            let last_step = if let Some(step) = runtime.table_manager.last_step(&atom.predicate()) {
-                step
-            } else {
-                // Table is empty and therefore the join will be empty
-                return node_result;
-            };
-
-            if last_step > runtime.step_last_application {
-                updated_atoms.push(atom_index);
-            }
-        }
-
-        for mid in 0..updated_atoms.len() {
-            let mut ranges = Vec::<UnionRange>::default();
-            let mut updated_index: usize = 0;
-
-            for atom_index in 0..self.atoms.len() {
-                let range = if updated_atoms.contains(&atom_index) {
-                    let range = if updated_index < mid {
-                        UnionRange::Old
-                    } else if updated_index == mid {
-                        UnionRange::New
-                    } else {
-                        UnionRange::All
-                    };
-
-                    updated_index += 1;
-                    range
-                } else {
-                    UnionRange::Old
-                };
-
-                ranges.push(range);
+        for variant in &self.variants {
+            if variant.is_empty(runtime) {
+                continue;
             }
 
-            let node_join = GeneratorJoin::new(self.atoms.clone(), ranges, &self.order)
-                .create_plan(plan, runtime);
+            let node_join = variant.create_plan(plan, runtime);
             node_result.add_subnode(node_join);
         }
 

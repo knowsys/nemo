@@ -196,7 +196,7 @@ impl Deref for OperationTable {
 /// mainly by providing a translation between
 /// user defined "markers" (supplied as a generic parameter to this object)
 /// and [OperationColumnMarker]s.
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct OperationTableGenerator<ExternalMarker>
 where
     ExternalMarker: Clone + PartialEq + Eq + Hash,

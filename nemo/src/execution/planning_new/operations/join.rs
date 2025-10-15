@@ -7,11 +7,9 @@ use nemo_physical::management::execution_plan::ExecutionNodeRef;
 use crate::{
     chase_model::analysis::variable_order::VariableOrder,
     execution::planning_new::{
+        RuntimeInformation,
         normalization::atom::body::BodyAtom,
-        operations::{
-            RuntimeInformation,
-            union::{GeneratorUnion, UnionRange},
-        },
+        operations::union::{GeneratorUnion, UnionRange},
     },
     rule_model::components::term::primitive::variable::Variable,
     table_manager::SubtableExecutionPlan,
@@ -72,5 +70,14 @@ impl GeneratorJoin {
     /// created by `create_plan`.
     pub fn output_variables(&self) -> Vec<Variable> {
         self.order.as_ordered_list()
+    }
+
+    /// Return whether any range is empty and hence the join would be empty.
+    pub fn is_empty(&self, runtime: &RuntimeInformation) -> bool {
+        self.ranges.iter().any(|range| {
+            range
+                .as_range(runtime.step_current, runtime.step_last_application)
+                .is_empty()
+        })
     }
 }

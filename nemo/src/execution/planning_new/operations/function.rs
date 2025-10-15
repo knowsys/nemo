@@ -5,9 +5,7 @@ use nemo_physical::{
 };
 
 use crate::{
-    execution::planning_new::{
-        normalization::operation::Operation, operations::RuntimeInformation,
-    },
+    execution::planning_new::{RuntimeInformation, normalization::operation::Operation},
     rule_model::components::term::primitive::variable::Variable,
     table_manager::SubtableExecutionPlan,
 };
@@ -93,5 +91,16 @@ impl GeneratorFunction {
     /// created by `create_plan`.
     pub fn output_variables(&self) -> Vec<Variable> {
         self.variables.clone()
+    }
+
+    /// Returns `Some(self)` or `None`
+    /// depending on whether this is a noop,
+    /// i.e. does not affect the result.
+    pub fn or_none(self) -> Option<Self> {
+        if !self.functions.is_empty() {
+            Some(self)
+        } else {
+            None
+        }
     }
 }
