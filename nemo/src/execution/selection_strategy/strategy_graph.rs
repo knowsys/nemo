@@ -2,7 +2,7 @@
 
 use std::marker::PhantomData;
 
-use crate::chase_model::{analysis::program_analysis::RuleAnalysis, components::rule::ChaseRule};
+use crate::execution::planning_new::normalization::rule::NormalizedRule;
 
 use super::{
     dependency_graph::graph_constructor::DependencyGraphConstructor,
@@ -26,11 +26,8 @@ pub struct StrategyDependencyGraph<
 impl<GraphConstructor: DependencyGraphConstructor, SubStrategy: RuleSelectionStrategy>
     RuleSelectionStrategy for StrategyDependencyGraph<GraphConstructor, SubStrategy>
 {
-    fn new(
-        rules: Vec<&ChaseRule>,
-        rule_analyses: Vec<&RuleAnalysis>,
-    ) -> Result<Self, SelectionStrategyError> {
-        let dependency_graph = GraphConstructor::build_graph(rules.clone(), rule_analyses.clone());
+    fn new(rules: Vec<&NormalizedRule>) -> Result<Self, SelectionStrategyError> {
+        let dependency_graph = GraphConstructor::build_graph(&rules);
         let graph_scc = petgraph::algo::condensation(dependency_graph, true);
         let scc_sorted = petgraph::algo::toposort(&graph_scc, None)
             .expect("The input graph is assured to be acyclic");
@@ -41,12 +38,13 @@ impl<GraphConstructor: DependencyGraphConstructor, SubStrategy: RuleSelectionStr
         for scc in scc_sorted {
             let scc_rule_indices = graph_scc[scc].clone();
 
-            let sub_rules: Vec<&ChaseRule> = scc_rule_indices.iter().map(|&i| rules[i]).collect();
-            let sub_analyses: Vec<&RuleAnalysis> =
-                scc_rule_indices.iter().map(|&i| rule_analyses[i]).collect();
+            let sub_rules = scc_rule_indices
+                .iter()
+                .map(|&i| rules[i])
+                .collect::<Vec<_>>();
 
             ordered_sccs.push(scc_rule_indices);
-            substrategies.push(SubStrategy::new(sub_rules, sub_analyses)?);
+            substrategies.push(SubStrategy::new(sub_rules)?);
         }
 
         Ok(Self {

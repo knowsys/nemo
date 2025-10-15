@@ -1,17 +1,15 @@
 //! This module defines the strategy for the (forward) execution of rules.
 
 use crate::{
-    chase_model::analysis::variable_order::VariableOrder,
-    execution::{
-        planning_new::{
-            RuntimeInformation,
-            normalization::rule::NormalizedRule,
-            operations::aggregation::GeneratorAggregation,
-            strategy::forward::{body::StrategyBody, head::StrategyHead},
-        },
-        rule_execution::VariableTranslation,
+    error::Error,
+    execution::planning_new::{
+        RuntimeInformation, VariableTranslation,
+        normalization::rule::NormalizedRule,
+        operations::aggregation::GeneratorAggregation,
+        strategy::forward::{body::StrategyBody, head::StrategyHead},
     },
     io::ImportManager,
+    rule_model::components::tag::Tag,
     table_manager::{SubtableExecutionPlan, TableManager},
 };
 
@@ -30,8 +28,6 @@ pub struct StrategyForward {
     /// Generator for the head operations
     head: StrategyHead,
 
-    /// Variable order
-    order: VariableOrder,
     /// Variable translation
     translation: VariableTranslation,
 }
@@ -74,19 +70,25 @@ impl StrategyForward {
             body,
             aggregation,
             head,
-            order: rule.variable_order().clone(),
             translation,
         }
     }
 
-    /// Create an execution plan for evaluating a rule.
-    pub async fn create_plan<'a>(
+    /// Return an iterator over all special predicates needed to execute this strategy.
+    pub fn special_predicates(&self) -> impl Iterator<Item = (Tag, usize)> {
+        self.body
+            .special_predicates()
+            .chain(self.head.special_predicates())
+    }
+
+    /// Create and execute the execution plan defined by this strategy.
+    pub async fn execute<'a>(
         &self,
-        table_manager: &'a TableManager,
+        table_manager: &'a mut TableManager,
         import_manager: &'a ImportManager,
         step_current: usize,
         step_last_application: usize,
-    ) -> SubtableExecutionPlan {
+    ) -> Result<Vec<Tag>, Error> {
         let mut plan = SubtableExecutionPlan::default();
 
         let runtime = RuntimeInformation {
@@ -94,7 +96,6 @@ impl StrategyForward {
             step_current,
             table_manager,
             import_manager,
-            order: self.order.clone(),
             translation: self.translation.clone(),
         };
 
@@ -108,6 +109,6 @@ impl StrategyForward {
         self.head
             .create_plan(&mut plan, node_body, node_aggregation, &runtime);
 
-        plan
+        table_manager.execute_plan(plan).await
     }
 }

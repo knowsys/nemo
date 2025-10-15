@@ -19,7 +19,7 @@ use crate::{
 #[derive(Debug)]
 pub struct GeneratorNegation {
     /// Safe variables
-    variables: Vec<Variable>,
+    _variables: Vec<Variable>,
 
     /// Negated atoms together with additional filters
     atoms: Vec<(BodyAtom, GeneratorFilter)>,
@@ -59,7 +59,7 @@ impl GeneratorNegation {
         atoms.retain(|_| *keep_iter.next().expect("keep is as long as atoms"));
 
         Self {
-            variables: positive_variables.to_vec(),
+            _variables: positive_variables.to_vec(),
             atoms: negated_atoms,
         }
     }
@@ -93,5 +93,17 @@ impl GeneratorNegation {
         } else {
             None
         }
+    }
+
+    /// Return the safe variables.
+    pub fn _safe_variables(&self) -> Vec<Variable> {
+        self._variables.clone()
+    }
+
+    /// Return an iterator over all negated atoms and their corresponding filters that will be applied.
+    pub fn atoms(&self) -> impl Iterator<Item = (BodyAtom, Vec<Operation>)> {
+        self.atoms
+            .iter()
+            .map(|(atom, filter)| (atom.clone(), filter.filters().cloned().collect()))
     }
 }

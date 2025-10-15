@@ -3,9 +3,9 @@
 use nemo_physical::management::execution_plan::ExecutionNodeRef;
 
 use crate::{
-    chase_model::analysis::variable_order::VariableOrder,
     execution::planning_new::{
         RuntimeInformation,
+        analysis::variable_order::VariableOrder,
         normalization::{
             atom::{body::BodyAtom, import::ImportAtom},
             operation::Operation,
@@ -15,7 +15,7 @@ use crate::{
             join_seminaive::GeneratorJoinSeminaive,
         },
     },
-    rule_model::components::term::primitive::variable::Variable,
+    rule_model::components::{tag::Tag, term::primitive::variable::Variable},
     table_manager::SubtableExecutionPlan,
 };
 
@@ -65,6 +65,15 @@ impl StrategyBody {
             import_filter: import_filter.or_none(),
             variables: order.as_ordered_list(),
         }
+    }
+
+    /// Return an iterator over all special predicates needed to execute this strategy.
+    pub fn special_predicates(&self) -> impl Iterator<Item = (Tag, usize)> {
+        self.import
+            .as_ref()
+            .map(|import| import.special_predicates())
+            .into_iter()
+            .flatten()
     }
 
     /// Append this operation to the plan.

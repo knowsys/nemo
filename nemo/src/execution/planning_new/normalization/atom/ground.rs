@@ -5,7 +5,7 @@ use std::fmt::Display;
 use nemo_physical::datavalues::AnyDataValue;
 
 use crate::{
-    rule_model::components::{tag::Tag, term::primitive::ground::GroundTerm},
+    rule_model::components::{atom::Atom, tag::Tag, term::primitive::ground::GroundTerm},
     syntax,
     util::seperated_list::DisplaySeperatedList,
 };
@@ -95,5 +95,26 @@ impl GroundAtom {
         }
 
         Some(Self { predicate, terms })
+    }
+}
+
+impl TryFrom<Atom> for GroundAtom {
+    type Error = ();
+
+    fn try_from(atom: Atom) -> Result<Self, Self::Error> {
+        let predicate = atom.predicate();
+        let mut terms = Vec::<GroundTerm>::default();
+
+        for term in atom.terms() {
+            use crate::rule_model::components::term::{Term, primitive::Primitive};
+
+            if let Term::Primitive(Primitive::Ground(ground)) = term {
+                terms.push(ground.clone())
+            } else {
+                return Err(());
+            }
+        }
+
+        Ok(Self { predicate, terms })
     }
 }

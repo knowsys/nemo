@@ -93,6 +93,12 @@ impl GeneratorFunction {
         self.variables.clone()
     }
 
+    /// Return an iterator over the [Operation]s that will
+    /// be applied and their target variable.
+    pub fn functions(&self) -> impl Iterator<Item = &(Variable, Operation)> {
+        self.functions.iter()
+    }
+
     /// Returns `Some(self)` or `None`
     /// depending on whether this is a noop,
     /// i.e. does not affect the result.

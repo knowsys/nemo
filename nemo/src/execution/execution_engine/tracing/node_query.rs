@@ -8,10 +8,6 @@ use nemo_physical::{
 };
 
 use crate::{
-    chase_model::{
-        ChaseAtom, GroundAtom, analysis::program_analysis::ProgramAnalysis,
-        components::program::ChaseProgram,
-    },
     execution::{
         ExecutionEngine,
         execution_engine::tracing::node_query::{
@@ -22,6 +18,7 @@ use crate::{
                 valid_tables_plan, variable_translation,
             },
         },
+        planning_new::normalization::{atom::ground::GroundAtom, program::NormalizedProgram},
         selection_strategy::strategy::RuleSelectionStrategy,
         tracing::{
             node_query::{
@@ -32,7 +29,7 @@ use crate::{
             shared::{PaginationResponse, Rule as TraceRule, TableEntryQuery, TableEntryResponse},
         },
     },
-    rule_model::components::{IterableVariables, atom::Atom, tag::Tag},
+    rule_model::components::{atom::Atom, tag::Tag},
 };
 
 mod manager;
@@ -48,7 +45,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         node: &TableEntriesForTreeNodesQueryInner,
         address: TreeAddress,
         predicate: &Tag,
-        program: &ChaseProgram,
+        program: &NormalizedProgram,
     ) {
         if !node.queries.is_empty() {
             let arity = self.predicate_arity(predicate).expect("invalid predicate");
@@ -103,7 +100,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             let rule = program.rules()[successor.rule].clone();
 
             for (index, (atom, node_atom)) in rule
-                .positive_body()
+                .positive_all()
                 .iter()
                 .zip(successor.children.iter())
                 .enumerate()
@@ -137,8 +134,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         predicate: &Tag,
         discarded_columns: &[usize],
         before_step: usize,
-        program: &ChaseProgram,
-        program_analysis: &ProgramAnalysis,
+        program: &NormalizedProgram,
     ) {
         manager.add_discard(&address, discarded_columns);
 
@@ -147,8 +143,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             let simple_successor = successor.children.iter().all(|child| child.is_simple());
 
             let rule = program.rules()[successor.rule].clone();
-            let order =
-                program_analysis.rule_analysis[successor.rule].promising_variable_orders[0].clone();
+            let order = rule.variable_order().clone();
 
             // Any facts derived after this point are not relevant for this node
             let next_step = {
@@ -161,7 +156,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             let unique_variables = unique_variables(&rule);
 
             for (index, (atom, node_atom)) in rule
-                .positive_body()
+                .positive_all()
                 .iter()
                 .zip(successor.children.iter())
                 .enumerate()
@@ -187,7 +182,6 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                     &discarded_columns,
                     next_step,
                     program,
-                    program_analysis,
                 ))
                 .await;
             }
@@ -304,8 +298,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         manager: &mut TraceNodeManager,
         node: &TableEntriesForTreeNodesQueryInner,
         address: TreeAddress,
-        program: &ChaseProgram,
-        program_analysis: &ProgramAnalysis,
+        program: &NormalizedProgram,
     ) -> bool {
         if address.is_empty() {
             if let Some(root_table) = manager.final_valid_table(&address) {
@@ -319,8 +312,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
         if let Some(successor) = &node.next {
             let rule = program.rules()[successor.rule].clone();
-            let order =
-                program_analysis.rule_analysis[successor.rule].promising_variable_orders[0].clone();
+            let order = rule.variable_order().clone();
 
             let (variable_translation, order, head_variables) =
                 variable_translation(&rule, successor.head_index, &order);
@@ -343,7 +335,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             let disjoint = head_set.is_disjoint(&body_set);
 
             for (index, (atom, node_atom)) in rule
-                .positive_body()
+                .positive_all()
                 .iter()
                 .zip(successor.children.iter())
                 .enumerate()
@@ -351,7 +343,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 let mut next_address = address.clone();
                 next_address.push(index);
 
-                let atom_variables = atom.variables().cloned().collect::<Vec<_>>();
+                let atom_variables = atom.terms().cloned().collect::<Vec<_>>();
 
                 if !disjoint {
                     if let Some(plan) = result_tables_plan(
@@ -382,14 +374,8 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                     return false;
                 }
 
-                if !Box::pin(self.trace_node_filter(
-                    manager,
-                    node_atom,
-                    next_address,
-                    program,
-                    program_analysis,
-                ))
-                .await
+                if !Box::pin(self.trace_node_filter(manager, node_atom, next_address, program))
+                    .await
                 {
                     return false;
                 }
@@ -403,8 +389,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     async fn trace_node_execute(
         &mut self,
         query: &TableEntriesForTreeNodesQuery,
-        program: &ChaseProgram,
-        program_analysis: &ProgramAnalysis,
+        program: &NormalizedProgram,
     ) -> TraceNodeManager {
         let mut manager = TraceNodeManager::default();
         let address = TreeAddress::default();
@@ -424,18 +409,11 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             &discarded_columns,
             before_step,
             program,
-            program_analysis,
         )
         .await;
 
         let _ = self
-            .trace_node_filter(
-                &mut manager,
-                node,
-                address.clone(),
-                program,
-                program_analysis,
-            )
+            .trace_node_filter(&mut manager, node, address.clone(), program)
             .await;
 
         manager
@@ -505,35 +483,27 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         node: &TableEntriesForTreeNodesQueryInner,
         address: TreeAddress,
         predicate: &Tag,
-        program: &ChaseProgram,
+        program: &NormalizedProgram,
     ) {
         // Collect all (syntactly) possible rules
         // that could be triggered by or could trigger
         // the predicate assigned to the current node
 
-        let possible_rules_above = self
-            .analysis
-            .predicate_to_rule_body
-            .get(predicate)
-            .cloned()
-            .unwrap_or_default()
+        let possible_rules_above = program
+            .rules_with_body_predicate(predicate)
             .into_iter()
-            .flat_map(|idx| {
-                TraceRule::all_possible_single_head_rules(idx, self.program().rule(idx))
+            .flat_map(|&index| {
+                TraceRule::all_possible_single_head_rules(index, self.program().rule(index))
             })
             .collect::<Vec<_>>();
 
-        let possible_rules_below = self
-            .analysis
-            .predicate_to_rule_head
-            .get(predicate)
-            .cloned()
-            .unwrap_or_default()
+        let possible_rules_below = program
+            .rules_with_head_predicate(predicate)
             .into_iter()
-            .flat_map(|idx| {
+            .flat_map(|&index| {
                 TraceRule::possible_rules_for_head_predicate(
-                    idx,
-                    self.program().rule(idx),
+                    index,
+                    self.program().rule(index),
                     predicate,
                 )
             })
@@ -572,7 +542,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             for (index, (child, atom)) in successor
                 .children
                 .iter()
-                .zip(rule.positive_body())
+                .zip(rule.positive_all())
                 .enumerate()
             {
                 let next_predicate = atom.predicate();
@@ -593,9 +563,9 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             // The content of the negated nodes is just the complete table
             // corresponding to the negated atoms predicate:
 
-            for (index, negative_atom) in rule.negative_body().iter().enumerate() {
+            for (index, negative_atom) in rule.negative().iter().enumerate() {
                 let mut next_address = address.clone();
-                next_address.push(rule.positive_body().len() + index);
+                next_address.push(rule.positive_all().len() + index);
 
                 let rows = if let Some(rows) = self
                     .predicate_rows(&negative_atom.predicate())
@@ -647,7 +617,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     async fn trace_node_prepare(
         &mut self,
         query: &TableEntriesForTreeNodesQuery,
-        program: &ChaseProgram,
+        program: &NormalizedProgram,
     ) -> TableEntriesForTreeNodesResponse {
         let mut elements = Vec::<TableEntriesForTreeNodesResponseElement>::default();
 
@@ -668,10 +638,10 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         &mut self,
         query: &TableEntriesForTreeNodesQuery,
     ) -> TableEntriesForTreeNodesResponse {
-        let (program, analysis) = self.program.prepare_tracing();
+        let program = self.program.clone();
 
         let response = self.trace_node_prepare(query, &program).await;
-        let manager = self.trace_node_execute(query, &program, &analysis).await;
+        let manager = self.trace_node_execute(query, &program).await;
 
         self.trace_node_answer(&manager, response)
             .await

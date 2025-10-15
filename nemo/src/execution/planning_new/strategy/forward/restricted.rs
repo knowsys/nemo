@@ -5,9 +5,9 @@ use std::collections::HashSet;
 use nemo_physical::management::execution_plan::ExecutionNodeRef;
 
 use crate::{
-    chase_model::analysis::variable_order::VariableOrder,
     execution::planning_new::{
         RuntimeInformation,
+        analysis::variable_order::VariableOrder,
         normalization::atom::head::HeadAtom,
         operations::{
             restricted_frontier::GeneratorRestrictedFrontier,
@@ -16,7 +16,7 @@ use crate::{
             union::{GeneratorUnion, UnionRange},
         },
     },
-    rule_model::components::term::primitive::variable::Variable,
+    rule_model::components::{tag::Tag, term::primitive::variable::Variable},
     table_manager::{SubtableExecutionPlan, SubtableIdentifier},
 };
 
@@ -46,7 +46,7 @@ impl StrategyRestricted {
     ) -> Self {
         let new_satisfied = GeneratorRestrictedHead::new(head, frontier.clone(), order, rule_id);
         let all_satisfied = GeneratorUnion::new(
-            new_satisfied.predicate(),
+            new_satisfied.predicate().0,
             new_satisfied.output_variables(),
             UnionRange::All,
         );
@@ -62,6 +62,11 @@ impl StrategyRestricted {
             frontier,
             nulls,
         }
+    }
+
+    /// Return an iterator over all special predicates needed to execute this strategy.
+    pub fn special_predicates(&self) -> impl Iterator<Item = (Tag, usize)> {
+        std::iter::once(self.new_satisfied.predicate())
     }
 
     /// Append this operation to the plan.
@@ -96,7 +101,7 @@ impl StrategyRestricted {
             node_newer_satisfied_matches_frontier,
             "Head (Restricted): Updated Sat. Frontier",
             "Restricted Chase Helper Table",
-            SubtableIdentifier::new(self.new_satisfied.predicate(), runtime.step_current),
+            SubtableIdentifier::new(self.new_satisfied.predicate().0, runtime.step_current),
         );
 
         self.nulls

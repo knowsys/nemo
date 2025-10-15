@@ -5,9 +5,9 @@ use std::collections::HashSet;
 use nemo_physical::management::execution_plan::ExecutionNodeRef;
 
 use crate::{
-    chase_model::analysis::variable_order::VariableOrder,
     execution::planning_new::{
         RuntimeInformation,
+        analysis::variable_order::VariableOrder,
         normalization::{
             atom::{body::BodyAtom, head::HeadAtom},
             generator::VariableGenerator,
@@ -41,7 +41,7 @@ pub struct GeneratorRestrictedHead {
     duplicates: GeneratorDuplicates,
 
     /// Predicate that identifies this table
-    predicate: Tag,
+    predicate: (Tag, usize),
     /// Output variables
     variables: Vec<Variable>,
 }
@@ -68,8 +68,8 @@ impl GeneratorRestrictedHead {
         order = order.restrict_to(&frontier);
         let projection = GeneratorRestrictedFrontier::new(order.as_ordered_list());
 
-        let predicate = Self::generate_predicate(rule_id);
-        let duplicates = GeneratorDuplicates::new(predicate.clone());
+        let predicate = (Self::generate_predicate(rule_id), order.len());
+        let duplicates = GeneratorDuplicates::new(predicate.0.clone());
 
         Self {
             join,
@@ -159,7 +159,7 @@ impl GeneratorRestrictedHead {
     }
 
     /// Return the predicate name that contains satisfied matches.
-    pub fn predicate(&self) -> Tag {
+    pub fn predicate(&self) -> (Tag, usize) {
         self.predicate.clone()
     }
 

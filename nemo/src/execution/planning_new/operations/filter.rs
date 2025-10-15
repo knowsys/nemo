@@ -12,7 +12,7 @@ use crate::{
 #[derive(Debug)]
 pub struct GeneratorFilter {
     /// Variables
-    variables: Vec<Variable>,
+    _variables: Vec<Variable>,
 
     /// Filters
     filters: Vec<Operation>,
@@ -40,7 +40,7 @@ impl GeneratorFilter {
         });
 
         Self {
-            variables: input_variables,
+            _variables: input_variables,
             filters,
         }
     }
@@ -59,6 +59,11 @@ impl GeneratorFilter {
             .collect::<Vec<_>>();
 
         plan.plan_mut().filter(input_node, filters)
+    }
+
+    /// Return an iterator over all filters that will be applied.
+    pub fn filters(&self) -> impl Iterator<Item = &Operation> {
+        self.filters.iter()
     }
 
     /// Returns `Some(self)` or `None` depending on whether this is a noop,

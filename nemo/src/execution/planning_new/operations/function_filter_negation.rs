@@ -83,6 +83,33 @@ impl GeneratorFunctionFilterNegation {
         self.variables.clone()
     }
 
+    /// Return an iterator over all filters that will be applied.
+    pub fn filters(&self) -> impl Iterator<Item = &Operation> {
+        self.filter
+            .as_ref()
+            .map(|filter| filter.filters())
+            .into_iter()
+            .flatten()
+    }
+
+    /// Return an iterator over all functions that will be applied.
+    pub fn functions(&self) -> impl Iterator<Item = &(Variable, Operation)> {
+        self.function
+            .as_ref()
+            .map(|function| function.functions())
+            .into_iter()
+            .flatten()
+    }
+
+    /// Return an iterator over all negation that will be applied.
+    pub fn negations(&self) -> impl Iterator<Item = (BodyAtom, Vec<Operation>)> {
+        self.negation
+            .as_ref()
+            .map(|negation| negation.atoms())
+            .into_iter()
+            .flatten()
+    }
+
     /// Returns `Some(self)` or `None` depending on whether this is a noop,
     /// i.e. does not affect the result.
     pub fn or_none(self) -> Option<Self> {

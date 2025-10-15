@@ -5,9 +5,9 @@ use std::collections::{HashMap, HashSet};
 use nemo_physical::management::execution_plan::{ColumnOrder, ExecutionNodeRef};
 
 use crate::{
-    chase_model::analysis::variable_order::VariableOrder,
     execution::planning_new::{
         RuntimeInformation,
+        analysis::variable_order::VariableOrder,
         normalization::atom::head::HeadAtom,
         operations::{duplicates::GeneratorDuplicates, projection_head::GeneratorProjectionHead},
         strategy::forward::restricted::StrategyRestricted,
@@ -87,6 +87,15 @@ impl StrategyHead {
         }
 
         Self { restricted, atoms }
+    }
+
+    /// Return an iterator over all special predicates needed to execute this strategy.
+    pub fn special_predicates(&self) -> impl Iterator<Item = (Tag, usize)> {
+        self.restricted
+            .as_ref()
+            .map(|restricted| restricted.special_predicates())
+            .into_iter()
+            .flatten()
     }
 
     /// Append this operation to the plan.

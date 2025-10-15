@@ -16,7 +16,7 @@ use nemo_physical::{
 use strum::IntoEnumIterator;
 
 use crate::{
-    chase_model::components::rule::ChaseRule,
+    execution::planning_new::normalization::rule::NormalizedRule,
     rule_model::{
         components::{
             ComponentSource,
@@ -688,7 +688,7 @@ impl ImportExportBuilder {
         predicate_name: &str,
         input_arity: usize,
         predicate_arity: usize,
-        filter_rules: Vec<ChaseRule>,
+        filter_rules: Vec<NormalizedRule>,
     ) -> Import {
         let patterns = filter_rules
             .into_iter()
@@ -731,7 +731,7 @@ impl ImportExportBuilder {
         &self,
         predicate_name: &str,
         arity: usize,
-        filter_rules: Vec<ChaseRule>,
+        filter_rules: Vec<NormalizedRule>,
     ) -> Export {
         let patterns = filter_rules
             .into_iter()

@@ -10,10 +10,8 @@ use nemo_physical::{
 };
 
 use crate::{
-    chase_model::components::{
-        atom::{ChaseAtom, variable_atom::VariableAtom},
-        program::ChaseProgram,
-        rule::ChaseRule,
+    execution::planning_new::normalization::{
+        atom::body::BodyAtom, program::NormalizedProgram, rule::NormalizedRule,
     },
     rule_model::components::{tag::Tag, term::primitive::variable::Variable},
 };
@@ -83,7 +81,7 @@ impl VariableOrder {
     }
 
     /// Returns the number of entries.
-    pub fn _len(&self) -> usize {
+    pub fn len(&self) -> usize {
         self.0.len()
     }
 
@@ -112,7 +110,7 @@ impl VariableOrder {
     }
 
     /// Return [String] with the contents of this object for debugging.
-    pub(crate) fn debug(&self) -> String {
+    pub(crate) fn _debug(&self) -> String {
         let mut variable_vector = Vec::<Variable>::new();
         variable_vector.resize_with(self.0.len(), || Variable::universal("PLACEHOLDER"));
 
@@ -179,7 +177,7 @@ impl IterationOrder {
     }
 }
 
-fn column_order_for(atom: &VariableAtom, var_order: &VariableOrder) -> ColumnOrder {
+fn column_order_for(atom: &BodyAtom, var_order: &VariableOrder) -> ColumnOrder {
     let mut partial_col_order: Vec<usize> = var_order
         .iter()
         .flat_map(|var| {
@@ -206,13 +204,13 @@ trait RuleVariableList {
     fn filter_cartesian_product(
         self,
         partial_var_order: &VariableOrder,
-        rule: &ChaseRule,
+        rule: &NormalizedRule,
     ) -> Vec<Variable>;
 
     fn filter_tries<P: FnMut(&Tag) -> bool>(
         self,
         partial_var_order: &VariableOrder,
-        rule: &ChaseRule,
+        rule: &NormalizedRule,
         required_trie_column_orders: &HashMap<Tag, HashSet<ColumnOrder>>,
         predicate_filter: P,
     ) -> Vec<Variable>;
@@ -222,12 +220,12 @@ impl RuleVariableList for Vec<Variable> {
     fn filter_cartesian_product(
         self,
         partial_var_order: &VariableOrder,
-        rule: &ChaseRule,
+        rule: &NormalizedRule,
     ) -> Vec<Variable> {
         let result: Vec<Variable> = self
             .iter()
             .filter(|var| {
-                rule.positive_body().iter().any(|atom| {
+                rule.positive_all().iter().any(|atom| {
                     let predicate_vars: Vec<Variable> = atom.terms().cloned().collect();
 
                     predicate_vars.iter().any(|pred_var| pred_var == *var)
@@ -245,7 +243,7 @@ impl RuleVariableList for Vec<Variable> {
     fn filter_tries<P: FnMut(&Tag) -> bool>(
         self,
         partial_var_order: &VariableOrder,
-        rule: &ChaseRule,
+        rule: &NormalizedRule,
         required_trie_column_orders: &HashMap<Tag, HashSet<ColumnOrder>>,
         mut predicate_filter: P,
     ) -> Vec<Variable> {
@@ -256,15 +254,15 @@ impl RuleVariableList for Vec<Variable> {
                 extended_var_order.push(var.clone());
 
                 let atoms = rule
-                    .positive_body()
-                    .iter()
+                    .positive_all()
+                    .into_iter()
                     .filter(|atom| predicate_filter(&atom.predicate()))
                     .filter(|atom| atom.terms().any(|atom_var| atom_var == var));
 
                 let (atoms_requiring_new_orders, total_atoms) = atoms.fold((0, 0), |acc, atom| {
                     let fitting_column_order_exists: bool = required_trie_column_orders
                         .get(&atom.predicate())
-                        .map(|set| set.contains(&column_order_for(atom, &extended_var_order)))
+                        .map(|set| set.contains(&column_order_for(&atom, &extended_var_order)))
                         .unwrap_or(false);
 
                     let new_col_order_required = !fitting_column_order_exists;
@@ -301,7 +299,7 @@ impl RuleVariableList for Vec<Variable> {
 }
 
 struct VariableOrderBuilder<'a> {
-    program: &'a ChaseProgram,
+    program: &'a NormalizedProgram,
     iteration_order_within_rule: IterationOrder,
     required_trie_column_orders: HashMap<Tag, HashSet<ColumnOrder>>, // maps predicates to sets of column orders
     idb_preds: HashSet<Tag>,
@@ -316,7 +314,7 @@ struct BuilderResult {
 
 impl VariableOrderBuilder<'_> {
     fn build_for(
-        program: &ChaseProgram,
+        program: &NormalizedProgram,
         iteration_order_within_rule: IterationOrder,
         initial_column_orders: HashMap<Tag, HashSet<ColumnOrder>>,
     ) -> BuilderResult {
@@ -324,7 +322,7 @@ impl VariableOrderBuilder<'_> {
             program,
             iteration_order_within_rule,
             required_trie_column_orders: initial_column_orders,
-            idb_preds: program.idb_predicates(),
+            idb_preds: program.derived_predicates().clone(),
         };
 
         let variable_orders = builder.generate_variable_orders();
@@ -338,9 +336,9 @@ impl VariableOrderBuilder<'_> {
 
     fn get_already_present_idb_edb_count_for_rule_in_tries(
         &self,
-        rule: &ChaseRule,
+        rule: &NormalizedRule,
     ) -> (usize, usize) {
-        let preds_with_tries = rule.positive_body().iter().filter_map(|atom| {
+        let preds_with_tries = rule.positive_all().into_iter().filter_map(|atom| {
             let pred = atom.predicate();
             self.required_trie_column_orders
                 .get(&pred)
@@ -361,7 +359,7 @@ impl VariableOrderBuilder<'_> {
 
     fn generate_variable_orders(&mut self) -> Vec<VariableOrder> {
         // NOTE: We use a BTreeMap to determinise the iteration order for easier debugging; this should not be performance critical
-        let mut remaining_rules: BTreeMap<usize, &ChaseRule> =
+        let mut remaining_rules: BTreeMap<usize, &NormalizedRule> =
             self.program.rules().iter().enumerate().collect();
 
         let mut result: Vec<(usize, VariableOrder)> =
@@ -395,11 +393,11 @@ impl VariableOrderBuilder<'_> {
         result.into_iter().map(|(_, ord)| ord).collect()
     }
 
-    fn generate_variable_order_for_rule(&mut self, rule: &ChaseRule) -> VariableOrder {
+    fn generate_variable_order_for_rule(&mut self, rule: &NormalizedRule) -> VariableOrder {
         let mut variable_order: VariableOrder = VariableOrder::new();
         let mut remaining_vars = {
             let remaining_vars_unpermutated: Vec<Variable> = rule
-                .positive_body()
+                .positive_all()
                 .iter()
                 .flat_map(|lit| lit.terms())
                 .fold(vec![], |mut acc, var| {
@@ -454,16 +452,16 @@ impl VariableOrderBuilder<'_> {
         &mut self,
         variable_order: &VariableOrder,
         must_contain: HashSet<Variable>,
-        rule: &ChaseRule,
+        rule: &NormalizedRule,
     ) {
-        let atoms = rule.positive_body().iter().filter(|atom| {
+        let atoms = rule.positive_all().into_iter().filter(|atom| {
             let vars: Vec<Variable> = atom.terms().cloned().collect();
             must_contain.iter().all(|var| vars.contains(var))
                 && vars.iter().all(|var| variable_order.contains(var))
         });
 
         for atom in atoms {
-            let column_ord: ColumnOrder = column_order_for(atom, variable_order);
+            let column_ord: ColumnOrder = column_order_for(&atom, variable_order);
 
             let set = self
                 .required_trie_column_orders
@@ -485,11 +483,11 @@ pub(crate) struct BuilderResultVariants {
     pub(crate) all_variable_orders: Vec<Vec<VariableOrder>>,
     /// For each variant of the variable order computation
     /// contains one [HashSet] mapping each predicate to its available [ColumnOrder]s.
-    pub(crate) all_column_orders: Vec<HashMap<Tag, HashSet<ColumnOrder>>>,
+    pub(crate) _all_column_orders: Vec<HashMap<Tag, HashSet<ColumnOrder>>>,
 }
 
 pub(crate) fn build_preferable_variable_orders(
-    program: &ChaseProgram,
+    program: &NormalizedProgram,
     initial_column_orders: Option<HashMap<Tag, HashSet<ColumnOrder>>>,
 ) -> BuilderResultVariants {
     let iteration_orders = [
@@ -536,18 +534,18 @@ pub(crate) fn build_preferable_variable_orders(
 
     BuilderResultVariants {
         all_variable_orders,
-        all_column_orders,
+        _all_column_orders: all_column_orders,
     }
 }
 
 #[cfg(test)]
 mod test {
     use crate::{
-        chase_model::components::{
-            atom::{primitive_atom::PrimitiveAtom, variable_atom::VariableAtom},
-            import::ChaseImport,
-            program::ChaseProgram,
-            rule::ChaseRule,
+        execution::planning_new::normalization::{
+            atom::{body::BodyAtom, head::HeadAtom},
+            import::ImportInstruction,
+            program::NormalizedProgram,
+            rule::NormalizedRule,
         },
         io::formats::{Import, MockHandler},
         rule_model::components::{
@@ -565,7 +563,8 @@ mod test {
         sync::Arc,
     };
 
-    type TestRuleSetWithAdditionalInfo = (Vec<ChaseRule>, Vec<Vec<Variable>>, Vec<(Tag, usize)>);
+    type TestRuleSetWithAdditionalInfo =
+        (Vec<NormalizedRule>, Vec<Vec<Variable>>, Vec<(Tag, usize)>);
 
     impl VariableOrder {
         fn from_vec(vec: Vec<Variable>) -> Self {
@@ -618,7 +617,7 @@ mod test {
         assert_eq!(expected_6, results_6);
     }
 
-    fn get_test_rule_with_vars_where_predicates_are_different() -> (ChaseRule, Vec<Variable>) {
+    fn get_test_rule_with_vars_where_predicates_are_different() -> (NormalizedRule, Vec<Variable>) {
         let a = Tag::new("a".to_string());
         let b = Tag::new("b".to_string());
         let c = Tag::new("c".to_string());
@@ -631,15 +630,19 @@ mod test {
         let _ty = Primitive::Variable(y.clone());
         let tz = Primitive::Variable(z.clone());
 
-        let mut rule = ChaseRule::default();
-        rule.add_head_atom(PrimitiveAtom::new(c, vec![tx.clone(), tz.clone()]));
-        rule.add_positive_atom(VariableAtom::new(a, vec![x.clone(), y.clone()]));
-        rule.add_positive_atom(VariableAtom::new(b, vec![y.clone(), z.clone()]));
+        let rule = NormalizedRule::positive_rule(
+            vec![HeadAtom::new(c, vec![tx.clone(), tz.clone()])],
+            vec![
+                BodyAtom::new(a, vec![x.clone(), y.clone()]),
+                BodyAtom::new(b, vec![y.clone(), z.clone()]),
+            ],
+            Vec::default(),
+        );
 
         (rule, vec![x, y, z])
     }
 
-    fn get_test_rule_with_vars_where_predicates_are_the_same() -> (ChaseRule, Vec<Variable>) {
+    fn get_test_rule_with_vars_where_predicates_are_the_same() -> (NormalizedRule, Vec<Variable>) {
         let a = Tag::new("a".to_string());
 
         let x = Variable::universal("x");
@@ -650,10 +653,14 @@ mod test {
         let _ty = Primitive::Variable(y.clone());
         let tz = Primitive::Variable(z.clone());
 
-        let mut rule = ChaseRule::default();
-        rule.add_head_atom(PrimitiveAtom::new(a.clone(), vec![tx.clone(), tz.clone()]));
-        rule.add_positive_atom(VariableAtom::new(a.clone(), vec![x.clone(), y.clone()]));
-        rule.add_positive_atom(VariableAtom::new(a, vec![y.clone(), z.clone()]));
+        let rule = NormalizedRule::positive_rule(
+            vec![HeadAtom::new(a.clone(), vec![tx.clone(), tz.clone()])],
+            vec![
+                BodyAtom::new(a.clone(), vec![x.clone(), y.clone()]),
+                BodyAtom::new(a, vec![y.clone(), z.clone()]),
+            ],
+            Vec::default(),
+        );
 
         (rule, vec![x, y, z])
     }
@@ -752,12 +759,12 @@ mod test {
 
     #[test]
     fn build_preferable_variable_orders_with_different_predicate_rule() {
-        let (rules, var_lists): (Vec<ChaseRule>, Vec<Vec<Variable>>) =
+        let (rules, var_lists): (Vec<NormalizedRule>, Vec<Vec<Variable>>) =
             vec![get_test_rule_with_vars_where_predicates_are_different()]
                 .into_iter()
                 .unzip();
 
-        let mut program = ChaseProgram::default();
+        let mut program = NormalizedProgram::default();
         for rule in rules {
             program.add_rule(rule);
         }
@@ -784,12 +791,12 @@ mod test {
 
     #[test]
     fn build_preferable_variable_orders_with_same_predicate_rule() {
-        let (rules, var_lists): (Vec<ChaseRule>, Vec<Vec<Variable>>) =
+        let (rules, var_lists): (Vec<NormalizedRule>, Vec<Vec<Variable>>) =
             vec![get_test_rule_with_vars_where_predicates_are_the_same()]
                 .into_iter()
                 .unzip();
 
-        let mut program = ChaseProgram::default();
+        let mut program = NormalizedProgram::default();
         for rule in rules {
             program.add_rule(rule);
         }
@@ -816,14 +823,14 @@ mod test {
 
     #[test]
     fn build_preferable_variable_orders_with_both_rules() {
-        let (rules, var_lists): (Vec<ChaseRule>, Vec<Vec<Variable>>) = vec![
+        let (rules, var_lists): (Vec<NormalizedRule>, Vec<Vec<Variable>>) = vec![
             get_test_rule_with_vars_where_predicates_are_different(),
             get_test_rule_with_vars_where_predicates_are_the_same(),
         ]
         .into_iter()
         .unzip();
 
-        let mut program = ChaseProgram::default();
+        let mut program = NormalizedProgram::default();
         for rule in rules {
             program.add_rule(rule);
         }
@@ -890,63 +897,60 @@ mod test {
 
         let (rules, variables) = [
             (
-                ChaseRule::positive_rule(
-                    vec![PrimitiveAtom::new(init.clone(), vec![tc.clone()])],
-                    vec![VariableAtom::new(is_main_class, vec![c.clone()])],
+                NormalizedRule::positive_rule(
+                    vec![HeadAtom::new(init.clone(), vec![tc.clone()])],
+                    vec![BodyAtom::new(is_main_class, vec![c.clone()])],
                     vec![],
                 ),
                 vec![c.clone()],
             ),
             (
-                ChaseRule::positive_rule(
-                    vec![PrimitiveAtom::new(
+                NormalizedRule::positive_rule(
+                    vec![HeadAtom::new(
                         sub_class_of.clone(),
                         vec![tc.clone(), tc.clone()],
                     )],
-                    vec![VariableAtom::new(init, vec![c.clone()])],
+                    vec![BodyAtom::new(init, vec![c.clone()])],
                     vec![],
                 ),
                 vec![c.clone()],
             ),
             (
-                ChaseRule::positive_rule(
+                NormalizedRule::positive_rule(
                     vec![
-                        PrimitiveAtom::new(sub_class_of.clone(), vec![tc.clone(), td1.clone()]),
-                        PrimitiveAtom::new(sub_class_of.clone(), vec![tc.clone(), td2.clone()]),
+                        HeadAtom::new(sub_class_of.clone(), vec![tc.clone(), td1.clone()]),
+                        HeadAtom::new(sub_class_of.clone(), vec![tc.clone(), td2.clone()]),
                     ],
                     vec![
-                        VariableAtom::new(sub_class_of.clone(), vec![c.clone(), y.clone()]),
-                        VariableAtom::new(conj.clone(), vec![y.clone(), d1.clone(), d2.clone()]),
+                        BodyAtom::new(sub_class_of.clone(), vec![c.clone(), y.clone()]),
+                        BodyAtom::new(conj.clone(), vec![y.clone(), d1.clone(), d2.clone()]),
                     ],
                     vec![],
                 ),
                 vec![c.clone(), y.clone(), d1.clone(), d2.clone()],
             ),
             (
-                ChaseRule::positive_rule(
-                    vec![PrimitiveAtom::new(
+                NormalizedRule::positive_rule(
+                    vec![HeadAtom::new(
                         sub_class_of.clone(),
                         vec![tc.clone(), ty.clone()],
                     )],
                     vec![
-                        VariableAtom::new(sub_class_of.clone(), vec![c.clone(), d1.clone()]),
-                        VariableAtom::new(sub_class_of.clone(), vec![c.clone(), d2.clone()]),
-                        VariableAtom::new(conj, vec![y.clone(), d1.clone(), d2.clone()]),
-                        VariableAtom::new(is_sub_class, vec![y.clone()]),
+                        BodyAtom::new(sub_class_of.clone(), vec![c.clone(), d1.clone()]),
+                        BodyAtom::new(sub_class_of.clone(), vec![c.clone(), d2.clone()]),
+                        BodyAtom::new(conj, vec![y.clone(), d1.clone(), d2.clone()]),
+                        BodyAtom::new(is_sub_class, vec![y.clone()]),
                     ],
                     vec![],
                 ),
                 vec![c.clone(), d1, d2, y.clone()],
             ),
             (
-                ChaseRule::positive_rule(
-                    vec![PrimitiveAtom::new(
-                        xe,
-                        vec![tc.clone(), tr.clone(), te.clone()],
-                    )],
+                NormalizedRule::positive_rule(
+                    vec![HeadAtom::new(xe, vec![tc.clone(), tr.clone(), te.clone()])],
                     vec![
-                        VariableAtom::new(sub_class_of, vec![e.clone(), y.clone()]),
-                        VariableAtom::new(exists, vec![y.clone(), r.clone(), c.clone()]),
+                        BodyAtom::new(sub_class_of, vec![e.clone(), y.clone()]),
+                        BodyAtom::new(exists, vec![y.clone(), r.clone(), c.clone()]),
                     ],
                     vec![],
                 ),
@@ -960,7 +964,7 @@ mod test {
     }
 
     /// Helper function to create source-like imports
-    fn csv_import(predicate: Tag, arity: usize) -> ChaseImport {
+    fn csv_import(predicate: Tag, arity: usize) -> ImportInstruction {
         let handler: Import = Import::new(
             ResourceBuilder::pipe_resource_builder().finalize(),
             Default::default(),
@@ -968,7 +972,7 @@ mod test {
             Arc::new(MockHandler),
         );
 
-        ChaseImport::new(predicate, handler)
+        ImportInstruction::new(predicate, handler)
     }
 
     #[test]
@@ -977,7 +981,7 @@ mod test {
         let (rules, var_lists, predicates) =
             get_part_of_galen_test_ruleset_ie_first_5_rules_without_constant();
 
-        let mut program = ChaseProgram::default();
+        let mut program = NormalizedProgram::default();
         for predicate_index in [1usize, 2, 3, 4, 6] {
             let (predicate, arity) = predicates[predicate_index].clone();
             program.add_import(csv_import(predicate, arity));
@@ -1096,160 +1100,160 @@ mod test {
 
         let (rules, variables) = [
             (
-                ChaseRule::positive_rule(
-                    vec![PrimitiveAtom::new(init.clone(), vec![tc.clone()])],
-                    vec![VariableAtom::new(is_main_class.clone(), vec![c.clone()])],
+                NormalizedRule::positive_rule(
+                    vec![HeadAtom::new(init.clone(), vec![tc.clone()])],
+                    vec![BodyAtom::new(is_main_class.clone(), vec![c.clone()])],
                     vec![],
                 ),
                 vec![c.clone()],
             ),
             (
-                ChaseRule::positive_rule(
-                    vec![PrimitiveAtom::new(
+                NormalizedRule::positive_rule(
+                    vec![HeadAtom::new(
                         sub_class_of.clone(),
                         vec![tc.clone(), tc.clone()],
                     )],
-                    vec![VariableAtom::new(init.clone(), vec![c.clone()])],
+                    vec![BodyAtom::new(init.clone(), vec![c.clone()])],
                     vec![],
                 ),
                 vec![c.clone()],
             ),
             (
-                ChaseRule::positive_rule(
+                NormalizedRule::positive_rule(
                     vec![
-                        PrimitiveAtom::new(sub_class_of.clone(), vec![tc.clone(), td1.clone()]),
-                        PrimitiveAtom::new(sub_class_of.clone(), vec![tc.clone(), td2.clone()]),
+                        HeadAtom::new(sub_class_of.clone(), vec![tc.clone(), td1.clone()]),
+                        HeadAtom::new(sub_class_of.clone(), vec![tc.clone(), td2.clone()]),
                     ],
                     vec![
-                        VariableAtom::new(sub_class_of.clone(), vec![c.clone(), y.clone()]),
-                        VariableAtom::new(conj.clone(), vec![y.clone(), d1.clone(), d2.clone()]),
+                        BodyAtom::new(sub_class_of.clone(), vec![c.clone(), y.clone()]),
+                        BodyAtom::new(conj.clone(), vec![y.clone(), d1.clone(), d2.clone()]),
                     ],
                     vec![],
                 ),
                 vec![c.clone(), y.clone(), d1.clone(), d2.clone()],
             ),
             (
-                ChaseRule::positive_rule(
-                    vec![PrimitiveAtom::new(
+                NormalizedRule::positive_rule(
+                    vec![HeadAtom::new(
                         sub_class_of.clone(),
                         vec![tc.clone(), ty.clone()],
                     )],
                     vec![
-                        VariableAtom::new(sub_class_of.clone(), vec![c.clone(), d1.clone()]),
-                        VariableAtom::new(sub_class_of.clone(), vec![c.clone(), d2.clone()]),
-                        VariableAtom::new(conj, vec![y.clone(), d1.clone(), d2.clone()]),
-                        VariableAtom::new(is_sub_class.clone(), vec![y.clone()]),
+                        BodyAtom::new(sub_class_of.clone(), vec![c.clone(), d1.clone()]),
+                        BodyAtom::new(sub_class_of.clone(), vec![c.clone(), d2.clone()]),
+                        BodyAtom::new(conj, vec![y.clone(), d1.clone(), d2.clone()]),
+                        BodyAtom::new(is_sub_class.clone(), vec![y.clone()]),
                     ],
                     vec![],
                 ),
                 vec![c.clone(), d1, d2, y.clone()],
             ),
             (
-                ChaseRule::positive_rule(
-                    vec![PrimitiveAtom::new(
+                NormalizedRule::positive_rule(
+                    vec![HeadAtom::new(
                         xe.clone(),
                         vec![tc.clone(), tr.clone(), te.clone()],
                     )],
                     vec![
-                        VariableAtom::new(sub_class_of.clone(), vec![e.clone(), y.clone()]),
-                        VariableAtom::new(exists.clone(), vec![y.clone(), r.clone(), c.clone()]),
+                        BodyAtom::new(sub_class_of.clone(), vec![e.clone(), y.clone()]),
+                        BodyAtom::new(exists.clone(), vec![y.clone(), r.clone(), c.clone()]),
                     ],
                     vec![],
                 ),
                 vec![e.clone(), y.clone(), r.clone(), c.clone()],
             ),
             (
-                ChaseRule::positive_rule(
-                    vec![PrimitiveAtom::new(
+                NormalizedRule::positive_rule(
+                    vec![HeadAtom::new(
                         aux_subsub_ext.clone(),
                         vec![td.clone(), tr.clone(), ty.clone()],
                     )],
                     vec![
-                        VariableAtom::new(sub_prop.clone(), vec![r.clone(), s.clone()]),
-                        VariableAtom::new(exists, vec![y.clone(), s.clone(), d.clone()]),
-                        VariableAtom::new(is_sub_class, vec![y.clone()]),
+                        BodyAtom::new(sub_prop.clone(), vec![r.clone(), s.clone()]),
+                        BodyAtom::new(exists, vec![y.clone(), s.clone(), d.clone()]),
+                        BodyAtom::new(is_sub_class, vec![y.clone()]),
                     ],
                     vec![],
                 ),
                 vec![r.clone(), s.clone(), y.clone(), d.clone()],
             ),
             (
-                ChaseRule::positive_rule(
-                    vec![PrimitiveAtom::new(
+                NormalizedRule::positive_rule(
+                    vec![HeadAtom::new(
                         aux.clone(),
                         vec![tc.clone(), tr.clone(), ty.clone()],
                     )],
                     vec![
-                        VariableAtom::new(sub_class_of.clone(), vec![c.clone(), d.clone()]),
-                        VariableAtom::new(aux_subsub_ext, vec![d.clone(), r.clone(), y.clone()]),
+                        BodyAtom::new(sub_class_of.clone(), vec![c.clone(), d.clone()]),
+                        BodyAtom::new(aux_subsub_ext, vec![d.clone(), r.clone(), y.clone()]),
                     ],
                     vec![],
                 ),
                 vec![c.clone(), d.clone(), r.clone(), y.clone()],
             ),
             (
-                ChaseRule::positive_rule(
-                    vec![PrimitiveAtom::new(
+                NormalizedRule::positive_rule(
+                    vec![HeadAtom::new(
                         sub_class_of.clone(),
                         vec![te.clone(), ty.clone()],
                     )],
                     vec![
-                        VariableAtom::new(xe.clone(), vec![c.clone(), r.clone(), e.clone()]),
-                        VariableAtom::new(aux, vec![c.clone(), r.clone(), y.clone()]),
+                        BodyAtom::new(xe.clone(), vec![c.clone(), r.clone(), e.clone()]),
+                        BodyAtom::new(aux, vec![c.clone(), r.clone(), y.clone()]),
                     ],
                     vec![],
                 ),
                 vec![c.clone(), r.clone(), e.clone(), y],
             ),
             (
-                ChaseRule::positive_rule(
-                    vec![PrimitiveAtom::new(
+                NormalizedRule::positive_rule(
+                    vec![HeadAtom::new(
                         sub_class_of.clone(),
                         vec![tc.clone(), te.clone()],
                     )],
                     vec![
-                        VariableAtom::new(sub_class_of.clone(), vec![c.clone(), d.clone()]),
-                        VariableAtom::new(sub_class_of.clone(), vec![d.clone(), e.clone()]),
+                        BodyAtom::new(sub_class_of.clone(), vec![c.clone(), d.clone()]),
+                        BodyAtom::new(sub_class_of.clone(), vec![d.clone(), e.clone()]),
                     ],
                     vec![],
                 ),
                 vec![c.clone(), d.clone(), e.clone()],
             ),
             (
-                ChaseRule::positive_rule(
-                    vec![PrimitiveAtom::new(
+                NormalizedRule::positive_rule(
+                    vec![HeadAtom::new(
                         xe.clone(),
                         vec![td.clone(), ts.clone(), te.clone()],
                     )],
                     vec![
-                        VariableAtom::new(xe.clone(), vec![c.clone(), r1.clone(), e.clone()]),
-                        VariableAtom::new(xe.clone(), vec![d.clone(), r2.clone(), c.clone()]),
-                        VariableAtom::new(sub_prop.clone(), vec![r1.clone(), s1.clone()]),
-                        VariableAtom::new(sub_prop, vec![r2.clone(), s2.clone()]),
-                        VariableAtom::new(sub_prop_chain, vec![s1.clone(), s2.clone(), s.clone()]),
+                        BodyAtom::new(xe.clone(), vec![c.clone(), r1.clone(), e.clone()]),
+                        BodyAtom::new(xe.clone(), vec![d.clone(), r2.clone(), c.clone()]),
+                        BodyAtom::new(sub_prop.clone(), vec![r1.clone(), s1.clone()]),
+                        BodyAtom::new(sub_prop, vec![r2.clone(), s2.clone()]),
+                        BodyAtom::new(sub_prop_chain, vec![s1.clone(), s2.clone(), s.clone()]),
                     ],
                     vec![],
                 ),
                 vec![c.clone(), r1, e.clone(), d, r2, s1, s2, s],
             ),
             (
-                ChaseRule::positive_rule(
-                    vec![PrimitiveAtom::new(init, vec![tc.clone()])],
-                    vec![VariableAtom::new(xe, vec![c.clone(), r.clone(), e.clone()])],
+                NormalizedRule::positive_rule(
+                    vec![HeadAtom::new(init, vec![tc.clone()])],
+                    vec![BodyAtom::new(xe, vec![c.clone(), r.clone(), e.clone()])],
                     vec![],
                 ),
                 vec![c, r, e],
             ),
             (
-                ChaseRule::positive_rule(
-                    vec![PrimitiveAtom::new(
+                NormalizedRule::positive_rule(
+                    vec![HeadAtom::new(
                         main_sub_class_of,
                         vec![ta.clone(), tb.clone()],
                     )],
                     vec![
-                        VariableAtom::new(sub_class_of, vec![a.clone(), b.clone()]),
-                        VariableAtom::new(is_main_class.clone(), vec![a.clone()]),
-                        VariableAtom::new(is_main_class, vec![b.clone()]),
+                        BodyAtom::new(sub_class_of, vec![a.clone(), b.clone()]),
+                        BodyAtom::new(is_main_class.clone(), vec![a.clone()]),
+                        BodyAtom::new(is_main_class, vec![b.clone()]),
                     ],
                     vec![],
                 ),
@@ -1267,7 +1271,7 @@ mod test {
     fn build_preferable_variable_orders_with_el_without_constant() {
         let (rules, var_lists, predicates) = get_el_test_ruleset_without_constants();
 
-        let mut program = ChaseProgram::default();
+        let mut program = NormalizedProgram::default();
         for predicate_index in [1usize, 2, 3, 4, 6, 8, 10] {
             let (predicate, arity) = predicates[predicate_index].clone();
             program.add_import(csv_import(predicate, arity));

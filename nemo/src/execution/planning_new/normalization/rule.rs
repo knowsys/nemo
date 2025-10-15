@@ -2,16 +2,24 @@
 
 use std::{collections::HashSet, fmt::Display};
 
+use nemo_physical::{datavalues::AnyDataValue, tabular::filters::FilterTransformPattern};
+
 use crate::{
-    chase_model::analysis::variable_order::VariableOrder,
-    execution::planning_new::normalization::{
-        aggregate::Aggregation,
-        atom::{body::BodyAtom, head::HeadAtom, import::ImportAtom},
-        generator::VariableGenerator,
-        operation::Operation,
+    execution::planning_new::{
+        VariableTranslation,
+        analysis::variable_order::VariableOrder,
+        normalization::{
+            aggregate::Aggregation,
+            atom::{body::BodyAtom, head::HeadAtom, import::ImportAtom},
+            generator::VariableGenerator,
+            operation::Operation,
+        },
+        operations::{filter::GeneratorFilter, function::GeneratorFunction},
     },
-    io::format_builder::ImportExportBuilder,
-    rule_model::components::{tag::Tag, term::primitive::variable::Variable},
+    rule_model::components::{
+        tag::Tag,
+        term::primitive::{Primitive, variable::Variable},
+    },
     syntax,
     util::seperated_list::DisplaySeperatedList,
 };
@@ -118,6 +126,20 @@ impl NormalizedRule {
     /// Return the list of imported atoms in this rule.
     pub fn imports(&self) -> &Vec<ImportAtom> {
         &self.imports
+    }
+
+    /// Return a list of all positive atoms, including import atoms
+    pub fn positive_all(&self) -> Vec<BodyAtom> {
+        let mut positive = self.positive.clone();
+
+        positive.extend(self.imports.iter().map(|atom| {
+            BodyAtom::new(
+                atom.predicate(),
+                atom.variables().cloned().collect::<Vec<_>>(),
+            )
+        }));
+
+        positive
     }
 
     /// Return the list of operations in this rule.
@@ -234,6 +256,35 @@ impl NormalizedRule {
             .chain(aggregation_variables)
     }
 
+    /// Return an iterator over all predicates occurring in a positive atom
+    /// (including import atoms).
+    pub fn predicates_positive(&self) -> impl Iterator<Item = (Tag, usize)> {
+        let positive = self
+            .positive
+            .iter()
+            .map(|atom| (atom.predicate(), atom.arity()));
+        let import = self
+            .imports
+            .iter()
+            .map(|atom| (atom.predicate(), atom.arity()));
+
+        positive.chain(import)
+    }
+
+    /// Return an iterator over all predicates occurring in a negative atom.
+    pub fn predicates_negative(&self) -> impl Iterator<Item = (Tag, usize)> {
+        self.negative
+            .iter()
+            .map(|atom| (atom.predicate(), atom.arity()))
+    }
+
+    /// Return an iterator over all predicates occurring in the head.
+    pub fn predicates_head(&self) -> impl Iterator<Item = (Tag, usize)> {
+        self.head
+            .iter()
+            .map(|atom| (atom.predicate(), atom.arity()))
+    }
+
     /// Return an iterator over predicates used in this rule
     /// together with their arities.
     pub fn predicates(&self) -> impl Iterator<Item = (Tag, usize)> {
@@ -280,6 +331,25 @@ impl NormalizedRule {
             .cloned()
             .collect::<HashSet<_>>()
     }
+
+    /// Return an iterator over all [AnyDataValue] contained in this rule.
+    pub fn datavalues(&self) -> impl Iterator<Item = AnyDataValue> {
+        let head_values = self.head.iter().flat_map(|atom| {
+            atom.terms().filter_map(|term| {
+                if let Primitive::Ground(ground) = term {
+                    Some(ground.value())
+                } else {
+                    None
+                }
+            })
+        });
+        let operation_values = self
+            .operations
+            .iter()
+            .flat_map(|operation| operation.datavalues());
+
+        head_values.chain(operation_values)
+    }
 }
 
 impl NormalizedRule {
@@ -288,11 +358,7 @@ impl NormalizedRule {
     ///
     /// # Panics
     /// Panics if rule is ill-formed.
-    pub fn normalize_rule(
-        import_builder: &ImportExportBuilder,
-        rule: &crate::rule_model::components::rule::Rule,
-        id: usize,
-    ) -> Self {
+    pub fn normalize_rule(rule: &crate::rule_model::components::rule::Rule, id: usize) -> Self {
         let mut generator = VariableGenerator::default();
 
         let mut operations = rule
@@ -332,7 +398,7 @@ impl NormalizedRule {
 
         let imports = rule
             .imports()
-            .map(|import| ImportAtom::normalize_import(import_builder, import))
+            .map(|import| ImportAtom::normalize_import(import))
             .collect::<Vec<_>>();
 
         Self {
@@ -345,5 +411,89 @@ impl NormalizedRule {
             variable_order: None,
             id,
         }
+    }
+
+    pub(crate) fn into_filter_transform_pattern(mut self) -> Option<FilterTransformPattern> {
+        let positive_variables = self.positive[0].terms().cloned().collect::<Vec<_>>();
+        let mut translation = VariableTranslation::new();
+        for variable in self.variables() {
+            translation.add_marker(variable.clone());
+        }
+
+        let generator_functions = GeneratorFunction::new(positive_variables, &mut self.operations);
+        let generator_filters =
+            GeneratorFilter::new(generator_functions.output_variables(), &mut self.operations);
+
+        // let functions = generator_functions.functions().map(|(variable, operation)|).collect::<Vec<_>>();
+        let filters = generator_filters
+            .filters()
+            .map(|filter| filter.function_tree(&translation))
+            .collect::<Vec<_>>();
+
+        // let mut filters = Vec::new();
+        // let mut transform_positions = Vec::new();
+
+        // let mut variable_positions = HashMap::new();
+        // let mut variable_operations = HashMap::new();
+
+        // let mut variable_translation = VariableTranslation::new();
+
+        // for (position, variable) in self.positive[0].terms().enumerate() {
+        //     variable_translation.add_marker(variable.clone());
+        //     variable_positions.insert(variable.clone(), position);
+        // }
+
+        // for operation in self.operations() {
+        //     let filter = operation.function_tree(&variable_translation);
+        // }
+
+        // for filter in self.positive.filters {
+        //     let tree = operation_term_to_function_tree(&variable_translation, filter.filter());
+        //     filters.push(tree);
+        // }
+
+        // for operation in self.positive.operations {
+        //     let variable = operation.variable();
+        //     variable_translation.add_marker(variable.clone());
+        //     let tree =
+        //         operation_term_to_function_tree(&variable_translation, operation.operation());
+        //     variable_operations.insert(variable.clone(), tree);
+        // }
+
+        // for (position, term) in self.head.atoms[0].terms().enumerate() {
+        //     match term {
+        //         Primitive::Ground(ground) => {
+        //             transform_positions.push(TransformPosition::new(
+        //                 position,
+        //                 FunctionTree::constant(ground.value()),
+        //             ));
+        //         }
+        //         Primitive::Variable(variable) => {
+        //             if let Some(&reference) = variable_positions.get(variable) {
+        //                 transform_positions.push(TransformPosition::new(
+        //                     position,
+        //                     FunctionTree::reference(OperationColumnMarker(reference)),
+        //                 ));
+        //             } else {
+        //                 let operation = variable_operations
+        //                     .get(variable)
+        //                     .expect("every variable is bound");
+        //                 transform_positions
+        //                     .push(TransformPosition::new(position, operation.clone()));
+        //             }
+        //         }
+        //     }
+        // }
+
+        // if filters.is_empty() && transform_positions.is_empty() {
+        //     None
+        // } else {
+        //     Some(FilterTransformPattern::new(
+        //         FunctionTree::boolean_conjunction(filters),
+        //         transform_positions,
+        //     ))
+        // }
+
+        todo!()
     }
 }

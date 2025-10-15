@@ -1,21 +1,19 @@
 //! This module defines [StrategyTracing].
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
-use nemo_physical::datavalues::AnyDataValue;
+use nemo_physical::{datavalues::AnyDataValue, tabular::trie::Trie};
 
 use crate::{
-    chase_model::analysis::variable_order::VariableOrder,
-    execution::{
-        planning_new::{
-            RuntimeInformation,
-            normalization::{operation::Operation, rule::NormalizedRule},
-            operations::{
-                function_filter_negation::GeneratorFunctionFilterNegation, join::GeneratorJoin,
-                union::UnionRange,
-            },
+    error::Error,
+    execution::planning_new::{
+        RuntimeInformation, VariableTranslation,
+        analysis::variable_order::VariableOrder,
+        normalization::{operation::Operation, rule::NormalizedRule},
+        operations::{
+            function_filter_negation::GeneratorFunctionFilterNegation, join::GeneratorJoin,
+            union::UnionRange,
         },
-        rule_execution::VariableTranslation,
     },
     io::{ImportManager, resource_providers::ResourceProviders},
     rule_model::components::term::primitive::{ground::GroundTerm, variable::Variable},
@@ -40,9 +38,7 @@ pub struct StrategyTracing {
 impl StrategyTracing {
     /// Creata a new [StrategyTracing].
     pub fn new(rule: &NormalizedRule, grounding: HashMap<Variable, AnyDataValue>) -> Self {
-        let rule = rule.prepare_tracing();
-
-        let positive = rule.positive().clone();
+        let positive = rule.positive_all().clone();
         let ranges = vec![UnionRange::Old; positive.len()];
         let mut negative = rule.negative().clone();
         let mut operations = rule.operations().clone();
@@ -66,31 +62,37 @@ impl StrategyTracing {
             &mut negative,
         );
 
+        let output_variables = filter
+            .output_variables()
+            .into_iter()
+            .collect::<HashSet<_>>();
+        let order = order.restrict_to(&output_variables);
+
         Self {
             join,
             filter,
-            order: order.clone(),
+            order,
             translation,
         }
     }
 
-    /// Create an execution plan for evaluating a rule.
-    pub fn create_plan(
-        &self,
-        table_manager: &TableManager,
-        step_current: usize,
-        step_application: usize,
-    ) -> SubtableExecutionPlan {
+    /// Return the variables marking the column of the node
+    /// created by `create_plan`.
+    pub fn output_variables(&self) -> Vec<Variable> {
+        self.order.as_ordered_list()
+    }
+
+    /// Creates an execution plan.
+    fn crate_plan(&self, table_manager: &mut TableManager, step: usize) -> SubtableExecutionPlan {
         let mut plan = SubtableExecutionPlan::default();
 
         let default_import_manager = ImportManager::new(ResourceProviders::default());
 
         let runtime = RuntimeInformation {
-            step_last_application: step_application,
-            step_current,
+            step_last_application: step,
+            step_current: step,
             table_manager,
             import_manager: &default_import_manager,
-            order: self.order.clone(),
             translation: self.translation.clone(),
         };
 
@@ -98,5 +100,29 @@ impl StrategyTracing {
         self.filter.create_plan(&mut plan, node, &runtime);
 
         plan
+    }
+
+    /// Create and execute the execution plan defined by this strategy.
+    ///
+    /// This function returns the first match, if it exists.
+    pub async fn execute(
+        &self,
+        table_manager: &mut TableManager,
+        step: usize,
+    ) -> Option<Vec<AnyDataValue>> {
+        let plan = self.crate_plan(table_manager, step);
+        table_manager.execute_plan_first_match(plan).await
+    }
+
+    /// Create an execute the execution plan defined by this strategy.
+    ///
+    /// This function returns a [Trie] of all matches.
+    pub async fn execute_all(
+        &self,
+        table_manager: &mut TableManager,
+        step: usize,
+    ) -> Result<Vec<Trie>, Error> {
+        let plan = self.crate_plan(table_manager, step);
+        table_manager.execute_plan_trie(plan).await
     }
 }
