@@ -3,3 +3,4 @@
 //! to a physical representation in the form of an execution plan.
 
 pub mod forward;
+pub mod tracing;
