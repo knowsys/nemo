@@ -4,7 +4,7 @@ use std::fmt::Display;
 
 use crate::{
     execution::planning_new::normalization::import::ImportInstruction,
-    io::{format_builder::ImportExportBuilder, formats::Import},
+    io::formats::Import,
     rule_model::components::{tag::Tag, term::primitive::variable::Variable},
     syntax,
     util::seperated_list::DisplaySeperatedList,
@@ -76,13 +76,14 @@ impl ImportAtom {
     /// Receives a [crate::rule_model::components::import_export::clause::ImportClause]
     /// and normalzes it to an [ImportAtom]
     pub fn normalize_import(
-        builder: &ImportExportBuilder,
         import: &crate::rule_model::components::import_export::clause::ImportClause,
     ) -> Self {
+        let import_builder = import.import_directive().builder().expect("invalid import");
+
         let predicate = import.predicate().clone();
         let arity = import.output_variables().len();
 
-        let handler: Import = builder.build_import(
+        let handler: Import = import_builder.build_import(
             predicate.name(),
             import
                 .import_directive()

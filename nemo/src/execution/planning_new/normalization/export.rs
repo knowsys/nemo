@@ -1,7 +1,7 @@
 //! This module defines [ExportInstruction].
 
 use crate::{
-    io::{format_builder::ImportExportBuilder, formats::Export},
+    execution::planning_new::normalization::rule::NormalizedRule, io::formats::Export,
     rule_model::components::tag::Tag,
 };
 
@@ -44,25 +44,25 @@ impl ExportInstruction {
     /// Pancis if the program is ill-formed and hence the arity of this export
     /// cannot be deduced.
     pub fn normalize_import(
-        export_builder: &ImportExportBuilder,
         export: &crate::rule_model::components::import_export::ExportDirective,
         arity: Option<usize>,
     ) -> Self {
+        let export_builder = export.builder().expect("invalid export");
         let predicate = export.predicate().clone();
-        // let filter_rules = export_directive
-        //     .filter_rules()
-        //     .iter()
-        //     .map(|rule| self.build_rule(rule))
-        //     .collect();
+
+        let filter_rules = export
+            .filter_rules()
+            .iter()
+            .map(|rule| NormalizedRule::normalize_rule(rule, 0))
+            .collect::<Vec<_>>();
 
         let export_arity = export_builder
             .expected_arity()
             .or(arity)
             .expect("predicate has unknown arity");
 
-        // TODO: Filter rules
         let handler: Export =
-            export_builder.build_export(predicate.name(), export_arity, Vec::default());
+            export_builder.build_export(predicate.name(), export_arity, filter_rules);
 
         Self::new(predicate, handler)
     }

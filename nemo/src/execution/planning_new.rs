@@ -1,14 +1,22 @@
 //! This module contains functions and data structures related to
 //! converting rules into execution plans executed by nemo-physical
 
+use nemo_physical::tabular::operations::OperationTableGenerator;
+
 use crate::{
-    chase_model::analysis::variable_order::VariableOrder,
-    execution::rule_execution::VariableTranslation, io::ImportManager, table_manager::TableManager,
+    io::ImportManager, rule_model::components::term::primitive::variable::Variable,
+    table_manager::TableManager,
 };
 
-pub(crate) mod normalization;
+pub mod normalization;
+
+pub(crate) mod analysis;
 pub(crate) mod operations;
 pub(crate) mod strategy;
+
+/// Translation of a [Variable] into an [OperationTable][nemo_physical::tabular::operations::OperationColumnMarker],
+/// which is used for constructing [ExecutionPlan][nemo_physical::management::execution_plan::ExecutionPlan]s
+pub(crate) type VariableTranslation = OperationTableGenerator<Variable>;
 
 /// Collects runtime information for generating an execution plan
 pub(crate) struct RuntimeInformation<'a> {
@@ -22,8 +30,6 @@ pub(crate) struct RuntimeInformation<'a> {
     /// Import mamager
     import_manager: &'a ImportManager,
 
-    /// Variable order
-    order: VariableOrder,
     /// Variable translation
     translation: VariableTranslation,
 }

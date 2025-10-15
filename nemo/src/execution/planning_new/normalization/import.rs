@@ -1,7 +1,7 @@
 //! This module defines [ImportInstruction].
 
 use crate::{
-    io::{format_builder::ImportExportBuilder, formats::Import},
+    execution::planning_new::normalization::rule::NormalizedRule, io::formats::Import,
     rule_model::components::tag::Tag,
 };
 
@@ -44,16 +44,17 @@ impl ImportInstruction {
     /// Pancis if the program is ill-formed and hence the arity of this import
     /// cannot be deduced.
     pub fn normalize_import(
-        import_builder: &ImportExportBuilder,
         import: &crate::rule_model::components::import_export::ImportDirective,
         arity: Option<usize>,
     ) -> Self {
+        let import_builder = import.builder().expect("invalid import directive");
+
         let predicate = import.predicate().clone();
-        // let filter_rules = import
-        //     .filter_rules()
-        //     .iter()
-        //     .map(|rule| self.build_rule(rule))
-        //     .collect();
+        let filter_rules = import
+            .filter_rules()
+            .iter()
+            .map(|rule| NormalizedRule::normalize_rule(rule, 0))
+            .collect::<Vec<_>>();
 
         let input_arity = import
             .expected_input_arity()
@@ -64,12 +65,8 @@ impl ImportInstruction {
             .or(arity)
             .expect("predicate has unknown arity");
 
-        let handler: Import = import_builder.build_import(
-            predicate.name(),
-            input_arity,
-            output_arity,
-            Vec::default(), // TODO: Replace with normalized rules
-        );
+        let handler: Import =
+            import_builder.build_import(predicate.name(), input_arity, output_arity, filter_rules);
 
         Self::new(predicate, handler)
     }

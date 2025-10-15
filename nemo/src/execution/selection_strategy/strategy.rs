@@ -2,7 +2,7 @@
 
 use thiserror::Error;
 
-use crate::chase_model::{analysis::program_analysis::RuleAnalysis, components::rule::ChaseRule};
+use crate::execution::planning_new::normalization::rule::NormalizedRule;
 
 /// Errors that can occur while creating a strategy.
 #[derive(Error, Debug, Copy, Clone)]
@@ -16,10 +16,7 @@ pub enum SelectionStrategyError {
 /// namely the order in which the rules are applied in.
 pub trait RuleSelectionStrategy: std::fmt::Debug {
     /// Create a new [RuleSelectionStrategy] object.
-    fn new(
-        rules: Vec<&ChaseRule>,
-        rule_analyses: Vec<&RuleAnalysis>,
-    ) -> Result<Self, SelectionStrategyError>
+    fn new(rules: Vec<&NormalizedRule>) -> Result<Self, SelectionStrategyError>
     where
         Self: Sized;
 

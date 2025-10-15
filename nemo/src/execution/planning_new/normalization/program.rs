@@ -5,12 +5,17 @@ use std::collections::{HashMap, HashSet};
 use nemo_physical::datavalues::AnyDataValue;
 
 use crate::{
-    execution::planning_new::normalization::{
-        atom::ground::GroundAtom, export::ExportInstruction, import::ImportInstruction,
-        rule::NormalizedRule,
+    execution::planning_new::{
+        analysis::variable_order::build_preferable_variable_orders,
+        normalization::{
+            atom::ground::GroundAtom, export::ExportInstruction, import::ImportInstruction,
+            rule::NormalizedRule,
+        },
     },
-    io::format_builder::ImportExportBuilder,
-    rule_model::{components::tag::Tag, programs::ProgramRead},
+    rule_model::{
+        components::{IterablePrimitives, tag::Tag, term::primitive::Primitive},
+        programs::ProgramRead,
+    },
 };
 
 /// Represents a normalized nemo program
@@ -46,9 +51,19 @@ impl NormalizedProgram {
         &self.rules
     }
 
+    /// Add a new rule to the program.
+    pub fn add_rule(&mut self, rule: NormalizedRule) {
+        self.rules.push(rule);
+    }
+
     /// Return a list of imports contained in this program.
     pub fn imports(&self) -> &Vec<ImportInstruction> {
         &self.imports
+    }
+
+    /// Add a new import to the program.
+    pub fn add_import(&mut self, import: ImportInstruction) {
+        self.imports.push(import);
     }
 
     /// Return a list of exports contained in this program.
@@ -70,11 +85,16 @@ impl NormalizedProgram {
     ///
     /// # Panics
     /// Panics if the requested predicate doesn't exist.
-    pub fn predicate_arity(&self, predicate: &Tag) -> usize {
+    pub fn predicate_arity_unchecked(&self, predicate: &Tag) -> usize {
         *self
             .predicate_arities
             .get(predicate)
             .expect("arity of this predicate is unknown")
+    }
+
+    /// Return the arity of a given predicate, if it is known.
+    pub fn predicate_arity(&self, predicate: &Tag) -> Option<usize> {
+        self.predicate_arities.get(predicate).cloned()
     }
 
     /// Return the set of derived predicates.
@@ -109,6 +129,14 @@ impl NormalizedProgram {
     /// Return the set of [AnyDataValue]s that appear in this program.
     pub fn datavalues(&self) -> &HashSet<AnyDataValue> {
         &self.datavalues
+    }
+
+    /// Return an iterator over all predicates occuring in this program
+    /// together with their arity
+    pub fn predicates(&self) -> impl Iterator<Item = (Tag, usize)> {
+        self.predicate_arities
+            .iter()
+            .map(|(predicate, arity)| (predicate.clone(), *arity))
     }
 
     /// Associate an arity with a given predicate.
@@ -158,10 +186,7 @@ impl NormalizedProgram {
     ///
     /// # Panics
     /// Panics if the program is ill-formed.
-    pub fn normalize_program(
-        import_export_builder: &ImportExportBuilder,
-        program: &crate::rule_model::programs::program::Program,
-    ) -> Self {
+    pub fn normalize_program(program: &crate::rule_model::programs::program::Program) -> Self {
         let mut result = Self::default();
 
         // Handle facts
@@ -170,14 +195,17 @@ impl NormalizedProgram {
                 continue;
             };
 
+            for term in ground_atom.terms() {
+                result.add_datavalue(term.value());
+            }
+
             result.add_predicate_arity(ground_atom.predicate(), ground_atom.arity());
             result.facts.push(ground_atom);
         }
 
         // Handle rules
         for (rule_index, rule) in program.rules().enumerate() {
-            let normalized_rule =
-                NormalizedRule::normalize_rule(import_export_builder, rule, rule_index);
+            let normalized_rule = NormalizedRule::normalize_rule(rule, rule_index);
 
             for (predicate, arity) in normalized_rule.predicates() {
                 result.add_predicate_arity(predicate, arity);
@@ -192,14 +220,23 @@ impl NormalizedProgram {
                 result.add_derived_predicate(head.predicate());
             }
 
+            for value in normalized_rule.datavalues() {
+                result.add_datavalue(value);
+            }
+
             result.rules.push(normalized_rule);
         }
 
         // Handle imports
         for import in program.imports() {
+            for term in import.primitive_terms() {
+                if let Primitive::Ground(ground) = term {
+                    result.add_datavalue(ground.value());
+                }
+            }
+
             let arity = result.predicate_arities.get(import.predicate()).cloned();
-            let normalized_import =
-                ImportInstruction::normalize_import(import_export_builder, import, arity);
+            let normalized_import = ImportInstruction::normalize_import(import, arity);
 
             result.add_predicate_arity(normalized_import.predicate(), normalized_import.arity());
             result.imports.push(normalized_import);
@@ -207,16 +244,32 @@ impl NormalizedProgram {
 
         // Handle exports
         for export in program.exports() {
+            for term in export.primitive_terms() {
+                if let Primitive::Ground(ground) = term {
+                    result.add_datavalue(ground.value());
+                }
+            }
+
             let arity = result.predicate_arities.get(export.predicate()).cloned();
-            let normalized_exports =
-                ExportInstruction::normalize_import(import_export_builder, export, arity);
+            let normalized_exports = ExportInstruction::normalize_import(export, arity);
 
             result.add_predicate_arity(normalized_exports.predicate(), normalized_exports.arity());
             result.exports.push(normalized_exports);
         }
 
         // Calculate variable order
-        // TODO
+        let orders = build_preferable_variable_orders(&result, None)
+            .all_variable_orders
+            .into_iter()
+            .map(|mut orders| {
+                orders
+                    .pop()
+                    .expect("function constructs at least one order")
+            });
+
+        for (rule, order) in result.rules.iter_mut().zip(orders) {
+            rule.set_variable_order(order);
+        }
 
         result
     }

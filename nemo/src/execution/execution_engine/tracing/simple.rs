@@ -5,14 +5,13 @@ use std::collections::{HashMap, hash_map::Entry};
 use nemo_physical::datavalues::AnyDataValue;
 
 use crate::{
-    chase_model::{
-        ChaseAtom, GroundAtom, analysis::program_analysis::ProgramAnalysis,
-        components::program::ChaseProgram, translation::ProgramChaseTranslation,
-    },
     error::Error,
     execution::{
         ExecutionEngine,
-        planning::plan_tracing::TracingStrategy,
+        planning_new::{
+            normalization::{atom::ground::GroundAtom, program::NormalizedProgram},
+            strategy::tracing::StrategyTracing,
+        },
         selection_strategy::strategy::RuleSelectionStrategy,
         tracing::{
             error::TracingError,
@@ -29,7 +28,6 @@ use crate::{
         },
         substitution::Substitution,
     },
-    table_manager::SubtableExecutionPlan,
 };
 
 impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
@@ -38,8 +36,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         &mut self,
         trace: &mut ExecutionTrace,
         fact: GroundAtom,
-        program: &ChaseProgram,
-        program_analysis: &ProgramAnalysis,
+        program: &NormalizedProgram,
     ) -> Result<TraceFactHandle, TracingError> {
         let trace_handle = trace.register_fact(fact.clone());
 
@@ -64,11 +61,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
         // If the traced fact is edb or derived at step 0,
         // then the derivation was successful
-        if !program_analysis
-            .derived_predicates
-            .contains(&fact.predicate())
-            || step == 0
-        {
+        if !program.derived_predicates().contains(&fact.predicate()) || step == 0 {
             trace.update_status(trace_handle, TraceStatus::Success(TraceDerivation::Input));
             return Ok(trace_handle);
         }
@@ -126,33 +119,28 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             }
 
             let rule = program.rules()[rule_index].clone();
-            let analysis = &program_analysis.rule_analysis[rule_index];
-            let mut variable_order = analysis.promising_variable_orders[0].clone(); // TODO: This selection is arbitrary
-            let trace_strategy = TracingStrategy::initialize(&rule, grounding)?;
+            let trace_strategy = StrategyTracing::new(&rule, grounding);
+            let trace_output_variables = trace_strategy.output_variables();
 
-            let mut execution_plan = SubtableExecutionPlan::default();
+            // let mut execution_plan = SubtableExecutionPlan::default();
 
-            trace_strategy.add_plan(
-                &self.table_manager,
-                &mut execution_plan,
-                &mut variable_order,
-                step,
-            );
+            // trace_strategy.add_plan(
+            //     &self.table_manager,
+            //     &mut execution_plan,
+            //     &mut variable_order,
+            //     step,
+            // );
 
-            if let Some(query_result) = self
-                .table_manager
-                .execute_plan_first_match(execution_plan)
-                .await
+            if let Some(query_result) = trace_strategy.execute(&mut self.table_manager, step).await
             {
-                let variable_assignment: HashMap<Variable, AnyDataValue> = variable_order
-                    .as_ordered_list()
+                let variable_assignment: HashMap<Variable, AnyDataValue> = trace_output_variables
                     .into_iter()
                     .zip(query_result.iter().cloned())
                     .collect();
 
                 let mut fully_derived = true;
                 let mut subtraces = Vec::<TraceFactHandle>::new();
-                for body_atom in rule.positive_body() {
+                for body_atom in rule.positive_all() {
                     let next_fact_predicate = body_atom.predicate();
                     let next_fact_terms = body_atom
                         .terms()
@@ -169,8 +157,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                     let next_fact = GroundAtom::new(next_fact_predicate, next_fact_terms);
 
                     let next_handle =
-                        Box::pin(self.trace_recursive(trace, next_fact, program, program_analysis))
-                            .await?;
+                        Box::pin(self.trace_recursive(trace, next_fact, program)).await?;
 
                     if trace.status(next_handle).is_success() {
                         subtraces.push(next_handle);
@@ -221,11 +208,11 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             }
         }
 
-        let (program, analysis) = self.program.prepare_tracing();
+        let program = self.program.clone();
 
         let chase_facts: Vec<_> = facts
             .into_iter()
-            .filter_map(|fact| ProgramChaseTranslation::new().build_fact(&fact))
+            .filter_map(|fact| GroundAtom::normalize_fact(&fact))
             .collect();
 
         let mut trace = ExecutionTrace::new(self.nemo_program.clone());
@@ -242,7 +229,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             }
 
             handles.push(
-                self.trace_recursive(&mut trace, chase_fact, &program, &analysis)
+                self.trace_recursive(&mut trace, chase_fact, &program)
                     .await?,
             );
         }

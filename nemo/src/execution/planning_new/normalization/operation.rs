@@ -2,10 +2,13 @@
 
 use std::fmt::Display;
 
-use nemo_physical::{function::tree::FunctionTree, tabular::operations::OperationColumnMarker};
+use nemo_physical::{
+    datavalues::AnyDataValue, function::tree::FunctionTree,
+    tabular::operations::OperationColumnMarker,
+};
 
 use crate::{
-    execution::rule_execution::VariableTranslation,
+    execution::planning_new::VariableTranslation,
     rule_model::components::{
         IterableVariables,
         term::{
@@ -73,6 +76,19 @@ impl Operation {
             Operation::Primitive(primitive) => primitive.variables(),
             Operation::Opreation { kind: _, subterms } => {
                 Box::new(subterms.iter().flat_map(|term| term.variables()))
+            }
+        }
+    }
+
+    /// Return an iterator over all [AnyDataValue]s within this operation.
+    pub fn datavalues(&self) -> Box<dyn Iterator<Item = AnyDataValue> + '_> {
+        match self {
+            Operation::Primitive(Primitive::Ground(ground)) => {
+                Box::new(std::iter::once(ground.value()))
+            }
+            Operation::Primitive(Primitive::Variable(_)) => Box::new(std::iter::empty()),
+            Operation::Opreation { kind: _, subterms } => {
+                Box::new(subterms.iter().flat_map(|term| term.datavalues()))
             }
         }
     }

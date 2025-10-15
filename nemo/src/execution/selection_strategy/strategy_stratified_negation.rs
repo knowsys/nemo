@@ -5,8 +5,7 @@ use std::collections::HashMap;
 use petgraph::Directed;
 
 use crate::{
-    chase_model::{analysis::program_analysis::RuleAnalysis, components::rule::ChaseRule},
-    rule_model::components::tag::Tag,
+    execution::planning_new::normalization::rule::NormalizedRule, rule_model::components::tag::Tag,
     util::labeled_graph::LabeledGraph,
 };
 
@@ -33,42 +32,42 @@ pub struct StrategyStratifiedNegation<SubStrategy: RuleSelectionStrategy> {
 }
 
 impl<SubStrategy: RuleSelectionStrategy> StrategyStratifiedNegation<SubStrategy> {
-    fn build_graph(rule_analyses: &[&RuleAnalysis]) -> NegationGraph {
+    fn build_graph(rules: &Vec<&NormalizedRule>) -> NegationGraph {
         let mut predicate_to_rules_body_positive = HashMap::<Tag, Vec<usize>>::new();
         let mut predicate_to_rules_body_negative = HashMap::<Tag, Vec<usize>>::new();
         let mut predicate_to_rules_head = HashMap::<Tag, Vec<usize>>::new();
 
-        for (rule_index, rule_analysis) in rule_analyses.iter().enumerate() {
-            for body_predicate in &rule_analysis.positive_body_predicates {
-                let indices = if rule_analysis.has_aggregates {
+        let rule_count = rules.len();
+
+        for (rule_index, rule) in rules.iter().enumerate() {
+            for (body_predicate, _) in rule.predicates_positive() {
+                let indices = if rule.contains_aggregates() {
                     // An aggregate in a head means that the head predicates need to be in a higher stratum than the body predicates
                     // This is the same as when all body literals are negative
                     // Therefore, we can easily compute strata for aggregates by acting if all body atoms in the rule were negated
                     predicate_to_rules_body_negative
-                        .entry(body_predicate.clone())
+                        .entry(body_predicate)
                         .or_default()
                 } else {
                     // No aggregates in the rule
                     predicate_to_rules_body_positive
-                        .entry(body_predicate.clone())
+                        .entry(body_predicate)
                         .or_default()
                 };
 
                 indices.push(rule_index);
             }
 
-            for body_predicate in &rule_analysis.negative_body_predicates {
+            for (body_predicate, _) in rule.predicates_negative() {
                 let indices = predicate_to_rules_body_negative
-                    .entry(body_predicate.clone())
+                    .entry(body_predicate)
                     .or_default();
 
                 indices.push(rule_index);
             }
 
-            for head_predicate in &rule_analysis.head_predicates {
-                let indices = predicate_to_rules_head
-                    .entry(head_predicate.clone())
-                    .or_default();
+            for (head_predicate, _) in rule.predicates_head() {
+                let indices = predicate_to_rules_head.entry(head_predicate).or_default();
 
                 indices.push(rule_index);
             }
@@ -76,7 +75,6 @@ impl<SubStrategy: RuleSelectionStrategy> StrategyStratifiedNegation<SubStrategy>
 
         let mut graph = NegationGraph::default();
 
-        let rule_count = rule_analyses.len();
         for rule_index in 0..rule_count {
             graph.add_node(rule_index);
         }
@@ -107,11 +105,8 @@ impl<SubStrategy: RuleSelectionStrategy> RuleSelectionStrategy
     for StrategyStratifiedNegation<SubStrategy>
 {
     /// Create new [StrategyStratifiedNegation].
-    fn new(
-        rules: Vec<&ChaseRule>,
-        rule_analyses: Vec<&RuleAnalysis>,
-    ) -> Result<Self, SelectionStrategyError> {
-        let graph = Self::build_graph(&rule_analyses);
+    fn new(rules: Vec<&NormalizedRule>) -> Result<Self, SelectionStrategyError> {
+        let graph = Self::build_graph(&rules);
 
         if let Some(mut strata) = graph.stratify(&[EdgeLabel::Negative]) {
             let mut substrategies = Vec::new();
@@ -119,11 +114,9 @@ impl<SubStrategy: RuleSelectionStrategy> RuleSelectionStrategy
             for stratum in &mut strata {
                 stratum.sort();
 
-                let sub_rules: Vec<&ChaseRule> = stratum.iter().map(|&i| rules[i]).collect();
-                let sub_analyses: Vec<&RuleAnalysis> =
-                    stratum.iter().map(|&i| rule_analyses[i]).collect();
+                let sub_rules = stratum.iter().map(|i| rules[*i]).collect::<Vec<_>>();
 
-                substrategies.push(SubStrategy::new(sub_rules, sub_analyses)?);
+                substrategies.push(SubStrategy::new(sub_rules)?);
             }
 
             for stratum in &mut strata {

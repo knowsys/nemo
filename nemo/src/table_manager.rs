@@ -227,7 +227,7 @@ pub struct SubtableExecutionPlan {
 
 impl SubtableExecutionPlan {
     /// Add a temporary table to the plan.
-    pub fn add_temporary_table(&mut self, node: ExecutionNodeRef, tree_name: &str) -> ExecutionId {
+    pub fn _add_temporary_table(&mut self, node: ExecutionNodeRef, tree_name: &str) -> ExecutionId {
         self.execution_plan.write_temporary(node, tree_name)
     }
 

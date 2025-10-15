@@ -16,9 +16,9 @@ use crate::{
 #[derive(Debug, Clone)]
 pub enum UnionRange {
     /// Explicit range of steps
-    Steps(Range<usize>),
+    _Steps(Range<usize>),
     /// All subtables before the specified step
-    Before(usize),
+    _Before(usize),
     /// All available subtables
     All,
     /// Only new subtables (relative to last rule application)
@@ -37,8 +37,8 @@ impl UnionRange {
     /// Convert this [UnionRange] into a [Range].
     pub fn as_range(&self, step_current: usize, step_last_application: usize) -> Range<usize> {
         match self {
-            UnionRange::Steps(range) => range.clone(),
-            UnionRange::Before(step) => 0..*step,
+            UnionRange::_Steps(range) => range.clone(),
+            UnionRange::_Before(step) => 0..*step,
             UnionRange::All => 0..step_current,
             UnionRange::New => step_last_application..step_current,
             UnionRange::Old => 0..step_last_application,
@@ -123,7 +123,7 @@ impl GeneratorUnion {
 
     /// Return the variables marking the column of the node
     /// created by `create_plan`.
-    pub fn output_variables(&self) -> Vec<Variable> {
+    pub fn _output_variables(&self) -> Vec<Variable> {
         self.variables.clone()
     }
 }

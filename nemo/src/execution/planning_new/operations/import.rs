@@ -10,9 +10,9 @@ use nemo_physical::{
 };
 
 use crate::{
-    chase_model::analysis::variable_order::VariableOrder,
     execution::planning_new::{
         RuntimeInformation,
+        analysis::variable_order::VariableOrder,
         normalization::atom::import::ImportAtom,
         operations::union::{GeneratorUnion, UnionRange},
     },
@@ -26,18 +26,20 @@ struct VariableBinding(pub Vec<Variable>);
 
 impl VariableBinding {
     /// Compute the predicate name and arity for the binding table.
-    fn predicate_name(&self, predicate: &Tag, input: &[Variable]) -> Tag {
+    fn predicate_name(&self, predicate: &Tag, input: &[Variable]) -> (Tag, usize) {
         let mut name = format!("__IMPORT_{}_", predicate.name());
+        let mut arity = 0;
 
         for variable in &self.0 {
             if input.contains(variable) {
+                arity += 1;
                 name.push('b');
             } else {
                 name.push('f');
             }
         }
 
-        Tag::new(name)
+        (Tag::new(name), arity)
     }
 }
 
@@ -81,6 +83,9 @@ pub struct GeneratorImport {
     /// and the subset of variables that occur both in that atom
     /// and the input
     atoms: HashMap<Tag, Vec<(ImportAtom, usize)>>,
+
+    /// Set of special atoms used in this generator
+    predicates: HashSet<(Tag, usize)>,
 }
 
 impl GeneratorImport {
@@ -92,6 +97,7 @@ impl GeneratorImport {
     ) -> Self {
         let mut bindings = VariableBindings::default();
         let mut atom_map = HashMap::<Tag, Vec<(ImportAtom, usize)>>::default();
+        let mut predicates = HashSet::<(Tag, usize)>::default();
 
         let mut variables = input_variables.iter().cloned().collect::<HashSet<_>>();
 
@@ -99,6 +105,11 @@ impl GeneratorImport {
             variables.extend(atom.variables().cloned());
 
             let index = bindings.add(&input_variables, &atom);
+
+            let special_predicate =
+                bindings.0[index].predicate_name(&atom.predicate(), &input_variables);
+            predicates.insert(special_predicate);
+
             atom_map
                 .entry(atom.predicate())
                 .or_default()
@@ -112,7 +123,13 @@ impl GeneratorImport {
             input_variables,
             bindings,
             atoms: atom_map,
+            predicates,
         }
+    }
+
+    /// Return an iterator over all special predicates used in this generator.
+    pub fn special_predicates(&self) -> impl Iterator<Item = (Tag, usize)> {
+        self.predicates.iter().cloned()
     }
 
     /// Return a list of variables
@@ -162,7 +179,7 @@ impl GeneratorImport {
             let mut stored_binding_tables = HashSet::<Tag>::default();
 
             for (atom, index_binding) in atoms {
-                let binding_predicate = self.bindings.0[*index_binding]
+                let (binding_predicate, _) = self.bindings.0[*index_binding]
                     .predicate_name(predicate, &self.input_variables);
 
                 if stored_binding_tables.insert(binding_predicate.clone()) {

@@ -3,9 +3,9 @@
 use nemo_physical::management::execution_plan::ExecutionNodeRef;
 
 use crate::{
-    chase_model::analysis::variable_order::VariableOrder,
     execution::planning_new::{
         RuntimeInformation,
+        analysis::variable_order::VariableOrder,
         normalization::atom::body::BodyAtom,
         operations::{join::GeneratorJoin, union::UnionRange},
     },
