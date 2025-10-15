@@ -6,7 +6,12 @@ use nemo_physical::{
 };
 
 use crate::{
-    execution::planning_new::{RuntimeInformation, normalization::aggregate::Aggregation},
+    execution::planning_new::{
+        RuntimeInformation,
+        normalization::{aggregate::Aggregation, operation::Operation},
+        operations::function::GeneratorFunction,
+    },
+    rule_model::components::term::primitive::variable::Variable,
     table_manager::SubtableExecutionPlan,
 };
 
@@ -15,12 +20,27 @@ use crate::{
 pub struct GeneratorAggregation {
     /// Aggregation
     aggregation: Aggregation,
+
+    /// Functions
+    function: Option<GeneratorFunction>,
 }
 
 impl GeneratorAggregation {
     /// Create a new [GeneratorAggregation].
-    pub fn new(aggregation: Aggregation) -> Self {
-        Self { aggregation }
+    pub fn new(
+        input_variables: Vec<Variable>,
+        aggregation: Aggregation,
+        operations: &mut Vec<Operation>,
+    ) -> Self {
+        let mut variables = input_variables;
+        variables.push(aggregation.output_variable().clone());
+
+        let function = GeneratorFunction::new(variables, operations);
+
+        Self {
+            aggregation,
+            function: function.or_none(),
+        }
     }
 
     /// Compute the [OperationTable] necessary for computing
@@ -114,7 +134,14 @@ impl GeneratorAggregation {
             aggregated_column: aggregation_input_column,
         };
 
-        plan.plan_mut()
-            .aggregate(output_markers, aggregate_input_node, aggregate_assignment)
+        let mut node_result =
+            plan.plan_mut()
+                .aggregate(output_markers, aggregate_input_node, aggregate_assignment);
+
+        if let Some(generator) = self.function.as_ref() {
+            node_result = generator.create_plan(plan, node_result, runtime);
+        }
+
+        node_result
     }
 }

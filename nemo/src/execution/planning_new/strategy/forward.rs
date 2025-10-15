@@ -4,8 +4,10 @@ use crate::{
     chase_model::analysis::variable_order::VariableOrder,
     execution::{
         planning_new::{
-            RuntimeInformation, normalization::rule::NormalizedRule,
-            operations::aggregation::GeneratorAggregation, strategy::forward::body::StrategyBody,
+            RuntimeInformation,
+            normalization::rule::NormalizedRule,
+            operations::aggregation::GeneratorAggregation,
+            strategy::forward::{body::StrategyBody, head::StrategyHead},
         },
         rule_execution::VariableTranslation,
     },
@@ -25,7 +27,9 @@ pub struct StrategyForward {
     body: StrategyBody,
     /// Generator for the aggregation
     aggregation: Option<GeneratorAggregation>,
-    // head: StrategyHead
+    /// Generator for the head operations
+    head: StrategyHead,
+
     /// Variable order
     order: VariableOrder,
     /// Variable translation
@@ -37,30 +41,39 @@ impl StrategyForward {
     pub fn new(rule: &NormalizedRule) -> Self {
         let positive = rule.positive().clone();
         let negative = rule.negative().clone();
-        let operations = rule.operations().clone();
+        let mut operations = rule.operations().clone();
         let imports = rule.imports().clone();
 
-        let body = StrategyBody::new(
-            rule.variable_order().clone(),
-            positive,
-            negative,
-            imports,
-            operations,
-        );
+        let order = rule.variable_order();
+        let frontier = rule.frontier();
+        let rule_id = rule.id();
+        let is_existential = rule.is_existential();
+        let aggregation_index = rule.aggregate_index();
 
-        let aggregation = rule
-            .aggregate()
-            .cloned()
-            .map(|aggregation| GeneratorAggregation::new(aggregation));
+        let body = StrategyBody::new(order.clone(), positive, negative, imports, &mut operations);
+
+        let aggregation = rule.aggregate().cloned().map(|aggregation| {
+            GeneratorAggregation::new(body.output_variables(), aggregation, &mut operations)
+        });
 
         let mut translation = VariableTranslation::new();
         for variable in rule.variables() {
             translation.add_marker(variable.clone());
         }
 
+        let head = StrategyHead::new(
+            rule.head(),
+            &order,
+            frontier,
+            aggregation_index,
+            rule_id,
+            is_existential,
+        );
+
         Self {
             body,
             aggregation,
+            head,
             order: rule.variable_order().clone(),
             translation,
         }
@@ -91,6 +104,9 @@ impl StrategyForward {
             .aggregation
             .as_ref()
             .map(|generator| generator.create_plan(&mut plan, node_body.clone(), &runtime));
+
+        self.head
+            .create_plan(&mut plan, node_body, node_aggregation, &runtime);
 
         plan
     }
