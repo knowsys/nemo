@@ -114,7 +114,7 @@ fn string_vec_from_any(parameters: &[AnyDataValue]) -> Option<Vec<LangTaggedStri
 ///
 /// Returns `None` if either parameter is not a (language tagged) string or
 /// if the two language tags do not comply with Argument Compatibility Rules.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct StringCompare;
 impl BinaryFunction for StringCompare {
     fn evaluate(
@@ -150,7 +150,7 @@ impl BinaryFunction for StringCompare {
 /// Returns an empty plain string if no parameters are given.
 ///
 /// Returns `None` if either parameter is not a string.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct StringConcatenation;
 impl NaryFunction for StringConcatenation {
     fn evaluate(&self, parameters: &[AnyDataValue]) -> Option<AnyDataValue> {
@@ -184,7 +184,7 @@ impl NaryFunction for StringConcatenation {
 ///
 /// Returns `None` if either parameter is not a (language tagged) string or
 /// if the two language tags do not comply with Argument Compatibility Rules.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct StringContains;
 impl BinaryFunction for StringContains {
     fn evaluate(
@@ -218,7 +218,7 @@ impl BinaryFunction for StringContains {
 ///
 /// Returns `None` if either parameter is not a (language tagged) string or
 /// if the two language tags do not comply with Argument Compatibility Rules.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct StringStarts;
 impl BinaryFunction for StringStarts {
     fn evaluate(
@@ -263,7 +263,7 @@ impl BinaryFunction for StringStarts {
 ///
 /// Returns `None` if either parameter is not a (language tagged) string or
 /// if the two language tags do not comply with Argument Compatibility Rules.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct StringEnds;
 impl BinaryFunction for StringEnds {
     fn evaluate(
@@ -313,7 +313,7 @@ impl BinaryFunction for StringEnds {
 ///
 /// Returns `None` if either parameter is not a (language tagged) string or if
 /// the two language tags do not comply with Argument Compatibility Rules.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct StringBefore;
 impl BinaryFunction for StringBefore {
     fn evaluate(
@@ -360,7 +360,7 @@ impl BinaryFunction for StringBefore {
 ///
 /// Returns `None` if either parameter is not a (language tagged) string or if
 /// the two language tags do not comply with Argument Compatibility Rules.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct StringAfter;
 impl BinaryFunction for StringAfter {
     fn evaluate(
@@ -411,7 +411,7 @@ impl BinaryFunction for StringAfter {
 /// Otherwise, return a plain string.
 ///
 /// Returns `None` if the type requirements from above are not met.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct StringSubstring;
 impl BinaryFunction for StringSubstring {
     fn evaluate(
@@ -452,7 +452,7 @@ static REGEX_CACHE: OnceCell<Mutex<lru::LruCache<String, regex::Regex>>> = OnceC
 ///
 /// Returns `None` if either parameter is not a (language tagged) string, if the second parameter is not
 /// a regular expression or if the two language tags do not comply with Argument Compatibility Rules.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct StringRegex;
 impl BinaryFunction for StringRegex {
     fn evaluate(
@@ -499,7 +499,7 @@ impl BinaryFunction for StringRegex {
 ///
 /// Returns `None` if either parameter is not a (language tagged) string or
 /// if the two language tags do not comply with Argument Compatibility Rules.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct StringLevenshtein;
 impl BinaryFunction for StringLevenshtein {
     fn evaluate(
@@ -524,7 +524,7 @@ impl BinaryFunction for StringLevenshtein {
 /// Returns a plain string.
 ///
 /// Returns `None` if the provided argument is not a (language tagged) string
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct StringLength;
 impl UnaryFunction for StringLength {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
@@ -546,7 +546,7 @@ impl UnaryFunction for StringLength {
 /// Otherwise, return a plain string.
 ///
 /// Returns `None` if the provided argument is not a (language tagged) string.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct StringReverse;
 impl UnaryFunction for StringReverse {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
@@ -573,7 +573,7 @@ impl UnaryFunction for StringReverse {
 /// Otherwise, return a plain string.
 ///
 /// Returns `None` if the provided argument is not a (language tagged) string.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct StringUppercase;
 impl UnaryFunction for StringUppercase {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
@@ -602,7 +602,7 @@ impl UnaryFunction for StringUppercase {
 /// Otherwise, return a plain string.
 ///
 /// Returns `None` if the provided argument is not a (language tagged) string.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct StringLowercase;
 impl UnaryFunction for StringLowercase {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
@@ -630,7 +630,7 @@ impl UnaryFunction for StringLowercase {
 /// Returns a plain string.
 ///
 /// Returns `None` if the provided argument is not a (language tagged) string.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct StringUriEncode;
 impl UnaryFunction for StringUriEncode {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
@@ -657,7 +657,7 @@ impl UnaryFunction for StringUriEncode {
 /// Returns a plain string.
 ///
 /// Returns `None` if the provided argument is not a (language tagged) string.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct StringUriDecode;
 impl UnaryFunction for StringUriDecode {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
@@ -688,7 +688,7 @@ impl UnaryFunction for StringUriDecode {
 /// Otherwise, return a plain string.
 ///
 /// Returns `None` if the type requirements from above are not met.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct StringSubstringLength;
 impl TernaryFunction for StringSubstringLength {
     fn evaluate(

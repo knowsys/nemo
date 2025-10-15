@@ -12,7 +12,7 @@ use super::{FunctionTypePropagation, UnaryFunction};
 /// Returns the language tag as a string of a language tagged string.
 /// Returns the empty string if value is a string.
 /// Returns `None` if value is neither string nor language tagged string.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct LanguageTag;
 impl UnaryFunction for LanguageTag {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
@@ -37,7 +37,7 @@ impl UnaryFunction for LanguageTag {
 /// the first being the tagged string and the second the language tag.
 ///
 /// Returns `None` if the input parameters are not strings.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct LanguageString;
 impl BinaryFunction for LanguageString {
     fn evaluate(

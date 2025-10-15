@@ -129,7 +129,7 @@ pub(crate) trait UnaryFunction {
 }
 
 /// Enum containing all implementations of [UnaryFunction]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UnaryFunctionEnum {
     BooleanNegation(BooleanNegation),
     CanonicalString(CanonicalString),
@@ -222,7 +222,7 @@ pub trait BinaryFunction {
 }
 
 /// Enum containing all implementations of [BinaryFunction]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BinaryFunctionEnum {
     Equals(Equals),
     Unequals(Unequals),
@@ -306,7 +306,7 @@ pub trait TernaryFunction {
 }
 
 /// Enum containing all implementations of [TernaryFunction]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TernaryFunctionEnum {
     StringSubstringLength(StringSubstringLength),
 }
@@ -335,7 +335,7 @@ pub trait NaryFunction {
 }
 
 /// Enum containing all implementations of [NaryFunction]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NaryFunctionEnum {
     BitAnd(BitAnd),
     BitOr(BitOr),
