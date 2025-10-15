@@ -431,4 +431,26 @@ mod test {
             assert!(operation.validate().is_err());
         }
     }
+
+    // Regression test for https://github.com/knowsys/nemo/issues/721
+    #[test]
+    fn invalid_operation_arity() {
+        let invalid_operations = vec![
+            "SUBSTR()",
+            "SUBSTR(\"foobar\")",
+            "SUBSTR(\"foobar\",0,2,\"TOO MANY ARGUMENTS\")",
+        ];
+
+        for string in invalid_operations {
+            let operation = Operation::parse(string).unwrap();
+            assert!(operation.validate().is_err());
+        }
+
+        let valid_operations = vec!["SUBSTR(\"foobar\",2)", "SUBSTR(\"foobar\",0,2)"];
+
+        for string in valid_operations {
+            let operation = Operation::parse(string).unwrap();
+            assert!(operation.validate().is_ok());
+        }
+    }
 }
