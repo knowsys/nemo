@@ -15,6 +15,7 @@ use crate::{
             join_seminaive::GeneratorJoinSeminaive,
         },
     },
+    rule_model::components::term::primitive::variable::Variable,
     table_manager::SubtableExecutionPlan,
 };
 
@@ -30,6 +31,9 @@ pub struct StrategyBody {
     import: Option<GeneratorImport>,
     /// Import Filter
     import_filter: Option<GeneratorFunctionFilterNegation>,
+
+    /// Variables
+    variables: Vec<Variable>,
 }
 
 impl StrategyBody {
@@ -39,26 +43,27 @@ impl StrategyBody {
         positive: Vec<BodyAtom>,
         mut negative: Vec<BodyAtom>,
         imports: Vec<ImportAtom>,
-        mut operations: Vec<Operation>,
+        operations: &mut Vec<Operation>,
     ) -> Self {
         let seminaive_join = GeneratorJoinSeminaive::new(positive, &order);
         let mut current_variables = seminaive_join.output_variables();
 
         let seminaive_filter =
-            GeneratorFunctionFilterNegation::new(current_variables, &mut operations, &mut negative);
+            GeneratorFunctionFilterNegation::new(current_variables, operations, &mut negative);
         current_variables = seminaive_filter.output_variables();
 
         let import = GeneratorImport::new(current_variables, imports, &order);
         current_variables = import.output_variables();
 
         let import_filter =
-            GeneratorFunctionFilterNegation::new(current_variables, &mut operations, &mut negative);
+            GeneratorFunctionFilterNegation::new(current_variables, operations, &mut negative);
 
         Self {
             seminaive_join,
             seminaive_filter: seminaive_filter.or_none(),
             import: import.or_none(),
             import_filter: import_filter.or_none(),
+            variables: order.as_ordered_list(),
         }
     }
 
@@ -83,5 +88,11 @@ impl StrategyBody {
         }
 
         current_node
+    }
+
+    /// Return the variables marking the column of the node
+    /// created by `create_plan`.
+    pub fn output_variables(&self) -> Vec<Variable> {
+        self.variables.clone()
     }
 }

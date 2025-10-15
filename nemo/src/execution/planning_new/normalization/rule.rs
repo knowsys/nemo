@@ -1,6 +1,6 @@
 //! This module defines [NormalizedRule].
 
-use std::fmt::Display;
+use std::{collections::HashSet, fmt::Display};
 
 use crate::{
     chase_model::analysis::variable_order::VariableOrder,
@@ -132,32 +132,14 @@ impl NormalizedRule {
             .map(|(aggregation, _)| aggregation)
     }
 
+    /// Return the head index containing the aggregation operation.
+    pub fn aggregate_index(&self) -> Option<usize> {
+        self.aggregation.as_ref().map(|(_, index)| *index)
+    }
+
     /// Return the id of this rule.
     pub fn id(&self) -> usize {
         self.id
-    }
-
-    /// Return an iterator over predicates used in this rule
-    /// together with their arities.
-    pub fn predicates(&self) -> impl Iterator<Item = (Tag, usize)> {
-        let head = self
-            .head
-            .iter()
-            .map(|atom| (atom.predicate(), atom.arity()));
-        let positive = self
-            .positive
-            .iter()
-            .map(|atom| (atom.predicate(), atom.arity()));
-        let negative = self
-            .negative
-            .iter()
-            .map(|atom| (atom.predicate(), atom.arity()));
-        let import = self
-            .imports
-            .iter()
-            .map(|atom| (atom.predicate(), atom.arity()));
-
-        head.chain(positive).chain(negative).chain(import)
     }
 }
 
@@ -211,7 +193,7 @@ impl NormalizedRule {
     /// Prepare the rule in such a way that it is suitable for tracing.
     ///
     /// This includes
-    ///     * Moving all statements from import to the positive and negative body of the rule
+    ///     * Moving all statements from import to the positive body of the rule
     pub fn prepare_tracing(&self) -> Self {
         let mut result = self.clone();
 
@@ -232,6 +214,7 @@ impl NormalizedRule {
         let head_variables = self.head.iter().flat_map(|atom| atom.variables());
         let positive_variables = self.positive.iter().flat_map(|atom| atom.terms());
         let negative_variables = self.negative.iter().flat_map(|atom| atom.terms());
+        let import_variables = self.imports.iter().flat_map(|atom| atom.variables());
         let operation_variables = self
             .operations
             .iter()
@@ -246,8 +229,56 @@ impl NormalizedRule {
         head_variables
             .chain(positive_variables)
             .chain(negative_variables)
+            .chain(import_variables)
             .chain(operation_variables)
             .chain(aggregation_variables)
+    }
+
+    /// Return an iterator over predicates used in this rule
+    /// together with their arities.
+    pub fn predicates(&self) -> impl Iterator<Item = (Tag, usize)> {
+        let head = self
+            .head
+            .iter()
+            .map(|atom| (atom.predicate(), atom.arity()));
+        let positive = self
+            .positive
+            .iter()
+            .map(|atom| (atom.predicate(), atom.arity()));
+        let negative = self
+            .negative
+            .iter()
+            .map(|atom| (atom.predicate(), atom.arity()));
+        let import = self
+            .imports
+            .iter()
+            .map(|atom| (atom.predicate(), atom.arity()));
+
+        head.chain(positive).chain(negative).chain(import)
+    }
+
+    /// Return the set of frontier variables in this rule,
+    /// i.e. the set of variables contained
+    /// in both the head and the body of the rule.
+    pub fn frontier(&self) -> HashSet<Variable> {
+        let head_variables = self
+            .head
+            .iter()
+            .flat_map(|atom| atom.variables())
+            .collect::<HashSet<_>>();
+
+        let positive_variables = self.positive.iter().flat_map(|atom| atom.terms());
+        let import_variables = self.imports.iter().flat_map(|atom| atom.variables());
+
+        let body_variables = positive_variables
+            .chain(import_variables)
+            .collect::<HashSet<_>>();
+
+        head_variables
+            .intersection(&body_variables)
+            .cloned()
+            .cloned()
+            .collect::<HashSet<_>>()
     }
 }
 
