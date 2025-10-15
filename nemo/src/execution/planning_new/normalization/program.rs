@@ -176,7 +176,8 @@ impl NormalizedProgram {
 
         // Handle rules
         for (rule_index, rule) in program.rules().enumerate() {
-            let normalized_rule = NormalizedRule::normalize_rule(import_export_builder, rule);
+            let normalized_rule =
+                NormalizedRule::normalize_rule(import_export_builder, rule, rule_index);
 
             for (predicate, arity) in normalized_rule.predicates() {
                 result.add_predicate_arity(predicate, arity);

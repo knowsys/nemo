@@ -8,10 +8,11 @@ use nemo_physical::{
 };
 
 use crate::{
-    execution::planning_new::{
-        normalization::atom::head::HeadAtom, operations::RuntimeInformation,
+    execution::planning_new::{RuntimeInformation, normalization::atom::head::HeadAtom},
+    rule_model::components::{
+        tag::Tag,
+        term::primitive::{Primitive, variable::Variable},
     },
-    rule_model::components::term::primitive::{Primitive, variable::Variable},
     table_manager::SubtableExecutionPlan,
 };
 
@@ -32,6 +33,9 @@ enum HeadInstruction {
 struct ProjectionHeadAtom {
     /// Marked columns
     terms: Vec<HeadInstruction>,
+
+    /// Predicate
+    predicate: Tag,
 }
 
 impl ProjectionHeadAtom {
@@ -44,6 +48,11 @@ impl ProjectionHeadAtom {
                 None
             }
         })
+    }
+
+    /// Return the predicate.
+    pub fn predicate(&self) -> Tag {
+        self.predicate.clone()
     }
 }
 
@@ -69,6 +78,7 @@ impl From<HeadAtom> for ProjectionHeadAtom {
 
         ProjectionHeadAtom {
             terms: instructions,
+            predicate: atom.predicate(),
         }
     }
 }
@@ -137,5 +147,10 @@ impl GeneratorProjectionHead {
 
         plan.plan_mut()
             .function(markers_append, node_projection, functions)
+    }
+
+    /// Return the predicate.
+    pub fn predicate(&self) -> Tag {
+        self.atom.predicate()
     }
 }

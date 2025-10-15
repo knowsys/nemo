@@ -4,9 +4,9 @@ use nemo_physical::management::execution_plan::ExecutionNodeRef;
 
 use crate::{
     execution::planning_new::{
+        RuntimeInformation,
         normalization::{atom::body::BodyAtom, operation::Operation},
         operations::{
-            RuntimeInformation,
             filter::GeneratorFilter,
             union::{GeneratorUnion, UnionRange},
         },
@@ -27,20 +27,36 @@ pub struct GeneratorNegation {
 
 impl GeneratorNegation {
     /// Create a new [GeneratorNegation].
+    ///
+    /// Only uses the negative atoms that contain at least
+    /// one positive variable and removes those from `atoms`.
     pub fn new(
         positive_variables: &[Variable],
-        atoms: Vec<BodyAtom>,
+        atoms: &mut Vec<BodyAtom>,
         operations: &mut Vec<Operation>,
     ) -> Self {
         let mut negated_atoms = Vec::<(BodyAtom, GeneratorFilter)>::default();
+        let mut keep = vec![true; atoms.len()];
 
-        for atom in atoms {
+        for (atom, keep_atom) in atoms.iter().zip(keep.iter_mut()) {
             let mut variables = positive_variables.to_vec();
+
+            if variables
+                .iter()
+                .all(|variable| !positive_variables.contains(variable))
+            {
+                *keep_atom = false;
+                continue;
+            }
+
             variables.extend(atom.terms().cloned());
 
             let filter = GeneratorFilter::new(variables, operations);
-            negated_atoms.push((atom, filter));
+            negated_atoms.push((atom.clone(), filter));
         }
+
+        let mut keep_iter = keep.iter();
+        atoms.retain(|_| *keep_iter.next().expect("keep is as long as atoms"));
 
         Self {
             variables: positive_variables.to_vec(),
@@ -66,5 +82,16 @@ impl GeneratorNegation {
         }
 
         plan.plan_mut().subtract(input_node, nodes_subtracted)
+    }
+
+    /// Returns `Some(self)` or `None`
+    /// depending on whether this is a noop,
+    /// i.e. does not affect the result.
+    pub fn or_none(self) -> Option<Self> {
+        if !self.atoms.is_empty() {
+            Some(self)
+        } else {
+            None
+        }
     }
 }

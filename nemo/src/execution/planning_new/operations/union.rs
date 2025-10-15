@@ -7,9 +7,7 @@ use nemo_physical::{
 };
 
 use crate::{
-    execution::planning_new::{
-        normalization::atom::body::BodyAtom, operations::RuntimeInformation,
-    },
+    execution::planning_new::{RuntimeInformation, normalization::atom::body::BodyAtom},
     rule_model::components::{tag::Tag, term::primitive::variable::Variable},
     table_manager::SubtableExecutionPlan,
 };
@@ -27,6 +25,12 @@ pub enum UnionRange {
     New,
     /// Only old subtables (relative to old rule application)
     Old,
+    /// Ony new subtables (relative to last rule application)
+    /// excluding the step the rule was applied in
+    NewExclusive,
+    /// Only old subtables (relative to last rule application)
+    /// including the step the rule was applied in
+    OldInclusive,
 }
 
 impl UnionRange {
@@ -38,6 +42,8 @@ impl UnionRange {
             UnionRange::All => 0..step_current,
             UnionRange::New => step_last_application..step_current,
             UnionRange::Old => 0..step_last_application,
+            UnionRange::NewExclusive => (step_last_application + 1)..step_current,
+            UnionRange::OldInclusive => 0..(step_last_application + 1),
         }
     }
 }
@@ -70,25 +76,49 @@ impl GeneratorUnion {
         Self::new(atom.predicate(), atom.terms().cloned().collect(), range)
     }
 
+    /// Append this operation to the plan
+    /// including the nodes in `start`.
+    fn create_plan_with_vector(
+        &self,
+        plan: &mut SubtableExecutionPlan,
+        runtime: &RuntimeInformation,
+        start: Vec<ExecutionNodeRef>,
+    ) -> ExecutionNodeRef {
+        let range = self
+            .range
+            .as_range(runtime.step_current, runtime.step_last_application);
+        let mut subtables = start;
+        subtables.extend(
+            runtime
+                .table_manager
+                .tables_in_range(&self.predicate, &range)
+                .into_iter()
+                .map(|id| plan.plan_mut().fetch_table(OperationTable::default(), id)),
+        );
+
+        let markers = runtime.translation.operation_table(self.variables.iter());
+
+        plan.plan_mut().union(markers, subtables)
+    }
+
     /// Append this operation to the plan.
     pub fn create_plan(
         &self,
         plan: &mut SubtableExecutionPlan,
         runtime: &RuntimeInformation,
     ) -> ExecutionNodeRef {
-        let range = self
-            .range
-            .as_range(runtime.step_current, runtime.step_last_application);
-        let subtables = runtime
-            .table_manager
-            .tables_in_range(&self.predicate, &range)
-            .into_iter()
-            .map(|id| plan.plan_mut().fetch_table(OperationTable::default(), id))
-            .collect::<Vec<_>>();
+        self.create_plan_with_vector(plan, runtime, Vec::default())
+    }
 
-        let markers = runtime.translation.operation_table(self.variables.iter());
-
-        plan.plan_mut().union(markers, subtables)
+    /// Append this operation to the plan,
+    /// including the given `input_node` in the union.
+    pub fn create_plan_with(
+        &self,
+        plan: &mut SubtableExecutionPlan,
+        input_node: ExecutionNodeRef,
+        runtime: &RuntimeInformation,
+    ) -> ExecutionNodeRef {
+        self.create_plan_with_vector(plan, runtime, vec![input_node])
     }
 
     /// Return the variables marking the column of the node

@@ -73,6 +73,20 @@ impl HeadAtom {
             Primitive::Ground(_) => None,
         })
     }
+
+    /// Return an iterator over all existential variables contained in this atom.
+    pub fn variables_existential(&self) -> impl Iterator<Item = &Variable> {
+        self.terms().filter_map(|term| match term {
+            Primitive::Variable(variable) => {
+                if variable.is_existential() {
+                    Some(variable)
+                } else {
+                    None
+                }
+            }
+            Primitive::Ground(_) => None,
+        })
+    }
 }
 
 impl HeadAtom {

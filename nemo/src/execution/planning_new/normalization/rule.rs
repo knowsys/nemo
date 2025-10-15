@@ -11,7 +11,7 @@ use crate::{
         operation::Operation,
     },
     io::format_builder::ImportExportBuilder,
-    rule_model::components::tag::Tag,
+    rule_model::components::{tag::Tag, term::primitive::variable::Variable},
     syntax,
     util::seperated_list::DisplaySeperatedList,
 };
@@ -31,11 +31,13 @@ pub struct NormalizedRule {
 
     /// Head of the rule
     head: Vec<HeadAtom>,
-    /// Aggregation
-    aggregation: Option<Aggregation>,
+    /// Aggregation and the head index it occurs in
+    aggregation: Option<(Aggregation, usize)>,
 
     /// Variable order
     variable_order: Option<VariableOrder>,
+    /// Unique identifier of this rule
+    id: usize,
 }
 
 impl NormalizedRule {
@@ -86,7 +88,7 @@ impl Display for NormalizedRule {
         let aggregation = self
             .aggregation
             .as_ref()
-            .map(|aggregation| aggregation.to_string())
+            .map(|(aggregation, _)| aggregation.to_string())
             .unwrap_or_default();
 
         let body = vec![positive, imports, negative, operations, aggregation];
@@ -125,7 +127,14 @@ impl NormalizedRule {
 
     /// Return the aggregate in this rule.
     pub fn aggregate(&self) -> Option<&Aggregation> {
-        self.aggregation.as_ref()
+        self.aggregation
+            .as_ref()
+            .map(|(aggregation, _)| aggregation)
+    }
+
+    /// Return the id of this rule.
+    pub fn id(&self) -> usize {
+        self.id
     }
 
     /// Return an iterator over predicates used in this rule
@@ -217,6 +226,29 @@ impl NormalizedRule {
 
         result
     }
+
+    /// Return an iterator over all variables contained in this rule.
+    pub fn variables(&self) -> impl Iterator<Item = &Variable> {
+        let head_variables = self.head.iter().flat_map(|atom| atom.variables());
+        let positive_variables = self.positive.iter().flat_map(|atom| atom.terms());
+        let negative_variables = self.negative.iter().flat_map(|atom| atom.terms());
+        let operation_variables = self
+            .operations
+            .iter()
+            .flat_map(|operation| operation.variables());
+        let aggregation_variables = self
+            .aggregation
+            .as_ref()
+            .map(|(aggregation, _)| aggregation.variables())
+            .into_iter()
+            .flatten();
+
+        head_variables
+            .chain(positive_variables)
+            .chain(negative_variables)
+            .chain(operation_variables)
+            .chain(aggregation_variables)
+    }
 }
 
 impl NormalizedRule {
@@ -228,6 +260,7 @@ impl NormalizedRule {
     pub fn normalize_rule(
         import_builder: &ImportExportBuilder,
         rule: &crate::rule_model::components::rule::Rule,
+        id: usize,
     ) -> Self {
         let mut generator = VariableGenerator::default();
 
@@ -253,16 +286,16 @@ impl NormalizedRule {
         }
 
         let mut head = Vec::<HeadAtom>::default();
-        let mut aggregation: Option<Aggregation> = None;
-        for atom in rule.head() {
+        let mut aggregation: Option<(Aggregation, usize)> = None;
+        for (atom_index, atom) in rule.head().iter().enumerate() {
             let (normalized_atom, new_operations, new_aggregation) =
                 HeadAtom::normalize_atom(&mut generator, atom);
 
             head.push(normalized_atom);
             operations.extend(new_operations);
 
-            if new_aggregation.is_some() {
-                aggregation = new_aggregation;
+            if let Some(new_aggregation) = new_aggregation {
+                aggregation = Some((new_aggregation, atom_index));
             }
         }
 
@@ -279,6 +312,7 @@ impl NormalizedRule {
             head,
             aggregation,
             variable_order: None,
+            id,
         }
     }
 }
