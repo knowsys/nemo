@@ -286,6 +286,10 @@ impl ComponentBehavior for Operation {
             report.merge(child.validate());
         }
 
+        if let Some(variable) = self.variables().find(|variable| variable.is_anonymous()) {
+            report.add(variable, ValidationError::OperationAnonymous);
+        }
+
         if !self.kind.num_arguments().validate(self.subterms.len()) {
             report.add(
                 self,
@@ -294,10 +298,9 @@ impl ComponentBehavior for Operation {
                     expected: self.kind.num_arguments().to_string(),
                 },
             );
-        }
 
-        if let Some(variable) = self.variables().find(|variable| variable.is_anonymous()) {
-            report.add(variable, ValidationError::OperationAnonymous);
+            // If this check fails, self.reduce will panic, therefore we need to return here!
+            return report.result();
         }
 
         if self.reduce().is_none() {
@@ -426,6 +429,28 @@ mod test {
         for string in invalid_operations {
             let operation = Operation::parse(string).unwrap();
             assert!(operation.validate().is_err());
+        }
+    }
+
+    // Regression test for https://github.com/knowsys/nemo/issues/721
+    #[test]
+    fn invalid_operation_arity() {
+        let invalid_operations = vec![
+            "SUBSTR()",
+            "SUBSTR(\"foobar\")",
+            "SUBSTR(\"foobar\",0,2,\"TOO MANY ARGUMENTS\")",
+        ];
+
+        for string in invalid_operations {
+            let operation = Operation::parse(string).unwrap();
+            assert!(operation.validate().is_err());
+        }
+
+        let valid_operations = vec!["SUBSTR(\"foobar\",2)", "SUBSTR(\"foobar\",0,2)"];
+
+        for string in valid_operations {
+            let operation = Operation::parse(string).unwrap();
+            assert!(operation.validate().is_ok());
         }
     }
 }
