@@ -286,6 +286,10 @@ impl ComponentBehavior for Operation {
             report.merge(child.validate());
         }
 
+        if let Some(variable) = self.variables().find(|variable| variable.is_anonymous()) {
+            report.add(variable, ValidationError::OperationAnonymous);
+        }
+
         if !self.kind.num_arguments().validate(self.subterms.len()) {
             report.add(
                 self,
@@ -294,10 +298,9 @@ impl ComponentBehavior for Operation {
                     expected: self.kind.num_arguments().to_string(),
                 },
             );
-        }
 
-        if let Some(variable) = self.variables().find(|variable| variable.is_anonymous()) {
-            report.add(variable, ValidationError::OperationAnonymous);
+            // If this check fails, self.reduce will panic, therefore we need to return here!
+            return report.result();
         }
 
         if self.reduce().is_none() {
