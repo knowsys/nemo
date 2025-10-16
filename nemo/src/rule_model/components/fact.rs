@@ -7,7 +7,7 @@ use std::{
 };
 
 use crate::{
-    execution::planning_new::normalization::atom::ground::GroundAtom,
+    execution::planning::normalization::atom::ground::GroundAtom,
     rule_model::{
         error::{ValidationReport, hint::Hint, validation_error::ValidationError},
         origin::Origin,

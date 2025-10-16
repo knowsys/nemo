@@ -10,7 +10,7 @@ use self::selection_strategy::{
 };
 
 pub mod execution_parameters;
-pub mod planning_new;
+pub mod planning;
 pub mod selection_strategy;
 pub mod tracing;
 

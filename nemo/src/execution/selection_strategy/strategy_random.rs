@@ -4,7 +4,7 @@ use std::collections::HashSet;
 
 use rand::Rng;
 
-use crate::execution::planning_new::normalization::rule::NormalizedRule;
+use crate::execution::planning::normalization::rule::NormalizedRule;
 
 use super::strategy::{RuleSelectionStrategy, SelectionStrategyError};
 

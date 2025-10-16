@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    execution::planning_new::normalization::rule::NormalizedRule, rule_model::components::tag::Tag,
+    execution::planning::normalization::rule::NormalizedRule, rule_model::components::tag::Tag,
 };
 
 use super::graph_constructor::{DependencyGraph, DependencyGraphConstructor};

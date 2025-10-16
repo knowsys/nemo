@@ -9,7 +9,7 @@ use crate::{
     error::Error,
     execution::{
         ExecutionEngine,
-        planning_new::{
+        planning::{
             normalization::{
                 atom::ground::GroundAtom, program::NormalizedProgram, rule::NormalizedRule,
             },

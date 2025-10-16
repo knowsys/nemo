@@ -11,7 +11,7 @@ use nemo_physical::{
 
 use crate::{
     error::{Error, report::ProgramReport, warned::Warned},
-    execution::planning_new::{
+    execution::planning::{
         normalization::program::NormalizedProgram, strategy::forward::StrategyForward,
     },
     io::{formats::Export, import_manager::ImportManager},

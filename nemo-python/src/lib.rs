@@ -200,7 +200,7 @@ fn datavalue_to_python(py: Python<'_>, v: AnyDataValue) -> PyResult<Bound<'_, Py
 }
 
 #[pyclass]
-struct NemoFact(nemo::execution::planning_new::normalization::atom::ground::GroundAtom);
+struct NemoFact(nemo::execution::planning::normalization::atom::ground::GroundAtom);
 
 #[pymethods]
 impl NemoFact {

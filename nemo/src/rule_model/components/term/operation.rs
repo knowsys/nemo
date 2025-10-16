@@ -7,7 +7,7 @@ use std::{collections::HashMap, fmt::Display, hash::Hash};
 use operation_kind::OperationKind;
 
 use crate::{
-    execution::planning_new::VariableTranslation,
+    execution::planning::VariableTranslation,
     rule_model::{
         components::{
             ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent,
@@ -108,7 +108,7 @@ impl Operation {
             return Some(Term::Operation(self.clone()));
         }
 
-        let normalized_operation = crate::execution::planning_new::normalization::operation::Operation::normalize_body_operation(self);
+        let normalized_operation = crate::execution::planning::normalization::operation::Operation::normalize_body_operation(self);
 
         let empty_translation = VariableTranslation::new();
         let function_tree = normalized_operation.function_tree(&empty_translation);

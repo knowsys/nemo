@@ -2,7 +2,7 @@
 
 use thiserror::Error;
 
-use crate::execution::planning_new::normalization::rule::NormalizedRule;
+use crate::execution::planning::normalization::rule::NormalizedRule;
 
 /// Errors that can occur while creating a strategy.
 #[derive(Error, Debug, Copy, Clone)]
