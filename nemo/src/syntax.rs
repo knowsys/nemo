@@ -147,6 +147,11 @@ pub mod expression {
         pub const EXPRESSION_START: &str = "{";
         /// Marker of the end of an expression
         pub const EXPRESSION_END: &str = "}";
+
+        /// Escaped version of the start marker
+        pub const ESCAPE_START: &str = "{{";
+        /// Escaped version of the end marker
+        pub const ESCAPE_END: &str = "}}";
     }
 }
 

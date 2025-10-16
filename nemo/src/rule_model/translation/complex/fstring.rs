@@ -1,6 +1,6 @@
 use crate::{
     newtype_wrapper,
-    parser::ast::{self},
+    parser::ast::{self, expression::complex::fstring::FormatStringElement},
     rule_model::{
         components::term::{
             Term,
@@ -9,6 +9,7 @@ use crate::{
         origin::Origin,
         translation::TranslationComponent,
     },
+    syntax::expression::format_string::{EXPRESSION_END, EXPRESSION_START},
 };
 
 pub(crate) struct FormatStringLiteral(Operation);
@@ -25,15 +26,15 @@ impl TranslationComponent for FormatStringLiteral {
 
         for element in format_string.elements() {
             let term = match element {
-                ast::expression::complex::fstring::FormatStringElement::String(token) => {
-                    Term::from(token.to_string())
-                }
-                ast::expression::complex::fstring::FormatStringElement::Expression(expression) => {
+                FormatStringElement::String(token) => Term::from(token.to_string()),
+                FormatStringElement::Expression(expression) => {
                     let inner_term = Term::build_component(translation, expression)?;
                     let string_conversion =
                         Operation::new(OperationKind::LexicalValue, vec![inner_term]);
                     Term::from(string_conversion)
                 }
+                FormatStringElement::EscapedStart => Term::from(EXPRESSION_START),
+                FormatStringElement::EscapedEnd => Term::from(EXPRESSION_END),
             };
 
             subterms.push(term);

@@ -180,6 +180,12 @@ pub enum TokenKind {
     /// Format string expression close
     #[assoc(name = format_string::EXPRESSION_END)]
     FormatStringExpressionEnd,
+    /// Format string escaped start marker
+    #[assoc(name = format_string::ESCAPE_START)]
+    FormatStringEscapeStart,
+    /// Format string escaped end marker
+    #[assoc(name = format_string::ESCAPE_END)]
+    FormatStringEscapeEnd,
     /// Blank node prefix
     #[assoc(name = "_:")]
     BlankNodePrefix,
@@ -816,6 +822,8 @@ impl<'a> Token<'a> {
     string_token!(triple_quote, TokenKind::TripleQuote);
     string_token!(fstring_open, TokenKind::FormatStringOpen);
     string_token!(fstring_close, TokenKind::FormatStringClose);
+    string_token!(fstring_escape_start, TokenKind::FormatStringEscapeStart);
+    string_token!(fstring_escape_end, TokenKind::FormatStringEscapeEnd);
     string_token!(fstring_multiline_open, TokenKind::FormatStringMultilineOpen);
     string_token!(
         fstring_multiline_close,
