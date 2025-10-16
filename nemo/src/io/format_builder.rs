@@ -16,7 +16,7 @@ use nemo_physical::{
 use strum::IntoEnumIterator;
 
 use crate::{
-    execution::planning_new::normalization::rule::NormalizedRule,
+    execution::planning::normalization::rule::NormalizedRule,
     rule_model::{
         components::{
             ComponentSource,

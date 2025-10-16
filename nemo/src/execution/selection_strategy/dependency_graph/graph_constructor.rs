@@ -2,7 +2,7 @@
 
 use petgraph::{Directed, Graph, adj::NodeIndex};
 
-use crate::execution::planning_new::normalization::rule::NormalizedRule;
+use crate::execution::planning::normalization::rule::NormalizedRule;
 
 /// Graph that represents a prioritization between rules.
 pub type DependencyGraph = Graph<NodeIndex<usize>, (), Directed>;

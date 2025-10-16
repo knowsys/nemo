@@ -18,7 +18,7 @@ use crate::{
                 valid_tables_plan, variable_translation,
             },
         },
-        planning_new::normalization::{atom::ground::GroundAtom, program::NormalizedProgram},
+        planning::normalization::{atom::ground::GroundAtom, program::NormalizedProgram},
         selection_strategy::strategy::RuleSelectionStrategy,
         tracing::{
             node_query::{

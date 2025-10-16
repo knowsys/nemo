@@ -14,7 +14,7 @@ use serde::Serialize;
 
 use crate::{
     execution::{
-        planning_new::normalization::atom::ground::GroundAtom,
+        planning::normalization::atom::ground::GroundAtom,
         tracing::node_query::{
             TableEntriesForTreeNodesQuery, TableEntriesForTreeNodesQueryInner,
             TableEntriesForTreeNodesQuerySuccessor,
@@ -670,7 +670,7 @@ mod test {
 
     use crate::{
         execution::{
-            planning_new::normalization::atom::ground::GroundAtom,
+            planning::normalization::atom::ground::GroundAtom,
             tracing::trace::{TraceDerivation, TraceStatus},
         },
         rule_model::{

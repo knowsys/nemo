@@ -2,7 +2,7 @@
 
 use std::marker::PhantomData;
 
-use crate::execution::planning_new::normalization::rule::NormalizedRule;
+use crate::execution::planning::normalization::rule::NormalizedRule;
 
 use super::{
     dependency_graph::graph_constructor::DependencyGraphConstructor,

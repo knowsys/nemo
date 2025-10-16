@@ -1,6 +1,6 @@
 //! Defines the execution strategy by which each rule is applied in the order it appears.
 
-use crate::execution::planning_new::normalization::rule::NormalizedRule;
+use crate::execution::planning::normalization::rule::NormalizedRule;
 
 use super::strategy::{RuleSelectionStrategy, SelectionStrategyError};
 

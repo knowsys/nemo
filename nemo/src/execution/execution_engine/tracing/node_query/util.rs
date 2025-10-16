@@ -21,7 +21,7 @@ use nemo_physical::{
 use crate::{
     execution::{
         execution_engine::tracing::node_query::TraceNodeManager,
-        planning_new::{
+        planning::{
             VariableTranslation,
             analysis::variable_order::VariableOrder,
             normalization::{atom::body::BodyAtom, operation::Operation, rule::NormalizedRule},
