@@ -7,7 +7,7 @@ use crate::function::{evaluation::StackProgram, tree::FunctionTree};
 use super::operations::OperationColumnMarker;
 
 /// A filter or transformation applied to a position
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TransformPosition {
     pub(crate) position: usize,
     pub(crate) program: StackProgram,
@@ -28,7 +28,7 @@ impl TransformPosition {
 }
 
 /// A pattern that can be used to filter and transform the tuples in a tuple buffer.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FilterTransformPattern {
     pub(crate) filter: StackProgram,
     pub(crate) transformations: Vec<TransformPosition>,

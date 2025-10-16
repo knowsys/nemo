@@ -189,6 +189,42 @@ where
             None
         }
     }
+
+    /// A (mutable) iterator over the leaves of this tree.
+    pub fn leaves(&mut self) -> impl Iterator<Item = &mut FunctionTree<ReferenceType>> {
+        let mut result = Vec::new();
+        match self {
+            leaf @ FunctionTree::Leaf(_) => result.push(leaf),
+            FunctionTree::Unary(_function, tree) => result.extend(tree.leaves()),
+            FunctionTree::Binary {
+                function: _,
+                left,
+                right,
+            } => {
+                result.extend(left.leaves());
+                result.extend(right.leaves());
+            }
+            FunctionTree::Ternary {
+                function: _,
+                first,
+                second,
+                third,
+            } => {
+                result.extend(first.leaves());
+                result.extend(second.leaves());
+                result.extend(third.leaves());
+            }
+            FunctionTree::Nary {
+                function: _,
+                parameters,
+            } => {
+                for parameter in parameters {
+                    result.extend(parameter.leaves())
+                }
+            }
+        }
+        result.into_iter()
+    }
 }
 
 // Contains constructors for each type of operation

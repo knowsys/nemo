@@ -6,7 +6,7 @@ use std::{
 };
 
 use nemo_physical::{
-    function::tree::FunctionTree,
+    function::tree::{FunctionLeaf, FunctionTree},
     tabular::{
         filters::{FilterTransformPattern, TransformPosition},
         operations::{OperationColumnMarker, OperationTableGenerator},
@@ -672,12 +672,43 @@ impl ChaseRule {
             filters.push(tree);
         }
 
-        for operation in self.positive.operations {
+        for operation in &self.positive.operations {
             let variable = operation.variable();
             variable_translation.add_marker(variable.clone());
             let tree =
                 operation_term_to_function_tree(&variable_translation, operation.operation());
             variable_operations.insert(variable.clone(), tree);
+        }
+
+        loop {
+            let mut changed = false;
+            let operations = variable_operations.clone();
+
+            for operation in &self.positive.operations {
+                let variable = operation.variable();
+                let tree = variable_operations
+                    .get_mut(variable)
+                    .expect("all variables are bound");
+                for mut term in tree.leaves() {
+                    if let ref mut subtree @ FunctionTree::Leaf(FunctionLeaf::Reference(_)) = term {
+                        let FunctionTree::Leaf(FunctionLeaf::Reference(reference)) = subtree else {
+                            unreachable!()
+                        };
+                        let variable = variable_translation
+                            .find(reference)
+                            .expect("all variables are bound");
+                        if let Some(operation) = operations.get(variable) {
+                            // this is an auxiliary variable, inline it
+                            changed = true;
+                            *(*subtree) = operation.clone();
+                        }
+                    }
+                }
+            }
+
+            if !changed {
+                break;
+            }
         }
 
         for (position, term) in self.head.atoms[0].terms().enumerate() {
@@ -757,5 +788,114 @@ impl IterablePrimitives for ChaseRule {
 
     fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Primitive> + 'a> {
         unimplemented!("currently unused, needs support in the entire chase model")
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use nemo_physical::{
+        datavalues::AnyDataValue,
+        function::tree::FunctionTree,
+        tabular::{
+            filters::{FilterTransformPattern, TransformPosition},
+            operations::OperationTable,
+        },
+    };
+
+    #[cfg(not(miri))]
+    use test_log::test;
+
+    use crate::{
+        chase_model::components::{
+            atom::{primitive_atom::PrimitiveAtom, variable_atom::VariableAtom},
+            operation::ChaseOperation,
+            rule::{ChaseRule, ChaseRuleBodyPositive, ChaseRuleHead},
+            term::operation_term::{Operation, OperationTerm},
+        },
+        rule_model::components::{
+            tag::Tag,
+            term::{
+                operation::operation_kind::OperationKind,
+                primitive::{Primitive, variable::Variable},
+            },
+        },
+    };
+
+    #[test]
+    fn filter_transform_pattern_with_expression_chain() {
+        let head = PrimitiveAtom::new(
+            Tag::new("head".to_string()),
+            vec![
+                Primitive::universal_variable("?x"),
+                Primitive::universal_variable("?r"),
+            ],
+        );
+
+        let body = VariableAtom::new(
+            Tag::new("body".to_string()),
+            vec![Variable::universal("?x"), Variable::universal("?y")],
+        );
+
+        let z = ChaseOperation::new(
+            Variable::universal("?z"),
+            OperationTerm::Operation(Operation::new(
+                OperationKind::NumericProduct,
+                vec![
+                    OperationTerm::Primitive(Primitive::ground(
+                        AnyDataValue::new_integer_from_u64(2),
+                    )),
+                    OperationTerm::Primitive(Primitive::universal_variable("?y")),
+                ],
+            )),
+        );
+        let r = ChaseOperation::new(
+            Variable::universal("?r"),
+            OperationTerm::Operation(Operation::new(
+                OperationKind::NumericSum,
+                vec![
+                    OperationTerm::Primitive(Primitive::universal_variable("?z")),
+                    OperationTerm::Primitive(Primitive::ground(
+                        AnyDataValue::new_integer_from_u64(7),
+                    )),
+                ],
+            )),
+        );
+
+        let rule = ChaseRule {
+            positive: ChaseRuleBodyPositive {
+                atoms: vec![body],
+                operations: vec![z, r],
+                ..Default::default()
+            },
+            head: ChaseRuleHead {
+                atoms: vec![head],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let mut table = OperationTable::default();
+        let zero = *table.push_new();
+        let one = *table.push_new();
+
+        let pattern = rule.into_filter_transform_pattern();
+        let expected = Some(FilterTransformPattern::new(
+            FunctionTree::constant(AnyDataValue::new_boolean(true)),
+            vec![
+                TransformPosition::new(0, FunctionTree::reference(zero)),
+                TransformPosition::new(
+                    1,
+                    FunctionTree::numeric_sum(vec![
+                        FunctionTree::numeric_product(vec![
+                            FunctionTree::constant(AnyDataValue::new_integer_from_u64(2)),
+                            FunctionTree::reference(one),
+                        ]),
+                        FunctionTree::constant(AnyDataValue::new_integer_from_u64(7)),
+                    ]),
+                ),
+            ],
+        ));
+
+        assert_eq!(pattern, expected)
     }
 }

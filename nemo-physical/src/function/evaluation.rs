@@ -23,7 +23,7 @@ use super::{
 pub(crate) type StackReferenceIndex = usize;
 
 /// A value pushed onto the evaluation stack of [StackProgram]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum StackValue {
     /// A constant value on the stack
     Constant(AnyDataValue),
@@ -36,7 +36,7 @@ pub(crate) enum StackValue {
 }
 
 /// Operation performed in a [StackProgram]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum StackOperation {
     /// Push the given value onto the stack.
     Push(StackValue),
@@ -51,7 +51,7 @@ pub(crate) enum StackOperation {
 }
 
 /// Representation of a [FunctionTree] as a stack program
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StackProgram {
     /// Maximmum size of the stack
     size: usize,

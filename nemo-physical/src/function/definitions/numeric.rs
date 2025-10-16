@@ -307,7 +307,7 @@ impl NumericList {
 ///
 /// Returns `None` if the input parameters are not numeric
 /// or if the result cannot be represented within the range of the result's value type.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct NumericAddition;
 impl BinaryFunction for NumericAddition {
     fn evaluate(
@@ -337,7 +337,7 @@ impl BinaryFunction for NumericAddition {
 ///
 /// Returns `None` if the input parameters are not numeric
 /// or if the result cannot be represented within the range of the result's value type.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct NumericSubtraction;
 impl BinaryFunction for NumericSubtraction {
     fn evaluate(
@@ -367,7 +367,7 @@ impl BinaryFunction for NumericSubtraction {
 ///
 /// Returns `None` if the input parameters are not numeric
 /// or if the result cannot be represented within the range of the result's value type.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct NumericMultiplication;
 impl BinaryFunction for NumericMultiplication {
     fn evaluate(
@@ -399,7 +399,7 @@ impl BinaryFunction for NumericMultiplication {
 ///
 /// Returns `None` if the input parameters are not numeric
 /// or if the result cannot be represented within the range of the result's value type.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct NumericDivision;
 impl BinaryFunction for NumericDivision {
     fn evaluate(
@@ -429,7 +429,7 @@ impl BinaryFunction for NumericDivision {
 /// returns the integer resulting from perfoming an "and" on their bit representation.
 ///
 /// Returns `None` if the input parameters are not integers or no input parameters are given.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct BitAnd;
 impl NaryFunction for BitAnd {
     fn evaluate(&self, parameters: &[AnyDataValue]) -> Option<AnyDataValue> {
@@ -455,7 +455,7 @@ impl NaryFunction for BitAnd {
 ///
 /// Returns the zero from the integer value space if no parameters are given.
 /// Returns `None` if the input parameters are not integers or no input parameters are given.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct BitOr;
 impl NaryFunction for BitOr {
     fn evaluate(&self, parameters: &[AnyDataValue]) -> Option<AnyDataValue> {
@@ -481,7 +481,7 @@ impl NaryFunction for BitOr {
 ///
 /// Returns zero from the integer value space if no parameters are given.
 /// Returns `None` if the input parameters are not integers or no input parameters are given.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct BitXor;
 impl NaryFunction for BitXor {
     fn evaluate(&self, parameters: &[AnyDataValue]) -> Option<AnyDataValue> {
@@ -503,7 +503,7 @@ impl NaryFunction for BitXor {
 /// Bitwise Left shift
 ///
 /// Returns `None` if the input parameter pair are not integers or no input parameters are given.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct BitShiftLeft;
 impl BinaryFunction for BitShiftLeft {
     fn evaluate(
@@ -525,7 +525,7 @@ impl BinaryFunction for BitShiftLeft {
 /// Bitwise arithmetic right shift
 ///
 /// Returns `None` if the input parameter pair are not integers or no input parameters are given.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct BitShiftRight;
 impl BinaryFunction for BitShiftRight {
     fn evaluate(
@@ -547,7 +547,7 @@ impl BinaryFunction for BitShiftRight {
 /// Bitwise logical (unsigned) right shift
 ///
 /// Returns `None` if the input parameter pair are not integers or no input parameters are given.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct BitShiftRightUnsigned;
 impl BinaryFunction for BitShiftRightUnsigned {
     fn evaluate(
@@ -573,7 +573,7 @@ impl BinaryFunction for BitShiftRightUnsigned {
 ///
 /// Returns `None` if the input parameters are not numeric
 /// or if the result cannot be represented within the range of the result's value type.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct NumericLogarithm;
 impl BinaryFunction for NumericLogarithm {
     fn evaluate(
@@ -603,7 +603,7 @@ impl BinaryFunction for NumericLogarithm {
 ///
 /// Returns `None` if the input parameters are not numeric
 /// or if the result cannot be represented within the range of the result's value type.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct NumericPower;
 impl BinaryFunction for NumericPower {
     fn evaluate(
@@ -636,7 +636,7 @@ impl BinaryFunction for NumericPower {
 ///
 /// Returns `None` if the input parameters are not numeric
 /// or if the result cannot be represented within the range of the result's value type.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct NumericRemainder;
 impl BinaryFunction for NumericRemainder {
     fn evaluate(
@@ -665,7 +665,7 @@ impl BinaryFunction for NumericRemainder {
 /// Returns the absolute value of the given parameter.
 ///
 /// Returns `None` if the input parameter is not a numeric value space.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct NumericAbsolute;
 impl UnaryFunction for NumericAbsolute {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
@@ -690,7 +690,7 @@ impl UnaryFunction for NumericAbsolute {
 /// Returns the multiplicative inverse of the input paramter.
 ///
 /// Returns `None` if the input parameter is not a numeric value space.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct NumericNegation;
 impl UnaryFunction for NumericNegation {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
@@ -716,7 +716,7 @@ impl UnaryFunction for NumericNegation {
 ///
 /// Returns `None` if the input parameter is not a numeric value space
 /// or is negative.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct NumericSquareroot;
 impl UnaryFunction for NumericSquareroot {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
@@ -741,7 +741,7 @@ impl UnaryFunction for NumericSquareroot {
 /// Returns the sine of the input parameter.
 ///
 /// Returns `None` if the input paramter is not in a floating point value space.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct NumericSine;
 impl UnaryFunction for NumericSine {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
@@ -766,7 +766,7 @@ impl UnaryFunction for NumericSine {
 /// Returns the cosine of the input parameter.
 ///
 /// Returns `None` if the input paramter is not in a floating point value space.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct NumericCosine;
 impl UnaryFunction for NumericCosine {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
@@ -791,7 +791,7 @@ impl UnaryFunction for NumericCosine {
 /// Returns the tangent of the input parameter.
 ///
 /// Returns `None` if the input paramter is not in a floating point value space.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct NumericTangent;
 impl UnaryFunction for NumericTangent {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
@@ -817,7 +817,7 @@ impl UnaryFunction for NumericTangent {
 /// If the result is half-way between two integers, round away from 0.0.
 ///
 /// Returns `None` if the input parameter is not from a numeric value space.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct NumericRound;
 impl UnaryFunction for NumericRound {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
@@ -842,7 +842,7 @@ impl UnaryFunction for NumericRound {
 /// Returns the smallest integer less than or equal than input parameter
 ///
 /// Returns `None` if the input parameter is not from a numeric value space.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct NumericCeil;
 impl UnaryFunction for NumericCeil {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
@@ -868,7 +868,7 @@ impl UnaryFunction for NumericCeil {
 /// If the result is half-way between two integers, round away from 0.0.
 ///
 /// Returns `None` if the input parameter is not from a numeric value space.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct NumericFloor;
 impl UnaryFunction for NumericFloor {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
@@ -895,7 +895,7 @@ impl UnaryFunction for NumericFloor {
 /// and `false` otherwise.
 ///
 /// Returns `None` if the arguments are not from the numeric value space.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct NumericLessthan;
 impl BinaryFunction for NumericLessthan {
     fn evaluate(
@@ -931,7 +931,7 @@ impl BinaryFunction for NumericLessthan {
 /// and `false` otherwise.
 ///
 /// Returns `None` if the arguments are not from the numeric value space.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct NumericLessthaneq;
 impl BinaryFunction for NumericLessthaneq {
     fn evaluate(
@@ -967,7 +967,7 @@ impl BinaryFunction for NumericLessthaneq {
 /// and `false` otherwise.
 ///
 /// Returns `None` if the arguments are not from the numeric value space.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct NumericGreaterthan;
 impl BinaryFunction for NumericGreaterthan {
     fn evaluate(
@@ -1003,7 +1003,7 @@ impl BinaryFunction for NumericGreaterthan {
 /// and `false` otherwise.
 ///
 /// Returns `None` if the arguments are not from the numeric value space.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct NumericGreaterthaneq;
 impl BinaryFunction for NumericGreaterthaneq {
     fn evaluate(
@@ -1042,7 +1042,7 @@ impl BinaryFunction for NumericGreaterthaneq {
 /// or no input parameters are given.
 /// Returns `None` if the result (or an intermediate result) cannot be represented
 /// within the range of the numeric value type.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct NumericSum;
 impl NaryFunction for NumericSum {
     fn evaluate(&self, parameters: &[AnyDataValue]) -> Option<AnyDataValue> {
@@ -1070,7 +1070,7 @@ impl NaryFunction for NumericSum {
 /// or no input parameters are given.
 /// Returns `None` if the result (or an intermediate result) cannot be represented
 /// within the range of the numeric value type.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct NumericProduct;
 impl NaryFunction for NumericProduct {
     fn evaluate(&self, parameters: &[AnyDataValue]) -> Option<AnyDataValue> {
@@ -1096,7 +1096,7 @@ impl NaryFunction for NumericProduct {
 ///
 /// Returns `None` if the input parameters are not numeric
 /// or no input parameters are given.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct NumericMinimum;
 impl NaryFunction for NumericMinimum {
     fn evaluate(&self, parameters: &[AnyDataValue]) -> Option<AnyDataValue> {
@@ -1122,7 +1122,7 @@ impl NaryFunction for NumericMinimum {
 ///
 /// Returns `None` if the input parameters are not numeric
 /// or no input parameters are given.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct NumericMaximum;
 impl NaryFunction for NumericMaximum {
     fn evaluate(&self, parameters: &[AnyDataValue]) -> Option<AnyDataValue> {
@@ -1149,7 +1149,7 @@ impl NaryFunction for NumericMaximum {
 /// Returns `None` if the input parameters are not numeric
 /// or no input parameters are given.
 /// Returns `None` if the input parameters are not of a floating point type.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct NumericLukasiewicz;
 impl NaryFunction for NumericLukasiewicz {
     fn evaluate(&self, parameters: &[AnyDataValue]) -> Option<AnyDataValue> {
