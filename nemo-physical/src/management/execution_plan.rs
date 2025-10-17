@@ -745,6 +745,7 @@ impl ExecutionPlan {
             }
             ExecutionOperation::Subtract(subnode_main, subnodes_subtract) => {
                 let markers_main = node_markers;
+
                 let (markers_subtract, subtract_reorderings): (
                     Vec<OperationTable>,
                     Vec<Permutation>,

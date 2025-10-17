@@ -437,18 +437,20 @@ impl TableManager {
         format!("{predicate} ({step}) -> {referenced_table_name} {permutation}")
     }
 
-    /// Intitializes helper structures that are needed for handling the table associated with the predicate.
+    /// Initializes helper structures that are needed for handling the table associated with the predicate.
     /// Must be done before calling functions that add tables to that predicate.
     pub(crate) fn register_predicate(&mut self, predicate: Tag, arity: usize) {
         let predicate_info = PredicateInfo { arity };
 
-        if self
-            .predicate_to_info
-            .insert(predicate.clone(), predicate_info)
-            .is_some()
+        if let Some(previous_info) = self.predicate_to_info.get(&predicate)
+            && previous_info.arity != arity
         {
-            panic!("predicates must uniquely identify one relation");
+            panic!("cannot register the same predicate with different arities");
         }
+
+        self.predicate_to_info
+            .insert(predicate.clone(), predicate_info);
+
         self.predicate_subtables
             .insert(predicate, SubtableHandler::default());
     }
