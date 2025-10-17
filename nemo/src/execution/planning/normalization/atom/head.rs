@@ -149,10 +149,10 @@ impl HeadAtom {
         let mut aggregation: Option<Aggregation> = None;
         if let Some((aggregate, mut group_by, aggregate_index)) = aggregate {
             for (term_index, term) in head_terms.iter().enumerate() {
-                if let Primitive::Variable(variable) = term {
-                    if term_index != aggregate_index {
-                        group_by.insert(variable.clone());
-                    }
+                if let Primitive::Variable(variable) = term
+                    && term_index != aggregate_index
+                {
+                    group_by.insert(variable.clone());
                 }
             }
 

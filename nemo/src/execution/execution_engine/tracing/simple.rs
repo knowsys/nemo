@@ -122,15 +122,6 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             let trace_strategy = StrategyTracing::new(&rule, grounding);
             let trace_output_variables = trace_strategy.output_variables();
 
-            // let mut execution_plan = SubtableExecutionPlan::default();
-
-            // trace_strategy.add_plan(
-            //     &self.table_manager,
-            //     &mut execution_plan,
-            //     &mut variable_order,
-            //     step,
-            // );
-
             if let Some(query_result) = trace_strategy.execute(&mut self.table_manager, step).await
             {
                 let variable_assignment: HashMap<Variable, AnyDataValue> = trace_output_variables

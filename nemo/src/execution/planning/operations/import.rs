@@ -119,7 +119,7 @@ impl GeneratorImport {
         let order = order.restrict_to(&variables);
 
         Self {
-            order: order,
+            order,
             input_variables,
             bindings,
             atoms: atom_map,

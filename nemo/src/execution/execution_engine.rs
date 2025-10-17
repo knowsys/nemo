@@ -266,7 +266,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             .program
             .rules()
             .iter()
-            .map(|rule| StrategyForward::new(rule))
+            .map(StrategyForward::new)
             .collect::<Vec<_>>();
 
         for (predicate, arity) in execution_strategy

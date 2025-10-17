@@ -71,7 +71,7 @@ impl StrategyForward {
 
         let head = StrategyHead::new(
             rule,
-            &order,
+            order,
             frontier,
             aggregation_index,
             rule_id,

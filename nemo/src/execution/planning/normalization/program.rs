@@ -144,10 +144,10 @@ impl NormalizedProgram {
     /// # Panics
     /// Panics if the arity contradicts the previous arity.
     fn add_predicate_arity(&mut self, predicate: Tag, arity: usize) {
-        if let Some(previous_arity) = self.predicate_arities.insert(predicate.clone(), arity) {
-            if previous_arity != arity {
-                panic!("predicate {predicate} appears with multiple arities");
-            }
+        if let Some(previous_arity) = self.predicate_arities.insert(predicate.clone(), arity)
+            && previous_arity != arity
+        {
+            panic!("predicate {predicate} appears with multiple arities");
         }
     }
 
