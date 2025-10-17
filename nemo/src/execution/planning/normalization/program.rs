@@ -1,6 +1,6 @@
 //! This module defines [NormalizedProgram].
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use nemo_physical::datavalues::AnyDataValue;
 
@@ -42,7 +42,7 @@ pub struct NormalizedProgram {
     /// Map from a predicate to all the rules where that predicate appears in its head
     predicate_to_rule_head: HashMap<Tag, HashSet<usize>>,
     /// Set of datavalues used in this program
-    datavalues: HashSet<AnyDataValue>,
+    datavalues: BTreeSet<AnyDataValue>,
 }
 
 impl NormalizedProgram {
@@ -127,8 +127,8 @@ impl NormalizedProgram {
     }
 
     /// Return the set of [AnyDataValue]s that appear in this program.
-    pub fn datavalues(&self) -> &HashSet<AnyDataValue> {
-        &self.datavalues
+    pub fn datavalues(&self) -> impl Iterator<Item = &AnyDataValue> {
+        self.datavalues.iter()
     }
 
     /// Return an iterator over all predicates occuring in this program
