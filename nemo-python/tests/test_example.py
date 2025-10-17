@@ -41,8 +41,8 @@ class TestExample(unittest.TestCase):
         self.engine.reason()
 
         self.expected_api_result = [
-            ["<world>", "_:0"],
-            ["<circle>", "_:1"],
+            ["<circle>", "_:0"],
+            ["<world>", "_:1"],
             [
                 NemoLiteral("hello world", lang="en"),
                 "_:2",
@@ -53,8 +53,8 @@ class TestExample(unittest.TestCase):
         ]
 
         self.expected_serialized_result = [
-            ["world", "_:0"],
-            ["circle", "_:1"],
+            ["circle", "_:0"],
+            ["world", "_:1"],
             [
                 '"hello world"@en',
                 "_:2",
