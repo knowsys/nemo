@@ -464,7 +464,7 @@ impl NormalizedRule {
     pub(crate) fn into_filter_transform_pattern(mut self) -> Option<FilterTransformPattern> {
         let positive_variables = self.positive[0].terms().cloned().collect::<Vec<_>>();
         let mut translation = VariableTranslation::new();
-        for variable in self.variables() {
+        for variable in positive_variables.iter().chain(self.variables()) {
             translation.add_marker(variable.clone());
         }
 
@@ -625,8 +625,7 @@ mod test {
 
         let mut table = OperationTable::default();
         let zero = *table.push_new();
-        let _one = *table.push_new();
-        let two = *table.push_new();
+        let one = *table.push_new();
 
         let pattern = rule.into_filter_transform_pattern();
         let expected = Some(FilterTransformPattern::new(
@@ -638,7 +637,7 @@ mod test {
                     FunctionTree::numeric_sum(vec![
                         FunctionTree::numeric_product(vec![
                             FunctionTree::constant(AnyDataValue::new_integer_from_u64(2)),
-                            FunctionTree::reference(two),
+                            FunctionTree::reference(one),
                         ]),
                         FunctionTree::constant(AnyDataValue::new_integer_from_u64(7)),
                     ]),
