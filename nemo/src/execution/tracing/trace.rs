@@ -13,10 +13,12 @@ use petgraph_graphml::GraphMl;
 use serde::Serialize;
 
 use crate::{
-    chase_model::components::atom::{ChaseAtom, ground_atom::GroundAtom},
-    execution::tracing::node_query::{
-        TableEntriesForTreeNodesQuery, TableEntriesForTreeNodesQueryInner,
-        TableEntriesForTreeNodesQuerySuccessor,
+    execution::{
+        planning::normalization::atom::ground::GroundAtom,
+        tracing::node_query::{
+            TableEntriesForTreeNodesQuery, TableEntriesForTreeNodesQueryInner,
+            TableEntriesForTreeNodesQuerySuccessor,
+        },
     },
     rule_model::{
         components::{fact::Fact, rule::Rule},
@@ -667,8 +669,10 @@ mod test {
     use nemo_physical::datavalues::AnyDataValue;
 
     use crate::{
-        chase_model::components::atom::ground_atom::GroundAtom,
-        execution::tracing::trace::{TraceDerivation, TraceStatus},
+        execution::{
+            planning::normalization::atom::ground::GroundAtom,
+            tracing::trace::{TraceDerivation, TraceStatus},
+        },
         rule_model::{
             components::{
                 atom::Atom,

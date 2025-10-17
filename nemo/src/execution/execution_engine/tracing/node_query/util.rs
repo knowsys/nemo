@@ -1,7 +1,10 @@
 //! This module contains various helper functions
 //! for evaluating tree node queries.
 
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    ops::Range,
+};
 
 use itertools::Itertools;
 use nemo_physical::{
@@ -10,37 +13,36 @@ use nemo_physical::{
             DatabaseInstance,
             id::{ExecutionId, PermanentTableId},
         },
-        execution_plan::ExecutionPlan,
+        execution_plan::{ExecutionNodeRef, ExecutionPlan},
     },
-    tabular::operations::OperationTable,
+    tabular::operations::{Filters, FunctionAssignment, OperationTable},
 };
 
 use crate::{
-    chase_model::{
-        ChaseAtom, analysis::variable_order::VariableOrder, components::rule::ChaseRule,
-    },
     execution::{
         execution_engine::tracing::node_query::TraceNodeManager,
-        planning::operations::{
-            filter::node_filter, functions::node_functions, negation::node_negation,
+        planning::{
+            VariableTranslation,
+            analysis::variable_order::VariableOrder,
+            normalization::{atom::body::BodyAtom, operation::Operation, rule::NormalizedRule},
+            operations::function_filter_negation::GeneratorFunctionFilterNegation,
         },
-        rule_execution::VariableTranslation,
         tracing::node_query::TreeAddress,
     },
     rule_model::components::{
-        IterableVariables,
+        tag::Tag,
         term::primitive::{Primitive, variable::Variable},
     },
     table_manager::TableManager,
 };
 
-/// For a given [ChaseRule],
+/// For a given [NormalizedRule],
 /// compute useful objects which are required to construct execution plans.
 ///
 /// Returns a [VariableTranslation], a [VariableOrder],
 /// and a list of [Variable]s used in the head.
 pub(super) fn variable_translation(
-    rule: &ChaseRule,
+    rule: &NormalizedRule,
     head_index: usize,
     order: &VariableOrder,
 ) -> (VariableTranslation, VariableOrder, Vec<Variable>) {
@@ -63,9 +65,9 @@ pub(super) fn variable_translation(
                             .map(|aggregate| aggregate.output_variable()))
                 {
                     if !rule
-                        .positive_body()
+                        .positive_all()
                         .iter()
-                        .flat_map(|atom| atom.variables())
+                        .flat_map(|atom| atom.terms())
                         .contains(variable)
                     {
                         order.push(variable.clone());
@@ -100,7 +102,7 @@ pub(super) fn valid_tables_plan(
     manager: &TraceNodeManager,
     table_manager: &TableManager,
     address: &TreeAddress,
-    rule: &ChaseRule,
+    rule: &NormalizedRule,
     head_index: usize,
     discarded_columns: &[usize],
     order: &VariableOrder,
@@ -113,7 +115,7 @@ pub(super) fn valid_tables_plan(
     let (variable_translation, mut order, head_variables) =
         variable_translation(rule, head_index, order);
 
-    let is_aggregate = Some(head_index) == rule.aggregate_head_index();
+    let is_aggregate = Some(head_index) == rule.aggregate_index();
 
     let aggregate_set = if is_aggregate {
         let aggregate = rule.aggregate().expect("is aggregate");
@@ -144,7 +146,7 @@ pub(super) fn valid_tables_plan(
     let disjoint = head_set.is_disjoint(&body_set);
 
     if disjoint {
-        order = order._restrict_to(&body_set);
+        order = order.restrict_to(&body_set);
     }
 
     let order_set = order.iter().cloned().collect::<HashSet<_>>();
@@ -172,7 +174,7 @@ pub(super) fn valid_tables_plan(
         node_join.add_subnode(node_query);
     }
 
-    for (body_index, body_atom) in rule.positive_body().iter().enumerate() {
+    for (body_index, body_atom) in rule.positive_all().iter().enumerate() {
         let mut body_address = address.clone();
         body_address.push(body_index);
 
@@ -186,18 +188,29 @@ pub(super) fn valid_tables_plan(
         node_join.add_subnode(node_union);
     }
 
+    let input_variables = Vec::default();
+
+    let mut operations = rule.operations().clone();
+    let mut atoms_negations = rule.negative().clone();
+
+    let generator = GeneratorFunctionFilterNegation::new(
+        input_variables,
+        &mut operations,
+        &mut atoms_negations,
+    );
+
     let node_body_functions = node_functions(
         &mut plan,
         &variable_translation,
         node_join,
-        rule.positive_operations(),
+        generator.functions(),
     );
 
     let node_body_filter = node_filter(
         &mut plan,
         &variable_translation,
         node_body_functions,
-        rule.positive_filters(),
+        generator.filters(),
     );
 
     let node_negation = node_negation(
@@ -206,8 +219,7 @@ pub(super) fn valid_tables_plan(
         &variable_translation,
         node_body_filter,
         step,
-        rule.negative_body(),
-        rule.negative_filters(),
+        generator.negations(),
     );
 
     let node_negation = if single_exist {
@@ -231,9 +243,9 @@ pub(super) fn valid_tables_plan(
     (plan, id_valid, id_assignment)
 }
 
-/// Return the set of variables in a [ChaseRule]
+/// Return the set of variables in a [NormalizedRule]
 /// that are only used once, i.e. are unrestricted and unused.
-pub(super) fn unique_variables(rule: &ChaseRule) -> HashSet<Variable> {
+pub(super) fn unique_variables(rule: &NormalizedRule) -> HashSet<Variable> {
     let mut result = HashMap::<Variable, usize>::new();
 
     for variable in rule.variables() {
@@ -348,4 +360,102 @@ pub(super) async fn ignore_discarded_columns_base(
         .iter()
         .next()
         .map(|(_, &result_id)| result_id)
+}
+
+/// Calculate helper structures that define the filters that need to be applied.
+pub(crate) fn node_filter<'a, FilterIter>(
+    plan: &mut ExecutionPlan,
+    translation: &VariableTranslation,
+    subnode: ExecutionNodeRef,
+    filters: FilterIter,
+) -> ExecutionNodeRef
+where
+    FilterIter: Iterator<Item = &'a Operation>,
+{
+    let trees = filters
+        .map(|operation| operation.function_tree(translation))
+        .collect::<Filters>();
+
+    plan.filter(subnode, trees)
+}
+
+/// Calculate helper structures that define the filters that need to be applied.
+pub(crate) fn node_functions<'a, OperationIter>(
+    plan: &mut ExecutionPlan,
+    translation: &VariableTranslation,
+    subnode: ExecutionNodeRef,
+    operations: OperationIter,
+) -> ExecutionNodeRef
+where
+    OperationIter: Iterator<Item = &'a (Variable, Operation)>,
+{
+    let mut output_markers = subnode.markers_cloned();
+    let mut assignments = FunctionAssignment::new();
+
+    for (variable, operation) in operations {
+        let marker = *translation.get(variable).expect("All variables are known");
+        let function_tree = operation.function_tree(translation);
+
+        assignments.insert(marker, function_tree);
+        output_markers.push(marker);
+    }
+
+    plan.function(output_markers, subnode, assignments)
+}
+
+/// Compute the appropriate execution plan to evaluate negated atoms.
+pub(crate) fn node_negation<NegationIter>(
+    plan: &mut ExecutionPlan,
+    table_manager: &TableManager,
+    translation: &VariableTranslation,
+    node_main: ExecutionNodeRef,
+    current_step_number: usize,
+    negation: NegationIter,
+) -> ExecutionNodeRef
+where
+    NegationIter: Iterator<Item = (BodyAtom, Vec<Operation>)>,
+{
+    let subtracted = negation
+        .map(|(atom, constraints)| {
+            let subtract_markers = translation.operation_table(atom.terms());
+
+            let node = subplan_union(
+                plan,
+                table_manager,
+                &atom.predicate(),
+                0..current_step_number,
+                subtract_markers.clone(),
+            );
+
+            let node_filtered = node_filter(plan, translation, node, constraints.iter());
+
+            // The tables may contain columns that are not part of `node_main`.
+            // These need to be projected away.
+            let markers_project_target = node_main.markers_cloned().restrict(&subtract_markers);
+            plan.projectreorder(markers_project_target, node_filtered)
+        })
+        .collect();
+
+    plan.subtract(node_main, subtracted)
+}
+
+/// Given a predicate and a range of execution steps,
+/// adds to the given [ExecutionPlan]
+/// a node representing the union of subtables within that range.
+///
+/// Note that only the output of the union will receive column markers.
+pub(crate) fn subplan_union(
+    plan: &mut ExecutionPlan,
+    table_manager: &TableManager,
+    predicate: &Tag,
+    steps: Range<usize>,
+    output_markers: OperationTable,
+) -> ExecutionNodeRef {
+    let subtables = table_manager
+        .tables_in_range(predicate, &steps)
+        .into_iter()
+        .map(|id| plan.fetch_table(OperationTable::default(), id))
+        .collect();
+
+    plan.union(output_markers, subtables)
 }

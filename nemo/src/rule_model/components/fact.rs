@@ -7,7 +7,7 @@ use std::{
 };
 
 use crate::{
-    chase_model::components::atom::{ChaseAtom, ground_atom::GroundAtom},
+    execution::planning::normalization::atom::ground::GroundAtom,
     rule_model::{
         error::{ValidationReport, hint::Hint, validation_error::ValidationError},
         origin::Origin,
@@ -280,7 +280,7 @@ impl IterablePrimitives for Fact {
 
 impl From<GroundAtom> for Fact {
     fn from(value: GroundAtom) -> Self {
-        let origin = Origin::Created; // TODO
+        let origin = Origin::Created;
         let predicate = value.predicate();
         let terms = value.terms().cloned().map(Term::from).collect();
 

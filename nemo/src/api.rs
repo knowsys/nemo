@@ -125,8 +125,7 @@ pub fn output_predicates(engine: &Engine) -> Vec<Tag> {
         .exports()
         .iter()
         .map(|export| export.predicate())
-        .cloned()
-        .collect()
+        .collect::<Vec<_>>()
 }
 
 // TODO: Disabled write API. This API is designed in a way that does not fit how Nemo controls exporting.

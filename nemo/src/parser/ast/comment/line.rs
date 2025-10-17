@@ -93,7 +93,6 @@ mod test {
         for (input, expected) in test {
             let parser_input = ParserInput::new(input, ParserState::default());
             let result = all_consuming(LineComment::parse)(parser_input);
-            dbg!(&result);
 
             assert!(result.is_ok());
 
