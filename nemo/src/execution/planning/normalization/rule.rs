@@ -1,8 +1,18 @@
 //! This module defines [NormalizedRule].
 
-use std::{collections::HashSet, fmt::Display};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::Display,
+};
 
-use nemo_physical::{datavalues::AnyDataValue, tabular::filters::FilterTransformPattern};
+use nemo_physical::{
+    datavalues::AnyDataValue,
+    function::tree::{FunctionLeaf, FunctionTree},
+    tabular::{
+        filters::{FilterTransformPattern, TransformPosition},
+        operations::OperationColumnMarker,
+    },
+};
 
 use crate::{
     execution::planning::{
@@ -464,76 +474,180 @@ impl NormalizedRule {
         let generator_filters =
             GeneratorFilter::new(generator_functions.output_variables(), &mut self.operations);
 
-        // let functions = generator_functions.functions().map(|(variable, operation)|).collect::<Vec<_>>();
         let filters = generator_filters
             .filters()
             .map(|filter| filter.function_tree(&translation))
             .collect::<Vec<_>>();
 
-        // let mut filters = Vec::new();
-        // let mut transform_positions = Vec::new();
+        let mut variable_operations = generator_functions
+            .functions()
+            .map(|(variable, function)| (variable.clone(), function.function_tree(&translation)))
+            .collect::<HashMap<_, _>>();
 
-        // let mut variable_positions = HashMap::new();
-        // let mut variable_operations = HashMap::new();
+        let mut variable_positions = HashMap::new();
+        for (position, variable) in self.positive[0].terms().enumerate() {
+            variable_positions.insert(variable.clone(), position);
+        }
 
-        // let mut variable_translation = VariableTranslation::new();
+        loop {
+            let mut changed = false;
+            let operations = variable_operations.clone();
 
-        // for (position, variable) in self.positive[0].terms().enumerate() {
-        //     variable_translation.add_marker(variable.clone());
-        //     variable_positions.insert(variable.clone(), position);
-        // }
+            for (variable, _operation) in generator_functions.functions() {
+                let tree = variable_operations
+                    .get_mut(variable)
+                    .expect("all variables are bound");
+                for mut term in tree.leaves() {
+                    if let ref mut subtree @ FunctionTree::Leaf(FunctionLeaf::Reference(_)) = term {
+                        let FunctionTree::Leaf(FunctionLeaf::Reference(reference)) = subtree else {
+                            unreachable!()
+                        };
+                        let variable = translation
+                            .find(reference)
+                            .expect("all variables are bound");
+                        if let Some(operation) = operations.get(variable) {
+                            // this is an auxiliary variable, inline it
+                            changed = true;
+                            *(*subtree) = operation.clone();
+                        }
+                    }
+                }
+            }
 
-        // for operation in self.operations() {
-        //     let filter = operation.function_tree(&variable_translation);
-        // }
+            if !changed {
+                break;
+            }
+        }
 
-        // for filter in self.positive.filters {
-        //     let tree = operation_term_to_function_tree(&variable_translation, filter.filter());
-        //     filters.push(tree);
-        // }
+        let mut transform_positions = Vec::new();
 
-        // for operation in self.positive.operations {
-        //     let variable = operation.variable();
-        //     variable_translation.add_marker(variable.clone());
-        //     let tree =
-        //         operation_term_to_function_tree(&variable_translation, operation.operation());
-        //     variable_operations.insert(variable.clone(), tree);
-        // }
+        for (position, term) in self.head[0].terms().enumerate() {
+            match term {
+                Primitive::Ground(ground) => {
+                    transform_positions.push(TransformPosition::new(
+                        position,
+                        FunctionTree::constant(ground.value()),
+                    ));
+                }
+                Primitive::Variable(variable) => {
+                    if let Some(&reference) = variable_positions.get(variable) {
+                        transform_positions.push(TransformPosition::new(
+                            position,
+                            FunctionTree::reference(OperationColumnMarker(reference)),
+                        ));
+                    } else {
+                        let operation = variable_operations
+                            .get(variable)
+                            .expect("every variable is bound");
+                        transform_positions
+                            .push(TransformPosition::new(position, operation.clone()));
+                    }
+                }
+            }
+        }
 
-        // for (position, term) in self.head.atoms[0].terms().enumerate() {
-        //     match term {
-        //         Primitive::Ground(ground) => {
-        //             transform_positions.push(TransformPosition::new(
-        //                 position,
-        //                 FunctionTree::constant(ground.value()),
-        //             ));
-        //         }
-        //         Primitive::Variable(variable) => {
-        //             if let Some(&reference) = variable_positions.get(variable) {
-        //                 transform_positions.push(TransformPosition::new(
-        //                     position,
-        //                     FunctionTree::reference(OperationColumnMarker(reference)),
-        //                 ));
-        //             } else {
-        //                 let operation = variable_operations
-        //                     .get(variable)
-        //                     .expect("every variable is bound");
-        //                 transform_positions
-        //                     .push(TransformPosition::new(position, operation.clone()));
-        //             }
-        //         }
-        //     }
-        // }
+        if filters.is_empty() && transform_positions.is_empty() {
+            None
+        } else {
+            Some(FilterTransformPattern::new(
+                FunctionTree::boolean_conjunction(filters),
+                transform_positions,
+            ))
+        }
+    }
+}
 
-        // if filters.is_empty() && transform_positions.is_empty() {
-        //     None
-        // } else {
-        //     Some(FilterTransformPattern::new(
-        //         FunctionTree::boolean_conjunction(filters),
-        //         transform_positions,
-        //     ))
-        // }
+#[cfg(test)]
+mod test {
+    use nemo_physical::{
+        datavalues::AnyDataValue,
+        function::tree::FunctionTree,
+        tabular::{
+            filters::{FilterTransformPattern, TransformPosition},
+            operations::OperationTable,
+        },
+    };
 
-        todo!()
+    #[cfg(not(miri))]
+    use test_log::test;
+
+    use crate::{
+        execution::planning::normalization::{
+            atom::{body::BodyAtom, head::HeadAtom},
+            operation::Operation,
+            rule::NormalizedRule,
+        },
+        rule_model::components::{
+            tag::Tag,
+            term::{
+                operation::operation_kind::OperationKind,
+                primitive::{Primitive, variable::Variable},
+            },
+        },
+    };
+
+    #[test]
+    fn filter_transform_pattern_with_expression_chain() {
+        let head = HeadAtom::new(
+            Tag::new("head".to_string()),
+            vec![
+                Primitive::universal_variable("?x"),
+                Primitive::universal_variable("?r"),
+            ],
+        );
+
+        let body = BodyAtom::new(
+            Tag::new("body".to_string()),
+            vec![Variable::universal("?x"), Variable::universal("?y")],
+        );
+
+        let z = Operation::new_assignment(
+            Variable::universal("?z"),
+            Operation::Opreation {
+                kind: OperationKind::NumericProduct,
+                subterms: vec![
+                    Operation::Primitive(Primitive::ground(AnyDataValue::new_integer_from_u64(2))),
+                    Operation::Primitive(Primitive::universal_variable("?y")),
+                ],
+            },
+        );
+
+        let r = Operation::new_assignment(
+            Variable::universal("?r"),
+            Operation::Opreation {
+                kind: OperationKind::NumericSum,
+                subterms: vec![
+                    Operation::Primitive(Primitive::universal_variable("?z")),
+                    Operation::Primitive(Primitive::ground(AnyDataValue::new_integer_from_u64(7))),
+                ],
+            },
+        );
+
+        let rule = NormalizedRule::positive_rule(vec![head], vec![body], vec![z, r]);
+
+        let mut table = OperationTable::default();
+        let zero = *table.push_new();
+        let _one = *table.push_new();
+        let two = *table.push_new();
+
+        let pattern = rule.into_filter_transform_pattern();
+        let expected = Some(FilterTransformPattern::new(
+            FunctionTree::constant(AnyDataValue::new_boolean(true)),
+            vec![
+                TransformPosition::new(0, FunctionTree::reference(zero)),
+                TransformPosition::new(
+                    1,
+                    FunctionTree::numeric_sum(vec![
+                        FunctionTree::numeric_product(vec![
+                            FunctionTree::constant(AnyDataValue::new_integer_from_u64(2)),
+                            FunctionTree::reference(two),
+                        ]),
+                        FunctionTree::constant(AnyDataValue::new_integer_from_u64(7)),
+                    ]),
+                ),
+            ],
+        ));
+
+        assert_eq!(pattern, expected)
     }
 }
