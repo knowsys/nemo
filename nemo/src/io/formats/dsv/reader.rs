@@ -76,6 +76,7 @@ impl<T: BufRead> DsvReader<T> {
             .has_headers(self.ignore_headers)
             .double_quote(true)
             .quoting(self.quoting)
+            .flexible(true)
             .from_reader(self.read)
     }
 
@@ -107,6 +108,11 @@ impl<T: BufRead> DsvReader<T> {
         let mut line_count: u64 = 0;
         let mut drop_count: u64 = 0;
         for row in dsv_reader.records().flatten() {
+            if row.len() != expected_file_arity {
+                drop_count += 1;
+                continue;
+            }
+
             for (idx, value) in row.iter().enumerate() {
                 if idx >= expected_file_arity || skip[idx] {
                     continue;

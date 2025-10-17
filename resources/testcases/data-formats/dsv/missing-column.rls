@@ -1,0 +1,8 @@
+@import noHeader :- csv{ resource="sources/missing-columns.csv", ignore_headers=true } .
+@import header :- csv{ resource="sources/missing-columns.csv", ignore_headers=false } .
+
+withHeader(?x, ?y) :- header(?x, ?y) .
+withoutHeader(?x, ?y) :- noHeader(?x, ?y) .
+
+@export withHeader :- csv{} .
+@export withoutHeader :- csv{} .
