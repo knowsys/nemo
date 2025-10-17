@@ -31,9 +31,6 @@ pub struct StrategyBody {
     import: Option<GeneratorImport>,
     /// Import Filter
     import_filter: Option<GeneratorFunctionFilterNegation>,
-
-    /// Variables
-    variables: Vec<Variable>,
 }
 
 impl StrategyBody {
@@ -63,7 +60,6 @@ impl StrategyBody {
             seminaive_filter: seminaive_filter.or_none(),
             import: import.or_none(),
             import_filter: import_filter.or_none(),
-            variables: order.as_ordered_list(),
         }
     }
 
@@ -96,12 +92,22 @@ impl StrategyBody {
             current_node = generator.create_plan(plan, current_node, runtime);
         }
 
+        plan.add_temporary_table(current_node.clone(), "Body");
+
         current_node
     }
 
     /// Return the variables marking the column of the node
     /// created by `create_plan`.
     pub fn output_variables(&self) -> Vec<Variable> {
-        self.variables.clone()
+        if let Some(generator) = self.import_filter.as_ref() {
+            generator.output_variables()
+        } else if let Some(generator) = self.import.as_ref() {
+            generator.output_variables()
+        } else if let Some(generator) = self.seminaive_filter.as_ref() {
+            generator.output_variables()
+        } else {
+            self.seminaive_join.output_variables()
+        }
     }
 }

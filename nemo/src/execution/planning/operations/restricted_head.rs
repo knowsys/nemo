@@ -8,21 +8,14 @@ use crate::{
     execution::planning::{
         RuntimeInformation,
         analysis::variable_order::VariableOrder,
-        normalization::{
-            atom::{body::BodyAtom, head::HeadAtom},
-            generator::VariableGenerator,
-            operation::Operation,
-        },
+        normalization::rule::NormalizedRule,
         operations::{
             duplicates::GeneratorDuplicates, filter::GeneratorFilter,
             join_seminaive::GeneratorJoinSeminaive,
             restricted_frontier::GeneratorRestrictedFrontier,
         },
     },
-    rule_model::components::{
-        tag::Tag,
-        term::primitive::{Primitive, variable::Variable},
-    },
+    rule_model::components::{tag::Tag, term::primitive::variable::Variable},
     table_manager::SubtableExecutionPlan,
 };
 
@@ -49,18 +42,19 @@ pub struct GeneratorRestrictedHead {
 impl GeneratorRestrictedHead {
     /// Create a new [GeneratorRestrictedHead].
     pub fn new(
-        head: &[HeadAtom],
+        rule: &NormalizedRule,
         frontier: HashSet<Variable>,
         order: &VariableOrder,
         rule_id: usize,
     ) -> Self {
-        let head_variables = head
+        let head_variables = rule
+            .head()
             .iter()
             .flat_map(|atom| atom.variables().cloned())
             .collect::<HashSet<_>>();
         let mut order = order.restrict_to(&head_variables);
 
-        let (atoms, mut operations) = Self::normalize_head(head, &mut order);
+        let (atoms, mut operations) = rule.normalize_existential_head(&mut order);
 
         let join = GeneratorJoinSeminaive::new_exclusive(atoms, &order);
         let filter = GeneratorFilter::new(join.output_variables(), &mut operations);
@@ -85,58 +79,6 @@ impl GeneratorRestrictedHead {
     fn generate_predicate(rule_id: usize) -> Tag {
         let name = format!("_SATISFIED_{rule_id}");
         Tag::new(name)
-    }
-
-    /// Translate [HeadAtom]s into a list of [BodyAtom]s
-    /// and additional filter [Operation]s.
-    fn normalize_head(
-        head: &[HeadAtom],
-        order: &mut VariableOrder,
-    ) -> (Vec<BodyAtom>, Vec<Operation>) {
-        let mut generator = VariableGenerator::default();
-
-        let mut atoms = Vec::<BodyAtom>::default();
-        let mut operations = Vec::<Operation>::default();
-
-        for head_atom in head {
-            let mut used_variables = HashSet::<Variable>::default();
-            let mut variables = Vec::<Variable>::default();
-
-            for term in head_atom.terms() {
-                match term {
-                    Primitive::Variable(variable) => {
-                        if !used_variables.insert(variable.clone()) {
-                            let new_variable = generator.universal("RESTRICTED_HEAD");
-                            let new_operation = Operation::new_assignment(
-                                new_variable.clone(),
-                                Operation::new_variable(variable.clone()),
-                            );
-
-                            variables.push(new_variable.clone());
-                            order.push(new_variable);
-                            operations.push(new_operation);
-                        } else {
-                            variables.push(variable.clone());
-                        }
-                    }
-                    Primitive::Ground(ground_term) => {
-                        let new_variable = generator.universal("RESTRICTED_HEAD");
-                        let new_operation = Operation::new_assignment(
-                            new_variable.clone(),
-                            Operation::new_ground(ground_term.clone()),
-                        );
-
-                        variables.push(new_variable.clone());
-                        order.push(new_variable);
-                        operations.push(new_operation);
-                    }
-                }
-            }
-
-            atoms.push(BodyAtom::new(head_atom.predicate(), variables));
-        }
-
-        (atoms, operations)
     }
 
     /// Append this operation to the plan.

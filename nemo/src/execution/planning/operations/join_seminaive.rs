@@ -1,5 +1,7 @@
 //! This module defines [GeneratorJoinSeminaive].
 
+use std::collections::HashSet;
+
 use nemo_physical::management::execution_plan::ExecutionNodeRef;
 
 use crate::{
@@ -27,24 +29,18 @@ pub struct GeneratorJoinSeminaive {
 impl GeneratorJoinSeminaive {
     /// Create a new [GeneratorJoinSeminaive].
     pub fn new(atoms: Vec<BodyAtom>, order: &VariableOrder) -> Self {
-        let variants = Self::create_variants(atoms, order, true);
+        let (variants, order) = Self::create_variants(atoms, order, true);
 
-        Self {
-            variants,
-            order: order.clone(),
-        }
+        Self { variants, order }
     }
 
     /// Create a new [GeneratorJoinSeminaive]
     /// where tables created in the during the last rule application step
     /// are considered as `old` tables.
     pub fn new_exclusive(atoms: Vec<BodyAtom>, order: &VariableOrder) -> Self {
-        let variants = Self::create_variants(atoms, order, false);
+        let (variants, order) = Self::create_variants(atoms, order, false);
 
-        Self {
-            variants,
-            order: order.clone(),
-        }
+        Self { variants, order }
     }
 
     /// Create a generator for each seminaive variant.
@@ -52,7 +48,13 @@ impl GeneratorJoinSeminaive {
         atoms: Vec<BodyAtom>,
         order: &VariableOrder,
         last_is_new: bool,
-    ) -> Vec<GeneratorJoin> {
+    ) -> (Vec<GeneratorJoin>, VariableOrder) {
+        let variables = atoms
+            .iter()
+            .flat_map(|atom| atom.terms().cloned())
+            .collect::<HashSet<_>>();
+        let order = order.restrict_to(&variables);
+
         let mut result = Vec::<GeneratorJoin>::default();
 
         for mid in 0..atoms.len() {
@@ -70,11 +72,11 @@ impl GeneratorJoinSeminaive {
                 ranges.push(range);
             }
 
-            let node_join = GeneratorJoin::new(atoms.clone(), ranges, order);
+            let node_join = GeneratorJoin::new(atoms.clone(), ranges, &order);
             result.push(node_join);
         }
 
-        result
+        (result, order)
     }
 
     /// Return a [UnionRange] taking into account

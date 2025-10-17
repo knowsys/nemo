@@ -36,7 +36,15 @@ impl GeneratorFunction {
 
         loop {
             for (index, function) in operations.iter().enumerate() {
+                if !keep[index] {
+                    continue;
+                }
+
                 if let Some((variable, operation)) = function.variable_assignment() {
+                    if variables.contains(variable) {
+                        continue;
+                    }
+
                     if operation
                         .variables()
                         .all(|variable| variables.contains(variable))

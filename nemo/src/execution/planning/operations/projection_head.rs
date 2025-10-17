@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 
 use nemo_physical::{
     datavalues::AnyDataValue, function::tree::FunctionTree,
-    management::execution_plan::ExecutionNodeRef, tabular::operations::OperationTable,
+    management::execution_plan::ExecutionNodeRef,
 };
 
 use crate::{
@@ -109,35 +109,30 @@ impl GeneratorProjectionHead {
         let markers_projection = runtime
             .translation
             .operation_table(self.atom.projection_variables());
+
         let node_projection = plan
             .plan_mut()
             .projectreorder(markers_projection.clone(), input_node);
 
-        let mut markers_append = OperationTable::default();
+        let mut markers_append = markers_projection;
         let mut functions = HashMap::default();
 
-        for term in &self.atom.terms {
+        for (term_index, term) in self.atom.terms.iter().enumerate() {
             match term {
-                HeadInstruction::Variable(variable) => {
-                    let marker = *runtime
-                        .translation
-                        .get(variable)
-                        .expect("all variables are known");
-                    markers_append.push(marker);
-                }
+                HeadInstruction::Variable(_) => {}
                 HeadInstruction::Repeat(variable) => {
                     let marker_variable = runtime
                         .translation
                         .get(variable)
                         .expect("all variables are known");
 
-                    let marker = *markers_append.push_new();
+                    let marker = *markers_append.push_new_at(term_index);
                     let tree = FunctionTree::reference(*marker_variable);
 
                     functions.insert(marker, tree);
                 }
                 HeadInstruction::Constant(constant) => {
-                    let marker = *markers_append.push_new();
+                    let marker = *markers_append.push_new_at(term_index);
                     let tree = FunctionTree::constant(constant.clone());
 
                     functions.insert(marker, tree);

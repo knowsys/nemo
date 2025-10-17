@@ -8,7 +8,7 @@ use crate::{
     execution::planning::{
         RuntimeInformation,
         analysis::variable_order::VariableOrder,
-        normalization::atom::head::HeadAtom,
+        normalization::rule::NormalizedRule,
         operations::{
             restricted_frontier::GeneratorRestrictedFrontier,
             restricted_head::GeneratorRestrictedHead,
@@ -39,12 +39,12 @@ pub struct StrategyRestricted {
 impl StrategyRestricted {
     /// Create a new [StrategyRestricted].
     pub fn new(
-        head: &[HeadAtom],
+        rule: &NormalizedRule,
         frontier: HashSet<Variable>,
         order: &VariableOrder,
         rule_id: usize,
     ) -> Self {
-        let new_satisfied = GeneratorRestrictedHead::new(head, frontier.clone(), order, rule_id);
+        let new_satisfied = GeneratorRestrictedHead::new(rule, frontier.clone(), order, rule_id);
         let all_satisfied = GeneratorUnion::new(
             new_satisfied.predicate().0,
             new_satisfied.output_variables(),
@@ -54,7 +54,7 @@ impl StrategyRestricted {
         let frontier =
             GeneratorRestrictedFrontier::new(order.restrict_to(&frontier).as_ordered_list());
 
-        let nulls = GeneratorRestrictedNull::new(head);
+        let nulls = GeneratorRestrictedNull::new(rule.head());
 
         Self {
             new_satisfied,

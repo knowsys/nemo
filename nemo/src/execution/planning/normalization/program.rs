@@ -267,7 +267,8 @@ impl NormalizedProgram {
                     .expect("function constructs at least one order")
             });
 
-        for (rule, order) in result.rules.iter_mut().zip(orders) {
+        for (rule, mut order) in result.rules.iter_mut().zip(orders) {
+            order.extend(rule.variables());
             rule.set_variable_order(order);
         }
 

@@ -1,5 +1,6 @@
-//! This module defines [v].
+//! This module defines [GeneratorNegation].
 
+use itertools::Itertools;
 use nemo_physical::management::execution_plan::ExecutionNodeRef;
 
 use crate::{
@@ -22,7 +23,8 @@ pub struct GeneratorNegation {
     _variables: Vec<Variable>,
 
     /// Negated atoms together with additional filters
-    atoms: Vec<(BodyAtom, GeneratorFilter)>,
+    /// and the variables to project to
+    atoms: Vec<(BodyAtom, GeneratorFilter, Vec<Variable>)>,
 }
 
 impl GeneratorNegation {
@@ -35,24 +37,30 @@ impl GeneratorNegation {
         atoms: &mut Vec<BodyAtom>,
         operations: &mut Vec<Operation>,
     ) -> Self {
-        let mut negated_atoms = Vec::<(BodyAtom, GeneratorFilter)>::default();
-        let mut keep = vec![true; atoms.len()];
+        let mut negated_atoms = Vec::<(BodyAtom, GeneratorFilter, Vec<Variable>)>::default();
+        let mut keep = vec![false; atoms.len()];
 
         for (atom, keep_atom) in atoms.iter().zip(keep.iter_mut()) {
-            let mut variables = positive_variables.to_vec();
-
-            if variables
-                .iter()
+            if atom
+                .terms()
                 .all(|variable| !positive_variables.contains(variable))
             {
-                *keep_atom = false;
+                *keep_atom = true;
                 continue;
             }
 
-            variables.extend(atom.terms().cloned());
+            let mut filter_variables = positive_variables.to_vec();
+            filter_variables.extend(atom.terms().cloned());
 
-            let filter = GeneratorFilter::new(variables, operations);
-            negated_atoms.push((atom.clone(), filter));
+            let filter = GeneratorFilter::new(filter_variables, operations);
+
+            let projection_variables = positive_variables
+                .iter()
+                .cloned()
+                .filter(|variable| atom.terms().contains(variable))
+                .collect::<Vec<_>>();
+
+            negated_atoms.push((atom.clone(), filter, projection_variables));
         }
 
         let mut keep_iter = keep.iter();
@@ -73,12 +81,19 @@ impl GeneratorNegation {
     ) -> ExecutionNodeRef {
         let mut nodes_subtracted = Vec::<ExecutionNodeRef>::default();
 
-        for (atom, filter) in &self.atoms {
+        for (atom, filter, projection_variables) in &self.atoms {
             let node_union =
                 GeneratorUnion::new_atom(atom, UnionRange::All).create_plan(plan, runtime);
             let node_filter = filter.create_plan(plan, node_union, runtime);
 
-            nodes_subtracted.push(node_filter);
+            let markers_projection = runtime
+                .translation
+                .operation_table(projection_variables.iter());
+            let node_project = plan
+                .plan_mut()
+                .projectreorder(markers_projection, node_filter);
+
+            nodes_subtracted.push(node_project);
         }
 
         plan.plan_mut().subtract(input_node, nodes_subtracted)
@@ -104,6 +119,6 @@ impl GeneratorNegation {
     pub fn atoms(&self) -> impl Iterator<Item = (BodyAtom, Vec<Operation>)> {
         self.atoms
             .iter()
-            .map(|(atom, filter)| (atom.clone(), filter.filters().cloned().collect()))
+            .map(|(atom, filter, _)| (atom.clone(), filter.filters().cloned().collect()))
     }
 }

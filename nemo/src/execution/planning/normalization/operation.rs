@@ -182,7 +182,7 @@ impl Operation {
             }
             crate::rule_model::components::term::Term::Aggregate(aggregate) => {
                 // Has the same name as defined in `normalize_aggregate`
-                let aggregate_variable = Variable::universal("_AGGREGATE_OUT");
+                let aggregate_variable = Variable::universal("_AGGREGATION_OUT");
 
                 (
                     Self::Primitive(Primitive::Variable(aggregate_variable)),
