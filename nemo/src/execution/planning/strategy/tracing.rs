@@ -16,8 +16,11 @@ use crate::{
         },
     },
     io::{ImportManager, resource_providers::ResourceProviders},
-    rule_model::components::term::primitive::{ground::GroundTerm, variable::Variable},
-    table_manager::{SubtableExecutionPlan, TableManager},
+    rule_model::components::{
+        tag::Tag,
+        term::primitive::{ground::GroundTerm, variable::Variable},
+    },
+    table_manager::{SubtableExecutionPlan, SubtableIdentifier, TableManager},
 };
 
 /// Strategy for creating an execution plan
@@ -96,8 +99,15 @@ impl StrategyTracing {
             translation: self.translation.clone(),
         };
 
-        let node = self.join.create_plan(&mut plan, &runtime);
-        self.filter.create_plan(&mut plan, node, &runtime);
+        let node_join = self.join.create_plan(&mut plan, &runtime);
+        let node_filter = self.filter.create_plan(&mut plan, node_join, &runtime);
+
+        plan.add_permanent_table(
+            node_filter.clone(),
+            "Tracing Query",
+            "Tracing Query",
+            SubtableIdentifier::new(Tag::new(String::from("_TRACING")), step),
+        );
 
         plan
     }
