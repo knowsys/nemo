@@ -1,4 +1,4 @@
-//! This module defines [Operation] and [OperationTerm].
+//! This module defines [Operation].
 
 use std::fmt::Display;
 
@@ -99,18 +99,19 @@ impl Operation {
     /// # Panics
     /// Panics if this component is invalid.
     pub fn variable_assignment(&self) -> Option<(&Variable, &Self)> {
-        if let Self::Opreation { kind, subterms } = self {
-            if matches!(kind, OperationKind::Equal) {
-                let left = subterms.first().expect("invalid program component");
-                let right = subterms.get(1).expect("invalid program component");
+        if let Self::Opreation { kind, subterms } = self
+            && matches!(kind, OperationKind::Equal)
+        {
+            let left = subterms.first().expect("invalid program component");
+            let right = subterms.get(1).expect("invalid program component");
 
-                if let Self::Primitive(Primitive::Variable(variable)) = left {
-                    return Some((variable, right));
-                } else if let Self::Primitive(Primitive::Variable(variable)) = right {
-                    return Some((variable, left));
-                }
+            if let Self::Primitive(Primitive::Variable(variable)) = left {
+                return Some((variable, right));
+            } else if let Self::Primitive(Primitive::Variable(variable)) = right {
+                return Some((variable, left));
             }
         }
+
         None
     }
 }

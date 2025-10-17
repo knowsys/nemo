@@ -56,8 +56,8 @@ impl GeneratorNegation {
 
             let projection_variables = positive_variables
                 .iter()
-                .cloned()
                 .filter(|variable| atom.terms().contains(variable))
+                .cloned()
                 .collect::<Vec<_>>();
 
             negated_atoms.push((atom.clone(), filter, projection_variables));

@@ -113,7 +113,7 @@ impl GeneratorFunctionFilterNegation {
     /// Returns `Some(self)` or `None` depending on whether this is a noop,
     /// i.e. does not affect the result.
     pub fn or_none(self) -> Option<Self> {
-        if !self.function.is_none() || !self.filter.is_none() || !self.negation.is_none() {
+        if self.function.is_some() || self.filter.is_some() || self.negation.is_some() {
             Some(self)
         } else {
             None

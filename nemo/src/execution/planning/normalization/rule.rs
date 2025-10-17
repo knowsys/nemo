@@ -66,13 +66,12 @@ impl NormalizedRule {
         body: Vec<BodyAtom>,
         operations: Vec<Operation>,
     ) -> Self {
-        let mut result = Self::default();
-
-        result.head = head;
-        result.positive = body;
-        result.operations = operations;
-
-        result
+        Self {
+            head,
+            positive: body,
+            operations,
+            ..Default::default()
+        }
     }
 }
 
@@ -93,8 +92,7 @@ impl Display for NormalizedRule {
             .chain(
                 self.aggregation
                     .as_ref()
-                    .map(|(aggregation, _)| aggregation.to_string())
-                    .into_iter(),
+                    .map(|(aggregation, _)| aggregation.to_string()),
             );
 
         let body = DisplaySeperatedList::display(body, &format!("{} ", syntax::SEQUENCE_SEPARATOR));
@@ -174,7 +172,7 @@ impl NormalizedRule {
             .expect("variable order not available for this rule")
     }
 
-    /// Set a [VariableOrder] for this rule.
+    /// Set a variable order for this rule.
     pub fn set_variable_order(&mut self, variable_order: VariableOrder) {
         self.variable_order = Some(variable_order);
     }
@@ -350,7 +348,7 @@ impl NormalizedRule {
     /// Translate the [HeadAtom]s into a list of [BodyAtom]s
     /// and additional filter [Operation]s.
     ///
-    /// New variables are appended to the given [VariableOrder].
+    /// New variables are appended to the given variable order.
     pub fn normalize_existential_head(
         &self,
         order: &mut VariableOrder,
@@ -448,7 +446,7 @@ impl NormalizedRule {
 
         let imports = rule
             .imports()
-            .map(|import| ImportAtom::normalize_import(import))
+            .map(ImportAtom::normalize_import)
             .collect::<Vec<_>>();
 
         Self {

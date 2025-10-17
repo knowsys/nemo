@@ -1,4 +1,4 @@
-//! This module defines [ChaseAggregate].
+//! This module defines [Aggregation].
 
 use std::{collections::HashSet, fmt::Display};
 
