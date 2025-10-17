@@ -73,35 +73,21 @@ impl Display for NormalizedRule {
             &format!("{} ", syntax::SEQUENCE_SEPARATOR),
         );
 
-        let positive = DisplaySeperatedList::display(
-            self.positive.iter(),
-            &format!("{} ", syntax::SEQUENCE_SEPARATOR),
-        );
+        let body = self
+            .positive
+            .iter()
+            .map(ToString::to_string)
+            .chain(self.negative.iter().map(ToString::to_string))
+            .chain(self.operations.iter().map(ToString::to_string))
+            .chain(self.imports.iter().map(ToString::to_string))
+            .chain(
+                self.aggregation
+                    .as_ref()
+                    .map(|(aggregation, _)| aggregation.to_string())
+                    .into_iter(),
+            );
 
-        let negative = DisplaySeperatedList::display(
-            self.negative.iter(),
-            &format!("{} ", syntax::SEQUENCE_SEPARATOR),
-        );
-
-        let operations = DisplaySeperatedList::display(
-            self.operations.iter(),
-            &format!("{} ", syntax::SEQUENCE_SEPARATOR),
-        );
-
-        let imports = DisplaySeperatedList::display(
-            self.imports.iter(),
-            &format!("{} ", syntax::SEQUENCE_SEPARATOR),
-        );
-
-        let aggregation = self
-            .aggregation
-            .as_ref()
-            .map(|(aggregation, _)| aggregation.to_string())
-            .unwrap_or_default();
-
-        let body = vec![positive, imports, negative, operations, aggregation];
-        let body =
-            DisplaySeperatedList::display(body.iter(), &format!("{} ", syntax::SEQUENCE_SEPARATOR));
+        let body = DisplaySeperatedList::display(body, &format!("{} ", syntax::SEQUENCE_SEPARATOR));
 
         f.write_str(&format!("{head} :- {body}"))
     }
@@ -120,7 +106,7 @@ impl NormalizedRule {
 
     /// Return the list of negative body atoms in this rule.
     pub fn negative(&self) -> &Vec<BodyAtom> {
-        &self.positive
+        &self.negative
     }
 
     /// Return the list of imported atoms in this rule.
@@ -349,6 +335,60 @@ impl NormalizedRule {
             .flat_map(|operation| operation.datavalues());
 
         head_values.chain(operation_values)
+    }
+
+    /// Translate the [HeadAtom]s into a list of [BodyAtom]s
+    /// and additional filter [Operation]s.
+    ///
+    /// New variables are appended to the given [VariableOrder].
+    pub fn normalize_existential_head(
+        &self,
+        order: &mut VariableOrder,
+    ) -> (Vec<BodyAtom>, Vec<Operation>) {
+        let mut generator = VariableGenerator::default();
+
+        let mut atoms = Vec::<BodyAtom>::default();
+        let mut operations = Vec::<Operation>::default();
+
+        for head_atom in &self.head {
+            let mut used_variables = HashSet::<Variable>::default();
+            let mut variables = Vec::<Variable>::default();
+
+            for term in head_atom.terms() {
+                match term {
+                    Primitive::Variable(variable) => {
+                        if !used_variables.insert(variable.clone()) {
+                            let new_variable = generator.universal("RESTRICTED_HEAD");
+                            let new_operation = Operation::new_assignment(
+                                new_variable.clone(),
+                                Operation::new_variable(variable.clone()),
+                            );
+
+                            variables.push(new_variable.clone());
+                            order.push(new_variable);
+                            operations.push(new_operation);
+                        } else {
+                            variables.push(variable.clone());
+                        }
+                    }
+                    Primitive::Ground(ground_term) => {
+                        let new_variable = generator.universal("RESTRICTED_HEAD");
+                        let new_operation = Operation::new_assignment(
+                            new_variable.clone(),
+                            Operation::new_ground(ground_term.clone()),
+                        );
+
+                        variables.push(new_variable.clone());
+                        order.push(new_variable);
+                        operations.push(new_operation);
+                    }
+                }
+            }
+
+            atoms.push(BodyAtom::new(head_atom.predicate(), variables));
+        }
+
+        (atoms, operations)
     }
 }
 

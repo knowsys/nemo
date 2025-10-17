@@ -546,6 +546,7 @@ impl DatabaseInstance {
             let (result_tree, results_dependent) = self
                 .execute_tree(&temporary_storage, tree, dependent_reorderings)
                 .await;
+
             TimedCode::instance().sub(&timed_string).stop();
 
             if tree_used > 0 {

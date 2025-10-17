@@ -158,7 +158,7 @@ impl Aggregation {
             ),
         };
 
-        let output_variable = Variable::universal("_AGGREGATE_OUT");
+        let output_variable = Variable::universal("_AGGREGATION_OUT");
         let distinct_variables = aggregate.distinct().cloned().collect::<Vec<_>>();
         let group_by_variables = group_by.into_iter().collect::<Vec<_>>();
 

@@ -8,7 +8,7 @@ use crate::{
     execution::planning::{
         RuntimeInformation,
         analysis::variable_order::VariableOrder,
-        normalization::atom::head::HeadAtom,
+        normalization::rule::NormalizedRule,
         operations::{duplicates::GeneratorDuplicates, projection_head::GeneratorProjectionHead},
         strategy::forward::restricted::StrategyRestricted,
     },
@@ -60,7 +60,7 @@ pub struct StrategyHead {
 impl StrategyHead {
     /// Create a new [StrategyHead].
     pub fn new(
-        head: &[HeadAtom],
+        rule: &NormalizedRule,
         order: &VariableOrder,
         frontier: HashSet<Variable>,
         aggregation_index: Option<usize>,
@@ -68,13 +68,13 @@ impl StrategyHead {
         is_existential: bool,
     ) -> Self {
         let restricted = if is_existential {
-            Some(StrategyRestricted::new(head, frontier, order, rule_id))
+            Some(StrategyRestricted::new(rule, frontier, order, rule_id))
         } else {
             None
         };
 
         let mut atoms = Vec::<HeadAtomType>::default();
-        for (atom_index, atom) in head.iter().enumerate() {
+        for (atom_index, atom) in rule.head().iter().enumerate() {
             let generator = GeneratorProjectionHead::new(atom.clone());
 
             if Some(atom_index) == aggregation_index {

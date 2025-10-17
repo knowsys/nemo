@@ -106,31 +106,36 @@ impl HeadAtom {
         let mut aggregate: Option<(
             &crate::rule_model::components::term::aggregate::Aggregate,
             HashSet<Variable>, // Variables contained in the expression outside of the aggregate
+            usize,             // term index it occurred in
         )> = None;
         let mut head_terms = Vec::<Primitive>::default();
 
-        for term in atom.terms() {
+        for (term_index, term) in atom.terms().enumerate() {
             match term {
                 crate::rule_model::components::term::Term::Primitive(primitive) => {
                     head_terms.push(primitive.clone());
                 }
                 crate::rule_model::components::term::Term::Aggregate(term_aggregate) => {
-                    aggregate = Some((term_aggregate, HashSet::default()));
+                    aggregate = Some((term_aggregate, HashSet::default(), term_index));
+                    head_terms.push(Primitive::Variable(Variable::universal("_AGGREGATION_OUT")))
                 }
                 crate::rule_model::components::term::Term::Operation(operation) => {
-                    let (new_operation, term_aggregate) =
+                    let (head_operation, term_aggregate) =
                         Operation::normalize_head_operation(operation);
-                    let new_variable = Primitive::Variable(generator.universal("HEAD"));
+                    let new_variable = generator.universal("HEAD");
 
                     if let Some(term_aggregate) = term_aggregate {
                         let mut variables =
-                            new_operation.variables().cloned().collect::<HashSet<_>>();
+                            head_operation.variables().cloned().collect::<HashSet<_>>();
                         variables.remove(&Variable::universal("_AGGREGATION_OUT"));
 
-                        aggregate = Some((term_aggregate, variables));
+                        aggregate = Some((term_aggregate, variables, term_index));
                     }
 
-                    head_terms.push(new_variable);
+                    let new_operation =
+                        Operation::new_assignment(new_variable.clone(), head_operation);
+
+                    head_terms.push(Primitive::from(new_variable));
                     operations.push(new_operation);
                 }
                 crate::rule_model::components::term::Term::Map(_)
@@ -142,10 +147,10 @@ impl HeadAtom {
         }
 
         let mut aggregation: Option<Aggregation> = None;
-        if let Some((aggregate, mut group_by)) = aggregate {
-            for term in &head_terms {
+        if let Some((aggregate, mut group_by, aggregate_index)) = aggregate {
+            for (term_index, term) in head_terms.iter().enumerate() {
                 if let Primitive::Variable(variable) = term {
-                    if variable.name() != Some("_AGGREGATION_OUT") {
+                    if term_index != aggregate_index {
                         group_by.insert(variable.clone());
                     }
                 }

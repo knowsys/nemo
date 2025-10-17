@@ -262,8 +262,6 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         TimedCode::instance().sub("Reasoning/Rules").start();
         TimedCode::instance().sub("Reasoning/Execution").start();
 
-        let mut new_derivations: Option<bool> = None;
-
         let execution_strategy = self
             .program
             .rules()
@@ -277,6 +275,8 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         {
             self.table_manager.register_predicate(predicate, arity);
         }
+
+        let mut new_derivations: Option<bool> = None;
 
         while let Some(index) = self.selection_strategy.next_rule(new_derivations) {
             let updated_predicates = self.step(index, &execution_strategy[index]).await?;

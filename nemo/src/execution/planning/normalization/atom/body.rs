@@ -117,7 +117,10 @@ impl BodyAtom {
                 }
                 crate::rule_model::components::term::Term::Operation(operation) => {
                     let new_variable = generator.universal("BODY");
-                    let new_operation = Operation::normalize_body_operation(operation);
+                    let new_operation = Operation::new_assignment(
+                        new_variable.clone(),
+                        Operation::normalize_body_operation(operation),
+                    );
 
                     terms.push(new_variable);
                     additional_operations.push(new_operation);
