@@ -77,7 +77,7 @@ pub(crate) enum Reporting {
 
 /// Cli Arguments related to logging
 #[derive(clap::Args, Debug)]
-pub(crate) struct LoggingArgs {
+pub struct LoggingArgs {
     /// Increase log verbosity (multiple uses increase verbosity further)
     #[arg(short, long, action = clap::builder::ArgAction::Count, group = "verbosity")]
     verbose: u8,
@@ -97,8 +97,7 @@ impl LoggingArgs {
     ///  * `Error` when `-q` is used
     ///  * The `NMO_LOG` environment variable value
     ///  * `Warn` otherwise
-    #[allow(dead_code)]
-    pub(crate) fn initialize_logging(&self) {
+    pub fn initialize_logging(&self) {
         let mut builder = env_logger::Builder::new();
 
         // Default log level

@@ -6,7 +6,6 @@ use std::{fmt::Display, ops::Range};
 use enum_assoc::Assoc;
 
 use nom::{
-    FindSubstring, InputTake,
     branch::alt,
     bytes::complete::{is_a, is_not, tag, take_until, take_while1},
     character::complete::{
@@ -15,20 +14,21 @@ use nom::{
     combinator::{map, opt, recognize, verify},
     multi::many0,
     sequence::pair,
+    FindSubstring, InputTake,
 };
 use nom_supreme::error::{BaseErrorKind, Expectation};
 
 use crate::{
     parser::{
-        ParserInput, ParserResult,
-        context::{ParserContext, context},
+        context::{context, ParserContext},
         error::ParserErrorTree,
         span::Span,
+        ParserInput, ParserResult,
     },
     rule_model::components::ComponentSource,
     syntax::{
         self, comment,
-        datavalues::{self, RDF_DATATYPE_INDICATOR, boolean, iri, map, string, tuple},
+        datavalues::{self, boolean, iri, map, string, tuple, RDF_DATATYPE_INDICATOR},
         directive, encoding_prefixes,
         expression::{aggregate, atom, format_string, operation, variable},
         operator, rule,
@@ -311,6 +311,12 @@ pub enum TokenKind {
     /// Empty token
     #[assoc(name = "empty")]
     Empty,
+}
+
+impl Display for TokenKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.name())
+    }
 }
 
 /// A token is the smallest unit recognized by the parser

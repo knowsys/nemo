@@ -9,18 +9,18 @@ use nom::{
 };
 
 use crate::parser::{
-    ParserResult,
     ast::ast_to_ascii_tree,
-    context::{ParserContext, context},
+    context::{context, ParserContext},
     error::{recover, report_error},
     input::ParserInput,
-    span::Span,
+    span::{CharacterPosition, Span},
+    ParserResult,
 };
 
 use super::{
-    ProgramAST,
     comment::{toplevel::TopLevelComment, wsoc::WSoC},
     statement::Statement,
+    ProgramAST,
 };
 
 /// AST representation of a nemo program
@@ -58,6 +58,29 @@ impl<'a> Program<'a> {
 const CONTEXT: ParserContext = ParserContext::Program;
 
 impl<'a> ProgramAST<'a> for Program<'a> {
+    fn pretty_print(&self, indent_level: usize) -> Option<String> {
+        let mut result = String::new();
+        let mut previous_end: Option<CharacterPosition> = None;
+
+        for child in self.children().iter() {
+            if let Some(end) = previous_end {
+                let lines = child.span().range().start.line - end.line;
+                result
+                    .push_str(&"\n".repeat(usize::try_from(lines).expect("should fit into usize")));
+            }
+
+            result.push_str(&child.pretty_print(indent_level)?);
+            previous_end = Some(child.span().range().end)
+        }
+
+        // ensure the file ends with a newline
+        if !result.ends_with('\n') {
+            result.push('\n');
+        }
+
+        Some(result)
+    }
+
     fn children(&self) -> Vec<&dyn ProgramAST<'a>> {
         let mut result = Vec::<&dyn ProgramAST>::new();
 
@@ -122,7 +145,7 @@ impl std::fmt::Display for Program<'_> {
 mod test {
     use nom::combinator::all_consuming;
 
-    use crate::parser::{ParserState, Program, ast::ProgramAST, input::ParserInput};
+    use crate::parser::{ast::ProgramAST, input::ParserInput, ParserState, Program};
 
     #[test]
     #[cfg_attr(miri, ignore)]

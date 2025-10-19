@@ -2,14 +2,23 @@
 
 use nom::sequence::{separated_pair, tuple};
 
-use crate::parser::{
-    ParserResult,
-    context::{ParserContext, context},
-    input::ParserInput,
-    span::Span,
+use crate::{
+    parser::{
+        context::{context, ParserContext},
+        input::ParserInput,
+        span::Span,
+        ParserResult,
+    },
+    syntax::pretty_printing::INDENT_INCREMENT,
 };
 
-use super::{ProgramAST, comment::wsoc::WSoC, guard::Guard, sequence::Sequence, token::Token};
+use super::{
+    comment::wsoc::WSoC,
+    guard::Guard,
+    sequence::Sequence,
+    token::{Token, TokenKind},
+    ProgramAST,
+};
 
 /// A rule describing a logical implication
 #[derive(Debug)]
@@ -83,6 +92,33 @@ impl<'a> ProgramAST<'a> for Rule<'a> {
     fn context(&self) -> ParserContext {
         CONTEXT
     }
+
+    fn pretty_print(&self, indent_level: usize) -> Option<String> {
+        let head_indent = indent_level + INDENT_INCREMENT;
+        let mut result = self.head.pretty_print(indent_level + INDENT_INCREMENT)?;
+
+        let body_indent = if result.contains('\n') {
+            result.push_str(&format!(
+                "\n{}{}",
+                "".repeat(head_indent),
+                TokenKind::RuleArrow
+            ));
+            head_indent + INDENT_INCREMENT
+        } else {
+            result.push_str(&format!(" {}", TokenKind::RuleArrow));
+            head_indent
+        };
+
+        let body = self.body.pretty_print(body_indent)?;
+        if body.contains('\n') {
+            result.push_str(&format!("\n{}", " ".repeat(body_indent)));
+        } else {
+            result.push(' ');
+        }
+        result.push_str(&body);
+
+        Some(result)
+    }
 }
 
 #[cfg(test)]
@@ -90,9 +126,9 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
-        ParserState,
-        ast::{ProgramAST, rule::Rule},
+        ast::{rule::Rule, ProgramAST},
         input::ParserInput,
+        ParserState,
     };
 
     #[test]

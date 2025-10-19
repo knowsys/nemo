@@ -5,11 +5,15 @@ use std::fmt::Display;
 use nom::{branch::alt, combinator::map, sequence::separated_pair};
 
 use crate::parser::{
-    ParserResult,
-    ast::{ProgramAST, expression::basic::iri::Iri, token::Token},
-    context::{ParserContext, context},
+    ast::{
+        expression::basic::iri::Iri,
+        token::{Token, TokenKind},
+        ProgramAST,
+    },
+    context::{context, ParserContext},
     input::ParserInput,
     span::Span,
+    ParserResult,
 };
 
 /// Types of [StructureTag]s
@@ -108,6 +112,23 @@ impl<'a> ProgramAST<'a> for StructureTag<'a> {
     fn context(&self) -> ParserContext {
         CONTEXT
     }
+
+    fn pretty_print(&self, _indent_level: usize) -> Option<String> {
+        Some(match &self.kind {
+            StructureTagKind::Plain(token) => format!("{token}"),
+            StructureTagKind::Prefixed { prefix, tag } => {
+                format!("{prefix}{}{tag}", TokenKind::NamespaceSeparator)
+            }
+            StructureTagKind::Iri(iri) => {
+                format!(
+                    "{}{}{}",
+                    TokenKind::IriOpen,
+                    iri.content(),
+                    TokenKind::IriClose
+                )
+            }
+        })
+    }
 }
 
 #[cfg(test)]
@@ -115,9 +136,9 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
-        ParserState,
-        ast::{ProgramAST, tag::structure::StructureTag},
+        ast::{tag::structure::StructureTag, ProgramAST},
         input::ParserInput,
+        ParserState,
     };
 
     #[test]

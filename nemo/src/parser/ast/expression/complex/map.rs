@@ -6,18 +6,18 @@ use nom::{
 };
 
 use crate::parser::{
-    ParserResult,
     ast::{
-        ProgramAST,
         comment::wsoc::WSoC,
         expression::Expression,
-        sequence::{Sequence, key_value::KeyValuePair},
+        sequence::{key_value::KeyValuePair, Sequence},
         tag::structure::StructureTag,
-        token::Token,
+        token::{Token, TokenKind},
+        ProgramAST,
     },
-    context::{ParserContext, context},
+    context::{context, ParserContext},
     input::ParserInput,
     span::Span,
+    ParserResult,
 };
 
 /// A possibly tagged sequence of [Expression]s.
@@ -99,6 +99,30 @@ impl<'a> ProgramAST<'a> for Map<'a> {
     fn context(&self) -> ParserContext {
         CONTEXT
     }
+
+    fn pretty_print(&self, indent_level: usize) -> Option<String> {
+        let mut result = String::new();
+
+        if let Some(tag) = &self.tag {
+            result.push_str(&tag.pretty_print(indent_level)?);
+        }
+        result.push_str(&format!("{}", TokenKind::MapOpen));
+
+        let content_indent = indent_level + result.len();
+        let content = self.key_value.pretty_print(content_indent)?;
+        if !content.is_empty() {
+            result.push(' ');
+            result.push_str(&content);
+            if content.contains('\n') {
+                result.push_str(&" ".repeat(content_indent - 1));
+            }
+            result.push(' ');
+        }
+
+        result.push_str(&format!("{}", TokenKind::MapClose));
+
+        Some(result)
+    }
 }
 
 #[cfg(test)]
@@ -106,9 +130,9 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
-        ParserState,
-        ast::{ProgramAST, expression::complex::map::Map},
+        ast::{expression::complex::map::Map, ProgramAST},
         input::ParserInput,
+        ParserState,
     };
 
     #[test]

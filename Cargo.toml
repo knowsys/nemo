@@ -13,6 +13,7 @@ members = [
     "nemo-physical",
     "nemo-python",
     "nemo-language-server",
+    "nemo-fmt",
     "nemo-wasm",
     "xtask",
 ]

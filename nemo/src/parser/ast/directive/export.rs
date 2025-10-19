@@ -6,14 +6,19 @@ use nom::{
 };
 
 use crate::parser::{
-    ParserResult,
     ast::{
-        ProgramAST, comment::wsoc::WSoC, expression::complex::map::Map, guard::Guard,
-        sequence::Sequence, tag::structure::StructureTag, token::Token,
+        comment::wsoc::WSoC,
+        expression::complex::map::Map,
+        guard::Guard,
+        sequence::Sequence,
+        tag::structure::StructureTag,
+        token::{Token, TokenKind},
+        ProgramAST,
     },
-    context::{ParserContext, context},
+    context::{context, ParserContext},
     input::ParserInput,
     span::Span,
+    ParserResult,
 };
 
 /// Export directive
@@ -112,6 +117,29 @@ impl<'a> ProgramAST<'a> for Export<'a> {
     fn context(&self) -> ParserContext {
         CONTEXT
     }
+
+    fn pretty_print(&self, indent_level: usize) -> Option<String> {
+        let mut result = format!(
+            "{}{} {} {}",
+            TokenKind::DirectiveIndicator,
+            TokenKind::ExportDirective,
+            self.predicate.pretty_print(indent_level)?,
+            TokenKind::ExportAssignment
+        );
+        let sub_indent = indent_level + result.len() + 1;
+        let instructions = &self.instructions.pretty_print(sub_indent)?;
+        if !instructions.starts_with('\n') {
+            result.push_str(" ");
+        }
+        result.push_str(instructions);
+
+        if let Some(guards) = &self.guards {
+            result.push_str(&TokenKind::SequenceSeparator.to_string());
+            result.push_str(&guards.pretty_print(sub_indent)?);
+        }
+
+        Some(result)
+    }
 }
 
 #[cfg(test)]
@@ -121,14 +149,14 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
-        ParserState,
         ast::{
-            ProgramAST,
             directive::export::Export,
-            expression::{Expression, complex::infix::InfixExpressionKind},
+            expression::{complex::infix::InfixExpressionKind, Expression},
             guard::Guard,
+            ProgramAST,
         },
         input::ParserInput,
+        ParserState,
     };
 
     #[test]

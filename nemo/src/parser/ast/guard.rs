@@ -2,11 +2,11 @@
 
 use nom::{branch::alt, combinator::map};
 
-use crate::parser::context::{ParserContext, context};
+use crate::parser::context::{context, ParserContext};
 
 use super::{
+    expression::{complex::infix::InfixExpression, Expression},
     ProgramAST,
-    expression::{Expression, complex::infix::InfixExpression},
 };
 
 /// An expression that is the building block of rules.
@@ -61,6 +61,13 @@ impl<'a> ProgramAST<'a> for Guard<'a> {
     fn context(&self) -> ParserContext {
         CONTEXT
     }
+
+    fn pretty_print(&self, indent_level: usize) -> Option<String> {
+        match &self {
+            Guard::Expression(expression) => expression.pretty_print(indent_level),
+            Guard::Infix(infix_expression) => infix_expression.pretty_print(indent_level),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -68,10 +75,10 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
-        ParserState,
-        ast::{ProgramAST, guard::Guard},
+        ast::{guard::Guard, ProgramAST},
         context::ParserContext,
         input::ParserInput,
+        ParserState,
     };
 
     #[test]

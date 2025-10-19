@@ -3,13 +3,14 @@
 use nom::sequence::{delimited, pair, terminated, tuple};
 
 use crate::parser::{
-    ParserResult,
-    context::{ParserContext, context},
+    ast::token::TokenKind,
+    context::{context, ParserContext},
     input::ParserInput,
     span::Span,
+    ParserResult,
 };
 
-use super::{ProgramAST, comment::wsoc::WSoC, expression::complex::atom::Atom, token::Token};
+use super::{comment::wsoc::WSoC, expression::complex::atom::Atom, token::Token, ProgramAST};
 
 /// Attribute of a rule
 #[derive(Debug)]
@@ -72,6 +73,15 @@ impl<'a> ProgramAST<'a> for Attribute<'a> {
     fn context(&self) -> ParserContext {
         CONTEXT
     }
+
+    fn pretty_print(&self, indent_level: usize) -> Option<String> {
+        Some(format!(
+            "{}{}{}",
+            TokenKind::OpenAttribute,
+            self.content.pretty_print(indent_level)?,
+            TokenKind::CloseAttribute
+        ))
+    }
 }
 
 #[cfg(test)]
@@ -79,9 +89,9 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
-        ParserState,
-        ast::{ProgramAST, attribute::Attribute},
+        ast::{attribute::Attribute, ProgramAST},
         input::ParserInput,
+        ParserState,
     };
 
     #[test]

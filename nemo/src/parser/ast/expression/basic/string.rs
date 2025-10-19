@@ -1,18 +1,22 @@
 //! This module defines [String]
 #![allow(missing_docs)]
 
+use nemo_physical::datavalues::syntax::string::{QUOTE, TRIPLE_QUOTE};
 use nom::{
     branch::alt,
     combinator::opt,
     sequence::{delimited, pair},
 };
 
-use crate::parser::{
-    ParserResult,
-    ast::{ProgramAST, token::Token},
-    context::{ParserContext, context},
-    input::ParserInput,
-    span::Span,
+use crate::{
+    parser::{
+        ast::{token::Token, ProgramAST},
+        context::{context, ParserContext},
+        input::ParserInput,
+        span::Span,
+        ParserResult,
+    },
+    syntax::pretty_printing::{fits_on_line, wrap_lines},
 };
 
 /// AST node representing a string
@@ -98,6 +102,27 @@ impl<'a> ProgramAST<'a> for StringLiteral<'a> {
     fn context(&self) -> ParserContext {
         CONTEXT
     }
+
+    fn pretty_print(&self, indent_level: usize) -> Option<String> {
+        let content = self.content();
+        Some(
+            if fits_on_line(&content, indent_level, Some(QUOTE), Some(QUOTE)) {
+                format!("{}{}{}", QUOTE, content, QUOTE)
+            } else {
+                format!(
+                    "{}\n{}\n{}{}",
+                    TRIPLE_QUOTE,
+                    wrap_lines(
+                        &content,
+                        indent_level + TRIPLE_QUOTE.len(),
+                        Some(&" ".repeat(TRIPLE_QUOTE.len()))
+                    ),
+                    " ".repeat(indent_level),
+                    TRIPLE_QUOTE
+                )
+            },
+        )
+    }
 }
 
 #[cfg(test)]
@@ -105,9 +130,9 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
-        ParserState,
-        ast::{ProgramAST, expression::basic::string::StringLiteral},
+        ast::{expression::basic::string::StringLiteral, ProgramAST},
         input::ParserInput,
+        ParserState,
     };
 
     #[test]

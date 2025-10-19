@@ -14,13 +14,13 @@ use strum_macros::EnumIter;
 use unknown::UnknownDirective;
 
 use crate::parser::{
-    ParserResult,
-    context::{ParserContext, context},
+    context::{context, ParserContext},
     input::ParserInput,
     span::Span,
+    ParserResult,
 };
 
-use super::{ProgramAST, token::TokenKind};
+use super::{token::TokenKind, ProgramAST};
 
 pub mod base;
 pub mod declare;
@@ -157,6 +157,21 @@ impl<'a> ProgramAST<'a> for Directive<'a> {
     fn context(&self) -> ParserContext {
         CONTEXT
     }
+
+    fn pretty_print(&self, indent_level: usize) -> Option<String> {
+        match self {
+            Directive::Base(base) => base.pretty_print(indent_level),
+            Directive::Declare(declare) => declare.pretty_print(indent_level),
+            Directive::Export(export) => export.pretty_print(indent_level),
+            Directive::Import(import) => import.pretty_print(indent_level),
+            Directive::Output(output) => output.pretty_print(indent_level),
+            Directive::Prefix(prefix) => prefix.pretty_print(indent_level),
+            Directive::Parameter(parameter_declaration) => {
+                parameter_declaration.pretty_print(indent_level)
+            }
+            Directive::Unknown(_unknown_directive) => None,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -164,10 +179,10 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
-        ParserState,
-        ast::{ProgramAST, directive::Directive},
+        ast::{directive::Directive, ProgramAST},
         context::ParserContext,
         input::ParserInput,
+        ParserState,
     };
 
     #[test]

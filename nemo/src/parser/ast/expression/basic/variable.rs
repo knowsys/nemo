@@ -5,14 +5,14 @@ use enum_assoc::Assoc;
 use nom::{branch::alt, combinator::opt, sequence::pair};
 
 use crate::parser::{
-    ParserResult,
     ast::{
-        ProgramAST,
         token::{Token, TokenKind},
+        ProgramAST,
     },
-    context::{ParserContext, context},
+    context::{context, ParserContext},
     input::ParserInput,
     span::Span,
+    ParserResult,
 };
 
 /// Marker that indicates the type of variable
@@ -117,6 +117,21 @@ impl<'a> ProgramAST<'a> for Variable<'a> {
     fn context(&self) -> ParserContext {
         CONTEXT
     }
+
+    fn pretty_print(&self, _indent_level: usize) -> Option<String> {
+        Some(match &self.kind {
+            VariableType::Universal => {
+                format!("{}{}", TokenKind::UniversalIndicator, self.name.as_ref()?)
+            }
+            VariableType::Existential => {
+                format!("{}{}", TokenKind::ExistentialIndicator, self.name.as_ref()?)
+            }
+            VariableType::Global => {
+                format!("{}{}", TokenKind::GlobalIndicator, self.name.as_ref()?)
+            }
+            VariableType::Anonymous => format!("{}", TokenKind::AnonVal),
+        })
+    }
 }
 
 #[cfg(test)]
@@ -124,9 +139,9 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
-        ParserState,
-        ast::{ProgramAST, expression::basic::variable::Variable},
+        ast::{expression::basic::variable::Variable, ProgramAST},
         input::ParserInput,
+        ParserState,
     };
 
     use super::VariableType;

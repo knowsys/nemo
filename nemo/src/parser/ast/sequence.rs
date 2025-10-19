@@ -13,12 +13,19 @@ use nom::{
     sequence::{terminated, tuple},
 };
 
-use crate::parser::{
-    ParserResult,
-    ast::{ProgramAST, comment::wsoc::WSoC, token::Token},
-    context::ParserContext,
-    input::ParserInput,
-    span::Span,
+use crate::{
+    parser::{
+        ast::{
+            comment::wsoc::WSoC,
+            token::{Token, TokenKind},
+            ProgramAST,
+        },
+        context::ParserContext,
+        input::ParserInput,
+        span::Span,
+        ParserResult,
+    },
+    syntax::pretty_printing::fits_on_line,
 };
 
 const CONTEXT: ParserContext = ParserContext::Sequence;
@@ -134,6 +141,27 @@ impl<'a, T: std::fmt::Debug + Sync + ProgramAST<'a>> ProgramAST<'a> for Sequence
     fn context(&self) -> ParserContext {
         CONTEXT
     }
+
+    fn pretty_print(&self, indent_level: usize) -> Option<String> {
+        let entries = self
+            .elements
+            .iter()
+            .flat_map(|element| element.pretty_print(indent_level))
+            .collect::<Vec<_>>();
+
+        let all_entries = entries.join(&format!("{} ", TokenKind::SequenceSeparator));
+
+        if fits_on_line(&all_entries, indent_level, None, None) {
+            Some(all_entries)
+        } else {
+            let indent = " ".repeat(indent_level);
+            Some(format!(
+                "\n{}{}",
+                &indent,
+                entries.join(&format!("{}\n{}", TokenKind::SequenceSeparator, &indent))
+            ))
+        }
+    }
 }
 
 impl<'b, T> IntoIterator for &'b Sequence<'_, T> {
@@ -158,7 +186,7 @@ impl<T> IntoIterator for Sequence<'_, T> {
 mod test {
     use nom::combinator::all_consuming;
 
-    use crate::parser::{ParserState, ast::expression::basic::number::Number};
+    use crate::parser::{ast::expression::basic::number::Number, ParserState};
 
     use super::*;
 

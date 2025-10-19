@@ -5,14 +5,14 @@ use enum_assoc::Assoc;
 use nom::branch::alt;
 
 use crate::parser::{
-    ParserResult,
     ast::{
-        ProgramAST,
         token::{Token, TokenKind},
+        ProgramAST,
     },
-    context::{ParserContext, context},
+    context::{context, ParserContext},
     input::ParserInput,
     span::Span,
+    ParserResult,
 };
 
 /// Boolean values
@@ -88,6 +88,16 @@ impl<'a> ProgramAST<'a> for Boolean<'a> {
     fn context(&self) -> ParserContext {
         CONTEXT
     }
+
+    fn pretty_print(&self, _indent_level: usize) -> Option<String> {
+        Some(format!(
+            "{}",
+            match self.value {
+                BooleanValue::False => TokenKind::False,
+                BooleanValue::True => TokenKind::True,
+            }
+        ))
+    }
 }
 
 #[cfg(test)]
@@ -95,9 +105,9 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
-        ParserState,
-        ast::{ProgramAST, expression::basic::boolean::Boolean},
+        ast::{expression::basic::boolean::Boolean, ProgramAST},
         input::ParserInput,
+        ParserState,
     };
 
     use super::BooleanValue;

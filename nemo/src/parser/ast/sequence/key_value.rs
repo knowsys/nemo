@@ -3,11 +3,16 @@
 use nom::sequence::{separated_pair, tuple};
 
 use crate::parser::{
-    ParserResult,
-    ast::{ProgramAST, comment::wsoc::WSoC, expression::Expression, token::Token},
+    ast::{
+        comment::wsoc::WSoC,
+        expression::Expression,
+        token::{Token, TokenKind},
+        ProgramAST,
+    },
     context::ParserContext,
     input::ParserInput,
     span::Span,
+    ParserResult,
 };
 
 /// Pairs of Expressions, separated by [KEY_VALUE_ASSIGN][nemo_physical::datavalues::syntax::map::KEY_VALUE_ASSIGN]
@@ -63,6 +68,15 @@ impl<'a> ProgramAST<'a> for KeyValuePair<'a> {
     fn context(&self) -> ParserContext {
         ParserContext::KeyValuePair
     }
+
+    fn pretty_print(&self, indent_level: usize) -> Option<String> {
+        Some(format!(
+            "{} {} {}",
+            self.key.pretty_print(indent_level)?,
+            TokenKind::KeyValueAssignment,
+            self.value.pretty_print(indent_level)?
+        ))
+    }
 }
 
 #[cfg(test)]
@@ -70,12 +84,12 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
-        ParserState,
         ast::{
+            sequence::{key_value::KeyValuePair, Sequence},
             ProgramAST,
-            sequence::{Sequence, key_value::KeyValuePair},
         },
         input::ParserInput,
+        ParserState,
     };
 
     #[test]

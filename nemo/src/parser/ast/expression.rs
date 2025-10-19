@@ -14,10 +14,10 @@ use complex::{
 use nom::{branch::alt, combinator::map};
 
 use crate::parser::{
-    ParserResult,
-    context::{ParserContext, context},
+    context::{context, ParserContext},
     input::ParserInput,
     span::Span,
+    ParserResult,
 };
 
 use super::ProgramAST;
@@ -178,6 +178,30 @@ impl<'a> ProgramAST<'a> for Expression<'a> {
     fn context(&self) -> ParserContext {
         CONTEXT
     }
+
+    fn pretty_print(&self, indent_level: usize) -> Option<String> {
+        match self {
+            Expression::Aggregation(aggregation) => aggregation.pretty_print(indent_level),
+            Expression::Arithmetic(arithmetic) => arithmetic.pretty_print(indent_level),
+            Expression::Atom(atom) => atom.pretty_print(indent_level),
+            Expression::Blank(blank) => blank.pretty_print(indent_level),
+            Expression::Boolean(boolean) => boolean.pretty_print(indent_level),
+            Expression::Constant(constant) => constant.pretty_print(indent_level),
+            Expression::FormatString(format_string) => format_string.pretty_print(indent_level),
+            Expression::Map(map) => map.pretty_print(indent_level),
+            Expression::Negation(negation) => negation.pretty_print(indent_level),
+            Expression::Number(number) => number.pretty_print(indent_level),
+            Expression::EncodedNumber(encoded_number) => encoded_number.pretty_print(indent_level),
+            Expression::Operation(operation) => operation.pretty_print(indent_level),
+            Expression::Parenthesized(parenthesized_expression) => {
+                parenthesized_expression.pretty_print(indent_level)
+            }
+            Expression::RdfLiteral(rdf_literal) => rdf_literal.pretty_print(indent_level),
+            Expression::String(string_literal) => string_literal.pretty_print(indent_level),
+            Expression::Tuple(tuple) => tuple.pretty_print(indent_level),
+            Expression::Variable(variable) => variable.pretty_print(indent_level),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -185,10 +209,10 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
-        ParserState,
-        ast::{ProgramAST, expression::Expression},
+        ast::{expression::Expression, ProgramAST},
         context::ParserContext,
         input::ParserInput,
+        ParserState,
     };
 
     #[test]

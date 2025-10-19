@@ -16,7 +16,7 @@ use std::{fmt::Debug, ops::Range};
 
 use crate::rule_model::components::ComponentSource;
 
-use super::{ParserInput, ParserResult, context::ParserContext, span::Span};
+use super::{context::ParserContext, span::Span, ParserInput, ParserResult};
 use ascii_tree::Tree;
 use colored::Colorize;
 
@@ -35,6 +35,11 @@ pub trait ProgramAST<'a>: Debug + Sync {
 
     /// Return [ParserContext] indicating the type of node.
     fn context(&self) -> ParserContext;
+
+    /// Pretty-print this node.
+    fn pretty_print(&self, indent_level: usize) -> Option<String> {
+        todo!("don't know how to pretty-print this AST node yet")
+    }
 }
 
 impl<'a, Node: ProgramAST<'a>> ComponentSource for Node {

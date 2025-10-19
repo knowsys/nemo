@@ -8,20 +8,21 @@ use nom::{
 };
 
 use crate::parser::{
-    ParserResult,
-    context::{ParserContext, context},
+    ast::token::TokenKind,
+    context::{context, ParserContext},
     input::ParserInput,
     span::Span,
+    ParserResult,
 };
 
 use super::{
-    ProgramAST,
     attribute::Attribute,
     comment::{doc::DocComment, wsoc::WSoC},
     directive::Directive,
     guard::Guard,
     rule::Rule,
     token::Token,
+    ProgramAST,
 };
 
 #[allow(clippy::large_enum_variant)]
@@ -147,6 +148,29 @@ impl<'a> ProgramAST<'a> for Statement<'a> {
     fn context(&self) -> ParserContext {
         CONTEXT
     }
+
+    fn pretty_print(&self, indent_level: usize) -> Option<String> {
+        let mut result = String::new();
+
+        if let Some(comment) = &self.comment {
+            result.push_str(&comment.pretty_print(indent_level)?);
+        }
+
+        for attribute in &self.attributes {
+            result.push_str(&attribute.pretty_print(indent_level)?);
+        }
+
+        result.push_str(&match &self.kind {
+            StatementKind::Fact(guard) => guard.pretty_print(indent_level)?,
+            StatementKind::Rule(rule) => rule.pretty_print(indent_level)?,
+            StatementKind::Directive(directive) => directive.pretty_print(indent_level)?,
+            StatementKind::Error(_token) => return None,
+        });
+
+        result.push_str(&format!(" {}", TokenKind::Dot));
+
+        Some(result)
+    }
 }
 
 #[cfg(test)]
@@ -154,10 +178,10 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
-        ParserState,
-        ast::{ProgramAST, statement::Statement},
+        ast::{statement::Statement, ProgramAST},
         context::ParserContext,
         input::ParserInput,
+        ParserState,
     };
 
     #[test]

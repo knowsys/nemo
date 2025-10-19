@@ -3,9 +3,10 @@ use std::path::PathBuf;
 
 use clap::{CommandFactory, Subcommand};
 
-use crate::bin_name::nemo_cli_bin_name;
+use crate::bin_name::{nemo_cli_bin_name, nemo_fmt_bin_name};
 use clap_mangen::generate_to;
-use nemo_cli::cli::CliApp;
+use nemo_cli::cli::CliApp as NemoCli;
+use nemo_fmt::cli::CliApp as NemoFmt;
 
 use super::Task;
 
@@ -19,8 +20,10 @@ impl Task for Manpages {
     fn handle(self) -> Result<()> {
         match self {
             Self::GenerateManpages { out_dir } => {
-                let command = CliApp::command().name(nemo_cli_bin_name());
-                generate_to(command, out_dir)
+                let nemo_command = NemoCli::command().name(nemo_cli_bin_name());
+                generate_to(nemo_command, &out_dir)?;
+                let fmt_command = NemoFmt::command().name(nemo_fmt_bin_name());
+                generate_to(fmt_command, &out_dir)
             }
         }
     }

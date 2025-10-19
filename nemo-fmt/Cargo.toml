@@ -1,0 +1,30 @@
+[package]
+name = "nemo-fmt"
+description = "a formatter for Nemo rules files"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "nmo-fmt"
+path = "src/main.rs"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+nemo = { path = "../nemo" }
+nemo-cli = { path = "../nemo-cli" }
+log = { version = "0.4", features = [ "max_level_trace", "release_max_level_info" ] }
+clap = { version = "4.0.32", features = [ "derive", "cargo", "env" ] }
+colored = "3"
+env_logger = "*"
+thiserror = "2.0"
+tokio = { version = "1.47.1", features = [ "rt", "macros" ] }
+
+[dev-dependencies]
+test-log = "0.2"

@@ -1,11 +1,11 @@
 //! This module defines [Constant]
 
 use crate::parser::{
-    ParserResult,
-    ast::{ProgramAST, tag::structure::StructureTag},
-    context::{ParserContext, context},
+    ast::{tag::structure::StructureTag, ProgramAST},
+    context::{context, ParserContext},
     input::ParserInput,
     span::Span,
+    ParserResult,
 };
 
 /// AST node representing a constant
@@ -58,6 +58,10 @@ impl<'a> ProgramAST<'a> for Constant<'a> {
     fn context(&self) -> ParserContext {
         CONTEXT
     }
+
+    fn pretty_print(&self, indent_level: usize) -> Option<String> {
+        self.constant.pretty_print(indent_level)
+    }
 }
 
 #[cfg(test)]
@@ -65,9 +69,9 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
-        ParserState,
-        ast::{ProgramAST, expression::basic::constant::Constant},
+        ast::{expression::basic::constant::Constant, ProgramAST},
         input::ParserInput,
+        ParserState,
     };
 
     #[test]

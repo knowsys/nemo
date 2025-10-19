@@ -2,15 +2,22 @@
 
 use nom::sequence::{delimited, pair};
 
-use crate::parser::{
-    ParserResult,
-    ast::{
-        ProgramAST, comment::wsoc::WSoC, expression::Expression,
-        sequence::simple::ExpressionSequenceSimple, tag::structure::StructureTag, token::Token,
+use crate::{
+    parser::{
+        ast::{
+            comment::wsoc::WSoC,
+            expression::Expression,
+            sequence::simple::ExpressionSequenceSimple,
+            tag::structure::StructureTag,
+            token::{Token, TokenKind},
+            ProgramAST,
+        },
+        context::{context, ParserContext},
+        input::ParserInput,
+        span::Span,
+        ParserResult,
     },
-    context::{ParserContext, context},
-    input::ParserInput,
-    span::Span,
+    syntax::pretty_printing::fits_on_line,
 };
 
 /// A possibly tagged sequence of [Expression]s.
@@ -89,6 +96,45 @@ impl<'a> ProgramAST<'a> for Atom<'a> {
     fn context(&self) -> ParserContext {
         CONTEXT
     }
+
+    fn pretty_print(&self, indent_level: usize) -> Option<String> {
+        let mut result = format!(
+            "{}{}",
+            self.tag.pretty_print(indent_level)?,
+            TokenKind::AtomOpen
+        );
+        let content_indent = indent_level + result.len();
+        let terms = self
+            .expressions()
+            .flat_map(|expression| expression.pretty_print(content_indent))
+            .collect::<Vec<_>>();
+        let all_terms = terms.join(&format!("{} ", TokenKind::SequenceSeparator));
+
+        let content = if fits_on_line(
+            &all_terms,
+            content_indent,
+            None,
+            Some(&format!("{}", TokenKind::AtomClose)),
+        ) {
+            all_terms
+        } else {
+            let indent = " ".repeat(content_indent);
+            format!(
+                "\n{}{}",
+                &indent,
+                terms.join(&format!("{}\n{}", TokenKind::SequenceSeparator, &indent))
+            )
+        };
+
+        result.push_str(&content);
+        if content.contains('\n') {
+            result.push_str(&" ".repeat(content_indent - 1));
+        }
+
+        result.push_str(&format!("{}", TokenKind::AtomClose));
+
+        Some(result)
+    }
 }
 
 #[cfg(test)]
@@ -96,9 +142,9 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
-        ParserState,
-        ast::{ProgramAST, expression::complex::atom::Atom},
+        ast::{expression::complex::atom::Atom, ProgramAST},
         input::ParserInput,
+        ParserState,
     };
 
     #[test]
