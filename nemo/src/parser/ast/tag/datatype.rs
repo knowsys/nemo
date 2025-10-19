@@ -6,12 +6,12 @@ use strum::IntoEnumIterator;
 
 use crate::{
     parser::{
-        ParserResult,
         ast::ProgramAST,
-        context::{ParserContext, context},
+        context::{context, ParserContext},
         error::ParserErrorTree,
         input::ParserInput,
         span::Span,
+        ParserResult,
     },
     rule_model::components::import_export::io_type::IOType,
 };
@@ -80,6 +80,10 @@ impl<'a> ProgramAST<'a> for DataTypeTag<'a> {
     fn context(&self) -> ParserContext {
         CONTEXT
     }
+
+    fn pretty_print(&self, _indent_level: usize) -> Option<String> {
+        Some(format!("{}", self.data_type.name()))
+    }
 }
 
 #[cfg(test)]
@@ -88,9 +92,9 @@ mod test {
 
     use crate::{
         parser::{
-            ParserState,
-            ast::{ProgramAST, tag::datatype::DataTypeTag},
+            ast::{tag::datatype::DataTypeTag, ProgramAST},
             input::ParserInput,
+            ParserState,
         },
         rule_model::components::import_export::io_type::IOType,
     };

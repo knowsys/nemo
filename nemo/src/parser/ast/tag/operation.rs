@@ -6,12 +6,12 @@ use strum::IntoEnumIterator;
 
 use crate::{
     parser::{
-        ParserResult,
         ast::ProgramAST,
-        context::{ParserContext, context},
+        context::{context, ParserContext},
         error::ParserErrorTree,
         input::ParserInput,
         span::Span,
+        ParserResult,
     },
     rule_model::components::term::operation::operation_kind::OperationKind,
 };
@@ -81,6 +81,10 @@ impl<'a> ProgramAST<'a> for OperationTag<'a> {
     fn context(&self) -> ParserContext {
         CONTEXT
     }
+
+    fn pretty_print(&self, _indent_level: usize) -> Option<String> {
+        Some(format!("{}", self.kind.name()))
+    }
 }
 
 #[cfg(test)]
@@ -89,9 +93,9 @@ mod test {
 
     use crate::{
         parser::{
-            ParserState,
-            ast::{ProgramAST, tag::operation::OperationTag},
+            ast::{tag::operation::OperationTag, ProgramAST},
             input::ParserInput,
+            ParserState,
         },
         rule_model::components::term::operation::operation_kind::OperationKind,
     };

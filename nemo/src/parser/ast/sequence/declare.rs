@@ -6,16 +6,16 @@ use nom::{
 };
 
 use crate::parser::{
-    ParserResult,
     ast::{
-        ProgramAST,
         comment::wsoc::WSoC,
         tag::{datatype::DataTypeTag, parameter::ParameterName},
-        token::Token,
+        token::{Token, TokenKind},
+        ProgramAST,
     },
     context::ParserContext,
     input::ParserInput,
     span::Span,
+    ParserResult,
 };
 
 const CONTEXT: ParserContext = ParserContext::DeclareNameTypePair;
@@ -69,6 +69,19 @@ impl<'a> ProgramAST<'a> for NameTypePair<'a> {
     fn context(&self) -> ParserContext {
         CONTEXT
     }
+
+    fn pretty_print(&self, indent_level: usize) -> Option<String> {
+        Some(if let Some(datatype) = &self.datatype {
+            format!(
+                "{}{} {}",
+                self.name.pretty_print(indent_level)?,
+                TokenKind::NameDatatypeSeparator,
+                datatype.pretty_print(indent_level)?
+            )
+        } else {
+            format!("{}", self.name.pretty_print(indent_level)?)
+        })
+    }
 }
 
 #[cfg(test)]
@@ -77,13 +90,13 @@ mod test {
 
     use crate::{
         parser::{
-            ParserState,
             ast::{
-                ProgramAST,
-                sequence::{Sequence, declare::NameTypePair},
+                sequence::{declare::NameTypePair, Sequence},
                 tag::parameter::Parameter,
+                ProgramAST,
             },
             input::ParserInput,
+            ParserState,
         },
         rule_model::components::import_export::io_type::IOType,
     };

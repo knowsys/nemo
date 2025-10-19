@@ -2,15 +2,18 @@
 
 use nom::{bytes::complete::take_until, sequence::delimited};
 
-use crate::parser::{
-    ParserResult,
-    ast::{
-        ProgramAST,
-        token::{Token, TokenKind},
+use crate::{
+    parser::{
+        ast::{
+            token::{Token, TokenKind},
+            ProgramAST,
+        },
+        context::{context, ParserContext},
+        input::ParserInput,
+        span::Span,
+        ParserResult,
     },
-    context::{ParserContext, context},
-    input::ParserInput,
-    span::Span,
+    syntax::pretty_printing::wrap_lines,
 };
 
 /// Closed comment
@@ -75,6 +78,18 @@ impl<'a> ProgramAST<'a> for ClosedComment<'a> {
     fn context(&self) -> ParserContext {
         CONTEXT
     }
+
+    fn pretty_print(&self, indent_level: usize) -> Option<String> {
+        let mut result = format!("{}", TokenKind::OpenComment);
+        result.push_str(&wrap_lines(&self.content(), indent_level, Some(" * ")));
+        result.push_str(&format!(
+            "\n{} {}",
+            " ".repeat(indent_level),
+            TokenKind::CloseComment
+        ));
+
+        Some(result)
+    }
 }
 
 #[cfg(test)]
@@ -82,9 +97,9 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
-        ParserState,
-        ast::{ProgramAST, comment::closed::ClosedComment},
+        ast::{comment::closed::ClosedComment, ProgramAST},
         input::ParserInput,
+        ParserState,
     };
 
     #[test]

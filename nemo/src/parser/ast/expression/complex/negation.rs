@@ -3,11 +3,16 @@
 use nom::sequence::{preceded, terminated};
 
 use crate::parser::{
-    ParserResult,
-    ast::{ProgramAST, comment::wsoc::WSoC, expression::Expression, token::Token},
-    context::{ParserContext, context},
+    ast::{
+        comment::wsoc::WSoC,
+        expression::Expression,
+        token::{Token, TokenKind},
+        ProgramAST,
+    },
+    context::{context, ParserContext},
     input::ParserInput,
     span::Span,
+    ParserResult,
 };
 
 /// A possibly tagged sequence of [Expression]s.
@@ -64,6 +69,14 @@ impl<'a> ProgramAST<'a> for Negation<'a> {
     fn context(&self) -> ParserContext {
         CONTEXT
     }
+
+    fn pretty_print(&self, indent_level: usize) -> Option<String> {
+        Some(format!(
+            "{}{}",
+            TokenKind::Neg,
+            self.expression.pretty_print(indent_level)?
+        ))
+    }
 }
 
 #[cfg(test)]
@@ -71,9 +84,9 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
-        ParserState,
-        ast::{ProgramAST, expression::complex::negation::Negation},
+        ast::{expression::complex::negation::Negation, ProgramAST},
         input::ParserInput,
+        ParserState,
     };
 
     #[test]

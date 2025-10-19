@@ -8,15 +8,12 @@ use nom::{
     sequence::{delimited, pair},
 };
 
-use crate::{
-    parser::{
-        ast::{token::Token, ProgramAST},
-        context::{context, ParserContext},
-        input::ParserInput,
-        span::Span,
-        ParserResult,
-    },
-    syntax::pretty_printing::{fits_on_line, wrap_lines},
+use crate::parser::{
+    ast::{token::Token, ProgramAST},
+    context::{context, ParserContext},
+    input::ParserInput,
+    span::Span,
+    ParserResult,
 };
 
 /// AST node representing a string
@@ -103,25 +100,14 @@ impl<'a> ProgramAST<'a> for StringLiteral<'a> {
         CONTEXT
     }
 
-    fn pretty_print(&self, indent_level: usize) -> Option<String> {
+    fn pretty_print(&self, _indent_level: usize) -> Option<String> {
         let content = self.content();
-        Some(
-            if fits_on_line(&content, indent_level, Some(QUOTE), Some(QUOTE)) {
-                format!("{}{}{}", QUOTE, content, QUOTE)
-            } else {
-                format!(
-                    "{}\n{}\n{}{}",
-                    TRIPLE_QUOTE,
-                    wrap_lines(
-                        &content,
-                        indent_level + TRIPLE_QUOTE.len(),
-                        Some(&" ".repeat(TRIPLE_QUOTE.len()))
-                    ),
-                    " ".repeat(indent_level),
-                    TRIPLE_QUOTE
-                )
-            },
-        )
+        let quote = if content.contains('\n') {
+            TRIPLE_QUOTE
+        } else {
+            QUOTE
+        };
+        Some(format!("{}{}{}", quote, content, quote))
     }
 }
 

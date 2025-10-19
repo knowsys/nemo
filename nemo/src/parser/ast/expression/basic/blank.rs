@@ -3,11 +3,14 @@
 use nom::{branch::alt, sequence::preceded};
 
 use crate::parser::{
-    ParserResult,
-    ast::{ProgramAST, token::Token},
-    context::{ParserContext, context},
+    ast::{
+        token::{Token, TokenKind},
+        ProgramAST,
+    },
+    context::{context, ParserContext},
     input::ParserInput,
     span::Span,
+    ParserResult,
 };
 
 /// AST node representing a blank node
@@ -69,6 +72,10 @@ impl<'a> ProgramAST<'a> for Blank<'a> {
     fn context(&self) -> ParserContext {
         CONTEXT
     }
+
+    fn pretty_print(&self, _indent_level: usize) -> Option<String> {
+        Some(format!("{}{}", TokenKind::BlankNodePrefix, self.name))
+    }
 }
 
 #[cfg(test)]
@@ -76,9 +83,9 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
-        ParserState,
-        ast::{ProgramAST, expression::basic::blank::Blank},
+        ast::{expression::basic::blank::Blank, ProgramAST},
         input::ParserInput,
+        ParserState,
     };
 
     #[test]

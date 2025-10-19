@@ -4,11 +4,15 @@
 use nom::sequence::{separated_pair, tuple};
 
 use crate::parser::{
-    ParserResult,
-    ast::{ProgramAST, tag::structure::StructureTag, token::Token},
-    context::{ParserContext, context},
+    ast::{
+        tag::structure::StructureTag,
+        token::{Token, TokenKind},
+        ProgramAST,
+    },
+    context::{context, ParserContext},
     input::ParserInput,
     span::Span,
+    ParserResult,
 };
 
 /// AST node representing an rdf literal
@@ -83,6 +87,17 @@ impl<'a> ProgramAST<'a> for RdfLiteral<'a> {
     fn context(&self) -> ParserContext {
         CONTEXT
     }
+
+    fn pretty_print(&self, indent_level: usize) -> Option<String> {
+        Some(format!(
+            "{}{}{}{}{}",
+            TokenKind::Quote,
+            self.content,
+            TokenKind::Quote,
+            TokenKind::RdfDatatypeIndicator,
+            self.tag.pretty_print(indent_level)?
+        ))
+    }
 }
 
 #[cfg(test)]
@@ -90,9 +105,9 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
-        ParserState,
-        ast::{ProgramAST, expression::basic::rdf_literal::RdfLiteral},
+        ast::{expression::basic::rdf_literal::RdfLiteral, ProgramAST},
         input::ParserInput,
+        ParserState,
     };
 
     #[test]

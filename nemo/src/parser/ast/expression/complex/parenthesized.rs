@@ -2,12 +2,20 @@
 
 use nom::sequence::{delimited, pair};
 
-use crate::parser::{
-    ParserResult,
-    ast::{ProgramAST, comment::wsoc::WSoC, expression::Expression, token::Token},
-    context::ParserContext,
-    input::ParserInput,
-    span::Span,
+use crate::{
+    parser::{
+        ast::{
+            comment::wsoc::WSoC,
+            expression::Expression,
+            token::{Token, TokenKind},
+            ProgramAST,
+        },
+        context::ParserContext,
+        input::ParserInput,
+        span::Span,
+        ParserResult,
+    },
+    syntax::pretty_printing::fits_on_line,
 };
 
 /// An [Expression] enclosed in parenthesis
@@ -69,6 +77,31 @@ impl<'a> ProgramAST<'a> for ParenthesizedExpression<'a> {
 
     fn context(&self) -> ParserContext {
         CONTEXT
+    }
+
+    fn pretty_print(&self, indent_level: usize) -> Option<String> {
+        let mut result = format!("{}", TokenKind::OpenParenthesis);
+        let content_indent = indent_level + result.len();
+        let content = self.expression.pretty_print(content_indent)?;
+
+        if fits_on_line(
+            &content,
+            content_indent,
+            None,
+            Some(TokenKind::ClosedParenthesis.name()),
+        ) {
+            result.push_str(&content);
+        } else {
+            result.push_str(&format!(
+                "\n{}{content}\n{}",
+                " ".repeat(content_indent),
+                " ".repeat(indent_level)
+            ));
+        }
+
+        result.push_str(&format!("{}", TokenKind::ClosedParenthesis));
+
+        Some(result)
     }
 }
 

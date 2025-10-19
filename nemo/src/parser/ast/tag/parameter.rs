@@ -3,11 +3,14 @@
 use nom::{branch::alt, combinator::map};
 
 use crate::parser::{
-    ParserResult,
-    ast::{ProgramAST, token::Token},
-    context::{ParserContext, context},
+    ast::{
+        token::{Token, TokenKind},
+        ProgramAST,
+    },
+    context::{context, ParserContext},
     input::ParserInput,
     span::Span,
+    ParserResult,
 };
 
 /// Type of parameter
@@ -76,6 +79,13 @@ impl<'a> ProgramAST<'a> for ParameterName<'a> {
     fn context(&self) -> ParserContext {
         CONTEXT
     }
+
+    fn pretty_print(&self, _indent_level: usize) -> Option<String> {
+        Some(match &self.parameter {
+            Parameter::Unnamed => format!("{}", TokenKind::AnonVal),
+            Parameter::Named(name) => format!("{name}"),
+        })
+    }
 }
 
 #[cfg(test)]
@@ -83,9 +93,9 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
-        ParserState,
-        ast::{ProgramAST, tag::parameter::ParameterName},
+        ast::{tag::parameter::ParameterName, ProgramAST},
         input::ParserInput,
+        ParserState,
     };
 
     use super::Parameter;

@@ -3,13 +3,17 @@
 use nom::sequence::{delimited, pair};
 
 use crate::parser::{
-    ParserResult,
     ast::{
-        ProgramAST, comment::wsoc::WSoC, expression::Expression, sequence::Sequence, token::Token,
+        comment::wsoc::WSoC,
+        expression::Expression,
+        sequence::Sequence,
+        token::{Token, TokenKind},
+        ProgramAST,
     },
-    context::{ParserContext, context},
+    context::{context, ParserContext},
     input::ParserInput,
     span::Span,
+    ParserResult,
 };
 
 /// A sequence of [Expression]s.
@@ -76,6 +80,23 @@ impl<'a> ProgramAST<'a> for Tuple<'a> {
     fn context(&self) -> ParserContext {
         CONTEXT
     }
+
+    fn pretty_print(&self, indent_level: usize) -> Option<String> {
+        let mut result = format!("{}", TokenKind::TupleOpen);
+
+        let content_indent = indent_level + result.len();
+        let content = self.expressions.pretty_print(content_indent)?;
+        if !content.is_empty() {
+            result.push_str(&content);
+            if content.contains('\n') {
+                result.push_str(&" ".repeat(content_indent - 1));
+            }
+        }
+
+        result.push_str(&format!("{}", TokenKind::TupleClose));
+
+        Some(result)
+    }
 }
 
 #[cfg(test)]
@@ -83,9 +104,9 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
-        ParserState,
-        ast::{ProgramAST, expression::complex::tuple::Tuple},
+        ast::{expression::complex::tuple::Tuple, ProgramAST},
         input::ParserInput,
+        ParserState,
     };
 
     #[test]

@@ -6,12 +6,12 @@ use strum::IntoEnumIterator;
 
 use crate::{
     parser::{
-        ParserResult,
-        ast::{ProgramAST, token::Token},
-        context::{ParserContext, context},
+        ast::{token::Token, ProgramAST},
+        context::{context, ParserContext},
         error::ParserErrorTree,
         input::ParserInput,
         span::Span,
+        ParserResult,
     },
     rule_model::components::term::aggregate::AggregateKind,
 };
@@ -90,6 +90,10 @@ impl<'a> ProgramAST<'a> for AggregationTag<'a> {
     fn context(&self) -> ParserContext {
         CONTEXT
     }
+
+    fn pretty_print(&self, _indent_level: usize) -> Option<String> {
+        Some(format!("{}", self.kind?.name()))
+    }
 }
 
 #[cfg(test)]
@@ -98,9 +102,9 @@ mod test {
 
     use crate::{
         parser::{
-            ParserState,
-            ast::{ProgramAST, tag::aggregation::AggregationTag},
+            ast::{tag::aggregation::AggregationTag, ProgramAST},
             input::ParserInput,
+            ParserState,
         },
         rule_model::components::term::aggregate::AggregateKind,
     };
