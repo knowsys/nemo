@@ -1,6 +1,6 @@
 //! Functionality which handles the execution of a program
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use nemo_physical::{
     datavalues::AnyDataValue,
@@ -276,6 +276,15 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             self.table_manager.register_predicate(predicate, arity);
         }
 
+        for predicate in self.program.output_predicates().iter().cloned().chain(
+            self.program
+                .exports()
+                .iter()
+                .map(|export| export.predicate()),
+        ) {
+            self.table_manager.combine_predicate(&predicate).await?;
+        }
+
         let mut new_derivations: Option<bool> = None;
 
         while let Some(index) = self.selection_strategy.next_rule(new_derivations) {
@@ -337,10 +346,25 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
     /// Count the number of facts of derived predicates that are currently in memory.
     pub fn count_facts_in_memory_for_derived_predicates(&self) -> usize {
-        self.program
-            .derived_predicates()
+        let output_predicates = self.program.output_predicates().iter().cloned();
+        let export_predicates = self
+            .program
+            .exports()
             .iter()
-            .map(|p| self.count_facts_in_memory_for_predicate(p).unwrap_or(0))
+            .map(|export| export.predicate());
+        let derived_predicates = self.program.derived_predicates().iter().cloned();
+
+        let predicates = output_predicates
+            .chain(export_predicates)
+            .chain(derived_predicates)
+            .collect::<HashSet<_>>();
+
+        predicates
+            .iter()
+            .map(|predicate| {
+                self.count_facts_in_memory_for_predicate(predicate)
+                    .unwrap_or(0)
+            })
             .sum()
     }
 

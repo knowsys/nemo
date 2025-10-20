@@ -620,10 +620,6 @@ impl TableManager {
 
         let tables = subtable_handler.cover_range(&range);
 
-        if tables.len() == 1 {
-            return Ok(Some(tables[0]));
-        }
-
         let mut union_plan = ExecutionPlan::default();
         let fetch_nodes = tables
             .iter()
@@ -633,13 +629,14 @@ impl TableManager {
         let plan_id = union_plan.write_permanent(union_node, "Combining Tables", &name);
 
         let execution_result = self.database.execute_plan(union_plan).await?;
-        let table_id = execution_result
-            .get(&plan_id)
-            .expect("Combining multiple non-empty tables should result in a non-empty table.");
 
-        subtable_handler.add_combined_table(&range, *table_id);
-
-        Ok(Some(*table_id))
+        match execution_result.get(&plan_id) {
+            Some(table_id) => {
+                subtable_handler.add_combined_table(&range, *table_id);
+                Ok(Some(*table_id))
+            }
+            None => Ok(None),
+        }
     }
 
     /// Execute a plan and add the results as subtables to the manager.

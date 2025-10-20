@@ -257,6 +257,11 @@ impl NormalizedProgram {
             result.exports.push(normalized_exports);
         }
 
+        // Handle outputs
+        for output in program.outputs() {
+            result.output_predicates.push(output.predicate().clone());
+        }
+
         // Calculate variable order
         let orders = build_preferable_variable_orders(&result, None)
             .all_variable_orders
