@@ -139,7 +139,7 @@ impl VariableOrder {
         result
     }
 
-    /// Extend this oder with the variables provided by the iterator.
+    /// Extend this order with the variables provided by the iterator.
     pub(crate) fn extend<'a, VariableIter>(&mut self, variables: VariableIter)
     where
         VariableIter: Iterator<Item = &'a Variable>,
@@ -493,7 +493,8 @@ pub(crate) struct BuilderResultVariants {
     pub(crate) all_variable_orders: Vec<Vec<VariableOrder>>,
     /// For each variant of the variable order computation
     /// contains one [HashSet] mapping each predicate to its available [ColumnOrder]s.
-    pub(crate) _all_column_orders: Vec<HashMap<Tag, HashSet<ColumnOrder>>>,
+    #[allow(unused)]
+    pub(crate) all_column_orders: Vec<HashMap<Tag, HashSet<ColumnOrder>>>,
 }
 
 pub(crate) fn build_preferable_variable_orders(
@@ -544,7 +545,7 @@ pub(crate) fn build_preferable_variable_orders(
 
     BuilderResultVariants {
         all_variable_orders,
-        _all_column_orders: all_column_orders,
+        all_column_orders,
     }
 }
 

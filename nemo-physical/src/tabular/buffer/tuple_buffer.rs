@@ -487,6 +487,8 @@ impl TupleBuffer {
                 if let Some(value) = transformation.program.evaluate_data(&data_values) {
                     self.current_tuple_data_values[transformation.position] = value;
                 } else {
+                    // We skip this pattern if the operation did not return a result,
+                    // e.g. when using a builtin with a value of an incorrect type
                     continue 'pattern;
                 }
             }
