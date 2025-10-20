@@ -53,6 +53,25 @@ impl NormalizedProgram {
 
     /// Add a new rule to the program.
     pub fn add_rule(&mut self, rule: NormalizedRule) {
+        let rule_index = self.rules.len();
+
+        for (predicate, arity) in rule.predicates() {
+            self.add_predicate_arity(predicate, arity);
+        }
+
+        for body in rule.positive() {
+            self.add_body_predicate_rule(body.predicate(), rule_index);
+        }
+
+        for head in rule.head() {
+            self.add_head_predicate_rule(head.predicate(), rule_index);
+            self.add_derived_predicate(head.predicate());
+        }
+
+        for value in rule.datavalues() {
+            self.add_datavalue(value);
+        }
+
         self.rules.push(rule);
     }
 
@@ -207,24 +226,7 @@ impl NormalizedProgram {
         for (rule_index, rule) in program.rules().enumerate() {
             let normalized_rule = NormalizedRule::normalize_rule(rule, rule_index);
 
-            for (predicate, arity) in normalized_rule.predicates() {
-                result.add_predicate_arity(predicate, arity);
-            }
-
-            for body in normalized_rule.positive() {
-                result.add_body_predicate_rule(body.predicate(), rule_index);
-            }
-
-            for head in normalized_rule.head() {
-                result.add_head_predicate_rule(head.predicate(), rule_index);
-                result.add_derived_predicate(head.predicate());
-            }
-
-            for value in normalized_rule.datavalues() {
-                result.add_datavalue(value);
-            }
-
-            result.rules.push(normalized_rule);
+            result.add_rule(normalized_rule);
         }
 
         // Handle imports

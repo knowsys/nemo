@@ -988,7 +988,6 @@ mod test {
         ImportInstruction::new(predicate, handler)
     }
 
-    // #[ignore]
     #[test]
     #[cfg_attr(miri, ignore)]
     fn build_preferable_variable_orders_with_galen_el_part_ie_5_rules_without_constant() {
@@ -1000,6 +999,7 @@ mod test {
             let (predicate, arity) = predicates[predicate_index].clone();
             program.add_import(csv_import(predicate, arity));
         }
+
         for rule in rules {
             program.add_rule(rule);
         }
@@ -1280,7 +1280,6 @@ mod test {
         (rules, variables, predicates)
     }
 
-    #[ignore]
     #[test]
     #[cfg_attr(miri, ignore)]
     fn build_preferable_variable_orders_with_el_without_constant() {
