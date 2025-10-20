@@ -170,13 +170,13 @@ impl GeneratorImport {
 
         let binding_nodes = self.create_binding_tables(plan, input_node, runtime);
 
-        for (predicate, atoms) in &self.atoms {
-            let mut stored_binding_tables = HashSet::<Tag>::default();
+        let mut import_bindings = HashMap::<Tag, Vec<ExecutionNodeRef>>::default();
 
+        for (predicate, atoms) in &self.atoms {
             for (atom, index_binding) in atoms {
                 let (binding_predicate, _arity) = Self::predicate_name(atom, &self.input_variables);
 
-                if !stored_binding_tables.insert(binding_predicate.clone()) {
+                if result.contains_key(&(predicate.clone(), *index_binding)) {
                     continue;
                 }
 
@@ -193,12 +193,10 @@ impl GeneratorImport {
                     .plan_mut()
                     .subtract(node_bindings, vec![node_old_bindings]);
 
-                plan.add_permanent_table(
-                    node_new_bindings.clone(),
-                    "Import Bindings",
-                    "Import Bindings",
-                    SubtableIdentifier::new(binding_predicate, runtime.step_current),
-                );
+                import_bindings
+                    .entry(binding_predicate.clone())
+                    .or_default()
+                    .push(node_new_bindings.clone());
 
                 let provider = runtime
                     .import_manager
@@ -213,6 +211,17 @@ impl GeneratorImport {
 
                 result.insert((predicate.clone(), *index_binding), node_import);
             }
+        }
+
+        for (predicate, nodes) in import_bindings {
+            let node_union = plan.plan_mut().union(nodes[0].markers_cloned(), nodes);
+
+            plan.add_permanent_table(
+                node_union.clone(),
+                "Import Bindings",
+                "Import Bindings",
+                SubtableIdentifier::new(predicate, runtime.step_current),
+            );
         }
 
         result

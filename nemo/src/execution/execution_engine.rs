@@ -202,7 +202,11 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         let timing_string = format!("Reasoning/Rules/Rule {rule_index}");
 
         TimedCode::instance().sub(&timing_string).start();
-        log::info!("<<< {0}: APPLYING RULE {rule_index} >>>", self.current_step);
+        log::info!(
+            "<<< {}: APPLYING RULE {} >>>",
+            self.current_step,
+            self.program.rules()[rule_index]
+        );
 
         self.rule_history.push(rule_index);
 

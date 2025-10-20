@@ -1,6 +1,9 @@
 //! This module defines [NormalizedProgram].
 
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::{
+    collections::{BTreeSet, HashMap, HashSet},
+    fmt::Display,
+};
 
 use nemo_physical::datavalues::AnyDataValue;
 
@@ -43,6 +46,29 @@ pub struct NormalizedProgram {
     predicate_to_rule_head: HashMap<Tag, HashSet<usize>>,
     /// Set of datavalues used in this program
     datavalues: BTreeSet<AnyDataValue>,
+}
+
+impl Display for NormalizedProgram {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let imports = self.imports.iter().map(ToString::to_string);
+        let exports = self.exports.iter().map(ToString::to_string);
+        let rules = self.rules.iter().map(ToString::to_string);
+        let facts = self.facts.iter().map(ToString::to_string);
+        let output = self
+            .output_predicates
+            .iter()
+            .map(|predicate| format!("@output {predicate} ."));
+
+        let program = imports
+            .chain(facts)
+            .chain(rules)
+            .chain(output)
+            .chain(exports)
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        f.write_str(&program)
+    }
 }
 
 impl NormalizedProgram {

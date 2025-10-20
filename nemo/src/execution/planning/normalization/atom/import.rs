@@ -30,7 +30,7 @@ impl Display for ImportAtom {
         let predicate = self.predicate();
 
         f.write_str(&format!(
-            "{predicate}{}{terms}{}",
+            "@import {predicate}{}{terms}{}",
             syntax::expression::atom::OPEN,
             syntax::expression::atom::CLOSE
         ))
