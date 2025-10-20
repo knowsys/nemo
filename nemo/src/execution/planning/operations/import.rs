@@ -171,12 +171,10 @@ impl GeneratorImport {
         let binding_nodes = self.create_binding_tables(plan, input_node, runtime);
 
         for (predicate, atoms) in &self.atoms {
-            let mut stored_binding_tables = HashSet::<Tag>::default();
-
             for (atom, index_binding) in atoms {
                 let (binding_predicate, _arity) = Self::predicate_name(atom, &self.input_variables);
 
-                if !stored_binding_tables.insert(binding_predicate.clone()) {
+                if result.contains_key(&(predicate.clone(), *index_binding)) {
                     continue;
                 }
 

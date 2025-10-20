@@ -1,5 +1,7 @@
 //! This module defines [ImportInstruction].
 
+use std::fmt::Display;
+
 use crate::{
     execution::planning::normalization::rule::NormalizedRule, io::formats::Import,
     rule_model::components::tag::Tag,
@@ -12,6 +14,12 @@ pub struct ImportInstruction {
     predicate: Tag,
     /// Handler object responsible for importing data
     handler: Import,
+}
+
+impl Display for ImportInstruction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("@import {} .", self.predicate))
+    }
 }
 
 impl ImportInstruction {

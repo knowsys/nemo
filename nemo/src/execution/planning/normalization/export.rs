@@ -1,5 +1,7 @@
 //! This module defines [ExportInstruction].
 
+use std::fmt::Display;
+
 use crate::{
     execution::planning::normalization::rule::NormalizedRule, io::formats::Export,
     rule_model::components::tag::Tag,
@@ -12,6 +14,12 @@ pub struct ExportInstruction {
     predicate: Tag,
     /// Handler object responsible for exporting data
     handler: Export,
+}
+
+impl Display for ExportInstruction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("@export {} .", self.predicate))
+    }
 }
 
 impl ExportInstruction {
