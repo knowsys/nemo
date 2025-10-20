@@ -1,6 +1,6 @@
 //! Functionality which handles the execution of a program
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use nemo_physical::{
     datavalues::AnyDataValue,
@@ -10,12 +10,10 @@ use nemo_physical::{
 };
 
 use crate::{
-    chase_model::{
-        analysis::program_analysis::ProgramAnalysis,
-        components::{atom::ChaseAtom, export::ChaseExport, program::ChaseProgram},
-        translation::ProgramChaseTranslation,
-    },
     error::{Error, report::ProgramReport, warned::Warned},
+    execution::planning::{
+        normalization::program::NormalizedProgram, strategy::forward::StrategyForward,
+    },
     io::{formats::Export, import_manager::ImportManager},
     rule_file::RuleFile,
     rule_model::{
@@ -27,8 +25,7 @@ use crate::{
 };
 
 use super::{
-    execution_parameters::ExecutionParameters, rule_execution::RuleExecution,
-    selection_strategy::strategy::RuleSelectionStrategy,
+    execution_parameters::ExecutionParameters, selection_strategy::strategy::RuleSelectionStrategy,
 };
 
 pub mod tracing;
@@ -59,12 +56,10 @@ pub struct ExecutionEngine<RuleSelectionStrategy> {
     nemo_program: Program,
 
     /// Normalized program
-    program: ChaseProgram,
-    /// Auxillary information for `program`
-    analysis: ProgramAnalysis,
+    program: NormalizedProgram,
 
     /// The picked selection strategy for rules
-    rule_strategy: RuleSelectionStrategy,
+    selection_strategy: RuleSelectionStrategy,
 
     /// Management of tables that represent predicates
     table_manager: TableManager,
@@ -110,30 +105,25 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         program: Program,
         import_manager: ImportManager,
     ) -> Result<Self, Error> {
-        let chase_program = ProgramChaseTranslation::new().translate(&program);
-        let analysis = chase_program.analyze();
+        let normalized_program = NormalizedProgram::normalize_program(&program);
 
         let mut table_manager = TableManager::new();
-        Self::register_all_predicates(&mut table_manager, &analysis);
-        Self::add_all_constants(&mut table_manager, &chase_program);
-        Self::add_imports(&mut table_manager, &import_manager, &chase_program).await?;
+        Self::register_all_predicates(&mut table_manager, &normalized_program);
+        Self::add_all_constants(&mut table_manager, &normalized_program);
+        Self::add_imports(&mut table_manager, &import_manager, &normalized_program).await?;
 
         let mut rule_infos = Vec::<RuleInfo>::new();
-        chase_program
+        normalized_program
             .rules()
             .iter()
             .for_each(|_| rule_infos.push(RuleInfo::new()));
 
-        let rule_strategy = Strategy::new(
-            chase_program.rules().iter().collect(),
-            analysis.rule_analysis.iter().collect(),
-        )?;
+        let selection_strategy = Strategy::new(normalized_program.rules().iter().collect())?;
 
         Ok(Self {
             nemo_program: program,
-            program: chase_program,
-            analysis,
-            rule_strategy,
+            program: normalized_program,
+            selection_strategy,
             table_manager,
             import_manager,
             predicate_fragmentation: HashMap::new(),
@@ -145,16 +135,16 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     }
 
     /// Register all predicates found in a rule program to the [TableManager].
-    fn register_all_predicates(table_manager: &mut TableManager, analysis: &ProgramAnalysis) {
-        for (predicate, arity) in &analysis.all_predicates {
-            table_manager.register_predicate(predicate.clone(), *arity);
+    fn register_all_predicates(table_manager: &mut TableManager, program: &NormalizedProgram) {
+        for (predicate, arity) in program.predicates() {
+            table_manager.register_predicate(predicate, arity);
         }
     }
 
     /// Add all constants appearing in the rules of the program to the dictionary.
-    fn add_all_constants(table_manager: &mut TableManager, program: &ChaseProgram) {
+    fn add_all_constants(table_manager: &mut TableManager, program: &NormalizedProgram) {
         for value in program.datavalues() {
-            table_manager.dictionary_mut().add_datavalue(value);
+            table_manager.dictionary_mut().add_datavalue(value.clone());
         }
     }
 
@@ -163,14 +153,14 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     async fn add_imports(
         table_manager: &mut TableManager,
         import_manager: &ImportManager,
-        program: &ChaseProgram,
+        program: &NormalizedProgram,
     ) -> Result<(), Error> {
         let mut predicate_to_sources = HashMap::<Tag, Vec<TableSource>>::new();
 
         // Add all the import specifications
         for import in program.imports() {
             let table_source = import_manager
-                .table_provider_from_handler(import.handler())
+                .table_provider_from_handler(&import.handler())
                 .await?;
 
             predicate_to_sources
@@ -207,7 +197,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     async fn step(
         &mut self,
         rule_index: usize,
-        execution: &RuleExecution,
+        execution: &StrategyForward,
     ) -> Result<Vec<Tag>, Error> {
         let timing_string = format!("Reasoning/Rules/Rule {rule_index}");
 
@@ -222,8 +212,8 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             .execute(
                 &mut self.table_manager,
                 &self.import_manager,
-                current_info,
                 self.current_step,
+                current_info.step_last_applied,
             )
             .await?;
 
@@ -272,19 +262,33 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         TimedCode::instance().sub("Reasoning/Rules").start();
         TimedCode::instance().sub("Reasoning/Execution").start();
 
-        let rule_execution: Vec<RuleExecution> = self
+        let execution_strategy = self
             .program
             .rules()
             .iter()
-            .enumerate()
-            .zip(self.analysis.rule_analysis.iter())
-            .map(|((index, rule), analysis)| RuleExecution::initialize(rule, index, analysis))
-            .collect();
+            .map(StrategyForward::new)
+            .collect::<Vec<_>>();
+
+        for (predicate, arity) in execution_strategy
+            .iter()
+            .flat_map(|strategy| strategy.special_predicates())
+        {
+            self.table_manager.register_predicate(predicate, arity);
+        }
+
+        for predicate in self.program.output_predicates().iter().cloned().chain(
+            self.program
+                .exports()
+                .iter()
+                .map(|export| export.predicate()),
+        ) {
+            self.table_manager.combine_predicate(&predicate).await?;
+        }
 
         let mut new_derivations: Option<bool> = None;
 
-        while let Some(index) = self.rule_strategy.next_rule(new_derivations) {
-            let updated_predicates = self.step(index, &rule_execution[index]).await?;
+        while let Some(index) = self.selection_strategy.next_rule(new_derivations) {
+            let updated_predicates = self.step(index, &execution_strategy[index]).await?;
             new_derivations = Some(!updated_predicates.is_empty());
 
             self.defrag(updated_predicates).await?;
@@ -302,7 +306,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     }
 
     /// Get a reference to the loaded program.
-    pub(crate) fn chase_program(&self) -> &ChaseProgram {
+    pub(crate) fn chase_program(&self) -> &NormalizedProgram {
         &self.program
     }
 
@@ -321,7 +325,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     /// Returns the arity of the predicate if the predicate is known to the engine,
     /// and `None` otherwise.
     pub fn predicate_arity(&self, predicate: &Tag) -> Option<usize> {
-        self.analysis.all_predicates.get(predicate).copied()
+        self.program.predicate_arity(predicate)
     }
 
     /// Return a list of all all export predicates and their respective [`Export`]s,
@@ -330,9 +334,8 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         self.program
             .exports()
             .iter()
-            .cloned()
-            .map(ChaseExport::into_predicate_and_handler)
-            .collect()
+            .map(|export| (export.predicate(), export.handler()))
+            .collect::<Vec<_>>()
     }
 
     /// Counts the facts of a single predicate that are currently in memory.
@@ -343,10 +346,25 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
     /// Count the number of facts of derived predicates that are currently in memory.
     pub fn count_facts_in_memory_for_derived_predicates(&self) -> usize {
-        self.analysis
-            .derived_predicates
+        let output_predicates = self.program.output_predicates().iter().cloned();
+        let export_predicates = self
+            .program
+            .exports()
             .iter()
-            .map(|p| self.count_facts_in_memory_for_predicate(p).unwrap_or(0))
+            .map(|export| export.predicate());
+        let derived_predicates = self.program.derived_predicates().iter().cloned();
+
+        let predicates = output_predicates
+            .chain(export_predicates)
+            .chain(derived_predicates)
+            .collect::<HashSet<_>>();
+
+        predicates
+            .iter()
+            .map(|predicate| {
+                self.count_facts_in_memory_for_predicate(predicate)
+                    .unwrap_or(0)
+            })
             .sum()
     }
 

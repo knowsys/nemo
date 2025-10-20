@@ -7,11 +7,7 @@ use std::{collections::HashMap, fmt::Display, hash::Hash};
 use operation_kind::OperationKind;
 
 use crate::{
-    chase_model::translation::ProgramChaseTranslation,
-    execution::{
-        planning::operations::operation::operation_term_to_function_tree,
-        rule_execution::VariableTranslation,
-    },
+    execution::planning::VariableTranslation,
     rule_model::{
         components::{
             ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent,
@@ -112,11 +108,10 @@ impl Operation {
             return Some(Term::Operation(self.clone()));
         }
 
-        let chase_operation_term = ProgramChaseTranslation::build_operation_term(self);
+        let normalized_operation = crate::execution::planning::normalization::operation::Operation::normalize_body_operation(self);
 
         let empty_translation = VariableTranslation::new();
-        let function_tree =
-            operation_term_to_function_tree(&empty_translation, &chase_operation_term);
+        let function_tree = normalized_operation.function_tree(&empty_translation);
 
         let stack_program = nemo_physical::function::evaluation::StackProgram::from_function_tree(
             &function_tree,

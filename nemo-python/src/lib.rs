@@ -2,7 +2,6 @@ use std::{collections::HashSet, fs::read_to_string, time::Duration};
 
 use nemo::{
     api::load_program,
-    chase_model::ChaseAtom,
     datavalues::{AnyDataValue, DataValue},
     error::Error,
     execution::{ExecutionEngine, tracing::trace::ExecutionTraceTree},
@@ -201,7 +200,7 @@ fn datavalue_to_python(py: Python<'_>, v: AnyDataValue) -> PyResult<Bound<'_, Py
 }
 
 #[pyclass]
-struct NemoFact(nemo::chase_model::GroundAtom);
+struct NemoFact(nemo::execution::planning::normalization::atom::ground::GroundAtom);
 
 #[pymethods]
 impl NemoFact {

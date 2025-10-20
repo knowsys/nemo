@@ -4,8 +4,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    chase_model::{analysis::program_analysis::RuleAnalysis, components::rule::ChaseRule},
-    rule_model::components::tag::Tag,
+    execution::planning::normalization::rule::NormalizedRule, rule_model::components::tag::Tag,
 };
 
 use super::graph_constructor::{DependencyGraph, DependencyGraphConstructor};
@@ -16,26 +15,21 @@ use super::graph_constructor::{DependencyGraph, DependencyGraphConstructor};
 pub struct GraphConstructorPositive {}
 
 impl DependencyGraphConstructor for GraphConstructorPositive {
-    fn build_graph(rules: Vec<&ChaseRule>, rule_analyses: Vec<&RuleAnalysis>) -> DependencyGraph {
-        debug_assert!(rules.len() == rule_analyses.len());
+    fn build_graph(rules: &[&NormalizedRule]) -> DependencyGraph {
         let rule_count = rules.len();
 
         let mut predicate_to_rules_body = HashMap::<Tag, Vec<usize>>::new();
         let mut predicate_to_rules_head = HashMap::<Tag, Vec<usize>>::new();
 
-        for (rule_index, rule_analysis) in rule_analyses.iter().enumerate() {
-            for body_predicate in &rule_analysis.positive_body_predicates {
-                let indices = predicate_to_rules_body
-                    .entry(body_predicate.clone())
-                    .or_default();
+        for (rule_index, rule) in rules.iter().enumerate() {
+            for (body_predicate, _) in rule.predicates_positive() {
+                let indices = predicate_to_rules_body.entry(body_predicate).or_default();
 
                 indices.push(rule_index);
             }
 
-            for head_predicate in &rule_analysis.head_predicates {
-                let indices = predicate_to_rules_head
-                    .entry(head_predicate.clone())
-                    .or_default();
+            for (head_predicate, _) in rule.predicates_head() {
+                let indices = predicate_to_rules_head.entry(head_predicate).or_default();
 
                 indices.push(rule_index);
             }
