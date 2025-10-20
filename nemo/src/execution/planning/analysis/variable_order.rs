@@ -145,7 +145,9 @@ impl VariableOrder {
         VariableIter: Iterator<Item = &'a Variable>,
     {
         for variable in variables {
-            self.push(variable.clone());
+            if !self.contains(variable) {
+                self.push(variable.clone());
+            }
         }
     }
 }
@@ -986,7 +988,7 @@ mod test {
         ImportInstruction::new(predicate, handler)
     }
 
-    #[ignore]
+    // #[ignore]
     #[test]
     #[cfg_attr(miri, ignore)]
     fn build_preferable_variable_orders_with_galen_el_part_ie_5_rules_without_constant() {
