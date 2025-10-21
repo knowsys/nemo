@@ -114,8 +114,8 @@ struct NemoLiteral {
 impl NemoLiteral {
     #[new]
     #[pyo3(signature=(value, lang=None))]
-    fn new(value: PyObject, lang: Option<String>) -> PyResult<NemoLiteral> {
-        Python::with_gil(|py| {
+    fn new(value: Py<PyAny>, lang: Option<String>) -> PyResult<NemoLiteral> {
+        Python::attach(|py| {
             let inner: String = value.extract(py).map_err(|_| {
                 NemoError::new_err("Only string arguments are currently supported".to_string())
             })?;
