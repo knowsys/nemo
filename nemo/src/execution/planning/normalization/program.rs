@@ -149,26 +149,28 @@ impl NormalizedProgram {
         &self.derived_predicates
     }
 
-    /// Return the set of rule indices that contain the given predicate
+    /// Return an iterator over rule indices that contain the given predicate
     /// in the rule's positive body.
-    ///
-    /// # Panics
-    /// Panics if the requested predicate doesn't exist.
-    pub fn rules_with_body_predicate(&self, predicate: &Tag) -> &HashSet<usize> {
-        self.predicate_to_rule_body
-            .get(predicate)
-            .expect("predicate is unknown")
+    pub fn rules_with_body_predicate(
+        &self,
+        predicate: &Tag,
+    ) -> Box<dyn Iterator<Item = usize> + '_> {
+        match self.predicate_to_rule_body.get(predicate) {
+            Some(set) => Box::new(set.iter().copied()),
+            None => Box::new(std::iter::empty()),
+        }
     }
 
-    /// Return the set of rule indices that contain the given predicate
+    /// Return an iterator over rule indices that contain the given predicate
     /// in the rule's head.
-    ///
-    /// # Panics
-    /// Panics if the requested predicate doesn't exist.
-    pub fn rules_with_head_predicate(&self, predicate: &Tag) -> &HashSet<usize> {
-        self.predicate_to_rule_head
-            .get(predicate)
-            .expect("predicate is unknown")
+    pub fn rules_with_head_predicate(
+        &self,
+        predicate: &Tag,
+    ) -> Box<dyn Iterator<Item = usize> + '_> {
+        match self.predicate_to_rule_head.get(predicate) {
+            Some(set) => Box::new(set.iter().copied()),
+            None => Box::new(std::iter::empty()),
+        }
     }
 
     /// Return the set of [AnyDataValue]s that appear in this program.

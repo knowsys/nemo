@@ -222,16 +222,14 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
         let possible_rules_above = program
             .rules_with_body_predicate(&predicate)
-            .iter()
-            .flat_map(|&index| {
+            .flat_map(|index| {
                 TraceRule::all_possible_single_head_rules(index, self.program().rule(index))
             })
             .collect::<Vec<_>>();
 
         let possible_rules_below = program
             .rules_with_head_predicate(&predicate)
-            .iter()
-            .flat_map(|&index| {
+            .flat_map(|index| {
                 TraceRule::possible_rules_for_head_predicate(
                     index,
                     self.program().rule(index),
@@ -480,8 +478,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             let possible_rules_above = self
                 .program
                 .rules_with_body_predicate(&predicate)
-                .iter()
-                .flat_map(|&index| {
+                .flat_map(|index| {
                     TraceRule::all_possible_single_head_rules(index, self.program().rule(index))
                 })
                 .collect::<Vec<_>>();
@@ -489,8 +486,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             let possible_rules_below = self
                 .program
                 .rules_with_head_predicate(&predicate)
-                .iter()
-                .flat_map(|&index| {
+                .flat_map(|index| {
                     TraceRule::possible_rules_for_head_predicate(
                         index,
                         self.program().rule(index),
