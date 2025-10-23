@@ -22,6 +22,7 @@
 #![feature(iter_intersperse)]
 #![feature(test)]
 #![feature(slice_swap_unchecked)]
+#![feature(iter_array_chunks)]
 
 mod benches;
 

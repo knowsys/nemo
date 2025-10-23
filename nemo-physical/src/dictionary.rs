@@ -30,6 +30,7 @@ pub(crate) mod string_langstring_dv_dict;
 pub(crate) mod null_dv_dict;
 pub(crate) use null_dv_dict::NullDvDictionary;
 
+pub(crate) mod map_dv_dict;
 pub(crate) mod tuple_dv_dict;
 
 pub mod meta_dv_dict;
