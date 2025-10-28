@@ -50,10 +50,19 @@ pub(super) fn variable_translation(
     for variable in rule.variables().cloned() {
         variable_translation.add_marker(variable);
     }
-    let mut order = order.clone();
+
+    let body_variables = rule
+        .positive_all()
+        .iter()
+        .flat_map(|atom| atom.terms())
+        .cloned()
+        .collect::<HashSet<_>>();
+
+    let mut order = order.restrict_to(&body_variables);
 
     let mut head_variables = Vec::<Variable>::default();
     let mut used_variables = HashSet::<&Variable>::new();
+
     for (index, term) in rule.head()[head_index].terms().enumerate() {
         let create_new_variable = match term {
             Primitive::Variable(variable) => {
@@ -131,7 +140,7 @@ pub(super) fn valid_tables_plan(
         HashSet::default()
     };
 
-    let body_set = rule.variables().cloned().collect::<HashSet<_>>();
+    let body_set = rule.variables_non_head().cloned().collect::<HashSet<_>>();
     let head_set = head_variables
         .iter()
         .enumerate()

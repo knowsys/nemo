@@ -225,9 +225,8 @@ impl NormalizedRule {
         result
     }
 
-    /// Return an iterator over all variables contained in this rule.
-    pub fn variables(&self) -> impl Iterator<Item = &Variable> {
-        let head_variables = self.head.iter().flat_map(|atom| atom.variables());
+    /// Return an iterator over all variables that do not occur in the head of this rule.
+    pub fn variables_non_head(&self) -> impl Iterator<Item = &Variable> {
         let positive_variables = self.positive.iter().flat_map(|atom| atom.terms());
         let negative_variables = self.negative.iter().flat_map(|atom| atom.terms());
         let import_variables = self.imports.iter().flat_map(|atom| atom.variables());
@@ -242,12 +241,19 @@ impl NormalizedRule {
             .into_iter()
             .flatten();
 
-        head_variables
-            .chain(positive_variables)
+        positive_variables
             .chain(negative_variables)
             .chain(import_variables)
             .chain(operation_variables)
             .chain(aggregation_variables)
+    }
+
+    /// Return an iterator over all variables contained in this rule.
+    pub fn variables(&self) -> impl Iterator<Item = &Variable> {
+        let head_variables = self.head.iter().flat_map(|atom| atom.variables());
+        let non_head_variables = self.variables_non_head();
+
+        head_variables.chain(non_head_variables)
     }
 
     /// Return an iterator over all predicates occurring in a positive atom

@@ -312,12 +312,13 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
         if let Some(successor) = &node.next {
             let rule = program.rules()[successor.rule].clone();
+
             let order = rule.variable_order().clone();
 
             let (variable_translation, order, head_variables) =
                 variable_translation(&rule, successor.head_index, &order);
 
-            let body_set = rule.variables().cloned().collect::<HashSet<_>>();
+            let body_set = rule.variables_non_head().cloned().collect::<HashSet<_>>();
             let head_set = head_variables
                 .iter()
                 .enumerate()
