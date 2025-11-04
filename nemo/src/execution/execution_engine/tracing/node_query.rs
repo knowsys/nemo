@@ -262,13 +262,9 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 if discarded_columns.is_empty() {
                     // If all columns are required, we simply add the table
 
-                    if let Some(id) = join_query_node(
-                        self.table_manager.database_mut(),
-                        arity,
-                        id,
-                        query_table.clone(),
-                    )
-                    .await
+                    if let Some(id) =
+                        join_query_node(self.table_manager.database_mut(), arity, id, query_table)
+                            .await
                     {
                         manager.add_valid_table(&address, step, id);
                     }
