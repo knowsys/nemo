@@ -308,7 +308,11 @@ pub(super) async fn consolidate_valid_tables(
     manager: &TraceNodeManager,
     address: &TreeAddress,
 ) -> Option<PermanentTableId> {
-    if manager.valid_tables(address).count() == 1 {
+    let valid_tables_count = manager.valid_tables(address).count();
+
+    if valid_tables_count == 0 {
+        return None;
+    } else if valid_tables_count == 1 {
         return Some(manager.valid_tables(address).next().unwrap());
     }
 
@@ -350,6 +354,7 @@ pub(super) async fn ignore_discarded_columns_base(
     id: PermanentTableId,
     arity: usize,
     discarded_columns: &[usize],
+    query_table: Option<PermanentTableId>,
 ) -> Option<PermanentTableId> {
     let markers = OperationTable::new_unique(arity);
     let mut single_markers = OperationTable::default();
@@ -358,8 +363,16 @@ pub(super) async fn ignore_discarded_columns_base(
     }
 
     let mut plan = ExecutionPlan::default();
-    let node_load = plan.fetch_table(markers, id);
-    let node_single = plan.single(node_load, single_markers);
+    let node_load = plan.fetch_table(markers.clone(), id);
+
+    let node_input = if let Some(query_id) = query_table {
+        let node_query = plan.fetch_table(markers.clone(), query_id);
+        plan.join(markers, vec![node_load, node_query])
+    } else {
+        node_load
+    };
+
+    let node_single = plan.single(node_input, single_markers);
 
     plan.write_permanent(node_single, "single", "single");
     database
@@ -371,8 +384,45 @@ pub(super) async fn ignore_discarded_columns_base(
         .map(|(_, &result_id)| result_id)
 }
 
+/// Filters the input table by the elements in the query table,
+/// by joining input and query table.
+///
+/// Returns the id of the input table if the query table is `None`.
+///
+/// Return None if the execution of the plan failed.
+pub(super) async fn join_query_node(
+    database: &mut DatabaseInstance,
+    arity: usize,
+    input_table: PermanentTableId,
+    query_table: Option<PermanentTableId>,
+) -> Option<PermanentTableId> {
+    let query_table = if let Some(id) = query_table {
+        id
+    } else {
+        return Some(input_table);
+    };
+
+    let mut plan = ExecutionPlan::default();
+    let markers = OperationTable::new_unique(arity);
+
+    let node_input = plan.fetch_table(markers.clone(), input_table);
+    let node_query = plan.fetch_table(markers.clone(), query_table);
+
+    let node_join = plan.join(markers, vec![node_input, node_query]);
+
+    plan.write_permanent(node_join, "join", "join");
+
+    database
+        .execute_plan(plan)
+        .await
+        .expect("error while executing plan")
+        .iter()
+        .next()
+        .map(|(_, &result_id)| result_id)
+}
+
 /// Calculate helper structures that define the filters that need to be applied.
-pub(crate) fn node_filter<'a, FilterIter>(
+pub(super) fn node_filter<'a, FilterIter>(
     plan: &mut ExecutionPlan,
     translation: &VariableTranslation,
     subnode: ExecutionNodeRef,
@@ -389,7 +439,7 @@ where
 }
 
 /// Calculate helper structures that define the filters that need to be applied.
-pub(crate) fn node_functions<'a, OperationIter>(
+pub(super) fn node_functions<'a, OperationIter>(
     plan: &mut ExecutionPlan,
     translation: &VariableTranslation,
     subnode: ExecutionNodeRef,
@@ -413,7 +463,7 @@ where
 }
 
 /// Compute the appropriate execution plan to evaluate negated atoms.
-pub(crate) fn node_negation<NegationIter>(
+pub(super) fn node_negation<NegationIter>(
     plan: &mut ExecutionPlan,
     table_manager: &TableManager,
     translation: &VariableTranslation,
@@ -453,7 +503,7 @@ where
 /// a node representing the union of subtables within that range.
 ///
 /// Note that only the output of the union will receive column markers.
-pub(crate) fn subplan_union(
+pub(super) fn subplan_union(
     plan: &mut ExecutionPlan,
     table_manager: &TableManager,
     predicate: &Tag,
