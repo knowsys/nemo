@@ -51,14 +51,14 @@ pub(super) fn variable_translation(
         variable_translation.add_marker(variable);
     }
 
-    let body_variables = rule
+    let positive_variables = rule
         .positive_all()
         .iter()
         .flat_map(|atom| atom.terms())
         .cloned()
         .collect::<HashSet<_>>();
 
-    let mut order = order.restrict_to(&body_variables);
+    let mut order = order.restrict_to(&positive_variables);
 
     let mut head_variables = Vec::<Variable>::default();
     let mut used_variables = HashSet::<&Variable>::new();
@@ -140,8 +140,8 @@ pub(super) fn valid_tables_plan(
         HashSet::default()
     };
 
-    let body_set = rule.variables_non_head().cloned().collect::<HashSet<_>>();
-    let head_set = head_variables
+    let set_non_head_variables = rule.variables_non_head().cloned().collect::<HashSet<_>>();
+    let set_head_variables = head_variables
         .iter()
         .enumerate()
         .filter_map(|(index, variable)| {
@@ -152,14 +152,14 @@ pub(super) fn valid_tables_plan(
             }
         })
         .collect::<HashSet<_>>();
-    let disjoint = head_set.is_disjoint(&body_set);
+    let disjoint = set_head_variables.is_disjoint(&set_non_head_variables);
 
     if disjoint {
-        order = order.restrict_to(&body_set);
+        order = order.restrict_to(&set_non_head_variables);
     }
 
     let order_set = order.iter().cloned().collect::<HashSet<_>>();
-    let head_set = head_set
+    let head_set = set_head_variables
         .union(&aggregate_set)
         .cloned()
         .collect::<HashSet<_>>();
@@ -378,7 +378,7 @@ pub(super) async fn ignore_discarded_columns_base(
     database
         .execute_plan(plan)
         .await
-        .expect("error while executing plan")
+        .expect("executing plan should be valid")
         .iter()
         .next()
         .map(|(_, &result_id)| result_id)
@@ -415,7 +415,7 @@ pub(super) async fn join_query_node(
     database
         .execute_plan(plan)
         .await
-        .expect("error while executing plan")
+        .expect("execution plan should be valid")
         .iter()
         .next()
         .map(|(_, &result_id)| result_id)
