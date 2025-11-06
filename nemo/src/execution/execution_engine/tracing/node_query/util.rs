@@ -50,10 +50,19 @@ pub(super) fn variable_translation(
     for variable in rule.variables().cloned() {
         variable_translation.add_marker(variable);
     }
-    let mut order = order.clone();
+
+    let positive_variables = rule
+        .positive_all()
+        .iter()
+        .flat_map(|atom| atom.terms())
+        .cloned()
+        .collect::<HashSet<_>>();
+
+    let mut order = order.restrict_to(&positive_variables);
 
     let mut head_variables = Vec::<Variable>::default();
     let mut used_variables = HashSet::<&Variable>::new();
+
     for (index, term) in rule.head()[head_index].terms().enumerate() {
         let create_new_variable = match term {
             Primitive::Variable(variable) => {
@@ -118,7 +127,7 @@ pub(super) fn valid_tables_plan(
     let is_aggregate = Some(head_index) == rule.aggregate_index();
 
     let aggregate_set = if is_aggregate {
-        let aggregate = rule.aggregate().expect("is aggregate");
+        let aggregate = rule.aggregate().expect("ensured by is_aggregate variable");
 
         aggregate
             .group_by_variables()
@@ -131,8 +140,8 @@ pub(super) fn valid_tables_plan(
         HashSet::default()
     };
 
-    let body_set = rule.variables().cloned().collect::<HashSet<_>>();
-    let head_set = head_variables
+    let set_non_head_variables = rule.variables_non_head().cloned().collect::<HashSet<_>>();
+    let set_head_variables = head_variables
         .iter()
         .enumerate()
         .filter_map(|(index, variable)| {
@@ -143,14 +152,14 @@ pub(super) fn valid_tables_plan(
             }
         })
         .collect::<HashSet<_>>();
-    let disjoint = head_set.is_disjoint(&body_set);
+    let disjoint = set_head_variables.is_disjoint(&set_non_head_variables);
 
     if disjoint {
-        order = order.restrict_to(&body_set);
+        order = order.restrict_to(&set_non_head_variables);
     }
 
     let order_set = order.iter().cloned().collect::<HashSet<_>>();
-    let head_set = head_set
+    let head_set = set_head_variables
         .union(&aggregate_set)
         .cloned()
         .collect::<HashSet<_>>();
@@ -299,7 +308,11 @@ pub(super) async fn consolidate_valid_tables(
     manager: &TraceNodeManager,
     address: &TreeAddress,
 ) -> Option<PermanentTableId> {
-    if manager.valid_tables(address).count() == 1 {
+    let valid_tables_count = manager.valid_tables(address).count();
+
+    if valid_tables_count == 0 {
+        return None;
+    } else if valid_tables_count == 1 {
         return Some(manager.valid_tables(address).next().unwrap());
     }
 
@@ -341,6 +354,7 @@ pub(super) async fn ignore_discarded_columns_base(
     id: PermanentTableId,
     arity: usize,
     discarded_columns: &[usize],
+    query_table: Option<PermanentTableId>,
 ) -> Option<PermanentTableId> {
     let markers = OperationTable::new_unique(arity);
     let mut single_markers = OperationTable::default();
@@ -349,21 +363,66 @@ pub(super) async fn ignore_discarded_columns_base(
     }
 
     let mut plan = ExecutionPlan::default();
-    let node_load = plan.fetch_table(markers, id);
-    let node_single = plan.single(node_load, single_markers);
+    let node_load = plan.fetch_table(markers.clone(), id);
+
+    let node_input = if let Some(query_id) = query_table {
+        let node_query = plan.fetch_table(markers.clone(), query_id);
+        plan.join(markers, vec![node_load, node_query])
+    } else {
+        node_load
+    };
+
+    let node_single = plan.single(node_input, single_markers);
 
     plan.write_permanent(node_single, "single", "single");
     database
         .execute_plan(plan)
         .await
-        .expect("error while executing plan")
+        .expect("plan does not require loading sources")
+        .iter()
+        .next()
+        .map(|(_, &result_id)| result_id)
+}
+
+/// Filters the input table by the elements in the query table,
+/// by joining input and query table.
+///
+/// Returns the id of the input table if the query table is `None`.
+///
+/// Return None if the execution of the plan failed.
+pub(super) async fn join_query_node(
+    database: &mut DatabaseInstance,
+    arity: usize,
+    input_table: PermanentTableId,
+    query_table: Option<PermanentTableId>,
+) -> Option<PermanentTableId> {
+    let query_table = if let Some(id) = query_table {
+        id
+    } else {
+        return Some(input_table);
+    };
+
+    let mut plan = ExecutionPlan::default();
+    let markers = OperationTable::new_unique(arity);
+
+    let node_input = plan.fetch_table(markers.clone(), input_table);
+    let node_query = plan.fetch_table(markers.clone(), query_table);
+
+    let node_join = plan.join(markers, vec![node_input, node_query]);
+
+    plan.write_permanent(node_join, "join", "join");
+
+    database
+        .execute_plan(plan)
+        .await
+        .expect("plan does not require loading sources")
         .iter()
         .next()
         .map(|(_, &result_id)| result_id)
 }
 
 /// Calculate helper structures that define the filters that need to be applied.
-pub(crate) fn node_filter<'a, FilterIter>(
+pub(super) fn node_filter<'a, FilterIter>(
     plan: &mut ExecutionPlan,
     translation: &VariableTranslation,
     subnode: ExecutionNodeRef,
@@ -380,7 +439,7 @@ where
 }
 
 /// Calculate helper structures that define the filters that need to be applied.
-pub(crate) fn node_functions<'a, OperationIter>(
+pub(super) fn node_functions<'a, OperationIter>(
     plan: &mut ExecutionPlan,
     translation: &VariableTranslation,
     subnode: ExecutionNodeRef,
@@ -393,7 +452,7 @@ where
     let mut assignments = FunctionAssignment::new();
 
     for (variable, operation) in operations {
-        let marker = *translation.get(variable).expect("All variables are known");
+        let marker = *translation.get(variable).expect("all variables are known");
         let function_tree = operation.function_tree(translation);
 
         assignments.insert(marker, function_tree);
@@ -404,7 +463,7 @@ where
 }
 
 /// Compute the appropriate execution plan to evaluate negated atoms.
-pub(crate) fn node_negation<NegationIter>(
+pub(super) fn node_negation<NegationIter>(
     plan: &mut ExecutionPlan,
     table_manager: &TableManager,
     translation: &VariableTranslation,
@@ -444,7 +503,7 @@ where
 /// a node representing the union of subtables within that range.
 ///
 /// Note that only the output of the union will receive column markers.
-pub(crate) fn subplan_union(
+pub(super) fn subplan_union(
     plan: &mut ExecutionPlan,
     table_manager: &TableManager,
     predicate: &Tag,

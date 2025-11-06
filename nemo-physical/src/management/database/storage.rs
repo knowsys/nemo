@@ -29,6 +29,8 @@ impl TableStorage {
     /// Load the table from a list of [TableSource]s and convert it into a [Trie].
     ///
     /// This function assumes that at least one source is provided.
+    ///
+    /// Returns an error if the [Trie] cannot be loaded.
     async fn load_sources(
         sources: Vec<TableSource>,
         dictionary: &RefCell<Dict>,
@@ -55,6 +57,8 @@ impl TableStorage {
     ///
     /// If the table is not already loaded into memory as a [Trie],
     /// this function will load the [TableSource] and transform it into a [Trie].
+    ///
+    /// Returns an error when [Trie] cannot be loaded.
     pub(crate) async fn trie<'a>(
         &'a mut self,
         dictionary: &RefCell<Dict>,

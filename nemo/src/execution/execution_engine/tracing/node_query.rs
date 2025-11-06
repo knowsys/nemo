@@ -14,8 +14,8 @@ use crate::{
             manager::TraceNodeManager,
             util::{
                 consolidate_assignment_tables, consolidate_valid_tables,
-                ignore_discarded_columns_base, result_tables_plan, unique_variables,
-                valid_tables_plan, variable_translation,
+                ignore_discarded_columns_base, join_query_node, result_tables_plan,
+                unique_variables, valid_tables_plan, variable_translation,
             },
         },
         planning::normalization::{atom::ground::GroundAtom, program::NormalizedProgram},
@@ -256,19 +256,27 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 .table_manager
                 .tables_in_range_steps(predicate, 0..before_step)
             {
+                let query_table = manager.query_table(&address);
+                let arity = self.table_manager.arity(predicate);
+
                 if discarded_columns.is_empty() {
                     // If all columns are required, we simply add the table
-                    manager.add_valid_table(&address, step, id);
+
+                    if let Some(id) =
+                        join_query_node(self.table_manager.database_mut(), arity, id, query_table)
+                            .await
+                    {
+                        manager.add_valid_table(&address, step, id);
+                    }
                 } else {
                     // Otherwise, project the discarded columns away
-
-                    let arity = self.table_manager.arity(predicate);
 
                     if let Some(ignored_id) = ignore_discarded_columns_base(
                         self.table_manager.database_mut(),
                         id,
                         arity,
                         discarded_columns,
+                        query_table,
                     )
                     .await
                     {
@@ -312,12 +320,13 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
         if let Some(successor) = &node.next {
             let rule = program.rules()[successor.rule].clone();
+
             let order = rule.variable_order().clone();
 
             let (variable_translation, order, head_variables) =
                 variable_translation(&rule, successor.head_index, &order);
 
-            let body_set = rule.variables().cloned().collect::<HashSet<_>>();
+            let body_set = rule.variables_non_head().cloned().collect::<HashSet<_>>();
             let head_set = head_variables
                 .iter()
                 .enumerate()

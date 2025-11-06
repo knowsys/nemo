@@ -168,7 +168,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             .zip(grounding.iter().cloned())
             .collect();
 
-        for (body_index, body_atom) in rule.positive().iter().enumerate() {
+        for (body_index, body_atom) in rule.positive_all().iter().enumerate() {
             let next_fact_predicate = body_atom.predicate();
             let next_fact_terms = body_atom
                 .terms()
@@ -193,11 +193,8 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         facts: Vec<GroundAtom>,
         program: &NormalizedProgram,
     ) -> Option<TreeForTableResponse> {
-        let predicate = if let Some(first_fact) = facts.first() {
-            first_fact.predicate() // We assume that all facts have the same predicate
-        } else {
-            return None;
-        };
+        // This functions assumes that all facts have the same predicate.
+        let predicate = facts.first().map(|fact| fact.predicate())?;
 
         // Prepare the result, which contains some information independant of tracing results below
         let entries = {
@@ -207,6 +204,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 .ok()
                 .flatten()?
                 .collect::<Vec<_>>();
+
             facts
                 .iter()
                 .map(|fact| {
@@ -258,6 +256,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 let entry = self.table_manager.find_table_row(&predicate, &dvs);
                 entries.push(entry.await);
             }
+
             entries.into_iter().collect::<Option<Vec<usize>>>()?
         };
 
