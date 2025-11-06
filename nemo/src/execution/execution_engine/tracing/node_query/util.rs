@@ -127,7 +127,7 @@ pub(super) fn valid_tables_plan(
     let is_aggregate = Some(head_index) == rule.aggregate_index();
 
     let aggregate_set = if is_aggregate {
-        let aggregate = rule.aggregate().expect("is aggregate");
+        let aggregate = rule.aggregate().expect("ensured by is_aggregate variable");
 
         aggregate
             .group_by_variables()
@@ -378,7 +378,7 @@ pub(super) async fn ignore_discarded_columns_base(
     database
         .execute_plan(plan)
         .await
-        .expect("executing plan should be valid")
+        .expect("plan does not require loading sources")
         .iter()
         .next()
         .map(|(_, &result_id)| result_id)
@@ -415,7 +415,7 @@ pub(super) async fn join_query_node(
     database
         .execute_plan(plan)
         .await
-        .expect("execution plan should be valid")
+        .expect("plan does not require loading sources")
         .iter()
         .next()
         .map(|(_, &result_id)| result_id)
@@ -452,7 +452,7 @@ where
     let mut assignments = FunctionAssignment::new();
 
     for (variable, operation) in operations {
-        let marker = *translation.get(variable).expect("All variables are known");
+        let marker = *translation.get(variable).expect("all variables are known");
         let function_tree = operation.function_tree(translation);
 
         assignments.insert(marker, function_tree);

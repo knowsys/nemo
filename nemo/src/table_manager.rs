@@ -640,6 +640,11 @@ impl TableManager {
     }
 
     /// Execute a plan and add the results as subtables to the manager.
+    ///
+    /// The affected predicates are returned as a list of [Tag]s.
+    ///
+    /// Execution can fail if loading required tables into memory
+    /// is unsuccessful. In this case this function returns an error.
     pub async fn execute_plan(
         &mut self,
         subtable_plan: SubtableExecutionPlan,

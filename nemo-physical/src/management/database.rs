@@ -334,7 +334,9 @@ impl DatabaseInstance {
     /// For a given list of [PermanentTableId] and [ColumnOrder] pairs,
     /// make sure that the tables represented by those ids and orders
     /// exist as [Trie]s and return a list with the [StorageId]s
-    /// to obtain them from `self.reference_manager`
+    /// to obtain them from `self.reference_manager.
+    ///
+    /// Returns an error if loading a [Trie] into memory failed.
     async fn collect_requiured_tries(
         &mut self,
         tables: &[(PermanentTableId, ColumnOrder)],
@@ -498,6 +500,14 @@ impl DatabaseInstance {
     }
 
     /// Evaluate the given [ExecutionPlan].
+    ///
+    /// Returns a map associating [ExecutionId]s,
+    /// which mark output nodes in the [ExecutionPlan]s,
+    /// to [PermanentTableId]s of the computed tables.
+    ///
+    /// If the loading of [Trie]s into memory failed
+    /// as part of the execution,
+    /// then this function will return an error.
     pub async fn execute_plan(
         &mut self,
         plan: ExecutionPlan,
