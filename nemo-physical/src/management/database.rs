@@ -414,8 +414,8 @@ impl DatabaseInstance {
         storage: &'a TemporaryStorage,
         tree: ExecutionTree,
         dependent: Vec<ProjectReordering>,
-    ) -> (Trie, Vec<Trie>) {
-        match tree.root {
+    ) -> Result<(Trie, Vec<Trie>), Error> {
+        Ok(match tree.root {
             ExecutionTreeNode::Operation(operation) => {
                 if let Some(trie_scan) =
                     self.evaluate_operation(&self.dictionary, storage, &operation)
@@ -463,16 +463,14 @@ impl DatabaseInstance {
                 }
             }
             ExecutionTreeNode::IncrementalImport { generator, subnode } => {
-                let dict = &self.dictionary;
-                let trie = match self.evaluate_tree_leaf(storage, &subnode) {
-                    Some(scan) => generator.apply_operation(scan, dict).await,
-                    None => Ok(Trie::empty(0)),
-                }
-                .expect("error while reading"); // TODO: This error should somehow be caught
+                let trie = match self.evaluate_operation(&self.dictionary, storage, &subnode) {
+                    Some(scan) => generator.apply_operation(scan, &self.dictionary).await?,
+                    None => Trie::empty(0),
+                };
 
                 (trie, vec![])
             }
-        }
+        })
     }
 
     fn log_new_trie(tree_result: &ExecutionResult, trie: &Trie) {
@@ -554,7 +552,7 @@ impl DatabaseInstance {
             TimedCode::instance().sub(&timed_string).start();
             let (result_tree, results_dependent) = self
                 .execute_tree(&temporary_storage, tree, dependent_reorderings)
-                .await;
+                .await?;
 
             TimedCode::instance().sub(&timed_string).stop();
 
@@ -612,7 +610,10 @@ impl DatabaseInstance {
         for (tree_index, tree) in execution_series.trees.into_iter().enumerate() {
             match &tree.result {
                 ExecutionResult::Temporary => {
-                    let (result, _) = self.execute_tree(&temporary_storage, tree, vec![]).await;
+                    let (result, _) = self
+                        .execute_tree(&temporary_storage, tree, vec![])
+                        .await
+                        .ok()?;
 
                     temporary_storage.computed_tables[tree_index] = Some(result);
                 }
@@ -699,7 +700,7 @@ impl DatabaseInstance {
 
             let (result_tree, results_dependent) = self
                 .execute_tree(&temporary_storage, tree, dependent_reorderings)
-                .await;
+                .await?;
 
             temporary_storage.computed_tables[tree_index] = Some(result_tree);
             for ((computed_id, _), result_dependent) in

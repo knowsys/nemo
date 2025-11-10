@@ -415,7 +415,6 @@ impl ExecutionPlan {
             ExecutionOperation::IncrementalImport(subnode.clone(), Rc::new(provider));
         let import_node = self.push_and_return_reference(new_operation, marked_columns);
 
-        self.write_temporary(subnode, "Input for Import");
         self.write_temporary(import_node.clone(), "Import");
 
         import_node
@@ -885,23 +884,17 @@ impl ExecutionPlan {
             }
             ExecutionOperation::IncrementalImport(subnode, table_provider) => {
                 let marker_subnode = subnode.markers_cloned();
-                let subtree: ExecutionTreeLeaf = if let ExecutionTreeOperation::Leaf(leaf) =
-                    Self::execution_node(
-                        root_node_id,
-                        subnode.clone(),
-                        ColumnOrder::default(),
-                        output_nodes,
-                        computed_trees,
-                        computed_trees_map,
-                        loaded_tables,
-                    )
-                    .operation()
-                    .expect("non-operations appear only as tree roots")
-                {
-                    leaf
-                } else {
-                    unreachable!("Subnode of a project must be a load instruction");
-                };
+                let subtree = Self::execution_node(
+                    root_node_id,
+                    subnode.clone(),
+                    order,
+                    output_nodes,
+                    computed_trees,
+                    computed_trees_map,
+                    loaded_tables,
+                )
+                .operation()
+                .expect("non-operations appear only as tree roots");
 
                 ExecutionTreeNode::IncrementalImport {
                     generator: GeneratorIncrementalImport::new(

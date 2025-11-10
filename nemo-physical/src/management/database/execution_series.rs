@@ -52,7 +52,7 @@ pub(crate) enum ExecutionTreeNode {
     },
     IncrementalImport {
         generator: GeneratorIncrementalImport,
-        subnode: ExecutionTreeLeaf,
+        subnode: ExecutionTreeOperation,
     },
 }
 
@@ -130,7 +130,6 @@ impl ExecutionTree {
             }
             ExecutionTreeNode::ProjectReorder { generator, subnode } => {
                 let subnode_tree = Self::ascii_tree_recursive(subnode);
-
                 ascii_tree::Tree::Node(format!("{generator:?}"), vec![subnode_tree])
             }
             ExecutionTreeNode::Single { generator, subnode } => {
@@ -138,15 +137,7 @@ impl ExecutionTree {
                 ascii_tree::Tree::Node(format!("{generator:?}"), vec![subnode_tree])
             }
             ExecutionTreeNode::IncrementalImport { generator, subnode } => {
-                let subnode_tree = match subnode {
-                    ExecutionTreeLeaf::LoadTable(_) => {
-                        ascii_tree::Tree::Leaf(vec![format!("Permanent Table")])
-                    }
-                    ExecutionTreeLeaf::FetchComputedTable(_) => {
-                        ascii_tree::Tree::Leaf(vec![format!("New Table")])
-                    }
-                };
-
+                let subnode_tree = Self::ascii_tree_recursive(subnode);
                 ascii_tree::Tree::Node(format!("{generator:?}"), vec![subnode_tree])
             }
         };
