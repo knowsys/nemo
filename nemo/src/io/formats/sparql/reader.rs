@@ -2,6 +2,7 @@
 
 use std::io::{BufReader, Read};
 
+use itertools::Itertools;
 use nemo_physical::datasources::bindings::{Bindings, ProductBindings};
 use nemo_physical::error::ReadingErrorKind;
 use nemo_physical::management::bytesized::ByteSized;
@@ -242,15 +243,58 @@ impl SparqlReader {
     }
 
     fn bindings_chunks(bindings: &[Bindings], page_size: usize) -> Vec<Vec<Bindings>> {
-        let counts = bindings
+        let sorted = bindings
             .iter()
-            .map(|bindings| bindings.count())
+            .enumerate()
+            .sorted_by_cached_key(|(_, bindings)| bindings.count())
             .collect::<Vec<_>>();
 
-        if counts.iter().product::<usize>() <= page_size {
-            vec![Vec::from(bindings)]
-        } else {
+        let split_index = sorted
+            .iter()
+            .enumerate()
+            .scan(1, |count, (idx, (_, bindings))| {
+                *count *= bindings.count();
+                Some((idx, *count))
+            })
+            .find(|(_, count)| *count > page_size);
+
+        if let Some((split_index, _)) = split_index {
+            let mut result = Vec::new();
+            let (prefix, rest) = sorted.split_at(split_index);
+            let prefix_count = prefix
+                .iter()
+                .map(|(_, bindings)| bindings.count())
+                .product::<usize>();
+            let remaining_size = page_size.div_ceil(prefix_count).max(1);
+            let the_prefix = prefix
+                .iter()
+                .map(|(_, bindings)| (*bindings).clone())
+                .collect::<Vec<_>>();
+
+            if rest.len() > 1 {
+                for infix in rest[0..rest.len() - 1]
+                    .iter()
+                    .map(|(_, bindings)| bindings.chunks(1).collect::<Vec<_>>())
+                    .multi_cartesian_product()
+                {
+                    for chunk in rest[rest.len()].1.chunks(remaining_size) {
+                        let mut the_result = the_prefix.clone();
+                        the_result.extend(infix.clone());
+                        the_result.push(chunk);
+                        result.push(the_result);
+                    }
+                }
+            } else {
+                for chunk in rest[0].1.chunks(remaining_size) {
+                    let mut the_result = the_prefix.clone();
+                    the_result.push(chunk);
+                    result.push(the_result);
+                }
+            }
+
             todo!("implement paging here")
+        } else {
+            vec![Vec::from(bindings)]
         }
     }
 

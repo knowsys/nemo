@@ -99,11 +99,7 @@ impl GeneratorIncrementalImport {
                 provider
                     .provide_table_data_with_bindings(
                         &mut tuple_writer,
-                        &ProductBindings::new(&Bindings::new(
-                            &self.bound_positions,
-                            &bindings,
-                            bindings.len(),
-                        )),
+                        &ProductBindings::new(&Bindings::new(&self.bound_positions, &bindings)),
                     )
                     .await?;
             }

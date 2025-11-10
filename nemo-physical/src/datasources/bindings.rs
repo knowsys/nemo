@@ -1,5 +1,7 @@
 //! This module defines a data structure for sets of variable bindings.
 
+use itertools::Itertools;
+
 use crate::datavalues::AnyDataValue;
 
 /// A set of bindings for some positions
@@ -12,11 +14,11 @@ pub struct Bindings {
 
 impl Bindings {
     /// Creates a new set of bindings for the given positions
-    pub fn new(positions: &[usize], bindings: &[Vec<AnyDataValue>], count: usize) -> Self {
+    pub fn new(positions: &[usize], bindings: &[Vec<AnyDataValue>]) -> Self {
         Self {
             positions: positions.iter().cloned().collect(),
             bindings: bindings.iter().cloned().collect(),
-            count,
+            count: bindings.len(),
         }
     }
 
@@ -41,6 +43,19 @@ impl Bindings {
             bindings,
             count: left.count + right.count,
         }
+    }
+
+    /// Split the bindings set into chunks not greater than the given size.
+    pub fn chunks(&self, size: usize) -> impl Iterator<Item = Self> {
+        let mut result = Vec::new();
+
+        for chunk in &self.bindings.iter().chunks(size) {
+            let bindings = chunk.cloned().collect::<Vec<_>>();
+
+            result.push(Self::new(&self.positions, &bindings))
+        }
+
+        result.into_iter()
     }
 
     /// Checks whether this binding set is empty.
