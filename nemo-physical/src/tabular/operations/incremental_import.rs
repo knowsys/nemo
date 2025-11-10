@@ -3,7 +3,11 @@
 use std::{cell::RefCell, rc::Rc};
 
 use crate::{
-    datasources::{table_providers::TableProvider, tuple_writer::TupleWriter},
+    datasources::{
+        bindings::{Bindings, ProductBindings},
+        table_providers::TableProvider,
+        tuple_writer::TupleWriter,
+    },
     datatypes::into_datavalue::IntoDataValue,
     error::ReadingError,
     management::database::Dict,
@@ -95,9 +99,11 @@ impl GeneratorIncrementalImport {
                 provider
                     .provide_table_data_with_bindings(
                         &mut tuple_writer,
-                        &self.bound_positions,
-                        &bindings,
-                        bindings.len(),
+                        &ProductBindings::new(&Bindings::new(
+                            &self.bound_positions,
+                            &bindings,
+                            bindings.len(),
+                        )),
                     )
                     .await?;
             }
