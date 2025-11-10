@@ -141,6 +141,11 @@ impl GeneratorProjectReorder {
     pub(crate) fn projectreordering(&self) -> ProjectReordering {
         self.projectreordering.clone()
     }
+
+    /// Return the arity of the resulting table.
+    pub(crate) fn arity(&self) -> usize {
+        self.arity_output
+    }
 }
 
 #[cfg(test)]

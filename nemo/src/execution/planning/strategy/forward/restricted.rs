@@ -104,7 +104,12 @@ impl StrategyRestricted {
             SubtableIdentifier::new(self.new_satisfied.predicate().0, runtime.step_current),
         );
 
-        self.nulls
-            .create_plan(plan, node_unsatisfied_matches_frontier, runtime)
+        let node_nulls = self
+            .nulls
+            .create_plan(plan, node_unsatisfied_matches_frontier, runtime);
+
+        plan.add_temporary_table(node_nulls.clone(), "Head (Restricted): Nulls");
+
+        node_nulls
     }
 }

@@ -16,8 +16,6 @@ use std::{
     fmt::Debug,
 };
 
-use ascii_tree::write_tree;
-
 use crate::{
     datasources::table_providers::TableProvider,
     datavalues::AnyDataValue,
@@ -441,14 +439,15 @@ impl DatabaseInstance {
                     "Having dependent tables is not supported for projectreorder nodes."
                 );
 
-                let trie = if generator.is_noop() {
-                    self.evaluate_tree_leaf(storage, &subnode)
-                        .map(|scan| Trie::from_partial_trie_scan(scan, tree.cut_layers))
-                        .unwrap_or(Trie::empty(0))
-                } else {
-                    self.evaluate_tree_leaf(storage, &subnode)
-                        .map(|scan| generator.apply_operation(scan))
-                        .unwrap_or(Trie::empty(0))
+                let trie = match self.evaluate_operation(&self.dictionary, storage, &subnode) {
+                    Some(scan) => {
+                        if generator.is_noop() {
+                            Trie::from_partial_trie_scan(scan, tree.cut_layers)
+                        } else {
+                            generator.apply_operation(scan)
+                        }
+                    }
+                    None => Trie::empty(generator.arity()),
                 };
 
                 (trie, vec![])
@@ -634,7 +633,7 @@ impl DatabaseInstance {
                             })
                         }
                         ExecutionTreeNode::ProjectReorder { generator, subnode } => self
-                            .evaluate_tree_leaf(&temporary_storage, subnode)
+                            .evaluate_operation(&self.dictionary, &temporary_storage, subnode)
                             .and_then(|scan| generator.apply_operation_first(scan)),
                         ExecutionTreeNode::Single {
                             generator: _,
@@ -688,9 +687,6 @@ impl DatabaseInstance {
             if temporary_storage.computed_tables[tree_index].is_some() {
                 continue;
             }
-
-            let mut string_tree = String::new();
-            let _ = write_tree(&mut string_tree, &tree.ascii_tree());
 
             let dependent_reorderings = tree
                 .dependents
