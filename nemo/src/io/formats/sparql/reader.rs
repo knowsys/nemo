@@ -105,7 +105,7 @@ impl SparqlReader {
                 // the page size is still too large, try half
                 for page in page.chunks(page.len().div_ceil(2).max(1)) {
                     Box::pin(self.load_from_bindings(
-                        &ProductBindings::product(page.into_iter().map(|bindings| {
+                        &ProductBindings::product(page.iter().map(|bindings| {
                             (Bindings::empty(bindings.positions()), bindings.clone())
                         })),
                         tuple_writer,
@@ -197,10 +197,10 @@ impl SparqlReader {
                         variables: bound_variables,
                         bindings,
                     };
-                    previous = Box::new(GraphPattern::Join {
-                        left: previous,
+                    *previous = GraphPattern::Join {
+                        left: previous.clone(),
                         right: Box::new(values),
-                    });
+                    };
                 }
 
                 GraphPattern::Project {
@@ -292,7 +292,7 @@ impl SparqlReader {
                 }
             }
 
-            todo!("implement paging here")
+            result
         } else {
             vec![Vec::from(bindings)]
         }

@@ -16,8 +16,8 @@ impl Bindings {
     /// Creates a new set of bindings for the given positions
     pub fn new(positions: &[usize], bindings: &[Vec<AnyDataValue>]) -> Self {
         Self {
-            positions: positions.iter().cloned().collect(),
-            bindings: bindings.iter().cloned().collect(),
+            positions: positions.to_vec(),
+            bindings: bindings.to_vec(),
             count: bindings.len(),
         }
     }
@@ -25,7 +25,7 @@ impl Bindings {
     /// Creates a new, empty binding set for the given positions.
     pub fn empty(positions: &[usize]) -> Self {
         Self {
-            positions: positions.iter().cloned().collect(),
+            positions: positions.to_vec(),
             bindings: Vec::new(),
             count: 0,
         }
