@@ -6,6 +6,7 @@ use itertools::Itertools;
 use nemo_physical::datasources::bindings::{Bindings, ProductBindings};
 use nemo_physical::error::ReadingErrorKind;
 use nemo_physical::management::bytesized::ByteSized;
+use nemo_physical::meta::timing::TimedCode;
 use nemo_physical::tabular::filters::FilterTransformPattern;
 use nemo_physical::{datasources::table_providers::TableProvider, error::ReadingError};
 use nemo_physical::{
@@ -71,16 +72,25 @@ impl SparqlReader {
         query: &Query,
         tuple_writer: &mut TupleWriter<'_>,
     ) -> Result<(), ReadingError> {
+        TimedCode::instance()
+            .sub("Reasoning/Execution/Import/SPARQL queries")
+            .start();
+
         let response = self
             .execute_query(&self.builder.endpoint, query)
             .await?
             .expect("query result should not be empty");
-        Self::read_table_data(
+        TimedCode::instance()
+            .sub("Reasoning/Execution/Import/SPARQL queries")
+            .stop();
+        let result = Self::read_table_data(
             response,
             tuple_writer,
             self.builder.value_formats.clone(),
             self.patterns.clone(),
-        )
+        );
+
+        result
     }
 
     async fn load_from_bindings(
