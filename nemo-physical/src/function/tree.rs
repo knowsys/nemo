@@ -35,7 +35,7 @@ use super::{
 };
 
 /// Leaf node of a [FunctionTree]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FunctionLeaf<ReferenceType>
 where
     ReferenceType: Debug + Clone,
@@ -47,7 +47,7 @@ where
 }
 
 /// Tree structure representing a series of function applications
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FunctionTree<ReferenceType>
 where
     ReferenceType: Debug + Clone,
