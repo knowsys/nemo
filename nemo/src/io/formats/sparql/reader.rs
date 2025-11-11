@@ -93,10 +93,13 @@ impl SparqlReader {
 
     async fn load_from_bindings(
         &self,
+        unbound_query: &Query,
         bindings: &ProductBindings,
         tuple_writer: &mut TupleWriter<'_>,
     ) -> Result<(), ReadingError> {
-        for (page, query) in self.queries_with_bindings(bindings, MAX_BINDINGS_PER_PAGE) {
+        for (page, query) in
+            self.queries_with_bindings(unbound_query, bindings, MAX_BINDINGS_PER_PAGE)
+        {
             let result = self.load_from_query(&query, tuple_writer).await;
 
             // TODO(mam): detect timeouts here and reduce page size
@@ -113,6 +116,7 @@ impl SparqlReader {
                 // the page size is still too large, try half
                 for page in page.chunks(page.len().div_ceil(2).max(1)) {
                     Box::pin(self.load_from_bindings(
+                        unbound_query,
                         &ProductBindings::product(page.iter().map(|bindings| {
                             (Bindings::empty(bindings.positions()), bindings.clone())
                         })),
@@ -227,8 +231,8 @@ impl SparqlReader {
         }
     }
 
-    fn query_with_bindings(&self, bindings: &[Bindings]) -> Option<Query> {
-        let query = match &self.builder.query {
+    fn query_with_bindings(&self, query: &Query, bindings: &[Bindings]) -> Option<Query> {
+        let query = match query {
             q @ &Query::Construct { .. } | q @ &Query::Describe { .. } => q.clone(),
             Query::Select {
                 dataset,
@@ -315,6 +319,7 @@ impl SparqlReader {
 
     fn queries_with_bindings(
         &self,
+        query: &Query,
         bindings: &ProductBindings,
         page_size: usize,
     ) -> impl Iterator<Item = (Vec<Bindings>, Query)> {
@@ -322,18 +327,24 @@ impl SparqlReader {
 
         for combination in bindings.combinations() {
             for page in Self::bindings_chunks(&combination, page_size.max(1)) {
-                match self.query_with_bindings(&page) {
+                match self.query_with_bindings(query, &page) {
                     Some(query) => {
                         queries.push((page.clone(), query));
                     }
-                    None => {
-                        queries.extend(self.queries_with_bindings(bindings, page_size.div_ceil(2)))
-                    }
+                    None => queries.extend(self.queries_with_bindings(
+                        query,
+                        bindings,
+                        page_size.div_ceil(2),
+                    )),
                 }
             }
         }
 
         queries.into_iter()
+    }
+
+    fn query_with_filters(&self) -> (&Query, Vec<FilterTransformPattern>) {
+        (&self.builder.query, self.patterns.clone())
     }
 }
 
@@ -353,9 +364,9 @@ impl TableProvider for SparqlReader {
         self: Box<Self>,
         tuple_writer: &mut TupleWriter,
     ) -> Result<(), ReadingError> {
-        tuple_writer.set_patterns(self.patterns.clone());
-        self.load_from_query(&self.builder.query, tuple_writer)
-            .await
+        let (query, patterns) = self.query_with_filters();
+        tuple_writer.set_patterns(patterns);
+        self.load_from_query(query, tuple_writer).await
     }
 
     fn should_import_with_bindings(
@@ -371,7 +382,8 @@ impl TableProvider for SparqlReader {
         tuple_writer: &mut TupleWriter,
         bindings: &ProductBindings,
     ) -> Result<(), ReadingError> {
-        tuple_writer.set_patterns(self.patterns.clone());
-        self.load_from_bindings(bindings, tuple_writer).await
+        let (query, patterns) = self.query_with_filters();
+        tuple_writer.set_patterns(patterns);
+        self.load_from_bindings(query, bindings, tuple_writer).await
     }
 }

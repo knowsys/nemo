@@ -31,6 +31,7 @@ impl TransformPosition {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FilterTransformPattern {
     pub(crate) filter: StackProgram,
+    pub(crate) filter_function: FunctionTree<OperationColumnMarker>,
     pub(crate) transformations: Vec<TransformPosition>,
 }
 
@@ -49,7 +50,13 @@ impl FilterTransformPattern {
 
         Self {
             filter: filter_program,
+            filter_function: filter,
             transformations,
         }
+    }
+
+    /// Return the underlying function for the filter part of this pattern.
+    pub fn filter_function(&self) -> &FunctionTree<OperationColumnMarker> {
+        &self.filter_function
     }
 }
