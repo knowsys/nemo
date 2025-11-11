@@ -12,6 +12,7 @@ use crate::{
         },
         operations::{
             function_filter_negation::GeneratorFunctionFilterNegation, import::GeneratorImport,
+            join_cartesian::GeneratorJoinCartesian, join_imports::GeneratorJoinImports,
             join_seminaive::GeneratorJoinSeminaive,
         },
     },
@@ -21,16 +22,22 @@ use crate::{
 
 /// Generator of an execution plan that evaluates the body of a rule
 #[derive(Debug)]
-pub struct StrategyBody {
-    // Seminaive join
-    seminaive_join: GeneratorJoinSeminaive,
-    // Filter
-    seminaive_filter: Option<GeneratorFunctionFilterNegation>,
-
-    /// Import
-    import: Option<GeneratorImport>,
-    /// Import Filter
-    import_filter: Option<GeneratorFunctionFilterNegation>,
+pub enum StrategyBody {
+    /// Plain Datalog without imports
+    Plain {
+        /// Seminaive join
+        join: GeneratorJoinSeminaive,
+        /// Additional filters
+        filter: Option<GeneratorFunctionFilterNegation>,
+    },
+    Import {
+        /// Cartesian seminaive join
+        join: GeneratorJoinCartesian,
+        /// Incremental import
+        import: GeneratorImport,
+        /// Join of the import atoms
+        merge: GeneratorJoinImports,
+    },
 }
 
 impl StrategyBody {
@@ -42,34 +49,56 @@ impl StrategyBody {
         imports: Vec<ImportAtom>,
         operations: &mut Vec<Operation>,
     ) -> Self {
-        let seminaive_join = GeneratorJoinSeminaive::new(positive, &order);
-        let mut current_variables = seminaive_join.output_variables();
+        if imports.is_empty() {
+            let join = GeneratorJoinSeminaive::new(positive, &order);
+            let filter = GeneratorFunctionFilterNegation::new(
+                join.output_variables(),
+                operations,
+                &mut negative,
+            )
+            .or_none();
 
-        let seminaive_filter =
-            GeneratorFunctionFilterNegation::new(current_variables, operations, &mut negative);
-        current_variables = seminaive_filter.output_variables();
+            Self::Plain { join, filter }
+        } else {
+            let join = GeneratorJoinCartesian::new(&order, &positive, operations, &mut negative);
+            let import = GeneratorImport::new(join.output_variables(), &imports);
+            let merge =
+                GeneratorJoinImports::new(&order, positive, imports, operations, &mut negative);
 
-        let import = GeneratorImport::new(current_variables, imports, &order);
-        current_variables = import.output_variables();
-
-        let import_filter =
-            GeneratorFunctionFilterNegation::new(current_variables, operations, &mut negative);
-
-        Self {
-            seminaive_join,
-            seminaive_filter: seminaive_filter.or_none(),
-            import: import.or_none(),
-            import_filter: import_filter.or_none(),
+            Self::Import {
+                join,
+                import,
+                merge,
+            }
         }
     }
 
     /// Return an iterator over all special predicates needed to execute this strategy.
-    pub fn special_predicates(&self) -> impl Iterator<Item = (Tag, usize)> {
-        self.import
-            .as_ref()
-            .map(|import| import.special_predicates())
-            .into_iter()
-            .flatten()
+    pub fn special_predicates(&self) -> Box<dyn Iterator<Item = (Tag, usize)> + '_> {
+        match self {
+            StrategyBody::Plain { join: _, filter: _ } => Box::new(std::iter::empty()),
+            StrategyBody::Import {
+                join: _,
+                import,
+                merge: _,
+            } => Box::new(import.special_predicates()),
+        }
+    }
+
+    /// Return the variables marking the column of the node
+    /// created by `create_plan`.
+    pub fn output_variables(&self) -> Vec<Variable> {
+        match self {
+            StrategyBody::Plain { join, filter } => match filter {
+                Some(filter) => filter.output_variables(),
+                None => join.output_variables(),
+            },
+            StrategyBody::Import {
+                join: _,
+                import: _,
+                merge,
+            } => merge.output_variables(),
+        }
     }
 
     /// Append this operation to the plan.
@@ -78,36 +107,33 @@ impl StrategyBody {
         plan: &mut SubtableExecutionPlan,
         runtime: &RuntimeInformation<'a>,
     ) -> ExecutionNodeRef {
-        let mut current_node = self.seminaive_join.create_plan(plan, runtime);
+        match self {
+            StrategyBody::Plain { join, filter } => {
+                let mut node = join.create_plan(plan, runtime);
 
-        if let Some(generator) = self.seminaive_filter.as_ref() {
-            current_node = generator.create_plan(plan, current_node, runtime);
-        }
+                if let Some(filter) = filter {
+                    node = filter.create_plan(plan, node, runtime);
+                }
 
-        if let Some(generator) = self.import.as_ref() {
-            current_node = generator.create_plan(plan, current_node, runtime).await;
-        }
+                node
+            }
+            StrategyBody::Import {
+                join,
+                import,
+                merge,
+            } => {
+                let nodes_join = join.create_plan(plan, runtime);
 
-        if let Some(generator) = self.import_filter.as_ref() {
-            current_node = generator.create_plan(plan, current_node, runtime);
-        }
+                let merge_input = if nodes_join.len() == 1 {
+                    Some(nodes_join[0].clone())
+                } else {
+                    None
+                };
 
-        plan.add_temporary_table(current_node.clone(), "Body");
+                import.create_plan(plan, nodes_join, runtime).await;
 
-        current_node
-    }
-
-    /// Return the variables marking the column of the node
-    /// created by `create_plan`.
-    pub fn output_variables(&self) -> Vec<Variable> {
-        if let Some(generator) = self.import_filter.as_ref() {
-            generator.output_variables()
-        } else if let Some(generator) = self.import.as_ref() {
-            generator.output_variables()
-        } else if let Some(generator) = self.seminaive_filter.as_ref() {
-            generator.output_variables()
-        } else {
-            self.seminaive_join.output_variables()
+                merge.create_plan(plan, merge_input, runtime)
+            }
         }
     }
 }
