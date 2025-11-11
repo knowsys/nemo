@@ -88,7 +88,9 @@ impl SparqlReader {
             tuple_writer,
             self.builder.value_formats.clone(),
             self.patterns.clone(),
-        )
+        );
+
+        result
     }
 
     async fn load_from_bindings(
