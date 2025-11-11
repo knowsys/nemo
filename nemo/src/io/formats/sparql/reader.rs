@@ -83,14 +83,12 @@ impl SparqlReader {
         TimedCode::instance()
             .sub("Reasoning/Execution/Import/SPARQL queries")
             .stop();
-        let result = Self::read_table_data(
+        Self::read_table_data(
             response,
             tuple_writer,
             self.builder.value_formats.clone(),
             self.patterns.clone(),
-        );
-
-        result
+        )
     }
 
     async fn load_from_bindings(
