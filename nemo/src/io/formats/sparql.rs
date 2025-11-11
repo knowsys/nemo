@@ -1,5 +1,6 @@
 //! Handler for resources of type SPARQL (SPARQL query language for RDF).
 
+pub(crate) mod functions;
 pub(crate) mod reader;
 
 use reader::SparqlReader;
