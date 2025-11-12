@@ -4,4 +4,4 @@
 pub mod evaluation;
 pub mod tree;
 
-pub(crate) mod definitions;
+pub mod definitions;
