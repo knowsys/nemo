@@ -28,7 +28,7 @@ pub struct GeneratorJoin {
 }
 
 impl GeneratorJoin {
-    /// Create a new [Join].
+    /// Create a new [GeneratorJoin].
     pub fn new(atoms: Vec<BodyAtom>, ranges: Vec<UnionRange>, order: &VariableOrder) -> Self {
         debug_assert!(atoms.len() == ranges.len());
 

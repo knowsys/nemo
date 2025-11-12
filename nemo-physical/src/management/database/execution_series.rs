@@ -44,7 +44,7 @@ pub(crate) enum ExecutionTreeNode {
     Operation(ExecutionTreeOperation),
     ProjectReorder {
         generator: GeneratorProjectReorder,
-        subnode: ExecutionTreeLeaf,
+        subnode: ExecutionTreeOperation,
     },
     Single {
         generator: GeneratorSingle,
@@ -52,14 +52,15 @@ pub(crate) enum ExecutionTreeNode {
     },
     IncrementalImport {
         generator: GeneratorIncrementalImport,
-        subnode: ExecutionTreeLeaf,
+        subnode: ExecutionTreeOperation,
     },
 }
 
 impl ExecutionTreeNode {
-    /// Returns [ExecutionTreeOperation] if this is not a project node.
+    /// If this is a `Operation` node, then this function returns the
+    /// [ExecutionTreeOperation].
     ///
-    /// Returns `None` otherwise.
+    /// Otherwise, returns `None`.
     pub(crate) fn operation(self) -> Option<ExecutionTreeOperation> {
         if let Self::Operation(result) = self {
             Some(result)
@@ -128,15 +129,7 @@ impl ExecutionTree {
                 Self::ascii_tree_recursive(operation_tree)
             }
             ExecutionTreeNode::ProjectReorder { generator, subnode } => {
-                let subnode_tree = match subnode {
-                    ExecutionTreeLeaf::LoadTable(_) => {
-                        ascii_tree::Tree::Leaf(vec![format!("Permanent Table")])
-                    }
-                    ExecutionTreeLeaf::FetchComputedTable(_) => {
-                        ascii_tree::Tree::Leaf(vec![format!("New Table")])
-                    }
-                };
-
+                let subnode_tree = Self::ascii_tree_recursive(subnode);
                 ascii_tree::Tree::Node(format!("{generator:?}"), vec![subnode_tree])
             }
             ExecutionTreeNode::Single { generator, subnode } => {
@@ -144,15 +137,7 @@ impl ExecutionTree {
                 ascii_tree::Tree::Node(format!("{generator:?}"), vec![subnode_tree])
             }
             ExecutionTreeNode::IncrementalImport { generator, subnode } => {
-                let subnode_tree = match subnode {
-                    ExecutionTreeLeaf::LoadTable(_) => {
-                        ascii_tree::Tree::Leaf(vec![format!("Permanent Table")])
-                    }
-                    ExecutionTreeLeaf::FetchComputedTable(_) => {
-                        ascii_tree::Tree::Leaf(vec![format!("New Table")])
-                    }
-                };
-
+                let subnode_tree = Self::ascii_tree_recursive(subnode);
                 ascii_tree::Tree::Node(format!("{generator:?}"), vec![subnode_tree])
             }
         };
