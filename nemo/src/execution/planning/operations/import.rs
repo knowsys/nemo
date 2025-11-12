@@ -361,10 +361,9 @@ impl GeneratorImport {
             let pattern_bindings = patterns.iter().map(|pattern| bindings.get(pattern).expect("construction of this generator ensures that all possible patterns appear in this map").clone()).collect::<Vec<_>>();
             let markers_atom = runtime.translation.operation_table(atom.variables());
 
-            // TODO: Adjust import interface
-            let node_import =
-                plan.plan_mut()
-                    .import(markers_atom, pattern_bindings[0].0.clone(), provider);
+            let node_import = plan
+                .plan_mut()
+                .import(markers_atom, pattern_bindings, provider);
 
             result.push(node_import);
         }

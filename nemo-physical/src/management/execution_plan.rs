@@ -149,13 +149,17 @@ impl ExecutionNodeRef {
 
                 result
             }
+            ExecutionOperation::IncrementalImport(subnodes, _) => subnodes
+                .iter()
+                .cloned()
+                .flat_map(|(old, new)| [old, new])
+                .collect::<Vec<_>>(),
             ExecutionOperation::ProjectReorder(subnode)
             | ExecutionOperation::Single(subnode, _)
             | ExecutionOperation::Filter(subnode, _)
             | ExecutionOperation::Function(subnode, _)
             | ExecutionOperation::Null(subnode)
             | ExecutionOperation::Aggregate(subnode, _)
-            | ExecutionOperation::IncrementalImport(subnode, _)
             | ExecutionOperation::Rename(subnode) => vec![subnode.clone()],
         }
     }
@@ -197,7 +201,10 @@ pub(crate) enum ExecutionOperation {
     /// Perform aggregate operation
     Aggregate(ExecutionNodeRef, AggregateAssignment),
     /// Perform an incremental import
-    IncrementalImport(ExecutionNodeRef, Rc<Box<dyn TableProvider>>),
+    IncrementalImport(
+        Vec<(ExecutionNodeRef, ExecutionNodeRef)>,
+        Rc<Box<dyn TableProvider>>,
+    ),
     /// Renaming of the columns of the table
     Rename(ExecutionNodeRef),
 }
@@ -408,11 +415,10 @@ impl ExecutionPlan {
     pub fn import(
         &mut self,
         marked_columns: OperationTable,
-        subnode: ExecutionNodeRef,
+        subnodes: Vec<(ExecutionNodeRef, ExecutionNodeRef)>,
         provider: Box<dyn TableProvider>,
     ) -> ExecutionNodeRef {
-        let new_operation =
-            ExecutionOperation::IncrementalImport(subnode.clone(), Rc::new(provider));
+        let new_operation = ExecutionOperation::IncrementalImport(subnodes, Rc::new(provider));
         let import_node = self.push_and_return_reference(new_operation, marked_columns);
 
         self.write_temporary(import_node.clone(), "Import");
@@ -882,27 +888,49 @@ impl ExecutionPlan {
                     subnode: subtree,
                 }
             }
-            ExecutionOperation::IncrementalImport(subnode, table_provider) => {
-                let marker_subnode = subnode.markers_cloned();
-                let subtree = Self::execution_node(
-                    root_node_id,
-                    subnode.clone(),
-                    order,
-                    output_nodes,
-                    computed_trees,
-                    computed_trees_map,
-                    loaded_tables,
-                )
-                .operation()
-                .expect("non-operations appear only as tree roots");
+            ExecutionOperation::IncrementalImport(subnodes, table_provider) => {
+                let markers_subnode = subnodes
+                    .iter()
+                    .map(|(old, _)| old.markers_cloned())
+                    .collect::<Vec<_>>();
+
+                let subtrees = subnodes
+                    .iter()
+                    .map(|(old, new)| {
+                        (
+                            Self::execution_node(
+                                root_node_id,
+                                old.clone(),
+                                order.clone(),
+                                output_nodes,
+                                computed_trees,
+                                computed_trees_map,
+                                loaded_tables,
+                            )
+                            .operation()
+                            .expect("non-operations appear only as tree roots"),
+                            Self::execution_node(
+                                root_node_id,
+                                new.clone(),
+                                order.clone(),
+                                output_nodes,
+                                computed_trees,
+                                computed_trees_map,
+                                loaded_tables,
+                            )
+                            .operation()
+                            .expect("non-operations appear only as tree roots"),
+                        )
+                    })
+                    .collect::<Vec<_>>();
 
                 ExecutionTreeNode::IncrementalImport {
                     generator: GeneratorIncrementalImport::new(
                         node_markers,
-                        marker_subnode,
+                        markers_subnode,
                         table_provider.clone(),
                     ),
-                    subnode: subtree,
+                    subnodes: subtrees,
                 }
             }
             ExecutionOperation::Rename(subnode) => Self::execution_node(

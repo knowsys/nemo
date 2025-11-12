@@ -52,7 +52,7 @@ pub(crate) enum ExecutionTreeNode {
     },
     IncrementalImport {
         generator: GeneratorIncrementalImport,
-        subnode: ExecutionTreeOperation,
+        subnodes: Vec<(ExecutionTreeOperation, ExecutionTreeOperation)>,
     },
 }
 
@@ -136,9 +136,16 @@ impl ExecutionTree {
                 let subnode_tree = Self::ascii_tree_recursive(subnode);
                 ascii_tree::Tree::Node(format!("{generator:?}"), vec![subnode_tree])
             }
-            ExecutionTreeNode::IncrementalImport { generator, subnode } => {
-                let subnode_tree = Self::ascii_tree_recursive(subnode);
-                ascii_tree::Tree::Node(format!("{generator:?}"), vec![subnode_tree])
+            ExecutionTreeNode::IncrementalImport {
+                generator,
+                subnodes,
+            } => {
+                let subnode_trees = subnodes
+                    .iter()
+                    .flat_map(|(old, new)| [old, new])
+                    .map(|tree| Self::ascii_tree_recursive(tree))
+                    .collect::<Vec<_>>();
+                ascii_tree::Tree::Node(format!("{generator:?}"), subnode_trees)
             }
         };
 

@@ -345,7 +345,7 @@ impl TableProvider for SparqlReader {
 
     fn should_import_with_bindings(
         &self,
-        _bound_positions: &[usize],
+        _bound_positions: &[Vec<usize>],
         _num_bindings: usize,
     ) -> bool {
         true // TODO: use a better heuristic here

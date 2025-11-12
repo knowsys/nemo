@@ -28,7 +28,7 @@ pub trait TableProvider: std::fmt::Debug + ByteSized {
     /// Whether bindings should be computed for the import
     fn should_import_with_bindings(
         &self,
-        _bound_positions: &[usize],
+        _bound_positions: &[Vec<usize>],
         _num_bindings: usize,
     ) -> bool {
         false

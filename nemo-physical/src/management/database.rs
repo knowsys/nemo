@@ -462,9 +462,22 @@ impl DatabaseInstance {
                     (Trie::empty(0), vec![Trie::empty(0); dependent.len()])
                 }
             }
-            ExecutionTreeNode::IncrementalImport { generator, subnode } => {
-                let trie = match self.evaluate_operation(&self.dictionary, storage, &subnode) {
-                    Some(scan) => generator.apply_operation(scan, &self.dictionary).await?,
+            ExecutionTreeNode::IncrementalImport {
+                generator,
+                subnodes,
+            } => {
+                let scans = subnodes
+                    .iter()
+                    .map(|(old, new)| {
+                        let old = self.evaluate_operation(&self.dictionary, storage, old);
+                        let new = self.evaluate_operation(&self.dictionary, storage, new);
+
+                        old.zip(new)
+                    })
+                    .collect::<Option<Vec<(TrieScanEnum, TrieScanEnum)>>>();
+
+                let trie = match scans {
+                    Some(scans) => generator.apply_operation(scans, &self.dictionary).await?,
                     None => Trie::empty(0),
                 };
 

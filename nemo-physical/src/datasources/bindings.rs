@@ -14,11 +14,13 @@ pub struct Bindings {
 
 impl Bindings {
     /// Creates a new set of bindings for the given positions
-    pub fn new(positions: &[usize], bindings: &[Vec<AnyDataValue>]) -> Self {
+    pub fn new(positions: Vec<usize>, bindings: Vec<Vec<AnyDataValue>>) -> Self {
+        let count = bindings.len();
+
         Self {
-            positions: positions.to_vec(),
-            bindings: bindings.to_vec(),
-            count: bindings.len(),
+            positions,
+            bindings,
+            count,
         }
     }
 
@@ -52,7 +54,7 @@ impl Bindings {
         for chunk in &self.bindings.iter().chunks(size) {
             let bindings = chunk.cloned().collect::<Vec<_>>();
 
-            result.push(Self::new(&self.positions, &bindings))
+            result.push(Self::new(self.positions.clone(), bindings))
         }
 
         result.into_iter()
