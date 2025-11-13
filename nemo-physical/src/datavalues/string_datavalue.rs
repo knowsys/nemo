@@ -13,7 +13,7 @@ pub struct StringDataValue(String);
 
 impl StringDataValue {
     /// Constructor.
-    pub(crate) fn new(string: String) -> Self {
+    pub fn new(string: String) -> Self {
         StringDataValue(string)
     }
 }

@@ -58,6 +58,8 @@ delegate = "0.13.3"
 orx-imp-vec = "2.14"
 itertools = "0.14.0"
 indexmap = "2.10.0"
+paste = "1.0.15"
+serde_state = { version = "0.4.8", features = ["derive"] }
 
 [dev-dependencies]
 env_logger = "*"

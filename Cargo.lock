@@ -1636,6 +1636,7 @@ dependencies = [
  "oxiri",
  "oxrdf",
  "oxrdfio",
+ "paste",
  "petgraph",
  "petgraph-graphml",
  "quickcheck",
@@ -1645,6 +1646,7 @@ dependencies = [
  "sanitise-file-name",
  "serde",
  "serde_json",
+ "serde_state",
  "similar-string",
  "spargebra",
  "strum",
@@ -2146,6 +2148,12 @@ dependencies = [
  "smallvec",
  "windows-link 0.2.1",
 ]
+
+[[package]]
+name = "paste"
+version = "1.0.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
 
 [[package]]
 name = "path-slash"
@@ -2778,6 +2786,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde_state"
+version = "0.4.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "740753f904603d9f3b7130b13125be3a470aca9e6616da18cb96d9291bd6a72a"
+dependencies = [
+ "serde",
+ "serde_derive",
+]
+
+[[package]]
 name = "serde_urlencoded"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2896,9 +2914,9 @@ checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 
 [[package]]
 name = "syn"
-version = "2.0.107"
+version = "2.0.108"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2a26dbd934e5451d21ef060c018dae56fc073894c5a7896f882928a76e6d081b"
+checksum = "da58917d35242480a05c2897064da0a80589a2a0476c9a3f2fdc83b53502e917"
 dependencies = [
  "proc-macro2",
  "quote",

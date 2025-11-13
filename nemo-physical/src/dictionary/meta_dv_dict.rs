@@ -5,13 +5,12 @@ use crate::datavalues::{AnyDataValue, DataValue};
 use crate::dictionary::NONEXISTING_ID_MARK;
 use crate::management::bytesized::{ByteSized, size_inner_vec_flat};
 
-use super::DvDict;
-use super::StringDvDictionary;
+use super::map_dv_dict::MapDvDict;
 use super::ranked_pair_iri_dv_dict::IriSplittingDvDictionary;
 use super::ranked_pair_other_dv_dict::OtherSplittingDvDictionary;
 use super::string_langstring_dv_dict::LangStringDvDictionary;
 use super::tuple_dv_dict::TupleDvDict;
-use super::{AddResult, NullDvDictionary};
+use super::{AddResult, DvDict, NullDvDictionary, StringDvDictionary};
 
 // /// Number of recent occurrences of a string pattern required for creating a bespoke dictionary
 // const DICT_THRESHOLD: u32 = 500;
@@ -37,6 +36,8 @@ enum DictionaryType {
     Null,
     /// Dictionary for (variable-free) tuples
     Tuple,
+    /// Dictionary for (variable-free) maps
+    Map,
     // /// Dictionary for long strings (blobs)
     // Blob,
     // /// Dictionary for strings with a fixed prefix and suffix
@@ -124,6 +125,7 @@ impl DictIterator {
                 ValueDomain::Other => return md.other_dict,
                 ValueDomain::Null => return md.null_dict,
                 ValueDomain::Tuple => return md.tuple_dict,
+                ValueDomain::Map => return md.map_dict,
                 ValueDomain::Boolean => return md.other_dict, // TODO: maybe not the best place, using a whole page for two values if there is not much "other"
                 ValueDomain::UnsignedLong => return md.other_dict, // TODO: maybe not the best place either
                 _ => {}
@@ -173,6 +175,8 @@ pub struct MetaDvDictionary {
     null_dict: DictId,
     /// Id of the tuple dictionary, if any (otherwise [NO_DICT])
     tuple_dict: DictId,
+    /// Id of the map dictionary, if any (otherwise [NO_DICT])
+    map_dict: DictId,
     /// Ids of further general-purpose dictionaries,
     /// which might be used for any kind of datavalue.
     generic_dicts: Vec<DictId>,
@@ -199,6 +203,7 @@ impl Default for MetaDvDictionary {
             other_dict: NO_DICT,
             null_dict: NO_DICT,
             tuple_dict: NO_DICT,
+            map_dict: NO_DICT,
             // dict_candidates: LruCache::new(NonZeroUsize::new(150).unwrap()),
             //infix_dicts: HashMap::new(),
             generic_dicts: Vec::new(),
@@ -211,6 +216,7 @@ impl Default for MetaDvDictionary {
         result.add_dictionary(DictionaryType::Other);
         result.add_dictionary(DictionaryType::Null);
         result.add_dictionary(DictionaryType::Tuple);
+        result.add_dictionary(DictionaryType::Map);
 
         result
     }
@@ -359,6 +365,13 @@ impl MetaDvDictionary {
                 }
                 dict = Box::new(TupleDvDict::new());
                 self.tuple_dict = self.dicts.len();
+            }
+            DictionaryType::Map => {
+                if self.map_dict != NO_DICT {
+                    return;
+                }
+                dict = Box::new(MapDvDict::new());
+                self.map_dict = self.dicts.len();
             } // DictionaryType::Infix {
               //     ref prefix,
               //     ref suffix,
@@ -595,12 +608,15 @@ impl ByteSized for MetaDvDictionary {
 mod test {
     use crate::{
         datavalues::{
-            AnyDataValue, IriDataValue, NullDataValue, TupleDataValue, syntax::XSD_PREFIX,
+            AnyDataValue, IriDataValue, MapDataValue, NullDataValue, TupleDataValue,
+            syntax::XSD_PREFIX,
         },
         dictionary::{AddResult, DvDict},
     };
 
     use super::MetaDvDictionary;
+    #[cfg(not(miri))]
+    use test_log::test;
 
     #[test]
     fn add_and_get() {
@@ -820,5 +836,54 @@ mod test {
             AddResult::Known(dv_tuple_id)
         );
         assert_eq!(dict.id_to_datavalue(dv_tuple_id), Some(dv_tuple2.clone()));
+    }
+
+    #[test]
+    fn add_and_get_map() {
+        let mut dict = MetaDvDictionary::new();
+
+        let dv_label = IriDataValue::new("f".to_string());
+        let null_id = dict.fresh_null_id();
+        let dv_null = dict.id_to_datavalue(null_id).unwrap();
+        let dvs = vec![
+            (
+                AnyDataValue::new_plain_string("http://example.org".to_string()),
+                AnyDataValue::new_integer_from_i64(42),
+            ),
+            (
+                AnyDataValue::new_integer_from_u64(u64::MAX - 3),
+                AnyDataValue::new_plain_string("another string".to_string()),
+            ),
+            (AnyDataValue::new_boolean(true), dv_null),
+            (
+                AnyDataValue::new_float_from_f32(3.9914).expect("must work"),
+                AnyDataValue::new_double_from_f64(1.2345).expect("must work"),
+            ),
+            (
+                AnyDataValue::new_iri("http://example.org".to_string()),
+                AnyDataValue::new_language_tagged_string("Hallo".to_string(), "de".to_string()),
+            ),
+            (
+                AnyDataValue::new_other(
+                    "abc".to_string(),
+                    "http://example.org/mydatatype".to_string(),
+                ),
+                dv_label.into(),
+            ),
+        ];
+
+        let dv_map: AnyDataValue = MapDataValue::from_iter(dvs).into();
+
+        let ar = dict.add_datavalue(dv_map.clone());
+        let AddResult::Fresh(dv_map_id) = ar else {
+            panic!("add failed: {ar:?}");
+        };
+
+        assert_eq!(dict.datavalue_to_id(&dv_map), Some(dv_map_id));
+        assert_eq!(
+            dict.add_datavalue(dv_map.clone()),
+            AddResult::Known(dv_map_id)
+        );
+        assert_eq!(dict.id_to_datavalue(dv_map_id), Some(dv_map.clone()));
     }
 }
