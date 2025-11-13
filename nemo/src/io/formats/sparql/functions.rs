@@ -1,6 +1,7 @@
 //! Mapping from [FunctionTree] to SPARQL functions.
 
 use nemo_physical::{
+    datavalues::{AnyDataValue, DataValue, ValueDomain},
     function::{
         definitions::{
             BinaryFunctionEnum, NaryFunctionEnum, TernaryFunctionEnum, UnaryFunctionEnum,
@@ -9,6 +10,7 @@ use nemo_physical::{
     },
     tabular::operations::OperationColumnMarker,
 };
+use oxrdf::{Literal, NamedNode};
 use spargebra::{
     algebra::{Expression, Function},
     term::Variable,
@@ -44,12 +46,41 @@ pub(crate) fn try_expression_from_tree(
     }
 }
 
+fn try_expression_from_value(value: &AnyDataValue) -> Option<Expression> {
+    match value.value_domain() {
+        ValueDomain::PlainString => Some(Expression::Literal(Literal::new_simple_literal(
+            value.to_plain_string_unchecked(),
+        ))),
+        ValueDomain::LanguageTaggedString => {
+            let (string, tag) = value.to_language_tagged_string_unchecked();
+            Some(Expression::Literal(
+                Literal::new_language_tagged_literal_unchecked(string, tag),
+            ))
+        }
+        ValueDomain::Iri => Some(Expression::NamedNode(NamedNode::new_unchecked(
+            value.to_iri_unchecked(),
+        ))),
+        ValueDomain::Float
+        | ValueDomain::Double
+        | ValueDomain::UnsignedLong
+        | ValueDomain::NonNegativeLong
+        | ValueDomain::UnsignedInt
+        | ValueDomain::NonNegativeInt
+        | ValueDomain::Long
+        | ValueDomain::Int
+        | ValueDomain::Boolean => Some(Expression::Literal(Literal::new_simple_literal(
+            value.lexical_value(),
+        ))),
+        ValueDomain::Tuple | ValueDomain::Map | ValueDomain::Null | ValueDomain::Other => None,
+    }
+}
+
 fn try_expression_from_leaf(
     variables: &[Variable],
     leaf: &FunctionLeaf<Marker>,
 ) -> Option<Expression> {
     match leaf {
-        FunctionLeaf::Constant(_) => None,
+        FunctionLeaf::Constant(value) => try_expression_from_value(value),
         FunctionLeaf::Reference(reference) => {
             Some(Expression::Variable(variables[reference.0].clone()))
         }
@@ -78,25 +109,34 @@ fn try_expression_from_binary(
     left: &Tree,
     right: &Tree,
 ) -> Option<Expression> {
-    // TODO(mam): actually check which functions we can support here
-    None
+    let lhs = Box::new(try_expression_from_tree(variables, left)?);
+    let rhs = Box::new(try_expression_from_tree(variables, right)?);
+
+    match function {
+        BinaryFunctionEnum::Equals(_) => Some(Expression::Equal(lhs, rhs)),
+        BinaryFunctionEnum::Unequals(_) => {
+            Some(Expression::Not(Box::new(Expression::Equal(lhs, rhs))))
+        }
+        // TODO(mam): actually check which functions we can support here
+        _ => None,
+    }
 }
 
 fn try_expression_from_ternary(
-    variables: &[Variable],
-    function: &TernaryFunctionEnum,
-    first: &Tree,
-    second: &Tree,
-    third: &Tree,
+    _variables: &[Variable],
+    _function: &TernaryFunctionEnum,
+    _first: &Tree,
+    _second: &Tree,
+    _third: &Tree,
 ) -> Option<Expression> {
     // TODO(mam): actually check which functions we can support here
     None
 }
 
 fn try_expression_from_nary(
-    variables: &[Variable],
-    function: &NaryFunctionEnum,
-    parameters: &Vec<Tree>,
+    _variables: &[Variable],
+    _function: &NaryFunctionEnum,
+    _parameters: &Vec<Tree>,
 ) -> Option<Expression> {
     // TODO(mam): actually check which functions we can support here
     None
