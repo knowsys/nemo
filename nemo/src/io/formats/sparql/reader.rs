@@ -4,20 +4,14 @@ use std::io::Read;
 
 use itertools::Itertools;
 use nemo_physical::datasources::bindings::{Bindings, ProductBindings};
+use nemo_physical::datasources::tuple_writer::TupleWriter;
 use nemo_physical::error::ReadingErrorKind;
 use nemo_physical::management::bytesized::ByteSized;
 use nemo_physical::meta::timing::TimedCode;
 use nemo_physical::tabular::filters::FilterTransformPattern;
 use nemo_physical::{datasources::table_providers::TableProvider, error::ReadingError};
-use nemo_physical::{
-    datasources::tuple_writer::TupleWriter,
-    datavalues::{AnyDataValue, DataValue},
-};
 use oxiri::Iri;
-use oxrdf::{Literal, NamedNode};
 use spargebra::Query;
-use spargebra::algebra::GraphPattern;
-use spargebra::term::GroundTerm;
 
 use crate::io::format_builder::FormatBuilder;
 use crate::io::formats::dsv::reader::DsvReader;
@@ -27,6 +21,7 @@ use crate::io::resource_providers::http::HttpResourceProvider;
 use crate::rule_model::components::import_export::Direction;
 use crate::syntax::import_export::file_format::MEDIA_TYPE_TSV;
 
+use super::queries::{pattern_with_bindings, pattern_with_filters};
 use super::{MAX_BINDINGS_PER_PAGE, QUERY_PAGE_CHAR_LIMIT, SparqlBuilder};
 
 #[derive(Debug)]
@@ -72,6 +67,7 @@ impl SparqlReader {
         query: &Query,
         tuple_writer: &mut TupleWriter<'_>,
     ) -> Result<(), ReadingError> {
+        log::debug!("sending SPARQL query: {query}");
         TimedCode::instance()
             .sub("Reasoning/Execution/SPARQL queries")
             .start();
@@ -157,80 +153,6 @@ impl SparqlReader {
         reader.read(tuple_writer)
     }
 
-    fn ground_term_from_datavalue(value: &AnyDataValue) -> Option<GroundTerm> {
-        use nemo_physical::datavalues::ValueDomain;
-
-        match value.value_domain() {
-            ValueDomain::PlainString => Some(GroundTerm::Literal(Literal::new_simple_literal(
-                value.to_plain_string_unchecked(),
-            ))),
-            ValueDomain::LanguageTaggedString => {
-                let (content, language) = value.to_language_tagged_string_unchecked();
-                Some(GroundTerm::Literal(
-                    Literal::new_language_tagged_literal(content, language)
-                        .expect("should be valid"),
-                ))
-            }
-            ValueDomain::Iri => Some(GroundTerm::NamedNode(NamedNode::new_unchecked(
-                value.to_iri_unchecked(),
-            ))),
-            ValueDomain::Float
-            | ValueDomain::Double
-            | ValueDomain::UnsignedLong
-            | ValueDomain::NonNegativeLong
-            | ValueDomain::UnsignedInt
-            | ValueDomain::NonNegativeInt
-            | ValueDomain::Long
-            | ValueDomain::Int
-            | ValueDomain::Boolean
-            | ValueDomain::Other => Some(GroundTerm::Literal(Literal::new_typed_literal(
-                value.lexical_value(),
-                NamedNode::new_unchecked(value.datatype_iri()),
-            ))),
-            ValueDomain::Null => None,
-
-            ValueDomain::Tuple | ValueDomain::Map => {
-                unimplemented!("no support for complex values yet")
-            }
-        }
-    }
-
-    fn pattern_with_bindings(pattern: &GraphPattern, bindings: &[Bindings]) -> GraphPattern {
-        match pattern {
-            GraphPattern::Project { inner, variables } => {
-                let mut previous = inner.clone();
-
-                for bindings_set in bindings {
-                    let bound_variables = bindings_set
-                        .positions()
-                        .iter()
-                        .map(|idx| variables[*idx].clone())
-                        .collect::<Vec<_>>();
-                    let bindings = bindings_set
-                        .bindings()
-                        .iter()
-                        .map(|row| row.iter().map(Self::ground_term_from_datavalue).collect())
-                        .collect();
-
-                    let values = GraphPattern::Values {
-                        variables: bound_variables,
-                        bindings,
-                    };
-                    *previous = GraphPattern::Join {
-                        left: previous.clone(),
-                        right: Box::new(values),
-                    };
-                }
-
-                GraphPattern::Project {
-                    inner: previous,
-                    variables: variables.clone(),
-                }
-            }
-            _ => pattern.clone(),
-        }
-    }
-
     fn query_with_bindings(&self, query: &Query, bindings: &[Bindings]) -> Option<Query> {
         let query = match query {
             q @ &Query::Construct { .. } | q @ &Query::Describe { .. } => q.clone(),
@@ -241,7 +163,7 @@ impl SparqlReader {
             } => Query::Select {
                 dataset: dataset.clone(),
                 base_iri: base_iri.clone(),
-                pattern: Self::pattern_with_bindings(pattern, bindings),
+                pattern: pattern_with_bindings(pattern, bindings),
             },
             Query::Ask {
                 dataset,
@@ -250,7 +172,7 @@ impl SparqlReader {
             } => Query::Ask {
                 dataset: dataset.clone(),
                 base_iri: base_iri.clone(),
-                pattern: Self::pattern_with_bindings(pattern, bindings),
+                pattern: pattern_with_bindings(pattern, bindings),
             },
         };
 
@@ -343,8 +265,27 @@ impl SparqlReader {
         queries.into_iter()
     }
 
-    fn query_with_filters(&self) -> (&Query, Vec<FilterTransformPattern>) {
-        (&self.builder.query, self.patterns.clone())
+    fn query_with_filters(&self) -> (Query, Vec<FilterTransformPattern>) {
+        match &self.builder.query {
+            Query::Select {
+                dataset,
+                pattern,
+                base_iri,
+            } => {
+                let (pattern, patterns) = pattern_with_filters(pattern, &self.patterns);
+                (
+                    Query::Select {
+                        dataset: dataset.clone(),
+                        pattern,
+                        base_iri: base_iri.clone(),
+                    },
+                    patterns,
+                )
+            }
+            q @ Query::Construct { .. } | q @ Query::Describe { .. } | q @ Query::Ask { .. } => {
+                (q.clone(), self.patterns.clone())
+            }
+        }
     }
 }
 
@@ -366,7 +307,7 @@ impl TableProvider for SparqlReader {
     ) -> Result<(), ReadingError> {
         let (query, patterns) = self.query_with_filters();
         tuple_writer.set_patterns(patterns);
-        self.load_from_query(query, tuple_writer).await
+        self.load_from_query(&query, tuple_writer).await
     }
 
     fn should_import_with_bindings(
@@ -384,6 +325,7 @@ impl TableProvider for SparqlReader {
     ) -> Result<(), ReadingError> {
         let (query, patterns) = self.query_with_filters();
         tuple_writer.set_patterns(patterns);
-        self.load_from_bindings(query, bindings, tuple_writer).await
+        self.load_from_bindings(&query, bindings, tuple_writer)
+            .await
     }
 }
