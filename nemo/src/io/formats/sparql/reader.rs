@@ -71,10 +71,7 @@ impl SparqlReader {
         tuple_writer: &mut TupleWriter<'_>,
     ) -> Result<(), ReadingError> {
         TimedCode::instance()
-            .sub("Reasoning/Execution/Import")
-            .start();
-        TimedCode::instance()
-            .sub("Reasoning/Execution/Import/SPARQL queries")
+            .sub("Reasoning/Execution/SPARQL queries")
             .start();
 
         let response = self
@@ -82,10 +79,7 @@ impl SparqlReader {
             .await?
             .expect("query result should not be empty");
         TimedCode::instance()
-            .sub("Reasoning/Execution/Import/SPARQL queries")
-            .stop();
-        TimedCode::instance()
-            .sub("Reasoning/Execution/Import")
+            .sub("Reasoning/Execution/SPARQL queries")
             .stop();
         Self::read_table_data(
             response,
