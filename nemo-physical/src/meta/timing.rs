@@ -308,10 +308,10 @@ impl TimedCode {
 
         let filtered_blocks = TimedCode::apply_display_option(current_node, current_option);
         for block in filtered_blocks {
-            let percentage = if current_node.info.total_thread_time > Duration::new(0, 0) {
+            let percentage = if current_node.info.total_system_time > Duration::new(0, 0) {
                 100.0
-                    * (block.1.info.total_thread_time.as_secs_f64()
-                        / current_node.info.total_thread_time.as_secs_f64())
+                    * (block.1.info.total_system_time.as_secs_f64()
+                        / current_node.info.total_system_time.as_secs_f64())
             } else {
                 0.0
             };
@@ -322,7 +322,7 @@ impl TimedCode {
                 TimedCode::format_title(
                     block.0,
                     percentage,
-                    block.1.info.total_thread_time.as_millis(),
+                    block.1.info.total_system_time.as_millis(),
                     block.1.info.runs,
                 ),
                 options,

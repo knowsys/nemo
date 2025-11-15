@@ -1,9 +1,10 @@
 //! Reader for resources of type SPARQL (SPARQL query language for RDF).
 
-use std::io::{BufReader, Read};
+use std::io::Read;
 
 use nemo_physical::error::ReadingErrorKind;
 use nemo_physical::management::bytesized::ByteSized;
+use nemo_physical::meta::timing::TimedCode;
 use nemo_physical::tabular::filters::FilterTransformPattern;
 use nemo_physical::{datasources::table_providers::TableProvider, error::ReadingError};
 use nemo_physical::{
@@ -69,10 +70,17 @@ impl SparqlReader {
         query: &Query,
         tuple_writer: &mut TupleWriter<'_>,
     ) -> Result<(), ReadingError> {
+        TimedCode::instance()
+            .sub("Reasoning/Execution/SPARQL queries")
+            .start();
+
         let response = self
             .execute_query(&self.builder.endpoint, query)
             .await?
             .expect("query result should not be empty");
+        TimedCode::instance()
+            .sub("Reasoning/Execution/SPARQL queries")
+            .stop();
         Self::read_table_data(
             response,
             tuple_writer,
@@ -112,13 +120,20 @@ impl SparqlReader {
     }
 
     fn read_table_data(
-        read: Box<dyn Read>,
+        mut read: Box<dyn Read>,
         tuple_writer: &mut TupleWriter,
         value_formats: Option<DsvValueFormats>,
         patterns: Vec<FilterTransformPattern>,
     ) -> Result<(), ReadingError> {
+        // make sure we have the whole response in one contiguous
+        // buffer, otherwise the [DsvReader] will allocate for each
+        // record, which is horribly inefficient if the query returns
+        // lots of rows.
+        let mut buf = String::new();
+        let _ = read.read_to_string(&mut buf)?;
+
         let reader = DsvReader::new(
-            Box::new(BufReader::new(read)),
+            Box::new(buf.as_bytes()),
             b'\t',
             value_formats.unwrap_or(DsvValueFormats::default(tuple_writer.input_column_number())),
             None,
