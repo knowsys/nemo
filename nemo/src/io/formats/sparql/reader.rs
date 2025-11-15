@@ -1,6 +1,6 @@
 //! Reader for resources of type SPARQL (SPARQL query language for RDF).
 
-use std::io::{BufReader, Read};
+use std::io::Read;
 
 use itertools::Itertools;
 use nemo_physical::datasources::bindings::{Bindings, ProductBindings};
@@ -133,13 +133,16 @@ impl SparqlReader {
     }
 
     fn read_table_data(
-        read: Box<dyn Read>,
+        mut read: Box<dyn Read>,
         tuple_writer: &mut TupleWriter,
         value_formats: Option<DsvValueFormats>,
         patterns: Vec<FilterTransformPattern>,
     ) -> Result<(), ReadingError> {
+        let mut buf = String::new();
+        let _ = read.read_to_string(&mut buf)?;
+
         let reader = DsvReader::new(
-            Box::new(BufReader::new(read)),
+            Box::new(buf.as_bytes()),
             b'\t',
             value_formats.unwrap_or(DsvValueFormats::default(tuple_writer.input_column_number())),
             None,
