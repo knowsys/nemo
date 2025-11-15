@@ -10,7 +10,10 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::{Rule, TableResponseBaseTableEntries, TreeForTableResponseChildInformation};
+use super::{
+    Rule, TableResponseBaseMetaInformation, TableResponseBaseTableEntries,
+    TreeForTableResponseChildInformation,
+};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct TreeForTableResponse {
@@ -20,6 +23,8 @@ pub struct TreeForTableResponse {
     pub predicate: String,
     #[serde(rename = "tableEntries")]
     pub table_entries: Box<TableResponseBaseTableEntries>,
+    #[serde(rename = "metaInformation")]
+    pub meta_information: Box<TableResponseBaseMetaInformation>,
     #[serde(rename = "possibleRulesAbove")]
     pub possible_rules_above: Vec<Rule>,
     #[serde(rename = "possibleRulesBelow")]
