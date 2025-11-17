@@ -25,6 +25,7 @@ use crate::{
         single::GeneratorSingle,
         subtract::GeneratorSubtract,
         union::GeneratorUnion,
+        zero::GeneratorZero,
     },
     util::mapping::{permutation::Permutation, traits::NatMapping},
 };
@@ -140,7 +141,7 @@ impl ExecutionNodeRef {
         let node_operation = &node_rc.borrow().operation;
 
         match node_operation {
-            ExecutionOperation::FetchTable(_, _) => vec![],
+            ExecutionOperation::FetchTable(_, _) | ExecutionOperation::Zero => vec![],
             ExecutionOperation::Join(subnodes) => subnodes.clone(),
             ExecutionOperation::Union(subnodes) => subnodes.clone(),
             ExecutionOperation::Subtract(subnode_main, subnodes_subtract) => {
@@ -207,6 +208,8 @@ pub(crate) enum ExecutionOperation {
     ),
     /// Renaming of the columns of the table
     Rename(ExecutionNodeRef),
+    /// Non-empty zero arity table
+    Zero,
 }
 
 /// Declares whether the resulting table form executing a plan should be kept temporarily or permamently
@@ -434,6 +437,11 @@ impl ExecutionPlan {
     ) -> ExecutionNodeRef {
         let operation = ExecutionOperation::Rename(subnode);
         self.push_and_return_reference(operation, markers)
+    }
+
+    /// Return an [ExecutionNodeRef] that generatates a non-empty table with arity zero.
+    pub fn zero(&mut self) -> ExecutionNodeRef {
+        self.push_and_return_reference(ExecutionOperation::Zero, OperationTable::default())
     }
 }
 
@@ -942,6 +950,12 @@ impl ExecutionPlan {
                 computed_trees_map,
                 loaded_tables,
             ),
+            ExecutionOperation::Zero => {
+                ExecutionTreeNode::Operation(ExecutionTreeOperation::Node {
+                    generator: OperationGeneratorEnum::Zero(GeneratorZero::new()),
+                    subnodes: Vec::default(),
+                })
+            }
         }
     }
 

@@ -143,7 +143,7 @@ impl ExecutionTree {
                 let subnode_trees = subnodes
                     .iter()
                     .flat_map(|(old, new)| [old, new])
-                    .map(|tree| Self::ascii_tree_recursive(tree))
+                    .map(Self::ascii_tree_recursive)
                     .collect::<Vec<_>>();
                 ascii_tree::Tree::Node(format!("{generator:?}"), subnode_trees)
             }

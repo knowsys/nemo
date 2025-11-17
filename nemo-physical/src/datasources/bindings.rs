@@ -89,9 +89,9 @@ pub struct ProductBindings {
 
 impl ProductBindings {
     /// Creates a new product of bindings from a single factor.
-    pub fn new(bindings: &Bindings) -> Self {
+    pub fn new(bindings: Bindings) -> Self {
         Self {
-            bindings: vec![(Bindings::empty(bindings.positions()), bindings.clone())],
+            bindings: vec![(Bindings::empty(bindings.positions()), bindings)],
         }
     }
 

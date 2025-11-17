@@ -472,14 +472,11 @@ impl DatabaseInstance {
                         let old = self.evaluate_operation(&self.dictionary, storage, old);
                         let new = self.evaluate_operation(&self.dictionary, storage, new);
 
-                        old.zip(new)
+                        (old, new)
                     })
-                    .collect::<Option<Vec<(TrieScanEnum, TrieScanEnum)>>>();
+                    .collect::<Vec<(Option<TrieScanEnum>, Option<TrieScanEnum>)>>();
 
-                let trie = match scans {
-                    Some(scans) => generator.apply_operation(scans, &self.dictionary).await?,
-                    None => Trie::empty(0),
-                };
+                let trie = generator.apply_operation(scans, &self.dictionary).await?;
 
                 (trie, vec![])
             }

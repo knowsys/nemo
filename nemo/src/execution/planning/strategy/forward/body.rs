@@ -26,17 +26,17 @@ pub enum StrategyBody {
     /// Plain Datalog without imports
     Plain {
         /// Seminaive join
-        join: GeneratorJoinSeminaive,
+        join: Box<GeneratorJoinSeminaive>,
         /// Additional filters
         filter: Option<GeneratorFunctionFilterNegation>,
     },
     Import {
         /// Cartesian seminaive join
-        join: GeneratorJoinCartesian,
+        join: Box<GeneratorJoinCartesian>,
         /// Incremental import
-        import: GeneratorImport,
+        import: Box<GeneratorImport>,
         /// Join of the import atoms
-        merge: GeneratorJoinImports,
+        merge: Box<GeneratorJoinImports>,
     },
 }
 
@@ -50,7 +50,7 @@ impl StrategyBody {
         operations: &mut Vec<Operation>,
     ) -> Self {
         if imports.is_empty() {
-            let join = GeneratorJoinSeminaive::new(positive, &order);
+            let join = Box::new(GeneratorJoinSeminaive::new(positive, &order));
             let filter = GeneratorFunctionFilterNegation::new(
                 join.output_variables(),
                 operations,
@@ -60,15 +60,32 @@ impl StrategyBody {
 
             Self::Plain { join, filter }
         } else {
+            let mut merge_operations = &mut operations.clone();
+            let mut merge_negative = negative.clone();
+
             let join = GeneratorJoinCartesian::new(&order, &positive, operations, &mut negative);
-            let import = GeneratorImport::new(join.output_variables(), &imports);
-            let merge =
-                GeneratorJoinImports::new(&order, positive, imports, operations, &mut negative);
+            let variables_join = join.output_variables();
+            let single_factor = variables_join.len() == 1;
+
+            let import = GeneratorImport::new(variables_join, &imports);
+
+            if single_factor {
+                merge_operations = operations;
+                merge_negative = negative;
+            }
+
+            let merge = GeneratorJoinImports::new(
+                &order,
+                positive,
+                imports,
+                merge_operations,
+                &mut merge_negative,
+            );
 
             Self::Import {
-                join,
-                import,
-                merge,
+                join: Box::new(join),
+                import: Box::new(import),
+                merge: Box::new(merge),
             }
         }
     }
@@ -107,7 +124,7 @@ impl StrategyBody {
         plan: &mut SubtableExecutionPlan,
         runtime: &RuntimeInformation<'a>,
     ) -> ExecutionNodeRef {
-        match self {
+        let node_body = match self {
             StrategyBody::Plain { join, filter } => {
                 let mut node = join.create_plan(plan, runtime);
 
@@ -130,10 +147,14 @@ impl StrategyBody {
                     None
                 };
 
-                import.create_plan(plan, nodes_join, runtime).await;
+                let new_imports = import.create_plan(plan, nodes_join, runtime).await;
 
-                merge.create_plan(plan, merge_input, runtime)
+                merge.create_plan(plan, merge_input, new_imports, runtime)
             }
-        }
+        };
+
+        plan.add_temporary_table(node_body.clone(), "Body");
+
+        node_body
     }
 }

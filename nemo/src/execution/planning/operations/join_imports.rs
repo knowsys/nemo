@@ -1,6 +1,6 @@
 //! This module defines [GeneratorJoinImports].
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use nemo_physical::management::execution_plan::ExecutionNodeRef;
 
@@ -18,7 +18,7 @@ use crate::{
             union::{GeneratorUnion, UnionRange},
         },
     },
-    rule_model::components::term::primitive::variable::Variable,
+    rule_model::components::{tag::Tag, term::primitive::variable::Variable},
     table_manager::SubtableExecutionPlan,
 };
 
@@ -27,7 +27,7 @@ use crate::{
 #[derive(Debug)]
 pub struct GeneratorJoinImports {
     /// Variable order
-    order: VariableOrder,
+    join_order: VariableOrder,
 
     /// Join
     join: GeneratorJoinSeminaive,
@@ -54,31 +54,26 @@ impl GeneratorJoinImports {
                     .iter()
                     .flat_map(|atom| atom.variables().cloned()),
             )
-            .collect::<Vec<_>>();
+            .collect::<HashSet<_>>();
 
-        let join = GeneratorJoinSeminaive::new(atoms, order);
+        let join_order = order.restrict_to(&variables.into_iter().collect::<HashSet<_>>());
+
+        let join = GeneratorJoinSeminaive::new(atoms, &join_order);
         let imports = import_atoms
             .into_iter()
             .map(|atom| {
                 GeneratorUnion::new(atom.predicate(), atom.variables_cloned(), UnionRange::All)
             })
             .collect::<Vec<_>>();
-        let filters =
-            GeneratorFunctionFilterNegation::new(variables.clone(), operations, atoms_negation)
-                .or_none();
-
-        let variables = match &filters {
-            Some(filters) => variables
-                .into_iter()
-                .chain(filters.output_variables().into_iter())
-                .collect::<HashSet<_>>(),
-            None => variables.into_iter().collect::<HashSet<_>>(),
-        };
-
-        let order = order.restrict_to(&variables);
+        let filters = GeneratorFunctionFilterNegation::new(
+            join_order.as_ordered_list(),
+            operations,
+            atoms_negation,
+        )
+        .or_none();
 
         Self {
-            order,
+            join_order,
             join,
             imports,
             filters,
@@ -90,6 +85,7 @@ impl GeneratorJoinImports {
         &self,
         plan: &mut SubtableExecutionPlan,
         input: Option<ExecutionNodeRef>,
+        new_imports: HashMap<Tag, ExecutionNodeRef>,
         runtime: &RuntimeInformation,
     ) -> ExecutionNodeRef {
         let node_input = match input {
@@ -98,15 +94,18 @@ impl GeneratorJoinImports {
         };
 
         let mut join_tables = vec![node_input];
-        join_tables.extend(
-            self.imports
-                .iter()
-                .map(|import| import.create_plan(plan, runtime)),
-        );
+        for import in &self.imports {
+            let mut node_imports = import.create_plan(plan, runtime);
+            if let Some(node_new_import) = new_imports.get(import.predicate()).cloned() {
+                node_imports.add_subnode(node_new_import);
+            }
+
+            join_tables.push(node_imports);
+        }
 
         let markers = runtime
             .translation
-            .operation_table(self.order.as_ordered_list().iter());
+            .operation_table(self.join_order.as_ordered_list().iter());
 
         let mut node_result = plan.plan_mut().join(markers, join_tables);
 
@@ -120,6 +119,9 @@ impl GeneratorJoinImports {
     /// Return the variables marking the column of the node
     /// created by `create_plan`.
     pub fn output_variables(&self) -> Vec<Variable> {
-        self.order.as_ordered_list()
+        match &self.filters {
+            Some(filters) => filters.output_variables(),
+            None => self.join.output_variables(),
+        }
     }
 }

@@ -8,6 +8,7 @@ use delegate::delegate;
 use crate::{
     columnar::columnscan::ColumnScanT,
     datatypes::{StorageTypeName, StorageValueT, storage_type_name::StorageTypeBitSet},
+    tabular::operations::zero::TrieScanZero,
 };
 
 use super::{
@@ -76,6 +77,8 @@ pub(crate) enum TrieScanEnum<'a> {
     Subtract(TrieScanSubtract<'a>),
     /// Case [TrieScanUnion]
     Union(TrieScanUnion<'a>),
+    /// Case [TrieScanZero]
+    Zero(TrieScanZero),
     #[cfg(test)]
     /// Case [super::operations::prune::TrieScanPrune]
     Prune(super::operations::prune::TrieScanPrune<'a>),
@@ -94,6 +97,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanEnum<'a> {
             Self::Prune(scan) => scan,
             Self::Subtract(scan) => scan,
             Self::Union(scan) => scan,
+            Self::Zero(scan) => scan
         } {
             fn up(&mut self);
             fn down(&mut self, storage_type: StorageTypeName);

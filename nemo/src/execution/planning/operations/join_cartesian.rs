@@ -18,6 +18,16 @@ use crate::{
     table_manager::SubtableExecutionPlan,
 };
 
+/// The rule body is divided into multiple independent factors.
+/// Those can either be [BodyAtom]s
+/// or [Operation]s assigning constants to a variable.
+enum Factor {
+    /// Factor consisting of body atoms
+    Atoms(Vec<BodyAtom>),
+    /// Factor consisting of operations
+    Operations(Vec<Operation>),
+}
+
 /// Generator for execution plan nodes
 /// representing multiple disjoint seminaive join of body atoms
 #[derive(Debug)]
@@ -37,19 +47,36 @@ impl GeneratorJoinCartesian {
         operations: &mut Vec<Operation>,
         atoms_negation: &mut Vec<BodyAtom>,
     ) -> Self {
-        let partitioned_atoms = Self::partition_atoms(atoms, operations);
+        let factors = Self::partition_atoms(atoms, operations);
 
         let mut joins = Vec::default();
         let mut filters = Vec::default();
 
-        for partition in partitioned_atoms {
-            let join = GeneratorJoinSeminaive::new(partition, order);
-            let filter = GeneratorFunctionFilterNegation::new(
-                join.output_variables(),
-                operations,
-                atoms_negation,
-            )
-            .or_none();
+        for factor in factors {
+            let (join, filter) = match factor {
+                Factor::Atoms(atoms) => {
+                    let join = GeneratorJoinSeminaive::new(atoms, order);
+                    let filter = GeneratorFunctionFilterNegation::new(
+                        join.output_variables(),
+                        operations,
+                        atoms_negation,
+                    )
+                    .or_none();
+
+                    (join, filter)
+                }
+                Factor::Operations(mut operations) => {
+                    let join = GeneratorJoinSeminaive::new(Vec::default(), order);
+                    let filter = GeneratorFunctionFilterNegation::new(
+                        Vec::default(),
+                        &mut operations,
+                        atoms_negation,
+                    )
+                    .or_none();
+
+                    (join, filter)
+                }
+            };
 
             joins.push(join);
             filters.push(filter);
@@ -62,21 +89,45 @@ impl GeneratorJoinCartesian {
     pub fn output_variables(&self) -> Vec<Vec<Variable>> {
         self.joins
             .iter()
-            .map(|join| join.output_variables())
+            .zip(self.filters.iter())
+            .map(|(join, filter)| {
+                if let Some(filter) = filter {
+                    filter.output_variables()
+                } else {
+                    join.output_variables()
+                }
+            })
             .collect::<Vec<_>>()
     }
 
-    /// Partition the given [BodyAtom]s based on whether they are connected by shared variables
-    /// (or [Operation]s).
+    /// Partition the given [BodyAtom]s and (constant operations)
+    /// based on whether they are connected by shared variables.
     ///
     /// For example:
-    /// atoms: [a(x, y), b(y, z), c(v), r(w), t(w)], operations: [v < z]
-    /// result: [[a(x, y), b(y, z), c(v)], [r(w), t(w)]]
-    fn partition_atoms(atoms: &[BodyAtom], operations: &[Operation]) -> Vec<Vec<BodyAtom>> {
+    /// atoms: [a(x, y), b(y, z), c(z), r(w), t(w)]
+    /// operations: [q = 3, s = 7]
+    /// result: [[a(x, y), b(y, z), c(z)], [r(w), t(w)], [q = 3, s = 7]]
+    fn partition_atoms(atoms: &[BodyAtom], operations: &mut Vec<Operation>) -> Vec<Factor> {
         #[derive(Clone)]
         struct Partition {
             pub variables: HashSet<Variable>,
             pub origins: Vec<usize>,
+        }
+
+        impl std::fmt::Display for Partition {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                let variables = self
+                    .variables
+                    .iter()
+                    .map(|v| v.to_string())
+                    .collect::<Vec<_>>()
+                    .join(",");
+                let origins = format!("{:?}", self.origins);
+
+                f.write_fmt(format_args!(
+                    "Paritition {{ variables: {variables}, origins: {origins} }}"
+                ))
+            }
         }
 
         impl Partition {
@@ -135,24 +186,56 @@ impl GeneratorJoinCartesian {
             partitions.add(partition);
         }
 
-        for operation in operations {
-            let partition = Partition {
-                variables: operation.variables().cloned().collect::<HashSet<_>>(),
-                origins: Vec::default(),
-            };
-
-            partitions.add(partition);
-        }
-
         let mut result = Vec::default();
 
         for partition in partitions.0 {
-            let partitioned_atoms = partition
+            if partition.origins.is_empty() {
+                continue;
+            }
+
+            let factor_atoms = partition
                 .origins
                 .into_iter()
                 .map(|origin| atoms[origin].clone())
                 .collect::<Vec<_>>();
-            result.push(partitioned_atoms);
+
+            result.push(Factor::Atoms(factor_atoms));
+        }
+
+        let body_variables = atoms
+            .iter()
+            .flat_map(|atom| atom.terms())
+            .collect::<HashSet<_>>();
+
+        let mut constant_operations = Vec::default();
+        let mut constant_operations_len = constant_operations.len();
+        let mut constant_operations_variables = HashSet::<Variable>::default();
+
+        loop {
+            operations.retain(|operation| {
+                if let Some((left, right)) = operation.variable_assignment()
+                    && !body_variables.contains(left)
+                    && right
+                        .variables()
+                        .all(|variable| constant_operations_variables.contains(variable))
+                {
+                    constant_operations.push(operation.clone());
+                    constant_operations_variables.insert(left.clone());
+                    return false;
+                }
+
+                true
+            });
+
+            if constant_operations_len == constant_operations.len() {
+                break;
+            }
+
+            constant_operations_len = constant_operations.len();
+        }
+
+        if !constant_operations.is_empty() {
+            result.push(Factor::Operations(constant_operations));
         }
 
         result
@@ -172,6 +255,8 @@ impl GeneratorJoinCartesian {
             if let Some(filter) = filter {
                 node = filter.create_plan(plan, node, runtime);
             }
+
+            plan.add_temporary_table(node.clone(), "Cartesian Factor");
 
             result.push(node);
         }

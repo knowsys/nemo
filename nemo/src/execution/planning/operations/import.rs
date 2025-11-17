@@ -2,17 +2,10 @@
 
 use std::collections::HashMap;
 
-use nemo_physical::{
-    management::execution_plan::{ColumnOrder, ExecutionNodeRef},
-    tabular::operations::OperationTable,
-};
+use nemo_physical::management::execution_plan::{ColumnOrder, ExecutionNodeRef};
 
 use crate::{
-    execution::planning::{
-        RuntimeInformation,
-        normalization::atom::import::ImportAtom,
-        operations::union::{GeneratorUnion, UnionRange},
-    },
+    execution::planning::{RuntimeInformation, normalization::atom::import::ImportAtom},
     rule_model::components::{tag::Tag, term::primitive::variable::Variable},
     table_manager::{SubtableExecutionPlan, SubtableIdentifier},
 };
@@ -210,11 +203,15 @@ impl BindingPattern {
 pub struct GeneratorImport {
     /// List of [VariableBinding]s that are derived from the input tables
     bindings: VariableBindings,
-    /// All [BindingPattern]s and
+    /// Associates for each [BindingPattern]s a list of indices
+    /// pointing to `bindings`, indicating that this pattern
+    /// can be constructed using the respective bindings (for distinct positions)
     patterns: HashMap<BindingPattern, Vec<usize>>,
-    ///
+    /// List of import atoms with their corresponding binding patterns
     atoms: Vec<(ImportAtom, Vec<BindingPattern>)>,
-    ///
+    /// Associates for each imported predicate
+    /// a list of indices pointing to the import atoms
+    /// with that predicate
     import_predicates: HashMap<Tag, Vec<usize>>,
 }
 
@@ -226,8 +223,8 @@ impl GeneratorImport {
         let mut atoms = Vec::<(ImportAtom, Vec<BindingPattern>)>::default();
         let mut import_predicates = HashMap::<Tag, Vec<usize>>::default();
 
-        for (atom_index, atom) in import_atoms.into_iter().enumerate() {
-            let binding_patterns = BindingPattern::new(&input_variables, &atom);
+        for (atom_index, atom) in import_atoms.iter().enumerate() {
+            let binding_patterns = BindingPattern::new(&input_variables, atom);
 
             import_predicates
                 .entry(atom.predicate())
@@ -312,13 +309,20 @@ impl GeneratorImport {
                 .iter()
                 .map(|&input| binding_inputs[input].clone())
                 .collect::<Vec<_>>();
-            let node_current_bindings = plan
-                .plan_mut()
-                .union(OperationTable::default(), input_tables);
+            let markers = input_tables
+                .first()
+                .map(|table| table.markers_cloned())
+                .unwrap_or_default();
 
-            let node_old_bindings =
-                GeneratorUnion::new_unmarked(predicate.clone(), UnionRange::All)
-                    .create_plan(plan, runtime);
+            let node_current_bindings = plan.plan_mut().union(markers.clone(), input_tables);
+
+            let old_bindings_tables = runtime
+                .table_manager
+                .tables_in_range(&predicate, &(0..runtime.step_current))
+                .into_iter()
+                .map(|id| plan.plan_mut().fetch_table(markers.clone(), id))
+                .collect::<Vec<_>>();
+            let node_old_bindings = plan.plan_mut().union(markers, old_bindings_tables);
 
             let node_new_bindings = plan
                 .plan_mut()
@@ -378,10 +382,17 @@ impl GeneratorImport {
         plan: &mut SubtableExecutionPlan,
         imports: Vec<ExecutionNodeRef>,
         runtime: &RuntimeInformation,
-    ) {
+    ) -> HashMap<Tag, ExecutionNodeRef> {
+        let mut result = HashMap::default();
+
         for (predicate, tables) in &self.import_predicates {
+            let markers = tables
+                .first()
+                .map(|&table| imports[table].markers_cloned())
+                .unwrap_or_default();
+
             let node_import = plan.plan_mut().union(
-                OperationTable::default(),
+                markers,
                 tables
                     .iter()
                     .map(|&table| imports[table].clone())
@@ -395,12 +406,16 @@ impl GeneratorImport {
             );
 
             plan.add_permanent_table(
-                node_import,
+                node_import.clone(),
                 "Rule Import",
                 &import_table_name,
                 SubtableIdentifier::new(predicate.clone(), runtime.step_current - 1),
             );
+
+            result.insert(predicate.clone(), node_import);
         }
+
+        result
     }
 
     /// Append this operation to the plan.
@@ -409,7 +424,7 @@ impl GeneratorImport {
         plan: &mut SubtableExecutionPlan,
         input_nodes: Vec<ExecutionNodeRef>,
         runtime: &RuntimeInformation<'a>,
-    ) {
+    ) -> HashMap<Tag, ExecutionNodeRef> {
         let nodes_binding_inputs = self.create_binding_inputs(plan, input_nodes, runtime);
         let nodes_import_bindings =
             self.create_import_bindings(plan, nodes_binding_inputs, runtime);
@@ -417,6 +432,6 @@ impl GeneratorImport {
             .create_imports(plan, nodes_import_bindings, runtime)
             .await;
 
-        self.consolidate_imports(plan, nodes_imports, runtime);
+        self.consolidate_imports(plan, nodes_imports, runtime)
     }
 }

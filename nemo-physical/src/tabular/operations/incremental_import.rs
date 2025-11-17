@@ -77,9 +77,13 @@ impl GeneratorIncrementalImport {
 
     /// Materializes a [PartialTrieScan] into a list of [AnyDataValue] tuples.
     fn materialize_bindings<'a, Scan: PartialTrieScan<'a>>(
-        trie_scan: Scan,
+        trie_scan: Option<Scan>,
         dictionary: &'a RefCell<Dict>,
     ) -> Vec<Vec<AnyDataValue>> {
+        let Some(trie_scan) = trie_scan else {
+            return Vec::default();
+        };
+
         let scan = RowScan::new_full(trie_scan);
 
         scan.map(|row| {
@@ -98,10 +102,17 @@ impl GeneratorIncrementalImport {
         .collect::<Vec<_>>()
     }
 
+    /// Check whether a trie scan (option) has zero arity
+    fn zero_arity_scan<'a, Scan: PartialTrieScan<'a>>(scan: &Option<Scan>) -> bool {
+        scan.as_ref()
+            .map(|scan| scan.arity() == 0)
+            .unwrap_or_default()
+    }
+
     /// Apply the operation to a [PartialTrieScan].
     pub(crate) async fn apply_operation<'a, Scan: PartialTrieScan<'a>>(
         self,
-        mut trie_scans: Vec<(Scan, Scan)>,
+        mut trie_scans: Vec<(Option<Scan>, Option<Scan>)>,
         dictionary: &'a RefCell<Dict>,
     ) -> Result<Trie, ReadingError> {
         let Ok(provider) = Rc::try_unwrap(self.provider) else {
@@ -113,7 +124,7 @@ impl GeneratorIncrementalImport {
 
         let zero_arity_trie = trie_scans
             .iter()
-            .any(|(old, new)| old.arity() == 0 || new.arity() == 0);
+            .any(|(old, new)| Self::zero_arity_scan(old) || Self::zero_arity_scan(new));
         let use_bindings =
             provider.should_import_with_bindings(&self.bound_positions, num_bindings);
 
@@ -128,7 +139,7 @@ impl GeneratorIncrementalImport {
             provider
                 .provide_table_data_with_bindings(
                     &mut tuple_writer,
-                    &ProductBindings::new(&Bindings::new(bound_positions.clone(), bindings)),
+                    &ProductBindings::new(Bindings::new(bound_positions.clone(), bindings)),
                 )
                 .await?;
         } else {
