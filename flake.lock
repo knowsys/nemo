@@ -2376,11 +2376,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1761172214,
-        "narHash": "sha256-/1QJgvcWwE5Mux+GsNA3VL9WGAwk0Pbop8gZHrAz+uc=",
+        "lastModified": 1763463589,
+        "narHash": "sha256-EFT/kdptNvv66RH27XWEB0nUvIzlpsQJAI8uaLsn+C0=",
         "owner": "knowsys",
         "repo": "nemo-vscode-extension",
-        "rev": "b4cfccacc02c6287e8db8a413f9641aa7781371f",
+        "rev": "0c5cab6dc126688ae1fccfa3be0f62f2c1bf56a0",
         "type": "github"
       },
       "original": {
@@ -2958,11 +2958,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1763382112,
-        "narHash": "sha256-LORsQI9/DhZhWSl8oW2aNDFTdfbMoN+A1eJSCxbhNbc=",
+        "lastModified": 1763463846,
+        "narHash": "sha256-i0fVlFHaJJuJmdAYaCtSmjaXvMysEsxZW+ZZhMwB4tg=",
         "owner": "knowsys",
         "repo": "nemo-web",
-        "rev": "7ca6b7ebf038874bbac90284d50925484b9a4964",
+        "rev": "66cec081e3a1a2fb57a088683115ed252c0ca280",
         "type": "github"
       },
       "original": {
@@ -4132,11 +4132,11 @@
     "nev_3": {
       "flake": false,
       "locked": {
-        "lastModified": 1758632908,
-        "narHash": "sha256-EAP8hzoktCxHuI5ih5kuunMF9Q+QxfT0ac16MozP1+k=",
+        "lastModified": 1763458568,
+        "narHash": "sha256-0Gob7eJpL1T1A9IDbaRwCAH4bt7OdcaxUVINL5ZFHX0=",
         "owner": "imldresden",
         "repo": "nev",
-        "rev": "e967d9b5623bee631c0c3cc8d181d4e1625b6713",
+        "rev": "42922d85959b29901f3fa7d44e9c4c538dabfaa9",
         "type": "github"
       },
       "original": {
