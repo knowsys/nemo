@@ -8,6 +8,8 @@ pub mod function;
 pub mod function_filter_negation;
 pub mod import;
 pub mod join;
+pub mod join_cartesian;
+pub mod join_imports;
 pub mod join_seminaive;
 pub mod negation;
 pub mod projection_head;

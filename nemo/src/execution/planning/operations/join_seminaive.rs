@@ -35,7 +35,7 @@ impl GeneratorJoinSeminaive {
     }
 
     /// Create a new [GeneratorJoinSeminaive]
-    /// where tables created in the during the last rule application step
+    /// where tables created during the last rule application step
     /// are considered as `old` tables.
     pub fn new_exclusive(atoms: Vec<BodyAtom>, order: &VariableOrder) -> Self {
         let (variants, order) = Self::create_variants(atoms, order, false);
@@ -107,6 +107,10 @@ impl GeneratorJoinSeminaive {
         plan: &mut SubtableExecutionPlan,
         runtime: &RuntimeInformation,
     ) -> ExecutionNodeRef {
+        if self.variants.is_empty() {
+            return plan.plan_mut().zero();
+        }
+
         let markers_result = runtime.translation.operation_table(self.order.iter());
         let mut node_result = plan.plan_mut().union_empty(markers_result);
 

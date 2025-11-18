@@ -16,8 +16,6 @@ use std::{
     fmt::Debug,
 };
 
-use ascii_tree::write_tree;
-
 use crate::{
     datasources::table_providers::TableProvider,
     datavalues::AnyDataValue,
@@ -416,8 +414,8 @@ impl DatabaseInstance {
         storage: &'a TemporaryStorage,
         tree: ExecutionTree,
         dependent: Vec<ProjectReordering>,
-    ) -> (Trie, Vec<Trie>) {
-        match tree.root {
+    ) -> Result<(Trie, Vec<Trie>), Error> {
+        Ok(match tree.root {
             ExecutionTreeNode::Operation(operation) => {
                 if let Some(trie_scan) =
                     self.evaluate_operation(&self.dictionary, storage, &operation)
@@ -441,14 +439,15 @@ impl DatabaseInstance {
                     "Having dependent tables is not supported for projectreorder nodes."
                 );
 
-                let trie = if generator.is_noop() {
-                    self.evaluate_tree_leaf(storage, &subnode)
-                        .map(|scan| Trie::from_partial_trie_scan(scan, tree.cut_layers))
-                        .unwrap_or(Trie::empty(0))
-                } else {
-                    self.evaluate_tree_leaf(storage, &subnode)
-                        .map(|scan| generator.apply_operation(scan))
-                        .unwrap_or(Trie::empty(0))
+                let trie = match self.evaluate_operation(&self.dictionary, storage, &subnode) {
+                    Some(scan) => {
+                        if generator.is_noop() {
+                            Trie::from_partial_trie_scan(scan, tree.cut_layers)
+                        } else {
+                            generator.apply_operation(scan)
+                        }
+                    }
+                    None => Trie::empty(generator.arity()),
                 };
 
                 (trie, vec![])
@@ -463,17 +462,25 @@ impl DatabaseInstance {
                     (Trie::empty(0), vec![Trie::empty(0); dependent.len()])
                 }
             }
-            ExecutionTreeNode::IncrementalImport { generator, subnode } => {
-                let dict = &self.dictionary;
-                let trie = match self.evaluate_tree_leaf(storage, &subnode) {
-                    Some(scan) => generator.apply_operation(scan, dict).await,
-                    None => Ok(Trie::empty(0)),
-                }
-                .expect("error while reading"); // TODO: This error should somehow be caught
+            ExecutionTreeNode::IncrementalImport {
+                generator,
+                subnodes,
+            } => {
+                let scans = subnodes
+                    .iter()
+                    .map(|(old, new)| {
+                        let old = self.evaluate_operation(&self.dictionary, storage, old);
+                        let new = self.evaluate_operation(&self.dictionary, storage, new);
+
+                        (old, new)
+                    })
+                    .collect::<Vec<(Option<TrieScanEnum>, Option<TrieScanEnum>)>>();
+
+                let trie = generator.apply_operation(scans, &self.dictionary).await?;
 
                 (trie, vec![])
             }
-        }
+        })
     }
 
     fn log_new_trie(tree_result: &ExecutionResult, trie: &Trie) {
@@ -555,7 +562,7 @@ impl DatabaseInstance {
             TimedCode::instance().sub(&timed_string).start();
             let (result_tree, results_dependent) = self
                 .execute_tree(&temporary_storage, tree, dependent_reorderings)
-                .await;
+                .await?;
 
             TimedCode::instance().sub(&timed_string).stop();
 
@@ -613,7 +620,10 @@ impl DatabaseInstance {
         for (tree_index, tree) in execution_series.trees.into_iter().enumerate() {
             match &tree.result {
                 ExecutionResult::Temporary => {
-                    let (result, _) = self.execute_tree(&temporary_storage, tree, vec![]).await;
+                    let (result, _) = self
+                        .execute_tree(&temporary_storage, tree, vec![])
+                        .await
+                        .ok()?;
 
                     temporary_storage.computed_tables[tree_index] = Some(result);
                 }
@@ -634,7 +644,7 @@ impl DatabaseInstance {
                             })
                         }
                         ExecutionTreeNode::ProjectReorder { generator, subnode } => self
-                            .evaluate_tree_leaf(&temporary_storage, subnode)
+                            .evaluate_operation(&self.dictionary, &temporary_storage, subnode)
                             .and_then(|scan| generator.apply_operation_first(scan)),
                         ExecutionTreeNode::Single {
                             generator: _,
@@ -689,9 +699,6 @@ impl DatabaseInstance {
                 continue;
             }
 
-            let mut string_tree = String::new();
-            let _ = write_tree(&mut string_tree, &tree.ascii_tree());
-
             let dependent_reorderings = tree
                 .dependents
                 .iter()
@@ -703,7 +710,7 @@ impl DatabaseInstance {
 
             let (result_tree, results_dependent) = self
                 .execute_tree(&temporary_storage, tree, dependent_reorderings)
-                .await;
+                .await?;
 
             temporary_storage.computed_tables[tree_index] = Some(result_tree);
             for ((computed_id, _), result_dependent) in

@@ -2,6 +2,8 @@
 
 use std::io::Read;
 
+use itertools::Itertools;
+use nemo_physical::datasources::bindings::{Bindings, ProductBindings};
 use nemo_physical::error::ReadingErrorKind;
 use nemo_physical::management::bytesized::ByteSized;
 use nemo_physical::meta::timing::TimedCode;
@@ -91,27 +93,32 @@ impl SparqlReader {
 
     async fn load_from_bindings(
         &self,
-        bound_positions: &[usize],
-        bindings: &[Vec<AnyDataValue>],
+        bindings: &ProductBindings,
         tuple_writer: &mut TupleWriter<'_>,
     ) -> Result<(), ReadingError> {
-        for (page, query) in
-            self.queries_with_bindings(bound_positions, bindings, MAX_BINDINGS_PER_PAGE)
-        {
+        for (page, query) in self.queries_with_bindings(bindings, MAX_BINDINGS_PER_PAGE) {
             let result = self.load_from_query(&query, tuple_writer).await;
 
+            // TODO(mam): detect timeouts here and reduce page size
+            // cf. https://github.com/knowsys/nemo/issues/712
             if let Err(error) = result
                 && let ReadingErrorKind::HttpTransfer(error) = error.kind()
                 && let Some(code) = error.status()
                 && code == reqwest::StatusCode::PAYLOAD_TOO_LARGE
             {
-                if bindings.len() == 1 {
+                if bindings.count() == 1 {
                     return Err(ReadingError::new_external(Box::new(error)));
                 }
 
                 // the page size is still too large, try half
                 for page in page.chunks(page.len().div_ceil(2).max(1)) {
-                    Box::pin(self.load_from_bindings(bound_positions, page, tuple_writer)).await?;
+                    Box::pin(self.load_from_bindings(
+                        &ProductBindings::product(page.iter().map(|bindings| {
+                            (Bindings::empty(bindings.positions()), bindings.clone())
+                        })),
+                        tuple_writer,
+                    ))
+                    .await?;
                 }
             }
         }
@@ -184,33 +191,35 @@ impl SparqlReader {
         }
     }
 
-    fn pattern_with_bindings(
-        pattern: &GraphPattern,
-        bound_positions: &[usize],
-        bindings: &[Vec<AnyDataValue>],
-    ) -> GraphPattern {
+    fn pattern_with_bindings(pattern: &GraphPattern, bindings: &[Bindings]) -> GraphPattern {
         match pattern {
             GraphPattern::Project { inner, variables } => {
-                let bound_variables = bound_positions
-                    .iter()
-                    .map(|idx| variables[*idx].clone())
-                    .collect::<Vec<_>>();
-                let bindings = bindings
-                    .iter()
-                    .map(|row| row.iter().map(Self::ground_term_from_datavalue).collect())
-                    .collect();
+                let mut previous = inner.clone();
 
-                let values = GraphPattern::Values {
-                    variables: bound_variables,
-                    bindings,
-                };
-                let join = GraphPattern::Join {
-                    left: inner.clone(),
-                    right: Box::new(values),
-                };
+                for bindings_set in bindings {
+                    let bound_variables = bindings_set
+                        .positions()
+                        .iter()
+                        .map(|idx| variables[*idx].clone())
+                        .collect::<Vec<_>>();
+                    let bindings = bindings_set
+                        .bindings()
+                        .iter()
+                        .map(|row| row.iter().map(Self::ground_term_from_datavalue).collect())
+                        .collect();
+
+                    let values = GraphPattern::Values {
+                        variables: bound_variables,
+                        bindings,
+                    };
+                    *previous = GraphPattern::Join {
+                        left: previous.clone(),
+                        right: Box::new(values),
+                    };
+                }
 
                 GraphPattern::Project {
-                    inner: Box::new(join),
+                    inner: previous,
                     variables: variables.clone(),
                 }
             }
@@ -218,11 +227,7 @@ impl SparqlReader {
         }
     }
 
-    fn query_with_bindings(
-        &self,
-        bound_positions: &[usize],
-        bindings: &[Vec<AnyDataValue>],
-    ) -> Option<Query> {
+    fn query_with_bindings(&self, bindings: &[Bindings]) -> Option<Query> {
         let query = match &self.builder.query {
             q @ &Query::Construct { .. } | q @ &Query::Describe { .. } => q.clone(),
             Query::Select {
@@ -232,7 +237,7 @@ impl SparqlReader {
             } => Query::Select {
                 dataset: dataset.clone(),
                 base_iri: base_iri.clone(),
-                pattern: Self::pattern_with_bindings(pattern, bound_positions, bindings),
+                pattern: Self::pattern_with_bindings(pattern, bindings),
             },
             Query::Ask {
                 dataset,
@@ -241,7 +246,7 @@ impl SparqlReader {
             } => Query::Ask {
                 dataset: dataset.clone(),
                 base_iri: base_iri.clone(),
-                pattern: Self::pattern_with_bindings(pattern, bound_positions, bindings),
+                pattern: Self::pattern_with_bindings(pattern, bindings),
             },
         };
 
@@ -252,24 +257,79 @@ impl SparqlReader {
         }
     }
 
-    fn queries_with_bindings<'bindings>(
+    fn bindings_chunks(bindings: &[Bindings], page_size: usize) -> Vec<Vec<Bindings>> {
+        let sorted = bindings
+            .iter()
+            .enumerate()
+            .sorted_by_cached_key(|(_, bindings)| bindings.count())
+            .collect::<Vec<_>>();
+
+        let split_index = sorted
+            .iter()
+            .enumerate()
+            .scan(1, |count, (idx, (_, bindings))| {
+                *count *= bindings.count();
+                Some((idx, *count))
+            })
+            .find(|(_, count)| *count > page_size);
+
+        if let Some((split_index, _)) = split_index {
+            let mut result = Vec::new();
+            let (prefix, rest) = sorted.split_at(split_index);
+            let prefix_count = prefix
+                .iter()
+                .map(|(_, bindings)| bindings.count())
+                .product::<usize>();
+            let remaining_size = page_size.div_ceil(prefix_count).max(1);
+            let the_prefix = prefix
+                .iter()
+                .map(|(_, bindings)| (*bindings).clone())
+                .collect::<Vec<_>>();
+
+            if rest.len() > 1 {
+                for infix in rest[0..rest.len() - 1]
+                    .iter()
+                    .map(|(_, bindings)| bindings.chunks(1).collect::<Vec<_>>())
+                    .multi_cartesian_product()
+                {
+                    for chunk in rest[rest.len()].1.chunks(remaining_size) {
+                        let mut the_result = the_prefix.clone();
+                        the_result.extend(infix.clone());
+                        the_result.push(chunk);
+                        result.push(the_result);
+                    }
+                }
+            } else {
+                for chunk in rest[0].1.chunks(remaining_size) {
+                    let mut the_result = the_prefix.clone();
+                    the_result.push(chunk);
+                    result.push(the_result);
+                }
+            }
+
+            result
+        } else {
+            vec![Vec::from(bindings)]
+        }
+    }
+
+    fn queries_with_bindings(
         &self,
-        bound_positions: &[usize],
-        bindings: &'bindings [Vec<AnyDataValue>],
+        bindings: &ProductBindings,
         page_size: usize,
-    ) -> impl Iterator<Item = (&'bindings [Vec<AnyDataValue>], Query)> {
+    ) -> impl Iterator<Item = (Vec<Bindings>, Query)> {
         let mut queries = Vec::new();
 
-        for page in bindings.chunks(page_size.max(1)) {
-            match self.query_with_bindings(bound_positions, page) {
-                Some(query) => {
-                    queries.push((page, query));
+        for combination in bindings.combinations() {
+            for page in Self::bindings_chunks(&combination, page_size.max(1)) {
+                match self.query_with_bindings(&page) {
+                    Some(query) => {
+                        queries.push((page.clone(), query));
+                    }
+                    None => {
+                        queries.extend(self.queries_with_bindings(bindings, page_size.div_ceil(2)))
+                    }
                 }
-                None => queries.extend(self.queries_with_bindings(
-                    bound_positions,
-                    page,
-                    page_size.div_ceil(2),
-                )),
             }
         }
 
@@ -300,7 +360,7 @@ impl TableProvider for SparqlReader {
 
     fn should_import_with_bindings(
         &self,
-        _bound_positions: &[usize],
+        _bound_positions: &[Vec<usize>],
         _num_bindings: usize,
     ) -> bool {
         true // TODO: use a better heuristic here
@@ -309,12 +369,9 @@ impl TableProvider for SparqlReader {
     async fn provide_table_data_with_bindings(
         self: Box<Self>,
         tuple_writer: &mut TupleWriter,
-        bound_positions: &[usize],
-        bindings: &[Vec<AnyDataValue>],
-        _num_bindings: usize,
+        bindings: &ProductBindings,
     ) -> Result<(), ReadingError> {
         tuple_writer.set_patterns(self.patterns.clone());
-        self.load_from_bindings(bound_positions, bindings, tuple_writer)
-            .await
+        self.load_from_bindings(bindings, tuple_writer).await
     }
 }

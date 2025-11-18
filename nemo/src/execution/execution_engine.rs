@@ -203,8 +203,9 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
         TimedCode::instance().sub(&timing_string).start();
         log::info!(
-            "<<< {}: APPLYING RULE {} >>>",
+            "<<< STEP {}: APPLYING RULE {} {} >>>",
             self.current_step,
+            rule_index,
             self.program.rules()[rule_index]
         );
 

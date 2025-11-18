@@ -12,6 +12,7 @@ pub(crate) mod single;
 pub(crate) mod subtract;
 pub(crate) mod trim;
 pub(crate) mod union;
+pub(crate) mod zero;
 
 pub use filter::Filter;
 pub use filter::Filters;
@@ -27,6 +28,7 @@ use std::{
 
 use delegate::delegate;
 
+use crate::tabular::operations::zero::GeneratorZero;
 use crate::{management::database::Dict, util::mapping::permutation::Permutation};
 
 use self::aggregate::GeneratorAggregate;
@@ -308,6 +310,8 @@ pub(crate) enum OperationGeneratorEnum {
     Function(GeneratorFunction),
     /// Null
     Null(GeneratorNull),
+    /// Zero artiy tables
+    Zero(GeneratorZero),
 }
 
 impl OperationGenerator for OperationGeneratorEnum {
@@ -320,6 +324,7 @@ impl OperationGenerator for OperationGeneratorEnum {
             Self::Filter(generator) => generator,
             Self::Function(generator) => generator,
             Self::Null(generator) => generator,
+            Self::Zero(generator) => generator,
         } {
             #[allow(late_bound_lifetime_arguments)]
             fn generate<'a>(
@@ -341,6 +346,7 @@ impl Debug for OperationGeneratorEnum {
             Self::Filter(generator) => f.write_fmt(format_args!("Filter ({generator:?})")),
             Self::Function(generator) => f.write_fmt(format_args!("Function ({generator:?})")),
             Self::Null(generator) => f.write_fmt(format_args!("Null ({generator:?})")),
+            Self::Zero(_genrerator) => f.write_fmt(format_args!("Zero")),
         }
     }
 }

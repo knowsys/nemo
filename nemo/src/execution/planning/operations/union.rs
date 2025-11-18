@@ -126,4 +126,9 @@ impl GeneratorUnion {
     pub fn _output_variables(&self) -> Vec<Variable> {
         self.variables.clone()
     }
+
+    /// Return the predicate over which this union is performed.
+    pub fn predicate(&self) -> &Tag {
+        &self.predicate
+    }
 }
