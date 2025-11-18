@@ -17,6 +17,7 @@ use crate::{
 use super::{
     ProgramTransformation, exports::TransformationExports,
     filter_imports::TransformationFilterImports, global::TransformationGlobal,
+    normalize::TransformationNormalize,
 };
 
 /// Default transformation
@@ -50,6 +51,7 @@ impl<'a> ProgramTransformation for TransformationDefault<'a> {
 
         commit
             .submit()?
+            .transform(TransformationNormalize::default())?
             .transform(TransformationGlobal::new(&self.parameters.global_variables))?
             .transform(TransformationExports::new(
                 self.parameters.export_parameters,
