@@ -17,6 +17,21 @@
     },
     "crane_10": {
       "locked": {
+        "lastModified": 1748047550,
+        "narHash": "sha256-t0qLLqb4C1rdtiY8IFRH5KIapTY/n3Lqt57AmxEv9mk=",
+        "owner": "ipetkov",
+        "repo": "crane",
+        "rev": "b718a78696060df6280196a6f992d04c87a16aef",
+        "type": "github"
+      },
+      "original": {
+        "owner": "ipetkov",
+        "repo": "crane",
+        "type": "github"
+      }
+    },
+    "crane_11": {
+      "locked": {
         "lastModified": 1747587869,
         "narHash": "sha256-Zay3WJdSvC2VQmNqWSVLBOg/1iS/0/Q0c9JOBsB+3qw=",
         "owner": "ipetkov",
@@ -32,11 +47,11 @@
     },
     "crane_2": {
       "locked": {
-        "lastModified": 1760924934,
-        "narHash": "sha256-tuuqY5aU7cUkR71sO2TraVKK2boYrdW3gCSXUkF4i44=",
+        "lastModified": 1762538466,
+        "narHash": "sha256-8zrIPl6J+wLm9MH5ksHcW7BUHo7jSNOu0/hA0ohOOaM=",
         "owner": "ipetkov",
         "repo": "crane",
-        "rev": "c6b4d5308293d0d04fcfeee92705017537cad02f",
+        "rev": "0cea393fffb39575c46b7a0318386467272182fe",
         "type": "github"
       },
       "original": {
@@ -77,11 +92,11 @@
     },
     "crane_5": {
       "locked": {
-        "lastModified": 1758758545,
-        "narHash": "sha256-NU5WaEdfwF6i8faJ2Yh+jcK9vVFrofLcwlD/mP65JrI=",
+        "lastModified": 1760924934,
+        "narHash": "sha256-tuuqY5aU7cUkR71sO2TraVKK2boYrdW3gCSXUkF4i44=",
         "owner": "ipetkov",
         "repo": "crane",
-        "rev": "95d528a5f54eaba0d12102249ce42f4d01f4e364",
+        "rev": "c6b4d5308293d0d04fcfeee92705017537cad02f",
         "type": "github"
       },
       "original": {
@@ -92,11 +107,11 @@
     },
     "crane_6": {
       "locked": {
-        "lastModified": 1751562746,
-        "narHash": "sha256-smpugNIkmDeicNz301Ll1bD7nFOty97T79m4GUMUczA=",
+        "lastModified": 1758758545,
+        "narHash": "sha256-NU5WaEdfwF6i8faJ2Yh+jcK9vVFrofLcwlD/mP65JrI=",
         "owner": "ipetkov",
         "repo": "crane",
-        "rev": "aed2020fd3dc26e1e857d4107a5a67a33ab6c1fd",
+        "rev": "95d528a5f54eaba0d12102249ce42f4d01f4e364",
         "type": "github"
       },
       "original": {
@@ -137,11 +152,11 @@
     },
     "crane_9": {
       "locked": {
-        "lastModified": 1748047550,
-        "narHash": "sha256-t0qLLqb4C1rdtiY8IFRH5KIapTY/n3Lqt57AmxEv9mk=",
+        "lastModified": 1751562746,
+        "narHash": "sha256-smpugNIkmDeicNz301Ll1bD7nFOty97T79m4GUMUczA=",
         "owner": "ipetkov",
         "repo": "crane",
-        "rev": "b718a78696060df6280196a6f992d04c87a16aef",
+        "rev": "aed2020fd3dc26e1e857d4107a5a67a33ab6c1fd",
         "type": "github"
       },
       "original": {
@@ -212,6 +227,48 @@
         "type": "github"
       }
     },
+    "dream2nix_11": {
+      "inputs": {
+        "nixpkgs": [
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nixpkgs"
+        ],
+        "purescript-overlay": "purescript-overlay_11",
+        "pyproject-nix": "pyproject-nix_11"
+      },
+      "locked": {
+        "lastModified": 1747658429,
+        "narHash": "sha256-qZWuEdxmPx818qR61t3mMozJOvZSmTRUDPU4L3JeGgE=",
+        "owner": "nix-community",
+        "repo": "dream2nix",
+        "rev": "6fd6d9188f32efd1e1656b3c3e63a67f9df7b636",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nix-community",
+        "repo": "dream2nix",
+        "type": "github"
+      }
+    },
     "dream2nix_2": {
       "inputs": {
         "nixpkgs": [
@@ -223,11 +280,11 @@
         "pyproject-nix": "pyproject-nix_2"
       },
       "locked": {
-        "lastModified": 1754978539,
-        "narHash": "sha256-nrDovydywSKRbWim9Ynmgj8SBm8LK3DI2WuhIqzOHYI=",
+        "lastModified": 1763413832,
+        "narHash": "sha256-dkqBwDXiv8MPoFyIvOuC4bVubAP+TlVZUkVMB78TTSg=",
         "owner": "nix-community",
         "repo": "dream2nix",
-        "rev": "fbec3263cb4895ac86ee9506cdc4e6919a1a2214",
+        "rev": "5658fba3a0b6b7d5cb0460b949651f64f644a743",
         "type": "github"
       },
       "original": {
@@ -339,11 +396,11 @@
         "pyproject-nix": "pyproject-nix_6"
       },
       "locked": {
-        "lastModified": 1752547840,
-        "narHash": "sha256-T6wYez5urMcY8oUetwOIqPcqj77Ey3qka7wQsi6YCd4=",
+        "lastModified": 1754978539,
+        "narHash": "sha256-nrDovydywSKRbWim9Ynmgj8SBm8LK3DI2WuhIqzOHYI=",
         "owner": "nix-community",
         "repo": "dream2nix",
-        "rev": "667ba5ee25c95cf63ace92307db270e235dce66e",
+        "rev": "fbec3263cb4895ac86ee9506cdc4e6919a1a2214",
         "type": "github"
       },
       "original": {
@@ -447,11 +504,11 @@
         "pyproject-nix": "pyproject-nix_9"
       },
       "locked": {
-        "lastModified": 1747658429,
-        "narHash": "sha256-qZWuEdxmPx818qR61t3mMozJOvZSmTRUDPU4L3JeGgE=",
+        "lastModified": 1752547840,
+        "narHash": "sha256-T6wYez5urMcY8oUetwOIqPcqj77Ey3qka7wQsi6YCd4=",
         "owner": "nix-community",
         "repo": "dream2nix",
-        "rev": "6fd6d9188f32efd1e1656b3c3e63a67f9df7b636",
+        "rev": "667ba5ee25c95cf63ace92307db270e235dce66e",
         "type": "github"
       },
       "original": {
@@ -477,6 +534,22 @@
       }
     },
     "flake-compat_10": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1696426674,
+        "narHash": "sha256-kvjfFW7WAETZlt09AgDn1MrtKzP7t90Vf7vypd3OL1U=",
+        "owner": "edolstra",
+        "repo": "flake-compat",
+        "rev": "0f9255e01c2351cc7d116c072cb317785dd33b33",
+        "type": "github"
+      },
+      "original": {
+        "owner": "edolstra",
+        "repo": "flake-compat",
+        "type": "github"
+      }
+    },
+    "flake-compat_11": {
       "flake": false,
       "locked": {
         "lastModified": 1696426674,
@@ -644,23 +717,23 @@
         "dream2nix": "dream2nix_2",
         "nemo-doc": "nemo-doc_2",
         "nemo-vscode-extension": "nemo-vscode-extension_2",
-        "nemo-web": "nemo-web_9",
+        "nemo-web": "nemo-web_10",
         "nixpkgs": [
           "nemo-vscode-extension",
           "nixpkgs"
         ],
-        "rust-overlay": "rust-overlay_10",
+        "rust-overlay": "rust-overlay_11",
         "utils": [
           "nemo-vscode-extension",
           "utils"
         ]
       },
       "locked": {
-        "lastModified": 1761173289,
-        "narHash": "sha256-jAh6NbG4kMjLkyQzCy+0GlB4tH4NIGvejqwrOYq8e7U=",
+        "lastModified": 1763463543,
+        "narHash": "sha256-5Ic6K2EKjoAvOVI0ii24qLiZ1aK0zI7W4Wn74jS2yZk=",
         "owner": "knowsys",
         "repo": "nemo",
-        "rev": "d15d7b543e02dc00400e89440b343d2a07080134",
+        "rev": "78b76f85f7d8a0a455f815dc7f6c6decf37a5dd8",
         "type": "github"
       },
       "original": {
@@ -762,6 +835,92 @@
         ]
       },
       "locked": {
+        "lastModified": 1747815494,
+        "narHash": "sha256-HS5ZaTKly8aqck7/XoFX7orkOvwJcU9V1DJ84QsOSy4=",
+        "owner": "knowsys",
+        "repo": "nemo-doc",
+        "rev": "8635cf463bd257cf475e4df8bc87741d51ccf0a9",
+        "type": "github"
+      },
+      "original": {
+        "owner": "knowsys",
+        "repo": "nemo-doc",
+        "type": "github"
+      }
+    },
+    "nemo-doc_11": {
+      "inputs": {
+        "dream2nix": [
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "dream2nix"
+        ],
+        "nixpkgs": [
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nixpkgs"
+        ],
+        "utils": [
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "utils"
+        ]
+      },
+      "locked": {
         "lastModified": 1747305769,
         "narHash": "sha256-89hPChBD7BHVnKWcZyUsVRvbXkIykAYC/xHvaGX/7nI=",
         "owner": "knowsys",
@@ -794,11 +953,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1761030255,
-        "narHash": "sha256-Y7swuWmT5mvTbqaHSPBREOR5gVp0UoNLtJMpaHl+5Vw=",
+        "lastModified": 1761217151,
+        "narHash": "sha256-/UZUAC7fPzwm6XLQ6r9/IOQ/FaR5wse9bY0o3tQLjws=",
         "owner": "knowsys",
         "repo": "nemo-doc",
-        "rev": "4abbf81fa852f220e5d29de99cfd91d17ff38dea",
+        "rev": "8e44e654a311425085de7e92c16e67a28659846e",
         "type": "github"
       },
       "original": {
@@ -926,11 +1085,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1756902760,
-        "narHash": "sha256-ZqiyqkNf3oKdz/fjoD2q8y/jsKSNunLtREudX2qNRl4=",
+        "lastModified": 1761030255,
+        "narHash": "sha256-Y7swuWmT5mvTbqaHSPBREOR5gVp0UoNLtJMpaHl+5Vw=",
         "owner": "knowsys",
         "repo": "nemo-doc",
-        "rev": "8797365c8fe842f5a21256b59d8aaa76c87cf6a0",
+        "rev": "4abbf81fa852f220e5d29de99cfd91d17ff38dea",
         "type": "github"
       },
       "original": {
@@ -982,11 +1141,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1752606379,
-        "narHash": "sha256-JZwtVHKS93/fTHCzijpit+bI6B21n0Aag5vkSqa25JM=",
+        "lastModified": 1756902760,
+        "narHash": "sha256-ZqiyqkNf3oKdz/fjoD2q8y/jsKSNunLtREudX2qNRl4=",
         "owner": "knowsys",
         "repo": "nemo-doc",
-        "rev": "499f3c124cb2e34754d3de4eb4011db172d57733",
+        "rev": "8797365c8fe842f5a21256b59d8aaa76c87cf6a0",
         "type": "github"
       },
       "original": {
@@ -1044,11 +1203,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1747815494,
-        "narHash": "sha256-HS5ZaTKly8aqck7/XoFX7orkOvwJcU9V1DJ84QsOSy4=",
+        "lastModified": 1752606379,
+        "narHash": "sha256-JZwtVHKS93/fTHCzijpit+bI6B21n0Aag5vkSqa25JM=",
         "owner": "knowsys",
         "repo": "nemo-doc",
-        "rev": "8635cf463bd257cf475e4df8bc87741d51ccf0a9",
+        "rev": "499f3c124cb2e34754d3de4eb4011db172d57733",
         "type": "github"
       },
       "original": {
@@ -1213,11 +1372,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1761173395,
-        "narHash": "sha256-+XXPGDE52cZbHf9iDERDl1Fk2/NCFJcc22eoYCRiDw0=",
+        "lastModified": 1763463589,
+        "narHash": "sha256-EFT/kdptNvv66RH27XWEB0nUvIzlpsQJAI8uaLsn+C0=",
         "owner": "knowsys",
         "repo": "nemo-vscode-extension",
-        "rev": "dfc37af5cc408f235e3283792d23ab80525d4ccc",
+        "rev": "0c5cab6dc126688ae1fccfa3be0f62f2c1bf56a0",
         "type": "github"
       },
       "original": {
@@ -1294,11 +1453,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1738170133,
-        "narHash": "sha256-O7XgGgxrhg5j2p8KgHa88yWozJcO6sIdCEN1U8eAMWA=",
+        "lastModified": 1748355656,
+        "narHash": "sha256-YN/hBnywEvoCSOg5N1Wz6WNV08H1/pJNFcvnbcA5fVw=",
         "owner": "knowsys",
         "repo": "nemo-vscode-extension",
-        "rev": "83580d47218b2e6d3ea30280d0004aa7ce670662",
+        "rev": "cdfee81fe495586d68110ed555c11885d7f939b7",
         "type": "github"
       },
       "original": {
@@ -1328,31 +1487,11 @@
           "nemo",
           "nemo-vscode-extension",
           "nemo",
-          "nemo-web",
+          "nemo-vscode-extension",
+          "nemo",
           "dream2nix"
         ],
-        "nemo": [
-          "nemo-vscode-extension",
-          "nemo",
-          "nemo-vscode-extension",
-          "nemo",
-          "nemo-vscode-extension",
-          "nemo",
-          "nemo-vscode-extension",
-          "nemo",
-          "nemo-vscode-extension",
-          "nemo",
-          "nemo-vscode-extension",
-          "nemo",
-          "nemo-vscode-extension",
-          "nemo",
-          "nemo-vscode-extension",
-          "nemo",
-          "nemo-vscode-extension",
-          "nemo",
-          "nemo-web",
-          "nemo"
-        ],
+        "nemo": "nemo_11",
         "nixpkgs": [
           "nemo-vscode-extension",
           "nemo",
@@ -1372,7 +1511,8 @@
           "nemo",
           "nemo-vscode-extension",
           "nemo",
-          "nemo-web",
+          "nemo-vscode-extension",
+          "nemo",
           "nixpkgs"
         ],
         "utils": [
@@ -1394,7 +1534,8 @@
           "nemo",
           "nemo-vscode-extension",
           "nemo",
-          "nemo-web",
+          "nemo-vscode-extension",
+          "nemo",
           "utils"
         ]
       },
@@ -1431,10 +1572,18 @@
           "nemo",
           "nemo-vscode-extension",
           "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-web",
           "dream2nix"
         ],
         "nemo": [
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
@@ -1471,10 +1620,123 @@
           "nemo",
           "nemo-vscode-extension",
           "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-web",
           "nixpkgs"
         ],
         "utils": [
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-web",
+          "utils"
+        ]
+      },
+      "locked": {
+        "lastModified": 1738170133,
+        "narHash": "sha256-O7XgGgxrhg5j2p8KgHa88yWozJcO6sIdCEN1U8eAMWA=",
+        "owner": "knowsys",
+        "repo": "nemo-vscode-extension",
+        "rev": "83580d47218b2e6d3ea30280d0004aa7ce670662",
+        "type": "github"
+      },
+      "original": {
+        "owner": "knowsys",
+        "repo": "nemo-vscode-extension",
+        "type": "github"
+      }
+    },
+    "nemo-vscode-extension_13": {
+      "inputs": {
+        "dream2nix": [
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-web",
+          "dream2nix"
+        ],
+        "nemo": [
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-web",
+          "nemo"
+        ],
+        "nixpkgs": [
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-web",
+          "nixpkgs"
+        ],
+        "utils": [
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
@@ -1509,9 +1771,11 @@
         "type": "github"
       }
     },
-    "nemo-vscode-extension_13": {
+    "nemo-vscode-extension_14": {
       "inputs": {
         "dream2nix": [
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
@@ -1544,6 +1808,8 @@
           "nemo",
           "nemo-vscode-extension",
           "nemo",
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-web",
           "nemo"
         ],
@@ -1562,10 +1828,14 @@
           "nemo",
           "nemo-vscode-extension",
           "nemo",
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-web",
           "nixpkgs"
         ],
         "utils": [
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
@@ -1598,9 +1868,11 @@
         "type": "github"
       }
     },
-    "nemo-vscode-extension_14": {
+    "nemo-vscode-extension_15": {
       "inputs": {
         "dream2nix": [
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
@@ -1629,6 +1901,8 @@
           "nemo",
           "nemo-vscode-extension",
           "nemo",
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-web",
           "nemo"
         ],
@@ -1645,10 +1919,14 @@
           "nemo",
           "nemo-vscode-extension",
           "nemo",
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-web",
           "nixpkgs"
         ],
         "utils": [
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
@@ -1679,9 +1957,11 @@
         "type": "github"
       }
     },
-    "nemo-vscode-extension_15": {
+    "nemo-vscode-extension_16": {
       "inputs": {
         "dream2nix": [
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
@@ -1706,6 +1986,8 @@
           "nemo",
           "nemo-vscode-extension",
           "nemo",
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-web",
           "nemo"
         ],
@@ -1720,10 +2002,14 @@
           "nemo",
           "nemo-vscode-extension",
           "nemo",
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-web",
           "nixpkgs"
         ],
         "utils": [
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
@@ -1752,9 +2038,11 @@
         "type": "github"
       }
     },
-    "nemo-vscode-extension_16": {
+    "nemo-vscode-extension_17": {
       "inputs": {
         "dream2nix": [
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
@@ -1775,6 +2063,8 @@
           "nemo",
           "nemo-vscode-extension",
           "nemo",
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-web",
           "nemo"
         ],
@@ -1787,10 +2077,14 @@
           "nemo",
           "nemo-vscode-extension",
           "nemo",
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-web",
           "nixpkgs"
         ],
         "utils": [
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
@@ -1817,9 +2111,11 @@
         "type": "github"
       }
     },
-    "nemo-vscode-extension_17": {
+    "nemo-vscode-extension_18": {
       "inputs": {
         "dream2nix": [
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
@@ -1836,6 +2132,8 @@
           "nemo",
           "nemo-vscode-extension",
           "nemo",
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-web",
           "nemo"
         ],
@@ -1846,10 +2144,14 @@
           "nemo",
           "nemo-vscode-extension",
           "nemo",
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-web",
           "nixpkgs"
         ],
         "utils": [
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
@@ -1874,9 +2176,11 @@
         "type": "github"
       }
     },
-    "nemo-vscode-extension_18": {
+    "nemo-vscode-extension_19": {
       "inputs": {
         "dream2nix": [
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
@@ -1889,6 +2193,8 @@
           "nemo",
           "nemo-vscode-extension",
           "nemo",
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-web",
           "nemo"
         ],
@@ -1897,10 +2203,14 @@
           "nemo",
           "nemo-vscode-extension",
           "nemo",
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-web",
           "nixpkgs"
         ],
         "utils": [
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
@@ -1915,47 +2225,6 @@
         "owner": "knowsys",
         "repo": "nemo-vscode-extension",
         "rev": "6f578f30398b41e0fe0476a68acbb2d4ae15e644",
-        "type": "github"
-      },
-      "original": {
-        "owner": "knowsys",
-        "repo": "nemo-vscode-extension",
-        "type": "github"
-      }
-    },
-    "nemo-vscode-extension_19": {
-      "inputs": {
-        "dream2nix": [
-          "nemo-vscode-extension",
-          "nemo",
-          "nemo-web",
-          "dream2nix"
-        ],
-        "nemo": [
-          "nemo-vscode-extension",
-          "nemo",
-          "nemo-web",
-          "nemo"
-        ],
-        "nixpkgs": [
-          "nemo-vscode-extension",
-          "nemo",
-          "nemo-web",
-          "nixpkgs"
-        ],
-        "utils": [
-          "nemo-vscode-extension",
-          "nemo",
-          "nemo-web",
-          "utils"
-        ]
-      },
-      "locked": {
-        "lastModified": 1761172214,
-        "narHash": "sha256-/1QJgvcWwE5Mux+GsNA3VL9WGAwk0Pbop8gZHrAz+uc=",
-        "owner": "knowsys",
-        "repo": "nemo-vscode-extension",
-        "rev": "b4cfccacc02c6287e8db8a413f9641aa7781371f",
         "type": "github"
       },
       "original": {
@@ -1984,6 +2253,55 @@
         ]
       },
       "locked": {
+        "lastModified": 1761173395,
+        "narHash": "sha256-+XXPGDE52cZbHf9iDERDl1Fk2/NCFJcc22eoYCRiDw0=",
+        "owner": "knowsys",
+        "repo": "nemo-vscode-extension",
+        "rev": "dfc37af5cc408f235e3283792d23ab80525d4ccc",
+        "type": "github"
+      },
+      "original": {
+        "owner": "knowsys",
+        "repo": "nemo-vscode-extension",
+        "type": "github"
+      }
+    },
+    "nemo-vscode-extension_20": {
+      "inputs": {
+        "dream2nix": [
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-web",
+          "dream2nix"
+        ],
+        "nemo": [
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-web",
+          "nemo"
+        ],
+        "nixpkgs": [
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-web",
+          "nixpkgs"
+        ],
+        "utils": [
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-web",
+          "utils"
+        ]
+      },
+      "locked": {
         "lastModified": 1761172214,
         "narHash": "sha256-/1QJgvcWwE5Mux+GsNA3VL9WGAwk0Pbop8gZHrAz+uc=",
         "owner": "knowsys",
@@ -1997,7 +2315,48 @@
         "type": "github"
       }
     },
-    "nemo-vscode-extension_20": {
+    "nemo-vscode-extension_21": {
+      "inputs": {
+        "dream2nix": [
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-web",
+          "dream2nix"
+        ],
+        "nemo": [
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-web",
+          "nemo"
+        ],
+        "nixpkgs": [
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-web",
+          "nixpkgs"
+        ],
+        "utils": [
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-web",
+          "utils"
+        ]
+      },
+      "locked": {
+        "lastModified": 1761172214,
+        "narHash": "sha256-/1QJgvcWwE5Mux+GsNA3VL9WGAwk0Pbop8gZHrAz+uc=",
+        "owner": "knowsys",
+        "repo": "nemo-vscode-extension",
+        "rev": "b4cfccacc02c6287e8db8a413f9641aa7781371f",
+        "type": "github"
+      },
+      "original": {
+        "owner": "knowsys",
+        "repo": "nemo-vscode-extension",
+        "type": "github"
+      }
+    },
+    "nemo-vscode-extension_22": {
       "inputs": {
         "dream2nix": [
           "nemo-web",
@@ -2056,11 +2415,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1761041597,
-        "narHash": "sha256-npEyTMgnmJTZM+lpLWdTcMmi/akyB51tcc0mG/8r7wg=",
+        "lastModified": 1761172214,
+        "narHash": "sha256-/1QJgvcWwE5Mux+GsNA3VL9WGAwk0Pbop8gZHrAz+uc=",
         "owner": "knowsys",
         "repo": "nemo-vscode-extension",
-        "rev": "6f578f30398b41e0fe0476a68acbb2d4ae15e644",
+        "rev": "b4cfccacc02c6287e8db8a413f9641aa7781371f",
         "type": "github"
       },
       "original": {
@@ -2101,11 +2460,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1761038594,
-        "narHash": "sha256-KmoDTuDkn+0pSFi6h7ZoUK/gl5+UfYb06elgbaB3BDs=",
+        "lastModified": 1761041597,
+        "narHash": "sha256-npEyTMgnmJTZM+lpLWdTcMmi/akyB51tcc0mG/8r7wg=",
         "owner": "knowsys",
         "repo": "nemo-vscode-extension",
-        "rev": "0d3cfa4ed924807c828c0ec7dc630696fd5656e4",
+        "rev": "6f578f30398b41e0fe0476a68acbb2d4ae15e644",
         "type": "github"
       },
       "original": {
@@ -2152,11 +2511,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1758632847,
-        "narHash": "sha256-/BJTeCsBMx20S+N+V4aOd1O/LlKhr8BzpXuY6lfoTfs=",
+        "lastModified": 1761038594,
+        "narHash": "sha256-KmoDTuDkn+0pSFi6h7ZoUK/gl5+UfYb06elgbaB3BDs=",
         "owner": "knowsys",
         "repo": "nemo-vscode-extension",
-        "rev": "3f4a199b334eafc61ac26e5e423187ada00887bf",
+        "rev": "0d3cfa4ed924807c828c0ec7dc630696fd5656e4",
         "type": "github"
       },
       "original": {
@@ -2209,11 +2568,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1752608788,
-        "narHash": "sha256-rmiSN6V1S4Sey9a8ujyF/DmlK5MIAb0AhwhzPaX79AY=",
+        "lastModified": 1758632847,
+        "narHash": "sha256-/BJTeCsBMx20S+N+V4aOd1O/LlKhr8BzpXuY6lfoTfs=",
         "owner": "knowsys",
         "repo": "nemo-vscode-extension",
-        "rev": "a5781ef9f270709242ae5db45cfa241c703e1bc1",
+        "rev": "3f4a199b334eafc61ac26e5e423187ada00887bf",
         "type": "github"
       },
       "original": {
@@ -2272,11 +2631,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1752598510,
-        "narHash": "sha256-9DTIctvwNsrgJ3odNiqX7Jnq6AB250yahtMKo+RBrps=",
+        "lastModified": 1752608788,
+        "narHash": "sha256-rmiSN6V1S4Sey9a8ujyF/DmlK5MIAb0AhwhzPaX79AY=",
         "owner": "knowsys",
         "repo": "nemo-vscode-extension",
-        "rev": "613f2f229e6300b1146428099d047d725931f59e",
+        "rev": "a5781ef9f270709242ae5db45cfa241c703e1bc1",
         "type": "github"
       },
       "original": {
@@ -2341,11 +2700,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1748474348,
-        "narHash": "sha256-LnRs9SqiFUTr5aDPVKdSPSiWDxcTqSE73z4GkH4EXcI=",
+        "lastModified": 1752598510,
+        "narHash": "sha256-9DTIctvwNsrgJ3odNiqX7Jnq6AB250yahtMKo+RBrps=",
         "owner": "knowsys",
         "repo": "nemo-vscode-extension",
-        "rev": "7c28283cc646fcde2f9cde86880baf4404348c8b",
+        "rev": "613f2f229e6300b1146428099d047d725931f59e",
         "type": "github"
       },
       "original": {
@@ -2416,11 +2775,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1748355656,
-        "narHash": "sha256-YN/hBnywEvoCSOg5N1Wz6WNV08H1/pJNFcvnbcA5fVw=",
+        "lastModified": 1748474348,
+        "narHash": "sha256-LnRs9SqiFUTr5aDPVKdSPSiWDxcTqSE73z4GkH4EXcI=",
         "owner": "knowsys",
         "repo": "nemo-vscode-extension",
-        "rev": "cdfee81fe495586d68110ed555c11885d7f939b7",
+        "rev": "7c28283cc646fcde2f9cde86880baf4404348c8b",
         "type": "github"
       },
       "original": {
@@ -2432,6 +2791,8 @@
     "nemo-web": {
       "inputs": {
         "dream2nix": [
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
@@ -2472,10 +2833,14 @@
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
           "nemo"
         ],
-        "nemo-vscode-extension": "nemo-vscode-extension_11",
+        "nemo-vscode-extension": "nemo-vscode-extension_12",
         "nixpkgs": [
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
@@ -2515,6 +2880,8 @@
           "nemo",
           "nemo-vscode-extension",
           "nemo",
+          "nemo-vscode-extension",
+          "nemo",
           "utils"
         ]
       },
@@ -2535,14 +2902,54 @@
     "nemo-web_10": {
       "inputs": {
         "dream2nix": [
+          "nemo-vscode-extension",
+          "nemo",
+          "dream2nix"
+        ],
+        "nemo": [
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo"
+        ],
+        "nemo-vscode-extension": "nemo-vscode-extension_21",
+        "nev": "nev_2",
+        "nixpkgs": [
+          "nemo-vscode-extension",
+          "nemo",
+          "nixpkgs"
+        ],
+        "utils": [
+          "nemo-vscode-extension",
+          "nemo",
+          "utils"
+        ]
+      },
+      "locked": {
+        "lastModified": 1763382112,
+        "narHash": "sha256-LORsQI9/DhZhWSl8oW2aNDFTdfbMoN+A1eJSCxbhNbc=",
+        "owner": "knowsys",
+        "repo": "nemo-web",
+        "rev": "7ca6b7ebf038874bbac90284d50925484b9a4964",
+        "type": "github"
+      },
+      "original": {
+        "owner": "knowsys",
+        "repo": "nemo-web",
+        "type": "github"
+      }
+    },
+    "nemo-web_11": {
+      "inputs": {
+        "dream2nix": [
           "dream2nix"
         ],
         "nemo": [
           "nemo-vscode-extension",
           "nemo"
         ],
-        "nemo-vscode-extension": "nemo-vscode-extension_20",
-        "nev": "nev_2",
+        "nemo-vscode-extension": "nemo-vscode-extension_22",
+        "nev": "nev_3",
         "nixpkgs": [
           "nixpkgs"
         ],
@@ -2583,6 +2990,8 @@
           "nemo",
           "nemo-vscode-extension",
           "nemo",
+          "nemo-vscode-extension",
+          "nemo",
           "dream2nix"
         ],
         "nemo": [
@@ -2603,10 +3012,14 @@
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
           "nemo"
         ],
-        "nemo-vscode-extension": "nemo-vscode-extension_12",
+        "nemo-vscode-extension": "nemo-vscode-extension_13",
         "nixpkgs": [
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
@@ -2626,6 +3039,8 @@
           "nixpkgs"
         ],
         "utils": [
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
@@ -2676,6 +3091,8 @@
           "nemo",
           "nemo-vscode-extension",
           "nemo",
+          "nemo-vscode-extension",
+          "nemo",
           "dream2nix"
         ],
         "nemo": [
@@ -2694,10 +3111,14 @@
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
           "nemo"
         ],
-        "nemo-vscode-extension": "nemo-vscode-extension_13",
+        "nemo-vscode-extension": "nemo-vscode-extension_14",
         "nixpkgs": [
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
@@ -2715,6 +3136,8 @@
           "nixpkgs"
         ],
         "utils": [
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
@@ -2761,6 +3184,8 @@
           "nemo",
           "nemo-vscode-extension",
           "nemo",
+          "nemo-vscode-extension",
+          "nemo",
           "dream2nix"
         ],
         "nemo": [
@@ -2777,10 +3202,14 @@
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
           "nemo"
         ],
-        "nemo-vscode-extension": "nemo-vscode-extension_14",
+        "nemo-vscode-extension": "nemo-vscode-extension_15",
         "nixpkgs": [
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
@@ -2796,6 +3225,8 @@
           "nixpkgs"
         ],
         "utils": [
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
@@ -2838,6 +3269,8 @@
           "nemo",
           "nemo-vscode-extension",
           "nemo",
+          "nemo-vscode-extension",
+          "nemo",
           "dream2nix"
         ],
         "nemo": [
@@ -2852,10 +3285,14 @@
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
           "nemo"
         ],
-        "nemo-vscode-extension": "nemo-vscode-extension_15",
+        "nemo-vscode-extension": "nemo-vscode-extension_16",
         "nixpkgs": [
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
@@ -2869,6 +3306,8 @@
           "nixpkgs"
         ],
         "utils": [
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
@@ -2907,6 +3346,8 @@
           "nemo",
           "nemo-vscode-extension",
           "nemo",
+          "nemo-vscode-extension",
+          "nemo",
           "dream2nix"
         ],
         "nemo": [
@@ -2919,10 +3360,14 @@
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
           "nemo"
         ],
-        "nemo-vscode-extension": "nemo-vscode-extension_16",
+        "nemo-vscode-extension": "nemo-vscode-extension_17",
         "nixpkgs": [
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
@@ -2934,6 +3379,8 @@
           "nixpkgs"
         ],
         "utils": [
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
@@ -2968,6 +3415,8 @@
           "nemo",
           "nemo-vscode-extension",
           "nemo",
+          "nemo-vscode-extension",
+          "nemo",
           "dream2nix"
         ],
         "nemo": [
@@ -2978,10 +3427,14 @@
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
           "nemo"
         ],
-        "nemo-vscode-extension": "nemo-vscode-extension_17",
+        "nemo-vscode-extension": "nemo-vscode-extension_18",
         "nixpkgs": [
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
@@ -2991,6 +3444,8 @@
           "nixpkgs"
         ],
         "utils": [
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
@@ -3021,6 +3476,8 @@
           "nemo",
           "nemo-vscode-extension",
           "nemo",
+          "nemo-vscode-extension",
+          "nemo",
           "dream2nix"
         ],
         "nemo": [
@@ -3029,10 +3486,14 @@
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
           "nemo"
         ],
-        "nemo-vscode-extension": "nemo-vscode-extension_18",
+        "nemo-vscode-extension": "nemo-vscode-extension_19",
         "nixpkgs": [
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
@@ -3040,6 +3501,8 @@
           "nixpkgs"
         ],
         "utils": [
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
@@ -3066,22 +3529,30 @@
         "dream2nix": [
           "nemo-vscode-extension",
           "nemo",
+          "nemo-vscode-extension",
+          "nemo",
           "dream2nix"
         ],
         "nemo": [
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
           "nemo"
         ],
-        "nemo-vscode-extension": "nemo-vscode-extension_19",
+        "nemo-vscode-extension": "nemo-vscode-extension_20",
         "nev": "nev",
         "nixpkgs": [
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-vscode-extension",
           "nemo",
           "nixpkgs"
         ],
         "utils": [
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-vscode-extension",
           "nemo",
           "utils"
@@ -3103,7 +3574,76 @@
     },
     "nemo_10": {
       "inputs": {
+        "crane": "crane_11",
+        "dream2nix": "dream2nix_11",
+        "nemo-doc": "nemo-doc_11",
+        "nemo-vscode-extension": "nemo-vscode-extension_11",
+        "nemo-web": "nemo-web",
         "nixpkgs": [
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nixpkgs"
+        ],
+        "rust-overlay": "rust-overlay_2",
+        "utils": [
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "utils"
+        ]
+      },
+      "locked": {
+        "lastModified": 1748342678,
+        "narHash": "sha256-xw2doyAV3r+9w3ulpL7IJ5ISdUCn5aHV9wn4azhd2PQ=",
+        "owner": "knowsys",
+        "repo": "nemo",
+        "rev": "db4be24d32543a7ff8443a7e61d44e343fdaf1d6",
+        "type": "github"
+      },
+      "original": {
+        "owner": "knowsys",
+        "repo": "nemo",
+        "type": "github"
+      }
+    },
+    "nemo_11": {
+      "inputs": {
+        "nixpkgs": [
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
@@ -3146,6 +3686,8 @@
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
           "utils"
         ]
       },
@@ -3169,8 +3711,45 @@
         "dream2nix": "dream2nix_3",
         "nemo-doc": "nemo-doc_3",
         "nemo-vscode-extension": "nemo-vscode-extension_3",
+        "nemo-web": "nemo-web_9",
+        "nixpkgs": [
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nixpkgs"
+        ],
+        "rust-overlay": "rust-overlay_10",
+        "utils": [
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "utils"
+        ]
+      },
+      "locked": {
+        "lastModified": 1761173289,
+        "narHash": "sha256-jAh6NbG4kMjLkyQzCy+0GlB4tH4NIGvejqwrOYq8e7U=",
+        "owner": "knowsys",
+        "repo": "nemo",
+        "rev": "d15d7b543e02dc00400e89440b343d2a07080134",
+        "type": "github"
+      },
+      "original": {
+        "owner": "knowsys",
+        "repo": "nemo",
+        "type": "github"
+      }
+    },
+    "nemo_3": {
+      "inputs": {
+        "crane": "crane_4",
+        "dream2nix": "dream2nix_4",
+        "nemo-doc": "nemo-doc_4",
+        "nemo-vscode-extension": "nemo-vscode-extension_4",
         "nemo-web": "nemo-web_8",
         "nixpkgs": [
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
@@ -3178,6 +3757,8 @@
         ],
         "rust-overlay": "rust-overlay_9",
         "utils": [
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
@@ -3198,14 +3779,16 @@
         "type": "github"
       }
     },
-    "nemo_3": {
+    "nemo_4": {
       "inputs": {
-        "crane": "crane_4",
-        "dream2nix": "dream2nix_4",
-        "nemo-doc": "nemo-doc_4",
-        "nemo-vscode-extension": "nemo-vscode-extension_4",
+        "crane": "crane_5",
+        "dream2nix": "dream2nix_5",
+        "nemo-doc": "nemo-doc_5",
+        "nemo-vscode-extension": "nemo-vscode-extension_5",
         "nemo-web": "nemo-web_7",
         "nixpkgs": [
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
@@ -3215,6 +3798,8 @@
         ],
         "rust-overlay": "rust-overlay_8",
         "utils": [
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
@@ -3237,14 +3822,16 @@
         "type": "github"
       }
     },
-    "nemo_4": {
+    "nemo_5": {
       "inputs": {
-        "crane": "crane_5",
-        "dream2nix": "dream2nix_5",
-        "nemo-doc": "nemo-doc_5",
-        "nemo-vscode-extension": "nemo-vscode-extension_5",
+        "crane": "crane_6",
+        "dream2nix": "dream2nix_6",
+        "nemo-doc": "nemo-doc_6",
+        "nemo-vscode-extension": "nemo-vscode-extension_6",
         "nemo-web": "nemo-web_6",
         "nixpkgs": [
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
@@ -3256,6 +3843,8 @@
         ],
         "rust-overlay": "rust-overlay_7",
         "utils": [
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
@@ -3280,14 +3869,16 @@
         "type": "github"
       }
     },
-    "nemo_5": {
+    "nemo_6": {
       "inputs": {
-        "crane": "crane_6",
-        "dream2nix": "dream2nix_6",
-        "nemo-doc": "nemo-doc_6",
-        "nemo-vscode-extension": "nemo-vscode-extension_6",
+        "crane": "crane_7",
+        "dream2nix": "dream2nix_7",
+        "nemo-doc": "nemo-doc_7",
+        "nemo-vscode-extension": "nemo-vscode-extension_7",
         "nemo-web": "nemo-web_5",
         "nixpkgs": [
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
@@ -3301,6 +3892,8 @@
         ],
         "rust-overlay": "rust-overlay_6",
         "utils": [
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
@@ -3327,14 +3920,16 @@
         "type": "github"
       }
     },
-    "nemo_6": {
+    "nemo_7": {
       "inputs": {
-        "crane": "crane_7",
-        "dream2nix": "dream2nix_7",
-        "nemo-doc": "nemo-doc_7",
-        "nemo-vscode-extension": "nemo-vscode-extension_7",
+        "crane": "crane_8",
+        "dream2nix": "dream2nix_8",
+        "nemo-doc": "nemo-doc_8",
+        "nemo-vscode-extension": "nemo-vscode-extension_8",
         "nemo-web": "nemo-web_4",
         "nixpkgs": [
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
@@ -3350,6 +3945,8 @@
         ],
         "rust-overlay": "rust-overlay_5",
         "utils": [
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
@@ -3378,14 +3975,16 @@
         "type": "github"
       }
     },
-    "nemo_7": {
+    "nemo_8": {
       "inputs": {
-        "crane": "crane_8",
-        "dream2nix": "dream2nix_8",
-        "nemo-doc": "nemo-doc_8",
-        "nemo-vscode-extension": "nemo-vscode-extension_8",
+        "crane": "crane_9",
+        "dream2nix": "dream2nix_9",
+        "nemo-doc": "nemo-doc_9",
+        "nemo-vscode-extension": "nemo-vscode-extension_9",
         "nemo-web": "nemo-web_3",
         "nixpkgs": [
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
@@ -3416,6 +4015,8 @@
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
           "utils"
         ]
       },
@@ -3433,14 +4034,16 @@
         "type": "github"
       }
     },
-    "nemo_8": {
+    "nemo_9": {
       "inputs": {
-        "crane": "crane_9",
-        "dream2nix": "dream2nix_9",
-        "nemo-doc": "nemo-doc_9",
-        "nemo-vscode-extension": "nemo-vscode-extension_9",
+        "crane": "crane_10",
+        "dream2nix": "dream2nix_10",
+        "nemo-doc": "nemo-doc_10",
+        "nemo-vscode-extension": "nemo-vscode-extension_10",
         "nemo-web": "nemo-web_2",
         "nixpkgs": [
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
@@ -3475,6 +4078,8 @@
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
           "utils"
         ]
       },
@@ -3484,69 +4089,6 @@
         "owner": "knowsys",
         "repo": "nemo",
         "rev": "e4a8bcf9fe40090f21dcbde91dfa4d52d9455752",
-        "type": "github"
-      },
-      "original": {
-        "owner": "knowsys",
-        "repo": "nemo",
-        "type": "github"
-      }
-    },
-    "nemo_9": {
-      "inputs": {
-        "crane": "crane_10",
-        "dream2nix": "dream2nix_10",
-        "nemo-doc": "nemo-doc_10",
-        "nemo-vscode-extension": "nemo-vscode-extension_10",
-        "nemo-web": "nemo-web",
-        "nixpkgs": [
-          "nemo-vscode-extension",
-          "nemo",
-          "nemo-vscode-extension",
-          "nemo",
-          "nemo-vscode-extension",
-          "nemo",
-          "nemo-vscode-extension",
-          "nemo",
-          "nemo-vscode-extension",
-          "nemo",
-          "nemo-vscode-extension",
-          "nemo",
-          "nemo-vscode-extension",
-          "nemo",
-          "nemo-vscode-extension",
-          "nemo",
-          "nemo-vscode-extension",
-          "nixpkgs"
-        ],
-        "rust-overlay": "rust-overlay_2",
-        "utils": [
-          "nemo-vscode-extension",
-          "nemo",
-          "nemo-vscode-extension",
-          "nemo",
-          "nemo-vscode-extension",
-          "nemo",
-          "nemo-vscode-extension",
-          "nemo",
-          "nemo-vscode-extension",
-          "nemo",
-          "nemo-vscode-extension",
-          "nemo",
-          "nemo-vscode-extension",
-          "nemo",
-          "nemo-vscode-extension",
-          "nemo",
-          "nemo-vscode-extension",
-          "utils"
-        ]
-      },
-      "locked": {
-        "lastModified": 1748342678,
-        "narHash": "sha256-xw2doyAV3r+9w3ulpL7IJ5ISdUCn5aHV9wn4azhd2PQ=",
-        "owner": "knowsys",
-        "repo": "nemo",
-        "rev": "db4be24d32543a7ff8443a7e61d44e343fdaf1d6",
         "type": "github"
       },
       "original": {
@@ -3572,6 +4114,22 @@
       }
     },
     "nev_2": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1758632908,
+        "narHash": "sha256-EAP8hzoktCxHuI5ih5kuunMF9Q+QxfT0ac16MozP1+k=",
+        "owner": "imldresden",
+        "repo": "nev",
+        "rev": "e967d9b5623bee631c0c3cc8d181d4e1625b6713",
+        "type": "github"
+      },
+      "original": {
+        "owner": "imldresden",
+        "repo": "nev",
+        "type": "github"
+      }
+    },
+    "nev_3": {
       "flake": false,
       "locked": {
         "lastModified": 1758632908,
@@ -3652,6 +4210,49 @@
           "nixpkgs"
         ],
         "slimlock": "slimlock_10"
+      },
+      "locked": {
+        "lastModified": 1728546539,
+        "narHash": "sha256-Sws7w0tlnjD+Bjck1nv29NjC5DbL6nH5auL9Ex9Iz2A=",
+        "owner": "thomashoneyman",
+        "repo": "purescript-overlay",
+        "rev": "4ad4c15d07bd899d7346b331f377606631eb0ee4",
+        "type": "github"
+      },
+      "original": {
+        "owner": "thomashoneyman",
+        "repo": "purescript-overlay",
+        "type": "github"
+      }
+    },
+    "purescript-overlay_11": {
+      "inputs": {
+        "flake-compat": "flake-compat_11",
+        "nixpkgs": [
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "dream2nix",
+          "nixpkgs"
+        ],
+        "slimlock": "slimlock_11"
       },
       "locked": {
         "lastModified": 1728546539,
@@ -3961,6 +4562,23 @@
         "type": "github"
       }
     },
+    "pyproject-nix_11": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1702448246,
+        "narHash": "sha256-hFg5s/hoJFv7tDpiGvEvXP0UfFvFEDgTdyHIjDVHu1I=",
+        "owner": "davhau",
+        "repo": "pyproject.nix",
+        "rev": "5a06a2697b228c04dd2f35659b4b659ca74f7aeb",
+        "type": "github"
+      },
+      "original": {
+        "owner": "davhau",
+        "ref": "dream2nix",
+        "repo": "pyproject.nix",
+        "type": "github"
+      }
+    },
     "pyproject-nix_2": {
       "inputs": {
         "nixpkgs": [
@@ -4165,18 +4783,38 @@
       }
     },
     "pyproject-nix_9": {
-      "flake": false,
+      "inputs": {
+        "nixpkgs": [
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "dream2nix",
+          "nixpkgs"
+        ]
+      },
       "locked": {
-        "lastModified": 1702448246,
-        "narHash": "sha256-hFg5s/hoJFv7tDpiGvEvXP0UfFvFEDgTdyHIjDVHu1I=",
-        "owner": "davhau",
+        "lastModified": 1752481895,
+        "narHash": "sha256-luVj97hIMpCbwhx3hWiRwjP2YvljWy8FM+4W9njDhLA=",
+        "owner": "pyproject-nix",
         "repo": "pyproject.nix",
-        "rev": "5a06a2697b228c04dd2f35659b4b659ca74f7aeb",
+        "rev": "16ee295c25107a94e59a7fc7f2e5322851781162",
         "type": "github"
       },
       "original": {
-        "owner": "davhau",
-        "ref": "dream2nix",
+        "owner": "pyproject-nix",
         "repo": "pyproject.nix",
         "type": "github"
       }
@@ -4187,15 +4825,17 @@
         "dream2nix": "dream2nix",
         "nemo-doc": "nemo-doc",
         "nemo-vscode-extension": "nemo-vscode-extension",
-        "nemo-web": "nemo-web_10",
+        "nemo-web": "nemo-web_11",
         "nixpkgs": "nixpkgs",
-        "rust-overlay": "rust-overlay_11",
+        "rust-overlay": "rust-overlay_12",
         "utils": "utils"
       }
     },
     "rust-overlay": {
       "inputs": {
         "nixpkgs": [
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
@@ -4238,6 +4878,8 @@
         "nixpkgs": [
           "nemo-vscode-extension",
           "nemo",
+          "nemo-vscode-extension",
+          "nemo",
           "nixpkgs"
         ]
       },
@@ -4256,6 +4898,28 @@
       }
     },
     "rust-overlay_11": {
+      "inputs": {
+        "nixpkgs": [
+          "nemo-vscode-extension",
+          "nemo",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1763433504,
+        "narHash": "sha256-cVid5UNpk88sPYHkLAA5aZEHOFQXSB/2L1vl18Aq7IM=",
+        "owner": "oxalica",
+        "repo": "rust-overlay",
+        "rev": "42ce16c6d8318a654d53f047c9400b7d902d6e61",
+        "type": "github"
+      },
+      "original": {
+        "owner": "oxalica",
+        "repo": "rust-overlay",
+        "type": "github"
+      }
+    },
+    "rust-overlay_12": {
       "inputs": {
         "nixpkgs": [
           "nixpkgs"
@@ -4278,6 +4942,8 @@
     "rust-overlay_2": {
       "inputs": {
         "nixpkgs": [
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
@@ -4332,6 +4998,8 @@
           "nemo",
           "nemo-vscode-extension",
           "nemo",
+          "nemo-vscode-extension",
+          "nemo",
           "nixpkgs"
         ]
       },
@@ -4352,6 +5020,8 @@
     "rust-overlay_4": {
       "inputs": {
         "nixpkgs": [
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
@@ -4398,6 +5068,8 @@
           "nemo",
           "nemo-vscode-extension",
           "nemo",
+          "nemo-vscode-extension",
+          "nemo",
           "nixpkgs"
         ]
       },
@@ -4418,6 +5090,8 @@
     "rust-overlay_6": {
       "inputs": {
         "nixpkgs": [
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
@@ -4456,6 +5130,8 @@
           "nemo",
           "nemo-vscode-extension",
           "nemo",
+          "nemo-vscode-extension",
+          "nemo",
           "nixpkgs"
         ]
       },
@@ -4482,6 +5158,8 @@
           "nemo",
           "nemo-vscode-extension",
           "nemo",
+          "nemo-vscode-extension",
+          "nemo",
           "nixpkgs"
         ]
       },
@@ -4502,6 +5180,8 @@
     "rust-overlay_9": {
       "inputs": {
         "nixpkgs": [
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
@@ -4548,6 +5228,48 @@
     "slimlock_10": {
       "inputs": {
         "nixpkgs": [
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "nemo-vscode-extension",
+          "nemo",
+          "dream2nix",
+          "purescript-overlay",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1688756706,
+        "narHash": "sha256-xzkkMv3neJJJ89zo3o2ojp7nFeaZc2G0fYwNXNJRFlo=",
+        "owner": "thomashoneyman",
+        "repo": "slimlock",
+        "rev": "cf72723f59e2340d24881fd7bf61cb113b4c407c",
+        "type": "github"
+      },
+      "original": {
+        "owner": "thomashoneyman",
+        "repo": "slimlock",
+        "type": "github"
+      }
+    },
+    "slimlock_11": {
+      "inputs": {
+        "nixpkgs": [
+          "nemo-vscode-extension",
+          "nemo",
           "nemo-vscode-extension",
           "nemo",
           "nemo-vscode-extension",
