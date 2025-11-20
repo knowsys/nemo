@@ -71,6 +71,15 @@ impl GeneratorUnion {
         }
     }
 
+    /// Create a new [GeneratorUnion] that produces unmarked execution nodes.
+    pub fn new_unmarked(predicate: Tag, range: UnionRange) -> Self {
+        Self {
+            predicate,
+            variables: Vec::default(),
+            range,
+        }
+    }
+
     /// Create a new [Union] form a [BodyAtom].
     pub fn new_atom(atom: &BodyAtom, range: UnionRange) -> Self {
         Self::new(atom.predicate(), atom.terms().cloned().collect(), range)
@@ -123,7 +132,7 @@ impl GeneratorUnion {
 
     /// Return the variables marking the column of the node
     /// created by `create_plan`.
-    pub fn _output_variables(&self) -> Vec<Variable> {
+    pub fn output_variables(&self) -> Vec<Variable> {
         self.variables.clone()
     }
 

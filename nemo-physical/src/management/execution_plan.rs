@@ -109,6 +109,15 @@ impl ExecutionNodeRef {
 
         node_borrow.marked_columns.clone()
     }
+
+    /// Set the [OperationTable]
+    /// that marks the columns that are represented by this node.
+    pub fn set_markers(&mut self, markers: OperationTable) {
+        let node_rc = self.get_rc();
+        let mut node_borrow = node_rc.borrow_mut();
+
+        node_borrow.marked_columns = markers;
+    }
 }
 
 impl ExecutionNodeRef {
@@ -150,7 +159,12 @@ impl ExecutionNodeRef {
 
                 result
             }
-            ExecutionOperation::IncrementalImport(subnodes, _) => subnodes
+            ExecutionOperation::IncrementalImport {
+                bound_positions: _,
+                arity: _,
+                input_nodes,
+                provider: _,
+            } => input_nodes
                 .iter()
                 .cloned()
                 .flat_map(|(old, new)| [old, new])
@@ -202,10 +216,12 @@ pub(crate) enum ExecutionOperation {
     /// Perform aggregate operation
     Aggregate(ExecutionNodeRef, AggregateAssignment),
     /// Perform an incremental import
-    IncrementalImport(
-        Vec<(ExecutionNodeRef, ExecutionNodeRef)>,
-        Rc<Box<dyn TableProvider>>,
-    ),
+    IncrementalImport {
+        bound_positions: Vec<Vec<usize>>,
+        arity: usize,
+        input_nodes: Vec<(ExecutionNodeRef, ExecutionNodeRef)>,
+        provider: Rc<Box<dyn TableProvider>>,
+    },
     /// Renaming of the columns of the table
     Rename(ExecutionNodeRef),
     /// Non-empty zero arity table
@@ -417,12 +433,21 @@ impl ExecutionPlan {
     /// Return an [ExecutionNodeRef] for performing an import.
     pub fn import(
         &mut self,
-        marked_columns: OperationTable,
+        markers: OperationTable,
+        bound_positions: Vec<Vec<usize>>,
+        arity: usize,
         subnodes: Vec<(ExecutionNodeRef, ExecutionNodeRef)>,
         provider: Box<dyn TableProvider>,
     ) -> ExecutionNodeRef {
-        let new_operation = ExecutionOperation::IncrementalImport(subnodes, Rc::new(provider));
-        let import_node = self.push_and_return_reference(new_operation, marked_columns);
+        debug_assert!(markers.arity() == 0 || markers.arity() == arity);
+
+        let new_operation = ExecutionOperation::IncrementalImport {
+            bound_positions,
+            arity,
+            input_nodes: subnodes,
+            provider: Rc::new(provider),
+        };
+        let import_node = self.push_and_return_reference(new_operation, markers);
 
         self.write_temporary(import_node.clone(), "Import");
 
@@ -896,12 +921,12 @@ impl ExecutionPlan {
                     subnode: subtree,
                 }
             }
-            ExecutionOperation::IncrementalImport(subnodes, table_provider) => {
-                let markers_subnode = subnodes
-                    .iter()
-                    .map(|(old, _)| old.markers_cloned())
-                    .collect::<Vec<_>>();
-
+            ExecutionOperation::IncrementalImport {
+                bound_positions,
+                arity,
+                input_nodes: subnodes,
+                provider,
+            } => {
                 let subtrees = subnodes
                     .iter()
                     .map(|(old, new)| {
@@ -934,9 +959,9 @@ impl ExecutionPlan {
 
                 ExecutionTreeNode::IncrementalImport {
                     generator: GeneratorIncrementalImport::new(
-                        node_markers,
-                        markers_subnode,
-                        table_provider.clone(),
+                        bound_positions.clone(),
+                        *arity,
+                        provider.clone(),
                     ),
                     subnodes: subtrees,
                 }
