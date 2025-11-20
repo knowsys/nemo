@@ -107,7 +107,7 @@ impl GeneratorJoinCartesian {
     /// atoms: [a(x, y), b(y, z), c(z), r(w), t(w)]
     /// operations: [q = 3, s = 7]
     /// result: [[a(x, y), b(y, z), c(z)], [r(w), t(w)], [q = 3, s = 7]]
-    fn partition_atoms(atoms: &[BodyAtom], operations: &mut Vec<Operation>) -> Vec<Factor> {
+    fn partition_atoms(atoms: &[BodyAtom], operations: &[Operation]) -> Vec<Factor> {
         #[derive(Clone)]
         struct Partition {
             pub variables: HashSet<Variable>,
@@ -207,25 +207,26 @@ impl GeneratorJoinCartesian {
             .flat_map(|atom| atom.terms())
             .collect::<HashSet<_>>();
 
-        let mut constant_operations = Vec::default();
+        let mut constant_operations = HashSet::<usize>::default();
         let mut constant_operations_len = constant_operations.len();
         let mut constant_operations_variables = HashSet::<Variable>::default();
 
         loop {
-            operations.retain(|operation| {
+            for (index, operation) in operations.iter().enumerate() {
+                if constant_operations.contains(&index) {
+                    continue;
+                }
+
                 if let Some((left, right)) = operation.variable_assignment()
                     && !body_variables.contains(left)
                     && right
                         .variables()
                         .all(|variable| constant_operations_variables.contains(variable))
                 {
-                    constant_operations.push(operation.clone());
+                    constant_operations.insert(index);
                     constant_operations_variables.insert(left.clone());
-                    return false;
                 }
-
-                true
-            });
+            }
 
             if constant_operations_len == constant_operations.len() {
                 break;
@@ -233,6 +234,11 @@ impl GeneratorJoinCartesian {
 
             constant_operations_len = constant_operations.len();
         }
+
+        let constant_operations = constant_operations
+            .iter()
+            .map(|&index| operations[index].clone())
+            .collect::<Vec<_>>();
 
         if !constant_operations.is_empty() {
             result.push(Factor::Operations(constant_operations));
@@ -262,5 +268,10 @@ impl GeneratorJoinCartesian {
         }
 
         result
+    }
+
+    /// Return whether this the body atoms were partitioned into only one group.
+    pub fn is_single_join(&self) -> bool {
+        self.joins.iter().filter(|join| !join.is_empty()).count() == 1
     }
 }

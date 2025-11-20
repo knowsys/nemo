@@ -65,7 +65,7 @@ impl StrategyBody {
 
             let join = GeneratorJoinCartesian::new(&order, &positive, operations, &mut negative);
             let variables_join = join.output_variables();
-            let single_factor = variables_join.len() == 1;
+            let single_factor = join.is_single_join();
 
             let import = GeneratorImport::new(variables_join, &imports);
 
@@ -141,7 +141,7 @@ impl StrategyBody {
             } => {
                 let nodes_join = join.create_plan(plan, runtime);
 
-                let merge_input = if nodes_join.len() == 1 {
+                let merge_input = if join.is_single_join() {
                     Some(nodes_join[0].clone())
                 } else {
                     None

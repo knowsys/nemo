@@ -131,4 +131,9 @@ impl GeneratorJoinSeminaive {
     pub fn output_variables(&self) -> Vec<Variable> {
         self.order.as_ordered_list()
     }
+
+    /// Return whether this join is empty.
+    pub fn is_empty(&self) -> bool {
+        self.variants.is_empty()
+    }
 }

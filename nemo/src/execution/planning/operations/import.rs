@@ -2,10 +2,19 @@
 
 use std::collections::HashMap;
 
-use nemo_physical::management::execution_plan::{ColumnOrder, ExecutionNodeRef};
+use indexmap::IndexSet;
+use nemo_physical::{
+    management::execution_plan::{ColumnOrder, ExecutionNodeRef},
+    tabular::operations::OperationTable,
+};
 
 use crate::{
-    execution::planning::{RuntimeInformation, normalization::atom::import::ImportAtom},
+    execution::planning::{
+        RuntimeInformation,
+        normalization::atom::import::ImportAtom,
+        operations::union::{GeneratorUnion, UnionRange},
+    },
+    io::formats::Import,
     rule_model::components::{tag::Tag, term::primitive::variable::Variable},
     table_manager::{SubtableExecutionPlan, SubtableIdentifier},
 };
@@ -198,6 +207,77 @@ impl BindingPattern {
     }
 }
 
+/// Combination of all subsets of a [BindingPattern]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct ProductBinding {
+    /// Predicate of the associated import atom
+    predicate: Tag,
+    /// Arity of the associated import atom
+    output_arity: usize,
+
+    /// Individual patterns
+    patterns: Vec<BindingPattern>,
+}
+
+impl ProductBinding {
+    /// Create a new [ProductBinding].
+    pub fn new(predicate: Tag, output_arity: usize) -> Self {
+        Self {
+            predicate,
+            output_arity,
+            patterns: Vec::default(),
+        }
+    }
+
+    /// Add a [BindingPattern].
+    pub fn push(&mut self, pattern: BindingPattern) {
+        self.patterns.push(pattern);
+    }
+
+    /// Return an iterator over the individual [BindingPattern]s.
+    pub fn iter(&self) -> impl Iterator<Item = &BindingPattern> {
+        self.patterns.iter()
+    }
+
+    /// Return the predicate associated with this pattern.
+    pub fn predicate(&self) -> &Tag {
+        &self.predicate
+    }
+
+    /// For each factor return the list of bound positions.
+    pub fn bound_positions(&self) -> Vec<Vec<usize>> {
+        let mut result = Vec::default();
+
+        for pattern in self.iter() {
+            let mut bound_positions = pattern
+                .pattern
+                .iter()
+                .enumerate()
+                .filter_map(|(index, element)| match element {
+                    BindingPatternElement::Bound => Some(index),
+                    BindingPatternElement::Free => None,
+                })
+                .collect::<Vec<_>>();
+
+            if let Some(subset) = &pattern.subset {
+                bound_positions = subset
+                    .iter()
+                    .map(|&index| bound_positions[index])
+                    .collect::<Vec<_>>();
+            }
+
+            result.push(bound_positions);
+        }
+
+        result
+    }
+
+    /// Return the number of
+    pub fn output_arity(&self) -> usize {
+        self.output_arity
+    }
+}
+
 /// Generator of import nodes in execution plans
 #[derive(Debug)]
 pub struct GeneratorImport {
@@ -207,12 +287,17 @@ pub struct GeneratorImport {
     /// pointing to `bindings`, indicating that this pattern
     /// can be constructed using the respective bindings (for distinct positions)
     patterns: HashMap<BindingPattern, Vec<usize>>,
-    /// List of import atoms with their corresponding binding patterns
-    atoms: Vec<(ImportAtom, Vec<BindingPattern>)>,
+    /// List of [ProductBinding] where each results in a new import
+    imports: IndexSet<ProductBinding>,
+    /// Associates a predicate with a [Import]
+    ///
+    /// TODO: This assumes that each predicate is associated with exactly one [Import]
+    /// but every [ImportAtom] (with the same predicate) might have different [Import]s.
+    handlers: HashMap<Tag, Import>,
+
     /// Associates for each imported predicate
-    /// a list of indices pointing to the import atoms
-    /// with that predicate
-    import_predicates: HashMap<Tag, Vec<usize>>,
+    /// a list of indices pointing to `imports`
+    predicates: HashMap<Tag, Vec<usize>>,
 }
 
 impl GeneratorImport {
@@ -220,37 +305,41 @@ impl GeneratorImport {
     pub fn new(input_variables: Vec<Vec<Variable>>, import_atoms: &[ImportAtom]) -> Self {
         let mut bindings = VariableBindings::default();
         let mut patterns = HashMap::<BindingPattern, Vec<usize>>::default();
-        let mut atoms = Vec::<(ImportAtom, Vec<BindingPattern>)>::default();
-        let mut import_predicates = HashMap::<Tag, Vec<usize>>::default();
+        let mut imports = IndexSet::<ProductBinding>::default();
+        let mut predicates = HashMap::<Tag, Vec<usize>>::default();
+        let mut handlers = HashMap::default();
 
-        for (atom_index, atom) in import_atoms.iter().enumerate() {
+        for atom in import_atoms {
             let binding_patterns = BindingPattern::new(&input_variables, atom);
 
-            import_predicates
-                .entry(atom.predicate())
-                .or_default()
-                .push(atom_index);
-
-            atoms.push((
-                atom.clone(),
-                binding_patterns
-                    .iter()
-                    .map(|(pattern, _, _)| pattern.clone())
-                    .collect::<Vec<_>>(),
-            ));
+            let mut product_pattern = ProductBinding::new(atom.predicate(), atom.arity());
 
             for (pattern, binding, origin) in binding_patterns {
                 let binding_index = bindings.add(binding, origin);
 
-                patterns.entry(pattern).or_default().push(binding_index);
+                patterns
+                    .entry(pattern.clone())
+                    .or_default()
+                    .push(binding_index);
+                product_pattern.push(pattern);
             }
+
+            let (import_index, _) = imports.insert_full(product_pattern);
+
+            predicates
+                .entry(atom.predicate())
+                .or_default()
+                .push(import_index);
+
+            handlers.insert(atom.predicate(), atom.handler());
         }
 
         Self {
             bindings,
             patterns,
-            atoms,
-            import_predicates,
+            imports,
+            handlers,
+            predicates,
         }
     }
 
@@ -304,25 +393,20 @@ impl GeneratorImport {
 
         for (pattern, inputs) in &self.patterns {
             let predicate = Tag::new(pattern.name());
+            let arity = pattern.arity();
+            let markers = OperationTable::new_unique(arity);
 
             let input_tables = inputs
                 .iter()
                 .map(|&input| binding_inputs[input].clone())
                 .collect::<Vec<_>>();
-            let markers = input_tables
-                .first()
-                .map(|table| table.markers_cloned())
-                .unwrap_or_default();
 
             let node_current_bindings = plan.plan_mut().union(markers.clone(), input_tables);
 
-            let old_bindings_tables = runtime
-                .table_manager
-                .tables_in_range(&predicate, &(0..runtime.step_current))
-                .into_iter()
-                .map(|id| plan.plan_mut().fetch_table(markers.clone(), id))
-                .collect::<Vec<_>>();
-            let node_old_bindings = plan.plan_mut().union(markers, old_bindings_tables);
+            let mut node_old_bindings =
+                GeneratorUnion::new_unmarked(predicate.clone(), UnionRange::All)
+                    .create_plan(plan, runtime);
+            node_old_bindings.set_markers(markers);
 
             let node_new_bindings = plan
                 .plan_mut()
@@ -355,19 +439,24 @@ impl GeneratorImport {
     ) -> Vec<ExecutionNodeRef> {
         let mut result = Vec::default();
 
-        for (atom, patterns) in &self.atoms {
+        for import in &self.imports {
+            let handler = self.handlers.get(import.predicate()).expect("construction of this generator ensures that every import predicate is associated with a handler");
+
             let provider = runtime
                 .import_manager
-                .table_provider_from_handler(&atom.handler())
+                .table_provider_from_handler(handler)
                 .await
                 .expect("imports are validated during rule construction");
 
-            let pattern_bindings = patterns.iter().map(|pattern| bindings.get(pattern).expect("construction of this generator ensures that all possible patterns appear in this map").clone()).collect::<Vec<_>>();
-            let markers_atom = runtime.translation.operation_table(atom.variables());
+            let pattern_bindings = import.iter().map(|pattern| bindings.get(pattern).expect("construction of this generator ensures that all possible patterns appear in this map").clone()).collect::<Vec<_>>();
 
-            let node_import = plan
-                .plan_mut()
-                .import(markers_atom, pattern_bindings, provider);
+            let node_import = plan.plan_mut().import(
+                OperationTable::default(),
+                import.bound_positions(),
+                import.output_arity(),
+                pattern_bindings,
+                provider,
+            );
 
             result.push(node_import);
         }
@@ -385,7 +474,7 @@ impl GeneratorImport {
     ) -> HashMap<Tag, ExecutionNodeRef> {
         let mut result = HashMap::default();
 
-        for (predicate, tables) in &self.import_predicates {
+        for (predicate, tables) in &self.predicates {
             let markers = tables
                 .first()
                 .map(|&table| imports[table].markers_cloned())

@@ -96,7 +96,12 @@ impl GeneratorJoinImports {
         let mut join_tables = vec![node_input];
         for import in &self.imports {
             let mut node_imports = import.create_plan(plan, runtime);
-            if let Some(node_new_import) = new_imports.get(import.predicate()).cloned() {
+            let import_markers = runtime
+                .translation
+                .operation_table(import.output_variables().iter());
+
+            if let Some(mut node_new_import) = new_imports.get(import.predicate()).cloned() {
+                node_new_import.set_markers(import_markers);
                 node_imports.add_subnode(node_new_import);
             }
 

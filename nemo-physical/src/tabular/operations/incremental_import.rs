@@ -15,8 +15,6 @@ use crate::{
     tabular::{rowscan::RowScan, trie::Trie, triescan::PartialTrieScan},
 };
 
-use super::OperationTable;
-
 /// Database operation that triggers an import
 /// with bindings that are derived from
 /// one or more input tables
@@ -43,31 +41,13 @@ pub(crate) struct GeneratorIncrementalImport {
 impl GeneratorIncrementalImport {
     /// Create a new [GeneratorIncrementalImport].
     ///
-    /// Every marker in the output table must appear in exactly one of the input tables.
-    ///
     /// # Panics
     /// Panics if the above condition is not met.
     pub(crate) fn new(
-        output: OperationTable,
-        inputs: Vec<OperationTable>,
+        bound_positions: Vec<Vec<usize>>,
+        arity_output: usize,
         provider: Rc<Box<dyn TableProvider>>,
     ) -> Self {
-        let arity_output = output.arity();
-
-        let mut bound_positions = Vec::default();
-
-        for input in inputs {
-            let mut positions = Vec::default();
-
-            for column in input {
-                positions.push(output.position(&column).expect(
-                    "function assumes that every input column is present in the output table",
-                ));
-            }
-
-            bound_positions.push(positions);
-        }
-
         Self {
             provider,
             bound_positions,
