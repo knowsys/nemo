@@ -123,12 +123,15 @@ impl BindingPattern {
         let subsets = input
             .iter()
             .map(|input_variables| {
-                input_variables
+                let mut subset = input_variables
                     .iter()
                     .filter_map(|variable| {
                         bound_variables.iter().position(|bound| bound == variable)
                     })
-                    .collect::<Vec<_>>()
+                    .collect::<Vec<_>>();
+
+                subset.sort();
+                subset
             })
             .collect::<Vec<_>>();
 
