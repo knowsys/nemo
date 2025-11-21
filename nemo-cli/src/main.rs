@@ -249,7 +249,7 @@ async fn handle_tracing_node(
                 error: error.to_string(),
             })?;
 
-        let result = engine.trace_node(&node_query).await;
+        let result = engine.trace_node(&node_query).await?;
 
         let json = serde_json::to_string_pretty(&result).expect("json serialization failed");
         println!("{json}");

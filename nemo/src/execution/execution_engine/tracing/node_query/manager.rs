@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use nemo_physical::management::database::id::PermanentTableId;
 
-use crate::execution::tracing::node_query::TreeAddress;
+use crate::{execution::tracing::node_query::TreeAddress, table_manager::TableManager};
 
 /// Represents a mapping from step to a [PermanentTableId].
 #[derive(Debug, Default)]
@@ -191,5 +191,59 @@ impl TraceNodeManager {
     /// Return an iterator over all result tables.
     pub fn _results(&self) -> impl Iterator<Item = PermanentTableId> {
         self.result.values().copied()
+    }
+}
+
+#[allow(unused)]
+impl TraceNodeManager {
+    /// For debugging, converts an entry in the [TraceNodeManager]
+    /// to a string.
+    async fn map_to_string(
+        manager: &mut TableManager,
+        map: &HashMap<TreeAddress, PermanentTableId>,
+    ) -> String {
+        let mut entries = Vec::default();
+
+        for (address, id) in map {
+            let rows = manager.table_row_iterator(*id).await.expect("");
+            let rows_string = rows
+                .map(|row| {
+                    row.iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+
+            let entry = format!("{:?}:\n{}", address, rows_string);
+            entries.push(entry);
+        }
+
+        entries.join("\n\n")
+    }
+
+    /// For debugging, converts all of the managed tables to a string.
+    pub async fn to_string(&self, manager: &mut TableManager) -> String {
+        let mut entries = Vec::default();
+
+        entries.push(format!(
+            "query:\n{}",
+            Self::map_to_string(manager, &self.query).await
+        ));
+        entries.push(format!(
+            "valid:\n{}",
+            Self::map_to_string(manager, &self.valid_final).await
+        ));
+        entries.push(format!(
+            "assignment:\n{}",
+            Self::map_to_string(manager, &self.assignment_final).await
+        ));
+        entries.push(format!(
+            "result:\n{}",
+            Self::map_to_string(manager, &self.result).await
+        ));
+
+        entries.join("\n\n")
     }
 }

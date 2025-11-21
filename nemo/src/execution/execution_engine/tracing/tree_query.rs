@@ -197,26 +197,18 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         let predicate = facts.first().map(|fact| fact.predicate())?;
 
         // Prepare the result, which contains some information independant of tracing results below
-        let entries = {
-            let predicate_rows = self
-                .predicate_rows(&predicate)
-                .await
-                .ok()
-                .flatten()?
-                .collect::<Vec<_>>();
+        let mut entries = Vec::default();
 
-            facts
-                .iter()
-                .map(|fact| {
-                    Some(TableEntryResponse {
-                        entry_id: predicate_rows.iter().position(|row| {
-                            fact.terms().map(|t| t.value()).collect::<Vec<_>>() == *row
-                        })?,
-                        terms: fact.terms().map(|term| term.value()).collect(),
-                    })
-                })
-                .collect::<Option<Vec<_>>>()?
-        };
+        for fact in facts.iter() {
+            let terms = fact.terms().map(|term| term.value()).collect::<Vec<_>>();
+
+            let entry_id = self
+                .table_manager
+                .table_row_id(&fact.predicate(), &terms)
+                .await?;
+
+            entries.push(TableEntryResponse { entry_id, terms });
+        }
 
         let possible_rules_above = program
             .rules_with_body_predicate(&predicate)
@@ -429,15 +421,13 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             let fact = match fact_query {
                 TableEntryQuery::Entry(row_index) => {
                     let terms_to_trace: Vec<AnyDataValue> = self
-                        .predicate_rows(&Tag::new(query.predicate.clone()))
-                        .await?
-                        .into_iter()
-                        .flatten()
-                        .nth(row_index)
-                        .ok_or(Error::TracingError(TracingError::InvalidFactId {
+                        .table_manager
+                        .row_by_id(&Tag::new(query.predicate.clone()), row_index)
+                        .await
+                        .ok_or(TracingError::InvalidFactId {
                             predicate: query.predicate.clone(),
                             id: row_index,
-                        }))?;
+                        })?;
 
                     GroundAtom::new(
                         Tag::new(query.predicate.clone()),

@@ -197,7 +197,13 @@ pub(super) fn valid_tables_plan(
         node_join.add_subnode(node_union);
     }
 
-    let input_variables = Vec::default();
+    let input_variables = rule
+        .positive_all()
+        .iter()
+        .flat_map(|atom| atom.terms())
+        .chain(head_variables.iter())
+        .cloned()
+        .collect::<Vec<_>>();
 
     let mut operations = rule.operations().clone();
     let mut atoms_negations = rule.negative().clone();

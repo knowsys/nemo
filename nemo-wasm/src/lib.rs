@@ -375,7 +375,12 @@ impl NemoEngine {
             table_entries_for_tree_nodes_query,
         );
 
-        let response = self.engine.trace_node(&query).await;
+        let response = self
+            .engine
+            .trace_node(&query)
+            .await
+            .map_err(WasmOrInternalNemoError::Nemo)
+            .map_err(NemoError)?;
 
         let table_entries_for_tree_nodes_response = response
             .elements
