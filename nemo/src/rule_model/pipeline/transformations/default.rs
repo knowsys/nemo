@@ -17,7 +17,7 @@ use crate::{
 use super::{
     ProgramTransformation, exports::TransformationExports,
     filter_imports::TransformationFilterImports, global::TransformationGlobal,
-    normalize::TransformationNormalize,
+    merge_sparql::TransformationMergeSparql, normalize::TransformationNormalize,
 };
 
 /// Default transformation
@@ -59,6 +59,7 @@ impl<'a> ProgramTransformation for TransformationDefault<'a> {
             .transform(TransformationSetDefaultOutputs::default())?
             .transform(TransformationValidate::default())?
             .transform(TransformationActive::default())?
+            .transform(TransformationMergeSparql::default())?
             .transform(TransformationIncremental::new())?
             .transform(TransformationFilterImports::new())
     }

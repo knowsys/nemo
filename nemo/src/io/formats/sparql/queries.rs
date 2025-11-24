@@ -7,6 +7,7 @@ use nemo_physical::{
 };
 use oxrdf::{Literal, NamedNode, Variable};
 use spargebra::{
+    Query,
     algebra::{Expression, GraphPattern},
     term::GroundTerm,
 };
@@ -159,5 +160,59 @@ where
             aggregates: aggregates.clone(),
         },
         _ => pattern.clone(),
+    }
+}
+
+pub(crate) fn merge_patterns(left: &GraphPattern, right: &GraphPattern) -> Option<GraphPattern> {
+    match (left, right) {
+        (
+            GraphPattern::Project {
+                inner: inner_left,
+                variables: variables_leftvariables,
+            },
+            GraphPattern::Project {
+                inner: inner_right,
+                variables: variables_right,
+            },
+        ) => todo!(),
+        _ => None,
+    }
+}
+
+pub(crate) fn merge_queries(left: &Query, right: &Query) -> Option<Query> {
+    match (left, right) {
+        (
+            Query::Select {
+                dataset: dataset_left,
+                pattern: pattern_left,
+                base_iri: base_left,
+            },
+            Query::Select {
+                dataset: dataset_right,
+                pattern: pattern_right,
+                base_iri: base_right,
+            },
+        ) if dataset_left == dataset_right && base_left == base_right => Some(Query::Select {
+            dataset: dataset_left.clone(),
+            pattern: merge_patterns(pattern_left, pattern_right)?,
+            base_iri: base_left.clone(),
+        }),
+        (
+            Query::Ask {
+                dataset: dataset_left,
+                pattern: pattern_left,
+                base_iri: base_left,
+            },
+            Query::Ask {
+                dataset: dataset_right,
+                pattern: pattern_right,
+                base_iri: base_right,
+            },
+        ) if dataset_left == dataset_right && base_left == base_right => Some(Query::Ask {
+            dataset: dataset_left.clone(),
+            pattern: merge_patterns(pattern_left, pattern_right)?,
+            base_iri: base_left.clone(),
+        }),
+        _ => None,
     }
 }
