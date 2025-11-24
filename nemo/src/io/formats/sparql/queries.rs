@@ -1,5 +1,7 @@
 //! Manipulation of SPARQL queries.
 
+use std::collections::HashSet;
+
 use nemo_physical::{
     datasources::bindings::Bindings,
     datavalues::{AnyDataValue, DataValue},
@@ -163,23 +165,60 @@ where
     }
 }
 
-pub(crate) fn merge_patterns(left: &GraphPattern, right: &GraphPattern) -> Option<GraphPattern> {
-    match (left, right) {
-        (
-            GraphPattern::Project {
-                inner: inner_left,
-                variables: variables_leftvariables,
-            },
-            GraphPattern::Project {
-                inner: inner_right,
-                variables: variables_right,
-            },
-        ) => todo!(),
+fn rename_apart(
+    pattern: &GraphPattern,
+    base: &str,
+    join_positions: &[usize],
+) -> Option<(GraphPattern, Vec<Variable>)> {
+    match pattern {
+        GraphPattern::Project { inner, variables } => {
+            todo!()
+        }
         _ => None,
     }
 }
 
-pub(crate) fn merge_queries(left: &Query, right: &Query) -> Option<Query> {
+fn merge_variables(left: &[Variable], right: &[Variable]) -> Vec<Variable> {
+    let mut result = left.to_vec();
+    let left = left.iter().collect::<HashSet<_>>();
+
+    for variable in right {
+        if !left.contains(variable) {
+            result.push(variable.clone());
+        }
+    }
+
+    result
+}
+
+pub(crate) fn merge_patterns(
+    left: &GraphPattern,
+    right: &GraphPattern,
+    join_positions: &[usize],
+) -> Option<GraphPattern> {
+    match (left, right) {
+        (GraphPattern::Project { .. }, GraphPattern::Project { .. }) => {
+            let (left_pattern, left_variables) = rename_apart(left, "l", join_positions)?;
+            let (right_pattern, right_variables) = rename_apart(right, "r", join_positions)?;
+            let inner = Box::new(GraphPattern::Join {
+                left: Box::new(left_pattern),
+                right: Box::new(right_pattern),
+            });
+
+            Some(GraphPattern::Project {
+                inner,
+                variables: merge_variables(&left_variables, &right_variables),
+            })
+        }
+        _ => None,
+    }
+}
+
+pub(crate) fn merge_queries(
+    left: &Query,
+    right: &Query,
+    join_positions: &[usize],
+) -> Option<Query> {
     match (left, right) {
         (
             Query::Select {
@@ -194,7 +233,7 @@ pub(crate) fn merge_queries(left: &Query, right: &Query) -> Option<Query> {
             },
         ) if dataset_left == dataset_right && base_left == base_right => Some(Query::Select {
             dataset: dataset_left.clone(),
-            pattern: merge_patterns(pattern_left, pattern_right)?,
+            pattern: merge_patterns(pattern_left, pattern_right, join_positions)?,
             base_iri: base_left.clone(),
         }),
         (
@@ -210,7 +249,7 @@ pub(crate) fn merge_queries(left: &Query, right: &Query) -> Option<Query> {
             },
         ) if dataset_left == dataset_right && base_left == base_right => Some(Query::Ask {
             dataset: dataset_left.clone(),
-            pattern: merge_patterns(pattern_left, pattern_right)?,
+            pattern: merge_patterns(pattern_left, pattern_right, join_positions)?,
             base_iri: base_left.clone(),
         }),
         _ => None,
