@@ -75,6 +75,8 @@ pub struct ExecutionEngine<RuleSelectionStrategy> {
     rule_infos: Vec<RuleInfo>,
     /// For each step the rule index of the applied rule
     rule_history: Vec<usize>,
+    /// For each step, the execution time in milliseconds
+    step_times_ms: Vec<u128>,
     /// Current step
     current_step: usize,
 }
@@ -130,6 +132,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             predicate_last_union: HashMap::new(),
             rule_infos,
             rule_history: vec![usize::MAX], // Placeholder, Step counting starts at 1
+            step_times_ms: vec![0],         // Placeholder, Step counting starts at 1
             current_step: 1,
         })
     }
@@ -225,9 +228,13 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         current_info.step_last_applied = self.current_step;
 
         let rule_duration = TimedCode::instance().sub(&timing_string).stop();
+
+        self.step_times_ms.push(rule_duration.as_millis());
+
         log::info!("Rule duration: {} ms", rule_duration.as_millis());
 
         self.current_step += 1;
+
         Ok(updated_predicates)
     }
 
@@ -376,5 +383,13 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     /// Return the amount of consumed memory for the tables used by the chase.
     pub fn memory_usage(&self) -> MemoryUsage {
         self.table_manager.memory_usage()
+    }
+
+    /// For a given iterator over rule execution steps
+    /// returns the sum of execution time for those steps.
+    pub fn steps_time_ms<Iter: Iterator<Item = usize>>(&self, steps: Iter) -> u128 {
+        steps
+            .map(|step| self.step_times_ms.get(step).cloned().unwrap_or_default())
+            .sum()
     }
 }

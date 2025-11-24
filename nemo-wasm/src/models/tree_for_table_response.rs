@@ -56,6 +56,7 @@ impl From<TreeForTableResponse> for nemo::execution::tracing::tree_query::TreeFo
                 .map(Into::into)
                 .collect(),
             next: value.child_information.map(|info| (*info).into()),
+            meta_information: (*value.meta_information).into(),
         }
     }
 }
@@ -81,6 +82,7 @@ impl From<nemo::execution::tracing::tree_query::TreeForTableResponse> for TreeFo
                 .into_iter()
                 .map(Into::into)
                 .collect(),
+            meta_information: Box::new(value.meta_information.into()),
         }
     }
 }

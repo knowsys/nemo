@@ -55,6 +55,7 @@ impl From<TableEntriesForTreeNodesResponseInner>
                 .map(Into::into)
                 .collect(),
             address: value.address_in_tree.unwrap_or_default(),
+            meta_information: (*value.meta_information).into(),
         }
     }
 }
@@ -84,6 +85,7 @@ impl From<nemo::execution::tracing::node_query::TableEntriesForTreeNodesResponse
                 .into_iter()
                 .map(Into::into)
                 .collect(),
+            meta_information: Box::new(value.meta_information.into()),
         }
     }
 }

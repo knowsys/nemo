@@ -15,3 +15,23 @@ pub struct TableResponseBaseMetaInformation {
     #[serde(rename = "executionTime")]
     pub execution_time: usize,
 }
+
+impl From<TableResponseBaseMetaInformation>
+    for nemo::execution::tracing::shared::ResponseMetaInformation
+{
+    fn from(value: TableResponseBaseMetaInformation) -> Self {
+        Self {
+            execution_time: value.execution_time,
+        }
+    }
+}
+
+impl From<nemo::execution::tracing::shared::ResponseMetaInformation>
+    for TableResponseBaseMetaInformation
+{
+    fn from(value: nemo::execution::tracing::shared::ResponseMetaInformation) -> Self {
+        Self {
+            execution_time: value.execution_time,
+        }
+    }
+}

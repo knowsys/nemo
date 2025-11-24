@@ -4,6 +4,8 @@ use std::hash::Hash;
 
 use serde::{Deserialize, Serialize};
 
+use crate::execution::tracing::shared::ResponseMetaInformation;
+
 use super::shared::{
     PaginationQuery, PaginationResponse, Rule, RuleId, TableEntryQuery, TableEntryResponse,
 };
@@ -103,6 +105,9 @@ pub type TreeAddress = Vec<usize>;
 pub struct TableEntriesForTreeNodesResponseElement {
     /// Predicate of the this table
     pub predicate: String,
+
+    /// Meta information about the rule execution
+    pub meta_information: ResponseMetaInformation,
 
     /// Entries contained in this table
     pub entries: Vec<TableEntryResponse>,

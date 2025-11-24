@@ -30,7 +30,10 @@ use crate::{
                 TableEntriesForTreeNodesResponse, TableEntriesForTreeNodesResponseElement,
                 TreeAddress,
             },
-            shared::{PaginationResponse, Rule as TraceRule, TableEntryQuery, TableEntryResponse},
+            shared::{
+                PaginationResponse, ResponseMetaInformation, Rule as TraceRule, TableEntryQuery,
+                TableEntryResponse,
+            },
         },
     },
     rule_model::components::{atom::Atom, tag::Tag},
@@ -481,12 +484,16 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             element.pagination.more = element.pagination.start + rows.len()
                 < self.table_manager.database().count_rows_in_memory(table_id);
 
+            let mut steps = HashSet::<usize>::default();
+
             for row in rows {
-                let entry_id = self
+                let (entry_id, step) = self
                     .table_manager
                     .table_row_id(&Tag::new(element.predicate.clone()), &row)
                     .await
                     .expect("if a row appears in an answer it must have an id");
+
+                steps.insert(step);
 
                 let table_response = TableEntryResponse {
                     entry_id,
@@ -495,6 +502,11 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
                 element.entries.push(table_response);
             }
+
+            element.meta_information.execution_time = self
+                .steps_time_ms(steps.into_iter())
+                .try_into()
+                .unwrap_or_default();
         }
 
         Some(response)
@@ -511,7 +523,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         predicate: &Tag,
         program: &NormalizedProgram,
     ) -> Result<(), Error> {
-        // Collect all (syntactly) possible rules
+        // Collect all (syntactically) possible rules
         // that could be triggered by or could trigger
         // the predicate assigned to the current node
 
@@ -539,6 +551,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
         let element = TableEntriesForTreeNodesResponseElement {
             predicate: predicate.to_string(),
+            meta_information: ResponseMetaInformation::default(),
             entries: Vec::with_capacity(
                 node.pagination
                     .map(|pagination| pagination.count)
@@ -601,7 +614,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 let mut entries = Vec::default();
 
                 for row in rows {
-                    let entry_id = self
+                    let (entry_id, _step) = self
                         .table_manager
                         .table_row_id(&negative_atom.predicate(), &row)
                         .await
@@ -625,6 +638,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                     possible_rules_above: Vec::default(),
                     possible_rules_below: Vec::default(),
                     address: next_address,
+                    meta_information: ResponseMetaInformation::default(),
                 };
 
                 elements.push(negation_element);
