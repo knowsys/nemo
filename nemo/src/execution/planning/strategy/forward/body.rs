@@ -60,19 +60,13 @@ impl StrategyBody {
 
             Self::Plain { join, filter }
         } else {
-            let mut merge_operations = &mut operations.clone();
+            let merge_operations = &mut operations.clone();
             let mut merge_negative = negative.clone();
 
             let join = GeneratorJoinCartesian::new(&order, &positive, operations, &mut negative);
             let variables_join = join.output_variables();
-            let single_factor = join.is_single_join();
 
             let import = GeneratorImport::new(variables_join, &imports);
-
-            if single_factor {
-                merge_operations = operations;
-                merge_negative = negative;
-            }
 
             let merge = GeneratorJoinImports::new(
                 &order,
