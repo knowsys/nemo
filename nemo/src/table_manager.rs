@@ -739,6 +739,33 @@ impl TableManager {
         None
     }
 
+    /// Given a row id, return the corresponding row.
+    ///
+    /// Returns `None` if the predicate is unknown,
+    /// requesting the table failed,
+    /// or if there is no row with the given id.
+    pub async fn row_by_id(&mut self, predicate: &Tag, row_id: usize) -> Option<Vec<AnyDataValue>> {
+        let handler = self.predicate_subtables.get(predicate)?;
+
+        let mut skipped: usize = 0;
+
+        for (_, table_id) in &handler.single {
+            let row_count = self.database.count_rows_in_memory(*table_id);
+
+            if row_id < skipped + row_count {
+                let local_id = row_id - skipped;
+
+                let mut row_iterator = self.database.table_row_iterator(*table_id).await.ok()?;
+
+                return row_iterator.nth(local_id);
+            }
+
+            skipped += row_count;
+        }
+
+        None
+    }
+
     /// Execute a given [SubtableExecutionPlan]
     /// but evaluate it only until the first row of the result table
     /// or return None if it is empty.

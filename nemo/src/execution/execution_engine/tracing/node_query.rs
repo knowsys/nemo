@@ -8,6 +8,7 @@ use nemo_physical::{
 };
 
 use crate::{
+    error::Error,
     execution::{
         ExecutionEngine,
         execution_engine::tracing::node_query::{
@@ -18,9 +19,12 @@ use crate::{
                 unique_variables, valid_tables_plan, variable_translation,
             },
         },
-        planning::normalization::{atom::ground::GroundAtom, program::NormalizedProgram},
+        planning::normalization::{
+            atom::ground::GroundAtom, program::NormalizedProgram, rule::NormalizedRule,
+        },
         selection_strategy::strategy::RuleSelectionStrategy,
         tracing::{
+            error::TracingError,
             node_query::{
                 TableEntriesForTreeNodesQuery, TableEntriesForTreeNodesQueryInner,
                 TableEntriesForTreeNodesResponse, TableEntriesForTreeNodesResponseElement,
@@ -46,9 +50,11 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         address: TreeAddress,
         predicate: &Tag,
         program: &NormalizedProgram,
-    ) {
+    ) -> Result<(), TracingError> {
         if !node.queries.is_empty() {
-            let arity = self.predicate_arity(predicate).expect("invalid predicate");
+            let arity = self
+                .predicate_arity(predicate)
+                .expect("predicate has been used in the normalized program");
 
             // We collect facts that are part of the query
             // in a light-weight table
@@ -59,21 +65,28 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 let terms = match query {
                     TableEntryQuery::Entry(row_index) => {
                         let terms_to_trace: Vec<AnyDataValue> = self
-                            .predicate_rows(predicate)
+                            .table_manager
+                            .row_by_id(predicate, *row_index)
                             .await
-                            .expect("unknown predicate")
-                            .into_iter()
-                            .flatten()
-                            .nth(*row_index)
-                            .expect("invalid id");
+                            .ok_or(TracingError::InvalidFactId {
+                                predicate: predicate.to_string(),
+                                id: *row_index,
+                            })?;
 
                         terms_to_trace
                     }
                     TableEntryQuery::Query(query_string) => {
-                        let atom = Atom::parse(&format!("P({query_string})"))
-                            .expect("invalid query string");
+                        let atom = Atom::parse(&format!("P({query_string})")).map_err(|_| {
+                            TracingError::InvalidFact {
+                                fact: query_string.clone(),
+                            }
+                        })?;
 
-                        let ground = GroundAtom::try_from(atom).expect("only support ground fact");
+                        let ground =
+                            GroundAtom::try_from(atom).map_err(|_| TracingError::InvalidFact {
+                                fact: query_string.clone(),
+                            })?;
+
                         ground.datavalues().collect::<Vec<_>>()
                     }
                 };
@@ -115,9 +128,11 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                     &atom.predicate(),
                     program,
                 ))
-                .await;
+                .await?;
             }
         }
+
+        Ok(())
     }
 
     /// Phase 2 of `trace_node_execute`
@@ -139,11 +154,13 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         manager.add_discard(&address, discarded_columns);
 
         if let Some(successor) = &node.next {
-            // True if all children do not have any restrictions
-            let simple_successor = successor.children.iter().all(|child| child.is_simple());
-
             let rule = program.rules()[successor.rule].clone();
             let order = rule.variable_order().clone();
+
+            // True if all children do not have any restrictions
+            // and there is only one way to derive the body predicates of the current rule
+            let simple_successor = rule_is_simple(program, &rule)
+                && successor.children.iter().all(|child| child.is_simple());
 
             // Any facts derived after this point are not relevant for this node
             let next_step = {
@@ -222,7 +239,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                     .database_mut()
                     .execute_plan(plan)
                     .await
-                    .expect("execute plan failed");
+                    .expect("plan does not require loading sources");
 
                 if let Some(id_valid) = id_valid {
                     if let Some(result_id) = execution_results.get(&id_valid) {
@@ -399,7 +416,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         &mut self,
         query: &TableEntriesForTreeNodesQuery,
         program: &NormalizedProgram,
-    ) -> TraceNodeManager {
+    ) -> Result<TraceNodeManager, TracingError> {
         let mut manager = TraceNodeManager::default();
         let address = TreeAddress::default();
         let predicate = Tag::new(query.predicate.clone());
@@ -408,7 +425,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         let discarded_columns = Vec::default();
 
         self.trace_node_restriction(&mut manager, node, address.clone(), &predicate, program)
-            .await;
+            .await?;
 
         self.trace_node_valid(
             &mut manager,
@@ -425,10 +442,10 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             .trace_node_filter(&mut manager, node, address.clone(), program)
             .await;
 
-        manager
+        Ok(manager)
     }
 
-    /// Collect the answer to the node query using [TreeTableManager]
+    /// Collect the answer to the node query using [TraceNodeManager]
     /// and write it into the prepared [TableEntriesForTreeNodesResponse]
     async fn trace_node_answer(
         &mut self,
@@ -469,7 +486,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                     .table_manager
                     .table_row_id(&Tag::new(element.predicate.clone()), &row)
                     .await
-                    .expect("row should be contained somewhere");
+                    .expect("if a row appears in an answer it must have an id");
 
                 let table_response = TableEntryResponse {
                     entry_id,
@@ -493,7 +510,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         address: TreeAddress,
         predicate: &Tag,
         program: &NormalizedProgram,
-    ) {
+    ) -> Result<(), Error> {
         // Collect all (syntactly) possible rules
         // that could be triggered by or could trigger
         // the predicate assigned to the current node
@@ -564,7 +581,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                     &next_predicate,
                     program,
                 ))
-                .await;
+                .await?;
             }
 
             // The content of the negated nodes is just the complete table
@@ -574,15 +591,12 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 let mut next_address = address.clone();
                 next_address.push(rule.positive_all().len() + index);
 
-                let rows = if let Some(rows) = self
-                    .predicate_rows(&negative_atom.predicate())
-                    .await
-                    .expect("collect negation rows failed")
-                {
-                    rows.collect::<Vec<_>>()
-                } else {
-                    Vec::default()
-                };
+                let rows =
+                    if let Some(rows) = self.predicate_rows(&negative_atom.predicate()).await? {
+                        rows.collect::<Vec<_>>()
+                    } else {
+                        Vec::default()
+                    };
 
                 let mut entries = Vec::default();
 
@@ -591,7 +605,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                         .table_manager
                         .table_row_id(&negative_atom.predicate(), &row)
                         .await
-                        .expect("row should be contained somewhere");
+                        .expect("rows has been filled from tables and therefore must have an id");
 
                     let table_response = TableEntryResponse {
                         entry_id,
@@ -616,6 +630,8 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 elements.push(negation_element);
             }
         }
+
+        Ok(())
     }
 
     /// For a given [TableEntriesForTreeNodesQuery]
@@ -625,7 +641,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         &mut self,
         query: &TableEntriesForTreeNodesQuery,
         program: &NormalizedProgram,
-    ) -> TableEntriesForTreeNodesResponse {
+    ) -> Result<TableEntriesForTreeNodesResponse, Error> {
         let mut elements = Vec::<TableEntriesForTreeNodesResponseElement>::default();
 
         self.trace_node_prepare_recursive(
@@ -635,23 +651,33 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             &Tag::new(query.predicate.clone()),
             program,
         )
-        .await;
+        .await?;
 
-        TableEntriesForTreeNodesResponse { elements }
+        Ok(TableEntriesForTreeNodesResponse { elements })
     }
 
     /// Evaluate a [TableEntriesForTreeNodesQuery].
     pub async fn trace_node(
         &mut self,
         query: &TableEntriesForTreeNodesQuery,
-    ) -> TableEntriesForTreeNodesResponse {
+    ) -> Result<TableEntriesForTreeNodesResponse, Error> {
         let program = self.program.clone();
 
-        let response = self.trace_node_prepare(query, &program).await;
-        let manager = self.trace_node_execute(query, &program).await;
+        let response = self.trace_node_prepare(query, &program).await?;
+        let manager = self.trace_node_execute(query, &program).await?;
 
-        self.trace_node_answer(&manager, response)
+        let result = self
+            .trace_node_answer(&manager, response)
             .await
-            .unwrap_or_default()
+            .unwrap_or_default();
+
+        Ok(result)
     }
+}
+
+/// Check whether the body atoms of a rule can only be derived in one way.
+fn rule_is_simple(program: &NormalizedProgram, rule: &NormalizedRule) -> bool {
+    rule.positive()
+        .iter()
+        .all(|atom| program.rules_with_head_predicate(&atom.predicate()).count() <= 1)
 }
