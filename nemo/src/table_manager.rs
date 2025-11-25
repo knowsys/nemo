@@ -721,16 +721,20 @@ impl TableManager {
         None
     }
 
-    /// Return an id for a given row and predicate, if it exists.
+    /// Return an id for a given row and predicate and the step it was derived in, if it exists.
     ///
     /// Returns `None` if there is no such row for this predicate.
-    pub async fn table_row_id(&mut self, predicate: &Tag, row: &[AnyDataValue]) -> Option<usize> {
+    pub async fn table_row_id(
+        &mut self,
+        predicate: &Tag,
+        row: &[AnyDataValue],
+    ) -> Option<(usize, usize)> {
         let handler = self.predicate_subtables.get(predicate)?;
 
         let mut skipped: usize = 0;
-        for (_, id) in &handler.single {
+        for (step, id) in &handler.single {
             if let Some(row_index) = self.database.table_row_position(*id, row).await {
-                return Some(skipped + row_index);
+                return Some((skipped + row_index, *step));
             }
 
             skipped += self.database.count_rows_in_memory(*id);

@@ -10,7 +10,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::{Rule, TableResponseBaseTableEntries};
+use super::{Rule, TableResponseBaseMetaInformation, TableResponseBaseTableEntries};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct TableEntriesForTreeNodesResponseInner {
@@ -20,6 +20,8 @@ pub struct TableEntriesForTreeNodesResponseInner {
     pub predicate: String,
     #[serde(rename = "tableEntries")]
     pub table_entries: Box<TableResponseBaseTableEntries>,
+    #[serde(rename = "metaInformation")]
+    pub meta_information: Box<TableResponseBaseMetaInformation>,
     #[serde(rename = "possibleRulesAbove")]
     pub possible_rules_above: Vec<Rule>,
     #[serde(rename = "possibleRulesBelow")]
@@ -53,6 +55,7 @@ impl From<TableEntriesForTreeNodesResponseInner>
                 .map(Into::into)
                 .collect(),
             address: value.address_in_tree.unwrap_or_default(),
+            meta_information: (*value.meta_information).into(),
         }
     }
 }
@@ -82,6 +85,7 @@ impl From<nemo::execution::tracing::node_query::TableEntriesForTreeNodesResponse
                 .into_iter()
                 .map(Into::into)
                 .collect(),
+            meta_information: Box::new(value.meta_information.into()),
         }
     }
 }

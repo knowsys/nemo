@@ -67,7 +67,7 @@ pub(super) struct TraceNodeManager {
     /// For each "valid" table, the variable assignment
     /// used to compute it
     assignment: HashMap<TreeAddress, StepToId>,
-    /// Consolidated version of `assignemnt`
+    /// Consolidated version of `assignment`
     assignment_final: HashMap<TreeAddress, PermanentTableId>,
 
     /// For each node in the query,

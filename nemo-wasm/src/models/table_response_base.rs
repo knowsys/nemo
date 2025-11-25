@@ -10,7 +10,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::{Rule, TableResponseBaseTableEntries};
+use super::{Rule, TableResponseBaseMetaInformation, TableResponseBaseTableEntries};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 #[allow(dead_code)]
@@ -19,6 +19,8 @@ pub struct TableResponseBase {
     pub predicate: String,
     #[serde(rename = "tableEntries")]
     pub table_entries: Box<TableResponseBaseTableEntries>,
+    #[serde(rename = "metaInformation")]
+    pub meta_information: Box<TableResponseBaseMetaInformation>,
     #[serde(rename = "possibleRulesAbove")]
     pub possible_rules_above: Vec<Rule>,
     #[serde(rename = "possibleRulesBelow")]

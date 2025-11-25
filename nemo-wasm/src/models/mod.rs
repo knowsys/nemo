@@ -20,6 +20,8 @@ pub use self::table_query_base_table_entries::TableQueryBaseTableEntries;
 pub mod table_query_base_table_entries_pagination;
 pub use self::table_query_base_table_entries_pagination::TableQueryBaseTableEntriesPagination;
 pub mod table_response_base;
+pub mod table_response_base_meta_information;
+pub use self::table_response_base_meta_information::TableResponseBaseMetaInformation;
 pub mod table_response_base_table_entries;
 pub use self::table_response_base_table_entries::TableResponseBaseTableEntries;
 pub mod table_response_base_table_entries_pagination;

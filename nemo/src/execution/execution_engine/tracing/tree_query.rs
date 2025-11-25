@@ -18,7 +18,10 @@ use crate::{
         selection_strategy::strategy::RuleSelectionStrategy,
         tracing::{
             error::TracingError,
-            shared::{PaginationResponse, Rule as TraceRule, TableEntryQuery, TableEntryResponse},
+            shared::{
+                PaginationResponse, ResponseMetaInformation, Rule as TraceRule, TableEntryQuery,
+                TableEntryResponse,
+            },
             tree_query::{TreeForTableQuery, TreeForTableResponse, TreeForTableResponseSuccessor},
         },
     },
@@ -126,7 +129,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
                 let mut entries = Vec::default();
                 for row in rows {
-                    let entry_id = self
+                    let (entry_id, _step) = self
                         .table_manager
                         .table_row_id(&negative_atom.predicate(), &row)
                         .await
@@ -142,6 +145,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
                 let negative_response = TreeForTableResponse {
                     predicate: negative_atom.predicate().to_string(),
+                    meta_information: ResponseMetaInformation::default(),
                     entries,
                     pagination: PaginationResponse {
                         start: 0,
@@ -196,13 +200,13 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         // This functions assumes that all facts have the same predicate.
         let predicate = facts.first().map(|fact| fact.predicate())?;
 
-        // Prepare the result, which contains some information independant of tracing results below
+        // Prepare the result, which contains some information independent of tracing results below
         let mut entries = Vec::default();
 
         for fact in facts.iter() {
             let terms = fact.terms().map(|term| term.value()).collect::<Vec<_>>();
 
-            let entry_id = self
+            let (entry_id, _step) = self
                 .table_manager
                 .table_row_id(&fact.predicate(), &terms)
                 .await?;
@@ -230,6 +234,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
         let mut result = TreeForTableResponse {
             predicate: predicate.to_string(),
+            meta_information: ResponseMetaInformation::default(),
             entries,
             pagination: PaginationResponse {
                 start: 0,
@@ -265,6 +270,12 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         // Get the rule that has been applied in each step
         // We can only proceed if every fact has been derived by the same rule
         let rule_index = self.rule_history[steps[0]];
+
+        result.meta_information.execution_time = self
+            .steps_time_ms(steps.iter().cloned())
+            .try_into()
+            .unwrap_or_default();
+
         if steps
             .iter()
             .any(|&step| self.rule_history[step] != rule_index)
@@ -486,6 +497,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
             Ok(TreeForTableResponse {
                 predicate: query.predicate,
+                meta_information: ResponseMetaInformation::default(),
                 entries: vec![],
                 pagination: PaginationResponse {
                     start: query

@@ -184,7 +184,7 @@ mod any_datavalue_serde {
     }
 }
 
-/// Response containig the entries of a table node
+/// Response containing the entries of a table node
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TableEntryResponse {
     /// Identifier of the table entry
@@ -200,7 +200,7 @@ pub struct TableEntryResponse {
 impl TableEntryResponse {
     /// Create a new [TableEntryResponse] with terms given as a list of [String]s.
     ///
-    /// Retrurns `None` if any term cannot be parsed.
+    /// Returns `None` if any term cannot be parsed.
     pub fn new_from_string(entry_id: TableEntryId, terms: &[String]) -> Option<Self> {
         let parsed_terms: Result<Vec<AnyDataValue>, _> = terms
             .iter()
@@ -216,4 +216,11 @@ impl TableEntryResponse {
     pub fn terms_string(&self) -> Vec<String> {
         self.terms.iter().map(|term| term.to_string()).collect()
     }
+}
+
+/// Contains useful meta information about a rule application
+#[derive(Debug, Default, Copy, Clone, Serialize, Deserialize)]
+pub struct ResponseMetaInformation {
+    /// Execution time in milliseconds
+    pub execution_time: usize,
 }
