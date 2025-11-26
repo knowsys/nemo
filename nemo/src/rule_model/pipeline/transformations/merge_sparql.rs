@@ -8,13 +8,10 @@ use super::ProgramTransformation;
 pub struct TransformationMergeSparql {}
 
 impl ProgramTransformation for TransformationMergeSparql {
-    fn apply(
-        mut self,
-        program: &ProgramHandle,
-    ) -> Result<
-        ProgramHandle,
-        ValidationReport,
-    > {
+    fn apply(mut self, program: &ProgramHandle) -> Result<ProgramHandle, ValidationReport> {
+        // find pure EDBs
+        // merge queries
 
+        todo!()
     }
 }
