@@ -11,29 +11,29 @@ use super::meta_dv_dict::MetaDvDictionary;
 use super::{AddResult, ranked_pair_dictionary::GenericRankedPairDictionary};
 
 /// Type constant that signifies no type in a tuple
-const TUPLE_TYPE_NOTYPE: u8 = 0;
+pub(super) const TUPLE_TYPE_NOTYPE: u8 = 0;
 /// Type constant to signify a 64bit dictionary id in a tuple
-const TUPLE_TYPE_DICTID64: u8 = 1;
+pub(super) const TUPLE_TYPE_DICTID64: u8 = 1;
 /// Type constant to signify a 32bit dictionary id in a tuple
-const TUPLE_TYPE_DICTID32: u8 = 2;
+pub(super) const TUPLE_TYPE_DICTID32: u8 = 2;
 /// Type constant to signify a 64bit null id in a tuple
-const TUPLE_TYPE_NULLID64: u8 = 3;
+pub(super) const TUPLE_TYPE_NULLID64: u8 = 3;
 /// Type constant to signify a 32bit null id in a tuple
-const TUPLE_TYPE_NULLID32: u8 = 4;
+pub(super) const TUPLE_TYPE_NULLID32: u8 = 4;
 /// Type constant to signify an i64 value in a tuple
-const TUPLE_TYPE_I64: u8 = 5;
+pub(super) const TUPLE_TYPE_I64: u8 = 5;
 /// Type constant to signify an u64 value in a tuple
-const TUPLE_TYPE_U64: u8 = 6;
+pub(super) const TUPLE_TYPE_U64: u8 = 6;
 /// Type constant to signify an f32 value in a tuple
-const TUPLE_TYPE_F32: u8 = 7;
+pub(super) const TUPLE_TYPE_F32: u8 = 7;
 /// Type constant to signify an f64 value in a tuple
-const TUPLE_TYPE_F64: u8 = 8;
+pub(super) const TUPLE_TYPE_F64: u8 = 8;
 /// Type constant to signify a boolean value in a tuple
-const TUPLE_TYPE_BOOL: u8 = 9;
+pub(super) const TUPLE_TYPE_BOOL: u8 = 9;
 /// Type constant to signify a 32bit dictionary id of a label (at the start of tuples)
-const TUPLE_TYPE_LABELID32: u8 = 10;
+pub(super) const TUPLE_TYPE_LABELID32: u8 = 10;
 /// Type constant to signify a 64bit dictionary id of a label (at the start of tuples)
-const TUPLE_TYPE_LABELID64: u8 = 11;
+pub(super) const TUPLE_TYPE_LABELID64: u8 = 11;
 
 crate::dictionary::bytes_buffer::declare_bytes_buffer!(
     TupleBytesPairDictBytesBuffer,
@@ -202,7 +202,10 @@ fn push_usize_id_to_bytes(
 /// TODO: This function is very similar to [tuple_bytes]. Maybe consider (efficient) options
 /// for code sharing. However, putting large parts of code into macros is not very helpful either,
 /// since it leads to less readable code.
-fn tuple_bytes_mut(parent_dict: &mut MetaDvDictionary, dv: AnyDataValue) -> (Vec<u8>, Vec<u8>) {
+pub(super) fn tuple_bytes_mut(
+    parent_dict: &mut MetaDvDictionary,
+    dv: AnyDataValue,
+) -> (Vec<u8>, Vec<u8>) {
     let mut tuple_type: Vec<u8> = Vec::with_capacity(8); // space for a short label and 4 distinct types
     let mut tuple_content: Vec<u8> = Vec::with_capacity(16); // space for 4 short values
 
@@ -222,7 +225,7 @@ fn tuple_bytes_mut(parent_dict: &mut MetaDvDictionary, dv: AnyDataValue) -> (Vec
     let mut cur_type: u8;
     let mut prev_type: u8 = TUPLE_TYPE_NOTYPE;
     let mut last_type_change: usize = 0;
-    for i in 0..dv.len_unchecked() {
+    for i in 0..dv.tuple_len_unchecked() {
         let dvi = dv.tuple_element_unchecked(i);
         match dvi.value_domain() {
             ValueDomain::PlainString
@@ -298,7 +301,10 @@ fn tuple_bytes_mut(parent_dict: &mut MetaDvDictionary, dv: AnyDataValue) -> (Vec
 /// TODO: This function is very similar to [tuple_bytes_mut]. Maybe consider (efficient) options
 /// for code sharing. However, putting large parts of code into macros is not very helpful either,
 /// since it leads to less readable code.
-fn tuple_bytes(parent_dict: &MetaDvDictionary, dv: &AnyDataValue) -> Option<(Vec<u8>, Vec<u8>)> {
+pub(super) fn tuple_bytes(
+    parent_dict: &MetaDvDictionary,
+    dv: &AnyDataValue,
+) -> Option<(Vec<u8>, Vec<u8>)> {
     let mut tuple_type: Vec<u8> = Vec::with_capacity(8); // space for a short label and 4 distinct types
     let mut tuple_content: Vec<u8> = Vec::with_capacity(16); // space for 4 short values
 
@@ -321,7 +327,7 @@ fn tuple_bytes(parent_dict: &MetaDvDictionary, dv: &AnyDataValue) -> Option<(Vec
     let mut cur_type: u8;
     let mut prev_type: u8 = TUPLE_TYPE_NOTYPE;
     let mut last_type_change: usize = 0;
-    for i in 0..dv.len_unchecked() {
+    for i in 0..dv.tuple_len_unchecked() {
         let dvi = dv.tuple_element_unchecked(i);
         match dvi.value_domain() {
             ValueDomain::PlainString
