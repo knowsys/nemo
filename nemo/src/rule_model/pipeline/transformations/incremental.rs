@@ -168,11 +168,24 @@ impl TransformationIncremental {
         Variable::universal(&name)
     }
 
+    /// Change the predicate of a given [ImportDirective] such that it is unique.
+    fn unique_import_directive(directive: &ImportDirective, id: &mut usize) -> ImportDirective {
+        let predicate = Tag::new(format!("_{}_{}", directive.predicate(), id));
+        *id += 1;
+
+        let mut result = directive.clone();
+        result.set_predicate(predicate);
+
+        result
+    }
+
     /// Given a rule with inlined import predicates,
     /// compute a rule that includes the corresponding import statements.
     fn incremental_rule(
         rule: &Rule,
         incremental_predicates: &HashMap<Tag, &ImportDirective>,
+        derived_predicates: &HashSet<Tag>,
+        id: &mut usize,
     ) -> Rule {
         let mut result = rule.clone();
 
@@ -195,7 +208,13 @@ impl TransformationIncremental {
                     }
                 }
 
-                let clause = ImportClause::new(import.clone(), variables);
+                let import = if !derived_predicates.contains(import.predicate()) {
+                    Self::unique_import_directive(import, id)
+                } else {
+                    import.clone()
+                };
+
+                let clause = ImportClause::new(import, variables);
 
                 import_clauses.push(clause);
                 return false;
@@ -222,6 +241,9 @@ impl ProgramTransformation for TransformationIncremental {
         let mut commit = program.fork();
 
         let incremental_predicates = Self::incremental_predicates(program);
+        let derived_predicates = program.derived_predicates();
+
+        let mut name_id: usize = 0;
 
         for statement in program.statements() {
             match statement {
@@ -230,7 +252,12 @@ impl ProgramTransformation for TransformationIncremental {
                         .body_positive()
                         .any(|atom| incremental_predicates.contains_key(&atom.predicate()))
                     {
-                        let new_rule = Self::incremental_rule(rule, &incremental_predicates);
+                        let new_rule = Self::incremental_rule(
+                            rule,
+                            &incremental_predicates,
+                            &derived_predicates,
+                            &mut name_id,
+                        );
 
                         commit.add_rule(new_rule);
                     } else {
