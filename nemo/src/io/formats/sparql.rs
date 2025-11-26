@@ -103,9 +103,9 @@ impl FormatParameter<SparqlTag> for SparqlParameter {
 
 #[derive(Clone, Debug)]
 pub(crate) struct SparqlBuilder {
-    value_formats: Option<DsvValueFormats>,
-    endpoint: Iri<String>,
-    query: Query,
+    pub(crate) value_formats: Option<DsvValueFormats>,
+    pub(crate) endpoint: Iri<String>,
+    pub(crate) query: Query,
 }
 
 impl SparqlBuilder {

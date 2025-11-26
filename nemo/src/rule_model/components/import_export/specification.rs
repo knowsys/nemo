@@ -30,7 +30,7 @@ pub struct ImportExportSpec {
     format: Tag,
 
     /// List of tuples containing attribute-value-pairs
-    map: Vec<(ImportExportAttribute, Term)>,
+    pub(crate) map: Vec<(ImportExportAttribute, Term)>,
 }
 
 impl ImportExportSpec {

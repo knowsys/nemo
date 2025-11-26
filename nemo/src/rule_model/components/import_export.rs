@@ -1,15 +1,22 @@
 //! Import and export directives are a direct representation of the syntactic information
 //! given in rule files.
 
+use std::collections::HashSet;
+
+use nemo_physical::datavalues::AnyDataValue;
 use specification::ImportExportSpec;
 
 use crate::{
-    io::format_builder::ImportExportBuilder,
+    io::{
+        self,
+        format_builder::{AnyImportExportBuilder, ImportExportBuilder, SupportedFormatTag},
+        formats::sparql::queries::merge_queries,
+    },
     rule_model::{
         components::rule::Rule, error::ValidationReport, origin::Origin,
         pipeline::id::ProgramComponentId,
     },
-    syntax,
+    syntax::{self, import_export::attribute::QUERY},
 };
 
 use super::{
@@ -17,7 +24,11 @@ use super::{
     IterableVariables, ProgramComponent, ProgramComponentKind, component_iterator,
     component_iterator_mut,
     tag::Tag,
-    term::{Term, operation::Operation, primitive::variable::Variable},
+    term::{
+        Term,
+        operation::Operation,
+        primitive::{Primitive, variable::Variable},
+    },
 };
 
 pub mod attribute;
@@ -163,6 +174,72 @@ impl ImportDirective {
             bindings,
             filter_rules: Vec::new(),
         })
+    }
+
+    pub(crate) fn try_merge(
+        &self,
+        left_variables: &[Variable],
+        right: &Self,
+        right_variables: &[Variable],
+    ) -> Option<(Self, Vec<Variable>)> {
+        let left_builder = self.builder()?;
+        let right_builder = right.builder()?;
+
+        match (left_builder.format(), right_builder.format()) {
+            (SupportedFormatTag::Sparql(..), SupportedFormatTag::Sparql(..)) => {
+                let AnyImportExportBuilder::Sparql(left_sparql) = left_builder.inner else {
+                    unreachable!("inner builder must be a SPARQL builder")
+                };
+                let AnyImportExportBuilder::Sparql(right_sparql) = right_builder.inner else {
+                    unreachable!("inner builder must be a SPARQL builder")
+                };
+
+                if left_sparql.endpoint != right_sparql.endpoint {
+                    return None;
+                }
+
+                let left_set = left_variables.iter().collect::<HashSet<_>>();
+                let right_set = right_variables.iter().collect::<HashSet<_>>();
+                let join_variables = left_set.intersection(&right_set).collect::<HashSet<_>>();
+                let left_positions =
+                    left_variables
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(idx, variable)| {
+                            join_variables.contains(&variable).then_some(idx)
+                        });
+                let right_positions =
+                    left_variables
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(idx, variable)| {
+                            join_variables.contains(&variable).then_some(idx)
+                        });
+                let join_positions = left_positions.zip(right_positions).collect::<Vec<_>>();
+
+                let query =
+                    merge_queries(&left_sparql.query, &right_sparql.query, &join_positions)?;
+
+                let mut result = self.clone();
+
+                for (key, value) in &mut result.0.spec.map {
+                    if key.value() == QUERY {
+                        *value = Term::ground(AnyDataValue::new_plain_string(query.to_string()));
+                    }
+                }
+
+                let mut variables = left_variables.to_vec();
+                variables.extend(
+                    right_variables
+                        .iter()
+                        .filter(|variable| !join_variables.contains(variable))
+                        .cloned(),
+                );
+
+                Some((result, variables))
+            }
+            _ => None,
+        }
     }
 
     /// Change the predicate that this import writes to.

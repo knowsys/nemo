@@ -16,6 +16,7 @@
 )]
 #![feature(macro_metavar_expr)]
 #![feature(iter_intersperse)]
+#![feature(iterator_try_reduce)]
 #![feature(str_from_raw_parts)]
 #![feature(associated_type_defaults)]
 
