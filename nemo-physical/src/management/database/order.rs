@@ -326,6 +326,26 @@ impl OrderedReferenceManager {
         panic!("No table with id {id} exists.");
     }
 
+    /// Return the [StorageId] of a in-memory [Trie]
+    /// corresponding to the given [PermanentTableId] and [ColumnOrder].
+    ///
+    /// Return `None` if trie is not in memory.
+    pub(crate) fn trie_id_inmemory(
+        &self,
+        id: PermanentTableId,
+        column_order: ColumnOrder,
+    ) -> Option<StorageId> {
+        let (id, column_order) = self.resolve_reference(id, column_order);
+
+        if let Some(order_map) = self.storage_map.get(&id)
+            && let Some(&storage_id) = order_map.get(&column_order)
+        {
+            return Some(storage_id);
+        }
+
+        None
+    }
+
     /// Given a [StorageId] return a reference to a [Trie].
     ///
     /// # Panics

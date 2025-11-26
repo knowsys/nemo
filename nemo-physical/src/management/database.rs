@@ -167,6 +167,25 @@ impl DatabaseInstance {
         self.trie_row_iterator(trie)
     }
 
+    /// Provide an iterator over the rows of the table with the given [PermanentTableId].
+    /// This function assumes that the table exists in-memory in the default column order.
+    ///
+    /// # Panics
+    /// Panics if trie does not exist in default column order in memory
+    /// or the given id does not exist.
+    pub fn table_row_iterator_inmemory(
+        &self,
+        id: PermanentTableId,
+    ) -> Result<impl Iterator<Item = Vec<AnyDataValue>>, Error> {
+        let storage_id = self
+            .reference_manager
+            .trie_id_inmemory(id, ColumnOrder::default())
+            .expect("function assumes that trie exists in memory");
+        let trie = self.reference_manager.trie(storage_id);
+
+        self.trie_row_iterator(trie)
+    }
+
     /// Provide an iterator over the rows of the table with the given [Trie].
     pub fn trie_row_iterator<'a>(
         &'a self,
@@ -225,6 +244,39 @@ impl DatabaseInstance {
             .trie_id(&self.dictionary, id, ColumnOrder::default())
             .await
             .unwrap_or_else(|err| panic!("No table with the id {id} exists: {err}"));
+        let trie = self.reference_manager.trie(storage_id);
+
+        let dictionary: &Dict = &self.dictionary();
+
+        let mut row_storage = Vec::with_capacity(row.len());
+        for data_value in row.iter() {
+            if let Some(storage_value) = data_value.try_to_storage_value_t(dictionary) {
+                row_storage.push(storage_value);
+            } else {
+                // `value` is not know to the dictionary and therefore
+                // not be part of a table.
+                return None;
+            }
+        }
+
+        trie.row_position(&row_storage)
+    }
+
+    /// Return the position of a row within a table (with respect to the standard ordering)
+    /// This function assumes that the table exists in-memory in the default column order.
+    ///
+    /// # Panics
+    /// Panics if trie does not exist in default column order in memory
+    /// or the given id does not exist.
+    pub fn table_row_position_inmemory(
+        &self,
+        id: PermanentTableId,
+        row: &[AnyDataValue],
+    ) -> Option<usize> {
+        let storage_id = self
+            .reference_manager
+            .trie_id_inmemory(id, ColumnOrder::default())
+            .expect("function assumes that trie exists in memory");
         let trie = self.reference_manager.trie(storage_id);
 
         let dictionary: &Dict = &self.dictionary();
