@@ -1,6 +1,9 @@
 //! Manipulation of SPARQL queries.
 
-use std::collections::HashSet;
+use std::{
+    collections::{HashMap, HashSet},
+    iter::empty,
+};
 
 use nemo_physical::{
     datasources::bindings::Bindings,
@@ -10,8 +13,10 @@ use nemo_physical::{
 use oxrdf::{Literal, NamedNode, Variable};
 use spargebra::{
     Query,
-    algebra::{Expression, GraphPattern},
-    term::GroundTerm,
+    algebra::{
+        AggregateExpression, Expression, GraphPattern, OrderExpression, PropertyPathExpression,
+    },
+    term::{GroundTerm, NamedNodePattern, TermPattern, TriplePattern},
 };
 
 use super::functions::try_expression_from_tree;
@@ -165,50 +170,498 @@ where
     }
 }
 
-fn rename_apart(
+#[derive(Debug, Default, Clone)]
+struct PatternVariables {
+    in_scope: HashSet<Variable>,
+    hidden: HashSet<Variable>,
+}
+
+impl PatternVariables {
+    fn new<T, V>(in_scope: T, hidden: V) -> Self
+    where
+        T: IntoIterator<Item = Variable>,
+        V: IntoIterator<Item = Variable>,
+    {
+        Self {
+            in_scope: in_scope.into_iter().collect(),
+            hidden: hidden.into_iter().collect(),
+        }
+    }
+
+    fn project(mut self, other: &Self) -> Self {
+        self.hidden.extend(self.in_scope.drain());
+        self.union(other)
+    }
+
+    fn project_onto<'a, T: IntoIterator<Item = &'a Variable>>(self, variables: T) -> Self {
+        self.project(&PatternVariables::new(
+            variables.into_iter().cloned(),
+            empty(),
+        ))
+    }
+
+    fn union(mut self, other: &Self) -> Self {
+        self.hidden.extend(other.hidden.iter().cloned());
+        self.in_scope.extend(other.in_scope.iter().cloned());
+
+        self
+    }
+}
+
+fn variables_in_pattern(pattern: &GraphPattern) -> PatternVariables {
+    match pattern {
+        GraphPattern::Bgp { .. } | GraphPattern::Path { .. } | GraphPattern::Values { .. } => {
+            let mut result = PatternVariables::default();
+            pattern.on_in_scope_variable(|variable| {
+                result.in_scope.insert(variable.clone());
+            });
+
+            result
+        }
+        GraphPattern::Join { left, right }
+        | GraphPattern::LeftJoin { left, right, .. }
+        | GraphPattern::Union { left, right } => {
+            variables_in_pattern(left).union(&variables_in_pattern(right))
+        }
+        GraphPattern::Graph { name, inner } => {
+            let mut result = variables_in_pattern(inner);
+            if let NamedNodePattern::Variable(variable) = name {
+                result.in_scope.insert(variable.clone());
+            }
+
+            result
+        }
+        GraphPattern::Extend {
+            inner, variable, ..
+        } => {
+            let mut result = variables_in_pattern(inner);
+            result.in_scope.insert(variable.clone());
+
+            result
+        }
+        GraphPattern::Minus { left, right } => {
+            variables_in_pattern(right).project(&variables_in_pattern(left))
+        }
+        GraphPattern::Project { inner, variables } => {
+            variables_in_pattern(inner).project_onto(variables)
+        }
+        GraphPattern::Group {
+            inner,
+            variables,
+            aggregates,
+        } => variables_in_pattern(inner).project_onto(
+            variables
+                .iter()
+                .chain(aggregates.iter().map(|(variable, _)| variable)),
+        ),
+        GraphPattern::OrderBy { inner, .. }
+        | GraphPattern::Distinct { inner }
+        | GraphPattern::Reduced { inner }
+        | GraphPattern::Slice { inner, .. }
+        | GraphPattern::Service { inner, .. }
+        | GraphPattern::Filter { inner, .. } => variables_in_pattern(inner),
+    }
+}
+
+fn rename_variables<'a, T: IntoIterator<Item = &'a Variable>>(
+    variables: T,
+    mapping: &HashMap<Variable, Variable>,
+) -> impl Iterator<Item = Variable> {
+    variables.into_iter().map(|variable| {
+        mapping
+            .get(variable)
+            .expect("mapping should be total")
+            .clone()
+    })
+}
+
+fn rename_aggregates<'a, T: IntoIterator<Item = &'a (Variable, AggregateExpression)>>(
+    aggregates: T,
+    mapping: &HashMap<Variable, Variable>,
+) -> impl Iterator<Item = (Variable, AggregateExpression)> {
+    aggregates.into_iter().map(|(variable, expression)| {
+        (
+            mapping
+                .get(variable)
+                .expect("mapping should be total")
+                .clone(),
+            match expression {
+                AggregateExpression::CountSolutions { .. } => expression.clone(),
+                AggregateExpression::FunctionCall {
+                    name,
+                    expr,
+                    distinct,
+                } => AggregateExpression::FunctionCall {
+                    name: name.clone(),
+                    expr: rename_in_expression(expr, mapping),
+                    distinct: *distinct,
+                },
+            },
+        )
+    })
+}
+
+fn rename_in_term_pattern(
+    term: &TermPattern,
+    mapping: &HashMap<Variable, Variable>,
+) -> TermPattern {
+    match term {
+        TermPattern::Variable(variable) => TermPattern::Variable(
+            mapping
+                .get(variable)
+                .expect("mapping should be total")
+                .clone(),
+        ),
+        _ => term.clone(),
+    }
+}
+
+fn rename_in_named_node_pattern(
+    pattern: &NamedNodePattern,
+    mapping: &HashMap<Variable, Variable>,
+) -> NamedNodePattern {
+    match pattern {
+        NamedNodePattern::Variable(variable) => NamedNodePattern::Variable(
+            mapping
+                .get(variable)
+                .expect("mapping should be total")
+                .clone(),
+        ),
+        _ => pattern.clone(),
+    }
+}
+
+fn rename_in_expression(
+    expression: &Expression,
+    mapping: &HashMap<Variable, Variable>,
+) -> Expression {
+    match expression {
+        Expression::NamedNode(_) | Expression::Literal(_) => expression.clone(),
+        Expression::Variable(variable) => Expression::Variable(
+            mapping
+                .get(variable)
+                .expect("mapping should be total")
+                .clone(),
+        ),
+        Expression::Or(expression, expression1) => Expression::Or(
+            Box::new(rename_in_expression(expression, mapping)),
+            Box::new(rename_in_expression(expression1, mapping)),
+        ),
+        Expression::And(expression, expression1) => Expression::And(
+            Box::new(rename_in_expression(expression, mapping)),
+            Box::new(rename_in_expression(expression1, mapping)),
+        ),
+        Expression::Equal(expression, expression1) => Expression::Equal(
+            Box::new(rename_in_expression(expression, mapping)),
+            Box::new(rename_in_expression(expression1, mapping)),
+        ),
+        Expression::SameTerm(expression, expression1) => Expression::SameTerm(
+            Box::new(rename_in_expression(expression, mapping)),
+            Box::new(rename_in_expression(expression1, mapping)),
+        ),
+        Expression::Greater(expression, expression1) => Expression::Greater(
+            Box::new(rename_in_expression(expression, mapping)),
+            Box::new(rename_in_expression(expression1, mapping)),
+        ),
+        Expression::GreaterOrEqual(expression, expression1) => Expression::GreaterOrEqual(
+            Box::new(rename_in_expression(expression, mapping)),
+            Box::new(rename_in_expression(expression1, mapping)),
+        ),
+        Expression::Less(expression, expression1) => Expression::Less(
+            Box::new(rename_in_expression(expression, mapping)),
+            Box::new(rename_in_expression(expression1, mapping)),
+        ),
+        Expression::LessOrEqual(expression, expression1) => Expression::LessOrEqual(
+            Box::new(rename_in_expression(expression, mapping)),
+            Box::new(rename_in_expression(expression1, mapping)),
+        ),
+        Expression::In(expression, expressions) => Expression::In(
+            Box::new(rename_in_expression(expression, mapping)),
+            expressions
+                .into_iter()
+                .map(|expression| rename_in_expression(expression, mapping))
+                .collect(),
+        ),
+        Expression::Add(expression, expression1) => Expression::Add(
+            Box::new(rename_in_expression(expression, mapping)),
+            Box::new(rename_in_expression(expression1, mapping)),
+        ),
+        Expression::Subtract(expression, expression1) => Expression::Subtract(
+            Box::new(rename_in_expression(expression, mapping)),
+            Box::new(rename_in_expression(expression1, mapping)),
+        ),
+        Expression::Multiply(expression, expression1) => Expression::Multiply(
+            Box::new(rename_in_expression(expression, mapping)),
+            Box::new(rename_in_expression(expression1, mapping)),
+        ),
+        Expression::Divide(expression, expression1) => Expression::Divide(
+            Box::new(rename_in_expression(expression, mapping)),
+            Box::new(rename_in_expression(expression1, mapping)),
+        ),
+        Expression::UnaryPlus(expression) => {
+            Expression::UnaryPlus(Box::new(rename_in_expression(expression, mapping)))
+        }
+        Expression::UnaryMinus(expression) => {
+            Expression::UnaryMinus(Box::new(rename_in_expression(expression, mapping)))
+        }
+        Expression::Not(expression) => {
+            Expression::Not(Box::new(rename_in_expression(expression, mapping)))
+        }
+        Expression::Exists(graph_pattern) => {
+            Expression::Exists(Box::new(rename_in_graph_pattern(graph_pattern, mapping)))
+        }
+        Expression::Bound(variable) => Expression::Bound(
+            mapping
+                .get(variable)
+                .expect("mapping should be total")
+                .clone(),
+        ),
+        Expression::If(expression, expression1, expression2) => Expression::If(
+            Box::new(rename_in_expression(expression, mapping)),
+            Box::new(rename_in_expression(expression1, mapping)),
+            Box::new(rename_in_expression(expression2, mapping)),
+        ),
+        Expression::Coalesce(expressions) => Expression::Coalesce(
+            expressions
+                .into_iter()
+                .map(|expression| rename_in_expression(expression, mapping))
+                .collect(),
+        ),
+        Expression::FunctionCall(function, expressions) => Expression::FunctionCall(
+            function.clone(),
+            expressions
+                .into_iter()
+                .map(|expression| rename_in_expression(expression, mapping))
+                .collect(),
+        ),
+    }
+}
+
+fn rename_in_graph_pattern(
     pattern: &GraphPattern,
-    base: &str,
-    join_positions: &[usize],
+    mapping: &HashMap<Variable, Variable>,
+) -> GraphPattern {
+    match pattern {
+        GraphPattern::Bgp { patterns } => {
+            let mut result = Vec::new();
+
+            for pattern in patterns {
+                result.push(TriplePattern {
+                    subject: rename_in_term_pattern(&pattern.subject, mapping),
+                    predicate: rename_in_named_node_pattern(&pattern.predicate, mapping),
+                    object: rename_in_term_pattern(&pattern.object, mapping),
+                });
+            }
+
+            GraphPattern::Bgp { patterns: result }
+        }
+        GraphPattern::Path {
+            subject,
+            path,
+            object,
+        } => GraphPattern::Path {
+            subject: rename_in_term_pattern(subject, mapping),
+            path: path.clone(),
+            object: rename_in_term_pattern(object, mapping),
+        },
+        GraphPattern::Join { left, right } => GraphPattern::Join {
+            left: Box::new(rename_in_graph_pattern(left, mapping)),
+            right: Box::new(rename_in_graph_pattern(right, mapping)),
+        },
+        GraphPattern::LeftJoin {
+            left,
+            right,
+            expression,
+        } => GraphPattern::LeftJoin {
+            left: Box::new(rename_in_graph_pattern(left, mapping)),
+            right: Box::new(rename_in_graph_pattern(right, mapping)),
+            expression: expression
+                .clone()
+                .map(|expression| rename_in_expression(&expression, mapping)),
+        },
+        GraphPattern::Filter { expr, inner } => GraphPattern::Filter {
+            expr: rename_in_expression(expr, mapping),
+            inner: Box::new(rename_in_graph_pattern(inner, mapping)),
+        },
+        GraphPattern::Union { left, right } => GraphPattern::Union {
+            left: Box::new(rename_in_graph_pattern(left, mapping)),
+            right: Box::new(rename_in_graph_pattern(right, mapping)),
+        },
+        GraphPattern::Graph { name, inner } => GraphPattern::Graph {
+            name: rename_in_named_node_pattern(name, mapping),
+            inner: Box::new(rename_in_graph_pattern(inner, mapping)),
+        },
+        GraphPattern::Extend {
+            inner,
+            variable,
+            expression,
+        } => GraphPattern::Extend {
+            inner: Box::new(rename_in_graph_pattern(inner, mapping)),
+            variable: mapping
+                .get(variable)
+                .expect("mapping should be total")
+                .clone(),
+            expression: rename_in_expression(expression, mapping),
+        },
+        GraphPattern::Minus { left, right } => GraphPattern::Minus {
+            left: Box::new(rename_in_graph_pattern(left, mapping)),
+            right: Box::new(rename_in_graph_pattern(right, mapping)),
+        },
+        GraphPattern::Values {
+            variables,
+            bindings,
+        } => GraphPattern::Values {
+            variables: rename_variables(variables, mapping).collect(),
+            bindings: bindings.clone(),
+        },
+        GraphPattern::OrderBy { inner, expression } => GraphPattern::OrderBy {
+            inner: Box::new(rename_in_graph_pattern(inner, mapping)),
+            expression: expression
+                .into_iter()
+                .map(|expression| match expression {
+                    OrderExpression::Asc(expression) => {
+                        OrderExpression::Asc(rename_in_expression(expression, mapping))
+                    }
+                    OrderExpression::Desc(expression) => {
+                        OrderExpression::Desc(rename_in_expression(expression, mapping))
+                    }
+                })
+                .collect(),
+        },
+        GraphPattern::Project { inner, variables } => GraphPattern::Project {
+            inner: Box::new(rename_in_graph_pattern(inner, mapping)),
+            variables: rename_variables(variables, mapping).collect(),
+        },
+        GraphPattern::Distinct { inner } => GraphPattern::Distinct {
+            inner: Box::new(rename_in_graph_pattern(inner, mapping)),
+        },
+        GraphPattern::Reduced { inner } => GraphPattern::Reduced {
+            inner: Box::new(rename_in_graph_pattern(inner, mapping)),
+        },
+        GraphPattern::Slice {
+            inner,
+            start,
+            length,
+        } => GraphPattern::Slice {
+            inner: Box::new(rename_in_graph_pattern(inner, mapping)),
+            start: *start,
+            length: length.clone(),
+        },
+        GraphPattern::Group {
+            inner,
+            variables,
+            aggregates,
+        } => GraphPattern::Group {
+            inner: Box::new(rename_in_graph_pattern(inner, mapping)),
+            variables: rename_variables(variables, mapping).collect(),
+            aggregates: rename_aggregates(aggregates, mapping).collect(),
+        },
+        GraphPattern::Service {
+            name,
+            inner,
+            silent,
+        } => GraphPattern::Service {
+            name: name.clone(),
+            inner: Box::new(rename_in_graph_pattern(inner, mapping)),
+            silent: *silent,
+        },
+    }
+}
+
+fn rename_variables_in_project_pattern(
+    pattern: &GraphPattern,
+    mapping: &HashMap<Variable, Variable>,
 ) -> Option<(GraphPattern, Vec<Variable>)> {
     match pattern {
         GraphPattern::Project { inner, variables } => {
-            todo!()
+            let inner = rename_in_graph_pattern(inner, mapping);
+
+            Some((inner, rename_variables(variables, mapping).collect()))
         }
         _ => None,
     }
 }
 
-fn merge_variables(left: &[Variable], right: &[Variable]) -> Vec<Variable> {
-    let mut result = left.to_vec();
-    let left = left.iter().collect::<HashSet<_>>();
+fn standardize_variables(
+    prefix: &str,
+    variables: &PatternVariables,
+    join_variables: &[Variable],
+) -> HashMap<Variable, Variable> {
+    let mut result = HashMap::new();
 
-    for variable in right {
-        if !left.contains(variable) {
-            result.push(variable.clone());
+    for (count, variable) in join_variables.iter().enumerate() {
+        result.insert(
+            variable.clone(),
+            Variable::new_unchecked(format!("j{count}")),
+        );
+    }
+
+    let mut count = 0;
+
+    for variable in variables.in_scope.iter().chain(variables.hidden.iter()) {
+        if result.contains_key(variable) {
+            continue;
         }
+
+        result.insert(
+            variable.clone(),
+            Variable::new_unchecked(format!("{prefix}{count}")),
+        );
+        count += 1;
     }
 
     result
 }
 
-pub(crate) fn merge_patterns(
+pub(crate) fn merge_project_patterns(
     left: &GraphPattern,
     right: &GraphPattern,
-    join_positions: &[usize],
+    join_positions: &[(usize, usize)],
 ) -> Option<GraphPattern> {
     match (left, right) {
-        (GraphPattern::Project { .. }, GraphPattern::Project { .. }) => {
-            let (left_pattern, left_variables) = rename_apart(left, "l", join_positions)?;
-            let (right_pattern, right_variables) = rename_apart(right, "r", join_positions)?;
+        (
+            GraphPattern::Project {
+                variables: left_project,
+                ..
+            },
+            GraphPattern::Project {
+                variables: right_project,
+                ..
+            },
+        ) => {
+            let left_variables = variables_in_pattern(left);
+            let right_variables = variables_in_pattern(right);
+
+            let mut left_join_variables = Vec::new();
+            let mut right_join_variables = Vec::new();
+
+            for (l, r) in join_positions {
+                left_join_variables.push(left_project[*l].clone());
+                right_join_variables.push(right_project[*r].clone());
+            }
+
+            let left_mapping = standardize_variables("l", &left_variables, &left_join_variables);
+            let right_mapping = standardize_variables("r", &right_variables, &right_join_variables);
+
+            let (left_pattern, left_variables) =
+                rename_variables_in_project_pattern(left, &left_mapping)?;
+            let (right_pattern, right_variables) =
+                rename_variables_in_project_pattern(right, &right_mapping)?;
             let inner = Box::new(GraphPattern::Join {
                 left: Box::new(left_pattern),
                 right: Box::new(right_pattern),
             });
 
-            Some(GraphPattern::Project {
-                inner,
-                variables: merge_variables(&left_variables, &right_variables),
-            })
+            let mut variables = left_variables;
+            let join_variables =
+                rename_variables(&left_join_variables, &left_mapping).collect::<HashSet<_>>();
+            for variable in right_variables {
+                if !join_variables.contains(&variable) {
+                    variables.push(variable);
+                }
+            }
+
+            Some(GraphPattern::Project { inner, variables })
         }
         _ => None,
     }
@@ -217,7 +670,7 @@ pub(crate) fn merge_patterns(
 pub(crate) fn merge_queries(
     left: &Query,
     right: &Query,
-    join_positions: &[usize],
+    join_positions: &[(usize, usize)],
 ) -> Option<Query> {
     match (left, right) {
         (
@@ -233,7 +686,7 @@ pub(crate) fn merge_queries(
             },
         ) if dataset_left == dataset_right && base_left == base_right => Some(Query::Select {
             dataset: dataset_left.clone(),
-            pattern: merge_patterns(pattern_left, pattern_right, join_positions)?,
+            pattern: merge_project_patterns(pattern_left, pattern_right, join_positions)?,
             base_iri: base_left.clone(),
         }),
         (
@@ -249,7 +702,7 @@ pub(crate) fn merge_queries(
             },
         ) if dataset_left == dataset_right && base_left == base_right => Some(Query::Ask {
             dataset: dataset_left.clone(),
-            pattern: merge_patterns(pattern_left, pattern_right, join_positions)?,
+            pattern: merge_project_patterns(pattern_left, pattern_right, join_positions)?,
             base_iri: base_left.clone(),
         }),
         _ => None,
