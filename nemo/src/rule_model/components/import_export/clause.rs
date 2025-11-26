@@ -56,6 +56,19 @@ impl ImportClause {
         }
     }
 
+    pub(crate) fn try_merge(left: Self, right: Self) -> Option<Self> {
+        let (import, variables) =
+            left.import
+                .try_merge(&left.variables, &right.import, &right.variables)?;
+
+        Some(Self {
+            origin: Origin::Component(Box::new(left)), // TODO: track reference to [right] as well
+            id: ProgramComponentId::default(),
+            import,
+            variables,
+        })
+    }
+
     /// Return a reference to the output variables.
     pub fn output_variables(&self) -> &Vec<Variable> {
         &self.variables

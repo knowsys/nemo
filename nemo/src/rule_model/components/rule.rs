@@ -172,6 +172,12 @@ impl Rule {
         self.imports.iter()
     }
 
+    /// Return a mutable reference to the [ImportClause]s
+    /// that are evaluated as part of this rule.
+    pub(crate) fn imports_mut(&mut self) -> &mut Vec<ImportClause> {
+        &mut self.imports
+    }
+
     /// Add an [ImportClause] to this rule.
     pub fn add_import(&mut self, import: ImportClause) {
         self.imports.push(import);

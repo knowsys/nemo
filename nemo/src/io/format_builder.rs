@@ -448,8 +448,8 @@ impl<B: FormatBuilder> Parameters<B> {
 /// corresponding handler (i.e. [`ImportHandler`] or [`ExportHandler`])
 #[derive(Clone, Debug)]
 pub struct ImportExportBuilder {
-    inner: AnyImportExportBuilder,
-    resource: Option<Resource>,
+    pub(crate) inner: AnyImportExportBuilder,
+    pub(crate) resource: Option<Resource>,
     compression: CompressionFormat,
 }
 
