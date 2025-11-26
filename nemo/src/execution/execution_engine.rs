@@ -334,6 +334,31 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         Ok(Some(self.table_manager.table_row_iterator(table_id).await?))
     }
 
+    /// Creates an [Iterator] over all facts of a predicate with their corresponding id.
+    pub async fn predicate_rows_ids(
+        &mut self,
+        predicate: &Tag,
+    ) -> Result<Option<impl Iterator<Item = (Vec<AnyDataValue>, usize)>>, Error> {
+        let Some(table_id) = self.table_manager.combine_predicate(predicate).await? else {
+            return Ok(None);
+        };
+
+        // Once `combine_predicate` is called all subtables should be inmemory
+
+        let iterator = self
+            .table_manager
+            .table_row_iterator_inmemory(table_id)?
+            .map(|row| {
+                let (id, _step) = self
+                    .table_manager
+                    .table_row_id_inmemory(predicate, &row)
+                    .expect("row must exist since it comes from calling `combine_predicate`");
+                (row, id)
+            });
+
+        Ok(Some(iterator))
+    }
+
     /// Returns the arity of the predicate if the predicate is known to the engine,
     /// and `None` otherwise.
     pub fn predicate_arity(&self, predicate: &Tag) -> Option<usize> {

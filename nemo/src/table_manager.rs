@@ -376,12 +376,27 @@ impl TableManager {
             .map(|s| s.count_rows_in_memory(&self.database))
     }
 
-    /// Get a list of column iterators for the full table (i.e. the expanded trie)
+    /// Provide an iterator over the rows of the table with the given [PermanentTableId].
+    ///
+    /// # Panics
+    /// Panics if the given id does not exist.
     pub(crate) async fn table_row_iterator(
         &mut self,
         id: PermanentTableId,
     ) -> Result<impl Iterator<Item = Vec<AnyDataValue>> + '_, Error> {
         Ok(self.database.table_row_iterator(id).await?)
+    }
+
+    /// Provide an iterator over the rows of the table with the given [PermanentTableId].
+    /// This function assumes that the table exists in-memory in the default column order.
+    ///
+    /// # Panics
+    /// Panics if trie does not exist in default column order in memory or the given id does not exist.
+    pub(crate) fn table_row_iterator_inmemory(
+        &self,
+        id: PermanentTableId,
+    ) -> Result<impl Iterator<Item = Vec<AnyDataValue>> + '_, Error> {
+        Ok(self.database.table_row_iterator_inmemory(id)?)
     }
 
     /// Get a an iterator over the rows of a trie
@@ -734,6 +749,31 @@ impl TableManager {
         let mut skipped: usize = 0;
         for (step, id) in &handler.single {
             if let Some(row_index) = self.database.table_row_position(*id, row).await {
+                return Some((skipped + row_index, *step));
+            }
+
+            skipped += self.database.count_rows_in_memory(*id);
+        }
+
+        None
+    }
+
+    /// Return an id for a given row and predicate and the step it was derived in, if it exists.
+    ///
+    /// Returns `None` if there is no such row for this predicate.
+    ///
+    /// # Panics
+    /// Panics if any subtable of the predicate is not in memory.
+    pub fn table_row_id_inmemory(
+        &self,
+        predicate: &Tag,
+        row: &[AnyDataValue],
+    ) -> Option<(usize, usize)> {
+        let handler = self.predicate_subtables.get(predicate)?;
+
+        let mut skipped: usize = 0;
+        for (step, id) in &handler.single {
+            if let Some(row_index) = self.database.table_row_position_inmemory(*id, row) {
                 return Some((skipped + row_index, *step));
             }
 
