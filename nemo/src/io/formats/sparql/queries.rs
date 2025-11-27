@@ -625,9 +625,17 @@ fn standardize_variables(
     let mut result = HashMap::new();
 
     for (count, variable) in join_variables.iter().enumerate() {
+        if result.contains_key(variable) {
+            continue;
+        }
+
         result.insert(
             variable.clone(),
             Variable::new_unchecked(format!("j{count}")),
+        );
+        result.insert(
+            Variable::new_unchecked(format!("{}Label", variable.as_str())),
+            Variable::new_unchecked(format!("j{count}Label")),
         );
     }
 
@@ -641,6 +649,10 @@ fn standardize_variables(
         result.insert(
             variable.clone(),
             Variable::new_unchecked(format!("{prefix}{count}")),
+        );
+        result.insert(
+            Variable::new_unchecked(format!("{}Label", variable.as_str())),
+            Variable::new_unchecked(format!("{prefix}{count}Label")),
         );
         count += 1;
     }
