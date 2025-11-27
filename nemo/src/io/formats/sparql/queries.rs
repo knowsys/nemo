@@ -633,6 +633,7 @@ fn standardize_variables(
             variable.clone(),
             Variable::new_unchecked(format!("j{count}")),
         );
+        // TODO: what if we hit the `Label`-suffixed version first?
         result.insert(
             Variable::new_unchecked(format!("{}Label", variable.as_str())),
             Variable::new_unchecked(format!("j{count}Label")),
@@ -650,6 +651,7 @@ fn standardize_variables(
             variable.clone(),
             Variable::new_unchecked(format!("{prefix}{count}")),
         );
+        // TODO: what if we hit the `Label`-suffixed version first?
         result.insert(
             Variable::new_unchecked(format!("{}Label", variable.as_str())),
             Variable::new_unchecked(format!("{prefix}{count}Label")),

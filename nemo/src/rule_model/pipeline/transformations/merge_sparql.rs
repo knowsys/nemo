@@ -97,11 +97,12 @@ impl ProgramTransformation for TransformationMergeSparql {
 
                         import.push_constants(&equalities);
                         let equalities = HashSet::<_>::from_iter(equalities.into_iter());
-                        let is_still_incremental = head_variables
-                            != import
-                                .import_directive()
-                                .expected_output_arity()
-                                .unwrap_or(head_variables + 1);
+                        let is_still_incremental = equalities.is_empty()
+                            || head_variables
+                                != import
+                                    .import_directive()
+                                    .expected_output_arity()
+                                    .unwrap_or(head_variables + 1);
 
                         let mut rule = rule.clone();
                         rule.imports_mut().clear();
@@ -128,11 +129,12 @@ impl ProgramTransformation for TransformationMergeSparql {
                         .flatten()
                     {
                         let equalities = HashSet::<_>::from_iter(equalities.into_iter());
-                        let is_still_incremental = head_variables
-                            != merged
-                                .import_directive()
-                                .expected_output_arity()
-                                .unwrap_or(head_variables + 1);
+                        let is_still_incremental = equalities.is_empty()
+                            || head_variables
+                                != merged
+                                    .import_directive()
+                                    .expected_output_arity()
+                                    .unwrap_or(head_variables + 1);
 
                         let mut rule = rule.clone();
                         rule.imports_mut().clear();
