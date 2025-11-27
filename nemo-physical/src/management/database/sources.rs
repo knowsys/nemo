@@ -50,7 +50,11 @@ impl TableProvider for SimpleTable {
         Ok(())
     }
 
-    fn arity(&self) -> usize {
+    fn output_arity(&self) -> usize {
+        self.arity
+    }
+
+    fn input_arity(&self) -> usize {
         self.arity
     }
 }

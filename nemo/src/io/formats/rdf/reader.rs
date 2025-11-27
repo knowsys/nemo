@@ -356,7 +356,11 @@ impl TableProvider for RdfReader {
         }
     }
 
-    fn arity(&self) -> usize {
+    fn output_arity(&self) -> usize {
+        self.value_formats.arity()
+    }
+
+    fn input_arity(&self) -> usize {
         self.value_formats.arity()
     }
 }

@@ -40,12 +40,12 @@ impl TableStorage {
         let arity = sources
             .first()
             .expect("Function assumes that at least one source is provided")
-            .arity();
+            .input_arity();
         let mut tuple_writer = TupleWriter::new(dictionary, arity);
 
         for source in sources {
             log::info!("Loading source {source:?}");
-            debug_assert!(source.arity() == arity);
+            debug_assert!(source.input_arity() == arity);
 
             source.provide_table_data(&mut tuple_writer).await?;
         }
@@ -101,7 +101,7 @@ impl TableStorage {
             TableStorage::FromSources(sources) => sources
                 .first()
                 .expect("At least one source must be present")
-                .arity(),
+                .output_arity(),
             TableStorage::Empty => 0,
         }
     }

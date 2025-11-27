@@ -162,7 +162,11 @@ impl<T: Read> TableProvider for JsonReader<T> {
         Ok(())
     }
 
-    fn arity(&self) -> usize {
+    fn output_arity(&self) -> usize {
+        3
+    }
+
+    fn input_arity(&self) -> usize {
         3
     }
 }

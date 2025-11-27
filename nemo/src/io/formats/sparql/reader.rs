@@ -272,14 +272,14 @@ impl SparqlReader {
                 pattern,
                 base_iri,
             } => {
-                let (pattern, patterns) = pattern_with_filters(pattern, &self.patterns);
+                let (pattern, _patterns) = pattern_with_filters(pattern, &self.patterns);
                 (
                     Query::Select {
                         dataset: dataset.clone(),
                         pattern,
                         base_iri: base_iri.clone(),
                     },
-                    patterns,
+                    self.patterns.clone(),
                 )
             }
             q @ Query::Construct { .. } | q @ Query::Describe { .. } | q @ Query::Ask { .. } => {
@@ -297,8 +297,17 @@ impl ByteSized for SparqlReader {
 
 #[async_trait::async_trait(?Send)]
 impl TableProvider for SparqlReader {
-    fn arity(&self) -> usize {
+    fn input_arity(&self) -> usize {
         self.builder.expected_arity().unwrap_or_default()
+    }
+
+    fn output_arity(&self) -> usize {
+        if let Some(pattern) = self.patterns.first() &&
+        let Some(arity) = pattern.expected_arity() {
+            return arity;
+        }
+
+        self.input_arity()
     }
 
     async fn provide_table_data(

@@ -34,6 +34,9 @@ pub trait TableProvider: std::fmt::Debug + ByteSized {
         false
     }
 
-    /// Return the number of columns of this table.
-    fn arity(&self) -> usize;
+    /// Return the number of (output) columns of this table.
+    fn output_arity(&self) -> usize;
+
+    /// Return the number of (input) columns of this table.
+    fn input_arity(&self) -> usize;
 }

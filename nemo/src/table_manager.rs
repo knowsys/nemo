@@ -474,7 +474,7 @@ impl TableManager {
     /// Predicate must be registered before calling this function.
     pub(crate) fn add_edb(&mut self, predicate: Tag, sources: Vec<TableSource>) {
         let arity = if let Some(source) = sources.first() {
-            source.arity()
+            source.output_arity()
         } else {
             return;
         };
