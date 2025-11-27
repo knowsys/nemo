@@ -1,16 +1,15 @@
 //! Import and export directives are a direct representation of the syntactic information
 //! given in rule files.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use nemo_physical::datavalues::AnyDataValue;
 use specification::ImportExportSpec;
 
 use crate::{
     io::{
-        self,
         format_builder::{AnyImportExportBuilder, ImportExportBuilder, SupportedFormatTag},
-        formats::sparql::queries::merge_queries,
+        formats::sparql::queries::{ground_term_from_datavalue, merge_queries, push_constants},
     },
     rule_model::{
         components::rule::Rule, error::ValidationReport, origin::Origin,
@@ -27,7 +26,7 @@ use super::{
     term::{
         Term,
         operation::Operation,
-        primitive::{Primitive, variable::Variable},
+        primitive::{ground::GroundTerm, variable::Variable},
     },
 };
 
@@ -176,11 +175,48 @@ impl ImportDirective {
         })
     }
 
+    pub(crate) fn push_constants(
+        &mut self,
+        variables: &[Variable],
+        constants: &HashMap<Variable, GroundTerm>,
+    ) {
+        let Some(builder) = self.builder() else {
+            return;
+        };
+        match builder.format() {
+            SupportedFormatTag::Sparql(..) => {
+                let AnyImportExportBuilder::Sparql(sparql) = builder.inner else {
+                    unreachable!("inner builder must be a SPARQL builder")
+                };
+
+                let mut the_constants = HashMap::new();
+                for (idx, variable) in variables.iter().enumerate() {
+                    if let Some(term) = constants.get(variable) {
+                        let Some(ground_term) = ground_term_from_datavalue(&term.value()) else {
+                            return;
+                        };
+                        the_constants.insert(idx, ground_term);
+                    }
+                }
+
+                let query = push_constants(&sparql.query, &the_constants);
+
+                for (key, value) in &mut self.0.spec.map {
+                    if key.value() == QUERY {
+                        *value = Term::ground(AnyDataValue::new_plain_string(query.to_string()));
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
     pub(crate) fn try_merge(
         &self,
         left_variables: &[Variable],
         right: &Self,
         right_variables: &[Variable],
+        constants: &HashMap<Variable, GroundTerm>,
     ) -> Option<(Self, Vec<Variable>)> {
         let left_builder = self.builder()?;
         let right_builder = right.builder()?;
@@ -201,24 +237,39 @@ impl ImportDirective {
                 let left_set = left_variables.iter().collect::<HashSet<_>>();
                 let right_set = right_variables.iter().collect::<HashSet<_>>();
                 let join_variables = left_set.intersection(&right_set).collect::<HashSet<_>>();
-                let left_positions =
-                    left_variables
-                        .iter()
-                        .enumerate()
-                        .filter_map(|(idx, variable)| {
-                            join_variables.contains(&variable).then_some(idx)
-                        });
-                let right_positions =
-                    left_variables
-                        .iter()
-                        .enumerate()
-                        .filter_map(|(idx, variable)| {
-                            join_variables.contains(&variable).then_some(idx)
-                        });
-                let join_positions = left_positions.zip(right_positions).collect::<Vec<_>>();
+                let mut left_positions = Vec::new();
+                let mut left_constants = HashMap::new();
+                let mut right_positions = Vec::new();
+                let mut right_constants = HashMap::new();
 
-                let query =
-                    merge_queries(&left_sparql.query, &right_sparql.query, &join_positions)?;
+                for (idx, variable) in left_variables.iter().enumerate() {
+                    if let Some(term) = constants.get(variable) {
+                        left_constants.insert(idx, ground_term_from_datavalue(&term.value())?);
+                    } else if join_variables.contains(&variable) {
+                        left_positions.push(idx);
+                    }
+                }
+
+                for (idx, variable) in right_variables.iter().enumerate() {
+                    if let Some(term) = constants.get(variable) {
+                        right_constants.insert(idx, ground_term_from_datavalue(&term.value())?);
+                    } else if join_variables.contains(&variable) {
+                        right_positions.push(idx);
+                    }
+                }
+
+                let join_positions = left_positions
+                    .into_iter()
+                    .zip(right_positions)
+                    .collect::<Vec<_>>();
+
+                let query = merge_queries(
+                    &left_sparql.query,
+                    &right_sparql.query,
+                    &join_positions,
+                    &left_constants,
+                    &right_constants,
+                )?;
 
                 let mut result = self.clone();
 
