@@ -80,6 +80,11 @@
               nemo-wasm-node
               nemo-web
               nemo-vscode-extension
+
+              nemo-no-incremental
+              nemo-only-incremental
+              nemo-no-merge
+              nemo-no-cartesian
               ;
 
             nodePackages = lib.makeExtensible (lib.extends pkgs.nodePackages prev.nodePackages);
@@ -249,7 +254,7 @@
               crateArgs
               // {
                 inherit pname;
-                cargoExtraArgs = "--package ${crate}";
+                cargoExtraArgs = "${args.cargoExtraArgs ? ""} --package ${crate}";
               }
               // args
             );
@@ -307,6 +312,90 @@
               pname = "nemo";
               crate = "nemo-cli";
 
+              cargoExtraArgs = "--features import-incremental --features import-cartesian --features import-merge";
+              nativeBuildInputs =
+                crateArgs.nativeBuildInputs ++ (lib.attrValues { inherit (pkgs) installShellFiles; });
+
+              postInstall = ''
+                installManPage ${nemo-cli-manpages}/nmo.1
+                installShellCompletion \
+                  --fish ${nemo-cli-shell-completions}/nmo.fish \
+                  --bash ${nemo-cli-shell-completions}/nmo.bash \
+                  --zsh ${nemo-cli-shell-completions}/_nmo
+              '';
+
+              meta = crateArgs.meta // {
+                mainProgram = "nmo";
+              };
+            };
+
+            nemo-no-merge = buildCrate {
+              pname = "nemo";
+              crate = "nemo-cli";
+
+              cargoExtraArgs = "--features import-incremental --features import-cartesian";
+              nativeBuildInputs =
+                crateArgs.nativeBuildInputs ++ (lib.attrValues { inherit (pkgs) installShellFiles; });
+
+              postInstall = ''
+                installManPage ${nemo-cli-manpages}/nmo.1
+                installShellCompletion \
+                  --fish ${nemo-cli-shell-completions}/nmo.fish \
+                  --bash ${nemo-cli-shell-completions}/nmo.bash \
+                  --zsh ${nemo-cli-shell-completions}/_nmo
+              '';
+
+              meta = crateArgs.meta // {
+                mainProgram = "nmo";
+              };
+            };
+
+            nemo-no-cartesian = buildCrate {
+              pname = "nemo";
+              crate = "nemo-cli";
+
+              cargoExtraArgs = "--features import-incremental --features import-merge";
+              nativeBuildInputs =
+                crateArgs.nativeBuildInputs ++ (lib.attrValues { inherit (pkgs) installShellFiles; });
+
+              postInstall = ''
+                installManPage ${nemo-cli-manpages}/nmo.1
+                installShellCompletion \
+                  --fish ${nemo-cli-shell-completions}/nmo.fish \
+                  --bash ${nemo-cli-shell-completions}/nmo.bash \
+                  --zsh ${nemo-cli-shell-completions}/_nmo
+              '';
+
+              meta = crateArgs.meta // {
+                mainProgram = "nmo";
+              };
+            };
+
+            nemo-no-incremental = buildCrate {
+              pname = "nemo";
+              crate = "nemo-cli";
+
+              nativeBuildInputs =
+                crateArgs.nativeBuildInputs ++ (lib.attrValues { inherit (pkgs) installShellFiles; });
+
+              postInstall = ''
+                installManPage ${nemo-cli-manpages}/nmo.1
+                installShellCompletion \
+                  --fish ${nemo-cli-shell-completions}/nmo.fish \
+                  --bash ${nemo-cli-shell-completions}/nmo.bash \
+                  --zsh ${nemo-cli-shell-completions}/_nmo
+              '';
+
+              meta = crateArgs.meta // {
+                mainProgram = "nmo";
+              };
+            };
+            nemo-only-incremental = buildCrate {
+              pname = "nemo";
+              crate = "nemo-cli";
+
+              cargoExtraArgs = "--features import-incremental";
+
               nativeBuildInputs =
                 crateArgs.nativeBuildInputs ++ (lib.attrValues { inherit (pkgs) installShellFiles; });
 
@@ -339,7 +428,9 @@
               };
             };
 
-            nemo-language-server = buildCrate { crate = "nemo-language-server"; };
+            nemo-language-server = buildCrate {
+              crate = "nemo-language-server";
+            };
 
             nemo-python = buildCrate {
               crate = "nemo-python";
