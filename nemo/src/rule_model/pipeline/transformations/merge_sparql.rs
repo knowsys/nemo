@@ -41,12 +41,37 @@ impl ProgramTransformation for TransformationMergeSparql {
         log::debug!("merging SPARQL queries");
         let mut commit = program.fork();
 
+        let mut ineligible = HashSet::new();
+        for fact in program.facts() {
+            ineligible.insert(fact.predicate().clone());
+        }
+
+        let mut defining_rules = HashMap::new();
+        for rule in program.rules() {
+            for atom in rule.head() {
+                defining_rules
+                    .entry(atom.predicate())
+                    .and_modify(|count| *count += 1)
+                    .or_insert(1_usize);
+            }
+        }
+        ineligible.extend(
+            defining_rules
+                .into_iter()
+                .filter_map(|(predicate, count)| (count > 1).then_some(predicate)),
+        );
+
         for statement in program.statements() {
             match statement {
                 Statement::Rule(rule) => {
                     let imports = rule.imports().collect::<Vec<_>>();
 
-                    if imports.is_empty() {
+                    if rule
+                        .head()
+                        .iter()
+                        .any(|atom| ineligible.contains(&atom.predicate()))
+                        || imports.is_empty()
+                    {
                         // nothing to merge
                         commit.keep(statement);
                         continue;
