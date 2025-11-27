@@ -13,9 +13,7 @@ use nemo_physical::{
 use oxrdf::{Literal, NamedNode, Variable};
 use spargebra::{
     Query,
-    algebra::{
-        AggregateExpression, Expression, GraphPattern, OrderExpression, PropertyPathExpression,
-    },
+    algebra::{AggregateExpression, Expression, GraphPattern, OrderExpression},
     term::{GroundTerm, NamedNodePattern, TermPattern, TriplePattern},
 };
 
@@ -568,15 +566,52 @@ fn rename_in_graph_pattern(
     }
 }
 
+fn bind_constants(
+    pattern: &GraphPattern,
+    variables: &[Variable],
+    constants: &HashMap<usize, GroundTerm>,
+) -> GraphPattern {
+    let mut constant_variables = Vec::new();
+    let mut constant_terms = Vec::new();
+
+    for (idx, term) in constants {
+        constant_variables.push(variables[*idx].clone());
+        constant_terms.push(Some(term.clone()));
+    }
+
+    GraphPattern::Join {
+        left: Box::new(pattern.clone()),
+        right: Box::new(GraphPattern::Values {
+            variables: constant_variables,
+            bindings: vec![constant_terms],
+        }),
+    }
+}
+
 fn rename_variables_in_project_pattern(
     pattern: &GraphPattern,
     mapping: &HashMap<Variable, Variable>,
+    constants: &HashMap<usize, GroundTerm>,
 ) -> Option<(GraphPattern, Vec<Variable>)> {
     match pattern {
         GraphPattern::Project { inner, variables } => {
             let inner = rename_in_graph_pattern(inner, mapping);
+            let renamed_variables = rename_variables(variables, mapping).collect::<Vec<_>>();
 
-            Some((inner, rename_variables(variables, mapping).collect()))
+            Some((
+                bind_constants(&inner, &renamed_variables, constants),
+                renamed_variables
+                    .into_iter()
+                    .enumerate()
+                    .filter_map(|(idx, variable)| {
+                        if constants.contains_key(&idx) {
+                            None
+                        } else {
+                            Some(variable)
+                        }
+                    })
+                    .collect(),
+            ))
         }
         _ => None,
     }
@@ -617,6 +652,8 @@ pub(crate) fn merge_project_patterns(
     left: &GraphPattern,
     right: &GraphPattern,
     join_positions: &[(usize, usize)],
+    left_constants: &HashMap<usize, GroundTerm>,
+    right_constants: &HashMap<usize, GroundTerm>,
 ) -> Option<GraphPattern> {
     match (left, right) {
         (
@@ -644,9 +681,9 @@ pub(crate) fn merge_project_patterns(
             let right_mapping = standardize_variables("r", &right_variables, &right_join_variables);
 
             let (left_pattern, left_variables) =
-                rename_variables_in_project_pattern(left, &left_mapping)?;
+                rename_variables_in_project_pattern(left, &left_mapping, &left_constants)?;
             let (right_pattern, right_variables) =
-                rename_variables_in_project_pattern(right, &right_mapping)?;
+                rename_variables_in_project_pattern(right, &right_mapping, &right_constants)?;
             let inner = Box::new(GraphPattern::Join {
                 left: Box::new(left_pattern),
                 right: Box::new(right_pattern),
@@ -671,6 +708,8 @@ pub(crate) fn merge_queries(
     left: &Query,
     right: &Query,
     join_positions: &[(usize, usize)],
+    left_constants: &HashMap<usize, GroundTerm>,
+    right_constants: &HashMap<usize, GroundTerm>,
 ) -> Option<Query> {
     match (left, right) {
         (
@@ -686,7 +725,13 @@ pub(crate) fn merge_queries(
             },
         ) if dataset_left == dataset_right && base_left == base_right => Some(Query::Select {
             dataset: dataset_left.clone(),
-            pattern: merge_project_patterns(pattern_left, pattern_right, join_positions)?,
+            pattern: merge_project_patterns(
+                pattern_left,
+                pattern_right,
+                join_positions,
+                left_constants,
+                right_constants,
+            )?,
             base_iri: base_left.clone(),
         }),
         (
@@ -702,9 +747,60 @@ pub(crate) fn merge_queries(
             },
         ) if dataset_left == dataset_right && base_left == base_right => Some(Query::Ask {
             dataset: dataset_left.clone(),
-            pattern: merge_project_patterns(pattern_left, pattern_right, join_positions)?,
+            pattern: merge_project_patterns(
+                pattern_left,
+                pattern_right,
+                join_positions,
+                left_constants,
+                right_constants,
+            )?,
             base_iri: base_left.clone(),
         }),
         _ => None,
+    }
+}
+
+pub(crate) fn push_constants_in_project_pattern(
+    pattern: &GraphPattern,
+    constants: &HashMap<usize, GroundTerm>,
+) -> Option<GraphPattern> {
+    match pattern {
+        GraphPattern::Project { .. } => {
+            let mapping = standardize_variables("v", &variables_in_pattern(pattern), &[]);
+            let (inner, variables) =
+                rename_variables_in_project_pattern(pattern, &mapping, constants)?;
+
+            Some(GraphPattern::Project {
+                inner: Box::new(inner),
+                variables,
+            })
+        }
+        _ => None,
+    }
+}
+
+pub(crate) fn push_constants(query: &Query, constants: &HashMap<usize, GroundTerm>) -> Query {
+    match query {
+        Query::Select {
+            dataset,
+            pattern,
+            base_iri,
+        } => Query::Select {
+            dataset: dataset.clone(),
+            pattern: push_constants_in_project_pattern(pattern, constants)
+                .unwrap_or_else(|| pattern.clone()),
+            base_iri: base_iri.clone(),
+        },
+        Query::Ask {
+            dataset,
+            pattern,
+            base_iri,
+        } => Query::Ask {
+            dataset: dataset.clone(),
+            pattern: push_constants_in_project_pattern(pattern, constants)
+                .unwrap_or_else(|| pattern.clone()),
+            base_iri: base_iri.clone(),
+        },
+        _ => query.clone(),
     }
 }

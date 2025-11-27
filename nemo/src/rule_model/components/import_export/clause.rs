@@ -1,13 +1,15 @@
 //! This module defines [ImportClause].
 
-use std::fmt::Display;
+use std::{collections::HashMap, fmt::Display};
 
 use crate::rule_model::{
     components::{
         ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent,
         IterableVariables, ProgramComponent, ProgramComponentKind, component_iterator,
-        component_iterator_mut, import_export::ImportDirective, tag::Tag,
-        term::primitive::variable::Variable,
+        component_iterator_mut,
+        import_export::ImportDirective,
+        tag::Tag,
+        term::primitive::{ground::GroundTerm, variable::Variable},
     },
     error::ValidationReport,
     origin::Origin,
@@ -56,17 +58,34 @@ impl ImportClause {
         }
     }
 
-    pub(crate) fn try_merge(left: Self, right: Self) -> Option<Self> {
+    pub(crate) fn try_merge(
+        left: Self,
+        right: Self,
+        equalities: &HashMap<Variable, GroundTerm>,
+    ) -> Option<Self> {
         let (import, variables) =
             left.import
-                .try_merge(&left.variables, &right.import, &right.variables)?;
+                .try_merge(&left.variables, &right.import, &right.variables, equalities)?;
 
         Some(Self {
             origin: Origin::Component(Box::new(left)), // TODO: track reference to [right] as well
             id: ProgramComponentId::default(),
             import,
-            variables,
+            variables: variables
+                .into_iter()
+                .filter(|variable| !equalities.contains_key(variable))
+                .collect(),
         })
+    }
+
+    pub(crate) fn push_constants(&mut self, equalities: &HashMap<Variable, GroundTerm>) {
+        self.import.push_constants(&self.variables, equalities);
+        self.variables = self
+            .variables
+            .iter()
+            .filter(|variable| !equalities.contains_key(variable))
+            .cloned()
+            .collect();
     }
 
     /// Return a reference to the output variables.
