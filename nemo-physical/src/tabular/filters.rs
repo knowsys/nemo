@@ -1,6 +1,6 @@
 //! This module defines [FilterTransformPattern].
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::function::{evaluation::StackProgram, tree::FunctionTree};
 
@@ -58,5 +58,12 @@ impl FilterTransformPattern {
     /// Return the underlying function for the filter part of this pattern.
     pub fn filter_function(&self) -> &FunctionTree<OperationColumnMarker> {
         &self.filter_function
+    }
+
+    /// Estimate the arity from the transformations
+    pub fn expected_arity(&self) -> Option<usize> {
+        let positions = self.transformations.iter().map(|position| position.position).collect::<HashSet<_>>().len();
+
+        (positions > 0).then_some(positions)
     }
 }

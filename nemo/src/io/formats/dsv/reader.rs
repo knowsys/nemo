@@ -150,7 +150,11 @@ impl<T: BufRead> TableProvider for DsvReader<T> {
         self.read(tuple_writer)
     }
 
-    fn arity(&self) -> usize {
+    fn output_arity(&self) -> usize {
+        self.value_formats.arity()
+    }
+
+    fn input_arity(&self) -> usize {
         self.value_formats.arity()
     }
 }
