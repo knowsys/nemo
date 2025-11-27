@@ -1,14 +1,22 @@
 //! This module defines [TransformationMergeSparql].
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use itertools::Itertools;
 
 use crate::rule_model::{
     components::{
-        import_export::clause::ImportClause,
+        IterableVariables,
+        atom::Atom,
+        import_export::{ImportDirective, clause::ImportClause},
+        literal::Literal,
+        rule::Rule,
         statement::Statement,
-        term::{Term, operation::operation_kind::OperationKind, primitive::Primitive},
+        term::{
+            Term,
+            operation::{Operation, operation_kind::OperationKind},
+            primitive::{Primitive, ground::GroundTerm, variable::Variable},
+        },
     },
     error::ValidationReport,
     programs::{ProgramRead, ProgramWrite, handle::ProgramHandle},
@@ -36,50 +44,47 @@ impl ProgramTransformation for TransformationMergeSparql {
                         continue;
                     }
 
-                    let mut equalities = rule
+                    let head_variables = rule
+                        .head()
+                        .iter()
+                        .flat_map(|atom| atom.variables())
+                        .filter(|variable| variable.is_universal())
+                        .cloned()
+                        .collect::<HashSet<_>>()
+                        .len();
+                    let equalities = rule
                         .body_operations()
-                        .filter_map(|operation| {
-                            if operation.operation_kind() != OperationKind::Equal {
-                                return None;
-                            }
-
-                            let (left, right) = operation.terms().collect_tuple()?;
-
-                            match (left, right) {
-                                (Term::Primitive(left), Term::Primitive(right)) => {
-                                    match (left, right) {
-                                        (
-                                            Primitive::Variable(variable),
-                                            Primitive::Ground(ground_term),
-                                        )
-                                        | (
-                                            Primitive::Ground(ground_term),
-                                            Primitive::Variable(variable),
-                                        ) => Some((variable.clone(), ground_term.clone())),
-                                        _ => None,
-                                    }
-                                }
-                                _ => None,
-                            }
-                        })
+                        .filter_map(try_equality_from_operation)
                         .collect::<HashMap<_, _>>();
-
-                    // TODO hack: drop one equality so that we always have a binding.
-                    if let Some(key) = equalities.keys().next().cloned() {
-                        equalities.remove(&key);
-                    }
 
                     if imports.len() == 1 {
                         // nothing to merge, but push constants
 
                         let mut import = imports[0].clone();
+
                         import.push_constants(&equalities);
+                        let equalities = HashSet::<_>::from_iter(equalities.into_iter());
+                        let is_still_incremental = head_variables
+                            != import
+                                .import_directive()
+                                .expected_output_arity()
+                                .unwrap_or(head_variables + 1);
 
                         let mut rule = rule.clone();
                         rule.imports_mut().clear();
-                        rule.imports_mut().push(import);
+
+                        if is_still_incremental {
+                            rule.imports_mut().push(import);
+                        } else {
+                            commit.add_import(unincremental_import(
+                                &mut rule,
+                                &import,
+                                &equalities,
+                            ));
+                        }
 
                         commit.add_rule(rule);
+
                         continue;
                     }
 
@@ -89,10 +94,25 @@ impl ProgramTransformation for TransformationMergeSparql {
                         .try_reduce(|left, right| ImportClause::try_merge(left, right, &equalities))
                         .flatten()
                     {
-                        let mut rule = rule.clone();
+                        let equalities = HashSet::<_>::from_iter(equalities.into_iter());
+                        let is_still_incremental = head_variables
+                            != merged
+                                .import_directive()
+                                .expected_output_arity()
+                                .unwrap_or(head_variables + 1);
 
+                        let mut rule = rule.clone();
                         rule.imports_mut().clear();
-                        rule.imports_mut().push(merged);
+
+                        if is_still_incremental {
+                            rule.imports_mut().push(merged);
+                        } else {
+                            commit.add_import(unincremental_import(
+                                &mut rule,
+                                &merged,
+                                &equalities,
+                            ));
+                        }
 
                         commit.add_rule(rule);
                     } else {
@@ -105,4 +125,54 @@ impl ProgramTransformation for TransformationMergeSparql {
 
         commit.submit()
     }
+}
+
+fn try_equality_from_operation(operation: &Operation) -> Option<(Variable, GroundTerm)> {
+    if operation.operation_kind() != OperationKind::Equal {
+        return None;
+    }
+
+    let (left, right) = operation.terms().collect_tuple()?;
+
+    match (left, right) {
+        (Term::Primitive(left), Term::Primitive(right)) => match (left, right) {
+            (Primitive::Variable(variable), Primitive::Ground(ground_term))
+            | (Primitive::Ground(ground_term), Primitive::Variable(variable)) => {
+                Some((variable.clone(), ground_term.clone()))
+            }
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+fn unincremental_import(
+    rule: &mut Rule,
+    import: &ImportClause,
+    equalities: &HashSet<(Variable, GroundTerm)>,
+) -> ImportDirective {
+    let directive = import.import_directive().clone();
+    let mut body = Vec::new();
+
+    for literal in rule.body() {
+        if let Literal::Operation(operation) = literal
+            && let Some(equality) = try_equality_from_operation(operation)
+            && equalities.contains(&equality)
+        {
+            continue;
+        }
+
+        body.push(literal.clone())
+    }
+
+    body.push(Literal::Positive(Atom::new(
+        directive.predicate().clone(),
+        import
+            .variables()
+            .map(|variable| Term::Primitive(Primitive::Variable(variable.clone()))),
+    )));
+
+    *rule.body_mut() = body;
+
+    directive
 }
