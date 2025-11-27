@@ -145,8 +145,14 @@ impl GeneratorJoinCartesian {
                 Self { variables, origins }
             }
 
+            #[cfg(not(feature = "import-cartesian"))]
+            pub fn compatible(&self, other: &Self) -> bool {
+                true
+            }
+
             /// Check whether this and another [Partition]
             /// share variables.
+            #[cfg(feature = "import-cartesian")]
             pub fn compatible(&self, other: &Self) -> bool {
                 self.variables
                     .intersection(&other.variables)

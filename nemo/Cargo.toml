@@ -13,6 +13,9 @@ repository.workspace = true
 # Allows building for web assembly environments
 # Enables the "js" feature of the "getrandom" crate
 js = ["getrandom/js"]
+import-incremental = []
+import-cartesian = []
+import-merge = []
 
 [dependencies]
 nemo-physical = { path = "../nemo-physical", default-features = false }

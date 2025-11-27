@@ -237,6 +237,12 @@ impl TransformationIncremental {
 }
 
 impl ProgramTransformation for TransformationIncremental {
+    #[cfg(not(feature = "import-incremental"))]
+    fn apply(self, program: &ProgramHandle) -> Result<ProgramHandle, ValidationReport> {
+        program.fork_full().submit()
+    }
+
+    #[cfg(feature = "import-incremental")]
     fn apply(self, program: &ProgramHandle) -> Result<ProgramHandle, ValidationReport> {
         let mut commit = program.fork();
 
