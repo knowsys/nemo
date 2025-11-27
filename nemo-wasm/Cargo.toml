@@ -23,7 +23,7 @@ unexpected_cfgs = { level = "warn", check-cfg = ['cfg(wasm_bindgen_unstable_test
 async-trait = "0.1.89"
 console_error_panic_hook = "0.1.7"
 js-sys = "0.3.63"
-nemo = { path = "../nemo", features = [ "js" ], default-features = false }
+nemo = { path = "../nemo", features = [ "js", "import-incremental", "import-cartesian", "import-merge" ], default-features = false }
 nemo-physical = { path = "../nemo-physical", default-features = false }
 nemo-language-server = { path = "../nemo-language-server", features = [ "js" ], default-features = false}
 futures = "0.3.21"

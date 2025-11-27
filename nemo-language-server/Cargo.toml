@@ -23,7 +23,7 @@ tokio = ["dep:tokio"]
 [dependencies]
 anyhow = "1.0"
 line-index = "0.1.1"
-nemo = { path = "../nemo", default-features = false }
+nemo = { path = "../nemo", default-features = false, features = [ "import-incremental", "import-cartesian", "import-merge" ] }
 futures = "0.3.21"
 strum = "0.27.1"
 strum_macros = "0.27.1"
