@@ -56,6 +56,10 @@ pub(crate) fn ground_term_from_datavalue(value: &AnyDataValue) -> Option<GroundT
 }
 
 pub(crate) fn pattern_with_bindings(pattern: &GraphPattern, bindings: &[Bindings]) -> GraphPattern {
+    if bindings.is_empty() {
+        return pattern.clone();
+    }
+
     modify_outermost_projection(pattern, |inner, variables| {
         let mut previous = inner.clone();
 
@@ -376,7 +380,7 @@ fn rename_in_expression(
         Expression::In(expression, expressions) => Expression::In(
             Box::new(rename_in_expression(expression, mapping)),
             expressions
-                .into_iter()
+                .iter()
                 .map(|expression| rename_in_expression(expression, mapping))
                 .collect(),
         ),
@@ -421,14 +425,14 @@ fn rename_in_expression(
         ),
         Expression::Coalesce(expressions) => Expression::Coalesce(
             expressions
-                .into_iter()
+                .iter()
                 .map(|expression| rename_in_expression(expression, mapping))
                 .collect(),
         ),
         Expression::FunctionCall(function, expressions) => Expression::FunctionCall(
             function.clone(),
             expressions
-                .into_iter()
+                .iter()
                 .map(|expression| rename_in_expression(expression, mapping))
                 .collect(),
         ),
@@ -515,7 +519,7 @@ fn rename_in_graph_pattern(
         GraphPattern::OrderBy { inner, expression } => GraphPattern::OrderBy {
             inner: Box::new(rename_in_graph_pattern(inner, mapping)),
             expression: expression
-                .into_iter()
+                .iter()
                 .map(|expression| match expression {
                     OrderExpression::Asc(expression) => {
                         OrderExpression::Asc(rename_in_expression(expression, mapping))
@@ -543,7 +547,7 @@ fn rename_in_graph_pattern(
         } => GraphPattern::Slice {
             inner: Box::new(rename_in_graph_pattern(inner, mapping)),
             start: *start,
-            length: length.clone(),
+            length: *length,
         },
         GraphPattern::Group {
             inner,
@@ -577,6 +581,10 @@ fn bind_constants(
     for (idx, term) in constants {
         constant_variables.push(variables[*idx].clone());
         constant_terms.push(Some(term.clone()));
+    }
+
+    if constant_terms.is_empty() {
+        return pattern.clone();
     }
 
     GraphPattern::Join {
@@ -695,9 +703,9 @@ pub(crate) fn merge_project_patterns(
             let right_mapping = standardize_variables("r", &right_variables, &right_join_variables);
 
             let (left_pattern, left_variables) =
-                rename_variables_in_project_pattern(left, &left_mapping, &left_constants)?;
+                rename_variables_in_project_pattern(left, &left_mapping, left_constants)?;
             let (right_pattern, right_variables) =
-                rename_variables_in_project_pattern(right, &right_mapping, &right_constants)?;
+                rename_variables_in_project_pattern(right, &right_mapping, right_constants)?;
             let inner = Box::new(GraphPattern::Join {
                 left: Box::new(left_pattern),
                 right: Box::new(right_pattern),

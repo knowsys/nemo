@@ -1,5 +1,6 @@
 //! Reader for resources of type SPARQL (SPARQL query language for RDF).
 
+use std::fmt::Display;
 use std::io::Read;
 
 use itertools::Itertools;
@@ -302,8 +303,9 @@ impl TableProvider for SparqlReader {
     }
 
     fn output_arity(&self) -> usize {
-        if let Some(pattern) = self.patterns.first() &&
-        let Some(arity) = pattern.expected_arity() {
+        if let Some(pattern) = self.patterns.first()
+            && let Some(arity) = pattern.expected_arity()
+        {
             return arity;
         }
 
@@ -336,5 +338,15 @@ impl TableProvider for SparqlReader {
         tuple_writer.set_patterns(patterns);
         self.load_from_bindings(&query, bindings, tuple_writer)
             .await
+    }
+}
+
+impl Display for SparqlReader {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "SPARQL query to endpoint: {}\n{}",
+            self.builder.endpoint, self.builder.query
+        )
     }
 }

@@ -44,7 +44,7 @@ impl TableStorage {
         let mut tuple_writer = TupleWriter::new(dictionary, arity);
 
         for source in sources {
-            log::info!("Loading source {source:?}");
+            log::info!("Loading source: {source}");
             debug_assert!(source.input_arity() == arity);
 
             source.provide_table_data(&mut tuple_writer).await?;

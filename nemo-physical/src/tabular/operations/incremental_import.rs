@@ -109,12 +109,17 @@ impl GeneratorIncrementalImport {
             provider.should_import_with_bindings(&self.bound_positions, num_bindings);
 
         if zero_arity_trie || !use_bindings {
+            log::info!("Loading data (without bindings): {provider}");
             provider.provide_table_data(&mut tuple_writer).await?
         } else if trie_scans.len() == 1 {
             let (_, trie_scan) = trie_scans.pop().expect("length is 1");
             let bound_positions = &self.bound_positions[0];
 
             let bindings = Self::materialize_bindings(trie_scan, dictionary);
+            log::info!(
+                "Loading data (with {} bindings): {provider}",
+                bindings.len()
+            );
 
             provider
                 .provide_table_data_with_bindings(

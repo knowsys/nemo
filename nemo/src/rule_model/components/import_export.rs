@@ -183,31 +183,28 @@ impl ImportDirective {
         let Some(builder) = self.builder() else {
             return;
         };
-        match builder.format() {
-            SupportedFormatTag::Sparql(..) => {
-                let AnyImportExportBuilder::Sparql(sparql) = builder.inner else {
-                    unreachable!("inner builder must be a SPARQL builder")
-                };
+        if let SupportedFormatTag::Sparql(..) = builder.format() {
+            let AnyImportExportBuilder::Sparql(sparql) = builder.inner else {
+                unreachable!("inner builder must be a SPARQL builder")
+            };
 
-                let mut the_constants = HashMap::new();
-                for (idx, variable) in variables.iter().enumerate() {
-                    if let Some(term) = constants.get(variable) {
-                        let Some(ground_term) = ground_term_from_datavalue(&term.value()) else {
-                            return;
-                        };
-                        the_constants.insert(idx, ground_term);
-                    }
-                }
-
-                let query = push_constants(&sparql.query, &the_constants);
-
-                for (key, value) in &mut self.0.spec.map {
-                    if key.value() == QUERY {
-                        *value = Term::ground(AnyDataValue::new_plain_string(query.to_string()));
-                    }
+            let mut the_constants = HashMap::new();
+            for (idx, variable) in variables.iter().enumerate() {
+                if let Some(term) = constants.get(variable) {
+                    let Some(ground_term) = ground_term_from_datavalue(&term.value()) else {
+                        return;
+                    };
+                    the_constants.insert(idx, ground_term);
                 }
             }
-            _ => {}
+
+            let query = push_constants(&sparql.query, &the_constants);
+
+            for (key, value) in &mut self.0.spec.map {
+                if key.value() == QUERY {
+                    *value = Term::ground(AnyDataValue::new_plain_string(query.to_string()));
+                }
+            }
         }
     }
 

@@ -9,7 +9,7 @@ use nemo_physical::{
     management::bytesized::ByteSized,
     tabular::filters::FilterTransformPattern,
 };
-use std::{cell::Cell, io::Read, mem::size_of};
+use std::{cell::Cell, fmt::Display, io::Read, mem::size_of};
 
 use oxiri::Iri;
 use oxrdf::{BlankNode, GraphName, Literal, NamedNode, Quad, Subject, Term};
@@ -372,6 +372,20 @@ impl std::fmt::Debug for RdfReader {
             .field("variant", &self.variant)
             .field("base", &self.base)
             .finish()
+    }
+}
+
+impl Display for RdfReader {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "RDF data ({} variant; {})",
+            self.variant,
+            self.base
+                .clone()
+                .map(|ref base| format!("base IRI <{base}>"))
+                .unwrap_or("no base IRI".to_string())
+        )
     }
 }
 
