@@ -13,6 +13,8 @@ use crate::{
         operations::{
             function_filter_negation::GeneratorFunctionFilterNegation, import::GeneratorImport,
             join_cartesian::GeneratorJoinCartesian, join_imports::GeneratorJoinImports,
+            join_imports_general::GeneratorJoinImportsGeneral,
+            join_imports_simple::GeneratorJoinImportsSimple,
             join_seminaive::GeneratorJoinSeminaive,
         },
     },
@@ -60,21 +62,28 @@ impl StrategyBody {
 
             Self::Plain { join, filter }
         } else {
-            let merge_operations = &mut operations.clone();
-            let mut merge_negative = negative.clone();
-
             let join = GeneratorJoinCartesian::new(&order, &positive, operations, &mut negative);
             let variables_join = join.output_variables();
 
             let import = GeneratorImport::new(variables_join, &imports);
 
-            let merge = GeneratorJoinImports::new(
-                &order,
-                positive,
-                imports,
-                merge_operations,
-                &mut merge_negative,
-            );
+            let merge = if join.is_single_join() {
+                GeneratorJoinImports::Simple(GeneratorJoinImportsSimple::new(
+                    &order,
+                    join.output_variables().first().cloned().unwrap_or_default(),
+                    imports,
+                    operations,
+                    &mut negative,
+                ))
+            } else {
+                GeneratorJoinImports::General(GeneratorJoinImportsGeneral::new(
+                    &order,
+                    positive,
+                    imports,
+                    operations,
+                    &mut negative,
+                ))
+            };
 
             Self::Import {
                 join: Box::new(join),

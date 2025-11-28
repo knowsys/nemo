@@ -49,6 +49,8 @@ impl StrategyForward {
 
         let body = StrategyBody::new(order.clone(), positive, negative, imports, &mut operations);
 
+        body.output_variables();
+
         let aggregation = rule.aggregate().cloned().map(|aggregation| {
             GeneratorAggregation::new(body.output_variables(), aggregation, &mut operations)
         });
