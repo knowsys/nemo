@@ -1,8 +1,11 @@
 //! Implements a reader for json files.
 //! Deserialisation is handled by [serde_json].
 
-use core::fmt;
-use std::{fmt::Debug, io::Read, mem::size_of};
+use std::{
+    fmt::{Debug, Display},
+    io::Read,
+    mem::size_of,
+};
 
 use nemo_physical::{
     datasources::{table_providers::TableProvider, tuple_writer::TupleWriter},
@@ -24,6 +27,12 @@ impl<T> Debug for JsonReader<T> {
     }
 }
 
+impl<T> Display for JsonReader<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "JSON data")
+    }
+}
+
 impl<T> ByteSized for JsonReader<T> {
     fn size_bytes(&self) -> u64 {
         size_of::<Self>() as u64
@@ -33,9 +42,9 @@ impl<T> ByteSized for JsonReader<T> {
 #[derive(Debug)]
 struct JsonReadingError(serde_json::Error);
 
-impl fmt::Display for JsonReadingError {
+impl Display for JsonReadingError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        <serde_json::Error as fmt::Display>::fmt(&self.0, f)
+        <serde_json::Error as Display>::fmt(&self.0, f)
     }
 }
 

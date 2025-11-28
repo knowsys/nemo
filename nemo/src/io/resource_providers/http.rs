@@ -1,5 +1,5 @@
 use super::ResourceProvider;
-use log::{debug, warn};
+use log;
 use nemo_physical::{
     error::{ReadingError, ReadingErrorKind},
     resource::Resource,
@@ -104,7 +104,6 @@ impl HttpResourceProvider {
             .map_err(err_mapping)?;
 
         let full_url = resource.to_string();
-        debug!("Make HTTP request: {full_url:?}");
 
         let post_parameters = resource
             .post_parameters()
@@ -128,7 +127,7 @@ impl HttpResourceProvider {
             .unwrap_or_default();
         // Use 'contains()', because response_type contains content type and encoding information
         if !response_type.contains(media_type) {
-            warn!(
+            log::warn!(
                 "HTTP response to the request: \n {full_url} \n is of content type {response_type:?}, expected {media_type:?}. Make sure you specified the correct IRI and parameters."
             );
         }
@@ -138,7 +137,7 @@ impl HttpResourceProvider {
         let content = response.bytes().await.map_err(err_mapping)?;
 
         if content.is_empty() {
-            warn!(
+            log::warn!(
                 "HTTP response to the request: \n {full_url} \n contains no content. Make sure you specified the correct IRI and parameters."
             );
         }

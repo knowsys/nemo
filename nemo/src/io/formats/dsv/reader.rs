@@ -1,5 +1,6 @@
 //! The reader for DSV files.
 
+use std::fmt::Display;
 use std::io::BufRead;
 use std::mem::size_of;
 
@@ -167,6 +168,19 @@ impl<T> std::fmt::Debug for DsvReader<T> {
             .field("escape", &self.escape)
             .field("value formats", &self.value_formats)
             .finish()
+    }
+}
+
+impl<T> Display for DsvReader<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "DSV data (delimiter {:?}, {})",
+            self.delimiter,
+            self.escape
+                .map(|escape| format!("escaping with {escape:?}"))
+                .unwrap_or("without escaping".to_string())
+        )
     }
 }
 

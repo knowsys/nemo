@@ -8,7 +8,7 @@ use crate::rule_model::{
     components::{
         IterableVariables,
         atom::Atom,
-        import_export::{ImportDirective, clause::ImportClause},
+        import_export::clause::ImportClause,
         literal::Literal,
         rule::Rule,
         statement::Statement,
@@ -19,6 +19,7 @@ use crate::rule_model::{
         },
     },
     error::ValidationReport,
+    pipeline::commit::ProgramCommit,
     programs::{ProgramRead, ProgramWrite, handle::ProgramHandle},
 };
 
@@ -77,14 +78,6 @@ impl ProgramTransformation for TransformationMergeSparql {
                         continue;
                     }
 
-                    let head_variables = rule
-                        .head()
-                        .iter()
-                        .flat_map(|atom| atom.variables())
-                        .filter(|variable| variable.is_universal())
-                        .cloned()
-                        .collect::<HashSet<_>>()
-                        .len();
                     let equalities = rule
                         .body_operations()
                         .filter_map(try_equality_from_operation)
@@ -92,64 +85,17 @@ impl ProgramTransformation for TransformationMergeSparql {
 
                     if imports.len() == 1 {
                         // nothing to merge, but push constants
-
                         let mut import = imports[0].clone();
-
                         import.push_constants(&equalities);
-                        let equalities = HashSet::<_>::from_iter(equalities.into_iter());
-                        let is_still_incremental = equalities.is_empty()
-                            || head_variables
-                                != import
-                                    .import_directive()
-                                    .expected_output_arity()
-                                    .unwrap_or(head_variables + 1);
 
-                        let mut rule = rule.clone();
-                        rule.imports_mut().clear();
-
-                        if is_still_incremental {
-                            rule.imports_mut().push(import);
-                        } else {
-                            commit.add_import(unincremental_import(
-                                &mut rule,
-                                &import,
-                                &equalities,
-                            ));
-                        }
-
-                        commit.add_rule(rule);
-
-                        continue;
-                    }
-
-                    if let Some(merged) = imports
+                        update_import(&mut commit, import, rule, equalities);
+                    } else if let Some(merged) = imports
                         .into_iter()
                         .cloned()
                         .try_reduce(|left, right| ImportClause::try_merge(left, right, &equalities))
                         .flatten()
                     {
-                        let equalities = HashSet::<_>::from_iter(equalities.into_iter());
-                        let is_still_incremental = equalities.is_empty()
-                            || head_variables
-                                != merged
-                                    .import_directive()
-                                    .expected_output_arity()
-                                    .unwrap_or(head_variables + 1);
-
-                        let mut rule = rule.clone();
-                        rule.imports_mut().clear();
-
-                        if is_still_incremental {
-                            rule.imports_mut().push(merged);
-                        } else {
-                            commit.add_import(unincremental_import(
-                                &mut rule,
-                                &merged,
-                                &equalities,
-                            ));
-                        }
-
-                        commit.add_rule(rule);
+                        update_import(&mut commit, merged, rule, equalities);
                     } else {
                         commit.keep(statement);
                     }
@@ -181,33 +127,61 @@ fn try_equality_from_operation(operation: &Operation) -> Option<(Variable, Groun
     }
 }
 
-fn unincremental_import(
-    rule: &mut Rule,
-    import: &ImportClause,
-    equalities: &HashSet<(Variable, GroundTerm)>,
-) -> ImportDirective {
-    let directive = import.import_directive().clone();
-    let mut body = Vec::new();
+fn update_import(
+    commit: &mut ProgramCommit,
+    import: ImportClause,
+    rule: &Rule,
+    equalities: HashMap<Variable, GroundTerm>,
+) {
+    let binding_variables = rule
+        .body_positive()
+        .flat_map(|atom| atom.variables())
+        .cloned()
+        .collect::<HashSet<_>>();
+    let equalities = HashSet::<_>::from_iter(equalities);
+    let output_variables = import
+        .output_variables()
+        .iter()
+        .cloned()
+        .collect::<HashSet<_>>();
 
-    for literal in rule.body() {
-        if let Literal::Operation(operation) = literal
-            && let Some(equality) = try_equality_from_operation(operation)
-            && equalities.contains(&equality)
-        {
-            continue;
+    let is_still_incremental = equalities.is_empty()
+        || binding_variables
+            .intersection(&output_variables)
+            .next()
+            .is_some();
+
+    let mut rule = rule.clone();
+    rule.imports_mut().clear();
+
+    if is_still_incremental {
+        rule.imports_mut().push(import);
+    } else {
+        let directive = import.import_directive().clone();
+        let mut body = Vec::new();
+
+        for literal in rule.body() {
+            if let Literal::Operation(operation) = literal
+                && let Some(equality) = try_equality_from_operation(operation)
+                && equalities.contains(&equality)
+            {
+                continue;
+            }
+
+            body.push(literal.clone())
         }
 
-        body.push(literal.clone())
+        body.push(Literal::Positive(Atom::new(
+            directive.predicate().clone(),
+            import
+                .variables()
+                .map(|variable| Term::Primitive(Primitive::Variable(variable.clone()))),
+        )));
+
+        *rule.body_mut() = body;
+
+        commit.add_import(directive);
     }
 
-    body.push(Literal::Positive(Atom::new(
-        directive.predicate().clone(),
-        import
-            .variables()
-            .map(|variable| Term::Primitive(Primitive::Variable(variable.clone()))),
-    )));
-
-    *rule.body_mut() = body;
-
-    directive
+    commit.add_rule(rule);
 }

@@ -60,7 +60,7 @@ impl<'a> ProgramTransformation for TransformationDefault<'a> {
             .transform(TransformationValidate::default())?
             .transform(TransformationActive::default())?
             .transform(TransformationIncremental::new())?
-            .transform(TransformationMergeSparql::default())?
+            .transform(TransformationMergeSparql)?
             .transform(TransformationFilterImports::new())
     }
 }
