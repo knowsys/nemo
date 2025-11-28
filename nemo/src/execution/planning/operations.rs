@@ -10,6 +10,8 @@ pub mod import;
 pub mod join;
 pub mod join_cartesian;
 pub mod join_imports;
+pub mod join_imports_general;
+pub mod join_imports_simple;
 pub mod join_seminaive;
 pub mod negation;
 pub mod projection_head;

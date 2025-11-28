@@ -365,6 +365,12 @@ impl ExecutionPlan {
         marked_columns: OperationTable,
         subnode: ExecutionNodeRef,
     ) -> ExecutionNodeRef {
+        debug_assert!(
+            marked_columns
+                .iter()
+                .all(|marker| subnode.markers_cloned().contains(marker))
+        );
+
         let new_operation = ExecutionOperation::ProjectReorder(subnode.clone());
 
         let project_node = self.push_and_return_reference(new_operation, marked_columns);
