@@ -254,7 +254,7 @@
               crateArgs
               // {
                 inherit pname;
-                cargoExtraArgs = "${args.cargoExtraArgs ? ""} --package ${crate}";
+                cargoExtraArgs = "${args.cargoExtraArgs or ""} --package ${crate}";
               }
               // args
             );
@@ -330,7 +330,7 @@
             };
 
             nemo-no-merge = buildCrate {
-              pname = "nemo";
+              pname = "nemo-no-merge";
               crate = "nemo-cli";
 
               cargoExtraArgs = "--features import-incremental --features import-cartesian";
@@ -338,20 +338,16 @@
                 crateArgs.nativeBuildInputs ++ (lib.attrValues { inherit (pkgs) installShellFiles; });
 
               postInstall = ''
-                installManPage ${nemo-cli-manpages}/nmo.1
-                installShellCompletion \
-                  --fish ${nemo-cli-shell-completions}/nmo.fish \
-                  --bash ${nemo-cli-shell-completions}/nmo.bash \
-                  --zsh ${nemo-cli-shell-completions}/_nmo
+                mv $out/bin/nmo $out/bin/nmo-no-merge
               '';
 
               meta = crateArgs.meta // {
-                mainProgram = "nmo";
+                mainProgram = "nmo-no-merge";
               };
             };
 
             nemo-no-cartesian = buildCrate {
-              pname = "nemo";
+              pname = "nemo-no-cartesian";
               crate = "nemo-cli";
 
               cargoExtraArgs = "--features import-incremental --features import-merge";
@@ -359,39 +355,31 @@
                 crateArgs.nativeBuildInputs ++ (lib.attrValues { inherit (pkgs) installShellFiles; });
 
               postInstall = ''
-                installManPage ${nemo-cli-manpages}/nmo.1
-                installShellCompletion \
-                  --fish ${nemo-cli-shell-completions}/nmo.fish \
-                  --bash ${nemo-cli-shell-completions}/nmo.bash \
-                  --zsh ${nemo-cli-shell-completions}/_nmo
+                mv $out/bin/nmo $out/bin/nmo-no-cartesian
               '';
 
               meta = crateArgs.meta // {
-                mainProgram = "nmo";
+                mainProgram = "nmo-no-incremental";
               };
             };
 
             nemo-no-incremental = buildCrate {
-              pname = "nemo";
+              pname = "nemo-no-incremental";
               crate = "nemo-cli";
 
               nativeBuildInputs =
                 crateArgs.nativeBuildInputs ++ (lib.attrValues { inherit (pkgs) installShellFiles; });
 
               postInstall = ''
-                installManPage ${nemo-cli-manpages}/nmo.1
-                installShellCompletion \
-                  --fish ${nemo-cli-shell-completions}/nmo.fish \
-                  --bash ${nemo-cli-shell-completions}/nmo.bash \
-                  --zsh ${nemo-cli-shell-completions}/_nmo
+                mv $out/bin/nmo $out/bin/nmo-no-incremental
               '';
 
               meta = crateArgs.meta // {
-                mainProgram = "nmo";
+                mainProgram = "nmo-no-incremental";
               };
             };
             nemo-only-incremental = buildCrate {
-              pname = "nemo";
+              pname = "nemo-only-incremental";
               crate = "nemo-cli";
 
               cargoExtraArgs = "--features import-incremental";
@@ -400,15 +388,11 @@
                 crateArgs.nativeBuildInputs ++ (lib.attrValues { inherit (pkgs) installShellFiles; });
 
               postInstall = ''
-                installManPage ${nemo-cli-manpages}/nmo.1
-                installShellCompletion \
-                  --fish ${nemo-cli-shell-completions}/nmo.fish \
-                  --bash ${nemo-cli-shell-completions}/nmo.bash \
-                  --zsh ${nemo-cli-shell-completions}/_nmo
+                mv $out/bin/nmo $out/bin/nmo-only-incremental
               '';
 
               meta = crateArgs.meta // {
-                mainProgram = "nmo";
+                mainProgram = "nmo-only-incremental";
               };
             };
 
