@@ -283,9 +283,10 @@ impl NemoEngine {
 
     #[wasm_bindgen(js_name = "getResult")]
     pub async fn result(&mut self, predicate: String) -> Result<NemoResults, NemoError> {
+        let pred_tag = Tag::from(predicate);
         let iter = self
             .engine
-            .predicate_rows(&Tag::from(predicate))
+            .predicate_rows_ids(&pred_tag)
             .await
             .map_err(WasmOrInternalNemoError::Nemo)
             .map_err(NemoError)?;
@@ -395,13 +396,21 @@ impl NemoEngine {
 }
 
 #[wasm_bindgen]
-pub struct NemoResults(Box<dyn Iterator<Item = Vec<AnyDataValue>> + Send>);
+pub struct NemoResults(Box<dyn Iterator<Item = (Vec<AnyDataValue>, usize)> + Send>);
+
+#[wasm_bindgen]
+#[derive(Clone)]
+pub struct NemoResultRow {
+    #[wasm_bindgen(getter_with_clone)]
+    pub values: Array,
+    pub id: usize,
+}
 
 #[wasm_bindgen]
 pub struct NemoResultsIteratorNext {
     pub done: bool,
     #[wasm_bindgen(getter_with_clone)]
-    pub value: JsValue,
+    pub value: Option<NemoResultRow>,
 }
 
 #[wasm_bindgen]
@@ -413,6 +422,7 @@ impl NemoResults {
 
         if let Some(next) = next {
             let array: Array = next
+                .0
                 .into_iter()
                 .map(|v| match v.value_domain() {
                     nemo_physical::datavalues::ValueDomain::PlainString
@@ -454,12 +464,15 @@ impl NemoResults {
 
             NemoResultsIteratorNext {
                 done: false,
-                value: JsValue::from(array),
+                value: Some(NemoResultRow {
+                    values: array,
+                    id: next.1,
+                }),
             }
         } else {
             NemoResultsIteratorNext {
                 done: true,
-                value: JsValue::undefined(),
+                value: None,
             }
         }
     }
