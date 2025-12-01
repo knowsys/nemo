@@ -41,6 +41,28 @@ pub struct GeneratorJoinCartesian {
 }
 
 impl GeneratorJoinCartesian {
+    #[cfg(not(feature = "import-cartesian"))]
+    /// Create a new [GeneratorJoinCartesian]
+    pub fn new(
+        order: &VariableOrder,
+        atoms: &[BodyAtom],
+        operations: &mut Vec<Operation>,
+        atoms_negation: &mut Vec<BodyAtom>,
+    ) -> Self {
+        let join = GeneratorJoinSeminaive::new(atoms.to_vec(), order);
+        let filter = GeneratorFunctionFilterNegation::new(
+            join.output_variables(),
+            operations,
+            atoms_negation,
+        );
+
+        Self {
+            joins: vec![join],
+            filters: vec![filter.or_none()],
+        }
+    }
+
+    #[cfg(feature = "import-cartesian")]
     /// Create a new [GeneratorJoinCartesian].
     pub fn new(
         order: &VariableOrder,
