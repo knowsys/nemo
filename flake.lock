@@ -3395,11 +3395,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1763463926,
-        "narHash": "sha256-0gebeqhBbAqD4y066t79Nw9Os6CINCPKhYSwjh/R/xc=",
+        "lastModified": 1764583698,
+        "narHash": "sha256-QMfpG2wC98m22E8Auo53ntZmu9NCiNUx1mssYbUf6XE=",
         "owner": "knowsys",
         "repo": "nemo-web",
-        "rev": "c8e36f904f77c4827383d39e32608228ab79a1c1",
+        "rev": "193c49dd6733b1c922b28b3d5fce99b67c8dc622",
         "type": "github"
       },
       "original": {
@@ -4724,11 +4724,11 @@
     "nev_4": {
       "flake": false,
       "locked": {
-        "lastModified": 1763458568,
-        "narHash": "sha256-0Gob7eJpL1T1A9IDbaRwCAH4bt7OdcaxUVINL5ZFHX0=",
+        "lastModified": 1764147832,
+        "narHash": "sha256-f1JU8rjb4GKpeynmV3goRgr+X83ZPVIfkKlU0RbrYN0=",
         "owner": "imldresden",
         "repo": "nev",
-        "rev": "42922d85959b29901f3fa7d44e9c4c538dabfaa9",
+        "rev": "d3d5704d5f3131bb72e3dc38aad74b9baff7cef9",
         "type": "github"
       },
       "original": {
