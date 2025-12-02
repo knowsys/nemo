@@ -48,10 +48,11 @@ impl StrategyBody {
         order: VariableOrder,
         positive: Vec<BodyAtom>,
         mut negative: Vec<BodyAtom>,
-        imports: Vec<ImportAtom>,
+        positive_imports: Vec<ImportAtom>,
+        negative_imports: Vec<ImportAtom>,
         operations: &mut Vec<Operation>,
     ) -> Self {
-        if imports.is_empty() {
+        if positive_imports.is_empty() && negative_imports.is_empty() {
             let join = Box::new(GeneratorJoinSeminaive::new(positive, &order));
             let filter = GeneratorFunctionFilterNegation::new(
                 join.output_variables(),
@@ -65,13 +66,19 @@ impl StrategyBody {
             let join = GeneratorJoinCartesian::new(&order, &positive, operations, &mut negative);
             let variables_join = join.output_variables();
 
-            let import = GeneratorImport::new(variables_join, &imports);
+            let import = GeneratorImport::new(
+                variables_join,
+                &positive_imports,
+                &negative_imports,
+                operations,
+            );
 
             let merge = if join.is_single_join() {
                 GeneratorJoinImports::Simple(GeneratorJoinImportsSimple::new(
                     &order,
                     join.output_variables().first().cloned().unwrap_or_default(),
-                    imports,
+                    positive_imports,
+                    negative_imports,
                     operations,
                     &mut negative,
                 ))
@@ -79,7 +86,8 @@ impl StrategyBody {
                 GeneratorJoinImports::General(GeneratorJoinImportsGeneral::new(
                     &order,
                     positive,
-                    imports,
+                    positive_imports,
+                    negative_imports,
                     operations,
                     &mut negative,
                 ))

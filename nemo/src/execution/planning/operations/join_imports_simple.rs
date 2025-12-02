@@ -32,6 +32,8 @@ pub struct GeneratorJoinImportsSimple {
 
     /// Imports
     imports: Vec<GeneratorUnion>,
+    /// Negated imports
+    negative_imports: Vec<GeneratorUnion>,
     /// Filters
     filters: Option<GeneratorFunctionFilterNegation>,
 }
@@ -42,6 +44,7 @@ impl GeneratorJoinImportsSimple {
         order: &VariableOrder,
         postive_variables: Vec<Variable>,
         import_atoms: Vec<ImportAtom>,
+        negative_import_atoms: Vec<ImportAtom>,
         operations: &mut Vec<Operation>,
         atoms_negation: &mut Vec<BodyAtom>,
     ) -> Self {
@@ -62,6 +65,13 @@ impl GeneratorJoinImportsSimple {
                 GeneratorUnion::new(atom.predicate(), atom.variables_cloned(), UnionRange::All)
             })
             .collect::<Vec<_>>();
+        let negative_imports = negative_import_atoms
+            .into_iter()
+            .map(|atom| {
+                GeneratorUnion::new(atom.predicate(), atom.variables_cloned(), UnionRange::All)
+            })
+            .collect::<Vec<_>>();
+
         let filters = GeneratorFunctionFilterNegation::new(
             join_order.as_ordered_list(),
             operations,
@@ -72,6 +82,7 @@ impl GeneratorJoinImportsSimple {
         Self {
             join_order,
             imports,
+            negative_imports,
             filters,
         }
     }
@@ -105,6 +116,26 @@ impl GeneratorJoinImportsSimple {
             .operation_table(self.join_order.as_ordered_list().iter());
 
         let mut node_result = plan.plan_mut().join(markers, join_tables);
+
+        if !self.negative_imports.is_empty() {
+            let mut subtracted = Vec::default();
+
+            for import in &self.negative_imports {
+                let mut node_imports = import.create_plan(plan, runtime);
+                let import_markers = runtime
+                    .translation
+                    .operation_table(import.output_variables().iter());
+
+                if let Some(mut node_new_import) = new_imports.get(import.predicate()).cloned() {
+                    node_new_import.set_markers(import_markers);
+                    node_imports.add_subnode(node_new_import);
+                }
+
+                subtracted.push(node_imports);
+            }
+
+            node_result = plan.plan_mut().subtract(node_result, subtracted);
+        }
 
         if let Some(filters) = &self.filters {
             node_result = filters.create_plan(plan, node_result, runtime);
