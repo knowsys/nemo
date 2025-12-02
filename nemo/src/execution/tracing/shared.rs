@@ -7,7 +7,7 @@ use nemo_physical::datavalues::AnyDataValue;
 use serde::{Deserialize, Serialize};
 
 use crate::rule_model::components::{
-    IterableVariables, atom::Atom, import_export::clause::ImportClause, literal::Literal,
+    IterableVariables, atom::Atom, import_export::clause::ImportLiteral, literal::Literal,
     rule::Rule as ModelRule, tag::Tag, term::primitive::ground::GroundTerm,
 };
 
@@ -46,8 +46,8 @@ impl TryFrom<&Literal> for PredicateWithParameters {
     }
 }
 
-impl From<&ImportClause> for PredicateWithParameters {
-    fn from(clause: &ImportClause) -> Self {
+impl From<&ImportLiteral> for PredicateWithParameters {
+    fn from(clause: &ImportLiteral) -> Self {
         let name = clause.predicate().to_string();
 
         Self {

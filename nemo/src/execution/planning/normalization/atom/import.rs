@@ -17,7 +17,7 @@ pub struct ImportAtom {
     import: ImportInstruction,
 
     /// List of variables bound to values
-    /// that will be input for the input
+    /// that will be input for the import
     variables: Vec<Variable>,
 }
 
@@ -74,7 +74,7 @@ impl ImportAtom {
 
 impl ImportAtom {
     /// Receives a [crate::rule_model::components::import_export::clause::ImportClause]
-    /// and normalzes it to an [ImportAtom]
+    /// and normalizes it to an [ImportAtom]
     pub fn normalize_import(
         import: &crate::rule_model::components::import_export::clause::ImportClause,
     ) -> Self {

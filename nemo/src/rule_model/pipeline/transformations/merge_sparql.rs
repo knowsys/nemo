@@ -8,7 +8,7 @@ use crate::rule_model::{
     components::{
         IterableVariables,
         atom::Atom,
-        import_export::clause::ImportClause,
+        import_export::clause::{ImportClause, ImportLiteral},
         literal::Literal,
         rule::Rule,
         statement::Statement,
@@ -65,7 +65,19 @@ impl ProgramTransformation for TransformationMergeSparql {
         for statement in program.statements() {
             match statement {
                 Statement::Rule(rule) => {
-                    let imports = rule.imports().collect::<Vec<_>>();
+                    let mut imports = Vec::default();
+
+                    for import_literal in rule.imports() {
+                        match import_literal {
+                            ImportLiteral::Positive(clause) => {
+                                imports.push(clause.clone());
+                            }
+                            ImportLiteral::Negative(_) => {
+                                // TODO: Handle negative case
+                                continue;
+                            }
+                        }
+                    }
 
                     if rule
                         .head()
@@ -91,7 +103,6 @@ impl ProgramTransformation for TransformationMergeSparql {
                         update_import(&mut commit, import, rule, equalities);
                     } else if let Some(merged) = imports
                         .into_iter()
-                        .cloned()
                         .try_reduce(|left, right| ImportClause::try_merge(left, right, &equalities))
                         .flatten()
                     {
@@ -155,7 +166,8 @@ fn update_import(
     rule.imports_mut().clear();
 
     if is_still_incremental {
-        rule.imports_mut().push(import);
+        // TODO: Handle negative case
+        rule.imports_mut().push(ImportLiteral::Positive(import));
     } else {
         let directive = import.import_directive().clone();
         let mut body = Vec::new();
