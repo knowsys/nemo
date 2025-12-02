@@ -7,7 +7,7 @@ use crate::{
     rule_model::{
         components::{
             IterableVariables,
-            import_export::{ImportDirective, clause::ImportClause},
+            import_export::{ImportDirective, clause::ImportLiteral},
             literal::Literal,
             rule::Rule,
             statement::Statement,
@@ -165,11 +165,8 @@ impl TransformationIncremental {
                     normal_predicates.insert(fact.predicate().clone());
                 }
                 Statement::Rule(rule) => {
-                    for head in rule.head() {
-                        normal_predicates.insert(head.predicate());
-                    }
-                    for atom in rule.body_negative() {
-                        normal_predicates.insert(atom.predicate().clone());
+                    for atom in rule.head() {
+                        normal_predicates.insert(atom.predicate());
                     }
 
                     if !Self::possible_rule(rule, &incremental_predicates) {
@@ -220,41 +217,51 @@ impl TransformationIncremental {
     ) -> Rule {
         let mut result = rule.clone();
 
-        let mut import_clauses = Vec::<ImportClause>::default();
+        let mut import_literals = Vec::<ImportLiteral>::default();
         let mut computed_terms = Vec::<(Variable, Term)>::default();
 
         result.body_mut().retain(|literal| {
-            if let Literal::Positive(atom) = literal
-                && let Some(&import) = incremental_predicates.get(&atom.predicate())
-            {
-                let mut variables = Vec::<Variable>::new();
-                for (term_index, term) in atom.terms().enumerate() {
-                    if let Term::Primitive(Primitive::Variable(variable)) = term {
-                        variables.push(variable.clone());
-                    } else {
-                        let new_variable = Self::new_variable(&atom.predicate(), term_index);
+            match literal {
+                Literal::Positive(atom) | Literal::Negative(atom) => {
+                    let is_positive = matches!(literal, Literal::Positive(_));
 
-                        variables.push(new_variable.clone());
-                        computed_terms.push((new_variable, term.clone()));
+                    if let Some(&import) = incremental_predicates.get(&atom.predicate()) {
+                        let mut variables = Vec::<Variable>::new();
+                        for (term_index, term) in atom.terms().enumerate() {
+                            if let Term::Primitive(Primitive::Variable(variable)) = term {
+                                variables.push(variable.clone());
+                            } else {
+                                let new_variable =
+                                    Self::new_variable(&atom.predicate(), term_index);
+
+                                variables.push(new_variable.clone());
+                                computed_terms.push((new_variable, term.clone()));
+                            }
+                        }
+
+                        let import = if !derived_predicates.contains(import.predicate()) {
+                            Self::unique_import_directive(import, id)
+                        } else {
+                            import.clone()
+                        };
+
+                        let literal = if is_positive {
+                            ImportLiteral::positive(import, variables)
+                        } else {
+                            ImportLiteral::negative(import, variables)
+                        };
+
+                        import_literals.push(literal);
+                        return false;
                     }
                 }
-
-                let import = if !derived_predicates.contains(import.predicate()) {
-                    Self::unique_import_directive(import, id)
-                } else {
-                    import.clone()
-                };
-
-                let clause = ImportClause::new(import, variables);
-
-                import_clauses.push(clause);
-                return false;
+                Literal::Operation(_) => {}
             }
 
             true
         });
 
-        for import in import_clauses {
+        for import in import_literals {
             result.add_import(import);
         }
 

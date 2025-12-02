@@ -27,6 +27,7 @@ use crate::{
         operations::{filter::GeneratorFilter, function::GeneratorFunction},
     },
     rule_model::components::{
+        import_export::clause::ImportLiteral,
         tag::Tag,
         term::primitive::{Primitive, variable::Variable},
     },
@@ -43,6 +44,8 @@ pub struct NormalizedRule {
     negative: Vec<BodyAtom>,
     /// Import Atoms
     imports: Vec<ImportAtom>,
+    /// Negated import atoms
+    negative_imports: Vec<ImportAtom>,
 
     /// Operations
     operations: Vec<Operation>,
@@ -450,15 +453,25 @@ impl NormalizedRule {
             }
         }
 
-        let imports = rule
-            .imports()
-            .map(ImportAtom::normalize_import)
-            .collect::<Vec<_>>();
+        let mut imports = Vec::default();
+        let mut negative_imports = Vec::default();
+
+        for import in rule.imports() {
+            match import {
+                ImportLiteral::Positive(clause) => {
+                    imports.push(ImportAtom::normalize_import(clause))
+                }
+                ImportLiteral::Negative(clause) => {
+                    negative_imports.push(ImportAtom::normalize_import(clause))
+                }
+            }
+        }
 
         Self {
             positive,
             negative,
             imports,
+            negative_imports,
             operations,
             head,
             aggregation,
