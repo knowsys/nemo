@@ -37,6 +37,7 @@ impl TransformationIncremental {
         Self {}
     }
 
+    #[allow(unused)]
     /// Check if there are no restrictions on an atom.
     fn has_unrestricted_atom(
         rule: &Rule,
@@ -97,7 +98,12 @@ impl TransformationIncremental {
             return false;
         }
 
-        !Self::has_unrestricted_atom(rule, incremental_predicates)
+        // [super::merge_sparql::TransformationMergeSparql] will turn
+        // this back into an ordinary import if there's an
+        // unrestricted import, but merging might turn unrestricted
+        // imports into restricted imports.
+        // !Self::has_unrestricted_atom(rule, incremental_predicates)
+        true
     }
 
     /// Compute the predicates that will be inlined in this transformation.
