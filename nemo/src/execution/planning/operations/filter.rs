@@ -21,8 +21,7 @@ pub struct GeneratorFilter {
 impl GeneratorFilter {
     /// Create a new [GeneratorFilter].
     ///
-    /// This operation is applied to [ExecutionBinding]
-    /// and applies all `operations` that only use bound variables,
+    /// This generator applies all `operations` that only use bound variables,
     /// and then removes those operations from the list.
     pub fn new(input_variables: Vec<Variable>, operations: &mut Vec<Operation>) -> Self {
         let mut filters = Vec::<Operation>::default();

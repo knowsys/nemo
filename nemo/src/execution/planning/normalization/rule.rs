@@ -43,7 +43,7 @@ pub struct NormalizedRule {
     /// Negative body atoms
     negative: Vec<BodyAtom>,
     /// Import Atoms
-    imports: Vec<ImportAtom>,
+    positive_imports: Vec<ImportAtom>,
     /// Negated import atoms
     negative_imports: Vec<ImportAtom>,
 
@@ -89,9 +89,14 @@ impl Display for NormalizedRule {
             .positive
             .iter()
             .map(ToString::to_string)
-            .chain(self.negative.iter().map(ToString::to_string))
+            .chain(self.negative.iter().map(|atom| format!("~{atom}")))
             .chain(self.operations.iter().map(ToString::to_string))
-            .chain(self.imports.iter().map(ToString::to_string))
+            .chain(self.positive_imports.iter().map(ToString::to_string))
+            .chain(
+                self.negative_imports
+                    .iter()
+                    .map(|import| format!("~{import}")),
+            )
             .chain(
                 self.aggregation
                     .as_ref()
@@ -121,15 +126,20 @@ impl NormalizedRule {
     }
 
     /// Return the list of imported atoms in this rule.
-    pub fn imports(&self) -> &Vec<ImportAtom> {
-        &self.imports
+    pub fn positive_imports(&self) -> &Vec<ImportAtom> {
+        &self.positive_imports
+    }
+
+    /// Return the list of negated imported atoms in this rule.
+    pub fn negative_imports(&self) -> &Vec<ImportAtom> {
+        &self.negative_imports
     }
 
     /// Return a list of all positive atoms, including import atoms
     pub fn positive_all(&self) -> Vec<BodyAtom> {
         let mut positive = self.positive.clone();
 
-        positive.extend(self.imports.iter().map(|atom| {
+        positive.extend(self.positive_imports.iter().map(|atom| {
             BodyAtom::new(
                 atom.predicate(),
                 atom.variables().cloned().collect::<Vec<_>>(),
@@ -212,18 +222,28 @@ impl NormalizedRule {
     /// Prepare the rule in such a way that it is suitable for tracing.
     ///
     /// This includes
-    ///     * Moving all statements from import to the positive body of the rule
+    ///     * Moving all statements from positive import to the positive body of the rule
+    ///     * Moving all statements from negative import ot the negative body of the rule
     pub fn prepare_tracing(&self) -> Self {
         let mut result = self.clone();
 
         let mut positive = self.positive.clone();
-        for import in self.imports() {
+        for import in self.positive_imports() {
             let atom = BodyAtom::new(import.predicate().clone(), import.variables_cloned());
             positive.push(atom);
         }
 
+        let mut negative = self.negative.clone();
+        for import in self.negative_imports() {
+            let atom = BodyAtom::new(import.predicate().clone(), import.variables_cloned());
+            negative.push(atom);
+        }
+
         result.positive = positive;
-        result.imports.clear();
+        result.negative = negative;
+
+        result.positive_imports.clear();
+        result.negative_imports.clear();
 
         result
     }
@@ -232,7 +252,15 @@ impl NormalizedRule {
     pub fn variables_non_head(&self) -> impl Iterator<Item = &Variable> {
         let positive_variables = self.positive.iter().flat_map(|atom| atom.terms());
         let negative_variables = self.negative.iter().flat_map(|atom| atom.terms());
-        let import_variables = self.imports.iter().flat_map(|atom| atom.variables());
+        let positive_import_variables = self
+            .positive_imports
+            .iter()
+            .flat_map(|atom| atom.variables());
+        let negative_import_variables = self
+            .negative_imports
+            .iter()
+            .flat_map(|atom| atom.variables());
+
         let operation_variables = self
             .operations
             .iter()
@@ -246,7 +274,8 @@ impl NormalizedRule {
 
         positive_variables
             .chain(negative_variables)
-            .chain(import_variables)
+            .chain(positive_import_variables)
+            .chain(negative_import_variables)
             .chain(operation_variables)
             .chain(aggregation_variables)
     }
@@ -267,7 +296,7 @@ impl NormalizedRule {
             .iter()
             .map(|atom| (atom.predicate(), atom.arity()));
         let import = self
-            .imports
+            .positive_imports
             .iter()
             .map(|atom| (atom.predicate(), atom.arity()));
 
@@ -276,9 +305,16 @@ impl NormalizedRule {
 
     /// Return an iterator over all predicates occurring in a negative atom.
     pub fn predicates_negative(&self) -> impl Iterator<Item = (Tag, usize)> {
-        self.negative
+        let negative = self
+            .negative
             .iter()
-            .map(|atom| (atom.predicate(), atom.arity()))
+            .map(|atom| (atom.predicate(), atom.arity()));
+        let import = self
+            .negative_imports
+            .iter()
+            .map(|atom| (atom.predicate(), atom.arity()));
+
+        negative.chain(import)
     }
 
     /// Return an iterator over all predicates occurring in the head.
@@ -303,17 +339,24 @@ impl NormalizedRule {
             .negative
             .iter()
             .map(|atom| (atom.predicate(), atom.arity()));
-        let import = self
-            .imports
+        let positive_import = self
+            .positive_imports
+            .iter()
+            .map(|atom| (atom.predicate(), atom.arity()));
+        let negative_import = self
+            .negative_imports
             .iter()
             .map(|atom| (atom.predicate(), atom.arity()));
 
-        head.chain(positive).chain(negative).chain(import)
+        head.chain(positive)
+            .chain(negative)
+            .chain(positive_import)
+            .chain(negative_import)
     }
 
     /// Return the set of frontier variables in this rule,
     /// i.e. the set of variables contained
-    /// in both the head and the body of the rule.
+    /// in both the head and the (positive) body of the rule.
     pub fn frontier(&self) -> HashSet<Variable> {
         let head_variables = self
             .head
@@ -322,7 +365,10 @@ impl NormalizedRule {
             .collect::<HashSet<_>>();
 
         let positive_variables = self.positive.iter().flat_map(|atom| atom.terms());
-        let import_variables = self.imports.iter().flat_map(|atom| atom.variables());
+        let import_variables = self
+            .positive_imports
+            .iter()
+            .flat_map(|atom| atom.variables());
 
         let body_variables = positive_variables
             .chain(import_variables)
@@ -453,13 +499,13 @@ impl NormalizedRule {
             }
         }
 
-        let mut imports = Vec::default();
+        let mut positive_imports = Vec::default();
         let mut negative_imports = Vec::default();
 
         for import in rule.imports() {
             match import {
                 ImportLiteral::Positive(clause) => {
-                    imports.push(ImportAtom::normalize_import(clause))
+                    positive_imports.push(ImportAtom::normalize_import(clause))
                 }
                 ImportLiteral::Negative(clause) => {
                     negative_imports.push(ImportAtom::normalize_import(clause))
@@ -470,7 +516,7 @@ impl NormalizedRule {
         Self {
             positive,
             negative,
-            imports,
+            positive_imports,
             negative_imports,
             operations,
             head,
