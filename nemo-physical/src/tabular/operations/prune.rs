@@ -8,7 +8,7 @@ use crate::{
         operations::prune::ColumnScanPrune,
     },
     datatypes::{
-        storage_type_name::StorageTypeBitSet, ColumnDataType, StorageTypeName, StorageValueT,
+        ColumnDataType, StorageTypeName, StorageValueT, storage_type_name::StorageTypeBitSet,
     },
     tabular::triescan::{PartialTrieScan, TrieScan, TrieScanEnum},
 };
@@ -178,9 +178,10 @@ impl<'a> TrieScanPruneState<'a> {
         }
 
         assert!(self.external_current_layer < self.input_trie_scan.arity() - 1);
-        assert!(self
-            .highest_peeked_layer
-            .is_none_or(|layer| layer > self.external_current_layer));
+        assert!(
+            self.highest_peeked_layer
+                .is_none_or(|layer| layer > self.external_current_layer)
+        );
 
         self.external_current_layer += 1;
     }
@@ -264,9 +265,12 @@ impl<'a> TrieScanPruneState<'a> {
             self.input_up();
         }
         for _ in self.input_trie_scan_current_layer..target_layer {
-            if self.current_input_value().is_none() {
-                return false;
+            unsafe {
+                if self.current_input_value().is_none() {
+                    return false;
+                }
             }
+
             self.input_down();
         }
 
@@ -337,7 +341,7 @@ impl<'a> TrieScanPruneState<'a> {
     unsafe fn current_input_value(&self) -> Option<StorageValueT> {
         debug_assert!(self.initialized);
 
-        self.current_input_trie_value(self.input_trie_scan_current_layer)
+        unsafe { self.current_input_trie_value(self.input_trie_scan_current_layer) }
     }
 
     /// Helper method for the `advance_on_layer()` and `advance_on_layer_with_seek()`
@@ -478,7 +482,7 @@ impl<'a> TrieScanPruneState<'a> {
         debug_assert!(self.initialized);
         //????
         self.external_current_layer = target_layer; // Wird vielleicht unten gamacht
-                                                    // self.external_path_types = //???
+        // self.external_path_types = //???
 
         let allow_advancements_above_target_layer = stay_in_type.is_none();
 
@@ -676,9 +680,9 @@ mod test {
         management::database::Dict,
         tabular::{
             operations::{
+                OperationGenerator, OperationTable,
                 filter::{Filter, GeneratorFilter},
                 join::test::generate_join_scan,
-                OperationGenerator, OperationTable,
             },
             trie::Trie,
             triescan::{PartialTrieScan, TrieScanEnum},

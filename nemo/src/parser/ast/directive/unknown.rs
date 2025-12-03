@@ -10,12 +10,12 @@ use nom_supreme::error::{BaseErrorKind, Expectation};
 use strum::IntoEnumIterator;
 
 use crate::parser::{
-    ast::{comment::wsoc::WSoC, expression::Expression, token::Token, ProgramAST},
-    context::{context, ParserContext},
+    ParserResult,
+    ast::{ProgramAST, comment::wsoc::WSoC, expression::Expression, token::Token},
+    context::{ParserContext, context},
     error::ParserErrorTree,
     input::ParserInput,
     span::Span,
-    ParserResult,
 };
 
 use super::DirectiveKind;
@@ -131,9 +131,9 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
-        ast::{directive::unknown::UnknownDirective, ProgramAST},
-        input::ParserInput,
         ParserState,
+        ast::{ProgramAST, directive::unknown::UnknownDirective},
+        input::ParserInput,
     };
 
     #[test]

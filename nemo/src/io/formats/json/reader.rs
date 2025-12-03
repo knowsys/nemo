@@ -9,10 +9,14 @@ use nemo_physical::{
     datavalues::AnyDataValue,
     error::{ExternalReadingError, ReadingError, ReadingErrorKind},
     management::bytesized::ByteSized,
+    tabular::filters::FilterTransformPattern,
 };
 use serde_json::Value;
 
-pub(crate) struct JsonReader<T>(pub(super) T);
+pub(crate) struct JsonReader<T> {
+    pub(super) read: T,
+    pub(super) patterns: Vec<FilterTransformPattern>,
+}
 
 impl<T> Debug for JsonReader<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -43,12 +47,14 @@ impl From<JsonReadingError> for ReadingError {
     }
 }
 
+#[async_trait::async_trait(?Send)]
 impl<T: Read> TableProvider for JsonReader<T> {
-    fn provide_table_data(
+    async fn provide_table_data(
         self: Box<Self>,
         tuple_writer: &mut TupleWriter,
     ) -> Result<(), ReadingError> {
-        let value: Value = serde_json::from_reader(self.0).map_err(JsonReadingError)?;
+        tuple_writer.set_patterns(self.patterns);
+        let value: Value = serde_json::from_reader(self.read).map_err(JsonReadingError)?;
         let mut max_object_id = 0u64;
 
         let mut stack = vec![(max_object_id, value)];

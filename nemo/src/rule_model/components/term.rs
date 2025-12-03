@@ -25,9 +25,9 @@ use map::Map;
 use nemo_physical::datavalues::AnyDataValue;
 use operation::Operation;
 use primitive::{
-    ground::GroundTerm,
-    variable::{existential::ExistentialVariable, universal::UniversalVariable, Variable},
     Primitive,
+    ground::GroundTerm,
+    variable::{Variable, existential::ExistentialVariable, universal::UniversalVariable},
 };
 use tuple::Tuple;
 use value_type::ValueType;
@@ -37,9 +37,8 @@ use crate::rule_model::{
 };
 
 use super::{
-    import_export::io_type::IOType, ComponentBehavior, ComponentIdentity, ComponentSource,
-    IterableComponent, IterablePrimitives, IterableVariables, ProgramComponent,
-    ProgramComponentKind,
+    ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent, IterablePrimitives,
+    IterableVariables, ProgramComponent, ProgramComponentKind, import_export::io_type::IOType,
 };
 
 /// Term
@@ -134,6 +133,19 @@ impl Term {
         matches!(self, Term::Tuple(_))
     }
 
+    /// Return whether this term is a variable.
+    pub fn is_variable(&self) -> bool {
+        matches!(self, Term::Primitive(Primitive::Variable(_)))
+    }
+
+    /// Return whether this term is an existentially quantified variable.
+    pub fn is_existential_variable(&self) -> bool {
+        matches!(
+            self,
+            Term::Primitive(Primitive::Variable(Variable::Existential(_)))
+        )
+    }
+
     /// Return an iterator over the arguments to this term.
     pub fn terms(&self) -> Box<dyn Iterator<Item = &Term> + '_> {
         match self {
@@ -174,11 +186,10 @@ impl Term {
         })
     }
 
-    /// Check wether this term can be reduced to a ground value,
-    /// except for global variables that need to be resolved.
+    /// Check wether this term can be reduced to a ground value.
     ///
     /// This is the case if
-    ///     * This term does not contain non-global variables.
+    ///     * This term does not contain variables.
     ///     * This term does not contain undefined intermediate values.
     pub fn is_resolvable(&self) -> bool {
         match self {

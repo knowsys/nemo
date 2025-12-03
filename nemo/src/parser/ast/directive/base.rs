@@ -3,11 +3,11 @@
 use nom::sequence::{preceded, tuple};
 
 use crate::parser::{
-    ast::{comment::wsoc::WSoC, expression::basic::iri::Iri, token::Token, ProgramAST},
-    context::{context, ParserContext},
+    ParserResult,
+    ast::{ProgramAST, comment::wsoc::WSoC, expression::basic::iri::Iri, token::Token},
+    context::{ParserContext, context},
     input::ParserInput,
     span::Span,
-    ParserResult,
 };
 
 /// Base directive, indicating a global prefix
@@ -82,9 +82,9 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
-        ast::{directive::base::Base, ProgramAST},
-        input::ParserInput,
         ParserState,
+        ast::{ProgramAST, directive::base::Base},
+        input::ParserInput,
     };
 
     #[test]

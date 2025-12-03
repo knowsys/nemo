@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use clap::{CommandFactory, Subcommand, ValueEnum};
 
-use clap_complete::{generate_to, Shell};
+use clap_complete::{Shell, generate_to};
 use nemo_cli::cli::CliApp;
 
 use super::Task;

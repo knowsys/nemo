@@ -14,10 +14,10 @@ use complex::{
 use nom::{branch::alt, combinator::map};
 
 use crate::parser::{
-    context::{context, ParserContext},
+    ParserResult,
+    context::{ParserContext, context},
     input::ParserInput,
     span::Span,
-    ParserResult,
 };
 
 use super::ProgramAST;
@@ -185,10 +185,10 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
-        ast::{expression::Expression, ProgramAST},
+        ParserState,
+        ast::{ProgramAST, expression::Expression},
         context::ParserContext,
         input::ParserInput,
-        ParserState,
     };
 
     #[test]

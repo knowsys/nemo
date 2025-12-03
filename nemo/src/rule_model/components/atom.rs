@@ -10,7 +10,7 @@ use std::{
 use crate::{
     parser::ParserErrorReport,
     rule_model::{
-        error::{validation_error::ValidationError, ValidationReport},
+        error::{ValidationReport, validation_error::ValidationError},
         origin::Origin,
         pipeline::id::ProgramComponentId,
         translation::{ProgramParseReport, TranslationComponent},
@@ -18,15 +18,15 @@ use crate::{
 };
 
 use super::{
-    component_iterator, component_iterator_mut,
+    ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent, IterablePrimitives,
+    IterableVariables, ProgramComponent, ProgramComponentKind, component_iterator,
+    component_iterator_mut,
     literal::Literal,
     tag::Tag,
     term::{
-        primitive::{variable::Variable, Primitive},
         Term,
+        primitive::{Primitive, variable::Variable},
     },
-    ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent, IterablePrimitives,
-    IterableVariables, ProgramComponent, ProgramComponentKind,
 };
 
 /// Atom
@@ -298,7 +298,7 @@ impl IterablePrimitives for Atom {
 
 #[cfg(test)]
 mod test {
-    use crate::rule_model::components::{term::primitive::variable::Variable, IterableVariables};
+    use crate::rule_model::components::{IterableVariables, term::primitive::variable::Variable};
 
     #[test]
     fn atom_basic() {

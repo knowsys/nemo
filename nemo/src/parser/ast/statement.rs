@@ -8,20 +8,20 @@ use nom::{
 };
 
 use crate::parser::{
-    context::{context, ParserContext},
+    ParserResult,
+    context::{ParserContext, context},
     input::ParserInput,
     span::Span,
-    ParserResult,
 };
 
 use super::{
+    ProgramAST,
     attribute::Attribute,
     comment::{doc::DocComment, wsoc::WSoC},
     directive::Directive,
     guard::Guard,
     rule::Rule,
     token::Token,
-    ProgramAST,
 };
 
 #[allow(clippy::large_enum_variant)]
@@ -154,10 +154,10 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
-        ast::{statement::Statement, ProgramAST},
+        ParserState,
+        ast::{ProgramAST, statement::Statement},
         context::ParserContext,
         input::ParserInput,
-        ParserState,
     };
 
     #[test]

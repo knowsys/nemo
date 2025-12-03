@@ -3,13 +3,13 @@
 use nom::sequence::{delimited, pair, terminated, tuple};
 
 use crate::parser::{
-    context::{context, ParserContext},
+    ParserResult,
+    context::{ParserContext, context},
     input::ParserInput,
     span::Span,
-    ParserResult,
 };
 
-use super::{comment::wsoc::WSoC, expression::complex::atom::Atom, token::Token, ProgramAST};
+use super::{ProgramAST, comment::wsoc::WSoC, expression::complex::atom::Atom, token::Token};
 
 /// Attribute of a rule
 #[derive(Debug)]
@@ -79,9 +79,9 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
-        ast::{attribute::Attribute, ProgramAST},
-        input::ParserInput,
         ParserState,
+        ast::{ProgramAST, attribute::Attribute},
+        input::ParserInput,
     };
 
     #[test]

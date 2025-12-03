@@ -3,15 +3,23 @@
 use std::{
     borrow::Cow,
     collections::{HashMap, HashSet},
+    hash::Hash,
 };
 
 use ascii_tree::write_tree;
+use indexmap::{IndexSet, set::MutableValues};
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph_graphml::GraphMl;
 use serde::Serialize;
 
 use crate::{
-    chase_model::components::atom::{ground_atom::GroundAtom, ChaseAtom},
+    execution::{
+        planning::normalization::atom::ground::GroundAtom,
+        tracing::node_query::{
+            TableEntriesForTreeNodesQuery, TableEntriesForTreeNodesQueryInner,
+            TableEntriesForTreeNodesQuerySuccessor,
+        },
+    },
     rule_model::{
         components::{fact::Fact, rule::Rule},
         programs::program::Program,
@@ -91,6 +99,20 @@ struct TracedFact {
     status: TraceStatus,
 }
 
+impl PartialEq for TracedFact {
+    fn eq(&self, other: &Self) -> bool {
+        self.fact == other.fact
+    }
+}
+
+impl Eq for TracedFact {}
+
+impl Hash for TracedFact {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.fact.hash(state);
+    }
+}
+
 /// Structure for recording execution traces
 /// while not recomputing traces for the same facts occurring multiple times
 #[derive(Debug)]
@@ -99,7 +121,7 @@ pub struct ExecutionTrace {
     program: Program,
 
     /// All the facts considered during tracing
-    facts: Vec<TracedFact>,
+    facts: IndexSet<TracedFact>,
 }
 
 impl ExecutionTrace {
@@ -107,44 +129,31 @@ impl ExecutionTrace {
     pub(crate) fn new(program: Program) -> Self {
         Self {
             program,
-            facts: Vec::new(),
+            facts: IndexSet::default(),
         }
     }
 
     /// Given a [TraceFactHandle] return a reference to the corresponding [TracedFact].
     fn get_fact(&self, handle: TraceFactHandle) -> &TracedFact {
-        &self.facts[handle.0]
+        self.facts.get_index(handle.0).expect("invalid fact handle")
     }
 
     /// Given a [TraceFactHandle] return a mutable reference to the corresponding [TracedFact].
     fn get_fact_mut(&mut self, handle: TraceFactHandle) -> &mut TracedFact {
-        &mut self.facts[handle.0]
+        self.facts
+            .get_index_mut2(handle.0)
+            .expect("invalid fact handle")
     }
 
     /// Search a given [GroundAtom] in self.facts.
     /// Also takes into account that the interpretation of a constant depends on its type.
     fn find_fact(&self, fact: &GroundAtom) -> Option<TraceFactHandle> {
-        for (fact_index, traced_fact) in self.facts.iter().enumerate() {
-            if traced_fact.fact.predicate() != fact.predicate()
-                || traced_fact.fact.arity() != fact.arity()
-            {
-                continue;
-            }
+        let traced_fact = TracedFact {
+            fact: fact.clone(),
+            status: TraceStatus::Unknown,
+        };
 
-            let mut identical = true;
-            for (term_fact, term_traced_fact) in fact.terms().zip(traced_fact.fact.terms()) {
-                if term_fact != term_traced_fact {
-                    identical = false;
-                    break;
-                }
-            }
-
-            if identical {
-                return Some(TraceFactHandle(fact_index));
-            }
-        }
-
-        None
+        self.facts.get_index_of(&traced_fact).map(TraceFactHandle)
     }
 
     /// Registers a new [GroundAtom].
@@ -157,7 +166,7 @@ impl ExecutionTrace {
             handle
         } else {
             let handle = TraceFactHandle(self.facts.len());
-            self.facts.push(TracedFact {
+            self.facts.insert(TracedFact {
                 fact,
                 status: TraceStatus::Unknown,
             });
@@ -206,6 +215,10 @@ impl ToGraphMl for DiGraph<TracePetGraphNodeLabel, ()> {
 pub struct TraceTreeRuleApplication {
     /// Rule that was applied
     pub rule: Rule,
+    /// Index of the applied rule
+    pub rule_index: usize,
+    /// Head index
+    pub head_index: usize,
     /// Variable assignment used during the rule application
     pub assignment: Substitution,
     /// Index of the head atom which produced the fact under consideration
@@ -247,6 +260,18 @@ pub enum ExecutionTraceTree {
     Fact(GroundAtom),
     /// Node represents a derived fact
     Rule(TraceTreeRuleApplication, Vec<ExecutionTraceTree>),
+}
+
+impl ExecutionTraceTree {
+    /// Return the number of nodes in this tree.
+    pub fn node_count(&self) -> usize {
+        match self {
+            ExecutionTraceTree::Fact(_) => 1,
+            ExecutionTraceTree::Rule(_, trees) => {
+                1 + trees.iter().map(|tree| tree.node_count()).sum::<usize>()
+            }
+        }
+    }
 }
 
 /// Type of labels for [DiGraph] representation of [ExecutionTrace]
@@ -329,6 +354,48 @@ impl ExecutionTraceTree {
     pub fn to_graphml(&self) -> String {
         self.to_petgraph().to_graphml()
     }
+
+    /// Inner function of `to_node_query`.
+    fn to_node_query_inner(&self) -> TableEntriesForTreeNodesQueryInner {
+        match self {
+            ExecutionTraceTree::Fact(_) => TableEntriesForTreeNodesQueryInner {
+                queries: Vec::default(),
+                pagination: None,
+                next: None,
+            },
+            ExecutionTraceTree::Rule(rule_application, trees) => {
+                let successor = TableEntriesForTreeNodesQuerySuccessor {
+                    rule: rule_application.rule_index,
+                    head_index: rule_application.head_index,
+                    children: trees
+                        .iter()
+                        .map(|tree| tree.to_node_query_inner())
+                        .collect::<Vec<_>>(),
+                };
+
+                TableEntriesForTreeNodesQueryInner {
+                    queries: Vec::default(),
+                    pagination: None,
+                    next: Some(successor),
+                }
+            }
+        }
+    }
+
+    /// Return a [TableEntriesForTreeNodesQuery] that would be answered by this tree.
+    pub fn to_node_query(&self) -> TableEntriesForTreeNodesQuery {
+        let predicate = match self {
+            ExecutionTraceTree::Fact(fact) => fact.predicate(),
+            ExecutionTraceTree::Rule(rule_application, _) => {
+                rule_application.rule.head()[rule_application.head_index].predicate()
+            }
+        };
+
+        TableEntriesForTreeNodesQuery {
+            predicate: predicate.to_string(),
+            inner: self.to_node_query_inner(),
+        }
+    }
 }
 
 impl ExecutionTrace {
@@ -352,6 +419,8 @@ impl ExecutionTrace {
 
                     let tree_application = TraceTreeRuleApplication {
                         rule: self.program.rule(application.rule_index).clone(),
+                        rule_index: application.rule_index,
+                        head_index: application._position,
                         assignment: application.assignment.clone(),
                         _position: application._position,
                     };
@@ -600,15 +669,17 @@ mod test {
     use nemo_physical::datavalues::AnyDataValue;
 
     use crate::{
-        chase_model::components::atom::ground_atom::GroundAtom,
-        execution::tracing::trace::{TraceDerivation, TraceStatus},
+        execution::{
+            planning::normalization::atom::ground::GroundAtom,
+            tracing::trace::{TraceDerivation, TraceStatus},
+        },
         rule_model::{
             components::{
                 atom::Atom,
                 rule::Rule,
-                term::primitive::{variable::Variable, Primitive},
+                term::primitive::{Primitive, variable::Variable},
             },
-            programs::{program::Program, ProgramWrite},
+            programs::{ProgramWrite, program::Program},
             substitution::Substitution,
             translation::TranslationComponent,
         },

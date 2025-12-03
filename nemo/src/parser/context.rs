@@ -4,7 +4,7 @@
 use enum_assoc::Assoc;
 use nom_supreme::context::ContextError;
 
-use super::{ast::token::TokenKind, error::ParserErrorTree, ParserInput, ParserResult};
+use super::{ParserInput, ParserResult, ast::token::TokenKind, error::ParserErrorTree};
 
 /// Context, in which a particular parse error occurred
 #[derive(Assoc, Debug, Clone, Copy, PartialEq, Eq)]

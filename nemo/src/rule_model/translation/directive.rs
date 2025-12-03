@@ -6,11 +6,11 @@ use crate::{
     parser::ast::{self},
     rule_model::{
         components::{
+            ComponentSource,
             import_export::{ExportDirective, ImportDirective},
             output::Output,
             parameter::ParameterDeclaration,
             tag::Tag,
-            ComponentSource,
         },
         error::{info::Info, translation_error::TranslationError},
         origin::Origin,

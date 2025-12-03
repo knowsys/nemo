@@ -3,10 +3,10 @@
 use std::rc::Rc;
 
 use crate::rule_model::{
-    components::{statement::Statement, ComponentIdentity},
+    components::{ComponentIdentity, statement::Statement},
     error::ValidationReport,
-    pipeline::{revision::ProgramRevision, ProgramPipeline},
-    programs::{handle::ProgramHandle, ProgramWrite},
+    pipeline::{ProgramPipeline, revision::ProgramRevision},
+    programs::{ProgramWrite, handle::ProgramHandle},
 };
 
 use super::id::ProgramComponentId;

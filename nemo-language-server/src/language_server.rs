@@ -14,13 +14,13 @@ use anyhow::anyhow;
 use futures::lock::Mutex;
 use line_index::{LineCol, LineIndex, WideEncoding};
 use lsp_component::LSPComponent;
-use nemo::parser::ast::program::Program;
 use nemo::parser::ast::ProgramAST;
+use nemo::parser::ast::program::Program;
 use nemo::parser::context::ParserContext;
 use nemo::parser::span::CharacterPosition;
 use nemo::parser::{Parser, ParserErrorReport};
 use nemo_position::{
-    lsp_position_to_nemo_position, nemo_range_to_lsp_range, PositionConversionError,
+    PositionConversionError, lsp_position_to_nemo_position, nemo_range_to_lsp_range,
 };
 use token_type::TokenType;
 use tower_lsp::lsp_types::{

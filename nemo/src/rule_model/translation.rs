@@ -11,16 +11,16 @@ mod term;
 
 use std::{collections::HashMap, fmt::Debug, fmt::Display, ops::Range};
 
-use attribute::{process_attributes, KnownAttributes};
+use attribute::{KnownAttributes, process_attributes};
 use directive::{handle_define_directive, handle_use_directive};
 
 use crate::{
     error::report::ProgramReport,
     parser::{
+        ParserErrorReport, ParserState,
         ast::{self, ProgramAST},
         error::translate_error_tree,
         input::ParserInput,
-        ParserErrorReport, ParserState,
     },
     rule_file::RuleFile,
     rule_model::programs::ProgramWrite,
@@ -29,7 +29,7 @@ use crate::{
 
 use super::{
     components::{fact::Fact, rule::Rule, term::Term},
-    error::{translation_error::TranslationError, TranslationReport},
+    error::{TranslationReport, translation_error::TranslationError},
 };
 
 /// Object for handling the translation of the ast representation

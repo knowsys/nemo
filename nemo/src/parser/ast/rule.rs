@@ -3,13 +3,13 @@
 use nom::sequence::{separated_pair, tuple};
 
 use crate::parser::{
-    context::{context, ParserContext},
+    ParserResult,
+    context::{ParserContext, context},
     input::ParserInput,
     span::Span,
-    ParserResult,
 };
 
-use super::{comment::wsoc::WSoC, guard::Guard, sequence::Sequence, token::Token, ProgramAST};
+use super::{ProgramAST, comment::wsoc::WSoC, guard::Guard, sequence::Sequence, token::Token};
 
 /// A rule describing a logical implication
 #[derive(Debug)]
@@ -90,9 +90,9 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
-        ast::{rule::Rule, ProgramAST},
-        input::ParserInput,
         ParserState,
+        ast::{ProgramAST, rule::Rule},
+        input::ParserInput,
     };
 
     #[test]

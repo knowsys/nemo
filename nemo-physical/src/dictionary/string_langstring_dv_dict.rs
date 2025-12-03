@@ -1,7 +1,7 @@
 //! A [DvDict] implementation based on converting IRI data values to strings.
 
 use super::string_dv_dict::{
-    one_string_to_two, two_strings_to_one, DvConverter, StringBasedDvDictionary,
+    DvConverter, StringBasedDvDictionary, one_string_to_two, two_strings_to_one,
 };
 use crate::datavalues::{AnyDataValue, DataValue, ValueDomain};
 
@@ -40,7 +40,7 @@ mod test {
     use crate::{
         datavalues::AnyDataValue,
         dictionary::{
-            string_langstring_dv_dict::LangStringDvDictionary, AddResult, DvDict, KNOWN_ID_MARK,
+            AddResult, DvDict, KNOWN_ID_MARK, string_langstring_dv_dict::LangStringDvDictionary,
         },
     };
 

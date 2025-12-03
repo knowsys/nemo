@@ -25,7 +25,7 @@ fn bool_list_from_any(parameters: &[AnyDataValue]) -> Option<Vec<bool>> {
 ///
 /// Returns `true` if no parameters are given.
 /// Returns `None` if one of the inputs is not in the boolean value range.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct BooleanConjunction;
 impl NaryFunction for BooleanConjunction {
     fn evaluate(&self, parameters: &[AnyDataValue]) -> Option<AnyDataValue> {
@@ -53,7 +53,7 @@ impl NaryFunction for BooleanConjunction {
 ///
 /// Returns `false` if no parameters are given.
 /// Returns `None` if one of the inputs is not in the boolean value range.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct BooleanDisjunction;
 impl NaryFunction for BooleanDisjunction {
     fn evaluate(&self, parameters: &[AnyDataValue]) -> Option<AnyDataValue> {
@@ -81,7 +81,7 @@ impl NaryFunction for BooleanDisjunction {
 /// and returns `false` if its input it `true`.
 ///
 /// Returns `None` if the input is not in the boolean value range.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct BooleanNegation;
 impl UnaryFunction for BooleanNegation {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {

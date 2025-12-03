@@ -14,11 +14,11 @@ use nom::{
 };
 
 use crate::parser::{
-    ast::{comment::wsoc::WSoC, token::Token, ProgramAST},
+    ParserResult,
+    ast::{ProgramAST, comment::wsoc::WSoC, token::Token},
     context::ParserContext,
     input::ParserInput,
     span::Span,
-    ParserResult,
 };
 
 const CONTEXT: ParserContext = ParserContext::Sequence;
@@ -158,7 +158,7 @@ impl<T> IntoIterator for Sequence<'_, T> {
 mod test {
     use nom::combinator::all_consuming;
 
-    use crate::parser::{ast::expression::basic::number::Number, ParserState};
+    use crate::parser::{ParserState, ast::expression::basic::number::Number};
 
     use super::*;
 

@@ -2,10 +2,11 @@
 
 use std::{collections::HashMap, fmt::Debug, hash::Hash};
 
-use crate::datavalues::AnyDataValue;
+use crate::{datavalues::AnyDataValue, function::definitions::language::LanguageString};
 
 use super::{
     definitions::{
+        BinaryFunctionEnum, NaryFunctionEnum, TernaryFunctionEnum, UnaryFunctionEnum,
         boolean::{BooleanConjunction, BooleanDisjunction, BooleanNegation},
         casting::{CastingIntoDouble, CastingIntoFloat, CastingIntoInteger64, CastingIntoIri},
         checktype::{
@@ -29,7 +30,6 @@ use super::{
             StringReverse, StringStarts, StringSubstring, StringSubstringLength, StringUppercase,
             StringUriDecode, StringUriEncode,
         },
-        BinaryFunctionEnum, NaryFunctionEnum, TernaryFunctionEnum, UnaryFunctionEnum,
     },
     evaluation::StackProgram,
 };
@@ -189,6 +189,42 @@ where
             None
         }
     }
+
+    /// A (mutable) iterator over the leaves of this tree.
+    pub fn leaves(&mut self) -> impl Iterator<Item = &mut FunctionTree<ReferenceType>> {
+        let mut result = Vec::new();
+        match self {
+            leaf @ FunctionTree::Leaf(_) => result.push(leaf),
+            FunctionTree::Unary(_function, tree) => result.extend(tree.leaves()),
+            FunctionTree::Binary {
+                function: _,
+                left,
+                right,
+            } => {
+                result.extend(left.leaves());
+                result.extend(right.leaves());
+            }
+            FunctionTree::Ternary {
+                function: _,
+                first,
+                second,
+                third,
+            } => {
+                result.extend(first.leaves());
+                result.extend(second.leaves());
+                result.extend(third.leaves());
+            }
+            FunctionTree::Nary {
+                function: _,
+                parameters,
+            } => {
+                for parameter in parameters {
+                    result.extend(parameter.leaves())
+                }
+            }
+        }
+        result.into_iter()
+    }
 }
 
 // Contains constructors for each type of operation
@@ -250,6 +286,16 @@ where
         Self::Unary(UnaryFunctionEnum::Datatype(Datatype), Box::new(sub))
     }
 
+    /// Create a tree not that evaluates to a language tagged string
+    /// constructed from the input trees.
+    pub fn language_string(left: Self, right: Self) -> Self {
+        Self::Binary {
+            function: BinaryFunctionEnum::LanguageString(LanguageString),
+            left: Box::new(left),
+            right: Box::new(right),
+        }
+    }
+
     /// Create a tree node that evaluates to the language tag of the sub node.
     pub fn languagetag(sub: Self) -> Self {
         Self::Unary(UnaryFunctionEnum::LanguageTag(LanguageTag), Box::new(sub))
@@ -308,11 +354,13 @@ where
     /// and returns `false` otherwise.
     /// Returns `true` if there are no subnodes.
     pub fn boolean_conjunction(mut parameters: Vec<Self>) -> Self {
-        if parameters.len() != 1 {
+        if parameters.len() > 1 {
             Self::Nary {
                 function: NaryFunctionEnum::BooleanConjunction(BooleanConjunction),
                 parameters,
             }
+        } else if parameters.is_empty() {
+            Self::constant(AnyDataValue::new_boolean(true))
         } else {
             parameters.remove(0)
         }
@@ -324,11 +372,13 @@ where
     /// and returns `false` otherwise.
     /// Returns `false` if there are no subnodes.
     pub fn boolean_disjunction(mut parameters: Vec<Self>) -> Self {
-        if parameters.len() != 1 {
+        if parameters.len() > 1 {
             Self::Nary {
                 function: NaryFunctionEnum::BooleanDisjunction(BooleanDisjunction),
                 parameters,
             }
+        } else if parameters.is_empty() {
+            Self::constant(AnyDataValue::new_boolean(false))
         } else {
             parameters.remove(0)
         }

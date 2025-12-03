@@ -4,12 +4,15 @@ pub(crate) mod reader;
 
 use std::{io::Read, sync::Arc};
 
-use nemo_physical::datasources::table_providers::TableProvider;
+use nemo_physical::{
+    datasources::table_providers::TableProvider, tabular::filters::FilterTransformPattern,
+};
 use reader::JsonReader;
 
 use crate::{
     io::format_builder::{
-        format_tag, AnyImportExportBuilder, FormatBuilder, Parameters, StandardParameter,
+        AnyImportExportBuilder, FormatBuilder, Parameters, StandardParameter, SupportedFormatTag,
+        format_tag,
     },
     rule_model::{components::import_export::Direction, error::validation_error::ValidationError},
     syntax::import_export::file_format,
@@ -18,7 +21,16 @@ use crate::{
 use super::{FileFormatMeta, ImportHandler};
 
 #[derive(Debug, Clone)]
-pub(crate) struct JsonHandler;
+pub(crate) struct JsonHandler {
+    patterns: Vec<FilterTransformPattern>,
+}
+
+impl JsonHandler {
+    /// Return the [SupportedFormatTag] for this handler.
+    pub fn format_tag(&self) -> SupportedFormatTag {
+        SupportedFormatTag::Json(JsonTag::Json)
+    }
+}
 
 impl FileFormatMeta for JsonHandler {
     fn default_extension(&self) -> String {
@@ -32,12 +44,15 @@ impl FileFormatMeta for JsonHandler {
 
 impl ImportHandler for JsonHandler {
     fn reader(&self, read: Box<dyn Read>) -> Result<Box<dyn TableProvider>, crate::error::Error> {
-        Ok(Box::new(JsonReader(read)))
+        Ok(Box::new(JsonReader {
+            read,
+            patterns: self.patterns.clone(),
+        }))
     }
 }
 
 format_tag! {
-    pub(crate) enum JsonTag(SupportedFormatTag::Json) {
+    pub enum JsonTag(SupportedFormatTag::Json) {
         Json => file_format::JSON,
     }
 }
@@ -61,18 +76,28 @@ impl FormatBuilder for JsonHandler {
             return Err(ValidationError::UnsupportedJsonExport);
         }
 
-        Ok(Self)
+        Ok(Self {
+            patterns: Vec::new(),
+        })
     }
 
     fn expected_arity(&self) -> Option<usize> {
         Some(3)
     }
 
-    fn build_import(&self, _arity: usize) -> Arc<dyn ImportHandler + Send + Sync + 'static> {
-        Arc::new(Self)
+    fn build_import(
+        &self,
+        _arity: usize,
+        patterns: Vec<FilterTransformPattern>,
+    ) -> Arc<dyn ImportHandler + Send + Sync + 'static> {
+        Arc::new(Self { patterns })
     }
 
-    fn build_export(&self, _arity: usize) -> Arc<dyn super::ExportHandler + Send + Sync + 'static> {
+    fn build_export(
+        &self,
+        _arity: usize,
+        _patterns: Vec<FilterTransformPattern>,
+    ) -> Arc<dyn super::ExportHandler + Send + Sync + 'static> {
         unimplemented!("json export is currently not supported")
     }
 }

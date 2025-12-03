@@ -3,14 +3,14 @@
 use nom::sequence::{delimited, pair};
 
 use crate::parser::{
+    ParserResult,
     ast::{
-        comment::wsoc::WSoC, expression::Expression, sequence::simple::ExpressionSequenceSimple,
-        tag::structure::StructureTag, token::Token, ProgramAST,
+        ProgramAST, comment::wsoc::WSoC, expression::Expression,
+        sequence::simple::ExpressionSequenceSimple, tag::structure::StructureTag, token::Token,
     },
-    context::{context, ParserContext},
+    context::{ParserContext, context},
     input::ParserInput,
     span::Span,
-    ParserResult,
 };
 
 /// A possibly tagged sequence of [Expression]s.
@@ -96,9 +96,9 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
-        ast::{expression::complex::atom::Atom, ProgramAST},
-        input::ParserInput,
         ParserState,
+        ast::{ProgramAST, expression::complex::atom::Atom},
+        input::ParserInput,
     };
 
     #[test]

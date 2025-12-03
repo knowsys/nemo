@@ -7,13 +7,13 @@ use crate::{
     parser::Parser,
     rule_file::RuleFile,
     rule_model::{
-        components::{statement::Statement, ProgramComponent},
+        components::{ProgramComponent, statement::Statement},
         error::{TranslationReport, ValidationReport},
         pipeline::{
-            commit::ProgramCommit, id::ProgramComponentId, transformations::ProgramTransformation,
-            ProgramPipeline,
+            ProgramPipeline, commit::ProgramCommit, id::ProgramComponentId,
+            transformations::ProgramTransformation,
         },
-        programs::{program::Program, ProgramRead, ProgramWrite},
+        programs::{ProgramRead, ProgramWrite, program::Program},
         translation::{ASTProgramTranslation, ProgramParseReport},
     },
 };

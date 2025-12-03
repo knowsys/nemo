@@ -11,7 +11,7 @@ use super::{BinaryFunction, FunctionTypePropagation, UnaryFunction};
 ///
 /// Returns `true` from the boolean value space
 /// if both input values are equal and `false` if they are not.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Equals;
 impl BinaryFunction for Equals {
     fn evaluate(
@@ -40,7 +40,7 @@ impl BinaryFunction for Equals {
 ///
 /// Returns `false` from the boolean value space
 /// if both input values are equal and `true` if they are not.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Unequals;
 impl BinaryFunction for Unequals {
     fn evaluate(
@@ -68,7 +68,7 @@ impl BinaryFunction for Unequals {
 /// Canonical string representation
 ///
 /// Returns the canonical string representation of the given value
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct CanonicalString;
 impl UnaryFunction for CanonicalString {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
@@ -87,7 +87,7 @@ impl UnaryFunction for CanonicalString {
 /// Lexical value
 ///
 /// Return the lexical value of the given value as a string.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct LexicalValue;
 impl UnaryFunction for LexicalValue {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
@@ -115,7 +115,7 @@ impl UnaryFunction for LexicalValue {
 /// Datatype of a value
 ///
 /// Returns the data type of the input parameter as a string.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Datatype;
 impl UnaryFunction for Datatype {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {

@@ -6,7 +6,7 @@ use crate::{
     rule_model::{
         components::{
             tag::Tag,
-            term::{map::Map, Term},
+            term::{Term, map::Map},
         },
         origin::Origin,
         translation::{ASTProgramTranslation, TranslationComponent},

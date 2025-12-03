@@ -3,25 +3,29 @@
 
 use std::{
     cell::RefCell,
-    collections::{hash_map::Entry, HashMap},
+    collections::{HashMap, hash_map::Entry},
     fmt::Debug,
     rc::{Rc, Weak},
 };
 
 use crate::{
+    datasources::table_providers::TableProvider,
     management::database::execution_series::{
         ExecutionTreeLeaf, ExecutionTreeNode, ExecutionTreeOperation,
     },
     tabular::operations::{
+        OperationGeneratorEnum, OperationTable,
         aggregate::{AggregateAssignment, GeneratorAggregate},
         filter::{Filters, GeneratorFilter},
         function::{FunctionAssignment, GeneratorFunction},
+        incremental_import::GeneratorIncrementalImport,
         join::GeneratorJoin,
         null::GeneratorNull,
         projectreorder::GeneratorProjectReorder,
+        single::GeneratorSingle,
         subtract::GeneratorSubtract,
         union::GeneratorUnion,
-        OperationGeneratorEnum, OperationTable,
+        zero::GeneratorZero,
     },
     util::mapping::{permutation::Permutation, traits::NatMapping},
 };
@@ -58,8 +62,23 @@ impl ExecutionNodeOwned {
 /// Reference to a node in an [ExecutionPlan]
 ///
 /// Internally, uses a `Weak<RefCell<T>>`.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ExecutionNodeRef(Weak<RefCell<ExecutionNode>>);
+
+impl Debug for ExecutionNodeRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.0.upgrade() {
+            Some(node) => f
+                .debug_tuple("ExecutionNodeRef")
+                .field(&node.borrow().id)
+                .finish(),
+            _ => f
+                .debug_tuple("ExecutionNodeRef")
+                .field(&"<failed to upgrade weak reference>".to_string())
+                .finish(),
+        }
+    }
+}
 
 impl ExecutionNodeRef {
     /// Return an referenced counted cell of an [ExecutionNode].
@@ -89,6 +108,15 @@ impl ExecutionNodeRef {
         let node_borrow = node_rc.borrow();
 
         node_borrow.marked_columns.clone()
+    }
+
+    /// Set the [OperationTable]
+    /// that marks the columns that are represented by this node.
+    pub fn set_markers(&mut self, markers: OperationTable) {
+        let node_rc = self.get_rc();
+        let mut node_borrow = node_rc.borrow_mut();
+
+        node_borrow.marked_columns = markers;
     }
 }
 
@@ -122,7 +150,7 @@ impl ExecutionNodeRef {
         let node_operation = &node_rc.borrow().operation;
 
         match node_operation {
-            ExecutionOperation::FetchTable(_, _) => vec![],
+            ExecutionOperation::FetchTable(_, _) | ExecutionOperation::Zero => vec![],
             ExecutionOperation::Join(subnodes) => subnodes.clone(),
             ExecutionOperation::Union(subnodes) => subnodes.clone(),
             ExecutionOperation::Subtract(subnode_main, subnodes_subtract) => {
@@ -131,11 +159,23 @@ impl ExecutionNodeRef {
 
                 result
             }
+            ExecutionOperation::IncrementalImport {
+                bound_positions: _,
+                arity: _,
+                input_nodes,
+                provider: _,
+            } => input_nodes
+                .iter()
+                .cloned()
+                .flat_map(|(old, new)| [old, new])
+                .collect::<Vec<_>>(),
             ExecutionOperation::ProjectReorder(subnode)
+            | ExecutionOperation::Single(subnode, _)
             | ExecutionOperation::Filter(subnode, _)
             | ExecutionOperation::Function(subnode, _)
             | ExecutionOperation::Null(subnode)
-            | ExecutionOperation::Aggregate(subnode, _) => vec![subnode.clone()],
+            | ExecutionOperation::Aggregate(subnode, _)
+            | ExecutionOperation::Rename(subnode) => vec![subnode.clone()],
         }
     }
 }
@@ -165,6 +205,8 @@ pub(crate) enum ExecutionOperation {
     Subtract(ExecutionNodeRef, Vec<ExecutionNodeRef>),
     /// Reorder or remove columns from the table represented by the subnode
     ProjectReorder(ExecutionNodeRef),
+    /// Retain only single elements from certain columns
+    Single(ExecutionNodeRef, OperationTable),
     /// Apply a filter to the table represented by the subnode
     Filter(ExecutionNodeRef, Filters),
     /// Introduce new columns by applying a function to the columns of the table represented by the subnode
@@ -173,6 +215,17 @@ pub(crate) enum ExecutionOperation {
     Null(ExecutionNodeRef),
     /// Perform aggregate operation
     Aggregate(ExecutionNodeRef, AggregateAssignment),
+    /// Perform an incremental import
+    IncrementalImport {
+        bound_positions: Vec<Vec<usize>>,
+        arity: usize,
+        input_nodes: Vec<(ExecutionNodeRef, ExecutionNodeRef)>,
+        provider: Rc<Box<dyn TableProvider>>,
+    },
+    /// Renaming of the columns of the table
+    Rename(ExecutionNodeRef),
+    /// Non-empty zero arity table
+    Zero,
 }
 
 /// Declares whether the resulting table form executing a plan should be kept temporarily or permamently
@@ -314,14 +367,24 @@ impl ExecutionPlan {
     ) -> ExecutionNodeRef {
         let new_operation = ExecutionOperation::ProjectReorder(subnode.clone());
 
-        // The project/reorder operation requires that its input is a materialized trie.
-        // Also, the result of this operation is a materialized trie.
-        // Hence, we mark the input of this node as well as this node as "output" nodes.
         let project_node = self.push_and_return_reference(new_operation, marked_columns);
-        self.write_temporary(subnode, "Input for Project/Reorder");
         self.write_temporary(project_node.clone(), "Project/Reorder");
 
         project_node
+    }
+
+    /// Return an [ExecutionNodeRef]
+    pub fn single(
+        &mut self,
+        subnode: ExecutionNodeRef,
+        single_columns: OperationTable,
+    ) -> ExecutionNodeRef {
+        let new_operation = ExecutionOperation::Single(subnode.clone(), single_columns);
+
+        let single_node = self.push_and_return_reference(new_operation, subnode.markers_cloned());
+        self.write_temporary(single_node.clone(), "Single");
+
+        single_node
     }
 
     /// Return an [ExecutionNodeRef] for restricing a column to a certain value.
@@ -365,6 +428,45 @@ impl ExecutionPlan {
     ) -> ExecutionNodeRef {
         let new_operation = ExecutionOperation::Null(subnode);
         self.push_and_return_reference(new_operation, marked_columns)
+    }
+
+    /// Return an [ExecutionNodeRef] for performing an import.
+    pub fn import(
+        &mut self,
+        markers: OperationTable,
+        bound_positions: Vec<Vec<usize>>,
+        arity: usize,
+        subnodes: Vec<(ExecutionNodeRef, ExecutionNodeRef)>,
+        provider: Box<dyn TableProvider>,
+    ) -> ExecutionNodeRef {
+        debug_assert!(markers.arity() == 0 || markers.arity() == arity);
+
+        let new_operation = ExecutionOperation::IncrementalImport {
+            bound_positions,
+            arity,
+            input_nodes: subnodes,
+            provider: Rc::new(provider),
+        };
+        let import_node = self.push_and_return_reference(new_operation, markers);
+
+        self.write_temporary(import_node.clone(), "Import");
+
+        import_node
+    }
+
+    /// Return an [ExecutionNodeRef] with renamed column markers.
+    pub fn rename(
+        &mut self,
+        subnode: ExecutionNodeRef,
+        markers: OperationTable,
+    ) -> ExecutionNodeRef {
+        let operation = ExecutionOperation::Rename(subnode);
+        self.push_and_return_reference(operation, markers)
+    }
+
+    /// Return an [ExecutionNodeRef] that generatates a non-empty table with arity zero.
+    pub fn zero(&mut self) -> ExecutionNodeRef {
+        self.push_and_return_reference(ExecutionOperation::Zero, OperationTable::default())
     }
 }
 
@@ -486,7 +588,9 @@ impl ExecutionPlan {
 
             let root = ExecutionTreeNode::ProjectReorder {
                 generator,
-                subnode: ExecutionTreeLeaf::FetchComputedTable(closest_computed_id),
+                subnode: ExecutionTreeOperation::Leaf(ExecutionTreeLeaf::FetchComputedTable(
+                    closest_computed_id,
+                )),
             };
 
             ExecutionTree {
@@ -513,15 +617,15 @@ impl ExecutionPlan {
 
             if let ExecutionTreeNode::ProjectReorder {
                 generator,
-                subnode: ExecutionTreeLeaf::FetchComputedTable(computed),
+                subnode:
+                    ExecutionTreeOperation::Leaf(ExecutionTreeLeaf::FetchComputedTable(computed)),
             } = &root
+                && !&computed_trees[*computed].result.is_permanent()
             {
-                if !&computed_trees[*computed].result.is_permanent() {
-                    computed_trees[*computed]
-                        .dependents
-                        .push((computed_table_id, generator.projectreordering()));
-                    computed_trees[*computed].used -= 1;
-                }
+                computed_trees[*computed]
+                    .dependents
+                    .push((computed_table_id, generator.projectreordering()));
+                computed_trees[*computed].used -= 1;
             }
 
             ExecutionTree {
@@ -554,24 +658,23 @@ impl ExecutionPlan {
         computed_trees_map: &mut HashMap<ExecutionId, Vec<(ColumnOrder, ComputedTableId)>>,
         loaded_tables: &mut HashMap<(PermanentTableId, ColumnOrder), LoadedTableId>,
     ) -> ExecutionTreeNode {
-        if node.id() != root_node_id {
-            if let Some(output_node) = output_nodes
+        if node.id() != root_node_id
+            && let Some(output_node) = output_nodes
                 .iter()
                 .find(|output_node| node.id() == output_node.node.id())
-            {
-                let computed_id = Self::execution_tree(
-                    output_node,
-                    order,
-                    output_nodes,
-                    computed_trees,
-                    computed_trees_map,
-                    loaded_tables,
-                );
+        {
+            let computed_id = Self::execution_tree(
+                output_node,
+                order,
+                output_nodes,
+                computed_trees,
+                computed_trees_map,
+                loaded_tables,
+            );
 
-                return ExecutionTreeNode::Operation(ExecutionTreeOperation::Leaf(
-                    ExecutionTreeLeaf::FetchComputedTable(computed_id),
-                ));
-            }
+            return ExecutionTreeNode::Operation(ExecutionTreeOperation::Leaf(
+                ExecutionTreeLeaf::FetchComputedTable(computed_id),
+            ));
         }
 
         let node_rc = node.get_rc();
@@ -620,7 +723,7 @@ impl ExecutionPlan {
                             loaded_tables,
                         )
                         .operation()
-                        .expect("No sub node should be a project")
+                        .expect("non-operations appear only as tree roots")
                     })
                     .collect::<Vec<_>>();
 
@@ -646,7 +749,7 @@ impl ExecutionPlan {
                     loaded_tables,
                 )
                 .operation()
-                .expect("No sub node should be a project");
+                .expect("non-operations appear only as tree roots");
 
                 // Add aggregate operation
                 ExecutionTreeNode::Operation(ExecutionTreeOperation::Node {
@@ -668,7 +771,7 @@ impl ExecutionPlan {
                             loaded_tables,
                         )
                         .operation()
-                        .expect("No sub node should be a project")
+                        .expect("non-operations appear only as tree roots")
                     })
                     .collect::<Vec<_>>();
 
@@ -679,6 +782,7 @@ impl ExecutionPlan {
             }
             ExecutionOperation::Subtract(subnode_main, subnodes_subtract) => {
                 let markers_main = node_markers;
+
                 let (markers_subtract, subtract_reorderings): (
                     Vec<OperationTable>,
                     Vec<Permutation>,
@@ -701,7 +805,7 @@ impl ExecutionPlan {
                             loaded_tables,
                         )
                         .operation()
-                        .expect("No sub node should be a project")
+                        .expect("non-operations appear only as tree roots")
                     })
                     .collect::<Vec<_>>();
 
@@ -724,7 +828,7 @@ impl ExecutionPlan {
                     loaded_tables,
                 )
                 .operation()
-                .expect("No sub node should be a project");
+                .expect("non-operations appear only as tree roots");
 
                 ExecutionTreeNode::Operation(ExecutionTreeOperation::Node {
                     generator: OperationGeneratorEnum::Filter(GeneratorFilter::new(
@@ -745,7 +849,7 @@ impl ExecutionPlan {
                     loaded_tables,
                 )
                 .operation()
-                .expect("No sub node should be a project");
+                .expect("non-operations appear only as tree roots");
 
                 // TODO: A reordering may be required if the computed columns
                 // appear earlier than the argument columns they are using.
@@ -759,25 +863,19 @@ impl ExecutionPlan {
                 })
             }
             ExecutionOperation::ProjectReorder(subnode) => {
-                let marker_subnode = subnode.markers_cloned();
-                let subtree: ExecutionTreeLeaf = if let ExecutionTreeOperation::Leaf(leaf) =
-                    Self::execution_node(
-                        root_node_id,
-                        subnode.clone(),
-                        ColumnOrder::default(),
-                        output_nodes,
-                        computed_trees,
-                        computed_trees_map,
-                        loaded_tables,
-                    )
-                    .operation()
-                    .expect("No sub node should be a project")
-                {
-                    leaf
-                } else {
-                    unreachable!("Subnode of a project must be a load instruction");
-                };
+                let subtree = Self::execution_node(
+                    root_node_id,
+                    subnode.clone(),
+                    order,
+                    output_nodes,
+                    computed_trees,
+                    computed_trees_map,
+                    loaded_tables,
+                )
+                .operation()
+                .expect("non-operations appear only as tree roots");
 
+                let marker_subnode = subnode.markers_cloned();
                 ExecutionTreeNode::ProjectReorder {
                     generator: GeneratorProjectReorder::new(node_markers, marker_subnode),
                     subnode: subtree,
@@ -794,7 +892,7 @@ impl ExecutionPlan {
                     loaded_tables,
                 )
                 .operation()
-                .expect("No sub node should be a project");
+                .expect("non-operations appear only as tree roots");
 
                 ExecutionTreeNode::Operation(ExecutionTreeOperation::Node {
                     generator: OperationGeneratorEnum::Null(GeneratorNull::new(
@@ -802,6 +900,85 @@ impl ExecutionPlan {
                         subnode.markers_cloned(),
                     )),
                     subnodes: vec![subtree],
+                })
+            }
+            ExecutionOperation::Single(subnode, single) => {
+                let marker_subnode = subnode.markers_cloned();
+                let subtree = Self::execution_node(
+                    root_node_id,
+                    subnode.clone(),
+                    order,
+                    output_nodes,
+                    computed_trees,
+                    computed_trees_map,
+                    loaded_tables,
+                )
+                .operation()
+                .expect("non-operations appear only as tree roots");
+
+                ExecutionTreeNode::Single {
+                    generator: GeneratorSingle::new(marker_subnode, single.clone()),
+                    subnode: subtree,
+                }
+            }
+            ExecutionOperation::IncrementalImport {
+                bound_positions,
+                arity,
+                input_nodes: subnodes,
+                provider,
+            } => {
+                let subtrees = subnodes
+                    .iter()
+                    .map(|(old, new)| {
+                        (
+                            Self::execution_node(
+                                root_node_id,
+                                old.clone(),
+                                order.clone(),
+                                output_nodes,
+                                computed_trees,
+                                computed_trees_map,
+                                loaded_tables,
+                            )
+                            .operation()
+                            .expect("non-operations appear only as tree roots"),
+                            Self::execution_node(
+                                root_node_id,
+                                new.clone(),
+                                order.clone(),
+                                output_nodes,
+                                computed_trees,
+                                computed_trees_map,
+                                loaded_tables,
+                            )
+                            .operation()
+                            .expect("non-operations appear only as tree roots"),
+                        )
+                    })
+                    .collect::<Vec<_>>();
+
+                ExecutionTreeNode::IncrementalImport {
+                    generator: GeneratorIncrementalImport::new(
+                        bound_positions.clone(),
+                        *arity,
+                        provider.clone(),
+                    ),
+                    subnodes: subtrees,
+                }
+            }
+            ExecutionOperation::Rename(subnode) => Self::execution_node(
+                root_node_id,
+                subnode.clone(),
+                order,
+                output_nodes,
+                computed_trees,
+                computed_trees_map,
+                loaded_tables,
+            ),
+            ExecutionOperation::Zero => {
+                ExecutionTreeNode::Operation(ExecutionTreeOperation::Node {
+                    generator: OperationGeneratorEnum::Zero(GeneratorZero::new()),
+                    subnodes: Vec::default(),
                 })
             }
         }

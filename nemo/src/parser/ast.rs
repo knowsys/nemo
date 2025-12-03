@@ -16,7 +16,7 @@ use std::{fmt::Debug, ops::Range};
 
 use crate::rule_model::components::ComponentSource;
 
-use super::{context::ParserContext, span::Span, ParserInput, ParserResult};
+use super::{ParserInput, ParserResult, context::ParserContext, span::Span};
 use ascii_tree::Tree;
 use colored::Colorize;
 

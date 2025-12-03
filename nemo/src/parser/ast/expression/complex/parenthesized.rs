@@ -3,11 +3,11 @@
 use nom::sequence::{delimited, pair};
 
 use crate::parser::{
-    ast::{comment::wsoc::WSoC, expression::Expression, token::Token, ProgramAST},
+    ParserResult,
+    ast::{ProgramAST, comment::wsoc::WSoC, expression::Expression, token::Token},
     context::ParserContext,
     input::ParserInput,
     span::Span,
-    ParserResult,
 };
 
 /// An [Expression] enclosed in parenthesis

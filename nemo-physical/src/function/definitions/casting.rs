@@ -2,7 +2,7 @@
 
 use crate::{
     datatypes::StorageTypeName,
-    datavalues::{syntax::encodings, AnyDataValue, DataValue},
+    datavalues::{AnyDataValue, DataValue, syntax::encodings},
 };
 
 use super::{FunctionTypePropagation, UnaryFunction};
@@ -22,7 +22,7 @@ use super::{FunctionTypePropagation, UnaryFunction};
 ///
 /// Returns `None` when called on values outside the range described above
 /// or if the value cannot be converted to an integer.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct CastingIntoInteger64;
 impl UnaryFunction for CastingIntoInteger64 {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
@@ -107,7 +107,7 @@ impl UnaryFunction for CastingIntoInteger64 {
 ///
 /// Returns `None` when called on values outside the range described above
 /// or if value cannot be converted into a 32-bit float.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct CastingIntoFloat;
 impl UnaryFunction for CastingIntoFloat {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
@@ -167,7 +167,7 @@ impl UnaryFunction for CastingIntoFloat {
 ///
 /// Returns `None` when called on values outside the range described above
 /// or if value cannot be converted into a 64-bit float.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct CastingIntoDouble;
 impl UnaryFunction for CastingIntoDouble {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
@@ -218,7 +218,7 @@ impl UnaryFunction for CastingIntoDouble {
 /// Returns an IRI with the same content as the given string.
 ///
 /// Returns `None` when called on values other than plain strings.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct CastingIntoIri;
 impl UnaryFunction for CastingIntoIri {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {

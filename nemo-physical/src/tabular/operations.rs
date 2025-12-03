@@ -3,13 +3,16 @@
 pub mod aggregate;
 pub(crate) mod filter;
 pub(crate) mod function;
+pub(crate) mod incremental_import;
 pub(crate) mod join;
 pub(crate) mod null;
 pub(crate) mod projectreorder;
 pub(crate) mod prune;
+pub(crate) mod single;
 pub(crate) mod subtract;
 pub(crate) mod trim;
 pub(crate) mod union;
+pub(crate) mod zero;
 
 pub use filter::Filter;
 pub use filter::Filters;
@@ -17,7 +20,7 @@ pub use function::FunctionAssignment;
 
 use std::{
     cell::RefCell,
-    collections::{hash_map::Entry, HashMap},
+    collections::{HashMap, hash_map::Entry},
     fmt::Debug,
     hash::Hash,
     ops::Deref,
@@ -25,6 +28,7 @@ use std::{
 
 use delegate::delegate;
 
+use crate::tabular::operations::zero::GeneratorZero;
 use crate::{management::database::Dict, util::mapping::permutation::Permutation};
 
 use self::aggregate::GeneratorAggregate;
@@ -194,13 +198,26 @@ impl Deref for OperationTable {
 /// mainly by providing a translation between
 /// user defined "markers" (supplied as a generic parameter to this object)
 /// and [OperationColumnMarker]s.
-#[derive(Debug, Default)]
+#[derive(Default, Clone)]
 pub struct OperationTableGenerator<ExternalMarker>
 where
     ExternalMarker: Clone + PartialEq + Eq + Hash,
 {
     /// Associates an external marker with an [OperationColumnMarker]
     map: HashMap<ExternalMarker, OperationColumnMarker>,
+}
+
+impl<ExternalMarker> Debug for OperationTableGenerator<ExternalMarker>
+where
+    ExternalMarker: std::fmt::Display + Clone + PartialEq + Eq + Hash,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (external, marker) in self.map.iter() {
+            f.write_fmt(format_args!("{external} -> {marker:?}\n"))?;
+        }
+
+        Ok(())
+    }
 }
 
 impl<ExternalMarker> OperationTableGenerator<ExternalMarker>
@@ -259,7 +276,7 @@ where
         Some(
             self.map
                 .iter()
-                .find(|(_, &operation)| operation == *marker)?
+                .find(|(_, operation)| **operation == *marker)?
                 .0,
         )
     }
@@ -293,6 +310,8 @@ pub(crate) enum OperationGeneratorEnum {
     Function(GeneratorFunction),
     /// Null
     Null(GeneratorNull),
+    /// Zero artiy tables
+    Zero(GeneratorZero),
 }
 
 impl OperationGenerator for OperationGeneratorEnum {
@@ -305,6 +324,7 @@ impl OperationGenerator for OperationGeneratorEnum {
             Self::Filter(generator) => generator,
             Self::Function(generator) => generator,
             Self::Null(generator) => generator,
+            Self::Zero(generator) => generator,
         } {
             #[allow(late_bound_lifetime_arguments)]
             fn generate<'a>(
@@ -326,6 +346,7 @@ impl Debug for OperationGeneratorEnum {
             Self::Filter(generator) => f.write_fmt(format_args!("Filter ({generator:?})")),
             Self::Function(generator) => f.write_fmt(format_args!("Function ({generator:?})")),
             Self::Null(generator) => f.write_fmt(format_args!("Null ({generator:?})")),
+            Self::Zero(_genrerator) => f.write_fmt(format_args!("Zero")),
         }
     }
 }

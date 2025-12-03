@@ -8,7 +8,7 @@ use nemo_physical::datavalues::AnyDataValue;
 use crate::{
     error::Error,
     io::formats::{
-        dsv::value_format::DataValueSerializerFunction, TableWriter, PROGRESS_NOTIFY_INCREMENT,
+        PROGRESS_NOTIFY_INCREMENT, TableWriter, dsv::value_format::DataValueSerializerFunction,
     },
 };
 

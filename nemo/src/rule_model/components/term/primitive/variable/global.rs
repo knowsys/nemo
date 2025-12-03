@@ -6,10 +6,10 @@ use crate::{
     parser::ParserErrorReport,
     rule_model::{
         components::{
-            symbols::Symbols, ComponentBehavior, ComponentIdentity, ComponentSource,
-            IterableComponent, ProgramComponent, ProgramComponentKind,
+            ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent,
+            ProgramComponent, ProgramComponentKind, symbols::Symbols,
         },
-        error::{validation_error::ValidationError, ValidationReport},
+        error::{ValidationReport, validation_error::ValidationError},
         origin::Origin,
         pipeline::id::ProgramComponentId,
         translation::{ProgramParseReport, TranslationComponent},

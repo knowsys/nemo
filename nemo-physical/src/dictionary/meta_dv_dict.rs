@@ -3,14 +3,14 @@
 use crate::datavalues::ValueDomain;
 use crate::datavalues::{AnyDataValue, DataValue};
 use crate::dictionary::NONEXISTING_ID_MARK;
-use crate::management::bytesized::{size_inner_vec_flat, ByteSized};
+use crate::management::bytesized::{ByteSized, size_inner_vec_flat};
 
+use super::DvDict;
+use super::StringDvDictionary;
 use super::ranked_pair_iri_dv_dict::IriSplittingDvDictionary;
 use super::ranked_pair_other_dv_dict::OtherSplittingDvDictionary;
 use super::string_langstring_dv_dict::LangStringDvDictionary;
 use super::tuple_dv_dict::TupleDvDict;
-use super::DvDict;
-use super::StringDvDictionary;
 use super::{AddResult, NullDvDictionary};
 
 // /// Number of recent occurrences of a string pattern required for creating a bespoke dictionary
@@ -595,7 +595,7 @@ impl ByteSized for MetaDvDictionary {
 mod test {
     use crate::{
         datavalues::{
-            syntax::XSD_PREFIX, AnyDataValue, IriDataValue, NullDataValue, TupleDataValue,
+            AnyDataValue, IriDataValue, NullDataValue, TupleDataValue, syntax::XSD_PREFIX,
         },
         dictionary::{AddResult, DvDict},
     };

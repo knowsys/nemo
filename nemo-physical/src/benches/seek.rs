@@ -6,9 +6,9 @@ mod test {
     use rand_pcg::Pcg64;
 
     use crate::{
-        benches::test::{black_box, Bencher},
+        benches::test::{Bencher, black_box},
         columnar::{
-            column::{rle::ColumnRle, vector::ColumnVector, Column},
+            column::{Column, rle::ColumnRle, vector::ColumnVector},
             columnscan::ColumnScan,
         },
     };
@@ -20,7 +20,7 @@ mod test {
         let mut data: Vec<usize> = Vec::new();
 
         for _ in 0..length {
-            data.push(rng.gen::<usize>());
+            data.push(rng.r#gen::<usize>());
         }
         data.sort_unstable();
 

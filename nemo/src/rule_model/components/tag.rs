@@ -4,7 +4,7 @@ use std::{fmt::Display, hash::Hash};
 
 use crate::rule_model::origin::Origin;
 
-use super::{symbols::Symbols, ComponentSource};
+use super::{ComponentSource, symbols::Symbols};
 
 /// Name of a term or predicate
 #[derive(Debug, Clone)]

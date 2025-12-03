@@ -34,10 +34,9 @@ impl TokenType {
             ParserContext::Number => Some(TokenType::Number),
             ParserContext::EncodedNumber => Some(TokenType::EncodedNumber),
             ParserContext::Boolean => Some(TokenType::Bool),
-            ParserContext::Negation
-            | ParserContext::AggregationTag
-            | ParserContext::OperationTag
-            | ParserContext::Infix => Some(TokenType::Operator),
+            ParserContext::AggregationTag | ParserContext::OperationTag | ParserContext::Infix => {
+                Some(TokenType::Operator)
+            }
             ParserContext::Comment | ParserContext::DocComment | ParserContext::TopLevelComment => {
                 Some(TokenType::Comment)
             }

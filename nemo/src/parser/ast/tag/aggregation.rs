@@ -6,12 +6,12 @@ use strum::IntoEnumIterator;
 
 use crate::{
     parser::{
-        ast::{token::Token, ProgramAST},
-        context::{context, ParserContext},
+        ParserResult,
+        ast::{ProgramAST, token::Token},
+        context::{ParserContext, context},
         error::ParserErrorTree,
         input::ParserInput,
         span::Span,
-        ParserResult,
     },
     rule_model::components::term::aggregate::AggregateKind,
 };
@@ -98,9 +98,9 @@ mod test {
 
     use crate::{
         parser::{
-            ast::{tag::aggregation::AggregationTag, ProgramAST},
-            input::ParserInput,
             ParserState,
+            ast::{ProgramAST, tag::aggregation::AggregationTag},
+            input::ParserInput,
         },
         rule_model::components::term::aggregate::AggregateKind,
     };

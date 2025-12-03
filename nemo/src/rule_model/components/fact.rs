@@ -7,25 +7,25 @@ use std::{
 };
 
 use crate::{
-    chase_model::components::atom::{ground_atom::GroundAtom, ChaseAtom},
+    execution::planning::normalization::atom::ground::GroundAtom,
     rule_model::{
-        error::{hint::Hint, validation_error::ValidationError, ValidationReport},
+        error::{ValidationReport, hint::Hint, validation_error::ValidationError},
         origin::Origin,
         pipeline::id::ProgramComponentId,
-        translation::{literal::HeadAtom, ProgramParseReport, TranslationComponent},
+        translation::{ProgramParseReport, TranslationComponent, literal::HeadAtom},
     },
 };
 
 use super::{
+    ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent, IterablePrimitives,
+    IterableVariables, ProgramComponent, ProgramComponentKind,
     atom::Atom,
     component_iterator, component_iterator_mut,
     tag::Tag,
     term::{
-        primitive::{variable::Variable, Primitive},
         Term,
+        primitive::{Primitive, variable::Variable},
     },
-    ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent, IterablePrimitives,
-    IterableVariables, ProgramComponent, ProgramComponentKind,
 };
 
 /// A (ground) fact
@@ -291,7 +291,7 @@ impl From<(&Tag, Vec<Term>)> for Fact {
 
 impl From<GroundAtom> for Fact {
     fn from(value: GroundAtom) -> Self {
-        let origin = Origin::Created; // TODO
+        let origin = Origin::Created;
         let predicate = value.predicate();
         let terms = value.terms().cloned().map(Term::from).collect();
 

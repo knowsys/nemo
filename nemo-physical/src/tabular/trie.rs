@@ -9,14 +9,14 @@ use crate::{
     columnar::{
         columnscan::ColumnScanT,
         intervalcolumn::{
-            interval_lookup::lookup_column::IntervalLookupColumn, IntervalColumnT,
-            IntervalColumnTBuilderMatrix, IntervalColumnTBuilderTriescan,
+            IntervalColumnT, IntervalColumnTBuilderMatrix, IntervalColumnTBuilderTriescan,
+            interval_lookup::lookup_column::IntervalLookupColumn,
         },
     },
     datasources::tuple_writer::TupleWriter,
     datatypes::{
-        storage_type_name::{StorageTypeBitSet, STORAFE_TYPES},
         StorageTypeName, StorageValueT,
+        storage_type_name::{STORAFE_TYPES, StorageTypeBitSet},
     },
     management::bytesized::ByteSized,
     tabular::{buffer::tuple_buffer::TupleBuffer, rowscan::RowScan},
@@ -93,7 +93,7 @@ impl Trie {
 
     /// Return a row based iterator over this trie.
     pub(crate) fn row_iterator(&self) -> impl Iterator<Item = Vec<StorageValueT>> + '_ {
-        RowScan::new(self.partial_iterator(), 0)
+        RowScan::new_full(self.partial_iterator())
     }
 
     /// Return whether this [Trie] contains a given row of values.
@@ -113,16 +113,50 @@ impl Trie {
                     .get()
             };
 
-            if let Some(found) = column_scan.seek(*value) {
-                if found == *value {
-                    continue;
-                }
+            if let Some(found) = column_scan.seek(*value)
+                && found == *value
+            {
+                continue;
             }
 
             return false;
         }
 
         true
+    }
+
+    /// Return whether this [Trie] contains a given row of values.
+    pub(crate) fn row_position(&self, row: &[StorageValueT]) -> Option<usize> {
+        if self.arity() != row.len() {
+            return None;
+        }
+
+        if self.arity() == 0 {
+            return None;
+        }
+
+        let mut trie_scan = self.partial_iterator();
+
+        for value in row.iter() {
+            trie_scan.down(value.get_type());
+            let column_scan = unsafe {
+                &mut *trie_scan
+                    .current_scan()
+                    .expect("We called down above")
+                    .get()
+            };
+
+            if let Some(found) = column_scan.seek(*value)
+                && found == *value
+            {
+                continue;
+            }
+
+            return None;
+        }
+
+        let last_column_scan = unsafe { &mut *trie_scan.scan(self.arity() - 1).get() };
+        last_column_scan.pos(row.last().unwrap().get_type())
     }
 }
 
@@ -234,7 +268,7 @@ impl Trie {
             return trie;
         }
 
-        let mut rowscan = RowScan::new(trie_scan, cut_layers);
+        let mut rowscan = RowScan::new(trie_scan, cut_layers, cut_layers);
 
         let mut intervalcolumn_builders =
             Vec::<IntervalColumnTBuilderTriescan<IntervalLookupMethod>>::with_capacity(num_columns);
@@ -422,7 +456,7 @@ impl Trie {
             );
         }
 
-        let mut rowscan = RowScan::new(trie_scan, cut_layers);
+        let mut rowscan = RowScan::new(trie_scan, cut_layers, cut_layers);
 
         let mut intervalcolumn_builders =
             Vec::<IntervalColumnTBuilderTriescan<IntervalLookupMethod>>::with_capacity(arity);
@@ -506,7 +540,7 @@ impl Trie {
         let result_reordered = tuple_buffers
             .into_iter()
             .map(|buffer| {
-                if buffer.column_number() == 0 {
+                if buffer.output_column_number() == 0 {
                     Self::zero_arity(true)
                 } else {
                     Self::from_tuple_buffer(buffer.finalize())

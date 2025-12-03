@@ -90,7 +90,7 @@ impl SortedTupleBuffer {
         let first_record = tuple_buffer.subtable_record(first_subtable_id);
         let second_record = tuple_buffer.subtable_record(second_subtable_id);
 
-        for column_index in 0..tuple_buffer.column_number() {
+        for column_index in 0..tuple_buffer.output_column_number() {
             let first_type = first_record.storage_types[column_index];
             let second_type = second_record.storage_types[column_index];
 
@@ -120,7 +120,7 @@ impl SortedTupleBuffer {
 
     /// Returns the number of columns in the [SortedTupleBuffer]
     pub(crate) fn column_number(&self) -> usize {
-        self.tuple_buffer.column_number()
+        self.tuple_buffer.output_column_number()
     }
 
     /// For a specified column, return an iterator of over its values as [StorageValueT]s.

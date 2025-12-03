@@ -10,8 +10,8 @@ use crate::{
     parser::ast::{self},
     rule_model::{
         components::{
-            term::{value_type::ValueType, Term},
             ComponentBehavior, ProgramComponentKind,
+            term::{Term, value_type::ValueType},
         },
         error::{hint::Hint, info::Info, translation_error::TranslationError},
     },
@@ -81,15 +81,15 @@ pub(crate) fn process_attributes<'a>(
             continue;
         }
 
-        if attribute_kind.unique() {
-            if let Some(previous) = previous_attributes.get(&attribute_kind) {
-                translation
-                    .report
-                    .add(attribute, TranslationError::AttributeRedefined)
-                    .add_context(*previous, Info::FirstDefinition);
+        if attribute_kind.unique()
+            && let Some(previous) = previous_attributes.get(&attribute_kind)
+        {
+            translation
+                .report
+                .add(attribute, TranslationError::AttributeRedefined)
+                .add_context(*previous, Info::FirstDefinition);
 
-                continue;
-            }
+            continue;
         }
 
         let mut terms = Vec::<Term>::new();
@@ -113,30 +113,30 @@ pub(crate) fn process_attributes<'a>(
         {
             let term = Term::build_component(translation, expression)?;
 
-            if let Some(expected_component) = schema.0 {
-                if term.kind() != expected_component {
-                    translation.report.add(
-                        expression,
-                        TranslationError::AttributeParameterWrongComponent {
-                            expected: expected_component.name().to_string(),
-                            found: term.kind().name().to_string(),
-                        },
-                    );
+            if let Some(expected_component) = schema.0
+                && term.kind() != expected_component
+            {
+                translation.report.add(
+                    expression,
+                    TranslationError::AttributeParameterWrongComponent {
+                        expected: expected_component.name().to_string(),
+                        found: term.kind().name().to_string(),
+                    },
+                );
 
-                    continue;
-                }
+                continue;
             }
 
-            if let Some(expected_type) = schema.1 {
-                if term.value_type() != expected_type {
-                    translation.report.add(
-                        expression,
-                        TranslationError::AttributeParameterWrongType {
-                            expected: expected_type.name().to_string(),
-                            found: term.value_type().name().to_string(),
-                        },
-                    );
-                }
+            if let Some(expected_type) = schema.1
+                && term.value_type() != expected_type
+            {
+                translation.report.add(
+                    expression,
+                    TranslationError::AttributeParameterWrongType {
+                        expected: expected_type.name().to_string(),
+                        found: term.value_type().name().to_string(),
+                    },
+                );
             }
 
             terms.push(term);

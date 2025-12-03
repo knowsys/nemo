@@ -3,14 +3,14 @@
 use nom::{bytes::complete::take_until, sequence::delimited};
 
 use crate::parser::{
+    ParserResult,
     ast::{
-        token::{Token, TokenKind},
         ProgramAST,
+        token::{Token, TokenKind},
     },
-    context::{context, ParserContext},
+    context::{ParserContext, context},
     input::ParserInput,
     span::Span,
-    ParserResult,
 };
 
 /// Closed comment
@@ -82,9 +82,9 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
-        ast::{comment::closed::ClosedComment, ProgramAST},
-        input::ParserInput,
         ParserState,
+        ast::{ProgramAST, comment::closed::ClosedComment},
+        input::ParserInput,
     };
 
     #[test]

@@ -9,11 +9,11 @@ use nom::{
 };
 
 use crate::parser::{
-    ast::{token::Token, ProgramAST},
-    context::{context, ParserContext},
+    ParserResult,
+    ast::{ProgramAST, token::Token},
+    context::{ParserContext, context},
     input::ParserInput,
     span::Span,
-    ParserResult,
 };
 
 /// Doc comment that is attached to e.g. rules
@@ -89,9 +89,9 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
-        ast::{comment::toplevel::TopLevelComment, ProgramAST},
-        input::ParserInput,
         ParserState,
+        ast::{ProgramAST, comment::toplevel::TopLevelComment},
+        input::ParserInput,
     };
 
     #[test]

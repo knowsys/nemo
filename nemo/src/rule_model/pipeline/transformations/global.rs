@@ -4,12 +4,12 @@ use std::collections::{HashMap, HashSet};
 
 use crate::rule_model::{
     components::{
-        term::primitive::{ground::GroundTerm, variable::global::GlobalVariable},
         ComponentSource, IterableVariables,
+        term::primitive::{ground::GroundTerm, variable::global::GlobalVariable},
     },
     error::ValidationReport,
     origin::Origin,
-    programs::{handle::ProgramHandle, ProgramRead, ProgramWrite},
+    programs::{ProgramRead, ProgramWrite, handle::ProgramHandle},
     substitution::Substitution,
 };
 
