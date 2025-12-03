@@ -4,7 +4,6 @@ use crate::static_checks::msa::msa_execution_engine_from_rules;
 use crate::static_checks::positions::PositionsByRuleAndVariables;
 use crate::static_checks::rule_set::RuleSet;
 use crate::static_checks::{positions::Positions, rule_properties::RuleProperties};
-use nemo::datavalues::AnyDataValue;
 use nemo::execution::DefaultExecutionEngine;
 use nemo::rule_model::components::tag::Tag;
 
