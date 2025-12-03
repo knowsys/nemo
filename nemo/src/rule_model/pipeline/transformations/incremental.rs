@@ -69,24 +69,54 @@ impl TransformationIncremental {
             }
         }
 
-        for atom in rule.body_positive() {
-            if !incremental_predicates.contains_key(&atom.predicate()) {
-                continue;
-            }
+        // TransformationMergeSparql merges import atoms from the same predicate,
+        // potentially making variables available
+        let mut available_after_merge = HashMap::<Tag, HashSet<Variable>>::default();
+        let mut restricted_atoms = HashSet::<usize>::default();
+        let mut positive_atom_count: usize = 0;
 
-            if atom.terms().any(|term| !term.is_variable()) {
-                continue;
-            }
+        let mut change = true;
 
-            if atom
-                .variables()
-                .all(|variable| !available_variables.contains(variable))
-            {
-                return true;
+        while change {
+            change = false;
+            positive_atom_count = 0;
+
+            for (atom_index, atom) in rule.body_positive().enumerate() {
+                positive_atom_count += 1;
+
+                if restricted_atoms.contains(&atom_index) {
+                    continue;
+                }
+
+                if !incremental_predicates.contains_key(&atom.predicate()) {
+                    restricted_atoms.insert(atom_index);
+                    continue;
+                }
+
+                if atom.terms().any(|term| !term.is_variable()) {
+                    restricted_atoms.insert(atom_index);
+                    continue;
+                }
+
+                if atom.variables().any(|variable| {
+                    available_variables.contains(variable)
+                        || available_after_merge
+                            .get(&atom.predicate())
+                            .map(|variables| variables.contains(variable))
+                            .unwrap_or(false)
+                }) {
+                    available_after_merge
+                        .entry(atom.predicate())
+                        .or_default()
+                        .extend(atom.variables().cloned());
+
+                    restricted_atoms.insert(atom_index);
+                    change = true;
+                }
             }
         }
 
-        false
+        restricted_atoms.len() != positive_atom_count
     }
 
     /// Check whether a rule would allow for incremental import
@@ -98,12 +128,7 @@ impl TransformationIncremental {
             return false;
         }
 
-        // [super::merge_sparql::TransformationMergeSparql] will turn
-        // this back into an ordinary import if there's an
-        // unrestricted import, but merging might turn unrestricted
-        // imports into restricted imports.
-        // !Self::has_unrestricted_atom(rule, incremental_predicates)
-        true
+        !Self::has_unrestricted_atom(rule, incremental_predicates)
     }
 
     /// Compute the predicates that will be inlined in this transformation.
