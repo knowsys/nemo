@@ -294,6 +294,7 @@ impl ProgramTransformation for TransformationIncremental {
                 Statement::Rule(rule) => {
                     if rule
                         .body_positive()
+                        .chain(rule.body_negative())
                         .any(|atom| incremental_predicates.contains_key(&atom.predicate()))
                     {
                         let new_rule = Self::incremental_rule(
