@@ -51,7 +51,7 @@ pub trait RulesProperties {
     /// Determines if the ruleset is mfa.
     fn is_mfa(&self) -> bool;
     /// Determines if the ruleset is msa.
-    fn is_msa(&self) -> bool;
+    async fn is_msa(&self) -> bool;
     /// Determines if the ruleset is dmfa.
     fn is_dmfa(&self) -> bool;
     /// Determines if the ruleset is rmfa.
@@ -176,12 +176,14 @@ impl RulesProperties for RuleSet {
         // TODO: IMPLEMENT
     }
 
-    fn is_msa(&self) -> bool {
-        let mut msa_exec_eng: DefaultExecutionEngine = msa_execution_engine_from_rules(&self.0);
-        msa_exec_eng.execute().expect("no errors possible");
+    async fn is_msa(&self) -> bool {
+        let mut msa_exec_eng: DefaultExecutionEngine =
+            msa_execution_engine_from_rules(&self.0).await;
+        msa_exec_eng.execute().await.expect("no errors possible");
         let c_pred: Tag = Tag::from("_msa_C");
         if msa_exec_eng
             .predicate_rows(&c_pred)
+            .await
             .expect("no errors possible")
             .is_none()
         {
