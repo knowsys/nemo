@@ -21,7 +21,7 @@ members = [
 
 [workspace.package]
 description = "Nemo, a datalog-based rule engine for fast and scalable analytic data processing in memory"
-version = "0.7.2-dev"
+version = "0.9.2-dev"
 authors = [
     "Alex Ivliev <alex.ivliev@tu-dresden.de>",
     "Aidan Bailey <dev@aidanbailey.me>",
@@ -34,7 +34,7 @@ authors = [
     "Simon Meusel <simon.meusel@mailbox.tu-dresden.de>",
     "Stefan Ellmauthaler <stefan.ellmauthaler@tu-dresden.de>",
 ]
-edition = "2021"
+edition = "2024"
 homepage = "https://github.com/knowsys/nemo"
 license = "APACHE-2.0 OR MIT"
 readme = "README.md"

@@ -3,13 +3,13 @@
 use nom::sequence::{delimited, pair};
 
 use crate::parser::{
+    ParserResult,
     ast::{
-        comment::wsoc::WSoC, expression::Expression, sequence::Sequence, token::Token, ProgramAST,
+        ProgramAST, comment::wsoc::WSoC, expression::Expression, sequence::Sequence, token::Token,
     },
-    context::{context, ParserContext},
+    context::{ParserContext, context},
     input::ParserInput,
     span::Span,
-    ParserResult,
 };
 
 /// A sequence of [Expression]s.
@@ -83,9 +83,9 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
-        ast::{expression::complex::tuple::Tuple, ProgramAST},
-        input::ParserInput,
         ParserState,
+        ast::{ProgramAST, expression::complex::tuple::Tuple},
+        input::ParserInput,
     };
 
     #[test]

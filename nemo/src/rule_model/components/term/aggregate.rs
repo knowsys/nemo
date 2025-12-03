@@ -14,11 +14,11 @@ use strum_macros::EnumIter;
 use crate::{
     rule_model::{
         components::{
-            component_iterator, component_iterator_mut, ComponentBehavior, ComponentIdentity,
-            ComponentSource, IterableComponent, IterablePrimitives, IterableVariables,
-            ProgramComponent, ProgramComponentKind,
+            ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent,
+            IterablePrimitives, IterableVariables, ProgramComponent, ProgramComponentKind,
+            component_iterator, component_iterator_mut,
         },
-        error::{info::Info, validation_error::ValidationError, ValidationReport},
+        error::{ValidationReport, info::Info, validation_error::ValidationError},
         origin::Origin,
         pipeline::id::ProgramComponentId,
     },
@@ -26,9 +26,9 @@ use crate::{
 };
 
 use super::{
-    primitive::{variable::Variable, Primitive},
-    value_type::ValueType,
     Term,
+    primitive::{Primitive, variable::Variable},
+    value_type::ValueType,
 };
 
 /// Aggregate operation on logical values
@@ -282,16 +282,17 @@ impl ComponentBehavior for Aggregate {
         }
 
         let input_type = self.aggregate.value_type();
-        if let Some(expected_type) = self.kind.input_type() {
-            if input_type != ValueType::Any && input_type != expected_type {
-                report.add(
-                    &*self.aggregate,
-                    ValidationError::AggregateInvalidValueType {
-                        found: input_type.name().to_string(),
-                        expected: expected_type.name().to_string(),
-                    },
-                );
-            }
+        if let Some(expected_type) = self.kind.input_type()
+            && input_type != ValueType::Any
+            && input_type != expected_type
+        {
+            report.add(
+                &*self.aggregate,
+                ValidationError::AggregateInvalidValueType {
+                    found: input_type.name().to_string(),
+                    expected: expected_type.name().to_string(),
+                },
+            );
         }
 
         let mut distinct_set = if self.aggregate.is_primitive() {
@@ -413,7 +414,7 @@ impl IterablePrimitives for Aggregate {
 #[cfg(test)]
 mod test {
     use crate::rule_model::{
-        components::term::{aggregate::AggregateKind, primitive::variable::Variable, Term},
+        components::term::{Term, aggregate::AggregateKind, primitive::variable::Variable},
         translation::TranslationComponent,
     };
 

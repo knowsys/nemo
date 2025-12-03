@@ -147,6 +147,11 @@ pub mod expression {
         pub const EXPRESSION_START: &str = "{";
         /// Marker of the end of an expression
         pub const EXPRESSION_END: &str = "}";
+
+        /// Escaped version of the start marker
+        pub const ESCAPE_START: &str = "{{";
+        /// Escaped version of the end marker
+        pub const ESCAPE_END: &str = "}}";
     }
 }
 
@@ -261,6 +266,8 @@ pub mod builtin {
         pub(crate) const FLOOR: &str = "FLOOR";
         /// Return the datatype of the value
         pub(crate) const DATATYPE: &str = "DATATYPE";
+        /// Construct a language tagged string
+        pub(crate) const STRLANG: &str = "STRLANG";
         /// Return the language tag of the value
         pub(crate) const LANG: &str = "LANG";
         /// Convert the value to an integer
@@ -360,12 +367,12 @@ pub mod datatypes {
 
 pub mod datavalues {
     //! This module defines the syntax for datavalues.
+    pub use nemo_physical::datavalues::syntax::RDF_DATATYPE_INDICATOR;
     pub use nemo_physical::datavalues::syntax::boolean;
     pub use nemo_physical::datavalues::syntax::iri;
     pub use nemo_physical::datavalues::syntax::map;
     pub use nemo_physical::datavalues::syntax::string;
     pub use nemo_physical::datavalues::syntax::tuple;
-    pub use nemo_physical::datavalues::syntax::RDF_DATATYPE_INDICATOR;
 
     /// Anonymous values such as variables or names
     pub const ANONYMOUS: &str = "_";
@@ -397,6 +404,8 @@ pub mod import_export {
         pub const BASE: &str = "base";
         /// Name of the attribute for specifying a delimiter in import/export directives for delimiter-separated values format.
         pub const DSV_DELIMITER: &str = "delimiter";
+        /// Name of the attribute for specifying whether quoting should be respected in import/export directives for delimiter-separated values format.
+        pub const DSV_QUOTING: &str = "quoting";
         /// Name of the attribute for specifying the compression in import/export directives.
         pub const COMPRESSION: &str = "compression";
         /// Name of the attribute for specifying the limit in import/export directives.

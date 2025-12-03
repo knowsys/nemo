@@ -8,16 +8,16 @@ use nom::{
 };
 
 use crate::parser::{
+    ParserResult,
     ast::{
+        ProgramAST,
         comment::wsoc::WSoC,
         expression::Expression,
         token::{Token, TokenKind},
-        ProgramAST,
     },
-    context::{context, ParserContext},
+    context::{ParserContext, context},
     input::ParserInput,
     span::Span,
-    ParserResult,
 };
 
 /// Types of infix expression connectives
@@ -139,9 +139,9 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
-        ast::{expression::complex::infix::InfixExpression, ProgramAST},
-        input::ParserInput,
         ParserState,
+        ast::{ProgramAST, expression::complex::infix::InfixExpression},
+        input::ParserInput,
     };
 
     use super::InfixExpressionKind;

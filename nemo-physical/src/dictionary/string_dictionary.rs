@@ -3,9 +3,9 @@
 use crate::management::bytesized::ByteSized;
 
 use super::{
+    AddResult,
     bytes_buffer::{BytesBuffer, GlobalBytesBuffer},
     bytes_dictionary::BytesDictionary,
-    AddResult,
 };
 
 /// A struct that implements a bijection between strings and integers, where the integers

@@ -5,7 +5,7 @@ use hashbrown::HashMap;
 use super::bytes_buffer::{BytesRef, GlobalBytesBuffer};
 use super::{AddResult, KNOWN_ID_MARK};
 use crate::dictionary::datavalue_dictionary::{SMALL_KNOWN_ID_MARK, SMALL_KNOWN_ID_MARK_AS_USIZE};
-use crate::management::bytesized::{size_inner_hashmap_flat, size_inner_vec_flat, ByteSized};
+use crate::management::bytesized::{ByteSized, size_inner_hashmap_flat, size_inner_vec_flat};
 
 pub(crate) struct IdUtils {}
 
@@ -74,10 +74,10 @@ impl<B: GlobalBytesBuffer> BytesDictionary<B> {
             } else {
                 return Some(IdUtils::id32_to_id(id));
             }
-        } else if !self.map_long.is_empty() {
-            if let Some(id) = self.map_long.get(bytes).copied() {
-                return Some(IdUtils::id64_to_id(id));
-            }
+        } else if !self.map_long.is_empty()
+            && let Some(id) = self.map_long.get(bytes).copied()
+        {
+            return Some(IdUtils::id64_to_id(id));
         }
         None
     }
@@ -212,9 +212,9 @@ impl<B: GlobalBytesBuffer> ByteSized for BytesDictionary<B> {
 #[cfg(test)]
 mod test {
     use crate::dictionary::{
+        AddResult, KNOWN_ID_MARK,
         bytes_buffer::{BytesBuffer, GlobalBytesBuffer},
         bytes_dictionary::BytesDictionary,
-        AddResult, KNOWN_ID_MARK,
     };
 
     crate::dictionary::bytes_buffer::declare_bytes_buffer!(TestBytesBuffer, TEST_BUFFER);

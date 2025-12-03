@@ -1,114 +1,83 @@
-//! This module contains a helper function for computing the seminaive join
+//! This module defines [GeneratorJoin].
 
-use nemo_physical::{
-    management::execution_plan::{ExecutionNodeRef, ExecutionPlan},
-    tabular::operations::OperationTable,
-};
+use std::collections::HashSet;
+
+use nemo_physical::management::execution_plan::ExecutionNodeRef;
 
 use crate::{
-    chase_model::components::atom::{variable_atom::VariableAtom, ChaseAtom},
-    execution::rule_execution::VariableTranslation,
-    rule_model::components::IterableVariables,
-    table_manager::TableManager,
+    execution::planning::{
+        RuntimeInformation,
+        analysis::variable_order::VariableOrder,
+        normalization::atom::body::BodyAtom,
+        operations::union::{GeneratorUnion, UnionRange},
+    },
+    rule_model::components::term::primitive::variable::Variable,
+    table_manager::SubtableExecutionPlan,
 };
 
-use super::union::subplan_union;
+/// Generator of join nodes in execution plans
+#[derive(Debug)]
+pub struct GeneratorJoin {
+    /// Body atoms that will be joined
+    atoms: Vec<BodyAtom>,
+    /// Step ranges of the respective subtables
+    ranges: Vec<UnionRange>,
 
-/// Compute the appropriate execution plan to perform a join with the seminaive evaluation strategy.
-pub(crate) fn node_join(
-    plan: &mut ExecutionPlan,
-    table_manager: &TableManager,
-    variable_translation: &VariableTranslation,
-    step_last_applied: usize,
-    current_step_number: usize,
-    input_atoms: &[VariableAtom],
-    output_markers: OperationTable,
-) -> ExecutionNodeRef {
-    let mut node_result = plan.union_empty(output_markers.clone());
+    /// Variable order
+    order: VariableOrder,
+}
 
-    // We divide the atoms of the body into two parts:
-    //    * Main: Those atoms who received new elements since the last rule application
-    //    * Side: Those atoms which did not receive new elements since the last rule application
-    let mut side_atoms = Vec::new();
-    let mut main_atoms = Vec::new();
+impl GeneratorJoin {
+    /// Create a new [GeneratorJoin].
+    pub fn new(atoms: Vec<BodyAtom>, ranges: Vec<UnionRange>, order: &VariableOrder) -> Self {
+        debug_assert!(atoms.len() == ranges.len());
 
-    for atom in input_atoms {
-        let last_step = if let Some(step) = table_manager.last_step(&atom.predicate()) {
-            step
-        } else {
-            // Table is empty and therefore the join will be empty
-            return node_result;
-        };
+        let variables = atoms
+            .iter()
+            .flat_map(|atom| atom.terms())
+            .cloned()
+            .collect::<HashSet<_>>();
+        let order = order.restrict_to(&variables);
 
-        if last_step < step_last_applied {
-            side_atoms.push(atom);
-        } else {
-            main_atoms.push(atom);
+        Self {
+            atoms,
+            ranges,
+            order,
         }
     }
 
-    if main_atoms.is_empty() {
-        // No updates, hence the join is empty
-        return node_result;
+    /// Append this operation to the plan.
+    pub fn create_plan(
+        &self,
+        plan: &mut SubtableExecutionPlan,
+        runtime: &RuntimeInformation,
+    ) -> ExecutionNodeRef {
+        let subtables = self
+            .atoms
+            .iter()
+            .zip(self.ranges.iter())
+            .map(|(atom, range)| {
+                GeneratorUnion::new_atom(atom, range.clone()).create_plan(plan, runtime)
+            })
+            .collect::<Vec<_>>();
+
+        let markers = runtime.translation.operation_table(self.order.iter());
+
+        plan.plan_mut().join(markers, subtables)
     }
 
-    for atom_index in 0..main_atoms.len() {
-        let mut seminaive_node = plan.join_empty(output_markers.clone());
-
-        // For every atom that did not receive any update since the last rule application take all available elements
-        for atom in &side_atoms {
-            let atom_markers = variable_translation.operation_table(atom.variables());
-            let subnode = subplan_union(
-                plan,
-                table_manager,
-                &atom.predicate(),
-                0..step_last_applied,
-                atom_markers,
-            );
-
-            seminaive_node.add_subnode(subnode);
-        }
-
-        // For every atom before the mid point we take all the tables until the current `rule_step`
-        for &atom in main_atoms.iter().take(atom_index) {
-            let atom_markers = variable_translation.operation_table(atom.variables());
-            let subnode = subplan_union(
-                plan,
-                table_manager,
-                &atom.predicate(),
-                0..current_step_number,
-                atom_markers,
-            );
-
-            seminaive_node.add_subnode(subnode);
-        }
-
-        // For the middle atom we only take the new tables
-        let midnode = subplan_union(
-            plan,
-            table_manager,
-            &main_atoms[atom_index].predicate(),
-            step_last_applied..current_step_number,
-            variable_translation.operation_table(main_atoms[atom_index].variables()),
-        );
-        seminaive_node.add_subnode(midnode);
-
-        // For every atom past the mid point we take only the old tables
-        for atom in main_atoms.iter().skip(atom_index + 1) {
-            let atom_markers = variable_translation.operation_table(atom.variables());
-            let subnode = subplan_union(
-                plan,
-                table_manager,
-                &atom.predicate(),
-                0..step_last_applied,
-                atom_markers,
-            );
-
-            seminaive_node.add_subnode(subnode);
-        }
-
-        node_result.add_subnode(seminaive_node);
+    /// Return the variables marking the column of the node
+    /// created by `create_plan`.
+    pub fn output_variables(&self) -> Vec<Variable> {
+        self.order.as_ordered_list()
     }
 
-    node_result
+    /// Return whether any range is empty and hence the join would be empty.
+    pub fn is_empty(&self, runtime: &RuntimeInformation) -> bool {
+        self.ranges.iter().any(|range| {
+            range
+                .as_range(runtime.step_current, runtime.step_last_application)
+                .is_empty()
+        })
+    }
 }

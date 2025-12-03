@@ -10,18 +10,22 @@ use std::{
 
 use nemo_physical::{
     datavalues::{AnyDataValue, DataValue},
-    resource::{Resource, ResourceBuilder, ResourceValidationErrorKind},
+    resource::{Resource, ResourceBuilder, ResourceValidationError},
+    tabular::filters::FilterTransformPattern,
 };
 use strum::IntoEnumIterator;
 
 use crate::{
+    execution::planning::normalization::rule::NormalizedRule,
     rule_model::{
         components::{
-            import_export::{specification::ImportExportSpec, Direction},
-            term::{operation::Operation, primitive::ground::GroundTerm, value_type::ValueType},
             ComponentSource,
+            import_export::{Direction, specification::ImportExportSpec},
+            rule::Rule,
+            tag::Tag,
+            term::{operation::Operation, primitive::ground::GroundTerm, value_type::ValueType},
         },
-        error::{hint::Hint, info::Info, validation_error::ValidationError, ValidationReport},
+        error::{ValidationReport, hint::Hint, info::Info, validation_error::ValidationError},
         substitution::Substitution,
     },
     syntax::import_export::attribute,
@@ -30,17 +34,17 @@ use crate::{
 use super::{
     compression_format::CompressionFormat,
     formats::{
+        Export, ExportHandler, Import, ImportHandler,
         dsv::{DsvBuilder, DsvTag},
         json::{JsonHandler, JsonTag},
         rdf::{RdfHandler, RdfTag},
         sparql::{SparqlBuilder, SparqlTag},
-        Export, ExportHandler, Import, ImportHandler,
     },
     http_parameters,
 };
 
 pub(crate) trait FormatParameter<Tag>:
-    FromStr<Err = ()> + ToString + IntoEnumIterator + Copy + Eq + Hash
+    FromStr<Err = ()> + Debug + ToString + IntoEnumIterator + Copy + Eq + Hash
 {
     fn required_for(&self, tag: Tag) -> bool;
     fn is_value_valid(&self, value: AnyDataValue) -> Result<(), ValidationError>;
@@ -69,7 +73,7 @@ pub(super) fn value_type_matches(
 }
 
 pub(crate) trait FormatTag:
-    FromStr<Err = ()> + ToString + Copy + Eq + 'static + Into<SupportedFormatTag>
+    FromStr<Err = ()> + Debug + ToString + Copy + Eq + 'static + Into<SupportedFormatTag>
 {
     // NOTE: the only implementations of this trait happen in macros and are for some reason not recognized
     #[allow(dead_code)]
@@ -84,8 +88,9 @@ macro_rules! format_tag {
         use enum_assoc::Assoc;
 
         #[derive(Assoc, Debug, Copy, Clone, PartialEq, Eq, Hash)]
-        #[func(pub fn from_str(input: &str) -> Option<Self>)]
-        #[func(pub fn name(&self) -> &'static str)]
+        #[func(pub(crate) fn from_str(input: &str) -> Option<Self>)]
+        #[func(pub(crate) fn name(&self) -> &'static str)]
+        #[allow(missing_docs)]
         $vis enum $type_name {
             $(
                 #[assoc(from_str = $tag_value)]
@@ -256,7 +261,7 @@ impl<Tag> FormatParameter<Tag> for StandardParameter {
     }
 }
 
-pub(crate) trait FormatBuilder: Sized + Into<AnyImportExportBuilder> {
+pub(crate) trait FormatBuilder: Debug + Sized + Into<AnyImportExportBuilder> {
     type Tag: FormatTag + 'static;
     type Parameter: FormatParameter<Self::Tag> + From<StandardParameter> + 'static;
 
@@ -276,12 +281,20 @@ pub(crate) trait FormatBuilder: Sized + Into<AnyImportExportBuilder> {
         &self,
         _direction: Direction,
         builder: Option<ResourceBuilder>,
-    ) -> Result<Option<ResourceBuilder>, ResourceValidationErrorKind> {
+    ) -> Result<Option<ResourceBuilder>, ResourceValidationError> {
         Ok(builder)
     }
 
-    fn build_import(&self, arity: usize) -> Arc<dyn ImportHandler + Send + Sync + 'static>;
-    fn build_export(&self, arity: usize) -> Arc<dyn ExportHandler + Send + Sync + 'static>;
+    fn build_import(
+        &self,
+        arity: usize,
+        patterns: Vec<FilterTransformPattern>,
+    ) -> Arc<dyn ImportHandler + Send + Sync + 'static>;
+    fn build_export(
+        &self,
+        arity: usize,
+        patterns: Vec<FilterTransformPattern>,
+    ) -> Arc<dyn ExportHandler + Send + Sync + 'static>;
 }
 
 #[derive(Debug)]
@@ -338,8 +351,10 @@ impl<B: FormatBuilder> Parameters<B> {
     }
 
     pub(crate) fn validate(
+        _predicate: Tag,
         spec: &ImportExportSpec,
         bindings: &[Operation],
+        _filter_rules: &[Rule],
         direction: Direction,
         report: &mut ValidationReport,
     ) -> Option<Self> {
@@ -352,7 +367,7 @@ impl<B: FormatBuilder> Parameters<B> {
             );
             return None;
         };
-
+        let mut has_errors = false;
         let mut spec = spec.clone();
         let substitution = Self::build_substitution(bindings, report)?;
         substitution.apply(&mut spec);
@@ -379,6 +394,7 @@ impl<B: FormatBuilder> Parameters<B> {
                         B::Parameter::iter().map(|attribute| attribute.to_string()),
                     ));
 
+                has_errors = true;
                 continue;
             };
 
@@ -392,18 +408,21 @@ impl<B: FormatBuilder> Parameters<B> {
                     },
                 );
 
+                has_errors = true;
                 continue;
             }
 
             let value = match GroundTerm::try_from(value_term.clone()) {
                 Ok(ground_term) => ground_term.value(),
                 Err(_) => {
+                    has_errors = true;
                     continue;
                 }
             };
 
             if let Err(error) = parameter.is_value_valid(value.clone()) {
                 report.add(value_term, error);
+                has_errors = true;
                 continue;
             }
 
@@ -418,9 +437,10 @@ impl<B: FormatBuilder> Parameters<B> {
                     direction: direction.to_string(),
                 },
             );
+            has_errors = true;
         }
 
-        Some(Self(result))
+        if has_errors { None } else { Some(Self(result)) }
     }
 }
 
@@ -433,11 +453,16 @@ pub struct ImportExportBuilder {
     compression: CompressionFormat,
 }
 
-#[derive(Clone, Debug)]
-pub(crate) enum SupportedFormatTag {
+/// Supported import formats
+#[derive(Debug, Clone, Copy)]
+pub enum SupportedFormatTag {
+    /// Delimiter-separated values
     Dsv(DsvTag),
+    /// Resource Description Framework
     Rdf(RdfTag),
+    /// JSON
     Json(JsonTag),
+    /// SPARQL
     Sparql(SparqlTag),
 }
 
@@ -470,20 +495,28 @@ impl ImportExportBuilder {
         }
     }
 
+    /// Return the [SupportedFormatTag] of this file format.
+    pub fn format(&self) -> SupportedFormatTag {
+        self.inner.format_tag()
+    }
+
     /// The resource as specified in the parameters
     pub fn resource(&self) -> Option<Resource> {
         self.resource.clone()
     }
 
     fn new_with_tag<B: FormatBuilder>(
+        predicate: Tag,
         tag: B::Tag,
         spec: &ImportExportSpec,
         bindings: &[Operation],
+        filter_rules: &[Rule],
         direction: Direction,
         report: &mut ValidationReport,
     ) -> Option<ImportExportBuilder> {
         let origin = spec.origin();
-        let parameters = Parameters::<B>::validate(spec, bindings, direction, report)?;
+        let parameters =
+            Parameters::<B>::validate(predicate, spec, bindings, filter_rules, direction, report)?;
 
         let resource_builder =
             if let Some(value) = parameters.get_optional(StandardParameter::Resource.into()) {
@@ -529,23 +562,22 @@ impl ImportExportBuilder {
             });
         };
 
-        if let Some(headers) = parameters.get_optional(StandardParameter::HttpHeaders.into()) {
-            if let Err(error) = http_parameters::unpack_headers(headers).and_then(|mut headers| {
+        if let Some(headers) = parameters.get_optional(StandardParameter::HttpHeaders.into())
+            && let Err(error) = http_parameters::unpack_headers(headers).and_then(|mut headers| {
                 headers.try_for_each(|(key, value)| {
                     resource_builder
                         .add_header(key, value)
                         .and(Ok(()))
                         .map_err(ValidationError::from)
                 })
-            }) {
-                report.add_source(origin.clone(), error);
-            }
+            })
+        {
+            report.add_source(origin.clone(), error);
         }
 
         if let Some(parameters) =
             parameters.get_optional(StandardParameter::HttpGetParameters.into())
-        {
-            if let Err(error) =
+            && let Err(error) =
                 http_parameters::unpack_http_parameters(parameters).and_then(|mut parameters| {
                     parameters.try_for_each(|(key, value)| {
                         resource_builder
@@ -554,15 +586,13 @@ impl ImportExportBuilder {
                             .map_err(ValidationError::from)
                     })
                 })
-            {
-                report.add_source(origin.clone(), error);
-            }
+        {
+            report.add_source(origin.clone(), error);
         }
 
         if let Some(parameters) =
             parameters.get_optional(StandardParameter::HttpPostParameters.into())
-        {
-            if let Err(error) =
+            && let Err(error) =
                 http_parameters::unpack_http_parameters(parameters).and_then(|mut parameters| {
                     parameters.try_for_each(|(key, value)| {
                         resource_builder
@@ -571,19 +601,17 @@ impl ImportExportBuilder {
                             .map_err(ValidationError::from)
                     })
                 })
-            {
-                report.add_source(origin.clone(), error);
-            }
+        {
+            report.add_source(origin.clone(), error);
         }
 
-        if let Some(fragment) = parameters.get_optional(StandardParameter::IriFragment.into()) {
-            if let Err(error) = resource_builder
+        if let Some(fragment) = parameters.get_optional(StandardParameter::IriFragment.into())
+            && let Err(error) = resource_builder
                 .set_fragment(fragment.to_plain_string_unchecked())
                 .and(Ok(()))
                 .map_err(ValidationError::from)
-            {
-                report.add_source(origin.clone(), error);
-            }
+        {
+            report.add_source(origin.clone(), error);
         }
 
         Some(ImportExportBuilder {
@@ -595,8 +623,10 @@ impl ImportExportBuilder {
 
     /// Create a new [ImportExportBuilder].
     pub(crate) fn new(
+        predicate: Tag,
         spec: &ImportExportSpec,
         bindings: &[Operation],
+        filter_rules: &[Rule],
         direction: Direction,
         report: &mut ValidationReport,
     ) -> Option<Self> {
@@ -613,28 +643,71 @@ impl ImportExportBuilder {
         };
 
         match tag {
-            SupportedFormatTag::Dsv(tag) => {
-                Self::new_with_tag::<DsvBuilder>(tag, spec, bindings, direction, report)
-            }
-            SupportedFormatTag::Rdf(tag) => {
-                Self::new_with_tag::<RdfHandler>(tag, spec, bindings, direction, report)
-            }
-            SupportedFormatTag::Json(tag) => {
-                Self::new_with_tag::<JsonHandler>(tag, spec, bindings, direction, report)
-            }
-            SupportedFormatTag::Sparql(tag) => {
-                Self::new_with_tag::<SparqlBuilder>(tag, spec, bindings, direction, report)
-            }
+            SupportedFormatTag::Dsv(tag) => Self::new_with_tag::<DsvBuilder>(
+                predicate,
+                tag,
+                spec,
+                bindings,
+                filter_rules,
+                direction,
+                report,
+            ),
+            SupportedFormatTag::Rdf(tag) => Self::new_with_tag::<RdfHandler>(
+                predicate,
+                tag,
+                spec,
+                bindings,
+                filter_rules,
+                direction,
+                report,
+            ),
+            SupportedFormatTag::Json(tag) => Self::new_with_tag::<JsonHandler>(
+                predicate,
+                tag,
+                spec,
+                bindings,
+                filter_rules,
+                direction,
+                report,
+            ),
+            SupportedFormatTag::Sparql(tag) => Self::new_with_tag::<SparqlBuilder>(
+                predicate,
+                tag,
+                spec,
+                bindings,
+                filter_rules,
+                direction,
+                report,
+            ),
         }
     }
 
     /// Finalize and create an [`Import`] with the specified parameters
-    pub fn build_import(&self, predicate_name: &str, arity: usize) -> Import {
+    pub fn build_import(
+        &self,
+        predicate_name: &str,
+        input_arity: usize,
+        predicate_arity: usize,
+        filter_rules: Vec<NormalizedRule>,
+    ) -> Import {
+        let patterns = filter_rules
+            .into_iter()
+            .flat_map(|rule| rule.into_filter_transform_pattern())
+            .collect();
+
         let handler = match &self.inner {
-            AnyImportExportBuilder::Dsv(dsv_builder) => dsv_builder.build_import(arity),
-            AnyImportExportBuilder::Rdf(rdf_handler) => rdf_handler.build_import(arity),
-            AnyImportExportBuilder::Json(json_handler) => json_handler.build_import(arity),
-            AnyImportExportBuilder::Sparql(sparql_builder) => sparql_builder.build_import(arity),
+            AnyImportExportBuilder::Dsv(dsv_builder) => {
+                dsv_builder.build_import(input_arity, patterns)
+            }
+            AnyImportExportBuilder::Rdf(rdf_handler) => {
+                rdf_handler.build_import(input_arity, patterns)
+            }
+            AnyImportExportBuilder::Json(json_handler) => {
+                json_handler.build_import(input_arity, patterns)
+            }
+            AnyImportExportBuilder::Sparql(sparql_builder) => {
+                sparql_builder.build_import(input_arity, patterns)
+            }
         };
 
         let resource = self.resource.clone().unwrap_or(
@@ -648,18 +721,32 @@ impl ImportExportBuilder {
         Import {
             resource,
             compression: self.compression,
-            predicate_arity: arity,
+            predicate_arity,
             handler,
         }
     }
 
     /// Finalize and create an [`Export`] with the specified parameters
-    pub fn build_export(&self, predicate_name: &str, arity: usize) -> Export {
+    pub fn build_export(
+        &self,
+        predicate_name: &str,
+        arity: usize,
+        filter_rules: Vec<NormalizedRule>,
+    ) -> Export {
+        let patterns = filter_rules
+            .into_iter()
+            .flat_map(|rule| rule.into_filter_transform_pattern())
+            .collect();
+
         let handler = match &self.inner {
-            AnyImportExportBuilder::Dsv(dsv_builder) => dsv_builder.build_export(arity),
-            AnyImportExportBuilder::Rdf(rdf_handler) => rdf_handler.build_export(arity),
-            AnyImportExportBuilder::Json(json_handler) => json_handler.build_export(arity),
-            AnyImportExportBuilder::Sparql(sparql_builder) => sparql_builder.build_export(arity),
+            AnyImportExportBuilder::Dsv(dsv_builder) => dsv_builder.build_export(arity, patterns),
+            AnyImportExportBuilder::Rdf(rdf_handler) => rdf_handler.build_export(arity, patterns),
+            AnyImportExportBuilder::Json(json_handler) => {
+                json_handler.build_export(arity, patterns)
+            }
+            AnyImportExportBuilder::Sparql(sparql_builder) => {
+                sparql_builder.build_export(arity, patterns)
+            }
         };
 
         let resource = self.resource.clone().unwrap_or(
@@ -685,6 +772,18 @@ pub(crate) enum AnyImportExportBuilder {
     Rdf(RdfHandler),
     Json(JsonHandler),
     Sparql(Box<SparqlBuilder>),
+}
+
+impl AnyImportExportBuilder {
+    /// Return the format of this builder.
+    pub fn format_tag(&self) -> SupportedFormatTag {
+        match self {
+            AnyImportExportBuilder::Dsv(dsv) => dsv.format_tag(),
+            AnyImportExportBuilder::Rdf(rdf) => rdf.format_tag(),
+            AnyImportExportBuilder::Json(json) => json.format_tag(),
+            AnyImportExportBuilder::Sparql(sparql) => sparql.format_tag(),
+        }
+    }
 }
 
 impl Debug for AnyImportExportBuilder {

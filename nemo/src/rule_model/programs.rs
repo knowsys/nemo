@@ -1,12 +1,12 @@
 //! This module defines types of nemo programs and common traits.
 
-use std::collections::{hash_map::Entry, HashMap, HashSet};
+use std::collections::{HashMap, HashSet, hash_map::Entry};
 
 use crate::rule_model::{components::statement::Statement, error::info::Info};
 
 use super::{
     components::{
-        component_iterator,
+        IterableVariables, ProgramComponent, component_iterator,
         fact::Fact,
         import_export::{ExportDirective, ImportDirective},
         literal::Literal,
@@ -14,10 +14,9 @@ use super::{
         parameter::ParameterDeclaration,
         rule::Rule,
         tag::Tag,
-        term::primitive::variable::{global::GlobalVariable, Variable},
-        IterableVariables, ProgramComponent,
+        term::primitive::variable::{Variable, global::GlobalVariable},
     },
-    error::{validation_error::ValidationError, ValidationReport},
+    error::{ValidationReport, validation_error::ValidationError},
 };
 
 pub mod handle;
@@ -181,7 +180,7 @@ pub trait ProgramRead {
         let mut arities = HashMap::<Tag, usize>::new();
 
         for import in self.imports() {
-            if let Some(arity) = import.expected_arity() {
+            if let Some(arity) = import.expected_output_arity() {
                 arities.insert(import.predicate().clone(), arity);
             }
         }
@@ -268,7 +267,7 @@ pub trait ProgramRead {
                 continue;
             }
 
-            if let Some(arity) = import.expected_arity() {
+            if let Some(arity) = import.expected_output_arity() {
                 add(&mut arities, report, predicate, arity, import);
             } else if !arities.contains_key(&predicate) {
                 report.add(
@@ -345,16 +344,16 @@ pub trait ProgramRead {
                     continue;
                 }
 
-                if let Some(expression) = parameter.expression() {
-                    if expression.variables().all(|variable| {
+                if let Some(expression) = parameter.expression()
+                    && expression.variables().all(|variable| {
                         if let Variable::Global(global) = variable {
                             defined.contains(global)
                         } else {
                             true
                         }
-                    }) {
-                        defined.insert(parameter.variable());
-                    }
+                    })
+                {
+                    defined.insert(parameter.variable());
                 }
             }
 

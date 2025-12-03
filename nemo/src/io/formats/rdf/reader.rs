@@ -7,6 +7,7 @@ use nemo_physical::{
     dictionary::string_map::NullMap,
     error::ReadingError,
     management::bytesized::ByteSized,
+    tabular::filters::FilterTransformPattern,
 };
 use std::{cell::Cell, io::Read, mem::size_of};
 
@@ -17,9 +18,9 @@ use oxrdfio::{RdfFormat, RdfParser};
 use crate::io::formats::PROGRESS_NOTIFY_INCREMENT;
 
 use super::{
+    DEFAULT_GRAPH_IRI, RdfVariant,
     error::RdfFormatError,
     value_format::{RdfValueFormat, RdfValueFormats},
-    RdfVariant, DEFAULT_GRAPH_IRI,
 };
 
 /// A [TableProvider] for RDF 1.1 files containing triples.
@@ -34,6 +35,8 @@ pub(super) struct RdfReader {
     value_formats: RdfValueFormats,
     /// If given, this reader will only consider the first `limit` entries
     limit: Option<u64>,
+    /// Filter/Transformation patterns
+    patterns: Vec<FilterTransformPattern>,
     /// Map to store how nulls relate to blank nodes.
     ///
     /// TODO: An RdfReader is specific to one BufRead, which it consumes when reading.
@@ -51,6 +54,7 @@ impl RdfReader {
         base: Option<Iri<String>>,
         value_formats: RdfValueFormats,
         limit: Option<u64>,
+        patterns: Vec<FilterTransformPattern>,
     ) -> Self {
         Self {
             read,
@@ -58,6 +62,7 @@ impl RdfReader {
             base,
             value_formats,
             limit,
+            patterns,
             bnode_map: Default::default(),
         }
     }
@@ -163,7 +168,7 @@ impl RdfReader {
 
         assert_eq!(skip.len(), 3);
         assert_eq!(
-            tuple_writer.column_number(),
+            tuple_writer.input_column_number(),
             skip.iter().filter(|b| !*b).count()
         );
 
@@ -241,7 +246,7 @@ impl RdfReader {
 
         assert_eq!(skip.len(), 4);
         assert_eq!(
-            tuple_writer.column_number(),
+            tuple_writer.input_column_number(),
             skip.iter().filter(|b| !*b).count()
         );
 
@@ -309,11 +314,13 @@ impl RdfReader {
     }
 }
 
+#[async_trait::async_trait(?Send)]
 impl TableProvider for RdfReader {
-    fn provide_table_data(
+    async fn provide_table_data(
         self: Box<Self>,
         tuple_writer: &mut TupleWriter,
     ) -> Result<(), ReadingError> {
+        tuple_writer.set_patterns(self.patterns.clone());
         let base_iri = self.base.clone();
         let with_base_iri = |parser: RdfParser| {
             if let Some(base) = base_iri {
@@ -372,7 +379,7 @@ impl ByteSized for RdfReader {
 
 #[cfg(test)]
 mod test {
-    use super::{RdfReader, DEFAULT_GRAPH_IRI};
+    use super::{DEFAULT_GRAPH_IRI, RdfReader};
     use std::cell::RefCell;
 
     use nemo_physical::{
@@ -385,7 +392,7 @@ mod test {
     #[cfg(not(miri))]
     use test_log::test;
 
-    use crate::io::formats::rdf::{value_format::RdfValueFormats, RdfVariant};
+    use crate::io::formats::rdf::{RdfVariant, value_format::RdfValueFormats};
 
     #[test]
     fn parse_triples_nt() {
@@ -402,6 +409,7 @@ mod test {
             None,
             RdfValueFormats::default(3),
             None,
+            Vec::new(),
         );
         let dict = RefCell::new(Dict::default());
         let mut tuple_writer = TupleWriter::new(&dict, 3);
@@ -426,6 +434,7 @@ mod test {
             None,
             RdfValueFormats::default(3),
             None,
+            Vec::new(),
         );
         let dict = RefCell::new(Dict::default());
         let mut tuple_writer = TupleWriter::new(&dict, 3);
@@ -449,6 +458,7 @@ mod test {
             None,
             RdfValueFormats::default(3),
             None,
+            Vec::new(),
         );
         let dict = RefCell::new(Dict::default());
         let mut tuple_writer = TupleWriter::new(&dict, 3);

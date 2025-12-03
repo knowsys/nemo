@@ -10,7 +10,7 @@ use crate::{
         columnscan::{ColumnScanCell, ColumnScanEnum, ColumnScanT},
         operations::union::ColumnScanUnion,
     },
-    datatypes::{storage_type_name::StorageTypeBitSet, Double, Float, StorageTypeName},
+    datatypes::{Double, Float, StorageTypeName, storage_type_name::StorageTypeBitSet},
     management::database::Dict,
     tabular::triescan::{PartialTrieScan, TrieScanEnum},
 };
@@ -47,9 +47,11 @@ impl OperationGenerator for GeneratorUnion {
             return Some(trie_scans.remove(0));
         }
 
-        debug_assert!(trie_scans
-            .iter()
-            .all(|scan| scan.arity() == trie_scans[0].arity()));
+        debug_assert!(
+            trie_scans
+                .iter()
+                .all(|scan| scan.arity() == trie_scans[0].arity())
+        );
 
         let arity = trie_scans.first().map_or(0, |s| s.arity());
 
@@ -183,7 +185,7 @@ mod test {
         datatypes::{StorageTypeName, StorageValueT},
         dictionary::meta_dv_dict::MetaDvDictionary,
         tabular::{
-            operations::{join::GeneratorJoin, OperationGenerator, OperationTableGenerator},
+            operations::{OperationGenerator, OperationTableGenerator, join::GeneratorJoin},
             triescan::TrieScanEnum,
         },
         util::test_util::test::{trie_dfs, trie_id32},

@@ -28,8 +28,9 @@ result(fullstring, ?R) :- strings(?A, _), ?R = fullStr(?A).
 result(fullstring, ?R) :- doubles(?A, _, _), ?R = fullStr(?A).
 result(fullstring, ?R) :- tagged(?A), ?R = fullStr(?A).
 
-% Get language tag
+% Language tag
 result(tag, ?R) :- tagged(?L), ?R = LANG(?L).
+result(langtag, ?R) :- strings(?S, _), ?R = STRLANG(?S, "en"). 
 
 % Casts
 cast(3.0).

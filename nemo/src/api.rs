@@ -7,12 +7,13 @@
 //! # #[cfg(miri)]
 //! # fn main() {}
 //! # #[cfg(not(miri))]
-//! # fn main() {
+//! # #[tokio::main(flavor = "current_thread")]
+//! # async fn main() {
 //! use nemo::api::{load, reason, output_predicates};
 //! std::env::set_current_dir("../resources/testcases/lcs-diff-computation/").unwrap();
-//! let mut engine = load("run-lcs-10.rls".into()).unwrap();
+//! let mut engine = load("run-lcs-10.rls".into()).await.unwrap();
 //! // reasoning on the rule file
-//! reason(&mut engine).unwrap();
+//! reason(&mut engine).await.unwrap();
 //! // write the results to a temporary directory
 //! let temp_dir = TempDir::new().unwrap();
 //! let predicates = output_predicates(&engine);
@@ -24,16 +25,14 @@
 use std::{fs::read_to_string, path::PathBuf};
 
 use crate::{
-    error::{report::ProgramReport, Error, ReadingError},
+    error::{Error, ReadingError, report::ProgramReport},
     execution::{
-        execution_parameters::ExecutionParameters, DefaultExecutionEngine, ExecutionEngine,
+        DefaultExecutionEngine, ExecutionEngine, execution_parameters::ExecutionParameters,
     },
     rule_file::RuleFile,
     rule_model::{
         components::tag::Tag,
-        pipeline::transformations::{
-            default::TransformationDefault, validate::TransformationValidate,
-        },
+        pipeline::transformations::default::TransformationDefault,
         programs::{handle::ProgramHandle, program::Program},
     },
 };
@@ -45,10 +44,10 @@ pub type Engine = DefaultExecutionEngine;
 /// Load the given `file` and load the program from the file.
 ///
 /// For details see [load_string]
-pub fn load(file: PathBuf) -> Result<Engine, Error> {
+pub async fn load(file: PathBuf) -> Result<Engine, Error> {
     let input = read_to_string(file.clone())
         .map_err(|err| ReadingError::from(err).with_resource(Resource::Path(file)))?;
-    load_string(input)
+    load_string(input).await
 }
 
 /// Parse a program in the given `input`-String and return an [Engine].
@@ -57,11 +56,13 @@ pub fn load(file: PathBuf) -> Result<Engine, Error> {
 ///
 /// # Error
 /// Returns an appropriate [Error] variant on parsing and feature check issues.
-pub fn load_string(input: String) -> Result<Engine, Error> {
+pub async fn load_string(input: String) -> Result<Engine, Error> {
     let parameters = ExecutionParameters::default();
     let file = RuleFile::new(input, String::default());
 
-    Ok(ExecutionEngine::from_file(file, parameters)?.into_object())
+    Ok(ExecutionEngine::from_file(file, parameters)
+        .await?
+        .into_object())
 }
 
 /// Parse a program in the given `input`-string and return a [Program].
@@ -89,6 +90,7 @@ pub fn validate(input: String, label: String) -> ProgramReport {
     let file = RuleFile::new(input, label);
     let handle = ProgramHandle::from_file(&file);
     let report = ProgramReport::new(file);
+    let parameters = ExecutionParameters::default();
 
     let (program, report) = match report.merge_program_parser_report(handle) {
         Ok(result) => result,
@@ -97,7 +99,7 @@ pub fn validate(input: String, label: String) -> ProgramReport {
 
     let (_program, report) = match report.merge_validation_report(
         &program,
-        program.transform(TransformationValidate::default()),
+        program.transform(TransformationDefault::new(&parameters)),
     ) {
         Ok(result) => result,
         Err(report) => return report,
@@ -112,8 +114,8 @@ pub fn validate(input: String, label: String) -> ProgramReport {
 /// If there are `@source` or `@import` directives in the
 /// parsed rules, all relative paths are resolved with the current
 /// working directory
-pub fn reason(engine: &mut Engine) -> Result<(), Error> {
-    engine.execute()
+pub async fn reason(engine: &mut Engine) -> Result<(), Error> {
+    engine.execute().await
 }
 
 /// Get a [Vec] of all output predicates that are computed by the engine.
@@ -123,8 +125,7 @@ pub fn output_predicates(engine: &Engine) -> Vec<Tag> {
         .exports()
         .iter()
         .map(|export| export.predicate())
-        .cloned()
-        .collect()
+        .collect::<Vec<_>>()
 }
 
 // TODO: Disabled write API. This API is designed in a way that does not fit how Nemo controls exporting.
@@ -166,11 +167,11 @@ mod test {
     use super::*;
 
     #[cfg_attr(miri, ignore)]
-    #[test]
-    fn reason() {
+    #[tokio::test]
+    async fn reason() {
         std::env::set_current_dir("../resources/testcases/lcs-diff-computation/").unwrap();
-        let mut engine = load("run-lcs-10.rls".into()).unwrap();
-        super::reason(&mut engine).unwrap();
+        let mut engine = load("run-lcs-10.rls".into()).await.unwrap();
+        super::reason(&mut engine).await.unwrap();
 
         // writing only the results where the predicates contain an "i"
         let results = output_predicates(&engine)

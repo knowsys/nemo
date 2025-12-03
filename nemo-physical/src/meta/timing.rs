@@ -1,6 +1,6 @@
 //! Code for timing blocks of code
 
-use ascii_tree::{write_tree, Tree};
+use ascii_tree::{Tree, write_tree};
 #[cfg(not(target_family = "wasm"))]
 use cpu_time::ProcessTime;
 #[cfg(all(not(test), not(target_family = "wasm")))]
@@ -83,20 +83,15 @@ impl fmt::Debug for TimedCodeInfo {
 }
 
 /// How to sort the elements of a [TimedCode] object
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Default)]
 pub enum TimedSorting {
     /// The order the code got called in
+    #[default]
     Default,
     /// Alphabetical by the title of the block
     Alphabetical,
     /// Show the blocks which took longest first
     LongestThreadTime,
-}
-
-impl Default for TimedSorting {
-    fn default() -> Self {
-        Self::Default
-    }
 }
 
 /// How to display a layer of a [TimedCode] object
@@ -313,10 +308,10 @@ impl TimedCode {
 
         let filtered_blocks = TimedCode::apply_display_option(current_node, current_option);
         for block in filtered_blocks {
-            let percentage = if current_node.info.total_thread_time > Duration::new(0, 0) {
+            let percentage = if current_node.info.total_system_time > Duration::new(0, 0) {
                 100.0
-                    * (block.1.info.total_thread_time.as_secs_f64()
-                        / current_node.info.total_thread_time.as_secs_f64())
+                    * (block.1.info.total_system_time.as_secs_f64()
+                        / current_node.info.total_system_time.as_secs_f64())
             } else {
                 0.0
             };
@@ -327,7 +322,7 @@ impl TimedCode {
                 TimedCode::format_title(
                     block.0,
                     percentage,
-                    block.1.info.total_thread_time.as_millis(),
+                    block.1.info.total_system_time.as_millis(),
                     block.1.info.runs,
                 ),
                 options,

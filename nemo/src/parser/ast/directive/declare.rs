@@ -3,17 +3,17 @@
 use nom::sequence::{delimited, pair, preceded, separated_pair, tuple};
 
 use crate::parser::{
+    ParserResult,
     ast::{
+        ProgramAST,
         comment::wsoc::WSoC,
-        sequence::{declare::NameTypePair, Sequence},
+        sequence::{Sequence, declare::NameTypePair},
         tag::structure::StructureTag,
         token::Token,
-        ProgramAST,
     },
-    context::{context, ParserContext},
+    context::{ParserContext, context},
     input::ParserInput,
     span::Span,
-    ParserResult,
 };
 
 /// Declare directive, associating atom positions with names and data types
@@ -116,9 +116,9 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
-        ast::{directive::declare::Declare, ProgramAST},
-        input::ParserInput,
         ParserState,
+        ast::{ProgramAST, directive::declare::Declare},
+        input::ParserInput,
     };
 
     #[test]

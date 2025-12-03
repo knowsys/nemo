@@ -7,9 +7,9 @@ use nemo_physical::{
     management::{
         bytesized::ByteSized,
         database::{
+            DatabaseInstance, Dict,
             id::{ExecutionId, PermanentTableId},
             sources::TableSource,
-            DatabaseInstance, Dict,
         },
         execution_plan::{ColumnOrder, ExecutionNodeRef, ExecutionPlan},
     },
@@ -345,6 +345,16 @@ impl TableManager {
         }
     }
 
+    /// Return a mutbale reference to the [DatabaseInstance].
+    pub(crate) fn database_mut(&mut self) -> &mut DatabaseInstance {
+        &mut self.database
+    }
+
+    /// Return a reference to the [DatabaseInstance].
+    pub(crate) fn database(&self) -> &DatabaseInstance {
+        &self.database
+    }
+
     /// Return the [PermanentTableId] that is associated with a given subtable.
     /// Returns None if the predicate does not exist.
     fn table_id(&self, subtable: &SubtableIdentifier) -> Option<PermanentTableId> {
@@ -366,22 +376,45 @@ impl TableManager {
             .map(|s| s.count_rows_in_memory(&self.database))
     }
 
-    /// Get a list of column iterators for the full table (i.e. the expanded trie)
-    pub(crate) fn table_row_iterator(
+    /// Provide an iterator over the rows of the table with the given [PermanentTableId].
+    ///
+    /// # Panics
+    /// Panics if the given id does not exist.
+    pub(crate) async fn table_row_iterator(
         &mut self,
         id: PermanentTableId,
     ) -> Result<impl Iterator<Item = Vec<AnyDataValue>> + '_, Error> {
-        Ok(self.database.table_row_iterator(id)?)
+        Ok(self.database.table_row_iterator(id).await?)
+    }
+
+    /// Provide an iterator over the rows of the table with the given [PermanentTableId].
+    /// This function assumes that the table exists in-memory in the default column order.
+    ///
+    /// # Panics
+    /// Panics if trie does not exist in default column order in memory or the given id does not exist.
+    pub(crate) fn table_row_iterator_inmemory(
+        &self,
+        id: PermanentTableId,
+    ) -> Result<impl Iterator<Item = Vec<AnyDataValue>> + '_, Error> {
+        Ok(self.database.table_row_iterator_inmemory(id)?)
+    }
+
+    /// Get a an iterator over the rows of a trie
+    pub(crate) fn trie_row_iterator<'a>(
+        &'a self,
+        trie: &'a Trie,
+    ) -> Result<impl Iterator<Item = Vec<AnyDataValue>> + 'a, Error> {
+        Ok(self.database.trie_row_iterator(trie)?)
     }
 
     /// Combine all subtables of a predicate into one table
     /// and return the [PermanentTableId] of that new table.
-    pub(crate) fn combine_predicate(
+    pub(crate) async fn combine_predicate(
         &mut self,
         predicate: &Tag,
     ) -> Result<Option<PermanentTableId>, Error> {
         match self.last_step(predicate) {
-            Some(last_step) => self.combine_tables(predicate, 0..(last_step + 1)),
+            Some(last_step) => self.combine_tables(predicate, 0..(last_step + 1)).await,
             None => Ok(None),
         }
     }
@@ -419,18 +452,20 @@ impl TableManager {
         format!("{predicate} ({step}) -> {referenced_table_name} {permutation}")
     }
 
-    /// Intitializes helper structures that are needed for handling the table associated with the predicate.
+    /// Initializes helper structures that are needed for handling the table associated with the predicate.
     /// Must be done before calling functions that add tables to that predicate.
     pub(crate) fn register_predicate(&mut self, predicate: Tag, arity: usize) {
         let predicate_info = PredicateInfo { arity };
 
-        if self
-            .predicate_to_info
-            .insert(predicate.clone(), predicate_info)
-            .is_some()
+        if let Some(previous_info) = self.predicate_to_info.get(&predicate)
+            && previous_info.arity != arity
         {
-            panic!("predicates must uniquely identify one relation");
+            panic!("cannot register the same predicate with different arities");
         }
+
+        self.predicate_to_info
+            .insert(predicate.clone(), predicate_info);
+
         self.predicate_subtables
             .insert(predicate, SubtableHandler::default());
     }
@@ -520,6 +555,63 @@ impl TableManager {
             .arity
     }
 
+    /// For a predicate,
+    /// return all tables that are within a given range of steps.
+    ///
+    /// Returns a list of pairs consisting of step and id.
+    pub fn tables_in_range_steps(
+        &self,
+        predicate: &Tag,
+        range: Range<usize>,
+    ) -> Vec<(usize, PermanentTableId)> {
+        self.predicate_subtables
+            .get(predicate)
+            .map(|handler| {
+                handler
+                    .single
+                    .iter()
+                    .filter_map(|(step, id)| {
+                        if range.contains(step) {
+                            Some((*step, *id))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default()
+    }
+
+    /// For a predicate,
+    /// return all tables within a given range of steps
+    /// derived a given rule.
+    ///
+    /// Returns a list of pairs consisting of step and id.
+    pub fn tables_in_range_rule_steps(
+        &self,
+        predicate: &Tag,
+        range: Range<usize>,
+        rules: &[usize],
+        rule: usize,
+    ) -> Vec<(usize, PermanentTableId)> {
+        self.predicate_subtables
+            .get(predicate)
+            .map(|handler| {
+                handler
+                    .single
+                    .iter()
+                    .filter_map(|(step, id)| {
+                        if rules[*step] == rule && range.contains(step) {
+                            Some((*step, *id))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default()
+    }
+
     /// Return the ids of all subtables of a predicate within a certain range of steps.
     pub fn tables_in_range(&self, predicate: &Tag, range: &Range<usize>) -> Vec<PermanentTableId> {
         self.predicate_subtables
@@ -529,7 +621,7 @@ impl TableManager {
     }
 
     /// Combine subtables in a certain range into one larger table.
-    pub fn combine_tables(
+    pub async fn combine_tables(
         &mut self,
         predicate: &Tag,
         range: Range<usize>,
@@ -543,10 +635,6 @@ impl TableManager {
 
         let tables = subtable_handler.cover_range(&range);
 
-        if tables.len() == 1 {
-            return Ok(Some(tables[0]));
-        }
-
         let mut union_plan = ExecutionPlan::default();
         let fetch_nodes = tables
             .iter()
@@ -555,22 +643,31 @@ impl TableManager {
         let union_node = union_plan.union(OperationTable::default(), fetch_nodes);
         let plan_id = union_plan.write_permanent(union_node, "Combining Tables", &name);
 
-        let execution_result = self.database.execute_plan(union_plan)?;
-        let table_id = execution_result
-            .get(&plan_id)
-            .expect("Combining multiple non-empty tables should result in a non-empty table.");
+        let execution_result = self.database.execute_plan(union_plan).await?;
 
-        subtable_handler.add_combined_table(&range, *table_id);
-
-        Ok(Some(*table_id))
+        match execution_result.get(&plan_id) {
+            Some(table_id) => {
+                subtable_handler.add_combined_table(&range, *table_id);
+                Ok(Some(*table_id))
+            }
+            None => Ok(None),
+        }
     }
 
     /// Execute a plan and add the results as subtables to the manager.
-    pub fn execute_plan(
+    ///
+    /// The affected predicates are returned as a list of [Tag]s.
+    ///
+    /// Execution can fail if loading required tables into memory
+    /// is unsuccessful. In this case this function returns an error.
+    pub async fn execute_plan(
         &mut self,
         subtable_plan: SubtableExecutionPlan,
     ) -> Result<Vec<Tag>, Error> {
-        let result = self.database.execute_plan(subtable_plan.execution_plan)?;
+        let result = self
+            .database
+            .execute_plan(subtable_plan.execution_plan)
+            .await?;
 
         let mut updated_predicates = Vec::new();
         for (plan_id, table_id) in result {
@@ -627,13 +724,87 @@ impl TableManager {
 
     /// Return the chase step of the sub table that contains the given row within the given predicate.
     /// Returns None if the row does not exist.
-    pub fn find_table_row(&mut self, predicate: &Tag, row: &[AnyDataValue]) -> Option<usize> {
+    pub async fn find_table_row(&mut self, predicate: &Tag, row: &[AnyDataValue]) -> Option<usize> {
         let handler = self.predicate_subtables.get(predicate)?;
 
         for (step, id) in &handler.single {
-            if self.database.table_contains_row(*id, row) {
+            if self.database.table_contains_row(*id, row).await {
                 return Some(*step);
             }
+        }
+
+        None
+    }
+
+    /// Return an id for a given row and predicate and the step it was derived in, if it exists.
+    ///
+    /// Returns `None` if there is no such row for this predicate.
+    pub async fn table_row_id(
+        &mut self,
+        predicate: &Tag,
+        row: &[AnyDataValue],
+    ) -> Option<(usize, usize)> {
+        let handler = self.predicate_subtables.get(predicate)?;
+
+        let mut skipped: usize = 0;
+        for (step, id) in &handler.single {
+            if let Some(row_index) = self.database.table_row_position(*id, row).await {
+                return Some((skipped + row_index, *step));
+            }
+
+            skipped += self.database.count_rows_in_memory(*id);
+        }
+
+        None
+    }
+
+    /// Return an id for a given row and predicate and the step it was derived in, if it exists.
+    ///
+    /// Returns `None` if there is no such row for this predicate.
+    ///
+    /// # Panics
+    /// Panics if any subtable of the predicate is not in memory.
+    pub fn table_row_id_inmemory(
+        &self,
+        predicate: &Tag,
+        row: &[AnyDataValue],
+    ) -> Option<(usize, usize)> {
+        let handler = self.predicate_subtables.get(predicate)?;
+
+        let mut skipped: usize = 0;
+        for (step, id) in &handler.single {
+            if let Some(row_index) = self.database.table_row_position_inmemory(*id, row) {
+                return Some((skipped + row_index, *step));
+            }
+
+            skipped += self.database.count_rows_in_memory(*id);
+        }
+
+        None
+    }
+
+    /// Given a row id, return the corresponding row.
+    ///
+    /// Returns `None` if the predicate is unknown,
+    /// requesting the table failed,
+    /// or if there is no row with the given id.
+    pub async fn row_by_id(&mut self, predicate: &Tag, row_id: usize) -> Option<Vec<AnyDataValue>> {
+        let handler = self.predicate_subtables.get(predicate)?;
+
+        let mut skipped: usize = 0;
+
+        for (_, table_id) in &handler.single {
+            let row_count = self.database.count_rows_in_memory(*table_id);
+
+            if row_id < skipped + row_count {
+                let local_id = row_id - skipped;
+
+                let mut row_iterator = self.database.table_row_iterator(*table_id).await.ok()?;
+
+                return row_iterator.nth(local_id);
+            }
+
+            skipped += row_count;
         }
 
         None
@@ -646,12 +817,26 @@ impl TableManager {
     ///
     /// Assumes that the given plan has only one output node.
     /// No tables will be saved in the database.
-    pub fn execute_plan_first_match(
+    pub async fn execute_plan_first_match(
         &mut self,
         subtable_plan: SubtableExecutionPlan,
     ) -> Option<Vec<AnyDataValue>> {
         self.database
             .execute_first_match(subtable_plan.execution_plan)
+            .await
+    }
+
+    /// Execute a given [SubtableExecutionPlan]
+    /// and return a list of [Trie]s for each permanent table
+    /// instead of saving it to the database.
+    pub async fn execute_plan_trie(
+        &mut self,
+        subtable_plan: SubtableExecutionPlan,
+    ) -> Result<Vec<Trie>, Error> {
+        Ok(self
+            .database
+            .execute_plan_trie(subtable_plan.execution_plan)
+            .await?)
     }
 }
 

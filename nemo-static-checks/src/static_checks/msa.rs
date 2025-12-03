@@ -6,9 +6,9 @@ use nemo::io::{import_manager::ImportManager, resource_providers::ResourceProvid
 use nemo::rule_model::components::{fact::Fact, rule::Rule, tag::Tag, term::Term};
 use nemo::rule_model::error::ValidationReport;
 use nemo::rule_model::pipeline::{
-    commit::ProgramCommit, transformations::msa::TransformationMSA, ProgramPipeline,
+    ProgramPipeline, commit::ProgramCommit, transformations::msa::TransformationMSA,
 };
-use nemo::rule_model::programs::{handle::ProgramHandle, program::Program, ProgramWrite};
+use nemo::rule_model::programs::{ProgramWrite, handle::ProgramHandle, program::Program};
 
 use std::collections::HashSet;
 
@@ -27,7 +27,7 @@ fn critical_instance(rules: &[Rule]) -> HashSet<Fact> {
         .collect()
 }
 
-pub fn msa_execution_engine_from_rules(rules: &[Rule]) -> DefaultExecutionEngine {
+pub async fn msa_execution_engine_from_rules(rules: &[Rule]) -> DefaultExecutionEngine {
     let mut commit: ProgramCommit =
         ProgramCommit::empty(ProgramPipeline::new(), ValidationReport::default());
     rules.iter().for_each(|rule| {
@@ -44,5 +44,7 @@ pub fn msa_execution_engine_from_rules(rules: &[Rule]) -> DefaultExecutionEngine
     let prog: Program = prog_hand.materialize();
     // println!("{:#?}", prog.all_rules());
     let import_manager: ImportManager = ImportManager::new(ResourceProviders::empty());
-    ExecutionEngine::initialize(prog, import_manager).expect("no errors possible")
+    ExecutionEngine::initialize(prog, import_manager)
+        .await
+        .expect("no errors possible")
 }

@@ -8,7 +8,7 @@ pub mod span;
 
 use std::{cell::RefCell, fmt::Display, rc::Rc};
 
-use ast::{program::Program, ProgramAST};
+use ast::{ProgramAST, program::Program};
 use error::{ParserError, ParserErrorTree};
 use input::ParserInput;
 

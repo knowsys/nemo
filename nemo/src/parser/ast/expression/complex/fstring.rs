@@ -3,11 +3,11 @@
 use nom::{branch::alt, combinator::map, multi::many0, sequence::delimited};
 
 use crate::parser::{
-    ast::{expression::Expression, token::Token, ProgramAST},
-    context::{context, ParserContext},
+    ParserResult,
+    ast::{ProgramAST, expression::Expression, token::Token},
+    context::{ParserContext, context},
     input::ParserInput,
     span::Span,
-    ParserResult,
 };
 
 /// Elements that make up a [FormatString]
@@ -17,6 +17,10 @@ pub enum FormatStringElement<'a> {
     String(Token<'a>),
     /// Expression
     Expression(Expression<'a>),
+    /// Escaped start marker
+    EscapedStart,
+    /// Escaped end marker
+    EscapedEnd,
 }
 
 /// A string which may include sub expressions
@@ -48,6 +52,12 @@ impl<'a> FormatString<'a> {
     fn parse_element(input: ParserInput<'a>) -> ParserResult<'a, FormatStringElement<'a>> {
         alt((
             map(Token::fstring, FormatStringElement::String),
+            map(Token::fstring_escape_start, |_| {
+                FormatStringElement::EscapedStart
+            }),
+            map(Token::fstring_escape_end, |_| {
+                FormatStringElement::EscapedEnd
+            }),
             map(Self::parse_expression, FormatStringElement::Expression),
         ))(input)
     }
@@ -58,6 +68,12 @@ impl<'a> FormatString<'a> {
     ) -> ParserResult<'a, FormatStringElement<'a>> {
         alt((
             map(Token::multiline_fstring, FormatStringElement::String),
+            map(Token::fstring_escape_start, |_| {
+                FormatStringElement::EscapedStart
+            }),
+            map(Token::fstring_escape_end, |_| {
+                FormatStringElement::EscapedEnd
+            }),
             map(Self::parse_expression, FormatStringElement::Expression),
         ))(input)
     }
@@ -73,6 +89,8 @@ impl<'a> ProgramAST<'a> for FormatString<'a> {
             match element {
                 FormatStringElement::String(_token) => {}
                 FormatStringElement::Expression(expression) => result.push(expression),
+                &FormatStringElement::EscapedStart => {}
+                &FormatStringElement::EscapedEnd => {}
             }
         }
 
@@ -125,11 +143,12 @@ impl<'a> ProgramAST<'a> for FormatString<'a> {
 #[cfg(test)]
 mod test {
     use nom::combinator::all_consuming;
+    use test_log::test;
 
     use crate::parser::{
-        ast::{expression::complex::fstring::FormatString, ProgramAST},
-        input::ParserInput,
         ParserState,
+        ast::{ProgramAST, expression::complex::fstring::FormatString},
+        input::ParserInput,
     };
 
     #[test]
@@ -141,6 +160,10 @@ mod test {
             (r#"f"{?x + 1}""#, 1),
             (r#"f"result: {?x + 1}""#, 2),
             (r#"f"{?x} + {?y} = {?x + ?y}""#, 5),
+            (r#"f"{{""#, 1),
+            (r#"f"}}""#, 1),
+            (r#"f"{{}}""#, 2),
+            (r#"f"}}{{""#, 2),
         ];
 
         for (input, expected) in test {
@@ -150,6 +173,11 @@ mod test {
             assert!(result.is_ok());
 
             let result = result.unwrap().1;
+
+            log::debug!(
+                "{input:?}: expected {expected}; got {:?}",
+                result.elements().collect::<Vec<_>>()
+            );
             assert_eq!(expected, result.elements().count());
         }
     }

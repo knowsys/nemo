@@ -6,6 +6,7 @@ use std::{fmt::Display, ops::Range};
 use enum_assoc::Assoc;
 
 use nom::{
+    FindSubstring, InputTake,
     branch::alt,
     bytes::complete::{is_a, is_not, tag, take_until, take_while1},
     character::complete::{
@@ -14,21 +15,20 @@ use nom::{
     combinator::{map, opt, recognize, verify},
     multi::many0,
     sequence::pair,
-    FindSubstring, InputTake,
 };
 use nom_supreme::error::{BaseErrorKind, Expectation};
 
 use crate::{
     parser::{
-        context::{context, ParserContext},
+        ParserInput, ParserResult,
+        context::{ParserContext, context},
         error::ParserErrorTree,
         span::Span,
-        ParserInput, ParserResult,
     },
     rule_model::components::ComponentSource,
     syntax::{
         self, comment,
-        datavalues::{self, boolean, iri, map, string, tuple, RDF_DATATYPE_INDICATOR},
+        datavalues::{self, RDF_DATATYPE_INDICATOR, boolean, iri, map, string, tuple},
         directive, encoding_prefixes,
         expression::{aggregate, atom, format_string, operation, variable},
         operator, rule,
@@ -180,6 +180,12 @@ pub enum TokenKind {
     /// Format string expression close
     #[assoc(name = format_string::EXPRESSION_END)]
     FormatStringExpressionEnd,
+    /// Format string escaped start marker
+    #[assoc(name = format_string::ESCAPE_START)]
+    FormatStringEscapeStart,
+    /// Format string escaped end marker
+    #[assoc(name = format_string::ESCAPE_END)]
+    FormatStringEscapeEnd,
     /// Blank node prefix
     #[assoc(name = "_:")]
     BlankNodePrefix,
@@ -816,6 +822,8 @@ impl<'a> Token<'a> {
     string_token!(triple_quote, TokenKind::TripleQuote);
     string_token!(fstring_open, TokenKind::FormatStringOpen);
     string_token!(fstring_close, TokenKind::FormatStringClose);
+    string_token!(fstring_escape_start, TokenKind::FormatStringEscapeStart);
+    string_token!(fstring_escape_end, TokenKind::FormatStringEscapeEnd);
     string_token!(fstring_multiline_open, TokenKind::FormatStringMultilineOpen);
     string_token!(
         fstring_multiline_close,

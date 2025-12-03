@@ -12,6 +12,7 @@ use std::{
 use nemo_physical::{
     datasources::table_providers::TableProvider,
     datavalues::{AnyDataValue, DataValue},
+    tabular::filters::FilterTransformPattern,
 };
 use reader::DsvReader;
 use strum_macros::EnumIter;
@@ -21,8 +22,8 @@ use writer::DsvWriter;
 use crate::{
     error::Error,
     io::format_builder::{
-        format_parameter, format_tag, value_type_matches, AnyImportExportBuilder, FormatParameter,
-        Parameters, StandardParameter,
+        AnyImportExportBuilder, FormatParameter, Parameters, StandardParameter, SupportedFormatTag,
+        format_parameter, format_tag, value_type_matches,
     },
     rule_model::{
         components::{import_export::Direction, term::value_type::ValueType},
@@ -37,37 +38,46 @@ use super::{ExportHandler, FileFormatMeta, FormatBuilder, ImportHandler, TableWr
 #[derive(Debug, Clone)]
 pub struct DsvHandler {
     /// The specific delimiter for this format.
-    delimiter: u8,
+    pub(crate) delimiter: u8,
     /// The list of value formats to be used for importing/exporting data.
-    value_formats: DsvValueFormats,
+    pub(crate) value_formats: DsvValueFormats,
     /// Maximum number of statements that should be imported/exported.
-    limit: Option<u64>,
+    pub(crate) limit: Option<u64>,
     /// Whether to ignore headers
-    ignore_headers: bool,
+    pub(crate) ignore_headers: bool,
+    /// Whether to respect quoting in values
+    pub(crate) quoting: bool,
+    /// Filter/Transform patterns for imports
+    pub(crate) patterns: Vec<FilterTransformPattern>,
 }
 
 impl DsvHandler {
-    /// Create new [`DsvHandler`] with given delimiter and arity
+    /// Create a new [DsvHandler] with given delimiter and arity.
     pub fn new(delimiter: u8, arity: usize) -> Self {
-        DsvHandler {
+        Self::with_value_formats(
             delimiter,
-            value_formats: DsvValueFormats::default(arity),
-            limit: None,
-            ignore_headers: false,
-        }
+            DsvValueFormats::default(arity),
+            None,
+            false,
+            true,
+        )
     }
 
+    /// Create a new [DsvHandler] with the given parameters.
     pub(crate) fn with_value_formats(
         delimiter: u8,
         value_formats: DsvValueFormats,
         limit: Option<u64>,
         ignore_headers: bool,
+        quoting: bool,
     ) -> Self {
         DsvHandler {
             delimiter,
             value_formats,
             limit,
             ignore_headers,
+            quoting,
+            patterns: Vec::new(),
         }
     }
 }
@@ -106,6 +116,8 @@ impl ImportHandler for DsvHandler {
             None,
             self.limit,
             self.ignore_headers,
+            self.quoting,
+            self.patterns.clone(),
         )))
     }
 }
@@ -140,7 +152,7 @@ enum DsvVariant {
 }
 
 format_tag! {
-    pub(crate) enum DsvTag(SupportedFormatTag::Dsv) {
+    pub enum DsvTag(SupportedFormatTag::Dsv) {
         Dsv => file_format::DSV,
         Tsv => file_format::TSV,
         Csv => file_format::CSV,
@@ -153,6 +165,7 @@ format_parameter! {
         Delimiter(name = attribute::DSV_DELIMITER, supported_types = &[ValueType::String]),
         Format(name = attribute::FORMAT, supported_types = &[ValueType::Constant, ValueType::Tuple]),
         IgnoreHeaders(name = attribute::IGNORE_HEADERS, supported_types = &[ValueType::Boolean]),
+        Quoting(name = attribute::DSV_QUOTING, supported_types = &[ValueType::Boolean]),
     }
 }
 
@@ -185,16 +198,29 @@ impl FormatParameter<DsvTag> for DsvParameter {
                 }
             }),
             DsvParameter::IgnoreHeaders => Ok(()),
+            DsvParameter::Quoting => Ok(()),
         }
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct DsvBuilder {
     limit: Option<u64>,
     delimiter: u8,
     value_formats: Option<DsvValueFormats>,
     ignore_headers: bool,
+    quoting: bool,
+}
+
+impl DsvBuilder {
+    /// Return the [SupportedFormatTag] for this builder.
+    pub fn format_tag(&self) -> SupportedFormatTag {
+        SupportedFormatTag::Dsv(match self.delimiter {
+            b',' => DsvTag::Csv,
+            b'\t' => DsvTag::Tsv,
+            _ => DsvTag::Dsv,
+        })
+    }
 }
 
 impl From<DsvBuilder> for AnyImportExportBuilder {
@@ -238,11 +264,18 @@ impl FormatBuilder for DsvBuilder {
             .map(AnyDataValue::to_boolean_unchecked)
             .unwrap_or(false);
 
+        let quoting = parameters
+            .get_optional(DsvParameter::Quoting)
+            .as_ref()
+            .map(AnyDataValue::to_boolean_unchecked)
+            .unwrap_or(true);
+
         Ok(Self {
             delimiter,
             value_formats,
             limit,
             ignore_headers,
+            quoting,
         })
     }
 
@@ -250,7 +283,11 @@ impl FormatBuilder for DsvBuilder {
         self.value_formats.as_ref().map(DsvValueFormats::arity)
     }
 
-    fn build_import(&self, arity: usize) -> Arc<dyn ImportHandler + Send + Sync + 'static> {
+    fn build_import(
+        &self,
+        arity: usize,
+        patterns: Vec<FilterTransformPattern>,
+    ) -> Arc<dyn ImportHandler + Send + Sync + 'static> {
         Arc::new(DsvHandler {
             delimiter: self.delimiter,
             value_formats: self
@@ -259,10 +296,16 @@ impl FormatBuilder for DsvBuilder {
                 .unwrap_or(DsvValueFormats::default(arity)),
             limit: self.limit,
             ignore_headers: self.ignore_headers,
+            quoting: self.quoting,
+            patterns,
         })
     }
 
-    fn build_export(&self, arity: usize) -> Arc<dyn ExportHandler + Send + Sync + 'static> {
+    fn build_export(
+        &self,
+        arity: usize,
+        patterns: Vec<FilterTransformPattern>,
+    ) -> Arc<dyn ExportHandler + Send + Sync + 'static> {
         Arc::new(DsvHandler {
             delimiter: self.delimiter,
             value_formats: self
@@ -271,6 +314,8 @@ impl FormatBuilder for DsvBuilder {
                 .unwrap_or(DsvValueFormats::default(arity)),
             limit: self.limit,
             ignore_headers: self.ignore_headers,
+            quoting: self.quoting,
+            patterns,
         })
     }
 }

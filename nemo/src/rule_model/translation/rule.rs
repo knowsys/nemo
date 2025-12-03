@@ -8,14 +8,14 @@ use crate::{
         components::{
             literal::Literal,
             rule::Rule,
-            term::{primitive::Primitive, Term},
+            term::{Term, primitive::Primitive},
         },
         origin::Origin,
     },
 };
 
 use super::{
-    attribute::KnownAttributes, literal::HeadAtom, ASTProgramTranslation, TranslationComponent,
+    ASTProgramTranslation, TranslationComponent, attribute::KnownAttributes, literal::HeadAtom,
 };
 
 impl Rule {
@@ -33,12 +33,11 @@ impl TranslationComponent for Rule {
         let mut result = Origin::ast(Rule::empty(), rule);
         let attributes = translation.statement_attributes();
 
-        if let Some(rule_name) = attributes.get_unique(&KnownAttributes::Name) {
-            if let Term::Primitive(Primitive::Ground(ground)) = &rule_name[0] {
-                if let Some(name) = ground.value().to_plain_string() {
-                    result.set_name(&name);
-                }
-            }
+        if let Some(rule_name) = attributes.get_unique(&KnownAttributes::Name)
+            && let Term::Primitive(Primitive::Ground(ground)) = &rule_name[0]
+            && let Some(name) = ground.value().to_plain_string()
+        {
+            result.set_name(&name);
         }
 
         if let Some(rule_display) = attributes.get_unique(&KnownAttributes::Display) {

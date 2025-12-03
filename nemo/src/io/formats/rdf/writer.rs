@@ -10,12 +10,12 @@ use oxrdfio::{RdfFormat, RdfSerializer};
 
 use crate::{
     error::Error,
-    io::formats::{TableWriter, PROGRESS_NOTIFY_INCREMENT},
+    io::formats::{PROGRESS_NOTIFY_INCREMENT, TableWriter},
 };
 
 use super::{
+    DEFAULT_GRAPH_IRI, RdfVariant,
     value_format::{RdfValueFormat, RdfValueFormats},
-    RdfVariant, DEFAULT_GRAPH_IRI,
 };
 
 /// Private struct to record the type of an RDF term that

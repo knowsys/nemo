@@ -13,8 +13,9 @@ use delegate::delegate;
 use string::StringLevenshtein;
 
 use crate::{
-    datatypes::{storage_type_name::StorageTypeBitSet, StorageTypeName},
+    datatypes::{StorageTypeName, storage_type_name::StorageTypeBitSet},
     datavalues::AnyDataValue,
+    function::definitions::language::LanguageString,
 };
 
 use self::{
@@ -128,7 +129,7 @@ pub(crate) trait UnaryFunction {
 }
 
 /// Enum containing all implementations of [UnaryFunction]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UnaryFunctionEnum {
     BooleanNegation(BooleanNegation),
     CanonicalString(CanonicalString),
@@ -221,10 +222,11 @@ pub trait BinaryFunction {
 }
 
 /// Enum containing all implementations of [BinaryFunction]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BinaryFunctionEnum {
     Equals(Equals),
     Unequals(Unequals),
+    LanguageString(LanguageString),
     NumericAddition(NumericAddition),
     NumericSubtraction(NumericSubtraction),
     NumericMultiplication(NumericMultiplication),
@@ -255,6 +257,7 @@ impl BinaryFunction for BinaryFunctionEnum {
         to match self {
             Self::Equals(function) => function,
             Self::Unequals(function) => function,
+            Self::LanguageString(function) => function,
             Self::NumericAddition(function) => function,
             Self::NumericSubtraction(function) => function,
             Self::NumericMultiplication(function) => function,
@@ -303,7 +306,7 @@ pub trait TernaryFunction {
 }
 
 /// Enum containing all implementations of [TernaryFunction]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TernaryFunctionEnum {
     StringSubstringLength(StringSubstringLength),
 }
@@ -332,7 +335,7 @@ pub trait NaryFunction {
 }
 
 /// Enum containing all implementations of [NaryFunction]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NaryFunctionEnum {
     BitAnd(BitAnd),
     BitOr(BitOr),

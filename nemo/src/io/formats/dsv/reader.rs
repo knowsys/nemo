@@ -8,6 +8,7 @@ use nemo_physical::error::ReadingError;
 use nemo_physical::management::bytesized::ByteSized;
 
 use nemo_physical::datasources::{table_providers::TableProvider, tuple_writer::TupleWriter};
+use nemo_physical::tabular::filters::FilterTransformPattern;
 
 use crate::io::formats::PROGRESS_NOTIFY_INCREMENT;
 
@@ -21,7 +22,7 @@ use super::value_format::{DataValueParserFunction, DsvValueFormat, DsvValueForma
 ///
 /// Parsing of individual values can be done in several ways (DSV does not specify a data model at this level),
 /// as defined by [DsvValueFormat].
-pub(super) struct DsvReader<T> {
+pub(crate) struct DsvReader<T> {
     /// Buffer from which content is read
     read: T,
 
@@ -36,17 +37,24 @@ pub(super) struct DsvReader<T> {
     limit: Option<u64>,
     /// Whether to ignore headers (i.e., the first record)
     ignore_headers: bool,
+    /// Whether to respect quoting inside values
+    quoting: bool,
+    /// Filter & transformation patterns
+    patterns: Vec<FilterTransformPattern>,
 }
 
 impl<T: BufRead> DsvReader<T> {
+    #[allow(clippy::too_many_arguments)]
     /// Instantiate a [DsvReader] for a given delimiter
-    pub(super) fn new(
+    pub(crate) fn new(
         read: T,
         delimiter: u8,
         value_formats: DsvValueFormats,
         escape: Option<u8>,
         limit: Option<u64>,
         ignore_headers: bool,
+        quoting: bool,
+        patterns: Vec<FilterTransformPattern>,
     ) -> Self {
         Self {
             read,
@@ -55,6 +63,8 @@ impl<T: BufRead> DsvReader<T> {
             escape,
             limit,
             ignore_headers,
+            quoting,
+            patterns,
         }
     }
 
@@ -65,12 +75,14 @@ impl<T: BufRead> DsvReader<T> {
             .escape(self.escape)
             .has_headers(self.ignore_headers)
             .double_quote(true)
+            .quoting(self.quoting)
+            .flexible(true)
             .from_reader(self.read)
     }
 
     /// Actually reads the data from the file, using the given parsers to convert strings to [AnyDataValue]s.
     /// If a field cannot be read or parsed, the line will be ignored
-    fn read(self, tuple_writer: &mut TupleWriter) -> Result<(), ReadingError> {
+    pub(crate) fn read(self, tuple_writer: &mut TupleWriter) -> Result<(), ReadingError> {
         log::info!("Starting data import");
 
         let parsers: Vec<DataValueParserFunction> = self
@@ -85,7 +97,7 @@ impl<T: BufRead> DsvReader<T> {
             .collect();
         let expected_file_arity = parsers.len();
         assert_eq!(
-            tuple_writer.column_number(),
+            tuple_writer.input_column_number(),
             skip.iter().filter(|b| !*b).count()
         );
 
@@ -96,6 +108,11 @@ impl<T: BufRead> DsvReader<T> {
         let mut line_count: u64 = 0;
         let mut drop_count: u64 = 0;
         for row in dsv_reader.records().flatten() {
+            if row.len() != expected_file_arity {
+                drop_count += 1;
+                continue;
+            }
+
             for (idx, value) in row.iter().enumerate() {
                 if idx >= expected_file_arity || skip[idx] {
                     continue;
@@ -123,11 +140,13 @@ impl<T: BufRead> DsvReader<T> {
     }
 }
 
+#[async_trait::async_trait(?Send)]
 impl<T: BufRead> TableProvider for DsvReader<T> {
-    fn provide_table_data(
+    async fn provide_table_data(
         self: Box<Self>,
         tuple_writer: &mut TupleWriter,
     ) -> Result<(), ReadingError> {
+        tuple_writer.set_patterns(self.patterns.clone());
         self.read(tuple_writer)
     }
 
@@ -191,6 +210,8 @@ mod test {
                 None,
                 None,
                 ignore_headers,
+                true,
+                Vec::new(),
             );
             let dict = RefCell::new(Dict::default());
             let mut tuple_writer = TupleWriter::new(&dict, 4);

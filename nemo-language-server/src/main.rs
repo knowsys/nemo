@@ -1,5 +1,3 @@
-#![feature(let_chains)]
-
 use language_server::Backend;
 use tower_lsp::{LspService, Server};
 

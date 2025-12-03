@@ -1,11 +1,11 @@
 //! This module provides implementations [DataValue]s that represent boolean values.
 
 use super::{
-    syntax::{
-        boolean::{FALSE, TRUE},
-        RDF_DATATYPE_INDICATOR,
-    },
     DataValue, ValueDomain,
+    syntax::{
+        RDF_DATATYPE_INDICATOR,
+        boolean::{FALSE, TRUE},
+    },
 };
 
 /// Physical representation of a boolean value

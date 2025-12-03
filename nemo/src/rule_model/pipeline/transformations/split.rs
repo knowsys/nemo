@@ -3,7 +3,7 @@
 use crate::rule_model::{
     components::{rule::Rule, statement::Statement},
     error::ValidationReport,
-    programs::{handle::ProgramHandle, ProgramRead, ProgramWrite},
+    programs::{ProgramRead, ProgramWrite, handle::ProgramHandle},
 };
 
 use super::ProgramTransformation;

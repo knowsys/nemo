@@ -5,23 +5,24 @@ use std::{collections::HashSet, fmt::Display, hash::Hash};
 use nemo_physical::datavalues::DataValue;
 
 use crate::rule_model::{
-    error::{hint::Hint, info::Info, validation_error::ValidationError, ValidationReport},
+    components::{import_export::clause::ImportClause, term::operation::Operation},
+    error::{ValidationReport, hint::Hint, info::Info, validation_error::ValidationError},
     origin::Origin,
     pipeline::id::ProgramComponentId,
     substitution::Substitution,
 };
 
 use super::{
+    ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent, IterablePrimitives,
+    IterableVariables, ProgramComponentKind,
     atom::Atom,
     component_iterator, component_iterator_mut,
     literal::Literal,
     tag::Tag,
     term::{
-        primitive::{variable::Variable, Primitive},
         Term,
+        primitive::{Primitive, variable::Variable},
     },
-    ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent, IterablePrimitives,
-    IterableVariables, ProgramComponentKind,
 };
 
 /// Rule
@@ -46,6 +47,9 @@ pub struct Rule {
     head: Vec<Atom>,
     /// Body of the rule
     body: Vec<Literal>,
+
+    /// Imports that are evaluated as part of the rule
+    imports: Vec<ImportClause>,
 }
 
 impl Rule {
@@ -58,6 +62,7 @@ impl Rule {
             display: None,
             head,
             body,
+            imports: Vec::default(),
         }
     }
 
@@ -70,6 +75,7 @@ impl Rule {
             display: None,
             head: Vec::default(),
             body: Vec::default(),
+            imports: Vec::default(),
         }
     }
 
@@ -112,6 +118,22 @@ impl Rule {
         self.body.iter().filter_map(|literal| match literal {
             Literal::Positive(atom) => Some(atom),
             Literal::Negative(_) | Literal::Operation(_) => None,
+        })
+    }
+
+    /// Return an iterator over the negative literals in the body of this rule.
+    pub fn body_negative(&self) -> impl Iterator<Item = &Atom> {
+        self.body.iter().filter_map(|literal| match literal {
+            Literal::Negative(atom) => Some(atom),
+            Literal::Positive(_) | Literal::Operation(_) => None,
+        })
+    }
+
+    /// Return an iterator over the operations in the body of this rule.
+    pub fn body_operations(&self) -> impl Iterator<Item = &Operation> {
+        self.body.iter().filter_map(|literal| match literal {
+            Literal::Operation(operation) => Some(operation),
+            Literal::Positive(_) | Literal::Negative(_) => None,
         })
     }
 
@@ -184,6 +206,35 @@ impl Rule {
             .collect()
     }
 
+    /// Return an iterator over all [ImportClause]s
+    /// that are evaluated as part of this rule.
+    pub fn imports(&self) -> impl Iterator<Item = &ImportClause> {
+        self.imports.iter()
+    }
+
+    /// Add an [ImportClause] to this rule.
+    pub fn add_import(&mut self, import: ImportClause) {
+        self.imports.push(import);
+    }
+
+    // /// Return the set of variables that are bound in positive body atoms.
+    // pub fn positive_variables(&self) -> HashSet<&Variable> {
+    //     let mut result = HashSet::new();
+    //
+    //     for literal in &self.body {
+    //         if let Literal::Positive(atom) = literal {
+    //             for term in atom.terms() {
+    //                 if let Term::Primitive(Primitive::Variable(variable)) = term
+    //                     && variable.is_universal()
+    //                     && variable.name().is_some()
+    //                 {
+    //                     result.insert(variable);
+    //                 }
+    //             }
+    //         }
+    //     }
+    // }
+
     pub fn frontier_variables(&self) -> HashSet<&Variable> {
         let positive_body_variables: HashSet<&Variable> = self.positive_variables();
         let universal_head_variables: HashSet<&Variable> = self.universal_head_variables();
@@ -207,6 +258,14 @@ impl Rule {
         )
     }
 
+    /// Return the set of variables that are bound by import statements
+    pub fn import_variables(&self) -> HashSet<&Variable> {
+        self.imports
+            .iter()
+            .flat_map(|import| import.variables())
+            .collect::<HashSet<_>>()
+    }
+
     /// Return a set of "safe" variables.
     ///
     /// A variable is considered safe,
@@ -214,21 +273,23 @@ impl Rule {
     /// or is derived via the equality operation
     /// from other safe variables.
     pub fn safe_variables(&self) -> HashSet<&Variable> {
-        let mut result = self.positive_variables();
+        let mut result = self
+            .positive_variables()
+            .union(&self.import_variables())
+            .cloned()
+            .collect::<HashSet<_>>();
 
         loop {
             let current_count = result.len();
 
             for literal in &self.body {
-                if let Literal::Operation(operation) = literal {
-                    if let Some((variable, term)) = operation.variable_assignment() {
-                        if variable.is_universal()
-                            && variable.name().is_some()
-                            && term.variables().all(|variable| result.contains(variable))
-                        {
-                            result.insert(variable);
-                        }
-                    }
+                if let Literal::Operation(operation) = literal
+                    && let Some((variable, term)) = operation.variable_assignment()
+                    && variable.is_universal()
+                    && variable.name().is_some()
+                    && term.variables().all(|variable| result.contains(variable))
+                {
+                    result.insert(variable);
                 }
             }
 
@@ -258,15 +319,14 @@ impl Rule {
         let mut first_aggregate = if let Term::Aggregate(aggregate) = term {
             if let Term::Primitive(Primitive::Variable(aggregate_variable)) =
                 aggregate.aggregate_term()
+                && group_by_variable.contains(aggregate_variable)
             {
-                if group_by_variable.contains(aggregate_variable) {
-                    report.add(
-                        aggregate.aggregate_term(),
-                        ValidationError::AggregateOverGroupByVariable {
-                            variable: Box::new(aggregate_variable.clone()),
-                        },
-                    );
-                }
+                report.add(
+                    aggregate.aggregate_term(),
+                    ValidationError::AggregateOverGroupByVariable {
+                        variable: Box::new(aggregate_variable.clone()),
+                    },
+                );
             }
 
             true
@@ -449,10 +509,11 @@ impl ComponentBehavior for Rule {
             let mut current_negative_variables = HashSet::<&Variable>::new();
             if let Literal::Negative(negative) = literal {
                 for negative_subterm in negative.terms() {
-                    if let Term::Primitive(Primitive::Variable(variable)) = negative_subterm {
-                        if !safe_variables.contains(&variable) {
-                            current_negative_variables.insert(&variable);
-                        }
+                    if let Term::Primitive(Primitive::Variable(variable)) = negative_subterm
+                        && !safe_variables.contains(variable)
+                        && !variable.is_anonymous()
+                    {
+                        current_negative_variables.insert(variable);
                     }
                 }
             }
@@ -544,6 +605,14 @@ impl Display for Rule {
             if body_index < self.body.len() - 1 {
                 f.write_str(", ")?;
             }
+        }
+
+        for (import_index, import) in self.imports.iter().enumerate() {
+            if import_index > 0 || (import_index == 0 && !self.body.is_empty()) {
+                f.write_str(", ")?;
+            }
+
+            write!(f, "{import}")?;
         }
 
         f.write_str(" .")

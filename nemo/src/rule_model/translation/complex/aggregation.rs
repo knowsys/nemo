@@ -4,7 +4,7 @@
 use crate::{
     parser::ast::{self},
     rule_model::{
-        components::term::{aggregate::Aggregate, primitive::variable::Variable, Term},
+        components::term::{Term, aggregate::Aggregate, primitive::variable::Variable},
         error::translation_error::TranslationError,
         origin::Origin,
         translation::{ASTProgramTranslation, TranslationComponent},

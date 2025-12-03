@@ -1,10 +1,8 @@
-#![feature(let_chains)]
-
 pub use language_server::Backend;
 
 pub use tower_lsp::{
-    jsonrpc::{Request, Response},
     ClientSocket, ExitedError, LspService,
+    jsonrpc::{Request, Response},
 };
 pub use tower_service::Service;
 

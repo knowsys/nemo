@@ -2,9 +2,9 @@
 
 use crate::dictionary::AddResult;
 
+use super::DictionaryString;
 use super::dictionary::Dictionary;
 use super::hash_map_dictionary::HashMapDictionary;
-use super::DictionaryString;
 
 /// A read-only [Dictionary] to implement a bijection between integer ids and strings that start and end
 /// with a certain fixed prefix and postfix, respectively. Strings that do not have this shape will be
@@ -104,8 +104,8 @@ impl Dictionary for InfixDictionary {
 mod test {
 
     use crate::dictionary::{
-        old_dictionaries::{dictionary::Dictionary, DictionaryString},
         AddResult,
+        old_dictionaries::{DictionaryString, dictionary::Dictionary},
     };
 
     use super::InfixDictionary;

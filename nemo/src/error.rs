@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use nemo_physical::datavalues::DataValueCreationError;
+use nemo_physical::{datavalues::DataValueCreationError, resource::ResourceValidationError};
 use report::ProgramReport;
 use thiserror::Error;
 
@@ -70,6 +70,12 @@ pub enum Error {
 
 impl From<ReadingError> for Error {
     fn from(value: ReadingError) -> Self {
+        Self::PhysicalError(value.into())
+    }
+}
+
+impl From<ResourceValidationError> for Error {
+    fn from(value: ResourceValidationError) -> Self {
         Self::PhysicalError(value.into())
     }
 }

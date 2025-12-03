@@ -3,11 +3,11 @@
 use nom::{branch::alt, combinator::map};
 
 use crate::parser::{
-    ast::{token::Token, ProgramAST},
-    context::{context, ParserContext},
+    ParserResult,
+    ast::{ProgramAST, token::Token},
+    context::{ParserContext, context},
     input::ParserInput,
     span::Span,
-    ParserResult,
 };
 
 /// Type of parameter
@@ -83,9 +83,9 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
-        ast::{tag::parameter::ParameterName, ProgramAST},
-        input::ParserInput,
         ParserState,
+        ast::{ProgramAST, tag::parameter::ParameterName},
+        input::ParserInput,
     };
 
     use super::Parameter;

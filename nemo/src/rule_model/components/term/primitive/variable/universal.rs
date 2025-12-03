@@ -6,10 +6,10 @@ use crate::{
     parser::ParserErrorReport,
     rule_model::{
         components::{
-            symbols::Symbols, ComponentBehavior, ComponentIdentity, ComponentSource,
-            IterableComponent, ProgramComponent, ProgramComponentKind,
+            ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent,
+            ProgramComponent, ProgramComponentKind, symbols::Symbols,
         },
-        error::{validation_error::ValidationError, ValidationReport},
+        error::{ValidationReport, validation_error::ValidationError},
         origin::Origin,
         pipeline::id::ProgramComponentId,
         translation::{ProgramParseReport, TranslationComponent},
@@ -126,15 +126,15 @@ impl ComponentBehavior for UniversalVariable {
     fn validate(&self) -> Result<(), ValidationReport> {
         let mut report = ValidationReport::default();
 
-        if let Some(name) = self.name() {
-            if Symbols::is_reserved(name) {
-                report.add(
-                    self,
-                    ValidationError::InvalidVariableName {
-                        variable_name: name.to_owned(),
-                    },
-                );
-            }
+        if let Some(name) = self.name()
+            && Symbols::is_reserved(name)
+        {
+            report.add(
+                self,
+                ValidationError::InvalidVariableName {
+                    variable_name: name.to_owned(),
+                },
+            );
         }
 
         report.result()

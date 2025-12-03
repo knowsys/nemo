@@ -11,18 +11,17 @@ use nom::{
 use nom_supreme::error::{BaseErrorKind, Expectation};
 
 use crate::parser::{
+    ParserResult,
     ast::{
-        ast_to_ascii_tree,
+        ProgramAST, ast_to_ascii_tree,
         comment::wsoc::WSoC,
         expression::Expression,
         token::{Token, TokenKind},
-        ProgramAST,
     },
-    context::{context, ParserContext},
+    context::{ParserContext, context},
     error::ParserErrorTree,
     input::ParserInput,
     span::Span,
-    ParserResult,
 };
 
 use super::parenthesized::ParenthesizedExpression;
@@ -284,12 +283,12 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
+        ParserState,
         ast::{
-            expression::{complex::arithmetic::Arithmetic, Expression},
             ProgramAST,
+            expression::{Expression, complex::arithmetic::Arithmetic},
         },
         input::ParserInput,
-        ParserState,
     };
 
     /// Count the number of expressions contained in an arithmetic expression

@@ -12,7 +12,7 @@ use delegate::delegate;
 use crate::{
     columnar::{
         column::{Column, ColumnEnum},
-        columnbuilder::{adaptive::ColumnBuilderAdaptive, ColumnBuilder},
+        columnbuilder::{ColumnBuilder, adaptive::ColumnBuilderAdaptive},
         columnscan::{ColumnScanCell, ColumnScanEnum, ColumnScanT},
     },
     datatypes::{ColumnDataType, Double, Float, StorageTypeName, StorageValueT},
@@ -462,8 +462,8 @@ mod test {
     };
 
     use super::{
-        interval_lookup::{lookup_column::IntervalLookupColumn, IntervalLookup},
         IntervalColumnTBuilderMatrix,
+        interval_lookup::{IntervalLookup, lookup_column::IntervalLookupColumn},
     };
 
     fn test_builder_matrix<LookupMethod: IntervalLookup>() {

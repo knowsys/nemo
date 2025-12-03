@@ -23,6 +23,12 @@ pub enum CliError {
         /// Incorrectly formatted fact
         fact: String,
     },
+    /// Error while parsing tracing input file
+    #[error("unable to parse tracing input: {error}")]
+    TracingInvalidJsonInput {
+        /// Error from json parsing
+        error: String,
+    },
     /// Invalid paramater
     #[error("invalid parameter: {parameter}")]
     InvalidParameter {

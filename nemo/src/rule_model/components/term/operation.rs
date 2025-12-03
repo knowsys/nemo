@@ -7,27 +7,23 @@ use std::{collections::HashMap, fmt::Display, hash::Hash};
 use operation_kind::OperationKind;
 
 use crate::{
-    chase_model::translation::ProgramChaseTranslation,
-    execution::{
-        planning::operations::operation::operation_term_to_function_tree,
-        rule_execution::VariableTranslation,
-    },
+    execution::planning::VariableTranslation,
     rule_model::{
         components::{
-            component_iterator, component_iterator_mut, ComponentBehavior, ComponentIdentity,
-            ComponentSource, IterableComponent, IterablePrimitives, IterableVariables,
-            ProgramComponent, ProgramComponentKind,
+            ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent,
+            IterablePrimitives, IterableVariables, ProgramComponent, ProgramComponentKind,
+            component_iterator, component_iterator_mut,
         },
-        error::{validation_error::ValidationError, ValidationReport},
+        error::{ValidationReport, validation_error::ValidationError},
         origin::Origin,
         pipeline::id::ProgramComponentId,
     },
 };
 
 use super::{
-    primitive::{ground::GroundTerm, variable::Variable, Primitive},
-    value_type::ValueType,
     Term,
+    primitive::{Primitive, ground::GroundTerm, variable::Variable},
+    value_type::ValueType,
 };
 
 /// Operation
@@ -112,11 +108,10 @@ impl Operation {
             return Some(Term::Operation(self.clone()));
         }
 
-        let chase_operation_term = ProgramChaseTranslation::build_operation_term(self);
+        let normalized_operation = crate::execution::planning::normalization::operation::Operation::normalize_body_operation(self);
 
         let empty_translation = VariableTranslation::new();
-        let function_tree =
-            operation_term_to_function_tree(&empty_translation, &chase_operation_term);
+        let function_tree = normalized_operation.function_tree(&empty_translation);
 
         let stack_program = nemo_physical::function::evaluation::StackProgram::from_function_tree(
             &function_tree,
@@ -239,10 +234,10 @@ impl Operation {
 
 impl Display for Operation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some(infix) = self.infix_representation() {
-            if self.subterms.len() == 2 {
-                return self.format_infix_operation(f, infix, &self.subterms[0], &self.subterms[1]);
-            }
+        if let Some(infix) = self.infix_representation()
+            && self.subterms.len() == 2
+        {
+            return self.format_infix_operation(f, infix, &self.subterms[0], &self.subterms[1]);
         }
 
         self.format_operation(f)
@@ -286,6 +281,10 @@ impl ComponentBehavior for Operation {
             report.merge(child.validate());
         }
 
+        if let Some(variable) = self.variables().find(|variable| variable.is_anonymous()) {
+            report.add(variable, ValidationError::OperationAnonymous);
+        }
+
         if !self.kind.num_arguments().validate(self.subterms.len()) {
             report.add(
                 self,
@@ -294,10 +293,9 @@ impl ComponentBehavior for Operation {
                     expected: self.kind.num_arguments().to_string(),
                 },
             );
-        }
 
-        if let Some(variable) = self.variables().find(|variable| variable.is_anonymous()) {
-            report.add(variable, ValidationError::OperationAnonymous);
+            // If this check fails, self.reduce will panic, therefore we need to return here!
+            return report.result();
         }
 
         if self.reduce().is_none() {
@@ -380,8 +378,8 @@ impl IterablePrimitives for Operation {
 mod test {
     use crate::rule_model::{
         components::{
-            term::{operation::operation_kind::OperationKind, Term},
             ComponentBehavior,
+            term::{Term, operation::operation_kind::OperationKind},
         },
         translation::TranslationComponent,
     };
@@ -426,6 +424,28 @@ mod test {
         for string in invalid_operations {
             let operation = Operation::parse(string).unwrap();
             assert!(operation.validate().is_err());
+        }
+    }
+
+    // Regression test for https://github.com/knowsys/nemo/issues/721
+    #[test]
+    fn invalid_operation_arity() {
+        let invalid_operations = vec![
+            "SUBSTR()",
+            "SUBSTR(\"foobar\")",
+            "SUBSTR(\"foobar\",0,2,\"TOO MANY ARGUMENTS\")",
+        ];
+
+        for string in invalid_operations {
+            let operation = Operation::parse(string).unwrap();
+            assert!(operation.validate().is_err());
+        }
+
+        let valid_operations = vec!["SUBSTR(\"foobar\",2)", "SUBSTR(\"foobar\",0,2)"];
+
+        for string in valid_operations {
+            let operation = Operation::parse(string).unwrap();
+            assert!(operation.validate().is_ok());
         }
     }
 }

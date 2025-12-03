@@ -45,42 +45,39 @@ impl AggregateGroupProcessor for SumAggregateGroupProcessor {
     fn write_aggregate_input_value(&mut self, value: StorageValueT) {
         match value {
             StorageValueT::Double(value) => {
-                if self.current_sum_f64.is_none() {
-                    self.current_sum_f64 = Some(value)
-                } else {
+                if let Some(current_value) = self.current_sum_f64 {
                     self.current_sum_f64 = Some(
-                        self.current_sum_f64
-                            .unwrap()
+                        current_value
                             .checked_add(&value)
                             // TODO: Improve error handling
                             .expect("overflow in sum aggregate operation"),
-                    );
+                    )
+                } else {
+                    self.current_sum_f64 = Some(value)
                 }
             }
             StorageValueT::Float(value) => {
-                if self.current_sum_f32.is_none() {
-                    self.current_sum_f32 = Some(value)
-                } else {
+                if let Some(current_value) = self.current_sum_f32 {
                     self.current_sum_f32 = Some(
-                        self.current_sum_f32
-                            .unwrap()
+                        current_value
                             .checked_add(&value)
                             // TODO: Improve error handling
                             .expect("overflow in sum aggregate operation"),
                     );
+                } else {
+                    self.current_sum_f32 = Some(value)
                 }
             }
             StorageValueT::Int64(value) => {
-                if self.current_sum_i64.is_none() {
-                    self.current_sum_i64 = Some(value)
-                } else {
+                if let Some(current_value) = self.current_sum_i64 {
                     self.current_sum_i64 = Some(
-                        self.current_sum_i64
-                            .unwrap()
+                        current_value
                             .checked_add(value)
                             // TODO: Improve error handling
                             .expect("overflow in sum aggregate operation"),
                     );
+                } else {
+                    self.current_sum_i64 = Some(value)
                 }
             }
             _ => (),

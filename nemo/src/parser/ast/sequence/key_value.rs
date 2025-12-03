@@ -3,11 +3,11 @@
 use nom::sequence::{separated_pair, tuple};
 
 use crate::parser::{
-    ast::{comment::wsoc::WSoC, expression::Expression, token::Token, ProgramAST},
+    ParserResult,
+    ast::{ProgramAST, comment::wsoc::WSoC, expression::Expression, token::Token},
     context::ParserContext,
     input::ParserInput,
     span::Span,
-    ParserResult,
 };
 
 /// Pairs of Expressions, separated by [KEY_VALUE_ASSIGN][nemo_physical::datavalues::syntax::map::KEY_VALUE_ASSIGN]
@@ -70,12 +70,12 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
+        ParserState,
         ast::{
-            sequence::{key_value::KeyValuePair, Sequence},
             ProgramAST,
+            sequence::{Sequence, key_value::KeyValuePair},
         },
         input::ParserInput,
-        ParserState,
     };
 
     #[test]

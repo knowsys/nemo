@@ -251,6 +251,11 @@ pub enum OperationKind {
     #[assoc(num_arguments = OperationNumArguments::Unary)]
     #[assoc(return_type = ValueType::Constant)]
     Datatype,
+    /// Construct a language tagged string
+    #[assoc(name = function::STRLANG)]
+    #[assoc(num_arguments = OperationNumArguments::Binary)]
+    #[assoc(return_type = ValueType::LanguageString)]
+    LanguageString,
     /// Get language tag of a languaged tagged string
     #[assoc(name = function::LANG)]
     #[assoc(num_arguments = OperationNumArguments::Unary)]
@@ -441,9 +446,11 @@ mod test {
                 break;
             }
 
-            assert!(names[(name_index + 1)..]
-                .iter()
-                .all(|remaining| !remaining.starts_with(name)))
+            assert!(
+                names[(name_index + 1)..]
+                    .iter()
+                    .all(|remaining| !remaining.starts_with(name))
+            )
         }
     }
 }

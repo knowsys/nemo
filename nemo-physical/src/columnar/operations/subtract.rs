@@ -91,11 +91,11 @@ where
                 let subtract_scan = self.scans_follower[subtract_index]
                     .expect("This vector should not point to None entries.");
 
-                if let Some(subtract_value) = subtract_scan.seek(next_value) {
-                    if next_value == subtract_value {
-                        next_value = self.scan_main.next()?;
-                        subtracted_values = true;
-                    }
+                if let Some(subtract_value) = subtract_scan.seek(next_value)
+                    && next_value == subtract_value
+                {
+                    next_value = self.scan_main.next()?;
+                    subtracted_values = true;
                 }
             }
         }
@@ -174,7 +174,7 @@ mod test {
     use test_log::test;
 
     use crate::columnar::{
-        column::{vector::ColumnVector, Column},
+        column::{Column, vector::ColumnVector},
         columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum},
     };
 

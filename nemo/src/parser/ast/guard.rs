@@ -2,11 +2,11 @@
 
 use nom::{branch::alt, combinator::map};
 
-use crate::parser::context::{context, ParserContext};
+use crate::parser::context::{ParserContext, context};
 
 use super::{
-    expression::{complex::infix::InfixExpression, Expression},
     ProgramAST,
+    expression::{Expression, complex::infix::InfixExpression},
 };
 
 /// An expression that is the building block of rules.
@@ -68,10 +68,10 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
-        ast::{guard::Guard, ProgramAST},
+        ParserState,
+        ast::{ProgramAST, guard::Guard},
         context::ParserContext,
         input::ParserInput,
-        ParserState,
     };
 
     #[test]

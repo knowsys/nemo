@@ -4,6 +4,7 @@
 [![Documentations](https://img.shields.io/github/actions/workflow/status/knowsys/nemo/build.yml?branch=main&label=documentation)](https://knowsys.github.io/nemo-doc)
 [![dependency status](https://deps.rs/repo/github/knowsys/nemo/status.svg)](https://deps.rs/repo/github/knowsys/nemo)
 [![built with nix](https://img.shields.io/static/v1?logo=nixos&logoColor=white&label=&message=Built%20with%20Nix&color=41439a)](https://builtwithnix.org)
+[![Gitter](https://badges.gitter.im/nemo/community.svg)](https://gitter.im/nemo/community)
 
 *Nemo* is a datalog-based rule engine for fast and scalable analytic data processing in memory. It is available as a command-line tool ```nmo```,  through bindings to other programming languages, and via a [browser-based web application](https://tools.iccl.inf.tu-dresden.de/nemo/).
 
@@ -15,8 +16,8 @@
 </p>
 
 Goals of Nemo are performance, declarativity, versatility, and reliability. It is written in Rust. Nemo's data model aims at compatibility with [RDF](https://www.w3.org/TR/rdf11-concepts/)/[SPARQL](https://www.w3.org/TR/sparql11-overview/) while preserving established logic programming conventions and features. The following formats are currently supported:
-- Input: CSV, TSV, [DSV](https://en.wikipedia.org/wiki/Delimiter-separated_values), [N-Triples](https://www.w3.org/TR/n-triples/), [Turtle](https://www.w3.org/TR/turtle/), [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/), [N-Quads](https://www.w3.org/TR/n-quads/), [TriG](https://www.w3.org/TR/trig/)
-- Rules: datalog dialect with support for existential rules (tuple-generating dependencies), stratified negation, and datatypes (including numeric comparison and arithmetic functions)
+- Input: CSV, TSV, [DSV](https://en.wikipedia.org/wiki/Delimiter-separated_values), [N-Triples](https://www.w3.org/TR/n-triples/), [Turtle](https://www.w3.org/TR/turtle/), [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/), [N-Quads](https://www.w3.org/TR/n-quads/), [TriG](https://www.w3.org/TR/trig/), [SPARQL endpoints](https://www.w3.org/TR/sparql11-overview/)
+- Rules: Datalog dialect with support for stratified negation, datatypes (including numeric comparison and arithmetic functions), aggregates, and existential rules (tuple-generating dependencies)
 - Output: CSV, TSV, [DSV](https://en.wikipedia.org/wiki/Delimiter-separated_values), [N-Triples](https://www.w3.org/TR/n-triples/), [Turtle](https://www.w3.org/TR/turtle/), [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/), [N-Quads](https://www.w3.org/TR/n-quads/), [TriG](https://www.w3.org/TR/trig/)
 
 Nemo's datatypes allow the use of RDF-style data values but also "plain" names and constants in any of these formats.
@@ -32,6 +33,16 @@ Nemo is in heavy development and the current releases should still be considered
 We provide a [live online demo](https://tools.iccl.inf.tu-dresden.de/nemo/) that you can try in your browser.
 The application is based on the [Nemo browser integration](https://github.com/knowsys/nemo/wiki/Browser-integration) and runs entirely
 on your browser. Performance will therefore vary depending on your machine and browser (we found Firefox to be fastest).
+
+## Help
+
+Detailed information for users and developers is found in the [Nemo documentation](https://knowsys.github.io/nemo-doc/).
+Feel free to use [GitHub discussions](https://github.com/knowsys/nemo/discussions) to ask questions or talk about Nemo.
+
+For quick questions and discussions, we also provide a [public community chatroom](https://gitter.im/nemo/community), which can
+also be accessed from any Matrix client as `#nemo_community:gitter.im`.
+
+[Bug reports](https://github.com/knowsys/nemo/issues) are also very welcome.
 
 ## Installation
 
@@ -54,15 +65,8 @@ Run the following command for an overview of current options:
 
 `nmo --help`
 
-Further details are found in the [Nemo client documentation](https://knowsys.github.io/nemo-doc/guides/cli/).
+Further details are found in the [Nemo CLI documentation](https://knowsys.github.io/nemo-doc/installation/cli/).
 Example Nemo programs and datasets can be found in the [Nemo Examples repository](https://github.com/knowsys/nemo-examples).
-
-## Help
-
-Detailed information for users and developers is found in the [Nemo documentation](https://knowsys.github.io/nemo-doc/).
-Feel free to use [GitHub discussions](https://github.com/knowsys/nemo/discussions) to ask questions or talk about Nemo.
-
-[Bug reports](https://github.com/knowsys/nemo/issues) are also very welcome.
 
 ## License
 

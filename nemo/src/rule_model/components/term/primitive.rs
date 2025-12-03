@@ -8,8 +8,8 @@ use std::{fmt::Display, hash::Hash};
 use ground::GroundTerm;
 use nemo_physical::datavalues::AnyDataValue;
 use variable::{
-    existential::ExistentialVariable, global::GlobalVariable, universal::UniversalVariable,
-    Variable,
+    Variable, existential::ExistentialVariable, global::GlobalVariable,
+    universal::UniversalVariable,
 };
 
 use crate::rule_model::{
@@ -23,7 +23,7 @@ use crate::rule_model::{
     translation::{ProgramParseReport, TranslationComponent},
 };
 
-use super::{value_type::ValueType, Term};
+use super::{Term, value_type::ValueType};
 
 /// Primitive term
 ///
@@ -100,16 +100,26 @@ impl Primitive {
         }
     }
 
-    /// Check wether this term can be reduced to a ground value,
-    /// except for global variables that need to be resolved.
+    /// Check wether this term can be reduced to a ground value.
     ///
-    /// This is the case if
-    ///     * This term is ground
-    ///     * This term is a global variable
+    /// This is the case if the term is ground.
     pub fn is_resolvable(&self) -> bool {
+        matches!(self, &Primitive::Ground(_))
+    }
+
+    /// Return whether this primitive is a universal variable.
+    pub fn is_universal(&self) -> bool {
         match self {
-            Primitive::Variable(variable) => variable.is_global(),
-            Primitive::Ground(_) => true,
+            Primitive::Variable(variable) => variable.is_universal(),
+            Primitive::Ground(_) => false,
+        }
+    }
+
+    /// Return whether this primitive is an existential variable.
+    pub fn is_existential(&self) -> bool {
+        match self {
+            Primitive::Variable(variable) => variable.is_existential(),
+            Primitive::Ground(_) => false,
         }
     }
 }
