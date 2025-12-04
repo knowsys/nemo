@@ -66,12 +66,7 @@ impl StrategyBody {
             let join = GeneratorJoinCartesian::new(&order, &positive, operations, &mut negative);
             let variables_join = join.output_variables();
 
-            let import = GeneratorImport::new(
-                variables_join,
-                &positive_imports,
-                &negative_imports,
-                operations,
-            );
+            let import = GeneratorImport::new(variables_join, &positive_imports, &negative_imports);
 
             let merge = if join.is_single_join() {
                 GeneratorJoinImports::Simple(GeneratorJoinImportsSimple::new(

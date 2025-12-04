@@ -13,6 +13,7 @@ use crate::{
             operation::Operation,
         },
         operations::{
+            filter::GeneratorFilter,
             function_filter_negation::GeneratorFunctionFilterNegation,
             union::{GeneratorUnion, UnionRange},
         },
@@ -34,6 +35,8 @@ pub struct GeneratorJoinImportsSimple {
     imports: Vec<GeneratorUnion>,
     /// Negated imports
     negative_imports: Vec<GeneratorUnion>,
+    /// Filter for negatives imports
+    negative_filters: Vec<Option<GeneratorFilter>>,
     /// Filters
     filters: Option<GeneratorFunctionFilterNegation>,
 }
@@ -65,12 +68,19 @@ impl GeneratorJoinImportsSimple {
                 GeneratorUnion::new(atom.predicate(), atom.variables_cloned(), UnionRange::All)
             })
             .collect::<Vec<_>>();
-        let negative_imports = negative_import_atoms
-            .into_iter()
-            .map(|atom| {
-                GeneratorUnion::new(atom.predicate(), atom.variables_cloned(), UnionRange::All)
-            })
-            .collect::<Vec<_>>();
+
+        let mut negative_imports = Vec::default();
+        let mut negative_filters = Vec::default();
+
+        for atom in negative_import_atoms.into_iter() {
+            let union =
+                GeneratorUnion::new(atom.predicate(), atom.variables_cloned(), UnionRange::All);
+
+            let filter = GeneratorFilter::new(atom.variables_cloned(), operations);
+
+            negative_imports.push(union);
+            negative_filters.push(filter.or_none());
+        }
 
         let filters = GeneratorFunctionFilterNegation::new(
             join_order.as_ordered_list(),
@@ -83,6 +93,7 @@ impl GeneratorJoinImportsSimple {
             join_order,
             imports,
             negative_imports,
+            negative_filters,
             filters,
         }
     }
@@ -120,7 +131,11 @@ impl GeneratorJoinImportsSimple {
         if !self.negative_imports.is_empty() {
             let mut subtracted = Vec::default();
 
-            for import in &self.negative_imports {
+            for (import, filter) in self
+                .negative_imports
+                .iter()
+                .zip(self.negative_filters.iter())
+            {
                 let mut node_imports = import.create_plan(plan, runtime);
                 let import_markers = runtime
                     .translation
@@ -129,6 +144,10 @@ impl GeneratorJoinImportsSimple {
                 if let Some(mut node_new_import) = new_imports.get(import.predicate()).cloned() {
                     node_new_import.set_markers(import_markers);
                     node_imports.add_subnode(node_new_import);
+                }
+
+                if let Some(filter) = filter {
+                    node_imports = filter.create_plan(plan, node_imports, runtime);
                 }
 
                 subtracted.push(node_imports);
