@@ -27,7 +27,7 @@ pub enum Operation {
     /// Primitive term
     Primitive(Primitive),
     /// Operation
-    Opreation {
+    Operation {
         /// Type of operation
         kind: OperationKind,
         /// Input to the opreation
@@ -39,7 +39,7 @@ impl Display for Operation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Operation::Primitive(primitive) => primitive.fmt(f),
-            Operation::Opreation { kind, subterms } => {
+            Operation::Operation { kind, subterms } => {
                 let terms = DisplaySeperatedList::display(
                     subterms.iter(),
                     &format!("{} ", syntax::SEQUENCE_SEPARATOR),
@@ -54,7 +54,7 @@ impl Display for Operation {
 impl Operation {
     /// Create a new [Operation] of the form [Variable] = [Operation].
     pub fn new_assignment(variable: Variable, operation: Operation) -> Self {
-        Self::Opreation {
+        Self::Operation {
             kind: OperationKind::Equal,
             subterms: vec![Self::Primitive(Primitive::Variable(variable)), operation],
         }
@@ -74,7 +74,7 @@ impl Operation {
     pub fn variables(&self) -> Box<dyn Iterator<Item = &Variable> + '_> {
         match self {
             Operation::Primitive(primitive) => primitive.variables(),
-            Operation::Opreation { kind: _, subterms } => {
+            Operation::Operation { kind: _, subterms } => {
                 Box::new(subterms.iter().flat_map(|term| term.variables()))
             }
         }
@@ -87,7 +87,7 @@ impl Operation {
                 Box::new(std::iter::once(ground.value()))
             }
             Operation::Primitive(Primitive::Variable(_)) => Box::new(std::iter::empty()),
-            Operation::Opreation { kind: _, subterms } => {
+            Operation::Operation { kind: _, subterms } => {
                 Box::new(subterms.iter().flat_map(|term| term.datavalues()))
             }
         }
@@ -99,7 +99,7 @@ impl Operation {
     /// # Panics
     /// Panics if this component is invalid.
     pub fn variable_assignment(&self) -> Option<(&Variable, &Self)> {
-        if let Self::Opreation { kind, subterms } = self
+        if let Self::Operation { kind, subterms } = self
             && matches!(kind, OperationKind::Equal)
         {
             let left = subterms.first().expect("invalid program component");
@@ -154,7 +154,7 @@ impl Operation {
             .map(Self::normalize_body_term)
             .collect::<Vec<_>>();
 
-        Self::Opreation { kind, subterms }
+        Self::Operation { kind, subterms }
     }
 
     /// Normalize a [crate::rule_model::components::term::Term]
@@ -179,7 +179,7 @@ impl Operation {
                     operation.terms().map(Self::normalize_head_term).unzip();
                 let aggregate = aggregate.iter().find_map(|a| *a);
 
-                (Self::Opreation { kind, subterms }, aggregate)
+                (Self::Operation { kind, subterms }, aggregate)
             }
             crate::rule_model::components::term::Term::Aggregate(aggregate) => {
                 // Has the same name as defined in `normalize_aggregate`
@@ -214,7 +214,7 @@ impl Operation {
             operation.terms().map(Self::normalize_head_term).unzip();
         let aggregate = aggregate.iter().find_map(|a| *a);
 
-        (Self::Opreation { kind, subterms }, aggregate)
+        (Self::Operation { kind, subterms }, aggregate)
     }
 }
 
@@ -262,7 +262,7 @@ impl Operation {
                 ),
                 Primitive::Ground(ground_term) => FunctionTree::constant(ground_term.value()),
             },
-            Operation::Opreation { kind, subterms } => {
+            Operation::Operation { kind, subterms } => {
                 let mut sub = subterms
                     .iter()
                     .map(|term| term.function_tree(translation))

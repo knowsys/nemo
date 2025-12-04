@@ -527,7 +527,7 @@ impl NormalizedRule {
     }
 
     pub(crate) fn into_filter_transform_pattern(mut self) -> Option<FilterTransformPattern> {
-        let positive_variables = self.positive[0].terms().cloned().collect::<Vec<_>>();
+        let positive_variables = self.positive.iter().flat_map(|atom| atom.terms()).cloned().collect::<Vec<_>>();
         let mut translation = VariableTranslation::new();
         for variable in positive_variables.iter().chain(self.variables()) {
             translation.add_marker(variable.clone());
@@ -666,7 +666,7 @@ mod test {
 
         let z = Operation::new_assignment(
             Variable::universal("?z"),
-            Operation::Opreation {
+            Operation::Operation {
                 kind: OperationKind::NumericProduct,
                 subterms: vec![
                     Operation::Primitive(Primitive::ground(AnyDataValue::new_integer_from_u64(2))),
@@ -677,7 +677,7 @@ mod test {
 
         let r = Operation::new_assignment(
             Variable::universal("?r"),
-            Operation::Opreation {
+            Operation::Operation {
                 kind: OperationKind::NumericSum,
                 subterms: vec![
                     Operation::Primitive(Primitive::universal_variable("?z")),

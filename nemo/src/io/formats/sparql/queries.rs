@@ -743,13 +743,10 @@ pub(crate) fn merge_project_patterns(
             let left_mapping = standardize_variables("l", &left_variables, &left_join_variables);
             let right_mapping = standardize_variables("r", &right_variables, &right_join_variables);
 
-            log::debug!("mappings: {left_mapping:?} \n{right_mapping:?}");
-
             let (left_pattern, left_variables) =
                 rename_variables_in_project_pattern(left, &left_mapping, left_constants)?;
             let (right_pattern, right_variables) =
                 rename_variables_in_project_pattern(right, &right_mapping, right_constants)?;
-            log::debug!("\n\n {left_pattern} \n {right_pattern} \n\n");
 
             let inner = Box::new(GraphPattern::Join {
                 left: Box::new(left_pattern),

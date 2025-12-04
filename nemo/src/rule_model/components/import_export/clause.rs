@@ -227,13 +227,14 @@ impl ImportLiteral {
     pub fn try_merge(
         left: Self,
         right: Self,
+        equalities: &HashMap<Variable, GroundTerm>,
     ) -> Option<Self> {
         match (left, right) {
-            (ImportLiteral::Positive(left), ImportLiteral::Positive(right)) => Some(ImportLiteral::Positive(ImportClause::try_merge(left, right, &Default::default())?)),
+            (ImportLiteral::Positive(left), ImportLiteral::Positive(right)) => Some(ImportLiteral::Positive(ImportClause::try_merge(left, right, equalities)?)),
             (ImportLiteral::Positive(positive), ImportLiteral::Negative(negative)) |
             (ImportLiteral::Negative(negative), ImportLiteral::Positive(positive)) =>
-                Some(ImportLiteral::Positive(ImportClause::try_merge(positive, ImportClause::try_negate(negative)?, &Default::default())?)),
-            (ImportLiteral::Negative(left), ImportLiteral::Negative(right)) => Some(ImportLiteral::Negative(ImportClause::try_merge(left, right, &Default::default())?)),
+                Some(ImportLiteral::Positive(ImportClause::try_merge(positive, ImportClause::try_negate(negative)?, equalities)?)),
+            (ImportLiteral::Negative(left), ImportLiteral::Negative(right)) => Some(ImportLiteral::Negative(ImportClause::try_merge(left, right, equalities)?)),
         }
     }
 

@@ -157,6 +157,7 @@ fn update_import(
         .flat_map(|atom| atom.variables())
         .cloned()
         .collect::<HashSet<_>>();
+    let equality_map = equalities.clone();
     let equalities = HashSet::<_>::from_iter(equalities);
     let positive_output_variables = positive
         .as_ref()
@@ -184,6 +185,7 @@ fn update_import(
                 if let Some(merged) = ImportLiteral::try_merge(
                     ImportLiteral::Positive(positive.clone()),
                     ImportLiteral::Negative(negative.clone()),
+                    &equality_map
                 ) {
                     rule.imports_mut().push(merged);
                 } else {
