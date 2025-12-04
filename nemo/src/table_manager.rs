@@ -113,8 +113,13 @@ impl SubtableHandler {
     }
 
     pub fn subtable(&self, step: usize) -> Option<PermanentTableId> {
-        let postion = *self.single_steps().find(|&&s| s == step)?;
-        Some(self.single[postion].1)
+        for &(step_single, id) in &self.single {
+            if step == step_single {
+                return Some(id);
+            }
+        }
+
+        None
     }
 
     pub fn count_rows_in_memory(&self, database: &DatabaseInstance) -> usize {

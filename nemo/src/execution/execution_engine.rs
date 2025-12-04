@@ -416,9 +416,14 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
         for step in steps {
             let rule = self.rule_history[step];
-            let num_facts = self.program.rules()[rule]
+            let predicates = self.program.rules()[rule]
                 .predicates_head()
-                .map(|(predicate, _)| SubtableIdentifier::new(predicate, step))
+                .map(|(predicate, _)| predicate)
+                .collect::<HashSet<_>>();
+
+            let num_facts = predicates
+                .into_iter()
+                .map(|predicate| SubtableIdentifier::new(predicate, step))
                 .map(|id| self.table_manager.table_id(&id))
                 .map(|id| {
                     if let Some(id) = id {
