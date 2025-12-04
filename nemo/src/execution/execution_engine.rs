@@ -21,7 +21,7 @@ use crate::{
         pipeline::transformations::default::TransformationDefault,
         programs::{handle::ProgramHandle, program::Program},
     },
-    table_manager::{MemoryUsage, TableManager},
+    table_manager::{MemoryUsage, SubtableIdentifier, TableManager},
 };
 
 use super::{
@@ -76,7 +76,7 @@ pub struct ExecutionEngine<RuleSelectionStrategy> {
     /// For each step the rule index of the applied rule
     rule_history: Vec<usize>,
     /// For each step, the execution time in milliseconds
-    step_times_ms: Vec<u128>,
+    step_times_ms: Vec<f64>,
     /// Current step
     current_step: usize,
 }
@@ -132,7 +132,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             predicate_last_union: HashMap::new(),
             rule_infos,
             rule_history: vec![usize::MAX], // Placeholder, Step counting starts at 1
-            step_times_ms: vec![0],         // Placeholder, Step counting starts at 1
+            step_times_ms: vec![0.0],       // Placeholder, Step counting starts at 1
             current_step: 1,
         })
     }
@@ -229,7 +229,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
         let rule_duration = TimedCode::instance().sub(&timing_string).stop();
 
-        self.step_times_ms.push(rule_duration.as_millis());
+        self.step_times_ms.push(rule_duration.as_millis_f64());
 
         log::info!("Rule duration: {} ms", rule_duration.as_millis());
 
@@ -410,14 +410,42 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         self.table_manager.memory_usage()
     }
 
-    /// For a given iterator over rule execution steps
-    /// returns the sum of execution time for those steps.
+    /// Computes the total normalized execution time for a sequence of steps.
     pub fn steps_time_ms<Iter: Iterator<Item = usize>>(&self, steps: Iter) -> u128 {
-        let steps = steps.collect::<HashSet<_>>();
+        let mut sum_time = 0;
 
-        steps
-            .into_iter()
-            .map(|step| self.step_times_ms.get(step).cloned().unwrap_or_default())
-            .sum()
+        for step in steps {
+            let rule = self.rule_history[step];
+            let num_facts = self.program.rules()[rule]
+                .predicates_head()
+                .map(|(predicate, _)| SubtableIdentifier::new(predicate, step))
+                .map(|id| self.table_manager.table_id(&id))
+                .map(|id| {
+                    if let Some(id) = id {
+                        self.table_manager.database().count_rows_in_memory(id)
+                    } else {
+                        0
+                    }
+                })
+                .sum::<usize>();
+
+            let time = self.step_times_ms.get(step).copied().unwrap_or(0.0);
+
+            let normalized_time = if num_facts > 0 {
+                time / (num_facts as f64)
+            } else {
+                0.0
+            };
+
+            let normalized_u128 = if normalized_time.is_finite() && normalized_time > 0.0 {
+                normalized_time as u128
+            } else {
+                0
+            };
+
+            sum_time += normalized_u128;
+        }
+
+        sum_time
     }
 }

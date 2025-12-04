@@ -484,7 +484,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             element.pagination.more = element.pagination.start + rows.len()
                 < self.table_manager.database().count_rows_in_memory(table_id);
 
-            let mut steps = HashSet::<usize>::default();
+            let mut steps = Vec::<usize>::default();
 
             for row in rows {
                 let (entry_id, step) = self
@@ -493,7 +493,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                     .await
                     .expect("if a row appears in an answer it must have an id");
 
-                steps.insert(step);
+                steps.push(step);
 
                 let table_response = TableEntryResponse {
                     entry_id,

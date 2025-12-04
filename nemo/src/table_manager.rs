@@ -357,7 +357,7 @@ impl TableManager {
 
     /// Return the [PermanentTableId] that is associated with a given subtable.
     /// Returns None if the predicate does not exist.
-    fn table_id(&self, subtable: &SubtableIdentifier) -> Option<PermanentTableId> {
+    pub(crate) fn table_id(&self, subtable: &SubtableIdentifier) -> Option<PermanentTableId> {
         self.predicate_subtables
             .get(&subtable.predicate)?
             .subtable(subtable.step)
