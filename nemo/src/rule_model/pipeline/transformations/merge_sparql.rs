@@ -65,16 +65,16 @@ impl ProgramTransformation for TransformationMergeSparql {
         for statement in program.statements() {
             match statement {
                 Statement::Rule(rule) => {
-                    let mut imports = Vec::default();
+                    let mut positive_imports = Vec::default();
+                    let mut negative_imports = Vec::default();
 
                     for import_literal in rule.imports() {
                         match import_literal {
                             ImportLiteral::Positive(clause) => {
-                                imports.push(clause.clone());
+                                positive_imports.push(clause.clone());
                             }
-                            ImportLiteral::Negative(_) => {
-                                // TODO: Handle negative case
-                                continue;
+                            ImportLiteral::Negative(clause) => {
+                                negative_imports.push(clause.clone());
                             }
                         }
                     }
@@ -83,7 +83,7 @@ impl ProgramTransformation for TransformationMergeSparql {
                         .head()
                         .iter()
                         .any(|atom| ineligible.contains(&atom.predicate()))
-                        || imports.is_empty()
+                        || (positive_imports.is_empty() && negative_imports.is_empty())
                     {
                         // nothing to merge
                         commit.keep(statement);
@@ -95,21 +95,10 @@ impl ProgramTransformation for TransformationMergeSparql {
                         .filter_map(try_equality_from_operation)
                         .collect::<HashMap<_, _>>();
 
-                    if imports.len() == 1 {
-                        // nothing to merge, but push constants
-                        let mut import = imports[0].clone();
-                        import.push_constants(&equalities);
+                    let positive = merge_and_push_constants(positive_imports, &equalities);
+                    let negative = merge_and_push_constants(negative_imports, &equalities);
 
-                        update_import(&mut commit, import, rule, equalities);
-                    } else if let Some(merged) = imports
-                        .into_iter()
-                        .try_reduce(|left, right| ImportClause::try_merge(left, right, &equalities))
-                        .flatten()
-                    {
-                        update_import(&mut commit, merged, rule, equalities);
-                    } else {
-                        commit.keep(statement);
-                    }
+                    update_import(&mut commit, positive, negative, rule, equalities);
                 }
                 _ => commit.keep(statement),
             }
@@ -138,9 +127,28 @@ fn try_equality_from_operation(operation: &Operation) -> Option<(Variable, Groun
     }
 }
 
+fn merge_and_push_constants(
+    imports: Vec<ImportClause>,
+    equalities: &HashMap<Variable, GroundTerm>,
+) -> Option<ImportClause> {
+    if imports.len() == 1 {
+        // nothing to merge, but push constants
+        let mut import = imports[0].clone();
+        import.push_constants(&equalities);
+
+        Some(import)
+    } else {
+        imports
+            .into_iter()
+            .try_reduce(|left, right| ImportClause::try_merge(left, right, &equalities))
+            .flatten()
+    }
+}
+
 fn update_import(
     commit: &mut ProgramCommit,
-    import: ImportClause,
+    positive: Option<ImportClause>,
+    negative: Option<ImportClause>,
     rule: &Rule,
     equalities: HashMap<Variable, GroundTerm>,
 ) {
@@ -150,49 +158,78 @@ fn update_import(
         .cloned()
         .collect::<HashSet<_>>();
     let equalities = HashSet::<_>::from_iter(equalities);
-    let output_variables = import
-        .output_variables()
-        .iter()
-        .cloned()
-        .collect::<HashSet<_>>();
-
-    let is_still_incremental = equalities.is_empty()
-        || binding_variables
-            .intersection(&output_variables)
-            .next()
-            .is_some();
+    let positive_output_variables = positive
+        .as_ref()
+        .map(|import| {
+            import
+                .output_variables()
+                .iter()
+                .cloned()
+                .collect::<HashSet<_>>()
+        })
+        .unwrap_or_default();
 
     let mut rule = rule.clone();
     rule.imports_mut().clear();
 
-    if is_still_incremental {
-        // TODO: Handle negative case
-        rule.imports_mut().push(ImportLiteral::Positive(import));
-    } else {
-        let directive = import.import_directive().clone();
-        let mut body = Vec::new();
+    if let Some(positive) = positive {
+        let is_still_incremental = equalities.is_empty()
+            || binding_variables
+                .intersection(&positive_output_variables)
+                .next()
+                .is_some();
 
-        for literal in rule.body() {
-            if let Literal::Operation(operation) = literal
-                && let Some(equality) = try_equality_from_operation(operation)
-                && equalities.contains(&equality)
-            {
-                continue;
+        if is_still_incremental {
+            if let Some(negative) = negative {
+                if let Some(merged) = ImportLiteral::try_merge(
+                    ImportLiteral::Positive(positive.clone()),
+                    ImportLiteral::Negative(negative.clone()),
+                ) {
+                    rule.imports_mut().push(merged);
+                } else {
+                    rule.imports_mut().push(ImportLiteral::Positive(positive));
+                    rule.imports_mut().push(ImportLiteral::Negative(negative));
+                }
+            } else {
+                rule.imports_mut().push(ImportLiteral::Positive(positive));
+            }
+        } else {
+            let directive = positive.import_directive().clone();
+            let mut body = Vec::new();
+
+            for literal in rule.body() {
+                if let Literal::Operation(operation) = literal
+                    && let Some(equality) = try_equality_from_operation(operation)
+                    && equalities.contains(&equality)
+                {
+                    continue;
+                }
+
+                body.push(literal.clone())
             }
 
-            body.push(literal.clone())
+            body.push(Literal::Positive(Atom::new(
+                directive.predicate().clone(),
+                positive
+                    .variables()
+                    .map(|variable| Term::Primitive(Primitive::Variable(variable.clone()))),
+            )));
+
+            if let Some(negative) = negative {
+                body.push(Literal::Negative(Atom::new(
+                    negative.import_directive().predicate().clone(),
+                    negative
+                        .variables()
+                        .map(|variable| Term::Primitive(Primitive::Variable(variable.clone()))),
+                )));
+
+                commit.add_import(negative.import_directive().clone());
+            }
+
+            *rule.body_mut() = body;
+
+            commit.add_import(directive);
         }
-
-        body.push(Literal::Positive(Atom::new(
-            directive.predicate().clone(),
-            import
-                .variables()
-                .map(|variable| Term::Primitive(Primitive::Variable(variable.clone()))),
-        )));
-
-        *rule.body_mut() = body;
-
-        commit.add_import(directive);
     }
 
     commit.add_rule(rule);

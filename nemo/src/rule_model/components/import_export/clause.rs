@@ -94,6 +94,16 @@ impl ImportClause {
             .collect();
     }
 
+    /// Try to create a negated version of this clause.
+    pub(crate) fn try_negate(clause: Self) -> Option<Self> {
+        Some(Self {
+            origin: Origin::Component(Box::new(clause.clone())),
+            id: ProgramComponentId::default(),
+            import: clause.import.try_negate()?,
+            variables: clause.variables
+        })
+    }
+
     /// Return a reference to the output variables.
     pub fn output_variables(&self) -> &Vec<Variable> {
         &self.variables
@@ -215,16 +225,16 @@ impl ImportLiteral {
     ///
     /// Return `None` if they are incompatible.
     pub fn try_merge(
-        _left: Self,
-        _right: Self,
-        _equalities: &HashMap<Variable, GroundTerm>,
+        left: Self,
+        right: Self,
     ) -> Option<Self> {
-        unimplemented!()
-    }
-
-    /// Push constant assignments to variables into the underlying [ImportDirective].
-    pub fn push_constants(&mut self, _equalities: &HashMap<Variable, GroundTerm>) {
-        unimplemented!()
+        match (left, right) {
+            (ImportLiteral::Positive(left), ImportLiteral::Positive(right)) => Some(ImportLiteral::Positive(ImportClause::try_merge(left, right, &Default::default())?)),
+            (ImportLiteral::Positive(positive), ImportLiteral::Negative(negative)) |
+            (ImportLiteral::Negative(negative), ImportLiteral::Positive(positive)) =>
+                Some(ImportLiteral::Positive(ImportClause::try_merge(positive, ImportClause::try_negate(negative)?, &Default::default())?)),
+            (ImportLiteral::Negative(left), ImportLiteral::Negative(right)) => Some(ImportLiteral::Negative(ImportClause::try_merge(left, right, &Default::default())?)),
+        }
     }
 
     /// Return a reference to the output variables.

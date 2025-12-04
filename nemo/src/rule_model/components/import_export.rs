@@ -9,7 +9,9 @@ use specification::ImportExportSpec;
 use crate::{
     io::{
         format_builder::{AnyImportExportBuilder, ImportExportBuilder, SupportedFormatTag},
-        formats::sparql::queries::{ground_term_from_datavalue, merge_queries, push_constants},
+        formats::sparql::queries::{
+            ground_term_from_datavalue, merge_queries, negate_query, push_constants,
+        },
     },
     rule_model::{
         components::rule::Rule, error::ValidationReport, origin::Origin,
@@ -208,6 +210,28 @@ impl ImportDirective {
         }
     }
 
+    pub(crate) fn try_negate(&self) -> Option<Self> {
+        let builder = self.builder()?;
+
+        if let SupportedFormatTag::Sparql(..) = builder.format() {
+            let AnyImportExportBuilder::Sparql(sparql) = builder.inner else {
+                unreachable!("inner builder must be a SPARQL builder")
+            };
+
+            let query = negate_query(&sparql.query);
+            let mut result = self.clone();
+            for (key, value) in &mut result.0.spec.map {
+                if key.value() == QUERY {
+                    *value = Term::ground(AnyDataValue::new_plain_string(query.to_string()));
+                }
+            }
+
+            Some(result)
+        } else {
+            None
+        }
+    }
+
     pub(crate) fn try_merge(
         &self,
         left_variables: &[Variable],
@@ -257,8 +281,14 @@ impl ImportDirective {
 
                 let mut join_positions = Vec::new();
                 for &&variable in &join_variables {
-                    join_positions.push((*left_positions.get(variable).expect("all join variables are known"),
-                                        *right_positions.get(variable).expect("all join variables are known")));
+                    join_positions.push((
+                        *left_positions
+                            .get(variable)
+                            .expect("all join variables are known"),
+                        *right_positions
+                            .get(variable)
+                            .expect("all join variables are known"),
+                    ));
                 }
 
                 let query = merge_queries(
