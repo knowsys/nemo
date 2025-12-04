@@ -11,11 +11,8 @@ use nemo_physical::{
 use crate::{
     execution::planning::{
         RuntimeInformation,
-        normalization::{atom::import::ImportAtom, operation::Operation},
-        operations::{
-            filter::GeneratorFilter,
-            union::{GeneratorUnion, UnionRange},
-        },
+        normalization::atom::import::ImportAtom,
+        operations::union::{GeneratorUnion, UnionRange},
     },
     io::formats::Import,
     rule_model::components::{tag::Tag, term::primitive::variable::Variable},
@@ -295,9 +292,6 @@ pub struct GeneratorImport {
     patterns: HashMap<BindingPattern, Vec<usize>>,
     /// List of [ProductBinding] where each results in a new import
     imports: IndexSet<ProductBinding>,
-    /// Maps [ProductBinding] (identified by their index in the [IndexSet])
-    /// to a [GeneratorFilter]
-    import_filters: HashMap<usize, GeneratorFilter>,
     /// Associates a predicate with a [Import]
     ///
     /// TODO: This assumes that each predicate is associated with exactly one [Import]
@@ -318,12 +312,10 @@ impl GeneratorImport {
         input_variables: Vec<Vec<Variable>>,
         positive_import_atoms: &[ImportAtom],
         negative_import_atoms: &[ImportAtom],
-        operations: &mut Vec<Operation>,
     ) -> Self {
         let mut bindings = VariableBindings::default();
         let mut patterns = HashMap::<BindingPattern, Vec<usize>>::default();
         let mut imports = IndexSet::<ProductBinding>::default();
-        let mut import_filters = HashMap::<usize, GeneratorFilter>::default();
         let mut predicates = HashMap::<Tag, Vec<usize>>::default();
         let mut handlers = HashMap::default();
 
@@ -344,11 +336,6 @@ impl GeneratorImport {
 
             let (import_index, _) = imports.insert_full(product_pattern);
 
-            let filter = GeneratorFilter::new(atom.variables_cloned(), operations).or_none();
-            if let Some(filter) = filter {
-                import_filters.insert(import_index, filter);
-            }
-
             predicates
                 .entry(atom.predicate())
                 .or_default()
@@ -361,7 +348,6 @@ impl GeneratorImport {
             bindings,
             patterns,
             imports,
-            import_filters,
             handlers,
             predicates,
         }
@@ -463,7 +449,7 @@ impl GeneratorImport {
     ) -> Vec<ExecutionNodeRef> {
         let mut result = Vec::default();
 
-        for (import_index, import) in self.imports.iter().enumerate() {
+        for import in self.imports.iter() {
             let handler = self.handlers.get(import.predicate()).expect("construction of this generator ensures that every import predicate is associated with a handler");
 
             let provider = runtime
@@ -474,17 +460,13 @@ impl GeneratorImport {
 
             let pattern_bindings = import.iter().map(|pattern| bindings.get(pattern).expect("construction of this generator ensures that all possible patterns appear in this map").clone()).collect::<Vec<_>>();
 
-            let mut node_import = plan.plan_mut().import(
+            let node_import = plan.plan_mut().import(
                 OperationTable::default(),
                 import.bound_positions(),
                 import.output_arity(),
                 pattern_bindings,
                 provider,
             );
-
-            if let Some(filter) = self.import_filters.get(&import_index) {
-                node_import = filter.create_plan(plan, node_import, runtime);
-            }
 
             result.push(node_import);
         }
