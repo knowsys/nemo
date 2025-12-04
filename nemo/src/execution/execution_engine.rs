@@ -413,7 +413,10 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     /// For a given iterator over rule execution steps
     /// returns the sum of execution time for those steps.
     pub fn steps_time_ms<Iter: Iterator<Item = usize>>(&self, steps: Iter) -> u128 {
+        let steps = steps.collect::<HashSet<_>>();
+
         steps
+            .into_iter()
             .map(|step| self.step_times_ms.get(step).cloned().unwrap_or_default())
             .sum()
     }
