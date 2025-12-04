@@ -212,14 +212,54 @@ impl PatternVariables {
 
 fn variables_in_pattern(pattern: &GraphPattern) -> PatternVariables {
     match pattern {
-        GraphPattern::Bgp { .. } | GraphPattern::Path { .. } | GraphPattern::Values { .. } => {
-            let mut result = PatternVariables::default();
-            pattern.on_in_scope_variable(|variable| {
-                result.in_scope.insert(variable.clone());
-            });
+        GraphPattern::Bgp { patterns } => {
+            let mut variables = Vec::new();
+            let mut seen_variables = HashSet::new();
 
-            result
+            for pattern in patterns {
+                if let TermPattern::Variable(subject) = &pattern.subject
+                    && !seen_variables.contains(subject)
+                {
+                    variables.push(subject.clone());
+                    seen_variables.insert(subject.clone());
+                }
+                if let NamedNodePattern::Variable(predicate) = &pattern.predicate
+                    && !seen_variables.contains(predicate)
+                {
+                    variables.push(predicate.clone());
+                    seen_variables.insert(predicate.clone());
+                }
+                if let TermPattern::Variable(object) = &pattern.object
+                    && !seen_variables.contains(object)
+                {
+                    variables.push(object.clone());
+                    seen_variables.insert(object.clone());
+                }
+            }
+
+            PatternVariables::new(variables, empty())
         }
+        GraphPattern::Path {
+            subject,
+            path: _,
+            object,
+        } => {
+            let mut variables = Vec::new();
+
+            if let TermPattern::Variable(subject) = subject {
+                variables.push(subject.clone());
+            }
+            if let TermPattern::Variable(object) = object {
+                variables.push(object.clone());
+            }
+            variables.dedup();
+
+            PatternVariables::new(variables, empty())
+        }
+        GraphPattern::Values {
+            variables,
+            bindings: _,
+        } => PatternVariables::new(variables.iter().cloned(), empty()),
         GraphPattern::Join { left, right }
         | GraphPattern::LeftJoin { left, right, .. }
         | GraphPattern::Union { left, right } => {
@@ -227,7 +267,8 @@ fn variables_in_pattern(pattern: &GraphPattern) -> PatternVariables {
         }
         GraphPattern::Graph { name, inner } => {
             let mut result = variables_in_pattern(inner);
-            if let NamedNodePattern::Variable(variable) = name {
+            if let NamedNodePattern::Variable(variable) = name
+            {
                 result.in_scope.insert(variable.clone());
             }
 
@@ -237,7 +278,7 @@ fn variables_in_pattern(pattern: &GraphPattern) -> PatternVariables {
             inner, variable, ..
         } => {
             let mut result = variables_in_pattern(inner);
-            result.in_scope.insert(variable.clone());
+                result.in_scope.insert(variable.clone());
 
             result
         }
@@ -702,10 +743,14 @@ pub(crate) fn merge_project_patterns(
             let left_mapping = standardize_variables("l", &left_variables, &left_join_variables);
             let right_mapping = standardize_variables("r", &right_variables, &right_join_variables);
 
+            log::debug!("mappings: {left_mapping:?} \n{right_mapping:?}");
+
             let (left_pattern, left_variables) =
                 rename_variables_in_project_pattern(left, &left_mapping, left_constants)?;
             let (right_pattern, right_variables) =
                 rename_variables_in_project_pattern(right, &right_mapping, right_constants)?;
+            log::debug!("\n\n {left_pattern} \n {right_pattern} \n\n");
+
             let inner = Box::new(GraphPattern::Join {
                 left: Box::new(left_pattern),
                 right: Box::new(right_pattern),

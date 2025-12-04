@@ -234,16 +234,16 @@ impl ImportDirective {
                 let left_set = left_variables.iter().collect::<HashSet<_>>();
                 let right_set = right_variables.iter().collect::<HashSet<_>>();
                 let join_variables = left_set.intersection(&right_set).collect::<HashSet<_>>();
-                let mut left_positions = Vec::new();
+                let mut left_positions = HashMap::new();
                 let mut left_constants = HashMap::new();
-                let mut right_positions = Vec::new();
+                let mut right_positions = HashMap::new();
                 let mut right_constants = HashMap::new();
 
                 for (idx, variable) in left_variables.iter().enumerate() {
                     if let Some(term) = constants.get(variable) {
                         left_constants.insert(idx, ground_term_from_datavalue(&term.value())?);
                     } else if join_variables.contains(&variable) {
-                        left_positions.push(idx);
+                        left_positions.insert(variable, idx);
                     }
                 }
 
@@ -251,14 +251,15 @@ impl ImportDirective {
                     if let Some(term) = constants.get(variable) {
                         right_constants.insert(idx, ground_term_from_datavalue(&term.value())?);
                     } else if join_variables.contains(&variable) {
-                        right_positions.push(idx);
+                        right_positions.insert(variable, idx);
                     }
                 }
 
-                let join_positions = left_positions
-                    .into_iter()
-                    .zip(right_positions)
-                    .collect::<Vec<_>>();
+                let mut join_positions = Vec::new();
+                for &&variable in &join_variables {
+                    join_positions.push((*left_positions.get(variable).expect("all join variables are known"),
+                                        *right_positions.get(variable).expect("all join variables are known")));
+                }
 
                 let query = merge_queries(
                     &left_sparql.query,
