@@ -4,6 +4,7 @@ pub(crate) mod functions;
 pub(crate) mod queries;
 pub(crate) mod reader;
 
+use queries::cache_bust;
 use reader::SparqlReader;
 use spargebra::Query;
 use std::sync::Arc;
@@ -36,7 +37,7 @@ use super::{ExportHandler, FileFormatMeta, FormatBuilder, ImportHandler};
 use crate::io::formats::dsv::value_format::DsvValueFormats;
 
 /// A char limit to decide if a query is send as GET or POST request
-const HTTP_GET_CHAR_LIMIT: usize = 2_000;
+const HTTP_GET_CHAR_LIMIT: usize = 0;
 
 /// How many bindings to push into a single query
 const MAX_BINDINGS_PER_PAGE: usize = 32_000;
@@ -177,7 +178,7 @@ impl FormatBuilder for SparqlBuilder {
         match direction {
             Direction::Import => {
                 let mut resource_builder = ResourceBuilder::try_from(self.endpoint.clone())?;
-                let query = self.query.to_string();
+                let query = cache_bust(&self.query).to_string();
                 if query.len() > HTTP_GET_CHAR_LIMIT {
                     resource_builder.add_post_parameter(String::from("query"), query)?;
                 } else {
