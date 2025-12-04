@@ -3,6 +3,7 @@
 use std::{
     collections::{HashMap, HashSet},
     iter::empty,
+    time::SystemTime,
 };
 
 use nemo_physical::{
@@ -267,8 +268,7 @@ fn variables_in_pattern(pattern: &GraphPattern) -> PatternVariables {
         }
         GraphPattern::Graph { name, inner } => {
             let mut result = variables_in_pattern(inner);
-            if let NamedNodePattern::Variable(variable) = name
-            {
+            if let NamedNodePattern::Variable(variable) = name {
                 result.in_scope.insert(variable.clone());
             }
 
@@ -278,7 +278,7 @@ fn variables_in_pattern(pattern: &GraphPattern) -> PatternVariables {
             inner, variable, ..
         } => {
             let mut result = variables_in_pattern(inner);
-                result.in_scope.insert(variable.clone());
+            result.in_scope.insert(variable.clone());
 
             result
         }
@@ -869,13 +869,17 @@ pub(crate) fn push_constants(query: &Query, constants: &HashMap<usize, GroundTer
     }
 }
 
-
 pub(crate) fn negate_project_pattern(pattern: &GraphPattern) -> GraphPattern {
     modify_outermost_projection(pattern, |pattern, variables| {
-        (Box::new(GraphPattern::Filter { expr: Expression::Not(Box::new(Expression::Exists(pattern.clone()))), inner: Box::new(GraphPattern::default())}), variables.clone())
+        (
+            Box::new(GraphPattern::Filter {
+                expr: Expression::Not(Box::new(Expression::Exists(pattern.clone()))),
+                inner: Box::new(GraphPattern::default()),
+            }),
+            variables.clone(),
+        )
     })
 }
-
 
 pub(crate) fn negate_query(query: &Query) -> Query {
     match query {
@@ -899,4 +903,53 @@ pub(crate) fn negate_query(query: &Query) -> Query {
         },
         _ => query.clone(),
     }
+}
+
+pub(crate) fn cache_bust(query: &Query) -> Query {
+    match query {
+        Query::Select {
+            dataset,
+            pattern,
+            base_iri,
+        } => Query::Select {
+            dataset: dataset.clone(),
+            pattern: cache_bust_in_project_pattern(pattern),
+            base_iri: base_iri.clone(),
+        },
+        Query::Ask {
+            dataset,
+            pattern,
+            base_iri,
+        } => Query::Ask {
+            dataset: dataset.clone(),
+            pattern: cache_bust_in_project_pattern(pattern),
+            base_iri: base_iri.clone(),
+        },
+        _ => query.clone(),
+    }
+}
+
+pub(crate) fn cache_bust_in_project_pattern(pattern: &GraphPattern) -> GraphPattern {
+    modify_outermost_projection(pattern, |inner, variables| {
+        (
+            Box::new(GraphPattern::Join {
+                left: inner.clone(),
+                right: Box::new(GraphPattern::Values {
+                    variables: vec![Variable::new_unchecked("X_NEMO_CACHE_BUST")],
+                    bindings: vec![vec![
+                        SystemTime::now()
+                            .duration_since(SystemTime::UNIX_EPOCH)
+                            .map(|duration| {
+                                GroundTerm::Literal(Literal::new_simple_literal(format!(
+                                    "{}",
+                                    duration.as_secs()
+                                )))
+                            })
+                            .ok(),
+                    ]],
+                }),
+            }),
+            variables.clone(),
+        )
+    })
 }

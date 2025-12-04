@@ -43,6 +43,7 @@ impl SparqlReader {
             .customize_resource_builder(Direction::Import, None)
             .expect("should have been validated")
             .expect("should create a resource builder");
+        log::debug!("final query: {:?}", resource_builder);
         let resource = resource_builder.finalize();
         let provider = HttpResourceProvider {};
 
@@ -70,7 +71,7 @@ impl SparqlReader {
     ) -> Result<(), ReadingError> {
         log::debug!("sending SPARQL query: {query}");
         TimedCode::instance()
-            .sub("Reasoning/Execution/SPARQL queries")
+            .sub("Reasoning/Execution/Import/SPARQL queries")
             .start();
 
         let response = self
@@ -78,7 +79,7 @@ impl SparqlReader {
             .await?
             .expect("query result should not be empty");
         TimedCode::instance()
-            .sub("Reasoning/Execution/SPARQL queries")
+            .sub("Reasoning/Execution/Import/SPARQL queries")
             .stop();
         Self::read_table_data(
             response,
