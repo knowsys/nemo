@@ -871,3 +871,35 @@ pub(crate) fn push_constants(query: &Query, constants: &HashMap<usize, GroundTer
         _ => query.clone(),
     }
 }
+
+
+pub(crate) fn negate_project_pattern(pattern: &GraphPattern) -> GraphPattern {
+    modify_outermost_projection(pattern, |pattern, variables| {
+        (Box::new(GraphPattern::Filter { expr: Expression::Not(Box::new(Expression::Exists(pattern.clone()))), inner: Box::new(GraphPattern::default())}), variables.clone())
+    })
+}
+
+
+pub(crate) fn negate_query(query: &Query) -> Query {
+    match query {
+        Query::Select {
+            dataset,
+            pattern,
+            base_iri,
+        } => Query::Select {
+            dataset: dataset.clone(),
+            pattern: negate_project_pattern(pattern),
+            base_iri: base_iri.clone(),
+        },
+        Query::Ask {
+            dataset,
+            pattern,
+            base_iri,
+        } => Query::Ask {
+            dataset: dataset.clone(),
+            pattern: negate_project_pattern(pattern),
+            base_iri: base_iri.clone(),
+        },
+        _ => query.clone(),
+    }
+}
