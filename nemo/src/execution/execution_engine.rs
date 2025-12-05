@@ -415,6 +415,10 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         let mut sum_time = 0;
 
         for step in steps {
+            if step == 0 {
+                continue;
+            }
+
             let rule = self.rule_history[step];
             let predicates = self.program.rules()[rule]
                 .predicates_head()
