@@ -390,8 +390,8 @@
               };
               nemo-SN-EC-noMT = buildNemoCrate {
                 withSN = true;
-                withEC = false;
-                withMT = true;
+                withEC = true;
+                withMT = false;
               };
               nemo-SN-EC-MT = buildNemoCrate {
                 withSN = true;
