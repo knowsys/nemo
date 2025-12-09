@@ -307,201 +307,204 @@
           nemo-cli-shell-completions = cargoXtaskGenerate "shell-completions";
         in
         rec {
-          packages = rec {
-            nemo = buildCrate {
-              pname = "nemo";
-              crate = "nemo-cli";
+          packages =
+            let
+              inherit (lib) optionalString;
+              buildNemoCrate =
+                {
+                  withSN ? true,
+                  withEC ? true,
+                  withMT ? true,
+                }:
+                let
+                  SN = if withSN then "SN" else "noSN";
+                  EC = if withEC then "EC" else "noEC";
+                  MT = if withMT then "MT" else "noMT";
+                  variant = "${SN}-${EC}-${MT}";
+                  binary = "nmo-${variant}";
+                in
+                buildCrate {
+                  pname = "nemo-${variant}";
+                  crate = "nemo-cli";
 
-              cargoExtraArgs = "--features import-incremental --features import-cartesian --features import-merge";
-              nativeBuildInputs =
-                crateArgs.nativeBuildInputs ++ (lib.attrValues { inherit (pkgs) installShellFiles; });
+                  cargoExtraArgs = builtins.concatStringsSep " " [
+                    "-p nemo-cli"
+                    (optionalString withSN "--features nemo/import-incremental")
+                    (optionalString withEC "--features nemo/import-cartesian")
+                    (optionalString withMT "--features nemo/import-merge")
+                  ];
 
-              postInstall = ''
-                installManPage ${nemo-cli-manpages}/nmo.1
-                installShellCompletion \
-                  --fish ${nemo-cli-shell-completions}/nmo.fish \
-                  --bash ${nemo-cli-shell-completions}/nmo.bash \
-                  --zsh ${nemo-cli-shell-completions}/_nmo
-              '';
+                  nativeBuildInputs =
+                    crateArgs.nativeBuildInputs ++ (lib.attrValues { inherit (pkgs) installShellFiles; });
 
-              meta = crateArgs.meta // {
-                mainProgram = "nmo";
+                  postInstall = ''
+                    mv -n $out/bin/nmo $out/bin/${binary}                    
+                    installShellCompletion \
+                      --fish --name ${binary}.fish ${nemo-cli-shell-completions}/nmo.fish \
+                      --bash --name ${binary}.bash ${nemo-cli-shell-completions}/nmo.bash \
+                      --zsh --name _${binary} ${nemo-cli-shell-completions}/_nmo
+                    cp ${nemo-cli-manpages}/nmo.1 ${binary}.1
+                    installManPage ${binary}.1
+                  '';
+
+                  meta = crateArgs.meta // {
+                    mainProgram = binary;
+                  };
+                };
+            in
+            rec {
+              nemo = buildCrate {
+                pname = "nemo";
+                crate = "nemo-cli";
+
+                nativeBuildInputs =
+                  crateArgs.nativeBuildInputs ++ (lib.attrValues { inherit (pkgs) installShellFiles; });
+
+                postInstall = ''
+                  installManPage ${nemo-cli-manpages}/nmo.1
+                  installShellCompletion \
+                    --fish ${nemo-cli-shell-completions}/nmo.fish \
+                    --bash ${nemo-cli-shell-completions}/nmo.bash \
+                    --zsh  ${nemo-cli-shell-completions}/_nmo
+                '';
+
+                meta = crateArgs.meta // {
+                  mainProgram = "nmo";
+                };
               };
-            };
 
-            nemo-no-merge = buildCrate {
-              pname = "nemo-no-merge";
-              crate = "nemo-cli";
-
-              cargoExtraArgs = "--features import-incremental --features import-cartesian";
-              nativeBuildInputs =
-                crateArgs.nativeBuildInputs ++ (lib.attrValues { inherit (pkgs) installShellFiles; });
-
-              postInstall = ''
-                mv $out/bin/nmo $out/bin/nmo-no-merge
-              '';
-
-              meta = crateArgs.meta // {
-                mainProgram = "nmo-no-merge";
+              nemo-noSN-noEC-noMT = buildNemoCrate {
+                withSN = false;
+                withEC = false;
+                withMT = false;
               };
-            };
-
-            nemo-no-cartesian = buildCrate {
-              pname = "nemo-no-cartesian";
-              crate = "nemo-cli";
-
-              cargoExtraArgs = "--features import-incremental --features import-merge";
-              nativeBuildInputs =
-                crateArgs.nativeBuildInputs ++ (lib.attrValues { inherit (pkgs) installShellFiles; });
-
-              postInstall = ''
-                mv $out/bin/nmo $out/bin/nmo-no-cartesian
-              '';
-
-              meta = crateArgs.meta // {
-                mainProgram = "nmo-no-incremental";
+              nemo-SN-noEC-noMT = buildNemoCrate {
+                withSN = true;
+                withEC = false;
+                withMT = false;
               };
-            };
-
-            nemo-no-incremental = buildCrate {
-              pname = "nemo-no-incremental";
-              crate = "nemo-cli";
-
-              nativeBuildInputs =
-                crateArgs.nativeBuildInputs ++ (lib.attrValues { inherit (pkgs) installShellFiles; });
-
-              postInstall = ''
-                mv $out/bin/nmo $out/bin/nmo-no-incremental
-              '';
-
-              meta = crateArgs.meta // {
-                mainProgram = "nmo-no-incremental";
+              nemo-SN-noEC-MT = buildNemoCrate {
+                withSN = true;
+                withEC = false;
+                withMT = true;
               };
-            };
-            nemo-only-incremental = buildCrate {
-              pname = "nemo-only-incremental";
-              crate = "nemo-cli";
-
-              cargoExtraArgs = "--features import-incremental";
-
-              nativeBuildInputs =
-                crateArgs.nativeBuildInputs ++ (lib.attrValues { inherit (pkgs) installShellFiles; });
-
-              postInstall = ''
-                mv $out/bin/nmo $out/bin/nmo-only-incremental
-              '';
-
-              meta = crateArgs.meta // {
-                mainProgram = "nmo-only-incremental";
+              nemo-SN-EC-noMT = buildNemoCrate {
+                withSN = true;
+                withEC = false;
+                withMT = true;
               };
-            };
-
-            docker = pkgs.dockerTools.buildImage {
-              name = "nemo";
-              tag = "latest";
-              copyToRoot = pkgs.buildEnv {
-                name = "image-root";
-                paths = [
-                  pkgs.cacert
-                  pkgs.openssl
-                  nemo
-                ];
+              nemo-SN-EC-MT = buildNemoCrate {
+                withSN = true;
+                withEC = true;
+                withMT = true;
               };
-              config = {
-                Entrypoint = [ "/bin/nmo" ];
+
+              docker = pkgs.dockerTools.buildImage {
+                name = "nemo";
+                tag = "latest";
+                copyToRoot = pkgs.buildEnv {
+                  name = "image-root";
+                  paths = [
+                    pkgs.cacert
+                    pkgs.openssl
+                    nemo
+                  ];
+                };
+                config = {
+                  Entrypoint = [ "/bin/nmo" ];
+                };
               };
+
+              nemo-language-server = buildCrate {
+                crate = "nemo-language-server";
+              };
+
+              nemo-python = buildCrate {
+                crate = "nemo-python";
+
+                doInstallCheck = true;
+                doNotPostBuildInstallCargoBinaries = true;
+
+                nativeBuildInputs =
+                  crateArgs.nativeBuildInputs
+                  ++ (lib.attrValues {
+                    inherit pypaInstallHook;
+                    inherit (pkgs) maturin;
+                  });
+
+                buildPhaseCargoCommand = ''
+                  maturin build \
+                    --offline \
+                    --target-dir target \
+                    --manylinux off \
+                    --strip \
+                    --release \
+                    --manifest-path nemo-python/Cargo.toml
+                '';
+
+                preInstall = ''
+                  mkdir -p dist
+                  cp target/wheels/*.whl dist/
+                '';
+
+                installPhaseCommand = "pypaInstallPhase";
+
+                installCheckPhase = ''
+                  PYTHONPATH=''${PYTHONPATH:+''${PYTHONPATH}:}out python3 -m unittest discover -s nemo-python/tests -v
+                '';
+              };
+
+              nemo-wasm-node = wasmPack { target = "nodejs"; };
+              nemo-wasm-bundler = wasmPack { target = "bundler"; };
+              nemo-wasm-web = wasmPack { target = "web"; };
+              nemo-wasm = nemo-wasm-bundler;
+
+              python3 = pkgs.python3.withPackages (ps: [ nemo-python ]);
+              python = python3;
+
+              nodejs = pkgs.writeShellApplication {
+                name = "node";
+                meta = { inherit (pkgs.nodejs.meta) description; };
+
+                runtimeInputs = lib.attrValues { inherit (pkgs) nodejs; };
+
+                text = ''
+                  NODE_PATH=${nemo-wasm-node}/lib/node_modules''${NODE_PATH:+":$NODE_PATH"} node "$@"
+                '';
+              };
+
+              nemo-vscode-extension-vsix =
+                (inputs.nemo-vscode-extension.packages.${system}.nemo-vscode-extension-vsix.extendModules {
+                  modules = [
+                    {
+                      deps = {
+                        inherit nemo-wasm-web;
+                      };
+                    }
+                  ];
+                }).config.public;
+
+              nemo-vscode-extension =
+                inputs.nemo-vscode-extension.packages.${system}.nemo-vscode-extension.overrideAttrs
+                  (old: {
+                    src = "${nemo-vscode-extension-vsix}/nemo-${old.version}.vsix";
+                  });
+
+              nemo-web =
+                (inputs.nemo-web.packages.${system}.nemo-web.extendModules {
+                  modules = [
+                    {
+                      deps = {
+                        inherit nemo-wasm-web nemo-wasm-bundler nemo-vscode-extension-vsix;
+                      };
+                    }
+                  ];
+                }).config.public;
+
+              inherit (inputs.nemo-doc.packages.${system}) nemo-doc;
+
+              default = nemo;
             };
-
-            nemo-language-server = buildCrate {
-              crate = "nemo-language-server";
-            };
-
-            nemo-python = buildCrate {
-              crate = "nemo-python";
-
-              doInstallCheck = true;
-              doNotPostBuildInstallCargoBinaries = true;
-
-              nativeBuildInputs =
-                crateArgs.nativeBuildInputs
-                ++ (lib.attrValues {
-                  inherit pypaInstallHook;
-                  inherit (pkgs) maturin;
-                });
-
-              buildPhaseCargoCommand = ''
-                maturin build \
-                  --offline \
-                  --target-dir target \
-                  --manylinux off \
-                  --strip \
-                  --release \
-                  --manifest-path nemo-python/Cargo.toml
-              '';
-
-              preInstall = ''
-                mkdir -p dist
-                cp target/wheels/*.whl dist/
-              '';
-
-              installPhaseCommand = "pypaInstallPhase";
-
-              installCheckPhase = ''
-                PYTHONPATH=''${PYTHONPATH:+''${PYTHONPATH}:}out python3 -m unittest discover -s nemo-python/tests -v
-              '';
-            };
-
-            nemo-wasm-node = wasmPack { target = "nodejs"; };
-            nemo-wasm-bundler = wasmPack { target = "bundler"; };
-            nemo-wasm-web = wasmPack { target = "web"; };
-            nemo-wasm = nemo-wasm-bundler;
-
-            python3 = pkgs.python3.withPackages (ps: [ nemo-python ]);
-            python = python3;
-
-            nodejs = pkgs.writeShellApplication {
-              name = "node";
-              meta = { inherit (pkgs.nodejs.meta) description; };
-
-              runtimeInputs = lib.attrValues { inherit (pkgs) nodejs; };
-
-              text = ''
-                NODE_PATH=${nemo-wasm-node}/lib/node_modules''${NODE_PATH:+":$NODE_PATH"} node "$@"
-              '';
-            };
-
-            nemo-vscode-extension-vsix =
-              (inputs.nemo-vscode-extension.packages.${system}.nemo-vscode-extension-vsix.extendModules {
-                modules = [
-                  {
-                    deps = {
-                      inherit nemo-wasm-web;
-                    };
-                  }
-                ];
-              }).config.public;
-
-            nemo-vscode-extension =
-              inputs.nemo-vscode-extension.packages.${system}.nemo-vscode-extension.overrideAttrs
-                (old: {
-                  src = "${nemo-vscode-extension-vsix}/nemo-${old.version}.vsix";
-                });
-
-            nemo-web =
-              (inputs.nemo-web.packages.${system}.nemo-web.extendModules {
-                modules = [
-                  {
-                    deps = {
-                      inherit nemo-wasm-web nemo-wasm-bundler nemo-vscode-extension-vsix;
-                    };
-                  }
-                ];
-              }).config.public;
-
-            inherit (inputs.nemo-doc.packages.${system}) nemo-doc;
-
-            default = nemo;
-          };
 
           apps = {
             nemo-web = utils.lib.mkApp {
