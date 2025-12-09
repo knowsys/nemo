@@ -49,6 +49,7 @@ impl GeneratorJoinCartesian {
         operations: &mut Vec<Operation>,
         atoms_negation: &mut Vec<BodyAtom>,
     ) -> Self {
+	log::info!("not cartesianing");
         let join = GeneratorJoinSeminaive::new(atoms.to_vec(), order);
         let filter = GeneratorFunctionFilterNegation::new(
             join.output_variables(),
@@ -70,6 +71,7 @@ impl GeneratorJoinCartesian {
         operations: &mut Vec<Operation>,
         atoms_negation: &mut Vec<BodyAtom>,
     ) -> Self {
+	log::info!("cartesianing");
         let mut old_operations = Vec::default();
         let mut old_negations = Vec::default();
 
