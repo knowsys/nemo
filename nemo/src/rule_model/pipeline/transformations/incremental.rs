@@ -277,11 +277,13 @@ impl TransformationIncremental {
 impl ProgramTransformation for TransformationIncremental {
     #[cfg(not(feature = "import-incremental"))]
     fn apply(self, program: &ProgramHandle) -> Result<ProgramHandle, ValidationReport> {
+	log::info!("not incrementalising");
         program.fork_full().submit()
     }
 
     #[cfg(feature = "import-incremental")]
     fn apply(self, program: &ProgramHandle) -> Result<ProgramHandle, ValidationReport> {
+	log::info!("incrementalising");
         let mut commit = program.fork();
 
         let incremental_predicates = Self::incremental_predicates(program);
