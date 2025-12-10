@@ -32,6 +32,7 @@ pub enum StrategyBody {
         /// Additional filters
         filter: Option<GeneratorFunctionFilterNegation>,
     },
+    /// Datalog with incremental imports
     Import {
         /// Cartesian seminaive join
         join: Box<GeneratorJoinCartesian>,

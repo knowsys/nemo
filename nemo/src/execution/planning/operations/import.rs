@@ -305,9 +305,6 @@ pub struct GeneratorImport {
 
 impl GeneratorImport {
     /// Create a new [GeneratorImport].
-    ///
-    /// This function consumes [Operation]s from `operations`
-    /// if they can be directly evaluated on a positive or negative [ImportAtom].
     pub fn new(
         input_variables: Vec<Vec<Variable>>,
         positive_import_atoms: &[ImportAtom],

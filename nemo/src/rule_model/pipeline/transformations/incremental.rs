@@ -69,54 +69,79 @@ impl TransformationIncremental {
             }
         }
 
-        // TransformationMergeSparql merges import atoms from the same predicate,
-        // potentially making variables available
-        let mut available_after_merge = HashMap::<Tag, HashSet<Variable>>::default();
-        let mut restricted_atoms = HashSet::<usize>::default();
-        let mut positive_atom_count: usize = 0;
-
-        let mut change = true;
-
-        while change {
-            change = false;
-            positive_atom_count = 0;
-
-            for (atom_index, atom) in rule.body_positive().enumerate() {
-                positive_atom_count += 1;
-
-                if restricted_atoms.contains(&atom_index) {
-                    continue;
-                }
-
+        #[cfg(not(feature = "import-merge"))]
+        {
+            for atom in rule.body_positive() {
                 if !incremental_predicates.contains_key(&atom.predicate()) {
-                    restricted_atoms.insert(atom_index);
                     continue;
                 }
 
                 if atom.terms().any(|term| !term.is_variable()) {
-                    restricted_atoms.insert(atom_index);
                     continue;
                 }
 
-                if atom.variables().any(|variable| {
-                    available_variables.contains(variable)
-                        || available_after_merge
-                            .get(&atom.predicate())
-                            .map(|variables| variables.contains(variable))
-                            .unwrap_or(false)
-                }) {
-                    available_after_merge
-                        .entry(atom.predicate())
-                        .or_default()
-                        .extend(atom.variables().cloned());
-
-                    restricted_atoms.insert(atom_index);
-                    change = true;
+                if atom
+                    .variables()
+                    .all(|variable| !available_variables.contains(variable))
+                {
+                    return true;
                 }
             }
+
+            false
         }
 
-        restricted_atoms.len() != positive_atom_count
+        #[cfg(feature = "import-merge")]
+        {
+            // TransformationMergeSparql merges import atoms from the same predicate,
+            // potentially making variables available
+            let mut available_after_merge = HashMap::<Tag, HashSet<Variable>>::default();
+            let mut restricted_atoms = HashSet::<usize>::default();
+            let mut positive_atom_count: usize = 0;
+
+            let mut change = true;
+
+            while change {
+                change = false;
+                positive_atom_count = 0;
+
+                for (atom_index, atom) in rule.body_positive().enumerate() {
+                    positive_atom_count += 1;
+
+                    if restricted_atoms.contains(&atom_index) {
+                        continue;
+                    }
+
+                    if !incremental_predicates.contains_key(&atom.predicate()) {
+                        restricted_atoms.insert(atom_index);
+                        continue;
+                    }
+
+                    if atom.terms().any(|term| !term.is_variable()) {
+                        restricted_atoms.insert(atom_index);
+                        continue;
+                    }
+
+                    if atom.variables().any(|variable| {
+                        available_variables.contains(variable)
+                            || available_after_merge
+                                .get(&atom.predicate())
+                                .map(|variables| variables.contains(variable))
+                                .unwrap_or(false)
+                    }) {
+                        available_after_merge
+                            .entry(atom.predicate())
+                            .or_default()
+                            .extend(atom.variables().cloned());
+
+                        restricted_atoms.insert(atom_index);
+                        change = true;
+                    }
+                }
+            }
+
+            restricted_atoms.len() != positive_atom_count
+        }
     }
 
     /// Check whether a rule would allow for incremental import
@@ -277,13 +302,13 @@ impl TransformationIncremental {
 impl ProgramTransformation for TransformationIncremental {
     #[cfg(not(feature = "import-incremental"))]
     fn apply(self, program: &ProgramHandle) -> Result<ProgramHandle, ValidationReport> {
-	log::info!("not incrementalising");
+        log::info!("not incrementalising");
         program.fork_full().submit()
     }
 
     #[cfg(feature = "import-incremental")]
     fn apply(self, program: &ProgramHandle) -> Result<ProgramHandle, ValidationReport> {
-	log::info!("incrementalising");
+        log::info!("incrementalising");
         let mut commit = program.fork();
 
         let incremental_predicates = Self::incremental_predicates(program);
