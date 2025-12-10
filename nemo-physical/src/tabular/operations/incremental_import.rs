@@ -117,8 +117,9 @@ impl GeneratorIncrementalImport {
 
             let bindings = Self::materialize_bindings(trie_scan, dictionary);
             log::info!(
-                "Loading data (with {} bindings): {provider}",
-                bindings.len()
+                "Loading data (with {} bindings for {} positions): {provider}",
+                bindings.len(),
+                self.bound_positions.len()
             );
 
             provider
