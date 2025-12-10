@@ -130,7 +130,7 @@ impl GeneratorJoinImportsGeneral {
             .translation
             .operation_table(self.join_order.as_ordered_list().iter());
 
-        let mut node_result = plan.plan_mut().join(markers, join_tables);
+        let mut node_result = plan.plan_mut().join(markers.clone(), join_tables);
 
         if !self.negative_imports.is_empty() {
             let mut subtracted = Vec::default();
@@ -144,6 +144,7 @@ impl GeneratorJoinImportsGeneral {
                 let import_markers = runtime
                     .translation
                     .operation_table(import.output_variables().iter());
+                let projection_markers = markers.restrict(&import_markers);
 
                 if let Some(mut node_new_import) = new_imports.get(import.predicate()).cloned() {
                     node_new_import.set_markers(import_markers);
@@ -153,6 +154,10 @@ impl GeneratorJoinImportsGeneral {
                 if let Some(filter) = filter {
                     node_imports = filter.create_plan(plan, node_imports, runtime);
                 }
+
+                node_imports = plan
+                    .plan_mut()
+                    .projectreorder(projection_markers, node_imports);
 
                 subtracted.push(node_imports);
             }
