@@ -136,6 +136,9 @@ impl<T: BufRead> DsvReader<T> {
             }
         }
         log::info!("Finished import: processed {line_count} lines (dropped {drop_count})");
+        if drop_count > 0 && line_count == drop_count {
+            log::warn!("dropped all the records");
+        }
 
         Ok(())
     }
