@@ -180,58 +180,98 @@ fn update_import(
                 .next()
                 .is_some();
 
-        if is_still_incremental {
-            if let Some(negative) = negative {
-                if let Some(merged) = ImportLiteral::try_merge(
-                    ImportLiteral::Positive(positive.clone()),
-                    ImportLiteral::Negative(negative.clone()),
-                    &equality_map
-                ) {
+        // have negative import
+        if let Some(ref negative) = negative {
+            if let Some(merged) = ImportLiteral::try_merge(
+                ImportLiteral::Positive(positive.clone()),
+                ImportLiteral::Negative(negative.clone()),
+                &equality_map,
+            ) {
+                // we merged this into the positive part
+                if is_still_incremental {
                     rule.imports_mut().push(merged);
+                    return commit.add_rule(rule);
                 } else {
-                    rule.imports_mut().push(ImportLiteral::Positive(positive));
-                    rule.imports_mut().push(ImportLiteral::Negative(negative));
+                    let directive = merged.import_directive().clone();
+                    let mut body = Vec::new();
+
+                    for literal in rule.body() {
+                        if let Literal::Operation(operation) = literal
+                            && let Some(equality) = try_equality_from_operation(operation)
+                            && equalities.contains(&equality)
+                        {
+                            continue;
+                        }
+
+                        body.push(literal.clone())
+                    }
+
+                    body.push(Literal::Positive(Atom::new(
+                        directive.predicate().clone(),
+                        merged
+                            .variables()
+                            .map(|variable| Term::Primitive(Primitive::Variable(variable.clone()))),
+                    )));
+                    *rule.body_mut() = body;
+                    commit.add_import(directive);
+                    return commit.add_rule(rule);
                 }
             } else {
-                rule.imports_mut().push(ImportLiteral::Positive(positive));
-            }
-        } else {
-            let directive = positive.import_directive().clone();
-            let mut body = Vec::new();
-
-            for literal in rule.body() {
-                if let Literal::Operation(operation) = literal
-                    && let Some(equality) = try_equality_from_operation(operation)
-                    && equalities.contains(&equality)
-                {
-                    continue;
+                // couldn't merge
+                if is_still_incremental {
+                    // but the positive part is still incremental, keep both
+                    rule.imports_mut().push(ImportLiteral::Positive(positive));
+                    rule.imports_mut()
+                        .push(ImportLiteral::Negative(negative.clone()));
+                    return commit.add_rule(rule);
                 }
+            }
+        }
 
-                body.push(literal.clone())
+        // we don't have a negative part, or the positive part is no longer incremental after merging
+
+        if is_still_incremental {
+            // no negative part, but still incremental
+            rule.imports_mut().push(ImportLiteral::Positive(positive));
+            return commit.add_rule(rule);
+        }
+
+        // we're not incremental anymore
+
+        let directive = positive.import_directive().clone();
+        let mut body = Vec::new();
+
+        for literal in rule.body() {
+            if let Literal::Operation(operation) = literal
+                && let Some(equality) = try_equality_from_operation(operation)
+                && equalities.contains(&equality)
+            {
+                continue;
             }
 
-            body.push(Literal::Positive(Atom::new(
-                directive.predicate().clone(),
-                positive
+            body.push(literal.clone())
+        }
+
+        body.push(Literal::Positive(Atom::new(
+            directive.predicate().clone(),
+            positive
+                .variables()
+                .map(|variable| Term::Primitive(Primitive::Variable(variable.clone()))),
+        )));
+
+        if let Some(negative) = negative {
+            body.push(Literal::Negative(Atom::new(
+                negative.import_directive().predicate().clone(),
+                negative
                     .variables()
                     .map(|variable| Term::Primitive(Primitive::Variable(variable.clone()))),
             )));
 
-            if let Some(negative) = negative {
-                body.push(Literal::Negative(Atom::new(
-                    negative.import_directive().predicate().clone(),
-                    negative
-                        .variables()
-                        .map(|variable| Term::Primitive(Primitive::Variable(variable.clone()))),
-                )));
-
-                commit.add_import(negative.import_directive().clone());
-            }
-
-            *rule.body_mut() = body;
-
-            commit.add_import(directive);
+            commit.add_import(negative.import_directive().clone());
         }
+
+        *rule.body_mut() = body;
+        commit.add_import(directive);
     }
 
     commit.add_rule(rule);
