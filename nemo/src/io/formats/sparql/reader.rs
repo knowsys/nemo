@@ -39,11 +39,12 @@ impl SparqlReader {
     async fn execute_from_builder(
         builder: &SparqlBuilder,
     ) -> Result<Option<Box<dyn Read>>, ReadingError> {
+        log::info!("final query: \n{}\n", builder.query);
         let resource_builder = builder
             .customize_resource_builder(Direction::Import, None)
             .expect("should have been validated")
             .expect("should create a resource builder");
-        log::debug!("final query: {:?}", resource_builder);
+
         let resource = resource_builder.finalize();
         let provider = HttpResourceProvider {};
 
