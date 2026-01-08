@@ -62,7 +62,12 @@ impl FilterTransformPattern {
 
     /// Estimate the arity from the transformations
     pub fn expected_arity(&self) -> Option<usize> {
-        let positions = self.transformations.iter().map(|position| position.position).collect::<HashSet<_>>().len();
+        let positions = self
+            .transformations
+            .iter()
+            .map(|position| position.position)
+            .collect::<HashSet<_>>()
+            .len();
 
         (positions > 0).then_some(positions)
     }

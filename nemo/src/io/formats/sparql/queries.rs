@@ -310,12 +310,9 @@ fn rename_variables<'a, T: IntoIterator<Item = &'a Variable>>(
     variables: T,
     mapping: &HashMap<Variable, Variable>,
 ) -> impl Iterator<Item = Variable> {
-    variables.into_iter().map(|variable| {
-        mapping
-            .get(variable)
-            .unwrap_or(variable)
-            .clone()
-    })
+    variables
+        .into_iter()
+        .map(|variable| mapping.get(variable).unwrap_or(variable).clone())
 }
 
 fn rename_aggregates<'a, T: IntoIterator<Item = &'a (Variable, AggregateExpression)>>(
@@ -324,10 +321,7 @@ fn rename_aggregates<'a, T: IntoIterator<Item = &'a (Variable, AggregateExpressi
 ) -> impl Iterator<Item = (Variable, AggregateExpression)> {
     aggregates.into_iter().map(|(variable, expression)| {
         (
-            mapping
-                .get(variable)
-                .unwrap_or(variable)
-                .clone(),
+            mapping.get(variable).unwrap_or(variable).clone(),
             match expression {
                 AggregateExpression::CountSolutions { .. } => expression.clone(),
                 AggregateExpression::FunctionCall {
@@ -349,12 +343,9 @@ fn rename_in_term_pattern(
     mapping: &HashMap<Variable, Variable>,
 ) -> TermPattern {
     match term {
-        TermPattern::Variable(variable) => TermPattern::Variable(
-            mapping
-                .get(variable)
-                .unwrap_or(variable)
-                .clone(),
-        ),
+        TermPattern::Variable(variable) => {
+            TermPattern::Variable(mapping.get(variable).unwrap_or(variable).clone())
+        }
         _ => term.clone(),
     }
 }
@@ -364,12 +355,9 @@ fn rename_in_named_node_pattern(
     mapping: &HashMap<Variable, Variable>,
 ) -> NamedNodePattern {
     match pattern {
-        NamedNodePattern::Variable(variable) => NamedNodePattern::Variable(
-            mapping
-                .get(variable)
-                .unwrap_or(variable)
-                .clone(),
-        ),
+        NamedNodePattern::Variable(variable) => {
+            NamedNodePattern::Variable(mapping.get(variable).unwrap_or(variable).clone())
+        }
         _ => pattern.clone(),
     }
 }
@@ -380,12 +368,9 @@ fn rename_in_expression(
 ) -> Expression {
     match expression {
         Expression::NamedNode(_) | Expression::Literal(_) => expression.clone(),
-        Expression::Variable(variable) => Expression::Variable(
-            mapping
-                .get(variable)
-                .unwrap_or(variable)
-                .clone(),
-        ),
+        Expression::Variable(variable) => {
+            Expression::Variable(mapping.get(variable).unwrap_or(variable).clone())
+        }
         Expression::Or(expression, expression1) => Expression::Or(
             Box::new(rename_in_expression(expression, mapping)),
             Box::new(rename_in_expression(expression1, mapping)),
@@ -453,12 +438,9 @@ fn rename_in_expression(
         Expression::Exists(graph_pattern) => {
             Expression::Exists(Box::new(rename_in_graph_pattern(graph_pattern, mapping)))
         }
-        Expression::Bound(variable) => Expression::Bound(
-            mapping
-                .get(variable)
-                .unwrap_or(variable)
-                .clone(),
-        ),
+        Expression::Bound(variable) => {
+            Expression::Bound(mapping.get(variable).unwrap_or(variable).clone())
+        }
         Expression::If(expression, expression1, expression2) => Expression::If(
             Box::new(rename_in_expression(expression, mapping)),
             Box::new(rename_in_expression(expression1, mapping)),
@@ -540,10 +522,7 @@ fn rename_in_graph_pattern(
             expression,
         } => GraphPattern::Extend {
             inner: Box::new(rename_in_graph_pattern(inner, mapping)),
-            variable: mapping
-                .get(variable)
-                .unwrap_or(variable)
-                .clone(),
+            variable: mapping.get(variable).unwrap_or(variable).clone(),
             expression: rename_in_expression(expression, mapping),
         },
         GraphPattern::Minus { left, right } => GraphPattern::Minus {

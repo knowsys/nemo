@@ -527,7 +527,12 @@ impl NormalizedRule {
     }
 
     pub(crate) fn into_filter_transform_pattern(mut self) -> Option<FilterTransformPattern> {
-        let positive_variables = self.positive.iter().flat_map(|atom| atom.terms()).cloned().collect::<Vec<_>>();
+        let positive_variables = self
+            .positive
+            .iter()
+            .flat_map(|atom| atom.terms())
+            .cloned()
+            .collect::<Vec<_>>();
         let mut translation = VariableTranslation::new();
         for variable in positive_variables.iter().chain(self.variables()) {
             translation.add_marker(variable.clone());

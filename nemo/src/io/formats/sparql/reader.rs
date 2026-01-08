@@ -48,14 +48,13 @@ impl SparqlReader {
         let resource = resource_builder.finalize();
         let provider = HttpResourceProvider {};
 
-        match         provider.open_resource(&resource, MEDIA_TYPE_TSV).await {
+        match provider.open_resource(&resource, MEDIA_TYPE_TSV).await {
             Ok(resource) => Ok(resource),
             Err(error) => {
                 log::warn!("Failed to obtain a response: {error}");
                 Err(error)
-            },
+            }
         }
-
     }
 
     async fn execute_query(
@@ -151,8 +150,12 @@ impl SparqlReader {
 
         if buf == "upstream request timeout" {
             log::warn!("SPARQL query timeout (or literal response `upstream request timeout')");
-        } else if buf.contains("at com.bigdata.rdf.sail.webapp.BigdataServlet.submitApiTask(BigdataServlet.java:292)") {
-            log::warn!("possible SPARQL query timeout, might be missing results (or response looks suspiciously like a Java exception backtrace)");
+        } else if buf.contains(
+            "at com.bigdata.rdf.sail.webapp.BigdataServlet.submitApiTask(BigdataServlet.java:292)",
+        ) {
+            log::warn!(
+                "possible SPARQL query timeout, might be missing results (or response looks suspiciously like a Java exception backtrace)"
+            );
         }
 
         let reader = DsvReader::new(
