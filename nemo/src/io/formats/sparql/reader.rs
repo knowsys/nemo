@@ -213,7 +213,7 @@ impl SparqlReader {
             .iter()
             .enumerate()
             .scan(1, |count, (idx, (_, bindings))| {
-                *count *= bindings.count();
+                *count += bindings.count();
                 Some((idx, *count))
             })
             .find(|(_, count)| *count > page_size);
