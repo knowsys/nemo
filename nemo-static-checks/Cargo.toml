@@ -9,10 +9,26 @@ license.workspace = true
 readme.workspace = true
 repository.workspace = true
 
+[[bin]]
+name = "nemo-static-checks"
+path = "src/main.rs"
+# required-features = ["tokio"]
+
+[lib]
+path = "src/lib.rs"
+
 [dependencies]
 log = "0.4"
 nemo = { path = "../nemo", default-features = false }
 petgraph = "0.6.3"
+tokio = { version = "1.47.1", features = ["rt", "macros"] }
+clap = { version = "4.0.32", features = ["derive", "cargo", "env"] }
+# tokio = { version = "1.45.1", features = [
+#   "macros",
+#   "io-util",
+#   "rt-multi-thread",
+#   "io-std",
+# ], optional = true }
 
 [dev-dependencies]
 dir-test = "0.2.1"

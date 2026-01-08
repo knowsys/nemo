@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use nemo::{
-    error::{report::ProgramReport, warned::Warned, Error},
+    error::{Error, report::ProgramReport, warned::Warned},
     rule_file::RuleFile,
     rule_model::{
         error::TranslationReport,
@@ -204,9 +204,9 @@ impl FileProperties for PathBuf {
     }
 }
 
-fn create_rules_from_path(path: PathBuf) {
-    let rule_file: Result<RuleFile, Error> = RuleFile::load(path);
-}
+// fn create_rules_from_path(path: PathBuf) {
+//     let rule_file: Result<RuleFile, Error> = RuleFile::load(path);
+// }
 
 // fn nemo_program_from_rule_file(rule_file: RuleFile) -> Program {
 //     let r_init_phandle: Result<Warned<ProgramHandle, TranslationReport>, ProgramParseReport> =

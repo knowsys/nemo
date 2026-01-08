@@ -1742,11 +1742,13 @@ dependencies = [
 name = "nemo-static-checks"
 version = "0.9.2-dev"
 dependencies = [
+ "clap",
  "dir-test 0.2.1",
  "env_logger 0.11.8",
  "log",
  "nemo",
  "petgraph 0.6.5",
+ "tokio",
 ]
 
 [[package]]
