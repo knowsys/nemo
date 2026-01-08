@@ -100,7 +100,7 @@ impl ImportClause {
             origin: Origin::Component(Box::new(clause.clone())),
             id: ProgramComponentId::default(),
             import: clause.import.try_negate()?,
-            variables: clause.variables
+            variables: clause.variables,
         })
     }
 
@@ -230,11 +230,20 @@ impl ImportLiteral {
         equalities: &HashMap<Variable, GroundTerm>,
     ) -> Option<Self> {
         match (left, right) {
-            (ImportLiteral::Positive(left), ImportLiteral::Positive(right)) => Some(ImportLiteral::Positive(ImportClause::try_merge(left, right, equalities)?)),
-            (ImportLiteral::Positive(positive), ImportLiteral::Negative(negative)) |
-            (ImportLiteral::Negative(negative), ImportLiteral::Positive(positive)) =>
-                Some(ImportLiteral::Positive(ImportClause::try_merge(positive, ImportClause::try_negate(negative)?, equalities)?)),
-            (ImportLiteral::Negative(left), ImportLiteral::Negative(right)) => Some(ImportLiteral::Negative(ImportClause::try_merge(left, right, equalities)?)),
+            (ImportLiteral::Positive(left), ImportLiteral::Positive(right)) => Some(
+                ImportLiteral::Positive(ImportClause::try_merge(left, right, equalities)?),
+            ),
+            (ImportLiteral::Positive(positive), ImportLiteral::Negative(negative))
+            | (ImportLiteral::Negative(negative), ImportLiteral::Positive(positive)) => {
+                Some(ImportLiteral::Positive(ImportClause::try_merge(
+                    positive,
+                    ImportClause::try_negate(negative)?,
+                    equalities,
+                )?))
+            }
+            (ImportLiteral::Negative(left), ImportLiteral::Negative(right)) => Some(
+                ImportLiteral::Negative(ImportClause::try_merge(left, right, equalities)?),
+            ),
         }
     }
 
