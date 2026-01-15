@@ -1,15 +1,21 @@
-#![feature(const_slice_make_iter)]
 use clap::ArgAction;
+
+use std::path::PathBuf;
 
 /// Nemo CLI
 #[derive(clap::Parser, Debug)]
 #[command(author, version, about)]
 pub struct CliApp {
+    /// One or more rule program files
+    #[arg(value_parser, required = true)]
+    pub(crate) rules: Vec<PathBuf>,
+
+    /// One or more static checks
     #[arg(short = 'c', long = "checks", value_parser = CHECK_NAMES, action = ArgAction::Append, default_values = CHECK_NAMES)]
     pub(crate) checks: Vec<String>,
 }
 
-const CHECK_NAMES: [&'static str; 27] = [
+const CHECK_NAMES: [&str; 27] = [
     "joinless",
     "linear",
     "guarded",
@@ -38,10 +44,3 @@ const CHECK_NAMES: [&'static str; 27] = [
     "drpc",
     "rpc",
 ];
-
-fn parse_checks(s: &str) -> Result<String, String> {
-    if !CHECK_NAMES.contains(&s) {
-        return Err(format!("Unknown check: {}", s));
-    }
-    Ok(s.to_string())
-}

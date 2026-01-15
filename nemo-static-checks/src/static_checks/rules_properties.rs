@@ -1,11 +1,11 @@
 //! Functionality that provides the static checks for a RuleSet.
 use crate::static_checks::acyclicity_graphs::{JointAcyclicityGraph, WeakAcyclicityGraph};
-use crate::static_checks::msa::msa_execution_engine_from_rules;
+use crate::static_checks::msa::msa_execution_engine_from_handle;
 use crate::static_checks::positions::PositionsByRuleAndVariables;
 use crate::static_checks::rule_set::RuleSet;
 use crate::static_checks::{positions::Positions, rule_properties::RuleProperties};
 use nemo::execution::DefaultExecutionEngine;
-use nemo::rule_model::components::tag::Tag;
+use nemo::rule_model::{components::tag::Tag, programs::handle::ProgramHandle};
 
 /// This trait gives some static checks for some ruleset.
 pub trait RulesProperties {
@@ -50,7 +50,7 @@ pub trait RulesProperties {
     /// Determines if the ruleset is mfa.
     fn is_mfa(&self) -> bool;
     /// Determines if the ruleset is msa.
-    async fn is_msa(&self) -> bool;
+    fn is_msa(&self) -> impl std::future::Future<Output = bool>;
     /// Determines if the ruleset is dmfa.
     fn is_dmfa(&self) -> bool;
     /// Determines if the ruleset is rmfa.
@@ -171,13 +171,135 @@ impl RulesProperties for RuleSet {
     }
 
     fn is_mfa(&self) -> bool {
-        todo!("IMPLEMENT");
-        // TODO: IMPLEMENT
+        unreachable!();
+    }
+
+    async fn is_msa(&self) -> bool {
+        unreachable!();
+        // let mut msa_exec_eng: DefaultExecutionEngine =
+        //     msa_execution_engine_from_rules(&self.0).await;
+        // msa_exec_eng.execute().await.expect("no errors possible");
+        // let c_pred: Tag = Tag::from("_msa_C");
+        // if msa_exec_eng
+        //     .predicate_rows(&c_pred)
+        //     .await
+        //     .expect("no errors possible")
+        //     .is_none()
+        // {
+        //     return true;
+        // }
+        // false
+    }
+
+    fn is_dmfa(&self) -> bool {
+        unreachable!();
+    }
+
+    fn is_rmfa(&self) -> bool {
+        unreachable!();
+    }
+
+    fn is_mfc(&self) -> bool {
+        unreachable!();
+    }
+
+    fn is_dmfc(&self) -> bool {
+        unreachable!();
+    }
+
+    fn is_drpc(&self) -> bool {
+        unreachable!();
+    }
+
+    fn is_rpc(&self) -> bool {
+        unreachable!();
+    }
+}
+
+impl RulesProperties for ProgramHandle {
+    fn is_joinless(&self) -> bool {
+        unreachable!();
+    }
+
+    fn is_linear(&self) -> bool {
+        unreachable!();
+    }
+
+    fn is_guarded(&self) -> bool {
+        unreachable!();
+    }
+
+    fn is_sticky(&self) -> bool {
+        unreachable!();
+    }
+
+    fn is_weakly_sticky(&self) -> bool {
+        unreachable!();
+    }
+
+    fn is_domain_restricted(&self) -> bool {
+        unreachable!();
+    }
+
+    fn is_frontier_one(&self) -> bool {
+        unreachable!();
+    }
+
+    fn is_datalog(&self) -> bool {
+        unreachable!();
+    }
+
+    fn is_monadic(&self) -> bool {
+        unreachable!();
+    }
+
+    fn is_frontier_guarded(&self) -> bool {
+        unreachable!();
+    }
+
+    fn is_weakly_guarded(&self) -> bool {
+        unreachable!();
+    }
+
+    fn is_weakly_frontier_guarded(&self) -> bool {
+        unreachable!();
+    }
+
+    fn is_jointly_guarded(&self) -> bool {
+        unreachable!();
+    }
+
+    fn is_jointly_frontier_guarded(&self) -> bool {
+        unreachable!();
+    }
+
+    fn is_weakly_acyclic(&self) -> bool {
+        unreachable!();
+    }
+
+    fn is_jointly_acyclic(&self) -> bool {
+        unreachable!();
+    }
+
+    fn is_glut_guarded(&self) -> bool {
+        unreachable!();
+    }
+
+    fn is_glut_frontier_guarded(&self) -> bool {
+        unreachable!();
+    }
+
+    fn is_shy(&self) -> bool {
+        unreachable!();
+    }
+
+    fn is_mfa(&self) -> bool {
+        unimplemented!();
     }
 
     async fn is_msa(&self) -> bool {
         let mut msa_exec_eng: DefaultExecutionEngine =
-            msa_execution_engine_from_rules(&self.0).await;
+            msa_execution_engine_from_handle(self.clone()).await;
         msa_exec_eng.execute().await.expect("no errors possible");
         let c_pred: Tag = Tag::from("_msa_C");
         if msa_exec_eng
@@ -192,32 +314,26 @@ impl RulesProperties for RuleSet {
     }
 
     fn is_dmfa(&self) -> bool {
-        todo!("IMPLEMENT");
-        // TODO: IMPLEMENT
+        unreachable!();
     }
 
     fn is_rmfa(&self) -> bool {
-        todo!("IMPLEMENT");
-        // TODO: IMPLEMENT
+        unreachable!();
     }
 
     fn is_mfc(&self) -> bool {
-        todo!("IMPLEMENT");
-        // TODO: IMPLEMENT
+        unreachable!();
     }
 
     fn is_dmfc(&self) -> bool {
-        todo!("IMPLEMENT");
-        // TODO: IMPLEMENT
+        unreachable!();
     }
 
     fn is_drpc(&self) -> bool {
-        todo!("IMPLEMENT");
-        // TODO: IMPLEMENT
+        unreachable!();
     }
 
     fn is_rpc(&self) -> bool {
-        todo!("IMPLEMENT");
-        // TODO: IMPLEMENT
+        unreachable!();
     }
 }

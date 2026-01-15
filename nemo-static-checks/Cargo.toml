@@ -18,8 +18,10 @@ path = "src/main.rs"
 path = "src/lib.rs"
 
 [dependencies]
+colored = "3"
 log = "0.4"
 nemo = { path = "../nemo", default-features = false }
+nemo-cli = { path = "../nemo-cli", default-features = false }
 petgraph = "0.6.3"
 tokio = { version = "1.47.1", features = ["rt", "macros"] }
 clap = { version = "4.0.32", features = ["derive", "cargo", "env"] }
@@ -33,3 +35,5 @@ clap = { version = "4.0.32", features = ["derive", "cargo", "env"] }
 [dev-dependencies]
 dir-test = "0.2.1"
 env_logger = "*"
+assert_cmd = "2.0"
+predicates = "3.0.3"

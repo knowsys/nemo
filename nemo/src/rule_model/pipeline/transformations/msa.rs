@@ -6,8 +6,8 @@ use crate::rule_model::components::{
     statement::Statement,
     tag::Tag,
     term::{
-        primitive::{variable::Variable, Primitive},
         Term,
+        primitive::{Primitive, variable::Variable},
     },
 };
 use crate::rule_model::error::ValidationReport;
@@ -162,7 +162,6 @@ impl ProgramTransformation for TransformationMSA {
                 let f_preds: Vec<Tag> = f_preds_for_ex_vars(&ex_vars_of_rule, i);
                 let modified_msa_rule: Rule =
                     modified_msa_rule(rule, i, &s_pred, &f_preds, ex_vars_of_rule);
-                // println!("{:#?}", modified_msa_rule);
                 commit.add_rule(modified_msa_rule);
                 let f_msa_rules: Vec<Rule> = f_msa_rules(&f_preds, &d_pred, &x1_term, &x2_term);
                 f_msa_rules.into_iter().for_each(|f_msa_rule| {
