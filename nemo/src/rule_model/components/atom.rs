@@ -95,6 +95,7 @@ impl Atom {
         self.predicate.clone()
     }
 
+    /// Return the predicate of this atom as a reference.
     pub fn predicate_ref(&self) -> &Tag {
         &self.predicate
     }

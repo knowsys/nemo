@@ -82,6 +82,16 @@ enum AnyDataValueEnum {
 pub struct AnyDataValue(AnyDataValueEnum);
 
 impl AnyDataValue {
+    // TODO: DELETE FUNCTION ONCE MFA CHECK CAN BE IMPLEMENTED DIFFERENTLY
+    pub fn function_name(&self) -> &String {
+        match self {
+            AnyDataValue(AnyDataValueEnum::PlainString(string_datavalue)) => {
+                string_datavalue.plain_string()
+            }
+            _ => panic!("must be a string"),
+        }
+    }
+
     /// Construct a datavalue that represents the given number.
     pub fn new_integer_from_i64(value: i64) -> Self {
         AnyDataValue(AnyDataValueEnum::Long(LongDataValue::new(value)))

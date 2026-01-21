@@ -1,4 +1,5 @@
 //! Functionality that provides the static checks for a RuleSet.
+use crate::static_checks::acyclicity_checks::ChaseVariant;
 use crate::static_checks::acyclicity_graphs::{JointAcyclicityGraph, WeakAcyclicityGraph};
 use crate::static_checks::msa::msa_execution_engine_from_handle;
 use crate::static_checks::positions::PositionsByRuleAndVariables;
@@ -48,7 +49,7 @@ pub trait RulesProperties {
     /// Determines if the ruleset is shy.
     fn is_shy(&self) -> bool;
     /// Determines if the ruleset is mfa.
-    fn is_mfa(&self) -> bool;
+    fn is_mfa(&self) -> impl std::future::Future<Output = bool>;
     /// Determines if the ruleset is msa.
     fn is_msa(&self) -> impl std::future::Future<Output = bool>;
     /// Determines if the ruleset is dmfa.
@@ -170,8 +171,9 @@ impl RulesProperties for RuleSet {
             .all(|rule| rule.is_shy(&attacked_pos_by_existential_rule_and_vars))
     }
 
-    fn is_mfa(&self) -> bool {
-        unreachable!();
+    async fn is_mfa(&self) -> bool {
+        // unreachable!();
+        self.check_acyclicity(ChaseVariant::SkolemMFA).await
     }
 
     async fn is_msa(&self) -> bool {
@@ -293,7 +295,7 @@ impl RulesProperties for ProgramHandle {
         unreachable!();
     }
 
-    fn is_mfa(&self) -> bool {
+    async fn is_mfa(&self) -> bool {
         unimplemented!();
     }
 

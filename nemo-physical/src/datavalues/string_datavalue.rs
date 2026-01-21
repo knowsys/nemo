@@ -16,6 +16,11 @@ impl StringDataValue {
     pub(crate) fn new(string: String) -> Self {
         StringDataValue(string)
     }
+
+    // TODO: DELETE FUNCTION ONCE MFA CHECK CAN BE IMPLEMENTED DIFFERENTLY
+    pub(crate) fn plain_string(&self) -> &String {
+        &self.0
+    }
 }
 
 impl DataValue for StringDataValue {

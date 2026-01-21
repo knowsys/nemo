@@ -96,6 +96,14 @@ impl Fact {
             None
         }
     }
+
+    // TODO: ELIMINATE ONCE MFA IS IMPLEMENTED DIFFERENTLY
+    /// Returns whether the fact contains a term that is cyclic.
+    pub fn is_cyclic(&self) -> bool {
+        let mut reused_function_names: Vec<String> = Vec::<String>::new();
+        self.terms()
+            .any(|term| term.is_cyclic(&mut reused_function_names))
+    }
 }
 
 impl Index<usize> for Fact {

@@ -178,6 +178,12 @@ impl DerefMut for FunctionTerm {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.terms
     }
+
+    // / Returns whether the term is cyclic.
+    // pub fn is_cyclic<'a>(&'a self, function_symbols: &mut Vec<&'a Tag>) -> bool {
+    //     self.arguments()
+    //         .any(|term| term.is_cyclic(function_symbols))
+    // }
 }
 
 impl Display for FunctionTerm {
