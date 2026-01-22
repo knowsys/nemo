@@ -415,7 +415,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     }
 
     /// Compute the results for a [TableEntriesForTreeNodesQuery].
-    async fn trace_node_execute(
+    pub(crate) async fn trace_node_execute(
         &mut self,
         query: &TableEntriesForTreeNodesQuery,
         program: &NormalizedProgram,

@@ -70,6 +70,11 @@ struct SubtableHandler {
 }
 
 impl SubtableHandler {
+    pub(crate) fn delete_from(&mut self, id: PermanentTableId) {
+        self.single.retain(|(_, existing_id)| *existing_id < id);
+        self.combined.retain(|(_, existing_id)| *existing_id < id);
+    }
+
     /// A table may either be created as a result of a rule application at some step
     /// or may represent a union of many previously computed tables.
     /// Say, we have a table whose contents have been computed at steps 2, 4, 7, 10, 11.
@@ -353,6 +358,14 @@ impl TableManager {
     /// Return a reference to the [DatabaseInstance].
     pub(crate) fn database(&self) -> &DatabaseInstance {
         &self.database
+    }
+
+    pub(crate) fn delete_tables_from(&mut self, permanent_id: PermanentTableId, storage_id: usize) {
+        self.database.delete_from(permanent_id, storage_id);
+
+        for (_, handler) in self.predicate_subtables.iter_mut() {
+            handler.delete_from(permanent_id);
+        }
     }
 
     /// Return the [PermanentTableId] that is associated with a given subtable.

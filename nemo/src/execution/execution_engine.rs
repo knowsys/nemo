@@ -28,6 +28,8 @@ use super::{
     execution_parameters::ExecutionParameters, selection_strategy::strategy::RuleSelectionStrategy,
 };
 
+pub mod experiments;
+
 pub mod tracing;
 
 // Number of tables that are periodically combined into one.

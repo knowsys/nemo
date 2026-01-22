@@ -258,6 +258,21 @@ async fn handle_tracing_node(
     Ok(())
 }
 
+async fn handle_experiments(
+    cli: &CliApp,
+    engine: &mut DefaultExecutionEngine,
+) -> Result<(), CliError> {
+    if let Some(num_queries) = cli.tracing.experiments.create_queries {
+        engine.collect_node_queries(num_queries).await;
+    }
+
+    if let Some(directory) = &cli.tracing.experiments.trace_node_query {
+        engine.experiment_node_queries(directory).await;
+    }
+
+    Ok(())
+}
+
 async fn run(mut cli: CliApp) -> Result<(), CliError> {
     TimedCode::instance().start();
     TimedCode::instance().sub("Reading & Preprocessing").start();
@@ -369,6 +384,7 @@ async fn run(mut cli: CliApp) -> Result<(), CliError> {
         print_memory_details(&engine);
     }
 
+    handle_experiments(&cli, &mut engine).await?;
     handle_tracing(&cli, &mut engine).await?;
     handle_tracing_tree(&cli, &mut engine).await?;
     handle_tracing_node(&cli, &mut engine).await

@@ -52,7 +52,7 @@ impl StepToId {
 /// Stores the ids of all tables computed
 /// during answering a node query
 #[derive(Debug, Default)]
-pub(super) struct TraceNodeManager {
+pub(crate) struct TraceNodeManager {
     /// Holds the id of the table
     /// representing the facts contained in a node
     query: HashMap<TreeAddress, PermanentTableId>,

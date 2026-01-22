@@ -154,6 +154,17 @@ impl OutputArgs {
     }
 }
 
+/// Cli arguments related to experiments
+#[derive(Debug, clap::Args)]
+pub(crate) struct ExperimentArgs {
+    #[arg(long = "x-create-queries")]
+    pub create_queries: Option<usize>,
+    #[arg(long = "x-trace-node-query")]
+    pub trace_node_query: Option<PathBuf>,
+    #[arg(long = "x-provenance-node-query")]
+    pub provenance_node_query: Option<PathBuf>,
+}
+
 /// Cli arguments related to tracing
 #[derive(Debug, clap::Args)]
 pub(crate) struct TracingArgs {
@@ -168,6 +179,9 @@ pub(crate) struct TracingArgs {
     /// File to export the trace to
     #[arg(long = "trace-output", requires = "trace-input")]
     pub(crate) output_file: Option<PathBuf>,
+    /// Experiments
+    #[command(flatten)]
+    pub(crate) experiments: ExperimentArgs,
 }
 
 /// Cli arguments related to type 1 tracing
