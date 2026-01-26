@@ -2,6 +2,7 @@
 
 use crate::execution::{ExecutionEngine, selection_strategy::strategy::RuleSelectionStrategy};
 
+pub mod baseline;
 pub mod collect;
 pub mod node;
 

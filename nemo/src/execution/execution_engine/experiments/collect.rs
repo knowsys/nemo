@@ -26,7 +26,7 @@ const MAX_TREE_PER_FACT: usize = 10;
 
 impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     /// Collect all facts derived during the chase.
-    async fn all_facts(&mut self) -> Vec<Fact> {
+    pub(super) async fn all_facts(&mut self) -> Vec<Fact> {
         let mut facts = Vec::default();
 
         let predicates = self.chase_program().derived_predicates().clone();
@@ -89,7 +89,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             .take(num_queries * MAX_TREE_PER_FACT * 100)
             .collect();
 
-        let (trace, mut handles) = self.trace(facts).await.expect("error while tracing");
+        let (trace, mut handles) = self.trace(facts, None).await.expect("error while tracing");
         handles.shuffle(&mut rng);
 
         let num_facts = handles.len();

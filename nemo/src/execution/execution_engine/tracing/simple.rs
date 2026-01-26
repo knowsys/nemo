@@ -1,6 +1,9 @@
 //! This implements the simple, fact-based tracing.
 
-use std::collections::{HashMap, hash_map::Entry};
+use std::{
+    collections::{HashMap, hash_map::Entry},
+    time::Instant,
+};
 
 use nemo_physical::datavalues::AnyDataValue;
 
@@ -189,6 +192,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     pub async fn trace(
         &mut self,
         facts: Vec<Fact>,
+        timeout: Option<u64>,
     ) -> Result<(ExecutionTrace, Vec<TraceFactHandle>), Error> {
         for fact in &facts {
             if fact.validate().is_err() {
@@ -211,13 +215,25 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
         let num_chase_facts = chase_facts.len();
 
+        let time = Instant::now();
+
         for (i, chase_fact) in chase_facts.into_iter().enumerate() {
-            if i > 0 && i.is_multiple_of(500) {
-                log::info!(
-                    "{i}/{num_chase_facts} facts traced. ({}%)",
-                    i * 100 / num_chase_facts
-                );
+            if let Some(timeout) = timeout
+                && i.is_multiple_of(1000)
+            {
+                if time.elapsed().as_secs() > timeout {
+                    return Ok((trace, Vec::default()));
+                }
             }
+
+            if i.is_multiple_of(1000) {}
+
+            // if i > 0 && i.is_multiple_of(500) {
+            //     log::info!(
+            //         "{i}/{num_chase_facts} facts traced. ({}%)",
+            //         i * 100 / num_chase_facts
+            //     );
+            // }
 
             handles.push(
                 self.trace_recursive(&mut trace, chase_fact, &program)

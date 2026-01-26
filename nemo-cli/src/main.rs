@@ -187,7 +187,7 @@ async fn handle_tracing(cli: &CliApp, engine: &mut DefaultExecutionEngine) -> Re
             facts.push(fact);
         }
 
-        let (trace, handles) = engine.trace(facts).await?;
+        let (trace, handles) = engine.trace(facts, None).await?;
 
         match &cli.tracing.output_file {
             Some(output_file) => {
@@ -268,6 +268,10 @@ async fn handle_experiments(
 
     if let Some(directory) = &cli.tracing.experiments.trace_node_query {
         engine.experiment_node_queries(directory).await;
+    }
+
+    if let Some(directory) = &cli.tracing.experiments.trace_baseline {
+        engine.experiment_baseline(directory).await?;
     }
 
     Ok(())

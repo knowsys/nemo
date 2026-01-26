@@ -163,6 +163,8 @@ pub(crate) struct ExperimentArgs {
     pub trace_node_query: Option<PathBuf>,
     #[arg(long = "x-provenance-node-query")]
     pub provenance_node_query: Option<PathBuf>,
+    #[arg(long = "x-baseline")]
+    pub trace_baseline: Option<PathBuf>,
 }
 
 /// Cli arguments related to tracing
