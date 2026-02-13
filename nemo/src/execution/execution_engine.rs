@@ -421,7 +421,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
 #[cfg(test)]
 mod test {
-    use std::{assert_matches::assert_matches, default::Default};
+    use std::{assert_matches, default::Default};
 
     use test_log;
     use tokio;

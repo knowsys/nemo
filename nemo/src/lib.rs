@@ -15,7 +15,6 @@
     variant_size_differences
 )]
 #![feature(macro_metavar_expr)]
-#![feature(assert_matches)]
 #![feature(iter_intersperse)]
 #![feature(str_from_raw_parts)]
 #![feature(associated_type_defaults)]

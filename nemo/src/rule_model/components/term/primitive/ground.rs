@@ -87,11 +87,11 @@ impl GroundTerm {
 }
 
 impl TryFrom<Term> for GroundTerm {
-    type Error = Term;
+    type Error = Box<Term>;
 
     fn try_from(value: Term) -> Result<Self, Self::Error> {
         if !value.is_ground() {
-            return Err(value);
+            return Err(Box::new(value));
         }
 
         let reduced = value.reduce().ok_or(value)?;
@@ -105,14 +105,14 @@ impl TryFrom<Term> for GroundTerm {
                     unreachable!("value is ground");
                 }
             }
-            Term::Aggregate(term) => Err(Term::Aggregate(term)),
-            Term::Map(term) => Err(Term::Map(term)),
-            Term::Operation(term) => Err(Term::Operation(term)),
+            Term::Aggregate(term) => Err(Box::new(Term::Aggregate(term))),
+            Term::Map(term) => Err(Box::new(Term::Map(term))),
+            Term::Operation(term) => Err(Box::new(Term::Operation(term))),
             Term::FunctionTerm(term) => {
                 let subterms = term
                     .terms()
                     .map(|term| Self::try_from(term.clone()).map(|term| term.value()))
-                    .collect::<Result<Vec<_>, Term>>()?;
+                    .collect::<Result<Vec<_>, _>>()?;
 
                 let tuple_datavalue =
                     TupleDataValue::new(Some(IriDataValue::new(term.tag().to_string())), subterms);
@@ -122,7 +122,7 @@ impl TryFrom<Term> for GroundTerm {
                 let subterms = term
                     .terms()
                     .map(|term| Self::try_from(term.clone()).map(|term| term.value()))
-                    .collect::<Result<Vec<_>, Term>>()?;
+                    .collect::<Result<Vec<_>, _>>()?;
 
                 let tuple_datavalue = TupleDataValue::new(None, subterms);
                 Ok(GroundTerm::new(tuple_datavalue.into()))
