@@ -21,7 +21,7 @@ impl LangStringDataValue {
     ///
     /// The langauge tag is normalized to lower case, following RDF Schema 1.1, which states that
     /// "The value space of language tags is always in lower case."
-    pub(crate) fn new(string: String, lang_tag: String) -> Self {
+    pub fn new(string: String, lang_tag: String) -> Self {
         LangStringDataValue(string, lang_tag.to_ascii_lowercase())
     }
 }

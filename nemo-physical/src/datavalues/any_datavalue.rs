@@ -45,7 +45,7 @@ impl DecimalType {
 
 /// Enum that can represent arbitrary [DataValue]s.
 #[derive(Debug, Clone)]
-enum AnyDataValueEnum {
+pub enum AnyDataValueEnum {
     /// Variant for representing [DataValue]s in [ValueDomain::PlainString].
     PlainString(StringDataValue),
     /// Variant for representing [DataValue]s in [ValueDomain::LanguageTaggedString].
@@ -575,6 +575,21 @@ impl AnyDataValue {
             panic!("not a null value");
         }
     }
+
+    /// Construct a new [AnyDataValue] from an existing
+    /// [AnyDataValueEnum].
+    ///
+    /// This is most useful for implementing deserialization; if the
+    /// underlying type of the value is known, the type-specific
+    /// constructors should be preferred.
+    pub fn from_enum(value: AnyDataValueEnum) -> Self {
+        Self(value)
+    }
+
+    /// Returns the internal representation as an [AnyDataValueEnum].
+    pub fn into_inner(self) -> AnyDataValueEnum {
+        self.0
+    }
 }
 
 impl DataValue for AnyDataValue {
@@ -627,7 +642,9 @@ impl DataValue for AnyDataValue {
             fn length(&self) -> Option<usize>;
             fn len_unchecked(&self) -> usize;
             fn tuple_element_unchecked(&self, index: usize) -> &AnyDataValue;
+            fn tuple_len_unchecked(&self) -> usize;
             fn map_keys(&self) -> Option<Box<dyn Iterator<Item = &AnyDataValue> + '_>>;
+            fn map_items(&self) -> Option<Box<dyn Iterator<Item = (&AnyDataValue, &AnyDataValue)> + '_>>;
             fn map_element_unchecked(&self, key: &AnyDataValue) -> &AnyDataValue;
             }
     }

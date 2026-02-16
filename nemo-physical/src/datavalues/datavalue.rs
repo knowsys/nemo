@@ -543,10 +543,31 @@ pub trait DataValue: Debug + Display + Into<AnyDataValue> + PartialEq + Eq + Has
         panic!("Value is not a tuple");
     }
 
+    /// Return the length of this complex value in tuple form.  For
+    /// values- in the domain [ValueDomain::Tuple], this is the same
+    /// as [len_unchecked]. For values in the domain
+    /// [ValueDomain::Map], this is the length of the tuple encoding,
+    /// i.e., twice the value of [len_unchecked] (which counts
+    /// key–value pairs).
+    ///
+    /// # Panics
+    /// Panics if the value is not a collection
+    #[must_use]
+    fn tuple_len_unchecked(&self) -> usize {
+        self.len_unchecked()
+    }
+
     /// Returns an iterator over all keys in a value that is a map.
     /// None is returned for values that are no maps.
     #[must_use]
     fn map_keys(&self) -> Option<Box<dyn Iterator<Item = &AnyDataValue> + '_>> {
+        None
+    }
+
+    /// Returns an iterator over all key–value pairs in a value that is a map.
+    /// None is returned for values that are no maps.
+    #[must_use]
+    fn map_items(&self) -> Option<Box<dyn Iterator<Item = (&AnyDataValue, &AnyDataValue)> + '_>> {
         None
     }
 

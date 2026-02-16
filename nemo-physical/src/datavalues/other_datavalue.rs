@@ -11,7 +11,7 @@ pub struct OtherDataValue(String, String);
 impl OtherDataValue {
     /// Constructor. We do not currently check if the datatype IRI refers to a
     /// known type that is not really in [ValueDomain::Other].
-    pub(crate) fn new(lexical_value: String, datatype_iri: String) -> Self {
+    pub fn new(lexical_value: String, datatype_iri: String) -> Self {
         OtherDataValue(lexical_value, datatype_iri)
     }
 }

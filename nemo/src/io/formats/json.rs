@@ -1,6 +1,8 @@
 //! Handler for resources of type JSON (java script object notation).
 
+pub(crate) mod datavalues;
 pub(crate) mod reader;
+pub(crate) mod variants;
 
 use std::{io::Read, sync::Arc};
 

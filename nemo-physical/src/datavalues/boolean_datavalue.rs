@@ -15,7 +15,7 @@ pub struct BooleanDataValue(bool);
 
 impl BooleanDataValue {
     /// Create a new [BooleanDataValue].
-    pub(crate) fn new(value: bool) -> Self {
+    pub fn new(value: bool) -> Self {
         Self(value)
     }
 }
