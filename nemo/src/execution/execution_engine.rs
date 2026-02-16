@@ -418,3 +418,28 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             .sum()
     }
 }
+
+#[cfg(test)]
+mod test {
+    use std::{assert_matches, default::Default};
+
+    use test_log;
+    use tokio;
+
+    use crate::{api::load_program, execution::DefaultExecutionEngine, io::ImportManager};
+
+    #[tokio::test]
+    #[test_log::test]
+    #[cfg_attr(miri, ignore)]
+    async fn issue_759() {
+        const ITERATIONS: usize = 16_384;
+        let program = load_program("foo(bar).".to_string(), Default::default()).unwrap();
+        let import_manager = ImportManager::new(Default::default());
+
+        for _ in 1..=ITERATIONS {
+            let engine =
+                DefaultExecutionEngine::initialize(program.clone(), import_manager.clone()).await;
+            assert_matches!(engine, Ok(_));
+        }
+    }
+}

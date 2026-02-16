@@ -138,7 +138,7 @@ impl SubtableHandler {
         self.combined.push((cover, id));
 
         // Sorting is done here because it is assumed by the function self.cover_range
-        self.combined.sort_by(|x, y| x.0.cmp(&y.0));
+        self.combined.sort_by_key(|x| x.0);
     }
 
     pub fn cover_range(&self, range: &Range<usize>) -> Vec<PermanentTableId> {
