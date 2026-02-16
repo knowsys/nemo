@@ -1,6 +1,7 @@
 //! This module defines [GlobalBytesBuffer] and related code.
 
 use std::{
+    collections::VecDeque,
     fmt::{Debug, Display},
     hash::{Hash, Hasher},
     marker::PhantomData,
@@ -49,6 +50,8 @@ pub(crate) struct BytesBuffer {
     lock: AtomicBool,
     /// Marker that prevents StringBuffers from being send over thread boundaries
     _marker: PhantomData<*mut str>,
+    /// Buffers that have been freed and can have their pages reused
+    reclaimed_buffers: VecDeque<usize>,
 }
 
 impl BytesBuffer {
@@ -59,14 +62,24 @@ impl BytesBuffer {
             cur_pages: Vec::new(),
             lock: AtomicBool::new(false),
             _marker: PhantomData,
+            reclaimed_buffers: VecDeque::new(),
         }
     }
 
     /// Initializes a new buffer and returns a handle that can henceforth be used to access it.
     fn init_buffer(&mut self) -> usize {
         self.acquire_page_lock();
-        let buf_id = self.cur_pages.len();
-        self.cur_pages.push(0); // defer first page allocation to later
+        let buf_id = self
+            .reclaimed_buffers
+            .pop_front()
+            .unwrap_or(self.cur_pages.len());
+
+        // defer first page allocation to later
+        if buf_id < self.cur_pages.len() {
+            self.cur_pages[buf_id] = 0;
+        } else {
+            self.cur_pages.push(0);
+        }
         self.release_page_lock();
         buf_id
     }
@@ -75,11 +88,12 @@ impl BytesBuffer {
     /// No other pages are affected or moved.
     fn drop_buffer(&mut self, buffer: usize) {
         self.acquire_page_lock();
+        self.reclaimed_buffers.push_back(buffer);
+
         for (b, v) in self.pages.iter_mut() {
             if buffer == *b {
                 v.clear();
                 v.shrink_to_fit();
-                *b = usize::MAX;
             }
         }
         self.release_page_lock();
