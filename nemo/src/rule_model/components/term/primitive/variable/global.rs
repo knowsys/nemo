@@ -68,11 +68,17 @@ impl PartialEq for GlobalVariable {
     }
 }
 
+impl Ord for GlobalVariable {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.name.cmp(&other.name)
+    }
+}
+
 impl Eq for GlobalVariable {}
 
 impl PartialOrd for GlobalVariable {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.name.partial_cmp(&other.name)
+        Some(self.cmp(other))
     }
 }
 

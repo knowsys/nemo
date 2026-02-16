@@ -1,0 +1,3 @@
+Goal(nullAryPredicatesAreNotAllowedSoWePutThisConstant) :- A(?X, ?Y), R(?Y, ?Z) .
+
+@export Goal :- csv {} .

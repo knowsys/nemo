@@ -1,12 +1,14 @@
 //! This module defines [ProgramTransformation]s.
 
 pub mod active;
+pub mod crit_instance;
 pub mod default;
 pub mod empty;
 pub mod exports;
 pub mod filter_imports;
 pub mod global;
 pub mod incremental;
+pub mod msa;
 pub mod set_default_outputs;
 pub mod skolem;
 pub mod split;

@@ -19,7 +19,7 @@ use crate::{
 };
 
 /// Program-like object that is a spefic revision within [ProgramPipeline]
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct ProgramHandle {
     /// Reference to the [ProgramPipeline]
     pipeline: Rc<ProgramPipeline>,
