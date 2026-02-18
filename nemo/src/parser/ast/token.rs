@@ -387,7 +387,7 @@ impl<'a> Token<'a> {
         context(
             ParserContext::token(TokenKind::Name),
             recognize(pair(
-                alpha1,
+                context(ParserContext::AlphaNum, alpha1),
                 many0(alt((alphanumeric1, tag("_"), tag("%")))),
             )),
         )(input)
