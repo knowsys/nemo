@@ -169,6 +169,9 @@ pub enum ParserContext {
     /// Error
     #[assoc(name = "error")]
     Error,
+    /// A letter or a digit
+    #[assoc(name = "letter or digit")]
+    AlphaNum,
 }
 
 impl ParserContext {
