@@ -3,6 +3,7 @@
 
 use std::collections::{HashMap, HashSet};
 
+use attribute::ImportExportAttribute;
 use nemo_physical::datavalues::AnyDataValue;
 use specification::ImportExportSpec;
 
@@ -324,6 +325,36 @@ impl ImportDirective {
     /// Change the predicate that this import writes to.
     pub fn set_predicate(&mut self, predicate: Tag) {
         self.0.predicate = predicate;
+    }
+
+    /// Modify the parameters of this import.
+    pub fn with_parameter<F>(&mut self, parameter: &str, f: F)
+    where
+        F: Fn(Option<&Term>) -> Option<Term>,
+    {
+        let mut found = false;
+        let mut delete = None;
+        for (idx, (attribute, value)) in self.0.spec.map.iter_mut().enumerate() {
+            if attribute.value() == parameter {
+                found = true;
+                match f(Some(value)) {
+                    None => {
+                        delete = Some(idx);
+                    }
+                    Some(new_value) => *value = new_value,
+                }
+                break;
+            }
+        }
+
+        if let Some(idx) = delete {
+            self.0.spec.map.remove(idx);
+        } else if !found && let Some(new_value) = f(None) {
+            self.0
+                .spec
+                .map
+                .push((ImportExportAttribute::new(parameter.to_string()), new_value))
+        }
     }
 
     /// Add a new sub-[Rule] for filtered imports.

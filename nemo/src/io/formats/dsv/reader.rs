@@ -155,7 +155,10 @@ impl<T: BufRead> TableProvider for DsvReader<T> {
     }
 
     fn output_arity(&self) -> usize {
-        self.value_formats.arity()
+        self.patterns
+            .first()
+            .and_then(|pattern| pattern.expected_arity())
+            .unwrap_or_else(|| self.value_formats.arity())
     }
 
     fn input_arity(&self) -> usize {

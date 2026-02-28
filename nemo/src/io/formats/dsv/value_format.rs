@@ -7,6 +7,7 @@ use nemo_physical::datavalues::{AnyDataValue, DataValue, DataValueCreationError}
 
 use crate::{
     parser::{ParserState, ast::token::Token, input::ParserInput},
+    rule_model::components::term::{Term, primitive::Primitive, tuple::Tuple},
     syntax::directive::value_formats,
 };
 
@@ -75,6 +76,16 @@ impl TryFrom<AnyDataValue> for DsvValueFormats {
     }
 }
 
+impl Into<Term> for DsvValueFormats {
+    fn into(self) -> Term {
+        Term::Tuple(Tuple::new(
+            self.0
+                .into_iter()
+                .map(|format| Term::Primitive(Primitive::constant(format.name()))),
+        ))
+    }
+}
+
 impl DsvValueFormats {
     #[cfg(test)]
     pub(crate) fn new(formats: Vec<DsvValueFormat>) -> Self {
@@ -84,6 +95,22 @@ impl DsvValueFormats {
     /// Return a list of value formats with default entries.
     pub fn default(arity: usize) -> Self {
         Self((0..arity).map(|_| DsvValueFormat::Anything).collect())
+    }
+
+    /// Return a list of value formats with default entries and skips.
+    pub fn default_from_usage(is_position_used: impl IntoIterator<Item = bool>) -> Self {
+        Self(
+            is_position_used
+                .into_iter()
+                .map(|is_used| {
+                    if is_used {
+                        DsvValueFormat::Anything
+                    } else {
+                        DsvValueFormat::Skip
+                    }
+                })
+                .collect(),
+        )
     }
 
     /// Return the arity (ignoring the skipped columns)

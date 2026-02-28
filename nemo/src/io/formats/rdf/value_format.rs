@@ -5,7 +5,10 @@
 use enum_assoc::Assoc;
 use nemo_physical::datavalues::{AnyDataValue, DataValue};
 
-use crate::syntax::directive::value_formats;
+use crate::{
+    rule_model::components::term::{Term, primitive::Primitive, tuple::Tuple},
+    syntax::directive::value_formats,
+};
 
 /// Enum for the value formats that are supported for RDF. In many cases,
 /// RDF defines how formatting should be done, so there is not much to select here.
@@ -47,10 +50,36 @@ impl TryFrom<AnyDataValue> for RdfValueFormats {
     }
 }
 
+impl Into<Term> for RdfValueFormats {
+    fn into(self) -> Term {
+        Term::Tuple(Tuple::new(
+            self.0
+                .into_iter()
+                .map(|format| Term::Primitive(Primitive::constant(format.name()))),
+        ))
+    }
+}
+
 impl RdfValueFormats {
     /// Return a list of [RdfValueFormat]s with default entries.
     pub(crate) fn default(arity: usize) -> Self {
         Self((0..arity).map(|_| RdfValueFormat::Anything).collect())
+    }
+
+    /// Return a list of value formats with default entries and skips.
+    pub fn default_from_usage(is_position_used: impl IntoIterator<Item = bool>) -> Self {
+        Self(
+            is_position_used
+                .into_iter()
+                .map(|is_used| {
+                    if is_used {
+                        RdfValueFormat::Anything
+                    } else {
+                        RdfValueFormat::Skip
+                    }
+                })
+                .collect(),
+        )
     }
 
     /// Return the length of the format tuple.

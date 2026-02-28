@@ -1,12 +1,35 @@
 //! This module defines [TransformationFilterImports].
 
-use std::collections::{HashMap, HashSet};
+use std::{
+    cmp::max,
+    collections::{HashMap, HashSet},
+};
 
-use crate::rule_model::{
-    components::{ComponentIdentity, rule::Rule, statement::Statement, tag::Tag},
-    error::ValidationReport,
-    pipeline::id::ProgramComponentId,
-    programs::{ProgramRead, ProgramWrite, handle::ProgramHandle},
+use crate::{
+    io::{
+        format_builder::FormatBuilder,
+        formats::{
+            dsv::{DsvBuilder, value_format::DsvValueFormats},
+            rdf::{RdfHandler, value_format::RdfValueFormats},
+        },
+    },
+    rule_model::{
+        components::{
+            ComponentIdentity, IterableVariables,
+            import_export::ImportDirective,
+            rule::Rule,
+            statement::Statement,
+            tag::Tag,
+            term::{
+                Term,
+                primitive::{Primitive, ground::GroundTerm},
+            },
+        },
+        error::ValidationReport,
+        pipeline::id::ProgramComponentId,
+        programs::{ProgramRead, ProgramWrite, handle::ProgramHandle},
+    },
+    syntax::{directive::value_formats, import_export::attribute},
 };
 
 use super::ProgramTransformation;
@@ -172,10 +195,7 @@ impl ProgramTransformation for TransformationFilterImports {
                         // All head predicates of all rules are the same
                         let new_predicate = rules[0].head()[0].predicate();
                         new_import.set_predicate(new_predicate);
-
-                        for &rule in rules.iter() {
-                            new_import.add_filter_rule(rule.clone());
-                        }
+                        push_projections_and_filters(&mut new_import, rules);
 
                         commit.add_import(new_import);
                     } else {
@@ -189,5 +209,112 @@ impl ProgramTransformation for TransformationFilterImports {
         }
 
         commit.submit()
+    }
+}
+
+fn push_projections_and_filters(import: &mut ImportDirective, filter_rules: &[&Rule]) {
+    let mut rules = filter_rules.to_owned();
+
+    // can we push projections?
+    let format = import.spec().format().to_string();
+    let is_dsv = DsvBuilder::supports_tag(&format);
+    let is_rdf = RdfHandler::supports_tag(&format);
+
+    if is_dsv || is_rdf {
+        // check if there is a consistent projection that we can push
+
+        // All head predicates of all rules are the same
+        let mut positions = Vec::new();
+        let mut obsolete_rules = Vec::new();
+
+        for rule in &rules {
+            let body = rule
+                .body_atoms()
+                .next()
+                .expect("import rules have exactly one body atom");
+            let head_variables = rule.head()[0].variables().collect::<HashSet<_>>();
+            let binding_variables = rule
+                .body_operations()
+                .filter_map(|operation| {
+                    if operation.variable_assignment().is_some() {
+                        Some(operation.variables())
+                    } else {
+                        None
+                    }
+                })
+                .flatten()
+                .collect::<HashSet<_>>();
+
+            positions.resize(max(positions.len(), body.terms().count()), false);
+
+            for (position, term) in body.terms().enumerate() {
+                if let Term::Primitive(Primitive::Variable(variable)) = term
+                    && (head_variables.contains(variable) || binding_variables.contains(variable))
+                {
+                    positions[position] = true;
+                } else if let Term::Primitive(Primitive::Ground(_)) = term {
+                    positions[position] = true;
+                }
+            }
+
+            if positions.iter().any(|used| !used) {
+                // we can push something
+                import.with_parameter(attribute::FORMAT, |formats| match formats {
+                    Some(Term::Tuple(tuple)) => {
+                        let mut new_tuple = tuple.clone();
+
+                        for (position, format) in new_tuple.terms_mut().enumerate() {
+                            if !positions[position] {
+                                *format = Term::Primitive(Primitive::Ground(GroundTerm::constant(
+                                    value_formats::SKIP,
+                                )))
+                            }
+                        }
+                        Some(Term::Tuple(new_tuple))
+                    }
+                    _ => Some(if is_dsv {
+                        DsvValueFormats::default_from_usage(positions.clone()).into()
+                    } else {
+                        RdfValueFormats::default_from_usage(positions.clone()).into()
+                    }),
+                });
+
+                // now figure out which rules we need to keep
+                for (idx, rule) in rules.iter().enumerate() {
+                    if rule.head()[0].terms().any(|term| !term.is_variable())
+                        || rule.body()[0].terms().any(|term| !term.is_variable())
+                    {
+                        continue;
+                    }
+
+                    let head_variables = rule.head()[0].variables();
+                    let body_variables =
+                        rule.body()[0]
+                            .variables()
+                            .enumerate()
+                            .filter_map(
+                                |(idx, variable)| {
+                                    if positions[idx] { Some(variable) } else { None }
+                                },
+                            );
+                    if head_variables
+                        .zip(body_variables)
+                        .any(|(head, body)| head != body)
+                    {
+                        continue;
+                    }
+
+                    obsolete_rules.push(idx);
+                }
+            }
+        }
+
+        for idx in obsolete_rules {
+            rules.remove(idx);
+        }
+    }
+
+    for &rule in rules.iter() {
+        import.add_filter_rule(rule.clone());
     }
 }
