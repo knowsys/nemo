@@ -1,0 +1,7 @@
+@import data1 :- csv{ resource="../sources/file1.csv" } .
+@import data2 :- csv{ resource="../sources/file2.csv" } .
+
+out(?x, ?y) :- data1(?x, ?y) .
+out(?x, ?y) :- data2(?x, ?y, ?z) .
+
+@export out :- csv{} .
