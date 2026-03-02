@@ -50,10 +50,10 @@ impl TryFrom<AnyDataValue> for RdfValueFormats {
     }
 }
 
-impl Into<Term> for RdfValueFormats {
-    fn into(self) -> Term {
+impl From<RdfValueFormats> for Term {
+    fn from(val: RdfValueFormats) -> Self {
         Term::Tuple(Tuple::new(
-            self.0
+            val.0
                 .into_iter()
                 .map(|format| Term::Primitive(Primitive::constant(format.name()))),
         ))

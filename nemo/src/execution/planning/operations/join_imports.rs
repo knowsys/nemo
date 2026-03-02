@@ -48,11 +48,9 @@ impl GeneratorJoinImports {
     /// Return the variables marking the column of the node
     /// created by `create_plan`.
     pub fn output_variables(&self) -> Vec<Variable> {
-        let output = match self {
+        match self {
             GeneratorJoinImports::Simple(generator) => generator.output_variables(),
             GeneratorJoinImports::General(generator) => generator.output_variables(),
-        };
-
-        output
+        }
     }
 }

@@ -356,21 +356,13 @@ impl AnyDataValue {
 
         for char in lexical_value.bytes() {
             match char {
-                b'-' => {
-                    if trimmed_value.is_empty() && before_sign {
-                        before_sign = false;
-                        sign_plus = false;
-                        trimmed_value.push('-');
-                    } else {
-                        return Self::decimal_parse_error(lexical_value, decimal_type);
-                    }
+                b'-' if trimmed_value.is_empty() && before_sign => {
+                    before_sign = false;
+                    sign_plus = false;
+                    trimmed_value.push('-');
                 }
-                b'+' => {
-                    if trimmed_value.is_empty() && before_sign {
-                        before_sign = false;
-                    } else {
-                        return Self::decimal_parse_error(lexical_value, decimal_type);
-                    }
+                b'+' if trimmed_value.is_empty() && before_sign => {
+                    before_sign = false;
                 }
                 b'1'..=b'9' => {
                     saw_digit = true;

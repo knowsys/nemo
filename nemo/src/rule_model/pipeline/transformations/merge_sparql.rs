@@ -126,13 +126,13 @@ fn merge_and_push_constants(
     if imports.len() == 1 {
         // nothing to merge, but push constants
         let mut import = imports[0].clone();
-        import.push_constants(&equalities);
+        import.push_constants(equalities);
 
         Some(import)
     } else {
         imports
             .into_iter()
-            .try_reduce(|left, right| ImportClause::try_merge(left, right, &equalities))
+            .try_reduce(|left, right| ImportClause::try_merge(left, right, equalities))
             .flatten()
     }
 }

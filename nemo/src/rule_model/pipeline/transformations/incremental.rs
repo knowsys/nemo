@@ -285,12 +285,12 @@ impl ProgramTransformation for TransformationIncremental {
 
         for statement in program.statements() {
             match statement {
-                Statement::Rule(rule) => {
+                Statement::Rule(rule)
                     if rule
                         .body_positive()
                         .chain(rule.body_negative())
                         .any(|atom| incremental_predicates.contains_key(&atom.predicate()))
-                    {
+                    => {
                         let new_rule = Self::incremental_rule(
                             rule,
                             &incremental_predicates,
@@ -299,10 +299,7 @@ impl ProgramTransformation for TransformationIncremental {
                         );
 
                         commit.add_rule(new_rule);
-                    } else {
-                        commit.keep(statement);
                     }
-                }
                 Statement::Import(import) => {
                     if !incremental_predicates.contains_key(import.predicate()) {
                         commit.keep(statement);

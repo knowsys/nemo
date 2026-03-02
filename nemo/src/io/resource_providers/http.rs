@@ -93,7 +93,7 @@ impl HttpResourceProvider {
                 ))
             })
             .collect::<Result<Vec<_>, _>>()?;
-        headers.extend(new_headers.into_iter());
+        headers.extend(new_headers);
 
         let err_mapping =
             |err: reqwest::Error| ReadingError::new(err.into()).with_resource(resource.clone());
