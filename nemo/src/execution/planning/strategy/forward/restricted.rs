@@ -77,6 +77,11 @@ impl StrategyRestricted {
         runtime: &RuntimeInformation<'a>,
     ) -> ExecutionNodeRef {
         let node_new_satisfied_matches_frontier = self.new_satisfied.create_plan(plan, runtime);
+        plan.add_temporary_table(
+            node_new_satisfied_matches_frontier.clone(),
+            "Head (Restricted): New Sat. Matches Frontier",
+        );
+
         let node_all_satisfied_matches_frontier = self.all_satisfied.create_plan_with(
             plan,
             node_new_satisfied_matches_frontier.clone(),

@@ -635,6 +635,15 @@ impl TableManager {
 
         let tables = subtable_handler.cover_range(&range);
 
+        if tables.len() == 1 {
+            let id = tables[0];
+            self.database
+                .load_trie_into_memory(id, ColumnOrder::default())
+                .await?;
+
+            return Ok(Some(id));
+        }
+
         let mut union_plan = ExecutionPlan::default();
         let fetch_nodes = tables
             .iter()

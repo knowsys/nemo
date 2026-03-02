@@ -381,6 +381,21 @@ struct TemporaryStorage {
 
 // Functions for computing results of execution plans
 impl DatabaseInstance {
+    /// Make sure that the table with the given [PermanentTableId] and [ColumnOrder]
+    /// is loaded into memory as a [Trie].
+    pub async fn load_trie_into_memory(
+        &mut self,
+        id: PermanentTableId,
+        order: ColumnOrder,
+    ) -> Result<(), Error> {
+        let _ = self
+            .reference_manager
+            .trie_id(&self.dictionary, id, order)
+            .await?;
+
+        Ok(())
+    }
+
     /// For a given list of [PermanentTableId] and [ColumnOrder] pairs,
     /// make sure that the tables represented by those ids and orders
     /// exist as [Trie]s and return a list with the [StorageId]s
@@ -597,6 +612,10 @@ impl DatabaseInstance {
             if temporary_storage.computed_tables[tree_index].is_some() {
                 continue;
             }
+
+            let mut string = String::default();
+            let _ = ascii_tree::write_tree(&mut string, &tree.ascii_tree());
+            println!("Execution Tree:\n{string}");
 
             log::info!("Execution step: {}", tree.operation_name);
 

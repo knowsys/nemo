@@ -149,7 +149,7 @@ impl StrategyHead {
 
             plan.add_permanent_table(
                 node_final,
-                "Duplicate Elimination (Datalog)",
+                "Duplicate Elimination",
                 &table_name,
                 SubtableIdentifier::new(predicate.clone(), runtime.step_current),
             );
