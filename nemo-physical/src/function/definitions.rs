@@ -128,7 +128,7 @@ pub(crate) trait UnaryFunction {
     fn type_propagation(&self) -> FunctionTypePropagation;
 }
 
-/// Enum containing all implementations of `UnaryFunction`
+/// Enum containing all implementations of [UnaryFunction]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UnaryFunctionEnum {
     BooleanNegation(BooleanNegation),
@@ -216,7 +216,7 @@ pub trait BinaryFunction {
         parameter_second: AnyDataValue,
     ) -> Option<AnyDataValue>;
 
-    /// Return a `FunctionTypePropagation` indicating how storage types are propagated
+    /// Return a [FunctionTypePropagation] indicating how storage types are propagated
     /// when applying this function.
     fn type_propagation(&self) -> FunctionTypePropagation;
 }
@@ -300,7 +300,7 @@ pub trait TernaryFunction {
         parameter_third: AnyDataValue,
     ) -> Option<AnyDataValue>;
 
-    /// Return a `FunctionTypePropagation` indicating how storage types are propagated
+    /// Return a [FunctionTypePropagation] indicating how storage types are propagated
     /// when applying this function.
     fn type_propagation(&self) -> FunctionTypePropagation;
 }
@@ -329,7 +329,7 @@ pub trait NaryFunction {
     /// Returns `None` if the result of the operation is undefined.
     fn evaluate(&self, parameters: &[AnyDataValue]) -> Option<AnyDataValue>;
 
-    /// Return a `FunctionTypePropagation` indicating how storage types are propagated
+    /// Return a [FunctionTypePropagation] indicating how storage types are propagated
     /// when applying this function.
     fn type_propagation(&self) -> FunctionTypePropagation;
 }
