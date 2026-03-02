@@ -41,29 +41,6 @@ pub struct GeneratorJoinCartesian {
 }
 
 impl GeneratorJoinCartesian {
-    #[cfg(not(feature = "import-cartesian"))]
-    /// Create a new [GeneratorJoinCartesian]
-    pub fn new(
-        order: &VariableOrder,
-        atoms: &[BodyAtom],
-        operations: &mut Vec<Operation>,
-        atoms_negation: &mut Vec<BodyAtom>,
-    ) -> Self {
-        log::info!("not cartesianing");
-        let join = GeneratorJoinSeminaive::new(atoms.to_vec(), order);
-        let filter = GeneratorFunctionFilterNegation::new(
-            join.output_variables(),
-            operations,
-            atoms_negation,
-        );
-
-        Self {
-            joins: vec![join],
-            filters: vec![filter.or_none()],
-        }
-    }
-
-    #[cfg(feature = "import-cartesian")]
     /// Create a new [GeneratorJoinCartesian].
     pub fn new(
         order: &VariableOrder,
@@ -71,7 +48,6 @@ impl GeneratorJoinCartesian {
         operations: &mut Vec<Operation>,
         atoms_negation: &mut Vec<BodyAtom>,
     ) -> Self {
-        log::info!("cartesianing");
         let mut old_operations = Vec::default();
         let mut old_negations = Vec::default();
 
@@ -183,14 +159,8 @@ impl GeneratorJoinCartesian {
                 Self { variables, origins }
             }
 
-            #[cfg(not(feature = "import-cartesian"))]
-            pub fn compatible(&self, other: &Self) -> bool {
-                true
-            }
-
             /// Check whether this and another [Partition]
             /// share variables.
-            #[cfg(feature = "import-cartesian")]
             pub fn compatible(&self, other: &Self) -> bool {
                 self.variables
                     .intersection(&other.variables)

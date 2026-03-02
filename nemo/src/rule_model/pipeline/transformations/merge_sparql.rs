@@ -31,15 +31,7 @@ use super::ProgramTransformation;
 pub struct TransformationMergeSparql;
 
 impl ProgramTransformation for TransformationMergeSparql {
-    #[cfg(not(feature = "import-merge"))]
     fn apply(self, program: &ProgramHandle) -> Result<ProgramHandle, ValidationReport> {
-        log::info!("not merging SPARQL queries");
-        program.fork_full().submit()
-    }
-
-    #[cfg(feature = "import-merge")]
-    fn apply(self, program: &ProgramHandle) -> Result<ProgramHandle, ValidationReport> {
-        log::info!("merging SPARQL queries");
         let mut commit = program.fork();
 
         let mut ineligible = HashSet::new();
