@@ -186,10 +186,9 @@ impl DsvValueFormat {
         assert!(!input.is_empty());
 
         match input.as_bytes()[0] {
-            b'<'
-                if input.as_bytes()[input.len() - 1] == b'>' => {
-                    return Ok(AnyDataValue::new_iri(input[1..input.len() - 1].to_string()));
-                }
+            b'<' if input.as_bytes()[input.len() - 1] == b'>' => {
+                return Ok(AnyDataValue::new_iri(input[1..input.len() - 1].to_string()));
+            }
             b'0'..=b'9' | b'+' | b'-' => {
                 if let Ok(dv) = AnyDataValue::new_from_decimal_literal(input.to_string()) {
                     return Ok(dv);

@@ -166,7 +166,9 @@ impl TransformationFilterImports {
 
         import_map.retain(|_, rules| Self::same_head_predicate(rules));
 
-        let internalized_rules = import_map.values().flat_map(|rules| rules.iter().map(|rule| rule.id()))
+        let internalized_rules = import_map
+            .values()
+            .flat_map(|rules| rules.iter().map(|rule| rule.id()))
             .collect::<HashSet<_>>();
 
         (import_map, internalized_rules)
