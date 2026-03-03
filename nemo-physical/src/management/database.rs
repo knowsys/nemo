@@ -613,10 +613,6 @@ impl DatabaseInstance {
                 continue;
             }
 
-            let mut string = String::default();
-            let _ = ascii_tree::write_tree(&mut string, &tree.ascii_tree());
-            println!("Execution Tree:\n{string}");
-
             log::info!("Execution step: {}", tree.operation_name);
 
             let dependent_reorderings = tree
