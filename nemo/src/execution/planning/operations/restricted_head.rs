@@ -56,7 +56,31 @@ impl GeneratorRestrictedHead {
 
         let (atoms, mut operations) = rule.normalize_existential_head(&mut order);
 
-        let join = GeneratorJoinSeminaive::new_exclusive(atoms, &order);
+        let head_predicates = rule
+            .head()
+            .iter()
+            .map(|atom| atom.predicate().clone())
+            .collect::<HashSet<_>>();
+        let repeat_head_predicate = head_predicates.len() < rule.head().len();
+
+        // `GeneratorJoinSeminaive::new_exclusive` is an optimization,
+        // where we do not consider the tables created during the last rule application step
+        // as "new" tables. This is implemented by adding unsatisfied matches
+        // from the ith rule application to the table of satisfied matches.
+        //
+        // However, this may fail in cases where applying the exsitential rule to a set of unsatisfied matches
+        // might satisfy additional matches.
+        // A general solution would test whether there exist head atoms
+        // that are unifiable with other head atoms.
+        // Here, we use a simpler heuristic, and check whether there are multiple head atoms with the same predicate.
+        //
+        // This is related to https://github.com/knowsys/nemo/issues/756
+        let join = if repeat_head_predicate {
+            GeneratorJoinSeminaive::new(atoms, &order)
+        } else {
+            GeneratorJoinSeminaive::new_exclusive(atoms, &order)
+        };
+
         let filter = GeneratorFilter::new(join.output_variables(), &mut operations);
 
         order = order.restrict_to(&frontier);
