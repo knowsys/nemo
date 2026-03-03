@@ -1,0 +1,26 @@
+%! Test related to 
+%! https://github.com/knowsys/nemo/issues/756
+%! 
+%! Satisfied matches in the rule head are computed using seminaive evaluation.
+%! As an optimization, during the i+1 application of a rule,
+%! we do not consider facts derived during the ith application as "new".
+%! This works by adding unsatisfied matches from the ith rule application 
+%! to the table of satisfied matches.
+%!
+%! This method fails in the case below,
+%! because applying the exsitential rule to a set of unsatisfied matches
+%! might satisfy other matches.
+%! These will be missed by the above optimization.
+
+H(1) .
+
+%%% Derives H(n)
+P(!z) :- H(?p) .
+
+%%% Derives P(m), E(n, 1, m), E(m, 1, m)
+%%% By satisfying the match x = n and v = 1,
+%%% we also satisfy x = m and v = 1
+P(!z), E(?x, ?v, !z), E(!z, ?v, !z) :- P(?x), H(?v) .
+
+@export E :- csv {} .
+@export P :- csv {} .
