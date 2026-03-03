@@ -57,13 +57,14 @@ pub struct NormalizedRule {
 
     /// Variable order
     variable_order: Option<VariableOrder>,
+    /// Variable order for existential variables in the head of the rule
+    existential_variable_order: Option<VariableOrder>,
     /// Unique identifier of this rule
     id: usize,
 }
 
 impl NormalizedRule {
     /// Create a simple positive rule.
-    #[cfg(test)]
     pub(crate) fn positive_rule(
         head: Vec<HeadAtom>,
         body: Vec<BodyAtom>,
@@ -176,18 +177,34 @@ impl NormalizedRule {
     /// Return the variable order.
     ///
     /// # Panics
-    /// Panics if the variable order has not been computed it.
-    /// Call `analyze` on [super::program::NormalizedProgram]
-    /// before calling this function.
+    /// Panics if the variable order has not been computed.
+    /// This may happen if the rule has been constructed directly.
+    /// Using [super::program::NormalizedProgram::normalize_program]
+    /// guarantees that the variable order is available.
     pub fn variable_order(&self) -> &VariableOrder {
-        self.variable_order
-            .as_ref()
-            .expect("variable order not available for this rule")
+        if let Some(order) = self.variable_order.as_ref() {
+            order
+        } else {
+            panic!("variable order not available for this rule");
+        }
+    }
+
+    /// Return the variable order for existential variables in the head of this rule.
+    ///
+    /// Returns None if it doesn't exists.
+    /// This may be the case if the rule is not existential or if the variable order has not been computed.
+    pub fn existential_variable_order(&self) -> Option<&VariableOrder> {
+        self.existential_variable_order.as_ref()
     }
 
     /// Set a variable order for this rule.
     pub fn set_variable_order(&mut self, variable_order: VariableOrder) {
         self.variable_order = Some(variable_order);
+    }
+
+    /// Set a variable order for existential variables in the head of this rule.
+    pub fn set_existential_variable_order(&mut self, variable_order: VariableOrder) {
+        self.existential_variable_order = Some(variable_order);
     }
 
     /// Return whether this rule contains existential variables.
@@ -522,6 +539,7 @@ impl NormalizedRule {
             head,
             aggregation,
             variable_order: None,
+            existential_variable_order: None,
             id,
         }
     }

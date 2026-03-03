@@ -113,15 +113,6 @@ impl GeneratorJoinSeminaive {
 
         let markers_result = runtime.translation.operation_table(self.order.iter());
 
-        println!(
-            "markers_result: {}",
-            markers_result
-                .iter()
-                .map(|m| runtime.translation.find(m).unwrap().to_string())
-                .collect::<Vec<_>>()
-                .join(", ")
-        );
-
         let mut node_result = plan.plan_mut().union_empty(markers_result);
 
         for variant in &self.variants {

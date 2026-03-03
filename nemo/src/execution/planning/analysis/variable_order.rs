@@ -499,6 +499,17 @@ pub(crate) struct BuilderResultVariants {
     pub(crate) all_column_orders: Vec<HashMap<Tag, HashSet<ColumnOrder>>>,
 }
 
+pub(crate) fn build_preferable_variable_orders_for_rule(
+    rule: &NormalizedRule,
+    initial_column_orders: Option<HashMap<Tag, HashSet<ColumnOrder>>>,
+) -> VariableOrder {
+    let mut program = NormalizedProgram::default();
+    program.add_rule(rule.clone());
+
+    build_preferable_variable_orders(&program, initial_column_orders).all_variable_orders[0][0]
+        .clone()
+}
+
 pub(crate) fn build_preferable_variable_orders(
     program: &NormalizedProgram,
     initial_column_orders: Option<HashMap<Tag, HashSet<ColumnOrder>>>,

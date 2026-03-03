@@ -41,18 +41,20 @@ impl StrategyRestricted {
     pub fn new(
         rule: &NormalizedRule,
         frontier: HashSet<Variable>,
-        order: &VariableOrder,
+        existential_order: &VariableOrder,
         rule_id: usize,
     ) -> Self {
-        let new_satisfied = GeneratorRestrictedHead::new(rule, frontier.clone(), order, rule_id);
+        let new_satisfied =
+            GeneratorRestrictedHead::new(rule, frontier.clone(), existential_order, rule_id);
         let all_satisfied = GeneratorUnion::new(
             new_satisfied.predicate().0,
             new_satisfied.output_variables(),
             UnionRange::All,
         );
 
-        let frontier =
-            GeneratorRestrictedFrontier::new(order.restrict_to(&frontier).as_ordered_list());
+        let frontier = GeneratorRestrictedFrontier::new(
+            existential_order.restrict_to(&frontier).as_ordered_list(),
+        );
 
         let nulls = GeneratorRestrictedNull::new(rule.head());
 
