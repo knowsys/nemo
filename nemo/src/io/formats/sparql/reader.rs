@@ -39,7 +39,7 @@ impl SparqlReader {
     async fn execute_from_builder(
         builder: &SparqlBuilder,
     ) -> Result<Option<Box<dyn Read>>, ReadingError> {
-        log::debug!("final query: \n{}\n", builder.query);
+        log::debug!("Sending SPARQL query: \n{}\n", builder.query);
         let resource_builder = builder
             .customize_resource_builder(Direction::Import, None)
             .expect("should have been validated")
@@ -76,7 +76,6 @@ impl SparqlReader {
         query: &Query,
         tuple_writer: &mut TupleWriter<'_>,
     ) -> Result<(), ReadingError> {
-        log::debug!("sending SPARQL query: {query}");
         TimedCode::instance()
             .sub("Reasoning/Execution/Import/SPARQL queries")
             .start();

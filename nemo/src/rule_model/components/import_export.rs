@@ -202,12 +202,10 @@ impl ImportDirective {
             }
 
             let query = push_constants(&sparql.query, &the_constants);
-
-            for (key, value) in &mut self.0.spec.map {
-                if key.value() == QUERY {
-                    *value = Term::ground(AnyDataValue::new_plain_string(query.to_string()));
-                }
-            }
+            self.0.spec.replace_or_insert(
+                &QUERY.into(),
+                Term::ground(AnyDataValue::new_plain_string(query.to_string())),
+            );
         }
     }
 
@@ -221,11 +219,10 @@ impl ImportDirective {
 
             let query = negate_query(&sparql.query);
             let mut result = self.clone();
-            for (key, value) in &mut result.0.spec.map {
-                if key.value() == QUERY {
-                    *value = Term::ground(AnyDataValue::new_plain_string(query.to_string()));
-                }
-            }
+            result.0.spec.replace_or_insert(
+                &QUERY.into(),
+                Term::ground(AnyDataValue::new_plain_string(query.to_string())),
+            );
 
             Some(result)
         } else {
@@ -301,12 +298,10 @@ impl ImportDirective {
                 )?;
 
                 let mut result = self.clone();
-
-                for (key, value) in &mut result.0.spec.map {
-                    if key.value() == QUERY {
-                        *value = Term::ground(AnyDataValue::new_plain_string(query.to_string()));
-                    }
-                }
+                result.0.spec.replace_or_insert(
+                    &QUERY.into(),
+                    Term::ground(AnyDataValue::new_plain_string(query.to_string())),
+                );
 
                 let mut variables = left_variables.to_vec();
                 variables.extend(

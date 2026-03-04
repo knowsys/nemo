@@ -105,6 +105,26 @@ impl ImportExportSpec {
                 .collect::<Option<Vec<_>>>()?,
         })
     }
+
+    /// Replace the value for a given key, or insert it if it is not present.
+    ///
+    /// Returns whether the entry was present.
+    pub fn replace_or_insert(&mut self, key: &ImportExportAttribute, value: Term) -> bool {
+        let mut found = false;
+
+        for (k, v) in self.map.iter_mut() {
+            if k == key {
+                found = true;
+                *v = value.clone();
+            }
+        }
+
+        if !found {
+            self.map.push((key.clone(), value));
+        }
+
+        found
+    }
 }
 
 impl std::fmt::Display for ImportExportSpec {
