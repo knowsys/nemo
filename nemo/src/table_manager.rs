@@ -231,6 +231,17 @@ impl SubtableExecutionPlan {
         self.execution_plan.write_temporary(node, tree_name)
     }
 
+    /// Add a temporary table to the plan
+    /// that is require to be non-empty for the execution of the plan to continue.
+    pub fn add_temporary_table_non_empty(
+        &mut self,
+        node: ExecutionNodeRef,
+        tree_name: &str,
+    ) -> ExecutionId {
+        self.execution_plan
+            .write_temporary_non_empty(node, tree_name)
+    }
+
     /// Add a permanent table ot the plan-
     pub fn add_permanent_table(
         &mut self,
