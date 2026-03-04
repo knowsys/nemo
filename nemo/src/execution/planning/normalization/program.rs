@@ -325,6 +325,7 @@ impl NormalizedProgram {
                     Some(column_orders.clone()),
                 )
                 .restrict_to(&rule.variables().cloned().collect::<HashSet<_>>());
+
                 rule.set_existential_variable_order(auxiliary_order);
             }
         }

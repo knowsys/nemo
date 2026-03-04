@@ -23,8 +23,12 @@ pub struct VariableOrder(HashMap<Variable, usize>);
 
 impl VariableOrder {
     /// Create new [VariableOrder].
-    pub fn new() -> Self {
-        Self(HashMap::new())
+    pub fn new<Iterator: IntoIterator<Item = Variable>>(variables: Iterator) -> Self {
+        let mut order = HashMap::new();
+        for (index, variable) in variables.into_iter().enumerate() {
+            order.insert(variable, index);
+        }
+        Self(order)
     }
 
     /// Insert new variable in the last position.
@@ -406,7 +410,7 @@ impl VariableOrderBuilder<'_> {
     }
 
     fn generate_variable_order_for_rule(&mut self, rule: &NormalizedRule) -> VariableOrder {
-        let mut variable_order: VariableOrder = VariableOrder::new();
+        let mut variable_order: VariableOrder = VariableOrder::default();
         let mut remaining_vars = {
             let remaining_vars_unpermutated: Vec<Variable> = rule
                 .positive_all()
@@ -701,7 +705,7 @@ mod test {
                 get_test_rule_with_vars_where_predicates_are_different()
             }
         };
-        let empty_ord = VariableOrder::new();
+        let empty_ord = VariableOrder::default();
 
         let expected = vars.clone();
 
@@ -719,7 +723,7 @@ mod test {
         };
         let x = vars[0].clone();
         let y = vars[1].clone();
-        let mut ord_with_x = VariableOrder::new();
+        let mut ord_with_x = VariableOrder::default();
         ord_with_x.push(x.clone());
 
         let remaining_vars: Vec<Variable> = vars.into_iter().filter(|v| v != &x).collect();
@@ -757,7 +761,7 @@ mod test {
     {
         let (rule, vars) = get_test_rule_with_vars_where_predicates_are_different();
         let y = vars[1].clone();
-        let empty_ord = VariableOrder::new();
+        let empty_ord = VariableOrder::default();
         let empty_trie_cache: HashMap<Tag, HashSet<ColumnOrder>> = HashMap::new();
 
         let expected = vec![y];
@@ -771,7 +775,7 @@ mod test {
     fn filter_tries_where_rule_predicates_are_the_same_with_empty_var_order_and_empty_trie_cache() {
         let (rule, vars) = get_test_rule_with_vars_where_predicates_are_the_same();
         let y = vars[1].clone();
-        let empty_ord = VariableOrder::new();
+        let empty_ord = VariableOrder::default();
         let empty_trie_cache: HashMap<Tag, HashSet<ColumnOrder>> = HashMap::new();
 
         let expected = vec![y];

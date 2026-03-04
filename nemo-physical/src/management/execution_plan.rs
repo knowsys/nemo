@@ -3,7 +3,7 @@
 
 use std::{
     cell::RefCell,
-    collections::{HashMap, hash_map::Entry},
+    collections::{HashMap, HashSet, hash_map::Entry},
     fmt::Debug,
     rc::{Rc, Weak},
 };
@@ -14,7 +14,7 @@ use crate::{
         ExecutionTreeLeaf, ExecutionTreeNode, ExecutionTreeOperation,
     },
     tabular::operations::{
-        OperationGeneratorEnum, OperationTable,
+        OperationColumnMarker, OperationGeneratorEnum, OperationTable,
         aggregate::{AggregateAssignment, GeneratorAggregate},
         filter::{Filters, GeneratorFilter},
         function::{FunctionAssignment, GeneratorFunction},
@@ -254,6 +254,9 @@ struct ExecutionOutNode {
     result: ExecutionResult,
     /// Name which identifies this operation, e.g., for logging and timing.
     operation_name: String,
+    /// Whether the table produced by this node has to be non-empty
+    /// for the computation to continue
+    required_non_empty: bool,
 }
 
 /// A DAG representing instructions for generating new tables.
@@ -490,6 +493,7 @@ impl ExecutionPlan {
         node: ExecutionNodeRef,
         result: ExecutionResult,
         operation_name: &str,
+        required_non_empty: bool,
     ) -> ExecutionId {
         let id = node.id();
 
@@ -506,6 +510,7 @@ impl ExecutionPlan {
                 node,
                 result,
                 operation_name: String::from(operation_name),
+                required_non_empty,
             });
         }
 
@@ -517,7 +522,20 @@ impl ExecutionPlan {
     /// Returns an [ExecutionId] which can be linked to the output table
     /// that was computed by evaluateing this node.
     pub fn write_temporary(&mut self, node: ExecutionNodeRef, operation_name: &str) -> ExecutionId {
-        self.push_out_node(node, ExecutionResult::Temporary, operation_name)
+        self.push_out_node(node, ExecutionResult::Temporary, operation_name, false)
+    }
+
+    /// Designate a node in this [ExecutionPlan] as an "output" node that will produce a temporary table.
+    /// The produced table is required to be non-empty for the computation to continue.
+    ///
+    /// Returns an [ExecutionId] which can be linked to the output table
+    /// that was computed by evaluateing this node.
+    pub fn write_temporary_non_empty(
+        &mut self,
+        node: ExecutionNodeRef,
+        operation_name: &str,
+    ) -> ExecutionId {
+        self.push_out_node(node, ExecutionResult::Temporary, operation_name, true)
     }
 
     /// Designate a node in this [ExecutionPlan] as an "output" node that will produce a permanent table (in its default order).
@@ -548,11 +566,32 @@ impl ExecutionPlan {
             node,
             ExecutionResult::Permanent(order, String::from(table_name)),
             tree_name,
+            false,
         )
     }
 }
 
 impl ExecutionPlan {
+    /// For a given [ExecutionOutNode], compute the number of "cut layers",
+    /// which is the number of layers in the resulting trie that do not need to
+    /// be computed fully.
+    fn compute_cut_layer(
+        tree_markers: OperationTable,
+        root_markers: &HashSet<OperationColumnMarker>,
+    ) -> usize {
+        let mut cut_layers = 0;
+
+        for marker in tree_markers.iter().rev() {
+            if !root_markers.contains(marker) {
+                cut_layers += 1;
+            } else {
+                break;
+            }
+        }
+
+        cut_layers
+    }
+
     /// From a given [ExecutionOutNode], computes its [ExecutionTree]
     /// by depth-first traversing the [ExecutionPlan].
     ///
@@ -560,10 +599,11 @@ impl ExecutionPlan {
     /// Returns a [ComputedTableId], which is the index of the newly generated
     /// [ExecutionTree] in the `computed_trees` vector.
     fn execution_tree(
+        root_node_id: ExecutionId,
         output_node: &ExecutionOutNode,
         order: ColumnOrder,
         output_nodes: &[ExecutionOutNode],
-        computed_trees: &mut Vec<ExecutionTree>,
+        computed_trees: &mut Vec<(ExecutionTree, OperationTable, Vec<ExecutionId>)>,
         computed_trees_map: &mut HashMap<ExecutionId, Vec<(ColumnOrder, ComputedTableId)>>,
         loaded_tables: &mut HashMap<(PermanentTableId, ColumnOrder), LoadedTableId>,
     ) -> ComputedTableId {
@@ -586,7 +626,8 @@ impl ExecutionPlan {
                 arity,
             );
 
-            computed_trees[closest_computed_id].used += 1;
+            computed_trees[closest_computed_id].0.used += 1;
+            computed_trees[closest_computed_id].2.push(root_node_id);
 
             if generator.is_noop() {
                 return closest_computed_id;
@@ -604,9 +645,10 @@ impl ExecutionPlan {
                 id: output_node.node.id(),
                 result: execution_result,
                 operation_name: String::from("Reordering intermediate table"),
-                cut_layers: 0, // TODO: Compute cut_layers
+                cut_layers: 0,
                 used: 1,
                 dependents: Vec::new(),
+                required_non_empty: output_node.required_non_empty,
             }
         } else {
             let root = Self::execution_node(
@@ -626,12 +668,13 @@ impl ExecutionPlan {
                 subnode:
                     ExecutionTreeOperation::Leaf(ExecutionTreeLeaf::FetchComputedTable(computed)),
             } = &root
-                && !&computed_trees[*computed].result.is_permanent()
+                && !&computed_trees[*computed].0.result.is_permanent()
             {
                 computed_trees[*computed]
+                    .0
                     .dependents
                     .push((computed_table_id, generator.projectreordering()));
-                computed_trees[*computed].used -= 1;
+                computed_trees[*computed].0.used -= 1;
             }
 
             ExecutionTree {
@@ -639,15 +682,20 @@ impl ExecutionPlan {
                 id: output_node.node.id(),
                 result: execution_result,
                 operation_name: output_node.operation_name.clone(),
-                cut_layers: 0, // TODO: Compute cut_layers
+                cut_layers: 0,
                 used: 1,
                 dependents: Vec::new(),
+                required_non_empty: output_node.required_non_empty,
             }
         };
 
         let computed_table_id = computed_trees.len();
 
-        computed_trees.push(new_tree);
+        computed_trees.push((
+            new_tree,
+            output_node.node.markers_cloned(),
+            vec![root_node_id],
+        ));
         computed_trees_map.insert(output_node.node.id(), vec![(order, computed_table_id)]);
 
         computed_table_id
@@ -660,7 +708,7 @@ impl ExecutionPlan {
         node: ExecutionNodeRef,
         order: ColumnOrder,
         output_nodes: &[ExecutionOutNode],
-        computed_trees: &mut Vec<ExecutionTree>,
+        computed_trees: &mut Vec<(ExecutionTree, OperationTable, Vec<ExecutionId>)>,
         computed_trees_map: &mut HashMap<ExecutionId, Vec<(ColumnOrder, ComputedTableId)>>,
         loaded_tables: &mut HashMap<(PermanentTableId, ColumnOrder), LoadedTableId>,
     ) -> ExecutionTreeNode {
@@ -670,6 +718,7 @@ impl ExecutionPlan {
                 .find(|output_node| node.id() == output_node.node.id())
         {
             let computed_id = Self::execution_tree(
+                root_node_id,
                 output_node,
                 order,
                 output_nodes,
@@ -996,7 +1045,10 @@ impl ExecutionPlan {
     /// by the [DatabaseInstance][super::database::DatabaseInstance].
     pub(crate) fn finalize(self) -> ExecutionSeries {
         let mut loaded_tables = HashMap::<(PermanentTableId, ColumnOrder), LoadedTableId>::new();
-        let mut trees = Vec::<ExecutionTree>::with_capacity(self.out_nodes.len());
+        let mut trees_roots =
+            Vec::<(ExecutionTree, OperationTable, Vec<ExecutionId>)>::with_capacity(
+                self.out_nodes.len(),
+            );
         let mut trees_map = HashMap::<ExecutionId, Vec<(ColumnOrder, ComputedTableId)>>::new();
 
         for output_node in &self.out_nodes {
@@ -1005,10 +1057,11 @@ impl ExecutionPlan {
             }
 
             Self::execution_tree(
+                output_node.node.id(),
                 output_node,
                 ColumnOrder::default(),
                 &self.out_nodes,
-                &mut trees,
+                &mut trees_roots,
                 &mut trees_map,
                 &mut loaded_tables,
             );
@@ -1019,6 +1072,23 @@ impl ExecutionPlan {
 
         for (key, index) in loaded_tables.into_iter() {
             loaded_tries[index] = key;
+        }
+
+        let mut trees = Vec::<ExecutionTree>::with_capacity(trees_roots.len());
+        for (mut tree, tree_markers, roots) in trees_roots.into_iter() {
+            let mut root_markers = HashSet::<OperationColumnMarker>::default();
+            for root_id in roots.iter() {
+                let root_node = self
+                    .out_nodes
+                    .iter()
+                    .find(|output_node| output_node.node.id() == *root_id)
+                    .expect("Root node should be in out nodes.");
+                root_markers.extend(root_node.node.markers_cloned());
+            }
+
+            tree.cut_layers = Self::compute_cut_layer(tree_markers, &root_markers);
+
+            trees.push(tree);
         }
 
         ExecutionSeries {

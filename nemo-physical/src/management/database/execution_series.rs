@@ -92,6 +92,10 @@ pub(crate) struct ExecutionTree {
     /// how many layers are not used in the computation
     /// and therefore not need to be computed fully
     pub cut_layers: usize,
+    /// Whether this is required to be non-empty, i.e. whether the execution of this tree
+    /// is required to produce at least one row in the resulting table
+    /// or else the execution of the whole series fails
+    pub required_non_empty: bool,
 }
 
 impl Debug for ExecutionTree {

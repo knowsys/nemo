@@ -78,18 +78,15 @@ impl StrategyRestricted {
         input_node: ExecutionNodeRef,
         runtime: &RuntimeInformation<'a>,
     ) -> ExecutionNodeRef {
+        let node_matches_frontier = self.frontier.create_plan(plan, input_node, runtime);
+
         let node_new_satisfied_matches_frontier = self.new_satisfied.create_plan(plan, runtime);
-        plan.add_temporary_table(
-            node_new_satisfied_matches_frontier.clone(),
-            "Head (Restricted): New Sat. Matches Frontier",
-        );
 
         let node_all_satisfied_matches_frontier = self.all_satisfied.create_plan_with(
             plan,
             node_new_satisfied_matches_frontier.clone(),
             runtime,
         );
-        let node_matches_frontier = self.frontier.create_plan(plan, input_node, runtime);
 
         let node_unsatisfied_matches_frontier = plan.plan_mut().subtract(
             node_matches_frontier,
@@ -99,10 +96,16 @@ impl StrategyRestricted {
         let node_newer_satisfied_matches_frontier = plan.plan_mut().union(
             node_new_satisfied_matches_frontier.markers_cloned(),
             vec![
-                node_new_satisfied_matches_frontier,
                 node_unsatisfied_matches_frontier.clone(),
+                node_new_satisfied_matches_frontier.clone(),
             ],
         );
+
+        let node_nulls = self
+            .nulls
+            .create_plan(plan, node_unsatisfied_matches_frontier, runtime);
+
+        plan.add_temporary_table(node_nulls.clone(), "Head (Restricted): Nulls");
 
         plan.add_permanent_table(
             node_newer_satisfied_matches_frontier,
@@ -111,11 +114,10 @@ impl StrategyRestricted {
             SubtableIdentifier::new(self.new_satisfied.predicate().0, runtime.step_current),
         );
 
-        let node_nulls = self
-            .nulls
-            .create_plan(plan, node_unsatisfied_matches_frontier, runtime);
-
-        plan.add_temporary_table(node_nulls.clone(), "Head (Restricted): Nulls");
+        plan.add_temporary_table(
+            node_new_satisfied_matches_frontier.clone(),
+            "Head (Restricted): New Sat. Matches Frontier",
+        );
 
         node_nulls
     }
