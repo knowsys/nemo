@@ -42,6 +42,8 @@ impl TableStorage {
             .first()
             .expect("Function assumes that at least one source is provided")
             .input_arity();
+        debug_assert!(sources.iter().all(|source| source.input_arity() == arity));
+
         let mut tuple_writer = TupleWriter::new(dictionary, arity);
 
         for source in sources {

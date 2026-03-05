@@ -71,4 +71,26 @@ impl FilterTransformPattern {
 
         (positions > 0).then_some(positions)
     }
+
+    /// Apply the given skiplist to the pattern, renaming references so as to ignore the skipped columns
+    pub fn with_skips(&mut self, skips: &[bool]) -> &mut Self {
+        let mut reference_map = HashMap::new();
+        let mut skip_count = 0;
+
+        for (idx, skip) in skips.iter().enumerate() {
+            if *skip {
+                skip_count += 1;
+            } else {
+                reference_map.insert(idx, idx - skip_count);
+            }
+        }
+
+        self.filter.rename_references(&reference_map);
+        //self.filter_function.apply_skips(
+        self.transformations
+            .iter_mut()
+            .for_each(|transformation| transformation.program.rename_references(&reference_map));
+
+        self
+    }
 }

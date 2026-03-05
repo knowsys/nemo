@@ -56,13 +56,25 @@ impl RdfReader {
         limit: Option<u64>,
         patterns: Vec<FilterTransformPattern>,
     ) -> Self {
+        let skips = value_formats
+            .iter()
+            .map(|format| *format == RdfValueFormat::Skip)
+            .collect::<Vec<_>>();
+
+        let mut skipped_patterns = Vec::new();
+        for pattern in patterns {
+            let mut new_pattern = pattern.clone();
+            new_pattern.with_skips(&skips);
+            skipped_patterns.push(new_pattern);
+        }
+
         Self {
             read,
             variant,
             base,
             value_formats,
             limit,
-            patterns,
+            patterns: skipped_patterns,
             bnode_map: Default::default(),
         }
     }

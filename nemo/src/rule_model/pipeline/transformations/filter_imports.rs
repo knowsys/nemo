@@ -189,15 +189,28 @@ impl ProgramTransformation for TransformationFilterImports {
                     }
                 }
                 Statement::Import(import) => {
-                    if let Some(rules) = import_map.get(&import.id()) {
-                        let mut new_import = import.clone();
+                    if let Some(rules) = import_map.get(&import.id())
+                        && !rules.is_empty()
+                    {
+                        let arity = rules.first().expect("is not empty").head()[0]
+                            .terms()
+                            .count();
 
-                        // All head predicates of all rules are the same
-                        let new_predicate = rules[0].head()[0].predicate();
-                        new_import.set_predicate(new_predicate);
-                        push_projections_and_filters(&mut new_import, rules);
+                        if rules
+                            .iter()
+                            .all(|rule| rule.head()[0].terms().count() == arity)
+                        {
+                            let mut new_import = import.clone();
 
-                        commit.add_import(new_import);
+                            // All head predicates of all rules are the same
+                            let new_predicate = rules[0].head()[0].predicate();
+                            new_import.set_predicate(new_predicate);
+                            push_projections_and_filters(&mut new_import, rules);
+
+                            commit.add_import(new_import);
+                        } else {
+                            commit.keep(statement);
+                        }
                     } else {
                         commit.keep(statement);
                     }
