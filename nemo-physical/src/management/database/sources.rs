@@ -46,6 +46,7 @@ impl TableProvider for SimpleTable {
         self: Box<Self>,
         tuple_writer: &mut TupleWriter,
     ) -> Result<(), ReadingError> {
+        tuple_writer.set_patterns(Vec::new());
         self.write_tuples(tuple_writer);
         Ok(())
     }
