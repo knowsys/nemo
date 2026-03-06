@@ -14,7 +14,6 @@
     unused_extern_crates,
     variant_size_differences
 )]
-#![feature(macro_metavar_expr)]
 #![feature(iter_intersperse)]
 #![feature(iterator_try_reduce)]
 #![feature(str_from_raw_parts)]

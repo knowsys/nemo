@@ -15,7 +15,6 @@
     unused_extern_crates,
     variant_size_differences
 )]
-#![feature(macro_metavar_expr)]
 
 pub mod cli;
 pub mod error;
