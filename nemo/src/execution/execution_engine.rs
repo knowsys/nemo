@@ -439,7 +439,7 @@ mod test {
     #[test_log::test]
     #[cfg_attr(miri, ignore)]
     async fn issue_759() {
-        const ITERATIONS: usize = 16_384;
+        const ITERATIONS: usize = 32_768;
         let program = load_program("foo(bar).".to_string(), Default::default()).unwrap();
         let import_manager = ImportManager::new(Default::default());
 
