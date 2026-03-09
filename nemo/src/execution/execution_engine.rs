@@ -274,11 +274,18 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         TimedCode::instance().sub("Reasoning/Rules").start();
         TimedCode::instance().sub("Reasoning/Execution").start();
 
+        let predicates_with_facts = self
+            .program
+            .facts()
+            .iter()
+            .map(|atom| atom.predicate())
+            .collect::<HashSet<_>>();
+
         let execution_strategy = self
             .program
             .rules()
             .iter()
-            .map(StrategyForward::new)
+            .map(|rule| StrategyForward::new(rule, &predicates_with_facts))
             .collect::<Vec<_>>();
 
         for (predicate, arity) in execution_strategy

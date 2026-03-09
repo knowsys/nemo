@@ -1,5 +1,7 @@
 //! This module defines the strategy for the (forward) execution of rules.
 
+use std::collections::HashSet;
+
 use crate::{
     error::Error,
     execution::planning::{
@@ -35,7 +37,7 @@ pub struct StrategyForward {
 
 impl StrategyForward {
     /// Create a new [StrategyForward].
-    pub fn new(rule: &NormalizedRule) -> Self {
+    pub fn new(rule: &NormalizedRule, predicates_with_facts: &HashSet<Tag>) -> Self {
         let positive = rule.positive().clone();
         let negative = rule.negative().clone();
         let mut operations = rule.operations().clone();
@@ -79,6 +81,10 @@ impl StrategyForward {
             }
         }
 
+        let has_facts = rule
+            .predicates_head()
+            .any(|(predicate, _)| predicates_with_facts.contains(&predicate));
+
         let head = StrategyHead::new(
             rule,
             rule.existential_variable_order(),
@@ -86,6 +92,7 @@ impl StrategyForward {
             aggregation_index,
             rule_id,
             is_existential,
+            has_facts,
         );
 
         Self {

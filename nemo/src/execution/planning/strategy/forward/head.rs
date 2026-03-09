@@ -66,6 +66,7 @@ impl StrategyHead {
         aggregation_index: Option<usize>,
         rule_id: usize,
         is_existential: bool,
+        has_facts: bool,
     ) -> Self {
         let restricted = if is_existential {
             let existential_order = existential_order.expect("rule is existential");
@@ -74,6 +75,7 @@ impl StrategyHead {
                 frontier,
                 existential_order,
                 rule_id,
+                has_facts,
             ))
         } else {
             None

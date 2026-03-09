@@ -43,7 +43,12 @@ impl GeneratorRestrictedHead {
     /// Determine whether optimize the seminaive evaluation of the head.
     ///
     /// We check whether there are two head atoms with the same predicate.
-    fn apply_optimization(rule: &NormalizedRule) -> bool {
+    fn apply_optimization(rule: &NormalizedRule, has_facts: bool) -> bool {
+        // if one of the predicates has facts, don't optimise
+        if has_facts {
+            return false;
+        }
+
         let head_predicates = rule
             .head()
             .iter()
@@ -59,6 +64,7 @@ impl GeneratorRestrictedHead {
         frontier: HashSet<Variable>,
         order: &VariableOrder,
         rule_id: usize,
+        has_facts: bool,
     ) -> Self {
         let head_variables = rule
             .head()
@@ -75,10 +81,10 @@ impl GeneratorRestrictedHead {
         // from the ith rule application to the table of satisfied matches.
         //
         // However, this may fail in cases where applying
-        // the exsitential rule to a set of unsatisfied matches might satisfy additional matches.
+        // the existential rule to a set of unsatisfied matches might satisfy additional matches.
         //
         // This is related to https://github.com/knowsys/nemo/issues/756
-        let join = if Self::apply_optimization(rule) {
+        let join = if Self::apply_optimization(rule, has_facts) {
             GeneratorJoinSeminaive::new_exclusive(atoms, &order)
         } else {
             GeneratorJoinSeminaive::new(atoms, &order)
