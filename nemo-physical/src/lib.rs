@@ -22,8 +22,6 @@
 #![feature(iter_intersperse)]
 #![feature(slice_swap_unchecked)]
 
-mod benches;
-
 pub(crate) mod columnar;
 
 pub mod aggregates;
