@@ -84,6 +84,11 @@ impl GroundTerm {
     pub fn set_value(&mut self, value: AnyDataValue) {
         self.value = value;
     }
+
+    // TODO: DELETE FUNCTION ONCE MFA CHECK CAN BE IMPLEMENTED DIFFERENTLY
+    pub fn value_ref(&self) -> &AnyDataValue {
+        &self.value
+    }
 }
 
 impl TryFrom<Term> for GroundTerm {

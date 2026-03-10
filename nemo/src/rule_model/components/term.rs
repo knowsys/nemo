@@ -22,7 +22,7 @@ use delegate::delegate;
 use aggregate::Aggregate;
 use function::FunctionTerm;
 use map::Map;
-use nemo_physical::datavalues::AnyDataValue;
+use nemo_physical::datavalues::{AnyDataValue, StringDataValue};
 use operation::Operation;
 use primitive::{
     Primitive,
@@ -271,6 +271,61 @@ impl IterableComponent for Term {
                 &'a mut self,
             ) -> Box<dyn Iterator<Item = &'a mut dyn ProgramComponent> + 'a>;
         }
+    }
+}
+
+pub trait Cyclic<'a> {
+    fn is_cyclic(&self, function_names: &mut Vec<String>) -> bool;
+}
+
+impl<'a> Cyclic<'a> for Term {
+    fn is_cyclic(&self, _function_names: &mut Vec<String>) -> bool {
+        if let Term::FunctionTerm(func_term) = self {
+            func_term.is_cyclic(_function_names)
+        } else {
+            false
+        }
+        // self.terms()
+        //     .filter_map(|term| {
+        //         if let Term::FunctionTerm(func_term) = term {
+        //             Some(func_term)
+        //         } else {
+        //             None
+        //         }
+        //     })
+        //     .any(|func_term| {
+        //         // println!("func_term: {}", func_term);
+        //         func_term.is_cyclic(_function_names)
+        //     })
+    }
+}
+
+impl<'a> Cyclic<'a> for String {
+    fn is_cyclic(&self, function_names: &mut Vec<String>) -> bool {
+        if self.starts_with("*") {
+            return false;
+        }
+        let (function_name_str, inner): (&str, &str) = self.split_once('(').unwrap();
+        let function_name: String = String::from(function_name_str);
+        if function_names.contains(&function_name) {
+            return true;
+        }
+        function_names.push(function_name);
+        let inner_function_names: Vec<String> = inner
+            .split(',')
+            .filter_map(|s| match s.is_empty() {
+                true => None,
+                false => Some(String::from(s)),
+            })
+            .collect();
+        let any_cyclics: bool = inner_function_names
+            .iter()
+            .any(|s| s.is_cyclic(function_names));
+        if any_cyclics {
+            return true;
+        }
+        function_names.pop();
+        false
     }
 }
 

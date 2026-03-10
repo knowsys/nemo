@@ -23,7 +23,7 @@ use super::{
     component_iterator, component_iterator_mut,
     tag::Tag,
     term::{
-        Term,
+        Cyclic, Term,
         primitive::{Primitive, variable::Variable},
     },
 };
@@ -95,6 +95,17 @@ impl Fact {
         } else {
             None
         }
+    }
+}
+
+impl<'a> Cyclic<'a> for Fact {
+    fn is_cyclic(&self, function_names: &mut Vec<String>) -> bool {
+        self.terms().any(|term| {
+            // println!("term in fact: {}", term);
+            let this = term.is_cyclic(function_names);
+            // println!("{}", this);
+            this
+        })
     }
 }
 
@@ -275,6 +286,17 @@ impl IterablePrimitives for Fact {
                 .iter_mut()
                 .flat_map(|term| term.primitive_terms_mut()),
         )
+    }
+}
+
+impl From<(&Tag, Vec<Term>)> for Fact {
+    fn from((predicate, terms): (&Tag, Vec<Term>)) -> Self {
+        Self {
+            origin: Origin::Created,
+            id: ProgramComponentId::default(),
+            predicate: predicate.clone(),
+            terms,
+        }
     }
 }
 
