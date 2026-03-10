@@ -100,9 +100,7 @@ async fn run(mut cli: CliApp) -> Result<(), CliError> {
                 RulesProperties::is_glut_frontier_guarded(&rule_set)
             ),
             "shy" => println!("{check_str}: {}", RulesProperties::is_shy(&rule_set)),
-            "mfa" => println!(
-                "{check_str}: not yet implemented", /*RulesProperties::is_mfa(&rule_set)*/
-            ),
+            "mfa" => println!("{check_str}: {}", RulesProperties::is_mfa(&handle).await),
             "msa" => println!("{check_str}: {}", RulesProperties::is_msa(&handle).await),
             "dmfa" => println!(
                 "{check_str}: not yet implemented",

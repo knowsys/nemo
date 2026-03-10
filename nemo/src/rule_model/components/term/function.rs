@@ -11,7 +11,7 @@ use crate::rule_model::{
     components::{
         ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent,
         IterablePrimitives, IterableVariables, ProgramComponent, ProgramComponentKind,
-        component_iterator, component_iterator_mut, tag::Tag,
+        component_iterator, component_iterator_mut, tag::Tag, term::Cyclic,
     },
     error::{ValidationReport, validation_error::ValidationError},
     origin::Origin,
@@ -326,6 +326,32 @@ impl IterablePrimitives for FunctionTerm {
                 .iter_mut()
                 .flat_map(|term| term.primitive_terms_mut()),
         )
+    }
+}
+
+impl From<(&Tag, Vec<Term>)> for FunctionTerm {
+    fn from((predicate, terms): (&Tag, Vec<Term>)) -> Self {
+        Self {
+            origin: Origin::Created,
+            id: ProgramComponentId::default(),
+            tag: predicate.clone(),
+            terms,
+        }
+    }
+}
+
+impl<'a> Cyclic<'a> for FunctionTerm {
+    fn is_cyclic(&self, function_names: &mut Vec<String>) -> bool {
+        let func_name: String = self.tag().name().to_string();
+        if function_names.contains(&func_name) {
+            return true;
+        }
+        function_names.push(func_name);
+        // println!("{:?}", function_names);
+        let ret_val = self.terms().any(|term| term.is_cyclic(function_names));
+        function_names.pop();
+        // println!("{}", ret_v);
+        ret_val
     }
 }
 

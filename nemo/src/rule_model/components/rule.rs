@@ -409,6 +409,13 @@ impl Rule {
             None
         }
     }
+
+    pub fn contains_func(&self) -> bool {
+        self.head().iter().any(|atom| {
+            atom.terms()
+                .any(|term| matches!(term, Term::FunctionTerm(_)))
+        })
+    }
 }
 
 impl ComponentBehavior for Rule {

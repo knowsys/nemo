@@ -201,31 +201,6 @@ impl Term {
             Term::Tuple(term) => term.is_resolvable(),
         }
     }
-
-    // TODO: ELIMINATE ONCE MFA IS IMPLEMENTED DIFFERENTLY
-    /// Returns whether the term is cyclic.
-    pub fn is_cyclic(&self, function_names: &mut Vec<String>) -> bool {
-        let gterm: &GroundTerm = match self {
-            Term::Primitive(Primitive::Ground(gterm)) => gterm,
-            _ => panic!("must be a gterm"),
-        };
-        let function_name: &String = gterm.value_ref().function_name();
-        function_name.is_cyclic(function_names)
-        // match self {
-        // Term::FunctionTerm(func) => {
-        //     if function_symbols.contains(&func.tag()) {
-        //         return true;
-        //     }
-        //     function_symbols.push(func.tag());
-        //     if func.is_cyclic(function_symbols) {
-        //         return true;
-        //     }
-        //     function_symbols.pop();
-        //     false
-        // }
-        // _ => false,
-        // }
-    }
 }
 
 impl ComponentBehavior for Term {
@@ -299,8 +274,30 @@ impl IterableComponent for Term {
     }
 }
 
-trait Cyclic<'a> {
+pub trait Cyclic<'a> {
     fn is_cyclic(&self, function_names: &mut Vec<String>) -> bool;
+}
+
+impl<'a> Cyclic<'a> for Term {
+    fn is_cyclic(&self, _function_names: &mut Vec<String>) -> bool {
+        if let Term::FunctionTerm(func_term) = self {
+            func_term.is_cyclic(_function_names)
+        } else {
+            false
+        }
+        // self.terms()
+        //     .filter_map(|term| {
+        //         if let Term::FunctionTerm(func_term) = term {
+        //             Some(func_term)
+        //         } else {
+        //             None
+        //         }
+        //     })
+        //     .any(|func_term| {
+        //         // println!("func_term: {}", func_term);
+        //         func_term.is_cyclic(_function_names)
+        //     })
+    }
 }
 
 impl<'a> Cyclic<'a> for String {

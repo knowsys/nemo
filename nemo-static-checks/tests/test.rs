@@ -227,21 +227,35 @@ fn linear_positive(fixture: Fixture<&str>) {
     postfix: "mfa_negative",
 )]
 fn mfa_negative(fixture: Fixture<&str>) {
-    // let path: PathBuf = path_canonicalized(fixture.path());
-    // if !path.ends_with("higherCyclicTermDepthRequired.rls") {
+    // let file_names = [
+    // "r01.r",
+    // "r02.rls",
+    // "c28.rls",
+    // "higherCyclicTermDeptchRequired.rls",
+    // "inf_chain.rls",
+    // "joinless_non_terminating.rls",
+    //     "joint-acyclicity-guarded-talk-guadedness.rls",
+    // ];
+    // if !file_names.contains(
+    //     &path_canonicalized(fixture.path())
+    //         .file_name()
+    //         .unwrap()
+    //         .to_str()
+    //         .unwrap(),
+    // ) {
     //     return;
     // }
-    test(fixture, false, &RulesProperties::is_mfa);
+    test(fixture, false, "mfa")
 }
 
-// #[dir_test(
-//     dir: "$CARGO_MANIFEST_DIR/../resources/testcases_static_checks/tests/positive/isDmfa",
-//     glob: "*.rls",
-//     postfix: "mfa_positive",
-// )]
-// fn mfa_positive(fixture: Fixture<&str>) {
-//     test(fixture, true, &RulesProperties::is_mfa)
-// }
+#[dir_test(
+    dir: "$CARGO_MANIFEST_DIR/../resources/testcases_static_checks/tests/positive/isDmfa",
+    glob: "*.rls",
+    postfix: "mfa_positive",
+)]
+fn mfa_positive(fixture: Fixture<&str>) {
+    test(fixture, true, "mfa")
+}
 
 #[dir_test(
     dir: "$CARGO_MANIFEST_DIR/../resources/testcases_static_checks/tests/negative/isMonadic",
@@ -413,6 +427,9 @@ impl<'a> TestCase<'a> {
             .output()
             .expect("failed to execute");
 
+        // println!("{}", str::from_utf8(&output.stderr).expect(""));
+        // println!("hello");
+
         assert_eq!(
             str::from_utf8(&output.stdout).expect("").trim(),
             self.exp_res.trim()
@@ -431,55 +448,3 @@ fn test(fixture: Fixture<&str>, exp_bool: bool, check: &str) {
 fn path_canonicalized(path: &str) -> PathBuf {
     PathBuf::from_str(path).unwrap().canonicalize().unwrap()
 }
-
-// struct TestCase<'a, Input> {
-//     expected_result: bool,
-//     input: Input,
-//     static_check: &'a dyn Fn(&Input) -> bool,
-// }
-//
-// impl<'a, Input: RulesProperties> TestCase<'a, Input> {
-//     fn test_from_rule_file(
-//         rule_file: PathBuf,
-//         expected_result: bool,
-//         static_check: &'a dyn Fn(&Input) -> bool,
-//     ) -> Result<Self, Box<dyn std::error::Error>> {
-//         Ok(Self {
-//             expected_result,
-//             rule_set: run_until_rule_model(rule_file)?,
-//             static_check,
-//         })
-//     }
-//
-//     fn run(&self) -> Result<(), Box<dyn std::error::Error>> {
-//         let func = self.static_check;
-//         assert_eq!(self.expected_result, func(&self.rule_set));
-//         Ok(())
-//     }
-// }
-//
-// fn run_until_rule_model(file_path: PathBuf) -> Result<RuleSet, Box<dyn std::error::Error>> {
-//     let rule_file: RuleFile = RuleFile::load(file_path)?;
-//     let execution_parameters: ExecutionParameters = ExecutionParameters::default();
-//     let (engine, _) =
-//         DefaultExecutionEngine::from_file(rule_file, execution_parameters)?.into_pair();
-//     let program: &Program = engine.program();
-//     let rule_set: RuleSet = RuleSet(program.all_rules());
-//     Ok(rule_set)
-// }
-//
-// fn path_canonicalized(path: &str) -> PathBuf {
-//     PathBuf::from_str(path).unwrap().canonicalize().unwrap()
-// }
-//
-// fn test<Input: RulesProperties>(
-//     fixture: Fixture<&str>,
-//     expected_result: bool,
-//     static_check: &dyn Fn(&Input) -> bool,
-// ) {
-//     let path = path_canonicalized(fixture.path());
-//     assert!(path.exists());
-//     _ = env_logger::builder().is_test(true).try_init();
-//     let test_case = TestCase::test_from_rule_file(path, expected_result, static_check).unwrap();
-//     test_case.run().unwrap();
-// }

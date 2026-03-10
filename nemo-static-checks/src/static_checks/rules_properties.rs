@@ -1,5 +1,5 @@
 //! Functionality that provides the static checks for a RuleSet.
-use crate::static_checks::acyclicity_checks::ChaseVariant;
+use crate::static_checks::acyclicity_checks::{ChaseVariant, check_acyclicity, mfa_handle};
 use crate::static_checks::acyclicity_graphs::{JointAcyclicityGraph, WeakAcyclicityGraph};
 use crate::static_checks::msa::msa_execution_engine_from_handle;
 use crate::static_checks::positions::PositionsByRuleAndVariables;
@@ -172,8 +172,7 @@ impl RulesProperties for RuleSet {
     }
 
     async fn is_mfa(&self) -> bool {
-        // unreachable!();
-        self.check_acyclicity(ChaseVariant::SkolemMFA).await
+        unreachable!();
     }
 
     async fn is_msa(&self) -> bool {
@@ -296,7 +295,8 @@ impl RulesProperties for ProgramHandle {
     }
 
     async fn is_mfa(&self) -> bool {
-        unimplemented!();
+        let handle = mfa_handle(self.clone());
+        check_acyclicity(handle, ChaseVariant::SkolemMFA).await
     }
 
     async fn is_msa(&self) -> bool {

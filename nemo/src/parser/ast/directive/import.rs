@@ -118,7 +118,7 @@ impl<'a> ProgramAST<'a> for Import<'a> {
 #[cfg(test)]
 mod test {
     use nom::combinator::all_consuming;
-    use std::assert_matches::assert_matches;
+    use std::assert_matches;
 
     use crate::parser::{
         ParserState,

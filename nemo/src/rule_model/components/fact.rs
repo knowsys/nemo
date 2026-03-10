@@ -23,7 +23,7 @@ use super::{
     component_iterator, component_iterator_mut,
     tag::Tag,
     term::{
-        Term,
+        Cyclic, Term,
         primitive::{Primitive, variable::Variable},
     },
 };
@@ -96,13 +96,16 @@ impl Fact {
             None
         }
     }
+}
 
-    // TODO: ELIMINATE ONCE MFA IS IMPLEMENTED DIFFERENTLY
-    /// Returns whether the fact contains a term that is cyclic.
-    pub fn is_cyclic(&self) -> bool {
-        let mut reused_function_names: Vec<String> = Vec::<String>::new();
-        self.terms()
-            .any(|term| term.is_cyclic(&mut reused_function_names))
+impl<'a> Cyclic<'a> for Fact {
+    fn is_cyclic(&self, function_names: &mut Vec<String>) -> bool {
+        self.terms().any(|term| {
+            // println!("term in fact: {}", term);
+            let this = term.is_cyclic(function_names);
+            // println!("{}", this);
+            this
+        })
     }
 }
 
