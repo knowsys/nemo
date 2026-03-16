@@ -2,8 +2,13 @@
 
 use std::collections::{HashMap, HashSet};
 
+use oxiri::Iri;
+
 use crate::{
-    io::{format_builder::SupportedFormatTag, formats::sparql::SparqlTag},
+    io::{
+        format_builder::{AnyImportExportBuilder, SupportedFormatTag},
+        formats::sparql::SparqlTag,
+    },
     rule_model::{
         components::{
             IterableVariables,
@@ -37,7 +42,6 @@ impl TransformationIncremental {
         Self {}
     }
 
-    #[allow(unused)]
     /// Check if there are no restrictions on an atom.
     fn has_unrestricted_atom(
         rule: &Rule,
@@ -135,9 +139,12 @@ impl TransformationIncremental {
     ///
     /// Returns a hash map containing those predicates together with the
     /// associated import statement from which they originated.
-    fn incremental_predicates(program: &ProgramHandle) -> HashMap<Tag, &ImportDirective> {
+    fn incremental_predicates(
+        program: &ProgramHandle,
+    ) -> (HashMap<Tag, &ImportDirective>, HashMap<Tag, Iri<String>>) {
         // All predicates that will be incrementally imported
         let mut incremental_predicates = HashMap::<Tag, &ImportDirective>::default();
+        let mut endpoints = HashMap::new();
 
         // Predicates that have to be evaluated fully
         let mut normal_predicates = HashSet::<Tag>::default();
@@ -145,6 +152,11 @@ impl TransformationIncremental {
         for import in program.imports() {
             if let Some(builder) = import.builder() {
                 if let SupportedFormatTag::Sparql(SparqlTag::Sparql) = builder.format() {
+                    let AnyImportExportBuilder::Sparql(sparql) = builder.inner else {
+                        unreachable!("inner builder must be a SPARQL builder")
+                    };
+                    endpoints.insert(import.predicate().clone(), sparql.endpoint);
+
                     if incremental_predicates
                         .insert(import.predicate().clone(), import)
                         .is_some()
@@ -187,7 +199,7 @@ impl TransformationIncremental {
 
         incremental_predicates.retain(|predicate, _| !normal_predicates.contains(predicate));
 
-        incremental_predicates
+        (incremental_predicates, endpoints)
     }
 
     /// Create a new variable which hold the value of computed terms.
@@ -278,18 +290,24 @@ impl ProgramTransformation for TransformationIncremental {
     fn apply(self, program: &ProgramHandle) -> Result<ProgramHandle, ValidationReport> {
         let mut commit = program.fork();
 
-        let incremental_predicates = Self::incremental_predicates(program);
+        let (incremental_predicates, endpoints) = Self::incremental_predicates(program);
         let derived_predicates = program.derived_predicates();
 
         let mut name_id: usize = 0;
+        let incremental = incremental_predicates
+            .keys()
+            .cloned()
+            .collect::<HashSet<_>>();
 
         for statement in program.statements() {
             match statement {
                 Statement::Rule(rule)
-                    if rule
-                        .body_positive()
-                        .chain(rule.body_negative())
-                        .any(|atom| incremental_predicates.contains_key(&atom.predicate())) =>
+                    if incremental
+                        .intersection(&rule.body_atoms().map(|atom| atom.predicate()).collect())
+                        .map(|predicate| endpoints.get(predicate).expect("must have an endpoint"))
+                        .collect::<HashSet<_>>()
+                        .len()
+                        == 1 =>
                 {
                     let new_rule = Self::incremental_rule(
                         rule,
