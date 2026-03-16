@@ -652,41 +652,44 @@ fn standardize_variables(
     join_variables: &[Variable],
 ) -> HashMap<Variable, Variable> {
     let mut result = HashMap::new();
-
-    for (count, variable) in join_variables.iter().enumerate() {
-        if result.contains_key(variable) {
-            continue;
-        }
-
-        result.insert(
-            variable.clone(),
-            Variable::new_unchecked(format!("j{count}")),
+    let mut push = |prefix, count, variable: &Variable| {
+        let variable = Variable::new_unchecked(
+            variable
+                .as_str()
+                .strip_suffix("Label")
+                .unwrap_or(variable.as_str()),
         );
-        // TODO: what if we hit the `Label`-suffixed version first?
-        result.insert(
-            Variable::new_unchecked(format!("{}Label", variable.as_str())),
-            Variable::new_unchecked(format!("j{count}Label")),
-        );
-    }
 
-    let mut count = 0;
-
-    for variable in variables.in_scope.iter().chain(variables.hidden.iter()) {
-        if result.contains_key(variable) {
-            continue;
+        if result.contains_key(&variable) {
+            return;
         }
 
         result.insert(
             variable.clone(),
             Variable::new_unchecked(format!("{prefix}{count}")),
         );
-        // TODO: what if we hit the `Label`-suffixed version first?
         result.insert(
             Variable::new_unchecked(format!("{}Label", variable.as_str())),
             Variable::new_unchecked(format!("{prefix}{count}Label")),
         );
-        count += 1;
-    }
+    };
+
+    join_variables
+        .iter()
+        .enumerate()
+        .for_each(|(count, variable)| push("j", count, variable));
+
+    let mut count = 0;
+
+    variables
+        .in_scope
+        .iter()
+        .chain(variables.hidden.iter())
+        .for_each(|variable| {
+            push(prefix, count, variable);
+
+            count += 1;
+        });
 
     result
 }
