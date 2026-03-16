@@ -100,7 +100,9 @@ pub(crate) fn pattern_with_filters(
         let mut remaining_patterns = Vec::new();
 
         for pattern in patterns {
-            if let Some(expression) = try_expression_from_tree(variables, pattern.filter_function())
+            if !pattern.filter_function().is_constant_true()
+                && let Some(expression) =
+                    try_expression_from_tree(variables, pattern.filter_function())
             {
                 expressions.push(expression);
             } else {

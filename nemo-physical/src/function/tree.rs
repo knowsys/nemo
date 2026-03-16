@@ -2,7 +2,10 @@
 
 use std::{collections::HashMap, fmt::Debug, hash::Hash};
 
-use crate::{datavalues::AnyDataValue, function::definitions::language::LanguageString};
+use crate::{
+    datavalues::{AnyDataValue, DataValue},
+    function::definitions::language::LanguageString,
+};
 
 use super::{
     definitions::{
@@ -178,6 +181,13 @@ where
         } else {
             None
         }
+    }
+
+    /// Check if the function represented by this object evaluates to the boolean constant `true`.
+    pub fn is_constant_true(&self) -> bool {
+        self.get_constant_value()
+            .and_then(|value| value.to_boolean())
+            .unwrap_or_default()
     }
 
     /// Check if the function represented by this object evaluates to a referenced value.
