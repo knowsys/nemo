@@ -826,6 +826,7 @@
           "nixpkgs"
         ],
         "utils": [
+          "nemo-web",
           "utils"
         ]
       },
@@ -1535,6 +1536,7 @@
           "nixpkgs"
         ],
         "utils": [
+          "nemo-web",
           "utils"
         ]
       },
@@ -3390,9 +3392,7 @@
         "nixpkgs": [
           "nixpkgs"
         ],
-        "utils": [
-          "utils"
-        ]
+        "utils": "utils"
       },
       "locked": {
         "lastModified": 1769429574,
@@ -5503,8 +5503,7 @@
         "nemo-vscode-extension": "nemo-vscode-extension",
         "nemo-web": "nemo-web_12",
         "nixpkgs": "nixpkgs",
-        "rust-overlay": "rust-overlay_13",
-        "utils": "utils"
+        "rust-overlay": "rust-overlay_13"
       }
     },
     "rust-overlay": {
