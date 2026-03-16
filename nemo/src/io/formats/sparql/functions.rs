@@ -68,8 +68,9 @@ fn try_expression_from_value(value: &AnyDataValue) -> Option<Expression> {
         | ValueDomain::NonNegativeInt
         | ValueDomain::Long
         | ValueDomain::Int
-        | ValueDomain::Boolean => Some(Expression::Literal(Literal::new_simple_literal(
+        | ValueDomain::Boolean => Some(Expression::Literal(Literal::new_typed_literal(
             value.lexical_value(),
+            NamedNode::new_unchecked(value.datatype_iri()),
         ))),
         ValueDomain::Tuple | ValueDomain::Map | ValueDomain::Null | ValueDomain::Other => None,
     }
