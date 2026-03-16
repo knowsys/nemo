@@ -24,7 +24,7 @@ pub(crate) fn try_expression_from_tree(
     variables: &[Variable],
     function: &Tree,
 ) -> Option<Expression> {
-    // TODO(mam): actually check which functions we can support here
+    // TODO(mam): actually check which functions we can support here (cf. #772)
     match function {
         Tree::Leaf(leaf) => try_expression_from_leaf(variables, leaf),
         Tree::Unary(function, tree) => try_expression_from_unary(variables, function, tree),
@@ -97,7 +97,7 @@ fn try_expression_from_unary(
     let function = match function {
         UnaryFunctionEnum::Datatype(_) => Some(Function::Datatype),
         UnaryFunctionEnum::LanguageTag(_) => Some(Function::Lang),
-        // TODO(mam): actually check which functions we can support here
+        // TODO(mam): actually check which functions we can support here (cf. #772)
         _ => None,
     }?;
 
@@ -118,7 +118,7 @@ fn try_expression_from_binary(
         BinaryFunctionEnum::Unequals(_) => {
             Some(Expression::Not(Box::new(Expression::Equal(lhs, rhs))))
         }
-        // TODO(mam): actually check which functions we can support here
+        // TODO(mam): actually check which functions we can support here (cf. #772)
         _ => None,
     }
 }
@@ -130,7 +130,7 @@ fn try_expression_from_ternary(
     _second: &Tree,
     _third: &Tree,
 ) -> Option<Expression> {
-    // TODO(mam): actually check which functions we can support here
+    // TODO(mam): actually check which functions we can support here (cf. #772)
     None
 }
 
@@ -139,6 +139,6 @@ fn try_expression_from_nary(
     _function: &NaryFunctionEnum,
     _parameters: &Vec<Tree>,
 ) -> Option<Expression> {
-    // TODO(mam): actually check which functions we can support here
+    // TODO(mam): actually check which functions we can support here (cf. #772)
     None
 }

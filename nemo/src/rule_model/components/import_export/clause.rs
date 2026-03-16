@@ -73,7 +73,7 @@ impl ImportClause {
                 .try_merge(&left.variables, &right.import, &right.variables, equalities)?;
 
         Some(Self {
-            origin: Origin::Component(Box::new(left)), // TODO: track reference to [right] as well
+            origin: Origin::Component(Box::new(left)), // TODO: track reference to [right] as well (cf. #773)
             id: ProgramComponentId::default(),
             import,
             variables: variables
