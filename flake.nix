@@ -646,8 +646,9 @@
           default =
             final: prev:
             let
-              pkgs = self.packages."${final.system}";
-              lib = inputs.nixpkgs."${final.system}";
+              system = final.stdenv.hostPlatform.system;
+              pkgs = self.packages."${system}";
+              lib = inputs.nixpkgs."${system}";
             in
             {
               inherit (pkgs)
