@@ -4,7 +4,8 @@ use std::io::{BufWriter, Write};
 
 use nemo_physical::datavalues::{AnyDataValue, DataValue, ValueDomain};
 use oxrdf::{
-    BlankNodeRef, GraphNameRef, LiteralRef, NamedNodeRef, QuadRef, SubjectRef, TermRef, TripleRef,
+    BlankNodeRef, GraphNameRef, LiteralRef, NamedNodeRef, NamedOrBlankNodeRef, QuadRef, TermRef,
+    TripleRef,
 };
 use oxrdfio::{RdfFormat, RdfSerializer};
 
@@ -75,11 +76,11 @@ struct QuadBuffer {
     object_type: RdfTermType,
 }
 impl<'a> QuadBuffer {
-    fn subject(&'a self) -> SubjectRef<'a> {
+    fn subject(&'a self) -> NamedOrBlankNodeRef<'a> {
         if self.subject_is_blank {
-            SubjectRef::BlankNode(BlankNodeRef::new_unchecked(&self.subject))
+            NamedOrBlankNodeRef::BlankNode(BlankNodeRef::new_unchecked(&self.subject))
         } else {
-            SubjectRef::NamedNode(NamedNodeRef::new_unchecked(&self.subject))
+            NamedOrBlankNodeRef::NamedNode(NamedNodeRef::new_unchecked(&self.subject))
         }
     }
 

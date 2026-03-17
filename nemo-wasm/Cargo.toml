@@ -29,7 +29,7 @@ nemo-language-server = { path = "../nemo-language-server", features = [ "js" ], 
 futures = { workspace = true }
 gloo-utils = { version = "0.2.0", features = ["serde"] }
 thiserror = { workspace = true }
-# NOTE: the version of wasm-bindgen must be available in nixpkgs
+# NOTE: the version of wasm-bindgen must be available in nixpkgs-25.11, cf.  https://search.nixos.org/packages?query=wasm-bindgen-cli
 wasm-bindgen = "=0.2.114"
 wasm-bindgen-futures = "0.4.37"
 web-sys = { version = "0.3.64", features = [ "Blob", "FileReaderSync", "FileSystemSyncAccessHandle" ]}

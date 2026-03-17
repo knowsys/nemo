@@ -5,7 +5,7 @@ pub(crate) mod queries;
 pub(crate) mod reader;
 
 use reader::SparqlReader;
-use spargebra::Query;
+use spargebra::{Query, SparqlParser};
 use std::sync::Arc;
 
 use nemo_physical::{
@@ -93,12 +93,13 @@ impl FormatParameter<SparqlTag> for SparqlParameter {
             }
             SparqlParameter::Query => {
                 let query = value.to_plain_string_unchecked();
-                Query::parse(query.as_str(), None).and(Ok(())).map_err(|e| {
-                    ValidationError::InvalidSparqlQuery {
+                SparqlParser::new() // TODO(mam): inject prefixes and base here, cf. #647
+                    .parse_query(query.as_str())
+                    .and(Ok(()))
+                    .map_err(|e| ValidationError::InvalidSparqlQuery {
                         query,
                         oxi_error: e.to_string(),
-                    }
-                })
+                    })
             }
         }
     }
@@ -163,7 +164,9 @@ impl FormatBuilder for SparqlBuilder {
             .map(|value| value.to_plain_string_unchecked())
             .unwrap_or(QUERY_DEFAULT.to_string());
 
-        let query = Query::parse(query.as_str(), None).expect("query has already been validated");
+        let query = SparqlParser::new() // TODO(mam): inject prefixes and base here, cf. #647
+            .parse_query(query.as_str())
+            .expect("query has already been validated");
 
         Ok(Self {
             value_formats,

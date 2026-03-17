@@ -12,7 +12,7 @@ repository.workspace = true
 [features]
 # Allows building for web assembly environments
 # Enables the "js" feature of the "getrandom" crate
-js = ["getrandom/js"]
+js = ["getrandom/wasm_js"]
 
 [dependencies]
 nemo-physical = { path = "../nemo-physical", default-features = false }
@@ -25,9 +25,10 @@ csv = "1.1.6"
 thiserror = { workspace = true }
 flate2 = { workspace = true }
 sanitise-file-name = "1.0.0"
-getrandom = { version = "0.2.9", default-features = false }
+getrandom = { version = "0.3.4" }
 oxiri = { workspace = true }
 reqwest = { workspace = true, features = [
+    "form",
     "gzip",
     "brotli",
     "zstd",
@@ -47,10 +48,10 @@ strum_macros = { workspace = true }
 similar-string = "1.4.3"
 bytecount = "0.6.8"
 colored = { workspace = true }
-spargebra = { version = "0.3.5" }
+spargebra = { version = "0.4.6" }
 urlencoding = { workspace = true }
-oxrdfio = "0.1.6"
-oxrdf = "0.2.4"
+oxrdfio = "0.2.4"
+oxrdf = "0.3.3"
 delegate = { workspace = true }
 orx-imp-vec = "2.14"
 itertools = { workspace = true }
