@@ -13,7 +13,7 @@ publish = false
 [dependencies]
 cargo-util-schemas = "0.10.0"
 cargo_metadata = "0.23.0"
-clap = { version = "4.5.38", features = ["derive", "env", "cargo", "string"] }
+clap = { workspace = true, features = ["derive", "env", "cargo", "string"] }
 clap_complete = "4.5.50"
 clap_mangen = "0.2.26"
 nemo-cli = { path = "../nemo-cli" }
