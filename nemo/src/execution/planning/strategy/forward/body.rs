@@ -161,7 +161,6 @@ impl StrategyBody {
         };
 
         plan.add_temporary_table_non_empty(node_body.clone(), "Body");
-        // plan.add_temporary_table(node_body.clone(), "Body");
 
         node_body
     }
