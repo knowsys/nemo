@@ -20,7 +20,6 @@
       url = "github:knowsys/nemo-vscode-extension";
       inputs = {
         nixpkgs.follows = "nixpkgs";
-        utils.follows = "nemo-web/utils";
         dream2nix.follows = "dream2nix";
       };
     };
@@ -38,7 +37,6 @@
       url = "github:knowsys/nemo-doc";
       inputs = {
         nixpkgs.follows = "nixpkgs";
-        utils.follows = "nemo-web/utils";
         dream2nix.follows = "dream2nix";
       };
     };
