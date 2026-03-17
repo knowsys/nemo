@@ -58,11 +58,9 @@ impl ImportClause {
         }
     }
 
-    /// Merge two [ImportClause]s.
+    /// Merge two [ImportClause]s of SPARQL imports with the same endpoint into one.
     ///
-    /// TODO: Maybe more documentation
-    ///
-    /// Return `None` if they are incompatible.
+    /// Returns `None` if `left` or `right` is not a SPARQL import or if the endpoints don't match.
     pub(crate) fn try_merge(
         left: Self,
         right: Self,
@@ -219,11 +217,9 @@ impl ImportLiteral {
         Self::Negative(ImportClause::new(import, variables))
     }
 
-    /// Merge two [ImportClause]s.
+    /// Merge two [ImportLiteral]s of SPARQL imports with the same endpoint into one.
     ///
-    /// TODO: Maybe more documentation
-    ///
-    /// Return `None` if they are incompatible.
+    /// Returns `None` if `left` or `right` is not a SPARQL import or if the endpoints don't match.
     pub fn try_merge(
         left: Self,
         right: Self,

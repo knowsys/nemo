@@ -230,6 +230,9 @@ impl ImportDirective {
         }
     }
 
+    /// Merges two SPARQL imports of the same import into one.
+    ///
+    /// Returns the merged [ImportDirective] together with the result variables.
     pub(crate) fn try_merge(
         &self,
         left_variables: &[Variable],
