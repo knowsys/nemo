@@ -176,6 +176,28 @@
             };
           };
 
+          cargoUdeps =
+            {
+              cargoUdepsArgs ? "--workspace --all-targets",
+              ...
+            }@origArgs:
+            let
+              args = removeAttrs origArgs [ "cargoUdepsArgs" ];
+            in
+            crane.mkCargoDerivation (
+              args
+              // {
+                inherit cargoArtifacts src;
+                pname = "nemo-udeps";
+                buildPhaseCargoCommand = "cargo udeps ${cargoUdepsArgs}";
+                buildInputs = args.buildInputs or commonArgs.buildInputs;
+                nativeBuildInputs = [
+                  pkgs.cargo-udeps
+                ]
+                ++ (args.nativeBuildInputs or commonArgs.nativeBuildInputs);
+              }
+            );
+
           cargoXtask =
             {
               task,
@@ -462,6 +484,7 @@
                     cargo clippy --workspace --all-targets -- --deny warnings
                     cargo fmt --all -- --check
                     cargo doc --workspace
+                    cargo udeps --workspace --all-targets
 
                     pushd nemo-python
                       pycodestyle .
@@ -531,6 +554,14 @@
               }
             );
 
+            udeps = cargoUdeps (
+              commonArgs
+              // {
+                pname = "nemo-cargo-udeps";
+                inherit cargoArtifacts;
+              }
+            );
+
             python-codestyle =
               pkgs.runCommandLocal "nemo-check-python-codestyle"
                 {
@@ -579,6 +610,7 @@
                   cargo-audit
                   cargo-license
                   cargo-tarpaulin
+                  cargo-udeps
 
                   maturin
                   binaryen
