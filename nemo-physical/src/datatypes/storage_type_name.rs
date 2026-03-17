@@ -79,7 +79,7 @@ impl Display for StorageTypeName {
 
 /// [BitSet] where each bit represents a [StorageTypeName].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct StorageTypeBitSet(BitSet<usize>);
+pub struct StorageTypeBitSet(BitSet<usize>);
 
 impl StorageTypeBitSet {
     /// Create a [StorageTypeBitSet] which contains no entries.

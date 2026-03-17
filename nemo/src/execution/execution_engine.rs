@@ -274,11 +274,18 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         TimedCode::instance().sub("Reasoning/Rules").start();
         TimedCode::instance().sub("Reasoning/Execution").start();
 
+        let predicates_with_facts = self
+            .program
+            .facts()
+            .iter()
+            .map(|atom| atom.predicate())
+            .collect::<HashSet<_>>();
+
         let execution_strategy = self
             .program
             .rules()
             .iter()
-            .map(StrategyForward::new)
+            .map(|rule| StrategyForward::new(rule, &predicates_with_facts))
             .collect::<Vec<_>>();
 
         for (predicate, arity) in execution_strategy
@@ -432,7 +439,7 @@ mod test {
     #[test_log::test]
     #[cfg_attr(miri, ignore)]
     async fn issue_759() {
-        const ITERATIONS: usize = 16_384;
+        const ITERATIONS: usize = 32_768;
         let program = load_program("foo(bar).".to_string(), Default::default()).unwrap();
         let import_manager = ImportManager::new(Default::default());
 

@@ -1,6 +1,8 @@
 //! Module for defining a trait that can be implemented by code that can provide tabular data,
 //! such as file readers.
 
+use std::fmt::{Debug, Display};
+
 use crate::{error::ReadingError, management::bytesized::ByteSized};
 
 use super::{bindings::ProductBindings, tuple_writer::TupleWriter};
@@ -8,7 +10,7 @@ use super::{bindings::ProductBindings, tuple_writer::TupleWriter};
 /// This trait is implemented by code that can provide data in the form of a list of tuples,
 /// which are unordered and possibly contain duplicates.
 #[async_trait::async_trait(?Send)]
-pub trait TableProvider: std::fmt::Debug + ByteSized {
+pub trait TableProvider: Debug + Display + ByteSized {
     /// Provide table data by adding values to a [TupleWriter].
     async fn provide_table_data(
         self: Box<Self>,
@@ -34,6 +36,9 @@ pub trait TableProvider: std::fmt::Debug + ByteSized {
         false
     }
 
-    /// Return the number of columns of this table.
-    fn arity(&self) -> usize;
+    /// Return the number of (output) columns of this table.
+    fn output_arity(&self) -> usize;
+
+    /// Return the number of (input) columns of this table.
+    fn input_arity(&self) -> usize;
 }

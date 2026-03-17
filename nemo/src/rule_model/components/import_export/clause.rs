@@ -1,13 +1,15 @@
 //! This module defines [ImportClause].
 
-use std::fmt::Display;
+use std::{collections::HashMap, fmt::Display};
 
 use crate::rule_model::{
     components::{
         ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent,
         IterableVariables, ProgramComponent, ProgramComponentKind, component_iterator,
-        component_iterator_mut, import_export::ImportDirective, tag::Tag,
-        term::primitive::variable::Variable,
+        component_iterator_mut,
+        import_export::ImportDirective,
+        tag::Tag,
+        term::primitive::{ground::GroundTerm, variable::Variable},
     },
     error::ValidationReport,
     origin::Origin,
@@ -54,6 +56,50 @@ impl ImportClause {
             import,
             variables,
         }
+    }
+
+    /// Merge two [ImportClause]s of SPARQL imports with the same endpoint into one.
+    ///
+    /// Returns `None` if `left` or `right` is not a SPARQL import or if the endpoints don't match.
+    pub(crate) fn try_merge(
+        left: Self,
+        right: Self,
+        equalities: &HashMap<Variable, GroundTerm>,
+    ) -> Option<Self> {
+        let (import, variables) =
+            left.import
+                .try_merge(&left.variables, &right.import, &right.variables, equalities)?;
+
+        Some(Self {
+            origin: Origin::Component(Box::new(left)), // TODO: track reference to [right] as well (cf. #773)
+            id: ProgramComponentId::default(),
+            import,
+            variables: variables
+                .into_iter()
+                .filter(|variable| !equalities.contains_key(variable))
+                .collect(),
+        })
+    }
+
+    /// Push constant assignments to variables into the underlying [ImportDirective].
+    pub(crate) fn push_constants(&mut self, equalities: &HashMap<Variable, GroundTerm>) {
+        self.import.push_constants(&self.variables, equalities);
+        self.variables = self
+            .variables
+            .iter()
+            .filter(|variable| !equalities.contains_key(variable))
+            .cloned()
+            .collect();
+    }
+
+    /// Try to create a negated version of this clause.
+    pub(crate) fn try_negate(clause: Self) -> Option<Self> {
+        Some(Self {
+            origin: Origin::Component(Box::new(clause.clone())),
+            id: ProgramComponentId::default(),
+            import: clause.import.try_negate()?,
+            variables: clause.variables,
+        })
     }
 
     /// Return a reference to the output variables.
@@ -139,5 +185,170 @@ impl IterableComponent for ImportClause {
         let import_iter = self.import.children_mut();
         let variable_iter = component_iterator_mut(self.variables.iter_mut());
         Box::new(import_iter.chain(variable_iter))
+    }
+}
+
+/// A possibly negated [ImportClause]
+#[derive(Debug, Clone)]
+pub enum ImportLiteral {
+    /// Not negated
+    Positive(ImportClause),
+    /// Negated
+    Negative(ImportClause),
+}
+
+impl Display for ImportLiteral {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ImportLiteral::Positive(clause) => write!(f, "{clause}"),
+            ImportLiteral::Negative(clause) => write!(f, "~{clause}"),
+        }
+    }
+}
+
+impl ImportLiteral {
+    /// Create a new positive [ImportLiteral]
+    pub fn positive(import: ImportDirective, variables: Vec<Variable>) -> Self {
+        Self::Positive(ImportClause::new(import, variables))
+    }
+
+    /// Create a new negative [ImportLiteral]
+    pub fn negative(import: ImportDirective, variables: Vec<Variable>) -> Self {
+        Self::Negative(ImportClause::new(import, variables))
+    }
+
+    /// Merge two [ImportLiteral]s of SPARQL imports with the same endpoint into one.
+    ///
+    /// Returns `None` if `left` or `right` is not a SPARQL import or if the endpoints don't match.
+    pub fn try_merge(
+        left: Self,
+        right: Self,
+        equalities: &HashMap<Variable, GroundTerm>,
+    ) -> Option<Self> {
+        match (left, right) {
+            (ImportLiteral::Positive(left), ImportLiteral::Positive(right)) => Some(
+                ImportLiteral::Positive(ImportClause::try_merge(left, right, equalities)?),
+            ),
+            (ImportLiteral::Positive(positive), ImportLiteral::Negative(negative))
+            | (ImportLiteral::Negative(negative), ImportLiteral::Positive(positive)) => {
+                Some(ImportLiteral::Positive(ImportClause::try_merge(
+                    positive,
+                    ImportClause::try_negate(negative)?,
+                    equalities,
+                )?))
+            }
+            (ImportLiteral::Negative(left), ImportLiteral::Negative(right)) => Some(
+                ImportLiteral::Negative(ImportClause::try_merge(left, right, equalities)?),
+            ),
+        }
+    }
+
+    /// Return a reference to the output variables.
+    pub fn output_variables(&self) -> &Vec<Variable> {
+        match self {
+            ImportLiteral::Positive(clause) => clause.output_variables(),
+            ImportLiteral::Negative(clause) => clause.output_variables(),
+        }
+    }
+
+    /// Return a reference to the underlying [ImportDirective].
+    pub fn import_directive(&self) -> &ImportDirective {
+        match self {
+            ImportLiteral::Positive(clause) => clause.import_directive(),
+            ImportLiteral::Negative(clause) => clause.import_directive(),
+        }
+    }
+
+    /// Return the predicate of the import clause.
+    pub fn predicate(&self) -> &Tag {
+        match self {
+            ImportLiteral::Positive(clause) => clause.predicate(),
+            ImportLiteral::Negative(clause) => clause.predicate(),
+        }
+    }
+}
+
+impl ComponentBehavior for ImportLiteral {
+    fn kind(&self) -> ProgramComponentKind {
+        ProgramComponentKind::Import
+    }
+
+    fn validate(&self) -> Result<(), ValidationReport> {
+        match self {
+            ImportLiteral::Positive(clause) => clause.validate(),
+            ImportLiteral::Negative(clause) => clause.validate(),
+        }
+    }
+
+    fn boxed_clone(&self) -> Box<dyn ProgramComponent> {
+        Box::new(self.clone())
+    }
+}
+
+impl ComponentSource for ImportLiteral {
+    type Source = Origin;
+
+    fn origin(&self) -> Origin {
+        match self {
+            ImportLiteral::Positive(clause) => clause.origin(),
+            ImportLiteral::Negative(clause) => clause.origin(),
+        }
+    }
+
+    fn set_origin(&mut self, origin: Origin) {
+        match self {
+            ImportLiteral::Positive(clause) => clause.set_origin(origin),
+            ImportLiteral::Negative(clause) => clause.set_origin(origin),
+        }
+    }
+}
+
+impl ComponentIdentity for ImportLiteral {
+    fn id(&self) -> ProgramComponentId {
+        match self {
+            ImportLiteral::Positive(clause) => clause.id(),
+            ImportLiteral::Negative(clause) => clause.id(),
+        }
+    }
+
+    fn set_id(&mut self, id: ProgramComponentId) {
+        match self {
+            ImportLiteral::Positive(clause) => clause.set_id(id),
+            ImportLiteral::Negative(clause) => clause.set_id(id),
+        }
+    }
+}
+
+impl IterableVariables for ImportLiteral {
+    fn variables<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Variable> + 'a> {
+        match self {
+            ImportLiteral::Positive(clause) => clause.variables(),
+            ImportLiteral::Negative(clause) => clause.variables(),
+        }
+    }
+
+    fn variables_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Variable> + 'a> {
+        match self {
+            ImportLiteral::Positive(clause) => clause.variables_mut(),
+            ImportLiteral::Negative(clause) => clause.variables_mut(),
+        }
+    }
+}
+
+impl IterableComponent for ImportLiteral {
+    fn children<'a>(&'a self) -> Box<dyn Iterator<Item = &'a dyn ProgramComponent> + 'a> {
+        match self {
+            ImportLiteral::Positive(clause) => clause.children(),
+            ImportLiteral::Negative(clause) => clause.children(),
+        }
+    }
+
+    fn children_mut<'a>(
+        &'a mut self,
+    ) -> Box<dyn Iterator<Item = &'a mut dyn ProgramComponent> + 'a> {
+        match self {
+            ImportLiteral::Positive(clause) => clause.children_mut(),
+            ImportLiteral::Negative(clause) => clause.children_mut(),
+        }
     }
 }

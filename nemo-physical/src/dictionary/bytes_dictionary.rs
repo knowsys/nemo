@@ -198,7 +198,7 @@ impl<B: GlobalBytesBuffer> ByteSized for BytesDictionary<B> {
         let size_map64 = size_inner_hashmap_flat(&self.map_long);
         let size_buffer = B::buffer_size_bytes(self.buffer_id);
         log::debug!(
-            "BytesDictionary with {} entries. Mem use: vec {}, map32 {}, map64 {}, buffer{}",
+            "BytesDictionary with {} entries. Mem use: vec {}, map32 {}, map64 {}, buffer {}",
             self.len(),
             size_vec,
             size_map32,

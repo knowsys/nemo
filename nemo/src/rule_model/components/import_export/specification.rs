@@ -30,7 +30,7 @@ pub struct ImportExportSpec {
     format: Tag,
 
     /// List of tuples containing attribute-value-pairs
-    map: Vec<(ImportExportAttribute, Term)>,
+    pub(crate) map: Vec<(ImportExportAttribute, Term)>,
 }
 
 impl ImportExportSpec {
@@ -104,6 +104,26 @@ impl ImportExportSpec {
                 .map(|(key, value)| Some((key.clone(), value.reduce()?)))
                 .collect::<Option<Vec<_>>>()?,
         })
+    }
+
+    /// Replace the value for a given key, or insert it if it is not present.
+    ///
+    /// Returns whether the entry was present.
+    pub fn replace_or_insert(&mut self, key: &ImportExportAttribute, value: Term) -> bool {
+        let mut found = false;
+
+        for (k, v) in self.map.iter_mut() {
+            if k == key {
+                found = true;
+                *v = value.clone();
+            }
+        }
+
+        if !found {
+            self.map.push((key.clone(), value));
+        }
+
+        found
     }
 }
 

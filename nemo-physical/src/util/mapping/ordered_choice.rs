@@ -22,6 +22,7 @@ impl SortedChoice {
     /// Return an instance of the function from a hash map representation where the input `i` is mapped to `map.get(i)`.
     pub(crate) fn from_map(map: HashMap<usize, usize>, domain_size: usize) -> Self {
         let result = Self { map, domain_size };
+
         debug_assert!(result.is_valid());
 
         result

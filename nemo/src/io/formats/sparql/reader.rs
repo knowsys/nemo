@@ -1,23 +1,18 @@
 //! Reader for resources of type SPARQL (SPARQL query language for RDF).
 
+use std::fmt::Display;
 use std::io::Read;
 
 use itertools::Itertools;
 use nemo_physical::datasources::bindings::{Bindings, ProductBindings};
+use nemo_physical::datasources::tuple_writer::TupleWriter;
 use nemo_physical::error::ReadingErrorKind;
 use nemo_physical::management::bytesized::ByteSized;
 use nemo_physical::meta::timing::TimedCode;
 use nemo_physical::tabular::filters::FilterTransformPattern;
 use nemo_physical::{datasources::table_providers::TableProvider, error::ReadingError};
-use nemo_physical::{
-    datasources::tuple_writer::TupleWriter,
-    datavalues::{AnyDataValue, DataValue},
-};
 use oxiri::Iri;
-use oxrdf::{Literal, NamedNode};
 use spargebra::Query;
-use spargebra::algebra::GraphPattern;
-use spargebra::term::GroundTerm;
 
 use crate::io::format_builder::FormatBuilder;
 use crate::io::formats::dsv::reader::DsvReader;
@@ -27,6 +22,7 @@ use crate::io::resource_providers::http::HttpResourceProvider;
 use crate::rule_model::components::import_export::Direction;
 use crate::syntax::import_export::file_format::MEDIA_TYPE_TSV;
 
+use super::queries::{pattern_with_bindings, pattern_with_filters};
 use super::{MAX_BINDINGS_PER_PAGE, QUERY_PAGE_CHAR_LIMIT, SparqlBuilder};
 
 #[derive(Debug)]
@@ -43,14 +39,22 @@ impl SparqlReader {
     async fn execute_from_builder(
         builder: &SparqlBuilder,
     ) -> Result<Option<Box<dyn Read>>, ReadingError> {
+        log::debug!("Sending SPARQL query: \n{}\n", builder.query);
         let resource_builder = builder
             .customize_resource_builder(Direction::Import, None)
             .expect("should have been validated")
             .expect("should create a resource builder");
+
         let resource = resource_builder.finalize();
         let provider = HttpResourceProvider {};
 
-        provider.open_resource(&resource, MEDIA_TYPE_TSV).await
+        match provider.open_resource(&resource, MEDIA_TYPE_TSV).await {
+            Ok(resource) => Ok(resource),
+            Err(error) => {
+                log::warn!("Failed to obtain a response: {error}");
+                Err(error)
+            }
+        }
     }
 
     async fn execute_query(
@@ -73,7 +77,7 @@ impl SparqlReader {
         tuple_writer: &mut TupleWriter<'_>,
     ) -> Result<(), ReadingError> {
         TimedCode::instance()
-            .sub("Reasoning/Execution/SPARQL queries")
+            .sub("Reasoning/Execution/Import/SPARQL queries")
             .start();
 
         let response = self
@@ -81,7 +85,7 @@ impl SparqlReader {
             .await?
             .expect("query result should not be empty");
         TimedCode::instance()
-            .sub("Reasoning/Execution/SPARQL queries")
+            .sub("Reasoning/Execution/Import/SPARQL queries")
             .stop();
         Self::read_table_data(
             response,
@@ -93,10 +97,13 @@ impl SparqlReader {
 
     async fn load_from_bindings(
         &self,
+        unbound_query: &Query,
         bindings: &ProductBindings,
         tuple_writer: &mut TupleWriter<'_>,
     ) -> Result<(), ReadingError> {
-        for (page, query) in self.queries_with_bindings(bindings, MAX_BINDINGS_PER_PAGE) {
+        for (page, query) in
+            self.queries_with_bindings(unbound_query, bindings, MAX_BINDINGS_PER_PAGE)
+        {
             let result = self.load_from_query(&query, tuple_writer).await;
 
             // TODO(mam): detect timeouts here and reduce page size
@@ -113,6 +120,7 @@ impl SparqlReader {
                 // the page size is still too large, try half
                 for page in page.chunks(page.len().div_ceil(2).max(1)) {
                     Box::pin(self.load_from_bindings(
+                        unbound_query,
                         &ProductBindings::product(page.iter().map(|bindings| {
                             (Bindings::empty(bindings.positions()), bindings.clone())
                         })),
@@ -139,6 +147,16 @@ impl SparqlReader {
         let mut buf = String::new();
         let _ = read.read_to_string(&mut buf)?;
 
+        if buf == "upstream request timeout" {
+            log::warn!("SPARQL query timeout (or literal response `upstream request timeout')");
+        } else if buf.contains(
+            "at com.bigdata.rdf.sail.webapp.BigdataServlet.submitApiTask(BigdataServlet.java:292)",
+        ) {
+            log::warn!(
+                "possible SPARQL query timeout, might be missing results (or response looks suspiciously like a Java exception backtrace)"
+            );
+        }
+
         let reader = DsvReader::new(
             Box::new(buf.as_bytes()),
             b'\t',
@@ -153,82 +171,8 @@ impl SparqlReader {
         reader.read(tuple_writer)
     }
 
-    fn ground_term_from_datavalue(value: &AnyDataValue) -> Option<GroundTerm> {
-        use nemo_physical::datavalues::ValueDomain;
-
-        match value.value_domain() {
-            ValueDomain::PlainString => Some(GroundTerm::Literal(Literal::new_simple_literal(
-                value.to_plain_string_unchecked(),
-            ))),
-            ValueDomain::LanguageTaggedString => {
-                let (content, language) = value.to_language_tagged_string_unchecked();
-                Some(GroundTerm::Literal(
-                    Literal::new_language_tagged_literal(content, language)
-                        .expect("should be valid"),
-                ))
-            }
-            ValueDomain::Iri => Some(GroundTerm::NamedNode(NamedNode::new_unchecked(
-                value.to_iri_unchecked(),
-            ))),
-            ValueDomain::Float
-            | ValueDomain::Double
-            | ValueDomain::UnsignedLong
-            | ValueDomain::NonNegativeLong
-            | ValueDomain::UnsignedInt
-            | ValueDomain::NonNegativeInt
-            | ValueDomain::Long
-            | ValueDomain::Int
-            | ValueDomain::Boolean
-            | ValueDomain::Other => Some(GroundTerm::Literal(Literal::new_typed_literal(
-                value.lexical_value(),
-                NamedNode::new_unchecked(value.datatype_iri()),
-            ))),
-            ValueDomain::Null => None,
-
-            ValueDomain::Tuple | ValueDomain::Map => {
-                unimplemented!("no support for complex values yet")
-            }
-        }
-    }
-
-    fn pattern_with_bindings(pattern: &GraphPattern, bindings: &[Bindings]) -> GraphPattern {
-        match pattern {
-            GraphPattern::Project { inner, variables } => {
-                let mut previous = inner.clone();
-
-                for bindings_set in bindings {
-                    let bound_variables = bindings_set
-                        .positions()
-                        .iter()
-                        .map(|idx| variables[*idx].clone())
-                        .collect::<Vec<_>>();
-                    let bindings = bindings_set
-                        .bindings()
-                        .iter()
-                        .map(|row| row.iter().map(Self::ground_term_from_datavalue).collect())
-                        .collect();
-
-                    let values = GraphPattern::Values {
-                        variables: bound_variables,
-                        bindings,
-                    };
-                    *previous = GraphPattern::Join {
-                        left: previous.clone(),
-                        right: Box::new(values),
-                    };
-                }
-
-                GraphPattern::Project {
-                    inner: previous,
-                    variables: variables.clone(),
-                }
-            }
-            _ => pattern.clone(),
-        }
-    }
-
-    fn query_with_bindings(&self, bindings: &[Bindings]) -> Option<Query> {
-        let query = match &self.builder.query {
+    fn query_with_bindings(&self, query: &Query, bindings: &[Bindings]) -> Option<Query> {
+        let query = match query {
             q @ &Query::Construct { .. } | q @ &Query::Describe { .. } => q.clone(),
             Query::Select {
                 dataset,
@@ -237,7 +181,7 @@ impl SparqlReader {
             } => Query::Select {
                 dataset: dataset.clone(),
                 base_iri: base_iri.clone(),
-                pattern: Self::pattern_with_bindings(pattern, bindings),
+                pattern: pattern_with_bindings(pattern, bindings),
             },
             Query::Ask {
                 dataset,
@@ -246,7 +190,7 @@ impl SparqlReader {
             } => Query::Ask {
                 dataset: dataset.clone(),
                 base_iri: base_iri.clone(),
-                pattern: Self::pattern_with_bindings(pattern, bindings),
+                pattern: pattern_with_bindings(pattern, bindings),
             },
         };
 
@@ -268,7 +212,7 @@ impl SparqlReader {
             .iter()
             .enumerate()
             .scan(1, |count, (idx, (_, bindings))| {
-                *count *= bindings.count();
+                *count += bindings.count();
                 Some((idx, *count))
             })
             .find(|(_, count)| *count > page_size);
@@ -315,6 +259,7 @@ impl SparqlReader {
 
     fn queries_with_bindings(
         &self,
+        query: &Query,
         bindings: &ProductBindings,
         page_size: usize,
     ) -> impl Iterator<Item = (Vec<Bindings>, Query)> {
@@ -322,18 +267,43 @@ impl SparqlReader {
 
         for combination in bindings.combinations() {
             for page in Self::bindings_chunks(&combination, page_size.max(1)) {
-                match self.query_with_bindings(&page) {
+                match self.query_with_bindings(query, &page) {
                     Some(query) => {
                         queries.push((page.clone(), query));
                     }
-                    None => {
-                        queries.extend(self.queries_with_bindings(bindings, page_size.div_ceil(2)))
-                    }
+                    None => queries.extend(self.queries_with_bindings(
+                        query,
+                        bindings,
+                        page_size.div_ceil(2),
+                    )),
                 }
             }
         }
 
         queries.into_iter()
+    }
+
+    fn query_with_filters(&self) -> (Query, Vec<FilterTransformPattern>) {
+        match &self.builder.query {
+            Query::Select {
+                dataset,
+                pattern,
+                base_iri,
+            } => {
+                let (pattern, _patterns) = pattern_with_filters(pattern, &self.patterns);
+                (
+                    Query::Select {
+                        dataset: dataset.clone(),
+                        pattern,
+                        base_iri: base_iri.clone(),
+                    },
+                    self.patterns.clone(),
+                )
+            }
+            q @ Query::Construct { .. } | q @ Query::Describe { .. } | q @ Query::Ask { .. } => {
+                (q.clone(), self.patterns.clone())
+            }
+        }
     }
 }
 
@@ -345,17 +315,27 @@ impl ByteSized for SparqlReader {
 
 #[async_trait::async_trait(?Send)]
 impl TableProvider for SparqlReader {
-    fn arity(&self) -> usize {
+    fn input_arity(&self) -> usize {
         self.builder.expected_arity().unwrap_or_default()
+    }
+
+    fn output_arity(&self) -> usize {
+        if let Some(pattern) = self.patterns.first()
+            && let Some(arity) = pattern.expected_arity()
+        {
+            return arity;
+        }
+
+        self.input_arity()
     }
 
     async fn provide_table_data(
         self: Box<Self>,
         tuple_writer: &mut TupleWriter,
     ) -> Result<(), ReadingError> {
-        tuple_writer.set_patterns(self.patterns.clone());
-        self.load_from_query(&self.builder.query, tuple_writer)
-            .await
+        let (query, patterns) = self.query_with_filters();
+        tuple_writer.set_patterns(patterns);
+        self.load_from_query(&query, tuple_writer).await
     }
 
     fn should_import_with_bindings(
@@ -371,7 +351,19 @@ impl TableProvider for SparqlReader {
         tuple_writer: &mut TupleWriter,
         bindings: &ProductBindings,
     ) -> Result<(), ReadingError> {
-        tuple_writer.set_patterns(self.patterns.clone());
-        self.load_from_bindings(bindings, tuple_writer).await
+        let (query, patterns) = self.query_with_filters();
+        tuple_writer.set_patterns(patterns);
+        self.load_from_bindings(&query, bindings, tuple_writer)
+            .await
+    }
+}
+
+impl Display for SparqlReader {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "SPARQL query to endpoint: {}\n{}",
+            self.builder.endpoint, self.builder.query
+        )
     }
 }

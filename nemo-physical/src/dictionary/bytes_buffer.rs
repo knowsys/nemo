@@ -43,15 +43,17 @@ const PAGE_SIZE_INITIAL: usize = 1 << 20;
 /// writes, which causes races that may lead to reading errors unless all reads are also locked.
 pub(crate) struct BytesBuffer {
     /// Vector of all string buffer pages with the id of the buffer they belong to.
-    pages: Vec<(usize, Vec<u8>)>,
+    pages: Vec<(Option<usize>, Vec<u8>)>,
     /// Currently active page for each buffer. This is always the last page that was allocated for the buffer.
-    cur_pages: Vec<usize>,
+    cur_pages: Vec<Option<usize>>,
     /// Lock to guard page assignment operations when using multiple threads
     lock: AtomicBool,
     /// Marker that prevents StringBuffers from being send over thread boundaries
     _marker: PhantomData<*mut str>,
     /// Buffers that have been freed and can have their pages reused
     reclaimed_buffers: VecDeque<usize>,
+    /// Pages that have been freed and can be reused
+    reclaimed_pages: VecDeque<usize>,
 }
 
 impl BytesBuffer {
@@ -63,6 +65,7 @@ impl BytesBuffer {
             lock: AtomicBool::new(false),
             _marker: PhantomData,
             reclaimed_buffers: VecDeque::new(),
+            reclaimed_pages: VecDeque::new(),
         }
     }
 
@@ -76,9 +79,9 @@ impl BytesBuffer {
 
         // defer first page allocation to later
         if buf_id < self.cur_pages.len() {
-            self.cur_pages[buf_id] = 0;
+            self.cur_pages[buf_id] = None;
         } else {
-            self.cur_pages.push(0);
+            self.cur_pages.push(None);
         }
         self.release_page_lock();
         buf_id
@@ -90,10 +93,12 @@ impl BytesBuffer {
         self.acquire_page_lock();
         self.reclaimed_buffers.push_back(buffer);
 
-        for (b, v) in self.pages.iter_mut() {
-            if buffer == *b {
+        for (idx, (b, v)) in self.pages.iter_mut().enumerate() {
+            if Some(buffer) == *b {
                 v.clear();
                 v.shrink_to_fit();
+                *b = None;
+                self.reclaimed_pages.push_back(idx);
             }
         }
         self.release_page_lock();
@@ -101,24 +106,49 @@ impl BytesBuffer {
 
     /// Inserts a byte array into the buffer and returns its address and length.
     /// This data can be turned into a [BytesRef] by a [GlobalBytesBuffer].
-    ///
-    /// TODO: Allocation of new pages could re-use freed pages instead of always appending.
     fn push_bytes(&mut self, buffer: usize, bytes: &[u8]) -> (usize, usize) {
         let len = bytes.len();
         assert!(len < PAGE_SIZE);
 
         self.acquire_page_lock();
-        let mut page_num = self.cur_pages[buffer];
-        if self.pages.is_empty() || self.pages[page_num].0 != buffer {
-            self.pages
-                .push((buffer, Vec::with_capacity(PAGE_SIZE_INITIAL)));
-            page_num = self.pages.len() - 1;
-            self.cur_pages[buffer] = page_num;
-        } else if self.pages[page_num].1.len() + len > PAGE_SIZE {
-            self.pages.push((buffer, Vec::with_capacity(PAGE_SIZE)));
-            page_num = self.pages.len() - 1;
-            self.cur_pages[buffer] = page_num;
+        let mut page_num = match self.cur_pages[buffer] {
+            Some(page) => page,
+            None => {
+                // first page for buffer, allocate or reclaim a new one
+                let new_page = match self.reclaimed_pages.pop_front() {
+                    None => {
+                        self.pages
+                            .push((Some(buffer), Vec::with_capacity(PAGE_SIZE_INITIAL)));
+                        self.pages.len() - 1
+                    }
+                    Some(page) => {
+                        self.pages[page] = (Some(buffer), Vec::with_capacity(PAGE_SIZE_INITIAL));
+                        page
+                    }
+                };
+
+                self.cur_pages[buffer] = Some(new_page);
+                new_page
+            }
+        };
+
+        if self.pages[page_num].1.len() + len > PAGE_SIZE {
+            // page doesn't have enough free space, allocate or reclaim a new one
+            page_num = match self.reclaimed_pages.pop_front() {
+                None => {
+                    self.pages
+                        .push((Some(buffer), Vec::with_capacity(PAGE_SIZE_INITIAL)));
+                    self.pages.len() - 1
+                }
+                Some(page) => {
+                    self.pages[page] = (Some(buffer), Vec::with_capacity(PAGE_SIZE_INITIAL));
+                    page
+                }
+            };
+
+            self.cur_pages[buffer] = Some(page_num);
         }
+
         let page_inner_addr = self.pages[page_num].1.len();
         // TODO: Presumably the following is faster than extend_from_slice(), but this needs benchmarking
         let old_len = self.pages[page_num].1.len();
@@ -165,14 +195,14 @@ impl BytesBuffer {
         result
     }
 
-    /// Computes and returns the overall number of bytes that have been alocated for managing
+    /// Computes and returns the overall number of bytes that have been allocated for managing
     /// a specific buffer. This includes management data for that buffer but no shared management
     /// data for the [BytesBuffer] as such.
     fn buffer_size_bytes(&self, buffer: usize) -> u64 {
         let page_size: usize = self
             .pages
             .iter()
-            .filter(|(idx, _)| *idx == buffer)
+            .filter(|(idx, _)| *idx == Some(buffer))
             .map(|(_, page)| page.capacity())
             .sum();
         // Add size of usize, the space used for the current page number of that buffer:

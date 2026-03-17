@@ -1,15 +1,24 @@
 //! Import and export directives are a direct representation of the syntactic information
 //! given in rule files.
 
+use std::collections::{HashMap, HashSet};
+
+use attribute::ImportExportAttribute;
+use nemo_physical::datavalues::AnyDataValue;
 use specification::ImportExportSpec;
 
 use crate::{
-    io::format_builder::ImportExportBuilder,
+    io::{
+        format_builder::{AnyImportExportBuilder, ImportExportBuilder, SupportedFormatTag},
+        formats::sparql::queries::{
+            ground_term_from_datavalue, merge_queries, negate_query, push_constants,
+        },
+    },
     rule_model::{
         components::rule::Rule, error::ValidationReport, origin::Origin,
         pipeline::id::ProgramComponentId,
     },
-    syntax,
+    syntax::{self, import_export::attribute::QUERY},
 };
 
 use super::{
@@ -17,7 +26,11 @@ use super::{
     IterableVariables, ProgramComponent, ProgramComponentKind, component_iterator,
     component_iterator_mut,
     tag::Tag,
-    term::{Term, operation::Operation, primitive::variable::Variable},
+    term::{
+        Term,
+        operation::Operation,
+        primitive::{ground::GroundTerm, variable::Variable},
+    },
 };
 
 pub mod attribute;
@@ -165,9 +178,181 @@ impl ImportDirective {
         })
     }
 
+    pub(crate) fn push_constants(
+        &mut self,
+        variables: &[Variable],
+        constants: &HashMap<Variable, GroundTerm>,
+    ) {
+        let Some(builder) = self.builder() else {
+            return;
+        };
+        if let SupportedFormatTag::Sparql(..) = builder.format() {
+            let AnyImportExportBuilder::Sparql(sparql) = builder.inner else {
+                unreachable!("inner builder must be a SPARQL builder")
+            };
+
+            let mut the_constants = HashMap::new();
+            for (idx, variable) in variables.iter().enumerate() {
+                if let Some(term) = constants.get(variable) {
+                    let Some(ground_term) = ground_term_from_datavalue(&term.value()) else {
+                        return;
+                    };
+                    the_constants.insert(idx, ground_term);
+                }
+            }
+
+            let query = push_constants(&sparql.query, &the_constants);
+            self.0.spec.replace_or_insert(
+                &QUERY.into(),
+                Term::ground(AnyDataValue::new_plain_string(query.to_string())),
+            );
+        }
+    }
+
+    pub(crate) fn try_negate(&self) -> Option<Self> {
+        let builder = self.builder()?;
+
+        if let SupportedFormatTag::Sparql(..) = builder.format() {
+            let AnyImportExportBuilder::Sparql(sparql) = builder.inner else {
+                unreachable!("inner builder must be a SPARQL builder")
+            };
+
+            let query = negate_query(&sparql.query);
+            let mut result = self.clone();
+            result.0.spec.replace_or_insert(
+                &QUERY.into(),
+                Term::ground(AnyDataValue::new_plain_string(query.to_string())),
+            );
+
+            Some(result)
+        } else {
+            None
+        }
+    }
+
+    /// Merges two SPARQL imports of the same import into one.
+    ///
+    /// Returns the merged [ImportDirective] together with the result variables.
+    pub(crate) fn try_merge(
+        &self,
+        left_variables: &[Variable],
+        right: &Self,
+        right_variables: &[Variable],
+        constants: &HashMap<Variable, GroundTerm>,
+    ) -> Option<(Self, Vec<Variable>)> {
+        let left_builder = self.builder()?;
+        let right_builder = right.builder()?;
+
+        match (left_builder.format(), right_builder.format()) {
+            (SupportedFormatTag::Sparql(..), SupportedFormatTag::Sparql(..)) => {
+                let AnyImportExportBuilder::Sparql(left_sparql) = left_builder.inner else {
+                    unreachable!("inner builder must be a SPARQL builder")
+                };
+                let AnyImportExportBuilder::Sparql(right_sparql) = right_builder.inner else {
+                    unreachable!("inner builder must be a SPARQL builder")
+                };
+
+                if left_sparql.endpoint != right_sparql.endpoint {
+                    return None;
+                }
+
+                let left_set = left_variables.iter().collect::<HashSet<_>>();
+                let right_set = right_variables.iter().collect::<HashSet<_>>();
+                let join_variables = left_set.intersection(&right_set).collect::<HashSet<_>>();
+                let mut left_positions = HashMap::new();
+                let mut left_constants = HashMap::new();
+                let mut right_positions = HashMap::new();
+                let mut right_constants = HashMap::new();
+
+                for (idx, variable) in left_variables.iter().enumerate() {
+                    if let Some(term) = constants.get(variable) {
+                        left_constants.insert(idx, ground_term_from_datavalue(&term.value())?);
+                    } else if join_variables.contains(&variable) {
+                        left_positions.insert(variable, idx);
+                    }
+                }
+
+                for (idx, variable) in right_variables.iter().enumerate() {
+                    if let Some(term) = constants.get(variable) {
+                        right_constants.insert(idx, ground_term_from_datavalue(&term.value())?);
+                    } else if join_variables.contains(&variable) {
+                        right_positions.insert(variable, idx);
+                    }
+                }
+
+                let mut join_positions = Vec::new();
+                for &&variable in &join_variables {
+                    join_positions.push((
+                        *left_positions
+                            .get(variable)
+                            .expect("all join variables are known"),
+                        *right_positions
+                            .get(variable)
+                            .expect("all join variables are known"),
+                    ));
+                }
+
+                let query = merge_queries(
+                    &left_sparql.query,
+                    &right_sparql.query,
+                    &join_positions,
+                    &left_constants,
+                    &right_constants,
+                )?;
+
+                let mut result = self.clone();
+                result.0.spec.replace_or_insert(
+                    &QUERY.into(),
+                    Term::ground(AnyDataValue::new_plain_string(query.to_string())),
+                );
+
+                let mut variables = left_variables.to_vec();
+                variables.extend(
+                    right_variables
+                        .iter()
+                        .filter(|variable| !join_variables.contains(variable))
+                        .cloned(),
+                );
+
+                Some((result, variables))
+            }
+            _ => None,
+        }
+    }
+
     /// Change the predicate that this import writes to.
     pub fn set_predicate(&mut self, predicate: Tag) {
         self.0.predicate = predicate;
+    }
+
+    /// Modify the parameters of this import.
+    pub fn with_parameter<F>(&mut self, parameter: &str, f: F)
+    where
+        F: Fn(Option<&Term>) -> Option<Term>,
+    {
+        let mut found = false;
+        let mut delete = None;
+        for (idx, (attribute, value)) in self.0.spec.map.iter_mut().enumerate() {
+            if attribute.value() == parameter {
+                found = true;
+                match f(Some(value)) {
+                    None => {
+                        delete = Some(idx);
+                    }
+                    Some(new_value) => *value = new_value,
+                }
+                break;
+            }
+        }
+
+        if let Some(idx) = delete {
+            self.0.spec.map.remove(idx);
+        } else if !found && let Some(new_value) = f(None) {
+            self.0
+                .spec
+                .map
+                .push((ImportExportAttribute::new(parameter.to_string()), new_value))
+        }
     }
 
     /// Add a new sub-[Rule] for filtered imports.

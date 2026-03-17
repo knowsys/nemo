@@ -1,6 +1,6 @@
 //! This module defines [FilterTransformPattern].
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::function::{evaluation::StackProgram, tree::FunctionTree};
 
@@ -31,6 +31,7 @@ impl TransformPosition {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FilterTransformPattern {
     pub(crate) filter: StackProgram,
+    pub(crate) filter_function: FunctionTree<OperationColumnMarker>,
     pub(crate) transformations: Vec<TransformPosition>,
 }
 
@@ -49,7 +50,47 @@ impl FilterTransformPattern {
 
         Self {
             filter: filter_program,
+            filter_function: filter,
             transformations,
         }
+    }
+
+    /// Return the underlying function for the filter part of this pattern.
+    pub fn filter_function(&self) -> &FunctionTree<OperationColumnMarker> {
+        &self.filter_function
+    }
+
+    /// Estimate the arity from the transformations
+    pub fn expected_arity(&self) -> Option<usize> {
+        let positions = self
+            .transformations
+            .iter()
+            .map(|position| position.position)
+            .collect::<HashSet<_>>()
+            .len();
+
+        (positions > 0).then_some(positions)
+    }
+
+    /// Apply the given skiplist to the pattern, renaming references so as to ignore the skipped columns
+    pub fn with_skips(&mut self, skips: &[bool]) -> &mut Self {
+        let mut reference_map = HashMap::new();
+        let mut skip_count = 0;
+
+        for (idx, skip) in skips.iter().enumerate() {
+            if *skip {
+                skip_count += 1;
+            } else {
+                reference_map.insert(idx, idx - skip_count);
+            }
+        }
+
+        self.filter.rename_references(&reference_map);
+        //self.filter_function.apply_skips(
+        self.transformations
+            .iter_mut()
+            .for_each(|transformation| transformation.program.rename_references(&reference_map));
+
+        self
     }
 }

@@ -7,6 +7,8 @@ pub mod exports;
 pub mod filter_imports;
 pub mod global;
 pub mod incremental;
+pub mod merge_sparql;
+pub mod normalize;
 pub mod set_default_outputs;
 pub mod skolem;
 pub mod split;

@@ -1,5 +1,7 @@
 //! This module defines the strategy for the (forward) execution of rules.
 
+use std::collections::HashSet;
+
 use crate::{
     error::Error,
     execution::planning::{
@@ -35,11 +37,12 @@ pub struct StrategyForward {
 
 impl StrategyForward {
     /// Create a new [StrategyForward].
-    pub fn new(rule: &NormalizedRule) -> Self {
+    pub fn new(rule: &NormalizedRule, predicates_with_facts: &HashSet<Tag>) -> Self {
         let positive = rule.positive().clone();
         let negative = rule.negative().clone();
         let mut operations = rule.operations().clone();
-        let imports = rule.imports().clone();
+        let positive_imports = rule.positive_imports().clone();
+        let negative_imports = rule.negative_imports().clone();
 
         let order = rule.variable_order();
         let frontier = rule.frontier();
@@ -47,7 +50,16 @@ impl StrategyForward {
         let is_existential = rule.is_existential();
         let aggregation_index = rule.aggregate_index();
 
-        let body = StrategyBody::new(order.clone(), positive, negative, imports, &mut operations);
+        let body = StrategyBody::new(
+            order.clone(),
+            positive,
+            negative,
+            positive_imports,
+            negative_imports,
+            &mut operations,
+        );
+
+        body.output_variables();
 
         let aggregation = rule.aggregate().cloned().map(|aggregation| {
             GeneratorAggregation::new(body.output_variables(), aggregation, &mut operations)
@@ -69,13 +81,18 @@ impl StrategyForward {
             }
         }
 
+        let has_facts = rule
+            .predicates_head()
+            .any(|(predicate, _)| predicates_with_facts.contains(&predicate));
+
         let head = StrategyHead::new(
             rule,
-            order,
+            rule.existential_variable_order(),
             frontier,
             aggregation_index,
             rule_id,
             is_existential,
+            has_facts,
         );
 
         Self {

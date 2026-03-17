@@ -23,7 +23,7 @@ pub struct GeneratorFunction {
 impl GeneratorFunction {
     /// Create a new [GeneratorFunction].
     ///
-    /// Uses exactly those `operation` that bind a new variable and
+    /// Uses exactly those `operations` that bind a new variable and
     /// whose result can be determined
     /// by bound values of the input or other function values
     /// and removes them from the `operations` list.

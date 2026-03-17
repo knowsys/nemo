@@ -35,6 +35,15 @@ pub(crate) enum StackValue {
     This,
 }
 
+impl StackValue {
+    fn rename(&self, map: &HashMap<StackReferenceIndex, StackReferenceIndex>) -> Self {
+        match self {
+            Self::Reference(index) => Self::Reference(*map.get(index).unwrap_or(index)),
+            _ => self.clone(),
+        }
+    }
+}
+
 /// Operation performed in a [StackProgram]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum StackOperation {
@@ -50,10 +59,18 @@ pub(crate) enum StackOperation {
     NaryFunction(NaryFunctionEnum, usize),
 }
 
+impl StackOperation {
+    fn rename(&mut self, map: &HashMap<StackReferenceIndex, StackReferenceIndex>) {
+        if let Self::Push(value) = self {
+            *value = value.rename(map);
+        }
+    }
+}
+
 /// Representation of a [FunctionTree] as a stack program
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StackProgram {
-    /// Maximmum size of the stack
+    /// Maximum size of the stack
     size: usize,
     /// List of instructions
     instructions: Vec<StackOperation>,
@@ -325,6 +342,12 @@ impl StackProgram {
         stack
             .pop()
             .expect("The final value is on the stack, since this program is valid.")
+    }
+
+    pub(crate) fn rename_references(&mut self, map: &HashMap<usize, usize>) {
+        self.instructions
+            .iter_mut()
+            .for_each(|operation| operation.rename(map));
     }
 }
 

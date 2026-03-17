@@ -9,9 +9,14 @@ use nemo_physical::datavalues::AnyDataValue;
 
 use crate::{
     execution::planning::{
-        analysis::variable_order::build_preferable_variable_orders,
+        analysis::variable_order::{
+            VariableOrder, build_preferable_variable_orders,
+            build_preferable_variable_orders_for_rule,
+        },
         normalization::{
-            atom::ground::GroundAtom, export::ExportInstruction, import::ImportInstruction,
+            atom::{ground::GroundAtom, head::HeadAtom},
+            export::ExportInstruction,
+            import::ImportInstruction,
             rule::NormalizedRule,
         },
     },
@@ -293,20 +298,61 @@ impl NormalizedProgram {
         }
 
         // Calculate variable order
-        let orders = build_preferable_variable_orders(&result, None)
-            .all_variable_orders
-            .into_iter()
-            .map(|mut orders| {
-                orders
-                    .pop()
-                    .expect("function constructs at least one order")
-            });
+        let variable_order_result = build_preferable_variable_orders(&result, None);
+        let (column_orders, variable_orders) = (
+            variable_order_result
+                .all_column_orders
+                .into_iter()
+                .next()
+                .expect("function should compute at least one order"),
+            variable_order_result.all_variable_orders,
+        );
+
+        let orders = variable_orders.into_iter().map(|mut orders| {
+            orders
+                .pop()
+                .expect("function constructs at least one order")
+        });
 
         for (rule, mut order) in result.rules.iter_mut().zip(orders) {
             order.extend(rule.variables());
             rule.set_variable_order(order);
+
+            if rule.is_existential() {
+                let auxiliary_rule = Self::construct_auxiliary_existential_rule(rule);
+                let auxiliary_order = build_preferable_variable_orders_for_rule(
+                    &auxiliary_rule,
+                    Some(column_orders.clone()),
+                )
+                .restrict_to(&rule.variables().cloned().collect::<HashSet<_>>());
+
+                rule.set_existential_variable_order(auxiliary_order);
+            }
         }
 
         result
+    }
+
+    /// Construct an auxiliary rule for the evaluation of the head atoms.
+    ///
+    /// The resulting rule will have a single head atom containing all universal variables of the rule,
+    /// and a body containing all atoms in the original head.
+    fn construct_auxiliary_existential_rule(rule: &NormalizedRule) -> NormalizedRule {
+        let (body, operations) = rule.normalize_existential_head(&mut VariableOrder::default());
+
+        let mut universal_variables = rule
+            .head()
+            .iter()
+            .flat_map(|atom| atom.variables().cloned())
+            .filter(|variable| variable.is_universal())
+            .collect::<Vec<_>>();
+        universal_variables.dedup();
+
+        let head = HeadAtom::new(
+            Tag::new(String::from("__AUX")),
+            universal_variables.into_iter().map(Primitive::from),
+        );
+
+        NormalizedRule::positive_rule(vec![head], body, operations)
     }
 }

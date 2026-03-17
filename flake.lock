@@ -2,11 +2,11 @@
   "nodes": {
     "crane": {
       "locked": {
-        "lastModified": 1770419512,
-        "narHash": "sha256-o8Vcdz6B6bkiGUYkZqFwH3Pv1JwZyXht3dMtS7RchIo=",
+        "lastModified": 1773189535,
+        "narHash": "sha256-E1G/Or6MWeP+L6mpQ0iTFLpzSzlpGrITfU2220Gq47g=",
         "owner": "ipetkov",
         "repo": "crane",
-        "rev": "2510f2cbc3ccd237f700bb213756a8f35c32d8d7",
+        "rev": "6fa2fb4cf4a89ba49fc9dd5a3eb6cde99d388269",
         "type": "github"
       },
       "original": {
@@ -826,6 +826,7 @@
           "nixpkgs"
         ],
         "utils": [
+          "nemo-web",
           "utils"
         ]
       },
@@ -1535,6 +1536,7 @@
           "nixpkgs"
         ],
         "utils": [
+          "nemo-web",
           "utils"
         ]
       },
@@ -3390,9 +3392,7 @@
         "nixpkgs": [
           "nixpkgs"
         ],
-        "utils": [
-          "utils"
-        ]
+        "utils": "utils"
       },
       "locked": {
         "lastModified": 1769429574,
@@ -4739,16 +4739,16 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1767313136,
-        "narHash": "sha256-16KkgfdYqjaeRGBaYsNrhPRRENs0qzkQVUooNHtoy2w=",
+        "lastModified": 1773610124,
+        "narHash": "sha256-EpC7ELOKmb+xXaqpK5ZRpJ5g9fxxg6tWny7/rUBfrwk=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "ac62194c3917d5f474c1a844b6fd6da2db95077d",
+        "rev": "9fe1300f4360e13f39d6d1d006e54fd5093e9ad5",
         "type": "github"
       },
       "original": {
         "owner": "NixOS",
-        "ref": "nixos-25.05",
+        "ref": "nixos-25.11",
         "repo": "nixpkgs",
         "type": "github"
       }
@@ -5503,8 +5503,7 @@
         "nemo-vscode-extension": "nemo-vscode-extension",
         "nemo-web": "nemo-web_12",
         "nixpkgs": "nixpkgs",
-        "rust-overlay": "rust-overlay_13",
-        "utils": "utils"
+        "rust-overlay": "rust-overlay_13"
       }
     },
     "rust-overlay": {
@@ -5630,11 +5629,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1770952264,
-        "narHash": "sha256-CjymNrJZWBtpavyuTkfPVPaZkwzIzGaf0E/3WgcwM14=",
+        "lastModified": 1773630837,
+        "narHash": "sha256-zJhgAGnbVKeBMJOb9ctZm4BGS/Rnrz+5lfSXTVah4HQ=",
         "owner": "oxalica",
         "repo": "rust-overlay",
-        "rev": "ec6a3d5cdf14bb5a1dd03652bd3f6351004d2188",
+        "rev": "f600ea449c7b5bb596fa1cf21c871cc5b9e31316",
         "type": "github"
       },
       "original": {

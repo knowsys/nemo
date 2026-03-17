@@ -1,5 +1,7 @@
 //! Handler for resources of type SPARQL (SPARQL query language for RDF).
 
+pub(crate) mod functions;
+pub(crate) mod queries;
 pub(crate) mod reader;
 
 use reader::SparqlReader;
@@ -42,6 +44,9 @@ const MAX_BINDINGS_PER_PAGE: usize = 32_000;
 /// How many characters can fit into a single query page
 const QUERY_PAGE_CHAR_LIMIT: usize = 740_000;
 
+/// Default query string
+const QUERY_DEFAULT: &str = "SELECT ?s ?p ?o WHERE { ?s ?p ?o }";
+
 format_tag! {
     pub enum SparqlTag(SupportedFormatTag::Sparql) {
         Sparql => file_format::SPARQL,
@@ -59,7 +64,7 @@ format_parameter! {
 
 impl FormatParameter<SparqlTag> for SparqlParameter {
     fn required_for(&self, tag: SparqlTag) -> bool {
-        matches!(tag, SparqlTag::Sparql) && matches!(self, Self::Endpoint | Self::Query)
+        matches!(tag, SparqlTag::Sparql) && matches!(self, Self::Endpoint)
     }
 
     fn is_value_valid(&self, value: AnyDataValue) -> Result<(), ValidationError> {
@@ -101,9 +106,9 @@ impl FormatParameter<SparqlTag> for SparqlParameter {
 
 #[derive(Clone, Debug)]
 pub(crate) struct SparqlBuilder {
-    value_formats: Option<DsvValueFormats>,
-    endpoint: Iri<String>,
-    query: Query,
+    pub(crate) value_formats: Option<DsvValueFormats>,
+    pub(crate) endpoint: Iri<String>,
+    pub(crate) query: Query,
 }
 
 impl SparqlBuilder {
@@ -154,8 +159,9 @@ impl FormatBuilder for SparqlBuilder {
             .expect("Endpoint is validated already");
 
         let query = parameters
-            .get_required(SparqlParameter::Query)
-            .to_plain_string_unchecked();
+            .get_optional(SparqlParameter::Query)
+            .map(|value| value.to_plain_string_unchecked())
+            .unwrap_or(QUERY_DEFAULT.to_string());
 
         let query = Query::parse(query.as_str(), None).expect("query has already been validated");
 

@@ -61,14 +61,22 @@ impl StrategyHead {
     /// Create a new [StrategyHead].
     pub fn new(
         rule: &NormalizedRule,
-        order: &VariableOrder,
+        existential_order: Option<&VariableOrder>,
         frontier: HashSet<Variable>,
         aggregation_index: Option<usize>,
         rule_id: usize,
         is_existential: bool,
+        has_facts: bool,
     ) -> Self {
         let restricted = if is_existential {
-            Some(StrategyRestricted::new(rule, frontier, order, rule_id))
+            let existential_order = existential_order.expect("rule is existential");
+            Some(StrategyRestricted::new(
+                rule,
+                frontier,
+                existential_order,
+                rule_id,
+                has_facts,
+            ))
         } else {
             None
         };
@@ -149,7 +157,7 @@ impl StrategyHead {
 
             plan.add_permanent_table(
                 node_final,
-                "Duplicate Elimination (Datalog)",
+                "Duplicate Elimination",
                 &table_name,
                 SubtableIdentifier::new(predicate.clone(), runtime.step_current),
             );

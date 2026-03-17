@@ -61,7 +61,7 @@ impl GeneratorJoinSeminaive {
             let mut ranges = Vec::<UnionRange>::default();
 
             for atom_index in 0..atoms.len() {
-                let range = if atom_index < mid {
+                let range = if atom_index > mid {
                     Self::range_old(last_is_new)
                 } else if atom_index == mid {
                     Self::range_new(last_is_new)
@@ -112,6 +112,7 @@ impl GeneratorJoinSeminaive {
         }
 
         let markers_result = runtime.translation.operation_table(self.order.iter());
+
         let mut node_result = plan.plan_mut().union_empty(markers_result);
 
         for variant in &self.variants {

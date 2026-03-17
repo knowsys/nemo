@@ -7,7 +7,7 @@ use std::{
     str::FromStr,
 };
 
-use assert_cmd::Command;
+use assert_cmd::cargo_bin_cmd;
 use assert_fs::{TempDir, prelude::*};
 use dir_test::{Fixture, dir_test};
 /// Testcase-generator. Each set of testcases needs a directory in resources/testcases.
@@ -95,7 +95,7 @@ impl TestCase {
     }
 
     fn run(&self) -> Result<(), Box<dyn std::error::Error>> {
-        let mut cmd = Command::cargo_bin("nmo")?;
+        let mut cmd = cargo_bin_cmd!("nmo");
 
         cmd.current_dir(self.test_dir.as_path())
             .arg("-D")

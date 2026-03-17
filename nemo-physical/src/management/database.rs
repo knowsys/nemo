@@ -381,6 +381,21 @@ struct TemporaryStorage {
 
 // Functions for computing results of execution plans
 impl DatabaseInstance {
+    /// Make sure that the table with the given [PermanentTableId] and [ColumnOrder]
+    /// is loaded into memory as a [Trie].
+    pub async fn load_trie_into_memory(
+        &mut self,
+        id: PermanentTableId,
+        order: ColumnOrder,
+    ) -> Result<(), Error> {
+        let _ = self
+            .reference_manager
+            .trie_id(&self.dictionary, id, order)
+            .await?;
+
+        Ok(())
+    }
+
     /// For a given list of [PermanentTableId] and [ColumnOrder] pairs,
     /// make sure that the tables represented by those ids and orders
     /// exist as [Trie]s and return a list with the [StorageId]s
@@ -609,6 +624,8 @@ impl DatabaseInstance {
             let tree_result = tree.result.clone();
             let tree_dependents = tree.dependents.clone();
             let tree_used = tree.used;
+            let tree_name = tree.operation_name.clone();
+            let tree_non_empty = tree.required_non_empty;
 
             let timed_string = format!("Reasoning/Execution/{}", tree.operation_name);
             TimedCode::instance().sub(&timed_string).start();
@@ -622,12 +639,24 @@ impl DatabaseInstance {
                 Self::log_new_trie(&tree_result, &result_tree);
             }
 
+            let mut result_empty = result_tree.is_empty();
+
             temporary_storage.computed_tables[tree_index] = Some(result_tree);
             for ((computed_id, _), result_dependent) in
                 tree_dependents.iter().zip(results_dependent)
             {
+                result_empty &= result_dependent.is_empty();
+
                 Self::log_new_trie(&tree_result, &result_dependent);
                 temporary_storage.computed_tables[*computed_id] = Some(result_dependent);
+            }
+
+            if result_empty && tree_non_empty {
+                log::info!(
+                    "Execution stopped because {} is required to be non-empty but is empty.",
+                    tree_name
+                );
+                return Ok(HashMap::new());
             }
         }
 

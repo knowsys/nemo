@@ -231,6 +231,17 @@ impl SubtableExecutionPlan {
         self.execution_plan.write_temporary(node, tree_name)
     }
 
+    /// Add a temporary table to the plan
+    /// that is require to be non-empty for the execution of the plan to continue.
+    pub fn add_temporary_table_non_empty(
+        &mut self,
+        node: ExecutionNodeRef,
+        tree_name: &str,
+    ) -> ExecutionId {
+        self.execution_plan
+            .write_temporary_non_empty(node, tree_name)
+    }
+
     /// Add a permanent table ot the plan-
     pub fn add_permanent_table(
         &mut self,
@@ -489,7 +500,7 @@ impl TableManager {
     /// Predicate must be registered before calling this function.
     pub(crate) fn add_edb(&mut self, predicate: Tag, sources: Vec<TableSource>) {
         let arity = if let Some(source) = sources.first() {
-            source.arity()
+            source.output_arity()
         } else {
             return;
         };
@@ -634,6 +645,15 @@ impl TableManager {
         };
 
         let tables = subtable_handler.cover_range(&range);
+
+        if tables.len() == 1 {
+            let id = tables[0];
+            self.database
+                .load_trie_into_memory(id, ColumnOrder::default())
+                .await?;
+
+            return Ok(Some(id));
+        }
 
         let mut union_plan = ExecutionPlan::default();
         let fetch_nodes = tables

@@ -89,8 +89,8 @@ impl GeneratorFunction {
     /// Create a new [GeneratorFunction].
     pub fn new(output: OperationTable, functions: &FunctionAssignment) -> Self {
         let referenced_columns: HashSet<OperationColumnMarker> = functions
-            .iter()
-            .flat_map(|(_, function)| function.references())
+            .values()
+            .flat_map(|function| function.references())
             .collect();
 
         let mut reference_map = HashMap::<OperationColumnMarker, usize>::new();
