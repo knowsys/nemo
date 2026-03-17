@@ -91,6 +91,19 @@
 
           inherit (pkgs) python3; # this should match the install hook version below
           inherit (pkgs.python3Packages) pypaInstallHook pycodestyle; # this should match the python version above
+          # find correct wasm-bindgen-version
+          wasm-bindgen =
+            let
+              version = lib.pipe ./Cargo.lock [
+                builtins.readFile
+                fromTOML
+                (d: d.package)
+                (lib.findSingle (d: d.name == "wasm-bindgen") { } { })
+                (d: d.version)
+                (lib.replaceString "." "_")
+              ];
+            in
+            pkgs.${"wasm-bindgen-cli_${version}"};
 
           commonArgs = {
             inherit src;
@@ -285,9 +298,9 @@
                   (args.nativeBuildInputs or [ ])
                   ++ crateArgs.nativeBuildInputs
                   ++ (lib.attrValues {
+                    inherit wasm-bindgen;
                     inherit (pkgs)
                       binaryen
-                      wasm-bindgen-cli_0_2_100
                       wasm-pack
                       writableTmpDirAsHomeHook
                       ;
@@ -605,6 +618,7 @@
                 inherit
                   python3
                   pycodestyle
+                  wasm-bindgen
                   ;
                 inherit (pkgs)
                   cargo-audit
@@ -614,7 +628,6 @@
 
                   maturin
                   binaryen
-                  wasm-bindgen-cli
                   wasm-pack
 
                   gnuplot
