@@ -37,5 +37,8 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 
 [dev-dependencies]
+wasm-bindgen-test = "0.3"
 
+[package.metadata.cargo-udeps.ignore]
+development = ["wasm-bindgen-test"] # not actually used, since we don't have wasm tests
 
