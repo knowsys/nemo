@@ -32,6 +32,15 @@ jobs:
           purge-created: 0
           purge-last-accessed: 0
           purge-primary-key: never
+      - run: nix build .\#nemo
+      - run: nix build .\#nemo-language-server
+      - run: nix build .\#nemo-python
+      - run: nix build .\#nemo-wasm-bundler
+      - run: nix build .\#nemo-wasm-node
+      - run: nix build .\#nemo-wasm-web
+      - run: nix build .\#nemo-vscode-extension
+      - run: nix build .\#nemo-web
+      - run: nix build .\#nemo-doc
       - run: nix flake check
       - name: Build and Collect garbage
         run: |
