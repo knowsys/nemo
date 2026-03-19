@@ -256,7 +256,7 @@ impl NemoEngine {
     pub fn edb_predicates(&self) -> Set {
         let js_set = Set::new(&JsValue::undefined());
 
-        for tag in self.engine.chase_program().import_predicates().into_iter() {
+        for tag in self.engine.chase_program().import_predicates() {
             js_set.add(&JsValue::from(tag.to_string()));
         }
 
