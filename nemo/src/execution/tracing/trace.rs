@@ -87,7 +87,7 @@ impl TraceTreeRuleApplication {
     }
 }
 
-/// Tree representation of an [ExecutionTrace] from a given start node
+/// Tree representation of an `ExecutionTrace` from a given start node
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone)]
 pub enum ExecutionTraceTree {
@@ -311,7 +311,7 @@ struct ExecutionTraceListOfInferences {
     inferences: Vec<ExecutionTraceInference>,
 }
 
-/// Serializable representation of an [ExecutionTrace] as a list of inferences
+/// Serializable representation of an `ExecutionTrace` as a list of inferences
 #[derive(Debug, Serialize, Default)]
 pub struct ExecutionTraceListOfInferencesJSON {
     /// The list of conclusions for which the trace is computed

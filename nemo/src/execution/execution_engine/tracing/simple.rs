@@ -184,8 +184,8 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         Ok(trace_handle)
     }
 
-    /// Build an [ExecutionTrace] for a list of facts.
-    /// Also returns a list containing a [TraceFactHandle] for each fact.
+    /// Build an `ExecutionTrace` for a list of facts.
+    /// Also returns a list containing a `TraceFactHandle` for each fact.
     pub async fn trace(
         &mut self,
         facts: Vec<Fact>,

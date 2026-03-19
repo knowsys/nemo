@@ -69,8 +69,8 @@ fn predicates_to_print_facts_for(
     match print_facts_setting {
         FactPrinting::None => Vec::new(),
         FactPrinting::Idb => program.derived_predicates().iter().cloned().collect(),
-        FactPrinting::Edb => program.import_predicates().into_iter().collect(),
-        FactPrinting::All => program.all_predicates().into_iter().collect(),
+        FactPrinting::Edb => program.import_predicates().collect(),
+        FactPrinting::All => program.all_predicates().collect(),
     }
 }
 
