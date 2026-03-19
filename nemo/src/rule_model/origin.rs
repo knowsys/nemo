@@ -36,6 +36,9 @@ pub enum Origin {
         /// New component that is replacing it
         replacing: ProgramComponentId,
     },
+
+    /// Rule that was created by normalizing a rule
+    Normalization(ProgramComponentId),
 }
 
 impl Origin {

@@ -61,9 +61,9 @@ impl GeneratorRestrictedHead {
     /// Create a new [GeneratorRestrictedHead].
     pub fn new(
         rule: &NormalizedRule,
+        rule_index: usize,
         frontier: HashSet<Variable>,
         order: &VariableOrder,
-        rule_id: usize,
         has_facts: bool,
     ) -> Self {
         let head_variables = rule
@@ -95,7 +95,7 @@ impl GeneratorRestrictedHead {
         order = order.restrict_to(&frontier);
         let projection = GeneratorRestrictedFrontier::new(order.as_ordered_list());
 
-        let predicate = (Self::generate_predicate(rule_id), order.len());
+        let predicate = (Self::generate_predicate(rule_index), order.len());
         let duplicates = GeneratorDuplicates::new(predicate.0.clone());
 
         Self {
@@ -109,8 +109,9 @@ impl GeneratorRestrictedHead {
     }
 
     /// Generate the predicate name used to store the result of this generator.
-    fn generate_predicate(rule_id: usize) -> Tag {
-        let name = format!("_SATISFIED_{rule_id}");
+    fn generate_predicate(rule_index: usize) -> Tag {
+        let name = format!("_SATISFIED_{rule_index}");
+        println!("generated predicate: {}", name);
         Tag::new(name)
     }
 

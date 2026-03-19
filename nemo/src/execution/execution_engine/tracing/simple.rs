@@ -8,17 +8,15 @@ use crate::{
     error::Error,
     execution::{
         ExecutionEngine,
+        execution_engine::tracing::simple::storage::{
+            ExecutionTrace, TraceDerivation, TraceFactHandle, TraceRuleApplication, TraceStatus,
+        },
         planning::{
             normalization::{atom::ground::GroundAtom, program::NormalizedProgram},
             strategy::tracing::StrategyTracing,
         },
         selection_strategy::strategy::RuleSelectionStrategy,
-        tracing::{
-            error::TracingError,
-            trace::{
-                ExecutionTrace, TraceDerivation, TraceFactHandle, TraceRuleApplication, TraceStatus,
-            },
-        },
+        tracing::error::TracingError,
     },
     rule_model::{
         components::{
@@ -29,6 +27,8 @@ use crate::{
         substitution::Substitution,
     },
 };
+
+pub(crate) mod storage;
 
 impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     /// Recursive part of `trace`.
@@ -163,7 +163,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 }
 
                 let rule_application = TraceRuleApplication::new(
-                    rule_index,
+                    rule.id(),
                     Substitution::new(variable_assignment.into_iter().map(|(variable, value)| {
                         (Primitive::from(variable), Primitive::from(value))
                     })),
@@ -206,7 +206,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             .filter_map(|fact| GroundAtom::normalize_fact(&fact))
             .collect();
 
-        let mut trace = ExecutionTrace::new(self.nemo_program.clone());
+        let mut trace = ExecutionTrace::new(self.program_handle.clone());
         let mut handles = Vec::new();
 
         let num_chase_facts = chase_facts.len();

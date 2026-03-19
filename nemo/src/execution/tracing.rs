@@ -7,3 +7,5 @@ pub mod shared;
 
 pub mod node_query;
 pub mod tree_query;
+
+pub(crate) mod resolve_orgin;

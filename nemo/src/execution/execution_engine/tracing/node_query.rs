@@ -30,6 +30,7 @@ use crate::{
                 TableEntriesForTreeNodesResponse, TableEntriesForTreeNodesResponseElement,
                 TreeAddress,
             },
+            resolve_orgin::tracing_resolve_origin,
             shared::{
                 PaginationResponse, ResponseMetaInformation, Rule as TraceRule, TableEntryQuery,
                 TableEntryResponse,
@@ -521,27 +522,30 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         node: &TableEntriesForTreeNodesQueryInner,
         address: TreeAddress,
         predicate: &Tag,
-        program: &NormalizedProgram,
     ) -> Result<(), Error> {
         // Collect all (syntactically) possible rules
         // that could be triggered by or could trigger
         // the predicate assigned to the current node
 
-        let possible_rules_above = program
+        let possible_rules_above = self
+            .chase_program()
             .rules_with_body_predicate(predicate)
             .flat_map(|index| {
-                TraceRule::all_possible_single_head_rules(index, self.program().rule(index))
+                let chase_rule = &self.chase_program().rules()[index];
+                let logical_rule = tracing_resolve_origin(&self.program_handle, chase_rule.id());
+                TraceRule::all_possible_single_head_rules(index, &logical_rule).collect::<Vec<_>>()
             })
             .collect::<Vec<_>>();
 
-        let possible_rules_below = program
+        let possible_rules_below = self
+            .chase_program()
             .rules_with_head_predicate(predicate)
             .flat_map(|index| {
-                TraceRule::possible_rules_for_head_predicate(
-                    index,
-                    self.program().rule(index),
-                    predicate,
-                )
+                let chase_rule = &self.chase_program().rules()[index];
+                let logical_rule = tracing_resolve_origin(&self.program_handle, chase_rule.id());
+
+                TraceRule::possible_rules_for_head_predicate(index, &logical_rule, predicate)
+                    .collect::<Vec<_>>()
             })
             .collect::<Vec<_>>();
 
@@ -572,7 +576,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         elements.push(element);
 
         if let Some(successor) = &node.next {
-            let rule = program.rules()[successor.rule].clone();
+            let rule = self.chase_program().rules()[successor.rule].clone();
 
             // Call this function recursively for each successor
 
@@ -592,7 +596,6 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                     child,
                     next_address,
                     &next_predicate,
-                    program,
                 ))
                 .await?;
             }
@@ -654,7 +657,6 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     async fn trace_node_prepare(
         &mut self,
         query: &TableEntriesForTreeNodesQuery,
-        program: &NormalizedProgram,
     ) -> Result<TableEntriesForTreeNodesResponse, Error> {
         let mut elements = Vec::<TableEntriesForTreeNodesResponseElement>::default();
 
@@ -663,7 +665,6 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             &query.inner,
             Vec::default(),
             &Tag::new(query.predicate.clone()),
-            program,
         )
         .await?;
 
@@ -677,7 +678,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     ) -> Result<TableEntriesForTreeNodesResponse, Error> {
         let program = self.program.clone();
 
-        let response = self.trace_node_prepare(query, &program).await?;
+        let response = self.trace_node_prepare(query).await?;
         let manager = self.trace_node_execute(query, &program).await?;
 
         let result = self

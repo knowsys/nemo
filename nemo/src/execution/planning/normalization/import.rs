@@ -61,7 +61,7 @@ impl ImportInstruction {
         let filter_rules = import
             .filter_rules()
             .iter()
-            .map(|rule| NormalizedRule::normalize_rule(rule, 0))
+            .map(|rule| NormalizedRule::normalize_rule(rule))
             .collect::<Vec<_>>();
 
         let input_arity = import

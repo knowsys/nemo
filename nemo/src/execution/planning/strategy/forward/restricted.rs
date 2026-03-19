@@ -40,16 +40,16 @@ impl StrategyRestricted {
     /// Create a new [StrategyRestricted].
     pub fn new(
         rule: &NormalizedRule,
+        rule_index: usize,
         frontier: HashSet<Variable>,
         existential_order: &VariableOrder,
-        rule_id: usize,
         has_facts: bool,
     ) -> Self {
         let new_satisfied = GeneratorRestrictedHead::new(
             rule,
+            rule_index,
             frontier.clone(),
             existential_order,
-            rule_id,
             has_facts,
         );
         let all_satisfied = GeneratorUnion::new(

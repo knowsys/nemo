@@ -7,7 +7,7 @@ use crate::{
     parser::Parser,
     rule_file::RuleFile,
     rule_model::{
-        components::{ProgramComponent, statement::Statement},
+        components::{ProgramComponent, rule::Rule, statement::Statement},
         error::{TranslationReport, ValidationReport},
         pipeline::{
             ProgramPipeline, commit::ProgramCommit, id::ProgramComponentId,
@@ -19,7 +19,7 @@ use crate::{
 };
 
 /// Program-like object that is a spefic revision within [ProgramPipeline]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ProgramHandle {
     /// Reference to the [ProgramPipeline]
     pipeline: Rc<ProgramPipeline>,
@@ -95,6 +95,11 @@ impl ProgramHandle {
     pub fn component(&self, id: ProgramComponentId) -> Option<&dyn ProgramComponent> {
         self.pipeline.find_component(id)
     }
+
+    /// Given a [ProgramComponentId] return the corresponding [Rule], if it exists.
+    pub fn rule_by_id(&self, id: ProgramComponentId) -> Option<&Rule> {
+        self.pipeline.rule_by_id(id)
+    }
 }
 
 impl ProgramRead for ProgramHandle {
@@ -103,5 +108,17 @@ impl ProgramRead for ProgramHandle {
             .revision(self.revision)
             .statements()
             .map(|&id| self.pipeline.statement(id))
+    }
+}
+
+impl From<Program> for ProgramHandle {
+    fn from(program: Program) -> Self {
+        let mut commit = ProgramCommit::empty(ProgramPipeline::new(), ValidationReport::default());
+
+        for statement in program.statements() {
+            commit.add_statement(statement.clone());
+        }
+
+        commit.submit().expect("program is not validated")
     }
 }

@@ -7,184 +7,23 @@ use std::{
 };
 
 use ascii_tree::write_tree;
-use indexmap::{IndexSet, set::MutableValues};
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph_graphml::GraphMl;
 use serde::Serialize;
 
 use crate::{
     execution::{
-        planning::normalization::atom::ground::GroundAtom,
-        tracing::node_query::{
-            TableEntriesForTreeNodesQuery, TableEntriesForTreeNodesQueryInner,
-            TableEntriesForTreeNodesQuerySuccessor,
+        execution_engine::tracing::simple::storage::{
+            ExecutionTrace, TraceDerivation, TraceFactHandle, TraceStatus,
         },
+        planning::normalization::atom::ground::GroundAtom,
+        tracing::resolve_orgin::tracing_resolve_origin,
     },
     rule_model::{
         components::{fact::Fact, rule::Rule},
-        programs::program::Program,
         substitution::Substitution,
     },
 };
-
-/// Index of a rule within a [Program]
-type RuleIndex = usize;
-
-/// Represents the application of a rule to derive a specific fact
-#[derive(Debug)]
-pub(crate) struct TraceRuleApplication {
-    /// Index of the rule that was applied
-    rule_index: RuleIndex,
-    /// Variable assignment used during the rule application
-    assignment: Substitution,
-    /// Index of the head atom which produced the fact under consideration
-    _position: usize,
-}
-
-impl TraceRuleApplication {
-    /// Create new [TraceRuleApplication].
-    pub fn new(rule_index: RuleIndex, assignment: Substitution, _position: usize) -> Self {
-        Self {
-            rule_index,
-            assignment,
-            _position,
-        }
-    }
-}
-
-/// Handle to a traced fact within an [ExecutionTrace].
-#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq)]
-pub struct TraceFactHandle(usize);
-
-/// Encodes the origin of a fact
-#[derive(Debug)]
-pub(crate) enum TraceDerivation {
-    /// Fact was part of the input to the chase
-    Input,
-    /// Fact was derived during the chase
-    Derived(TraceRuleApplication, Vec<TraceFactHandle>),
-}
-
-/// Encodes current status of the derivation of a given fact
-#[derive(Debug)]
-pub(crate) enum TraceStatus {
-    /// It is not yet known whether this fact derived during chase
-    Unknown,
-    /// Fact was derived during the chase with the given [TraceDerivation]
-    Success(TraceDerivation),
-    /// Fact was not derived during the chase
-    Fail,
-}
-
-impl TraceStatus {
-    /// Return true when fact was successfully derived
-    /// and false otherwise.
-    pub fn is_success(&self) -> bool {
-        matches!(self, TraceStatus::Success(_))
-    }
-
-    /// Return true if it has already been decided whether
-    /// a given fact has been derived and false otherwise.
-    pub fn is_known(&self) -> bool {
-        !matches!(self, TraceStatus::Unknown)
-    }
-}
-
-/// Fact which was considered during the construction of an [ExecutionTrace]
-#[derive(Debug)]
-struct TracedFact {
-    /// The considered fact
-    fact: GroundAtom,
-    /// Its current status with respect to its derivability in the chase
-    status: TraceStatus,
-}
-
-impl PartialEq for TracedFact {
-    fn eq(&self, other: &Self) -> bool {
-        self.fact == other.fact
-    }
-}
-
-impl Eq for TracedFact {}
-
-impl Hash for TracedFact {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.fact.hash(state);
-    }
-}
-
-/// Structure for recording execution traces
-/// while not recomputing traces for the same facts occurring multiple times
-#[derive(Debug)]
-pub struct ExecutionTrace {
-    /// Input program
-    program: Program,
-
-    /// All the facts considered during tracing
-    facts: IndexSet<TracedFact>,
-}
-
-impl ExecutionTrace {
-    /// Create an empty [ExecutionTrace].
-    pub(crate) fn new(program: Program) -> Self {
-        Self {
-            program,
-            facts: IndexSet::default(),
-        }
-    }
-
-    /// Given a [TraceFactHandle] return a reference to the corresponding [TracedFact].
-    fn get_fact(&self, handle: TraceFactHandle) -> &TracedFact {
-        self.facts.get_index(handle.0).expect("invalid fact handle")
-    }
-
-    /// Given a [TraceFactHandle] return a mutable reference to the corresponding [TracedFact].
-    fn get_fact_mut(&mut self, handle: TraceFactHandle) -> &mut TracedFact {
-        self.facts
-            .get_index_mut2(handle.0)
-            .expect("invalid fact handle")
-    }
-
-    /// Search a given [GroundAtom] in self.facts.
-    /// Also takes into account that the interpretation of a constant depends on its type.
-    fn find_fact(&self, fact: &GroundAtom) -> Option<TraceFactHandle> {
-        let traced_fact = TracedFact {
-            fact: fact.clone(),
-            status: TraceStatus::Unknown,
-        };
-
-        self.facts.get_index_of(&traced_fact).map(TraceFactHandle)
-    }
-
-    /// Registers a new [GroundAtom].
-    ///
-    /// If the fact was not already known then it will return a fresh handle
-    /// with the status TraceStatus::Known.
-    /// Otherwise a handle to the existing fact will be returned.
-    pub fn register_fact(&mut self, fact: GroundAtom) -> TraceFactHandle {
-        if let Some(handle) = self.find_fact(&fact) {
-            handle
-        } else {
-            let handle = TraceFactHandle(self.facts.len());
-            self.facts.insert(TracedFact {
-                fact,
-                status: TraceStatus::Unknown,
-            });
-
-            handle
-        }
-    }
-
-    /// Return the [TraceStatus] of a given fact identified by its [TraceFactHandle].
-    pub(crate) fn status(&self, handle: TraceFactHandle) -> &TraceStatus {
-        &self.get_fact(handle).status
-    }
-
-    /// Update the [TraceStatus] of a given fact identified by its [TraceFactHandle].
-    pub(crate) fn update_status(&mut self, handle: TraceFactHandle, status: TraceStatus) {
-        self.get_fact_mut(handle).status = status;
-    }
-}
 
 /// Trait implemented by tree structure of traces
 /// that can be converted into the GraphML format
@@ -215,20 +54,16 @@ impl ToGraphMl for DiGraph<TracePetGraphNodeLabel, ()> {
 pub struct TraceTreeRuleApplication {
     /// Rule that was applied
     pub rule: Rule,
-    /// Index of the applied rule
-    pub rule_index: usize,
-    /// Head index
+    /// Index of the head atom which produced the fact under consideration
     pub head_index: usize,
     /// Variable assignment used during the rule application
     pub assignment: Substitution,
-    /// Index of the head atom which produced the fact under consideration
-    _position: usize,
 }
 
 impl TraceTreeRuleApplication {
     /// Get the [Fact] that was produced by this rule application.
     fn to_derived_atom(&self) -> Fact {
-        let mut fact = self.rule.head()[self._position].clone();
+        let mut fact = self.rule.head()[self.head_index].clone();
         self.assignment.apply(&mut fact);
 
         Fact::from(fact)
@@ -306,6 +141,7 @@ impl ExecutionTraceTree {
         result
     }
 
+    /// Create a petgraph representation.
     fn to_petgraph(&self) -> DiGraph<TracePetGraphNodeLabel, ()> {
         let mut graph = DiGraph::new();
 
@@ -354,59 +190,21 @@ impl ExecutionTraceTree {
     pub fn to_graphml(&self) -> String {
         self.to_petgraph().to_graphml()
     }
-
-    /// Inner function of `to_node_query`.
-    fn to_node_query_inner(&self) -> TableEntriesForTreeNodesQueryInner {
-        match self {
-            ExecutionTraceTree::Fact(_) => TableEntriesForTreeNodesQueryInner {
-                queries: Vec::default(),
-                pagination: None,
-                next: None,
-            },
-            ExecutionTraceTree::Rule(rule_application, trees) => {
-                let successor = TableEntriesForTreeNodesQuerySuccessor {
-                    rule: rule_application.rule_index,
-                    head_index: rule_application.head_index,
-                    children: trees
-                        .iter()
-                        .map(|tree| tree.to_node_query_inner())
-                        .collect::<Vec<_>>(),
-                };
-
-                TableEntriesForTreeNodesQueryInner {
-                    queries: Vec::default(),
-                    pagination: None,
-                    next: Some(successor),
-                }
-            }
-        }
-    }
-
-    /// Return a [TableEntriesForTreeNodesQuery] that would be answered by this tree.
-    pub fn to_node_query(&self) -> TableEntriesForTreeNodesQuery {
-        let predicate = match self {
-            ExecutionTraceTree::Fact(fact) => fact.predicate(),
-            ExecutionTraceTree::Rule(rule_application, _) => {
-                rule_application.rule.head()[rule_application.head_index].predicate()
-            }
-        };
-
-        TableEntriesForTreeNodesQuery {
-            predicate: predicate.to_string(),
-            inner: self.to_node_query_inner(),
-        }
-    }
 }
 
 impl ExecutionTrace {
     /// Return a [ExecutionTraceTree] representation of an [ExecutionTrace]
     /// starting from a given fact.
+    ///
+    /// Return `None` if there is no trace for the given fact.
     pub fn tree(&self, fact_handle: TraceFactHandle) -> Option<ExecutionTraceTree> {
         let traced_fact = self.get_fact(fact_handle);
 
-        if let TraceStatus::Success(derivation) = &traced_fact.status {
+        if let TraceStatus::Success(derivation) = &traced_fact.status() {
             match derivation {
-                TraceDerivation::Input => Some(ExecutionTraceTree::Fact(traced_fact.fact.clone())),
+                TraceDerivation::Input => {
+                    Some(ExecutionTraceTree::Fact(traced_fact.fact().clone()))
+                }
                 TraceDerivation::Derived(application, subderivations) => {
                     let mut subtrees = Vec::new();
                     for &derivation in subderivations {
@@ -417,12 +215,12 @@ impl ExecutionTrace {
                         }
                     }
 
+                    let rule = tracing_resolve_origin(self.program(), application.rule());
+
                     let tree_application = TraceTreeRuleApplication {
-                        rule: self.program.rule(application.rule_index).clone(),
-                        rule_index: application.rule_index,
-                        head_index: application._position,
-                        assignment: application.assignment.clone(),
-                        _position: application._position,
+                        rule,
+                        head_index: application.head_index(),
+                        assignment: application.assignment().clone(),
                     };
 
                     Some(ExecutionTraceTree::Rule(tree_application, subtrees))
@@ -553,15 +351,15 @@ impl ExecutionTrace {
                 ExecutionTraceInference::new(None, conclusion.clone(), vec![])
             }
             TraceDerivation::Derived(application, premises_handles) => {
-                let rule = self.program.rule(application.rule_index);
+                let rule = tracing_resolve_origin(self.program(), application.rule());
 
                 let premises = premises_handles
                     .iter()
-                    .map(|&handle| self.get_fact(handle).fact.clone())
+                    .map(|&handle| self.get_fact(handle).fact().clone())
                     .collect();
 
                 ExecutionTraceInference::new(
-                    Some((rule.clone(), application.assignment.clone())),
+                    Some((rule, application.assignment().clone())),
                     conclusion.clone(),
                     premises,
                 )
@@ -591,8 +389,8 @@ impl ExecutionTrace {
 
                 let traced_fact = self.get_fact(current_fact);
 
-                if let TraceStatus::Success(derivation) = &traced_fact.status {
-                    let inference = self.inference_from_derivation(derivation, &traced_fact.fact);
+                if let TraceStatus::Success(derivation) = &traced_fact.status() {
+                    let inference = self.inference_from_derivation(derivation, traced_fact.fact());
                     inferences.push(inference);
 
                     if let TraceDerivation::Derived(_, handles_derived) = derivation {
@@ -605,7 +403,7 @@ impl ExecutionTrace {
             }
 
             if successful_derivation {
-                final_conclusions.push(self.get_fact(final_handle).fact.clone());
+                final_conclusions.push(self.get_fact(final_handle).fact().clone());
             }
         }
 
@@ -670,22 +468,26 @@ mod test {
 
     use crate::{
         execution::{
+            execution_engine::tracing::simple::storage::TraceRuleApplication,
             planning::normalization::atom::ground::GroundAtom,
             tracing::trace::{TraceDerivation, TraceStatus},
         },
         rule_model::{
             components::{
+                ComponentIdentity,
                 atom::Atom,
                 rule::Rule,
                 term::primitive::{Primitive, variable::Variable},
             },
-            programs::{ProgramWrite, program::Program},
+            error::ValidationReport,
+            pipeline::{ProgramPipeline, commit::ProgramCommit},
+            programs::{ProgramRead, ProgramWrite},
             substitution::Substitution,
             translation::TranslationComponent,
         },
     };
 
-    use super::{ExecutionTrace, TraceRuleApplication};
+    use super::ExecutionTrace;
 
     macro_rules! variable_assignment {
         ($($k:expr => $v:expr),*) => {{
@@ -718,14 +520,19 @@ mod test {
         let s_a = GroundAtom::try_from(Atom::parse("S(a)").unwrap()).unwrap();
         let t_a = GroundAtom::try_from(Atom::parse("T(a)").unwrap()).unwrap();
 
-        let rule_1_index = 0;
-        let rule_2_index = 1;
-        let rule_3_index = 2;
+        let mut commit = ProgramCommit::empty(ProgramPipeline::new(), ValidationReport::default());
+        commit.add_rule(rule_1);
+        commit.add_rule(rule_2);
+        commit.add_rule(rule_3);
 
-        let mut program = Program::default();
-        program.add_rule(rule_1);
-        program.add_rule(rule_2);
-        program.add_rule(rule_3);
+        let program = commit.submit().unwrap();
+        let mut program_rules = program.rules();
+
+        let rule_1_id = program_rules.next().unwrap().id();
+        let rule_2_id = program_rules.next().unwrap().id();
+        let rule_3_id = program_rules.next().unwrap().id();
+
+        drop(program_rules);
 
         let mut trace = ExecutionTrace::new(program);
 
@@ -739,7 +546,7 @@ mod test {
         trace.update_status(
             trace_s_a,
             TraceStatus::Success(TraceDerivation::Derived(
-                TraceRuleApplication::new(rule_2_index, rule_2_assignment, 0),
+                TraceRuleApplication::new(rule_2_id, rule_2_assignment, 0),
                 vec![trace_t_a],
             )),
         );
@@ -747,14 +554,14 @@ mod test {
         trace.update_status(
             trace_p_ba,
             TraceStatus::Success(TraceDerivation::Derived(
-                TraceRuleApplication::new(rule_1_index, rule_1_assignment, 0),
+                TraceRuleApplication::new(rule_1_id, rule_1_assignment, 0),
                 vec![trace_q_ab],
             )),
         );
         trace.update_status(
             trace_r_ba,
             TraceStatus::Success(TraceDerivation::Derived(
-                TraceRuleApplication::new(rule_3_index, rule_3_assignment, 0),
+                TraceRuleApplication::new(rule_3_id, rule_3_assignment, 0),
                 vec![trace_p_ba, trace_s_a],
             )),
         );

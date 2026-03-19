@@ -191,6 +191,16 @@ impl NormalizedProgram {
             .map(|(predicate, arity)| (predicate.clone(), *arity))
     }
 
+    /// Return an iterator over all imported (EDB) predicates.
+    pub fn import_predicates(&self) -> impl Iterator<Item = Tag> + '_ {
+        self.imports.iter().map(|import| import.predicate().clone())
+    }
+
+    /// Return an iterator over all predicates occurring in this program.
+    pub fn all_predicates(&self) -> impl Iterator<Item = Tag> + '_ {
+        self.predicate_arities.keys().cloned()
+    }
+
     /// Associate an arity with a given predicate.
     ///
     /// # Panics
@@ -238,7 +248,7 @@ impl NormalizedProgram {
     ///
     /// # Panics
     /// Panics if the program is ill-formed.
-    pub fn normalize_program(program: &crate::rule_model::programs::program::Program) -> Self {
+    pub fn normalize_program(program: &crate::rule_model::programs::handle::ProgramHandle) -> Self {
         let mut result = Self::default();
 
         // Handle facts
@@ -256,8 +266,8 @@ impl NormalizedProgram {
         }
 
         // Handle rules
-        for (rule_index, rule) in program.rules().enumerate() {
-            let normalized_rule = NormalizedRule::normalize_rule(rule, rule_index);
+        for rule in program.rules() {
+            let normalized_rule = NormalizedRule::normalize_rule(rule);
 
             result.add_rule(normalized_rule);
         }

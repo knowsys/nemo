@@ -10,14 +10,13 @@ use crate::{
     execution::{
         ExecutionEngine,
         planning::{
-            normalization::{
-                atom::ground::GroundAtom, program::NormalizedProgram, rule::NormalizedRule,
-            },
+            normalization::{atom::ground::GroundAtom, rule::NormalizedRule},
             strategy::tracing::StrategyTracing,
         },
         selection_strategy::strategy::RuleSelectionStrategy,
         tracing::{
             error::TracingError,
+            resolve_orgin::tracing_resolve_origin,
             shared::{
                 PaginationResponse, ResponseMetaInformation, Rule as TraceRule, TableEntryQuery,
                 TableEntryResponse,
@@ -108,17 +107,13 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     /// The results for negated nodes is not computed as part of the normal
     /// evaluation of the query, and instead appendning the the full table,
     /// as an explanation for negated facts.
-    async fn trace_tree_add_negation(
-        &mut self,
-        response: &mut TreeForTableResponse,
-        program: &NormalizedProgram,
-    ) {
+    async fn trace_tree_add_negation(&mut self, response: &mut TreeForTableResponse) {
         if let Some(next) = &mut response.next {
             for child in &mut next.children {
-                Box::pin(self.trace_tree_add_negation(child, program)).await;
+                Box::pin(self.trace_tree_add_negation(child)).await;
             }
 
-            let rule = program.rules()[next.rule.id].clone();
+            let rule = self.chase_program().rules()[next.rule.id].clone();
             for negative_atom in rule.negative() {
                 let rows =
                     if let Ok(Some(rows)) = self.predicate_rows(&negative_atom.predicate()).await {
@@ -195,7 +190,6 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     async fn trace_tree_recursive(
         &mut self,
         facts: Vec<GroundAtom>,
-        program: &NormalizedProgram,
     ) -> Option<TreeForTableResponse> {
         // This functions assumes that all facts have the same predicate.
         let predicate = facts.first().map(|fact| fact.predicate())?;
@@ -214,21 +208,24 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             entries.push(TableEntryResponse { entry_id, terms });
         }
 
-        let possible_rules_above = program
+        let possible_rules_above = self
+            .chase_program()
             .rules_with_body_predicate(&predicate)
             .flat_map(|index| {
-                TraceRule::all_possible_single_head_rules(index, self.program().rule(index))
+                let chase_rule = &self.chase_program().rules()[index];
+                let logical_rule = tracing_resolve_origin(&self.program_handle, chase_rule.id());
+                TraceRule::all_possible_single_head_rules(index, &logical_rule).collect::<Vec<_>>()
             })
             .collect::<Vec<_>>();
 
-        let possible_rules_below = program
+        let possible_rules_below = self
+            .chase_program()
             .rules_with_head_predicate(&predicate)
             .flat_map(|index| {
-                TraceRule::possible_rules_for_head_predicate(
-                    index,
-                    self.program().rule(index),
-                    &predicate,
-                )
+                let chase_rule = &self.chase_program().rules()[index];
+                let logical_rule = tracing_resolve_origin(&self.program_handle, chase_rule.id());
+                TraceRule::possible_rules_for_head_predicate(index, &logical_rule, &predicate)
+                    .collect::<Vec<_>>()
             })
             .collect::<Vec<_>>();
 
@@ -257,9 +254,12 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             entries.into_iter().collect::<Option<Vec<usize>>>()?
         };
 
-        let contains_edb = facts
-            .iter()
-            .any(|fact| !program.derived_predicates().contains(&fact.predicate()));
+        let contains_edb = facts.iter().any(|fact| {
+            !self
+                .chase_program()
+                .derived_predicates()
+                .contains(&fact.predicate())
+        });
         let loaded_edb = steps.iter().contains(&0);
 
         // Some of the traced facts come from the input database
@@ -283,8 +283,8 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             return Some(result);
         }
 
-        let chase_rule = &program.rules()[rule_index].clone();
-        let logical_rule = self.program().rule(rule_index).clone();
+        let chase_rule = &self.chase_program().rules()[rule_index].clone();
+        let logical_rule = tracing_resolve_origin(&self.program_handle, chase_rule.id());
 
         for (head_index, _) in chase_rule.head().iter().enumerate() {
             let Some(combination) = facts
@@ -301,7 +301,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             let mut query_results = Vec::new();
 
             for (partial_grounding, &step) in combination.into_iter().zip(steps.iter()) {
-                let rule = &program.rules()[rule_index];
+                let rule = &self.chase_program().rules()[rule_index];
 
                 let trace_strategy = StrategyTracing::new(rule, partial_grounding);
 
@@ -327,15 +327,22 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 .collect::<Result<Vec<_>, Error>>()
                 .ok()?;
 
-            if program.rules()[rule_index].aggregate().is_some() {
+            if self.chase_program().rules()[rule_index]
+                .aggregate()
+                .is_some()
+            {
                 // If rule is an aggregate rule then we continue with all matches
 
-                let mut next_facts =
-                    vec![Vec::new(); program.rules()[rule_index].positive_all().len()];
+                let mut next_facts = vec![
+                    Vec::new();
+                    self.chase_program().rules()[rule_index]
+                        .positive_all()
+                        .len()
+                ];
 
                 for groundings in results {
                     for grounding in groundings {
-                        let rule = &program.rules()[rule_index];
+                        let rule = &self.chase_program().rules()[rule_index];
                         let tracing_variables =
                             StrategyTracing::new(rule, HashMap::default()).output_variables();
 
@@ -351,7 +358,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 let children_option = {
                     let mut entries: Vec<_> = vec![];
                     for facts in next_facts {
-                        let entry = self.trace_tree_recursive(facts, program);
+                        let entry = self.trace_tree_recursive(facts);
                         entries.push(Box::pin(entry).await);
                     }
                     entries.into_iter().collect::<Option<Vec<_>>>()
@@ -375,11 +382,15 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 // to see which one works
 
                 for groundings in results.into_iter().multi_cartesian_product() {
-                    let mut next_facts =
-                        vec![Vec::new(); program.rules()[rule_index].positive_all().len()];
+                    let mut next_facts = vec![
+                        Vec::new();
+                        self.chase_program().rules()[rule_index]
+                            .positive_all()
+                            .len()
+                    ];
 
                     for grounding in groundings {
-                        let rule = &program.rules()[rule_index];
+                        let rule = &self.chase_program().rules()[rule_index];
                         let tracing_variables =
                             StrategyTracing::new(rule, HashMap::default()).output_variables();
                         Self::trace_next_facts(
@@ -393,7 +404,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                     let children_option = {
                         let mut entries: Vec<_> = vec![];
                         for facts in next_facts {
-                            let entry = self.trace_tree_recursive(facts, program);
+                            let entry = self.trace_tree_recursive(facts);
                             entries.push(Box::pin(entry).await);
                         }
                         entries.into_iter().collect::<Option<Vec<_>>>()
@@ -424,8 +435,6 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         &mut self,
         query: TreeForTableQuery,
     ) -> Result<TreeForTableResponse, Error> {
-        let program = self.program.clone();
-
         let mut facts = Vec::new();
 
         for fact_query in query.queries {
@@ -469,8 +478,8 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             facts.push(fact);
         }
 
-        if let Some(mut result) = self.trace_tree_recursive(facts, &program).await {
-            self.trace_tree_add_negation(&mut result, &program).await;
+        if let Some(mut result) = self.trace_tree_recursive(facts).await {
+            self.trace_tree_add_negation(&mut result).await;
             Ok(result)
         } else {
             let predicate = Tag::new(query.predicate.clone());
@@ -479,7 +488,11 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 .program
                 .rules_with_body_predicate(&predicate)
                 .flat_map(|index| {
-                    TraceRule::all_possible_single_head_rules(index, self.program().rule(index))
+                    let chase_rule = &self.chase_program().rules()[index];
+                    let logical_rule =
+                        tracing_resolve_origin(&self.program_handle, chase_rule.id());
+                    TraceRule::all_possible_single_head_rules(index, &logical_rule)
+                        .collect::<Vec<_>>()
                 })
                 .collect::<Vec<_>>();
 
@@ -487,11 +500,11 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 .program
                 .rules_with_head_predicate(&predicate)
                 .flat_map(|index| {
-                    TraceRule::possible_rules_for_head_predicate(
-                        index,
-                        self.program().rule(index),
-                        &predicate,
-                    )
+                    let chase_rule = &self.chase_program().rules()[index];
+                    let logical_rule =
+                        tracing_resolve_origin(&self.program_handle, chase_rule.id());
+                    TraceRule::possible_rules_for_head_predicate(index, &logical_rule, &predicate)
+                        .collect::<Vec<_>>()
                 })
                 .collect::<Vec<_>>();
 
