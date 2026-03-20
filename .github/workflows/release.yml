@@ -37,7 +37,7 @@ jobs:
     runs-on: ${{ matrix.platform.runs-on }}
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Build release binary
         uses: houseabsolute/actions-rust-cross@v1
         with:
@@ -91,14 +91,14 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - uses: cachix/install-nix-action@v31
       - uses: jlumbroso/free-disk-space@v1.3.1
         with:
           swap-storage: false
           tool-cache: true
       - name: Restore and save Nix store
-        uses: nix-community/cache-nix-action@v6
+        uses: nix-community/cache-nix-action@v7
         with:
           primary-key: nemo-nix-${{ runner.os }}-${{ hashFiles('**/*.nix', '**/flake.lock') }}
           restore-prefixes-first-match: nemo-nix-${{ runner.os }}-
@@ -109,7 +109,7 @@ jobs:
           purge-last-accessed: 0
           purge-primary-key: never
       - name: Log in to the Container registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}

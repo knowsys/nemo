@@ -15,14 +15,14 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: cachix/install-nix-action@v31
       - uses: jlumbroso/free-disk-space@v1.3.1
         with:
           swap-storage: false
           tool-cache: true
       - name: Restore and save Nix store
-        uses: nix-community/cache-nix-action@v6
+        uses: nix-community/cache-nix-action@v7
         with:
           primary-key: nemo-nix-${{ runner.os }}-${{ hashFiles('**/*.nix', '**/flake.lock') }}
           restore-prefixes-first-match: nemo-nix-${{ runner.os }}-
@@ -49,15 +49,14 @@ jobs:
           nix-collect-garbage -d
 
       - name: Log in to the Container registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build and push docker image 
+      - name: Build and push docker image
         run: |
           nix build .\#docker
           docker load < result
           docker image tag nemo:latest ${{ env.REGISTRY }}/knowsys/nemo:latest
           docker push ${{ env.REGISTRY }}/knowsys/nemo:latest
-

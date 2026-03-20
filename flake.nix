@@ -20,7 +20,6 @@
       url = "github:knowsys/nemo-vscode-extension";
       inputs = {
         nixpkgs.follows = "nixpkgs";
-        utils.follows = "nemo-web/utils";
         dream2nix.follows = "dream2nix";
       };
     };
@@ -38,7 +37,6 @@
       url = "github:knowsys/nemo-doc";
       inputs = {
         nixpkgs.follows = "nixpkgs";
-        utils.follows = "nemo-web/utils";
         dream2nix.follows = "dream2nix";
       };
     };
@@ -91,6 +89,19 @@
 
           inherit (pkgs) python3; # this should match the install hook version below
           inherit (pkgs.python3Packages) pypaInstallHook pycodestyle; # this should match the python version above
+          # find correct wasm-bindgen-version
+          wasm-bindgen =
+            let
+              version = lib.pipe ./Cargo.lock [
+                builtins.readFile
+                fromTOML
+                (d: d.package)
+                (lib.findSingle (d: d.name == "wasm-bindgen") { } { })
+                (d: d.version)
+                (lib.replaceString "." "_")
+              ];
+            in
+            pkgs.${"wasm-bindgen-cli_${version}"};
 
           commonArgs = {
             inherit src;
@@ -175,6 +186,28 @@
               ];
             };
           };
+
+          cargoUdeps =
+            {
+              cargoUdepsArgs ? "--workspace --all-targets",
+              ...
+            }@origArgs:
+            let
+              args = removeAttrs origArgs [ "cargoUdepsArgs" ];
+            in
+            crane.mkCargoDerivation (
+              args
+              // {
+                inherit cargoArtifacts src;
+                pname = "nemo-udeps";
+                buildPhaseCargoCommand = "cargo udeps ${cargoUdepsArgs}";
+                buildInputs = args.buildInputs or commonArgs.buildInputs;
+                nativeBuildInputs = [
+                  pkgs.cargo-udeps
+                ]
+                ++ (args.nativeBuildInputs or commonArgs.nativeBuildInputs);
+              }
+            );
 
           cargoXtask =
             {
@@ -263,9 +296,9 @@
                   (args.nativeBuildInputs or [ ])
                   ++ crateArgs.nativeBuildInputs
                   ++ (lib.attrValues {
+                    inherit wasm-bindgen;
                     inherit (pkgs)
                       binaryen
-                      wasm-bindgen-cli_0_2_100
                       wasm-pack
                       writableTmpDirAsHomeHook
                       ;
@@ -462,6 +495,7 @@
                     cargo clippy --workspace --all-targets -- --deny warnings
                     cargo fmt --all -- --check
                     cargo doc --workspace
+                    cargo udeps --workspace --all-targets
 
                     pushd nemo-python
                       pycodestyle .
@@ -531,6 +565,14 @@
               }
             );
 
+            udeps = cargoUdeps (
+              commonArgs
+              // {
+                pname = "nemo-cargo-udeps";
+                inherit cargoArtifacts;
+              }
+            );
+
             python-codestyle =
               pkgs.runCommandLocal "nemo-check-python-codestyle"
                 {
@@ -574,15 +616,16 @@
                 inherit
                   python3
                   pycodestyle
+                  wasm-bindgen
                   ;
                 inherit (pkgs)
                   cargo-audit
                   cargo-license
                   cargo-tarpaulin
+                  cargo-udeps
 
                   maturin
                   binaryen
-                  wasm-bindgen-cli
                   wasm-pack
 
                   gnuplot
@@ -601,8 +644,9 @@
           default =
             final: prev:
             let
-              pkgs = self.packages."${final.system}";
-              lib = inputs.nixpkgs."${final.system}";
+              system = final.stdenv.hostPlatform.system;
+              pkgs = self.packages."${system}";
+              lib = inputs.nixpkgs."${system}";
             in
             {
               inherit (pkgs)

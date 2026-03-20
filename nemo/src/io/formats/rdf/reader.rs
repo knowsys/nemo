@@ -12,7 +12,7 @@ use nemo_physical::{
 use std::{cell::Cell, fmt::Display, io::Read, mem::size_of};
 
 use oxiri::Iri;
-use oxrdf::{BlankNode, GraphName, Literal, NamedNode, Quad, Subject, Term};
+use oxrdf::{BlankNode, GraphName, Literal, NamedNode, NamedOrBlankNode, Quad, Term};
 use oxrdfio::{RdfFormat, RdfParser};
 
 use crate::io::formats::PROGRESS_NOTIFY_INCREMENT;
@@ -113,18 +113,18 @@ impl RdfReader {
         }
     }
 
-    /// Create a [AnyDataValue] for a given [Subject].
+    /// Create a [AnyDataValue] for a given [NamedOrBlankNode].
     ///
     /// This function might create new nulls and enter
     /// them into the given [NullMap].
     fn datavalue_from_subject(
         bnode_map: &mut NullMap,
         tuple_writer: &mut TupleWriter,
-        value: Subject,
+        value: NamedOrBlankNode,
     ) -> Result<AnyDataValue, RdfFormatError> {
         match value {
-            Subject::NamedNode(nn) => Ok(Self::datavalue_from_named_node(nn)),
-            Subject::BlankNode(bn) => {
+            NamedOrBlankNode::NamedNode(nn) => Ok(Self::datavalue_from_named_node(nn)),
+            NamedOrBlankNode::BlankNode(bn) => {
                 Ok(Self::datavalue_from_blank_node(bnode_map, tuple_writer, bn))
             }
         }

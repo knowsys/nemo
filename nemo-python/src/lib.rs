@@ -52,7 +52,7 @@ impl<T> PythonResult for (T, Vec<Error>) {
     }
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone)]
 struct NemoProgram(nemo::rule_model::programs::program::Program);
 
@@ -336,7 +336,7 @@ struct NemoEngine {
     engine: nemo::execution::DefaultExecutionEngine,
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Debug, Clone)]
 struct NemoTiming {
     #[pyo3(get)]
