@@ -22,16 +22,16 @@ pub struct TraceRuleApplication {
     /// Variable assignment used during the rule application
     assignment: Substitution,
     /// Index of the head atom which produced the fact under consideration
-    position: usize
+    position: usize,
 }
 
 impl TraceRuleApplication {
     /// Create new [TraceRuleApplication].
-    pub fn new(rule_id: ProgramComponentId, assignment: Substitution, _position: usize) -> Self {
+    pub fn new(rule_id: ProgramComponentId, assignment: Substitution, position: usize) -> Self {
         Self {
             rule_id,
             assignment,
-            _position,
+            position,
         }
     }
 
@@ -47,7 +47,7 @@ impl TraceRuleApplication {
 
     /// Return the index of the head atom of this application.
     pub fn head_index(&self) -> usize {
-        self._position
+        self.position
     }
 }
 
