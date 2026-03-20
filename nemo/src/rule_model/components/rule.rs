@@ -65,6 +65,19 @@ impl Rule {
         }
     }
 
+    /// Create a new [Rule], with a given [Origin].
+    pub fn with_origin(head: Vec<Atom>, body: Vec<Literal>, origin: Origin) -> Self {
+        Self {
+            origin,
+            id: ProgramComponentId::default(),
+            name: None,
+            display: None,
+            head,
+            body,
+            imports: Vec::default(),
+        }
+    }
+
     /// Create a new empty [Rule].
     pub fn empty() -> Self {
         Self {

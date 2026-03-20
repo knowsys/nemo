@@ -37,15 +37,13 @@ use nemo::{
     execution::{
         DefaultExecutionEngine, ExecutionEngine,
         execution_parameters::ExecutionParameters,
+        planning::normalization::program::NormalizedProgram,
         tracing::{node_query::TableEntriesForTreeNodesQuery, tree_query::TreeForTableQuery},
     },
     io::{ImportManager, resource_providers::ResourceProviders},
     meta::timing::{TimedCode, TimedDisplay},
     rule_file::RuleFile,
-    rule_model::{
-        components::{ComponentBehavior, fact::Fact, tag::Tag, term::Term},
-        programs::{ProgramRead, program::Program},
-    },
+    rule_model::components::{ComponentBehavior, fact::Fact, tag::Tag, term::Term},
 };
 
 fn print_facts_for_table<W: Write>(
@@ -64,12 +62,15 @@ fn print_facts_for_table<W: Write>(
         .map_err(Error::IO)
 }
 
-fn predicates_to_print_facts_for(print_facts_setting: FactPrinting, program: &Program) -> Vec<Tag> {
+fn predicates_to_print_facts_for(
+    print_facts_setting: FactPrinting,
+    program: &NormalizedProgram,
+) -> Vec<Tag> {
     match print_facts_setting {
         FactPrinting::None => Vec::new(),
-        FactPrinting::Idb => program.derived_predicates().into_iter().collect(),
-        FactPrinting::Edb => program.import_predicates().into_iter().collect(),
-        FactPrinting::All => program.all_predicates().into_iter().collect(),
+        FactPrinting::Idb => program.derived_predicates().iter().cloned().collect(),
+        FactPrinting::Edb => program.import_predicates().collect(),
+        FactPrinting::All => program.all_predicates().collect(),
     }
 }
 
@@ -334,7 +335,7 @@ async fn run(mut cli: CliApp) -> Result<(), CliError> {
         let mut stdout = Box::new(stdout().lock());
 
         for predicate in
-            predicates_to_print_facts_for(cli.output.print_facts_setting, engine.program())
+            predicates_to_print_facts_for(cli.output.print_facts_setting, engine.chase_program())
         {
             if let Some(table) = engine.predicate_rows(&predicate).await? {
                 print_facts_for_table(&mut stdout, table, predicate)?;

@@ -18,7 +18,7 @@ use crate::{
     rule_file::RuleFile,
     rule_model::{
         components::tag::Tag,
-        pipeline::transformations::default::TransformationDefault,
+        pipeline::transformations::{default::TransformationDefault, global::TransformationGlobal},
         programs::{handle::ProgramHandle, program::Program},
     },
     table_manager::{MemoryUsage, TableManager},
@@ -52,8 +52,8 @@ impl RuleInfo {
 /// Object which handles the evaluation of the program.
 #[derive(Debug)]
 pub struct ExecutionEngine<RuleSelectionStrategy> {
-    /// Logical program
-    nemo_program: Program,
+    /// Handle to the logical program
+    program_handle: ProgramHandle,
 
     /// Normalized program
     program: NormalizedProgram,
@@ -97,17 +97,29 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             program.transform(TransformationDefault::new(&parameters)),
         )?;
 
-        let engine = Self::initialize(program.materialize(), parameters.import_manager).await?;
+        let engine = Self::initialize(program, parameters.import_manager).await?;
 
         report.warned(engine)
     }
 
-    /// Initialize [ExecutionEngine].
-    pub async fn initialize(
+    /// Initialize the [ExecutionEngine] starting from a [Program]
+    pub async fn from_program(
         program: Program,
+        parameters: ExecutionParameters,
+    ) -> Result<Self, Error> {
+        let program = ProgramHandle::from(program)
+            .transform(TransformationGlobal::new(&parameters.global_variables))
+            .expect("TransformationGlobal does not introduce validation errors");
+
+        Self::initialize(program, parameters.import_manager).await
+    }
+
+    /// Initialize the [ExecutionEngine].
+    pub async fn initialize(
+        program_handle: ProgramHandle,
         import_manager: ImportManager,
     ) -> Result<Self, Error> {
-        let normalized_program = NormalizedProgram::normalize_program(&program);
+        let normalized_program = NormalizedProgram::normalize_program(&program_handle);
 
         let mut table_manager = TableManager::new();
         Self::register_all_predicates(&mut table_manager, &normalized_program);
@@ -123,7 +135,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         let selection_strategy = Strategy::new(normalized_program.rules().iter().collect())?;
 
         Ok(Self {
-            nemo_program: program,
+            program_handle,
             program: normalized_program,
             selection_strategy,
             table_manager,
@@ -285,7 +297,10 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             .program
             .rules()
             .iter()
-            .map(|rule| StrategyForward::new(rule, &predicates_with_facts))
+            .enumerate()
+            .map(|(rule_index, rule)| {
+                StrategyForward::new(rule, rule_index, &predicates_with_facts)
+            })
             .collect::<Vec<_>>();
 
         for (predicate, arity) in execution_strategy
@@ -319,13 +334,8 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         Ok(())
     }
 
-    /// Return a reference to the current [Program].
-    pub fn program(&self) -> &Program {
-        &self.nemo_program
-    }
-
     /// Get a reference to the loaded program.
-    pub(crate) fn chase_program(&self) -> &NormalizedProgram {
+    pub fn chase_program(&self) -> &NormalizedProgram {
         &self.program
     }
 
@@ -433,19 +443,25 @@ mod test {
     use test_log;
     use tokio;
 
-    use crate::{api::load_program, execution::DefaultExecutionEngine, io::ImportManager};
+    use crate::{
+        api::load_program,
+        execution::{DefaultExecutionEngine, execution_parameters::ExecutionParameters},
+    };
 
     #[tokio::test]
     #[test_log::test]
     #[cfg_attr(miri, ignore)]
     async fn issue_759() {
         const ITERATIONS: usize = 32_768;
+
         let program = load_program("foo(bar).".to_string(), Default::default()).unwrap();
-        let import_manager = ImportManager::new(Default::default());
 
         for _ in 1..=ITERATIONS {
-            let engine =
-                DefaultExecutionEngine::initialize(program.clone(), import_manager.clone()).await;
+            let engine = DefaultExecutionEngine::from_program(
+                program.clone(),
+                ExecutionParameters::default(),
+            )
+            .await;
             assert_matches!(engine, Ok(_));
         }
     }

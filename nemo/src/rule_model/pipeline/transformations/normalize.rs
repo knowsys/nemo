@@ -2,6 +2,7 @@
 
 use crate::rule_model::{
     components::{
+        ComponentIdentity,
         atom::Atom,
         literal::Literal,
         rule::Rule,
@@ -15,6 +16,7 @@ use crate::rule_model::{
         },
     },
     error::ValidationReport,
+    origin::Origin,
     programs::{ProgramRead, ProgramWrite, handle::ProgramHandle},
 };
 
@@ -113,7 +115,15 @@ impl TransformationNormalize {
             }
         }
 
-        modified.then(|| Rule::new(rule.head().to_vec(), new_body))
+        if !modified {
+            return None;
+        }
+
+        Some(Rule::with_origin(
+            rule.head().to_vec(),
+            new_body,
+            Origin::Normalization(rule.id()),
+        ))
     }
 }
 

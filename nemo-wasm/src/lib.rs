@@ -22,7 +22,7 @@ use nemo::{
         resource_providers::{ResourceProvider, ResourceProviders, http},
     },
     rule_file::RuleFile,
-    rule_model::{components::tag::Tag, programs::ProgramRead},
+    rule_model::components::tag::Tag,
 };
 
 use nemo_physical::{error::ExternalReadingError, resource::Resource};
@@ -236,13 +236,15 @@ impl NemoEngine {
     pub fn output_predicates(&self) -> Array {
         let target_predicates: HashSet<_> = self
             .engine
-            .program()
-            .outputs()
-            .map(|o| o.predicate().to_string())
+            .chase_program()
+            .output_predicates()
+            .iter()
+            .map(|o| o.to_string())
             .chain(
                 self.engine
-                    .program()
+                    .chase_program()
                     .exports()
+                    .iter()
                     .map(|o| o.predicate().to_string()),
             )
             .collect();
@@ -254,7 +256,7 @@ impl NemoEngine {
     pub fn edb_predicates(&self) -> Set {
         let js_set = Set::new(&JsValue::undefined());
 
-        for tag in self.engine.program().import_predicates().into_iter() {
+        for tag in self.engine.chase_program().import_predicates() {
             js_set.add(&JsValue::from(tag.to_string()));
         }
 

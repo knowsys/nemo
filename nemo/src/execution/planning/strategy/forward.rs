@@ -37,7 +37,11 @@ pub struct StrategyForward {
 
 impl StrategyForward {
     /// Create a new [StrategyForward].
-    pub fn new(rule: &NormalizedRule, predicates_with_facts: &HashSet<Tag>) -> Self {
+    pub fn new(
+        rule: &NormalizedRule,
+        rule_index: usize,
+        predicates_with_facts: &HashSet<Tag>,
+    ) -> Self {
         let positive = rule.positive().clone();
         let negative = rule.negative().clone();
         let mut operations = rule.operations().clone();
@@ -46,7 +50,6 @@ impl StrategyForward {
 
         let order = rule.variable_order();
         let frontier = rule.frontier();
-        let rule_id = rule.id();
         let is_existential = rule.is_existential();
         let aggregation_index = rule.aggregate_index();
 
@@ -87,10 +90,10 @@ impl StrategyForward {
 
         let head = StrategyHead::new(
             rule,
+            rule_index,
             rule.existential_variable_order(),
             frontier,
             aggregation_index,
-            rule_id,
             is_existential,
             has_facts,
         );

@@ -26,10 +26,14 @@ use crate::{
         },
         operations::{filter::GeneratorFilter, function::GeneratorFunction},
     },
-    rule_model::components::{
-        import_export::clause::ImportLiteral,
-        tag::Tag,
-        term::primitive::{Primitive, variable::Variable},
+    rule_model::{
+        components::{
+            ComponentIdentity,
+            import_export::clause::ImportLiteral,
+            tag::Tag,
+            term::primitive::{Primitive, variable::Variable},
+        },
+        pipeline::id::ProgramComponentId,
     },
     syntax,
     util::seperated_list::DisplaySeperatedList,
@@ -59,8 +63,10 @@ pub struct NormalizedRule {
     variable_order: Option<VariableOrder>,
     /// Variable order for existential variables in the head of the rule
     existential_variable_order: Option<VariableOrder>,
-    /// Unique identifier of this rule
-    id: usize,
+
+    /// Id that associates this rule with the original
+    /// logical rule it was derived from
+    id: ProgramComponentId,
 }
 
 impl NormalizedRule {
@@ -168,7 +174,7 @@ impl NormalizedRule {
     }
 
     /// Return the id of this rule.
-    pub fn id(&self) -> usize {
+    pub fn id(&self) -> ProgramComponentId {
         self.id
     }
 }
@@ -478,7 +484,7 @@ impl NormalizedRule {
     ///
     /// # Panics
     /// Panics if rule is ill-formed.
-    pub fn normalize_rule(rule: &crate::rule_model::components::rule::Rule, id: usize) -> Self {
+    pub fn normalize_rule(rule: &crate::rule_model::components::rule::Rule) -> Self {
         let mut generator = VariableGenerator::default();
 
         let mut operations = rule
@@ -540,7 +546,7 @@ impl NormalizedRule {
             aggregation,
             variable_order: None,
             existential_variable_order: None,
-            id,
+            id: rule.id(),
         }
     }
 
