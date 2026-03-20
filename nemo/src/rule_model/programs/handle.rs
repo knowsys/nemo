@@ -119,6 +119,8 @@ impl From<Program> for ProgramHandle {
             commit.add_statement(statement.clone());
         }
 
-        commit.submit().expect("program is not validated")
+        commit
+            .submit()
+            .expect("no validation performed, so no errors possible")
     }
 }

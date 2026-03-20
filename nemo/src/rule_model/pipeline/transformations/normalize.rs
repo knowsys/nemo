@@ -2,7 +2,7 @@
 
 use crate::rule_model::{
     components::{
-        ComponentIdentity, ComponentSource,
+        ComponentIdentity,
         atom::Atom,
         literal::Literal,
         rule::Rule,
@@ -115,14 +115,15 @@ impl TransformationNormalize {
             }
         }
 
-        if modified {
-            let mut new_rule = Rule::new(rule.head().to_vec(), new_body);
-            new_rule.set_origin(Origin::Normalization(rule.id()));
-
-            Some(new_rule)
-        } else {
-            None
+        if !modified {
+            return None;
         }
+
+        Some(Rule::with_origin(
+            rule.head().to_vec(),
+            new_body,
+            Origin::Normalization(rule.id()),
+        ))
     }
 }
 
