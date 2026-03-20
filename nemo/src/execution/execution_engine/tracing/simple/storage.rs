@@ -22,7 +22,7 @@ pub struct TraceRuleApplication {
     /// Variable assignment used during the rule application
     assignment: Substitution,
     /// Index of the head atom which produced the fact under consideration
-    _position: usize,
+    position: usize
 }
 
 impl TraceRuleApplication {
