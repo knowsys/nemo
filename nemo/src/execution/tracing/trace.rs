@@ -17,7 +17,7 @@ use crate::{
             ExecutionTrace, TraceDerivation, TraceFactHandle, TraceStatus,
         },
         planning::normalization::atom::ground::GroundAtom,
-        tracing::resolve_orgin::tracing_resolve_origin,
+        tracing::resolve_origin::tracing_resolve_origin,
     },
     rule_model::{
         components::{fact::Fact, rule::Rule},

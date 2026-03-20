@@ -16,7 +16,7 @@ use crate::{
         selection_strategy::strategy::RuleSelectionStrategy,
         tracing::{
             error::TracingError,
-            resolve_orgin::tracing_resolve_origin,
+            resolve_origin::tracing_resolve_origin,
             shared::{
                 PaginationResponse, ResponseMetaInformation, Rule as TraceRule, TableEntryQuery,
                 TableEntryResponse,

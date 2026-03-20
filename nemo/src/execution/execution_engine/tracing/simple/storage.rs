@@ -1,4 +1,4 @@
-//! This module defines [ExecutionTrace] which holds traces for relvant facts
+//! This module defines [ExecutionTrace] which holds traces for relevant facts
 //! that were computed during the "simple" tracing
 
 use std::hash::Hash;
@@ -151,19 +151,28 @@ impl ExecutionTrace {
     }
 
     /// Given a [TraceFactHandle] return a reference to the corresponding [TracedFact].
+    ///
+    /// # Panics
+    /// Panics if [TraceFactHandle] does not point to a valid [TracedFact].
+    /// This cannot happen if the [TraceFactHandle] was obtained by this [ExecutionTrace].
     pub fn get_fact(&self, handle: TraceFactHandle) -> &TracedFact {
         self.facts.get_index(handle.0).expect("invalid fact handle")
     }
 
     /// Given a [TraceFactHandle] return a mutable reference to the corresponding [TracedFact].
+    ///
+    /// # Panics
+    /// Panics if [TraceFactHandle] does not point to a valid [TracedFact].
+    /// This cannot happen if the [TraceFactHandle] was obtained by this [ExecutionTrace].
     pub fn get_fact_mut(&mut self, handle: TraceFactHandle) -> &mut TracedFact {
         self.facts
             .get_index_mut2(handle.0)
             .expect("invalid fact handle")
     }
 
-    /// Search a given [GroundAtom] in self.facts.
-    /// Also takes into account that the interpretation of a constant depends on its type.
+    /// Search for a given [GroundAtom], returning its [TraceFactHandle].
+    ///
+    /// Returns `None` if [GroundAtom] has not been registered yet.
     pub fn find_fact(&self, fact: &GroundAtom) -> Option<TraceFactHandle> {
         let traced_fact = TracedFact {
             fact: fact.clone(),
@@ -176,28 +185,33 @@ impl ExecutionTrace {
     /// Registers a new [GroundAtom].
     ///
     /// If the fact was not already known then it will return a fresh handle
-    /// with the status TraceStatus::Known.
+    /// with the status [TraceStatus::Unknown].
     /// Otherwise a handle to the existing fact will be returned.
     pub fn register_fact(&mut self, fact: GroundAtom) -> TraceFactHandle {
-        if let Some(handle) = self.find_fact(&fact) {
-            handle
-        } else {
-            let handle = TraceFactHandle(self.facts.len());
-            self.facts.insert(TracedFact {
-                fact,
-                status: TraceStatus::Unknown,
-            });
-
-            handle
-        }
+        TraceFactHandle(
+            self.facts
+                .insert_full(TracedFact {
+                    fact,
+                    status: TraceStatus::Unknown,
+                })
+                .0,
+        )
     }
 
     /// Return the [TraceStatus] of a given fact identified by its [TraceFactHandle].
+    ///
+    /// # Panics
+    /// Panics if [TraceFactHandle] does not point to a valid [TracedFact].
+    /// This cannot happen if the [TraceFactHandle] was obtained by this [ExecutionTrace].
     pub fn status(&self, handle: TraceFactHandle) -> &TraceStatus {
         &self.get_fact(handle).status
     }
 
     /// Update the [TraceStatus] of a given fact identified by its [TraceFactHandle].
+    ///
+    /// # Panics
+    /// Panics if [TraceFactHandle] does not point to a valid [TracedFact].
+    /// This cannot happen if the [TraceFactHandle] was obtained by this [ExecutionTrace].
     pub fn update_status(&mut self, handle: TraceFactHandle, status: TraceStatus) {
         self.get_fact_mut(handle).status = status;
     }

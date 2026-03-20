@@ -448,7 +448,6 @@ mod test {
         execution::{DefaultExecutionEngine, execution_parameters::ExecutionParameters},
     };
 
-    #[ignore]
     #[tokio::test]
     #[test_log::test]
     #[cfg_attr(miri, ignore)]
