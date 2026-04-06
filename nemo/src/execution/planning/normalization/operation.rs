@@ -355,6 +355,7 @@ impl Operation {
                     OperationKind::StringSha256 => unary!(string_sha256, sub),
                     OperationKind::StringSha384 => unary!(string_sha384, sub),
                     OperationKind::StringSha512 => unary!(string_sha512, sub),
+                    OperationKind::TypedLiteral => binary!(typed_literal, sub),
                 }
             }
         }

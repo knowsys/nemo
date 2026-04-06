@@ -402,6 +402,12 @@ pub enum OperationKind {
     #[assoc(num_arguments = OperationNumArguments::Arbitrary)]
     #[assoc(return_type = ValueType::String)]
     StringConcatenation,
+    /// Construct a typed literal from a lexical value and a datatype IRI, corresponding to SPARQL function STRDT.
+    /// Must appear before LexicalValue ("STR") since "STRDT" starts with "STR" (case-insensitive).
+    #[assoc(name = function::STRDT)]
+    #[assoc(num_arguments = OperationNumArguments::Binary)]
+    #[assoc(return_type = ValueType::Any)]
+    TypedLiteral,
     /// Lexical value
     #[assoc(name = function::STR)]
     #[assoc(num_arguments = OperationNumArguments::Unary)]

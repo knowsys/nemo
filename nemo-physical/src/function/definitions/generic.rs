@@ -2,7 +2,7 @@
 
 use crate::{
     datatypes::StorageTypeName,
-    datavalues::{AnyDataValue, DataValue},
+    datavalues::{AnyDataValue, DataValue, ValueDomain},
 };
 
 use super::{BinaryFunction, FunctionTypePropagation, UnaryFunction};
@@ -128,5 +128,38 @@ impl UnaryFunction for Datatype {
                 .bitset()
                 .union(StorageTypeName::Id64.bitset()),
         )
+    }
+}
+
+/// Construct a typed literal from a lexical value and a datatype IRI
+///
+/// Corresponds to SPARQL STRDT(lexical_form, datatype_IRI).
+/// Returns a literal with the given lexical form and datatype.
+/// Well-known XSD types (integer, double, etc.) are normalized to their native representation.
+///
+/// Returns `None` if the first argument is not a plain string or if the second argument is not an IRI.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct TypedLiteral;
+impl BinaryFunction for TypedLiteral {
+    fn evaluate(
+        &self,
+        parameter_first: AnyDataValue,
+        parameter_second: AnyDataValue,
+    ) -> Option<AnyDataValue> {
+        if parameter_first.value_domain() != ValueDomain::PlainString {
+            return None;
+        }
+        if parameter_second.value_domain() != ValueDomain::Iri {
+            return None;
+        }
+
+        let lexical = parameter_first.to_plain_string_unchecked();
+        let datatype = parameter_second.to_iri_unchecked();
+
+        AnyDataValue::new_from_typed_literal(lexical, datatype).ok()
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::_Unknown
     }
 }

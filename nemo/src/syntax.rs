@@ -350,6 +350,8 @@ pub mod builtin {
         pub(crate) const SHA384: &str = "SHA384";
         /// Compute the SHA512 hash of a string
         pub(crate) const SHA512: &str = "SHA512";
+        /// Construct a typed literal from a lexical value and a datatype IRI
+        pub(crate) const STRDT: &str = "STRDT";
     }
 
     /// This module contains all strings of the supported builtin aggregates.

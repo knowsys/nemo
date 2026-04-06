@@ -16,7 +16,7 @@ use super::{
             CheckIsDouble, CheckIsFloat, CheckIsInteger, CheckIsIri, CheckIsNull, CheckIsNumeric,
             CheckIsString,
         },
-        generic::{CanonicalString, Datatype, Equals, LexicalValue, Unequals},
+        generic::{CanonicalString, Datatype, Equals, LexicalValue, TypedLiteral, Unequals},
         language::LanguageTag,
         numeric::{
             BitAnd, BitOr, BitShiftLeft, BitShiftRight, BitShiftRightUnsigned, BitXor,
@@ -864,6 +864,17 @@ where
             function: BinaryFunctionEnum::StringLevenshtein(StringLevenshtein),
             left: Box::new(from),
             right: Box::new(to),
+        }
+    }
+
+    /// Create a tree node representing a typed literal construction.
+    ///
+    /// Corresponds to SPARQL STRDT(lexical_form, datatype_IRI).
+    pub fn typed_literal(lexical: Self, datatype: Self) -> Self {
+        Self::Binary {
+            function: BinaryFunctionEnum::TypedLiteral(TypedLiteral),
+            left: Box::new(lexical),
+            right: Box::new(datatype),
         }
     }
 

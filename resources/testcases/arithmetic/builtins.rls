@@ -138,6 +138,10 @@ result(sha256, ?R) :- strings(?A, _), ?R = SHA256(?A).
 result(sha384, ?R) :- strings(?A, _), ?R = SHA384(?A).
 result(sha512, ?R) :- strings(?A, _), ?R = SHA512(?A).
 
+% STRDT
+result(strdt_int, ?R) :- strings(?A, _), ?DT = IRI("http://www.w3.org/2001/XMLSchema#integer"), ?R = STRDT("42", ?DT).
+result(strdt_other, ?R) :- strings(?A, _), ?DT = IRI("http://www.w3.org/2001/XMLSchema#date"), ?R = STRDT("2024-01-01", ?DT).
+
 % Export
 @export result :- csv{}.
 

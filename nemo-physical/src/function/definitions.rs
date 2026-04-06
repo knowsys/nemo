@@ -27,7 +27,7 @@ use self::{
         CheckIsDouble, CheckIsFloat, CheckIsInteger, CheckIsIri, CheckIsNull, CheckIsNumeric,
         CheckIsString,
     },
-    generic::{CanonicalString, Datatype, Equals, LexicalValue, Unequals},
+    generic::{CanonicalString, Datatype, Equals, LexicalValue, TypedLiteral, Unequals},
     language::LanguageTag,
     numeric::{
         BitAnd, BitOr, BitShiftLeft, BitShiftRight, BitShiftRightUnsigned, BitXor, NumericAbsolute,
@@ -328,6 +328,8 @@ pub enum BinaryFunctionEnum {
     BitShiftRightUnsigned(BitShiftRightUnsigned),
     /// Check if a language tag matches a language range
     StringLangMatches(StringLangMatches),
+    /// Construct a typed literal from a lexical value and a datatype IRI
+    TypedLiteral(TypedLiteral),
 }
 
 impl BinaryFunction for BinaryFunctionEnum {
@@ -360,6 +362,7 @@ impl BinaryFunction for BinaryFunctionEnum {
             Self::BitShiftRightUnsigned(function) => function,
             Self::BitShiftRight(function) => function,
             Self::StringLangMatches(function) => function,
+            Self::TypedLiteral(function) => function,
         } {
             fn evaluate(&self, first_parameter: AnyDataValue, second_parameter: AnyDataValue) -> Option<AnyDataValue>;
             fn type_propagation(&self) -> FunctionTypePropagation;
