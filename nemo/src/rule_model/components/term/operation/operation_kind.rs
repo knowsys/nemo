@@ -256,6 +256,12 @@ pub enum OperationKind {
     #[assoc(num_arguments = OperationNumArguments::Binary)]
     #[assoc(return_type = ValueType::LanguageString)]
     LanguageString,
+    /// Check if a language tag matches a language range, corresponding to SPARQL function langMatches.
+    /// Must appear before LanguageTag ("LANG") since "langMatches" starts with "lang" (case-insensitive).
+    #[assoc(name = function::LANGMATCHES)]
+    #[assoc(num_arguments = OperationNumArguments::Binary)]
+    #[assoc(return_type = ValueType::Boolean)]
+    StringLangMatches,
     /// Get language tag of a languaged tagged string
     #[assoc(name = function::LANG)]
     #[assoc(num_arguments = OperationNumArguments::Unary)]
@@ -401,6 +407,36 @@ pub enum OperationKind {
     #[assoc(num_arguments = OperationNumArguments::Unary)]
     #[assoc(return_type = ValueType::String)]
     LexicalValue,
+    /// Replace occurrences of a regex pattern in a string, corresponding to SPARQL function REPLACE.
+    #[assoc(name = function::REPLACE)]
+    #[assoc(num_arguments = OperationNumArguments::Choice(vec![3, 4]))]
+    #[assoc(return_type = ValueType::String)]
+    StringReplace,
+    /// Compute the MD5 hash of a string, corresponding to SPARQL function MD5.
+    #[assoc(name = function::MD5)]
+    #[assoc(num_arguments = OperationNumArguments::Unary)]
+    #[assoc(return_type = ValueType::String)]
+    StringMd5,
+    /// Compute the SHA1 hash of a string, corresponding to SPARQL function SHA1.
+    #[assoc(name = function::SHA1)]
+    #[assoc(num_arguments = OperationNumArguments::Unary)]
+    #[assoc(return_type = ValueType::String)]
+    StringSha1,
+    /// Compute the SHA256 hash of a string, corresponding to SPARQL function SHA256.
+    #[assoc(name = function::SHA256)]
+    #[assoc(num_arguments = OperationNumArguments::Unary)]
+    #[assoc(return_type = ValueType::String)]
+    StringSha256,
+    /// Compute the SHA384 hash of a string, corresponding to SPARQL function SHA384.
+    #[assoc(name = function::SHA384)]
+    #[assoc(num_arguments = OperationNumArguments::Unary)]
+    #[assoc(return_type = ValueType::String)]
+    StringSha384,
+    /// Compute the SHA512 hash of a string, corresponding to SPARQL function SHA512.
+    #[assoc(name = function::SHA512)]
+    #[assoc(num_arguments = OperationNumArguments::Unary)]
+    #[assoc(return_type = ValueType::String)]
+    StringSha512,
 }
 
 impl OperationKind {
@@ -438,7 +474,7 @@ mod test {
         // is the prefix of a subsequent operation name
 
         let names = OperationKind::iter()
-            .map(|kind| kind.name())
+            .map(|kind| kind.name().to_lowercase())
             .collect::<Vec<_>>();
 
         for (name_index, name) in names.iter().enumerate() {
@@ -449,7 +485,9 @@ mod test {
             assert!(
                 names[(name_index + 1)..]
                     .iter()
-                    .all(|remaining| !remaining.starts_with(name))
+                    .all(|remaining| !remaining.starts_with(name.as_str())),
+                "Operation name {:?} is a case-insensitive prefix of a later operation name",
+                name,
             )
         }
     }

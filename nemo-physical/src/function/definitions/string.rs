@@ -731,6 +731,101 @@ impl TernaryFunction for StringSubstringLength {
     }
 }
 
+/// Regex-based replacement within a string
+///
+/// Corresponds to SPARQL REPLACE(arg, pattern, replacement [, flags]).
+/// Returns a copy of `arg` with every match of the regex `pattern` replaced by `replacement`.
+/// The optional `flags` parameter (4th element) sets regex flags (e.g. "i", "s", "m", "x").
+/// Replacement may reference capture groups via `$1`, `$2`, etc.; use `$$` for a literal `$`.
+///
+/// Returns `None` if any string argument is not a (language tagged) string,
+/// or if the pattern (with any flags) is not a valid regex.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct StringReplace;
+impl NaryFunction for StringReplace {
+    fn evaluate(&self, parameters: &[AnyDataValue]) -> Option<AnyDataValue> {
+        if parameters.len() < 3 || parameters.len() > 4 {
+            return None;
+        }
+
+        let input = LangTaggedString::try_from(parameters[0].clone()).ok()?;
+        let pattern = LangTaggedString::try_from(parameters[1].clone()).ok()?;
+        let replacement = LangTaggedString::try_from(parameters[2].clone()).ok()?;
+
+        let regex_str = if parameters.len() == 4 {
+            let flags = LangTaggedString::try_from(parameters[3].clone()).ok()?;
+            format!("(?{}){}", flags.string, pattern.string)
+        } else {
+            pattern.string.clone()
+        };
+
+        let mut cache = REGEX_CACHE
+            .get_or_init(|| Mutex::new(lru::LruCache::new(REGEX_CACHE_SIZE)))
+            .lock()
+            .unwrap();
+
+        let regex = cache.try_get_or_insert(regex_str.clone(), || regex::Regex::new(&regex_str));
+
+        match regex {
+            Ok(regex) => {
+                let result = regex
+                    .replace_all(&input.string, replacement.string.as_str())
+                    .into_owned();
+                Some(LangTaggedString::new(result, input.tag).into_data_value())
+            }
+            Err(_) => None,
+        }
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::KnownOutput(
+            StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Id64.bitset()),
+        )
+    }
+}
+
+/// Language tag matching
+///
+/// Corresponds to SPARQL langMatches(language-tag, language-range).
+/// Returns `true` if `language-tag` matches `language-range` per RFC 4647 basic filtering:
+/// - A range of `"*"` matches any non-empty language tag.
+/// - Otherwise the tag matches if it equals the range or starts with `"<range>-"` (case-insensitive).
+///
+/// Returns `None` if either argument is not a (plain or language-tagged) string.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct StringLangMatches;
+impl BinaryFunction for StringLangMatches {
+    fn evaluate(
+        &self,
+        parameter_first: AnyDataValue,
+        parameter_second: AnyDataValue,
+    ) -> Option<AnyDataValue> {
+        let tag = LangTaggedString::try_from(parameter_first).ok()?;
+        let range = LangTaggedString::try_from(parameter_second).ok()?;
+
+        let tag_lc = tag.string.to_lowercase();
+        let range_lc = range.string.to_lowercase();
+
+        let matches = if range_lc == "*" {
+            !tag_lc.is_empty()
+        } else {
+            tag_lc == range_lc || tag_lc.starts_with(&format!("{range_lc}-"))
+        };
+
+        Some(AnyDataValue::new_boolean(matches))
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::KnownOutput(
+            StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Id64.bitset()),
+        )
+    }
+}
+
 #[cfg(test)]
 mod test {
 

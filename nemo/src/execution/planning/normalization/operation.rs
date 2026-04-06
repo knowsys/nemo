@@ -348,6 +348,13 @@ impl Operation {
                     OperationKind::NumericMaximum => FunctionTree::numeric_maximum(sub),
                     OperationKind::NumericLukasiewicz => FunctionTree::numeric_lukasiewicz(sub),
                     OperationKind::StringConcatenation => FunctionTree::string_concatenation(sub),
+                    OperationKind::StringReplace => FunctionTree::string_replace(sub),
+                    OperationKind::StringLangMatches => binary!(string_lang_matches, sub),
+                    OperationKind::StringMd5 => unary!(string_md5, sub),
+                    OperationKind::StringSha1 => unary!(string_sha1, sub),
+                    OperationKind::StringSha256 => unary!(string_sha256, sub),
+                    OperationKind::StringSha384 => unary!(string_sha384, sub),
+                    OperationKind::StringSha512 => unary!(string_sha512, sub),
                 }
             }
         }

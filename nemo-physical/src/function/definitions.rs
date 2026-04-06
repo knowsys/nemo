@@ -4,12 +4,14 @@ pub(crate) mod boolean;
 pub(crate) mod casting;
 pub(crate) mod checktype;
 pub(crate) mod generic;
+pub(crate) mod hashing;
 pub(crate) mod language;
 pub(crate) mod numeric;
 pub(crate) mod string;
 
 use casting::CastingIntoIri;
 use delegate::delegate;
+use hashing::{StringMd5, StringSha1, StringSha256, StringSha384, StringSha512};
 use string::StringLevenshtein;
 
 use crate::{
@@ -38,8 +40,9 @@ use self::{
     },
     string::{
         StringAfter, StringBefore, StringCompare, StringConcatenation, StringContains, StringEnds,
-        StringLength, StringLowercase, StringRegex, StringReverse, StringStarts, StringSubstring,
-        StringSubstringLength, StringUppercase, StringUriDecode, StringUriEncode,
+        StringLangMatches, StringLength, StringLowercase, StringRegex, StringReplace, StringReverse,
+        StringStarts, StringSubstring, StringSubstringLength, StringUppercase, StringUriDecode,
+        StringUriEncode,
     },
 };
 
@@ -194,6 +197,16 @@ pub enum UnaryFunctionEnum {
     StringUriEncode(StringUriEncode),
     /// Iri-decoding of a string
     StringUriDecode(StringUriDecode),
+    /// MD5 hash of a string
+    StringMd5(StringMd5),
+    /// SHA1 hash of a string
+    StringSha1(StringSha1),
+    /// SHA256 hash of a string
+    StringSha256(StringSha256),
+    /// SHA384 hash of a string
+    StringSha384(StringSha384),
+    /// SHA512 hash of a string
+    StringSha512(StringSha512),
 }
 
 impl UnaryFunction for UnaryFunctionEnum {
@@ -230,6 +243,11 @@ impl UnaryFunction for UnaryFunctionEnum {
             Self::StringUppercase(function) => function,
             Self::StringUriEncode(function) => function,
             Self::StringUriDecode(function) => function,
+            Self::StringMd5(function) => function,
+            Self::StringSha1(function) => function,
+            Self::StringSha256(function) => function,
+            Self::StringSha384(function) => function,
+            Self::StringSha512(function) => function,
         } {
             fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue>;
             fn type_propagation(&self) -> FunctionTypePropagation;
@@ -308,6 +326,8 @@ pub enum BinaryFunctionEnum {
     BitShiftRight(BitShiftRight),
     /// Shift value right by given number of bits, filling with zeros
     BitShiftRightUnsigned(BitShiftRightUnsigned),
+    /// Check if a language tag matches a language range
+    StringLangMatches(StringLangMatches),
 }
 
 impl BinaryFunction for BinaryFunctionEnum {
@@ -339,6 +359,7 @@ impl BinaryFunction for BinaryFunctionEnum {
             Self::BitShiftLeft(function) => function,
             Self::BitShiftRightUnsigned(function) => function,
             Self::BitShiftRight(function) => function,
+            Self::StringLangMatches(function) => function,
         } {
             fn evaluate(&self, first_parameter: AnyDataValue, second_parameter: AnyDataValue) -> Option<AnyDataValue>;
             fn type_propagation(&self) -> FunctionTypePropagation;
@@ -418,6 +439,8 @@ pub enum NaryFunctionEnum {
     NumericProduct(NumericProduct),
     /// Concatenation of given strings
     StringConcatenation(StringConcatenation),
+    /// Regex-based replacement within a string
+    StringReplace(StringReplace),
 }
 
 impl NaryFunction for NaryFunctionEnum {
@@ -434,6 +457,7 @@ impl NaryFunction for NaryFunctionEnum {
             Self::NumericSum(function) => function,
             Self::NumericProduct(function) => function,
             Self::StringConcatenation(function) => function,
+            Self::StringReplace(function) => function,
         } {
             fn evaluate(&self, parameters: &[AnyDataValue]) -> Option<AnyDataValue>;
             fn type_propagation(&self) -> FunctionTypePropagation;

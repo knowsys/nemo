@@ -120,6 +120,24 @@ result(bitand, ?R) :- integers(?A, ?B, ?C), ?R = BITAND(?A, ?B, ?C).
 result(bitor, ?R) :- integers(?A, ?B, ?C), ?R = BITOR(?A, ?B, ?C).
 result(bitxor, ?R) :- integers(?A, ?B, ?C), ?R = BITXOR(?A, ?B, ?C).
 
-% Export 
+% REPLACE
+result(replace_basic, ?R) :- strings(?A, _), ?R = REPLACE(?A, "l", "r").
+result(replace_capture, ?R) :- strings(?A, ?B), ?R = REPLACE(CONCAT(?A, " ", ?B), "(\w+) (\w+)", "$2 $1").
+result(replace_flags, ?R) :- strings(?A, _), ?R = REPLACE(?A, "hello", "Hi", "i").
+
+% langMatches
+result(langmatches_exact, ?R) :- tagged(?L), ?R = langMatches(LANG(?L), "en").
+result(langmatches_subtag, ?R) :- tagged(?L), ?R = langMatches("en-US", "en").
+result(langmatches_wildcard, ?R) :- tagged(?L), ?R = langMatches(LANG(?L), "*").
+result(langmatches_no_match, ?R) :- tagged(?L), ?R = langMatches(LANG(?L), "de").
+
+% Hashing
+result(md5, ?R) :- strings(?A, _), ?R = MD5(?A).
+result(sha1, ?R) :- strings(?A, _), ?R = SHA1(?A).
+result(sha256, ?R) :- strings(?A, _), ?R = SHA256(?A).
+result(sha384, ?R) :- strings(?A, _), ?R = SHA384(?A).
+result(sha512, ?R) :- strings(?A, _), ?R = SHA512(?A).
+
+% Export
 @export result :- csv{}.
 

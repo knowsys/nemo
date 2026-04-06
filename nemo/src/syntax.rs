@@ -336,6 +336,20 @@ pub mod builtin {
         pub(crate) const CONCAT: &str = "CONCAT";
         /// Compute the Levenshtein distance of two strings
         pub(crate) const LEVENSHTEIN: &str = "LEVENSHTEIN";
+        /// Replace occurrences of a regex pattern in a string
+        pub(crate) const REPLACE: &str = "REPLACE";
+        /// Check if a language tag matches a language range
+        pub(crate) const LANGMATCHES: &str = "langMatches";
+        /// Compute the MD5 hash of a string
+        pub(crate) const MD5: &str = "MD5";
+        /// Compute the SHA1 hash of a string
+        pub(crate) const SHA1: &str = "SHA1";
+        /// Compute the SHA256 hash of a string
+        pub(crate) const SHA256: &str = "SHA256";
+        /// Compute the SHA384 hash of a string
+        pub(crate) const SHA384: &str = "SHA384";
+        /// Compute the SHA512 hash of a string
+        pub(crate) const SHA512: &str = "SHA512";
     }
 
     /// This module contains all strings of the supported builtin aggregates.

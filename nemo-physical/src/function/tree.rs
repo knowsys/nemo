@@ -27,11 +27,12 @@ use super::{
             NumericRemainder, NumericRound, NumericSine, NumericSquareroot, NumericSubtraction,
             NumericSum, NumericTangent,
         },
+        hashing::{StringMd5, StringSha1, StringSha256, StringSha384, StringSha512},
         string::{
             StringAfter, StringBefore, StringCompare, StringConcatenation, StringContains,
-            StringEnds, StringLength, StringLevenshtein, StringLowercase, StringRegex,
-            StringReverse, StringStarts, StringSubstring, StringSubstringLength, StringUppercase,
-            StringUriDecode, StringUriEncode,
+            StringEnds, StringLangMatches, StringLength, StringLevenshtein, StringLowercase,
+            StringRegex, StringReplace, StringReverse, StringStarts, StringSubstring,
+            StringSubstringLength, StringUppercase, StringUriDecode, StringUriEncode,
         },
     },
     evaluation::StackProgram,
@@ -864,6 +865,55 @@ where
             left: Box::new(from),
             right: Box::new(to),
         }
+    }
+
+    /// Create a tree node representing a regex-replace operation.
+    ///
+    /// Corresponds to SPARQL REPLACE(arg, pattern, replacement [, flags]).
+    /// Evaluates to a string where all regex matches of `pattern` in `arg` are
+    /// replaced by `replacement`. An optional 4th element in `parameters`
+    /// specifies regex flags (e.g. "i" for case-insensitive).
+    pub fn string_replace(parameters: Vec<Self>) -> Self {
+        Self::Nary {
+            function: NaryFunctionEnum::StringReplace(StringReplace),
+            parameters,
+        }
+    }
+
+    /// Create a tree node that checks whether a language tag matches a language range.
+    ///
+    /// Corresponds to SPARQL langMatches(language-tag, language-range).
+    pub fn string_lang_matches(tag: Self, range: Self) -> Self {
+        Self::Binary {
+            function: BinaryFunctionEnum::StringLangMatches(StringLangMatches),
+            left: Box::new(tag),
+            right: Box::new(range),
+        }
+    }
+
+    /// Create a tree node representing the MD5 hash of a string.
+    pub fn string_md5(sub: Self) -> Self {
+        Self::Unary(UnaryFunctionEnum::StringMd5(StringMd5), Box::new(sub))
+    }
+
+    /// Create a tree node representing the SHA1 hash of a string.
+    pub fn string_sha1(sub: Self) -> Self {
+        Self::Unary(UnaryFunctionEnum::StringSha1(StringSha1), Box::new(sub))
+    }
+
+    /// Create a tree node representing the SHA256 hash of a string.
+    pub fn string_sha256(sub: Self) -> Self {
+        Self::Unary(UnaryFunctionEnum::StringSha256(StringSha256), Box::new(sub))
+    }
+
+    /// Create a tree node representing the SHA384 hash of a string.
+    pub fn string_sha384(sub: Self) -> Self {
+        Self::Unary(UnaryFunctionEnum::StringSha384(StringSha384), Box::new(sub))
+    }
+
+    /// Create a tree node representing the SHA512 hash of a string.
+    pub fn string_sha512(sub: Self) -> Self {
+        Self::Unary(UnaryFunctionEnum::StringSha512(StringSha512), Box::new(sub))
     }
 
     /// Create a tree node representing the bitwise and operation.

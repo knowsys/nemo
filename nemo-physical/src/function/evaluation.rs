@@ -1037,4 +1037,148 @@ mod test {
         let tree_not_string = Function::check_is_string(tree_double.clone());
         evaluate_bool_expect(&tree_not_string, false);
     }
+
+    #[test]
+    fn evaluate_replace() {
+        // Basic replacement
+        let tree = Function::string_replace(vec![
+            Function::constant(any_string("Hello World")),
+            Function::constant(any_string("o")),
+            Function::constant(any_string("0")),
+        ]);
+        evaluate_expect(&tree, Some(any_string("Hell0 W0rld")));
+
+        // With capture group reference in replacement
+        let tree_capture = Function::string_replace(vec![
+            Function::constant(any_string("2024-01-15")),
+            Function::constant(any_string(r"(\d{4})-(\d{2})-(\d{2})")),
+            Function::constant(any_string("$3/$2/$1")),
+        ]);
+        evaluate_expect(&tree_capture, Some(any_string("15/01/2024")));
+
+        // With flags (case-insensitive)
+        let tree_flags = Function::string_replace(vec![
+            Function::constant(any_string("Hello World")),
+            Function::constant(any_string("hello")),
+            Function::constant(any_string("Hi")),
+            Function::constant(any_string("i")),
+        ]);
+        evaluate_expect(&tree_flags, Some(any_string("Hi World")));
+
+        // Invalid regex returns None
+        let tree_invalid = Function::string_replace(vec![
+            Function::constant(any_string("test")),
+            Function::constant(any_string("[")), // unclosed bracket
+            Function::constant(any_string("x")),
+        ]);
+        evaluate_expect(&tree_invalid, None);
+
+        // Non-string input returns None
+        let tree_non_string = Function::string_replace(vec![
+            Function::constant(any_int(42)),
+            Function::constant(any_string(".")),
+            Function::constant(any_string("x")),
+        ]);
+        evaluate_expect(&tree_non_string, None);
+    }
+
+    #[test]
+    fn evaluate_lang_matches() {
+        // Exact match
+        let tree_exact = Function::string_lang_matches(
+            Function::constant(any_string("de")),
+            Function::constant(any_string("de")),
+        );
+        evaluate_bool_expect(&tree_exact, true);
+
+        // Subtag match: "en-US" matches range "en"
+        let tree_subtag = Function::string_lang_matches(
+            Function::constant(any_string("en-US")),
+            Function::constant(any_string("en")),
+        );
+        evaluate_bool_expect(&tree_subtag, true);
+
+        // Wildcard "*" matches any non-empty tag
+        let tree_wildcard = Function::string_lang_matches(
+            Function::constant(any_string("zh-Hans")),
+            Function::constant(any_string("*")),
+        );
+        evaluate_bool_expect(&tree_wildcard, true);
+
+        // Wildcard does not match empty tag
+        let tree_wildcard_empty = Function::string_lang_matches(
+            Function::constant(any_string("")),
+            Function::constant(any_string("*")),
+        );
+        evaluate_bool_expect(&tree_wildcard_empty, false);
+
+        // "de" does not match "en"
+        let tree_no_match = Function::string_lang_matches(
+            Function::constant(any_string("de")),
+            Function::constant(any_string("en")),
+        );
+        evaluate_bool_expect(&tree_no_match, false);
+
+        // Case-insensitive: "EN-US" matches "en"
+        let tree_case = Function::string_lang_matches(
+            Function::constant(any_string("EN-US")),
+            Function::constant(any_string("en")),
+        );
+        evaluate_bool_expect(&tree_case, true);
+    }
+
+    #[test]
+    fn evaluate_hashing() {
+        // MD5 of empty string (well-known value)
+        let tree_md5_empty = Function::string_md5(Function::constant(any_string("")));
+        evaluate_expect(
+            &tree_md5_empty,
+            Some(any_string("d41d8cd98f00b204e9800998ecf8427e")),
+        );
+
+        // MD5 of "abc"
+        let tree_md5_abc = Function::string_md5(Function::constant(any_string("abc")));
+        evaluate_expect(
+            &tree_md5_abc,
+            Some(any_string("900150983cd24fb0d6963f7d28e17f72")),
+        );
+
+        // SHA1 of "abc"
+        let tree_sha1 = Function::string_sha1(Function::constant(any_string("abc")));
+        evaluate_expect(
+            &tree_sha1,
+            Some(any_string("a9993e364706816aba3e25717850c26c9cd0d89d")),
+        );
+
+        // SHA256 of "abc"
+        let tree_sha256 = Function::string_sha256(Function::constant(any_string("abc")));
+        evaluate_expect(
+            &tree_sha256,
+            Some(any_string(
+                "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+            )),
+        );
+
+        // SHA384 of "abc"
+        let tree_sha384 = Function::string_sha384(Function::constant(any_string("abc")));
+        evaluate_expect(
+            &tree_sha384,
+            Some(any_string(
+                "cb00753f45a35e8bb5a03d699ac65007272c32ab0eded1631a8b605a43ff5bed8086072ba1e7cc2358baeca134c825a7",
+            )),
+        );
+
+        // SHA512 of "abc"
+        let tree_sha512 = Function::string_sha512(Function::constant(any_string("abc")));
+        evaluate_expect(
+            &tree_sha512,
+            Some(any_string(
+                "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f",
+            )),
+        );
+
+        // Non-string input returns None
+        let tree_non_string = Function::string_md5(Function::constant(any_int(42)));
+        evaluate_expect(&tree_non_string, None);
+    }
 }
