@@ -16,7 +16,12 @@ use super::{
             CheckIsDouble, CheckIsFloat, CheckIsInteger, CheckIsIri, CheckIsNull, CheckIsNumeric,
             CheckIsString,
         },
-        generic::{CanonicalString, Datatype, Equals, LexicalValue, Unequals},
+        datetime::{
+            DateTimeDay, DateTimeHours, DateTimeMinutes, DateTimeMonth, DateTimeSeconds,
+            DateTimeTimezone, DateTimeTz, DateTimeYear,
+        },
+        generic::{CanonicalString, Datatype, Equals, LexicalValue, TypedLiteral, Unequals},
+        hashing::{StringMd5, StringSha1, StringSha256, StringSha384, StringSha512},
         language::LanguageTag,
         numeric::{
             BitAnd, BitOr, BitShiftLeft, BitShiftRight, BitShiftRightUnsigned, BitXor,
@@ -29,9 +34,9 @@ use super::{
         },
         string::{
             StringAfter, StringBefore, StringCompare, StringConcatenation, StringContains,
-            StringEnds, StringLength, StringLevenshtein, StringLowercase, StringRegex,
-            StringReverse, StringStarts, StringSubstring, StringSubstringLength, StringUppercase,
-            StringUriDecode, StringUriEncode,
+            StringEnds, StringLangMatches, StringLength, StringLevenshtein, StringLowercase,
+            StringRegex, StringReplace, StringReverse, StringStarts, StringSubstring,
+            StringSubstringLength, StringUppercase, StringUriDecode, StringUriEncode,
         },
     },
     evaluation::StackProgram,
@@ -864,6 +869,112 @@ where
             left: Box::new(from),
             right: Box::new(to),
         }
+    }
+
+    /// Create a tree node representing a typed literal construction (STRDT).
+    pub fn typed_literal(lexical: Self, datatype: Self) -> Self {
+        Self::Binary {
+            function: BinaryFunctionEnum::TypedLiteral(TypedLiteral),
+            left: Box::new(lexical),
+            right: Box::new(datatype),
+        }
+    }
+
+    /// Create a tree node representing a regex-replace operation (REPLACE).
+    pub fn string_replace(parameters: Vec<Self>) -> Self {
+        Self::Nary {
+            function: NaryFunctionEnum::StringReplace(StringReplace),
+            parameters,
+        }
+    }
+
+    /// Create a tree node that checks whether a language tag matches a language range (langMatches).
+    pub fn string_lang_matches(tag: Self, range: Self) -> Self {
+        Self::Binary {
+            function: BinaryFunctionEnum::StringLangMatches(StringLangMatches),
+            left: Box::new(tag),
+            right: Box::new(range),
+        }
+    }
+
+    /// Create a tree node representing the MD5 hash of a string.
+    pub fn string_md5(sub: Self) -> Self {
+        Self::Unary(UnaryFunctionEnum::StringMd5(StringMd5), Box::new(sub))
+    }
+
+    /// Create a tree node representing the SHA1 hash of a string.
+    pub fn string_sha1(sub: Self) -> Self {
+        Self::Unary(UnaryFunctionEnum::StringSha1(StringSha1), Box::new(sub))
+    }
+
+    /// Create a tree node representing the SHA256 hash of a string.
+    pub fn string_sha256(sub: Self) -> Self {
+        Self::Unary(UnaryFunctionEnum::StringSha256(StringSha256), Box::new(sub))
+    }
+
+    /// Create a tree node representing the SHA384 hash of a string.
+    pub fn string_sha384(sub: Self) -> Self {
+        Self::Unary(UnaryFunctionEnum::StringSha384(StringSha384), Box::new(sub))
+    }
+
+    /// Create a tree node representing the SHA512 hash of a string.
+    pub fn string_sha512(sub: Self) -> Self {
+        Self::Unary(UnaryFunctionEnum::StringSha512(StringSha512), Box::new(sub))
+    }
+
+    /// Create a tree node extracting the year from an XSD date/dateTime (YEAR).
+    pub fn datetime_year(sub: Self) -> Self {
+        Self::Unary(UnaryFunctionEnum::DateTimeYear(DateTimeYear), Box::new(sub))
+    }
+
+    /// Create a tree node extracting the month from an XSD date/dateTime (MONTH).
+    pub fn datetime_month(sub: Self) -> Self {
+        Self::Unary(
+            UnaryFunctionEnum::DateTimeMonth(DateTimeMonth),
+            Box::new(sub),
+        )
+    }
+
+    /// Create a tree node extracting the day from an XSD date/dateTime (DAY).
+    pub fn datetime_day(sub: Self) -> Self {
+        Self::Unary(UnaryFunctionEnum::DateTimeDay(DateTimeDay), Box::new(sub))
+    }
+
+    /// Create a tree node extracting the hours from an XSD dateTime/time (HOURS).
+    pub fn datetime_hours(sub: Self) -> Self {
+        Self::Unary(
+            UnaryFunctionEnum::DateTimeHours(DateTimeHours),
+            Box::new(sub),
+        )
+    }
+
+    /// Create a tree node extracting the minutes from an XSD dateTime/time (MINUTES).
+    pub fn datetime_minutes(sub: Self) -> Self {
+        Self::Unary(
+            UnaryFunctionEnum::DateTimeMinutes(DateTimeMinutes),
+            Box::new(sub),
+        )
+    }
+
+    /// Create a tree node extracting the seconds from an XSD dateTime/time (SECONDS).
+    pub fn datetime_seconds(sub: Self) -> Self {
+        Self::Unary(
+            UnaryFunctionEnum::DateTimeSeconds(DateTimeSeconds),
+            Box::new(sub),
+        )
+    }
+
+    /// Create a tree node extracting the timezone as xsd:dayTimeDuration (TIMEZONE).
+    pub fn datetime_timezone(sub: Self) -> Self {
+        Self::Unary(
+            UnaryFunctionEnum::DateTimeTimezone(DateTimeTimezone),
+            Box::new(sub),
+        )
+    }
+
+    /// Create a tree node extracting the timezone as a plain string (TZ).
+    pub fn datetime_tz(sub: Self) -> Self {
+        Self::Unary(UnaryFunctionEnum::DateTimeTz(DateTimeTz), Box::new(sub))
     }
 
     /// Create a tree node representing the bitwise and operation.
