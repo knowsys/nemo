@@ -313,9 +313,7 @@ impl UnaryFunction for DateTimeTz {
             return None;
         }
         let (_, tz) = split_timezone(&lexical);
-        Some(AnyDataValue::new_plain_string(
-            tz.unwrap_or("").to_string(),
-        ))
+        Some(AnyDataValue::new_plain_string(tz.unwrap_or("").to_string()))
     }
 
     fn type_propagation(&self) -> FunctionTypePropagation {
@@ -352,7 +350,9 @@ mod test {
 
     #[test]
     fn test_year_with_timezone() {
-        let v = DateTimeYear.evaluate(dt("2023-06-15T10:30:45+05:30")).unwrap();
+        let v = DateTimeYear
+            .evaluate(dt("2023-06-15T10:30:45+05:30"))
+            .unwrap();
         assert_eq!(v, AnyDataValue::new_integer_from_i64(2023));
     }
 
@@ -394,7 +394,9 @@ mod test {
 
     #[test]
     fn test_seconds_fractional() {
-        let v = DateTimeSeconds.evaluate(dt("2023-06-15T10:30:45.5")).unwrap();
+        let v = DateTimeSeconds
+            .evaluate(dt("2023-06-15T10:30:45.5"))
+            .unwrap();
         assert_eq!(v, AnyDataValue::new_double_from_f64(45.5).unwrap());
     }
 
@@ -412,31 +414,43 @@ mod test {
 
     #[test]
     fn test_tz_offset() {
-        let v = DateTimeTz.evaluate(dt("2023-06-15T10:30:45-05:00")).unwrap();
+        let v = DateTimeTz
+            .evaluate(dt("2023-06-15T10:30:45-05:00"))
+            .unwrap();
         assert_eq!(v, AnyDataValue::new_plain_string("-05:00".to_string()));
     }
 
     #[test]
     fn test_timezone_absent() {
-        assert!(DateTimeTimezone.evaluate(dt("2023-06-15T10:30:45")).is_none());
+        assert!(
+            DateTimeTimezone
+                .evaluate(dt("2023-06-15T10:30:45"))
+                .is_none()
+        );
     }
 
     #[test]
     fn test_timezone_utc() {
-        let v = DateTimeTimezone.evaluate(dt("2023-06-15T10:30:45Z")).unwrap();
+        let v = DateTimeTimezone
+            .evaluate(dt("2023-06-15T10:30:45Z"))
+            .unwrap();
         assert_eq!(v.lexical_value(), "PT0S");
         assert_eq!(v.datatype_iri(), XSD_DAY_TIME_DURATION);
     }
 
     #[test]
     fn test_timezone_negative() {
-        let v = DateTimeTimezone.evaluate(dt("2023-06-15T10:30:45-05:00")).unwrap();
+        let v = DateTimeTimezone
+            .evaluate(dt("2023-06-15T10:30:45-05:00"))
+            .unwrap();
         assert_eq!(v.lexical_value(), "-PT5H");
     }
 
     #[test]
     fn test_timezone_positive_with_minutes() {
-        let v = DateTimeTimezone.evaluate(dt("2023-06-15T10:30:45+05:30")).unwrap();
+        let v = DateTimeTimezone
+            .evaluate(dt("2023-06-15T10:30:45+05:30"))
+            .unwrap();
         assert_eq!(v.lexical_value(), "PT5H30M");
     }
 

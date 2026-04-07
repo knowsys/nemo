@@ -11,11 +11,11 @@ pub(crate) mod numeric;
 pub(crate) mod string;
 
 use casting::CastingIntoIri;
-use delegate::delegate;
 use datetime::{
     DateTimeDay, DateTimeHours, DateTimeMinutes, DateTimeMonth, DateTimeSeconds, DateTimeTimezone,
     DateTimeTz, DateTimeYear,
 };
+use delegate::delegate;
 use hashing::{StringMd5, StringSha1, StringSha256, StringSha384, StringSha512};
 use string::StringLevenshtein;
 
@@ -45,9 +45,9 @@ use self::{
     },
     string::{
         StringAfter, StringBefore, StringCompare, StringConcatenation, StringContains, StringEnds,
-        StringLangMatches, StringLength, StringLowercase, StringRegex, StringReplace, StringReverse,
-        StringStarts, StringSubstring, StringSubstringLength, StringUppercase, StringUriDecode,
-        StringUriEncode,
+        StringLangMatches, StringLength, StringLowercase, StringRegex, StringReplace,
+        StringReverse, StringStarts, StringSubstring, StringSubstringLength, StringUppercase,
+        StringUriDecode, StringUriEncode,
     },
 };
 
