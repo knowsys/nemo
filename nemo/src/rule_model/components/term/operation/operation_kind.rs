@@ -382,6 +382,12 @@ pub enum OperationKind {
     #[assoc(num_arguments = OperationNumArguments::Arbitrary)]
     #[assoc(return_type = ValueType::Boolean)]
     BooleanDisjunction,
+    /// Extract the minutes from an XSD dateTime/time value, corresponding to SPARQL MINUTES.
+    /// Must appear before NumericMinimum ("MIN") since "min" is a prefix of "minutes".
+    #[assoc(name = function::MINUTES)]
+    #[assoc(num_arguments = OperationNumArguments::Unary)]
+    #[assoc(return_type = ValueType::Number)]
+    DateTimeMinutes,
     /// Minimum of numeric values
     #[assoc(name = function::MIN)]
     #[assoc(num_arguments = OperationNumArguments::Arbitrary)]
@@ -443,6 +449,42 @@ pub enum OperationKind {
     #[assoc(num_arguments = OperationNumArguments::Unary)]
     #[assoc(return_type = ValueType::String)]
     StringSha512,
+    /// Extract the year from an XSD date/dateTime, corresponding to SPARQL YEAR.
+    #[assoc(name = function::YEAR)]
+    #[assoc(num_arguments = OperationNumArguments::Unary)]
+    #[assoc(return_type = ValueType::Number)]
+    DateTimeYear,
+    /// Extract the month from an XSD date/dateTime, corresponding to SPARQL MONTH.
+    #[assoc(name = function::MONTH)]
+    #[assoc(num_arguments = OperationNumArguments::Unary)]
+    #[assoc(return_type = ValueType::Number)]
+    DateTimeMonth,
+    /// Extract the day from an XSD date/dateTime, corresponding to SPARQL DAY.
+    #[assoc(name = function::DAY)]
+    #[assoc(num_arguments = OperationNumArguments::Unary)]
+    #[assoc(return_type = ValueType::Number)]
+    DateTimeDay,
+    /// Extract the hours from an XSD dateTime/time, corresponding to SPARQL HOURS.
+    #[assoc(name = function::HOURS)]
+    #[assoc(num_arguments = OperationNumArguments::Unary)]
+    #[assoc(return_type = ValueType::Number)]
+    DateTimeHours,
+    /// Extract the seconds from an XSD dateTime/time, corresponding to SPARQL SECONDS.
+    #[assoc(name = function::SECONDS)]
+    #[assoc(num_arguments = OperationNumArguments::Unary)]
+    #[assoc(return_type = ValueType::Number)]
+    DateTimeSeconds,
+    /// Extract the timezone as xsd:dayTimeDuration, corresponding to SPARQL TIMEZONE.
+    /// Must appear before DateTimeTz ("TZ") since "tz" is a prefix of "timezone".
+    #[assoc(name = function::TIMEZONE)]
+    #[assoc(num_arguments = OperationNumArguments::Unary)]
+    #[assoc(return_type = ValueType::Any)]
+    DateTimeTimezone,
+    /// Extract the timezone as a plain string, corresponding to SPARQL TZ.
+    #[assoc(name = function::TZ)]
+    #[assoc(num_arguments = OperationNumArguments::Unary)]
+    #[assoc(return_type = ValueType::String)]
+    DateTimeTz,
 }
 
 impl OperationKind {

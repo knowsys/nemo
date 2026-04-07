@@ -27,6 +27,10 @@ use super::{
             NumericRemainder, NumericRound, NumericSine, NumericSquareroot, NumericSubtraction,
             NumericSum, NumericTangent,
         },
+        datetime::{
+            DateTimeDay, DateTimeHours, DateTimeMinutes, DateTimeMonth, DateTimeSeconds,
+            DateTimeTimezone, DateTimeTz, DateTimeYear,
+        },
         hashing::{StringMd5, StringSha1, StringSha256, StringSha384, StringSha512},
         string::{
             StringAfter, StringBefore, StringCompare, StringConcatenation, StringContains,
@@ -925,6 +929,61 @@ where
     /// Create a tree node representing the SHA512 hash of a string.
     pub fn string_sha512(sub: Self) -> Self {
         Self::Unary(UnaryFunctionEnum::StringSha512(StringSha512), Box::new(sub))
+    }
+
+    /// Create a tree node extracting the year from an XSD date/dateTime.
+    pub fn datetime_year(sub: Self) -> Self {
+        Self::Unary(UnaryFunctionEnum::DateTimeYear(DateTimeYear), Box::new(sub))
+    }
+
+    /// Create a tree node extracting the month from an XSD date/dateTime.
+    pub fn datetime_month(sub: Self) -> Self {
+        Self::Unary(
+            UnaryFunctionEnum::DateTimeMonth(DateTimeMonth),
+            Box::new(sub),
+        )
+    }
+
+    /// Create a tree node extracting the day from an XSD date/dateTime.
+    pub fn datetime_day(sub: Self) -> Self {
+        Self::Unary(UnaryFunctionEnum::DateTimeDay(DateTimeDay), Box::new(sub))
+    }
+
+    /// Create a tree node extracting the hours from an XSD dateTime/time.
+    pub fn datetime_hours(sub: Self) -> Self {
+        Self::Unary(
+            UnaryFunctionEnum::DateTimeHours(DateTimeHours),
+            Box::new(sub),
+        )
+    }
+
+    /// Create a tree node extracting the minutes from an XSD dateTime/time.
+    pub fn datetime_minutes(sub: Self) -> Self {
+        Self::Unary(
+            UnaryFunctionEnum::DateTimeMinutes(DateTimeMinutes),
+            Box::new(sub),
+        )
+    }
+
+    /// Create a tree node extracting the seconds from an XSD dateTime/time.
+    pub fn datetime_seconds(sub: Self) -> Self {
+        Self::Unary(
+            UnaryFunctionEnum::DateTimeSeconds(DateTimeSeconds),
+            Box::new(sub),
+        )
+    }
+
+    /// Create a tree node extracting the timezone as xsd:dayTimeDuration.
+    pub fn datetime_timezone(sub: Self) -> Self {
+        Self::Unary(
+            UnaryFunctionEnum::DateTimeTimezone(DateTimeTimezone),
+            Box::new(sub),
+        )
+    }
+
+    /// Create a tree node extracting the timezone as a plain string.
+    pub fn datetime_tz(sub: Self) -> Self {
+        Self::Unary(UnaryFunctionEnum::DateTimeTz(DateTimeTz), Box::new(sub))
     }
 
     /// Create a tree node representing the bitwise and operation.

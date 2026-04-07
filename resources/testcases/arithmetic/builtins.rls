@@ -142,6 +142,28 @@ result(sha512, ?R) :- strings(?A, _), ?R = SHA512(?A).
 result(strdt_int, ?R) :- strings(?A, _), ?DT = IRI("http://www.w3.org/2001/XMLSchema#integer"), ?R = STRDT("42", ?DT).
 result(strdt_other, ?R) :- strings(?A, _), ?DT = IRI("http://www.w3.org/2001/XMLSchema#date"), ?R = STRDT("2024-01-01", ?DT).
 
+% Date/time functions
+datetime("2023-06-15T10:30:45"^^xsd:dateTime).
+datetime_tz("2023-06-15T10:30:45Z"^^xsd:dateTime).
+datetime_tz_offset("2023-06-15T10:30:45-05:00"^^xsd:dateTime).
+dateonly("2023-06-15"^^xsd:date).
+timeonly("10:30:45.5"^^xsd:time).
+
+result(dt_year, ?R) :- datetime(?D), ?R = YEAR(?D).
+result(dt_month, ?R) :- datetime(?D), ?R = MONTH(?D).
+result(dt_day, ?R) :- datetime(?D), ?R = DAY(?D).
+result(dt_hours, ?R) :- datetime(?D), ?R = HOURS(?D).
+result(dt_minutes, ?R) :- datetime(?D), ?R = MINUTES(?D).
+result(dt_seconds, ?R) :- datetime(?D), ?R = SECONDS(?D).
+result(dt_year_date, ?R) :- dateonly(?D), ?R = YEAR(?D).
+result(dt_hours_time, ?R) :- timeonly(?D), ?R = HOURS(?D).
+result(dt_seconds_frac, ?R) :- timeonly(?D), ?R = SECONDS(?D).
+result(dt_tz_absent, ?R) :- datetime(?D), ?R = TZ(?D).
+result(dt_tz_utc, ?R) :- datetime_tz(?D), ?R = TZ(?D).
+result(dt_tz_offset, ?R) :- datetime_tz_offset(?D), ?R = TZ(?D).
+result(dt_timezone_utc, ?R) :- datetime_tz(?D), ?R = TIMEZONE(?D).
+result(dt_timezone_offset, ?R) :- datetime_tz_offset(?D), ?R = TIMEZONE(?D).
+
 % Export
 @export result :- csv{}.
 

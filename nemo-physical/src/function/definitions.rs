@@ -3,6 +3,7 @@
 pub(crate) mod boolean;
 pub(crate) mod casting;
 pub(crate) mod checktype;
+pub(crate) mod datetime;
 pub(crate) mod generic;
 pub(crate) mod hashing;
 pub(crate) mod language;
@@ -11,6 +12,10 @@ pub(crate) mod string;
 
 use casting::CastingIntoIri;
 use delegate::delegate;
+use datetime::{
+    DateTimeDay, DateTimeHours, DateTimeMinutes, DateTimeMonth, DateTimeSeconds, DateTimeTimezone,
+    DateTimeTz, DateTimeYear,
+};
 use hashing::{StringMd5, StringSha1, StringSha256, StringSha384, StringSha512};
 use string::StringLevenshtein;
 
@@ -207,6 +212,22 @@ pub enum UnaryFunctionEnum {
     StringSha384(StringSha384),
     /// SHA512 hash of a string
     StringSha512(StringSha512),
+    /// Year component of a date/dateTime value
+    DateTimeYear(DateTimeYear),
+    /// Month component of a date/dateTime value
+    DateTimeMonth(DateTimeMonth),
+    /// Day component of a date/dateTime value
+    DateTimeDay(DateTimeDay),
+    /// Hours component of a dateTime/time value
+    DateTimeHours(DateTimeHours),
+    /// Minutes component of a dateTime/time value
+    DateTimeMinutes(DateTimeMinutes),
+    /// Seconds component of a dateTime/time value
+    DateTimeSeconds(DateTimeSeconds),
+    /// Timezone of a date/dateTime/time value as xsd:dayTimeDuration
+    DateTimeTimezone(DateTimeTimezone),
+    /// Timezone of a date/dateTime/time value as a plain string
+    DateTimeTz(DateTimeTz),
 }
 
 impl UnaryFunction for UnaryFunctionEnum {
@@ -248,6 +269,14 @@ impl UnaryFunction for UnaryFunctionEnum {
             Self::StringSha256(function) => function,
             Self::StringSha384(function) => function,
             Self::StringSha512(function) => function,
+            Self::DateTimeYear(function) => function,
+            Self::DateTimeMonth(function) => function,
+            Self::DateTimeDay(function) => function,
+            Self::DateTimeHours(function) => function,
+            Self::DateTimeMinutes(function) => function,
+            Self::DateTimeSeconds(function) => function,
+            Self::DateTimeTimezone(function) => function,
+            Self::DateTimeTz(function) => function,
         } {
             fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue>;
             fn type_propagation(&self) -> FunctionTypePropagation;

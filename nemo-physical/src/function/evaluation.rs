@@ -1181,4 +1181,438 @@ mod test {
         let tree_non_string = Function::string_md5(Function::constant(any_int(42)));
         evaluate_expect(&tree_non_string, None);
     }
+
+    // ── Helpers for date/time tests ──────────────────────────────────────────
+
+    fn any_datetime(lex: &str) -> AnyDataValue {
+        AnyDataValue::new_other(
+            lex.to_string(),
+            "http://www.w3.org/2001/XMLSchema#dateTime".to_string(),
+        )
+    }
+
+    fn any_date(lex: &str) -> AnyDataValue {
+        AnyDataValue::new_other(
+            lex.to_string(),
+            "http://www.w3.org/2001/XMLSchema#date".to_string(),
+        )
+    }
+
+    fn any_time(lex: &str) -> AnyDataValue {
+        AnyDataValue::new_other(
+            lex.to_string(),
+            "http://www.w3.org/2001/XMLSchema#time".to_string(),
+        )
+    }
+
+    fn any_dtduration(lex: &str) -> AnyDataValue {
+        AnyDataValue::new_other(
+            lex.to_string(),
+            "http://www.w3.org/2001/XMLSchema#dayTimeDuration".to_string(),
+        )
+    }
+
+    /// Tests for YEAR extracted from xsd:dateTime and xsd:date.
+    ///
+    /// All examples from XPath functions spec §9.5.1 / §9.5.8,
+    /// and SPARQL 1.1 spec §17.4.5.2.
+    #[test]
+    fn evaluate_datetime_year() {
+        // XPath §9.5.1: fn:year-from-dateTime("1999-05-31T13:20:00-05:00") → 1999
+        evaluate_expect(
+            &Function::datetime_year(Function::constant(any_datetime(
+                "1999-05-31T13:20:00-05:00",
+            ))),
+            Some(any_int(1999)),
+        );
+        // XPath §9.5.1: fn:year-from-dateTime("1999-05-31T21:30:00-05:00") → 1999
+        evaluate_expect(
+            &Function::datetime_year(Function::constant(any_datetime(
+                "1999-05-31T21:30:00-05:00",
+            ))),
+            Some(any_int(1999)),
+        );
+        // XPath §9.5.1: fn:year-from-dateTime("1999-12-31T19:20:00") → 1999
+        evaluate_expect(
+            &Function::datetime_year(Function::constant(any_datetime("1999-12-31T19:20:00"))),
+            Some(any_int(1999)),
+        );
+        // XPath §9.5.1: fn:year-from-dateTime("1999-12-31T24:00:00") → 2000
+        // T24:00:00 is end-of-day midnight, equivalent to start of next day
+        evaluate_expect(
+            &Function::datetime_year(Function::constant(any_datetime("1999-12-31T24:00:00"))),
+            Some(any_int(2000)),
+        );
+        // XPath §9.5.1: fn:year-from-dateTime("-0002-06-06T00:00:00") → -2
+        evaluate_expect(
+            &Function::datetime_year(Function::constant(any_datetime("-0002-06-06T00:00:00"))),
+            Some(any_int(-2)),
+        );
+        // SPARQL §17.4.5.17: YEAR("2011-01-10T14:45:13.815-05:00") → 2011
+        evaluate_expect(
+            &Function::datetime_year(Function::constant(any_datetime(
+                "2011-01-10T14:45:13.815-05:00",
+            ))),
+            Some(any_int(2011)),
+        );
+
+        // XPath §9.5.8: fn:year-from-date("1999-05-31") → 1999
+        evaluate_expect(
+            &Function::datetime_year(Function::constant(any_date("1999-05-31"))),
+            Some(any_int(1999)),
+        );
+        // XPath §9.5.8: fn:year-from-date("2000-01-01+05:00") → 2000
+        evaluate_expect(
+            &Function::datetime_year(Function::constant(any_date("2000-01-01+05:00"))),
+            Some(any_int(2000)),
+        );
+        // XPath §9.5.8: fn:year-from-date("-0002-06-01") → -2
+        evaluate_expect(
+            &Function::datetime_year(Function::constant(any_date("-0002-06-01"))),
+            Some(any_int(-2)),
+        );
+
+        // Wrong datatype → None
+        evaluate_expect(
+            &Function::datetime_year(Function::constant(any_time("14:45:13"))),
+            None,
+        );
+        evaluate_expect(
+            &Function::datetime_year(Function::constant(any_string("2011-01-10"))),
+            None,
+        );
+    }
+
+    /// Tests for MONTH extracted from xsd:dateTime and xsd:date.
+    ///
+    /// All examples from XPath functions spec §9.5.2 / §9.5.9,
+    /// and SPARQL 1.1 spec §17.4.5.3.
+    #[test]
+    fn evaluate_datetime_month() {
+        // XPath §9.5.2: fn:month-from-dateTime("1999-05-31T13:20:00-05:00") → 5
+        evaluate_expect(
+            &Function::datetime_month(Function::constant(any_datetime(
+                "1999-05-31T13:20:00-05:00",
+            ))),
+            Some(any_int(5)),
+        );
+        // XPath §9.5.2: fn:month-from-dateTime("1999-12-31T19:20:00-05:00") → 12
+        evaluate_expect(
+            &Function::datetime_month(Function::constant(any_datetime(
+                "1999-12-31T19:20:00-05:00",
+            ))),
+            Some(any_int(12)),
+        );
+        // SPARQL §17.4.5.3: MONTH("2011-01-10T14:45:13.815-05:00") → 1
+        evaluate_expect(
+            &Function::datetime_month(Function::constant(any_datetime(
+                "2011-01-10T14:45:13.815-05:00",
+            ))),
+            Some(any_int(1)),
+        );
+
+        // XPath §9.5.9: fn:month-from-date("1999-05-31-05:00") → 5
+        evaluate_expect(
+            &Function::datetime_month(Function::constant(any_date("1999-05-31-05:00"))),
+            Some(any_int(5)),
+        );
+        // XPath §9.5.9: fn:month-from-date("2000-01-01+05:00") → 1
+        evaluate_expect(
+            &Function::datetime_month(Function::constant(any_date("2000-01-01+05:00"))),
+            Some(any_int(1)),
+        );
+
+        // Wrong datatype → None
+        evaluate_expect(
+            &Function::datetime_month(Function::constant(any_time("14:45:13"))),
+            None,
+        );
+    }
+
+    /// Tests for DAY extracted from xsd:dateTime and xsd:date.
+    ///
+    /// All examples from XPath functions spec §9.5.3 / §9.5.10,
+    /// and SPARQL 1.1 spec §17.4.5.4.
+    #[test]
+    fn evaluate_datetime_day() {
+        // XPath §9.5.3: fn:day-from-dateTime("1999-05-31T13:20:00-05:00") → 31
+        evaluate_expect(
+            &Function::datetime_day(Function::constant(any_datetime(
+                "1999-05-31T13:20:00-05:00",
+            ))),
+            Some(any_int(31)),
+        );
+        // XPath §9.5.3: fn:day-from-dateTime("1999-12-31T20:00:00-05:00") → 31
+        evaluate_expect(
+            &Function::datetime_day(Function::constant(any_datetime(
+                "1999-12-31T20:00:00-05:00",
+            ))),
+            Some(any_int(31)),
+        );
+        // SPARQL §17.4.5.4: DAY("2011-01-10T14:45:13.815-05:00") → 10
+        evaluate_expect(
+            &Function::datetime_day(Function::constant(any_datetime(
+                "2011-01-10T14:45:13.815-05:00",
+            ))),
+            Some(any_int(10)),
+        );
+
+        // XPath §9.5.10: fn:day-from-date("1999-05-31-05:00") → 31
+        evaluate_expect(
+            &Function::datetime_day(Function::constant(any_date("1999-05-31-05:00"))),
+            Some(any_int(31)),
+        );
+        // XPath §9.5.10: fn:day-from-date("2000-01-01+05:00") → 1
+        evaluate_expect(
+            &Function::datetime_day(Function::constant(any_date("2000-01-01+05:00"))),
+            Some(any_int(1)),
+        );
+
+        // Wrong datatype → None
+        evaluate_expect(
+            &Function::datetime_day(Function::constant(any_time("14:45:13"))),
+            None,
+        );
+    }
+
+    /// Tests for HOURS extracted from xsd:dateTime and xsd:time.
+    ///
+    /// All examples from XPath functions spec §9.5.4 / §9.5.12,
+    /// and SPARQL 1.1 spec §17.4.5.5.
+    #[test]
+    fn evaluate_datetime_hours() {
+        // XPath §9.5.4: fn:hours-from-dateTime("1999-05-31T08:20:00-05:00") → 8
+        evaluate_expect(
+            &Function::datetime_hours(Function::constant(any_datetime(
+                "1999-05-31T08:20:00-05:00",
+            ))),
+            Some(any_int(8)),
+        );
+        // XPath §9.5.4: fn:hours-from-dateTime("1999-12-31T21:20:00-05:00") → 21
+        evaluate_expect(
+            &Function::datetime_hours(Function::constant(any_datetime(
+                "1999-12-31T21:20:00-05:00",
+            ))),
+            Some(any_int(21)),
+        );
+        // XPath §9.5.4: fn:hours-from-dateTime("1999-12-31T12:00:00") → 12
+        evaluate_expect(
+            &Function::datetime_hours(Function::constant(any_datetime("1999-12-31T12:00:00"))),
+            Some(any_int(12)),
+        );
+        // XPath §9.5.4: fn:hours-from-dateTime("1999-12-31T24:00:00") → 0
+        // T24:00:00 rolls over to midnight (00:00:00) of the next day
+        evaluate_expect(
+            &Function::datetime_hours(Function::constant(any_datetime("1999-12-31T24:00:00"))),
+            Some(any_int(0)),
+        );
+        // SPARQL §17.4.5.5: HOURS("2011-01-10T14:45:13.815-05:00") → 14
+        evaluate_expect(
+            &Function::datetime_hours(Function::constant(any_datetime(
+                "2011-01-10T14:45:13.815-05:00",
+            ))),
+            Some(any_int(14)),
+        );
+
+        // XPath §9.5.12: fn:hours-from-time("11:23:00") → 11
+        evaluate_expect(
+            &Function::datetime_hours(Function::constant(any_time("11:23:00"))),
+            Some(any_int(11)),
+        );
+        // XPath §9.5.12: fn:hours-from-time("21:23:00") → 21
+        evaluate_expect(
+            &Function::datetime_hours(Function::constant(any_time("21:23:00"))),
+            Some(any_int(21)),
+        );
+        // XPath §9.5.12: fn:hours-from-time("01:23:00+05:00") → 1
+        evaluate_expect(
+            &Function::datetime_hours(Function::constant(any_time("01:23:00+05:00"))),
+            Some(any_int(1)),
+        );
+        // XPath §9.5.12: fn:hours-from-time("24:00:00") → 0
+        evaluate_expect(
+            &Function::datetime_hours(Function::constant(any_time("24:00:00"))),
+            Some(any_int(0)),
+        );
+
+        // Wrong datatype → None
+        evaluate_expect(
+            &Function::datetime_hours(Function::constant(any_date("2011-01-10"))),
+            None,
+        );
+    }
+
+    /// Tests for MINUTES extracted from xsd:dateTime and xsd:time.
+    ///
+    /// All examples from XPath functions spec §9.5.5 / §9.5.13,
+    /// and SPARQL 1.1 spec §17.4.5.6.
+    #[test]
+    fn evaluate_datetime_minutes() {
+        // XPath §9.5.5: fn:minutes-from-dateTime("1999-05-31T13:20:00-05:00") → 20
+        evaluate_expect(
+            &Function::datetime_minutes(Function::constant(any_datetime(
+                "1999-05-31T13:20:00-05:00",
+            ))),
+            Some(any_int(20)),
+        );
+        // XPath §9.5.5: fn:minutes-from-dateTime("1999-05-31T13:30:00+05:30") → 30
+        evaluate_expect(
+            &Function::datetime_minutes(Function::constant(any_datetime(
+                "1999-05-31T13:30:00+05:30",
+            ))),
+            Some(any_int(30)),
+        );
+        // SPARQL §17.4.5.6: MINUTES("2011-01-10T14:45:13.815-05:00") → 45
+        evaluate_expect(
+            &Function::datetime_minutes(Function::constant(any_datetime(
+                "2011-01-10T14:45:13.815-05:00",
+            ))),
+            Some(any_int(45)),
+        );
+
+        // XPath §9.5.13: fn:minutes-from-time("13:00:00Z") → 0
+        evaluate_expect(
+            &Function::datetime_minutes(Function::constant(any_time("13:00:00Z"))),
+            Some(any_int(0)),
+        );
+
+        // Wrong datatype → None
+        evaluate_expect(
+            &Function::datetime_minutes(Function::constant(any_date("2011-01-10"))),
+            None,
+        );
+    }
+
+    /// Tests for SECONDS extracted from xsd:dateTime and xsd:time.
+    ///
+    /// All examples from XPath functions spec §9.5.6 / §9.5.14,
+    /// and SPARQL 1.1 spec §17.4.5.7.
+    #[test]
+    fn evaluate_datetime_seconds() {
+        // XPath §9.5.6: fn:seconds-from-dateTime("1999-05-31T13:20:00-05:00") → 0
+        evaluate_expect(
+            &Function::datetime_seconds(Function::constant(any_datetime(
+                "1999-05-31T13:20:00-05:00",
+            ))),
+            Some(any_double(0.0)),
+        );
+        // SPARQL §17.4.5.7: SECONDS("2011-01-10T14:45:13.815-05:00") → 13.815
+        let result = StackProgram::from_function_tree(
+            &Function::datetime_seconds(Function::constant(any_datetime(
+                "2011-01-10T14:45:13.815-05:00",
+            ))),
+            &HashMap::new(),
+            None,
+        )
+        .evaluate(&[], None)
+        .unwrap();
+        assert!(
+            (result.to_f64_unchecked() - 13.815_f64).abs() < 1e-6,
+            "expected 13.815, got {result:?}"
+        );
+
+        // XPath §9.5.14: fn:seconds-from-time("13:20:10.5") → 10.5
+        let result = StackProgram::from_function_tree(
+            &Function::datetime_seconds(Function::constant(any_time("13:20:10.5"))),
+            &HashMap::new(),
+            None,
+        )
+        .evaluate(&[], None)
+        .unwrap();
+        assert!(
+            (result.to_f64_unchecked() - 10.5_f64).abs() < 1e-9,
+            "expected 10.5, got {result:?}"
+        );
+
+        // Wrong datatype → None
+        evaluate_expect(
+            &Function::datetime_seconds(Function::constant(any_date("2011-01-10"))),
+            None,
+        );
+    }
+
+    /// Tests for TIMEZONE (returns xsd:dayTimeDuration) and TZ (returns plain string).
+    ///
+    /// All examples from XPath functions spec §9.5.7 / §9.5.11 / §9.5.15,
+    /// and SPARQL 1.1 spec §17.4.5.8–9.
+    #[test]
+    fn evaluate_datetime_timezone() {
+        // XPath §9.5.7: fn:timezone-from-dateTime("1999-05-31T13:20:00-05:00") → -PT5H
+        evaluate_expect(
+            &Function::datetime_timezone(Function::constant(any_datetime(
+                "1999-05-31T13:20:00-05:00",
+            ))),
+            Some(any_dtduration("-PT5H")),
+        );
+        // XPath §9.5.7: fn:timezone-from-dateTime("2000-06-12T13:20:00Z") → PT0S
+        evaluate_expect(
+            &Function::datetime_timezone(Function::constant(any_datetime("2000-06-12T13:20:00Z"))),
+            Some(any_dtduration("PT0S")),
+        );
+        // XPath §9.5.7: fn:timezone-from-dateTime("2004-08-27T00:00:00") → () (no timezone)
+        evaluate_expect(
+            &Function::datetime_timezone(Function::constant(any_datetime("2004-08-27T00:00:00"))),
+            None,
+        );
+        // SPARQL §17.4.5.8: TIMEZONE("2011-01-10T14:45:13.815-05:00") → -PT5H
+        evaluate_expect(
+            &Function::datetime_timezone(Function::constant(any_datetime(
+                "2011-01-10T14:45:13.815-05:00",
+            ))),
+            Some(any_dtduration("-PT5H")),
+        );
+
+        // XPath §9.5.11: fn:timezone-from-date("1999-05-31-05:00") → -PT5H
+        evaluate_expect(
+            &Function::datetime_timezone(Function::constant(any_date("1999-05-31-05:00"))),
+            Some(any_dtduration("-PT5H")),
+        );
+        // XPath §9.5.11: fn:timezone-from-date("2000-06-12Z") → PT0S
+        evaluate_expect(
+            &Function::datetime_timezone(Function::constant(any_date("2000-06-12Z"))),
+            Some(any_dtduration("PT0S")),
+        );
+
+        // XPath §9.5.15: fn:timezone-from-time("13:20:00-05:00") → -PT5H
+        evaluate_expect(
+            &Function::datetime_timezone(Function::constant(any_time("13:20:00-05:00"))),
+            Some(any_dtduration("-PT5H")),
+        );
+        // XPath §9.5.15: fn:timezone-from-time("13:20:00") → () (no timezone)
+        evaluate_expect(
+            &Function::datetime_timezone(Function::constant(any_time("13:20:00"))),
+            None,
+        );
+
+        // SPARQL §17.4.5.9: TZ("2011-01-10T14:45:13.815-05:00") → "-05:00"
+        evaluate_expect(
+            &Function::datetime_tz(Function::constant(any_datetime(
+                "2011-01-10T14:45:13.815-05:00",
+            ))),
+            Some(any_string("-05:00")),
+        );
+        // SPARQL §17.4.5.9: TZ("2011-01-10T14:45:13.815") → ""  (no timezone present)
+        evaluate_expect(
+            &Function::datetime_tz(Function::constant(any_datetime("2011-01-10T14:45:13.815"))),
+            Some(any_string("")),
+        );
+        // TZ with "Z" suffix → "Z"
+        evaluate_expect(
+            &Function::datetime_tz(Function::constant(any_datetime("2011-01-10T14:45:13Z"))),
+            Some(any_string("Z")),
+        );
+        // TZ with positive offset → "+05:30"
+        evaluate_expect(
+            &Function::datetime_tz(Function::constant(any_datetime(
+                "2011-01-10T14:45:13+05:30",
+            ))),
+            Some(any_string("+05:30")),
+        );
+
+        // Wrong datatype → None
+        evaluate_expect(
+            &Function::datetime_timezone(Function::constant(any_string("2011-01-10T14:45:13Z"))),
+            None,
+        );
+    }
 }

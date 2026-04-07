@@ -352,6 +352,22 @@ pub mod builtin {
         pub(crate) const SHA512: &str = "SHA512";
         /// Construct a typed literal from a lexical value and a datatype IRI
         pub(crate) const STRDT: &str = "STRDT";
+        /// Extract the year from a date/dateTime value
+        pub(crate) const YEAR: &str = "YEAR";
+        /// Extract the month from a date/dateTime value
+        pub(crate) const MONTH: &str = "MONTH";
+        /// Extract the day from a date/dateTime value
+        pub(crate) const DAY: &str = "DAY";
+        /// Extract the hours from a dateTime/time value
+        pub(crate) const HOURS: &str = "HOURS";
+        /// Extract the minutes from a dateTime/time value
+        pub(crate) const MINUTES: &str = "MINUTES";
+        /// Extract the seconds from a dateTime/time value
+        pub(crate) const SECONDS: &str = "SECONDS";
+        /// Extract the timezone as xsd:dayTimeDuration from a date/dateTime/time value
+        pub(crate) const TIMEZONE: &str = "TIMEZONE";
+        /// Extract the timezone as a plain string from a date/dateTime/time value
+        pub(crate) const TZ: &str = "TZ";
     }
 
     /// This module contains all strings of the supported builtin aggregates.

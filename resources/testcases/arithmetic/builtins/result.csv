@@ -98,3 +98,17 @@ sha384,"""3519fe5ad2c596efe3e276a6f351b8fc0b03db861782490d45f7598ebd0ab5fd5520ed
 sha512,"""3615f80c9d293ed7402687f94b22d58e529b8cc7916f8fac7fddf7fbd5af4cf777d3d795a7a00a16bf7e7f3fb9561ee9baae480da9fe7a18769e71886b03f315"""
 strdt_int,42
 strdt_other,"""2024-01-01""^^<http://www.w3.org/2001/XMLSchema#date>"
+dt_year,2023
+dt_year_date,2023
+dt_month,6
+dt_day,15
+dt_hours,10
+dt_hours_time,10
+dt_minutes,30
+dt_seconds,"""45""^^<http://www.w3.org/2001/XMLSchema#double>"
+dt_seconds_frac,"""45.5""^^<http://www.w3.org/2001/XMLSchema#double>"
+dt_tz_absent,""""""
+dt_tz_utc,"""Z"""
+dt_tz_offset,"""-05:00"""
+dt_timezone_utc,"""PT0S""^^<http://www.w3.org/2001/XMLSchema#dayTimeDuration>"
+dt_timezone_offset,"""-PT5H""^^<http://www.w3.org/2001/XMLSchema#dayTimeDuration>"

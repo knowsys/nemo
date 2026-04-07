@@ -356,6 +356,14 @@ impl Operation {
                     OperationKind::StringSha384 => unary!(string_sha384, sub),
                     OperationKind::StringSha512 => unary!(string_sha512, sub),
                     OperationKind::TypedLiteral => binary!(typed_literal, sub),
+                    OperationKind::DateTimeYear => unary!(datetime_year, sub),
+                    OperationKind::DateTimeMonth => unary!(datetime_month, sub),
+                    OperationKind::DateTimeDay => unary!(datetime_day, sub),
+                    OperationKind::DateTimeHours => unary!(datetime_hours, sub),
+                    OperationKind::DateTimeMinutes => unary!(datetime_minutes, sub),
+                    OperationKind::DateTimeSeconds => unary!(datetime_seconds, sub),
+                    OperationKind::DateTimeTimezone => unary!(datetime_timezone, sub),
+                    OperationKind::DateTimeTz => unary!(datetime_tz, sub),
                 }
             }
         }
