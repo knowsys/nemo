@@ -414,6 +414,12 @@ pub enum OperationKind {
     #[assoc(num_arguments = OperationNumArguments::Binary)]
     #[assoc(return_type = ValueType::Any)]
     TypedLiteral,
+    /// Return a fresh UUID as a plain string, corresponding to SPARQL STRUUID.
+    /// Must appear before LexicalValue ("STR") since "STRUUID" starts with "STR" (case-insensitive).
+    #[assoc(name = function::STRUUID)]
+    #[assoc(num_arguments = OperationNumArguments::Choice(vec![0]))]
+    #[assoc(return_type = ValueType::String)]
+    FuncStruuid,
     /// Lexical value
     #[assoc(name = function::STR)]
     #[assoc(num_arguments = OperationNumArguments::Unary)]
@@ -485,6 +491,21 @@ pub enum OperationKind {
     #[assoc(num_arguments = OperationNumArguments::Unary)]
     #[assoc(return_type = ValueType::String)]
     DateTimeTz,
+    /// Return a pseudo-random double in [0, 1), corresponding to SPARQL RAND.
+    #[assoc(name = function::RAND)]
+    #[assoc(num_arguments = OperationNumArguments::Choice(vec![0]))]
+    #[assoc(return_type = ValueType::Number)]
+    FuncRand,
+    /// Return a fresh UUID as an IRI, corresponding to SPARQL UUID.
+    #[assoc(name = function::UUID)]
+    #[assoc(num_arguments = OperationNumArguments::Choice(vec![0]))]
+    #[assoc(return_type = ValueType::Constant)]
+    FuncUuid,
+    /// Return the current date/time as xsd:dateTime, corresponding to SPARQL NOW.
+    #[assoc(name = function::NOW)]
+    #[assoc(num_arguments = OperationNumArguments::Choice(vec![0]))]
+    #[assoc(return_type = ValueType::Any)]
+    FuncNow,
 }
 
 impl OperationKind {

@@ -27,14 +27,17 @@ pub type FunctionAssignment = HashMap<OperationColumnMarker, FunctionTree<Operat
 
 /// Marks an output column as either being the same as an input column
 /// or computing a new value
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, Clone)]
 enum ComputedMarker {
     /// Layer copies value from input trie
     Input,
-    /// Layer compies value from output trie
+    /// Layer copies value from output trie
     Copy(usize),
     /// Layer computes new value from input layers
     Computed,
+    /// Layer computes new value by evaluating a zero-argument program (e.g. RAND, UUID).
+    /// The program is re-evaluated on every call to `down` for this layer.
+    ZeroArgProgram(StackProgram),
 }
 
 /// Marks an output column as either being unused
@@ -142,7 +145,13 @@ impl GeneratorFunction {
                         input_information[layer_last_reference]
                             .append_used((stack_program, layer_output));
                     } else {
-                        unreachable!("If the function has no references it is constant");
+                        // No column references — zero-arg nondeterministic function
+                        // (e.g. RAND, UUID). Store the program in the output layer itself;
+                        // it will be evaluated with no inputs on every call to `down`.
+                        let stack_program =
+                            StackProgram::from_function_tree(function, &reference_map, None);
+                        computed_information[layer_output] =
+                            ComputedMarker::ZeroArgProgram(stack_program);
                     }
                 }
                 SpecialCaseFunction::Constant(constant) => {
@@ -176,7 +185,7 @@ impl GeneratorFunction {
         // no new columns are computed
         self.layer_information
             .iter()
-            .all(|info| info.computed == ComputedMarker::Input)
+            .all(|info| matches!(info.computed, ComputedMarker::Input))
     }
 }
 
@@ -211,7 +220,9 @@ impl OperationGenerator for GeneratorFunction {
             macro_rules! output_scan {
                 ($type:ty, $scan:ident) => {{
                     match information.computed {
-                        ComputedMarker::Computed | ComputedMarker::Copy(_) => {
+                        ComputedMarker::Computed
+                        | ComputedMarker::Copy(_)
+                        | ComputedMarker::ZeroArgProgram(_) => {
                             ColumnScanEnum::Constant(ColumnScanConstant::new(None))
                         }
                         ComputedMarker::Input => {
@@ -243,6 +254,8 @@ impl OperationGenerator for GeneratorFunction {
                 input_index += 1;
             } else if let ComputedMarker::Copy(source) = information.computed {
                 possible_types[output_index] = possible_types[source];
+            } else if let ComputedMarker::ZeroArgProgram(program) = &information.computed {
+                possible_types[output_index] = program.type_propagation(&[], None);
             }
 
             if let InputMarker::Used(programs) = &information.input {
@@ -309,7 +322,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanFunction<'a> {
         let current_layer = self.path_types.len() - 1;
         let previous_layer = current_layer.checked_sub(1);
 
-        if self.layer_information[current_layer].computed == ComputedMarker::Input {
+        if matches!(self.layer_information[current_layer].computed, ComputedMarker::Input) {
             // If the current output layer corresponds to a layer in the input trie,
             // we need to call up on that
             self.trie_scan.up();
@@ -381,6 +394,20 @@ impl<'a> PartialTrieScan<'a> for TrieScanFunction<'a> {
                 }
             }
             ComputedMarker::Computed => {}
+            ComputedMarker::ZeroArgProgram(program) => {
+                let dictionary = &mut self.dictionary.borrow_mut();
+                let program_result = program
+                    .evaluate_data(&[])
+                    .map(|result| result.to_storage_value_t_dict(dictionary));
+
+                self.column_scans[next_layer].get_mut().constant_set_none_all();
+
+                if let Some(storage_value) = program_result {
+                    self.column_scans[next_layer]
+                        .get_mut()
+                        .constant_set(storage_value);
+                }
+            }
         }
 
         self.column_scans[next_layer].get_mut().reset(next_type);

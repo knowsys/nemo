@@ -16,6 +16,7 @@ use super::{
             CheckIsDouble, CheckIsFloat, CheckIsInteger, CheckIsIri, CheckIsNull, CheckIsNumeric,
             CheckIsString,
         },
+        nondeterministic::{FuncRand, FuncStruuid, FuncUuid},
         datetime::{
             DateTimeDay, DateTimeHours, DateTimeMinutes, DateTimeMonth, DateTimeSeconds,
             DateTimeTimezone, DateTimeTz, DateTimeYear,
@@ -97,8 +98,6 @@ where
 /// where it might be beneficial to have special handling
 /// for performance reasons within the evaluation of
 /// [TrieScanFunction][crate::tabular::operations::function::TrieScanFunction]
-///
-/// TODO: This is not yet used anywhere
 #[derive(Debug)]
 #[allow(dead_code)]
 pub(crate) enum SpecialCaseFunction<'a, ReferenceType>
@@ -136,7 +135,7 @@ where
     /// Check if this function correspond to some special case defined in [SpecialCaseFunction].
     /// Returns `None` if this is not the case.
     pub(crate) fn special_function(&self) -> SpecialCaseFunction<'_, ReferenceType> {
-        if self.references().is_empty() {
+        if self.references().is_empty() && !self.is_nondeterministic() {
             let constant_program =
                 StackProgram::from_function_tree(self, &HashMap::default(), None);
 
@@ -977,6 +976,30 @@ where
         Self::Unary(UnaryFunctionEnum::DateTimeTz(DateTimeTz), Box::new(sub))
     }
 
+    /// Create a zero-arg tree node for RAND().
+    pub fn func_rand() -> Self {
+        Self::Nary {
+            function: NaryFunctionEnum::FuncRand(FuncRand),
+            parameters: vec![],
+        }
+    }
+
+    /// Create a zero-arg tree node for UUID().
+    pub fn func_uuid() -> Self {
+        Self::Nary {
+            function: NaryFunctionEnum::FuncUuid(FuncUuid),
+            parameters: vec![],
+        }
+    }
+
+    /// Create a zero-arg tree node for STRUUID().
+    pub fn func_struuid() -> Self {
+        Self::Nary {
+            function: NaryFunctionEnum::FuncStruuid(FuncStruuid),
+            parameters: vec![],
+        }
+    }
+
     /// Create a tree node representing the bitwise and operation.
     ///
     /// Evaluates to an integer resulting from performing the bitwise and operation
@@ -1179,8 +1202,36 @@ where
         }
     }
 
-    /// Return whether this tree evauluates to a constant value.
+    /// Return whether this tree evaluates to a constant value.
     pub fn is_constant(&self) -> bool {
         self.references().is_empty()
+    }
+
+    /// Return whether this tree contains a nondeterministic function.
+    ///
+    /// Nondeterministic functions (RAND, UUID, STRUUID) must not be constant-folded —
+    /// they need to be re-evaluated for every row.
+    pub fn is_nondeterministic(&self) -> bool {
+        match self {
+            FunctionTree::Leaf(_) => false,
+            FunctionTree::Unary(_, sub) => sub.is_nondeterministic(),
+            FunctionTree::Binary { left, right, .. } => {
+                left.is_nondeterministic() || right.is_nondeterministic()
+            }
+            FunctionTree::Ternary {
+                first,
+                second,
+                third,
+                ..
+            } => {
+                first.is_nondeterministic()
+                    || second.is_nondeterministic()
+                    || third.is_nondeterministic()
+            }
+            FunctionTree::Nary { function, parameters } => {
+                function.is_nondeterministic()
+                    || parameters.iter().any(|p| p.is_nondeterministic())
+            }
+        }
     }
 }

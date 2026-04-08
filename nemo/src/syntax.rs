@@ -368,6 +368,14 @@ pub mod builtin {
         pub(crate) const TIMEZONE: &str = "TIMEZONE";
         /// Extract the timezone as a plain string from a date/dateTime/time value
         pub(crate) const TZ: &str = "TZ";
+        /// Return a pseudo-random double in [0, 1)
+        pub(crate) const RAND: &str = "RAND";
+        /// Return a fresh UUID as an IRI
+        pub(crate) const UUID: &str = "UUID";
+        /// Return a fresh UUID as a plain string
+        pub(crate) const STRUUID: &str = "STRUUID";
+        /// Return the current date/time as xsd:dateTime
+        pub(crate) const NOW: &str = "NOW";
     }
 
     /// This module contains all strings of the supported builtin aggregates.

@@ -114,7 +114,11 @@ impl StackProgram {
                         return Err(Error::MalformedStackProgram);
                     }
 
-                    current_height -= parameter_count - 1;
+                    if *parameter_count == 0 {
+                        current_height += 1;
+                    } else {
+                        current_height -= parameter_count - 1;
+                    }
                 }
             }
 
@@ -1613,6 +1617,44 @@ mod test {
         evaluate_expect(
             &Function::datetime_timezone(Function::constant(any_string("2011-01-10T14:45:13Z"))),
             None,
+        );
+    }
+
+    /// Tests for RAND, UUID, STRUUID.
+    ///
+    /// These are nondeterministic — we verify output domain and structural properties.
+    #[test]
+    fn evaluate_nondeterministic() {
+        let program_rand =
+            StackProgram::from_function_tree(&Function::func_rand(), &HashMap::new(), None);
+        let program_uuid =
+            StackProgram::from_function_tree(&Function::func_uuid(), &HashMap::new(), None);
+        let program_struuid =
+            StackProgram::from_function_tree(&Function::func_struuid(), &HashMap::new(), None);
+
+        // RAND() must produce a double in [0, 1)
+        let r = program_rand.evaluate_data(&[]).unwrap();
+        assert_eq!(r.value_domain(), ValueDomain::Double);
+        let v = r.to_f64_unchecked();
+        assert!((0.0..1.0).contains(&v), "RAND() out of range: {v}");
+
+        // UUID() must produce an IRI of the form urn:uuid:…
+        let u = program_uuid.evaluate_data(&[]).unwrap();
+        assert_eq!(u.value_domain(), ValueDomain::Iri);
+        assert!(
+            u.to_iri_unchecked().starts_with("urn:uuid:"),
+            "UUID() IRI has wrong prefix: {}",
+            u.to_iri_unchecked()
+        );
+
+        // STRUUID() must produce a plain string that looks like a UUID (36 chars, hex + dashes)
+        let s = program_struuid.evaluate_data(&[]).unwrap();
+        assert_eq!(s.value_domain(), ValueDomain::PlainString);
+        let s_str = s.to_plain_string_unchecked();
+        assert_eq!(s_str.len(), 36, "STRUUID() wrong length: {s_str}");
+        assert!(
+            s_str.chars().all(|c| c.is_ascii_hexdigit() || c == '-'),
+            "STRUUID() unexpected characters: {s_str}"
         );
     }
 }

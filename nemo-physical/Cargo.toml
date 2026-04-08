@@ -41,6 +41,8 @@ oxiri = { workspace = true }
 path-slash = "0.2.1"
 levenshtein = "1.0.5"
 chrono = { workspace = true }
+rand = { workspace = true }
+uuid = { workspace = true }
 sha2 = "0.10"
 sha1 = "0.10"
 md5 = { package = "md-5", version = "0.10" }

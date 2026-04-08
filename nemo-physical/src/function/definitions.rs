@@ -7,10 +7,13 @@ pub(crate) mod datetime;
 pub(crate) mod generic;
 pub(crate) mod hashing;
 pub(crate) mod language;
+pub(crate) mod nondeterministic;
 pub(crate) mod numeric;
 pub(crate) mod string;
 
 use casting::CastingIntoIri;
+use nondeterministic::{FuncRand, FuncStruuid, FuncUuid};
+
 use datetime::{
     DateTimeDay, DateTimeHours, DateTimeMinutes, DateTimeMonth, DateTimeSeconds, DateTimeTimezone,
     DateTimeTz, DateTimeYear,
@@ -473,6 +476,12 @@ pub enum NaryFunctionEnum {
     StringConcatenation(StringConcatenation),
     /// Regex-based replacement within a string
     StringReplace(StringReplace),
+    /// Pseudo-random double in [0, 1)
+    FuncRand(FuncRand),
+    /// Fresh UUID as an IRI
+    FuncUuid(FuncUuid),
+    /// Fresh UUID as a plain string
+    FuncStruuid(FuncStruuid),
 }
 
 impl NaryFunction for NaryFunctionEnum {
@@ -490,9 +499,22 @@ impl NaryFunction for NaryFunctionEnum {
             Self::NumericProduct(function) => function,
             Self::StringConcatenation(function) => function,
             Self::StringReplace(function) => function,
+            Self::FuncRand(function) => function,
+            Self::FuncUuid(function) => function,
+            Self::FuncStruuid(function) => function,
         } {
             fn evaluate(&self, parameters: &[AnyDataValue]) -> Option<AnyDataValue>;
             fn type_propagation(&self) -> FunctionTypePropagation;
         }
+    }
+}
+
+impl NaryFunctionEnum {
+    /// Return `true` if this function is nondeterministic (must not be constant-folded).
+    pub(crate) fn is_nondeterministic(&self) -> bool {
+        matches!(
+            self,
+            Self::FuncRand(_) | Self::FuncUuid(_) | Self::FuncStruuid(_)
+        )
     }
 }

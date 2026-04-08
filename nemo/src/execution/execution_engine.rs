@@ -2,6 +2,8 @@
 
 use std::collections::{HashMap, HashSet};
 
+use chrono::Utc;
+
 use nemo_physical::{
     datavalues::AnyDataValue,
     dictionary::DvDict,
@@ -25,7 +27,9 @@ use crate::{
 };
 
 use super::{
-    execution_parameters::ExecutionParameters, selection_strategy::strategy::RuleSelectionStrategy,
+    execution_parameters::ExecutionParameters,
+    planning::normalization::operation::set_now_timestamp,
+    selection_strategy::strategy::RuleSelectionStrategy,
 };
 
 pub mod tracing;
@@ -283,6 +287,9 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
     /// Executes the program.
     pub async fn execute(&mut self) -> Result<(), Error> {
+        // Capture the current time for NOW() — consistent across the entire query execution.
+        set_now_timestamp(Utc::now().format("%Y-%m-%dT%H:%M:%S%.fZ").to_string());
+
         TimedCode::instance().sub("Reasoning/Rules").start();
         TimedCode::instance().sub("Reasoning/Execution").start();
 
