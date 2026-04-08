@@ -1255,9 +1255,9 @@ where
                     || third.is_nondeterministic()
             }
             FunctionTree::Nullary(function) => function.is_nondeterministic(),
-            FunctionTree::Nary {
-                parameters, ..
-            } => parameters.iter().any(|p| p.is_nondeterministic()),
+            FunctionTree::Nary { parameters, .. } => {
+                parameters.iter().any(|p| p.is_nondeterministic())
+            }
         }
     }
 }
