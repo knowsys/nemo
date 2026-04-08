@@ -12,6 +12,7 @@ repository.workspace = true
 [features]
 check_column_sorting = []
 old_dictionaries = []
+js = ["uuid/js"]
 
 [[bin]]
 name = "dict-bench"
