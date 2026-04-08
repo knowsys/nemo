@@ -1858,6 +1858,7 @@ dependencies = [
  "num",
  "once_cell",
  "oxiri",
+ "oxsdatatypes",
  "path-slash",
  "quickcheck",
  "quickcheck_macros",
@@ -2222,6 +2223,15 @@ dependencies = [
  "oxiri",
  "oxrdf",
  "quick-xml",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "oxsdatatypes"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "06fa874d87eae638daae9b4e3198864fe2cce68589f227c0b2cf5b62b1530516"
+dependencies = [
  "thiserror 2.0.18",
 ]
 

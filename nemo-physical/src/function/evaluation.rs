@@ -12,7 +12,8 @@ use crate::{
 use super::{
     definitions::{
         BinaryFunction, BinaryFunctionEnum, FunctionTypePropagation, NaryFunction,
-        NaryFunctionEnum, TernaryFunction, TernaryFunctionEnum, UnaryFunction, UnaryFunctionEnum,
+        NaryFunctionEnum, NullaryFunction, NullaryFunctionEnum, TernaryFunction,
+        TernaryFunctionEnum, UnaryFunction, UnaryFunctionEnum,
     },
     tree::FunctionTree,
 };
@@ -55,6 +56,8 @@ pub(crate) enum StackOperation {
     BinaryFunction(BinaryFunctionEnum),
     /// Evaluate the given ternary function on the top three elements in the stack.
     TernaryFunction(TernaryFunctionEnum),
+    /// Evaluate the given nullary function and push the result onto the stack.
+    NullaryFunction(NullaryFunctionEnum),
     /// Evaluate the given n-ary function on the top n elements in the stack.
     NaryFunction(NaryFunctionEnum, usize),
 }
@@ -108,6 +111,9 @@ impl StackProgram {
                     }
 
                     current_height -= 2;
+                }
+                StackOperation::NullaryFunction(_) => {
+                    current_height += 1;
                 }
                 StackOperation::NaryFunction(_, parameter_count) => {
                     if current_height < *parameter_count {
@@ -189,6 +195,9 @@ impl StackProgram {
 
                     operations.push(StackOperation::TernaryFunction(*function));
                 }
+                FunctionTree::Nullary(function) => {
+                    operations.push(StackOperation::NullaryFunction(*function));
+                }
                 FunctionTree::Nary {
                     function,
                     parameters,
@@ -254,6 +263,9 @@ impl StackProgram {
                         .expect("This program is valid, so the stack cannot be empty.");
 
                     stack.push(function.evaluate(first_input, second_input, third_input)?);
+                }
+                StackOperation::NullaryFunction(function) => {
+                    stack.push(function.evaluate()?);
                 }
                 StackOperation::NaryFunction(function, parameter_count) => {
                     let mut inputs = Vec::new();
@@ -329,6 +341,7 @@ impl StackProgram {
                 },
                 StackOperation::BinaryFunction(function) => (2, function.type_propagation()),
                 StackOperation::TernaryFunction(function) => (3, function.type_propagation()),
+                StackOperation::NullaryFunction(function) => (0, function.type_propagation()),
                 StackOperation::NaryFunction(function, num_arguments) => (*num_arguments, function.type_propagation()),
             };
 

@@ -11,7 +11,7 @@ use uuid::Uuid;
 use crate::{
     datatypes::StorageTypeName,
     datavalues::AnyDataValue,
-    function::definitions::{FunctionTypePropagation, NaryFunction},
+    function::definitions::{FunctionTypePropagation, NullaryFunction},
 };
 
 /// Return a pseudo-random double in the range [0, 1).
@@ -19,8 +19,8 @@ use crate::{
 /// Corresponds to SPARQL `RAND()`.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct FuncRand;
-impl NaryFunction for FuncRand {
-    fn evaluate(&self, _parameters: &[AnyDataValue]) -> Option<AnyDataValue> {
+impl NullaryFunction for FuncRand {
+    fn evaluate(&self) -> Option<AnyDataValue> {
         let value: f64 = random();
         AnyDataValue::new_double_from_f64(value).ok()
     }
@@ -36,8 +36,8 @@ impl NaryFunction for FuncRand {
 /// Returns a value of the form `<urn:uuid:…>`.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct FuncUuid;
-impl NaryFunction for FuncUuid {
-    fn evaluate(&self, _parameters: &[AnyDataValue]) -> Option<AnyDataValue> {
+impl NullaryFunction for FuncUuid {
+    fn evaluate(&self) -> Option<AnyDataValue> {
         let iri = format!("urn:uuid:{}", Uuid::new_v4());
         Some(AnyDataValue::new_iri(iri))
     }
@@ -57,8 +57,8 @@ impl NaryFunction for FuncUuid {
 /// Returns a lowercase hyphenated UUID string, e.g. `"f81d4fae-7dec-11d0-a765-00a0c91e6bf6"`.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct FuncStruuid;
-impl NaryFunction for FuncStruuid {
-    fn evaluate(&self, _parameters: &[AnyDataValue]) -> Option<AnyDataValue> {
+impl NullaryFunction for FuncStruuid {
+    fn evaluate(&self) -> Option<AnyDataValue> {
         Some(AnyDataValue::new_plain_string(Uuid::new_v4().to_string()))
     }
 

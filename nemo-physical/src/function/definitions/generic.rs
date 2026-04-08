@@ -2,7 +2,7 @@
 
 use crate::{
     datatypes::StorageTypeName,
-    datavalues::{AnyDataValue, DataValue, ValueDomain},
+    datavalues::{AnyDataValue, DataValue},
 };
 
 use super::{BinaryFunction, FunctionTypePropagation, UnaryFunction};
@@ -146,17 +146,11 @@ impl BinaryFunction for TypedLiteral {
         parameter_first: AnyDataValue,
         parameter_second: AnyDataValue,
     ) -> Option<AnyDataValue> {
-        if parameter_first.value_domain() != ValueDomain::PlainString {
-            return None;
-        }
-        if parameter_second.value_domain() != ValueDomain::Iri {
-            return None;
-        }
-
-        let lexical = parameter_first.to_plain_string_unchecked();
-        let datatype = parameter_second.to_iri_unchecked();
-
-        AnyDataValue::new_from_typed_literal(lexical, datatype).ok()
+        AnyDataValue::new_from_typed_literal(
+            parameter_first.to_plain_string()?,
+            parameter_second.to_iri()?,
+        )
+        .ok()
     }
 
     fn type_propagation(&self) -> FunctionTypePropagation {

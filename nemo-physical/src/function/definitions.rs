@@ -443,6 +443,49 @@ impl TernaryFunction for TernaryFunctionEnum {
     }
 }
 
+/// Defines a nullary function on [AnyDataValue] (takes no arguments)
+pub trait NullaryFunction {
+    /// Evaluate this function.
+    ///
+    /// Returns `None` if the result of the operation is undefined.
+    fn evaluate(&self) -> Option<AnyDataValue>;
+
+    /// Return a [FunctionTypePropagation] indicating how storage types are propagated
+    /// when applying this function.
+    fn type_propagation(&self) -> FunctionTypePropagation;
+}
+
+/// Enum containing all implementations of [NullaryFunction]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NullaryFunctionEnum {
+    /// Pseudo-random double in [0, 1)
+    FuncRand(FuncRand),
+    /// Fresh UUID as an IRI
+    FuncUuid(FuncUuid),
+    /// Fresh UUID as a plain string
+    FuncStruuid(FuncStruuid),
+}
+
+impl NullaryFunction for NullaryFunctionEnum {
+    delegate! {
+        to match self {
+            Self::FuncRand(function) => function,
+            Self::FuncUuid(function) => function,
+            Self::FuncStruuid(function) => function,
+        } {
+            fn evaluate(&self) -> Option<AnyDataValue>;
+            fn type_propagation(&self) -> FunctionTypePropagation;
+        }
+    }
+}
+
+impl NullaryFunctionEnum {
+    /// Return `true` if this function is nondeterministic (must not be constant-folded).
+    pub(crate) fn is_nondeterministic(&self) -> bool {
+        true
+    }
+}
+
 /// Defines a n-ary function on [AnyDataValue]
 pub trait NaryFunction {
     /// Evaluate this function on the given parameters.
@@ -484,12 +527,6 @@ pub enum NaryFunctionEnum {
     StringRegex(StringRegex),
     /// Regex-based replacement within a string
     StringReplace(StringReplace),
-    /// Pseudo-random double in [0, 1)
-    FuncRand(FuncRand),
-    /// Fresh UUID as an IRI
-    FuncUuid(FuncUuid),
-    /// Fresh UUID as a plain string
-    FuncStruuid(FuncStruuid),
 }
 
 impl NaryFunction for NaryFunctionEnum {
@@ -508,22 +545,9 @@ impl NaryFunction for NaryFunctionEnum {
             Self::StringConcatenation(function) => function,
             Self::StringRegex(function) => function,
             Self::StringReplace(function) => function,
-            Self::FuncRand(function) => function,
-            Self::FuncUuid(function) => function,
-            Self::FuncStruuid(function) => function,
         } {
             fn evaluate(&self, parameters: &[AnyDataValue]) -> Option<AnyDataValue>;
             fn type_propagation(&self) -> FunctionTypePropagation;
         }
-    }
-}
-
-impl NaryFunctionEnum {
-    /// Return `true` if this function is nondeterministic (must not be constant-folded).
-    pub(crate) fn is_nondeterministic(&self) -> bool {
-        matches!(
-            self,
-            Self::FuncRand(_) | Self::FuncUuid(_) | Self::FuncStruuid(_)
-        )
     }
 }

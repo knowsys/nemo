@@ -51,6 +51,7 @@ digest = "0.10"
 serde_urlencoded = "0.7.1"
 serde = { workspace = true, features =["derive"]}
 itertools = { workspace = true }
+oxsdatatypes = "0.2.2"
 
 [dev-dependencies]
 rand = { workspace = true }

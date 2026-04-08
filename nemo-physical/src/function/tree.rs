@@ -9,7 +9,8 @@ use crate::{
 
 use super::{
     definitions::{
-        BinaryFunctionEnum, NaryFunctionEnum, TernaryFunctionEnum, UnaryFunctionEnum,
+        BinaryFunctionEnum, NaryFunctionEnum, NullaryFunctionEnum, TernaryFunctionEnum,
+        UnaryFunctionEnum,
         boolean::{BooleanConjunction, BooleanDisjunction, BooleanNegation},
         casting::{CastingIntoDouble, CastingIntoFloat, CastingIntoInteger64, CastingIntoIri},
         checktype::{
@@ -86,6 +87,8 @@ where
         /// Third parameter to the function
         third: Box<FunctionTree<ReferenceType>>,
     },
+    /// Application of a nullary function (no arguments)
+    Nullary(NullaryFunctionEnum),
     /// Application of an n-ary function
     Nary {
         /// N-ary function
@@ -229,6 +232,7 @@ where
                 result.extend(second.leaves());
                 result.extend(third.leaves());
             }
+            FunctionTree::Nullary(_) => {}
             FunctionTree::Nary {
                 function: _,
                 parameters,
@@ -1008,26 +1012,17 @@ where
 
     /// Create a zero-arg tree node for RAND().
     pub fn func_rand() -> Self {
-        Self::Nary {
-            function: NaryFunctionEnum::FuncRand(FuncRand),
-            parameters: vec![],
-        }
+        Self::Nullary(NullaryFunctionEnum::FuncRand(FuncRand))
     }
 
     /// Create a zero-arg tree node for UUID().
     pub fn func_uuid() -> Self {
-        Self::Nary {
-            function: NaryFunctionEnum::FuncUuid(FuncUuid),
-            parameters: vec![],
-        }
+        Self::Nullary(NullaryFunctionEnum::FuncUuid(FuncUuid))
     }
 
     /// Create a zero-arg tree node for STRUUID().
     pub fn func_struuid() -> Self {
-        Self::Nary {
-            function: NaryFunctionEnum::FuncStruuid(FuncStruuid),
-            parameters: vec![],
-        }
+        Self::Nullary(NullaryFunctionEnum::FuncStruuid(FuncStruuid))
     }
 
     /// Create a tree node representing the bitwise and operation.
@@ -1217,6 +1212,7 @@ where
 
                 result
             }
+            FunctionTree::Nullary(_) => vec![],
             FunctionTree::Nary {
                 function: _,
                 parameters,
@@ -1258,12 +1254,10 @@ where
                     || second.is_nondeterministic()
                     || third.is_nondeterministic()
             }
+            FunctionTree::Nullary(function) => function.is_nondeterministic(),
             FunctionTree::Nary {
-                function,
-                parameters,
-            } => {
-                function.is_nondeterministic() || parameters.iter().any(|p| p.is_nondeterministic())
-            }
+                parameters, ..
+            } => parameters.iter().any(|p| p.is_nondeterministic()),
         }
     }
 }
