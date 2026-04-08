@@ -43,8 +43,8 @@ fn other_parts(value: AnyDataValue) -> Option<(String, String)> {
 /// Returns `(base, tz_str)` where `tz_str` is `None` when no timezone is present,
 /// or `Some(raw)` with the raw timezone suffix (e.g. `"Z"`, `"+05:30"`, `"-05:00"`).
 fn split_timezone(s: &str) -> (&str, Option<&str>) {
-    if s.ends_with('Z') {
-        return (&s[..s.len() - 1], Some(&s[s.len() - 1..]));
+    if let Some(stripped) = s.strip_suffix('Z') {
+        return (stripped, Some(&s[s.len() - 1..]));
     }
     if s.len() >= 6 {
         let tz_start = s.len() - 6;
@@ -67,12 +67,12 @@ fn split_timezone(s: &str) -> (&str, Option<&str>) {
 /// See XPath functions spec §9.5.1: `fn:year-from-dateTime("1999-12-31T24:00:00")` returns 2000.
 fn parse_naive_datetime(s: &str) -> Option<NaiveDateTime> {
     // Detect T24:00:00 — XSD allows this to mean start of the next day
-    if let Some(t_pos) = s.find('T') {
-        if s[t_pos + 1..].starts_with("24:00:00") {
-            let date = NaiveDate::parse_from_str(&s[..t_pos], "%Y-%m-%d").ok()?;
-            let next_day = date.checked_add_days(Days::new(1))?;
-            return Some(next_day.and_hms_opt(0, 0, 0)?);
-        }
+    if let Some(t_pos) = s.find('T')
+        && s[t_pos + 1..].starts_with("24:00:00")
+    {
+        let date = NaiveDate::parse_from_str(&s[..t_pos], "%Y-%m-%d").ok()?;
+        let next_day = date.checked_add_days(Days::new(1))?;
+        return next_day.and_hms_opt(0, 0, 0);
     }
     NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%S%.f")
         .ok()
