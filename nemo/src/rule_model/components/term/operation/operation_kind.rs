@@ -11,6 +11,8 @@ use crate::{rule_model::components::term::value_type::ValueType, syntax::builtin
 /// Number of arguments supported by an operation
 #[derive(Debug)]
 pub(crate) enum OperationNumArguments {
+    /// Operation requires zero arguments
+    Nullary,
     /// Operation requires one argument
     Unary,
     /// Operation requires two arguments
@@ -27,6 +29,7 @@ impl OperationNumArguments {
     /// Return whether the given number of arguments satisfies this constraint.
     pub(crate) fn validate(&self, num_arguments: usize) -> bool {
         match self {
+            OperationNumArguments::Nullary => num_arguments == 0,
             OperationNumArguments::Unary => num_arguments == 1,
             OperationNumArguments::Binary => num_arguments == 2,
             OperationNumArguments::_Ternary => num_arguments == 3,
@@ -39,6 +42,7 @@ impl OperationNumArguments {
 impl Display for OperationNumArguments {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            OperationNumArguments::Nullary => write!(f, "0"),
             OperationNumArguments::Unary => write!(f, "1"),
             OperationNumArguments::Binary => write!(f, "2"),
             OperationNumArguments::_Ternary => write!(f, "3"),
@@ -432,7 +436,7 @@ pub enum OperationKind {
     /// Return a fresh UUID as a plain string, corresponding to SPARQL STRUUID.
     /// Must appear before LexicalValue ("STR") since "STRUUID" starts with "STR" (case-insensitive).
     #[assoc(name = function::STRUUID)]
-    #[assoc(num_arguments = OperationNumArguments::Choice(vec![0]))]
+    #[assoc(num_arguments = OperationNumArguments::Nullary)]
     #[assoc(return_type = ValueType::String)]
     FuncStruuid,
     /// Lexical value
@@ -508,17 +512,17 @@ pub enum OperationKind {
     DateTimeTz,
     /// Return a pseudo-random double in [0, 1), corresponding to SPARQL RAND.
     #[assoc(name = function::RAND)]
-    #[assoc(num_arguments = OperationNumArguments::Choice(vec![0]))]
+    #[assoc(num_arguments = OperationNumArguments::Nullary)]
     #[assoc(return_type = ValueType::Number)]
     FuncRand,
     /// Return a fresh UUID as an IRI, corresponding to SPARQL UUID.
     #[assoc(name = function::UUID)]
-    #[assoc(num_arguments = OperationNumArguments::Choice(vec![0]))]
+    #[assoc(num_arguments = OperationNumArguments::Nullary)]
     #[assoc(return_type = ValueType::Constant)]
     FuncUuid,
     /// Return the current date/time as xsd:dateTime, corresponding to SPARQL NOW.
     #[assoc(name = function::NOW)]
-    #[assoc(num_arguments = OperationNumArguments::Choice(vec![0]))]
+    #[assoc(num_arguments = OperationNumArguments::Nullary)]
     #[assoc(return_type = ValueType::Any)]
     FuncNow,
 }
