@@ -307,7 +307,7 @@ impl Operation {
                     OperationKind::StringAfter => binary!(string_after, sub),
                     OperationKind::StringStarts => binary!(string_starts, sub),
                     OperationKind::StringEnds => binary!(string_ends, sub),
-                    OperationKind::StringRegex => binary!(string_regex, sub),
+                    OperationKind::StringRegex => FunctionTree::string_regex(sub),
                     OperationKind::StringLevenshtein => binary!(string_levenshtein, sub),
                     OperationKind::BitShl => binary!(bit_shl, sub),
                     OperationKind::BitShru => binary!(bit_shru, sub),

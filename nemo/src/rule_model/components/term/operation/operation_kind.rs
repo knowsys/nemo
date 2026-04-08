@@ -148,7 +148,7 @@ pub enum OperationKind {
     StringContains,
     /// Check whether the pattern given as a regular expression holds
     #[assoc(name = function::REGEX)]
-    #[assoc(num_arguments = OperationNumArguments::Binary)]
+    #[assoc(num_arguments = OperationNumArguments::Choice(vec![2, 3]))]
     #[assoc(return_type = ValueType::Boolean)]
     StringRegex,
     /// String starting at some start position

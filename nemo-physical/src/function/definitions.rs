@@ -351,8 +351,6 @@ pub enum BinaryFunctionEnum {
     StringCompare(StringCompare),
     /// Containment of strings
     StringContains(StringContains),
-    /// Regex matching of strings
-    StringRegex(StringRegex),
     /// Levenshtein distance of two strings
     StringLevenshtein(StringLevenshtein),
     /// Is the second string a suffix of the first string?
@@ -394,7 +392,6 @@ impl BinaryFunction for BinaryFunctionEnum {
             Self::StringBefore(function) => function,
             Self::StringCompare(function) => function,
             Self::StringContains(function) => function,
-            Self::StringRegex(function) => function,
             Self::StringLevenshtein(function) => function,
             Self::StringEnds(function) => function,
             Self::StringStarts(function) => function,
@@ -483,6 +480,8 @@ pub enum NaryFunctionEnum {
     NumericProduct(NumericProduct),
     /// Concatenation of given strings
     StringConcatenation(StringConcatenation),
+    /// Regex matching of strings (with optional flags)
+    StringRegex(StringRegex),
     /// Regex-based replacement within a string
     StringReplace(StringReplace),
     /// Pseudo-random double in [0, 1)
@@ -507,6 +506,7 @@ impl NaryFunction for NaryFunctionEnum {
             Self::NumericSum(function) => function,
             Self::NumericProduct(function) => function,
             Self::StringConcatenation(function) => function,
+            Self::StringRegex(function) => function,
             Self::StringReplace(function) => function,
             Self::FuncRand(function) => function,
             Self::FuncUuid(function) => function,

@@ -759,11 +759,10 @@ where
     /// if the subtree `text` evaluates to a string that matches
     /// the pattern resulting from evaluating the subtree `pattern`
     /// and to `false` otherwise.
-    pub fn string_regex(text: Self, pattern: Self) -> Self {
-        Self::Binary {
-            function: BinaryFunctionEnum::StringRegex(StringRegex),
-            left: Box::new(text),
-            right: Box::new(pattern),
+    pub fn string_regex(parameters: Vec<Self>) -> Self {
+        Self::Nary {
+            function: NaryFunctionEnum::StringRegex(StringRegex),
+            parameters,
         }
     }
 

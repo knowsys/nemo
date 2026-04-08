@@ -473,10 +473,10 @@ mod test {
         );
         evaluate_expect(&tree_not_contains, Some(AnyDataValue::new_boolean(false)));
 
-        let tree_regex = Function::string_regex(
+        let tree_regex = Function::string_regex(vec![
             Function::constant(any_string("hello")),
             Function::constant(any_string("l+")),
-        );
+        ]);
         evaluate_expect(&tree_regex, Some(AnyDataValue::new_boolean(true)));
 
         let tree_substring_length = Function::string_substring_length(
