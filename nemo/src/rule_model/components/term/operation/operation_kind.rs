@@ -317,6 +317,21 @@ pub enum OperationKind {
     #[assoc(num_arguments = OperationNumArguments::Unary)]
     #[assoc(return_type = ValueType::Number)]
     StringLength,
+    /// String with leading whitespace removed
+    #[assoc(name = function::STRTRIMSTART)]
+    #[assoc(num_arguments = OperationNumArguments::Unary)]
+    #[assoc(return_type = ValueType::String)]
+    StringTrimStart,
+    /// String with trailing whitespace removed
+    #[assoc(name = function::STRTRIMEND)]
+    #[assoc(num_arguments = OperationNumArguments::Unary)]
+    #[assoc(return_type = ValueType::String)]
+    StringTrimEnd,
+    /// String with leading and trailing whitespace removed
+    #[assoc(name = function::STRTRIM)]
+    #[assoc(num_arguments = OperationNumArguments::Unary)]
+    #[assoc(return_type = ValueType::String)]
+    StringTrim,
     /// Reverse of a string value
     #[assoc(name = function::STRREV)]
     #[assoc(num_arguments = OperationNumArguments::Unary)]

@@ -37,7 +37,8 @@ use super::{
             StringAfter, StringBefore, StringCompare, StringConcatenation, StringContains,
             StringEnds, StringLangMatches, StringLength, StringLevenshtein, StringLowercase,
             StringRegex, StringReplace, StringReverse, StringStarts, StringSubstring,
-            StringSubstringLength, StringUppercase, StringUriDecode, StringUriEncode,
+            StringSubstringLength, StringTrim, StringTrimEnd, StringTrimStart, StringUppercase,
+            StringUriDecode, StringUriEncode,
         },
     },
     evaluation::StackProgram,
@@ -772,6 +773,36 @@ where
     /// that is the length of the string that results from evaluating `sub`.
     pub fn string_length(sub: Self) -> Self {
         Self::Unary(UnaryFunctionEnum::StringLength(StringLength), Box::new(sub))
+    }
+
+    /// Create a tree node representing the trimmed version of a string.
+    ///
+    /// This evaluates to the string with leading and trailing whitespace removed
+    /// that results from evaluating `sub`.
+    pub fn string_trim(sub: Self) -> Self {
+        Self::Unary(UnaryFunctionEnum::StringTrim(StringTrim), Box::new(sub))
+    }
+
+    /// Create a tree node representing the start-trimmed version of a string.
+    ///
+    /// This evaluates to the string with leading whitespace removed
+    /// that results from evaluating `sub`.
+    pub fn string_trim_start(sub: Self) -> Self {
+        Self::Unary(
+            UnaryFunctionEnum::StringTrimStart(StringTrimStart),
+            Box::new(sub),
+        )
+    }
+
+    /// Create a tree node representing the end-trimmed version of a string.
+    ///
+    /// This evaluates to the string with trailing whitespace removed
+    /// that results from evaluating `sub`.
+    pub fn string_trim_end(sub: Self) -> Self {
+        Self::Unary(
+            UnaryFunctionEnum::StringTrimEnd(StringTrimEnd),
+            Box::new(sub),
+        )
     }
 
     /// Create a tree node representing the reverse of a string.

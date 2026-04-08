@@ -538,6 +538,93 @@ impl UnaryFunction for StringLength {
     }
 }
 
+/// Removal of leading and trailing whitespace from a string
+///
+/// Returns the string with leading and trailing whitespace removed.
+///
+/// Returns a language tagged string if the first parameter has a language tag.
+/// Otherwise, return a plain string.
+///
+/// Returns `None` if the provided argument is not a (language tagged) string.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct StringTrim;
+impl UnaryFunction for StringTrim {
+    fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
+        LangTaggedString::try_from(parameter)
+            .ok()
+            .map(|lang_string| {
+                let trimmed = lang_string.string.trim().to_string();
+                LangTaggedString::new(trimmed, lang_string.tag).into_data_value()
+            })
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::KnownOutput(
+            StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Id64.bitset()),
+        )
+    }
+}
+
+/// Removal of leading whitespace from a string
+///
+/// Returns the string with leading whitespace removed.
+///
+/// Returns a language tagged string if the first parameter has a language tag.
+/// Otherwise, return a plain string.
+///
+/// Returns `None` if the provided argument is not a (language tagged) string.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct StringTrimStart;
+impl UnaryFunction for StringTrimStart {
+    fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
+        LangTaggedString::try_from(parameter)
+            .ok()
+            .map(|lang_string| {
+                let trimmed = lang_string.string.trim_start().to_string();
+                LangTaggedString::new(trimmed, lang_string.tag).into_data_value()
+            })
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::KnownOutput(
+            StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Id64.bitset()),
+        )
+    }
+}
+
+/// Removal of trailing whitespace from a string
+///
+/// Returns the string with trailing whitespace removed.
+///
+/// Returns a language tagged string if the first parameter has a language tag.
+/// Otherwise, return a plain string.
+///
+/// Returns `None` if the provided argument is not a (language tagged) string.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct StringTrimEnd;
+impl UnaryFunction for StringTrimEnd {
+    fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
+        LangTaggedString::try_from(parameter)
+            .ok()
+            .map(|lang_string| {
+                let trimmed = lang_string.string.trim_end().to_string();
+                LangTaggedString::new(trimmed, lang_string.tag).into_data_value()
+            })
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::KnownOutput(
+            StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Id64.bitset()),
+        )
+    }
+}
+
 /// Transformation of a string into its reverse
 ///
 /// Returns the reversed version of the provided string.
@@ -839,7 +926,8 @@ mod test {
     use super::{
         StringAfter, StringBefore, StringCompare, StringConcatenation, StringContains, StringEnds,
         StringLength, StringLevenshtein, StringLowercase, StringRegex, StringReverse, StringStarts,
-        StringSubstring, StringSubstringLength, StringUppercase, StringUriDecode, StringUriEncode,
+        StringSubstring, StringSubstringLength, StringTrim, StringTrimEnd, StringTrimStart,
+        StringUppercase, StringUriDecode, StringUriEncode,
     };
 
     #[test]
@@ -1239,6 +1327,45 @@ mod test {
         let actual_result_lang = StringReverse.evaluate(string_lang);
         assert!(actual_result_lang.is_some());
         assert_eq!(result_lang, actual_result_lang.unwrap());
+    }
+
+    #[test]
+    fn test_string_trim() {
+        let string = AnyDataValue::new_plain_string("  hello  ".to_string());
+        let result = AnyDataValue::new_plain_string("hello".to_string());
+        let actual_result = StringTrim.evaluate(string.clone());
+        assert!(actual_result.is_some());
+        assert_eq!(result, actual_result.unwrap());
+
+        let string_notstring = AnyDataValue::new_integer_from_i64(1);
+        let actual_result_notstring = StringTrim.evaluate(string_notstring);
+        assert!(actual_result_notstring.is_none());
+
+        let string_lang =
+            AnyDataValue::new_language_tagged_string("  hola  ".to_string(), "es".to_string());
+        let result_lang =
+            AnyDataValue::new_language_tagged_string("hola".to_string(), "es".to_string());
+        let actual_result_lang = StringTrim.evaluate(string_lang);
+        assert!(actual_result_lang.is_some());
+        assert_eq!(result_lang, actual_result_lang.unwrap());
+    }
+
+    #[test]
+    fn test_string_trim_start() {
+        let string = AnyDataValue::new_plain_string("  hello  ".to_string());
+        let result = AnyDataValue::new_plain_string("hello  ".to_string());
+        let actual_result = StringTrimStart.evaluate(string.clone());
+        assert!(actual_result.is_some());
+        assert_eq!(result, actual_result.unwrap());
+    }
+
+    #[test]
+    fn test_string_trim_end() {
+        let string = AnyDataValue::new_plain_string("  hello  ".to_string());
+        let result = AnyDataValue::new_plain_string("  hello".to_string());
+        let actual_result = StringTrimEnd.evaluate(string.clone());
+        assert!(actual_result.is_some());
+        assert_eq!(result, actual_result.unwrap());
     }
 
     #[test]

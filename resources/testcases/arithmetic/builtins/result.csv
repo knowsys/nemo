@@ -56,6 +56,9 @@ levenshtein_ac,3
 levenshtein_bc,2
 levenshtein_ar,4
 stringreverse,"""olleH"""
+strtrim,"""Hello"""
+strtrimstart,"""Hello  """
+strtrimend,"""  Hello"""
 subString,"""ello"""
 subStringLength,"""ell"""
 ucase,"""HELLO"""

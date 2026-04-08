@@ -248,6 +248,12 @@ pub mod builtin {
         pub(crate) const TAN: &str = "TAN";
         /// Compute the length of a string
         pub(crate) const STRLEN: &str = "STRLEN";
+        /// Remove leading and trailing whitespace from a string
+        pub(crate) const STRTRIM: &str = "STRTRIM";
+        /// Remove leading whitespace from a string
+        pub(crate) const STRTRIMSTART: &str = "STRTRIMSTART";
+        /// Remove trailing whitespace from a string
+        pub(crate) const STRTRIMEND: &str = "STRTRIMEND";
         /// Compute the reverse of a string value
         pub(crate) const STRREV: &str = "STRREV";
         /// Replace characters in strings with their upper case version
