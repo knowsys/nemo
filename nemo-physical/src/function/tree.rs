@@ -16,7 +16,6 @@ use super::{
             CheckIsDouble, CheckIsFloat, CheckIsInteger, CheckIsIri, CheckIsNull, CheckIsNumeric,
             CheckIsString,
         },
-        nondeterministic::{FuncRand, FuncStruuid, FuncUuid},
         datetime::{
             DateTimeDay, DateTimeHours, DateTimeMinutes, DateTimeMonth, DateTimeSeconds,
             DateTimeTimezone, DateTimeTz, DateTimeYear,
@@ -24,6 +23,7 @@ use super::{
         generic::{CanonicalString, Datatype, Equals, LexicalValue, TypedLiteral, Unequals},
         hashing::{StringMd5, StringSha1, StringSha256, StringSha384, StringSha512},
         language::LanguageTag,
+        nondeterministic::{FuncRand, FuncStruuid, FuncUuid},
         numeric::{
             BitAnd, BitOr, BitShiftLeft, BitShiftRight, BitShiftRightUnsigned, BitXor,
             NumericAbsolute, NumericAddition, NumericCeil, NumericCosine, NumericDivision,
@@ -1259,9 +1259,11 @@ where
                     || second.is_nondeterministic()
                     || third.is_nondeterministic()
             }
-            FunctionTree::Nary { function, parameters } => {
-                function.is_nondeterministic()
-                    || parameters.iter().any(|p| p.is_nondeterministic())
+            FunctionTree::Nary {
+                function,
+                parameters,
+            } => {
+                function.is_nondeterministic() || parameters.iter().any(|p| p.is_nondeterministic())
             }
         }
     }

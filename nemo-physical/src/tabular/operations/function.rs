@@ -322,7 +322,10 @@ impl<'a> PartialTrieScan<'a> for TrieScanFunction<'a> {
         let current_layer = self.path_types.len() - 1;
         let previous_layer = current_layer.checked_sub(1);
 
-        if matches!(self.layer_information[current_layer].computed, ComputedMarker::Input) {
+        if matches!(
+            self.layer_information[current_layer].computed,
+            ComputedMarker::Input
+        ) {
             // If the current output layer corresponds to a layer in the input trie,
             // we need to call up on that
             self.trie_scan.up();
@@ -400,7 +403,9 @@ impl<'a> PartialTrieScan<'a> for TrieScanFunction<'a> {
                     .evaluate_data(&[])
                     .map(|result| result.to_storage_value_t_dict(dictionary));
 
-                self.column_scans[next_layer].get_mut().constant_set_none_all();
+                self.column_scans[next_layer]
+                    .get_mut()
+                    .constant_set_none_all();
 
                 if let Some(storage_value) = program_result {
                     self.column_scans[next_layer]
