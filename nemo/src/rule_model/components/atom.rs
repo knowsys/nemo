@@ -297,6 +297,17 @@ impl IterablePrimitives for Atom {
     }
 }
 
+impl From<(&Tag, Vec<Term>)> for Atom {
+    fn from((predicate, terms): (&Tag, Vec<Term>)) -> Self {
+        Self {
+            origin: Origin::Created,
+            id: ProgramComponentId::default(),
+            predicate: predicate.clone(),
+            terms,
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use crate::rule_model::components::{IterableVariables, term::primitive::variable::Variable};

@@ -7,6 +7,7 @@ use crate::static_checks::rule_set::RuleSet;
 use crate::static_checks::{positions::Positions, rule_properties::RuleProperties};
 use nemo::execution::DefaultExecutionEngine;
 use nemo::rule_model::{components::tag::Tag, programs::handle::ProgramHandle};
+use std::collections::HashSet;
 
 /// This trait gives some static checks for some ruleset.
 pub trait RulesProperties {
@@ -55,7 +56,7 @@ pub trait RulesProperties {
     /// Determines if the ruleset is dmfa.
     fn is_dmfa(&self) -> bool;
     /// Determines if the ruleset is rmfa.
-    fn is_rmfa(&self) -> bool;
+    fn is_rmfa(&self) -> impl std::future::Future<Output = bool>;
     /// Determines if the ruleset is mfc.
     fn is_mfc(&self) -> bool;
     /// Determines if the ruleset is dmfc.
@@ -196,7 +197,7 @@ impl RulesProperties for RuleSet {
         unreachable!();
     }
 
-    fn is_rmfa(&self) -> bool {
+    async fn is_rmfa(&self) -> bool {
         unreachable!();
     }
 
@@ -319,8 +320,13 @@ impl RulesProperties for ProgramHandle {
         unreachable!();
     }
 
-    fn is_rmfa(&self) -> bool {
-        unreachable!();
+    async fn is_rmfa(&self) -> bool {
+        let handle = mfa_handle(self.clone());
+        check_acyclicity(
+            handle,
+            ChaseVariant::SkolemRestricted(&HashSet::default(), &Vec::default()),
+        )
+        .await
     }
 
     fn is_mfc(&self) -> bool {

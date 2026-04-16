@@ -227,24 +227,6 @@ fn linear_positive(fixture: Fixture<&str>) {
     postfix: "mfa_negative",
 )]
 fn mfa_negative(fixture: Fixture<&str>) {
-    // let file_names = [
-    // "r01.r",
-    // "r02.rls",
-    // "c28.rls",
-    // "higherCyclicTermDeptchRequired.rls",
-    // "inf_chain.rls",
-    // "joinless_non_terminating.rls",
-    //     "joint-acyclicity-guarded-talk-guadedness.rls",
-    // ];
-    // if !file_names.contains(
-    //     &path_canonicalized(fixture.path())
-    //         .file_name()
-    //         .unwrap()
-    //         .to_str()
-    //         .unwrap(),
-    // ) {
-    //     return;
-    // }
     test(fixture, false, "mfa")
 }
 
@@ -401,6 +383,34 @@ fn msa_positive(fixture: Fixture<&str>) {
     test(fixture, true, "msa")
 }
 
+#[dir_test(
+    dir: "$CARGO_MANIFEST_DIR/../resources/testcases_static_checks/tests/negative/isRmfa",
+    glob: "*.rls",
+    postfix: "rmfa_negative",
+)]
+fn rmfa_negative(fixture: Fixture<&str>) {
+    test(fixture, false, "rmfa")
+}
+
+#[dir_test(
+    dir: "$CARGO_MANIFEST_DIR/../resources/testcases_static_checks/tests/positive/isRmfa",
+    glob: "*.rls",
+    postfix: "rmfa_positive",
+)]
+fn rmfa_positive(fixture: Fixture<&str>) {
+    // let file_names = ["r08.rls"];
+    // if !file_names.contains(
+    //     &path_canonicalized(fixture.path())
+    //         .file_name()
+    //         .unwrap()
+    //         .to_str()
+    //         .unwrap(),
+    // ) {
+    //     return;
+    // }
+    test(fixture, true, "rmfa")
+}
+
 struct TestCase<'a> {
     file: PathBuf,
     exp_res: String,
@@ -427,11 +437,11 @@ impl<'a> TestCase<'a> {
             .output()
             .expect("failed to execute");
 
-        // println!("{}", str::from_utf8(&output.stderr).expect(""));
-        // println!("hello");
+        println!("{}", str::from_utf8(&output.stderr).expect("no error"));
+        println!("hello");
 
         assert_eq!(
-            str::from_utf8(&output.stdout).expect("").trim(),
+            str::from_utf8(&output.stdout).expect("no output").trim(),
             self.exp_res.trim()
         );
 

@@ -106,10 +106,7 @@ async fn run(mut cli: CliApp) -> Result<(), CliError> {
                 "{check_str}: not yet implemented",
                 // RulesProperties::is_dmfa(&rule_set)
             ),
-            "rmfa" => println!(
-                "{check_str}: not yet implemented",
-                // RulesProperties::is_rmfa(&rule_set)
-            ),
+            "rmfa" => println!("{check_str}: {}", RulesProperties::is_rmfa(&handle).await),
             "mfc" => println!(
                 "{check_str}: not yet implemented",
                 // RulesProperties::is_mfc(&rule_set)

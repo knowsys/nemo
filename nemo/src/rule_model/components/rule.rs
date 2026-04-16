@@ -94,6 +94,11 @@ impl Rule {
         self.name.clone()
     }
 
+    /// Return an iterator over the terms of the head.
+    pub fn head_terms(&self) -> impl Iterator<Item = &Term> {
+        self.head().iter().flat_map(|atom| atom.terms())
+    }
+
     /// Return a string representation of the rule's description with the given [Substitution].
     ///
     /// Returns `None` if `description` results not in a ground term after applying the substitution.
