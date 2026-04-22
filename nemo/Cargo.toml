@@ -55,7 +55,7 @@ oxrdf = "0.3.3"
 delegate = { workspace = true }
 orx-imp-vec = "2.14"
 itertools = { workspace = true }
-indexmap = "2.10.0"
+indexmap = { workspace = true }
 
 [dev-dependencies]
 env_logger = { workspace = true }

@@ -208,11 +208,8 @@ impl ExecutionTrace {
                 TraceDerivation::Derived(application, subderivations) => {
                     let mut subtrees = Vec::new();
                     for &derivation in subderivations {
-                        if let Some(tree) = self.tree(derivation) {
-                            subtrees.push(tree);
-                        } else {
-                            return None;
-                        }
+                        let tree = self.tree(derivation)?;
+                        subtrees.push(tree);
                     }
 
                     let rule = tracing_resolve_origin(self.program(), application.rule());

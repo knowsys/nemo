@@ -250,13 +250,8 @@ impl DatabaseInstance {
 
         let mut row_storage = Vec::with_capacity(row.len());
         for data_value in row.iter() {
-            if let Some(storage_value) = data_value.try_to_storage_value_t(dictionary) {
-                row_storage.push(storage_value);
-            } else {
-                // `value` is not know to the dictionary and therefore
-                // not be part of a table.
-                return None;
-            }
+            let storage_value = data_value.try_to_storage_value_t(dictionary)?;
+            row_storage.push(storage_value);
         }
 
         trie.row_position(&row_storage)
@@ -283,13 +278,8 @@ impl DatabaseInstance {
 
         let mut row_storage = Vec::with_capacity(row.len());
         for data_value in row.iter() {
-            if let Some(storage_value) = data_value.try_to_storage_value_t(dictionary) {
-                row_storage.push(storage_value);
-            } else {
-                // `value` is not know to the dictionary and therefore
-                // not be part of a table.
-                return None;
-            }
+            let storage_value = data_value.try_to_storage_value_t(dictionary)?;
+            row_storage.push(storage_value);
         }
 
         trie.row_position(&row_storage)

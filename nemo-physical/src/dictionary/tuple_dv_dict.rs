@@ -304,17 +304,14 @@ fn tuple_bytes(parent_dict: &MetaDvDictionary, dv: &AnyDataValue) -> Option<(Vec
 
     // write label id, if any
     if let Some(label) = dv.label() {
-        if let Some(label_id) = parent_dict.datavalue_to_id(&label.clone().into()) {
-            push_usize_id_to_bytes(
-                label_id,
-                &mut tuple_type,
-                TUPLE_TYPE_LABELID32,
-                TUPLE_TYPE_LABELID64,
-                true,
-            );
-        } else {
-            return None;
-        }
+        let label_id = parent_dict.datavalue_to_id(&label.clone().into())?;
+        push_usize_id_to_bytes(
+            label_id,
+            &mut tuple_type,
+            TUPLE_TYPE_LABELID32,
+            TUPLE_TYPE_LABELID64,
+            true,
+        );
     }
 
     // process parameters to write type and content bytes
@@ -330,17 +327,14 @@ fn tuple_bytes(parent_dict: &MetaDvDictionary, dv: &AnyDataValue) -> Option<(Vec
             | ValueDomain::Other
             | ValueDomain::Tuple
             | ValueDomain::Map => {
-                if let Some(term_id) = parent_dict.datavalue_to_id(dvi) {
-                    cur_type = push_usize_id_to_bytes(
-                        term_id,
-                        &mut tuple_content,
-                        TUPLE_TYPE_DICTID32,
-                        TUPLE_TYPE_DICTID64,
-                        false,
-                    );
-                } else {
-                    return None;
-                }
+                let term_id = parent_dict.datavalue_to_id(dvi)?;
+                cur_type = push_usize_id_to_bytes(
+                    term_id,
+                    &mut tuple_content,
+                    TUPLE_TYPE_DICTID32,
+                    TUPLE_TYPE_DICTID64,
+                    false,
+                );
             }
             ValueDomain::Float => {
                 cur_type = TUPLE_TYPE_F32;

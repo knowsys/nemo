@@ -1,13 +1,9 @@
 #![feature(alloc_error_hook)]
 
-use std::{
-    alloc::Layout,
-    collections::{HashMap, HashSet},
-    fmt::Formatter,
-    io::Cursor,
-};
+use std::{alloc::Layout, collections::HashMap, fmt::Formatter, io::Cursor};
 
 use gloo_utils::format::JsValueSerdeExt;
+use indexmap::IndexSet;
 use js_sys::{Array, Reflect, Set, Uint8Array};
 use thiserror::Error;
 use wasm_bindgen::{JsCast, JsValue, prelude::wasm_bindgen};
@@ -234,7 +230,7 @@ impl NemoEngine {
 
     #[wasm_bindgen(js_name = "getOutputPredicates")]
     pub fn output_predicates(&self) -> Array {
-        let target_predicates: HashSet<_> = self
+        let target_predicates: IndexSet<_> = self
             .engine
             .chase_program()
             .output_predicates()

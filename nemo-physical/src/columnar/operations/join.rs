@@ -57,18 +57,14 @@ where
             self.active_index = (self.active_index + 1) % self.column_scans.len();
             let active_scan = self.column_scans[self.active_index];
 
-            if let Some(active_value) = active_scan.seek(current_max) {
-                if active_value == current_max {
-                    // If the values are equal we increment the counter
-                    matched_scans += 1;
-                } else {
-                    // If the value of the current scan does not equal `current_max` then it must be larger
-                    current_max = active_value;
-                    matched_scans = 1;
-                }
+            let active_value = active_scan.seek(current_max)?;
+            if active_value == current_max {
+                // If the values are equal we increment the counter
+                matched_scans += 1;
             } else {
-                // If we reach the end of one sub scan then we have reached the end of the join
-                return None;
+                // If the value of the current scan does not equal `current_max` then it must be larger
+                current_max = active_value;
+                matched_scans = 1;
             }
         }
     }
