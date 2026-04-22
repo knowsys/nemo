@@ -1784,6 +1784,7 @@ dependencies = [
  "console_error_panic_hook",
  "futures",
  "gloo-utils",
+ "indexmap",
  "js-sys",
  "nemo",
  "nemo-language-server",
