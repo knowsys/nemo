@@ -68,7 +68,8 @@ pub(crate) fn one_string_to_two(string: &str) -> Option<(String, String)> {
             .get(marker + 1..)
             .expect("must be valid if previous call was")
             .into();
-    } else if let Some(pos) = string.find('>') {
+    } else {
+        let pos = string.find('>')?;
         string2 = string
             .get(1..pos)
             .expect("must be valid if previous call was")
@@ -77,8 +78,6 @@ pub(crate) fn one_string_to_two(string: &str) -> Option<(String, String)> {
             .get(pos + 1..)
             .expect("must be valid if previous call was")
             .into();
-    } else {
-        return None;
     }
 
     Some((string1, string2))
