@@ -423,9 +423,11 @@ impl NemoResults {
                 .0
                 .into_iter()
                 .map(|v| match v.value_domain() {
-                    nemo_physical::datavalues::ValueDomain::PlainString
+                    nemo_physical::datavalues::ValueDomain::PlainString => {
+                        JsValue::from(v.lexical_value())
+                    }
+                    nemo_physical::datavalues::ValueDomain::LanguageTaggedString
                     | nemo_physical::datavalues::ValueDomain::Null
-                    | nemo_physical::datavalues::ValueDomain::LanguageTaggedString
                     | nemo_physical::datavalues::ValueDomain::Other => {
                         JsValue::from(v.canonical_string())
                     }
