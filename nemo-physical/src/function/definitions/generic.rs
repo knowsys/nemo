@@ -130,3 +130,30 @@ impl UnaryFunction for Datatype {
         )
     }
 }
+
+/// Construct a typed literal from a lexical value and a datatype IRI
+///
+/// Corresponds to SPARQL STRDT(lexical_form, datatype_IRI).
+/// Returns a literal with the given lexical form and datatype.
+/// Well-known XSD types (integer, double, etc.) are normalized to their native representation.
+///
+/// Returns `None` if the first argument is not a plain string or if the second argument is not an IRI.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct TypedLiteral;
+impl BinaryFunction for TypedLiteral {
+    fn evaluate(
+        &self,
+        parameter_first: AnyDataValue,
+        parameter_second: AnyDataValue,
+    ) -> Option<AnyDataValue> {
+        AnyDataValue::new_from_typed_literal(
+            parameter_first.to_plain_string()?,
+            parameter_second.to_iri()?,
+        )
+        .ok()
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::_Unknown
+    }
+}

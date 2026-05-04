@@ -12,10 +12,11 @@ repository.workspace = true
 [features]
 # Allows building for web assembly environments
 # Enables the "js" feature of the "getrandom" crate
-js = ["getrandom/wasm_js"]
+js = ["getrandom/wasm_js", "nemo-physical/js"]
 
 [dependencies]
 nemo-physical = { path = "../nemo-physical", default-features = false }
+chrono = { workspace = true }
 log = { workspace = true }
 nom = "7.1.1"
 petgraph = "0.8.3"

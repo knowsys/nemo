@@ -69,6 +69,7 @@ result(concat, ?R) :- strings(?A, ?B), ?R = CONCAT(?A, " ", ?B).
 result(compare, ?R) :- strings(?A, ?B), ?R = 10 * COMPARE(?A, ?B).  
 result(contains, ?R) :- strings(?A, _), ?R = CONTAINS(?A, "lo").
 result(regex, ?R) :- strings(?A, _), ?R = REGEX(?A, "l+").
+result(regex_flags, ?R) :- strings(?A, _), ?R = REGEX(?A, "HELLO", "i").
 result(levenshtein_id, ?R) :- strings(?A, _), ?R = LEVENSHTEIN(?A, ?A).
 result(levenshtein_ab, ?R) :- strings(?A, ?B), ?R = LEVENSHTEIN(?A, ?B).
 result(levenshtein_ba, ?R) :- strings(?A, ?B), ?R = LEVENSHTEIN(?B, ?A).
@@ -76,7 +77,10 @@ result(levenshtein_ac, ?R) :- strings(?A, _), ?R = LEVENSHTEIN(?A, "Hej").
 result(levenshtein_bc, ?R) :- strings(_, ?B), ?R = LEVENSHTEIN(?B, "värld").
 result(levenshtein_ar, ?R) :- strings(?A, _), ?R = LEVENSHTEIN(?A, STRREV(?A)).
 result(subString, ?R) :- strings(?A, ?B), ?R = SUBSTR(?A, STRLEN(?B) / 2).  
-result(stringreverse, ?R) :- strings(?A, _), ?R = STRREV(?A).  
+result(stringreverse, ?R) :- strings(?A, _), ?R = STRREV(?A).
+result(strtrim, ?R) :- strings(?A, _), ?R = STRTRIM(CONCAT("  ", ?A, "  ")).
+result(strtrimstart, ?R) :- strings(?A, _), ?R = STRTRIMSTART(CONCAT("  ", ?A, "  ")).
+result(strtrimend, ?R) :- strings(?A, _), ?R = STRTRIMEND(CONCAT("  ", ?A, "  ")).
 result(subStringLength, ?R) :- strings(?A, _), ?R = SUBSTR(?A, 2, 3).
 result(ucase, ?R) :- strings(?A, _), ?R = UCASE(?A).
 result(lcase, ?R) :- strings(_, ?B), ?R = LCASE(?B).
@@ -120,6 +124,50 @@ result(bitand, ?R) :- integers(?A, ?B, ?C), ?R = BITAND(?A, ?B, ?C).
 result(bitor, ?R) :- integers(?A, ?B, ?C), ?R = BITOR(?A, ?B, ?C).
 result(bitxor, ?R) :- integers(?A, ?B, ?C), ?R = BITXOR(?A, ?B, ?C).
 
-% Export 
+% REPLACE
+result(replace_basic, ?R) :- strings(?A, _), ?R = REPLACE(?A, "l", "r").
+result(replace_capture, ?R) :- strings(?A, ?B), ?R = REPLACE(CONCAT(?A, " ", ?B), "(\w+) (\w+)", "$2 $1").
+result(replace_flags, ?R) :- strings(?A, _), ?R = REPLACE(?A, "hello", "Hi", "i").
+
+% langMatches
+result(langmatches_exact, ?R) :- tagged(?L), ?R = langMatches(LANG(?L), "en").
+result(langmatches_subtag, ?R) :- tagged(?L), ?R = langMatches("en-US", "en").
+result(langmatches_wildcard, ?R) :- tagged(?L), ?R = langMatches(LANG(?L), "*").
+result(langmatches_no_match, ?R) :- tagged(?L), ?R = langMatches(LANG(?L), "de").
+
+% Hashing
+result(md5, ?R) :- strings(?A, _), ?R = MD5(?A).
+result(sha1, ?R) :- strings(?A, _), ?R = SHA1(?A).
+result(sha256, ?R) :- strings(?A, _), ?R = SHA256(?A).
+result(sha384, ?R) :- strings(?A, _), ?R = SHA384(?A).
+result(sha512, ?R) :- strings(?A, _), ?R = SHA512(?A).
+
+% STRDT
+result(strdt_int, ?R) :- strings(?A, _), ?DT = IRI("http://www.w3.org/2001/XMLSchema#integer"), ?R = STRDT("42", ?DT).
+result(strdt_other, ?R) :- strings(?A, _), ?DT = IRI("http://www.w3.org/2001/XMLSchema#date"), ?R = STRDT("2024-01-01", ?DT).
+
+% Date/time functions
+datetime("2023-06-15T10:30:45"^^xsd:dateTime).
+datetime_tz("2023-06-15T10:30:45Z"^^xsd:dateTime).
+datetime_tz_offset("2023-06-15T10:30:45-05:00"^^xsd:dateTime).
+dateonly("2023-06-15"^^xsd:date).
+timeonly("10:30:45.5"^^xsd:time).
+
+result(dt_year, ?R) :- datetime(?D), ?R = YEAR(?D).
+result(dt_month, ?R) :- datetime(?D), ?R = MONTH(?D).
+result(dt_day, ?R) :- datetime(?D), ?R = DAY(?D).
+result(dt_hours, ?R) :- datetime(?D), ?R = HOURS(?D).
+result(dt_minutes, ?R) :- datetime(?D), ?R = MINUTES(?D).
+result(dt_seconds, ?R) :- datetime(?D), ?R = SECONDS(?D).
+result(dt_year_date, ?R) :- dateonly(?D), ?R = YEAR(?D).
+result(dt_hours_time, ?R) :- timeonly(?D), ?R = HOURS(?D).
+result(dt_seconds_frac, ?R) :- timeonly(?D), ?R = SECONDS(?D).
+result(dt_tz_absent, ?R) :- datetime(?D), ?R = TZ(?D).
+result(dt_tz_utc, ?R) :- datetime_tz(?D), ?R = TZ(?D).
+result(dt_tz_offset, ?R) :- datetime_tz_offset(?D), ?R = TZ(?D).
+result(dt_timezone_utc, ?R) :- datetime_tz(?D), ?R = TIMEZONE(?D).
+result(dt_timezone_offset, ?R) :- datetime_tz_offset(?D), ?R = TIMEZONE(?D).
+
+% Export
 @export result :- csv{}.
 

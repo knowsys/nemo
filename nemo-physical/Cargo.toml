@@ -12,6 +12,7 @@ repository.workspace = true
 [features]
 check_column_sorting = []
 old_dictionaries = []
+js = ["uuid/js"]
 
 [[bin]]
 name = "dict-bench"
@@ -40,9 +41,17 @@ urlencoding = { workspace = true }
 oxiri = { workspace = true }
 path-slash = "0.2.1"
 levenshtein = "1.0.5"
+chrono = { workspace = true }
+rand = { workspace = true }
+uuid = { workspace = true }
+sha2 = "0.10"
+sha1 = "0.10"
+md5 = { package = "md-5", version = "0.10" }
+digest = "0.10"
 serde_urlencoded = "0.7.1"
 serde = { workspace = true, features =["derive"]}
 itertools = { workspace = true }
+oxsdatatypes = "0.2.2"
 
 [dev-dependencies]
 rand = { workspace = true }

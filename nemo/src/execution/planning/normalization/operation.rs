@@ -1,11 +1,31 @@
 //! This module defines [Operation].
 
-use std::fmt::Display;
+use std::{fmt::Display, sync::RwLock};
 
 use nemo_physical::{
     datavalues::AnyDataValue, function::tree::FunctionTree,
     tabular::operations::OperationColumnMarker,
 };
+
+/// Query-start timestamp used by `NOW()`.
+///
+/// Set once per query execution via [`set_now_timestamp`].
+/// Read during plan construction in the `NOW` arm of [`Operation::function_tree`].
+static NOW_TIMESTAMP: RwLock<String> = RwLock::new(String::new());
+
+/// Set the query-start timestamp used by `NOW()`.
+///
+/// Call this once at the beginning of each query execution (before any rule planning).
+pub(crate) fn set_now_timestamp(now: String) {
+    *NOW_TIMESTAMP.write().expect("NOW_TIMESTAMP lock poisoned") = now;
+}
+
+fn get_now_timestamp() -> String {
+    NOW_TIMESTAMP
+        .read()
+        .expect("NOW_TIMESTAMP lock poisoned")
+        .clone()
+}
 
 use crate::{
     execution::planning::VariableTranslation,
@@ -287,7 +307,7 @@ impl Operation {
                     OperationKind::StringAfter => binary!(string_after, sub),
                     OperationKind::StringStarts => binary!(string_starts, sub),
                     OperationKind::StringEnds => binary!(string_ends, sub),
-                    OperationKind::StringRegex => binary!(string_regex, sub),
+                    OperationKind::StringRegex => FunctionTree::string_regex(sub),
                     OperationKind::StringLevenshtein => binary!(string_levenshtein, sub),
                     OperationKind::BitShl => binary!(bit_shl, sub),
                     OperationKind::BitShru => binary!(bit_shru, sub),
@@ -331,6 +351,9 @@ impl Operation {
                     OperationKind::NumericSquareroot => unary!(numeric_squareroot, sub),
                     OperationKind::NumericTangent => unary!(numeric_tangent, sub),
                     OperationKind::StringLength => unary!(string_length, sub),
+                    OperationKind::StringTrim => unary!(string_trim, sub),
+                    OperationKind::StringTrimStart => unary!(string_trim_start, sub),
+                    OperationKind::StringTrimEnd => unary!(string_trim_end, sub),
                     OperationKind::StringReverse => unary!(string_reverse, sub),
                     OperationKind::StringLowercase => unary!(string_lowercase, sub),
                     OperationKind::StringUppercase => unary!(string_uppercase, sub),
@@ -348,6 +371,32 @@ impl Operation {
                     OperationKind::NumericMaximum => FunctionTree::numeric_maximum(sub),
                     OperationKind::NumericLukasiewicz => FunctionTree::numeric_lukasiewicz(sub),
                     OperationKind::StringConcatenation => FunctionTree::string_concatenation(sub),
+                    OperationKind::StringReplace => FunctionTree::string_replace(sub),
+                    OperationKind::StringLangMatches => binary!(string_lang_matches, sub),
+                    OperationKind::StringMd5 => unary!(string_md5, sub),
+                    OperationKind::StringSha1 => unary!(string_sha1, sub),
+                    OperationKind::StringSha256 => unary!(string_sha256, sub),
+                    OperationKind::StringSha384 => unary!(string_sha384, sub),
+                    OperationKind::StringSha512 => unary!(string_sha512, sub),
+                    OperationKind::TypedLiteral => binary!(typed_literal, sub),
+                    OperationKind::DateTimeYear => unary!(datetime_year, sub),
+                    OperationKind::DateTimeMonth => unary!(datetime_month, sub),
+                    OperationKind::DateTimeDay => unary!(datetime_day, sub),
+                    OperationKind::DateTimeHours => unary!(datetime_hours, sub),
+                    OperationKind::DateTimeMinutes => unary!(datetime_minutes, sub),
+                    OperationKind::DateTimeSeconds => unary!(datetime_seconds, sub),
+                    OperationKind::DateTimeTimezone => unary!(datetime_timezone, sub),
+                    OperationKind::DateTimeTz => unary!(datetime_tz, sub),
+                    OperationKind::FuncRand => FunctionTree::func_rand(),
+                    OperationKind::FuncUuid => FunctionTree::func_uuid(),
+                    OperationKind::FuncStruuid => FunctionTree::func_struuid(),
+                    OperationKind::FuncNow => {
+                        let now = get_now_timestamp();
+                        FunctionTree::constant(AnyDataValue::new_other(
+                            now,
+                            "http://www.w3.org/2001/XMLSchema#dateTime".to_string(),
+                        ))
+                    }
                 }
             }
         }

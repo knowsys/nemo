@@ -11,6 +11,8 @@ use crate::{rule_model::components::term::value_type::ValueType, syntax::builtin
 /// Number of arguments supported by an operation
 #[derive(Debug)]
 pub(crate) enum OperationNumArguments {
+    /// Operation requires zero arguments
+    Nullary,
     /// Operation requires one argument
     Unary,
     /// Operation requires two arguments
@@ -27,6 +29,7 @@ impl OperationNumArguments {
     /// Return whether the given number of arguments satisfies this constraint.
     pub(crate) fn validate(&self, num_arguments: usize) -> bool {
         match self {
+            OperationNumArguments::Nullary => num_arguments == 0,
             OperationNumArguments::Unary => num_arguments == 1,
             OperationNumArguments::Binary => num_arguments == 2,
             OperationNumArguments::_Ternary => num_arguments == 3,
@@ -39,6 +42,7 @@ impl OperationNumArguments {
 impl Display for OperationNumArguments {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            OperationNumArguments::Nullary => write!(f, "0"),
             OperationNumArguments::Unary => write!(f, "1"),
             OperationNumArguments::Binary => write!(f, "2"),
             OperationNumArguments::_Ternary => write!(f, "3"),
@@ -148,7 +152,7 @@ pub enum OperationKind {
     StringContains,
     /// Check whether the pattern given as a regular expression holds
     #[assoc(name = function::REGEX)]
-    #[assoc(num_arguments = OperationNumArguments::Binary)]
+    #[assoc(num_arguments = OperationNumArguments::Choice(vec![2, 3]))]
     #[assoc(return_type = ValueType::Boolean)]
     StringRegex,
     /// String starting at some start position
@@ -256,6 +260,12 @@ pub enum OperationKind {
     #[assoc(num_arguments = OperationNumArguments::Binary)]
     #[assoc(return_type = ValueType::LanguageString)]
     LanguageString,
+    /// Check if a language tag matches a language range, corresponding to SPARQL function langMatches.
+    /// Must appear before LanguageTag ("LANG") since "langMatches" starts with "lang" (case-insensitive).
+    #[assoc(name = function::LANGMATCHES)]
+    #[assoc(num_arguments = OperationNumArguments::Binary)]
+    #[assoc(return_type = ValueType::Boolean)]
+    StringLangMatches,
     /// Get language tag of a languaged tagged string
     #[assoc(name = function::LANG)]
     #[assoc(num_arguments = OperationNumArguments::Unary)]
@@ -311,6 +321,21 @@ pub enum OperationKind {
     #[assoc(num_arguments = OperationNumArguments::Unary)]
     #[assoc(return_type = ValueType::Number)]
     StringLength,
+    /// String with leading whitespace removed
+    #[assoc(name = function::STRTRIMSTART)]
+    #[assoc(num_arguments = OperationNumArguments::Unary)]
+    #[assoc(return_type = ValueType::String)]
+    StringTrimStart,
+    /// String with trailing whitespace removed
+    #[assoc(name = function::STRTRIMEND)]
+    #[assoc(num_arguments = OperationNumArguments::Unary)]
+    #[assoc(return_type = ValueType::String)]
+    StringTrimEnd,
+    /// String with leading and trailing whitespace removed
+    #[assoc(name = function::STRTRIM)]
+    #[assoc(num_arguments = OperationNumArguments::Unary)]
+    #[assoc(return_type = ValueType::String)]
+    StringTrim,
     /// Reverse of a string value
     #[assoc(name = function::STRREV)]
     #[assoc(num_arguments = OperationNumArguments::Unary)]
@@ -376,6 +401,12 @@ pub enum OperationKind {
     #[assoc(num_arguments = OperationNumArguments::Arbitrary)]
     #[assoc(return_type = ValueType::Boolean)]
     BooleanDisjunction,
+    /// Extract the minutes from an XSD dateTime/time value, corresponding to SPARQL MINUTES.
+    /// Must appear before NumericMinimum ("MIN") since "min" is a prefix of "minutes".
+    #[assoc(name = function::MINUTES)]
+    #[assoc(num_arguments = OperationNumArguments::Unary)]
+    #[assoc(return_type = ValueType::Number)]
+    DateTimeMinutes,
     /// Minimum of numeric values
     #[assoc(name = function::MIN)]
     #[assoc(num_arguments = OperationNumArguments::Arbitrary)]
@@ -396,11 +427,104 @@ pub enum OperationKind {
     #[assoc(num_arguments = OperationNumArguments::Arbitrary)]
     #[assoc(return_type = ValueType::String)]
     StringConcatenation,
+    /// Construct a typed literal from a lexical value and a datatype IRI, corresponding to SPARQL function STRDT.
+    /// Must appear before LexicalValue ("STR") since "STRDT" starts with "STR" (case-insensitive).
+    #[assoc(name = function::STRDT)]
+    #[assoc(num_arguments = OperationNumArguments::Binary)]
+    #[assoc(return_type = ValueType::Any)]
+    TypedLiteral,
+    /// Return a fresh UUID as a plain string, corresponding to SPARQL STRUUID.
+    /// Must appear before LexicalValue ("STR") since "STRUUID" starts with "STR" (case-insensitive).
+    #[assoc(name = function::STRUUID)]
+    #[assoc(num_arguments = OperationNumArguments::Nullary)]
+    #[assoc(return_type = ValueType::String)]
+    FuncStruuid,
     /// Lexical value
     #[assoc(name = function::STR)]
     #[assoc(num_arguments = OperationNumArguments::Unary)]
     #[assoc(return_type = ValueType::String)]
     LexicalValue,
+    /// Replace occurrences of a regex pattern in a string, corresponding to SPARQL function REPLACE.
+    #[assoc(name = function::REPLACE)]
+    #[assoc(num_arguments = OperationNumArguments::Choice(vec![3, 4]))]
+    #[assoc(return_type = ValueType::String)]
+    StringReplace,
+    /// Compute the MD5 hash of a string, corresponding to SPARQL function MD5.
+    #[assoc(name = function::MD5)]
+    #[assoc(num_arguments = OperationNumArguments::Unary)]
+    #[assoc(return_type = ValueType::String)]
+    StringMd5,
+    /// Compute the SHA1 hash of a string, corresponding to SPARQL function SHA1.
+    #[assoc(name = function::SHA1)]
+    #[assoc(num_arguments = OperationNumArguments::Unary)]
+    #[assoc(return_type = ValueType::String)]
+    StringSha1,
+    /// Compute the SHA256 hash of a string, corresponding to SPARQL function SHA256.
+    #[assoc(name = function::SHA256)]
+    #[assoc(num_arguments = OperationNumArguments::Unary)]
+    #[assoc(return_type = ValueType::String)]
+    StringSha256,
+    /// Compute the SHA384 hash of a string, corresponding to SPARQL function SHA384.
+    #[assoc(name = function::SHA384)]
+    #[assoc(num_arguments = OperationNumArguments::Unary)]
+    #[assoc(return_type = ValueType::String)]
+    StringSha384,
+    /// Compute the SHA512 hash of a string, corresponding to SPARQL function SHA512.
+    #[assoc(name = function::SHA512)]
+    #[assoc(num_arguments = OperationNumArguments::Unary)]
+    #[assoc(return_type = ValueType::String)]
+    StringSha512,
+    /// Extract the year from an XSD date/dateTime, corresponding to SPARQL YEAR.
+    #[assoc(name = function::YEAR)]
+    #[assoc(num_arguments = OperationNumArguments::Unary)]
+    #[assoc(return_type = ValueType::Number)]
+    DateTimeYear,
+    /// Extract the month from an XSD date/dateTime, corresponding to SPARQL MONTH.
+    #[assoc(name = function::MONTH)]
+    #[assoc(num_arguments = OperationNumArguments::Unary)]
+    #[assoc(return_type = ValueType::Number)]
+    DateTimeMonth,
+    /// Extract the day from an XSD date/dateTime, corresponding to SPARQL DAY.
+    #[assoc(name = function::DAY)]
+    #[assoc(num_arguments = OperationNumArguments::Unary)]
+    #[assoc(return_type = ValueType::Number)]
+    DateTimeDay,
+    /// Extract the hours from an XSD dateTime/time, corresponding to SPARQL HOURS.
+    #[assoc(name = function::HOURS)]
+    #[assoc(num_arguments = OperationNumArguments::Unary)]
+    #[assoc(return_type = ValueType::Number)]
+    DateTimeHours,
+    /// Extract the seconds from an XSD dateTime/time, corresponding to SPARQL SECONDS.
+    #[assoc(name = function::SECONDS)]
+    #[assoc(num_arguments = OperationNumArguments::Unary)]
+    #[assoc(return_type = ValueType::Number)]
+    DateTimeSeconds,
+    /// Extract the timezone as xsd:dayTimeDuration, corresponding to SPARQL TIMEZONE.
+    /// Must appear before DateTimeTz ("TZ") since "tz" is a prefix of "timezone".
+    #[assoc(name = function::TIMEZONE)]
+    #[assoc(num_arguments = OperationNumArguments::Unary)]
+    #[assoc(return_type = ValueType::Any)]
+    DateTimeTimezone,
+    /// Extract the timezone as a plain string, corresponding to SPARQL TZ.
+    #[assoc(name = function::TZ)]
+    #[assoc(num_arguments = OperationNumArguments::Unary)]
+    #[assoc(return_type = ValueType::String)]
+    DateTimeTz,
+    /// Return a pseudo-random double in [0, 1), corresponding to SPARQL RAND.
+    #[assoc(name = function::RAND)]
+    #[assoc(num_arguments = OperationNumArguments::Nullary)]
+    #[assoc(return_type = ValueType::Number)]
+    FuncRand,
+    /// Return a fresh UUID as an IRI, corresponding to SPARQL UUID.
+    #[assoc(name = function::UUID)]
+    #[assoc(num_arguments = OperationNumArguments::Nullary)]
+    #[assoc(return_type = ValueType::Constant)]
+    FuncUuid,
+    /// Return the current date/time as xsd:dateTime, corresponding to SPARQL NOW.
+    #[assoc(name = function::NOW)]
+    #[assoc(num_arguments = OperationNumArguments::Nullary)]
+    #[assoc(return_type = ValueType::Any)]
+    FuncNow,
 }
 
 impl OperationKind {
@@ -438,7 +562,7 @@ mod test {
         // is the prefix of a subsequent operation name
 
         let names = OperationKind::iter()
-            .map(|kind| kind.name())
+            .map(|kind| kind.name().to_lowercase())
             .collect::<Vec<_>>();
 
         for (name_index, name) in names.iter().enumerate() {
@@ -449,7 +573,9 @@ mod test {
             assert!(
                 names[(name_index + 1)..]
                     .iter()
-                    .all(|remaining| !remaining.starts_with(name))
+                    .all(|remaining| !remaining.starts_with(name.as_str())),
+                "Operation name {:?} is a case-insensitive prefix of a later operation name",
+                name,
             )
         }
     }

@@ -447,36 +447,40 @@ static REGEX_CACHE: OnceCell<Mutex<lru::LruCache<String, regex::Regex>>> = OnceC
 ///
 /// Returns `true` from the boolean value space if the regex provided as the second parameter
 /// is matched in the string provided as the first parameter and `false` otherwise.
+/// An optional third parameter may provide regex flags (e.g. `"i"` for case-insensitive),
+/// corresponding to the SPARQL `regex(string, pattern [, flags])` function.
 ///
-/// Returns a plain string.
-///
-/// Returns `None` if either parameter is not a (language tagged) string, if the second parameter is not
-/// a regular expression or if the two language tags do not comply with Argument Compatibility Rules.
+/// Returns `None` if any parameter is not a (language tagged) string or if the second parameter is not
+/// a valid regular expression.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct StringRegex;
-impl BinaryFunction for StringRegex {
-    fn evaluate(
-        &self,
-        parameter_first: AnyDataValue,
-        parameter_second: AnyDataValue,
-    ) -> Option<AnyDataValue> {
-        lang_string_pair_from_any(parameter_first, parameter_second).map(
-            |(lang_string, lang_pattern)| {
-                let mut cache = REGEX_CACHE
-                    .get_or_init(|| Mutex::new(lru::LruCache::new(REGEX_CACHE_SIZE)))
-                    .lock()
-                    .unwrap();
+impl NaryFunction for StringRegex {
+    fn evaluate(&self, parameters: &[AnyDataValue]) -> Option<AnyDataValue> {
+        if parameters.len() < 2 || parameters.len() > 3 {
+            return None;
+        }
 
-                let regex = cache.try_get_or_insert(lang_pattern.string.clone(), || {
-                    regex::Regex::new(&lang_pattern.string)
-                });
+        let lang_string = LangTaggedString::try_from(parameters[0].clone()).ok()?;
+        let lang_pattern = LangTaggedString::try_from(parameters[1].clone()).ok()?;
 
-                match regex {
-                    Ok(regex) => AnyDataValue::new_boolean(regex.is_match(&lang_string.string)),
-                    Err(_) => AnyDataValue::new_boolean(false),
-                }
-            },
-        )
+        let regex_str = if parameters.len() == 3 {
+            let flags = LangTaggedString::try_from(parameters[2].clone()).ok()?;
+            format!("(?{}){}", flags.string, lang_pattern.string)
+        } else {
+            lang_pattern.string.clone()
+        };
+
+        let mut cache = REGEX_CACHE
+            .get_or_init(|| Mutex::new(lru::LruCache::new(REGEX_CACHE_SIZE)))
+            .lock()
+            .unwrap();
+
+        let regex = cache.try_get_or_insert(regex_str.clone(), || regex::Regex::new(&regex_str));
+
+        Some(match regex {
+            Ok(regex) => AnyDataValue::new_boolean(regex.is_match(&lang_string.string)),
+            Err(_) => AnyDataValue::new_boolean(false),
+        })
     }
 
     fn type_propagation(&self) -> FunctionTypePropagation {
@@ -535,6 +539,93 @@ impl UnaryFunction for StringLength {
 
     fn type_propagation(&self) -> FunctionTypePropagation {
         FunctionTypePropagation::KnownOutput(StorageTypeName::Int64.bitset())
+    }
+}
+
+/// Removal of leading and trailing whitespace from a string
+///
+/// Returns the string with leading and trailing whitespace removed.
+///
+/// Returns a language tagged string if the first parameter has a language tag.
+/// Otherwise, return a plain string.
+///
+/// Returns `None` if the provided argument is not a (language tagged) string.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct StringTrim;
+impl UnaryFunction for StringTrim {
+    fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
+        LangTaggedString::try_from(parameter)
+            .ok()
+            .map(|lang_string| {
+                let trimmed = lang_string.string.trim().to_string();
+                LangTaggedString::new(trimmed, lang_string.tag).into_data_value()
+            })
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::KnownOutput(
+            StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Id64.bitset()),
+        )
+    }
+}
+
+/// Removal of leading whitespace from a string
+///
+/// Returns the string with leading whitespace removed.
+///
+/// Returns a language tagged string if the first parameter has a language tag.
+/// Otherwise, return a plain string.
+///
+/// Returns `None` if the provided argument is not a (language tagged) string.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct StringTrimStart;
+impl UnaryFunction for StringTrimStart {
+    fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
+        LangTaggedString::try_from(parameter)
+            .ok()
+            .map(|lang_string| {
+                let trimmed = lang_string.string.trim_start().to_string();
+                LangTaggedString::new(trimmed, lang_string.tag).into_data_value()
+            })
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::KnownOutput(
+            StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Id64.bitset()),
+        )
+    }
+}
+
+/// Removal of trailing whitespace from a string
+///
+/// Returns the string with trailing whitespace removed.
+///
+/// Returns a language tagged string if the first parameter has a language tag.
+/// Otherwise, return a plain string.
+///
+/// Returns `None` if the provided argument is not a (language tagged) string.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct StringTrimEnd;
+impl UnaryFunction for StringTrimEnd {
+    fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
+        LangTaggedString::try_from(parameter)
+            .ok()
+            .map(|lang_string| {
+                let trimmed = lang_string.string.trim_end().to_string();
+                LangTaggedString::new(trimmed, lang_string.tag).into_data_value()
+            })
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::KnownOutput(
+            StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Id64.bitset()),
+        )
     }
 }
 
@@ -731,6 +822,101 @@ impl TernaryFunction for StringSubstringLength {
     }
 }
 
+/// Regex-based replacement within a string
+///
+/// Corresponds to SPARQL REPLACE(arg, pattern, replacement [, flags]).
+/// Returns a copy of `arg` with every match of the regex `pattern` replaced by `replacement`.
+/// The optional `flags` parameter (4th element) sets regex flags (e.g. "i", "s", "m", "x").
+/// Replacement may reference capture groups via `$1`, `$2`, etc.; use `$$` for a literal `$`.
+///
+/// Returns `None` if any string argument is not a (language tagged) string,
+/// or if the pattern (with any flags) is not a valid regex.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct StringReplace;
+impl NaryFunction for StringReplace {
+    fn evaluate(&self, parameters: &[AnyDataValue]) -> Option<AnyDataValue> {
+        if parameters.len() < 3 || parameters.len() > 4 {
+            return None;
+        }
+
+        let input = LangTaggedString::try_from(parameters[0].clone()).ok()?;
+        let pattern = LangTaggedString::try_from(parameters[1].clone()).ok()?;
+        let replacement = LangTaggedString::try_from(parameters[2].clone()).ok()?;
+
+        let regex_str = if parameters.len() == 4 {
+            let flags = LangTaggedString::try_from(parameters[3].clone()).ok()?;
+            format!("(?{}){}", flags.string, pattern.string)
+        } else {
+            pattern.string.clone()
+        };
+
+        let mut cache = REGEX_CACHE
+            .get_or_init(|| Mutex::new(lru::LruCache::new(REGEX_CACHE_SIZE)))
+            .lock()
+            .unwrap();
+
+        let regex = cache.try_get_or_insert(regex_str.clone(), || regex::Regex::new(&regex_str));
+
+        match regex {
+            Ok(regex) => {
+                let result = regex
+                    .replace_all(&input.string, replacement.string.as_str())
+                    .into_owned();
+                Some(LangTaggedString::new(result, input.tag).into_data_value())
+            }
+            Err(_) => None,
+        }
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::KnownOutput(
+            StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Id64.bitset()),
+        )
+    }
+}
+
+/// Language tag matching
+///
+/// Corresponds to SPARQL langMatches(language-tag, language-range).
+/// Returns `true` if `language-tag` matches `language-range` per RFC 4647 basic filtering:
+/// - A range of `"*"` matches any non-empty language tag.
+/// - Otherwise the tag matches if it equals the range or starts with `"<range>-"` (case-insensitive).
+///
+/// Returns `None` if either argument is not a (plain or language-tagged) string.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct StringLangMatches;
+impl BinaryFunction for StringLangMatches {
+    fn evaluate(
+        &self,
+        parameter_first: AnyDataValue,
+        parameter_second: AnyDataValue,
+    ) -> Option<AnyDataValue> {
+        let tag = LangTaggedString::try_from(parameter_first).ok()?;
+        let range = LangTaggedString::try_from(parameter_second).ok()?;
+
+        let tag_lc = tag.string.to_lowercase();
+        let range_lc = range.string.to_lowercase();
+
+        let matches = if range_lc == "*" {
+            !tag_lc.is_empty()
+        } else {
+            tag_lc == range_lc || tag_lc.starts_with(&format!("{range_lc}-"))
+        };
+
+        Some(AnyDataValue::new_boolean(matches))
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::KnownOutput(
+            StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Id64.bitset()),
+        )
+    }
+}
+
 #[cfg(test)]
 mod test {
 
@@ -744,7 +930,8 @@ mod test {
     use super::{
         StringAfter, StringBefore, StringCompare, StringConcatenation, StringContains, StringEnds,
         StringLength, StringLevenshtein, StringLowercase, StringRegex, StringReverse, StringStarts,
-        StringSubstring, StringSubstringLength, StringUppercase, StringUriDecode, StringUriEncode,
+        StringSubstring, StringSubstringLength, StringTrim, StringTrimEnd, StringTrimStart,
+        StringUppercase, StringUriDecode, StringUriEncode,
     };
 
     #[test]
@@ -1147,6 +1334,45 @@ mod test {
     }
 
     #[test]
+    fn test_string_trim() {
+        let string = AnyDataValue::new_plain_string("  hello  ".to_string());
+        let result = AnyDataValue::new_plain_string("hello".to_string());
+        let actual_result = StringTrim.evaluate(string.clone());
+        assert!(actual_result.is_some());
+        assert_eq!(result, actual_result.unwrap());
+
+        let string_notstring = AnyDataValue::new_integer_from_i64(1);
+        let actual_result_notstring = StringTrim.evaluate(string_notstring);
+        assert!(actual_result_notstring.is_none());
+
+        let string_lang =
+            AnyDataValue::new_language_tagged_string("  hola  ".to_string(), "es".to_string());
+        let result_lang =
+            AnyDataValue::new_language_tagged_string("hola".to_string(), "es".to_string());
+        let actual_result_lang = StringTrim.evaluate(string_lang);
+        assert!(actual_result_lang.is_some());
+        assert_eq!(result_lang, actual_result_lang.unwrap());
+    }
+
+    #[test]
+    fn test_string_trim_start() {
+        let string = AnyDataValue::new_plain_string("  hello  ".to_string());
+        let result = AnyDataValue::new_plain_string("hello  ".to_string());
+        let actual_result = StringTrimStart.evaluate(string.clone());
+        assert!(actual_result.is_some());
+        assert_eq!(result, actual_result.unwrap());
+    }
+
+    #[test]
+    fn test_string_trim_end() {
+        let string = AnyDataValue::new_plain_string("  hello  ".to_string());
+        let result = AnyDataValue::new_plain_string("  hello".to_string());
+        let actual_result = StringTrimEnd.evaluate(string.clone());
+        assert!(actual_result.is_some());
+        assert_eq!(result, actual_result.unwrap());
+    }
+
+    #[test]
     fn test_string_before() {
         let string = AnyDataValue::new_plain_string("hello".to_string());
         let start = AnyDataValue::new_plain_string("l".to_string());
@@ -1347,23 +1573,33 @@ mod test {
         let string = AnyDataValue::new_plain_string("hello".to_string());
         let pattern = AnyDataValue::new_plain_string("l".to_string());
         let result = AnyDataValue::new_boolean(true);
-        let actual_result = StringRegex.evaluate(string.clone(), pattern);
+        let actual_result = StringRegex.evaluate(&[string.clone(), pattern]);
         assert!(actual_result.is_some());
         assert_eq!(result, actual_result.unwrap());
 
         let string_unicode = AnyDataValue::new_plain_string("loẅks".to_string());
         let pattern_unicode = AnyDataValue::new_plain_string("ẅ".to_string());
         let result_unicode = AnyDataValue::new_boolean(true);
-        let actual_result_unicode = StringRegex.evaluate(string_unicode.clone(), pattern_unicode);
+        let actual_result_unicode =
+            StringRegex.evaluate(&[string_unicode.clone(), pattern_unicode]);
         assert!(actual_result_unicode.is_some());
         assert_eq!(result_unicode, actual_result_unicode.unwrap());
 
         let string_regex = AnyDataValue::new_plain_string("looks".to_string());
         let pattern_regex = AnyDataValue::new_plain_string("o+".to_string());
         let result_regex = AnyDataValue::new_boolean(true);
-        let actual_result_regex = StringRegex.evaluate(string_regex.clone(), pattern_regex);
+        let actual_result_regex = StringRegex.evaluate(&[string_regex.clone(), pattern_regex]);
         assert!(actual_result_regex.is_some());
         assert_eq!(result_regex, actual_result_regex.unwrap());
+
+        // With flags: case-insensitive match
+        let string_flags = AnyDataValue::new_plain_string("Hello".to_string());
+        let pattern_flags = AnyDataValue::new_plain_string("hello".to_string());
+        let flags = AnyDataValue::new_plain_string("i".to_string());
+        let result_flags = AnyDataValue::new_boolean(true);
+        let actual_result_flags = StringRegex.evaluate(&[string_flags, pattern_flags, flags]);
+        assert!(actual_result_flags.is_some());
+        assert_eq!(result_flags, actual_result_flags.unwrap());
     }
 
     #[test]

@@ -49,6 +49,7 @@ concat,"""Hello World"""
 compare,-10
 contains,"""true""^^<http://www.w3.org/2001/XMLSchema#boolean>"
 regex,"""true""^^<http://www.w3.org/2001/XMLSchema#boolean>"
+regex_flags,"""true""^^<http://www.w3.org/2001/XMLSchema#boolean>"
 levenshtein_id,0
 levenshtein_ab,4
 levenshtein_ba,4
@@ -56,6 +57,9 @@ levenshtein_ac,3
 levenshtein_bc,2
 levenshtein_ar,4
 stringreverse,"""olleH"""
+strtrim,"""Hello"""
+strtrimstart,"""Hello  """
+strtrimend,"""  Hello"""
 subString,"""ello"""
 subStringLength,"""ell"""
 ucase,"""HELLO"""
@@ -84,3 +88,31 @@ bitshl,4
 bitshr,0
 bitshru,4611686018427387903
 bitshru,-9223372036854775808
+replace_basic,"""Herro"""
+replace_capture,"""World Hello"""
+replace_flags,"""Hi"""
+langmatches_exact,"""true""^^<http://www.w3.org/2001/XMLSchema#boolean>"
+langmatches_subtag,"""true""^^<http://www.w3.org/2001/XMLSchema#boolean>"
+langmatches_wildcard,"""true""^^<http://www.w3.org/2001/XMLSchema#boolean>"
+langmatches_no_match,"""false""^^<http://www.w3.org/2001/XMLSchema#boolean>"
+md5,"""8b1a9953c4611296a827abf8c47804d7"""
+sha1,"""f7ff9e8b7bb2e09b70935a5d785e0cc5d9d0abf0"""
+sha256,"""185f8db32271fe25f561a6fc938b2e264306ec304eda518007d1764826381969"""
+sha384,"""3519fe5ad2c596efe3e276a6f351b8fc0b03db861782490d45f7598ebd0ab5fd5520ed102f38c4a5ec834e98668035fc"""
+sha512,"""3615f80c9d293ed7402687f94b22d58e529b8cc7916f8fac7fddf7fbd5af4cf777d3d795a7a00a16bf7e7f3fb9561ee9baae480da9fe7a18769e71886b03f315"""
+strdt_int,42
+strdt_other,"""2024-01-01""^^<http://www.w3.org/2001/XMLSchema#date>"
+dt_year,2023
+dt_year_date,2023
+dt_month,6
+dt_day,15
+dt_hours,10
+dt_hours_time,10
+dt_minutes,30
+dt_seconds,"""45""^^<http://www.w3.org/2001/XMLSchema#double>"
+dt_seconds_frac,"""45.5""^^<http://www.w3.org/2001/XMLSchema#double>"
+dt_tz_absent,""""""
+dt_tz_utc,"""Z"""
+dt_tz_offset,"""-05:00"""
+dt_timezone_utc,"""PT0S""^^<http://www.w3.org/2001/XMLSchema#dayTimeDuration>"
+dt_timezone_offset,"""-PT5H""^^<http://www.w3.org/2001/XMLSchema#dayTimeDuration>"
