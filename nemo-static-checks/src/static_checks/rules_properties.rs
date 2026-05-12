@@ -1,8 +1,7 @@
 //! Functionality that provides the static checks for a RuleSet.
 use crate::static_checks::acyclicity_graphs::{JointAcyclicityGraph, WeakAcyclicityGraph};
-use crate::static_checks::cyclicity_checks::acyclicity::{
-    AcyclicityVariant, check_acyclicity, mfa_handle,
-};
+use crate::static_checks::cyclicity_checks::StrategySelector;
+use crate::static_checks::cyclicity_checks::acyclicity::{check_acyclicity, mfa_handle};
 use crate::static_checks::cyclicity_checks::cyclicity::{
     CyclicityVariant, check_cyclicity, mfc_handle,
 };
@@ -302,7 +301,7 @@ impl RulesProperties for ProgramHandle {
 
     async fn is_mfa(&self) -> bool {
         let handle = mfa_handle(self.clone());
-        check_acyclicity(handle, AcyclicityVariant::SkolemMFA).await
+        check_acyclicity(handle, StrategySelector::MFA).await
     }
 
     async fn is_msa(&self) -> bool {
@@ -327,11 +326,7 @@ impl RulesProperties for ProgramHandle {
 
     async fn is_rmfa(&self) -> bool {
         let handle = mfa_handle(self.clone());
-        check_acyclicity(
-            handle,
-            AcyclicityVariant::SkolemRestricted(&HashSet::default(), &Vec::default()),
-        )
-        .await
+        check_acyclicity(handle, StrategySelector::RMFA).await
     }
 
     async fn is_mfc(&self) -> bool {

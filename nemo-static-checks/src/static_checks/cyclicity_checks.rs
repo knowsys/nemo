@@ -99,7 +99,27 @@ fn assign(atom: &Atom, ass: &Assignment) -> Fact {
     Fact::from((pred, subterms))
 }
 
+#[derive(Clone, Copy)]
+pub enum StrategySelector {
+    MFA,
+    RMFA,
+}
+
+pub trait CyclicityStrategy {
+    fn is_blocked(&self, rule: &Rule, ass: &Assignment) -> bool;
+}
+
+#[derive(Default)]
+pub struct NoBlockStrategy;
+
+impl CyclicityStrategy for NoBlockStrategy {
+    fn is_blocked(&self, _rule: &Rule, _ass: &Assignment) -> bool {
+        false
+    }
+}
 
 
 
 pub type Assignment<'a> = HashMap<&'a Variable, Term>;
+pub type VarPerAtomIdxPosIdx<'a> = HashMap<(usize, usize, Option<usize>), &'a Variable>;
+pub type VarPerAtomIdxPosIdxPerRule<'a> = HashMap<&'a Rule, VarPerAtomIdxPosIdx<'a>>;

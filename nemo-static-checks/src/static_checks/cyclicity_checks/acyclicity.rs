@@ -19,7 +19,8 @@ use nemo::rule_model::{
 
 use crate::static_checks::collection_traits::InsertAll;
 use crate::static_checks::cyclicity_checks::{
-    Assignment, body_for_assignment, head_for_assignment, union,
+    Assignment, CyclicityStrategy, NoBlockStrategy, StrategySelector, VarPerAtomIdxPosIdx,
+    VarPerAtomIdxPosIdxPerRule, body_for_assignment, head_for_assignment, union,
 };
 use crate::static_checks::rule_set::{RuleRefs, RuleSet};
 
@@ -33,12 +34,59 @@ pub fn mfa_handle(handle: ProgramHandle) -> ProgramHandle {
         .expect("TransformationSkolemize Error")
 }
 
-#[derive(Clone)]
-pub enum AcyclicityVariant<'a, 'b> {
-    SkolemMFA,
-    SkolemDMFA,
-    SkolemRestricted(&'b HashSet<&'a Tag>, &'b Vec<&'a Rule>),
+#[derive(Default)]
+pub struct MFAStrategy;
+
+impl CyclicityStrategy for MFAStrategy {
+    fn is_blocked(&self, _rule: &Rule, _ass: &Assignment) -> bool {
+        false
+    }
 }
+
+pub struct RMFAStrategy<'a> {
+    pub existential_rules: &'a Vec<&'a Rule>,
+    pub datalog_rules: &'a Vec<&'a Rule>,
+    pub datalog_pr: &'a HashSet<&'a Tag>,
+    pub var_per_atom_idx_pos_idx_per_rule: &'a VarPerAtomIdxPosIdxPerRule<'a>,
+}
+
+impl<'a> RMFAStrategy<'a> {
+    fn new(
+        existential_rules: &'a Vec<&'a Rule>,
+        datalog_rules: &'a Vec<&'a Rule>,
+        datalog_pr: &'a HashSet<&'a Tag>,
+        var_per_atom_idx_pos_idx_per_rule: &'a VarPerAtomIdxPosIdxPerRule<'a>,
+    ) -> Self {
+        Self {
+            existential_rules,
+            datalog_rules,
+            datalog_pr,
+            var_per_atom_idx_pos_idx_per_rule,
+        }
+    }
+}
+
+impl<'a> CyclicityStrategy for RMFAStrategy<'a> {
+    fn is_blocked(&self, rule: &Rule, ass: &Assignment) -> bool {
+        // TODO: INSERT FUNC
+        assign_is_blocked_rmfa(
+            rule,
+            ass,
+            self.existential_rules,
+            self.datalog_rules,
+            self.datalog_pr,
+            self.var_per_atom_idx_pos_idx_per_rule,
+        )
+    }
+}
+
+// #[derive(Clone)]
+// pub enum AcyclicityVariant {
+//     SkolemMFA,
+//     SkolemDMFA,
+//     // SkolemRestricted(&'b HashSet<&'a Tag>, &'b Vec<&'a Rule>),
+//     SkolemRestricted,
+// }
 
 impl RuleSet {
     fn datalog_rules(&self) -> Vec<&Rule> {
@@ -71,7 +119,7 @@ fn convert_set_to_map(facts: Vec<&Fact>) -> HashMap<&Tag, HashSet<Fact>> {
     )
 }
 
-pub async fn check_acyclicity(handle: ProgramHandle, variant: AcyclicityVariant<'_, '_>) -> bool {
+pub async fn check_acyclicity(handle: ProgramHandle, strat_sel: StrategySelector) -> bool {
     let rules: RuleSet = RuleSet(handle.rules().cloned().collect());
     let rules_ref: Vec<&Rule> = rules.0.iter().collect();
 
@@ -86,24 +134,30 @@ pub async fn check_acyclicity(handle: ProgramHandle, variant: AcyclicityVariant<
 
     let var_per_atom_idx_pos_idx_per_rule = build_var_index_for_rules(&rules_ref);
 
-    let mut datalog_reasoner: DatalogReasoner = DatalogReasoner::new(
+    let no_bl_strat = NoBlockStrategy;
+
+    let mut datalog_reasoner: CoreReasoner = CoreReasoner::new(
         &datalog_pr,
         &datalog_rules,
         &var_per_atom_idx_pos_idx_per_rule,
+        &no_bl_strat,
     );
 
-    let variant_with_data = match variant {
-        AcyclicityVariant::SkolemRestricted(_, _) => {
-            AcyclicityVariant::SkolemRestricted(&datalog_pr, &datalog_rules)
-        }
-        _ => variant,
+    let strat: &dyn CyclicityStrategy = match strat_sel {
+        StrategySelector::MFA => &MFAStrategy,
+        StrategySelector::RMFA => &RMFAStrategy::new(
+            &existential_rules,
+            &datalog_rules,
+            &datalog_pr,
+            &var_per_atom_idx_pos_idx_per_rule,
+        ),
     };
 
-    let mut existential_reasoner: ExistentialReasoner = ExistentialReasoner::new(
+    let mut existential_reasoner: CoreReasoner = CoreReasoner::new(
         &existential_pr,
         &existential_rules,
         &var_per_atom_idx_pos_idx_per_rule,
-        &variant_with_data,
+        strat,
     );
 
     let mut new_datalog_facts_by_pred: HashMap<&Tag, HashSet<Fact>> = new_facts_by_pred
@@ -274,10 +328,10 @@ fn special_reasoning_set<'a>(
 
 fn assign_is_blocked_rmfa<'a>(
     rule: &Rule,
-    ex_rules: &Vec<&Rule>,
     ass: &Assignment,
-    datalog_preds: &HashSet<&'a Tag>,
+    ex_rules: &Vec<&Rule>,
     datalog_rules: &Vec<&'a Rule>,
+    datalog_preds: &HashSet<&'a Tag>,
     var_per_atom_idx_pos_idx_per_rule: &VarPerAtomIdxPosIdxPerRule,
 ) -> bool {
     let renamed_ass = rename_consts(ass);
@@ -286,10 +340,12 @@ fn assign_is_blocked_rmfa<'a>(
     let mut special_reasoning_set =
         special_reasoning_set(ex_rules, body_for_renamed_consts, skolem_terms_in_body);
 
-    let mut datalog_reasoner = DatalogReasoner::new(
+    let no_bl_strat = NoBlockStrategy::default();
+    let mut datalog_reasoner = CoreReasoner::new(
         datalog_preds,
         datalog_rules,
         var_per_atom_idx_pos_idx_per_rule,
+        &no_bl_strat,
     );
     let mut facts_after_reasoning = special_reasoning_set.clone();
     if !datalog_rules.is_empty() {
@@ -297,7 +353,7 @@ fn assign_is_blocked_rmfa<'a>(
         datalog_reasoner.run_saturating(special_reasoning_set);
         facts_after_reasoning = union(
             facts_after_reasoning,
-            datalog_reasoner.core.facts_by_pred.clone(),
+            datalog_reasoner.facts_by_pred.clone(),
         );
     }
 
@@ -367,28 +423,28 @@ fn reverse_sk(rule: &Rule) -> Rule {
     Rule::new(head, body)
 }
 
-fn assign_is_blocked(
-    rule: &Rule,
-    ex_rules: &Vec<&Rule>,
-    ass: &Assignment,
-    var_per_atom_idx_pos_idx_per_rule: &VarPerAtomIdxPosIdxPerRule,
-    variant: &AcyclicityVariant,
-) -> bool {
-    match variant {
-        AcyclicityVariant::SkolemMFA => false,
-        AcyclicityVariant::SkolemRestricted(datalog_preds, datalog_rules) => {
-            assign_is_blocked_rmfa(
-                rule,
-                ex_rules,
-                ass,
-                datalog_preds,
-                datalog_rules,
-                var_per_atom_idx_pos_idx_per_rule,
-            )
-        }
-        AcyclicityVariant::SkolemDMFA => panic!("not implemented yet"),
-    }
-}
+// fn assign_is_blocked(
+//     rule: &Rule,
+//     ass: &Assignment,
+//     ex_rules: &Vec<&Rule>,
+//     datalog_rules: &Vec<&Rule>,
+//     datalog_preds: &HashSet<&Tag>,
+//     var_per_atom_idx_pos_idx_per_rule: &VarPerAtomIdxPosIdxPerRule,
+//     // variant: &AcyclicityVariant,
+// ) -> bool {
+//     match variant {
+//         AcyclicityVariant::SkolemMFA => false,
+//         AcyclicityVariant::SkolemRestricted => assign_is_blocked_rmfa(
+//             rule,
+//             ass,
+//             ex_rules,
+//             datalog_rules,
+//             datalog_preds,
+//             var_per_atom_idx_pos_idx_per_rule,
+//         ),
+//         AcyclicityVariant::SkolemDMFA => panic!("not implemented yet"),
+//     }
+// }
 
 fn assignment_for_fact<'a>(
     fact: &Fact,
@@ -482,64 +538,6 @@ fn assignments_for_facts<'a>(
     ret_val
 }
 
-struct DatalogReasoner<'a> {
-    core: CoreReasoner<'a>,
-}
-
-impl<'a> DatalogReasoner<'a> {
-    fn new(
-        predicates: &HashSet<&'a Tag>,
-        rules: &'a Vec<&'a Rule>,
-        var_per_atom_idx_pos_idx_per_rule: &'a VarPerAtomIdxPosIdxPerRule<'a>,
-    ) -> Self {
-        Self {
-            core: CoreReasoner::new(predicates, rules, var_per_atom_idx_pos_idx_per_rule),
-        }
-    }
-
-    fn run_saturating(
-        &mut self,
-        new_facts_by_pred: HashMap<&'a Tag, HashSet<Fact>>,
-    ) -> HashMap<&'a Tag, HashSet<Fact>> {
-        self.core.run_saturating(new_facts_by_pred, &|_, _| false)
-    }
-}
-
-struct ExistentialReasoner<'a, 'b> {
-    core: CoreReasoner<'a>,
-    variant: &'b AcyclicityVariant<'a, 'b>,
-}
-
-impl<'a, 'b> ExistentialReasoner<'a, 'b> {
-    fn new(
-        predicates: &HashSet<&'a Tag>,
-        rules: &'a Vec<&'a Rule>,
-        var_per_atom_idx_pos_idx_per_rule: &'a VarPerAtomIdxPosIdxPerRule<'a>,
-        variant: &'b AcyclicityVariant<'a, 'b>,
-    ) -> Self {
-        Self {
-            core: CoreReasoner::new(predicates, rules, var_per_atom_idx_pos_idx_per_rule),
-            variant,
-        }
-    }
-
-    fn run_every_rule_once(
-        &mut self,
-        new_facts_by_pred: &HashMap<&'a Tag, HashSet<Fact>>,
-    ) -> HashMap<&'a Tag, HashSet<Fact>> {
-        self.core
-            .run_every_rule_once(new_facts_by_pred, &|rule, ass| {
-                assign_is_blocked(
-                    rule,
-                    self.core.rules,
-                    ass,
-                    self.core.var_per_atom_idx_pos_idx_per_rule,
-                    self.variant,
-                )
-            })
-    }
-}
-
 fn build_var_index_for_rule<'a>(rule: &'a Rule) -> VarPerAtomIdxPosIdx<'a> {
     let mut ret_val: VarPerAtomIdxPosIdx<'a> = VarPerAtomIdxPosIdx::new();
     rule.body_positive_refs()
@@ -587,6 +585,8 @@ struct CoreReasoner<'a> {
     facts_by_pred: HashMap<&'a Tag, HashSet<Fact>>,
     rules: &'a Vec<&'a Rule>,
     var_per_atom_idx_pos_idx_per_rule: &'a VarPerAtomIdxPosIdxPerRule<'a>,
+    strat: &'a dyn CyclicityStrategy,
+    // is_blocked: &'a dyn Fn(&Rule, &Assignment) -> bool,
 }
 
 impl<'a> CoreReasoner<'a> {
@@ -594,6 +594,7 @@ impl<'a> CoreReasoner<'a> {
         predicates: &HashSet<&'a Tag>,
         rules: &'a Vec<&'a Rule>,
         var_per_atom_idx_pos_idx_per_rule: &'a VarPerAtomIdxPosIdxPerRule<'a>,
+        strat: &'a dyn CyclicityStrategy, // is_blocked: &'a dyn Fn(&Rule, &Assignment) -> bool,
     ) -> Self {
         let facts_by_pred: HashMap<&Tag, HashSet<Fact>> = predicates
             .iter()
@@ -603,19 +604,19 @@ impl<'a> CoreReasoner<'a> {
             facts_by_pred,
             rules,
             var_per_atom_idx_pos_idx_per_rule,
+            strat,
         }
     }
 
     fn run_saturating(
         &mut self,
         mut new_facts_by_pred: HashMap<&'a Tag, HashSet<Fact>>,
-        is_blocked: &impl Fn(&Rule, &Assignment) -> bool,
     ) -> HashMap<&'a Tag, HashSet<Fact>> {
         let mut ret_val = HashMap::<&Tag, HashSet<Fact>>::default();
 
         loop {
             let con_facts_by_pred: HashMap<&Tag, HashSet<Fact>> =
-                self.run_every_rule_once(&new_facts_by_pred, is_blocked);
+                self.run_every_rule_once(&new_facts_by_pred);
             if con_facts_by_pred.is_empty() {
                 break;
             }
@@ -634,7 +635,6 @@ impl<'a> CoreReasoner<'a> {
     fn run_every_rule_once(
         &mut self,
         new_facts_by_pred: &HashMap<&'a Tag, HashSet<Fact>>,
-        is_blocked: &impl Fn(&Rule, &Assignment) -> bool,
     ) -> HashMap<&'a Tag, HashSet<Fact>> {
         self.update_facts(new_facts_by_pred);
 
@@ -642,7 +642,7 @@ impl<'a> CoreReasoner<'a> {
             HashMap::<&Tag, HashSet<Fact>>::new(),
             |mut ret_val, rule| {
                 let con_facts_by_pred: HashMap<&Tag, HashSet<Fact>> =
-                    self.run_rule(rule, new_facts_by_pred, is_blocked);
+                    self.run_rule(rule, new_facts_by_pred);
                 con_facts_by_pred.into_iter().for_each(|(pred, con_facts)| {
                     ret_val
                         .entry(pred)
@@ -658,7 +658,6 @@ impl<'a> CoreReasoner<'a> {
         &self,
         rule: &'a Rule,
         new_facts_by_pred: &HashMap<&Tag, HashSet<Fact>>,
-        is_blocked: &impl Fn(&Rule, &Assignment) -> bool,
     ) -> HashMap<&'a Tag, HashSet<Fact>> {
         let preds_of_body: Vec<&Tag> = rule
             .body_positive_refs()
@@ -673,7 +672,7 @@ impl<'a> CoreReasoner<'a> {
             self.var_per_atom_idx_pos_idx_per_rule.get(rule).unwrap(),
         );
 
-        assignments.retain(|ass| !is_blocked(rule, ass));
+        assignments.retain(|ass| !self.strat.is_blocked(rule, ass));
 
         assignments
             .iter_mut()
@@ -697,6 +696,3 @@ impl<'a> CoreReasoner<'a> {
         });
     }
 }
-
-type VarPerAtomIdxPosIdx<'a> = HashMap<(usize, usize, Option<usize>), &'a Variable>;
-type VarPerAtomIdxPosIdxPerRule<'a> = HashMap<&'a Rule, VarPerAtomIdxPosIdx<'a>>;
