@@ -2,7 +2,7 @@
 use crate::static_checks::positions::{Positions, PositionsByRuleAndVariables};
 use crate::static_checks::rule_set::{RuleAndVariable, RuleAndVariablePair};
 use nemo::rule_model::components::{
-    rule::Rule, term::primitive::variable::Variable, IterablePrimitives,
+    IterablePrimitives, rule::Rule, term::primitive::variable::Variable,
 };
 
 use crate::static_checks::rule_set::*;
@@ -23,6 +23,8 @@ pub trait RuleProperties {
     fn is_frontier_one(&self) -> bool;
     /// Determines if the rule is datalog.
     fn is_datalog(&self) -> bool;
+    /// Determines if the rule is deterministic.
+    fn is_deterministic(&self) -> bool;
     /// Determines if the rule is monadic.
     fn is_monadic(&self) -> bool;
     /// Determines if the rule is frontier guarded.
@@ -84,6 +86,10 @@ impl RuleProperties for Rule {
 
     fn is_datalog(&self) -> bool {
         self.existential_variables().is_empty()
+    }
+
+    fn is_deterministic(&self) -> bool {
+        1 == self.head().len()
     }
 
     fn is_monadic(&self) -> bool {

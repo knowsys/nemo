@@ -18,6 +18,9 @@ use nemo::rule_model::{
 };
 
 use crate::static_checks::collection_traits::InsertAll;
+use crate::static_checks::cyclicity_checks::{
+    Assignment, body_for_assignment, head_for_assignment, union,
+};
 use crate::static_checks::rule_set::{RuleRefs, RuleSet};
 
 use std::collections::{HashMap, HashSet};
@@ -31,7 +34,7 @@ pub fn mfa_handle(handle: ProgramHandle) -> ProgramHandle {
 }
 
 #[derive(Clone)]
-pub enum ChaseVariant<'a, 'b> {
+pub enum AcyclicityVariant<'a, 'b> {
     SkolemMFA,
     SkolemDMFA,
     SkolemRestricted(&'b HashSet<&'a Tag>, &'b Vec<&'a Rule>),
@@ -68,22 +71,7 @@ fn convert_set_to_map(facts: Vec<&Fact>) -> HashMap<&Tag, HashSet<Fact>> {
     )
 }
 
-fn union<'a>(
-    facts_by_pred: HashMap<&'a Tag, HashSet<Fact>>,
-    other_facts_by_pred: HashMap<&'a Tag, HashSet<Fact>>,
-) -> HashMap<&'a Tag, HashSet<Fact>> {
-    other_facts_by_pred
-        .into_iter()
-        .fold(facts_by_pred, |mut ret_val, (pred, facts)| {
-            ret_val
-                .entry(pred)
-                .and_modify(|cur_facts| cur_facts.insert_all_take(facts.clone()))
-                .or_insert(facts);
-            ret_val
-        })
-}
-
-pub async fn check_acyclicity(handle: ProgramHandle, variant: ChaseVariant<'_, '_>) -> bool {
+pub async fn check_acyclicity(handle: ProgramHandle, variant: AcyclicityVariant<'_, '_>) -> bool {
     let rules: RuleSet = RuleSet(handle.rules().cloned().collect());
     let rules_ref: Vec<&Rule> = rules.0.iter().collect();
 
@@ -105,8 +93,8 @@ pub async fn check_acyclicity(handle: ProgramHandle, variant: ChaseVariant<'_, '
     );
 
     let variant_with_data = match variant {
-        ChaseVariant::SkolemRestricted(_, _) => {
-            ChaseVariant::SkolemRestricted(&datalog_pr, &datalog_rules)
+        AcyclicityVariant::SkolemRestricted(_, _) => {
+            AcyclicityVariant::SkolemRestricted(&datalog_pr, &datalog_rules)
         }
         _ => variant,
     };
@@ -157,32 +145,6 @@ pub async fn check_acyclicity(handle: ProgramHandle, variant: ChaseVariant<'_, '
 
 fn filter_new_facts(facts_by_pred: &mut HashMap<&Tag, HashSet<Fact>>, preds: &HashSet<&Tag>) {
     facts_by_pred.retain(|pred, _| preds.contains(pred))
-}
-
-fn assign_rec(sk_func: &FunctionTerm, ass: &Assignment) -> Term {
-    let subterms: Vec<Term> = sk_func
-        .terms()
-        .map(|term| match term {
-            Term::Primitive(Primitive::Variable(var)) => ass.get(var).unwrap().clone(),
-            Term::FunctionTerm(sk_func) => assign_rec(sk_func, ass),
-            _ => panic!(),
-        })
-        .collect();
-    let pred: &Tag = sk_func.tag();
-    Term::FunctionTerm(FunctionTerm::from((pred, subterms)))
-}
-
-fn assign(atom: &Atom, ass: &Assignment) -> Fact {
-    let subterms: Vec<Term> = atom
-        .terms()
-        .map(|term| match term {
-            Term::Primitive(Primitive::Variable(var)) => ass.get(var).unwrap().clone(),
-            Term::FunctionTerm(sk_func) => assign_rec(sk_func, ass),
-            _ => panic!(),
-        })
-        .collect();
-    let pred: &Tag = atom.predicate_ref();
-    Fact::from((pred, subterms))
 }
 
 fn rename_consts_in_term(term: Term, count: &mut u32) -> Term {
@@ -410,50 +372,22 @@ fn assign_is_blocked(
     ex_rules: &Vec<&Rule>,
     ass: &Assignment,
     var_per_atom_idx_pos_idx_per_rule: &VarPerAtomIdxPosIdxPerRule,
-    variant: &ChaseVariant,
+    variant: &AcyclicityVariant,
 ) -> bool {
     match variant {
-        ChaseVariant::SkolemMFA => false,
-        ChaseVariant::SkolemRestricted(datalog_preds, datalog_rules) => assign_is_blocked_rmfa(
-            rule,
-            ex_rules,
-            ass,
-            datalog_preds,
-            datalog_rules,
-            var_per_atom_idx_pos_idx_per_rule,
-        ),
-        ChaseVariant::SkolemDMFA => panic!("not implemented yet"),
+        AcyclicityVariant::SkolemMFA => false,
+        AcyclicityVariant::SkolemRestricted(datalog_preds, datalog_rules) => {
+            assign_is_blocked_rmfa(
+                rule,
+                ex_rules,
+                ass,
+                datalog_preds,
+                datalog_rules,
+                var_per_atom_idx_pos_idx_per_rule,
+            )
+        }
+        AcyclicityVariant::SkolemDMFA => panic!("not implemented yet"),
     }
-}
-
-fn facts_for_assignment<'a>(
-    atoms: Vec<&'a Atom>,
-    ass: &Assignment<'_>,
-) -> HashMap<&'a Tag, HashSet<Fact>> {
-    atoms.iter().fold(
-        HashMap::<&Tag, HashSet<Fact>>::new(),
-        |mut ret_val, atom| {
-            let fact: Fact = assign(atom, ass);
-            let pred: &'a Tag = atom.predicate_ref();
-            ret_val
-                .entry(pred)
-                .and_modify(|facts| {
-                    facts.insert(fact.clone());
-                })
-                .or_insert(HashSet::from([fact]));
-            ret_val
-        },
-    )
-}
-
-fn body_for_assignment<'a>(rule: &'a Rule, ass: &Assignment) -> HashMap<&'a Tag, HashSet<Fact>> {
-    let body: Vec<&Atom> = rule.body_positive_refs();
-    facts_for_assignment(body, ass)
-}
-
-fn head_for_assignment<'a>(rule: &'a Rule, ass: &Assignment) -> HashMap<&'a Tag, HashSet<Fact>> {
-    let head: Vec<&Atom> = rule.head_refs();
-    facts_for_assignment(head, ass)
 }
 
 fn assignment_for_fact<'a>(
@@ -573,7 +507,7 @@ impl<'a> DatalogReasoner<'a> {
 
 struct ExistentialReasoner<'a, 'b> {
     core: CoreReasoner<'a>,
-    variant: &'b ChaseVariant<'a, 'b>,
+    variant: &'b AcyclicityVariant<'a, 'b>,
 }
 
 impl<'a, 'b> ExistentialReasoner<'a, 'b> {
@@ -581,7 +515,7 @@ impl<'a, 'b> ExistentialReasoner<'a, 'b> {
         predicates: &HashSet<&'a Tag>,
         rules: &'a Vec<&'a Rule>,
         var_per_atom_idx_pos_idx_per_rule: &'a VarPerAtomIdxPosIdxPerRule<'a>,
-        variant: &'b ChaseVariant<'a, 'b>,
+        variant: &'b AcyclicityVariant<'a, 'b>,
     ) -> Self {
         Self {
             core: CoreReasoner::new(predicates, rules, var_per_atom_idx_pos_idx_per_rule),
@@ -764,6 +698,5 @@ impl<'a> CoreReasoner<'a> {
     }
 }
 
-type Assignment<'a> = HashMap<&'a Variable, Term>;
 type VarPerAtomIdxPosIdx<'a> = HashMap<(usize, usize, Option<usize>), &'a Variable>;
 type VarPerAtomIdxPosIdxPerRule<'a> = HashMap<&'a Rule, VarPerAtomIdxPosIdx<'a>>;

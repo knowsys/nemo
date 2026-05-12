@@ -1,6 +1,11 @@
 //! Functionality that provides the static checks for a RuleSet.
-use crate::static_checks::acyclicity_checks::{ChaseVariant, check_acyclicity, mfa_handle};
 use crate::static_checks::acyclicity_graphs::{JointAcyclicityGraph, WeakAcyclicityGraph};
+use crate::static_checks::cyclicity_checks::acyclicity::{
+    AcyclicityVariant, check_acyclicity, mfa_handle,
+};
+use crate::static_checks::cyclicity_checks::cyclicity::{
+    CyclicityVariant, check_cyclicity, mfc_handle,
+};
 use crate::static_checks::msa::msa_execution_engine_from_handle;
 use crate::static_checks::positions::PositionsByRuleAndVariables;
 use crate::static_checks::rule_set::RuleSet;
@@ -58,7 +63,7 @@ pub trait RulesProperties {
     /// Determines if the ruleset is rmfa.
     fn is_rmfa(&self) -> impl std::future::Future<Output = bool>;
     /// Determines if the ruleset is mfc.
-    fn is_mfc(&self) -> bool;
+    fn is_mfc(&self) -> impl std::future::Future<Output = bool>;
     /// Determines if the ruleset is dmfc.
     fn is_dmfc(&self) -> bool;
     /// Determines if the ruleset is drpc.
@@ -201,7 +206,7 @@ impl RulesProperties for RuleSet {
         unreachable!();
     }
 
-    fn is_mfc(&self) -> bool {
+    async fn is_mfc(&self) -> bool {
         unreachable!();
     }
 
@@ -297,7 +302,7 @@ impl RulesProperties for ProgramHandle {
 
     async fn is_mfa(&self) -> bool {
         let handle = mfa_handle(self.clone());
-        check_acyclicity(handle, ChaseVariant::SkolemMFA).await
+        check_acyclicity(handle, AcyclicityVariant::SkolemMFA).await
     }
 
     async fn is_msa(&self) -> bool {
@@ -324,13 +329,14 @@ impl RulesProperties for ProgramHandle {
         let handle = mfa_handle(self.clone());
         check_acyclicity(
             handle,
-            ChaseVariant::SkolemRestricted(&HashSet::default(), &Vec::default()),
+            AcyclicityVariant::SkolemRestricted(&HashSet::default(), &Vec::default()),
         )
         .await
     }
 
-    fn is_mfc(&self) -> bool {
-        unreachable!();
+    async fn is_mfc(&self) -> bool {
+        let handle = mfc_handle(self.clone());
+        check_cyclicity(handle, CyclicityVariant::SkolemMFC).await
     }
 
     fn is_dmfc(&self) -> bool {
