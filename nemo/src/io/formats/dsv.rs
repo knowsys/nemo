@@ -5,6 +5,7 @@ pub mod value_format;
 pub(crate) mod writer;
 
 use std::{
+    collections::HashMap,
     io::{BufReader, Read, Write},
     sync::Arc,
 };
@@ -14,6 +15,7 @@ use nemo_physical::{
     datavalues::{AnyDataValue, DataValue},
     tabular::filters::FilterTransformPattern,
 };
+use oxiri::{Iri, IriRef};
 use reader::DsvReader;
 use strum_macros::EnumIter;
 use value_format::DsvValueFormats;
@@ -178,12 +180,17 @@ impl FormatParameter<DsvTag> for DsvParameter {
         }
     }
 
-    fn is_value_valid(&self, value: AnyDataValue) -> Result<(), ValidationError> {
+    fn is_value_valid(
+        &self,
+        value: AnyDataValue,
+        base: Option<Iri<String>>,
+        prefixes: HashMap<String, IriRef<String>>,
+    ) -> Result<(), ValidationError> {
         value_type_matches(self, &value, self.supported_types())?;
 
         match self {
-            DsvParameter::BaseParamType(base) => {
-                FormatParameter::<DsvTag>::is_value_valid(base, value)
+            DsvParameter::BaseParamType(base_param) => {
+                FormatParameter::<DsvTag>::is_value_valid(base_param, value, base, prefixes)
             }
             DsvParameter::Limit => value
                 .to_u64()
@@ -238,6 +245,8 @@ impl FormatBuilder for DsvBuilder {
         tag: Self::Tag,
         parameters: &Parameters<DsvBuilder>,
         _direction: Direction,
+        _base: Option<Iri<String>>,
+        _prefixes: HashMap<String, IriRef<String>>,
     ) -> Result<Self, ValidationError> {
         let value_formats = parameters.get_optional(DsvParameter::Format).map(|value| {
             DsvValueFormats::try_from(value).expect("value formats have already been validated")

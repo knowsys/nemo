@@ -2,11 +2,12 @@
 
 pub(crate) mod reader;
 
-use std::{io::Read, sync::Arc};
+use std::{collections::HashMap, io::Read, sync::Arc};
 
 use nemo_physical::{
     datasources::table_providers::TableProvider, tabular::filters::FilterTransformPattern,
 };
+use oxiri::{Iri, IriRef};
 use reader::JsonReader;
 
 use crate::{
@@ -71,6 +72,8 @@ impl FormatBuilder for JsonHandler {
         _tag: Self::Tag,
         _parameters: &Parameters<Self>,
         direction: Direction,
+        _base: Option<Iri<String>>,
+        _prefixes: HashMap<String, IriRef<String>>,
     ) -> Result<Self, ValidationError> {
         if matches!(direction, Direction::Export) {
             return Err(ValidationError::UnsupportedJsonExport);
