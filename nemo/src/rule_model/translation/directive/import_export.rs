@@ -1,5 +1,9 @@
 //! This module contains a function for handling import/export statements.
 
+use std::str::FromStr;
+
+use oxiri::{Iri, IriRef};
+
 use crate::{
     parser::{
         ast::{self, ProgramAST, tag::structure::StructureTag},
@@ -119,8 +123,19 @@ impl TranslationComponent for ImportDirective {
 
         let bindings = import_export_bindings(translation, import.guards())?;
 
+        let base = translation
+            .base
+            .clone()
+            .map(|x| Iri::from_str(&x.0).unwrap());
+
+        let prefixes = translation
+            .prefix_mapping
+            .iter()
+            .map(|(key, value)| (key.clone(), IriRef::from_str(&value.0).unwrap()))
+            .collect();
+
         Some(Origin::ast(
-            ImportDirective::new(predicate, spec, bindings),
+            ImportDirective::new(predicate, spec, bindings, base, prefixes),
             import,
         ))
     }

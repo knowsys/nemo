@@ -6,7 +6,7 @@ pub(crate) mod reader;
 
 use reader::SparqlReader;
 use spargebra::{Query, SparqlParser};
-use std::sync::Arc;
+use std::{collections::HashMap, str::FromStr, sync::Arc};
 
 use nemo_physical::{
     datasources::table_providers::TableProvider,
@@ -14,7 +14,7 @@ use nemo_physical::{
     resource::{ResourceBuilder, ResourceValidationError},
     tabular::filters::FilterTransformPattern,
 };
-use oxiri::Iri;
+use oxiri::{Iri, IriRef};
 
 use crate::{
     io::format_builder::{
@@ -67,12 +67,17 @@ impl FormatParameter<SparqlTag> for SparqlParameter {
         matches!(tag, SparqlTag::Sparql) && matches!(self, Self::Endpoint)
     }
 
-    fn is_value_valid(&self, value: AnyDataValue) -> Result<(), ValidationError> {
+    fn is_value_valid(
+        &self,
+        value: AnyDataValue,
+        base: Option<Iri<String>>,
+        prefixes: HashMap<String, IriRef<String>>,
+    ) -> Result<(), ValidationError> {
         value_type_matches(self, &value, self.supported_types())?;
 
         match self {
-            SparqlParameter::BaseParamType(base) => {
-                FormatParameter::<SparqlTag>::is_value_valid(base, value)
+            SparqlParameter::BaseParamType(base_param) => {
+                FormatParameter::<SparqlTag>::is_value_valid(base_param, value, base, prefixes)
             }
             SparqlParameter::Base => Ok(()),
             SparqlParameter::Format => DsvValueFormats::try_from(value).and(Ok(())).map_err(|_| {
@@ -93,13 +98,36 @@ impl FormatParameter<SparqlTag> for SparqlParameter {
             }
             SparqlParameter::Query => {
                 let query = value.to_plain_string_unchecked();
-                SparqlParser::new() // TODO(mam): inject prefixes and base here, cf. #647
-                    .parse_query(query.as_str())
-                    .and(Ok(()))
-                    .map_err(|e| ValidationError::InvalidSparqlQuery {
+
+                let mut parser = SparqlParser::new();
+
+                let resolved_prefixes: Vec<(String, Iri<String>)> = prefixes
+                    .iter()
+                    .map(|(key, value)| {
+                        (
+                            key.clone(),
+                            Iri::from_str(&value.to_string())
+                                .unwrap_or_else(|_| base.clone().unwrap().resolve(value).unwrap()),
+                        )
+                    })
+                    .collect();
+
+                if let Some(base) = base {
+                    parser = parser.with_base_iri(base.to_string()).unwrap();
+                }
+
+                for (prefix_name, prefix_iri) in resolved_prefixes {
+                    parser = parser
+                        .with_prefix(prefix_name, prefix_iri.to_string())
+                        .unwrap();
+                }
+
+                parser.parse_query(query.as_str()).and(Ok(())).map_err(|e| {
+                    ValidationError::InvalidSparqlQuery {
                         query,
                         oxi_error: e.to_string(),
-                    })
+                    }
+                })
             }
         }
     }
@@ -144,6 +172,8 @@ impl FormatBuilder for SparqlBuilder {
         _tag: Self::Tag,
         parameters: &Parameters<SparqlBuilder>,
         _direction: Direction,
+        base: Option<Iri<String>>,
+        prefixes: HashMap<String, IriRef<String>>,
     ) -> Result<Self, ValidationError> {
         let value_formats = parameters
             .get_optional(SparqlParameter::Format)
@@ -164,7 +194,31 @@ impl FormatBuilder for SparqlBuilder {
             .map(|value| value.to_plain_string_unchecked())
             .unwrap_or(QUERY_DEFAULT.to_string());
 
-        let query = SparqlParser::new() // TODO(mam): inject prefixes and base here, cf. #647
+        let mut parser = SparqlParser::new();
+
+        // SparqlParser only accepts absolute (resolved) iri's
+        let resolved_prefixes: Vec<(String, Iri<String>)> = prefixes
+            .iter()
+            .map(|(key, value)| {
+                (
+                    key.clone(),
+                    Iri::from_str(&value.to_string())
+                        .unwrap_or_else(|_| base.clone().unwrap().resolve(value).unwrap()),
+                )
+            })
+            .collect();
+
+        if let Some(base) = base {
+            parser = parser.with_base_iri(base.to_string()).unwrap();
+        }
+
+        for (prefix_name, prefix_iri) in resolved_prefixes {
+            parser = parser
+                .with_prefix(prefix_name, prefix_iri.to_string())
+                .unwrap();
+        }
+
+        let query = parser
             .parse_query(query.as_str())
             .expect("query has already been validated");
 
@@ -268,12 +322,15 @@ impl ImportHandler for SparqlHandler {
 
 #[cfg(test)]
 mod test {
+    use std::{collections::HashMap, str::FromStr};
+
     use crate::parser::{
         ParserState,
         ast::{ProgramAST, directive::import::Import},
         input::ParserInput,
     };
     use nom::combinator::all_consuming;
+    use oxiri::{Iri, IriRef};
 
     use crate::io::format_builder::FormatParameter;
     use nemo_physical::datavalues::AnyDataValue;
@@ -282,10 +339,20 @@ mod test {
 
     #[test]
     fn parse_query() {
+        let base = Some(Iri::from_str("http://www.wikidata.org/").unwrap());
+        let prefixes: HashMap<String, IriRef<String>> = HashMap::from([
+            // PREFIX wikibase: <http://wikiba.se/ontology#>
+            (
+                "wikibase".to_string(),
+                IriRef::from_str("http://wikiba.se/ontology#").unwrap(),
+            ),
+            // PREFIX wdt: <http://www.wikidata.org/prop/direct/>
+            ("wdt".to_string(), IriRef::from_str("prop/direct/").unwrap()),
+        ]);
+
         let valid_query = AnyDataValue::new_plain_string(String::from("
-            PREFIX wikibase: <http://wikiba.se/ontology#>
+        PREFIX wikibase: <http://wikiba.se/ontology#>
             PREFIX bd: <http://www.bigdata.com/rdf#>
-            PREFIX wdt: <http://www.wikidata.org/prop/direct/>
             PREFIX wd: <http://www.wikidata.org/entity/>
             PREFIX ps: <http://www.wikidata.org/prop/statement/>
             PREFIX p: <http://www.wikidata.org/prop/>
@@ -300,8 +367,14 @@ mod test {
         );
 
         let query_param = SparqlParameter::Query;
-        let result = query_param.is_value_valid(valid_query);
+        let result = query_param.is_value_valid(valid_query, base, prefixes);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn parse_invalid_query() {
+        let base = None;
+        let prefixes = HashMap::new();
 
         // Invalid because no prefixes are specified
         let invalid_query = AnyDataValue::new_plain_string(String::from("
@@ -313,7 +386,8 @@ mod test {
             }
             LIMIT 10")
         );
-        let result = query_param.is_value_valid(invalid_query);
+        let query_param = SparqlParameter::Query;
+        let result = query_param.is_value_valid(invalid_query, base, prefixes);
         assert!(result.is_err());
     }
 

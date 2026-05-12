@@ -5,6 +5,7 @@ use std::collections::{HashMap, HashSet};
 
 use attribute::ImportExportAttribute;
 use nemo_physical::datavalues::AnyDataValue;
+use oxiri::{Iri, IriRef};
 use specification::ImportExportSpec;
 
 use crate::{
@@ -78,6 +79,10 @@ pub(crate) struct ImportExportDirective {
     bindings: Vec<Operation>,
     /// Sub-rules for filtered import/export
     filter_rules: Vec<Rule>,
+    ///
+    base: Option<Iri<String>>,
+    ///
+    prefixes: HashMap<String, IriRef<String>>,
 }
 
 impl std::fmt::Display for ImportExportDirective {
@@ -167,7 +172,13 @@ pub struct ImportDirective(pub(crate) ImportExportDirective);
 
 impl ImportDirective {
     /// Create a new [ImportDirective].
-    pub fn new(predicate: Tag, spec: ImportExportSpec, bindings: Vec<Operation>) -> Self {
+    pub fn new(
+        predicate: Tag,
+        spec: ImportExportSpec,
+        bindings: Vec<Operation>,
+        base: Option<Iri<String>>,
+        prefixes: HashMap<String, IriRef<String>>,
+    ) -> Self {
         Self(ImportExportDirective {
             origin: Origin::default(),
             id: ProgramComponentId::default(),
@@ -175,6 +186,8 @@ impl ImportDirective {
             spec,
             bindings,
             filter_rules: Vec::new(),
+            base,
+            prefixes,
         })
     }
 
@@ -374,6 +387,8 @@ impl ImportDirective {
             self.filter_rules(),
             Direction::Import,
             report,
+            self.base().clone(),
+            self.prefixes().clone(),
         )
     }
 
@@ -387,7 +402,18 @@ impl ImportDirective {
             self.filter_rules(),
             Direction::Import,
             &mut report,
+            self.base().clone(),
+            self.prefixes().clone(),
         )
+    }
+
+    /// Return the base
+    pub fn base(&self) -> &Option<Iri<String>> {
+        &self.0.base
+    }
+    /// Return the prefixes
+    pub fn prefixes(&self) -> &HashMap<String, IriRef<String>> {
+        &self.0.prefixes
     }
 
     /// Return the predicate.
@@ -565,6 +591,8 @@ impl ExportDirective {
             spec,
             bindings,
             filter_rules: Vec::new(),
+            base: None,
+            prefixes: HashMap::new(),
         })
     }
 
@@ -596,6 +624,8 @@ impl ExportDirective {
             self.filter_rules(),
             Direction::Export,
             report,
+            self.base().clone(),
+            self.prefixes().clone(),
         )
     }
 
@@ -609,7 +639,18 @@ impl ExportDirective {
             self.filter_rules(),
             Direction::Export,
             &mut report,
+            self.base().clone(),
+            self.prefixes().clone(),
         )
+    }
+
+    /// Return the predicate.
+    pub fn base(&self) -> &Option<Iri<String>> {
+        &self.0.base
+    }
+
+    pub fn prefixes(&self) -> &HashMap<String, IriRef<String>> {
+        &self.0.prefixes
     }
 
     /// Return the predicate.

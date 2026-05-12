@@ -8,6 +8,7 @@ pub(crate) mod value_format;
 pub(crate) mod writer;
 
 use std::{
+    collections::HashMap,
     io::{Read, Write},
     sync::Arc,
 };
@@ -19,7 +20,7 @@ use nemo_physical::{
     tabular::filters::FilterTransformPattern,
 };
 
-use oxiri::Iri;
+use oxiri::{Iri, IriRef};
 use reader::RdfReader;
 use strum::VariantArray;
 use strum_macros::VariantArray;
@@ -187,12 +188,17 @@ impl FormatParameter<RdfTag> for RdfParameter {
             )
     }
 
-    fn is_value_valid(&self, value: AnyDataValue) -> Result<(), ValidationError> {
+    fn is_value_valid(
+        &self,
+        value: AnyDataValue,
+        base: Option<Iri<String>>,
+        prefixes: HashMap<String, IriRef<String>>,
+    ) -> Result<(), ValidationError> {
         value_type_matches(self, &value, self.supported_types())?;
 
         match self {
-            RdfParameter::BaseParamType(base) => {
-                FormatParameter::<RdfTag>::is_value_valid(base, value)
+            RdfParameter::BaseParamType(base_param) => {
+                FormatParameter::<RdfTag>::is_value_valid(base_param, value, base, prefixes)
             }
             RdfParameter::Limit => value
                 .to_u64()
@@ -222,6 +228,8 @@ impl FormatBuilder for RdfHandler {
         tag: Self::Tag,
         parameters: &Parameters<RdfHandler>,
         _direction: Direction,
+        _base: Option<Iri<String>>,
+        _prefixes: HashMap<String, IriRef<String>>,
     ) -> Result<Self, ValidationError> {
         let variant = match tag {
             RdfTag::Rdf => {
