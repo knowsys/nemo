@@ -100,12 +100,7 @@ impl Fact {
 
 impl<'a> Cyclic<'a> for Fact {
     fn is_cyclic(&self, function_names: &mut Vec<String>) -> bool {
-        self.terms().any(|term| {
-            // println!("term in fact: {}", term);
-            let this = term.is_cyclic(function_names);
-            // println!("{}", this);
-            this
-        })
+        self.terms().any(|term| term.is_cyclic(function_names))
     }
 }
 

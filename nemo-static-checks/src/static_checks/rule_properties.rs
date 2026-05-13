@@ -23,8 +23,8 @@ pub trait RuleProperties {
     fn is_frontier_one(&self) -> bool;
     /// Determines if the rule is datalog.
     fn is_datalog(&self) -> bool;
-    /// Determines if the rule is deterministic.
-    fn is_deterministic(&self) -> bool;
+    // /// Determines if the rule is deterministic.
+    // fn is_deterministic(&self) -> bool;
     /// Determines if the rule is monadic.
     fn is_monadic(&self) -> bool;
     /// Determines if the rule is frontier guarded.
@@ -88,9 +88,9 @@ impl RuleProperties for Rule {
         self.existential_variables().is_empty()
     }
 
-    fn is_deterministic(&self) -> bool {
-        1 == self.head().len()
-    }
+    // fn is_deterministic(&self) -> bool {
+    //     1 == self.head().len()
+    // }
 
     fn is_monadic(&self) -> bool {
         self.head()

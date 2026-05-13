@@ -2,9 +2,7 @@
 use crate::static_checks::acyclicity_graphs::{JointAcyclicityGraph, WeakAcyclicityGraph};
 use crate::static_checks::cyclicity_checks::StrategySelector;
 use crate::static_checks::cyclicity_checks::acyclicity::{check_acyclicity, mfa_handle};
-use crate::static_checks::cyclicity_checks::cyclicity::{
-    CyclicityVariant, check_cyclicity, mfc_handle,
-};
+use crate::static_checks::cyclicity_checks::cyclicity::{check_cyclicity, mfc_handle};
 use crate::static_checks::msa::msa_execution_engine_from_handle;
 use crate::static_checks::positions::PositionsByRuleAndVariables;
 use crate::static_checks::rule_set::RuleSet;
@@ -331,7 +329,7 @@ impl RulesProperties for ProgramHandle {
 
     async fn is_mfc(&self) -> bool {
         let handle = mfc_handle(self.clone());
-        check_cyclicity(handle, CyclicityVariant::SkolemMFC).await
+        check_cyclicity(handle, StrategySelector::MFC).await
     }
 
     fn is_dmfc(&self) -> bool {

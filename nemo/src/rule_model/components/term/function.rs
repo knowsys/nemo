@@ -352,10 +352,8 @@ impl<'a> Cyclic<'a> for FunctionTerm {
             return true;
         }
         function_names.push(func_name);
-        // println!("{:?}", function_names);
         let ret_val = self.terms().any(|term| term.is_cyclic(function_names));
         function_names.pop();
-        // println!("{}", ret_v);
         ret_val
     }
 }
