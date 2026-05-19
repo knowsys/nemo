@@ -58,7 +58,7 @@ pub(crate) async fn trace_selected_facts(
             facts.push(fact);
         }
 
-        let (trace, handles) = engine.trace(facts).await?;
+        let (trace, handles) = engine.trace_facts(facts).await?;
 
         match &cli.tracing.output_file {
             Some(output_file) => {
