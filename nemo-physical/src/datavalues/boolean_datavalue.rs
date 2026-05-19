@@ -49,12 +49,12 @@ impl DataValue for BooleanDataValue {
         if self.0 {
             format!(
                 "\"{TRUE}\"{RDF_DATATYPE_INDICATOR}<{}>",
-                &self.datatype_iri()
+                self.datatype_iri()
             )
         } else {
             format!(
                 "\"{FALSE}\"{RDF_DATATYPE_INDICATOR}<{}>",
-                &self.datatype_iri()
+                self.datatype_iri()
             )
         }
     }

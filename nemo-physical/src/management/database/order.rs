@@ -65,7 +65,7 @@ impl OrderedReferenceManager {
         self.reference_map
             .retain(|existing_id, _| *existing_id < table_id);
 
-        for (_, map) in self.storage_map.iter_mut() {
+        for map in self.storage_map.values_mut() {
             map.retain(|_, existing_id| *existing_id < storage_id);
         }
     }
