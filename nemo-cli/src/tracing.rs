@@ -27,6 +27,7 @@ pub(crate) fn parse_trace_facts(cli: &CliApp) -> Result<Vec<String>, Error> {
     Ok(facts)
 }
 
+/// Handle all tracing-related options specified on the command line.
 pub(crate) async fn handle_tracing(
     cli: &CliApp,
     engine: &mut DefaultExecutionEngine,
@@ -36,7 +37,7 @@ pub(crate) async fn handle_tracing(
     trace_node_query(cli, engine).await
 }
 
-/// Trace selected facts, if given on the command line
+/// Trace selected facts, if given on the command line.
 pub(crate) async fn trace_selected_facts(
     cli: &CliApp,
     engine: &mut DefaultExecutionEngine,
