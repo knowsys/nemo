@@ -157,6 +157,9 @@ impl OutputArgs {
 /// Cli arguments related to tracing
 #[derive(Debug, clap::Args)]
 pub(crate) struct TracingArgs {
+    /// Trace all IDB facts
+    #[arg(long = "trace-all-idb-facts", group = "trace-input")]
+    pub(crate) trace_all_idb_facts: bool,
     /// Facts for which a derivation trace should be computed;
     /// multiple facts can be separated by a semicolon, e.g. "P(a, b);Q(c)".
     #[arg(long = "trace", value_delimiter = ';', group = "trace-input")]

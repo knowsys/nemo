@@ -22,6 +22,7 @@ use crate::{
         components::{
             ComponentBehavior,
             fact::Fact,
+            tag::Tag,
             term::primitive::{Primitive, ground::GroundTerm, variable::Variable},
         },
         substitution::Substitution,
@@ -186,8 +187,8 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         Ok(trace_handle)
     }
 
-    /// Build an [ExecutionTrace] for a list of [fact](Fact)s.  Also
-    /// return a list containing the [TraceFactHandle] for each fact.
+    /// Build an `ExecutionTrace` for a list of [fact](Fact)s.  Also
+    /// return a list containing the `TraceFactHandle` for each fact.
     pub async fn trace_facts(
         &mut self,
         facts: Vec<Fact>,
@@ -201,25 +202,56 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             }
         }
 
-        let program = self.program.clone();
-
         let ground_facts: Vec<_> = facts
             .into_iter()
             .filter_map(|fact| GroundAtom::normalize_fact(&fact))
             .collect();
+        let mut trace = ExecutionTrace::new(self.program_handle.clone());
+        let handles = self.trace_ground_facts(&mut trace, &ground_facts).await?;
 
-        self.trace_ground_facts(&program, &ground_facts).await
+        Ok((trace, handles))
+    }
+
+    /// Build an `ExecutionTrace` for a list of [predicates](Tag)s.  Also
+    /// return a list containing the `TraceFactHandle` for each fact.
+    pub async fn trace_predicates(
+        &mut self,
+        predicates: impl IntoIterator<Item = &Tag>,
+    ) -> Result<(ExecutionTrace, Vec<TraceFactHandle>), Error> {
+        let mut trace = ExecutionTrace::new(self.program_handle.clone());
+        let mut handles = Vec::new();
+
+        for predicate in predicates {
+            let count = self
+                .count_facts_in_memory_for_predicate(&predicate)
+                .unwrap_or_default();
+
+            if count > 0 {
+                log::info!("Starting tracing of {count} facts for predicate {predicate}");
+
+                let ground_facts = self
+                    .predicate_rows(predicate)
+                    .await?
+                    .expect("predicate should have facts")
+                    .map(|values| {
+                        GroundAtom::new(predicate.clone(), values.into_iter().map(GroundTerm::new))
+                    })
+                    .collect::<Vec<_>>();
+                handles.append(&mut self.trace_ground_facts(&mut trace, &ground_facts).await?);
+            }
+        }
+
+        Ok((trace, handles))
     }
 
     /// Build an `ExecutionTrace` for a list of [ground
     /// facts](GroundAtom). Also return a list with the
-    /// [TraceFactHandle] for each fact.
-    pub async fn trace_ground_facts(
+    /// `TraceFactHandle` for each fact.
+    async fn trace_ground_facts(
         &mut self,
-        program: &NormalizedProgram,
+        trace: &mut ExecutionTrace,
         ground_facts: &[GroundAtom],
-    ) -> Result<(ExecutionTrace, Vec<TraceFactHandle>), Error> {
-        let mut trace = ExecutionTrace::new(self.program_handle.clone());
+    ) -> Result<Vec<TraceFactHandle>, Error> {
         let mut handles = Vec::new();
 
         let num_ground_facts = ground_facts.len();
@@ -233,13 +265,13 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             }
 
             handles.push(
-                self.trace_recursive(&mut trace, ground_fact, &program)
+                self.trace_recursive(trace, ground_fact, &self.program.clone())
                     .await?,
             );
         }
 
         log::info!("{num_ground_facts}/{num_ground_facts} facts traced. (100%)");
 
-        Ok((trace, handles))
+        Ok(handles)
     }
 }
