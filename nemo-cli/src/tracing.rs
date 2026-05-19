@@ -41,8 +41,36 @@ pub(crate) async fn trace_selected_facts(
     cli: &CliApp,
     engine: &mut DefaultExecutionEngine,
 ) -> Result<(), CliError> {
-    let tracing_facts = parse_trace_facts(cli)?;
-    if !tracing_facts.is_empty() {
+    let (trace, handles) = if cli.tracing.trace_all_idb_facts {
+        let predicates = engine
+            .chase_program()
+            .derived_predicates()
+            .iter()
+            .filter_map(|predicate| {
+                let count = engine
+                    .count_facts_in_memory_for_predicate(predicate)
+                    .unwrap_or_default();
+                (count > 0).then_some((predicate, count))
+            })
+            .collect::<Vec<_>>();
+        let total_facts = predicates.iter().map(|(_, count)| count).sum::<usize>();
+        log::info!(
+            "Starting tracing of {total_facts} for {} predicates",
+            predicates.len()
+        );
+
+        let predicates = predicates
+            .iter()
+            .map(|&(predicate, _)| predicate.clone())
+            .collect::<Vec<_>>();
+
+        engine.trace_predicates(&predicates).await?
+    } else {
+        let tracing_facts = parse_trace_facts(cli)?;
+        if tracing_facts.is_empty() {
+            return Ok(());
+        }
+
         log::info!("Starting tracing of {} facts...", tracing_facts.len());
         let mut facts = Vec::<Fact>::with_capacity(tracing_facts.len());
         for fact_string in &tracing_facts {
@@ -58,25 +86,26 @@ pub(crate) async fn trace_selected_facts(
             facts.push(fact);
         }
 
-        let (trace, handles) = engine.trace_facts(facts).await?;
+        engine.trace_facts(facts).await?
+    };
 
-        match &cli.tracing.output_file {
-            Some(output_file) => {
-                let filename = output_file.to_string_lossy().to_string();
-                let trace_json = trace.json(&handles);
+    match &cli.tracing.output_file {
+        Some(output_file) => {
+            let filename = output_file.to_string_lossy().to_string();
+            let trace_json = trace.json(&handles);
 
-                let mut json_file = File::create(output_file)?;
-                if serde_json::to_writer(&mut json_file, &trace_json).is_err() {
-                    return Err(CliError::SerializationError { filename });
-                }
+            let mut json_file = File::create(output_file)?;
+            if serde_json::to_writer(&mut json_file, &trace_json).is_err() {
+                return Err(CliError::SerializationError { filename });
             }
-            None => {
-                for (fact, handle) in tracing_facts.into_iter().zip(handles) {
-                    if let Some(tree) = trace.tree(handle) {
-                        println!("\n{}", tree.to_ascii_art());
-                    } else {
-                        println!("\n{fact} was not derived");
-                    }
+        }
+        None => {
+            for handle in handles {
+                if let Some(tree) = trace.tree(handle) {
+                    println!("\n{}", tree.to_ascii_art());
+                } else {
+                    let fact = trace.get_fact(handle).fact();
+                    println!("\n{fact} was not derived");
                 }
             }
         }
