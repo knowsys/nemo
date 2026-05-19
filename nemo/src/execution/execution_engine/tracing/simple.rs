@@ -223,7 +223,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
         for predicate in predicates {
             let count = self
-                .count_facts_in_memory_for_predicate(&predicate)
+                .count_facts_in_memory_for_predicate(predicate)
                 .unwrap_or_default();
 
             if count > 0 {
@@ -256,7 +256,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
         let num_ground_facts = ground_facts.len();
 
-        for (i, ground_fact) in ground_facts.into_iter().enumerate() {
+        for (i, ground_fact) in ground_facts.iter().enumerate() {
             if i > 0 && i.is_multiple_of(TRACING_PROGRESS_INCREMENT) {
                 log::info!(
                     "{i}/{num_ground_facts} facts traced. ({}%)",
