@@ -123,7 +123,7 @@ impl NatMapping for SortedChoice {
 
     fn chain_permutation(&self, permutation: &Permutation) -> Self {
         let mut result_map = self.map.clone();
-        for (_, value) in result_map.iter_mut() {
+        for value in result_map.values_mut() {
             *value = permutation.get(*value);
         }
 
