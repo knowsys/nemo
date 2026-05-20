@@ -444,7 +444,7 @@ impl NemoEngine {
         let fact = Fact::parse(&fact_string).ok()?;
         fact.validate().ok()?;
 
-        let (trace, handles) = rt.block_on(self.engine.trace(vec![fact])).ok()?;
+        let (trace, handles) = rt.block_on(self.engine.trace_facts(vec![fact])).ok()?;
         let handle = *handles
             .first()
             .expect("Function trace always returns a handle for each input fact");
