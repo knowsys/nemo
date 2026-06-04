@@ -109,10 +109,10 @@ impl ExecutionTree {
         match node {
             ExecutionTreeOperation::Leaf(leaf) => match leaf {
                 ExecutionTreeLeaf::LoadTable(_) => {
-                    ascii_tree::Tree::Leaf(vec![format!("Permanent Table")])
+                    ascii_tree::Tree::Leaf(vec!["Permanent Table".to_string()])
                 }
                 ExecutionTreeLeaf::FetchComputedTable(_) => {
-                    ascii_tree::Tree::Leaf(vec![format!("New Table")])
+                    ascii_tree::Tree::Leaf(vec!["New Table".to_string()])
                 }
             },
             ExecutionTreeOperation::Node {
