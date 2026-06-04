@@ -221,6 +221,11 @@ impl NormalizedRule {
             .any(|term| term.is_existential())
     }
 
+    /// Determines whether the given rule is Datalog, i.e. free of negative body atoms and existential variables.
+    pub fn is_datalog(&self) -> bool {
+        self.negative().len() == 0 && self.negative_imports().len() == 0 && !self.is_existential()
+    }
+
     /// Return whether this rule contains any aggregates.
     pub fn contains_aggregates(&self) -> bool {
         self.aggregate().is_some()

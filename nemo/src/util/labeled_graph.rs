@@ -5,6 +5,7 @@ use std::hash::Hash;
 use std::{collections::HashMap, fmt::Debug};
 
 use petgraph::graph::NodeIndex;
+use petgraph::visit::EdgeRef;
 use petgraph::{EdgeType, Graph};
 
 /// Graph with labeled nodes.
@@ -48,9 +49,21 @@ where
 
     /// Return a [NodeIndex] for a given node label or `None`
     /// if there is no node in the graph associated with that label.
-    #[allow(dead_code)]
-    pub fn get_node(&self, node: &NodeLabel) -> Option<NodeIndex> {
-        self.label_map.get(node).cloned()
+    pub fn node(&self, label: &NodeLabel) -> Option<NodeIndex> {
+        self.label_map.get(label).copied()
+    }
+    /// Return a [NodeIndex] for a given node label, assuming it is present.
+    pub fn node_unchecked(&self, label: &NodeLabel) -> NodeIndex {
+        self.node(label).expect("node with label should be present")
+    }
+
+    /// Return a [NodeLabel] for a given node or `None`.
+    pub fn label(&self, node: NodeIndex) -> Option<&NodeLabel> {
+        self.graph.node_weight(node)
+    }
+    /// Return a [NodeLabel] for a given node, assuming it is present.
+    pub fn label_unchecked(&self, node: NodeIndex) -> &NodeLabel {
+        self.label(node).expect("every node should have a label")
     }
 
     /// Add a new edge to the graph.
@@ -62,108 +75,134 @@ where
     }
 
     /// Return a reference to the underlying [Graph].
-    #[allow(dead_code)]
     pub fn graph(&self) -> &Graph<NodeLabel, EdgeLabel, Type> {
         &self.graph
     }
 
-    /// Remove every edge that connects a node to itself.
-    /// If the function detects a self cycle with a label contained in `by_edge_labels`
-    /// it will abort the computation and return true.
-    /// Otherwise it will return false.
-    fn remove_self_cycles<T: Clone>(
-        graph: &mut Graph<T, EdgeLabel, Type>,
-        by_edge_labels: &[EdgeLabel],
+    /// Check whether the graph has a special-edge path from source to destination.
+    /// like petgraph has_path_connecting but only uses edges accepted by the predicate
+    pub fn has_path_via(
+        &self,
+        src: NodeIndex,
+        dst: NodeIndex,
+        is_special: fn(&EdgeLabel) -> bool,
     ) -> bool {
-        for node in graph.node_indices() {
-            for edge in graph.edges_connecting(node, node) {
-                if by_edge_labels.contains(edge.weight()) {
-                    return true;
+        let mut seen = std::collections::HashSet::new();
+        let mut q = std::collections::VecDeque::from([src]);
+
+        while let Some(u) = q.pop_front() {
+            if u == dst {
+                return true;
+            }
+
+            if !seen.insert(u) {
+                continue;
+            }
+
+            for e in self.graph.edges(u) {
+                if is_special(e.weight()) {
+                    q.push_back(e.target());
                 }
             }
         }
-
-        graph.retain_edges(|g, e| {
-            let (start, end) = g.edge_endpoints(e).unwrap();
-            start != end
-        });
 
         false
     }
 
-    /// Given a map, reverses the keys and values.
-    /// Since multiple keys can map to the same value this results in
-    /// map from the values to a vector of keys.
-    fn reverse_map(map: HashMap<NodeIndex, usize>) -> HashMap<usize, Vec<NodeIndex>> {
-        let mut result = HashMap::<usize, Vec<NodeIndex>>::new();
+    /// Decompose the strongly-connected components of the graph using Tajan's algorithm and refine those with special edges.
+    pub fn decompose_and_refine<F, E>(
+        &self,
+        strata: &mut Vec<Vec<NodeLabel>>,
+        tarjan: &mut petgraph::algo::TarjanScc<NodeIndex>,
+        is_special: fn(&EdgeLabel) -> bool,
+        mut refine: F,
+    ) -> Result<(), E>
+    where
+        F: FnMut(Vec<NodeLabel>, &mut Vec<Vec<NodeLabel>>) -> Result<(), E>,
+    {
+        // identifier for current (sub-)SCC
+        let mut stratum_index = 0;
+        // prepare hash map of nodes to SCC identifiers
+        let mut mark = vec![0usize; self.graph.node_count()];
 
-        for (key, value) in map {
-            let vec = result.entry(value).or_default();
-            vec.push(key);
-        }
+        let mut result = Ok(());
+
+        tarjan.run(&self.graph, |scc| {
+            if result.is_err() {
+                return;
+            }
+
+            for &n in scc {
+                mark[n.index()] = stratum_index;
+            }
+
+            // determine whether the current SCC of the graph contains a preference edge
+            let has_special_edge = scc.iter().any(|&u| {
+                self.graph
+                    .edges(u)
+                    .any(|e| mark[e.target().index()] == stratum_index && is_special(e.weight()))
+            });
+
+            stratum_index += 1;
+
+            // translate petgraph NodeIndices of dependency graph back to rule indices
+            let scc_labels = scc
+                .iter()
+                .map(|&a| self.label_unchecked(a).clone())
+                .collect();
+
+            if has_special_edge {
+                result = refine(scc_labels, strata);
+            } else {
+                // no special edges, so just add the SCC to the list
+                strata.push(scc_labels);
+            }
+        });
 
         result
     }
 
-    /// Divides the nodes of the graph into a series of strata
-    /// such that there is no edge of label contained in `by_edge_labels`
-    /// from a node in a higher strata to a node in a lower strata.
-    pub fn stratify(&self, by_edge_labels: &[EdgeLabel]) -> Option<Vec<Vec<NodeLabel>>> {
-        let mut graph_scc = petgraph::algo::condensation(self.graph.clone(), false);
-        if Self::remove_self_cycles(&mut graph_scc, by_edge_labels) {
-            return None;
+    /// Return an iterator over outgoing edges of a node.
+    pub fn edges_outgoing(
+        &self,
+        start_label: &NodeLabel,
+    ) -> impl Iterator<Item = (&EdgeLabel, &NodeLabel)> {
+        self.graph
+            .edges_directed(
+                self.node_unchecked(start_label),
+                petgraph::Direction::Outgoing,
+            )
+            .map(|e| (e.weight(), self.label_unchecked(e.target())))
+    }
+
+    /// Find topological layering of the graph if it is acyclic.
+    pub fn layer(
+        &self,
+    ) -> Result<impl Iterator<Item = Vec<NodeLabel>>, petgraph::algo::Cycle<NodeIndex>> {
+        // sort the verices of the graph topologically
+        let order = petgraph::algo::toposort(&self.graph, None)?;
+
+        // longest-path layering (sources get layer 0, other vertices get maximum layer of a predecessor plus one)
+        let mut layer = vec![0usize; self.graph.node_count()];
+        for v in order {
+            let l = self
+                .graph
+                .edges_directed(v, petgraph::Direction::Incoming)
+                .map(|e| layer[e.source().index()] + 1)
+                .max()
+                .unwrap_or(0);
+
+            layer[v.index()] = l;
         }
 
-        let scc_sorted = petgraph::algo::toposort(&graph_scc, None)
-            .expect("Previous call to remove_cycles should have removed all cycles");
-        let scc_count = scc_sorted.len();
-
-        graph_scc.reverse();
-
-        let mut scc_to_stratum = HashMap::<NodeIndex, usize>::new();
-        for scc in scc_sorted {
-            let mut stratum: usize = 0;
-            for neighbor in graph_scc.neighbors(scc) {
-                for edge in graph_scc.edges_connecting(scc, neighbor) {
-                    if scc == neighbor {
-                        continue;
-                    }
-
-                    if by_edge_labels.contains(edge.weight()) {
-                        stratum = stratum.max(
-                            1 + *scc_to_stratum
-                                .get(&neighbor)
-                                .expect("Topolical sorting should ensure that there is an entry."),
-                        );
-                    } else {
-                        stratum = stratum.max(
-                            *scc_to_stratum
-                                .get(&neighbor)
-                                .expect("Topolical sorting should ensure that there is an entry."),
-                        );
-                    }
-                }
-            }
-
-            scc_to_stratum.insert(scc, stratum);
+        // form strata based on the layers of the graph
+        let mut strata = HashMap::<usize, Vec<_>>::new();
+        for (i, &l) in layer.iter().enumerate() {
+            let vec = strata.entry(l).or_default();
+            vec.push(self.label_unchecked(NodeIndex::new(i)).clone());
         }
 
-        let stratum_to_sccs = Self::reverse_map(scc_to_stratum);
-
-        let mut result = Vec::new();
-        for stratum in 0..scc_count {
-            if let Some(sccs) = stratum_to_sccs.get(&stratum) {
-                result.push(
-                    sccs.iter()
-                        .flat_map(|&i| graph_scc.node_weight(i).unwrap().clone())
-                        .collect(),
-                )
-            } else {
-                break;
-            }
-        }
-
-        Some(result)
+        Ok(strata.into_values())
     }
 }
 
@@ -178,81 +217,5 @@ where
             graph: Default::default(),
             label_map: Default::default(),
         }
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use petgraph::Directed;
-
-    use super::LabeledGraph;
-
-    #[derive(Debug, Eq, PartialEq, Hash, Clone)]
-    enum EdgeLabel {
-        Positive,
-        Negative,
-    }
-
-    #[test]
-    fn stratification() {
-        let mut graph = LabeledGraph::<String, EdgeLabel, Directed>::default();
-
-        let node_a = String::from("A");
-        let node_b = String::from("B");
-        let node_c = String::from("C");
-        let node_d = String::from("D");
-
-        graph.add_edge(node_a.clone(), node_b.clone(), EdgeLabel::Negative);
-        graph.add_edge(node_b.clone(), node_c.clone(), EdgeLabel::Positive);
-        graph.add_edge(node_c.clone(), node_b.clone(), EdgeLabel::Positive);
-        graph.add_edge(node_c.clone(), node_c.clone(), EdgeLabel::Positive);
-        graph.add_edge(node_c.clone(), node_d.clone(), EdgeLabel::Positive);
-        graph.add_edge(node_c.clone(), node_d.clone(), EdgeLabel::Negative);
-
-        let mut stratums = graph.stratify(&[EdgeLabel::Negative]).unwrap();
-        for stratum in &mut stratums {
-            stratum.sort();
-        }
-
-        assert_eq!(
-            stratums,
-            vec![vec![node_a], vec![node_b, node_c], vec![node_d]]
-        );
-    }
-
-    #[test]
-    fn stratification_2() {
-        let mut graph = LabeledGraph::<String, EdgeLabel, Directed>::default();
-
-        let node_a = String::from("A");
-        let node_b = String::from("B");
-        let node_c = String::from("C");
-        let node_d = String::from("D");
-
-        graph.add_edge(node_a.clone(), node_c.clone(), EdgeLabel::Negative);
-        graph.add_edge(node_b.clone(), node_c.clone(), EdgeLabel::Positive);
-        graph.add_edge(node_c.clone(), node_d.clone(), EdgeLabel::Positive);
-
-        let mut stratums = graph.stratify(&[EdgeLabel::Negative]).unwrap();
-
-        for stratum in &mut stratums {
-            stratum.sort();
-        }
-
-        assert_eq!(stratums, vec![vec![node_a, node_b], vec![node_c, node_d]]);
-    }
-
-    #[test]
-    fn not_stratified() {
-        let mut graph = LabeledGraph::<String, EdgeLabel, Directed>::default();
-
-        let node_a = String::from("A");
-        let node_b = String::from("B");
-
-        graph.add_edge(node_a.clone(), node_b.clone(), EdgeLabel::Negative);
-        graph.add_edge(node_b, node_a, EdgeLabel::Positive);
-
-        let stratums = graph.stratify(&[EdgeLabel::Negative]);
-        assert!(stratums.is_none());
     }
 }

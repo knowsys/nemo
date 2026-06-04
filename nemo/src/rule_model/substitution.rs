@@ -47,6 +47,37 @@ impl Substitution {
         self.map.insert(from.into(), to.into());
     }
 
+    /// Add a new mapping from `old_y` to `new_y` and adjust existing mappings onto `old_y`.
+    pub fn remap(&mut self, old_y: Primitive, new_y: Primitive) {
+        debug_assert!(old_y != new_y, "trying to add identity transmutation");
+        debug_assert!(
+            !self.map.contains_key(&old_y),
+            "domain and range of unifier are not disjoint"
+        );
+        // modify all entries pointing to old_y to now point to new_y instead
+        let term_old_y = Term::Primitive(old_y.clone());
+        self.map
+            .iter_mut()
+            .filter(|(_k, v)| **v == term_old_y)
+            .for_each(|(_k, v)| {
+                *v = Term::Primitive(new_y.clone());
+            });
+        self.map.insert(old_y, Term::Primitive(new_y));
+    }
+
+    /// Resolve a primitive w.r.t. the substitution.
+    pub fn get(&self, term: &Primitive) -> Option<Primitive> {
+        if matches!(term, Primitive::Ground(_)) {
+            Some(term.clone())
+        } else {
+            if let Some(Term::Primitive(prim)) = self.map.get(term) {
+                Some(prim.clone())
+            } else {
+                None
+            }
+        }
+    }
+
     /// Apply mapping to a program component.
     pub fn apply<Component: IterablePrimitives<TermType = Term>>(&self, component: &mut Component) {
         for term in component.primitive_terms_mut() {
