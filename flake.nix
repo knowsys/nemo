@@ -665,11 +665,6 @@
                 nemo-wasm-node
                 nemo-web
                 nemo-vscode-extension
-
-                nemo-no-incremental
-                nemo-only-incremental
-                nemo-no-merge
-                nemo-no-cartesian
                 ;
 
               nodePackages = lib.makeExtensible (lib.extends pkgs.nodePackages prev.nodePackages);
