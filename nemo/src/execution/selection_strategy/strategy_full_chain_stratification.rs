@@ -608,13 +608,35 @@ struct RuleEncoding {
     arg_stream: Vec<usize>,
 }
 
+#[derive(Default)]
+enum Progress<T> {
+    #[default] NotStarted,
+    Partial(T),
+    Complete(T),
+}
+
+
+impl<T> Progress<T> {
+    fn get_unchecked(&self) -> &T {
+        match self {
+            Progress::NotStarted => panic!("progress should have started"),
+            Progress::Partial(t) | Progress::Complete(t) => t,
+        }
+    }
+    fn finish(&mut self) {
+        if let Progress::Partial(t) = std::mem::take(self) {
+            *self = Progress::Complete(t);
+        }
+    }
+}
+
 /// will be indexed by EdgeLabel variants via their usize repr
 /// meaning of values:
-///   None --> not computed yet
-///   Some(vec![]) --> no reliance of this type
-///   Some(vec![mu]) --> found reliance of this type with AtomMapping mu
-///   Some(vec![mu1,mu2]) --> found reliance of this type with multiple possible AtomMappings (relevant for chain computations)
-type Reliances = [Option<Vec<Reliance>>; EdgeLabel::COUNT];
+///   Progress::NotStarted --> not computed yet
+///   Progress::Complete(vec![]) --> no reliance of this type
+///   Progress::Partial(vec![mu]) --> found reliance of this type with AtomMapping mu (and there may be more)
+///   Progress::Complete(vec![mu1,mu2]) --> found reliance of this type with multiple possible AtomMappings (relevant for chain computations)
+type Reliances = [Progress<Vec<Reliance>>; EdgeLabel::COUNT];
 
 struct RuleMemoization<'a> {
     rules: &'a Vec<&'a NormalizedRule>,
@@ -656,6 +678,7 @@ impl<'a> RelianceMemoization<'a> {
         }
     }
 
+    // TODO: how to make sure that atom mappings stay valid with reordered atoms?
     fn encode_rule(rule: &NormalizedRule) -> RuleEncoding {
         use crate::execution::planning::normalization::{
             aggregate::Aggregation,
@@ -814,14 +837,13 @@ impl<'a> RelianceMemoization<'a> {
         key
     }
 
-    // only get one reliance
-    // todo: implement something like get_all()
-    fn get<'b>(
+    /// Get a mutable reference to the progress of the reliance computation of the given type between the two rules.
+    fn get_progress<'b>(
         &'b mut self,
         rule1_index: usize,
         rule2_index: usize,
         label: EdgeLabel,
-    ) -> Option<&'b Reliance>
+    ) -> (&'b mut Progress<Vec<Reliance>>, &'b mut RuleMemoization<'a>)
     where
         'a: 'b,
     {
@@ -840,44 +862,98 @@ impl<'a> RelianceMemoization<'a> {
                 let enc = Self::encode_rule_pair(enc1, enc2);
                 *self.reliances_key_map.entry(enc).or_insert_with(|| {
                     let new_index = self.reliances.len();
-                    self.reliances.push([const { None }; EdgeLabel::COUNT]);
+                    self.reliances.push([const { Progress::NotStarted }; EdgeLabel::COUNT]);
                     new_index
                 })
             });
-        let atom_mappings_vec =
-            self.reliances[reliances_index][label as usize].get_or_insert_with(|| {
-                if let Some(mu) = match label {
-                    EdgeLabel::Positive => {
-                        is_positive_reliance(&mut self.data, rule1_index, rule2_index, None)
+        (&mut self.reliances[reliances_index][label as usize], &mut self.data)
+    }
+
+    /// Given the previous reliance result, determine the next atom mapping constituting a reliance of the given type between the two rules if it exists.
+    fn next_reliance(mem: &mut RuleMemoization, rule1_index: usize, rule2_index: usize, label: EdgeLabel, previous_opt: Option<&Reliance>) -> Option<Reliance> {
+        match label {
+            EdgeLabel::Positive => {
+                is_positive_reliance(mem, rule1_index, rule2_index, previous_opt)
+            }
+            EdgeLabel::Restraint => {
+                if rule1_index == rule2_index {
+                    match is_self_restraint_reliance(mem, rule1_index, previous_opt) {
+                        None => is_restraint_reliance(
+                            mem,
+                            rule1_index,
+                            rule2_index,
+                            None,
+                        ),
+                        x => x,
                     }
-                    EdgeLabel::Restraint => {
-                        if rule1_index == rule2_index {
-                            match is_self_restraint_reliance(&mut self.data, rule1_index, None) {
-                                None => is_restraint_reliance(
-                                    &mut self.data,
-                                    rule1_index,
-                                    rule2_index,
-                                    None,
-                                ),
-                                x => x,
-                            }
-                        } else {
-                            is_restraint_reliance(&mut self.data, rule1_index, rule2_index, None)
-                        }
-                    }
-                    EdgeLabel::Negation => {
-                        is_negation_reliance(&mut self.data, rule1_index, rule2_index, None)
-                    }
-                    EdgeLabel::Aggregation => {
-                        is_aggregation_reliance(&mut self.data, rule1_index, rule2_index, None)
-                    }
-                } {
-                    vec![mu]
                 } else {
-                    vec![]
+                    is_restraint_reliance(mem, rule1_index, rule2_index, previous_opt)
                 }
-            });
+            }
+            EdgeLabel::Negation => {
+                is_negation_reliance(mem, rule1_index, rule2_index, previous_opt)
+            }
+            EdgeLabel::Aggregation => {
+                is_aggregation_reliance(mem, rule1_index, rule2_index, previous_opt)
+            }
+        }
+    }
+
+    /// Get one atom mappings constituting a reliance of the given type between the two rules if it exists.
+    fn get_one<'b>(
+        &'b mut self,
+        rule1_index: usize,
+        rule2_index: usize,
+        label: EdgeLabel,
+    ) -> Option<&'b Reliance>
+    where
+        'a: 'b,
+    {
+        let (progress, mem) = self.get_progress(rule1_index, rule2_index, label);
+        let atom_mappings_vec = match progress {
+            Progress::NotStarted => {
+                if let Some(mu) = Self::next_reliance(mem, rule1_index, rule2_index, label, None) {
+                    *progress = Progress::Partial(vec![mu]);
+                } else {
+                    *progress = Progress::Complete(vec![]);
+                }
+                progress.get_unchecked()
+            },
+            Progress::Partial(t) | Progress::Complete(t) => t,
+        };
         atom_mappings_vec.last()
+    }
+
+    /// Get all atom mappings constituting a reliance of the given type between the two rules.
+    fn get_all<'b>(
+        &'b mut self,
+        rule1_index: usize,
+        rule2_index: usize,
+        label: EdgeLabel,
+    ) -> &'b Vec<Reliance>
+    where
+        'a: 'b,
+    {
+        let (progress, mem) = self.get_progress(rule1_index, rule2_index, label);
+        match progress {
+            Progress::NotStarted => {
+                let mut t = Vec::new();
+                while let Some(rel) = Self::next_reliance(mem, rule1_index, rule2_index, label, t.last()) {
+                    t.push(rel);
+                }
+                *progress = Progress::Complete(t);
+                progress.get_unchecked()
+            },
+            Progress::Partial(t) => {
+                debug_assert!(t.last().is_some(), "if this is an empty vec, progress should be complete");
+                while let Some(rel) = Self::next_reliance(mem, rule1_index, rule2_index, label, t.last()) {
+                    t.push(rel);
+                }
+                progress.finish();
+                progress.get_unchecked()
+            },
+            Progress::Complete(t) => t,
+        }
     }
 }
 
@@ -991,7 +1067,7 @@ impl<SubStrategy: RuleSelectionStrategy> StrategyFullChainStratification<SubStra
                 .edges_outgoing(&rule1_index)
                 .filter(|(_, rule2_index)| stratum_set.contains(&rule2_index))
             {
-                if let Some(_) = mem.get(rule1_index, rule2_index, label) {
+                if let Some(_) = mem.get_one(rule1_index, rule2_index, label) {
                     if reliance_graph.has_path_via_special(
                         reliance_graph.node_unchecked(&rule1_index),
                         reliance_graph.node_unchecked(&rule1_index),
@@ -1059,6 +1135,8 @@ impl<SubStrategy: RuleSelectionStrategy> RuleSelectionStrategy
         )?;
 
         let mut substrategies = Vec::with_capacity(strata.len());
+
+        // TODO: pay closer attention to which Datalog rules are still active --> split strata into Datalog and non-Datalog part by adding a next_datalog_rule method?
 
         // extract 0th separate Datalog stratum to be applied exhaustively after each non-Datlog rule application, since we need to ensure Datalog-first chase
         let datalog_rules;
