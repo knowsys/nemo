@@ -6,9 +6,12 @@ use crate::{
     execution::planning::normalization::{
         aggregate::Aggregation, generator::VariableGenerator, operation::Operation,
     },
-    rule_model::components::{
-        tag::Tag,
-        term::primitive::{Primitive, variable::Variable},
+    rule_model::{
+        components::{
+            tag::Tag,
+            term::primitive::{Primitive, variable::Variable},
+        },
+        substitution::{Substitute, Substitution},
     },
     syntax,
     util::seperated_list::DisplaySeperatedList,
@@ -167,5 +170,20 @@ impl HeadAtom {
 
         let head_atom = Self::new(atom.predicate(), head_terms);
         (head_atom, operations, aggregation)
+    }
+}
+
+impl Substitute for Primitive {
+    fn substitute(&mut self, eta: &Substitution) -> &mut Self {
+        todo!()
+    }
+}
+
+impl Substitute for HeadAtom {
+    fn substitute(&mut self, eta: &Substitution) -> &mut Self {
+        self.terms
+            .iter_mut()
+            .map(|primitive| primitive.substitute(eta));
+        todo!()
     }
 }

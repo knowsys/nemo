@@ -389,28 +389,41 @@ impl NormalizedRule {
             .chain(negative_import)
     }
 
-    /// Return the set of frontier variables in this rule,
-    /// i.e. the set of variables contained
-    /// in both the head and the (positive) body of the rule.
-    pub fn frontier(&self) -> HashSet<Variable> {
-        let head_variables = self
-            .head
-            .iter()
-            .flat_map(|atom| atom.variables())
-            .collect::<HashSet<_>>();
-
+    /// Return the set of universal variables in this rule.
+    pub fn universals(&self) -> HashSet<&Variable> {
         let positive_variables = self.positive.iter().flat_map(|atom| atom.terms());
         let import_variables = self
             .positive_imports
             .iter()
             .flat_map(|atom| atom.variables());
 
-        let body_variables = positive_variables
+        positive_variables
             .chain(import_variables)
-            .collect::<HashSet<_>>();
+            .collect::<HashSet<_>>()
+    }
 
-        head_variables
-            .intersection(&body_variables)
+    fn head_variables(&self) -> HashSet<&Variable> {
+        self
+            .head
+            .iter()
+            .flat_map(|atom| atom.variables())
+            .collect::<HashSet<_>>()
+    }
+
+    /// Return the set of existential variables in this rule.
+    pub fn existentials(&self) -> HashSet<&Variable> {
+        self.head_variables()
+            .difference(&self.universals())
+            .cloned()
+            .collect::<HashSet<_>>()
+    }
+
+    /// Return the set of frontier variables in this rule,
+    /// i.e. the set of variables contained
+    /// in both the head and the (positive) body of the rule.
+    pub fn frontier(&self) -> HashSet<Variable> {
+        self.head_variables()
+            .intersection(&self.universals())
             .cloned()
             .cloned()
             .collect::<HashSet<_>>()

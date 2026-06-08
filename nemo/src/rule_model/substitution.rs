@@ -67,15 +67,18 @@ impl Substitution {
 
     /// Resolve a primitive w.r.t. the substitution.
     pub fn get(&self, term: &Primitive) -> Option<Primitive> {
-        if matches!(term, Primitive::Ground(_)) {
-            Some(term.clone())
-        } else {
-            if let Some(Term::Primitive(prim)) = self.map.get(term) {
-                Some(prim.clone())
-            } else {
-                None
-            }
+        match term {
+            Primitive::Variable(_) => match self.map.get(term) {
+                Some(Term::Primitive(prim)) => Some(prim.clone()),
+                _ => None,
+            },
+            Primitive::Ground(_) => Some(term.clone()),
         }
+    }
+
+    /// Check if the gien variable is mapped by this substitution.
+    pub fn contains_var(&self, k: &Variable) -> bool {
+        self.map.contains_key(&Primitive::Variable(k.clone()))
     }
 
     /// Apply mapping to a program component.
@@ -101,6 +104,10 @@ impl Substitution {
             }
         })
     }
+}
+
+pub trait Substitute {
+    fn substitute(&mut self, eta: &Substitution) -> &mut Self;
 }
 
 impl<TypeFrom, TypeTo> From<HashMap<TypeFrom, TypeTo>> for Substitution

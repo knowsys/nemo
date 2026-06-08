@@ -1,6 +1,9 @@
 use std::collections::HashMap;
 
 use crate::execution::planning::normalization::rule::NormalizedRule;
+use crate::rule_model::components::term::{
+    Term, operation::operation_kind::OperationKind, primitive::Primitive,
+};
 use crate::rule_model::substitution::Substitution;
 
 use crate::execution::selection_strategy::strategy_full_chain_stratification::util::{
@@ -9,9 +12,17 @@ use crate::execution::selection_strategy::strategy_full_chain_stratification::ut
     unify::unify
 };
 use crate::execution::selection_strategy::strategy_full_chain_stratification::reliance_memoization::RuleMemoization;
+use crate::execution::planning::normalization::operation::Operation;
 
 /// maps indices of body/head atoms of the 2nd rule to indices of head atoms of the 1st rule
 pub type AtomMapping = HashMap<usize, usize>;
+
+pub fn mapped<'a, T>(mu: &'a AtomMapping, domain: &'a Vec<T>) -> impl Iterator<Item = &'a T> + 'a {
+    mu.keys().copied().map(|k| &domain[k])
+}
+pub fn maxidx(mu: &AtomMapping) -> usize {
+    mu.keys().copied().max().unwrap_or(0)
+}
 
 pub enum CheckResult {
     Accept,
@@ -44,14 +55,38 @@ where
         }) => (*idx_dom, *idx_ran + 1), // look for "next" one
         None => (0, 0),
     };
+    let rule1 = mem.rules[rule1_index];
+    let rule2 = mem.rules[rule2_index];
+
+    // initialize the substitution with known constant replacements (possibly from normalization)
+    let mut eta = Substitution::default();
+    for op in rule1.operations().iter().chain(rule2.operations().iter()) {
+        if let Operation::Operation {
+            kind: OperationKind::Equal,
+            subterms,
+        } = op
+        {
+            if let [
+                Operation::Primitive(Primitive::Variable(var)),
+                Operation::Primitive(prim),
+            ] = subterms.as_slice()
+            {
+                eta.insert(
+                    Primitive::Variable(var.clone()),
+                    Term::Primitive(prim.clone()),
+                );
+            }
+        }
+    }
+
     extend::<T>(
-        &mem.rules[rule1_index],
-        &mem.rules[rule2_index],
+        rule1,
+        rule2,
         mem.sorted_head_atoms.get(mem.rules, rule1_index),
         T::reorder(&mut mem.reordered_atoms).get(mem.rules, rule2_index),
         check,
         &mut AtomMapping::new(),
-        Substitution::default(),
+        eta,
         idx_dom,
         idx_ran,
     )

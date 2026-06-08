@@ -4,7 +4,10 @@ use std::{collections::HashSet, fmt::Display};
 
 use crate::{
     execution::planning::normalization::{generator::VariableGenerator, operation::Operation},
-    rule_model::components::{tag::Tag, term::primitive::variable::Variable},
+    rule_model::{
+        components::{tag::Tag, term::primitive::variable::Variable},
+        substitution::{Substitute, Substitution},
+    },
     syntax,
     util::seperated_list::DisplaySeperatedList,
 };
@@ -132,5 +135,11 @@ impl BodyAtom {
         let normalized_atom = Self { predicate, terms };
 
         (normalized_atom, additional_operations)
+    }
+}
+
+impl Substitute for BodyAtom {
+    fn substitute(&mut self, eta: &Substitution) -> &mut Self {
+        todo!()
     }
 }
