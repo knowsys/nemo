@@ -121,7 +121,9 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     ) -> Result<Self, Error> {
         let mut table_manager = TableManager::new();
 
-        let normalized_program = NormalizedProgram::normalize_program(&program_handle/* , table_manager.dictionary()*/);
+        let normalized_program = NormalizedProgram::normalize_program(
+            &program_handle, /* , table_manager.dictionary()*/
+        );
 
         // TODO: instead of the following three calls, intern in NormalizedProgram.
         Self::register_all_predicates(&mut table_manager, &normalized_program);
@@ -134,7 +136,9 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             .iter()
             .for_each(|_| rule_infos.push(RuleInfo::new()));
 
-        let selection_strategy = Strategy::new(normalized_program.rules().iter().collect()/* , table_manager.dictionary()*/)?;
+        let selection_strategy = Strategy::new(
+            normalized_program.rules().iter().collect(), /* , table_manager.dictionary()*/
+        )?;
 
         Ok(Self {
             program_handle,

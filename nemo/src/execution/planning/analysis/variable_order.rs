@@ -97,10 +97,7 @@ impl VariableOrder {
     /// Return an iterator over all mapped variables.
     pub fn iter(&self) -> impl Iterator<Item = &Variable> {
         let mut vars: Vec<&Variable> = self.0.keys().collect();
-        vars.sort_by_key(|var| {
-            self.get(var)
-                .expect("we are iterating over existing keys")
-        });
+        vars.sort_by_key(|var| self.get(var).expect("we are iterating over existing keys"));
         vars.into_iter()
     }
 
