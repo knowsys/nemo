@@ -159,7 +159,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
         if let Some(successor) = &node.next {
             let rule = program.rules()[successor.rule].clone();
-            let order = rule.variable_order().clone();
+            let order = rule.body_variable_order().clone();
 
             // True if all children do not have any restrictions
             // and there is only one way to derive the body predicates of the current rule
@@ -342,7 +342,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         if let Some(successor) = &node.next {
             let rule = program.rules()[successor.rule].clone();
 
-            let order = rule.variable_order().clone();
+            let order = rule.body_variable_order().clone();
 
             let (variable_translation, order, head_variables) =
                 variable_translation(&rule, successor.head_index, &order);

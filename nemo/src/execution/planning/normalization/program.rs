@@ -326,18 +326,16 @@ impl NormalizedProgram {
 
         for (rule, mut order) in result.rules.iter_mut().zip(orders) {
             order.extend(rule.variables());
-            rule.set_variable_order(order);
+            rule.set_body_variable_order(order);
 
-            if rule.is_existential() {
-                let auxiliary_rule = Self::construct_auxiliary_existential_rule(rule);
-                let auxiliary_order = build_preferable_variable_orders_for_rule(
-                    &auxiliary_rule,
-                    Some(column_orders.clone()),
-                )
-                .restrict_to(&rule.variables().cloned().collect::<HashSet<_>>());
+            let auxiliary_rule = Self::construct_auxiliary_head_rule(rule);
+            let auxiliary_order = build_preferable_variable_orders_for_rule(
+                &auxiliary_rule,
+                Some(column_orders.clone()),
+            )
+            .restrict_to(&rule.variables().cloned().collect::<HashSet<_>>());
 
-                rule.set_existential_variable_order(auxiliary_order);
-            }
+            rule.set_head_variable_order(auxiliary_order);
         }
 
         result
@@ -347,7 +345,7 @@ impl NormalizedProgram {
     ///
     /// The resulting rule will have a single head atom containing all universal variables of the rule,
     /// and a body containing all atoms in the original head.
-    fn construct_auxiliary_existential_rule(rule: &NormalizedRule) -> NormalizedRule {
+    fn construct_auxiliary_head_rule(rule: &NormalizedRule) -> NormalizedRule {
         let (body, operations) = rule.normalize_existential_head(&mut VariableOrder::default());
 
         let mut universal_variables = rule

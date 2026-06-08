@@ -48,7 +48,7 @@ impl StrategyForward {
         let positive_imports = rule.positive_imports().clone();
         let negative_imports = rule.negative_imports().clone();
 
-        let order = rule.variable_order();
+        let order = rule.body_variable_order();
         let frontier = rule.frontier();
         let is_existential = rule.is_existential();
         let aggregation_index = rule.aggregate_index();
@@ -91,7 +91,7 @@ impl StrategyForward {
         let head = StrategyHead::new(
             rule,
             rule_index,
-            rule.existential_variable_order(),
+            rule.head_variable_order(),
             frontier,
             aggregation_index,
             is_existential,

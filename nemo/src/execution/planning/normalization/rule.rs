@@ -59,10 +59,10 @@ pub struct NormalizedRule {
     /// Aggregation and the head index it occurs in
     aggregation: Option<(Aggregation, usize)>,
 
-    /// Variable order
-    variable_order: Option<VariableOrder>,
-    /// Variable order for existential variables in the head of the rule
-    existential_variable_order: Option<VariableOrder>,
+    /// Order of variable occuring in the rule body
+    body_variable_order: Option<VariableOrder>,
+    /// Order of variable occuring in the rule head
+    head_variable_order: Option<VariableOrder>,
 
     /// Id that associates this rule with the original
     /// logical rule it was derived from
@@ -180,37 +180,44 @@ impl NormalizedRule {
 }
 
 impl NormalizedRule {
-    /// Return the variable order.
+    /// Return the body variable order of this rule.
     ///
     /// # Panics
     /// Panics if the variable order has not been computed.
     /// This may happen if the rule has been constructed directly.
     /// Using [super::program::NormalizedProgram::normalize_program]
     /// guarantees that the variable order is available.
-    pub fn variable_order(&self) -> &VariableOrder {
-        if let Some(order) = self.variable_order.as_ref() {
+    pub fn body_variable_order(&self) -> &VariableOrder {
+        if let Some(order) = self.body_variable_order.as_ref() {
             order
         } else {
-            panic!("variable order not available for this rule");
+            panic!("body variable order not available for this rule");
         }
     }
 
-    /// Return the variable order for existential variables in the head of this rule.
+    /// Return the head variable order of this rule.
     ///
-    /// Returns None if it doesn't exists.
-    /// This may be the case if the rule is not existential or if the variable order has not been computed.
-    pub fn existential_variable_order(&self) -> Option<&VariableOrder> {
-        self.existential_variable_order.as_ref()
+    /// # Panics
+    /// Panics if the variable order has not been computed.
+    /// This may happen if the rule has been constructed directly.
+    /// Using [super::program::NormalizedProgram::normalize_program]
+    /// guarantees that the variable order is available.
+    pub fn head_variable_order(&self) -> &VariableOrder {
+        if let Some(order) = self.head_variable_order.as_ref() {
+            order
+        } else {
+            panic!("head variable order not available for this rule");
+        }
     }
 
     /// Set a variable order for this rule.
-    pub fn set_variable_order(&mut self, variable_order: VariableOrder) {
-        self.variable_order = Some(variable_order);
+    pub fn set_body_variable_order(&mut self, variable_order: VariableOrder) {
+        self.body_variable_order = Some(variable_order);
     }
 
     /// Set a variable order for existential variables in the head of this rule.
-    pub fn set_existential_variable_order(&mut self, variable_order: VariableOrder) {
-        self.existential_variable_order = Some(variable_order);
+    pub fn set_head_variable_order(&mut self, variable_order: VariableOrder) {
+        self.head_variable_order = Some(variable_order);
     }
 
     /// Return whether this rule contains existential variables.
@@ -549,8 +556,8 @@ impl NormalizedRule {
             operations,
             head,
             aggregation,
-            variable_order: None,
-            existential_variable_order: None,
+            body_variable_order: None,
+            head_variable_order: None,
             id: rule.id(),
         }
     }

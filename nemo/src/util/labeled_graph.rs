@@ -27,6 +27,12 @@ where
     label_map: HashMap<NodeLabel, NodeIndex>,
 }
 
+/// An edge label which can be special.
+pub trait SpecialEdgeLabel {
+    /// Predicate to decide whether an edge is special.
+    fn is_special(&self) -> bool;
+}
+
 impl<NodeLabel, EdgeLabel, Type> LabeledGraph<NodeLabel, EdgeLabel, Type>
 where
     NodeLabel: Debug + Clone + Eq + PartialEq + Hash,
@@ -80,13 +86,11 @@ where
     }
 
     /// Check whether the graph has a special-edge path from source to destination.
-    /// like petgraph has_path_connecting but only uses edges accepted by the predicate
-    pub fn has_path_via(
-        &self,
-        src: NodeIndex,
-        dst: NodeIndex,
-        is_special: fn(&EdgeLabel) -> bool,
-    ) -> bool {
+    /// Like `petgraph::has_path_connecting` but only uses special edges.
+    pub fn has_path_via_special(&self, src: NodeIndex, dst: NodeIndex) -> bool
+    where
+        EdgeLabel: SpecialEdgeLabel,
+    {
         let mut seen = std::collections::HashSet::new();
         let mut q = std::collections::VecDeque::from([src]);
 
@@ -100,7 +104,7 @@ where
             }
 
             for e in self.graph.edges(u) {
-                if is_special(e.weight()) {
+                if e.weight().is_special() {
                     q.push_back(e.target());
                 }
             }
@@ -114,11 +118,11 @@ where
         &self,
         strata: &mut Vec<Vec<NodeLabel>>,
         tarjan: &mut petgraph::algo::TarjanScc<NodeIndex>,
-        is_special: fn(&EdgeLabel) -> bool,
         mut refine: F,
     ) -> Result<(), E>
     where
         F: FnMut(Vec<NodeLabel>, &mut Vec<Vec<NodeLabel>>) -> Result<(), E>,
+        EdgeLabel: SpecialEdgeLabel,
     {
         // identifier for current (sub-)SCC
         let mut stratum_index = 0;
@@ -140,7 +144,7 @@ where
             let has_special_edge = scc.iter().any(|&u| {
                 self.graph
                     .edges(u)
-                    .any(|e| mark[e.target().index()] == stratum_index && is_special(e.weight()))
+                    .any(|e| mark[e.target().index()] == stratum_index && e.weight().is_special())
             });
 
             stratum_index += 1;

@@ -62,19 +62,18 @@ impl StrategyHead {
     pub fn new(
         rule: &NormalizedRule,
         rule_index: usize,
-        existential_order: Option<&VariableOrder>,
+        head_variable_order: &VariableOrder,
         frontier: HashSet<Variable>,
         aggregation_index: Option<usize>,
         is_existential: bool,
         has_facts: bool,
     ) -> Self {
         let restricted = if is_existential {
-            let existential_order = existential_order.expect("rule is existential");
             Some(StrategyRestricted::new(
                 rule,
                 rule_index,
                 frontier,
-                existential_order,
+                head_variable_order,
                 has_facts,
             ))
         } else {

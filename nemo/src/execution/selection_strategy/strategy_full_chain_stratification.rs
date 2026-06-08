@@ -5,14 +5,24 @@
 use std::collections::{HashMap, HashSet};
 use std::hash::{DefaultHasher, Hash};
 
+use crate::execution::planning::analysis::variable_order::{
+    VariableOrder, build_preferable_variable_orders_for_rule,
+};
 use crate::execution::planning::normalization::{
     atom::{body::BodyAtom, head::HeadAtom},
     rule::NormalizedRule,
 };
-use crate::rule_model::{components::term::primitive::Primitive, substitution::Substitution};
+use crate::rule_model::{
+    components::{
+        tag::Tag,
+        term::primitive::{Primitive, variable::Variable},
+    },
+    substitution::Substitution,
+};
 
 use super::strategy::{RuleSelectionStrategy, SelectionStrategyError};
 
+use delegate::delegate;
 use strum::EnumCount;
 use strum_macros::EnumCount;
 
@@ -25,7 +35,7 @@ enum EdgeLabel {
     Aggregation,
 }
 
-impl EdgeLabel {
+impl crate::util::labeled_graph::SpecialEdgeLabel for EdgeLabel {
     fn is_special(&self) -> bool {
         *self != EdgeLabel::Positive
     }
@@ -159,11 +169,6 @@ where
     Some(eta)
 }
 
-enum RulePart {
-    Head,
-    Body,
-}
-
 pub enum CheckResult {
     Accept,
     Extend,
@@ -190,6 +195,7 @@ trait Atom {
 
     fn pred(&self) -> Predicate;
     fn primitives<'a>(&'a self) -> impl Iterator<Item = Self::Item<'a>>;
+    fn variables<'a>(&'a self) -> impl Iterator<Item = &'a Variable>;
 
     fn reorder<'b, 'a: 'b>(
         reordered_atoms: &'b mut ReorderAtoms<'a>,
@@ -205,6 +211,10 @@ impl Atom for HeadAtom {
 
     fn primitives<'a>(&'a self) -> impl Iterator<Item = Self::Item<'a>> {
         self.terms()
+    }
+
+    fn variables<'a>(&'a self) -> impl Iterator<Item = &'a Variable> {
+        self.variables()
     }
 
     fn reorder<'b, 'a: 'b>(
@@ -226,10 +236,48 @@ impl Atom for BodyAtom {
         self.terms().map(|var| Primitive::Variable(var.clone()))
     }
 
+    fn variables<'a>(&'a self) -> impl Iterator<Item = &'a Variable> {
+        self.terms()
+    }
+
     fn reorder<'b, 'a: 'b>(
         reordered_atoms: &'b mut ReorderAtoms<'a>,
     ) -> &'b mut Mem<ReorderedAtoms<'a, BodyAtom>> {
         &mut reordered_atoms.reordered_body_atoms
+    }
+}
+
+#[repr(transparent)]
+struct NegBodyAtom(BodyAtom);
+
+impl NegBodyAtom {
+    /// Cast a reference to a [BodyAtom] to a reference to a [NegBodyAtom].
+    /// This is safe, since the layout of the transparent newtype is compatible.
+    /// This is analogous to deriving `bytemuck::TransparentWrapper` or `ref_cast::RefCast`.
+    fn wrap_ref(r: &BodyAtom) -> &Self {
+        //let tmp: *const BodyAtom = r;
+        //unsafe { &*(tmp as *const NegBodyAtom) }
+        unsafe { &*std::ptr::from_ref(r).cast::<NegBodyAtom>() }
+    }
+}
+
+impl Atom for NegBodyAtom {
+    type Item<'a>
+        = <BodyAtom as Atom>::Item<'a>
+    where
+        Self: 'a;
+    delegate! {
+        to self.0 {
+            fn pred(&self) -> Predicate;
+            fn primitives<'a>(&'a self) -> impl Iterator<Item = Self::Item<'a>>;
+            fn variables<'a>(&'a self) -> impl Iterator<Item = &'a Variable>;
+        }
+    }
+
+    fn reorder<'b, 'a: 'b>(
+        reordered_atoms: &'b mut ReorderAtoms<'a>,
+    ) -> &'b mut Mem<ReorderedAtoms<'a, NegBodyAtom>> {
+        &mut reordered_atoms.reordered_negative_body_atoms
     }
 }
 
@@ -405,7 +453,7 @@ fn is_negation_reliance<'b, 'a: 'b>(
     rule2_index: usize,
     previous_opt: Option<&Reliance>,
 ) -> Option<Reliance> {
-    extend_init::<BodyAtom>(mem, rule1_index, rule2_index, check_negr, previous_opt)
+    extend_init::<NegBodyAtom>(mem, rule1_index, rule2_index, check_negr, previous_opt)
 }
 
 fn check_aggr(
@@ -428,9 +476,16 @@ fn is_aggregation_reliance<'b, 'a: 'b>(
 
 type ReorderedAtoms<'a, T> = Vec<&'a T>;
 type ReorderedBodyAtoms<'a> = ReorderedAtoms<'a, BodyAtom>;
+type ReorderedNegBodyAtoms<'a> = ReorderedAtoms<'a, NegBodyAtom>;
 type ReorderedHeadAtoms<'a> = ReorderedAtoms<'a, HeadAtom>;
 
 struct Mem<T>(Vec<Option<T>>);
+
+impl<T: Clone> Mem<T> {
+    fn new(len: usize) -> Self {
+        Self(vec![None; len])
+    }
+}
 
 trait GetRuleMem<'a> {
     fn compute(rule: &'a NormalizedRule) -> Self;
@@ -442,25 +497,81 @@ impl<'a, T: GetRuleMem<'a>> Mem<T> {
     }
 }
 
+fn reorder_atoms<'a, T: Atom>(
+    atoms: impl IntoIterator<Item = &'a T>,
+    order: &VariableOrder,
+) -> ReorderedAtoms<'a, T> {
+    let mut atoms: Vec<_> = atoms.into_iter().collect();
+    let mut reordered = Vec::with_capacity(atoms.len());
+    let mut vars_so_far = HashSet::new();
+    for v in order.iter() {
+        vars_so_far.insert(v);
+        // find all atoms which only use variables from vars_so_far
+        let (only_active_vars, remainder): (Vec<_>, Vec<_>) = atoms
+            .into_iter()
+            .partition(|atom| atom.variables().all(|var| vars_so_far.contains(var)));
+        reordered.extend_from_slice(&only_active_vars);
+        atoms = remainder;
+    }
+    reordered
+}
+
 impl<'a> GetRuleMem<'a> for ReorderedBodyAtoms<'a> {
     /// Reorder body atoms.
     /// to be applied to body / head of rule2 before calling extend
     /// maybe reuse Nemo's heuristic for join order?
     /// use NormalizeRule::variable_order --> should be Some
     fn compute(rule: &'a NormalizedRule) -> ReorderedBodyAtoms<'a> {
-        todo!()
+        reorder_atoms(rule.positive(), rule.body_variable_order())
+    }
+}
+
+impl<'a> GetRuleMem<'a> for ReorderedNegBodyAtoms<'a> {
+    /// Reorder negative body atoms.
+    /// Such a variable order has not been computed anwhere else, as negative atoms don't partake in joins, so we just apply the heuristic manually.
+    fn compute(rule: &'a NormalizedRule) -> ReorderedNegBodyAtoms<'a> {
+        fn construct_auxiliary_negation_rule(rule: &NormalizedRule) -> NormalizedRule {
+            let mut universal_variables = rule
+                .negative()
+                .iter()
+                .flat_map(|atom| atom.terms())
+                .collect::<Vec<_>>();
+            universal_variables.dedup();
+
+            let head = HeadAtom::new(
+                Tag::new(String::from("__AUX")),
+                universal_variables
+                    .into_iter()
+                    .cloned()
+                    .map(Primitive::from),
+            );
+
+            NormalizedRule::positive_rule(vec![head], rule.negative().clone(), vec![])
+        }
+
+        let auxiliary_rule = construct_auxiliary_negation_rule(rule);
+        let auxiliary_order = build_preferable_variable_orders_for_rule(&auxiliary_rule, None)
+            .restrict_to(&rule.variables().cloned().collect::<HashSet<_>>());
+
+        reorder_atoms(
+            rule.negative()
+                .iter()
+                .map(|atom| NegBodyAtom::wrap_ref(atom)),
+            &auxiliary_order,
+        )
     }
 }
 
 impl<'a> GetRuleMem<'a> for ReorderedHeadAtoms<'a> {
     /// Reorder head atoms.
     fn compute(rule: &'a NormalizedRule) -> ReorderedHeadAtoms<'a> {
-        todo!()
+        reorder_atoms(rule.head(), rule.head_variable_order())
     }
 }
 
 struct ReorderAtoms<'a> {
     reordered_body_atoms: Mem<ReorderedBodyAtoms<'a>>,
+    reordered_negative_body_atoms: Mem<ReorderedNegBodyAtoms<'a>>,
     reordered_head_atoms: Mem<ReorderedHeadAtoms<'a>>,
 }
 
@@ -531,8 +642,9 @@ impl<'a> RelianceMemoization<'a> {
                 rules,
 
                 reordered_atoms: ReorderAtoms {
-                    reordered_body_atoms: Mem(vec![None; rules.len()]),
-                    reordered_head_atoms: Mem(vec![None; rules.len()]),
+                    reordered_body_atoms: Mem::new(rules.len()),
+                    reordered_negative_body_atoms: Mem::new(rules.len()),
+                    reordered_head_atoms: Mem::new(rules.len()),
                 },
                 sorted_head_atoms: Mem(vec![None; rules.len()]),
                 encoded_rules: vec![None; rules.len()],
@@ -741,15 +853,24 @@ impl<'a> RelianceMemoization<'a> {
                     EdgeLabel::Restraint => {
                         if rule1_index == rule2_index {
                             match is_self_restraint_reliance(&mut self.data, rule1_index, None) {
-                                None => is_restraint_reliance(&mut self.data, rule1_index, rule2_index, None),
+                                None => is_restraint_reliance(
+                                    &mut self.data,
+                                    rule1_index,
+                                    rule2_index,
+                                    None,
+                                ),
                                 x => x,
                             }
                         } else {
                             is_restraint_reliance(&mut self.data, rule1_index, rule2_index, None)
                         }
                     }
-                    EdgeLabel::Negation => is_negation_reliance(&mut self.data, rule1_index, rule2_index, None),
-                    EdgeLabel::Aggregation => is_aggregation_reliance(&mut self.data, rule1_index, rule2_index, None),
+                    EdgeLabel::Negation => {
+                        is_negation_reliance(&mut self.data, rule1_index, rule2_index, None)
+                    }
+                    EdgeLabel::Aggregation => {
+                        is_aggregation_reliance(&mut self.data, rule1_index, rule2_index, None)
+                    }
                 } {
                     vec![mu]
                 } else {
@@ -763,8 +884,6 @@ impl<'a> RelianceMemoization<'a> {
 impl<SubStrategy: RuleSelectionStrategy> StrategyFullChainStratification<SubStrategy> {
     /// Compute predicate-based dependencies in the ruleset
     fn build_dependency_graph(rules: &Vec<&NormalizedRule>) -> Graph {
-        use crate::rule_model::components::tag::Tag;
-
         let mut predicate_to_rules_body_positive = HashMap::<Tag, Vec<usize>>::new();
         let mut predicate_to_rules_body_negative = HashMap::<Tag, Vec<usize>>::new();
         let mut predicate_to_rules_head = HashMap::<Tag, Vec<usize>>::new();
@@ -873,10 +992,9 @@ impl<SubStrategy: RuleSelectionStrategy> StrategyFullChainStratification<SubStra
                 .filter(|(_, rule2_index)| stratum_set.contains(&rule2_index))
             {
                 if let Some(_) = mem.get(rule1_index, rule2_index, label) {
-                    if reliance_graph.has_path_via(
+                    if reliance_graph.has_path_via_special(
                         reliance_graph.node_unchecked(&rule1_index),
                         reliance_graph.node_unchecked(&rule1_index),
-                        EdgeLabel::is_special,
                     ) {
                         return Err(SelectionStrategyError::NonStratifiedProgram);
                     }
@@ -920,29 +1038,23 @@ impl<SubStrategy: RuleSelectionStrategy> RuleSelectionStrategy
         dependency_graph.decompose_and_refine(
             &mut strata,
             &mut petgraph::algo::TarjanScc::new(),
-            EdgeLabel::is_special,
             |depg_stratum, strata| {
                 let reliance_graph =
                     Self::build_reliance_graph(&mut mem, &dependency_graph, &depg_stratum)?;
 
-                reliance_graph.decompose_and_refine(
-                    strata,
-                    &mut tarjan,
-                    EdgeLabel::is_special,
-                    |relg_stratum, strata| {
-                        let chain_graph =
-                            Self::build_chain_graph(&mut mem, &reliance_graph, &relg_stratum)?;
+                reliance_graph.decompose_and_refine(strata, &mut tarjan, |relg_stratum, strata| {
+                    let chain_graph =
+                        Self::build_chain_graph(&mut mem, &reliance_graph, &relg_stratum)?;
 
-                        let chaing_strata = chain_graph.layer().expect(
-                            "chain graph should be acyclic if no SelectionStrategyError was raised",
-                        );
+                    let chaing_strata = chain_graph.layer().expect(
+                        "chain graph should be acyclic if no SelectionStrategyError was raised",
+                    );
 
-                        for chaing_stratum in chaing_strata {
-                            strata.push(chaing_stratum);
-                        }
-                        Ok(())
-                    },
-                )
+                    for chaing_stratum in chaing_strata {
+                        strata.push(chaing_stratum);
+                    }
+                    Ok(())
+                })
             },
         )?;
 

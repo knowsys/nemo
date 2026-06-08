@@ -45,7 +45,7 @@ impl StrategyTracing {
         let ranges = vec![UnionRange::Old; positive.len()];
         let mut negative = rule.negative().clone();
         let mut operations = rule.operations().clone();
-        let order = rule.variable_order();
+        let order = rule.body_variable_order();
 
         for (variable, value) in grounding {
             let new_operation =

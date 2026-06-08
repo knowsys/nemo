@@ -98,8 +98,7 @@ impl VariableOrder {
     pub fn iter(&self) -> impl Iterator<Item = &Variable> {
         let mut vars: Vec<&Variable> = self.0.keys().collect();
         vars.sort_by_key(|var| {
-            self.0
-                .get(var)
+            self.get(var)
                 .expect("we are iterating over existing keys")
         });
         vars.into_iter()
@@ -107,10 +106,13 @@ impl VariableOrder {
 
     /// Return a vector which puts the variables in the order prescribed by `self`.
     pub fn as_ordered_list(&self) -> Vec<Variable> {
-        let mut variables: Vec<Variable> = self.iter().cloned().collect();
-        variables.sort_by(|a, b| self.get(a).unwrap().cmp(self.get(b).unwrap()));
+        self.iter().cloned().collect()
 
-        variables
+        // Doesn't this sort twice? self.iter() should already be in the right order... also we are collecting an iterator which was just created from a new vec...
+        //let mut variables: Vec<Variable> = self.iter().cloned().collect();
+        //variables.sort_by(|a, b| self.get(a).unwrap().cmp(self.get(b).unwrap()));
+        //
+        //variables
     }
 
     /// Return [String] with the contents of this object for debugging.
