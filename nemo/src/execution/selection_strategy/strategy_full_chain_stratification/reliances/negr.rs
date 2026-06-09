@@ -1,9 +1,8 @@
-use crate::execution::planning::normalization::rule::NormalizedRule;
+use crate::execution::planning::normalization::{atom::body::NegBodyAtom, rule::NormalizedRule};
 use crate::rule_model::substitution::Substitution;
 
 use crate::execution::selection_strategy::strategy_full_chain_stratification::reliance_memoization::RuleMemoization;
 use crate::execution::selection_strategy::strategy_full_chain_stratification::util::extend::{AtomMapping, CheckResult, Reliance, extend_init};
-use crate::execution::selection_strategy::strategy_full_chain_stratification::util::atom::NegBodyAtom;
 
 fn check_negr(
     rule1: &NormalizedRule,

@@ -15,7 +15,7 @@ use crate::execution::selection_strategy::strategy_full_chain_stratification::ut
 
 use strum::EnumCount;
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 enum Progress<T> {
     #[default]
     NotStarted,
@@ -46,6 +46,7 @@ impl<T> Progress<T> {
 ///   Progress::Complete(vec![mu1,mu2]) --> found reliance of this type with multiple possible AtomMappings (relevant for chain computations)
 type Reliances = [Progress<Vec<Reliance>>; EdgeLabel::COUNT];
 
+#[derive(Debug)]
 pub struct RuleMemoization<'a> {
     pub rules: &'a Vec<&'a NormalizedRule>,
 
@@ -56,6 +57,23 @@ pub struct RuleMemoization<'a> {
     encoded_rules: Vec<Option<RuleEncoding>>,
 }
 
+impl<'a> RuleMemoization<'a> {
+    pub fn new(rules: &'a Vec<&'a NormalizedRule>) -> Self {
+        Self {
+            rules,
+
+            reordered_atoms: ReorderAtoms {
+                reordered_body_atoms: Mem::new(rules.len()),
+                reordered_negative_body_atoms: Mem::new(rules.len()),
+                reordered_head_atoms: Mem::new(rules.len()),
+            },
+            sorted_head_atoms: Mem::new(rules.len()),
+            encoded_rules: vec![None; rules.len()],
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct RelianceMemoization<'a> {
     data: RuleMemoization<'a>,
 
@@ -68,17 +86,7 @@ pub struct RelianceMemoization<'a> {
 impl<'a> RelianceMemoization<'a> {
     pub fn new(rules: &'a Vec<&'a NormalizedRule>) -> Self {
         Self {
-            data: RuleMemoization {
-                rules,
-
-                reordered_atoms: ReorderAtoms {
-                    reordered_body_atoms: Mem::new(rules.len()),
-                    reordered_negative_body_atoms: Mem::new(rules.len()),
-                    reordered_head_atoms: Mem::new(rules.len()),
-                },
-                sorted_head_atoms: Mem::new(rules.len()),
-                encoded_rules: vec![None; rules.len()],
-            },
+            data: RuleMemoization::new(rules),
 
             reliances: Vec::new(),
             reliances_key_map: HashMap::new(),

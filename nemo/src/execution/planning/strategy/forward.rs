@@ -43,7 +43,7 @@ impl StrategyForward {
         predicates_with_facts: &HashSet<Tag>,
     ) -> Self {
         let positive = rule.positive().clone();
-        let negative = rule.negative().clone();
+        let negative = rule.negative().cloned().collect();
         let mut operations = rule.operations().clone();
         let positive_imports = rule.positive_imports().clone();
         let negative_imports = rule.negative_imports().clone();

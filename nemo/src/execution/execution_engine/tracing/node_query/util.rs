@@ -206,7 +206,7 @@ pub(super) fn valid_tables_plan(
         .collect::<Vec<_>>();
 
     let mut operations = rule.operations().clone();
-    let mut atoms_negations = rule.negative().clone();
+    let mut atoms_negations = rule.negative().cloned().collect();
 
     let generator = GeneratorFunctionFilterNegation::new(
         input_variables,

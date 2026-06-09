@@ -15,15 +15,24 @@ use crate::execution::selection_strategy::strategy_full_chain_stratification::re
 use crate::execution::planning::normalization::operation::Operation;
 
 /// maps indices of body/head atoms of the 2nd rule to indices of head atoms of the 1st rule
-pub type AtomMapping = HashMap<usize, usize>;
+#[derive(Debug, Clone)]
+pub struct AtomMapping(HashMap<usize, usize>);
 
-pub fn mapped<'a, T>(mu: &'a AtomMapping, domain: &'a Vec<T>) -> impl Iterator<Item = &'a T> + 'a {
-    mu.keys().copied().map(|k| &domain[k])
-}
-pub fn maxidx(mu: &AtomMapping) -> usize {
-    mu.keys().copied().max().unwrap_or(0)
+impl AtomMapping {
+    pub fn new() -> Self {
+        Self(HashMap::new())
+    }
+
+    pub fn mapped<'a, T>(&'a self, domain: &'a Vec<T>) -> impl Iterator<Item = &'a T> + 'a {
+        self.0.keys().copied().map(|k| &domain[k])
+    }
+
+    pub fn maxidx(&self) -> usize {
+        self.0.keys().copied().max().unwrap_or(0)
+    }
 }
 
+#[derive(Debug)]
 pub enum CheckResult {
     Accept,
     Extend,
@@ -32,6 +41,7 @@ pub enum CheckResult {
 
 type CheckFn = fn(&NormalizedRule, &NormalizedRule, &AtomMapping, &Substitution) -> CheckResult;
 
+#[derive(Debug)]
 pub struct Reliance {
     mu: AtomMapping,
     idx_dom: usize,
@@ -107,7 +117,7 @@ fn extend<T: Atom>(
         let atom_i = rule2_part[i];
 
         debug_assert!(
-            !mu.contains_key(&i),
+            !mu.0.contains_key(&i),
             "extend tried to change previous mapping"
         );
 
@@ -128,7 +138,7 @@ fn extend<T: Atom>(
 
             // prefer mapping variables of rule1 to variables of rule2
             if let Some(eta) = unify(atom_j.terms(), atom_i.primitives(), eta.clone()) {
-                mu.insert(i, j);
+                mu.0.insert(i, j);
                 match check(rule1, rule2, mu, &eta) {
                     CheckResult::Accept => {
                         return Some(Reliance {
@@ -160,7 +170,7 @@ fn extend<T: Atom>(
                 }
             }
         }
-        mu.remove(&i);
+        mu.0.remove(&i);
     }
 
     None

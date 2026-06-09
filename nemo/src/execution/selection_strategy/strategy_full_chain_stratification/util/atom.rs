@@ -1,4 +1,7 @@
-use crate::execution::planning::normalization::atom::{body::BodyAtom, head::HeadAtom};
+use crate::execution::planning::normalization::atom::{
+    body::{BodyAtom, NegBodyAtom},
+    head::HeadAtom,
+};
 use crate::rule_model::components::term::primitive::{Primitive, variable::Variable};
 
 use crate::execution::selection_strategy::strategy_full_chain_stratification::util::ordered_atoms::{Mem, ReorderedAtoms, ReorderAtoms};
@@ -67,27 +70,13 @@ impl Atom for BodyAtom {
     }
 }
 
-#[repr(transparent)]
-pub struct NegBodyAtom(BodyAtom);
-
-impl NegBodyAtom {
-    /// Cast a reference to a [BodyAtom] to a reference to a [NegBodyAtom].
-    /// This is safe, since the layout of the transparent newtype is compatible.
-    /// This is analogous to deriving `bytemuck::TransparentWrapper` or `ref_cast::RefCast`.
-    pub fn wrap_ref(r: &BodyAtom) -> &Self {
-        //let tmp: *const BodyAtom = r;
-        //unsafe { &*(tmp as *const NegBodyAtom) }
-        unsafe { &*std::ptr::from_ref(r).cast::<NegBodyAtom>() }
-    }
-}
-
 impl Atom for NegBodyAtom {
     type Item<'a>
         = <BodyAtom as Atom>::Item<'a>
     where
         Self: 'a;
     delegate! {
-        to self.0 {
+        to self.as_body_atom() {
             fn pred(&self) -> Predicate;
             fn primitives<'a>(&'a self) -> impl Iterator<Item = Self::Item<'a>>;
             fn variables<'a>(&'a self) -> impl Iterator<Item = &'a Variable>;

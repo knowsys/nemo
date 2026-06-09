@@ -20,7 +20,11 @@ use crate::{
         analysis::variable_order::VariableOrder,
         normalization::{
             aggregate::Aggregation,
-            atom::{body::BodyAtom, head::HeadAtom, import::ImportAtom},
+            atom::{
+                body::{BodyAtom, NegBodyAtom},
+                head::HeadAtom,
+                import::ImportAtom,
+            },
             generator::VariableGenerator,
             operation::Operation,
         },
@@ -31,9 +35,14 @@ use crate::{
             ComponentIdentity,
             import_export::clause::ImportLiteral,
             tag::Tag,
-            term::primitive::{Primitive, variable::Variable},
+            term::{
+                Term,
+                operation::operation_kind::OperationKind,
+                primitive::{Primitive, variable::Variable},
+            },
         },
         pipeline::id::ProgramComponentId,
+        substitution::Substitution,
     },
     syntax,
     util::seperated_list::DisplaySeperatedList,
@@ -45,7 +54,7 @@ pub struct NormalizedRule {
     /// Positive body atoms
     positive: Vec<BodyAtom>,
     /// Negative body atoms
-    negative: Vec<BodyAtom>,
+    negative: Vec<NegBodyAtom>,
     /// Import Atoms
     positive_imports: Vec<ImportAtom>,
     /// Negated import atoms
@@ -128,7 +137,11 @@ impl NormalizedRule {
     }
 
     /// Return the list of negative body atoms in this rule.
-    pub fn negative(&self) -> &Vec<BodyAtom> {
+    pub fn negative(&self) -> impl Iterator<Item = &BodyAtom> {
+        self.negative.iter().map(NegBodyAtom::as_body_atom)
+    }
+
+    pub(crate) fn negative_atoms(&self) -> &Vec<NegBodyAtom> {
         &self.negative
     }
 
@@ -230,7 +243,9 @@ impl NormalizedRule {
 
     /// Determines whether the given rule is Datalog, i.e. free of negative body atoms and existential variables.
     pub fn is_datalog(&self) -> bool {
-        self.negative().len() == 0 && self.negative_imports().len() == 0 && !self.is_existential()
+        self.negative_atoms().len() == 0
+            && self.negative_imports().len() == 0
+            && !self.is_existential()
     }
 
     /// Return whether this rule contains any aggregates.
@@ -270,7 +285,10 @@ impl NormalizedRule {
 
         let mut negative = self.negative.clone();
         for import in self.negative_imports() {
-            let atom = BodyAtom::new(import.predicate().clone(), import.variables_cloned());
+            let atom = NegBodyAtom::new(BodyAtom::new(
+                import.predicate().clone(),
+                import.variables_cloned(),
+            ));
             negative.push(atom);
         }
 
@@ -403,8 +421,7 @@ impl NormalizedRule {
     }
 
     fn head_variables(&self) -> HashSet<&Variable> {
-        self
-            .head
+        self.head
             .iter()
             .flat_map(|atom| atom.variables())
             .collect::<HashSet<_>>()
@@ -525,11 +542,11 @@ impl NormalizedRule {
             operations.extend(new_operations);
         }
 
-        let mut negative = Vec::<BodyAtom>::default();
+        let mut negative = Vec::<NegBodyAtom>::default();
         for atom in rule.body_negative() {
             let (normalized_atom, new_operations) = BodyAtom::normalize_atom(&mut generator, atom);
 
-            negative.push(normalized_atom);
+            negative.push(NegBodyAtom::new(normalized_atom));
             operations.extend(new_operations);
         }
 
@@ -671,6 +688,28 @@ impl NormalizedRule {
                 transform_positions,
             ))
         }
+    }
+}
+
+impl NormalizedRule {
+    /// Obtain a new rule by apply the given variable substitution to this rule.
+    pub fn substitute(&self, eta: &Substitution) -> Self {
+        let mut rule = self.clone();
+        rule.operations
+            .extend(eta.into_iter().filter_map(|(from_primitive, to_term)| {
+                if let Term::Primitive(to_primitive) = to_term {
+                    Some(Operation::Operation {
+                        kind: OperationKind::Equal,
+                        subterms: vec![
+                            Operation::Primitive(from_primitive.clone()),
+                            Operation::Primitive(to_primitive.clone()),
+                        ],
+                    })
+                } else {
+                    None
+                }
+            }));
+        rule
     }
 }
 

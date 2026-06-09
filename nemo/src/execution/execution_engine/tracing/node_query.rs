@@ -603,7 +603,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             // The content of the negated nodes is just the complete table
             // corresponding to the negated atoms predicate:
 
-            for (index, negative_atom) in rule.negative().iter().enumerate() {
+            for (index, negative_atom) in rule.negative().enumerate() {
                 let mut next_address = address.clone();
                 next_address.push(rule.positive_all().len() + index);
 

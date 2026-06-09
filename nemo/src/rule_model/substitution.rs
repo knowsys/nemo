@@ -66,18 +66,30 @@ impl Substitution {
     }
 
     /// Resolve a primitive w.r.t. the substitution.
-    pub fn get(&self, term: &Primitive) -> Option<Primitive> {
-        match term {
-            Primitive::Variable(_) => match self.map.get(term) {
-                Some(Term::Primitive(prim)) => Some(prim.clone()),
-                _ => None,
-            },
-            Primitive::Ground(_) => Some(term.clone()),
+    pub fn get_primitive<'a>(&'a self, primitive: &'a Primitive) -> Option<&'a Primitive> {
+        match primitive {
+            Primitive::Variable(_) => Some(self.map.get(primitive)?.as_primitive()?),
+            Primitive::Ground(_) => Some(primitive),
         }
     }
 
+    /// Resolve a variable w.r.t. the substitution.
+    pub fn get_variable<'a>(&'a self, variable: &'a Variable) -> Option<&'a Variable> {
+        self.map
+            .get(&Primitive::Variable(variable.clone()))?
+            .as_variable()
+    }
+
+    /// Resolve all variables in the iterator w.r.t. the substitution.
+    pub fn substitute_variables<'a>(
+        &'a self,
+        vars: impl IntoIterator<Item = &'a Variable>,
+    ) -> impl Iterator<Item = &'a Variable> {
+        vars.into_iter().filter_map(|v| self.get_variable(v))
+    }
+
     /// Check if the gien variable is mapped by this substitution.
-    pub fn contains_var(&self, k: &Variable) -> bool {
+    pub fn contains_variable(&self, k: &Variable) -> bool {
         self.map.contains_key(&Primitive::Variable(k.clone()))
     }
 
@@ -104,10 +116,6 @@ impl Substitution {
             }
         })
     }
-}
-
-pub trait Substitute {
-    fn substitute(&mut self, eta: &Substitution) -> &mut Self;
 }
 
 impl<TypeFrom, TypeTo> From<HashMap<TypeFrom, TypeTo>> for Substitution

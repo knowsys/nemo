@@ -43,7 +43,7 @@ impl StrategyTracing {
     pub fn new(rule: &NormalizedRule, grounding: HashMap<Variable, AnyDataValue>) -> Self {
         let positive = rule.positive_all().clone();
         let ranges = vec![UnionRange::Old; positive.len()];
-        let mut negative = rule.negative().clone();
+        let mut negative = rule.negative().cloned().collect();
         let mut operations = rule.operations().clone();
         let order = rule.body_variable_order();
 

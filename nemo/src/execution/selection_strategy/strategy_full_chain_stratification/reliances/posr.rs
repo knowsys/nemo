@@ -1,130 +1,12 @@
 use std::collections::HashSet;
 
-use crate::execution::selection_strategy::strategy_full_chain_stratification::util::atom::{
-    Atom, Predicate,
-};
-use crate::rule_model::components::IterablePrimitives;
-use crate::rule_model::substitution::{Substitute, Substitution};
-use crate::{
-    execution::planning::normalization::{
-        atom::{body::BodyAtom, head::HeadAtom},
-        rule::NormalizedRule,
-    },
-    rule_model::components::term::{
-        Term,
-        primitive::{Primitive, variable::Variable},
-    },
-};
+use crate::execution::planning::normalization::{atom::body::BodyAtom, rule::NormalizedRule};
+use crate::execution::selection_strategy::strategy_full_chain_stratification::util::atom::Atom;
+use crate::rule_model::substitution::Substitution;
 
 use crate::execution::selection_strategy::strategy_full_chain_stratification::reliance_memoization::RuleMemoization;
-use crate::execution::selection_strategy::strategy_full_chain_stratification::util::extend::{AtomMapping, CheckResult, Reliance, extend_init, mapped, maxidx};
-use crate::execution::selection_strategy::strategy_full_chain_stratification::util::database::RepresentativeDatabase;
-
-impl IterablePrimitives for BodyAtom {
-    fn primitive_terms<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Primitive> + 'a> {
-        todo!()
-    }
-
-    fn primitive_terms_mut<'a>(
-        &'a mut self,
-    ) -> Box<dyn Iterator<Item = &'a mut Self::TermType> + 'a> {
-        todo!()
-    }
-}
-
-impl IterablePrimitives for HeadAtom {
-    fn primitive_terms<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Primitive> + 'a> {
-        todo!()
-    }
-
-    fn primitive_terms_mut<'a>(
-        &'a mut self,
-    ) -> Box<dyn Iterator<Item = &'a mut Self::TermType> + 'a> {
-        todo!()
-    }
-}
-
-impl IterablePrimitives for Variable {
-    fn primitive_terms<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Primitive> + 'a> {
-        todo!()
-    }
-
-    fn primitive_terms_mut<'a>(
-        &'a mut self,
-    ) -> Box<dyn Iterator<Item = &'a mut Self::TermType> + 'a> {
-        todo!()
-    }
-}
-
-impl<T: IterablePrimitives> IterablePrimitives for HashSet<&T> {
-    fn primitive_terms<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Primitive> + 'a> {
-        Box::from(self.iter().flat_map(|t| t.primitive_terms()))
-    }
-
-    fn primitive_terms_mut<'a>(
-        &'a mut self,
-    ) -> Box<dyn Iterator<Item = &'a mut Self::TermType> + 'a> {
-        todo!()
-    }
-}
-
-fn apply_to_variables(eta: &Substitution, vars: HashSet<&Variable>) -> HashSet<Variable> {
-    vars.into_iter()
-        .filter_map(|v| {
-            if let Some(Primitive::Variable(v_out)) = eta.get(&Primitive::Variable(v.clone())) {
-                Some(v_out)
-            } else {
-                None
-            }
-        })
-        .collect()
-}
-
-struct SubstitutedAtom {
-    predicate: Predicate,
-    terms: Vec<Term>,
-}
-
-impl From<&BodyAtom> for SubstitutedAtom {
-    fn from(value: &BodyAtom) -> Self {
-        Self {
-            predicate: value.predicate().name().to_string(),
-            terms: value
-                .terms()
-                .map(|v| Term::Primitive(Primitive::Variable(v.clone())))
-                .collect(),
-        }
-    }
-}
-
-impl From<&HeadAtom> for SubstitutedAtom {
-    fn from(value: &HeadAtom) -> Self {
-        Self {
-            predicate: value.predicate().name().to_string(),
-            terms: value.terms().map(|p| Term::Primitive(p.clone())).collect(),
-        }
-    }
-}
-
-impl Substitute for Term {
-    fn substitute(&mut self, eta: &Substitution) -> &mut Self {
-        if let Term::Primitive(prim) = self {
-            if let Some(p) = eta.get(prim) {
-                *self = Term::Primitive(p);
-            }
-        }
-        self
-    }
-}
-
-impl Substitute for SubstitutedAtom {
-    fn substitute(&mut self, eta: &Substitution) -> &mut Self {
-        self.terms.iter_mut().for_each(|t| {
-            t.substitute(eta);
-        });
-        self
-    }
-}
+use crate::execution::selection_strategy::strategy_full_chain_stratification::util::extend::{AtomMapping, CheckResult, Reliance, extend_init};
+use crate::execution::selection_strategy::strategy_full_chain_stratification::util::database::{RepresentativeDatabase, RepresentativeAtom};
 
 fn check_posr(
     rule1: &NormalizedRule,
@@ -132,12 +14,13 @@ fn check_posr(
     mu: &AtomMapping,
     eta: &Substitution,
 ) -> CheckResult {
-    let mut r1_universals_eta = rule1.universals();
-    eta.apply(&mut r1_universals_eta);
+    let r1_universals_eta = eta
+        .substitute_variables(rule1.universals())
+        .collect::<HashSet<_>>();
     let r1_existentials = rule1.existentials();
 
     // mu failed if eta assigned a variable in rule1.body to an existential
-    if r1_existentials.iter().any(|v| eta.contains_var(*v)) {
+    if r1_existentials.iter().any(|v| eta.contains_variable(*v)) {
         log::trace!("existential of rule1 mapped");
         return CheckResult::Reject;
     }
@@ -148,9 +31,9 @@ fn check_posr(
         return CheckResult::Reject;
     }
 
-    let rule2_body_mapped_set = mapped(mu, &rule2.positive()).collect::<HashSet<_>>();
+    let rule2_body_mapped_set = mu.mapped(&rule2.positive()).collect::<HashSet<_>>();
 
-    let mu_maxidx = maxidx(mu);
+    let mu_maxidx = mu.maxidx();
 
     let rule2_body_unmapped_left = &rule2.positive()[..mu_maxidx]
         .iter()
@@ -160,11 +43,13 @@ fn check_posr(
         .collect::<HashSet<_>>();
 
     // mu failed if eta assigned a variable in the left unmapped portion of rule2.body to an existential
-    let mut rule2_body_unmapped_left_vars_eta = rule2_body_unmapped_left
-        .iter()
-        .flat_map(|atom| atom.variables())
+    let rule2_body_unmapped_left_vars_eta = eta
+        .substitute_variables(
+            rule2_body_unmapped_left
+                .iter()
+                .flat_map(|atom| atom.variables()),
+        )
         .collect::<HashSet<_>>();
-    eta.apply(&mut rule2_body_unmapped_left_vars_eta);
     if !rule2_body_unmapped_left_vars_eta.is_disjoint(&r1_existentials) {
         log::trace!(
             "variables of the left unmapped part of rule2 under eta are not disjoint from existentials of rule1 => mu failed"
@@ -180,11 +65,13 @@ fn check_posr(
         .collect::<HashSet<_>>();
 
     // mu has to be extended if eta assigned a variable from the right unmapped portion of rule2.body to an existential
-    let mut rule2_body_unmapped_right_vars_eta = rule2_body_unmapped_right
-        .iter()
-        .flat_map(|atom| atom.variables())
+    let rule2_body_unmapped_right_vars_eta = eta
+        .substitute_variables(
+            rule2_body_unmapped_right
+                .iter()
+                .flat_map(|atom| atom.variables()),
+        )
         .collect::<HashSet<_>>();
-    eta.apply(&mut rule2_body_unmapped_right_vars_eta);
     if !rule2_body_unmapped_right_vars_eta.is_disjoint(&r1_existentials) {
         log::trace!(
             "variables of the right unmapped part of rule2 under eta are disjoint from existentials of rule1 => mu must be extended"
@@ -192,77 +79,72 @@ fn check_posr(
         return CheckResult::Extend;
     }
 
-    let mut rule1_body_eta = rule1.positive().iter().collect::<HashSet<_>>();
-    eta.apply(&mut rule1_body_eta);
+    let rule1_body_eta =
+        RepresentativeAtom::substitute_atoms(eta, rule1.positive()).collect::<HashSet<_>>();
 
-    let mut rule2_body_unmapped_eta = rule2
-        .positive()
-        .iter()
-        .collect::<HashSet<_>>()
-        .difference(&rule2_body_mapped_set)
-        .cloned()
-        .collect::<HashSet<_>>();
-    eta.apply(&mut rule2_body_unmapped_eta);
+    let rule2_body_unmapped_eta = RepresentativeAtom::substitute_atoms(
+        eta,
+        rule2
+            .positive()
+            .iter()
+            .collect::<HashSet<_>>()
+            .difference(&rule2_body_mapped_set)
+            .copied(),
+    )
+    .collect();
 
     // construct representative interpretation I_a
-    let rule1_body_eta_cup_rule2_body_unmapped_eta = rule1_body_eta.union(&rule2_body_unmapped_eta);
-    let interpretation_a_db = RepresentativeDatabase::new(
-        rule1_body_eta_cup_rule2_body_unmapped_eta
-            .into_iter()
-            .copied(),
+    let rule1_body_eta_cup_rule2_body_unmapped_eta = rule1_body_eta
+        .union(&rule2_body_unmapped_eta)
+        .collect::<HashSet<_>>();
+    log::trace!(
+        "I_a = {}",
+        RepresentativeDatabase::display(
+            rule1_body_eta_cup_rule2_body_unmapped_eta.iter().copied(),
+            None
+        )
     );
-    //log::trace!(
-    //    "{}",
-    //    db_to_string(
-    //        "I_a =",
-    //        &rule1_body_eta_cup_rule2_body_unmapped_eta,
-    //        &Database::new(&vec![])
-    //    )
-    //);
+    let interpretation_a_db =
+        RepresentativeDatabase::new(rule1_body_eta_cup_rule2_body_unmapped_eta.into_iter());
 
     // mu has to be extended if rule1 under eta is satisfied on I_a
-    let mut rule1_head_eta = rule1.head().iter().collect::<HashSet<_>>();
-    eta.apply(&mut rule1_head_eta);
-    if interpretation_a_db.entails(&r1_existentials, rule1_head_eta.iter().copied()) {
+    let rule1_head_eta =
+        RepresentativeAtom::substitute_atoms(eta, rule1.head()).collect::<HashSet<_>>();
+    if interpretation_a_db.entails(&r1_existentials, &rule1_head_eta) {
         log::trace!("I_a models the head of rule1 under eta => mu must be extended");
         return CheckResult::Extend;
     }
 
-    let mut rule2_body_eta = rule2.positive().iter().collect::<HashSet<_>>();
-    eta.apply(&mut rule2_body_eta);
+    let rule2_body_eta =
+        RepresentativeAtom::substitute_atoms(eta, rule2.positive()).collect::<HashSet<_>>();
 
     // mu has to be extended if rule2_body under eta is fully contained in I_a
-    if interpretation_a_db.contains(rule2_body_eta) {
+    if interpretation_a_db.contains(&rule2_body_eta) {
         log::trace!("body of rule2 under eta already contained in I_a => mu must be extended");
         return CheckResult::Extend;
     }
 
     // construct representative interpretation I_b
-    //log::trace!(
-    //    "{}",
-    //    db_to_string(
-    //        &format!("I_b = I_a {CUP}"),
-    //        &rule1_head_eta,
-    //        &interpretation_a_db
-    //    )
-    //);
-    let interpretation_b_db = RepresentativeDatabase::collect(rule1_head_eta, interpretation_a_db);
+    log::trace!(
+        "I_b = I_a U {}",
+        RepresentativeDatabase::display(&rule1_head_eta, Some(&interpretation_a_db))
+    );
+    let interpretation_b_db = interpretation_a_db.add_facts(&rule1_head_eta);
 
     // mu has failed if rule2 under eta is satisfied in I_b
-    let mut r2_existentials = rule2.existentials();
-    eta.apply(&mut r2_existentials);
-    let mut rule2_head_eta = rule2.head().iter().collect::<HashSet<_>>();
-    eta.apply(&mut rule2_head_eta);
-    if interpretation_b_db.entails(&r2_existentials, rule2_head_eta) {
+    let r2_existentials = eta.substitute_variables(rule2.existentials()).collect();
+    let rule2_head_eta =
+        RepresentativeAtom::substitute_atoms(eta, rule2.head()).collect::<HashSet<_>>();
+    if interpretation_b_db.entails(&r2_existentials, &rule2_head_eta) {
         log::trace!("I_b models head of rule2 under eta => mu failed");
         return CheckResult::Reject;
     }
 
-    let mut r2_universals_eta = rule2.universals();
-    eta.apply(&mut r2_universals_eta);
+    let r2_universals_eta = eta
+        .substitute_variables(rule2.universals())
+        .collect::<HashSet<_>>();
     for n in rule2.negative() {
-        let mut n = n.clone();
-        eta.apply(&mut n);
+        let n = RepresentativeAtom::from_atom_with_substitution(eta, n);
         let existentials = n
             .variables()
             .filter(|v| !r2_universals_eta.contains(v))
@@ -284,4 +166,349 @@ pub fn is_positive_reliance<'b, 'a: 'b>(
     previous_opt: Option<&Reliance>,
 ) -> Option<Reliance> {
     extend_init::<BodyAtom>(mem, rule1_index, rule2_index, check_posr, previous_opt)
+}
+
+#[cfg(test)]
+mod test {
+    #![allow(non_snake_case)] // to preserve the original test case names
+
+    use crate::{
+        execution::{
+            DefaultExecutionStrategy, ExecutionEngine, execution_parameters::ExecutionParameters, planning::normalization::rule::NormalizedRule, selection_strategy::strategy_full_chain_stratification::{
+                reliance_memoization::RuleMemoization, reliances::posr::is_positive_reliance,
+            }
+        },
+        rule_file::RuleFile,
+    };
+
+    fn aux_parse_rules(rules_str: &str) -> Vec<NormalizedRule> {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+
+        let engine: ExecutionEngine<DefaultExecutionStrategy> = rt
+            .block_on(ExecutionEngine::from_file(
+                RuleFile::new(rules_str.to_string(), "test_file".to_string()),
+                ExecutionParameters::default(),
+            ))
+            .unwrap()
+            .into_pair()
+            .0;
+        engine.chase_program().rules().clone()
+    }
+
+    // see also:
+    // <https://github.com/knowsys/2022-ISWC-reliances/tree/master/reproduce/VLog/examples/reliances>
+
+    #[test]
+    fn test_long() {
+        // vlog_posr = [(0, 1)], vlog_restr = [(0, 0)]
+
+        let rules = aux_parse_rules(
+            "
+            <http://purl.org/obo/owl/CL#CL_0000766>(?x), <http://purl.org/obo/owl/has_part>(?x, !y1), <http://purl.org/obo/owl/GO#GO_0030141>(!y1), <http://purl.org/obo/owl/obo#capable_of>(?x, !y2), <http://purl.org/obo/owl/GO#GO_0008015>(!y2), <http://purl.org/obo/owl/obo#has_plasma_membrane_part>(?x, !y3), <http://purl.org/obo/owl/PRO#PRO_000001012>(!y3), <http://purl.org/obo/owl/obo#has_plasma_membrane_part>(?x, !y4), <http://purl.org/obo/owl/PRO#PRO_000001332>(!y4), <http://purl.org/obo/owl/obo#has_plasma_membrane_part>(?x, !y5), <http://purl.org/obo/owl/PRO#PRO_000001969>(!y5), <http://purl.org/obo/owl/obo#lacks_plasma_membrane_part>(?x, !y6), <http://purl.org/obo/owl/PRO#PRO_000001002>(!y6), <http://purl.org/obo/owl/obo#lacks_plasma_membrane_part>(?x, !y7), <http://purl.org/obo/owl/PRO#PRO_000001020>(!y7), <http://purl.org/obo/owl/obo#lacks_plasma_membrane_part>(?x, !y8), <http://purl.org/obo/owl/PRO#PRO_000001024>(!y8), <http://purl.org/obo/owl/obo#lacks_plasma_membrane_part>(?x, !y9), <http://purl.org/obo/owl/PRO#PRO_000001084>(!y9) :- <http://purl.org/obo/owl/CL#CL_0000094>(?x).
+            <http://purl.org/obo/owl/CL#CL_0000037>(?x) :- <http://purl.org/obo/owl/CL#CL_0000988>(?x), <http://purl.org/obo/owl/obo#capable_of>(?x, ?y1), <http://purl.org/obo/owl/GO#GO_0002244>(?y1), <http://purl.org/obo/owl/obo#capable_of>(?x, ?y2), <http://purl.org/obo/owl/GO#GO_0048103>(?y2), <http://purl.org/obo/owl/obo#lacks_plasma_membrane_part>(?x, ?y3), <http://purl.org/obo/owl/PRO#PRO_000001002>(?y3), <http://purl.org/obo/owl/obo#lacks_plasma_membrane_part>(?x, ?y4), <http://purl.org/obo/owl/PRO#PRO_000001004>(?y4), <http://purl.org/obo/owl/obo#lacks_plasma_membrane_part>(?x, ?y5), <http://purl.org/obo/owl/PRO#PRO_000001012>(?y5), <http://purl.org/obo/owl/obo#lacks_plasma_membrane_part>(?x, ?y6), <http://purl.org/obo/owl/PRO#PRO_000001020>(?y6), <http://purl.org/obo/owl/obo#lacks_plasma_membrane_part>(?x, ?y7), <http://purl.org/obo/owl/PRO#PRO_000001024>(?y7), <http://purl.org/obo/owl/obo#lacks_plasma_membrane_part>(?x, ?y8), <http://purl.org/obo/owl/PRO#PRO_000001083>(?y8), <http://purl.org/obo/owl/obo#lacks_plasma_membrane_part>(?x, ?y9), <http://purl.org/obo/owl/PRO#PRO_000001084>(?y9), <http://purl.org/obo/owl/obo#lacks_plasma_membrane_part>(?x, ?y10), <http://purl.org/obo/owl/PRO#PRO_000001289>(?y10), <http://purl.org/obo/owl/obo#lacks_plasma_membrane_part>(?x, ?y11), <http://purl.org/obo/owl/PRO#PRO_000001839>(?y11), <http://purl.org/obo/owl/obo#lacks_plasma_membrane_part>(?x, ?y12), <http://purl.org/obo/owl/PRO#PRO_000001889>(?y12), <http://purl.org/obo/owl/obo#lacks_plasma_membrane_part>(?x, ?y13), <http://purl.org/obo/owl/PRO#PRO_000002978>(?y13), <http://purl.org/obo/owl/obo#lacks_plasma_membrane_part>(?x, ?y14), <http://purl.org/obo/owl/PRO#PRO_000002981>(?y14).
+            "
+        );
+
+        assert_eq!(
+            is_positive_reliance(&mut RuleMemoization::new(&rules.iter().collect()), 0, 1, None).is_some(),
+            true /* (suggestive test-case name + according to VLog) */
+        )
+    }
+
+    /*
+    #[test]
+    fn test_pos_basic() {
+        // vlog_posr = [(0, 1)], vlog_restr = []
+
+        let rule1: Rule = aux_parse_rule("A(X, V) :- B(X, Y)").unwrap().into();
+        let rule2: Rule = aux_parse_rule("C(X, Y) :- A(X, Y)").unwrap().into();
+        let rule1 = rule1.prime(1);
+
+        let mut result = RelianceResult::default();
+
+        assert_eq!(
+            trace_check_positive_dependency(0, TEST_VERBOSITY, &rule1, &rule2)
+                && trace_check_positive_reliance(0, TEST_VERBOSITY, &rule1, &rule2, &mut result),
+            true /* (suggestive test-case name + according to VLog) */
+        )
+    }
+
+    #[test]
+    fn test_pos_basic_2() {
+        // vlog_posr = [(0, 1)], vlog_restr = []
+
+        let rule1: Rule = aux_parse_rule("A(X, X), C(X, X) :- B(X, Y)")
+            .unwrap()
+            .into();
+        let rule2: Rule = aux_parse_rule("D(X, Y) :- A(X, Y), C(Y, X)")
+            .unwrap()
+            .into();
+        let rule1 = rule1.prime(1);
+
+        let mut result = RelianceResult::default();
+
+        assert_eq!(
+            trace_check_positive_dependency(0, TEST_VERBOSITY, &rule1, &rule2)
+                && trace_check_positive_reliance(0, TEST_VERBOSITY, &rule1, &rule2, &mut result),
+            true /* (suggestive test-case name + according to VLog) */
+        )
+    }
+
+    #[test]
+    fn test_pos_null_1() {
+        // vlog_posr = [], vlog_restr = []
+
+        let rule1: Rule = aux_parse_rule("H(X, Y) :- B(X)").unwrap().into();
+        let rule2: Rule = aux_parse_rule("C(Y) :- H(Y, Y)").unwrap().into();
+        let rule1 = rule1.prime(1);
+
+        let mut result = RelianceResult::default();
+
+        assert_eq!(
+            trace_check_positive_dependency(0, TEST_VERBOSITY, &rule1, &rule2)
+                && trace_check_positive_reliance(0, TEST_VERBOSITY, &rule1, &rule2, &mut result),
+            false /* (suggestive test-case name + according to VLog) */
+        )
+    }
+
+    #[test]
+    fn test_pos_null_2() {
+        // vlog_posr = [], vlog_restr = []
+
+        let rule1: Rule = aux_parse_rule("H(X, V) :- B(X)").unwrap().into();
+        let rule2: Rule = aux_parse_rule("D(X, Y) :- H(X, Y), C(Y)").unwrap().into();
+        let rule1 = rule1.prime(1);
+
+        let mut result = RelianceResult::default();
+
+        assert_eq!(
+            trace_check_positive_dependency(0, TEST_VERBOSITY, &rule1, &rule2)
+                && trace_check_positive_reliance(0, TEST_VERBOSITY, &rule1, &rule2, &mut result),
+            false /* (suggestive test-case name + according to VLog) */
+        )
+    }
+
+    #[test]
+    fn test_pos_phi2Ia() {
+        // vlog_posr = [], vlog_restr = []
+
+        let rule1: Rule = aux_parse_rule("A(X, Y), R(X) :- A(X, Y)").unwrap().into();
+        let rule2: Rule = aux_parse_rule("B(X, Y) :- A(X, Y)").unwrap().into();
+        let rule1 = rule1.prime(1);
+
+        let mut result = RelianceResult::default();
+
+        assert_eq!(
+            trace_check_positive_dependency(0, TEST_VERBOSITY, &rule1, &rule2)
+                && trace_check_positive_reliance(0, TEST_VERBOSITY, &rule1, &rule2, &mut result),
+            false /* (according to VLog) */
+        )
+    }
+
+    #[test]
+    fn test_pos_phi2Ia_ext() {
+        // vlog_posr = [(0, 1)], vlog_restr = []
+
+        let rule1: Rule = aux_parse_rule("A(X, X), R(X) :- B(X)").unwrap().into();
+        let rule2: Rule = aux_parse_rule("C(X, Y) :- A(X, Y), A(Y, X)")
+            .unwrap()
+            .into();
+        let rule1 = rule1.prime(1);
+
+        let mut result = RelianceResult::default();
+
+        assert_eq!(
+            trace_check_positive_dependency(0, TEST_VERBOSITY, &rule1, &rule2)
+                && trace_check_positive_reliance(0, TEST_VERBOSITY, &rule1, &rule2, &mut result),
+            true /* (suggestive test-case name + according to VLog) */
+        )
+    }
+
+    #[test]
+    fn test_pos_psi1Ia_ext() {
+        // vlog_posr = [(0, 1)], vlog_restr = [(0, 0)]
+
+        let rule1: Rule = aux_parse_rule("H(X, X), H(X, V), C(V, X) :- C(X, X), B(X)")
+            .unwrap()
+            .into();
+        let rule2: Rule = aux_parse_rule("D(X, Y) :- H(X, Y), C(Y, X), H(X, X)")
+            .unwrap()
+            .into();
+        let rule1 = rule1.prime(1);
+
+        let mut result = RelianceResult::default();
+
+        assert_eq!(
+            trace_check_positive_dependency(0, TEST_VERBOSITY, &rule1, &rule2)
+                && trace_check_positive_reliance(0, TEST_VERBOSITY, &rule1, &rule2, &mut result),
+            true /* (suggestive test-case name + according to VLog) */
+        )
+    }
+
+    #[test]
+    fn test_pos_psi1Ia_phi1() {
+        // vlog_posr = [], vlog_restr = []
+
+        let rule1: Rule = aux_parse_rule("A(V, V) :- A(X, X)").unwrap().into();
+        let rule2: Rule = aux_parse_rule("C(Y) :- A(Y, Y)").unwrap().into();
+        let rule1 = rule1.prime(1);
+
+        let mut result = RelianceResult::default();
+
+        assert_eq!(
+            trace_check_positive_dependency(0, TEST_VERBOSITY, &rule1, &rule2)
+                && trace_check_positive_reliance(0, TEST_VERBOSITY, &rule1, &rule2, &mut result),
+            false /* (according to VLog) */
+        )
+    }
+
+    #[test]
+    fn test_pos_psi1Ia_phi1phi22() {
+        // vlog_posr = [], vlog_restr = []
+
+        let rule1: Rule = aux_parse_rule("H(X, V), A(V, V) :- A(X, X), B(X)")
+            .unwrap()
+            .into();
+        let rule2: Rule = aux_parse_rule("C(X) :- H(X, X), H(X, Y)").unwrap().into();
+        let rule1 = rule1.prime(1);
+
+        let mut result = RelianceResult::default();
+
+        assert_eq!(
+            trace_check_positive_dependency(0, TEST_VERBOSITY, &rule1, &rule2)
+                && trace_check_positive_reliance(0, TEST_VERBOSITY, &rule1, &rule2, &mut result),
+            false /* (according to VLog) */
+        )
+    }
+
+    #[test]
+    fn test_pos_psi1Ia_phi22() {
+        // vlog_posr = [], vlog_restr = []
+
+        let rule1: Rule = aux_parse_rule("H(X, V) :- B(X)").unwrap().into();
+        let rule2: Rule = aux_parse_rule("C(X) :- H(X, X), H(X, Y)").unwrap().into();
+        let rule1 = rule1.prime(1);
+
+        let mut result = RelianceResult::default();
+
+        assert_eq!(
+            trace_check_positive_dependency(0, TEST_VERBOSITY, &rule1, &rule2)
+                && trace_check_positive_reliance(0, TEST_VERBOSITY, &rule1, &rule2, &mut result),
+            false /* (according to VLog) */
+        )
+    }
+
+    #[test]
+    fn test_pos_psi2Ib_phi1() {
+        // vlog_posr = [(1, 0)], vlog_restr = []
+
+        let rule1: Rule = aux_parse_rule("B(X, Y) :- A(X, Y)").unwrap().into();
+        let rule2: Rule = aux_parse_rule("A(X, V) :- B(X, Y)").unwrap().into();
+        let rule1 = rule1.prime(1);
+
+        let mut result = RelianceResult::default();
+
+        assert_eq!(
+            trace_check_positive_dependency(0, TEST_VERBOSITY, &rule1, &rule2)
+                && trace_check_positive_reliance(0, TEST_VERBOSITY, &rule1, &rule2, &mut result),
+            false /* (according to VLog) */
+        )
+    }
+
+    #[test]
+    fn test_pos_psi2Ib_phi22() {
+        // vlog_posr = [], vlog_restr = []
+
+        let rule1: Rule = aux_parse_rule("H(X, X) :- A(X)").unwrap().into();
+        let rule2: Rule = aux_parse_rule("B(X, X) :- B(X, Y), H(X, Y)")
+            .unwrap()
+            .into();
+        let rule1 = rule1.prime(1);
+
+        let mut result = RelianceResult::default();
+
+        assert_eq!(
+            trace_check_positive_dependency(0, TEST_VERBOSITY, &rule1, &rule2)
+                && trace_check_positive_reliance(0, TEST_VERBOSITY, &rule1, &rule2, &mut result),
+            false /* (according to VLog) */
+        )
+    }
+
+    #[test]
+    fn test_pos_psi2Ib_psi1() {
+        // vlog_posr = [], vlog_restr = []
+
+        let rule1: Rule = aux_parse_rule("H(X, V), T(Y, V) :- A(X, Y)")
+            .unwrap()
+            .into();
+        let rule2: Rule = aux_parse_rule("T(W, Y) :- H(X, Y)").unwrap().into();
+        let rule1 = rule1.prime(1);
+
+        let mut result = RelianceResult::default();
+
+        assert_eq!(
+            trace_check_positive_dependency(0, TEST_VERBOSITY, &rule1, &rule2)
+                && trace_check_positive_reliance(0, TEST_VERBOSITY, &rule1, &rule2, &mut result),
+            false /* (according to VLog) */
+        )
+    }
+
+    #[test]
+    fn test_pos_thesis() {
+        // vlog_posr = [(0, 1)], vlog_restr = []
+
+        let rule1: Rule = aux_parse_rule("P(X1, V), Q(V, Y1) :- A(X1, Y1)")
+            .unwrap()
+            .into();
+        let rule2: Rule = aux_parse_rule("B(W, W) :- P(X2, X2), P(X2, Y2), Q(Y2, X2)")
+            .unwrap()
+            .into();
+        let rule1 = rule1.prime(1);
+
+        let mut result = RelianceResult::default();
+
+        assert_eq!(
+            trace_check_positive_dependency(0, TEST_VERBOSITY, &rule1, &rule2)
+                && trace_check_positive_reliance(0, TEST_VERBOSITY, &rule1, &rule2, &mut result),
+            true /* (suggestive test-case name + according to VLog) */
+        )
+    }
+
+    #[test]
+    fn test_pos_unif_1() {
+        // vlog_posr = [], vlog_restr = []
+
+        let rule1: Rule = aux_parse_rule("H(X, X, const) :- B(X)").unwrap().into();
+        let rule2: Rule = aux_parse_rule("C(Y) :- H(Y, other, Y)").unwrap().into();
+        let rule1 = rule1.prime(1);
+
+        let mut result = RelianceResult::default();
+
+        assert_eq!(
+            trace_check_positive_dependency(0, TEST_VERBOSITY, &rule1, &rule2)
+                && trace_check_positive_reliance(0, TEST_VERBOSITY, &rule1, &rule2, &mut result),
+            false /* (according to VLog) */
+        )
+    }
+
+    #[test]
+    fn test_pos_unif_2() {
+        // vlog_posr = [], vlog_restr = []
+
+        let rule1: Rule = aux_parse_rule("H(X, V, const) :- B(X)").unwrap().into();
+        let rule2: Rule = aux_parse_rule("C(Y, Z) :- H(Y, Z, Z)").unwrap().into();
+        let rule1 = rule1.prime(1);
+
+        let mut result = RelianceResult::default();
+
+        assert_eq!(
+            trace_check_positive_dependency(0, TEST_VERBOSITY, &rule1, &rule2)
+                && trace_check_positive_reliance(0, TEST_VERBOSITY, &rule1, &rule2, &mut result),
+            false /* (according to VLog) */
+        )
+    }
+    */
 }

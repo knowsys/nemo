@@ -4,13 +4,12 @@ use std::{collections::HashSet, fmt::Display};
 
 use crate::{
     execution::planning::normalization::{generator::VariableGenerator, operation::Operation},
-    rule_model::{
-        components::{tag::Tag, term::primitive::variable::Variable},
-        substitution::{Substitute, Substitution},
-    },
+    rule_model::components::{tag::Tag, term::primitive::variable::Variable},
     syntax,
     util::seperated_list::DisplaySeperatedList,
 };
+
+use delegate::delegate;
 
 /// An atom that only uses [Variable]s.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -62,6 +61,34 @@ impl BodyAtom {
     /// Return the predicate of this atom.
     pub fn predicate(&self) -> Tag {
         self.predicate.clone()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub(crate) struct NegBodyAtom(BodyAtom);
+
+impl Display for NegBodyAtom {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl NegBodyAtom {
+    pub(crate) fn new(body_atom: BodyAtom) -> Self {
+        Self(body_atom)
+    }
+
+    pub(crate) fn as_body_atom(&self) -> &BodyAtom {
+        &self.0
+    }
+
+    delegate! {
+        to self.0 {
+            pub(crate) fn terms(&self) -> impl Iterator<Item = &Variable>;
+            pub(crate) fn arity(&self) -> usize;
+            pub(crate) fn predicate(&self) -> Tag;
+        }
     }
 }
 
@@ -135,11 +162,5 @@ impl BodyAtom {
         let normalized_atom = Self { predicate, terms };
 
         (normalized_atom, additional_operations)
-    }
-}
-
-impl Substitute for BodyAtom {
-    fn substitute(&mut self, eta: &Substitution) -> &mut Self {
-        todo!()
     }
 }

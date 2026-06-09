@@ -17,12 +17,13 @@ use crate::execution::selection_strategy::strategy_full_chain_stratification::ut
 
 use strum::IntoEnumIterator;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct RuleEncoding {
     pred_stream: Vec<Predicate>,
     arg_stream: Vec<usize>,
 }
 
+#[derive(Debug)]
 struct EncodeState {
     pred_stream: Vec<Predicate>,
     arg_stream: Vec<usize>,
@@ -130,7 +131,9 @@ pub fn encode_rule(rule: &NormalizedRule) -> RuleEncoding {
     };
 
     state.encode_vec(rule.positive(), EncodeState::encode_body_atom);
-    state.encode_vec(rule.negative(), EncodeState::encode_body_atom);
+    state.encode_vec(rule.negative_atoms(), |enc, neg_body_atom| {
+        enc.encode_body_atom(neg_body_atom.as_body_atom())
+    });
     state.encode_vec(rule.positive_imports(), EncodeState::encode_import_atom);
     state.encode_vec(rule.negative_imports(), EncodeState::encode_import_atom);
     state.encode_vec(rule.operations(), EncodeState::encode_operation);

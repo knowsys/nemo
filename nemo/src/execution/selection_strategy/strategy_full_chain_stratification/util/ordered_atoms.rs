@@ -4,13 +4,16 @@ use crate::execution::planning::analysis::variable_order::{
     VariableOrder, build_preferable_variable_orders_for_rule,
 };
 use crate::execution::planning::normalization::{
-    atom::{body::BodyAtom, head::HeadAtom},
+    atom::{
+        body::{BodyAtom, NegBodyAtom},
+        head::HeadAtom,
+    },
     rule::NormalizedRule,
 };
 use crate::rule_model::components::{tag::Tag, term::primitive::Primitive};
 
 use crate::execution::selection_strategy::strategy_full_chain_stratification::util::atom::{
-    Atom, NegBodyAtom, Predicate,
+    Atom, Predicate,
 };
 
 pub type ReorderedAtoms<'a, T> = Vec<&'a T>;
@@ -18,6 +21,7 @@ pub type ReorderedBodyAtoms<'a> = ReorderedAtoms<'a, BodyAtom>;
 pub type ReorderedNegBodyAtoms<'a> = ReorderedAtoms<'a, NegBodyAtom>;
 pub type ReorderedHeadAtoms<'a> = ReorderedAtoms<'a, HeadAtom>;
 
+#[derive(Debug)]
 pub struct Mem<T>(Vec<Option<T>>);
 
 impl<T: Clone> Mem<T> {
@@ -72,7 +76,6 @@ impl<'a> GetRuleMem<'a> for ReorderedNegBodyAtoms<'a> {
         fn construct_auxiliary_negation_rule(rule: &NormalizedRule) -> NormalizedRule {
             let mut universal_variables = rule
                 .negative()
-                .iter()
                 .flat_map(|atom| atom.terms())
                 .collect::<Vec<_>>();
             universal_variables.dedup();
@@ -85,19 +88,14 @@ impl<'a> GetRuleMem<'a> for ReorderedNegBodyAtoms<'a> {
                     .map(Primitive::from),
             );
 
-            NormalizedRule::positive_rule(vec![head], rule.negative().clone(), vec![])
+            NormalizedRule::positive_rule(vec![head], rule.negative().cloned().collect(), vec![])
         }
 
         let auxiliary_rule = construct_auxiliary_negation_rule(rule);
         let auxiliary_order = build_preferable_variable_orders_for_rule(&auxiliary_rule, None)
             .restrict_to(&rule.variables().cloned().collect::<HashSet<_>>());
 
-        reorder_atoms(
-            rule.negative()
-                .iter()
-                .map(|atom| NegBodyAtom::wrap_ref(atom)),
-            &auxiliary_order,
-        )
+        reorder_atoms(rule.negative_atoms(), &auxiliary_order)
     }
 }
 
@@ -108,16 +106,17 @@ impl<'a> GetRuleMem<'a> for ReorderedHeadAtoms<'a> {
     }
 }
 
-pub struct ReorderAtoms<'a> {
-    pub reordered_body_atoms: Mem<ReorderedBodyAtoms<'a>>,
-    pub reordered_negative_body_atoms: Mem<ReorderedNegBodyAtoms<'a>>,
-    pub reordered_head_atoms: Mem<ReorderedHeadAtoms<'a>>,
+#[derive(Debug)]
+pub(crate) struct ReorderAtoms<'a> {
+    pub(crate) reordered_body_atoms: Mem<ReorderedBodyAtoms<'a>>,
+    pub(crate) reordered_negative_body_atoms: Mem<ReorderedNegBodyAtoms<'a>>,
+    pub(crate) reordered_head_atoms: Mem<ReorderedHeadAtoms<'a>>,
 }
 
-#[derive(Clone)]
-pub struct SortedHeadAtoms<'a> {
-    pub sorted_atoms: ReorderedHeadAtoms<'a>,
-    pub ranges: HashMap<Predicate, (usize, usize)>,
+#[derive(Clone, Debug)]
+pub(crate) struct SortedHeadAtoms<'a> {
+    pub(crate) sorted_atoms: ReorderedHeadAtoms<'a>,
+    pub(crate) ranges: HashMap<Predicate, (usize, usize)>,
 }
 
 impl<'a> GetRuleMem<'a> for SortedHeadAtoms<'a> {

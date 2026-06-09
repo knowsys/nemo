@@ -29,8 +29,8 @@ where
     for (term_a, term_b) in terms_a.zip(terms_b) {
         let (term_a, term_b) = (term_a.as_ref(), term_b.as_ref());
         if term_a != term_b {
-            let mapped_term_a_opt = eta.get(term_a);
-            let mapped_term_b_opt = eta.get(term_b);
+            let mapped_term_a_opt = eta.get_primitive(term_a).cloned();
+            let mapped_term_b_opt = eta.get_primitive(term_b).cloned();
             match mapped_term_a_opt {
                 Some(mapped_term_a) => match mapped_term_a {
                     Primitive::Ground(_) => match mapped_term_b_opt {

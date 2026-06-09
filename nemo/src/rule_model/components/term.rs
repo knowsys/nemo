@@ -201,6 +201,20 @@ impl Term {
             Term::Tuple(term) => term.is_resolvable(),
         }
     }
+
+    pub fn as_primitive(&self) -> Option<&Primitive> {
+        match self {
+            Term::Primitive(primitive) => Some(primitive),
+            _ => None,
+        }
+    }
+
+    pub fn as_variable(&self) -> Option<&Variable> {
+        match self {
+            Term::Primitive(Primitive::Variable(variable)) => Some(variable),
+            _ => None,
+        }
+    }
 }
 
 impl ComponentBehavior for Term {
