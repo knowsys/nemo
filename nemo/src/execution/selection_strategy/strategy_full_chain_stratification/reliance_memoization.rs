@@ -7,6 +7,7 @@ use crate::execution::selection_strategy::strategy_full_chain_stratification::re
     aggr::is_aggregation_reliance, negr::is_negation_reliance, posr::is_positive_reliance,
     restr::is_restraint_reliance, self_restr::is_self_restraint_reliance,
 };
+use crate::execution::selection_strategy::strategy_full_chain_stratification::util::pieces::Piece;
 use crate::execution::selection_strategy::strategy_full_chain_stratification::util::{
     encode::{RuleEncoding, encode_rule, encode_rule_pair},
     extend::Reliance,
@@ -54,6 +55,7 @@ pub struct RuleMemoization<'a> {
     // uses `Vec<Option<X>>` (initialized to `vec![None; rules.len()]`) instead of `HashMap<usize,X>`
     pub reordered_atoms: ReorderAtoms<'a>,
     pub sorted_head_atoms: Mem<SortedHeadAtoms<'a>>,
+    pub head_pieces: Mem<Vec<Piece>>,
     encoded_rules: Vec<Option<RuleEncoding>>,
 }
 
@@ -61,13 +63,13 @@ impl<'a> RuleMemoization<'a> {
     pub fn new(rules: &'a Vec<&'a NormalizedRule>) -> Self {
         Self {
             rules,
-
             reordered_atoms: ReorderAtoms {
                 reordered_body_atoms: Mem::new(rules.len()),
                 reordered_negative_body_atoms: Mem::new(rules.len()),
                 reordered_head_atoms: Mem::new(rules.len()),
             },
             sorted_head_atoms: Mem::new(rules.len()),
+            head_pieces: Mem::new(rules.len()),
             encoded_rules: vec![None; rules.len()],
         }
     }

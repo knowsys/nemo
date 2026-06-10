@@ -6,7 +6,8 @@ pub mod util {
     pub mod encode;
     pub mod extend;
     pub mod ordered_atoms;
-    mod unify;
+    pub mod pieces;
+    pub mod unify;
 }
 mod reliances {
     pub mod aggr;

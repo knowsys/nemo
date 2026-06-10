@@ -1,9 +1,10 @@
 //! This module defines [Substitution].
 
 use std::collections::{
-    HashMap,
+    HashMap, HashSet,
     hash_map::{IntoIter, Iter, IterMut},
 };
+use std::fmt::Display;
 
 use crate::rule_model::origin::Origin;
 
@@ -93,6 +94,54 @@ impl Substitution {
         self.map.contains_key(&Primitive::Variable(k.clone()))
     }
 
+    /// Restrict this substitution to the given domain of variables.
+    pub fn restriction(&self, domain: &HashSet<&Variable>) -> Self {
+        Self {
+            map: self
+                .map
+                .clone()
+                .into_iter()
+                .filter(|(from, _to)| {
+                    if let Primitive::Variable(var) = from {
+                        domain.contains(var)
+                    } else {
+                        false
+                    }
+                })
+                .collect(),
+        }
+    }
+
+    /// f.compose(g) means (f ∘︎ g)(x) = f(g(x)
+    pub fn compose(&self, other: &Self) -> Self {
+        Self {
+            map: other
+                .map
+                .iter()
+                .map(|(k, v)| {
+                    (
+                        k.clone(),
+                        match v {
+                            Term::Primitive(primitive) => match primitive {
+                                Primitive::Variable(_) => self.map.get(primitive).cloned(),
+                                _ => None,
+                            },
+                            _ => None,
+                        }
+                        .unwrap_or(v.clone()),
+                    )
+                })
+                .chain(
+                    self.map
+                        .iter()
+                        .filter(|(k, _v)| !other.map.contains_key(k))
+                        .map(|(k, v)| (k.clone(), v.clone())),
+                )
+                .filter(|(k, v)| Term::Primitive(k.clone()) != *v)
+                .collect(),
+        }
+    }
+
     /// Apply mapping to a program component.
     pub fn apply<Component: IterablePrimitives<TermType = Term>>(&self, component: &mut Component) {
         for term in component.primitive_terms_mut() {
@@ -115,6 +164,11 @@ impl Substitution {
                 None
             }
         })
+    }
+
+    /// Check is this is the identity substitution.
+    pub fn is_empty(&self) -> bool {
+        self.map.is_empty()
     }
 }
 
@@ -157,5 +211,19 @@ impl<'a> IntoIterator for &'a mut Substitution {
 
     fn into_iter(self) -> Self::IntoIter {
         self.map.iter_mut()
+    }
+}
+
+impl Display for Substitution {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "[{}]",
+            self.map
+                .iter()
+                .map(|(from, to)| format!("{from}->{to}"))
+                .intersperse(",".to_string())
+                .collect::<String>()
+        )
     }
 }

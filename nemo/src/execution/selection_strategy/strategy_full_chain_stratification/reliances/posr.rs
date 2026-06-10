@@ -8,15 +8,12 @@ use crate::execution::selection_strategy::strategy_full_chain_stratification::re
 use crate::execution::selection_strategy::strategy_full_chain_stratification::util::extend::{AtomMapping, CheckResult, Reliance, extend_init};
 use crate::execution::selection_strategy::strategy_full_chain_stratification::util::database::{RepresentativeDatabase, RepresentativeAtom};
 
-fn check_posr(
+pub(super) fn check_posr(
     rule1: &NormalizedRule,
     rule2: &NormalizedRule,
     mu: &AtomMapping,
     eta: &Substitution,
 ) -> CheckResult {
-    let r1_universals_eta = eta
-        .substitute_variables(rule1.universals())
-        .collect::<HashSet<_>>();
     let r1_existentials = rule1.existentials();
 
     // mu failed if eta assigned a variable in rule1.body to an existential
@@ -24,6 +21,10 @@ fn check_posr(
         log::trace!("existential of rule1 mapped");
         return CheckResult::Reject;
     }
+
+    let r1_universals_eta = eta
+        .substitute_variables(rule1.universals())
+        .collect::<HashSet<_>>();
     if !r1_universals_eta.is_disjoint(&r1_existentials) {
         log::trace!(
             "universals of rule1 under eta are not disjoint from existentials of rule1 => mu failed"
@@ -39,7 +40,7 @@ fn check_posr(
         .iter()
         .collect::<HashSet<_>>()
         .difference(&rule2_body_mapped_set)
-        .cloned()
+        .copied()
         .collect::<HashSet<_>>();
 
     // mu failed if eta assigned a variable in the left unmapped portion of rule2.body to an existential
@@ -61,7 +62,7 @@ fn check_posr(
         .iter()
         .collect::<HashSet<_>>()
         .difference(&rule2_body_mapped_set)
-        .cloned()
+        .copied()
         .collect::<HashSet<_>>();
 
     // mu has to be extended if eta assigned a variable from the right unmapped portion of rule2.body to an existential
@@ -165,5 +166,12 @@ pub fn is_positive_reliance<'b, 'a: 'b>(
     rule2_index: usize,
     previous_opt: Option<&Reliance>,
 ) -> Option<Reliance> {
-    extend_init::<BodyAtom>(mem, rule1_index, rule2_index, check_posr, previous_opt)
+    extend_init::<BodyAtom>(
+        mem,
+        rule1_index,
+        rule2_index,
+        check_posr,
+        previous_opt,
+        Substitution::default(),
+    )
 }

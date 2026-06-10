@@ -1,6 +1,6 @@
 //! This module defines [Variable]
 
-use std::fmt::Display;
+use std::{fmt::Display, num::NonZero};
 
 use existential::ExistentialVariable;
 use global::GlobalVariable;
@@ -34,6 +34,46 @@ pub enum Variable {
     Existential(ExistentialVariable),
     /// Global variable
     Global(GlobalVariable),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd)]
+pub struct PrimedVariable {
+    prime: Option<NonZero<u16>>,
+    variable: Variable,
+}
+
+impl From<Variable> for PrimedVariable {
+    fn from(variable: Variable) -> Self {
+        Self {
+            prime: None,
+            variable,
+        }
+    }
+}
+
+use delegate::delegate;
+
+impl PrimedVariable {
+    pub fn prime(&self) -> Self {
+        Self {
+            prime: Some(
+                self.prime
+                    .map(|p| p.checked_add(1).expect("prime should not overflow"))
+                    .unwrap_or(NonZero::new(1).expect("one is not zero")),
+            ),
+            variable: self.variable.clone(),
+        }
+    }
+    delegate! {
+        to self.variable {
+            pub fn name(&self) -> Option<&str>;
+            pub fn is_universal(&self) -> bool;
+            pub fn is_existential(&self) -> bool;
+            pub fn is_global(&self) -> bool;
+            pub fn is_anonymous(&self) -> bool;
+            pub fn rename(&mut self, name: String);
+        }
+    }
 }
 
 impl Variable {

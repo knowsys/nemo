@@ -15,7 +15,7 @@ use crate::execution::selection_strategy::strategy_full_chain_stratification::re
 use crate::execution::planning::normalization::operation::Operation;
 
 /// maps indices of body/head atoms of the 2nd rule to indices of head atoms of the 1st rule
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct AtomMapping(HashMap<usize, usize>);
 
 impl AtomMapping {
@@ -41,7 +41,7 @@ pub enum CheckResult {
 
 type CheckFn = fn(&NormalizedRule, &NormalizedRule, &AtomMapping, &Substitution) -> CheckResult;
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Reliance {
     mu: AtomMapping,
     idx_dom: usize,
@@ -55,6 +55,7 @@ pub fn extend_init<'b, 'a: 'b, T: Atom + 'static>(
     rule2_index: usize,
     check: CheckFn,
     previous_opt: Option<&Reliance>,
+    mut eta: Substitution,
 ) -> Option<Reliance>
 where
     Vec<&'a T>: GetRuleMem<'a>,
@@ -69,7 +70,6 @@ where
     let rule2 = mem.rules[rule2_index];
 
     // initialize the substitution with known constant replacements (possibly from normalization)
-    let mut eta = Substitution::default();
     for op in rule1.operations().iter().chain(rule2.operations().iter()) {
         if let Operation::Operation {
             kind: OperationKind::Equal,

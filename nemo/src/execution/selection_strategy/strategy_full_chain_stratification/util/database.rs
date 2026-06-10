@@ -28,7 +28,7 @@ impl RepresentativeAtom {
         })
     }
     pub fn from_atom_with_substitution<T: Atom>(eta: &Substitution, atom: &T) -> Self {
-        RepresentativeAtom {
+        Self {
             predicate: atom.pred(),
             primitives: atom
                 .primitives()
@@ -43,6 +43,15 @@ impl RepresentativeAtom {
         atoms
             .into_iter()
             .map(|atom| Self::from_atom_with_substitution(eta, atom))
+    }
+}
+
+impl<T: Atom> From<&T> for RepresentativeAtom {
+    fn from(atom: &T) -> Self {
+        Self {
+            predicate: atom.pred(),
+            primitives: atom.primitives().map(|p| p.as_ref().clone()).collect(),
+        }
     }
 }
 
