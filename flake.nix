@@ -2,7 +2,7 @@
   description = "nemo, a datalog-based rule engine for fast and scalable analytic data processing in memory";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
+    nixpkgs.url = "https://channels.nixos.org/nixos-26.05/nixexprs.tar.xz";
 
     rust-overlay = {
       url = "github:oxalica/rust-overlay";
@@ -391,8 +391,14 @@
             nemo-wasm-web = wasmPack { target = "web"; };
             nemo-wasm = self.packages.${system}.nemo-wasm-bundler;
 
-            python3 = pkgs.python3.withPackages (ps: [ self.packages.${system}.nemo-python ]);
-            python = python3;
+            python3 =
+              (pkgs.python3.override {
+                packageOverrides = pyfinal: pyprev: {
+                  nemo-python = pyfinal.toPythonModule self.packages.${system}.nemo-python;
+                };
+              }).withPackages
+                (ps: [ ps.nemo-python ]);
+            python = self.packages.${system}.python3;
 
             nodejs = pkgs.writeShellApplication {
               name = "node";
@@ -659,11 +665,6 @@
                 nemo-wasm-node
                 nemo-web
                 nemo-vscode-extension
-
-                nemo-no-incremental
-                nemo-only-incremental
-                nemo-no-merge
-                nemo-no-cartesian
                 ;
 
               nodePackages = lib.makeExtensible (lib.extends pkgs.nodePackages prev.nodePackages);

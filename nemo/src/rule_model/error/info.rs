@@ -8,19 +8,19 @@ use enum_assoc::Assoc;
 #[func(pub fn message(&self) -> String)]
 pub enum Info {
     /// Value was defined externally
-    #[assoc(message = format!("value was defined externally"))]
+    #[assoc(message = "value was defined externally".to_string())]
     DefinedExternally,
     /// First definition occurred somewhere
-    #[assoc(message = format!("first definition occurred here"))]
+    #[assoc(message = "first definition occurred here".to_string())]
     FirstDefinition,
     /// First use occurred somewhere
-    #[assoc(message = format!("first use occurred here"))]
+    #[assoc(message = "first use occurred here".to_string())]
     FirstUse,
     /// Predicate different arity
     #[assoc(message = format!("predicate was used here with arity {}", _arity))]
     PredicateArity { arity: usize },
     /// Value was defined here
-    #[assoc(message = format!("value was defined here"))]
+    #[assoc(message = "value was defined here".to_string())]
     ValueDefined,
 }
 
