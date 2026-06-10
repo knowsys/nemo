@@ -14,6 +14,9 @@ mod reliances {
     pub mod posr;
     pub mod restr;
     pub mod self_restr;
+
+    #[cfg(test)]
+    mod test;
 }
 mod reliance_memoization;
 

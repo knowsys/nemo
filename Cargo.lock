@@ -1660,6 +1660,7 @@ dependencies = [
  "colored",
  "csv",
  "delegate",
+ "dir-test",
  "enum-assoc",
  "env_logger",
  "flate2",
