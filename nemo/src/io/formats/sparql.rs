@@ -21,9 +21,11 @@ use crate::{
         AnyImportExportBuilder, FormatParameter, Parameters, StandardParameter, SupportedFormatTag,
         format_parameter, format_tag, value_type_matches,
     },
+    parser::ast::directive::{Directive::Base, base},
     rule_model::{
         components::{import_export::Direction, term::value_type::ValueType},
         error::validation_error::ValidationError,
+        translation::directive::FormatContext,
     },
     syntax::import_export::{
         attribute,
@@ -70,14 +72,13 @@ impl FormatParameter<SparqlTag> for SparqlParameter {
     fn is_value_valid(
         &self,
         value: AnyDataValue,
-        base: Option<Iri<String>>,
-        prefixes: HashMap<String, IriRef<String>>,
+        format_context: FormatContext,
     ) -> Result<(), ValidationError> {
         value_type_matches(self, &value, self.supported_types())?;
 
         match self {
             SparqlParameter::BaseParamType(base_param) => {
-                FormatParameter::<SparqlTag>::is_value_valid(base_param, value, base, prefixes)
+                FormatParameter::<SparqlTag>::is_value_valid(base_param, value, format_context)
             }
             SparqlParameter::Base => Ok(()),
             SparqlParameter::Format => DsvValueFormats::try_from(value).and(Ok(())).map_err(|_| {
@@ -101,25 +102,22 @@ impl FormatParameter<SparqlTag> for SparqlParameter {
 
                 let mut parser = SparqlParser::new();
 
-                let resolved_prefixes: Vec<(String, Iri<String>)> = prefixes
-                    .iter()
-                    .map(|(key, value)| {
-                        (
-                            key.clone(),
-                            Iri::from_str(&value.to_string())
-                                .unwrap_or_else(|_| base.clone().unwrap().resolve(value).unwrap()),
-                        )
-                    })
-                    .collect();
-
-                if let Some(base) = base {
-                    parser = parser.with_base_iri(base.to_string()).unwrap();
+                if let Some(base) = format_context.base() {
+                    parser = parser.with_base_iri(base.to_string()).map_err(|e| {
+                        ValidationError::InvalidSparqlQuery {
+                            query: query.clone(),
+                            oxi_error: e.to_string(),
+                        }
+                    })?
                 }
 
-                for (prefix_name, prefix_iri) in resolved_prefixes {
+                for (prefix_name, prefix_iri) in format_context.prefixes() {
                     parser = parser
                         .with_prefix(prefix_name, prefix_iri.to_string())
-                        .unwrap();
+                        .map_err(|e| ValidationError::InvalidSparqlQuery {
+                            query: query.clone(),
+                            oxi_error: e.to_string(),
+                        })?
                 }
 
                 parser.parse_query(query.as_str()).and(Ok(())).map_err(|e| {
@@ -172,8 +170,7 @@ impl FormatBuilder for SparqlBuilder {
         _tag: Self::Tag,
         parameters: &Parameters<SparqlBuilder>,
         _direction: Direction,
-        base: Option<Iri<String>>,
-        prefixes: HashMap<String, IriRef<String>>,
+        format_context: FormatContext,
     ) -> Result<Self, ValidationError> {
         let value_formats = parameters
             .get_optional(SparqlParameter::Format)
@@ -194,29 +191,7 @@ impl FormatBuilder for SparqlBuilder {
             .map(|value| value.to_plain_string_unchecked())
             .unwrap_or(QUERY_DEFAULT.to_string());
 
-        let mut parser = SparqlParser::new();
-
-        // SparqlParser only accepts absolute (resolved) iri's
-        let resolved_prefixes: Vec<(String, Iri<String>)> = prefixes
-            .iter()
-            .map(|(key, value)| {
-                (
-                    key.clone(),
-                    Iri::from_str(&value.to_string())
-                        .unwrap_or_else(|_| base.clone().unwrap().resolve(value).unwrap()),
-                )
-            })
-            .collect();
-
-        if let Some(base) = base {
-            parser = parser.with_base_iri(base.to_string()).unwrap();
-        }
-
-        for (prefix_name, prefix_iri) in resolved_prefixes {
-            parser = parser
-                .with_prefix(prefix_name, prefix_iri.to_string())
-                .unwrap();
-        }
+        let parser = format_context.as_sparql_parser();
 
         let query = parser
             .parse_query(query.as_str())
@@ -324,10 +299,13 @@ impl ImportHandler for SparqlHandler {
 mod test {
     use std::{collections::HashMap, str::FromStr};
 
-    use crate::parser::{
-        ParserState,
-        ast::{ProgramAST, directive::import::Import},
-        input::ParserInput,
+    use crate::{
+        parser::{
+            ParserState,
+            ast::{ProgramAST, directive::import::Import},
+            input::ParserInput,
+        },
+        rule_model::translation::directive::FormatContext,
     };
     use nom::combinator::all_consuming;
     use oxiri::{Iri, IriRef};
@@ -340,15 +318,16 @@ mod test {
     #[test]
     fn parse_query() {
         let base = Some(Iri::from_str("http://www.wikidata.org/").unwrap());
-        let prefixes: HashMap<String, IriRef<String>> = HashMap::from([
-            // PREFIX wikibase: <http://wikiba.se/ontology#>
-            (
-                "wikibase".to_string(),
-                IriRef::from_str("http://wikiba.se/ontology#").unwrap(),
-            ),
-            // PREFIX wdt: <http://www.wikidata.org/prop/direct/>
-            ("wdt".to_string(), IriRef::from_str("prop/direct/").unwrap()),
-        ]);
+
+        let mut format_context = FormatContext::default();
+        format_context.add_base("http://www.wikidata.org/".to_string());
+        // PREFIX wikibase: <http://wikiba.se/ontology#>
+        format_context.add_prefix(
+            "wikibase".to_string(),
+            "http://wikiba.se/ontology#".to_string(),
+        );
+        // PREFIX wdt: <http://www.wikidata.org/prop/direct/>
+        format_context.add_prefix("wdt".to_string(), "prop/direct/".to_string());
 
         let valid_query = AnyDataValue::new_plain_string(String::from("
         PREFIX wikibase: <http://wikiba.se/ontology#>
@@ -367,15 +346,12 @@ mod test {
         );
 
         let query_param = SparqlParameter::Query;
-        let result = query_param.is_value_valid(valid_query, base, prefixes);
+        let result = query_param.is_value_valid(valid_query, format_context);
         assert!(result.is_ok());
     }
 
     #[test]
     fn parse_invalid_query() {
-        let base = None;
-        let prefixes = HashMap::new();
-
         // Invalid because no prefixes are specified
         let invalid_query = AnyDataValue::new_plain_string(String::from("
             SELECT ?item ?itemLabel
@@ -387,7 +363,7 @@ mod test {
             LIMIT 10")
         );
         let query_param = SparqlParameter::Query;
-        let result = query_param.is_value_valid(invalid_query, base, prefixes);
+        let result = query_param.is_value_valid(invalid_query, FormatContext::default());
         assert!(result.is_err());
     }
 

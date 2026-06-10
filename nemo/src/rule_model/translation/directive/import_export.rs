@@ -1,6 +1,6 @@
 //! This module contains a function for handling import/export statements.
 
-use std::str::FromStr;
+use std::{mem::transmute, str::FromStr};
 
 use oxiri::{Iri, IriRef};
 
@@ -22,6 +22,7 @@ use crate::{
         origin::Origin,
         translation::{
             ASTProgramTranslation, TranslationComponent, complex::infix::InfixOperation,
+            directive::FormatContext,
         },
     },
 };
@@ -123,19 +124,18 @@ impl TranslationComponent for ImportDirective {
 
         let bindings = import_export_bindings(translation, import.guards())?;
 
-        let base = translation
-            .base
-            .clone()
-            .map(|x| Iri::from_str(&x.0).unwrap());
+        let mut format_context = FormatContext::default();
 
-        let prefixes = translation
-            .prefix_mapping
-            .iter()
-            .map(|(key, value)| (key.clone(), IriRef::from_str(&value.0).unwrap()))
-            .collect();
+        if let Some(base) = &translation.base {
+            format_context.add_base(base.0.clone());
+        }
+
+        for (prefix, iri) in &translation.prefix_mapping {
+            format_context.add_prefix(prefix.clone(), iri.0.clone());
+        }
 
         Some(Origin::ast(
-            ImportDirective::new(predicate, spec, bindings, base, prefixes),
+            ImportDirective::new(predicate, spec, bindings, format_context),
             import,
         ))
     }

@@ -17,7 +17,7 @@ use crate::{
     },
     rule_model::{
         components::rule::Rule, error::ValidationReport, origin::Origin,
-        pipeline::id::ProgramComponentId,
+        pipeline::id::ProgramComponentId, translation::directive::FormatContext,
     },
     syntax::{self, import_export::attribute::QUERY},
 };
@@ -79,10 +79,8 @@ pub(crate) struct ImportExportDirective {
     bindings: Vec<Operation>,
     /// Sub-rules for filtered import/export
     filter_rules: Vec<Rule>,
-    ///
-    base: Option<Iri<String>>,
-    ///
-    prefixes: HashMap<String, IriRef<String>>,
+    /// Base IRI (if any is set) and Hashmap of any Prefixes
+    format_context: FormatContext,
 }
 
 impl std::fmt::Display for ImportExportDirective {
@@ -176,8 +174,7 @@ impl ImportDirective {
         predicate: Tag,
         spec: ImportExportSpec,
         bindings: Vec<Operation>,
-        base: Option<Iri<String>>,
-        prefixes: HashMap<String, IriRef<String>>,
+        format_context: FormatContext,
     ) -> Self {
         Self(ImportExportDirective {
             origin: Origin::default(),
@@ -186,8 +183,7 @@ impl ImportDirective {
             spec,
             bindings,
             filter_rules: Vec::new(),
-            base,
-            prefixes,
+            format_context,
         })
     }
 
@@ -387,8 +383,7 @@ impl ImportDirective {
             self.filter_rules(),
             Direction::Import,
             report,
-            self.base().clone(),
-            self.prefixes().clone(),
+            self.format_context().clone(),
         )
     }
 
@@ -402,18 +397,13 @@ impl ImportDirective {
             self.filter_rules(),
             Direction::Import,
             &mut report,
-            self.base().clone(),
-            self.prefixes().clone(),
+            self.format_context().clone(),
         )
     }
 
-    /// Return the base
-    pub fn base(&self) -> &Option<Iri<String>> {
-        &self.0.base
-    }
-    /// Return the prefixes
-    pub fn prefixes(&self) -> &HashMap<String, IriRef<String>> {
-        &self.0.prefixes
+    /// Return the FormatContext
+    pub fn format_context(&self) -> &FormatContext {
+        &self.0.format_context
     }
 
     /// Return the predicate.
@@ -591,8 +581,7 @@ impl ExportDirective {
             spec,
             bindings,
             filter_rules: Vec::new(),
-            base: None,
-            prefixes: HashMap::new(),
+            format_context: FormatContext::default(),
         })
     }
 
@@ -624,8 +613,7 @@ impl ExportDirective {
             self.filter_rules(),
             Direction::Export,
             report,
-            self.base().clone(),
-            self.prefixes().clone(),
+            self.format_context().clone(),
         )
     }
 
@@ -639,18 +627,13 @@ impl ExportDirective {
             self.filter_rules(),
             Direction::Export,
             &mut report,
-            self.base().clone(),
-            self.prefixes().clone(),
+            self.format_context().clone(),
         )
     }
 
-    /// Return the predicate.
-    pub fn base(&self) -> &Option<Iri<String>> {
-        &self.0.base
-    }
-
-    pub fn prefixes(&self) -> &HashMap<String, IriRef<String>> {
-        &self.0.prefixes
+    /// Return the FormatContext
+    pub fn format_context(&self) -> &FormatContext {
+        &self.0.format_context
     }
 
     /// Return the predicate.

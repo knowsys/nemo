@@ -1,6 +1,10 @@
 //! This module contains functions for translating directive ast nodes.
 
-use std::collections::hash_map::Entry;
+use core::panic;
+use std::collections::{HashMap, hash_map::Entry};
+
+use oxiri::{Iri, IriParseError, IriRef};
+use spargebra::SparqlParser;
 
 use crate::{
     parser::ast::{self},
@@ -139,5 +143,75 @@ fn handle_prefix<'a>(
         Entry::Vacant(entry) => {
             entry.insert((prefix.iri().content(), prefix.origin()));
         }
+    }
+}
+
+/// Wrapper for IRI base and prefixes
+/// Automatically attempts to resolve all relative prefixes on the base
+#[derive(Clone, Debug, Default)]
+pub struct FormatContext {
+    base: Option<Iri<String>>,
+    prefixes: HashMap<String, Iri<String>>,
+}
+
+impl FormatContext {
+    pub fn base(&self) -> &Option<Iri<String>> {
+        &self.base
+    }
+
+    pub fn prefixes(&self) -> &HashMap<String, Iri<String>> {
+        &self.prefixes
+    }
+
+    /// adds a base if None was set before
+    /// panics if a base is already set
+    pub fn add_base(&mut self, base: String) {
+        match self.base {
+            None => self.base = Some(Iri::parse(base).expect("not a valid IRI")),
+            Some(_) => panic!("attempted to set existing base"),
+        }
+    }
+
+    /// adds an absolute prefix
+    /// if the prefix given is relative attempts to resolve it on the base
+    /// panics if
+    /// - the iri is invalid
+    /// - the prefix cannot be resolved
+    /// - a relative prefix is given but no base is set
+    pub fn add_prefix(&mut self, prefix: String, iri: String) {
+        let rel_prefix = IriRef::parse(iri.clone()).expect("not a valid Iri");
+        let abs_prefix;
+        if rel_prefix.is_absolute() {
+            abs_prefix = Iri::parse(iri.clone()).expect("absolute IRI is not absolute");
+        } else {
+            if let Some(base) = &self.base {
+                abs_prefix = base
+                    .resolve(&rel_prefix.clone())
+                    .expect("relative prefix not resolvable on base");
+            } else {
+                panic!("attempted to resolve relative prefix without base")
+            }
+        }
+
+        self.prefixes.insert(prefix, abs_prefix);
+    }
+
+    ///
+    pub fn as_sparql_parser(&self) -> SparqlParser {
+        let mut parser = SparqlParser::new();
+
+        if let Some(base) = &self.base {
+            parser = parser
+                .with_base_iri(base.to_string())
+                .expect("valid base is invalid");
+        }
+
+        for (prefix_name, prefix_iri) in &self.prefixes {
+            parser = parser
+                .with_prefix(prefix_name, prefix_iri.to_string())
+                .expect("valid prefix is invalid");
+        }
+
+        parser
     }
 }

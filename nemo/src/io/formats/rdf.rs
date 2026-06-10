@@ -39,6 +39,7 @@ use crate::{
     rule_model::{
         components::{import_export::Direction, term::value_type::ValueType},
         error::validation_error::ValidationError,
+        translation::directive::FormatContext,
     },
     syntax::import_export::{attribute, file_format},
 };
@@ -191,14 +192,13 @@ impl FormatParameter<RdfTag> for RdfParameter {
     fn is_value_valid(
         &self,
         value: AnyDataValue,
-        base: Option<Iri<String>>,
-        prefixes: HashMap<String, IriRef<String>>,
+        format_context: FormatContext,
     ) -> Result<(), ValidationError> {
         value_type_matches(self, &value, self.supported_types())?;
 
         match self {
             RdfParameter::BaseParamType(base_param) => {
-                FormatParameter::<RdfTag>::is_value_valid(base_param, value, base, prefixes)
+                FormatParameter::<RdfTag>::is_value_valid(base_param, value, format_context)
             }
             RdfParameter::Limit => value
                 .to_u64()
@@ -228,8 +228,7 @@ impl FormatBuilder for RdfHandler {
         tag: Self::Tag,
         parameters: &Parameters<RdfHandler>,
         _direction: Direction,
-        _base: Option<Iri<String>>,
-        _prefixes: HashMap<String, IriRef<String>>,
+        _format_context: FormatContext,
     ) -> Result<Self, ValidationError> {
         let variant = match tag {
             RdfTag::Rdf => {
