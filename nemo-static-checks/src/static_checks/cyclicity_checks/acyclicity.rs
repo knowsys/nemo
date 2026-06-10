@@ -1,6 +1,5 @@
 use nemo::rule_model::{
     components::{
-        IterableVariables,
         atom::Atom,
         fact::Fact,
         rule::Rule,
@@ -20,11 +19,10 @@ use nemo::rule_model::{
 use crate::static_checks::collection_traits::InsertAll;
 use crate::static_checks::cyclicity_checks::{
     Assignment, CoreReasoner, CyclicityStrategy, NoBlockStrategy, StrategySelector,
-    VarPerAtomIdxPosIdxPerRule, assignments_for_facts, body_for_assignment,
-    build_var_index_for_rule, build_var_index_for_rules, head_for_assignment, predicates_ref,
-    union,
+    VarPerAtomIdxPosIdxPerRule, assignments_for_facts, backtrack_sk_term, body_for_assignment,
+    build_var_index_for_rule, build_var_index_for_rules, predicates_ref, reverse_sk, union,
 };
-use crate::static_checks::rule_set::{RuleRefs, RuleSet};
+use crate::static_checks::rule_set::RuleSet;
 
 use std::collections::{HashMap, HashSet};
 
@@ -89,10 +87,7 @@ impl<'a> CyclicityStrategy for RMFAStrategy<'a> {
         if !self.datalog_rules.is_empty() {
             filter_new_facts(&mut special_reasoning_set, self.datalog_pr);
             datalog_reasoner.run_saturating(special_reasoning_set);
-            facts_after_reasoning = union(
-                facts_after_reasoning,
-                datalog_reasoner.facts_by_pred.clone(),
-            );
+            facts_after_reasoning = union(facts_after_reasoning, datalog_reasoner.into_facts());
         }
 
         let preds_in_head: Vec<&Tag> = rule
@@ -100,6 +95,12 @@ impl<'a> CyclicityStrategy for RMFAStrategy<'a> {
             .iter()
             .map(|atom| atom.predicate_ref())
             .collect();
+
+        preds_in_head.iter().for_each(|pred| {
+            if !facts_after_reasoning.contains_key(pred) {
+                facts_after_reasoning.insert(pred, HashSet::default());
+            }
+        });
 
         let count_preds_body = rule.body().iter().count();
         let unsk_rule = reverse_sk(rule);
@@ -119,16 +120,6 @@ impl<'a> CyclicityStrategy for RMFAStrategy<'a> {
                 .iter()
                 .all(|var| renamed_ass.get(var).unwrap() == ass.get(var).unwrap())
         })
-    }
-}
-
-impl RuleSet {
-    fn datalog_rules(&self) -> Vec<&Rule> {
-        self.0.iter().filter(|rule| !rule.contains_func()).collect()
-    }
-
-    fn existential_rules(&self) -> Vec<&Rule> {
-        self.0.iter().filter(|rule| rule.contains_func()).collect()
     }
 }
 
@@ -256,16 +247,38 @@ fn rename_consts<'a>(ass: &Assignment<'a>) -> Assignment<'a> {
         .collect()
 }
 
-fn get_skolem_terms(facts_by_pred: &HashMap<&Tag, HashSet<Fact>>) -> Vec<FunctionTerm> {
+// fn get_skolem_terms(facts_by_pred: &HashMap<&Tag, HashSet<Fact>>) -> Vec<FunctionTerm> {
+//     facts_by_pred
+//         .values()
+//         .fold(Vec::<FunctionTerm>::new(), |mut ret_val, facts| {
+//             facts.iter().for_each(|fact| {
+//                 let skolem_terms_of_fact: Vec<FunctionTerm> = fact
+//                     .terms()
+//                     .filter_map(|term| {
+//                         if let Term::FunctionTerm(sk_term) = term {
+//                             Some(sk_term)
+//                         } else {
+//                             None
+//                         }
+//                     })
+//                     .cloned()
+//                     .collect();
+//                 ret_val.insert_all(&skolem_terms_of_fact);
+//             });
+//             ret_val
+//         })
+// }
+
+fn get_skolem_terms(facts_by_pred: &HashMap<&Tag, HashSet<Fact>>) -> Vec<Term> {
     facts_by_pred
         .values()
-        .fold(Vec::<FunctionTerm>::new(), |mut ret_val, facts| {
+        .fold(Vec::<Term>::new(), |mut ret_val, facts| {
             facts.iter().for_each(|fact| {
-                let skolem_terms_of_fact: Vec<FunctionTerm> = fact
+                let skolem_terms_of_fact: Vec<Term> = fact
                     .terms()
                     .filter_map(|term| {
-                        if let Term::FunctionTerm(sk_term) = term {
-                            Some(sk_term)
+                        if let Term::FunctionTerm(_) = term {
+                            Some(term)
                         } else {
                             None
                         }
@@ -278,119 +291,17 @@ fn get_skolem_terms(facts_by_pred: &HashMap<&Tag, HashSet<Fact>>) -> Vec<Functio
         })
 }
 
-fn facts_for_sk_term<'a>(
-    sk_term: FunctionTerm,
-    ex_rules: &Vec<&'a Rule>,
-) -> HashMap<&'a Tag, HashSet<Fact>> {
-    let (rule, unassigned_sk_term) = ex_rules
-        .iter()
-        .find_map(|rule| {
-            rule.head_terms().find_map(|term| {
-                if let Term::FunctionTerm(f_term) = term
-                    && f_term.tag() == sk_term.tag()
-                {
-                    Some((rule, f_term))
-                } else {
-                    None
-                }
-            })
-        })
-        .unwrap();
-    let front_vars = rule.frontier_variables();
-    let mut const_count = 0;
-    let ass = rule.variables().fold(Assignment::new(), |mut ass, var| {
-        if front_vars.contains(var) {
-            let index = unassigned_sk_term
-                .terms()
-                .enumerate()
-                .find_map(|(i, term)| {
-                    if let Term::Primitive(Primitive::Variable(var_in_sk)) = term
-                        && var_in_sk == var
-                    {
-                        Some(i)
-                    } else {
-                        None
-                    }
-                })
-                .unwrap();
-            let g_term = sk_term.terms().nth(index).unwrap().clone();
-            ass.insert(var, g_term);
-        } else {
-            const_count += 1;
-            let fresh_const = Term::from(format!("__FRESH_CONST_{const_count}__"));
-            ass.insert(var, fresh_const);
-        }
-        ass
-    });
-    let ret_val = union(
-        head_for_assignment(rule, &ass),
-        body_for_assignment(rule, &ass),
-    );
-    sk_term
-        .into_terms()
-        .filter_map(|term| {
-            if let Term::FunctionTerm(inner_sk_term) = term {
-                Some(inner_sk_term)
-            } else {
-                None
-            }
-        })
-        .fold(ret_val, |ret_val, inner_sk_term| {
-            union(ret_val, facts_for_sk_term(inner_sk_term, ex_rules))
-        })
-}
-
 fn special_reasoning_set<'a>(
     ex_rules: &Vec<&'a Rule>,
     facts_by_pred: HashMap<&'a Tag, HashSet<Fact>>,
-    skolem_terms: Vec<FunctionTerm>,
+    skolem_terms: Vec<Term>,
 ) -> HashMap<&'a Tag, HashSet<Fact>> {
     let involved_facts_in_derivation =
         skolem_terms
-            .into_iter()
+            .iter()
             .fold(HashMap::<&Tag, HashSet<Fact>>::new(), |facts, sk_term| {
-                let facts_for_sk_term = facts_for_sk_term(sk_term, ex_rules);
+                let facts_for_sk_term = backtrack_sk_term(sk_term, ex_rules, true);
                 union(facts, facts_for_sk_term)
             });
     union(facts_by_pred, involved_facts_in_derivation)
-}
-
-fn reverse_sk_atom<'a>(
-    atom: &'a Atom,
-    sk_funcs_to_ex_vars: &mut HashMap<&'a FunctionTerm, Variable>,
-    ex_var_count: &mut usize,
-) -> Atom {
-    let subterms: Vec<Term> = atom
-        .terms()
-        .map(|term| match term {
-            Term::Primitive(prim) => Term::Primitive(prim.clone()),
-            Term::FunctionTerm(sk_func) => {
-                let ex_var: &mut Variable = sk_funcs_to_ex_vars.entry(sk_func).or_insert({
-                    let var = Variable::existential(&format!("_NEXV_{}", ex_var_count));
-                    *ex_var_count += 1;
-                    var
-                });
-                Term::from(ex_var.clone())
-            }
-            _ => panic!(),
-        })
-        .collect();
-    let pred: &Tag = atom.predicate_ref();
-    Atom::from((pred, subterms))
-}
-
-fn reverse_sk(rule: &Rule) -> Rule {
-    let body = rule.body().clone();
-    let head = rule
-        .head()
-        .iter()
-        .fold(Vec::<Atom>::new(), |mut head, atom| {
-            let mut stored_sk_funcs_to_ex_vars: HashMap<&FunctionTerm, Variable> = HashMap::new();
-            let mut ex_var_count = 0;
-            let new_atom =
-                reverse_sk_atom(atom, &mut stored_sk_funcs_to_ex_vars, &mut ex_var_count);
-            head.push(new_atom);
-            head
-        });
-    Rule::new(head, body)
 }

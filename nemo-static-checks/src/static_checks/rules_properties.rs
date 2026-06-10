@@ -64,7 +64,7 @@ pub trait RulesProperties {
     /// Determines if the ruleset is dmfc.
     fn is_dmfc(&self) -> bool;
     /// Determines if the ruleset is drpc.
-    fn is_drpc(&self) -> bool;
+    fn is_drpc(&self) -> impl std::future::Future<Output = bool>;
     /// Determines if the ruleset is rpc.
     fn is_rpc(&self) -> bool;
 }
@@ -211,7 +211,7 @@ impl RulesProperties for RuleSet {
         unreachable!();
     }
 
-    fn is_drpc(&self) -> bool {
+    async fn is_drpc(&self) -> bool {
         unreachable!();
     }
 
@@ -336,8 +336,9 @@ impl RulesProperties for ProgramHandle {
         unreachable!();
     }
 
-    fn is_drpc(&self) -> bool {
-        unreachable!();
+    async fn is_drpc(&self) -> bool {
+        let handle = mfc_handle(self.clone());
+        check_cyclicity(handle, StrategySelector::DRPC).await
     }
 
     fn is_rpc(&self) -> bool {

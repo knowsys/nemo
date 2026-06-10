@@ -398,7 +398,43 @@ fn rmfa_negative(fixture: Fixture<&str>) {
     postfix: "rmfa_positive",
 )]
 fn rmfa_positive(fixture: Fixture<&str>) {
-    // let file_names = ["r08.rls"];
+    test(fixture, true, "rmfa")
+}
+
+#[dir_test(
+    dir: "$CARGO_MANIFEST_DIR/../resources/testcases_static_checks/tests/negative/isDmfc",
+    glob: "*.rls",
+    postfix: "mfc_negative",
+)]
+fn mfc_negative(fixture: Fixture<&str>) {
+    test(fixture, false, "mfc")
+}
+
+#[dir_test(
+    dir: "$CARGO_MANIFEST_DIR/../resources/testcases_static_checks/tests/positive/isDmfc",
+    glob: "*.rls",
+    postfix: "mfc_positive",
+)]
+fn mfc_positive(fixture: Fixture<&str>) {
+    test(fixture, true, "mfc")
+}
+
+#[dir_test(
+    dir: "$CARGO_MANIFEST_DIR/../resources/testcases_static_checks/tests/negative/isDrpc",
+    glob: "*.rls",
+    postfix: "drpc_negative",
+)]
+fn drpc_negative(fixture: Fixture<&str>) {
+    test(fixture, false, "drpc")
+}
+
+#[dir_test(
+    dir: "$CARGO_MANIFEST_DIR/../resources/testcases_static_checks/tests/positive/isDrpc",
+    glob: "*.rls",
+    postfix: "drpc_positive",
+)]
+fn drpc_positive(fixture: Fixture<&str>) {
+    // let file_names = ["r16.rls"];
     // if !file_names.contains(
     //     &path_canonicalized(fixture.path())
     //         .file_name()
@@ -408,7 +444,7 @@ fn rmfa_positive(fixture: Fixture<&str>) {
     // ) {
     //     return;
     // }
-    test(fixture, true, "rmfa")
+    test(fixture, true, "drpc")
 }
 
 struct TestCase<'a> {

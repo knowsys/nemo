@@ -112,10 +112,7 @@ async fn run(mut cli: CliApp) -> Result<(), CliError> {
                 "{check_str}: not yet implemented",
                 // RulesProperties::is_dmfc(&rule_set)
             ),
-            "drpc" => println!(
-                "{check_str}: not yet implemented",
-                // RulesProperties::is_drpc(&rule_set)
-            ),
+            "drpc" => println!("{check_str}: {}", RulesProperties::is_drpc(&handle).await),
             "rpc" => println!(
                 "{check_str}: not yet implemented",
                 // RulesProperties::is_rpc(&rule_set)

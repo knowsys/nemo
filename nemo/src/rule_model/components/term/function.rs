@@ -11,7 +11,9 @@ use crate::rule_model::{
     components::{
         ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent,
         IterablePrimitives, IterableVariables, ProgramComponent, ProgramComponentKind,
-        component_iterator, component_iterator_mut, tag::Tag, term::Cyclic,
+        component_iterator, component_iterator_mut,
+        tag::Tag,
+        term::{Cyclic, RuleCyclic},
     },
     error::{ValidationReport, validation_error::ValidationError},
     origin::Origin,
@@ -183,12 +185,6 @@ impl DerefMut for FunctionTerm {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.terms
     }
-
-    // / Returns whether the term is cyclic.
-    // pub fn is_cyclic<'a>(&'a self, function_symbols: &mut Vec<&'a Tag>) -> bool {
-    //     self.arguments()
-    //         .any(|term| term.is_cyclic(function_symbols))
-    // }
 }
 
 impl Display for FunctionTerm {
@@ -346,14 +342,31 @@ impl From<(&Tag, Vec<Term>)> for FunctionTerm {
 }
 
 impl<'a> Cyclic<'a> for FunctionTerm {
-    fn is_cyclic(&self, function_names: &mut Vec<String>) -> bool {
-        let func_name: String = self.tag().name().to_string();
-        if function_names.contains(&func_name) {
+    fn is_cyclic(&'a self, f_tags: &mut Vec<&'a Tag>) -> bool {
+        let f_tag: &Tag = self.tag();
+        if f_tags.contains(&f_tag) {
             return true;
         }
-        function_names.push(func_name);
-        let ret_val = self.terms().any(|term| term.is_cyclic(function_names));
-        function_names.pop();
+        f_tags.push(f_tag);
+        let ret_val = self.terms().any(|term| term.is_cyclic(f_tags));
+        f_tags.pop();
+        ret_val
+    }
+}
+
+impl<'a> RuleCyclic<'a> for FunctionTerm {
+    fn is_rule_cyclic(&'a self, f_tags: &mut Vec<&'a Tag>, sk_f_tags_of_rule: &Vec<&Tag>) -> bool {
+        let f_tag: &Tag = self.tag();
+        if f_tags.contains(&f_tag) {
+            return true;
+        }
+        if sk_f_tags_of_rule.contains(&f_tag) {
+            f_tags.push(f_tag);
+        }
+        let ret_val = self.terms().any(|term| term.is_cyclic(f_tags));
+        if sk_f_tags_of_rule.contains(&f_tag) {
+            f_tags.pop();
+        }
         ret_val
     }
 }

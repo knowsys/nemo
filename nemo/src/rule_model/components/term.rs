@@ -33,7 +33,7 @@ use tuple::Tuple;
 use value_type::ValueType;
 
 use crate::rule_model::{
-    error::ValidationReport, origin::Origin, pipeline::id::ProgramComponentId,
+    components::tag::Tag, error::ValidationReport, origin::Origin, pipeline::id::ProgramComponentId,
 };
 
 use super::{
@@ -44,7 +44,7 @@ use super::{
 /// Term
 ///
 /// Basic building block for expressions like atoms or facts.
-#[derive(Debug, Clone, PartialEq, Hash, PartialOrd)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd)]
 pub enum Term {
     /// Unstructured, primitive term
     Primitive(Primitive),
@@ -275,13 +275,27 @@ impl IterableComponent for Term {
 }
 
 pub trait Cyclic<'a> {
-    fn is_cyclic(&self, function_names: &mut Vec<String>) -> bool;
+    fn is_cyclic(&'a self, f_tags: &mut Vec<&'a Tag>) -> bool;
 }
 
 impl<'a> Cyclic<'a> for Term {
-    fn is_cyclic(&self, _function_names: &mut Vec<String>) -> bool {
+    fn is_cyclic(&'a self, _f_tags: &mut Vec<&'a Tag>) -> bool {
         if let Term::FunctionTerm(func_term) = self {
-            func_term.is_cyclic(_function_names)
+            func_term.is_cyclic(_f_tags)
+        } else {
+            false
+        }
+    }
+}
+
+pub trait RuleCyclic<'a> {
+    fn is_rule_cyclic(&'a self, f_tags: &mut Vec<&'a Tag>, sk_f_tags_of_rule: &Vec<&Tag>) -> bool;
+}
+
+impl<'a> RuleCyclic<'a> for Term {
+    fn is_rule_cyclic(&'a self, _f_tags: &mut Vec<&'a Tag>, sk_f_tags_of_rule: &Vec<&Tag>) -> bool {
+        if let Term::FunctionTerm(f_term) = self {
+            f_term.is_rule_cyclic(_f_tags, sk_f_tags_of_rule)
         } else {
             false
         }

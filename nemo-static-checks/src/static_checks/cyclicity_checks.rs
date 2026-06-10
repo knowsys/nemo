@@ -1,7 +1,8 @@
 //! Functionality
 use crate::static_checks::collection_traits::InsertAll;
-use crate::static_checks::rule_set::RuleRefs;
+use crate::static_checks::rule_set::{RuleRefs, RuleSet};
 use nemo::rule_model::components::{
+    IterableVariables,
     atom::Atom,
     fact::Fact,
     rule::Rule,
@@ -17,6 +18,82 @@ use std::collections::{HashMap, HashSet};
 
 pub mod acyclicity;
 pub mod cyclicity;
+
+fn backtrack_sk_term<'a>(
+    in_term: &Term,
+    ex_rules: &Vec<&'a Rule>,
+    with_body: bool,
+) -> HashMap<&'a Tag, HashSet<Fact>> {
+    let sk_term;
+    if let Term::FunctionTerm(f_term) = in_term {
+        sk_term = f_term;
+    } else {
+        return HashMap::default();
+    }
+    let (rule, unassigned_sk_term): (&Rule, &FunctionTerm) = ex_rules
+        .iter()
+        .find_map(|rule| {
+            rule.head_terms().find_map(|term| {
+                if let Term::FunctionTerm(f_term) = term
+                    && f_term.tag() == sk_term.tag()
+                {
+                    Some((*rule, f_term))
+                } else {
+                    None
+                }
+            })
+        })
+        .unwrap();
+    let front_vars = rule.frontier_variables();
+    let mut const_count = 0;
+    let ass = rule.variables().fold(Assignment::new(), |mut ass, var| {
+        if front_vars.contains(var) {
+            let index = unassigned_sk_term
+                .terms()
+                .enumerate()
+                .find_map(|(i, term)| {
+                    if let Term::Primitive(Primitive::Variable(var_in_sk)) = term
+                        && var_in_sk == var
+                    {
+                        Some(i)
+                    } else {
+                        None
+                    }
+                })
+                .unwrap();
+            let g_term = sk_term.terms().nth(index).unwrap().clone();
+            ass.insert(var, g_term);
+        } else {
+            const_count += 1;
+            let fresh_const = Term::from(format!("__FRESH_CONST_{const_count}__"));
+            ass.insert(var, fresh_const);
+        }
+        ass
+    });
+    let ret_val = if with_body {
+        union(
+            head_for_assignment(rule, &ass),
+            body_for_assignment(rule, &ass),
+        )
+    } else {
+        head_for_assignment(rule, &ass)
+    };
+    sk_term
+        .terms()
+        // .filter_map(|term| {
+        //     if let Term::FunctionTerm(inner_sk_term) = term {
+        //         Some(inner_sk_term)
+        //     } else {
+        //         None
+        //     }
+        // })
+        .fold(ret_val, |ret_val, inner_sk_term| {
+            union(
+                ret_val,
+                backtrack_sk_term(inner_sk_term, ex_rules, with_body),
+            )
+        })
+}
 
 pub fn union<'a>(
     facts_by_pred: HashMap<&'a Tag, HashSet<Fact>>,
@@ -100,10 +177,19 @@ pub enum StrategySelector {
     MFA,
     RMFA,
     MFC,
+    DRPC,
 }
 
 pub trait CyclicityStrategy {
     fn is_blocked(&self, rule: &Rule, ass: &Assignment) -> bool;
+
+    #[inline]
+    fn h<'a>(
+        &self,
+        facts_by_pred: HashMap<&'a Tag, HashSet<Fact>>,
+    ) -> HashMap<&'a Tag, HashSet<Fact>> {
+        facts_by_pred
+    }
 }
 
 pub struct NoBlockStrategy;
@@ -114,10 +200,20 @@ impl CyclicityStrategy for NoBlockStrategy {
     }
 }
 
-fn predicates_ref<'a>(rules: &[&'a Rule]) -> HashSet<&'a Tag> {
-    rules.iter().fold(HashSet::<&Tag>::new(), |ret_val, rule| {
-        ret_val.insert_all_take_ret(rule.predicates_ref())
-    })
+fn predicates_ref<'a>(rule_set: &[&'a Rule]) -> HashSet<&'a Tag> {
+    rule_set
+        .iter()
+        .fold(HashSet::<&Tag>::new(), |ret_val, rule| {
+            ret_val.insert_all_take_ret(rule.predicates_ref())
+        })
+}
+
+fn predicates_ref_and_lens<'a>(rule_set: &[&'a Rule]) -> HashSet<(&'a Tag, usize)> {
+    rule_set
+        .iter()
+        .fold(HashSet::<(&Tag, usize)>::new(), |ret_val, rule| {
+            ret_val.insert_all_take_ret(rule.predicates_ref_and_lens())
+        })
 }
 
 fn build_var_index_for_rule<'a>(rule: &'a Rule) -> VarPerAtomIdxPosIdx<'a> {
@@ -255,19 +351,27 @@ fn assignments_for_facts<'a>(
     ret_val
 }
 
-pub struct CoreReasoner<'a> {
+pub struct CoreReasoner<'a, 's> {
     facts_by_pred: HashMap<&'a Tag, HashSet<Fact>>,
     rules: &'a Vec<&'a Rule>,
     var_per_atom_idx_pos_idx_per_rule: &'a VarPerAtomIdxPosIdxPerRule<'a>,
-    strat: &'a dyn CyclicityStrategy,
+    strat: &'s dyn CyclicityStrategy,
 }
 
-impl<'a> CoreReasoner<'a> {
+impl<'a, 's> CoreReasoner<'a, 's> {
+    pub fn facts(&self) -> &HashMap<&Tag, HashSet<Fact>> {
+        &self.facts_by_pred
+    }
+
+    pub fn into_facts(self) -> HashMap<&'a Tag, HashSet<Fact>> {
+        self.facts_by_pred
+    }
+
     fn new(
         predicates: &HashSet<&'a Tag>,
         rules: &'a Vec<&'a Rule>,
         var_per_atom_idx_pos_idx_per_rule: &'a VarPerAtomIdxPosIdxPerRule<'a>,
-        strat: &'a dyn CyclicityStrategy,
+        strat: &'s dyn CyclicityStrategy,
     ) -> Self {
         let facts_by_pred: HashMap<&Tag, HashSet<Fact>> = predicates
             .iter()
@@ -349,7 +453,7 @@ impl<'a> CoreReasoner<'a> {
 
         assignments
             .iter_mut()
-            .flat_map(|ass| head_for_assignment(rule, ass))
+            .flat_map(|ass| self.strat.h(head_for_assignment(rule, ass)))
             .filter_map(|(pred, mut facts)| {
                 facts.retain(|fact| !self.facts_by_pred.get(pred).unwrap().contains(fact));
                 match !facts.is_empty() {
@@ -367,6 +471,56 @@ impl<'a> CoreReasoner<'a> {
                 .unwrap()
                 .insert_all(new_facts)
         });
+    }
+}
+
+fn reverse_sk_atom<'a>(
+    atom: &'a Atom,
+    sk_funcs_to_ex_vars: &mut HashMap<&'a FunctionTerm, Variable>,
+    ex_var_count: &mut usize,
+) -> Atom {
+    let subterms: Vec<Term> = atom
+        .terms()
+        .map(|term| match term {
+            Term::Primitive(prim) => Term::Primitive(prim.clone()),
+            Term::FunctionTerm(sk_func) => {
+                let ex_var: &mut Variable = sk_funcs_to_ex_vars.entry(sk_func).or_insert({
+                    let var = Variable::existential(&format!("_NEXV_{}", ex_var_count));
+                    *ex_var_count += 1;
+                    var
+                });
+                Term::from(ex_var.clone())
+            }
+            _ => panic!(),
+        })
+        .collect();
+    let pred: &Tag = atom.predicate_ref();
+    Atom::from((pred, subterms))
+}
+
+fn reverse_sk(rule: &Rule) -> Rule {
+    let body = rule.body().clone();
+    let head = rule
+        .head()
+        .iter()
+        .fold(Vec::<Atom>::new(), |mut head, atom| {
+            let mut stored_sk_funcs_to_ex_vars: HashMap<&FunctionTerm, Variable> = HashMap::new();
+            let mut ex_var_count = 0;
+            let new_atom =
+                reverse_sk_atom(atom, &mut stored_sk_funcs_to_ex_vars, &mut ex_var_count);
+            head.push(new_atom);
+            head
+        });
+    Rule::new(head, body)
+}
+
+impl RuleSet {
+    fn datalog_rules(&self) -> Vec<&Rule> {
+        self.0.iter().filter(|rule| !rule.contains_func()).collect()
+    }
+
+    fn existential_rules(&self) -> Vec<&Rule> {
+        self.0.iter().filter(|rule| rule.contains_func()).collect()
     }
 }
 
