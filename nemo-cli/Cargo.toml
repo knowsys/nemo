@@ -29,6 +29,7 @@ tokio = { workspace = true, features = [ "rt", "macros" ] }
 nemo = { path = "../nemo" }
 ariadne = { workspace = true }
 serde = { workspace = true }
+zbus = { version = "5.16.0", default-features = false, features = [ "tokio" ] }
 
 [dev-dependencies]
 assert_cmd = "2.0"

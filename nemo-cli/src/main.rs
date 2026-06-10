@@ -16,11 +16,13 @@
     variant_size_differences
 )]
 
+#[cfg(target_os = "linux")]
+pub mod cgroup;
 pub mod cli;
 pub mod error;
 pub mod tracing;
 
-use std::{io::Write, io::stdout};
+use std::io::{Write, stdout};
 
 use clap::Parser;
 use colored::Colorize;
@@ -274,6 +276,8 @@ async fn main() {
     log::info!("Version: {}", clap::crate_version!());
     log::debug!("Rule files: {:?}", cli.rules);
 
+    setup_cgroup(&cli).await;
+
     if let Err(error) = run(cli).await {
         if let CliError::NemoError(Error::ProgramReport(report)) = error {
             let _ = report.eprint(disable_warnings);
@@ -285,5 +289,36 @@ async fn main() {
             log::error!("{} {error}", "error:".red().bold());
             std::process::exit(1);
         }
+    }
+}
+
+#[cfg(target_os = "linux")]
+async fn setup_cgroup(cli: &CliApp) {
+    let mut builder = cgroup::CgroupBuilder::new("app-nemo-{pid}.scope");
+
+    if let Some(seconds) = cli.limits.time_seconds {
+        builder.time_limit(seconds);
+    }
+
+    if let Some(mebibytes) = cli.limits.memory_mebibytes {
+        builder.memory_limit(mebibytes);
+    }
+
+    if let Err(error) = builder.create_scope().await {
+        if cli.limits.requested() {
+            // if a resource limit was requested, this is an error.
+            log::error!("Failed to create cgroup. Resource limits cannot be enforced: {error}");
+        } else {
+            log::warn!(
+                "Failed to create cgroup. This is not fatal and can safely be ignored: {error}"
+            );
+        }
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+async fn setup_cgroup(cli: &CliApp) {
+    if cli.limits.requested() {
+        Log::warn!("Resource limits are only supported on Linux.");
     }
 }

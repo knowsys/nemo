@@ -189,6 +189,30 @@ pub(crate) struct TracingNodeArgs {
     pub(crate) trace_node_json: Option<PathBuf>,
 }
 
+/// Cli arguments related to resource limits
+#[derive(Debug, clap::Args)]
+pub(crate) struct LimitArgs {
+    /// Runtime limit for the Nemo process. Nemo will be killed if this is exceeded.
+    ///
+    /// Only supported on Linux.
+    #[arg(long = "time-limit", id = "seconds")]
+    pub(crate) time_seconds: Option<u32>,
+
+    /// Memory limit for the Nemo process. Nemo will be killed if this is exceeded.
+    ///
+    /// Only supported on Linux.
+    #[arg(long = "memory-limit", id = "mebibytes")]
+    pub(crate) memory_mebibytes: Option<u32>,
+}
+
+impl LimitArgs {
+    #[allow(dead_code)]
+    /// Whether any resource limits have been requested
+    pub(crate) fn requested(&self) -> bool {
+        self.time_seconds.is_some() || self.memory_mebibytes.is_some()
+    }
+}
+
 /// Nemo CLI
 #[derive(clap::Parser, Debug)]
 #[command(author, version, about)]
@@ -223,6 +247,9 @@ pub struct CliApp {
     /// Disable warnings when validating rule files
     #[arg(long = "no-warnings")]
     pub(crate) disable_warnings: bool,
+    /// Arguments related to resource limits
+    #[command(flatten)]
+    pub(crate) limits: LimitArgs,
 }
 
 /// Key-Value pair for global variable
