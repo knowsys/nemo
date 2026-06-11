@@ -230,8 +230,8 @@ fn push_projections_and_filters(import: &mut ImportDirective, filter_rules: &[&R
 
     // can we push projections?
     let format = import.spec().format().to_string();
-    let is_dsv = DsvBuilder::supports_tag(&format);
-    let is_rdf = RdfHandler::supports_tag(&format);
+    let is_dsv = DsvBuilder::supports_tag(&format).is_some();
+    let is_rdf = RdfHandler::supports_tag(&format).is_some();
 
     if is_dsv || is_rdf {
         // check if there is a consistent projection that we can push

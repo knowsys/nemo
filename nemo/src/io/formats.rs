@@ -1,6 +1,7 @@
 //! The input and output formats supported by Nemo.
 
 pub mod dsv;
+pub mod facts;
 pub mod json;
 pub mod rdf;
 pub mod sparql;

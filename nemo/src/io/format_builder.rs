@@ -36,6 +36,7 @@ use super::{
     formats::{
         Export, ExportHandler, Import, ImportHandler,
         dsv::{DsvBuilder, DsvTag},
+        facts::{FactsHandler, FactsTag},
         json::{JsonHandler, JsonTag},
         rdf::{RdfHandler, RdfTag},
         sparql::{SparqlBuilder, SparqlTag},
@@ -273,8 +274,8 @@ pub(crate) trait FormatBuilder: Debug + Sized + Into<AnyImportExportBuilder> {
 
     fn expected_arity(&self) -> Option<usize>;
 
-    fn supports_tag(tag: &str) -> bool {
-        Self::Tag::from_str(tag).is_ok()
+    fn supports_tag(tag: &str) -> Option<Self::Tag> {
+        Self::Tag::from_str(tag).ok()
     }
 
     fn customize_resource_builder(
@@ -464,22 +465,21 @@ pub enum SupportedFormatTag {
     Json(JsonTag),
     /// SPARQL
     Sparql(SparqlTag),
+    /// Facts
+    Facts(FactsTag),
 }
 
 impl FromStr for SupportedFormatTag {
     type Err = ();
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if DsvBuilder::supports_tag(s) {
-            Ok(Self::Dsv(s.parse().unwrap()))
-        } else if RdfHandler::supports_tag(s) {
-            Ok(Self::Rdf(s.parse().unwrap()))
-        } else if JsonHandler::supports_tag(s) {
-            Ok(Self::Json(s.parse().unwrap()))
-        } else if SparqlBuilder::supports_tag(s) {
-            Ok(Self::Sparql(s.parse().unwrap()))
-        } else {
-            Err(())
+        match s {
+            s if let Some(tag) = DsvBuilder::supports_tag(s) => Ok(Self::Dsv(tag)),
+            s if let Some(tag) = RdfHandler::supports_tag(s) => Ok(Self::Rdf(tag)),
+            s if let Some(tag) = JsonHandler::supports_tag(s) => Ok(Self::Json(tag)),
+            s if let Some(tag) = SparqlBuilder::supports_tag(s) => Ok(Self::Sparql(tag)),
+            s if let Some(tag) = FactsHandler::supports_tag(s) => Ok(Self::Facts(tag)),
+            _ => Err(()),
         }
     }
 }
@@ -492,6 +492,7 @@ impl ImportExportBuilder {
             AnyImportExportBuilder::Rdf(inner) => inner.expected_arity(),
             AnyImportExportBuilder::Json(inner) => inner.expected_arity(),
             AnyImportExportBuilder::Sparql(inner) => inner.expected_arity(),
+            AnyImportExportBuilder::Facts(inner) => inner.expected_arity(),
         }
     }
 
@@ -679,6 +680,15 @@ impl ImportExportBuilder {
                 direction,
                 report,
             ),
+            SupportedFormatTag::Facts(tag) => Self::new_with_tag::<FactsHandler>(
+                predicate,
+                tag,
+                spec,
+                bindings,
+                filter_rules,
+                direction,
+                report,
+            ),
         }
     }
 
@@ -707,6 +717,9 @@ impl ImportExportBuilder {
             }
             AnyImportExportBuilder::Sparql(sparql_builder) => {
                 sparql_builder.build_import(input_arity, patterns)
+            }
+            AnyImportExportBuilder::Facts(facts_handler) => {
+                facts_handler.build_import(input_arity, patterns)
             }
         };
 
@@ -747,6 +760,9 @@ impl ImportExportBuilder {
             AnyImportExportBuilder::Sparql(sparql_builder) => {
                 sparql_builder.build_export(arity, patterns)
             }
+            AnyImportExportBuilder::Facts(facts_handler) => {
+                facts_handler.build_export(arity, patterns)
+            }
         };
 
         let resource = self.resource.clone().unwrap_or(
@@ -772,16 +788,18 @@ pub(crate) enum AnyImportExportBuilder {
     Rdf(RdfHandler),
     Json(JsonHandler),
     Sparql(Box<SparqlBuilder>),
+    Facts(FactsHandler),
 }
 
 impl AnyImportExportBuilder {
     /// Return the format of this builder.
     pub fn format_tag(&self) -> SupportedFormatTag {
         match self {
-            AnyImportExportBuilder::Dsv(dsv) => dsv.format_tag(),
-            AnyImportExportBuilder::Rdf(rdf) => rdf.format_tag(),
-            AnyImportExportBuilder::Json(json) => json.format_tag(),
-            AnyImportExportBuilder::Sparql(sparql) => sparql.format_tag(),
+            Self::Dsv(dsv) => dsv.format_tag(),
+            Self::Rdf(rdf) => rdf.format_tag(),
+            Self::Json(json) => json.format_tag(),
+            Self::Sparql(sparql) => sparql.format_tag(),
+            Self::Facts(facts) => facts.format_tag(),
         }
     }
 }
@@ -793,6 +811,7 @@ impl Debug for AnyImportExportBuilder {
             Self::Rdf(_) => f.debug_tuple("Rdf").field(&"...").finish(),
             Self::Json(_) => f.debug_tuple("Json").field(&"...").finish(),
             Self::Sparql(_) => f.debug_tuple("Sparql").field(&"...").finish(),
+            Self::Facts(_) => f.debug_tuple("Facts").field(&"...").finish(),
         }
     }
 }

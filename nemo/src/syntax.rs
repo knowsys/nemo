@@ -456,6 +456,8 @@ pub mod import_export {
         pub const JSON: &str = "json";
         /// The "predicate name" used for the SPARQL format in import/export directives.
         pub const SPARQL: &str = "sparql";
+        /// The "predicate name" used for the Facts format in import/export directives.
+        pub const FACTS: &str = "facts";
 
         // file extensions
         /// The file extension used for CSV files
@@ -478,6 +480,8 @@ pub mod import_export {
         pub(crate) const EXTENSION_JSON: &str = "json";
         /// The file extension used for gzip files
         pub(crate) const EXTENSION_GZ: &str = "gz";
+        /// The file extension used for Nemo rls (facts) files
+        pub(crate) const EXTENSION_RLS: &str = "rls";
 
         // media types
         /// The media type used for CSV resources
@@ -498,5 +502,7 @@ pub mod import_export {
         pub(crate) const MEDIA_TYPE_RDF_XML: &str = "application/rdf+xml";
         /// The media type used for json resources
         pub(crate) const MEDIA_TYPE_JSON: &str = "application/json";
+        /// The media type used for Nemo rls (facts) resources
+        pub(crate) const MEDIA_TYPE_RLS: &str = "text/plain";
     }
 }
