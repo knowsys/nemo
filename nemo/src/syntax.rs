@@ -248,6 +248,12 @@ pub mod builtin {
         pub(crate) const TAN: &str = "TAN";
         /// Compute the length of a string
         pub(crate) const STRLEN: &str = "STRLEN";
+        /// Remove leading and trailing whitespace from a string
+        pub(crate) const STRTRIM: &str = "STRTRIM";
+        /// Remove leading whitespace from a string
+        pub(crate) const STRTRIMSTART: &str = "STRTRIMSTART";
+        /// Remove trailing whitespace from a string
+        pub(crate) const STRTRIMEND: &str = "STRTRIMEND";
         /// Compute the reverse of a string value
         pub(crate) const STRREV: &str = "STRREV";
         /// Replace characters in strings with their upper case version
@@ -336,6 +342,46 @@ pub mod builtin {
         pub(crate) const CONCAT: &str = "CONCAT";
         /// Compute the Levenshtein distance of two strings
         pub(crate) const LEVENSHTEIN: &str = "LEVENSHTEIN";
+        /// Replace occurrences of a regex pattern in a string
+        pub(crate) const REPLACE: &str = "REPLACE";
+        /// Check if a language tag matches a language range
+        pub(crate) const LANGMATCHES: &str = "langMatches";
+        /// Compute the MD5 hash of a string
+        pub(crate) const MD5: &str = "MD5";
+        /// Compute the SHA1 hash of a string
+        pub(crate) const SHA1: &str = "SHA1";
+        /// Compute the SHA256 hash of a string
+        pub(crate) const SHA256: &str = "SHA256";
+        /// Compute the SHA384 hash of a string
+        pub(crate) const SHA384: &str = "SHA384";
+        /// Compute the SHA512 hash of a string
+        pub(crate) const SHA512: &str = "SHA512";
+        /// Construct a typed literal from a lexical value and a datatype IRI
+        pub(crate) const STRDT: &str = "STRDT";
+        /// Extract the year from a date/dateTime value
+        pub(crate) const YEAR: &str = "YEAR";
+        /// Extract the month from a date/dateTime value
+        pub(crate) const MONTH: &str = "MONTH";
+        /// Extract the day from a date/dateTime value
+        pub(crate) const DAY: &str = "DAY";
+        /// Extract the hours from a dateTime/time value
+        pub(crate) const HOURS: &str = "HOURS";
+        /// Extract the minutes from a dateTime/time value
+        pub(crate) const MINUTES: &str = "MINUTES";
+        /// Extract the seconds from a dateTime/time value
+        pub(crate) const SECONDS: &str = "SECONDS";
+        /// Extract the timezone as xsd:dayTimeDuration from a date/dateTime/time value
+        pub(crate) const TIMEZONE: &str = "TIMEZONE";
+        /// Extract the timezone as a plain string from a date/dateTime/time value
+        pub(crate) const TZ: &str = "TZ";
+        /// Return a pseudo-random double in [0, 1)
+        pub(crate) const RAND: &str = "RAND";
+        /// Return a fresh UUID as an IRI
+        pub(crate) const UUID: &str = "UUID";
+        /// Return a fresh UUID as a plain string
+        pub(crate) const STRUUID: &str = "STRUUID";
+        /// Return the current date/time as xsd:dateTime
+        pub(crate) const NOW: &str = "NOW";
     }
 
     /// This module contains all strings of the supported builtin aggregates.

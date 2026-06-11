@@ -12,7 +12,8 @@ use crate::{
 use super::{
     definitions::{
         BinaryFunction, BinaryFunctionEnum, FunctionTypePropagation, NaryFunction,
-        NaryFunctionEnum, TernaryFunction, TernaryFunctionEnum, UnaryFunction, UnaryFunctionEnum,
+        NaryFunctionEnum, NullaryFunction, NullaryFunctionEnum, TernaryFunction,
+        TernaryFunctionEnum, UnaryFunction, UnaryFunctionEnum,
     },
     tree::FunctionTree,
 };
@@ -55,6 +56,8 @@ pub(crate) enum StackOperation {
     BinaryFunction(BinaryFunctionEnum),
     /// Evaluate the given ternary function on the top three elements in the stack.
     TernaryFunction(TernaryFunctionEnum),
+    /// Evaluate the given nullary function and push the result onto the stack.
+    NullaryFunction(NullaryFunctionEnum),
     /// Evaluate the given n-ary function on the top n elements in the stack.
     NaryFunction(NaryFunctionEnum, usize),
 }
@@ -109,12 +112,19 @@ impl StackProgram {
 
                     current_height -= 2;
                 }
+                StackOperation::NullaryFunction(_) => {
+                    current_height += 1;
+                }
                 StackOperation::NaryFunction(_, parameter_count) => {
                     if current_height < *parameter_count {
                         return Err(Error::MalformedStackProgram);
                     }
 
-                    current_height -= parameter_count - 1;
+                    if *parameter_count == 0 {
+                        current_height += 1;
+                    } else {
+                        current_height -= parameter_count - 1;
+                    }
                 }
             }
 
@@ -185,6 +195,9 @@ impl StackProgram {
 
                     operations.push(StackOperation::TernaryFunction(*function));
                 }
+                FunctionTree::Nullary(function) => {
+                    operations.push(StackOperation::NullaryFunction(*function));
+                }
                 FunctionTree::Nary {
                     function,
                     parameters,
@@ -250,6 +263,9 @@ impl StackProgram {
                         .expect("This program is valid, so the stack cannot be empty.");
 
                     stack.push(function.evaluate(first_input, second_input, third_input)?);
+                }
+                StackOperation::NullaryFunction(function) => {
+                    stack.push(function.evaluate()?);
                 }
                 StackOperation::NaryFunction(function, parameter_count) => {
                     let mut inputs = Vec::new();
@@ -325,6 +341,7 @@ impl StackProgram {
                 },
                 StackOperation::BinaryFunction(function) => (2, function.type_propagation()),
                 StackOperation::TernaryFunction(function) => (3, function.type_propagation()),
+                StackOperation::NullaryFunction(function) => (0, function.type_propagation()),
                 StackOperation::NaryFunction(function, num_arguments) => (*num_arguments, function.type_propagation()),
             };
 
@@ -469,10 +486,10 @@ mod test {
         );
         evaluate_expect(&tree_not_contains, Some(AnyDataValue::new_boolean(false)));
 
-        let tree_regex = Function::string_regex(
+        let tree_regex = Function::string_regex(vec![
             Function::constant(any_string("hello")),
             Function::constant(any_string("l+")),
-        );
+        ]);
         evaluate_expect(&tree_regex, Some(AnyDataValue::new_boolean(true)));
 
         let tree_substring_length = Function::string_substring_length(
@@ -1036,5 +1053,621 @@ mod test {
         evaluate_bool_expect(&tree_is_string, true);
         let tree_not_string = Function::check_is_string(tree_double.clone());
         evaluate_bool_expect(&tree_not_string, false);
+    }
+
+    #[test]
+    fn evaluate_replace() {
+        // Basic replacement
+        let tree = Function::string_replace(vec![
+            Function::constant(any_string("Hello World")),
+            Function::constant(any_string("o")),
+            Function::constant(any_string("0")),
+        ]);
+        evaluate_expect(&tree, Some(any_string("Hell0 W0rld")));
+
+        // With capture group reference in replacement
+        let tree_capture = Function::string_replace(vec![
+            Function::constant(any_string("2024-01-15")),
+            Function::constant(any_string(r"(\d{4})-(\d{2})-(\d{2})")),
+            Function::constant(any_string("$3/$2/$1")),
+        ]);
+        evaluate_expect(&tree_capture, Some(any_string("15/01/2024")));
+
+        // With flags (case-insensitive)
+        let tree_flags = Function::string_replace(vec![
+            Function::constant(any_string("Hello World")),
+            Function::constant(any_string("hello")),
+            Function::constant(any_string("Hi")),
+            Function::constant(any_string("i")),
+        ]);
+        evaluate_expect(&tree_flags, Some(any_string("Hi World")));
+
+        // Invalid regex returns None
+        let tree_invalid = Function::string_replace(vec![
+            Function::constant(any_string("test")),
+            Function::constant(any_string("[")), // unclosed bracket
+            Function::constant(any_string("x")),
+        ]);
+        evaluate_expect(&tree_invalid, None);
+
+        // Non-string input returns None
+        let tree_non_string = Function::string_replace(vec![
+            Function::constant(any_int(42)),
+            Function::constant(any_string(".")),
+            Function::constant(any_string("x")),
+        ]);
+        evaluate_expect(&tree_non_string, None);
+    }
+
+    #[test]
+    fn evaluate_lang_matches() {
+        // Exact match
+        let tree_exact = Function::string_lang_matches(
+            Function::constant(any_string("de")),
+            Function::constant(any_string("de")),
+        );
+        evaluate_bool_expect(&tree_exact, true);
+
+        // Subtag match: "en-US" matches range "en"
+        let tree_subtag = Function::string_lang_matches(
+            Function::constant(any_string("en-US")),
+            Function::constant(any_string("en")),
+        );
+        evaluate_bool_expect(&tree_subtag, true);
+
+        // Wildcard "*" matches any non-empty tag
+        let tree_wildcard = Function::string_lang_matches(
+            Function::constant(any_string("zh-Hans")),
+            Function::constant(any_string("*")),
+        );
+        evaluate_bool_expect(&tree_wildcard, true);
+
+        // Wildcard does not match empty tag
+        let tree_wildcard_empty = Function::string_lang_matches(
+            Function::constant(any_string("")),
+            Function::constant(any_string("*")),
+        );
+        evaluate_bool_expect(&tree_wildcard_empty, false);
+
+        // "de" does not match "en"
+        let tree_no_match = Function::string_lang_matches(
+            Function::constant(any_string("de")),
+            Function::constant(any_string("en")),
+        );
+        evaluate_bool_expect(&tree_no_match, false);
+
+        // Case-insensitive: "EN-US" matches "en"
+        let tree_case = Function::string_lang_matches(
+            Function::constant(any_string("EN-US")),
+            Function::constant(any_string("en")),
+        );
+        evaluate_bool_expect(&tree_case, true);
+    }
+
+    #[test]
+    fn evaluate_hashing() {
+        // MD5 of empty string (well-known value)
+        let tree_md5_empty = Function::string_md5(Function::constant(any_string("")));
+        evaluate_expect(
+            &tree_md5_empty,
+            Some(any_string("d41d8cd98f00b204e9800998ecf8427e")),
+        );
+
+        // MD5 of "abc"
+        let tree_md5_abc = Function::string_md5(Function::constant(any_string("abc")));
+        evaluate_expect(
+            &tree_md5_abc,
+            Some(any_string("900150983cd24fb0d6963f7d28e17f72")),
+        );
+
+        // SHA1 of "abc"
+        let tree_sha1 = Function::string_sha1(Function::constant(any_string("abc")));
+        evaluate_expect(
+            &tree_sha1,
+            Some(any_string("a9993e364706816aba3e25717850c26c9cd0d89d")),
+        );
+
+        // SHA256 of "abc"
+        let tree_sha256 = Function::string_sha256(Function::constant(any_string("abc")));
+        evaluate_expect(
+            &tree_sha256,
+            Some(any_string(
+                "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+            )),
+        );
+
+        // SHA384 of "abc"
+        let tree_sha384 = Function::string_sha384(Function::constant(any_string("abc")));
+        evaluate_expect(
+            &tree_sha384,
+            Some(any_string(
+                "cb00753f45a35e8bb5a03d699ac65007272c32ab0eded1631a8b605a43ff5bed8086072ba1e7cc2358baeca134c825a7",
+            )),
+        );
+
+        // SHA512 of "abc"
+        let tree_sha512 = Function::string_sha512(Function::constant(any_string("abc")));
+        evaluate_expect(
+            &tree_sha512,
+            Some(any_string(
+                "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f",
+            )),
+        );
+
+        // Non-string input returns None
+        let tree_non_string = Function::string_md5(Function::constant(any_int(42)));
+        evaluate_expect(&tree_non_string, None);
+    }
+
+    // ── Helpers for date/time tests ──────────────────────────────────────────
+
+    fn any_datetime(lex: &str) -> AnyDataValue {
+        AnyDataValue::new_other(
+            lex.to_string(),
+            "http://www.w3.org/2001/XMLSchema#dateTime".to_string(),
+        )
+    }
+
+    fn any_date(lex: &str) -> AnyDataValue {
+        AnyDataValue::new_other(
+            lex.to_string(),
+            "http://www.w3.org/2001/XMLSchema#date".to_string(),
+        )
+    }
+
+    fn any_time(lex: &str) -> AnyDataValue {
+        AnyDataValue::new_other(
+            lex.to_string(),
+            "http://www.w3.org/2001/XMLSchema#time".to_string(),
+        )
+    }
+
+    fn any_dtduration(lex: &str) -> AnyDataValue {
+        AnyDataValue::new_other(
+            lex.to_string(),
+            "http://www.w3.org/2001/XMLSchema#dayTimeDuration".to_string(),
+        )
+    }
+
+    /// Tests for YEAR extracted from xsd:dateTime and xsd:date.
+    ///
+    /// All examples from XPath functions spec §9.5.1 / §9.5.8,
+    /// and SPARQL 1.1 spec §17.4.5.2.
+    #[test]
+    fn evaluate_datetime_year() {
+        // XPath §9.5.1: fn:year-from-dateTime("1999-05-31T13:20:00-05:00") → 1999
+        evaluate_expect(
+            &Function::datetime_year(Function::constant(any_datetime(
+                "1999-05-31T13:20:00-05:00",
+            ))),
+            Some(any_int(1999)),
+        );
+        // XPath §9.5.1: fn:year-from-dateTime("1999-05-31T21:30:00-05:00") → 1999
+        evaluate_expect(
+            &Function::datetime_year(Function::constant(any_datetime(
+                "1999-05-31T21:30:00-05:00",
+            ))),
+            Some(any_int(1999)),
+        );
+        // XPath §9.5.1: fn:year-from-dateTime("1999-12-31T19:20:00") → 1999
+        evaluate_expect(
+            &Function::datetime_year(Function::constant(any_datetime("1999-12-31T19:20:00"))),
+            Some(any_int(1999)),
+        );
+        // XPath §9.5.1: fn:year-from-dateTime("1999-12-31T24:00:00") → 2000
+        // T24:00:00 is end-of-day midnight, equivalent to start of next day
+        evaluate_expect(
+            &Function::datetime_year(Function::constant(any_datetime("1999-12-31T24:00:00"))),
+            Some(any_int(2000)),
+        );
+        // XPath §9.5.1: fn:year-from-dateTime("-0002-06-06T00:00:00") → -2
+        evaluate_expect(
+            &Function::datetime_year(Function::constant(any_datetime("-0002-06-06T00:00:00"))),
+            Some(any_int(-2)),
+        );
+        // SPARQL §17.4.5.17: YEAR("2011-01-10T14:45:13.815-05:00") → 2011
+        evaluate_expect(
+            &Function::datetime_year(Function::constant(any_datetime(
+                "2011-01-10T14:45:13.815-05:00",
+            ))),
+            Some(any_int(2011)),
+        );
+
+        // XPath §9.5.8: fn:year-from-date("1999-05-31") → 1999
+        evaluate_expect(
+            &Function::datetime_year(Function::constant(any_date("1999-05-31"))),
+            Some(any_int(1999)),
+        );
+        // XPath §9.5.8: fn:year-from-date("2000-01-01+05:00") → 2000
+        evaluate_expect(
+            &Function::datetime_year(Function::constant(any_date("2000-01-01+05:00"))),
+            Some(any_int(2000)),
+        );
+        // XPath §9.5.8: fn:year-from-date("-0002-06-01") → -2
+        evaluate_expect(
+            &Function::datetime_year(Function::constant(any_date("-0002-06-01"))),
+            Some(any_int(-2)),
+        );
+
+        // Wrong datatype → None
+        evaluate_expect(
+            &Function::datetime_year(Function::constant(any_time("14:45:13"))),
+            None,
+        );
+        evaluate_expect(
+            &Function::datetime_year(Function::constant(any_string("2011-01-10"))),
+            None,
+        );
+    }
+
+    /// Tests for MONTH extracted from xsd:dateTime and xsd:date.
+    ///
+    /// All examples from XPath functions spec §9.5.2 / §9.5.9,
+    /// and SPARQL 1.1 spec §17.4.5.3.
+    #[test]
+    fn evaluate_datetime_month() {
+        // XPath §9.5.2: fn:month-from-dateTime("1999-05-31T13:20:00-05:00") → 5
+        evaluate_expect(
+            &Function::datetime_month(Function::constant(any_datetime(
+                "1999-05-31T13:20:00-05:00",
+            ))),
+            Some(any_int(5)),
+        );
+        // XPath §9.5.2: fn:month-from-dateTime("1999-12-31T19:20:00-05:00") → 12
+        evaluate_expect(
+            &Function::datetime_month(Function::constant(any_datetime(
+                "1999-12-31T19:20:00-05:00",
+            ))),
+            Some(any_int(12)),
+        );
+        // SPARQL §17.4.5.3: MONTH("2011-01-10T14:45:13.815-05:00") → 1
+        evaluate_expect(
+            &Function::datetime_month(Function::constant(any_datetime(
+                "2011-01-10T14:45:13.815-05:00",
+            ))),
+            Some(any_int(1)),
+        );
+
+        // XPath §9.5.9: fn:month-from-date("1999-05-31-05:00") → 5
+        evaluate_expect(
+            &Function::datetime_month(Function::constant(any_date("1999-05-31-05:00"))),
+            Some(any_int(5)),
+        );
+        // XPath §9.5.9: fn:month-from-date("2000-01-01+05:00") → 1
+        evaluate_expect(
+            &Function::datetime_month(Function::constant(any_date("2000-01-01+05:00"))),
+            Some(any_int(1)),
+        );
+
+        // Wrong datatype → None
+        evaluate_expect(
+            &Function::datetime_month(Function::constant(any_time("14:45:13"))),
+            None,
+        );
+    }
+
+    /// Tests for DAY extracted from xsd:dateTime and xsd:date.
+    ///
+    /// All examples from XPath functions spec §9.5.3 / §9.5.10,
+    /// and SPARQL 1.1 spec §17.4.5.4.
+    #[test]
+    fn evaluate_datetime_day() {
+        // XPath §9.5.3: fn:day-from-dateTime("1999-05-31T13:20:00-05:00") → 31
+        evaluate_expect(
+            &Function::datetime_day(Function::constant(any_datetime(
+                "1999-05-31T13:20:00-05:00",
+            ))),
+            Some(any_int(31)),
+        );
+        // XPath §9.5.3: fn:day-from-dateTime("1999-12-31T20:00:00-05:00") → 31
+        evaluate_expect(
+            &Function::datetime_day(Function::constant(any_datetime(
+                "1999-12-31T20:00:00-05:00",
+            ))),
+            Some(any_int(31)),
+        );
+        // SPARQL §17.4.5.4: DAY("2011-01-10T14:45:13.815-05:00") → 10
+        evaluate_expect(
+            &Function::datetime_day(Function::constant(any_datetime(
+                "2011-01-10T14:45:13.815-05:00",
+            ))),
+            Some(any_int(10)),
+        );
+
+        // XPath §9.5.10: fn:day-from-date("1999-05-31-05:00") → 31
+        evaluate_expect(
+            &Function::datetime_day(Function::constant(any_date("1999-05-31-05:00"))),
+            Some(any_int(31)),
+        );
+        // XPath §9.5.10: fn:day-from-date("2000-01-01+05:00") → 1
+        evaluate_expect(
+            &Function::datetime_day(Function::constant(any_date("2000-01-01+05:00"))),
+            Some(any_int(1)),
+        );
+
+        // Wrong datatype → None
+        evaluate_expect(
+            &Function::datetime_day(Function::constant(any_time("14:45:13"))),
+            None,
+        );
+    }
+
+    /// Tests for HOURS extracted from xsd:dateTime and xsd:time.
+    ///
+    /// All examples from XPath functions spec §9.5.4 / §9.5.12,
+    /// and SPARQL 1.1 spec §17.4.5.5.
+    #[test]
+    fn evaluate_datetime_hours() {
+        // XPath §9.5.4: fn:hours-from-dateTime("1999-05-31T08:20:00-05:00") → 8
+        evaluate_expect(
+            &Function::datetime_hours(Function::constant(any_datetime(
+                "1999-05-31T08:20:00-05:00",
+            ))),
+            Some(any_int(8)),
+        );
+        // XPath §9.5.4: fn:hours-from-dateTime("1999-12-31T21:20:00-05:00") → 21
+        evaluate_expect(
+            &Function::datetime_hours(Function::constant(any_datetime(
+                "1999-12-31T21:20:00-05:00",
+            ))),
+            Some(any_int(21)),
+        );
+        // XPath §9.5.4: fn:hours-from-dateTime("1999-12-31T12:00:00") → 12
+        evaluate_expect(
+            &Function::datetime_hours(Function::constant(any_datetime("1999-12-31T12:00:00"))),
+            Some(any_int(12)),
+        );
+        // XPath §9.5.4: fn:hours-from-dateTime("1999-12-31T24:00:00") → 0
+        // T24:00:00 rolls over to midnight (00:00:00) of the next day
+        evaluate_expect(
+            &Function::datetime_hours(Function::constant(any_datetime("1999-12-31T24:00:00"))),
+            Some(any_int(0)),
+        );
+        // SPARQL §17.4.5.5: HOURS("2011-01-10T14:45:13.815-05:00") → 14
+        evaluate_expect(
+            &Function::datetime_hours(Function::constant(any_datetime(
+                "2011-01-10T14:45:13.815-05:00",
+            ))),
+            Some(any_int(14)),
+        );
+
+        // XPath §9.5.12: fn:hours-from-time("11:23:00") → 11
+        evaluate_expect(
+            &Function::datetime_hours(Function::constant(any_time("11:23:00"))),
+            Some(any_int(11)),
+        );
+        // XPath §9.5.12: fn:hours-from-time("21:23:00") → 21
+        evaluate_expect(
+            &Function::datetime_hours(Function::constant(any_time("21:23:00"))),
+            Some(any_int(21)),
+        );
+        // XPath §9.5.12: fn:hours-from-time("01:23:00+05:00") → 1
+        evaluate_expect(
+            &Function::datetime_hours(Function::constant(any_time("01:23:00+05:00"))),
+            Some(any_int(1)),
+        );
+        // XPath §9.5.12: fn:hours-from-time("24:00:00") → 0
+        evaluate_expect(
+            &Function::datetime_hours(Function::constant(any_time("24:00:00"))),
+            Some(any_int(0)),
+        );
+
+        // Wrong datatype → None
+        evaluate_expect(
+            &Function::datetime_hours(Function::constant(any_date("2011-01-10"))),
+            None,
+        );
+    }
+
+    /// Tests for MINUTES extracted from xsd:dateTime and xsd:time.
+    ///
+    /// All examples from XPath functions spec §9.5.5 / §9.5.13,
+    /// and SPARQL 1.1 spec §17.4.5.6.
+    #[test]
+    fn evaluate_datetime_minutes() {
+        // XPath §9.5.5: fn:minutes-from-dateTime("1999-05-31T13:20:00-05:00") → 20
+        evaluate_expect(
+            &Function::datetime_minutes(Function::constant(any_datetime(
+                "1999-05-31T13:20:00-05:00",
+            ))),
+            Some(any_int(20)),
+        );
+        // XPath §9.5.5: fn:minutes-from-dateTime("1999-05-31T13:30:00+05:30") → 30
+        evaluate_expect(
+            &Function::datetime_minutes(Function::constant(any_datetime(
+                "1999-05-31T13:30:00+05:30",
+            ))),
+            Some(any_int(30)),
+        );
+        // SPARQL §17.4.5.6: MINUTES("2011-01-10T14:45:13.815-05:00") → 45
+        evaluate_expect(
+            &Function::datetime_minutes(Function::constant(any_datetime(
+                "2011-01-10T14:45:13.815-05:00",
+            ))),
+            Some(any_int(45)),
+        );
+
+        // XPath §9.5.13: fn:minutes-from-time("13:00:00Z") → 0
+        evaluate_expect(
+            &Function::datetime_minutes(Function::constant(any_time("13:00:00Z"))),
+            Some(any_int(0)),
+        );
+
+        // Wrong datatype → None
+        evaluate_expect(
+            &Function::datetime_minutes(Function::constant(any_date("2011-01-10"))),
+            None,
+        );
+    }
+
+    /// Tests for SECONDS extracted from xsd:dateTime and xsd:time.
+    ///
+    /// All examples from XPath functions spec §9.5.6 / §9.5.14,
+    /// and SPARQL 1.1 spec §17.4.5.7.
+    #[test]
+    fn evaluate_datetime_seconds() {
+        // XPath §9.5.6: fn:seconds-from-dateTime("1999-05-31T13:20:00-05:00") → 0
+        evaluate_expect(
+            &Function::datetime_seconds(Function::constant(any_datetime(
+                "1999-05-31T13:20:00-05:00",
+            ))),
+            Some(any_double(0.0)),
+        );
+        // SPARQL §17.4.5.7: SECONDS("2011-01-10T14:45:13.815-05:00") → 13.815
+        let result = StackProgram::from_function_tree(
+            &Function::datetime_seconds(Function::constant(any_datetime(
+                "2011-01-10T14:45:13.815-05:00",
+            ))),
+            &HashMap::new(),
+            None,
+        )
+        .evaluate(&[], None)
+        .unwrap();
+        assert!(
+            (result.to_f64_unchecked() - 13.815_f64).abs() < 1e-6,
+            "expected 13.815, got {result:?}"
+        );
+
+        // XPath §9.5.14: fn:seconds-from-time("13:20:10.5") → 10.5
+        let result = StackProgram::from_function_tree(
+            &Function::datetime_seconds(Function::constant(any_time("13:20:10.5"))),
+            &HashMap::new(),
+            None,
+        )
+        .evaluate(&[], None)
+        .unwrap();
+        assert!(
+            (result.to_f64_unchecked() - 10.5_f64).abs() < 1e-9,
+            "expected 10.5, got {result:?}"
+        );
+
+        // Wrong datatype → None
+        evaluate_expect(
+            &Function::datetime_seconds(Function::constant(any_date("2011-01-10"))),
+            None,
+        );
+    }
+
+    /// Tests for TIMEZONE (returns xsd:dayTimeDuration) and TZ (returns plain string).
+    ///
+    /// All examples from XPath functions spec §9.5.7 / §9.5.11 / §9.5.15,
+    /// and SPARQL 1.1 spec §17.4.5.8–9.
+    #[test]
+    fn evaluate_datetime_timezone() {
+        // XPath §9.5.7: fn:timezone-from-dateTime("1999-05-31T13:20:00-05:00") → -PT5H
+        evaluate_expect(
+            &Function::datetime_timezone(Function::constant(any_datetime(
+                "1999-05-31T13:20:00-05:00",
+            ))),
+            Some(any_dtduration("-PT5H")),
+        );
+        // XPath §9.5.7: fn:timezone-from-dateTime("2000-06-12T13:20:00Z") → PT0S
+        evaluate_expect(
+            &Function::datetime_timezone(Function::constant(any_datetime("2000-06-12T13:20:00Z"))),
+            Some(any_dtduration("PT0S")),
+        );
+        // XPath §9.5.7: fn:timezone-from-dateTime("2004-08-27T00:00:00") → () (no timezone)
+        evaluate_expect(
+            &Function::datetime_timezone(Function::constant(any_datetime("2004-08-27T00:00:00"))),
+            None,
+        );
+        // SPARQL §17.4.5.8: TIMEZONE("2011-01-10T14:45:13.815-05:00") → -PT5H
+        evaluate_expect(
+            &Function::datetime_timezone(Function::constant(any_datetime(
+                "2011-01-10T14:45:13.815-05:00",
+            ))),
+            Some(any_dtduration("-PT5H")),
+        );
+
+        // XPath §9.5.11: fn:timezone-from-date("1999-05-31-05:00") → -PT5H
+        evaluate_expect(
+            &Function::datetime_timezone(Function::constant(any_date("1999-05-31-05:00"))),
+            Some(any_dtduration("-PT5H")),
+        );
+        // XPath §9.5.11: fn:timezone-from-date("2000-06-12Z") → PT0S
+        evaluate_expect(
+            &Function::datetime_timezone(Function::constant(any_date("2000-06-12Z"))),
+            Some(any_dtduration("PT0S")),
+        );
+
+        // XPath §9.5.15: fn:timezone-from-time("13:20:00-05:00") → -PT5H
+        evaluate_expect(
+            &Function::datetime_timezone(Function::constant(any_time("13:20:00-05:00"))),
+            Some(any_dtduration("-PT5H")),
+        );
+        // XPath §9.5.15: fn:timezone-from-time("13:20:00") → () (no timezone)
+        evaluate_expect(
+            &Function::datetime_timezone(Function::constant(any_time("13:20:00"))),
+            None,
+        );
+
+        // SPARQL §17.4.5.9: TZ("2011-01-10T14:45:13.815-05:00") → "-05:00"
+        evaluate_expect(
+            &Function::datetime_tz(Function::constant(any_datetime(
+                "2011-01-10T14:45:13.815-05:00",
+            ))),
+            Some(any_string("-05:00")),
+        );
+        // SPARQL §17.4.5.9: TZ("2011-01-10T14:45:13.815") → ""  (no timezone present)
+        evaluate_expect(
+            &Function::datetime_tz(Function::constant(any_datetime("2011-01-10T14:45:13.815"))),
+            Some(any_string("")),
+        );
+        // TZ with "Z" suffix → "Z"
+        evaluate_expect(
+            &Function::datetime_tz(Function::constant(any_datetime("2011-01-10T14:45:13Z"))),
+            Some(any_string("Z")),
+        );
+        // TZ with positive offset → "+05:30"
+        evaluate_expect(
+            &Function::datetime_tz(Function::constant(any_datetime(
+                "2011-01-10T14:45:13+05:30",
+            ))),
+            Some(any_string("+05:30")),
+        );
+
+        // Wrong datatype → None
+        evaluate_expect(
+            &Function::datetime_timezone(Function::constant(any_string("2011-01-10T14:45:13Z"))),
+            None,
+        );
+    }
+
+    /// Tests for RAND, UUID, STRUUID.
+    ///
+    /// These are nondeterministic — we verify output domain and structural properties.
+    #[test]
+    fn evaluate_nondeterministic() {
+        let program_rand =
+            StackProgram::from_function_tree(&Function::func_rand(), &HashMap::new(), None);
+        let program_uuid =
+            StackProgram::from_function_tree(&Function::func_uuid(), &HashMap::new(), None);
+        let program_struuid =
+            StackProgram::from_function_tree(&Function::func_struuid(), &HashMap::new(), None);
+
+        // RAND() must produce a double in [0, 1)
+        let r = program_rand.evaluate_data(&[]).unwrap();
+        assert_eq!(r.value_domain(), ValueDomain::Double);
+        let v = r.to_f64_unchecked();
+        assert!((0.0..1.0).contains(&v), "RAND() out of range: {v}");
+
+        // UUID() must produce an IRI of the form urn:uuid:…
+        let u = program_uuid.evaluate_data(&[]).unwrap();
+        assert_eq!(u.value_domain(), ValueDomain::Iri);
+        assert!(
+            u.to_iri_unchecked().starts_with("urn:uuid:"),
+            "UUID() IRI has wrong prefix: {}",
+            u.to_iri_unchecked()
+        );
+
+        // STRUUID() must produce a plain string that looks like a UUID (36 chars, hex + dashes)
+        let s = program_struuid.evaluate_data(&[]).unwrap();
+        assert_eq!(s.value_domain(), ValueDomain::PlainString);
+        let s_str = s.to_plain_string_unchecked();
+        assert_eq!(s_str.len(), 36, "STRUUID() wrong length: {s_str}");
+        assert!(
+            s_str.chars().all(|c| c.is_ascii_hexdigit() || c == '-'),
+            "STRUUID() unexpected characters: {s_str}"
+        );
     }
 }

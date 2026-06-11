@@ -39,6 +39,7 @@ pub(crate) fn try_expression_from_tree(
             second,
             third,
         } => try_expression_from_ternary(variables, function, first, second, third),
+        Tree::Nullary(_) => None,
         Tree::Nary {
             function,
             parameters,

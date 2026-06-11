@@ -9,15 +9,22 @@ use crate::{
 
 use super::{
     definitions::{
-        BinaryFunctionEnum, NaryFunctionEnum, TernaryFunctionEnum, UnaryFunctionEnum,
+        BinaryFunctionEnum, NaryFunctionEnum, NullaryFunctionEnum, TernaryFunctionEnum,
+        UnaryFunctionEnum,
         boolean::{BooleanConjunction, BooleanDisjunction, BooleanNegation},
         casting::{CastingIntoDouble, CastingIntoFloat, CastingIntoInteger64, CastingIntoIri},
         checktype::{
             CheckIsDouble, CheckIsFloat, CheckIsInteger, CheckIsIri, CheckIsNull, CheckIsNumeric,
             CheckIsString,
         },
-        generic::{CanonicalString, Datatype, Equals, LexicalValue, Unequals},
+        datetime::{
+            DateTimeDay, DateTimeHours, DateTimeMinutes, DateTimeMonth, DateTimeSeconds,
+            DateTimeTimezone, DateTimeTz, DateTimeYear,
+        },
+        generic::{CanonicalString, Datatype, Equals, LexicalValue, TypedLiteral, Unequals},
+        hashing::{StringMd5, StringSha1, StringSha256, StringSha384, StringSha512},
         language::LanguageTag,
+        nondeterministic::{FuncRand, FuncStruuid, FuncUuid},
         numeric::{
             BitAnd, BitOr, BitShiftLeft, BitShiftRight, BitShiftRightUnsigned, BitXor,
             NumericAbsolute, NumericAddition, NumericCeil, NumericCosine, NumericDivision,
@@ -29,8 +36,9 @@ use super::{
         },
         string::{
             StringAfter, StringBefore, StringCompare, StringConcatenation, StringContains,
-            StringEnds, StringLength, StringLevenshtein, StringLowercase, StringRegex,
-            StringReverse, StringStarts, StringSubstring, StringSubstringLength, StringUppercase,
+            StringEnds, StringLangMatches, StringLength, StringLevenshtein, StringLowercase,
+            StringRegex, StringReplace, StringReverse, StringStarts, StringSubstring,
+            StringSubstringLength, StringTrim, StringTrimEnd, StringTrimStart, StringUppercase,
             StringUriDecode, StringUriEncode,
         },
     },
@@ -79,6 +87,8 @@ where
         /// Third parameter to the function
         third: Box<FunctionTree<ReferenceType>>,
     },
+    /// Application of a nullary function (no arguments)
+    Nullary(NullaryFunctionEnum),
     /// Application of an n-ary function
     Nary {
         /// N-ary function
@@ -92,8 +102,6 @@ where
 /// where it might be beneficial to have special handling
 /// for performance reasons within the evaluation of
 /// [TrieScanFunction][crate::tabular::operations::function::TrieScanFunction]
-///
-/// TODO: This is not yet used anywhere
 #[derive(Debug)]
 #[allow(dead_code)]
 pub(crate) enum SpecialCaseFunction<'a, ReferenceType>
@@ -131,7 +139,7 @@ where
     /// Check if this function correspond to some special case defined in [SpecialCaseFunction].
     /// Returns `None` if this is not the case.
     pub(crate) fn special_function(&self) -> SpecialCaseFunction<'_, ReferenceType> {
-        if self.references().is_empty() {
+        if self.references().is_empty() && !self.is_nondeterministic() {
             let constant_program =
                 StackProgram::from_function_tree(self, &HashMap::default(), None);
 
@@ -224,6 +232,7 @@ where
                 result.extend(second.leaves());
                 result.extend(third.leaves());
             }
+            FunctionTree::Nullary(_) => {}
             FunctionTree::Nary {
                 function: _,
                 parameters,
@@ -754,11 +763,10 @@ where
     /// if the subtree `text` evaluates to a string that matches
     /// the pattern resulting from evaluating the subtree `pattern`
     /// and to `false` otherwise.
-    pub fn string_regex(text: Self, pattern: Self) -> Self {
-        Self::Binary {
-            function: BinaryFunctionEnum::StringRegex(StringRegex),
-            left: Box::new(text),
-            right: Box::new(pattern),
+    pub fn string_regex(parameters: Vec<Self>) -> Self {
+        Self::Nary {
+            function: NaryFunctionEnum::StringRegex(StringRegex),
+            parameters,
         }
     }
 
@@ -768,6 +776,36 @@ where
     /// that is the length of the string that results from evaluating `sub`.
     pub fn string_length(sub: Self) -> Self {
         Self::Unary(UnaryFunctionEnum::StringLength(StringLength), Box::new(sub))
+    }
+
+    /// Create a tree node representing the trimmed version of a string.
+    ///
+    /// This evaluates to the string with leading and trailing whitespace removed
+    /// that results from evaluating `sub`.
+    pub fn string_trim(sub: Self) -> Self {
+        Self::Unary(UnaryFunctionEnum::StringTrim(StringTrim), Box::new(sub))
+    }
+
+    /// Create a tree node representing the start-trimmed version of a string.
+    ///
+    /// This evaluates to the string with leading whitespace removed
+    /// that results from evaluating `sub`.
+    pub fn string_trim_start(sub: Self) -> Self {
+        Self::Unary(
+            UnaryFunctionEnum::StringTrimStart(StringTrimStart),
+            Box::new(sub),
+        )
+    }
+
+    /// Create a tree node representing the end-trimmed version of a string.
+    ///
+    /// This evaluates to the string with trailing whitespace removed
+    /// that results from evaluating `sub`.
+    pub fn string_trim_end(sub: Self) -> Self {
+        Self::Unary(
+            UnaryFunctionEnum::StringTrimEnd(StringTrimEnd),
+            Box::new(sub),
+        )
     }
 
     /// Create a tree node representing the reverse of a string.
@@ -864,6 +902,127 @@ where
             left: Box::new(from),
             right: Box::new(to),
         }
+    }
+
+    /// Create a tree node representing a typed literal construction (STRDT).
+    pub fn typed_literal(lexical: Self, datatype: Self) -> Self {
+        Self::Binary {
+            function: BinaryFunctionEnum::TypedLiteral(TypedLiteral),
+            left: Box::new(lexical),
+            right: Box::new(datatype),
+        }
+    }
+
+    /// Create a tree node representing a regex-replace operation (REPLACE).
+    pub fn string_replace(parameters: Vec<Self>) -> Self {
+        Self::Nary {
+            function: NaryFunctionEnum::StringReplace(StringReplace),
+            parameters,
+        }
+    }
+
+    /// Create a tree node that checks whether a language tag matches a language range (langMatches).
+    pub fn string_lang_matches(tag: Self, range: Self) -> Self {
+        Self::Binary {
+            function: BinaryFunctionEnum::StringLangMatches(StringLangMatches),
+            left: Box::new(tag),
+            right: Box::new(range),
+        }
+    }
+
+    /// Create a tree node representing the MD5 hash of a string.
+    pub fn string_md5(sub: Self) -> Self {
+        Self::Unary(UnaryFunctionEnum::StringMd5(StringMd5), Box::new(sub))
+    }
+
+    /// Create a tree node representing the SHA1 hash of a string.
+    pub fn string_sha1(sub: Self) -> Self {
+        Self::Unary(UnaryFunctionEnum::StringSha1(StringSha1), Box::new(sub))
+    }
+
+    /// Create a tree node representing the SHA256 hash of a string.
+    pub fn string_sha256(sub: Self) -> Self {
+        Self::Unary(UnaryFunctionEnum::StringSha256(StringSha256), Box::new(sub))
+    }
+
+    /// Create a tree node representing the SHA384 hash of a string.
+    pub fn string_sha384(sub: Self) -> Self {
+        Self::Unary(UnaryFunctionEnum::StringSha384(StringSha384), Box::new(sub))
+    }
+
+    /// Create a tree node representing the SHA512 hash of a string.
+    pub fn string_sha512(sub: Self) -> Self {
+        Self::Unary(UnaryFunctionEnum::StringSha512(StringSha512), Box::new(sub))
+    }
+
+    /// Create a tree node extracting the year from an XSD date/dateTime (YEAR).
+    pub fn datetime_year(sub: Self) -> Self {
+        Self::Unary(UnaryFunctionEnum::DateTimeYear(DateTimeYear), Box::new(sub))
+    }
+
+    /// Create a tree node extracting the month from an XSD date/dateTime (MONTH).
+    pub fn datetime_month(sub: Self) -> Self {
+        Self::Unary(
+            UnaryFunctionEnum::DateTimeMonth(DateTimeMonth),
+            Box::new(sub),
+        )
+    }
+
+    /// Create a tree node extracting the day from an XSD date/dateTime (DAY).
+    pub fn datetime_day(sub: Self) -> Self {
+        Self::Unary(UnaryFunctionEnum::DateTimeDay(DateTimeDay), Box::new(sub))
+    }
+
+    /// Create a tree node extracting the hours from an XSD dateTime/time (HOURS).
+    pub fn datetime_hours(sub: Self) -> Self {
+        Self::Unary(
+            UnaryFunctionEnum::DateTimeHours(DateTimeHours),
+            Box::new(sub),
+        )
+    }
+
+    /// Create a tree node extracting the minutes from an XSD dateTime/time (MINUTES).
+    pub fn datetime_minutes(sub: Self) -> Self {
+        Self::Unary(
+            UnaryFunctionEnum::DateTimeMinutes(DateTimeMinutes),
+            Box::new(sub),
+        )
+    }
+
+    /// Create a tree node extracting the seconds from an XSD dateTime/time (SECONDS).
+    pub fn datetime_seconds(sub: Self) -> Self {
+        Self::Unary(
+            UnaryFunctionEnum::DateTimeSeconds(DateTimeSeconds),
+            Box::new(sub),
+        )
+    }
+
+    /// Create a tree node extracting the timezone as xsd:dayTimeDuration (TIMEZONE).
+    pub fn datetime_timezone(sub: Self) -> Self {
+        Self::Unary(
+            UnaryFunctionEnum::DateTimeTimezone(DateTimeTimezone),
+            Box::new(sub),
+        )
+    }
+
+    /// Create a tree node extracting the timezone as a plain string (TZ).
+    pub fn datetime_tz(sub: Self) -> Self {
+        Self::Unary(UnaryFunctionEnum::DateTimeTz(DateTimeTz), Box::new(sub))
+    }
+
+    /// Create a zero-arg tree node for RAND().
+    pub fn func_rand() -> Self {
+        Self::Nullary(NullaryFunctionEnum::FuncRand(FuncRand))
+    }
+
+    /// Create a zero-arg tree node for UUID().
+    pub fn func_uuid() -> Self {
+        Self::Nullary(NullaryFunctionEnum::FuncUuid(FuncUuid))
+    }
+
+    /// Create a zero-arg tree node for STRUUID().
+    pub fn func_struuid() -> Self {
+        Self::Nullary(NullaryFunctionEnum::FuncStruuid(FuncStruuid))
     }
 
     /// Create a tree node representing the bitwise and operation.
@@ -1053,6 +1212,7 @@ where
 
                 result
             }
+            FunctionTree::Nullary(_) => vec![],
             FunctionTree::Nary {
                 function: _,
                 parameters,
@@ -1068,8 +1228,36 @@ where
         }
     }
 
-    /// Return whether this tree evauluates to a constant value.
+    /// Return whether this tree evaluates to a constant value.
     pub fn is_constant(&self) -> bool {
         self.references().is_empty()
+    }
+
+    /// Return whether this tree contains a nondeterministic function.
+    ///
+    /// Nondeterministic functions (RAND, UUID, STRUUID) must not be constant-folded —
+    /// they need to be re-evaluated for every row.
+    pub fn is_nondeterministic(&self) -> bool {
+        match self {
+            FunctionTree::Leaf(_) => false,
+            FunctionTree::Unary(_, sub) => sub.is_nondeterministic(),
+            FunctionTree::Binary { left, right, .. } => {
+                left.is_nondeterministic() || right.is_nondeterministic()
+            }
+            FunctionTree::Ternary {
+                first,
+                second,
+                third,
+                ..
+            } => {
+                first.is_nondeterministic()
+                    || second.is_nondeterministic()
+                    || third.is_nondeterministic()
+            }
+            FunctionTree::Nullary(function) => function.is_nondeterministic(),
+            FunctionTree::Nary { parameters, .. } => {
+                parameters.iter().any(|p| p.is_nondeterministic())
+            }
+        }
     }
 }
