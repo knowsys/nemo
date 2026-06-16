@@ -67,5 +67,4 @@ assert_fs = "1.0"
 test-log = "0.2"
 quickcheck = "1"
 quickcheck_macros = "1"
-tokio = { version = "1.47.1", features = [ "rt", "macros" ] }
-
+tokio = { version = "1.47.1", features = ["rt", "macros"] }

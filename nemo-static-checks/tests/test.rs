@@ -434,16 +434,6 @@ fn drpc_negative(fixture: Fixture<&str>) {
     postfix: "drpc_positive",
 )]
 fn drpc_positive(fixture: Fixture<&str>) {
-    // let file_names = ["r16.rls"];
-    // if !file_names.contains(
-    //     &path_canonicalized(fixture.path())
-    //         .file_name()
-    //         .unwrap()
-    //         .to_str()
-    //         .unwrap(),
-    // ) {
-    //     return;
-    // }
     test(fixture, true, "drpc")
 }
 

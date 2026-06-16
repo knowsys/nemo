@@ -53,8 +53,8 @@ impl Literal {
         }
     }
 
-    /// Return the predicate (positive Atom | negative Atom) or None (Operation) of the
-    /// Literal as a reference
+    /// If literal is not an operation, return the predicate as a reference.
+    /// Returns `None` otherwise.
     pub fn predicate_ref(&self) -> Option<&Tag> {
         match self {
             Literal::Positive(atom) | Literal::Negative(atom) => Some(atom.predicate_ref()),

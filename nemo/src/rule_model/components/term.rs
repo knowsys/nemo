@@ -274,34 +274,6 @@ impl IterableComponent for Term {
     }
 }
 
-pub trait Cyclic<'a> {
-    fn is_cyclic(&'a self, f_tags: &mut Vec<&'a Tag>) -> bool;
-}
-
-impl<'a> Cyclic<'a> for Term {
-    fn is_cyclic(&'a self, _f_tags: &mut Vec<&'a Tag>) -> bool {
-        if let Term::FunctionTerm(func_term) = self {
-            func_term.is_cyclic(_f_tags)
-        } else {
-            false
-        }
-    }
-}
-
-pub trait RuleCyclic<'a> {
-    fn is_rule_cyclic(&'a self, f_tags: &mut Vec<&'a Tag>, sk_f_tags_of_rule: &Vec<&Tag>) -> bool;
-}
-
-impl<'a> RuleCyclic<'a> for Term {
-    fn is_rule_cyclic(&'a self, _f_tags: &mut Vec<&'a Tag>, sk_f_tags_of_rule: &Vec<&Tag>) -> bool {
-        if let Term::FunctionTerm(f_term) = self {
-            f_term.is_rule_cyclic(_f_tags, sk_f_tags_of_rule)
-        } else {
-            false
-        }
-    }
-}
-
 impl From<Variable> for Term {
     fn from(value: Variable) -> Self {
         Self::Primitive(Primitive::from(value))

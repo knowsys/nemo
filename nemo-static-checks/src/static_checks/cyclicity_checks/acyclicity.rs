@@ -5,7 +5,7 @@ use nemo::rule_model::{
         rule::Rule,
         tag::Tag,
         term::{
-            Cyclic, Term,
+            Term,
             function::FunctionTerm,
             primitive::{Primitive, variable::Variable},
         },
@@ -18,9 +18,10 @@ use nemo::rule_model::{
 
 use crate::static_checks::collection_traits::InsertAll;
 use crate::static_checks::cyclicity_checks::{
-    Assignment, CoreReasoner, CyclicityStrategy, NoBlockStrategy, StrategySelector,
-    VarPerAtomIdxPosIdxPerRule, assignments_for_facts, backtrack_sk_term, body_for_assignment,
-    build_var_index_for_rule, build_var_index_for_rules, predicates_ref, reverse_sk, union,
+    Assignment, CoreReasoner, Cyclic, CyclicityStrategy, FactsByPred, NoBlockStrategy,
+    StrategySelector, Trigger, VarPerAtomIdxPosIdxPerRule, assignments_for_facts,
+    backtrack_sk_term, body_for_assignment, build_var_index_for_rule, build_var_index_for_rules,
+    predicates_ref, reverse_sk, union,
 };
 use crate::static_checks::rule_set::RuleSet;
 
@@ -36,16 +37,13 @@ pub fn mfa_handle(handle: ProgramHandle) -> ProgramHandle {
 
 pub struct MFAStrategy;
 
-impl CyclicityStrategy for MFAStrategy {
-    fn is_blocked(&self, _rule: &Rule, _ass: &Assignment) -> bool {
-        false
-    }
-}
+impl CyclicityStrategy for MFAStrategy {}
 
 pub struct RMFAStrategy<'a> {
     pub existential_rules: &'a Vec<&'a Rule>,
     pub datalog_rules: &'a Vec<&'a Rule>,
-    pub datalog_pr: &'a HashSet<&'a Tag>,
+    datalog_pr: &'a HashSet<&'a Tag>,
+    pub preds: &'a HashSet<&'a Tag>,
     pub var_per_atom_idx_pos_idx_per_rule: &'a VarPerAtomIdxPosIdxPerRule<'a>,
 }
 
@@ -54,31 +52,34 @@ impl<'a> RMFAStrategy<'a> {
         existential_rules: &'a Vec<&'a Rule>,
         datalog_rules: &'a Vec<&'a Rule>,
         datalog_pr: &'a HashSet<&'a Tag>,
+        preds: &'a HashSet<&'a Tag>,
         var_per_atom_idx_pos_idx_per_rule: &'a VarPerAtomIdxPosIdxPerRule<'a>,
     ) -> Self {
         Self {
             existential_rules,
             datalog_rules,
             datalog_pr,
+            preds,
             var_per_atom_idx_pos_idx_per_rule,
         }
     }
 }
 
 impl<'a> CyclicityStrategy for RMFAStrategy<'a> {
-    fn is_blocked(&self, rule: &Rule, ass: &Assignment) -> bool {
-        let renamed_ass = rename_consts(ass);
-        let body_for_renamed_consts = body_for_assignment(rule, &renamed_ass);
+    fn is_blocked(&self, trig: Trigger) -> bool {
+        let renamed_ass = rename_consts(trig.ass());
+        let body_for_renamed_consts = body_for_assignment(trig.rule(), &renamed_ass);
         let skolem_terms_in_body = get_skolem_terms(&body_for_renamed_consts);
         let mut special_reasoning_set = special_reasoning_set(
             self.existential_rules,
             body_for_renamed_consts,
             skolem_terms_in_body,
+            self.preds,
         );
 
         let no_bl_strat = NoBlockStrategy;
         let mut datalog_reasoner = CoreReasoner::new(
-            self.datalog_pr,
+            self.preds,
             self.datalog_rules,
             self.var_per_atom_idx_pos_idx_per_rule,
             &no_bl_strat,
@@ -90,43 +91,14 @@ impl<'a> CyclicityStrategy for RMFAStrategy<'a> {
             facts_after_reasoning = union(facts_after_reasoning, datalog_reasoner.into_facts());
         }
 
-        let preds_in_head: Vec<&Tag> = rule
-            .head()
-            .iter()
-            .map(|atom| atom.predicate_ref())
-            .collect();
-
-        preds_in_head.iter().for_each(|pred| {
-            if !facts_after_reasoning.contains_key(pred) {
-                facts_after_reasoning.insert(pred, HashSet::default());
-            }
-        });
-
-        let count_preds_body = rule.body().iter().count();
-        let unsk_rule = reverse_sk(rule);
-        let var_atom_pos_unsk_rule = build_var_index_for_rule(&unsk_rule);
-
-        let possible_ass_for_chase_result = assignments_for_facts(
-            count_preds_body,
-            preds_in_head,
-            &facts_after_reasoning,
-            &facts_after_reasoning,
-            &var_atom_pos_unsk_rule,
-        );
-
-        let frontier_vars = rule.frontier_variables();
-        possible_ass_for_chase_result.iter().any(|ass| {
-            frontier_vars
-                .iter()
-                .all(|var| renamed_ass.get(var).unwrap() == ass.get(var).unwrap())
-        })
+        Trigger::new(trig.rule(), &renamed_ass).is_obsolete(&facts_after_reasoning)
     }
 }
 
-fn convert_set_to_map(facts: Vec<&Fact>) -> HashMap<&Tag, HashSet<Fact>> {
-    facts.into_iter().fold(
-        HashMap::<&Tag, HashSet<Fact>>::new(),
-        |mut ret_val, fact| {
+fn convert_set_to_map(facts: Vec<&Fact>) -> FactsByPred<'_> {
+    facts
+        .into_iter()
+        .fold(FactsByPred::new(), |mut ret_val, fact| {
             ret_val
                 .entry(fact.predicate())
                 .and_modify(|facts_of_pred| {
@@ -134,22 +106,21 @@ fn convert_set_to_map(facts: Vec<&Fact>) -> HashMap<&Tag, HashSet<Fact>> {
                 })
                 .or_insert(HashSet::from([fact.clone()]));
             ret_val
-        },
-    )
+        })
 }
 
 pub async fn check_acyclicity(handle: ProgramHandle, strat_sel: StrategySelector) -> bool {
     let rules: RuleSet = RuleSet(handle.rules().cloned().collect());
     let rules_ref: Vec<&Rule> = rules.0.iter().collect();
 
-    let new_facts_by_pred: HashMap<&Tag, HashSet<Fact>> =
-        convert_set_to_map(handle.facts().collect());
+    let new_facts_by_pred: FactsByPred = convert_set_to_map(handle.facts().collect());
 
     let datalog_rules: Vec<&Rule> = rules.datalog_rules();
     let existential_rules: Vec<&Rule> = rules.existential_rules();
 
     let datalog_pr: HashSet<&Tag> = predicates_ref(&datalog_rules);
     let existential_pr: HashSet<&Tag> = predicates_ref(&existential_rules);
+    let all_pr: HashSet<&Tag> = datalog_pr.union(&existential_pr).copied().collect();
 
     let var_per_atom_idx_pos_idx_per_rule = build_var_index_for_rules(&rules_ref);
 
@@ -168,6 +139,7 @@ pub async fn check_acyclicity(handle: ProgramHandle, strat_sel: StrategySelector
             &existential_rules,
             &datalog_rules,
             &datalog_pr,
+            &all_pr,
             &var_per_atom_idx_pos_idx_per_rule,
         ),
         _ => unreachable!(),
@@ -180,12 +152,12 @@ pub async fn check_acyclicity(handle: ProgramHandle, strat_sel: StrategySelector
         strat,
     );
 
-    let mut new_datalog_facts_by_pred: HashMap<&Tag, HashSet<Fact>> = new_facts_by_pred
+    let mut new_datalog_facts_by_pred: FactsByPred = new_facts_by_pred
         .iter()
         .filter(|(pred, _)| datalog_pr.contains(*pred))
         .map(|(pred, facts)| (*pred, facts.clone()))
         .collect();
-    let mut new_existential_facts_by_pred: HashMap<&Tag, HashSet<Fact>> = new_facts_by_pred
+    let mut new_existential_facts_by_pred: FactsByPred = new_facts_by_pred
         .iter()
         .filter(|(pred, _)| existential_pr.contains(*pred))
         .map(|(pred, facts)| (*pred, facts.clone()))
@@ -217,7 +189,7 @@ pub async fn check_acyclicity(handle: ProgramHandle, strat_sel: StrategySelector
     true
 }
 
-fn filter_new_facts(facts_by_pred: &mut HashMap<&Tag, HashSet<Fact>>, preds: &HashSet<&Tag>) {
+fn filter_new_facts(facts_by_pred: &mut FactsByPred, preds: &HashSet<&Tag>) {
     facts_by_pred.retain(|pred, _| preds.contains(pred))
 }
 
@@ -247,42 +219,14 @@ fn rename_consts<'a>(ass: &Assignment<'a>) -> Assignment<'a> {
         .collect()
 }
 
-// fn get_skolem_terms(facts_by_pred: &HashMap<&Tag, HashSet<Fact>>) -> Vec<FunctionTerm> {
-//     facts_by_pred
-//         .values()
-//         .fold(Vec::<FunctionTerm>::new(), |mut ret_val, facts| {
-//             facts.iter().for_each(|fact| {
-//                 let skolem_terms_of_fact: Vec<FunctionTerm> = fact
-//                     .terms()
-//                     .filter_map(|term| {
-//                         if let Term::FunctionTerm(sk_term) = term {
-//                             Some(sk_term)
-//                         } else {
-//                             None
-//                         }
-//                     })
-//                     .cloned()
-//                     .collect();
-//                 ret_val.insert_all(&skolem_terms_of_fact);
-//             });
-//             ret_val
-//         })
-// }
-
-fn get_skolem_terms(facts_by_pred: &HashMap<&Tag, HashSet<Fact>>) -> Vec<Term> {
+fn get_skolem_terms(facts_by_pred: &FactsByPred) -> Vec<Term> {
     facts_by_pred
         .values()
         .fold(Vec::<Term>::new(), |mut ret_val, facts| {
             facts.iter().for_each(|fact| {
                 let skolem_terms_of_fact: Vec<Term> = fact
                     .terms()
-                    .filter_map(|term| {
-                        if let Term::FunctionTerm(_) = term {
-                            Some(term)
-                        } else {
-                            None
-                        }
-                    })
+                    .filter(|term| term.is_function())
                     .cloned()
                     .collect();
                 ret_val.insert_all(&skolem_terms_of_fact);
@@ -293,9 +237,10 @@ fn get_skolem_terms(facts_by_pred: &HashMap<&Tag, HashSet<Fact>>) -> Vec<Term> {
 
 fn special_reasoning_set<'a>(
     ex_rules: &Vec<&'a Rule>,
-    facts_by_pred: HashMap<&'a Tag, HashSet<Fact>>,
+    facts_by_pred: FactsByPred<'a>,
     skolem_terms: Vec<Term>,
-) -> HashMap<&'a Tag, HashSet<Fact>> {
+    preds: &HashSet<&'a Tag>,
+) -> FactsByPred<'a> {
     let involved_facts_in_derivation =
         skolem_terms
             .iter()
@@ -303,5 +248,11 @@ fn special_reasoning_set<'a>(
                 let facts_for_sk_term = backtrack_sk_term(sk_term, ex_rules, true);
                 union(facts, facts_for_sk_term)
             });
-    union(facts_by_pred, involved_facts_in_derivation)
+    let mut ret_val = union(facts_by_pred, involved_facts_in_derivation);
+    preds.iter().for_each(|pred| {
+        if !ret_val.contains_key(pred) {
+            ret_val.insert(pred, HashSet::default());
+        }
+    });
+    ret_val
 }

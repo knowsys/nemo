@@ -2,7 +2,7 @@
 use crate::static_checks::collection_traits::{Disjoint, InsertAll, Superset};
 use crate::static_checks::positions::{Position, Positions, PositionsByRuleAndVariables};
 use nemo::rule_model::components::{
-    atom::Atom, rule::Rule, term::primitive::variable::Variable, IterableVariables,
+    IterableVariables, atom::Atom, rule::Rule, term::primitive::variable::Variable,
 };
 
 use std::collections::{HashMap, HashSet};

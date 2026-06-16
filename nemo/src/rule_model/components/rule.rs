@@ -194,7 +194,6 @@ impl Rule {
         self.head.iter().chain(self.body_atoms())
     }
 
-    /// Return the predicates of all Literals (no Operations) of the Rule.
     pub fn predicates_ref(&self) -> Vec<&Tag> {
         self.body()
             .iter()

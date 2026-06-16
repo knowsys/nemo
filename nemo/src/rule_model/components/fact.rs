@@ -23,7 +23,7 @@ use super::{
     component_iterator, component_iterator_mut,
     tag::Tag,
     term::{
-        Cyclic, RuleCyclic, Term,
+        Term,
         primitive::{Primitive, variable::Variable},
     },
 };
@@ -95,19 +95,6 @@ impl Fact {
         } else {
             None
         }
-    }
-}
-
-impl<'a> Cyclic<'a> for Fact {
-    fn is_cyclic(&'a self, f_tags: &mut Vec<&'a Tag>) -> bool {
-        self.terms().any(|term| term.is_cyclic(f_tags))
-    }
-}
-
-impl<'a> RuleCyclic<'a> for Fact {
-    fn is_rule_cyclic(&'a self, f_tags: &mut Vec<&'a Tag>, sk_f_tags_of_rule: &Vec<&Tag>) -> bool {
-        self.terms()
-            .any(|term| term.is_rule_cyclic(f_tags, sk_f_tags_of_rule))
     }
 }
 

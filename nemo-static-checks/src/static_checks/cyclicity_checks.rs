@@ -110,32 +110,12 @@ pub fn union<'a>(
         })
 }
 
-fn facts_for_assignment<'a>(
-    atoms: Vec<&'a Atom>,
-    ass: &Assignment<'_>,
-) -> HashMap<&'a Tag, HashSet<Fact>> {
-    atoms.iter().fold(
-        HashMap::<&Tag, HashSet<Fact>>::new(),
-        |mut ret_val, atom| {
-            let fact: Fact = assign(atom, ass);
-            let pred: &'a Tag = atom.predicate_ref();
-            ret_val
-                .entry(pred)
-                .and_modify(|facts| {
-                    facts.insert(fact.clone());
-                })
-                .or_insert(HashSet::from([fact]));
-            ret_val
-        },
-    )
-}
-
 pub fn body_for_assignment<'a>(
     rule: &'a Rule,
     ass: &Assignment,
 ) -> HashMap<&'a Tag, HashSet<Fact>> {
     let body: Vec<&Atom> = rule.body_positive_refs();
-    facts_for_assignment(body, ass)
+    body.assign(ass)
 }
 
 pub fn head_for_assignment<'a>(
@@ -143,33 +123,7 @@ pub fn head_for_assignment<'a>(
     ass: &Assignment,
 ) -> HashMap<&'a Tag, HashSet<Fact>> {
     let head: Vec<&Atom> = rule.head_refs();
-    facts_for_assignment(head, ass)
-}
-
-fn assign_rec(sk_func: &FunctionTerm, ass: &Assignment) -> Term {
-    let subterms: Vec<Term> = sk_func
-        .terms()
-        .map(|term| match term {
-            Term::Primitive(Primitive::Variable(var)) => ass.get(var).unwrap().clone(),
-            Term::FunctionTerm(sk_func) => assign_rec(sk_func, ass),
-            _ => panic!(),
-        })
-        .collect();
-    let pred: &Tag = sk_func.tag();
-    Term::FunctionTerm(FunctionTerm::from((pred, subterms)))
-}
-
-fn assign(atom: &Atom, ass: &Assignment) -> Fact {
-    let subterms: Vec<Term> = atom
-        .terms()
-        .map(|term| match term {
-            Term::Primitive(Primitive::Variable(var)) => ass.get(var).unwrap().clone(),
-            Term::FunctionTerm(sk_func) => assign_rec(sk_func, ass),
-            _ => panic!(),
-        })
-        .collect();
-    let pred: &Tag = atom.predicate_ref();
-    Fact::from((pred, subterms))
+    head.assign(ass)
 }
 
 #[derive(Clone, Copy)]
@@ -181,10 +135,13 @@ pub enum StrategySelector {
 }
 
 pub trait CyclicityStrategy {
-    fn is_blocked(&self, rule: &Rule, ass: &Assignment) -> bool;
+    #[inline]
+    fn is_blocked(&self, _trig: Trigger) -> bool {
+        false
+    }
 
     #[inline]
-    fn h<'a>(
+    fn map<'a>(
         &self,
         facts_by_pred: HashMap<&'a Tag, HashSet<Fact>>,
     ) -> HashMap<&'a Tag, HashSet<Fact>> {
@@ -194,27 +151,7 @@ pub trait CyclicityStrategy {
 
 pub struct NoBlockStrategy;
 
-impl CyclicityStrategy for NoBlockStrategy {
-    fn is_blocked(&self, _rule: &Rule, _ass: &Assignment) -> bool {
-        false
-    }
-}
-
-fn predicates_ref<'a>(rule_set: &[&'a Rule]) -> HashSet<&'a Tag> {
-    rule_set
-        .iter()
-        .fold(HashSet::<&Tag>::new(), |ret_val, rule| {
-            ret_val.insert_all_take_ret(rule.predicates_ref())
-        })
-}
-
-fn predicates_ref_and_lens<'a>(rule_set: &[&'a Rule]) -> HashSet<(&'a Tag, usize)> {
-    rule_set
-        .iter()
-        .fold(HashSet::<(&Tag, usize)>::new(), |ret_val, rule| {
-            ret_val.insert_all_take_ret(rule.predicates_ref_and_lens())
-        })
-}
+impl CyclicityStrategy for NoBlockStrategy {}
 
 fn build_var_index_for_rule<'a>(rule: &'a Rule) -> VarPerAtomIdxPosIdx<'a> {
     let mut ret_val: VarPerAtomIdxPosIdx<'a> = VarPerAtomIdxPosIdx::new();
@@ -352,18 +289,18 @@ fn assignments_for_facts<'a>(
 }
 
 pub struct CoreReasoner<'a, 's> {
-    facts_by_pred: HashMap<&'a Tag, HashSet<Fact>>,
+    facts_by_pred: FactsByPred<'a>,
     rules: &'a Vec<&'a Rule>,
     var_per_atom_idx_pos_idx_per_rule: &'a VarPerAtomIdxPosIdxPerRule<'a>,
     strat: &'s dyn CyclicityStrategy,
 }
 
 impl<'a, 's> CoreReasoner<'a, 's> {
-    pub fn facts(&self) -> &HashMap<&Tag, HashSet<Fact>> {
+    pub fn facts(&self) -> &FactsByPred<'_> {
         &self.facts_by_pred
     }
 
-    pub fn into_facts(self) -> HashMap<&'a Tag, HashSet<Fact>> {
+    pub fn into_facts(self) -> FactsByPred<'a> {
         self.facts_by_pred
     }
 
@@ -373,7 +310,7 @@ impl<'a, 's> CoreReasoner<'a, 's> {
         var_per_atom_idx_pos_idx_per_rule: &'a VarPerAtomIdxPosIdxPerRule<'a>,
         strat: &'s dyn CyclicityStrategy,
     ) -> Self {
-        let facts_by_pred: HashMap<&Tag, HashSet<Fact>> = predicates
+        let facts_by_pred: FactsByPred = predicates
             .iter()
             .map(|pred| (*pred, HashSet::default()))
             .collect();
@@ -385,15 +322,11 @@ impl<'a, 's> CoreReasoner<'a, 's> {
         }
     }
 
-    fn run_saturating(
-        &mut self,
-        mut new_facts_by_pred: HashMap<&'a Tag, HashSet<Fact>>,
-    ) -> HashMap<&'a Tag, HashSet<Fact>> {
-        let mut ret_val = HashMap::<&Tag, HashSet<Fact>>::default();
+    fn run_saturating(&mut self, mut new_facts_by_pred: FactsByPred<'a>) -> FactsByPred<'a> {
+        let mut ret_val = FactsByPred::default();
 
         loop {
-            let con_facts_by_pred: HashMap<&Tag, HashSet<Fact>> =
-                self.run_every_rule_once(&new_facts_by_pred);
+            let con_facts_by_pred: FactsByPred = self.run_every_rule_once(&new_facts_by_pred);
             if con_facts_by_pred.is_empty() {
                 break;
             }
@@ -409,17 +342,13 @@ impl<'a, 's> CoreReasoner<'a, 's> {
         ret_val
     }
 
-    fn run_every_rule_once(
-        &mut self,
-        new_facts_by_pred: &HashMap<&'a Tag, HashSet<Fact>>,
-    ) -> HashMap<&'a Tag, HashSet<Fact>> {
+    fn run_every_rule_once(&mut self, new_facts_by_pred: &FactsByPred<'a>) -> FactsByPred<'a> {
         self.update_facts(new_facts_by_pred);
 
-        self.rules.iter().fold(
-            HashMap::<&Tag, HashSet<Fact>>::new(),
-            |mut ret_val, rule| {
-                let con_facts_by_pred: HashMap<&Tag, HashSet<Fact>> =
-                    self.run_rule(rule, new_facts_by_pred);
+        self.rules
+            .iter()
+            .fold(FactsByPred::new(), |mut ret_val, rule| {
+                let con_facts_by_pred: FactsByPred = self.run_rule(rule, new_facts_by_pred);
                 con_facts_by_pred.into_iter().for_each(|(pred, con_facts)| {
                     ret_val
                         .entry(pred)
@@ -427,15 +356,10 @@ impl<'a, 's> CoreReasoner<'a, 's> {
                         .or_insert(con_facts);
                 });
                 ret_val
-            },
-        )
+            })
     }
 
-    fn run_rule(
-        &self,
-        rule: &'a Rule,
-        new_facts_by_pred: &HashMap<&Tag, HashSet<Fact>>,
-    ) -> HashMap<&'a Tag, HashSet<Fact>> {
+    fn run_rule(&self, rule: &'a Rule, new_facts_by_pred: &FactsByPred) -> FactsByPred<'a> {
         let preds_of_body: Vec<&Tag> = rule
             .body_positive_refs()
             .iter()
@@ -449,11 +373,11 @@ impl<'a, 's> CoreReasoner<'a, 's> {
             self.var_per_atom_idx_pos_idx_per_rule.get(rule).unwrap(),
         );
 
-        assignments.retain(|ass| !self.strat.is_blocked(rule, ass));
+        assignments.retain(|ass| !self.strat.is_blocked(Trigger::new(rule, ass)));
 
         assignments
             .iter_mut()
-            .flat_map(|ass| self.strat.h(head_for_assignment(rule, ass)))
+            .flat_map(|ass| self.strat.map(head_for_assignment(rule, ass)))
             .filter_map(|(pred, mut facts)| {
                 facts.retain(|fact| !self.facts_by_pred.get(pred).unwrap().contains(fact));
                 match !facts.is_empty() {
@@ -464,7 +388,7 @@ impl<'a, 's> CoreReasoner<'a, 's> {
             .collect()
     }
 
-    fn update_facts(&mut self, new_facts_by_pred: &HashMap<&'a Tag, HashSet<Fact>>) {
+    fn update_facts(&mut self, new_facts_by_pred: &FactsByPred<'a>) {
         new_facts_by_pred.iter().for_each(|(pred, new_facts)| {
             self.facts_by_pred
                 .get_mut(pred)
@@ -524,6 +448,226 @@ impl RuleSet {
     }
 }
 
+// trait PredicateRef {
+//     type PredOutput<'a>
+//     where
+//         Self: 'a;
+//     type PredLenOutput<'a>
+//     where
+//         Self: 'a;
+//
+//     fn predicate_ref(&self) -> Self::PredOutput<'_>;
+//     fn predicate_ref_and_len(&self) -> Self::PredLenOutput<'_>;
+// }
+//
+// impl PredicateRef for Atom {
+//     type PredOutput<'a> = &'a Tag;
+//     type PredLenOutput<'a> = (&'a Tag, usize);
+//
+//     fn predicate_ref(&self) -> Self::PredOutput<'_> {
+//         &self.predicate
+//     }
+//
+//     fn predicate_ref_and_len(&self) -> Self::PredLenOutput<'_> {
+//
+//     }
+// }
+//
+// trait PredicatesRef {
+//     type PredOutput;
+//     type PredLenOutput;
+//     fn predicates_ref(&self) -> Vec<Self::PredOutput>;
+//     fn predicates_ref_and_lens(&self) -> Vec<Self::PredLenOutput>;
+// }
+
+fn predicates_ref<'a>(rule_set: &[&'a Rule]) -> HashSet<&'a Tag> {
+    rule_set
+        .iter()
+        .fold(HashSet::<&Tag>::new(), |ret_val, rule| {
+            ret_val.insert_all_take_ret(rule.predicates_ref())
+        })
+}
+
+fn predicates_ref_and_lens<'a>(rule_set: &[&'a Rule]) -> HashSet<(&'a Tag, usize)> {
+    rule_set
+        .iter()
+        .fold(HashSet::<(&Tag, usize)>::new(), |ret_val, rule| {
+            ret_val.insert_all_take_ret(rule.predicates_ref_and_lens())
+        })
+}
+
+pub struct Trigger<'a, 'b> {
+    rule: &'a Rule,
+    ass: &'a Assignment<'b>,
+}
+
+impl<'a, 'b> Trigger<'a, 'b> {
+    fn new(rule: &'a Rule, ass: &'a Assignment<'b>) -> Self {
+        Self { rule, ass }
+    }
+
+    #[inline]
+    fn rule(&self) -> &'a Rule {
+        self.rule
+    }
+
+    #[inline]
+    fn ass(&self) -> &'a Assignment<'_> {
+        self.ass
+    }
+
+    fn is_obsolete(&self, facts_by_pred: &FactsByPred<'_>) -> bool {
+        let preds_in_head: Vec<&Tag> = self
+            .rule
+            .head()
+            .iter()
+            .map(|atom| atom.predicate_ref())
+            .collect();
+
+        let count_preds_body = self.rule.body().iter().count();
+        let unsk_rule = reverse_sk(self.rule);
+        let var_atom_pos_unsk_rule = build_var_index_for_rule(&unsk_rule);
+
+        let possible_ass_for_chase_result = assignments_for_facts(
+            count_preds_body,
+            preds_in_head,
+            facts_by_pred,
+            facts_by_pred,
+            &var_atom_pos_unsk_rule,
+        );
+
+        let frontier_vars = self.rule.frontier_variables();
+        possible_ass_for_chase_result.iter().any(|pos_ass| {
+            frontier_vars
+                .iter()
+                .all(|var| self.ass.get(var).unwrap() == pos_ass.get(var).unwrap())
+        })
+    }
+}
+
+// TODO: Traits that should only be just functions
+trait Assign {
+    type Output;
+
+    fn assign(&self, ass: &Assignment) -> Self::Output;
+}
+
+impl Assign for Atom {
+    type Output = Fact;
+
+    fn assign(&self, ass: &Assignment) -> Self::Output {
+        let subterms: Vec<Term> = self
+            .terms()
+            .map(|term| match term {
+                Term::Primitive(Primitive::Variable(var)) => ass.get(var).unwrap().clone(),
+                Term::FunctionTerm(sk_func) => sk_func.assign(ass),
+                _ => panic!(),
+            })
+            .collect();
+        let pred: &Tag = self.predicate_ref();
+        Fact::from((pred, subterms))
+    }
+}
+
+impl Assign for FunctionTerm {
+    type Output = Term;
+
+    fn assign(&self, ass: &Assignment) -> Self::Output {
+        let subterms: Vec<Term> = self
+            .terms()
+            .map(|term| match term {
+                Term::Primitive(Primitive::Variable(var)) => ass.get(var).unwrap().clone(),
+                Term::FunctionTerm(sk_func) => sk_func.assign(ass),
+                _ => panic!(),
+            })
+            .collect();
+        let pred: &Tag = self.tag();
+        Term::FunctionTerm(FunctionTerm::from((pred, subterms)))
+    }
+}
+
+impl<'a> Assign for Vec<&'a Atom> {
+    type Output = FactsByPred<'a>;
+
+    fn assign(&self, ass: &Assignment) -> Self::Output {
+        self.iter().fold(
+            HashMap::<&Tag, HashSet<Fact>>::new(),
+            |mut ret_val, atom| {
+                let fact: Fact = atom.assign(ass);
+                let pred: &'a Tag = atom.predicate_ref();
+                ret_val
+                    .entry(pred)
+                    .and_modify(|facts| {
+                        facts.insert(fact.clone());
+                    })
+                    .or_insert(HashSet::from([fact]));
+                ret_val
+            },
+        )
+    }
+}
+
+trait Cyclic<'a> {
+    fn is_cyclic(&'a self, f_tags: &mut Vec<&'a Tag>) -> bool;
+    fn is_rule_cyclic(&'a self, f_tags: &mut Vec<&'a Tag>, sk_f_tags_of_rule: &[&Tag]) -> bool;
+}
+
+impl<'a> Cyclic<'a> for Fact {
+    fn is_cyclic(&'a self, f_tags: &mut Vec<&'a Tag>) -> bool {
+        self.terms().any(|term| term.is_cyclic(f_tags))
+    }
+
+    fn is_rule_cyclic(&'a self, f_tags: &mut Vec<&'a Tag>, sk_f_tags_of_rule: &[&Tag]) -> bool {
+        self.terms()
+            .any(|term| term.is_rule_cyclic(f_tags, sk_f_tags_of_rule))
+    }
+}
+
+impl<'a> Cyclic<'a> for Term {
+    fn is_cyclic(&'a self, f_tags: &mut Vec<&'a Tag>) -> bool {
+        match self {
+            Term::FunctionTerm(func_term) => func_term.is_cyclic(f_tags),
+            _ => false,
+        }
+    }
+
+    fn is_rule_cyclic(&'a self, f_tags: &mut Vec<&'a Tag>, sk_f_tags_of_rule: &[&Tag]) -> bool {
+        match self {
+            Term::FunctionTerm(func_term) => func_term.is_rule_cyclic(f_tags, sk_f_tags_of_rule),
+            _ => false,
+        }
+    }
+}
+
+impl<'a> Cyclic<'a> for FunctionTerm {
+    fn is_cyclic(&'a self, f_tags: &mut Vec<&'a Tag>) -> bool {
+        let f_tag: &Tag = self.tag();
+        if f_tags.contains(&f_tag) {
+            return true;
+        }
+        f_tags.push(f_tag);
+        let ret_val = self.terms().any(|term| term.is_cyclic(f_tags));
+        f_tags.pop();
+        ret_val
+    }
+
+    fn is_rule_cyclic(&'a self, f_tags: &mut Vec<&'a Tag>, sk_f_tags_of_rule: &[&Tag]) -> bool {
+        let f_tag: &Tag = self.tag();
+        if f_tags.contains(&f_tag) {
+            return true;
+        }
+        if sk_f_tags_of_rule.contains(&f_tag) {
+            f_tags.push(f_tag);
+        }
+        let ret_val = self.terms().any(|term| term.is_cyclic(f_tags));
+        if sk_f_tags_of_rule.contains(&f_tag) {
+            f_tags.pop();
+        }
+        ret_val
+    }
+}
+
+pub type FactsByPred<'a> = HashMap<&'a Tag, HashSet<Fact>>;
 pub type Assignment<'a> = HashMap<&'a Variable, Term>;
 pub type VarPerAtomIdxPosIdx<'a> = HashMap<(usize, usize, Option<usize>), &'a Variable>;
 pub type VarPerAtomIdxPosIdxPerRule<'a> = HashMap<&'a Rule, VarPerAtomIdxPosIdx<'a>>;

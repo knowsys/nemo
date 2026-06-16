@@ -11,9 +11,7 @@ use crate::rule_model::{
     components::{
         ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent,
         IterablePrimitives, IterableVariables, ProgramComponent, ProgramComponentKind,
-        component_iterator, component_iterator_mut,
-        tag::Tag,
-        term::{Cyclic, RuleCyclic},
+        component_iterator, component_iterator_mut, tag::Tag,
     },
     error::{ValidationReport, validation_error::ValidationError},
     origin::Origin,
@@ -338,36 +336,6 @@ impl From<(&Tag, Vec<Term>)> for FunctionTerm {
             tag: predicate.clone(),
             terms,
         }
-    }
-}
-
-impl<'a> Cyclic<'a> for FunctionTerm {
-    fn is_cyclic(&'a self, f_tags: &mut Vec<&'a Tag>) -> bool {
-        let f_tag: &Tag = self.tag();
-        if f_tags.contains(&f_tag) {
-            return true;
-        }
-        f_tags.push(f_tag);
-        let ret_val = self.terms().any(|term| term.is_cyclic(f_tags));
-        f_tags.pop();
-        ret_val
-    }
-}
-
-impl<'a> RuleCyclic<'a> for FunctionTerm {
-    fn is_rule_cyclic(&'a self, f_tags: &mut Vec<&'a Tag>, sk_f_tags_of_rule: &Vec<&Tag>) -> bool {
-        let f_tag: &Tag = self.tag();
-        if f_tags.contains(&f_tag) {
-            return true;
-        }
-        if sk_f_tags_of_rule.contains(&f_tag) {
-            f_tags.push(f_tag);
-        }
-        let ret_val = self.terms().any(|term| term.is_cyclic(f_tags));
-        if sk_f_tags_of_rule.contains(&f_tag) {
-            f_tags.pop();
-        }
-        ret_val
     }
 }
 

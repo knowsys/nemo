@@ -6,7 +6,7 @@ use nemo::rule_model::{
         rule::Rule,
         tag::Tag,
         term::{
-            Cyclic, RuleCyclic, Term,
+            Term,
             function::FunctionTerm,
             primitive::{Primitive, variable::Variable},
         },
@@ -18,10 +18,10 @@ use nemo::rule_model::{
 };
 
 use crate::static_checks::cyclicity_checks::{
-    Assignment, CoreReasoner, CyclicityStrategy, StrategySelector, VarPerAtomIdxPosIdxPerRule,
-    assignments_for_facts, backtrack_sk_term, body_for_assignment, build_var_index_for_rule,
-    build_var_index_for_rules, head_for_assignment, predicates_ref, predicates_ref_and_lens,
-    reverse_sk, union,
+    Assignment, CoreReasoner, Cyclic, CyclicityStrategy, FactsByPred, StrategySelector, Trigger,
+    VarPerAtomIdxPosIdxPerRule, assignments_for_facts, backtrack_sk_term, body_for_assignment,
+    build_var_index_for_rule, build_var_index_for_rules, head_for_assignment, predicates_ref,
+    predicates_ref_and_lens, reverse_sk, union,
 };
 
 use crate::static_checks::collection_traits::InsertAll;
@@ -33,28 +33,23 @@ use std::collections::{HashMap, HashSet};
 pub struct MFCStrategy;
 
 impl CyclicityStrategy for MFCStrategy {
-    fn is_blocked(&self, _rule: &Rule, ass: &Assignment) -> bool {
-        ass.values().any(|term| term.is_cyclic(&mut Vec::default()))
+    fn is_blocked(&self, trig: Trigger) -> bool {
+        trig.ass()
+            .values()
+            .any(|term| term.is_cyclic(&mut Vec::default()))
     }
 }
 
 struct OverapproximationStrategy<'a> {
     rule: &'a Rule,
-    ass: &'a Assignment<'a>,
     skel_of_trig: &'a Vec<Term>,
-    head_for_ass: &'a HashMap<&'a Tag, HashSet<Fact>>,
+    head_for_ass: &'a FactsByPred<'a>,
 }
 
 impl<'a> OverapproximationStrategy<'a> {
-    fn new(
-        rule: &'a Rule,
-        ass: &'a Assignment<'a>,
-        skel_of_trig: &'a Vec<Term>,
-        head_for_ass: &'a HashMap<&'a Tag, HashSet<Fact>>,
-    ) -> Self {
+    fn new(rule: &'a Rule, skel_of_trig: &'a Vec<Term>, head_for_ass: &'a FactsByPred<'a>) -> Self {
         Self {
             rule,
-            ass,
             skel_of_trig,
             head_for_ass,
         }
@@ -62,17 +57,14 @@ impl<'a> OverapproximationStrategy<'a> {
 }
 
 impl CyclicityStrategy for OverapproximationStrategy<'_> {
-    fn is_blocked(&self, rule: &Rule, ass: &Assignment) -> bool {
-        if self.rule != rule {
+    fn is_blocked(&self, trig: Trigger) -> bool {
+        if self.rule != trig.rule() {
             return false;
         }
-        &head_for_assignment(rule, ass) == self.head_for_ass
+        &head_for_assignment(trig.rule(), trig.ass()) == self.head_for_ass
     }
 
-    fn h<'a>(
-        &self,
-        facts_by_pred: HashMap<&'a Tag, HashSet<Fact>>,
-    ) -> HashMap<&'a Tag, HashSet<Fact>> {
+    fn map<'a>(&self, facts_by_pred: FactsByPred<'a>) -> FactsByPred<'a> {
         let star_const = Term::from("__STAR__");
         facts_by_pred
             .into_iter()
@@ -121,64 +113,19 @@ impl<'a> DRPCStrategy<'a> {
         }
     }
 
-    fn is_star_unblockable(&self, rule: &Rule, ass: &Assignment) -> bool {
-        // TODO: IF WE ONLY ITERATE OVER EXISTENTIAL RULES THIS IS UNNECCESARY
-        if !rule.contains_func() {
-            return true;
-        }
+    fn is_star_unblockable(&self, trig: &Trigger) -> bool {
+        let head_for_ass = head_for_assignment(trig.rule(), trig.ass());
+        let h_star_operapproximation = self.h_star_overapproximation(trig, &head_for_ass);
 
-        let head_for_ass = head_for_assignment(rule, ass);
-        let h_star_operapproximation = self.h_star_overapproximation(rule, ass, &head_for_ass);
-        // print!("  OVERAPPROX:  ");
-        // h_star_operapproximation
-        //     .values()
-        //     .flatten()
-        //     .for_each(|fact| {
-        //         print!("  {fact}  ");
-        //     });
-
-        // head_for_ass
-        //     .iter()
-        //     .any(|(pred, facts)| !facts.is_subset(h_star_operapproximation.get(pred).unwrap()))
-        let preds_in_head: Vec<&Tag> = rule
-            .head()
-            .iter()
-            .map(|atom| atom.predicate_ref())
-            .collect();
-
-        // preds_in_head.iter().for_each(|pred| {
-        //     if !h_star_operapproximation.contains_key(pred) {
-        //         h_star_overapproximation.insert(pred, HashSet::default());
-        //     }
-        // });
-
-        let count_preds_body = rule.body().iter().count();
-        let unsk_rule = reverse_sk(rule);
-        let var_atom_pos_unsk_rule = build_var_index_for_rule(&unsk_rule);
-
-        let possible_ass_for_chase_result = assignments_for_facts(
-            count_preds_body,
-            preds_in_head,
-            &h_star_operapproximation,
-            &h_star_operapproximation,
-            &var_atom_pos_unsk_rule,
-        );
-
-        let frontier_vars = rule.frontier_variables();
-        !possible_ass_for_chase_result.iter().any(|pos_ass| {
-            frontier_vars
-                .iter()
-                .all(|var| ass.get(var).unwrap() == pos_ass.get(var).unwrap())
-        })
+        !trig.is_obsolete(&h_star_operapproximation)
     }
 
     fn h_star_overapproximation(
         &'a self,
-        rule: &Rule,
-        ass: &Assignment,
-        head_for_ass: &HashMap<&'a Tag, HashSet<Fact>>,
-    ) -> HashMap<&'a Tag, HashSet<Fact>> {
-        let backtrack_of_trigger = backtrack_trigger(&self.ex_rule_set, rule, ass);
+        trig: &Trigger,
+        head_for_ass: &FactsByPred<'_>,
+    ) -> FactsByPred<'a> {
+        let backtrack_of_trigger = backtrack_trigger(&self.ex_rule_set, trig);
 
         let mut skeleton_of_trigger = skeleton_of_trigger_backtrack(&backtrack_of_trigger);
         let star_const = Term::from("__STAR__");
@@ -191,7 +138,7 @@ impl<'a> DRPCStrategy<'a> {
             possible_facts(preds_and_lens, &skeleton_of_trigger);
 
         let overapprox_strat =
-            OverapproximationStrategy::new(rule, ass, &skeleton_of_trigger, head_for_ass);
+            OverapproximationStrategy::new(trig.rule(), &skeleton_of_trigger, head_for_ass);
 
         let mut reasoner = CoreReasoner::new(
             &preds,
@@ -211,38 +158,29 @@ impl<'a> DRPCStrategy<'a> {
 }
 
 impl CyclicityStrategy for DRPCStrategy<'_> {
-    fn is_blocked(&self, rule: &Rule, ass: &Assignment) -> bool {
-        let no_cyclic_terms_in_ass = !ass.values().any(|term| term.is_cyclic(&mut Vec::default()));
-        // print!("  {no_cyclic_terms_in_ass}  ");
-        let is_star_unblockable = self.is_star_unblockable(rule, ass);
-        // print!("  {is_star_unblockable}  ");
-        let ass_injective = if rule == self.rule {
-            ass_is_injective(ass)
+    fn is_blocked(&self, trig: Trigger) -> bool {
+        let no_cyclic_terms_in_ass = !trig
+            .ass()
+            .values()
+            .any(|term| term.is_cyclic(&mut Vec::default()));
+        let is_star_unblockable = self.is_star_unblockable(&trig);
+        let ass_injective = if trig.rule() == self.rule {
+            ass_is_injective(trig.ass())
         } else {
             true
         };
-        // ass.iter().for_each(|(var, term)| {
-        //     print!("  {var} |-> {term}  ");
-        // });
-        // print!("  star_unblock: {is_star_unblockable}  ");
-        // print!(
-        //     "  all: {}  ",
-        //     !(no_cyclic_terms_in_ass && is_star_unblockable && ass_injective)
-        // );
-
-        // print!("  {ass_injective}  ");
         !(no_cyclic_terms_in_ass && is_star_unblockable && ass_injective)
     }
 }
 
 fn possible_facts<'a>(
     preds_and_lens: HashSet<(&'a Tag, usize)>,
-    skeleton: &Vec<Term>,
-) -> HashMap<&'a Tag, HashSet<Fact>> {
+    skeleton: &[Term],
+) -> FactsByPred<'a> {
     let skeleton_consts = skeleton.iter().filter(|term| !term.is_function()).collect();
-    preds_and_lens.into_iter().fold(
-        HashMap::<&Tag, HashSet<Fact>>::new(),
-        |mut ret_val, (pred, size)| {
+    preds_and_lens
+        .into_iter()
+        .fold(FactsByPred::new(), |mut ret_val, (pred, size)| {
             let mut term_sequences = Vec::new();
             construct_term_sequences_rec(
                 &mut term_sequences,
@@ -256,8 +194,7 @@ fn possible_facts<'a>(
                 .collect();
             ret_val.insert(pred, facts);
             ret_val
-        },
-    )
+        })
 }
 
 fn construct_term_sequences_rec(
@@ -277,7 +214,7 @@ fn construct_term_sequences_rec(
     })
 }
 
-fn skeleton_of_trigger_backtrack(backtrack: &HashMap<&Tag, HashSet<Fact>>) -> Vec<Term> {
+fn skeleton_of_trigger_backtrack(backtrack: &FactsByPred) -> Vec<Term> {
     backtrack
         .values()
         .fold(Vec::<Term>::new(), |ret_val, facts| {
@@ -289,25 +226,17 @@ fn skeleton_of_trigger_backtrack(backtrack: &HashMap<&Tag, HashSet<Fact>>) -> Ve
         })
 }
 
-fn backtrack_trigger<'a>(
-    existential_rules: &Vec<&'a Rule>,
-    rule: &Rule,
-    ass: &Assignment,
-) -> HashMap<&'a Tag, HashSet<Fact>> {
+fn backtrack_trigger<'a>(existential_rules: &Vec<&'a Rule>, trig: &Trigger) -> FactsByPred<'a> {
     // NOTE: MAYBE MOVE FRONT_VARS INTO DRPC STRUCT TO AVOID RECOMPUTING
-    let front_vars = rule.frontier_variables();
+    let front_vars = trig.rule().frontier_variables();
     front_vars
         .into_iter()
-        .fold(HashMap::<&Tag, HashSet<Fact>>::new(), |ret_val, var| {
-            let term = ass.get(var).unwrap();
+        .fold(FactsByPred::new(), |ret_val, var| {
+            let term = trig.ass().get(var).unwrap();
             let facts_of_ass_var = backtrack_sk_term(term, existential_rules, false);
             union(ret_val, facts_of_ass_var)
         })
 }
-
-// fn h_star_func<'a>(rule_set: &Vec<&Rule>, ass: &'a Assignment<'_>) -> HashMap<&'a Term, &'a Term> {
-//     todo!();
-// }
 
 fn ass_is_injective(ass: &Assignment) -> bool {
     let mut seen_terms: HashSet<&Term> = HashSet::new();
@@ -323,8 +252,9 @@ pub fn mfc_handle(handle: ProgramHandle) -> ProgramHandle {
 pub async fn check_cyclicity(handle: ProgramHandle, strat: StrategySelector) -> bool {
     let rule_set: RuleSet = RuleSet(handle.rules().cloned().collect());
     let det_rules: Vec<&Rule> = rule_set.0.iter().collect();
+    let ex_rules: Vec<&Rule> = rule_set.existential_rules();
 
-    for rule in det_rules.iter().filter(|rule| rule.contains_func()) {
+    for rule in ex_rules.iter().filter(|rule| rule.contains_func()) {
         if check_cyclicity_for_rule(rule, &det_rules, &strat).await {
             return true;
         }

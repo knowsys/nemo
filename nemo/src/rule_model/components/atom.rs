@@ -21,6 +21,7 @@ use super::{
     ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent, IterablePrimitives,
     IterableVariables, ProgramComponent, ProgramComponentKind, component_iterator,
     component_iterator_mut,
+    fact::Fact,
     literal::Literal,
     tag::Tag,
     term::{
@@ -95,7 +96,7 @@ impl Atom {
         self.predicate.clone()
     }
 
-    /// Return the predicate of this atom as a reference.
+    /// Return the predicate as a reference of this atom.
     pub fn predicate_ref(&self) -> &Tag {
         &self.predicate
     }
