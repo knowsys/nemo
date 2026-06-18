@@ -61,5 +61,4 @@ indexmap = { workspace = true }
 env_logger = { workspace = true }
 assert_fs = { workspace = true }
 test-log = { workspace = true }
-tokio = { workspace = true, features = [ "rt", "macros" ] }
-
+tokio = { workspace = true, features = ["rt", "macros"] }

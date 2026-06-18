@@ -22,7 +22,7 @@ use delegate::delegate;
 use aggregate::Aggregate;
 use function::FunctionTerm;
 use map::Map;
-use nemo_physical::datavalues::AnyDataValue;
+use nemo_physical::datavalues::{AnyDataValue, StringDataValue};
 use operation::Operation;
 use primitive::{
     Primitive,
@@ -33,7 +33,7 @@ use tuple::Tuple;
 use value_type::ValueType;
 
 use crate::rule_model::{
-    error::ValidationReport, origin::Origin, pipeline::id::ProgramComponentId,
+    components::tag::Tag, error::ValidationReport, origin::Origin, pipeline::id::ProgramComponentId,
 };
 
 use super::{
@@ -44,7 +44,7 @@ use super::{
 /// Term
 ///
 /// Basic building block for expressions like atoms or facts.
-#[derive(Debug, Clone, PartialEq, Hash, PartialOrd)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd)]
 pub enum Term {
     /// Unstructured, primitive term
     Primitive(Primitive),

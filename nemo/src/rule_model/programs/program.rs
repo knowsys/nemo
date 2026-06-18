@@ -42,6 +42,15 @@ impl Program {
         }
     }
 
+    /// Returns all rules of the program
+    // TODO: NEEDED FOR TESTS OF STATIC CHECKS, SHOULD BE REMOVED
+    pub fn all_rules(&self) -> Vec<Rule> {
+        (0..self.rules.len()).fold(Vec::<Rule>::new(), |mut ret_val, index| {
+            ret_val.push(self.rule(index).clone());
+            ret_val
+        })
+    }
+
     /// Remove all export statements
     pub fn clear_exports(&mut self) {
         self.statements.retain(|statement| !statement.is_export());

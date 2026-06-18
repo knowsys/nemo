@@ -278,6 +278,17 @@ impl IterablePrimitives for Fact {
     }
 }
 
+impl From<(&Tag, Vec<Term>)> for Fact {
+    fn from((predicate, terms): (&Tag, Vec<Term>)) -> Self {
+        Self {
+            origin: Origin::Created,
+            id: ProgramComponentId::default(),
+            predicate: predicate.clone(),
+            terms,
+        }
+    }
+}
+
 impl From<GroundAtom> for Fact {
     fn from(value: GroundAtom) -> Self {
         let origin = Origin::Created;

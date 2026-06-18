@@ -1,0 +1,3 @@
+F(?Y, ?Yprime, !Z, !Zprime) :- F(?X, ?Xprime, ?Y, ?Yprime) . 
+
+@export F :- csv {} .
