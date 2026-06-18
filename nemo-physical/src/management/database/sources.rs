@@ -1,6 +1,6 @@
 //! This module defines possible sources of tables to be stored as [Trie][crate::tabular::trie::Trie]s.
 
-use std::mem::size_of;
+use std::{fmt::Display, mem::size_of};
 
 use crate::{
     datasources::{table_providers::TableProvider, tuple_writer::TupleWriter},
@@ -46,11 +46,16 @@ impl TableProvider for SimpleTable {
         self: Box<Self>,
         tuple_writer: &mut TupleWriter,
     ) -> Result<(), ReadingError> {
+        tuple_writer.set_patterns(Vec::new());
         self.write_tuples(tuple_writer);
         Ok(())
     }
 
-    fn arity(&self) -> usize {
+    fn output_arity(&self) -> usize {
+        self.arity
+    }
+
+    fn input_arity(&self) -> usize {
         self.arity
     }
 }
@@ -59,6 +64,17 @@ impl ByteSized for SimpleTable {
     fn size_bytes(&self) -> u64 {
         // cast everything to u64 separately to avoid overflows
         size_of::<Self>() as u64 + self.data.capacity() as u64 * size_of::<AnyDataValue>() as u64
+    }
+}
+
+impl Display for SimpleTable {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "in-memory table (arity {}; {} entries)",
+            self.arity,
+            self.data.len()
+        )
     }
 }
 

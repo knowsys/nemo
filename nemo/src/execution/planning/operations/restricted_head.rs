@@ -40,12 +40,31 @@ pub struct GeneratorRestrictedHead {
 }
 
 impl GeneratorRestrictedHead {
+    /// Determine whether optimize the seminaive evaluation of the head.
+    ///
+    /// We check whether there are two head atoms with the same predicate.
+    fn apply_optimization(rule: &NormalizedRule, has_facts: bool) -> bool {
+        // if one of the predicates has facts, don't optimise
+        if has_facts {
+            return false;
+        }
+
+        let head_predicates = rule
+            .head()
+            .iter()
+            .map(|atom| atom.predicate())
+            .collect::<HashSet<_>>();
+
+        head_predicates.len() == rule.head().len()
+    }
+
     /// Create a new [GeneratorRestrictedHead].
     pub fn new(
         rule: &NormalizedRule,
+        rule_index: usize,
         frontier: HashSet<Variable>,
         order: &VariableOrder,
-        rule_id: usize,
+        has_facts: bool,
     ) -> Self {
         let head_variables = rule
             .head()
@@ -56,13 +75,27 @@ impl GeneratorRestrictedHead {
 
         let (atoms, mut operations) = rule.normalize_existential_head(&mut order);
 
-        let join = GeneratorJoinSeminaive::new_exclusive(atoms, &order);
+        // `GeneratorJoinSeminaive::new_exclusive` is an optimization,
+        // where we do not consider the tables created during the last rule application step
+        // as "new" tables. This is implemented by adding unsatisfied matches
+        // from the ith rule application to the table of satisfied matches.
+        //
+        // However, this may fail in cases where applying
+        // the existential rule to a set of unsatisfied matches might satisfy additional matches.
+        //
+        // This is related to https://github.com/knowsys/nemo/issues/756
+        let join = if Self::apply_optimization(rule, has_facts) {
+            GeneratorJoinSeminaive::new_exclusive(atoms, &order)
+        } else {
+            GeneratorJoinSeminaive::new(atoms, &order)
+        };
+
         let filter = GeneratorFilter::new(join.output_variables(), &mut operations);
 
         order = order.restrict_to(&frontier);
         let projection = GeneratorRestrictedFrontier::new(order.as_ordered_list());
 
-        let predicate = (Self::generate_predicate(rule_id), order.len());
+        let predicate = (Self::generate_predicate(rule_index), order.len());
         let duplicates = GeneratorDuplicates::new(predicate.0.clone());
 
         Self {
@@ -76,8 +109,9 @@ impl GeneratorRestrictedHead {
     }
 
     /// Generate the predicate name used to store the result of this generator.
-    fn generate_predicate(rule_id: usize) -> Tag {
-        let name = format!("_SATISFIED_{rule_id}");
+    fn generate_predicate(rule_index: usize) -> Tag {
+        let name = format!("_SATISFIED_{rule_index}");
+        println!("generated predicate: {}", name);
         Tag::new(name)
     }
 

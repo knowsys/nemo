@@ -2,7 +2,11 @@
 #![allow(missing_docs)]
 
 use enum_assoc::Assoc;
-use nom::{branch::alt, combinator::opt, sequence::pair};
+use nom::{
+    branch::alt,
+    combinator::{cut, map},
+    sequence::pair,
+};
 
 use crate::parser::{
     ParserResult,
@@ -57,25 +61,28 @@ impl<'a> Variable<'a> {
         self.kind
     }
 
-    /// Parse the variable prefix
-    fn parse_variable_prefix(input: ParserInput<'a>) -> ParserResult<'a, VariableType> {
-        alt((
-            Token::universal_indicator,
-            Token::existential_indicator,
-            Token::global_indicator,
-            Token::underscore,
-        ))(input)
-        .map(|(rest, result)| {
-            (
-                rest,
-                VariableType::token(result.kind()).expect("unknown token"),
-            )
-        })
+    /// Parse a named variable
+    fn parse_named_variable(input: ParserInput<'a>) -> ParserResult<'a, (VariableType, Token<'a>)> {
+        pair(
+            map(
+                alt((
+                    Token::universal_indicator,
+                    Token::existential_indicator,
+                    Token::global_indicator,
+                )),
+                |indicator| {
+                    VariableType::token(indicator.kind()).expect("unknown variable indicator")
+                },
+            ),
+            cut(Token::name),
+        )(input)
     }
 
-    /// Parse the name of the variable
-    fn parse_variable_name(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
-        Token::name(input)
+    /// Parse an anonymous variable
+    fn parse_anonymous_variable(input: ParserInput<'a>) -> ParserResult<'a, VariableType> {
+        map(Token::underscore, |indicator| {
+            VariableType::token(indicator.kind()).expect("unknown variable indicator")
+        })(input)
     }
 }
 
@@ -98,7 +105,10 @@ impl<'a> ProgramAST<'a> for Variable<'a> {
 
         context(
             CONTEXT,
-            pair(Self::parse_variable_prefix, opt(Self::parse_variable_name)),
+            alt((
+                map(Self::parse_named_variable, |(typ, name)| (typ, Some(name))),
+                map(Self::parse_anonymous_variable, |typ| (typ, None)),
+            )),
         )(input)
         .map(|(rest, (kind, name))| {
             let rest_span = rest.span;
@@ -122,6 +132,7 @@ impl<'a> ProgramAST<'a> for Variable<'a> {
 #[cfg(test)]
 mod test {
     use nom::combinator::all_consuming;
+    use std::assert_matches;
 
     use crate::parser::{
         ParserState,
@@ -143,14 +154,13 @@ mod test {
                 (Some("existential".to_string()), VariableType::Existential),
             ),
             ("_", (None, VariableType::Anonymous)),
-            ("?", (None, VariableType::Universal)),
         ];
 
         for (input, expected) in test {
             let parser_input = ParserInput::new(input, ParserState::default());
             let result = all_consuming(Variable::parse)(parser_input);
 
-            assert!(result.is_ok());
+            assert_matches!(result, Ok(_));
 
             let result = result.unwrap();
             assert_eq!(expected, (result.1.name(), result.1.kind()));

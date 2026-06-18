@@ -28,7 +28,7 @@ pub(super) enum TableStorage {
 impl TableStorage {
     /// Load the table from a list of [TableSource]s and convert it into a [Trie].
     ///
-    /// This function assumes that at least one source is provided.
+    /// This function assumes that at least one source is provided. All sources must have the same input arity.
     ///
     /// Returns an error if the [Trie] cannot be loaded.
     async fn load_sources(
@@ -37,15 +37,18 @@ impl TableStorage {
     ) -> Result<Trie, Error> {
         debug_assert!(!sources.is_empty());
 
+        // input arity must be the same for all sources
         let arity = sources
             .first()
             .expect("Function assumes that at least one source is provided")
-            .arity();
+            .input_arity();
+        debug_assert!(sources.iter().all(|source| source.input_arity() == arity));
+
         let mut tuple_writer = TupleWriter::new(dictionary, arity);
 
         for source in sources {
-            log::info!("Loading source {source:?}");
-            debug_assert!(source.arity() == arity);
+            log::info!("Loading source: {source}");
+            debug_assert!(source.input_arity() == arity);
 
             source.provide_table_data(&mut tuple_writer).await?;
         }
@@ -101,7 +104,7 @@ impl TableStorage {
             TableStorage::FromSources(sources) => sources
                 .first()
                 .expect("At least one source must be present")
-                .arity(),
+                .output_arity(),
             TableStorage::Empty => 0,
         }
     }

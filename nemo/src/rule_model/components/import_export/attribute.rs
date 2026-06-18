@@ -38,6 +38,18 @@ impl ImportExportAttribute {
     }
 }
 
+impl From<String> for ImportExportAttribute {
+    fn from(value: String) -> Self {
+        Self::new(value)
+    }
+}
+
+impl From<&str> for ImportExportAttribute {
+    fn from(value: &str) -> Self {
+        value.to_string().into()
+    }
+}
+
 impl std::fmt::Display for ImportExportAttribute {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.attribute.fmt(f)

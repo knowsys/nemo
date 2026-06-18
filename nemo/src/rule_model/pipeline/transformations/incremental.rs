@@ -2,12 +2,17 @@
 
 use std::collections::{HashMap, HashSet};
 
+use oxiri::Iri;
+
 use crate::{
-    io::{format_builder::SupportedFormatTag, formats::sparql::SparqlTag},
+    io::{
+        format_builder::{AnyImportExportBuilder, SupportedFormatTag},
+        formats::sparql::SparqlTag,
+    },
     rule_model::{
         components::{
             IterableVariables,
-            import_export::{ImportDirective, clause::ImportClause},
+            import_export::{ImportDirective, clause::ImportLiteral},
             literal::Literal,
             rule::Rule,
             statement::Statement,
@@ -68,24 +73,54 @@ impl TransformationIncremental {
             }
         }
 
-        for atom in rule.body_positive() {
-            if !incremental_predicates.contains_key(&atom.predicate()) {
-                continue;
-            }
+        // TransformationMergeSparql merges import atoms from the same predicate,
+        // potentially making variables available
+        let mut available_after_merge = HashMap::<Tag, HashSet<Variable>>::default();
+        let mut restricted_atoms = HashSet::<usize>::default();
+        let mut positive_atom_count: usize = 0;
 
-            if atom.terms().any(|term| !term.is_variable()) {
-                continue;
-            }
+        let mut change = true;
 
-            if atom
-                .variables()
-                .all(|variable| !available_variables.contains(variable))
-            {
-                return true;
+        while change {
+            change = false;
+            positive_atom_count = 0;
+
+            for (atom_index, atom) in rule.body_positive().enumerate() {
+                positive_atom_count += 1;
+
+                if restricted_atoms.contains(&atom_index) {
+                    continue;
+                }
+
+                if !incremental_predicates.contains_key(&atom.predicate()) {
+                    restricted_atoms.insert(atom_index);
+                    continue;
+                }
+
+                if atom.terms().any(|term| !term.is_variable()) {
+                    restricted_atoms.insert(atom_index);
+                    continue;
+                }
+
+                if atom.variables().any(|variable| {
+                    available_variables.contains(variable)
+                        || available_after_merge
+                            .get(&atom.predicate())
+                            .map(|variables| variables.contains(variable))
+                            .unwrap_or(false)
+                }) {
+                    available_after_merge
+                        .entry(atom.predicate())
+                        .or_default()
+                        .extend(atom.variables().cloned());
+
+                    restricted_atoms.insert(atom_index);
+                    change = true;
+                }
             }
         }
 
-        false
+        restricted_atoms.len() != positive_atom_count
     }
 
     /// Check whether a rule would allow for incremental import
@@ -104,9 +139,12 @@ impl TransformationIncremental {
     ///
     /// Returns a hash map containing those predicates together with the
     /// associated import statement from which they originated.
-    fn incremental_predicates(program: &ProgramHandle) -> HashMap<Tag, &ImportDirective> {
+    fn incremental_predicates(
+        program: &ProgramHandle,
+    ) -> (HashMap<Tag, &ImportDirective>, HashMap<Tag, Iri<String>>) {
         // All predicates that will be incrementally imported
         let mut incremental_predicates = HashMap::<Tag, &ImportDirective>::default();
+        let mut endpoints = HashMap::new();
 
         // Predicates that have to be evaluated fully
         let mut normal_predicates = HashSet::<Tag>::default();
@@ -114,6 +152,11 @@ impl TransformationIncremental {
         for import in program.imports() {
             if let Some(builder) = import.builder() {
                 if let SupportedFormatTag::Sparql(SparqlTag::Sparql) = builder.format() {
+                    let AnyImportExportBuilder::Sparql(sparql) = builder.inner else {
+                        unreachable!("inner builder must be a SPARQL builder")
+                    };
+                    endpoints.insert(import.predicate().clone(), sparql.endpoint);
+
                     if incremental_predicates
                         .insert(import.predicate().clone(), import)
                         .is_some()
@@ -134,11 +177,8 @@ impl TransformationIncremental {
                     normal_predicates.insert(fact.predicate().clone());
                 }
                 Statement::Rule(rule) => {
-                    for head in rule.head() {
-                        normal_predicates.insert(head.predicate());
-                    }
-                    for atom in rule.body_negative() {
-                        normal_predicates.insert(atom.predicate().clone());
+                    for atom in rule.head() {
+                        normal_predicates.insert(atom.predicate());
                     }
 
                     if !Self::possible_rule(rule, &incremental_predicates) {
@@ -159,7 +199,7 @@ impl TransformationIncremental {
 
         incremental_predicates.retain(|predicate, _| !normal_predicates.contains(predicate));
 
-        incremental_predicates
+        (incremental_predicates, endpoints)
     }
 
     /// Create a new variable which hold the value of computed terms.
@@ -189,41 +229,51 @@ impl TransformationIncremental {
     ) -> Rule {
         let mut result = rule.clone();
 
-        let mut import_clauses = Vec::<ImportClause>::default();
+        let mut import_literals = Vec::<ImportLiteral>::default();
         let mut computed_terms = Vec::<(Variable, Term)>::default();
 
         result.body_mut().retain(|literal| {
-            if let Literal::Positive(atom) = literal
-                && let Some(&import) = incremental_predicates.get(&atom.predicate())
-            {
-                let mut variables = Vec::<Variable>::new();
-                for (term_index, term) in atom.terms().enumerate() {
-                    if let Term::Primitive(Primitive::Variable(variable)) = term {
-                        variables.push(variable.clone());
-                    } else {
-                        let new_variable = Self::new_variable(&atom.predicate(), term_index);
+            match literal {
+                Literal::Positive(atom) | Literal::Negative(atom) => {
+                    let is_positive = matches!(literal, Literal::Positive(_));
 
-                        variables.push(new_variable.clone());
-                        computed_terms.push((new_variable, term.clone()));
+                    if let Some(&import) = incremental_predicates.get(&atom.predicate()) {
+                        let mut variables = Vec::<Variable>::new();
+                        for (term_index, term) in atom.terms().enumerate() {
+                            if let Term::Primitive(Primitive::Variable(variable)) = term {
+                                variables.push(variable.clone());
+                            } else {
+                                let new_variable =
+                                    Self::new_variable(&atom.predicate(), term_index);
+
+                                variables.push(new_variable.clone());
+                                computed_terms.push((new_variable, term.clone()));
+                            }
+                        }
+
+                        let import = if !derived_predicates.contains(import.predicate()) {
+                            Self::unique_import_directive(import, id)
+                        } else {
+                            import.clone()
+                        };
+
+                        let literal = if is_positive {
+                            ImportLiteral::positive(import, variables)
+                        } else {
+                            ImportLiteral::negative(import, variables)
+                        };
+
+                        import_literals.push(literal);
+                        return false;
                     }
                 }
-
-                let import = if !derived_predicates.contains(import.predicate()) {
-                    Self::unique_import_directive(import, id)
-                } else {
-                    import.clone()
-                };
-
-                let clause = ImportClause::new(import, variables);
-
-                import_clauses.push(clause);
-                return false;
+                Literal::Operation(_) => {}
             }
 
             true
         });
 
-        for import in import_clauses {
+        for import in import_literals {
             result.add_import(import);
         }
 
@@ -240,29 +290,33 @@ impl ProgramTransformation for TransformationIncremental {
     fn apply(self, program: &ProgramHandle) -> Result<ProgramHandle, ValidationReport> {
         let mut commit = program.fork();
 
-        let incremental_predicates = Self::incremental_predicates(program);
+        let (incremental_predicates, endpoints) = Self::incremental_predicates(program);
         let derived_predicates = program.derived_predicates();
 
         let mut name_id: usize = 0;
+        let incremental = incremental_predicates
+            .keys()
+            .cloned()
+            .collect::<HashSet<_>>();
 
         for statement in program.statements() {
             match statement {
-                Statement::Rule(rule) => {
-                    if rule
-                        .body_positive()
-                        .any(|atom| incremental_predicates.contains_key(&atom.predicate()))
-                    {
-                        let new_rule = Self::incremental_rule(
-                            rule,
-                            &incremental_predicates,
-                            &derived_predicates,
-                            &mut name_id,
-                        );
+                Statement::Rule(rule)
+                    if incremental
+                        .intersection(&rule.body_atoms().map(|atom| atom.predicate()).collect())
+                        .map(|predicate| endpoints.get(predicate).expect("must have an endpoint"))
+                        .collect::<HashSet<_>>()
+                        .len()
+                        == 1 =>
+                {
+                    let new_rule = Self::incremental_rule(
+                        rule,
+                        &incremental_predicates,
+                        &derived_predicates,
+                        &mut name_id,
+                    );
 
-                        commit.add_rule(new_rule);
-                    } else {
-                        commit.keep(statement);
-                    }
+                    commit.add_rule(new_rule);
                 }
                 Statement::Import(import) => {
                     if !incremental_predicates.contains_key(import.predicate()) {

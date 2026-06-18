@@ -45,7 +45,7 @@ impl RuleSelectionStrategy for StrategyRandom {
             return None;
         }
 
-        let mut random_index = rand::thread_rng().gen_range(0..self.rule_count);
+        let mut random_index = rand::rng().random_range(0..self.rule_count);
         while self.no_derivations.contains(&random_index) {
             random_index = (random_index + 1) % self.rule_count;
         }

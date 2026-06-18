@@ -92,6 +92,10 @@ pub(crate) struct ExecutionTree {
     /// how many layers are not used in the computation
     /// and therefore not need to be computed fully
     pub cut_layers: usize,
+    /// Whether this is required to be non-empty, i.e. whether the execution of this tree
+    /// is required to produce at least one row in the resulting table
+    /// or else the execution of the whole series fails
+    pub required_non_empty: bool,
 }
 
 impl Debug for ExecutionTree {
@@ -105,10 +109,10 @@ impl ExecutionTree {
         match node {
             ExecutionTreeOperation::Leaf(leaf) => match leaf {
                 ExecutionTreeLeaf::LoadTable(_) => {
-                    ascii_tree::Tree::Leaf(vec![format!("Permanent Table")])
+                    ascii_tree::Tree::Leaf(vec!["Permanent Table".to_string()])
                 }
                 ExecutionTreeLeaf::FetchComputedTable(_) => {
-                    ascii_tree::Tree::Leaf(vec![format!("New Table")])
+                    ascii_tree::Tree::Leaf(vec!["New Table".to_string()])
                 }
             },
             ExecutionTreeOperation::Node {

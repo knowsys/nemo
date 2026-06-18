@@ -18,7 +18,7 @@ jobs:
         include:
           - { rust: nightly, os: ubuntu-latest }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: hecrj/setup-rust-action@v2
         with:
           rust-version: ${{ matrix.rust }}
@@ -33,8 +33,8 @@ jobs:
         rust: [nightly]
         os: [ubuntu-latest]
     steps:
-      - uses: actions/checkout@v4
-      - uses: hecrj/setup-rust-action@v1
+      - uses: actions/checkout@v6
+      - uses: hecrj/setup-rust-action@v2
         with:
           rust-version: ${{ matrix.rust }}
       - run: cargo build --verbose

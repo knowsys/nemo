@@ -13,6 +13,8 @@ use crate::{
         operations::{
             function_filter_negation::GeneratorFunctionFilterNegation, import::GeneratorImport,
             join_cartesian::GeneratorJoinCartesian, join_imports::GeneratorJoinImports,
+            join_imports_general::GeneratorJoinImportsGeneral,
+            join_imports_simple::GeneratorJoinImportsSimple,
             join_seminaive::GeneratorJoinSeminaive,
         },
     },
@@ -30,6 +32,7 @@ pub enum StrategyBody {
         /// Additional filters
         filter: Option<GeneratorFunctionFilterNegation>,
     },
+    /// Datalog with incremental imports
     Import {
         /// Cartesian seminaive join
         join: Box<GeneratorJoinCartesian>,
@@ -46,10 +49,11 @@ impl StrategyBody {
         order: VariableOrder,
         positive: Vec<BodyAtom>,
         mut negative: Vec<BodyAtom>,
-        imports: Vec<ImportAtom>,
+        positive_imports: Vec<ImportAtom>,
+        negative_imports: Vec<ImportAtom>,
         operations: &mut Vec<Operation>,
     ) -> Self {
-        if imports.is_empty() {
+        if positive_imports.is_empty() && negative_imports.is_empty() {
             let join = Box::new(GeneratorJoinSeminaive::new(positive, &order));
             let filter = GeneratorFunctionFilterNegation::new(
                 join.output_variables(),
@@ -60,21 +64,30 @@ impl StrategyBody {
 
             Self::Plain { join, filter }
         } else {
-            let merge_operations = &mut operations.clone();
-            let mut merge_negative = negative.clone();
-
             let join = GeneratorJoinCartesian::new(&order, &positive, operations, &mut negative);
             let variables_join = join.output_variables();
 
-            let import = GeneratorImport::new(variables_join, &imports);
+            let import = GeneratorImport::new(variables_join, &positive_imports, &negative_imports);
 
-            let merge = GeneratorJoinImports::new(
-                &order,
-                positive,
-                imports,
-                merge_operations,
-                &mut merge_negative,
-            );
+            let merge = if join.is_single_join() {
+                GeneratorJoinImports::Simple(GeneratorJoinImportsSimple::new(
+                    &order,
+                    join.output_variables().first().cloned().unwrap_or_default(),
+                    positive_imports,
+                    negative_imports,
+                    operations,
+                    &mut negative,
+                ))
+            } else {
+                GeneratorJoinImports::General(GeneratorJoinImportsGeneral::new(
+                    &order,
+                    positive,
+                    positive_imports,
+                    negative_imports,
+                    operations,
+                    &mut negative,
+                ))
+            };
 
             Self::Import {
                 join: Box::new(join),
@@ -147,7 +160,7 @@ impl StrategyBody {
             }
         };
 
-        plan.add_temporary_table(node_body.clone(), "Body");
+        plan.add_temporary_table_non_empty(node_body.clone(), "Body");
 
         node_body
     }

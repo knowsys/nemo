@@ -1,5 +1,6 @@
 //! The reader for DSV files.
 
+use std::fmt::Display;
 use std::io::BufRead;
 use std::mem::size_of;
 
@@ -56,6 +57,18 @@ impl<T: BufRead> DsvReader<T> {
         quoting: bool,
         patterns: Vec<FilterTransformPattern>,
     ) -> Self {
+        let skips = value_formats
+            .iter()
+            .map(|format| *format == DsvValueFormat::Skip)
+            .collect::<Vec<_>>();
+
+        let mut skipped_patterns = Vec::new();
+        for pattern in patterns {
+            let mut new_pattern = pattern.clone();
+            new_pattern.with_skips(&skips);
+            skipped_patterns.push(new_pattern);
+        }
+
         Self {
             read,
             delimiter,
@@ -64,7 +77,7 @@ impl<T: BufRead> DsvReader<T> {
             limit,
             ignore_headers,
             quoting,
-            patterns,
+            patterns: skipped_patterns,
         }
     }
 
@@ -135,6 +148,9 @@ impl<T: BufRead> DsvReader<T> {
             }
         }
         log::info!("Finished import: processed {line_count} lines (dropped {drop_count})");
+        if drop_count > 0 && line_count == drop_count {
+            log::warn!("dropped all the records");
+        }
 
         Ok(())
     }
@@ -150,7 +166,14 @@ impl<T: BufRead> TableProvider for DsvReader<T> {
         self.read(tuple_writer)
     }
 
-    fn arity(&self) -> usize {
+    fn output_arity(&self) -> usize {
+        self.patterns
+            .first()
+            .and_then(|pattern| pattern.expected_arity())
+            .unwrap_or_else(|| self.value_formats.arity())
+    }
+
+    fn input_arity(&self) -> usize {
         self.value_formats.arity()
     }
 }
@@ -163,6 +186,19 @@ impl<T> std::fmt::Debug for DsvReader<T> {
             .field("escape", &self.escape)
             .field("value formats", &self.value_formats)
             .finish()
+    }
+}
+
+impl<T> Display for DsvReader<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "DSV data (delimiter {:?}, {})",
+            self.delimiter,
+            self.escape
+                .map(|escape| format!("escaping with {escape:?}"))
+                .unwrap_or("without escaping".to_string())
+        )
     }
 }
 

@@ -1,13 +1,9 @@
 #![feature(alloc_error_hook)]
 
-use std::{
-    alloc::Layout,
-    collections::{HashMap, HashSet},
-    fmt::Formatter,
-    io::Cursor,
-};
+use std::{alloc::Layout, collections::HashMap, fmt::Formatter, io::Cursor};
 
 use gloo_utils::format::JsValueSerdeExt;
+use indexmap::IndexSet;
 use js_sys::{Array, Reflect, Set, Uint8Array};
 use thiserror::Error;
 use wasm_bindgen::{JsCast, JsValue, prelude::wasm_bindgen};
@@ -22,7 +18,7 @@ use nemo::{
         resource_providers::{ResourceProvider, ResourceProviders, http},
     },
     rule_file::RuleFile,
-    rule_model::{components::tag::Tag, programs::ProgramRead},
+    rule_model::components::tag::Tag,
 };
 
 use nemo_physical::{error::ExternalReadingError, resource::Resource};
@@ -234,15 +230,17 @@ impl NemoEngine {
 
     #[wasm_bindgen(js_name = "getOutputPredicates")]
     pub fn output_predicates(&self) -> Array {
-        let target_predicates: HashSet<_> = self
+        let target_predicates: IndexSet<_> = self
             .engine
-            .program()
-            .outputs()
-            .map(|o| o.predicate().to_string())
+            .chase_program()
+            .output_predicates()
+            .iter()
+            .map(|o| o.to_string())
             .chain(
                 self.engine
-                    .program()
+                    .chase_program()
                     .exports()
+                    .iter()
                     .map(|o| o.predicate().to_string()),
             )
             .collect();
@@ -254,7 +252,7 @@ impl NemoEngine {
     pub fn edb_predicates(&self) -> Set {
         let js_set = Set::new(&JsValue::undefined());
 
-        for tag in self.engine.program().import_predicates().into_iter() {
+        for tag in self.engine.chase_program().import_predicates() {
             js_set.add(&JsValue::from(tag.to_string()));
         }
 
@@ -425,9 +423,11 @@ impl NemoResults {
                 .0
                 .into_iter()
                 .map(|v| match v.value_domain() {
-                    nemo_physical::datavalues::ValueDomain::PlainString
+                    nemo_physical::datavalues::ValueDomain::PlainString => {
+                        JsValue::from(v.lexical_value())
+                    }
+                    nemo_physical::datavalues::ValueDomain::LanguageTaggedString
                     | nemo_physical::datavalues::ValueDomain::Null
-                    | nemo_physical::datavalues::ValueDomain::LanguageTaggedString
                     | nemo_physical::datavalues::ValueDomain::Other => {
                         JsValue::from(v.canonical_string())
                     }

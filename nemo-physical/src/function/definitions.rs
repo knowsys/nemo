@@ -44,7 +44,8 @@ use self::{
 };
 
 /// Specifies how storage values are propagated by a function.
-pub(crate) enum FunctionTypePropagation {
+#[derive(Debug, Clone, Copy)]
+pub enum FunctionTypePropagation {
     /// Possible outputs are knonw in advance
     KnownOutput(StorageTypeBitSet),
     /// Types are preserved, i.e. the output has the same types as the inputs
@@ -117,7 +118,7 @@ impl FunctionTypePropagation {
 }
 
 /// Defines a unary function on [AnyDataValue].
-pub(crate) trait UnaryFunction {
+pub trait UnaryFunction {
     /// Evaluate this function on the given parameter.
     ///
     /// Returns `None` if the result of the operation is undefined.
@@ -131,36 +132,67 @@ pub(crate) trait UnaryFunction {
 /// Enum containing all implementations of [UnaryFunction]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UnaryFunctionEnum {
+    /// Negation operator for Booleans
     BooleanNegation(BooleanNegation),
+    /// Canonical string for value
     CanonicalString(CanonicalString),
+    /// Cast to i64
     CastingIntoInteger64(CastingIntoInteger64),
+    /// Cast to double
     CastingIntoDouble(CastingIntoDouble),
+    /// Cast to float
     CastingIntoFloat(CastingIntoFloat),
+    /// Cast to Iri
     CastingIntoIri(CastingIntoIri),
+    /// Check whether value is double
     CheckIsDouble(CheckIsDouble),
+    /// Check whether value is float
     CheckIsFloat(CheckIsFloat),
+    /// Check whether value is integer
     CheckIsInteger(CheckIsInteger),
+    /// Check whether value is Iri
     CheckIsIri(CheckIsIri),
+    /// Check whether value is null
     CheckIsNull(CheckIsNull),
+    /// Check whether value is numeric
     CheckIsNumeric(CheckIsNumeric),
+    /// Check whether value is a string
     CheckIsString(CheckIsString),
+    /// Datatype Iri for the value
     Datatype(Datatype),
+    /// Language tag of language tagged string
     LanguageTag(LanguageTag),
+    /// Lexical value for the value
     LexicalValue(LexicalValue),
+    /// Absolute value
     NumericAbsolute(NumericAbsolute),
+    /// Round up to nearest integer
     NumericCeil(NumericCeil),
+    /// Cosine of value
     NumericCosine(NumericCosine),
+    /// Round down to nearest integer
     NumericFloor(NumericFloor),
+    /// Negation operator for numbers
     NumericNegation(NumericNegation),
+    /// Round to nearest integer
     NumericRound(NumericRound),
+    /// Sine of value
     NumericSine(NumericSine),
+    /// Square root of value
     NumericSquareroot(NumericSquareroot),
+    /// Tangent of value
     NumericTangent(NumericTangent),
+    /// Length of a string
     StringLength(StringLength),
+    /// Reverse of a string
     StringReverse(StringReverse),
+    /// Lowercase of a string
     StringLowercase(StringLowercase),
+    /// Uppercase of a string
     StringUppercase(StringUppercase),
+    /// Iri-encoding of a string
     StringUriEncode(StringUriEncode),
+    /// Iri-decoding of a string
     StringUriDecode(StringUriDecode),
 }
 
@@ -224,31 +256,57 @@ pub trait BinaryFunction {
 /// Enum containing all implementations of [BinaryFunction]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BinaryFunctionEnum {
+    /// Equality comparison
     Equals(Equals),
+    /// Inequality comparison
     Unequals(Unequals),
+    /// Construct a language-tagged string from value and language tag
     LanguageString(LanguageString),
+    /// Addition of two numbers
     NumericAddition(NumericAddition),
+    /// Subtraction of two numbers
     NumericSubtraction(NumericSubtraction),
+    /// Multiplication of two numbers
     NumericMultiplication(NumericMultiplication),
+    /// Division of two numbers
     NumericDivision(NumericDivision),
+    /// Logarithm of number relative to base
     NumericLogarithm(NumericLogarithm),
+    /// Exponentiation of number relative to base
     NumericPower(NumericPower),
+    /// Remainder of division of two numbers
     NumericRemainder(NumericRemainder),
+    /// Less-than comparison of two numbers
     NumericLessthan(NumericLessthan),
+    /// Less-than-or-equal comparison of two numbers
     NumericLessthaneq(NumericLessthaneq),
+    /// Greater-than comparison of two numbers
     NumericGreaterthan(NumericGreaterthan),
+    /// Greater-than-or-equal comparison of two numbers
     NumericGreaterthaneq(NumericGreaterthaneq),
+    /// Part of string after first occurrence of second string
     StringAfter(StringAfter),
+    /// Part of string before first occurrence of second string
     StringBefore(StringBefore),
+    /// Lexicographic comparison of two strings
     StringCompare(StringCompare),
+    /// Containment of strings
     StringContains(StringContains),
+    /// Regex matching of strings
     StringRegex(StringRegex),
+    /// Levenshtein distance of two strings
     StringLevenshtein(StringLevenshtein),
+    /// Is the second string a suffix of the first string?
     StringEnds(StringEnds),
+    /// Is the second string a prefix of the first string?
     StringStarts(StringStarts),
+    /// Is the second string an infix of the first string?
     StringSubstring(StringSubstring),
+    /// Shift value left by given number of bits
     BitShiftLeft(BitShiftLeft),
+    /// Shift value right by given number of bits
     BitShiftRight(BitShiftRight),
+    /// Shift value right by given number of bits, filling with zeros
     BitShiftRightUnsigned(BitShiftRightUnsigned),
 }
 
@@ -308,6 +366,7 @@ pub trait TernaryFunction {
 /// Enum containing all implementations of [TernaryFunction]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TernaryFunctionEnum {
+    /// Substring of given string starting at offset of given length
     StringSubstringLength(StringSubstringLength),
 }
 
@@ -337,16 +396,27 @@ pub trait NaryFunction {
 /// Enum containing all implementations of [NaryFunction]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NaryFunctionEnum {
+    /// Bitwise and
     BitAnd(BitAnd),
+    /// Bitwise or
     BitOr(BitOr),
+    /// Bitwise exclusive or
     BitXor(BitXor),
+    /// Boolean and
     BooleanConjunction(BooleanConjunction),
+    /// Boolean or
     BooleanDisjunction(BooleanDisjunction),
+    /// Maximum of given numbers
     NumericMaximum(NumericMaximum),
+    /// Minimum of given numbers
     NumericMinimum(NumericMinimum),
+    /// Lukasiewicz T-norm of given numbers
     NumericLukasiewicz(NumericLukasiewicz),
+    /// Sum of given numbers
     NumericSum(NumericSum),
+    /// Product of given numbers
     NumericProduct(NumericProduct),
+    /// Concatenation of given strings
     StringConcatenation(StringConcatenation),
 }
 

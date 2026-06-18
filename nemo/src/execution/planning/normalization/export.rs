@@ -61,7 +61,7 @@ impl ExportInstruction {
         let filter_rules = export
             .filter_rules()
             .iter()
-            .map(|rule| NormalizedRule::normalize_rule(rule, 0))
+            .map(NormalizedRule::normalize_rule)
             .collect::<Vec<_>>();
 
         let export_arity = export_builder

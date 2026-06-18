@@ -91,8 +91,16 @@ impl ProgramPipeline {
     /// Given a [ProgramComponentId] return the corresponding [Rule],
     /// if it exists.
     pub fn rule_by_id(&self, id: ProgramComponentId) -> Option<&Rule> {
-        self.find_component(id)
-            .and_then(|component| component.try_as_ref())
+        // Rules appear only on statement level
+        if id.is_statement() {
+            let statement = &self.statements[id.statement()?];
+
+            if let Statement::Rule(rule) = statement {
+                return Some(rule);
+            }
+        }
+
+        None
     }
 
     /// Given a [ProgramComponentId] return the corresponding [Atom],

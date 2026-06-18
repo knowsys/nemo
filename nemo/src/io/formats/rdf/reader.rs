@@ -9,10 +9,10 @@ use nemo_physical::{
     management::bytesized::ByteSized,
     tabular::filters::FilterTransformPattern,
 };
-use std::{cell::Cell, io::Read, mem::size_of};
+use std::{cell::Cell, fmt::Display, io::Read, mem::size_of};
 
 use oxiri::Iri;
-use oxrdf::{BlankNode, GraphName, Literal, NamedNode, Quad, Subject, Term};
+use oxrdf::{BlankNode, GraphName, Literal, NamedNode, NamedOrBlankNode, Quad, Term};
 use oxrdfio::{RdfFormat, RdfParser};
 
 use crate::io::formats::PROGRESS_NOTIFY_INCREMENT;
@@ -56,13 +56,25 @@ impl RdfReader {
         limit: Option<u64>,
         patterns: Vec<FilterTransformPattern>,
     ) -> Self {
+        let skips = value_formats
+            .iter()
+            .map(|format| *format == RdfValueFormat::Skip)
+            .collect::<Vec<_>>();
+
+        let mut skipped_patterns = Vec::new();
+        for pattern in patterns {
+            let mut new_pattern = pattern.clone();
+            new_pattern.with_skips(&skips);
+            skipped_patterns.push(new_pattern);
+        }
+
         Self {
             read,
             variant,
             base,
             value_formats,
             limit,
-            patterns,
+            patterns: skipped_patterns,
             bnode_map: Default::default(),
         }
     }
@@ -101,18 +113,18 @@ impl RdfReader {
         }
     }
 
-    /// Create a [AnyDataValue] for a given [Subject].
+    /// Create a [AnyDataValue] for a given [NamedOrBlankNode].
     ///
     /// This function might create new nulls and enter
     /// them into the given [NullMap].
     fn datavalue_from_subject(
         bnode_map: &mut NullMap,
         tuple_writer: &mut TupleWriter,
-        value: Subject,
+        value: NamedOrBlankNode,
     ) -> Result<AnyDataValue, RdfFormatError> {
         match value {
-            Subject::NamedNode(nn) => Ok(Self::datavalue_from_named_node(nn)),
-            Subject::BlankNode(bn) => {
+            NamedOrBlankNode::NamedNode(nn) => Ok(Self::datavalue_from_named_node(nn)),
+            NamedOrBlankNode::BlankNode(bn) => {
                 Ok(Self::datavalue_from_blank_node(bnode_map, tuple_writer, bn))
             }
         }
@@ -356,7 +368,11 @@ impl TableProvider for RdfReader {
         }
     }
 
-    fn arity(&self) -> usize {
+    fn output_arity(&self) -> usize {
+        self.value_formats.arity()
+    }
+
+    fn input_arity(&self) -> usize {
         self.value_formats.arity()
     }
 }
@@ -368,6 +384,20 @@ impl std::fmt::Debug for RdfReader {
             .field("variant", &self.variant)
             .field("base", &self.base)
             .finish()
+    }
+}
+
+impl Display for RdfReader {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "RDF data ({} variant; {})",
+            self.variant,
+            self.base
+                .clone()
+                .map(|ref base| format!("base IRI <{base}>"))
+                .unwrap_or("no base IRI".to_string())
+        )
     }
 }
 

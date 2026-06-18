@@ -15,16 +15,12 @@
     unused_extern_crates,
     variant_size_differences
 )]
-#![feature(macro_metavar_expr)]
 
 pub mod cli;
 pub mod error;
+pub mod tracing;
 
-use std::{
-    fs::{File, read_to_string},
-    io::Write,
-    io::stdout,
-};
+use std::{io::Write, io::stdout};
 
 use clap::Parser;
 use colored::Colorize;
@@ -36,18 +32,15 @@ use nemo::{
     datavalues::AnyDataValue,
     error::Error,
     execution::{
-        DefaultExecutionEngine, ExecutionEngine,
-        execution_parameters::ExecutionParameters,
-        tracing::{node_query::TableEntriesForTreeNodesQuery, tree_query::TreeForTableQuery},
+        DefaultExecutionEngine, ExecutionEngine, execution_parameters::ExecutionParameters,
+        planning::normalization::program::NormalizedProgram,
     },
     io::{ImportManager, resource_providers::ResourceProviders},
     meta::timing::{TimedCode, TimedDisplay},
     rule_file::RuleFile,
-    rule_model::{
-        components::{ComponentBehavior, fact::Fact, tag::Tag, term::Term},
-        programs::{ProgramRead, program::Program},
-    },
+    rule_model::components::{fact::Fact, tag::Tag, term::Term},
 };
+use tracing::handle_tracing;
 
 fn print_facts_for_table<W: Write>(
     writer: &mut W,
@@ -65,12 +58,15 @@ fn print_facts_for_table<W: Write>(
         .map_err(Error::IO)
 }
 
-fn predicates_to_print_facts_for(print_facts_setting: FactPrinting, program: &Program) -> Vec<Tag> {
+fn predicates_to_print_facts_for(
+    print_facts_setting: FactPrinting,
+    program: &NormalizedProgram,
+) -> Vec<Tag> {
     match print_facts_setting {
         FactPrinting::None => Vec::new(),
-        FactPrinting::Idb => program.derived_predicates().into_iter().collect(),
-        FactPrinting::Edb => program.import_predicates().into_iter().collect(),
-        FactPrinting::All => program.all_predicates().into_iter().collect(),
+        FactPrinting::Idb => program.derived_predicates().iter().cloned().collect(),
+        FactPrinting::Edb => program.import_predicates().collect(),
+        FactPrinting::All => program.all_predicates().collect(),
     }
 }
 
@@ -154,110 +150,6 @@ fn print_memory_details(engine: &DefaultExecutionEngine) {
     println!("\nMemory report:\n\n{}", engine.memory_usage());
 }
 
-/// Retrieve all facts that need to be traced from the cli arguments.
-fn parse_trace_facts(cli: &CliApp) -> Result<Vec<String>, Error> {
-    let mut facts = cli.tracing.facts.clone().unwrap_or_default();
-
-    if let Some(input_files) = &cli.tracing.input_file {
-        for input_file in input_files {
-            let file_content = read_to_string(input_file)?;
-            facts.extend(file_content.split(';').map(str::to_string));
-        }
-    }
-
-    Ok(facts)
-}
-
-/// Deal with tracing
-async fn handle_tracing(cli: &CliApp, engine: &mut DefaultExecutionEngine) -> Result<(), CliError> {
-    let tracing_facts = parse_trace_facts(cli)?;
-    if !tracing_facts.is_empty() {
-        log::info!("Starting tracing of {} facts...", tracing_facts.len());
-        let mut facts = Vec::<Fact>::with_capacity(tracing_facts.len());
-        for fact_string in &tracing_facts {
-            let fact = Fact::parse(fact_string).map_err(|_| CliError::TracingInvalidFact {
-                fact: fact_string.clone(),
-            })?;
-            if fact.validate().is_err() {
-                return Err(CliError::TracingInvalidFact {
-                    fact: fact_string.clone(),
-                });
-            }
-
-            facts.push(fact);
-        }
-
-        let (trace, handles) = engine.trace(facts).await?;
-
-        match &cli.tracing.output_file {
-            Some(output_file) => {
-                let filename = output_file.to_string_lossy().to_string();
-                let trace_json = trace.json(&handles);
-
-                let mut json_file = File::create(output_file)?;
-                if serde_json::to_writer(&mut json_file, &trace_json).is_err() {
-                    return Err(CliError::SerializationError { filename });
-                }
-            }
-            None => {
-                for (fact, handle) in tracing_facts.into_iter().zip(handles) {
-                    if let Some(tree) = trace.tree(handle) {
-                        println!("\n{}", tree.to_ascii_art());
-                    } else {
-                        println!("\n{fact} was not derived");
-                    }
-                }
-            }
-        }
-    }
-
-    Ok(())
-}
-
-async fn handle_tracing_tree(
-    cli: &CliApp,
-    engine: &mut DefaultExecutionEngine,
-) -> Result<(), CliError> {
-    if let Some(query_file) = &cli.tracing_tree.trace_tree_json {
-        let query_string = read_to_string(query_file)?;
-
-        let tree_query: TreeForTableQuery =
-            serde_json::from_str(&query_string).map_err(|error| {
-                CliError::TracingInvalidJsonInput {
-                    error: error.to_string(),
-                }
-            })?;
-
-        let result = engine.trace_tree(tree_query).await?;
-
-        let json = serde_json::to_string_pretty(&result).expect("json serialization failed");
-        println!("{json}");
-    }
-
-    Ok(())
-}
-
-async fn handle_tracing_node(
-    cli: &CliApp,
-    engine: &mut DefaultExecutionEngine,
-) -> Result<(), CliError> {
-    if let Some(query_file) = &cli.tracing_node.trace_node_json {
-        let query_string = read_to_string(query_file)?;
-
-        let node_query: TableEntriesForTreeNodesQuery = serde_json::from_str(&query_string)
-            .map_err(|error| CliError::TracingInvalidJsonInput {
-                error: error.to_string(),
-            })?;
-
-        let result = engine.trace_node(&node_query).await?;
-
-        let json = serde_json::to_string_pretty(&result).expect("json serialization failed");
-        println!("{json}");
-    }
-
-    Ok(())
-}
-
 async fn run(mut cli: CliApp) -> Result<(), CliError> {
     TimedCode::instance().start();
     TimedCode::instance().sub("Reading & Preprocessing").start();
@@ -335,7 +227,7 @@ async fn run(mut cli: CliApp) -> Result<(), CliError> {
         let mut stdout = Box::new(stdout().lock());
 
         for predicate in
-            predicates_to_print_facts_for(cli.output.print_facts_setting, engine.program())
+            predicates_to_print_facts_for(cli.output.print_facts_setting, engine.chase_program())
         {
             if let Some(table) = engine.predicate_rows(&predicate).await? {
                 print_facts_for_table(&mut stdout, table, predicate)?;
@@ -369,9 +261,7 @@ async fn run(mut cli: CliApp) -> Result<(), CliError> {
         print_memory_details(&engine);
     }
 
-    handle_tracing(&cli, &mut engine).await?;
-    handle_tracing_tree(&cli, &mut engine).await?;
-    handle_tracing_node(&cli, &mut engine).await
+    handle_tracing(&cli, &mut engine).await
 }
 
 #[tokio::main(flavor = "current_thread")]

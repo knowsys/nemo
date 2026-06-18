@@ -1,0 +1,6 @@
+R(a, b) .
+S(b, c) .
+
+S(?Y, !Z) :- R(?X, ?Y) .
+
+@export S :- csv{} .

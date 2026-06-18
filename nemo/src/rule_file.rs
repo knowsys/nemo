@@ -5,7 +5,7 @@ use std::{fs::read_to_string, path::PathBuf};
 use crate::error::Error;
 
 /// Contains the content and name of a rule file
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct RuleFile {
     /// Name of the file
     name: String,

@@ -48,7 +48,16 @@ impl GeneratorJoinCartesian {
         operations: &mut Vec<Operation>,
         atoms_negation: &mut Vec<BodyAtom>,
     ) -> Self {
+        let mut old_operations = Vec::default();
+        let mut old_negations = Vec::default();
+
         let factors = Self::partition_atoms(atoms, operations);
+        let is_single_factor = factors.len() == 1;
+
+        if !is_single_factor {
+            old_operations = operations.clone();
+            old_negations = atoms_negation.clone();
+        }
 
         let mut joins = Vec::default();
         let mut filters = Vec::default();
@@ -81,6 +90,11 @@ impl GeneratorJoinCartesian {
 
             joins.push(join);
             filters.push(filter);
+        }
+
+        if !is_single_factor {
+            *operations = old_operations;
+            *atoms_negation = old_negations;
         }
 
         Self { joins, filters }

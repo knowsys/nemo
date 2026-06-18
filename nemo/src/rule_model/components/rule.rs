@@ -5,7 +5,7 @@ use std::{collections::HashSet, fmt::Display, hash::Hash};
 use nemo_physical::datavalues::DataValue;
 
 use crate::rule_model::{
-    components::{import_export::clause::ImportClause, term::operation::Operation},
+    components::{import_export::clause::ImportLiteral, term::operation::Operation},
     error::{ValidationReport, hint::Hint, info::Info, validation_error::ValidationError},
     origin::Origin,
     pipeline::id::ProgramComponentId,
@@ -49,7 +49,7 @@ pub struct Rule {
     body: Vec<Literal>,
 
     /// Imports that are evaluated as part of the rule
-    imports: Vec<ImportClause>,
+    imports: Vec<ImportLiteral>,
 }
 
 impl Rule {
@@ -57,6 +57,19 @@ impl Rule {
     pub fn new(head: Vec<Atom>, body: Vec<Literal>) -> Self {
         Self {
             origin: Origin::Created,
+            id: ProgramComponentId::default(),
+            name: None,
+            display: None,
+            head,
+            body,
+            imports: Vec::default(),
+        }
+    }
+
+    /// Create a new [Rule], with a given [Origin].
+    pub fn with_origin(head: Vec<Atom>, body: Vec<Literal>, origin: Origin) -> Self {
+        Self {
+            origin,
             id: ProgramComponentId::default(),
             name: None,
             display: None,
@@ -210,14 +223,20 @@ impl Rule {
             .collect()
     }
 
-    /// Return an iterator over all [ImportClause]s
+    /// Return an iterator over all [ImportLiteral]s
     /// that are evaluated as part of this rule.
-    pub fn imports(&self) -> impl Iterator<Item = &ImportClause> {
+    pub fn imports(&self) -> impl Iterator<Item = &ImportLiteral> {
         self.imports.iter()
     }
 
-    /// Add an [ImportClause] to this rule.
-    pub fn add_import(&mut self, import: ImportClause) {
+    /// Return a mutable reference to the [ImportLiteral]s
+    /// that are evaluated as part of this rule.
+    pub(crate) fn imports_mut(&mut self) -> &mut Vec<ImportLiteral> {
+        &mut self.imports
+    }
+
+    /// Add an [ImportLiteral] to this rule.
+    pub fn add_import(&mut self, import: ImportLiteral) {
         self.imports.push(import);
     }
 

@@ -14,9 +14,9 @@ pub async fn msa_execution_engine_from_handle(mut handle: ProgramHandle) -> Defa
         .expect("TransformationCriticalInstance Error")
         .transform(TransformationMSA::default())
         .expect("TransformationMSA Error");
-    let prog: Program = handle.materialize();
+    // let prog: Program = handle.materialize();
     let import_manager: ImportManager = ImportManager::new(ResourceProviders::empty());
-    ExecutionEngine::initialize(prog, import_manager)
+    ExecutionEngine::initialize(handle, import_manager)
         .await
         .expect("ExecutionEngine initialization failed")
 }

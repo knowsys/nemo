@@ -8,34 +8,37 @@ use crate::{
     error::Error,
     execution::{
         ExecutionEngine,
+        execution_engine::tracing::simple::storage::{
+            ExecutionTrace, TraceDerivation, TraceFactHandle, TraceRuleApplication, TraceStatus,
+        },
         planning::{
             normalization::{atom::ground::GroundAtom, program::NormalizedProgram},
             strategy::tracing::StrategyTracing,
         },
         selection_strategy::strategy::RuleSelectionStrategy,
-        tracing::{
-            error::TracingError,
-            trace::{
-                ExecutionTrace, TraceDerivation, TraceFactHandle, TraceRuleApplication, TraceStatus,
-            },
-        },
+        tracing::error::TracingError,
     },
     rule_model::{
         components::{
             ComponentBehavior,
             fact::Fact,
+            tag::Tag,
             term::primitive::{Primitive, ground::GroundTerm, variable::Variable},
         },
         substitution::Substitution,
     },
 };
 
+pub(crate) mod storage;
+
+const TRACING_PROGRESS_INCREMENT: usize = 500;
+
 impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     /// Recursive part of `trace`.
     async fn trace_recursive(
         &mut self,
         trace: &mut ExecutionTrace,
-        fact: GroundAtom,
+        fact: &GroundAtom,
         program: &NormalizedProgram,
     ) -> Result<TraceFactHandle, TracingError> {
         let trace_handle = trace.register_fact(fact.clone());
@@ -148,7 +151,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                     let next_fact = GroundAtom::new(next_fact_predicate, next_fact_terms);
 
                     let next_handle =
-                        Box::pin(self.trace_recursive(trace, next_fact, program)).await?;
+                        Box::pin(self.trace_recursive(trace, &next_fact, program)).await?;
 
                     if trace.status(next_handle).is_success() {
                         subtraces.push(next_handle);
@@ -163,7 +166,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 }
 
                 let rule_application = TraceRuleApplication::new(
-                    rule_index,
+                    rule.id(),
                     Substitution::new(variable_assignment.into_iter().map(|(variable, value)| {
                         (Primitive::from(variable), Primitive::from(value))
                     })),
@@ -184,9 +187,9 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         Ok(trace_handle)
     }
 
-    /// Build an [ExecutionTrace] for a list of facts.
-    /// Also returns a list containing a [TraceFactHandle] for each fact.
-    pub async fn trace(
+    /// Build an `ExecutionTrace` for a list of [fact](Fact)s.  Also
+    /// return a list containing the `TraceFactHandle` for each fact.
+    pub async fn trace_facts(
         &mut self,
         facts: Vec<Fact>,
     ) -> Result<(ExecutionTrace, Vec<TraceFactHandle>), Error> {
@@ -199,34 +202,76 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             }
         }
 
-        let program = self.program.clone();
-
-        let chase_facts: Vec<_> = facts
+        let ground_facts: Vec<_> = facts
             .into_iter()
             .filter_map(|fact| GroundAtom::normalize_fact(&fact))
             .collect();
+        let mut trace = ExecutionTrace::new(self.program_handle.clone());
+        let handles = self.trace_ground_facts(&mut trace, &ground_facts).await?;
 
-        let mut trace = ExecutionTrace::new(self.nemo_program.clone());
+        Ok((trace, handles))
+    }
+
+    /// Build an `ExecutionTrace` for a list of [predicates](Tag)s.  Also
+    /// return a list containing the `TraceFactHandle` for each fact.
+    pub async fn trace_predicates(
+        &mut self,
+        predicates: impl IntoIterator<Item = &Tag>,
+    ) -> Result<(ExecutionTrace, Vec<TraceFactHandle>), Error> {
+        let mut trace = ExecutionTrace::new(self.program_handle.clone());
         let mut handles = Vec::new();
 
-        let num_chase_facts = chase_facts.len();
+        for predicate in predicates {
+            let count = self
+                .count_facts_in_memory_for_predicate(predicate)
+                .unwrap_or_default();
 
-        for (i, chase_fact) in chase_facts.into_iter().enumerate() {
-            if i > 0 && i.is_multiple_of(500) {
+            if count > 0 {
+                log::info!("Starting tracing of {count} facts for predicate {predicate}");
+
+                let ground_facts = self
+                    .predicate_rows(predicate)
+                    .await?
+                    .expect("predicate should have facts")
+                    .map(|values| {
+                        GroundAtom::new(predicate.clone(), values.into_iter().map(GroundTerm::new))
+                    })
+                    .collect::<Vec<_>>();
+                handles.append(&mut self.trace_ground_facts(&mut trace, &ground_facts).await?);
+            }
+        }
+
+        Ok((trace, handles))
+    }
+
+    /// Build an `ExecutionTrace` for a list of [ground
+    /// facts](GroundAtom). Also return a list with the
+    /// `TraceFactHandle` for each fact.
+    async fn trace_ground_facts(
+        &mut self,
+        trace: &mut ExecutionTrace,
+        ground_facts: &[GroundAtom],
+    ) -> Result<Vec<TraceFactHandle>, Error> {
+        let mut handles = Vec::new();
+
+        let num_ground_facts = ground_facts.len();
+
+        for (i, ground_fact) in ground_facts.iter().enumerate() {
+            if i > 0 && i.is_multiple_of(TRACING_PROGRESS_INCREMENT) {
                 log::info!(
-                    "{i}/{num_chase_facts} facts traced. ({}%)",
-                    i * 100 / num_chase_facts
+                    "{i}/{num_ground_facts} facts traced. ({}%)",
+                    i * 100 / num_ground_facts
                 );
             }
 
             handles.push(
-                self.trace_recursive(&mut trace, chase_fact, &program)
+                self.trace_recursive(trace, ground_fact, &self.program.clone())
                     .await?,
             );
         }
 
-        log::info!("{num_chase_facts}/{num_chase_facts} facts traced. (100%)");
+        log::info!("{num_ground_facts}/{num_ground_facts} facts traced. (100%)");
 
-        Ok((trace, handles))
+        Ok(handles)
     }
 }

@@ -141,6 +141,8 @@ impl GeneratorFilter {
 
     /// Compute the [FilterAssignment] from a list of [Filters].
     fn compute_assignments(input: &OperationTable, filters: &Filters) -> FilterAssignment {
+        debug_assert!(!input.is_empty());
+
         let mut grouped_filters = HashMap::<OperationColumnMarker, Vec<&Filter>>::new();
 
         for filter in filters {

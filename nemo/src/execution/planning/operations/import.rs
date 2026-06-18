@@ -305,14 +305,18 @@ pub struct GeneratorImport {
 
 impl GeneratorImport {
     /// Create a new [GeneratorImport].
-    pub fn new(input_variables: Vec<Vec<Variable>>, import_atoms: &[ImportAtom]) -> Self {
+    pub fn new(
+        input_variables: Vec<Vec<Variable>>,
+        positive_import_atoms: &[ImportAtom],
+        negative_import_atoms: &[ImportAtom],
+    ) -> Self {
         let mut bindings = VariableBindings::default();
         let mut patterns = HashMap::<BindingPattern, Vec<usize>>::default();
         let mut imports = IndexSet::<ProductBinding>::default();
         let mut predicates = HashMap::<Tag, Vec<usize>>::default();
         let mut handlers = HashMap::default();
 
-        for atom in import_atoms {
+        for atom in positive_import_atoms.iter().chain(negative_import_atoms) {
             let binding_patterns = BindingPattern::new(&input_variables, atom);
 
             let mut product_pattern = ProductBinding::new(atom.predicate(), atom.arity());
@@ -442,7 +446,7 @@ impl GeneratorImport {
     ) -> Vec<ExecutionNodeRef> {
         let mut result = Vec::default();
 
-        for import in &self.imports {
+        for import in self.imports.iter() {
             let handler = self.handlers.get(import.predicate()).expect("construction of this generator ensures that every import predicate is associated with a handler");
 
             let provider = runtime
