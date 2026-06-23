@@ -17,7 +17,7 @@ use crate::{
 };
 
 /// Tags that are used to identify operations
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct OperationTag<'a> {
     /// [Span] associated with this node
     span: Span<'a>,

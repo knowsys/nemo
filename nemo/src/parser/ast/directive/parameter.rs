@@ -19,7 +19,7 @@ use crate::parser::{
 };
 
 /// Parameter directive, indicating a global parameter (i.e. global variable)
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct ParameterDeclaration<'a> {
     /// [Span] associated with this node
     span: Span<'a>,

@@ -17,7 +17,7 @@ use crate::parser::{
 };
 
 /// Import directive
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Import<'a> {
     /// [Span] associated with this node
     span: Span<'a>,

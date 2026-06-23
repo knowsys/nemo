@@ -28,7 +28,7 @@ pub enum BooleanValue {
 }
 
 /// AST node representing a Boolean node
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Boolean<'a> {
     /// [Span] associated with this node
     span: Span<'a>,

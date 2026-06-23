@@ -14,15 +14,15 @@ use crate::parser::{
 };
 
 /// A possibly tagged sequence of [Expression]s.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Atom<'a> {
     /// [Span] associated with this node
-    span: Span<'a>,
+    pub(crate) span: Span<'a>,
 
     /// Tag of this Atom
-    tag: StructureTag<'a>,
+    pub(crate) tag: StructureTag<'a>,
     /// List of underlying expressions
-    expressions: ExpressionSequenceSimple<'a>,
+    pub(crate) expressions: ExpressionSequenceSimple<'a>,
 }
 
 impl<'a> Atom<'a> {

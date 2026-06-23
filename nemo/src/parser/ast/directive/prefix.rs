@@ -14,7 +14,7 @@ use crate::parser::{
 };
 
 /// Prefix directive
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Prefix<'a> {
     /// [Span] associated with this node
     span: Span<'a>,
@@ -26,6 +26,14 @@ pub struct Prefix<'a> {
 }
 
 impl<'a> Prefix<'a> {
+    pub(crate) fn from_span_prefix_and_iri(
+        span: Span<'a>,
+        prefix: Token<'a>,
+        iri: Iri<'a>,
+    ) -> Self {
+        Self { span, prefix, iri }
+    }
+
     /// Return the defined prefix.
     pub fn prefix(&self) -> String {
         self.prefix.to_string()

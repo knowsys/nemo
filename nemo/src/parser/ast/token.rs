@@ -31,7 +31,7 @@ use crate::{
         datavalues::{self, RDF_DATATYPE_INDICATOR, boolean, iri, map, string, tuple},
         directive, encoding_prefixes,
         expression::{aggregate, atom, format_string, operation, variable},
-        operator, rule,
+        n3, operator, rule,
     },
 };
 
@@ -156,6 +156,9 @@ pub enum TokenKind {
     /// Dot for numbers
     #[assoc(name = datavalues::DOT)]
     Dot,
+    /// Semicolon
+    #[assoc(name = ";")]
+    Semicolon,
     /// Quote
     #[assoc(name = string::QUOTE)]
     Quote,
@@ -254,6 +257,9 @@ pub enum TokenKind {
     /// Token marking the top level comment as defined in [TOP_LEVEL](comment::TOP_LEVEL)
     #[assoc(name = comment::TOP_LEVEL)]
     TopLevelComment,
+    /// Token marking a Notation3 comment as defined in [COMMENT](n3::COMMENT)
+    #[assoc(name = n3::COMMENT)]
+    N3Comment,
     /// Directive keyword indicator as defined in [INDICATOR_TOKEN](directive::INDICATOR_TOKEN)
     #[assoc(name = directive::INDICATOR_TOKEN)]
     DirectiveIndicator,
@@ -315,13 +321,19 @@ pub enum TokenKind {
 
 /// A token is the smallest unit recognized by the parser
 /// that is used to built up more complex expressions
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Token<'a> {
     /// [Span] associated with this node
     span: Span<'a>,
 
     /// The kind of token
     kind: TokenKind,
+}
+
+impl<'a> Token<'a> {
+    pub(crate) const fn from_span_and_kind(span: Span<'a>, kind: TokenKind) -> Self {
+        Self { span, kind }
+    }
 }
 
 impl<'a> ComponentSource for Token<'a> {
@@ -781,6 +793,22 @@ impl<'a> Token<'a> {
         })
     }
 
+    pub fn n3_comment(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
+        context(
+            ParserContext::token(TokenKind::N3Comment),
+            is_a(n3::COMMENT),
+        )(input)
+        .map(|(rest, result)| {
+            (
+                rest,
+                Token {
+                    span: result.span,
+                    kind: TokenKind::N3Comment,
+                },
+            )
+        })
+    }
+
     /// Create [TokenKind::Error].
     pub fn error(span: Span<'a>) -> Token<'a> {
         Token {
@@ -795,6 +823,7 @@ impl<'a> Token<'a> {
     string_token!(open_iri, TokenKind::IriOpen);
     string_token!(close_iri, TokenKind::IriClose);
     string_token!(dot, TokenKind::Dot);
+    string_token!(semicolon, TokenKind::Semicolon);
     string_token!(seq_sep, TokenKind::SequenceSeparator);
     string_token!(arrow, TokenKind::RuleArrow);
     string_token!(greater, TokenKind::Greater);

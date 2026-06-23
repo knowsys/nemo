@@ -33,6 +33,18 @@ impl<'a> Rule<'a> {
     pub fn body(&self) -> impl Iterator<Item = &Guard<'a>> {
         self.body.iter()
     }
+
+    pub(crate) fn from_span_body_and_head(
+        span: Span<'a>,
+        body: Vec<Guard<'a>>,
+        head: Vec<Guard<'a>>,
+    ) -> Self {
+        Self {
+            span,
+            head: Sequence::from_span_and_elements(span, head),
+            body: Sequence::from_span_and_elements(span, body),
+        }
+    }
 }
 
 const CONTEXT: ParserContext = ParserContext::Rule;

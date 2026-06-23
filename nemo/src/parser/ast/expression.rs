@@ -23,7 +23,7 @@ use crate::parser::{
 use super::ProgramAST;
 
 /// An expression of potentially complex terms
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum Expression<'a> {
     /// Aggregation
     Aggregation(Aggregation<'a>),

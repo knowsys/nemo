@@ -36,6 +36,18 @@ pub struct Program<'a> {
 }
 
 impl<'a> Program<'a> {
+    pub(crate) fn from_span_comment_and_statements(
+        span: Span<'a>,
+        comment: Option<TopLevelComment<'a>>,
+        statements: Vec<Statement<'a>>,
+    ) -> Self {
+        Self {
+            span,
+            comment,
+            statements,
+        }
+    }
+
     /// Return the top-level comment attached to this program,
     /// if there is any
     pub fn comment(&self) -> Option<&TopLevelComment<'a>> {
@@ -120,6 +132,8 @@ impl std::fmt::Display for Program<'_> {
 
 #[cfg(test)]
 mod test {
+    use std::assert_matches;
+
     use nom::combinator::all_consuming;
 
     use crate::parser::{ParserState, Program, ast::ProgramAST, input::ParserInput};
@@ -145,7 +159,7 @@ mod test {
         let parser_input = ParserInput::new(program, ParserState::default());
         let result = all_consuming(Program::parse)(parser_input);
 
-        assert!(result.is_ok());
+        assert_matches!(result, Ok(_));
 
         let result = result.unwrap();
         assert!(result.1.comment().is_some());

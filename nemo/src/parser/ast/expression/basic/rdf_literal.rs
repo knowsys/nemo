@@ -12,7 +12,7 @@ use crate::parser::{
 };
 
 /// AST node representing an rdf literal
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct RdfLiteral<'a> {
     /// [Span] associated with this node
     span: Span<'a>,

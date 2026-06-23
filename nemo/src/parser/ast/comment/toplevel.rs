@@ -16,6 +16,8 @@ use crate::parser::{
     span::Span,
 };
 
+use super::line::LineComment;
+
 /// Doc comment that is attached to e.g. rules
 #[derive(Debug)]
 pub struct TopLevelComment<'a> {
@@ -28,7 +30,7 @@ pub struct TopLevelComment<'a> {
 
 const CONTEXT: ParserContext = ParserContext::TopLevelComment;
 
-impl TopLevelComment<'_> {
+impl<'a> TopLevelComment<'a> {
     /// Return the content of the comment
     pub fn content(&self) -> Vec<String> {
         self.content
@@ -81,6 +83,15 @@ impl<'a> ProgramAST<'a> for TopLevelComment<'a> {
 
     fn context(&self) -> ParserContext {
         CONTEXT
+    }
+}
+
+impl<'a> From<LineComment<'a>> for TopLevelComment<'a> {
+    fn from(value: LineComment<'a>) -> Self {
+        Self {
+            span: value.span,
+            content: vec![value.content],
+        }
     }
 }
 

@@ -5,14 +5,17 @@ use nom::sequence::delimited;
 
 use crate::parser::{
     ParserResult,
-    ast::{ProgramAST, token::Token},
+    ast::{
+        ProgramAST,
+        token::{Token, TokenKind},
+    },
     context::{ParserContext, context},
     input::ParserInput,
     span::Span,
 };
 
 /// AST node representing a Iri
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Iri<'a> {
     /// [Span] associated with this node
     span: Span<'a>,
@@ -21,7 +24,16 @@ pub struct Iri<'a> {
     content: Token<'a>,
 }
 
-impl Iri<'_> {
+impl<'a> Iri<'a> {
+    pub(crate) fn from_span_and_content(span: Span<'a>, content: &'a str) -> Self {
+        let content_span = Span::new(content);
+
+        Self {
+            span,
+            content: Token::from_span_and_kind(content_span, TokenKind::Iri),
+        }
+    }
+
     /// Return the content of the iri.
     pub fn content(&self) -> String {
         self.content.to_string()

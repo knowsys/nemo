@@ -11,7 +11,7 @@ use crate::parser::{
 };
 
 /// Base directive, indicating a global prefix
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Base<'a> {
     /// [Span] associated with this node
     span: Span<'a>,
@@ -21,6 +21,10 @@ pub struct Base<'a> {
 }
 
 impl<'a> Base<'a> {
+    pub(crate) fn from_span_and_iri(span: Span<'a>, iri: Iri<'a>) -> Self {
+        Self { span, iri }
+    }
+
     /// Return the base iri.
     pub fn iri(&self) -> &Iri<'a> {
         &self.iri
@@ -64,10 +68,7 @@ impl<'a> ProgramAST<'a> for Base<'a> {
 
             (
                 rest,
-                Self {
-                    span: input_span.until_rest(&rest_span),
-                    iri,
-                },
+                Self::from_span_and_iri(input_span.until_rest(&rest_span), iri),
             )
         })
     }

@@ -13,7 +13,7 @@ use crate::parser::{
 };
 
 /// Types of [StructureTag]s
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum StructureTagKind<'a> {
     /// Plain name
     Plain(Token<'a>),
@@ -29,7 +29,7 @@ pub enum StructureTagKind<'a> {
 }
 
 /// Tags that is used to give a name to complex expressions
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct StructureTag<'a> {
     /// [Span] associated with this node
     span: Span<'a>,
@@ -39,9 +39,31 @@ pub struct StructureTag<'a> {
 }
 
 impl<'a> StructureTag<'a> {
+    pub(crate) const fn from_span_and_token(span: Span<'a>, plain: Token<'a>) -> Self {
+        Self {
+            span,
+            kind: StructureTagKind::Plain(plain),
+        }
+    }
+
+    pub(crate) const fn from_span_and_iri(span: Span<'a>, iri: Iri<'a>) -> Self {
+        Self {
+            span,
+            kind: StructureTagKind::Iri(iri),
+        }
+    }
+
     /// Return the type of structure tag.
     pub fn kind(&self) -> &StructureTagKind<'a> {
         &self.kind
+    }
+
+    /// Return the underlying [Iri] of the structure tag, if it corresponds to an (absolute) Iri.
+    pub fn try_as_iri(&self) -> Option<&Iri<'a>> {
+        match &self.kind {
+            StructureTagKind::Iri(iri) => Some(iri),
+            _ => None,
+        }
     }
 }
 

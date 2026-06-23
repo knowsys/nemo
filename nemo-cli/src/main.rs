@@ -161,6 +161,9 @@ async fn run(mut cli: CliApp) -> Result<(), CliError> {
     }
 
     let program_path = cli.rules.pop().ok_or(CliError::NoInput)?;
+    let is_n3 = program_path
+        .extension()
+        .map_or(false, |extension| extension == "n3");
     let program_file = RuleFile::load(program_path)?;
 
     let export_manager = cli.output.export_manager()?;
@@ -180,9 +183,13 @@ async fn run(mut cli: CliApp) -> Result<(), CliError> {
         return Err(CliError::InvalidParameter { parameter });
     }
 
-    let (mut engine, warnings) = ExecutionEngine::from_file(program_file, execution_parameters)
-        .await?
-        .into_pair();
+    let (mut engine, warnings) = (if is_n3 {
+        log::info!("loading Notation3 document");
+        ExecutionEngine::from_n3_file(program_file, execution_parameters).await?
+    } else {
+        ExecutionEngine::from_file(program_file, execution_parameters).await?
+    })
+    .into_pair();
     warnings.eprint(cli.disable_warnings)?;
 
     log::info!("Rules parsed");

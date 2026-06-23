@@ -38,7 +38,7 @@ pub enum VariableType {
 }
 
 /// AST node representing a variable
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Variable<'a> {
     /// [Span] associated with this node
     span: Span<'a>,
@@ -83,6 +83,14 @@ impl<'a> Variable<'a> {
         map(Token::underscore, |indicator| {
             VariableType::token(indicator.kind()).expect("unknown variable indicator")
         })(input)
+    }
+
+    pub(crate) fn universal_from_span_and_name(span: Span<'a>, name: Token<'a>) -> Self {
+        Self {
+            span,
+            kind: VariableType::Universal,
+            name: Some(name),
+        }
     }
 }
 

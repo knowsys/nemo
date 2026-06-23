@@ -61,7 +61,7 @@ pub enum DirectiveKind {
 }
 
 /// Directive
-#[derive(Assoc, Debug)]
+#[derive(Assoc, Clone, Debug)]
 #[func(pub fn kind(&self) -> DirectiveKind)]
 pub enum Directive<'a> {
     /// Base

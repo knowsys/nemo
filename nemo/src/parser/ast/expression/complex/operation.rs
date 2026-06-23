@@ -19,7 +19,7 @@ use crate::{
 /// A known operation applied to a series of [Expression]s.
 ///
 /// This has the same structure as an [Operation].
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Operation<'a> {
     /// [Span] associated with this node
     span: Span<'a>,

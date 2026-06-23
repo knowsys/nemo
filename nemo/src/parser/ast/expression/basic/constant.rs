@@ -9,7 +9,7 @@ use crate::parser::{
 };
 
 /// AST node representing a constant
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Constant<'a> {
     /// [Span] associated with this node
     span: Span<'a>,
@@ -22,6 +22,13 @@ impl<'a> Constant<'a> {
     /// Return the [StructureTag] representing the constant.
     pub fn tag(&self) -> &StructureTag<'a> {
         &self.constant
+    }
+
+    pub(crate) fn from_span_and_tag(span: Span<'a>, tag: StructureTag<'a>) -> Self {
+        Self {
+            span,
+            constant: tag,
+        }
     }
 }
 

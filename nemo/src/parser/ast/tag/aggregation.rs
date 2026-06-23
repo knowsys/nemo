@@ -17,7 +17,7 @@ use crate::{
 };
 
 /// Tags that is used to identify aggregations
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct AggregationTag<'a> {
     /// [Span] associated with this node
     span: Span<'a>,

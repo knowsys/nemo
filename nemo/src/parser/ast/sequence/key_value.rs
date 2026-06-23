@@ -11,7 +11,7 @@ use crate::parser::{
 };
 
 /// Pairs of Expressions, separated by [KEY_VALUE_ASSIGN][nemo_physical::datavalues::syntax::map::KEY_VALUE_ASSIGN]
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct KeyValuePair<'a> {
     /// [Span] associated with this node
     span: Span<'a>,

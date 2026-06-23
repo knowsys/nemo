@@ -45,7 +45,7 @@ pub enum InfixExpressionKind {
 }
 
 /// Expressions connected by an infix operation
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct InfixExpression<'a> {
     /// [Span] associated with this node
     span: Span<'a>,

@@ -148,7 +148,7 @@ impl<'a> Span<'a> {
     /// Do not use this constructor in parser functions;
     /// nom and nom_locate assume span offsets are relative to the beginning of the same input.
     /// In these cases, you probably want to use the nom::traits::Slice trait instead.
-    pub fn new(inner: &'a str) -> Span<'a> {
+    pub const fn new(inner: &'a str) -> Span<'a> {
         Span {
             allocation_start: inner.as_ptr(),
             fragment: inner,

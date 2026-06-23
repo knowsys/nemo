@@ -11,7 +11,7 @@ use crate::parser::{
 };
 
 /// An [Expression] enclosed in parenthesis
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct ParenthesizedExpression<'a> {
     /// [Span] associated with this node
     span: Span<'a>,

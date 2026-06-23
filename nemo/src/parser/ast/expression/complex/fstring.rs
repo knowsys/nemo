@@ -11,7 +11,7 @@ use crate::parser::{
 };
 
 /// Elements that make up a [FormatString]
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum FormatStringElement<'a> {
     /// String
     String(Token<'a>),
@@ -24,7 +24,7 @@ pub enum FormatStringElement<'a> {
 }
 
 /// A string which may include sub expressions
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct FormatString<'a> {
     /// [Span] associated with this node
     span: Span<'a>,

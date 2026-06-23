@@ -14,7 +14,7 @@ use crate::parser::{
 };
 
 /// Output directive
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Output<'a> {
     /// [Span] associated with this node
     span: Span<'a>,

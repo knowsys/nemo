@@ -172,12 +172,20 @@ pub enum ParserContext {
     /// A letter or a digit
     #[assoc(name = "letter or digit")]
     AlphaNum,
+    /// Notation3 context
+    #[assoc(name = _kind.name())]
+    Notation3 { kind: Notation3Context },
 }
 
 impl ParserContext {
     /// Create a [ParserContext] from a [TokenKind].
     pub fn token(kind: TokenKind) -> Self {
         Self::Token { kind }
+    }
+
+    /// Create a [ParserContext] from a [Notation3Context]
+    pub const fn notation3(kind: Notation3Context) -> Self {
+        Self::Notation3 { kind }
     }
 }
 
@@ -199,4 +207,55 @@ where
             i, context, e,
         ))),
     }
+}
+
+/// Context in which a particular parse error occurred, for Notation3
+#[derive(Assoc, Debug, Clone, Copy, PartialEq, Eq)]
+#[func(pub fn name(&self) -> &'static str)]
+pub enum Notation3Context {
+    /// Triple
+    #[assoc(name = "triple")]
+    Triple,
+    /// Triples
+    #[assoc(name = "triples")]
+    Triples,
+    /// Verb
+    #[assoc(name = "verb")]
+    Verb,
+    /// Variable
+    #[assoc(name = "variable")]
+    Variable,
+    /// Literal
+    #[assoc(name = "literal")]
+    Literal,
+    /// Iri
+    #[assoc(name = "IRI")]
+    Iri,
+    /// Expression
+    #[assoc(name = "expression")]
+    Expression,
+    /// predicateObjectList
+    #[assoc(name = "predicate-object list")]
+    PredicateObjectList,
+    /// objectList
+    #[assoc(name = "objects")]
+    ObjectList,
+    /// Object
+    #[assoc(name = "object")]
+    Object,
+    /// Subject
+    #[assoc(name = "subject")]
+    Subject,
+    /// Path item
+    #[assoc(name = "path item")]
+    PathItem,
+    /// Path
+    #[assoc(name = "path")]
+    Path,
+    /// Formula
+    #[assoc(name = "formula")]
+    Formula,
+    /// Document
+    #[assoc(name = "document")]
+    Document,    
 }

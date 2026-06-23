@@ -43,7 +43,7 @@ impl Encoding {
 }
 
 /// AST Node representing an encoded number
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct EncodedNumber<'a> {
     /// [Span] associated with this node
     span: Span<'a>,

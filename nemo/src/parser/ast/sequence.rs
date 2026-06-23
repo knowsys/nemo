@@ -41,6 +41,13 @@ impl<T> Sequence<'_, T> {
 }
 
 impl<'a, T: ProgramAST<'a> + 'a> Sequence<'a, T> {
+    pub(crate) fn from_span_and_elements(span: Span<'a>, elements: Vec<T>) -> Self {
+        Self {
+            _span: span,
+            elements,
+        }
+    }
+
     /// Parse one element with a trailing [SequenceSeparator](crate::parser::ast::token::TokenKind::SequenceSeparator)
     pub fn parse_first_trailing(input: ParserInput<'a>) -> ParserResult<'a, Self> {
         let input_span = input.span;

@@ -21,7 +21,7 @@ use crate::parser::{
 };
 
 /// A possibly tagged sequence of [Expression]s.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Map<'a> {
     /// [Span] associated with this node
     span: Span<'a>,

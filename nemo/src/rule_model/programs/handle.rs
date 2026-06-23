@@ -62,6 +62,20 @@ impl ProgramHandle {
             .warned(commit.submit().expect("No validation has occurred yet"))
     }
 
+    /// Create a [ProgramHandle] from a [RuleFile].
+    pub fn from_n3_file(
+        file: &RuleFile,
+    ) -> Result<Warned<Self, TranslationReport>, ProgramParseReport> {
+        let parser = Parser::initialize(file.content());
+        let ast = parser.parse_n3().map_err(|(_tail, report)| report)?;
+
+        let mut commit = ProgramCommit::empty(ProgramPipeline::new(), ValidationReport::default());
+
+        ASTProgramTranslation::default()
+            .translate(&ast, &mut commit)
+            .warned(commit.submit().expect("No validation has occurred yet"))
+    }
+
     /// Create a new [ProgramCommit] representing an empty program
     /// that contains a copy of the [ValidationReport] from the given handle.
     pub fn fork(&self) -> ProgramCommit {

@@ -21,7 +21,7 @@ use crate::{
 };
 
 /// A known Aggregation applied to a series of [Expression]s.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Aggregation<'a> {
     /// [Span] associated with this node
     span: Span<'a>,

@@ -50,7 +50,7 @@ enum NumberSign {
 }
 
 /// AST Node representing a number
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Number<'a> {
     /// [Span] associated with this node
     span: Span<'a>,

@@ -16,7 +16,7 @@ use crate::parser::{
 };
 
 /// AST node representing a string
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct StringLiteral<'a> {
     /// [Span] associated with this node
     span: Span<'a>,

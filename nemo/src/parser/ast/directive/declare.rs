@@ -17,7 +17,7 @@ use crate::parser::{
 };
 
 /// Declare directive, associating atom positions with names and data types
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Declare<'a> {
     /// [Span] associated with this node
     span: Span<'a>,

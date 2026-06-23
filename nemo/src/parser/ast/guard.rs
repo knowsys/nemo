@@ -6,11 +6,14 @@ use crate::parser::context::{ParserContext, context};
 
 use super::{
     ProgramAST,
-    expression::{Expression, complex::infix::InfixExpression},
+    expression::{
+        Expression,
+        complex::{atom::Atom, infix::InfixExpression},
+    },
 };
 
 /// An expression that is the building block of rules.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum Guard<'a> {
     /// A normal expression
     Expression(Expression<'a>),
@@ -18,13 +21,17 @@ pub enum Guard<'a> {
     Infix(InfixExpression<'a>),
 }
 
-impl Guard<'_> {
+impl<'a> Guard<'a> {
     /// Return the [ParserContext] of the underlying expression type.
     pub fn context_type(&self) -> ParserContext {
         match self {
             Guard::Expression(expression) => expression.context_type(),
             Guard::Infix(infix) => infix.context(),
         }
+    }
+
+    pub(crate) fn from_atom(atom: Atom<'a>) -> Self {
+        Self::Expression(Expression::Atom(atom))
     }
 }
 

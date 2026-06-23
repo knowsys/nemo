@@ -500,3 +500,9 @@ pub mod import_export {
         pub(crate) const MEDIA_TYPE_JSON: &str = "application/json";
     }
 }
+
+pub mod n3 {
+    //! Notation3 specific syntax
+
+    pub(crate) const COMMENT: &str = "#";
+}

@@ -69,7 +69,7 @@ impl ArithmeticOperation {
 }
 
 /// Arithmetic expression on numbers
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Arithmetic<'a> {
     /// [Span] associated with this node
     span: Span<'a>,

@@ -11,7 +11,7 @@ use crate::parser::{
 };
 
 /// AST node representing a blank node
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Blank<'a> {
     /// [Span] associated with this node
     span: Span<'a>,

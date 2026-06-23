@@ -21,7 +21,7 @@ use crate::parser::{
 use super::DirectiveKind;
 
 /// Unknown directive specified by a user
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct UnknownDirective<'a> {
     /// [Span] associated with this node
     span: Span<'a>,

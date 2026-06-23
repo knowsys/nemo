@@ -107,6 +107,26 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         report.warned(engine)
     }
 
+    /// Initialize a [ExecutionEngine] by parsing and translating
+    /// the contents of the given file.
+    pub async fn from_n3_file(
+        n3_file: RuleFile,
+        parameters: ExecutionParameters,
+    ) -> Result<Warned<Self, ProgramReport>, Error> {
+        let handle = ProgramHandle::from_n3_file(&n3_file);
+        let report = ProgramReport::new(n3_file);
+
+        let (program, report) = report.merge_program_parser_report(handle)?;
+        let (program, report) = report.merge_validation_report(
+            &program,
+            program.transform(TransformationDefault::new(&parameters)),
+        )?;
+
+        let engine = Self::initialize(program, parameters.import_manager).await?;
+
+        report.warned(engine)
+    }
+
     /// Initialize the [ExecutionEngine] from an already prepared [ProgramHandle]
     /// (for example one obtained from [crate::api::load_program_handle]).
     ///
