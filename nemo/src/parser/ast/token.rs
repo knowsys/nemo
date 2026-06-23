@@ -31,7 +31,7 @@ use crate::{
         datavalues::{self, RDF_DATATYPE_INDICATOR, boolean, iri, map, string, tuple},
         directive, encoding_prefixes,
         expression::{aggregate, atom, format_string, operation, variable},
-        operator, rule,
+        n3, operator, rule,
     },
 };
 
@@ -254,6 +254,9 @@ pub enum TokenKind {
     /// Token marking the top level comment as defined in [TOP_LEVEL](comment::TOP_LEVEL)
     #[assoc(name = comment::TOP_LEVEL)]
     TopLevelComment,
+    /// Token marking a Notation3 comment as defined in [COMMENT](n3::COMMENT)
+    #[assoc(name = n3::COMMENT)]
+    N3Comment,
     /// Directive keyword indicator as defined in [INDICATOR_TOKEN](directive::INDICATOR_TOKEN)
     #[assoc(name = directive::INDICATOR_TOKEN)]
     DirectiveIndicator,
@@ -771,6 +774,22 @@ impl<'a> Token<'a> {
                 Token {
                     span: result.span,
                     kind: TokenKind::Comment,
+                },
+            )
+        })
+    }
+
+    pub fn n3_comment(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
+        context(
+            ParserContext::token(TokenKind::N3Comment),
+            is_a(n3::COMMENT),
+        )(input)
+        .map(|(rest, result)| {
+            (
+                rest,
+                Token {
+                    span: result.span,
+                    kind: TokenKind::N3Comment,
                 },
             )
         })

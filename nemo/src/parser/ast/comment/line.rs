@@ -27,7 +27,11 @@ pub struct LineComment<'a> {
 
 const CONTEXT: ParserContext = ParserContext::Comment;
 
-impl LineComment<'_> {
+impl<'a> LineComment<'a> {
+    pub(crate) fn new(span: Span<'a>, content: Span<'a>) -> Self {
+        Self { span, content }
+    }
+
     /// Return the content of the comment
     pub fn content(&self) -> String {
         self.content.fragment().to_string()
@@ -58,10 +62,7 @@ impl<'a> ProgramAST<'a> for LineComment<'a> {
 
             (
                 rest,
-                Self {
-                    span: input_span.until_rest(&rest_span),
-                    content: content.span,
-                },
+                Self::new(input_span.until_rest(&rest_span), content.span),
             )
         })
     }
