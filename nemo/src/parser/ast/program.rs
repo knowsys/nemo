@@ -120,6 +120,8 @@ impl std::fmt::Display for Program<'_> {
 
 #[cfg(test)]
 mod test {
+    use std::assert_matches;
+
     use nom::combinator::all_consuming;
 
     use crate::parser::{ParserState, Program, ast::ProgramAST, input::ParserInput};
@@ -145,7 +147,7 @@ mod test {
         let parser_input = ParserInput::new(program, ParserState::default());
         let result = all_consuming(Program::parse)(parser_input);
 
-        assert!(result.is_ok());
+        assert_matches!(result, Ok(_));
 
         let result = result.unwrap();
         assert!(result.1.comment().is_some());
