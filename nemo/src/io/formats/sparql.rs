@@ -191,7 +191,7 @@ impl FormatBuilder for SparqlBuilder {
             .map(|value| value.to_plain_string_unchecked())
             .unwrap_or(QUERY_DEFAULT.to_string());
 
-        let parser = format_context.as_sparql_parser();
+        let parser = format_context.into_sparql_parser();
 
         let query = parser
             .parse_query(query.as_str())
