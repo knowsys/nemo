@@ -1,7 +1,6 @@
 //! This module contains functions for translating directive ast nodes.
 use core::panic;
 use std::collections::{HashMap, hash_map::Entry};
-use std::result::Result;
 
 use oxiri::{Iri, IriRef};
 use spargebra::SparqlParser;
@@ -101,7 +100,7 @@ fn handle_base<'a>(translation: &mut ASTProgramTranslation, base: &ast::directiv
     }
 
     // check if base is a valid iri
-    if let Err(_) = Iri::parse(base.iri().content()) {
+    if Iri::parse(base.iri().content()).is_err() {
         translation.report.add(base, TranslationError::BaseInvalid);
         // TODO add parse error as context
     }
@@ -137,7 +136,7 @@ fn handle_prefix<'a>(
     translation: &mut ASTProgramTranslation,
     prefix: &ast::directive::prefix::Prefix<'a>,
 ) {
-    if let Err(_) = (|| {
+    if (|| {
         let rel_prefix = IriRef::parse(prefix.iri().content())?;
         if rel_prefix.is_absolute() {
             return Ok::<(), Box<dyn std::error::Error>>(());
@@ -148,7 +147,9 @@ fn handle_prefix<'a>(
             return Ok::<(), Box<dyn std::error::Error>>(());
         }
         Err(Box::new(TranslationError::PrefixInvalid))
-    })() {
+    })()
+    .is_err()
+    {
         // parsing not successful
         translation
             .report
@@ -223,7 +224,7 @@ impl FormatContext {
     }
 
     /// prepares and returns a SparqlParser with the base and prefixes
-    pub fn into_sparql_parser(&self) -> SparqlParser {
+    pub fn into_sparql_parser(self) -> SparqlParser {
         let mut parser = SparqlParser::new();
 
         if let Some(base) = &self.base {

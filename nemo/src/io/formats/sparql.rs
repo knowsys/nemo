@@ -6,7 +6,7 @@ pub(crate) mod reader;
 
 use reader::SparqlReader;
 use spargebra::{Query, SparqlParser};
-use std::{collections::HashMap, str::FromStr, sync::Arc};
+use std::sync::Arc;
 
 use nemo_physical::{
     datasources::table_providers::TableProvider,
@@ -14,14 +14,13 @@ use nemo_physical::{
     resource::{ResourceBuilder, ResourceValidationError},
     tabular::filters::FilterTransformPattern,
 };
-use oxiri::{Iri, IriRef};
+use oxiri::Iri;
 
 use crate::{
     io::format_builder::{
         AnyImportExportBuilder, FormatParameter, Parameters, StandardParameter, SupportedFormatTag,
         format_parameter, format_tag, value_type_matches,
     },
-    parser::ast::directive::{Directive::Base, base},
     rule_model::{
         components::{import_export::Direction, term::value_type::ValueType},
         error::validation_error::ValidationError,

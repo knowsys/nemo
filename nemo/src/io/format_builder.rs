@@ -13,7 +13,6 @@ use nemo_physical::{
     resource::{Resource, ResourceBuilder, ResourceValidationError},
     tabular::filters::FilterTransformPattern,
 };
-use oxiri::{Iri, IriRef};
 use strum::IntoEnumIterator;
 
 use crate::{
@@ -243,7 +242,7 @@ impl<Tag> FormatParameter<Tag> for StandardParameter {
     fn is_value_valid(
         &self,
         value: AnyDataValue,
-        format_context: FormatContext,
+        _format_context: FormatContext,
     ) -> Result<(), ValidationError> {
         value_type_matches(self, &value, self.supported_types())?;
 

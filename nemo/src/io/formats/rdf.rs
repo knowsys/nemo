@@ -8,7 +8,6 @@ pub(crate) mod value_format;
 pub(crate) mod writer;
 
 use std::{
-    collections::HashMap,
     io::{Read, Write},
     sync::Arc,
 };
@@ -20,7 +19,7 @@ use nemo_physical::{
     tabular::filters::FilterTransformPattern,
 };
 
-use oxiri::{Iri, IriRef};
+use oxiri::Iri;
 use reader::RdfReader;
 use strum::VariantArray;
 use strum_macros::VariantArray;

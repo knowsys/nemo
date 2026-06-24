@@ -1,8 +1,6 @@
 //! This module contains a function for handling import/export statements.
 
-use std::{mem::transmute, str::FromStr};
 
-use oxiri::{Iri, IriRef};
 
 use crate::{
     parser::{

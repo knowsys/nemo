@@ -5,7 +5,6 @@ use std::collections::{HashMap, HashSet};
 
 use attribute::ImportExportAttribute;
 use nemo_physical::datavalues::AnyDataValue;
-use oxiri::{Iri, IriRef};
 use specification::ImportExportSpec;
 
 use crate::{
