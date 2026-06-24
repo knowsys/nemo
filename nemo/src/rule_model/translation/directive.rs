@@ -1,9 +1,9 @@
 //! This module contains functions for translating directive ast nodes.
-
 use core::panic;
 use std::collections::{HashMap, hash_map::Entry};
+use std::result::Result;
 
-use oxiri::{Iri, IriParseError, IriRef};
+use oxiri::{Iri, IriRef};
 use spargebra::SparqlParser;
 
 use crate::{
@@ -100,6 +100,12 @@ fn handle_base<'a>(translation: &mut ASTProgramTranslation, base: &ast::directiv
             .add_context_source(first_base.clone(), Info::FirstDefinition);
     }
 
+    // check if base is a valid iri
+    if let Err(_) = Iri::parse(base.iri().content()) {
+        translation.report.add(base, TranslationError::BaseInvalid);
+        // TODO add parse error as context
+    }
+
     translation.base = Some((base.iri().content(), base.origin()));
 }
 
@@ -131,6 +137,24 @@ fn handle_prefix<'a>(
     translation: &mut ASTProgramTranslation,
     prefix: &ast::directive::prefix::Prefix<'a>,
 ) {
+    if let Err(_) = (|| {
+        let rel_prefix = IriRef::parse(prefix.iri().content())?;
+        if rel_prefix.is_absolute() {
+            return Ok::<(), Box<dyn std::error::Error>>(());
+        } else if let Some(base) = &translation.base {
+            Iri::parse(base.0.to_string())
+                .expect("base is not a valid IRI")
+                .resolve(&rel_prefix)?;
+            return Ok::<(), Box<dyn std::error::Error>>(());
+        }
+        Err(Box::new(TranslationError::PrefixInvalid))
+    })() {
+        // parsing not successful
+        translation
+            .report
+            .add(prefix.prefix_token(), TranslationError::PrefixInvalid);
+    }
+
     match translation.prefix_mapping.entry(prefix.prefix()) {
         Entry::Occupied(entry) => {
             let (_, prefix_first) = entry.get();
@@ -155,10 +179,12 @@ pub struct FormatContext {
 }
 
 impl FormatContext {
+    /// Returns an optional base IRI
     pub fn base(&self) -> &Option<Iri<String>> {
         &self.base
     }
 
+    /// returns a Hashmap of all prefixes and their related IRIs
     pub fn prefixes(&self) -> &HashMap<String, Iri<String>> {
         &self.prefixes
     }
@@ -180,24 +206,24 @@ impl FormatContext {
     /// - a relative prefix is given but no base is set
     pub fn add_prefix(&mut self, prefix: String, iri: String) {
         let rel_prefix = IriRef::parse(iri.clone()).expect("not a valid Iri");
-        let abs_prefix;
-        if rel_prefix.is_absolute() {
-            abs_prefix = Iri::parse(iri.clone()).expect("absolute IRI is not absolute");
+        let abs_prefix = if rel_prefix.is_absolute() {
+            Iri::parse(iri.clone()).expect("absolute IRI is not absolute")
         } else {
             if let Some(base) = &self.base {
-                abs_prefix = base
-                    .resolve(&rel_prefix.clone())
-                    .expect("relative prefix not resolvable on base");
+                base.resolve(&rel_prefix.clone())
+                    .expect("relative prefix not resolvable on base")
             } else {
-                panic!("attempted to resolve relative prefix without base")
+                panic!(
+                    "Relative base without prefixes! This should have been cought by the translator!"
+                )
             }
-        }
+        };
 
         self.prefixes.insert(prefix, abs_prefix);
     }
 
-    ///
-    pub fn as_sparql_parser(&self) -> SparqlParser {
+    /// prepares and returns a SparqlParser with the base and prefixes
+    pub fn into_sparql_parser(&self) -> SparqlParser {
         let mut parser = SparqlParser::new();
 
         if let Some(base) = &self.base {
