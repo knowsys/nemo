@@ -16,7 +16,6 @@ use crate::{
         selection_strategy::strategy::RuleSelectionStrategy,
         tracing::{
             error::TracingError,
-            resolve_origin::tracing_resolve_origin,
             shared::{
                 PaginationResponse, ResponseMetaInformation, Rule as TraceRule, TableEntryQuery,
                 TableEntryResponse,
@@ -113,7 +112,8 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 Box::pin(self.trace_tree_add_negation(child)).await;
             }
 
-            let rule = self.chase_program().rules()[next.rule.id].clone();
+            let rule_index = self.rule_translation.to_normalized(next.rule.id);
+            let rule = self.chase_program().rules()[rule_index].clone();
             for negative_atom in rule.negative() {
                 let rows =
                     if let Ok(Some(rows)) = self.predicate_rows(&negative_atom.predicate()).await {
@@ -212,9 +212,12 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             .chase_program()
             .rules_with_body_predicate(&predicate)
             .flat_map(|index| {
-                let chase_rule = &self.chase_program().rules()[index];
-                let logical_rule = tracing_resolve_origin(&self.program_handle, chase_rule.id());
-                TraceRule::all_possible_single_head_rules(index, &logical_rule).collect::<Vec<_>>()
+                let logical_rule = self.rule_translation.original_rule(index);
+                TraceRule::all_possible_single_head_rules(
+                    self.rule_translation.to_original(index),
+                    &logical_rule,
+                )
+                .collect::<Vec<_>>()
             })
             .collect::<Vec<_>>();
 
@@ -222,10 +225,13 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             .chase_program()
             .rules_with_head_predicate(&predicate)
             .flat_map(|index| {
-                let chase_rule = &self.chase_program().rules()[index];
-                let logical_rule = tracing_resolve_origin(&self.program_handle, chase_rule.id());
-                TraceRule::possible_rules_for_head_predicate(index, &logical_rule, &predicate)
-                    .collect::<Vec<_>>()
+                let logical_rule = self.rule_translation.original_rule(index);
+                TraceRule::possible_rules_for_head_predicate(
+                    self.rule_translation.to_original(index),
+                    &logical_rule,
+                    &predicate,
+                )
+                .collect::<Vec<_>>()
             })
             .collect::<Vec<_>>();
 
@@ -284,7 +290,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         }
 
         let chase_rule = &self.chase_program().rules()[rule_index].clone();
-        let logical_rule = tracing_resolve_origin(&self.program_handle, chase_rule.id());
+        let logical_rule = self.rule_translation.original_rule(rule_index);
 
         for (head_index, _) in chase_rule.head().iter().enumerate() {
             let Some(combination) = facts
@@ -367,7 +373,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 if let Some(children) = children_option {
                     result.next = Some(TreeForTableResponseSuccessor {
                         rule: TraceRule::from_rule_and_head(
-                            rule_index,
+                            self.rule_translation.to_original(rule_index),
                             &logical_rule,
                             head_index,
                             &logical_rule.head()[head_index],
@@ -488,11 +494,12 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 .program
                 .rules_with_body_predicate(&predicate)
                 .flat_map(|index| {
-                    let chase_rule = &self.chase_program().rules()[index];
-                    let logical_rule =
-                        tracing_resolve_origin(&self.program_handle, chase_rule.id());
-                    TraceRule::all_possible_single_head_rules(index, &logical_rule)
-                        .collect::<Vec<_>>()
+                    let logical_rule = self.rule_translation.original_rule(index);
+                    TraceRule::all_possible_single_head_rules(
+                        self.rule_translation.to_original(index),
+                        &logical_rule,
+                    )
+                    .collect::<Vec<_>>()
                 })
                 .collect::<Vec<_>>();
 
@@ -500,11 +507,13 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 .program
                 .rules_with_head_predicate(&predicate)
                 .flat_map(|index| {
-                    let chase_rule = &self.chase_program().rules()[index];
-                    let logical_rule =
-                        tracing_resolve_origin(&self.program_handle, chase_rule.id());
-                    TraceRule::possible_rules_for_head_predicate(index, &logical_rule, &predicate)
-                        .collect::<Vec<_>>()
+                    let logical_rule = self.rule_translation.original_rule(index);
+                    TraceRule::possible_rules_for_head_predicate(
+                        self.rule_translation.to_original(index),
+                        &logical_rule,
+                        &predicate,
+                    )
+                    .collect::<Vec<_>>()
                 })
                 .collect::<Vec<_>>();
 

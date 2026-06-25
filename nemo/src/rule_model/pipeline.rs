@@ -1,6 +1,6 @@
 //! This module defines [ProgramPipeline].
 
-use std::rc::Rc;
+use std::{cell::Cell, rc::Rc};
 
 use id::ProgramComponentId;
 use orx_imp_vec::{ImpVec, PinnedVec};
@@ -11,7 +11,7 @@ use crate::rule_model::{
         arena::{Arena, Id},
         revision::ProgramRevision,
     },
-    programs::{ProgramWrite, program::Program},
+    programs::{ProgramWrite, handle::ProgramHandle, program::Program},
 };
 
 use super::components::{IterableComponent, ProgramComponent, atom::Atom, rule::Rule};
@@ -33,12 +33,31 @@ pub struct ProgramPipeline {
 
     /// Collection of all revisions, i.e. version of nemo prorams
     revisions: ImpVec<ProgramRevision>,
+
+    /// Index of the "original" revision, i.e. the one that was created from
+    /// the user input
+    original_revision: Cell<Option<usize>>,
 }
 
 impl ProgramPipeline {
     /// Create a new managed [ProgramPipeline].
     pub fn new() -> Rc<Self> {
         Rc::new(Self::default())
+    }
+
+    /// Set the original revision of the [ProgramPipeline].
+    ///
+    /// Uses interior mutability, since the [ProgramPipeline] is shared
+    /// (behind an [Rc]) across all revisions derived from it.
+    pub fn set_original_revision(&self, revision: usize) {
+        self.original_revision.set(Some(revision));
+    }
+
+    /// Return a [ProgramHandle] to the original revision of the [ProgramPipeline].
+    pub fn original_revision(self: &Rc<Self>) -> Option<ProgramHandle> {
+        self.original_revision
+            .get()
+            .map(|revision| ProgramHandle::new(self.clone(), revision))
     }
 
     /// Search for the [ProgramComponent] with a given [ProgramComponentId]

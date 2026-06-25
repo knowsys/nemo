@@ -14,10 +14,11 @@ use crate::{
     execution::planning::{
         normalization::program::NormalizedProgram, strategy::forward::StrategyForward,
     },
+    execution::tracing::shared::RuleId,
     io::{formats::Export, import_manager::ImportManager},
     rule_file::RuleFile,
     rule_model::{
-        components::tag::Tag,
+        components::{rule::Rule, tag::Tag},
         pipeline::transformations::{default::TransformationDefault, global::TransformationGlobal},
         programs::{handle::ProgramHandle, program::Program},
     },
@@ -26,6 +27,7 @@ use crate::{
 
 use super::{
     execution_parameters::ExecutionParameters, selection_strategy::strategy::RuleSelectionStrategy,
+    tracing::rule_translation::RuleIdTranslation,
 };
 
 pub mod tracing;
@@ -57,6 +59,10 @@ pub struct ExecutionEngine<RuleSelectionStrategy> {
 
     /// Normalized program
     program: NormalizedProgram,
+
+    /// Translation of rule ids between the normalized and the original program,
+    /// used for tracing
+    rule_translation: RuleIdTranslation,
 
     /// The picked selection strategy for rules
     selection_strategy: RuleSelectionStrategy,
@@ -92,6 +98,11 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         let report = ProgramReport::new(file);
 
         let (program, report) = report.merge_program_parser_report(handle)?;
+
+        // The parsed program (before any transformation) is what the user wrote,
+        // and therefore serves as the reference for tracing (rule ids, origins).
+        program.mark_as_original();
+
         let (program, report) = report.merge_validation_report(
             &program,
             program.transform(TransformationDefault::new(&parameters)),
@@ -107,7 +118,10 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         program: Program,
         parameters: ExecutionParameters,
     ) -> Result<Self, Error> {
-        let program = ProgramHandle::from(program)
+        let original = ProgramHandle::from(program);
+        original.mark_as_original();
+
+        let program = original
             .transform(TransformationGlobal::new(&parameters.global_variables))
             .expect("TransformationGlobal does not introduce validation errors");
 
@@ -120,6 +134,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         import_manager: ImportManager,
     ) -> Result<Self, Error> {
         let normalized_program = NormalizedProgram::normalize_program(&program_handle);
+        let rule_translation = RuleIdTranslation::new(&program_handle, &normalized_program);
 
         let mut table_manager = TableManager::new();
         Self::register_all_predicates(&mut table_manager, &normalized_program);
@@ -137,6 +152,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         Ok(Self {
             program_handle,
             program: normalized_program,
+            rule_translation,
             selection_strategy,
             table_manager,
             import_manager,
@@ -337,6 +353,24 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     /// Get a reference to the loaded program.
     pub fn chase_program(&self) -> &NormalizedProgram {
         &self.program
+    }
+
+    /// Return a reference to the [ProgramHandle] backing this engine.
+    ///
+    /// This gives access to the full program pipeline, including the original
+    /// program (the one written by the user) via [ProgramHandle::original_revision].
+    pub fn program_handle(&self) -> &ProgramHandle {
+        &self.program_handle
+    }
+
+    /// Given a rule id as used in tracing responses (an index into the original
+    /// program's list of rules), return the corresponding original [Rule], if it exists.
+    ///
+    /// The rule's source location and transformation history are available via
+    /// [crate::rule_model::components::ComponentSource::origin].
+    pub fn rule_for_trace_id(&self, id: RuleId) -> Option<&Rule> {
+        let component_id = self.rule_translation.original_rule_id(id)?;
+        self.program_handle.rule_by_id(component_id)
     }
 
     /// Creates an [Iterator] over all facts of a predicate.
