@@ -259,6 +259,21 @@ impl NemoEngine {
         js_set
     }
 
+    #[wasm_bindgen(js_name = "getLineNumberFromRuleId")]
+    pub fn line_number_from_rule_id(&self, rule_id: usize) -> Option<u32> {
+        let prog_handle = self
+            .engine
+            .original_program_handle()
+            .expect("program was loaded from a (dummy) file");
+
+        let rule = prog_handle.rule_by_index(rule_id)?;
+        let position = prog_handle
+            .source_position(rule)
+            .expect("rule originates from the source");
+
+        Some(position.line)
+    }
+
     #[wasm_bindgen]
     pub async fn reason(&mut self) -> Result<(), NemoError> {
         self.engine
