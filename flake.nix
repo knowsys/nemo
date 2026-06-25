@@ -180,7 +180,7 @@
                 description
                 homepage
                 ;
-              license = [
+              license = pkgs.lib.licenses.OR [
                 pkgs.lib.licenses.asl20
                 pkgs.lib.licenses.mit
               ];
