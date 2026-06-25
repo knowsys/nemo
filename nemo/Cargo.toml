@@ -18,6 +18,7 @@ js = ["getrandom/wasm_js"]
 nemo-physical = { path = "../nemo-physical", default-features = false }
 log = { workspace = true }
 nom = "7.1.1"
+line-index = "0.1.1"
 petgraph = "0.8.3"
 petgraph-graphml = "5.0.0"
 rand = { workspace = true }

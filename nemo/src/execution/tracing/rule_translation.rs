@@ -45,8 +45,6 @@ pub(crate) struct RuleIdTranslation {
     norm_to_orig: Vec<Option<usize>>,
     /// For each original rule index, the corresponding normalized rule indices.
     orig_to_norm: HashMap<usize, Vec<usize>>,
-    /// For each original rule index, the [ProgramComponentId] of that rule.
-    orig_rule_ids: Vec<ProgramComponentId>,
 }
 
 impl RuleIdTranslation {
@@ -60,14 +58,12 @@ impl RuleIdTranslation {
             .map(|rule| tracing_resolve_origin_id(handle, rule.id()))
             .collect::<Vec<_>>();
 
-        // If an original revision is recorded, index its rules to map between
-        // a rule's [ProgramComponentId] and its position in the original program.
-        let mut orig_rule_ids = Vec::new();
+        // If an original revision is recorded, index its rules to map
+        // a rule's [ProgramComponentId] to its position in the original program.
         let mut orig_index_by_id = HashMap::new();
         if let Some(original) = handle.original_revision() {
             for (index, rule) in original.rules().enumerate() {
                 orig_index_by_id.insert(rule.id(), index);
-                orig_rule_ids.push(rule.id());
             }
         }
 
@@ -89,7 +85,6 @@ impl RuleIdTranslation {
             norm_to_orig_id,
             norm_to_orig,
             orig_to_norm,
-            orig_rule_ids,
         }
     }
 
@@ -131,12 +126,6 @@ impl RuleIdTranslation {
             .get(&original)
             .and_then(|indices| indices.first().copied())
             .unwrap_or(original)
-    }
-
-    /// Return the [ProgramComponentId] of the original rule with the given (frontend) index,
-    /// if it exists.
-    pub(crate) fn original_rule_id(&self, original: usize) -> Option<ProgramComponentId> {
-        self.orig_rule_ids.get(original).copied()
     }
 }
 
@@ -212,7 +201,6 @@ mod test {
         // Index translation round-trips between the single normalized and original rule.
         assert_eq!(translation.to_original(0), 0);
         assert_eq!(translation.to_normalized(0), 0);
-        assert_eq!(translation.original_rule_id(0), Some(original_id));
 
         // The displayed rule is the original one, not the rewritten (normalized) one.
         assert_eq!(translation.original_rule(0).to_string(), original_string);

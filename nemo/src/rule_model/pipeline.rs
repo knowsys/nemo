@@ -1,10 +1,14 @@
 //! This module defines [ProgramPipeline].
 
-use std::{cell::Cell, rc::Rc};
+use std::{
+    cell::{Cell, OnceCell},
+    rc::Rc,
+};
 
 use id::ProgramComponentId;
 use orx_imp_vec::{ImpVec, PinnedVec};
 
+use crate::parser::span::SourcePositions;
 use crate::rule_model::{
     components::statement::Statement,
     pipeline::{
@@ -37,6 +41,11 @@ pub struct ProgramPipeline {
     /// Index of the "original" revision, i.e. the one that was created from
     /// the user input
     original_revision: Cell<Option<usize>>,
+
+    /// Index over the source text the program was parsed from,
+    /// used to resolve byte offsets (e.g. in [crate::rule_model::origin::Origin::File])
+    /// to source positions (line and column numbers).
+    source: OnceCell<SourcePositions>,
 }
 
 impl ProgramPipeline {
@@ -58,6 +67,18 @@ impl ProgramPipeline {
         self.original_revision
             .get()
             .map(|revision| ProgramHandle::new(self.clone(), revision))
+    }
+
+    /// Record the source text the program was parsed from.
+    ///
+    /// Has no effect if a source has already been set.
+    pub fn set_source(&self, source: &str) {
+        let _ = self.source.set(SourcePositions::new(source));
+    }
+
+    /// Return the [SourcePositions] index over the source text, if one was recorded.
+    pub fn source_positions(&self) -> Option<&SourcePositions> {
+        self.source.get()
     }
 
     /// Search for the [ProgramComponent] with a given [ProgramComponentId]

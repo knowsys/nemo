@@ -14,11 +14,10 @@ use crate::{
     execution::planning::{
         normalization::program::NormalizedProgram, strategy::forward::StrategyForward,
     },
-    execution::tracing::shared::RuleId,
     io::{formats::Export, import_manager::ImportManager},
     rule_file::RuleFile,
     rule_model::{
-        components::{rule::Rule, tag::Tag},
+        components::tag::Tag,
         pipeline::transformations::{default::TransformationDefault, global::TransformationGlobal},
         programs::{handle::ProgramHandle, program::Program},
     },
@@ -357,20 +356,15 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
     /// Return a reference to the [ProgramHandle] backing this engine.
     ///
-    /// This gives access to the full program pipeline, including the original
-    /// program (the one written by the user) via [ProgramHandle::original_revision].
+    /// Note that this represents the transformed program and not the original.
+    /// To obtain the original program, use [ProgramHandle::original_revision].
     pub fn program_handle(&self) -> &ProgramHandle {
         &self.program_handle
     }
 
-    /// Given a rule id as used in tracing responses (an index into the original
-    /// program's list of rules), return the corresponding original [Rule], if it exists.
-    ///
-    /// The rule's source location and transformation history are available via
-    /// [crate::rule_model::components::ComponentSource::origin].
-    pub fn rule_for_trace_id(&self, id: RuleId) -> Option<&Rule> {
-        let component_id = self.rule_translation.original_rule_id(id)?;
-        self.program_handle.rule_by_id(component_id)
+    /// Return the [ProgramHandle] of the original program, if it exists.
+    pub fn original_program_handle(&self) -> Option<ProgramHandle> {
+        self.program_handle.original_revision()
     }
 
     /// Creates an [Iterator] over all facts of a predicate.
@@ -480,7 +474,34 @@ mod test {
     use crate::{
         api::load_program,
         execution::{DefaultExecutionEngine, execution_parameters::ExecutionParameters},
+        rule_file::RuleFile,
     };
+
+    #[tokio::test]
+    #[cfg_attr(miri, ignore)]
+    async fn rule_source_position_reports_line() {
+        // A fact on line 1 and a rule on line 2.
+        let source = "a(1).\nb(?x) :- a(?x).";
+        let file = RuleFile::new(source.to_string(), "test".to_string());
+
+        let engine = DefaultExecutionEngine::from_file(file, ExecutionParameters::default())
+            .await
+            .unwrap()
+            .into_object();
+
+        // The frontend resolves a tracing rule id via the original program handle.
+        let original = engine
+            .original_program_handle()
+            .expect("program was loaded from a file");
+
+        // Rule id 0 is the first (and only) rule, which is on line 2, column 1.
+        let rule = original.rule_by_index(0).expect("rule id is valid");
+        let position = original
+            .source_position(rule)
+            .expect("rule originates from the source");
+        assert_eq!(position.line, 2);
+        assert_eq!(position.column, 1);
+    }
 
     #[tokio::test]
     #[test_log::test]
