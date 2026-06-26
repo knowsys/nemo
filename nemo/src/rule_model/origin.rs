@@ -39,6 +39,15 @@ pub enum Origin {
 
     /// Rule that was created by normalizing a rule
     Normalization(ProgramComponentId),
+
+    /// Statement that was created by substituting global variables in a rule
+    Global(ProgramComponentId),
+
+    /// Rule that was created by inlining incremental imports into a rule
+    Incremental(ProgramComponentId),
+
+    /// Rule that was created by merging SPARQL imports in a rule
+    MergeSparql(ProgramComponentId),
 }
 
 impl Origin {

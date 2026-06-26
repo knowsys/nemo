@@ -406,7 +406,10 @@ impl ValidationReport {
                 error.add_hint(Info::DefinedExternally);
                 None
             }
-            Origin::Normalization(id) => Self::id_to_range(program, *id, error),
+            Origin::Normalization(id)
+            | Origin::Global(id)
+            | Origin::Incremental(id)
+            | Origin::MergeSparql(id) => Self::id_to_range(program, *id, error),
         }
     }
 

@@ -17,15 +17,15 @@ use crate::{
     io::{formats::Export, import_manager::ImportManager},
     rule_file::RuleFile,
     rule_model::{
-        components::tag::Tag,
-        pipeline::transformations::{default::TransformationDefault, global::TransformationGlobal},
-        programs::{handle::ProgramHandle, program::Program},
+        components::tag::Tag, pipeline::transformations::default::TransformationDefault,
+        programs::handle::ProgramHandle,
     },
     table_manager::{MemoryUsage, TableManager},
 };
 
 use super::{
     execution_parameters::ExecutionParameters, selection_strategy::strategy::RuleSelectionStrategy,
+    tracing::rule_translation::RuleIdTranslation,
 };
 
 pub mod tracing;
@@ -57,6 +57,10 @@ pub struct ExecutionEngine<RuleSelectionStrategy> {
 
     /// Normalized program
     program: NormalizedProgram,
+
+    /// Translation of rule ids between the normalized and the original program,
+    /// used for tracing
+    rule_translation: RuleIdTranslation,
 
     /// The picked selection strategy for rules
     selection_strategy: RuleSelectionStrategy,
@@ -92,25 +96,29 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         let report = ProgramReport::new(file);
 
         let (program, report) = report.merge_program_parser_report(handle)?;
+
         let (program, report) = report.merge_validation_report(
             &program,
             program.transform(TransformationDefault::new(&parameters)),
         )?;
 
-        let engine = Self::initialize(program, parameters.import_manager).await?;
+        let engine = Self::from_handle(program, parameters).await?;
 
         report.warned(engine)
     }
 
-    /// Initialize the [ExecutionEngine] starting from a [Program]
-    pub async fn from_program(
-        program: Program,
+    /// Initialize the [ExecutionEngine] from an already prepared [ProgramHandle]
+    /// (for example one obtained from [crate::api::load_program_handle]).
+    ///
+    /// This performs **no** transformation.
+    /// This is the entry point for callers that prepare
+    /// the program themselves (e.g. applying their own transformations); the
+    /// common case of going from a source file to an engine is covered by
+    /// [Self::from_file], which prepares the program and then calls this.
+    pub async fn from_handle(
+        program: ProgramHandle,
         parameters: ExecutionParameters,
     ) -> Result<Self, Error> {
-        let program = ProgramHandle::from(program)
-            .transform(TransformationGlobal::new(&parameters.global_variables))
-            .expect("TransformationGlobal does not introduce validation errors");
-
         Self::initialize(program, parameters.import_manager).await
     }
 
@@ -120,6 +128,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         import_manager: ImportManager,
     ) -> Result<Self, Error> {
         let normalized_program = NormalizedProgram::normalize_program(&program_handle);
+        let rule_translation = RuleIdTranslation::new(&program_handle, &normalized_program);
 
         let mut table_manager = TableManager::new();
         Self::register_all_predicates(&mut table_manager, &normalized_program);
@@ -137,6 +146,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         Ok(Self {
             program_handle,
             program: normalized_program,
+            rule_translation,
             selection_strategy,
             table_manager,
             import_manager,
@@ -339,6 +349,20 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         &self.program
     }
 
+    /// Return the current [ProgramHandle].
+    ///
+    /// Note that this represents the transformed program and not the original.
+    /// To obtain the original program, use [Self::original_program_handle].
+    pub fn current_program_handle(&self) -> ProgramHandle {
+        self.program_handle.clone()
+    }
+
+    /// Return the [ProgramHandle] of the original program, i.e. the program as
+    /// it was created from the user input (the first revision of the pipeline).
+    pub fn original_program_handle(&self) -> ProgramHandle {
+        self.program_handle.original_revision()
+    }
+
     /// Creates an [Iterator] over all facts of a predicate.
     pub async fn predicate_rows(
         &mut self,
@@ -444,9 +468,35 @@ mod test {
     use tokio;
 
     use crate::{
-        api::load_program,
         execution::{DefaultExecutionEngine, execution_parameters::ExecutionParameters},
+        rule_file::RuleFile,
     };
+
+    #[tokio::test]
+    #[cfg_attr(miri, ignore)]
+    async fn rule_source_position_reports_line() {
+        // A fact on line 1 and a rule on line 2.
+        let source = "a(1).
+b(?x) :- a(?x).";
+
+        let file = RuleFile::new(source.to_string(), "test".to_string());
+
+        let engine = DefaultExecutionEngine::from_file(file, ExecutionParameters::default())
+            .await
+            .unwrap()
+            .into_object();
+
+        // The frontend resolves a tracing rule id via the original program handle.
+        let original = engine.original_program_handle();
+
+        // Rule id 0 is the first (and only) rule, which is on line 2, column 1.
+        let rule = original.rule_by_index(0).expect("rule id is valid");
+        let position = original
+            .source_position(rule)
+            .expect("rule originates from the source");
+        assert_eq!(position.line, 2);
+        assert_eq!(position.column, 1);
+    }
 
     #[tokio::test]
     #[test_log::test]
@@ -454,14 +504,12 @@ mod test {
     async fn issue_759() {
         const ITERATIONS: usize = 32_768;
 
-        let program = load_program("foo(bar).".to_string(), Default::default()).unwrap();
+        let file = RuleFile::new("foo(bar).".to_string(), Default::default());
 
         for _ in 1..=ITERATIONS {
-            let engine = DefaultExecutionEngine::from_program(
-                program.clone(),
-                ExecutionParameters::default(),
-            )
-            .await;
+            let engine =
+                DefaultExecutionEngine::from_file(file.clone(), ExecutionParameters::default())
+                    .await;
             assert_matches!(engine, Ok(_));
         }
     }

@@ -65,11 +65,17 @@ pub async fn load_string(input: String) -> Result<Engine, Error> {
         .into_object())
 }
 
-/// Parse a program in the given `input`-string and return a [Program].
+/// Parse a program in the given `input`-string and return a [ProgramHandle]
+/// for the transformed program.
+///
+/// In contrast to [load_program], this keeps the program's pipeline intact, so
+/// the returned handle can be used to build an [Engine] (sharing a single
+/// pipeline across parsing, transformation, execution and tracing) and to
+/// resolve component origins back to the original program.
 ///
 /// # Error
 /// Returns a [ProgramReport] if parsing or validation fails.
-pub fn load_program(input: String, label: String) -> Result<Program, ProgramReport> {
+pub fn load_program_handle(input: String, label: String) -> Result<ProgramHandle, ProgramReport> {
     let file = RuleFile::new(input, label);
     let parameters = ExecutionParameters::default();
 
@@ -77,12 +83,24 @@ pub fn load_program(input: String, label: String) -> Result<Program, ProgramRepo
     let report = ProgramReport::new(file);
 
     let (program, report) = report.merge_program_parser_report(handle)?;
+
     let (program, report) = report.merge_validation_report(
         &program,
         program.transform(TransformationDefault::new(&parameters)),
     )?;
 
-    report.result(program.materialize())
+    report.result(program)
+}
+
+/// Parse a program in the given `input`-string and return a [Program].
+///
+/// Note that the resulting [Program] is a standalone snapshot without a
+/// pipeline; for tracing or building an [Engine], prefer [load_program_handle].
+///
+/// # Error
+/// Returns a [ProgramReport] if parsing or validation fails.
+pub fn load_program(input: String, label: String) -> Result<Program, ProgramReport> {
+    load_program_handle(input, label).map(|program| program.materialize())
 }
 
 /// Validate the `input` and create a [ProgramReport] for error reporting

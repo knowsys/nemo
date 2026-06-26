@@ -4,6 +4,7 @@
 use core::str;
 use std::ops::{Deref, Range};
 
+use line_index::{LineIndex, TextSize};
 use nom::{Offset, Slice};
 
 /// Locates a certain character within a file,
@@ -22,6 +23,48 @@ impl CharacterPosition {
     /// Return a zero character range at this position
     pub fn range(&self) -> Range<usize> {
         self.offset..self.offset
+    }
+}
+
+/// Precomputed index over a source file that converts byte offsets
+/// (as stored, for example, in [crate::rule_model::origin::Origin::File])
+/// into [CharacterPosition]s, i.e. 1-based line and column numbers.
+pub struct SourcePositions {
+    line_index: LineIndex,
+}
+
+impl std::fmt::Debug for SourcePositions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SourcePositions").finish_non_exhaustive()
+    }
+}
+
+impl SourcePositions {
+    /// Build an index over the given source text.
+    pub fn new(source: &str) -> Self {
+        Self {
+            line_index: LineIndex::new(source),
+        }
+    }
+
+    /// Return the [CharacterPosition] (1-based line and column) of the given byte offset.
+    pub fn position(&self, offset: usize) -> CharacterPosition {
+        let line_col = self.line_index.line_col(TextSize::new(offset as u32));
+
+        CharacterPosition {
+            offset,
+            line: line_col.line + 1,
+            column: line_col.col + 1,
+        }
+    }
+
+    /// Return the [CharacterRange] (1-based line and column for both ends)
+    /// of the given byte range.
+    pub fn range(&self, range: Range<usize>) -> CharacterRange {
+        CharacterRange {
+            start: self.position(range.start),
+            end: self.position(range.end),
+        }
     }
 }
 
@@ -356,5 +399,53 @@ impl nom::Compare<&str> for Span<'_> {
 
     fn compare_no_case(&self, t: &str) -> nom::CompareResult {
         self.fragment.compare_no_case(t)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::SourcePositions;
+
+    #[test]
+    fn source_positions_line_and_column() {
+        let source = "abc\nde\n\nf";
+
+        // offsets: a0 b1 c2 \n3 d4 e5 \n6 \n7 f8
+        let positions = SourcePositions::new(source);
+
+        // First character of the file: line 1, column 1.
+        let a = positions.position(0);
+        assert_eq!((a.line, a.column), (1, 1));
+
+        // Third character on the first line.
+        let c = positions.position(2);
+        assert_eq!((c.line, c.column), (1, 3));
+
+        // First character of the second line.
+        let d = positions.position(4);
+        assert_eq!((d.line, d.column), (2, 1));
+
+        // The empty third line.
+        let empty = positions.position(7);
+        assert_eq!((empty.line, empty.column), (3, 1));
+
+        // The single character on the fourth line.
+        let f = positions.position(8);
+        assert_eq!((f.line, f.column), (4, 1));
+        assert_eq!(f.offset, 8);
+    }
+
+    #[test]
+    fn source_positions_range() {
+        let source = "a(1).
+        b(?x) :- a(?x).";
+
+        let positions = SourcePositions::new(source);
+
+        // The rule starts right after the newline at offset 6.
+        let range = positions.range(6..source.len());
+        assert_eq!(range.start.line, 2);
+        assert_eq!(range.start.column, 1);
+        assert_eq!(range.end.line, 2);
     }
 }
