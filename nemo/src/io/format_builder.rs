@@ -27,6 +27,7 @@ use crate::{
         },
         error::{ValidationReport, hint::Hint, info::Info, validation_error::ValidationError},
         substitution::Substitution,
+        translation::directive::FormatContext,
     },
     syntax::import_export::attribute,
 };
@@ -47,7 +48,11 @@ pub(crate) trait FormatParameter<Tag>:
     FromStr<Err = ()> + Debug + ToString + IntoEnumIterator + Copy + Eq + Hash
 {
     fn required_for(&self, tag: Tag) -> bool;
-    fn is_value_valid(&self, value: AnyDataValue) -> Result<(), ValidationError>;
+    fn is_value_valid(
+        &self,
+        value: AnyDataValue,
+        format_context: FormatContext,
+    ) -> Result<(), ValidationError>;
 }
 
 pub(super) fn value_type_matches(
@@ -234,7 +239,11 @@ impl<Tag> FormatParameter<Tag> for StandardParameter {
         false
     }
 
-    fn is_value_valid(&self, value: AnyDataValue) -> Result<(), ValidationError> {
+    fn is_value_valid(
+        &self,
+        value: AnyDataValue,
+        _format_context: FormatContext,
+    ) -> Result<(), ValidationError> {
         value_type_matches(self, &value, self.supported_types())?;
 
         match self {
@@ -269,6 +278,7 @@ pub(crate) trait FormatBuilder: Debug + Sized + Into<AnyImportExportBuilder> {
         tag: Self::Tag,
         parameters: &Parameters<Self>,
         direction: Direction,
+        format_context: FormatContext,
     ) -> Result<Self, ValidationError>;
 
     fn expected_arity(&self) -> Option<usize>;
@@ -357,6 +367,7 @@ impl<B: FormatBuilder> Parameters<B> {
         _filter_rules: &[Rule],
         direction: Direction,
         report: &mut ValidationReport,
+        formate_context: FormatContext,
     ) -> Option<Self> {
         let Ok(format_tag) = B::Tag::from_str(spec.format().name()) else {
             report.add(
@@ -420,7 +431,7 @@ impl<B: FormatBuilder> Parameters<B> {
                 }
             };
 
-            if let Err(error) = parameter.is_value_valid(value.clone()) {
+            if let Err(error) = parameter.is_value_valid(value.clone(), formate_context.clone()) {
                 report.add(value_term, error);
                 has_errors = true;
                 continue;
@@ -513,10 +524,18 @@ impl ImportExportBuilder {
         filter_rules: &[Rule],
         direction: Direction,
         report: &mut ValidationReport,
+        format_context: FormatContext,
     ) -> Option<ImportExportBuilder> {
         let origin = spec.origin();
-        let parameters =
-            Parameters::<B>::validate(predicate, spec, bindings, filter_rules, direction, report)?;
+        let parameters = Parameters::<B>::validate(
+            predicate,
+            spec,
+            bindings,
+            filter_rules,
+            direction,
+            report,
+            format_context.clone(),
+        )?;
 
         let resource_builder =
             if let Some(value) = parameters.get_optional(StandardParameter::Resource.into()) {
@@ -538,7 +557,7 @@ impl ImportExportBuilder {
             })
             .unwrap_or_else(|| CompressionFormat::from_resource_builder(&resource_builder));
 
-        let inner = match B::new(tag, &parameters, direction) {
+        let inner = match B::new(tag, &parameters, direction, format_context.clone()) {
             Ok(b) => b,
             Err(error) => {
                 report.add_source(origin.clone(), error);
@@ -629,6 +648,7 @@ impl ImportExportBuilder {
         filter_rules: &[Rule],
         direction: Direction,
         report: &mut ValidationReport,
+        format_context: FormatContext,
     ) -> Option<Self> {
         let format_tag = spec.format().name().to_owned();
         let Ok(tag) = format_tag.parse::<SupportedFormatTag>() else {
@@ -651,6 +671,7 @@ impl ImportExportBuilder {
                 filter_rules,
                 direction,
                 report,
+                format_context,
             ),
             SupportedFormatTag::Rdf(tag) => Self::new_with_tag::<RdfHandler>(
                 predicate,
@@ -660,6 +681,7 @@ impl ImportExportBuilder {
                 filter_rules,
                 direction,
                 report,
+                format_context,
             ),
             SupportedFormatTag::Json(tag) => Self::new_with_tag::<JsonHandler>(
                 predicate,
@@ -669,6 +691,7 @@ impl ImportExportBuilder {
                 filter_rules,
                 direction,
                 report,
+                format_context,
             ),
             SupportedFormatTag::Sparql(tag) => Self::new_with_tag::<SparqlBuilder>(
                 predicate,
@@ -678,6 +701,7 @@ impl ImportExportBuilder {
                 filter_rules,
                 direction,
                 report,
+                format_context,
             ),
         }
     }

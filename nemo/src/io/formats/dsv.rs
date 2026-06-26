@@ -28,6 +28,7 @@ use crate::{
     rule_model::{
         components::{import_export::Direction, term::value_type::ValueType},
         error::validation_error::ValidationError,
+        translation::directive::FormatContext,
     },
     syntax::import_export::{attribute, file_format},
 };
@@ -178,12 +179,16 @@ impl FormatParameter<DsvTag> for DsvParameter {
         }
     }
 
-    fn is_value_valid(&self, value: AnyDataValue) -> Result<(), ValidationError> {
+    fn is_value_valid(
+        &self,
+        value: AnyDataValue,
+        format_context: FormatContext,
+    ) -> Result<(), ValidationError> {
         value_type_matches(self, &value, self.supported_types())?;
 
         match self {
-            DsvParameter::BaseParamType(base) => {
-                FormatParameter::<DsvTag>::is_value_valid(base, value)
+            DsvParameter::BaseParamType(base_param) => {
+                FormatParameter::<DsvTag>::is_value_valid(base_param, value, format_context)
             }
             DsvParameter::Limit => value
                 .to_u64()
@@ -238,6 +243,7 @@ impl FormatBuilder for DsvBuilder {
         tag: Self::Tag,
         parameters: &Parameters<DsvBuilder>,
         _direction: Direction,
+        _format_context: FormatContext,
     ) -> Result<Self, ValidationError> {
         let value_formats = parameters.get_optional(DsvParameter::Format).map(|value| {
             DsvValueFormats::try_from(value).expect("value formats have already been validated")
