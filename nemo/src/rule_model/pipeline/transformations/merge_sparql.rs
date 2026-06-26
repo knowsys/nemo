@@ -165,9 +165,7 @@ fn update_import(
 
     let original_id = rule.id();
     let mut rule = rule.clone();
-    // Record that this rule was derived from the original rule, so tracing can
-    // resolve it back and the rule-index translation between the original and
-    // the normalized program stays 1:1.
+
     rule.set_origin(Origin::MergeSparql(original_id));
     rule.imports_mut().clear();
 

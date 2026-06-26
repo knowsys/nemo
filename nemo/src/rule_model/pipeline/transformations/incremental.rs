@@ -317,9 +317,6 @@ impl ProgramTransformation for TransformationIncremental {
                         &mut name_id,
                     );
 
-                    // Record that this rule was derived from the original rule, so
-                    // tracing can resolve it back and the rule-index translation
-                    // between the original and the normalized program stays 1:1.
                     new_rule.set_origin(Origin::Incremental(rule.id()));
 
                     commit.add_rule(new_rule);
