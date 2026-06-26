@@ -1,9 +1,6 @@
 //! This module defines [ProgramPipeline].
 
-use std::{
-    cell::{Cell, OnceCell},
-    rc::Rc,
-};
+use std::{cell::OnceCell, rc::Rc};
 
 use id::ProgramComponentId;
 use orx_imp_vec::{ImpVec, PinnedVec};
@@ -38,10 +35,6 @@ pub struct ProgramPipeline {
     /// Collection of all revisions, i.e. version of nemo prorams
     revisions: ImpVec<ProgramRevision>,
 
-    /// Index of the "original" revision, i.e. the one that was created from
-    /// the user input
-    original_revision: Cell<Option<usize>>,
-
     /// Index over the source text the program was parsed from,
     /// used to resolve byte offsets (e.g. in [crate::rule_model::origin::Origin::File])
     /// to source positions (line and column numbers).
@@ -54,19 +47,20 @@ impl ProgramPipeline {
         Rc::new(Self::default())
     }
 
-    /// Set the original revision of the [ProgramPipeline].
+    /// Return a [ProgramHandle] to the original revision of the [ProgramPipeline],
+    /// i.e. the first revision. This holds the program as it was created from the
+    /// user input, before any transformation.
     ///
-    /// Uses interior mutability, since the [ProgramPipeline] is shared
-    /// (behind an [Rc]) across all revisions derived from it.
-    pub fn set_original_revision(&self, revision: usize) {
-        self.original_revision.set(Some(revision));
-    }
+    /// Every revision derived from this pipeline shares the same first revision,
+    /// so this is the single reference point for resolving components back to the
+    /// original program (see the tracing modules).
+    pub fn original_revision(self: &Rc<Self>) -> ProgramHandle {
+        debug_assert!(
+            self.revisions.len() > 0,
+            "a pipeline a handle exists for always has at least one revision"
+        );
 
-    /// Return a [ProgramHandle] to the original revision of the [ProgramPipeline].
-    pub fn original_revision(self: &Rc<Self>) -> Option<ProgramHandle> {
-        self.original_revision
-            .get()
-            .map(|revision| ProgramHandle::new(self.clone(), revision))
+        ProgramHandle::new(self.clone(), 0)
     }
 
     /// Record the source text the program was parsed from.

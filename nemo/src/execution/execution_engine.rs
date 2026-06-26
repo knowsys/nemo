@@ -17,9 +17,8 @@ use crate::{
     io::{formats::Export, import_manager::ImportManager},
     rule_file::RuleFile,
     rule_model::{
-        components::tag::Tag,
-        pipeline::transformations::{default::TransformationDefault, global::TransformationGlobal},
-        programs::{handle::ProgramHandle, program::Program},
+        components::tag::Tag, pipeline::transformations::default::TransformationDefault,
+        programs::handle::ProgramHandle,
     },
     table_manager::{MemoryUsage, TableManager},
 };
@@ -98,32 +97,28 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
         let (program, report) = report.merge_program_parser_report(handle)?;
 
-        // The parsed program (before any transformation) is what the user wrote,
-        // and therefore serves as the reference for tracing (rule ids, origins).
-        program.mark_as_original();
-
         let (program, report) = report.merge_validation_report(
             &program,
             program.transform(TransformationDefault::new(&parameters)),
         )?;
 
-        let engine = Self::initialize(program, parameters.import_manager).await?;
+        let engine = Self::from_handle(program, parameters).await?;
 
         report.warned(engine)
     }
 
-    /// Initialize the [ExecutionEngine] starting from a [Program]
-    pub async fn from_program(
-        program: Program,
+    /// Initialize the [ExecutionEngine] from an already prepared [ProgramHandle]
+    /// (for example one obtained from [crate::api::load_program_handle]).
+    ///
+    /// This performs **no** transformation.
+    /// This is the entry point for callers that prepare
+    /// the program themselves (e.g. applying their own transformations); the
+    /// common case of going from a source file to an engine is covered by
+    /// [Self::from_file], which prepares the program and then calls this.
+    pub async fn from_handle(
+        program: ProgramHandle,
         parameters: ExecutionParameters,
     ) -> Result<Self, Error> {
-        let original = ProgramHandle::from(program);
-        original.mark_as_original();
-
-        let program = original
-            .transform(TransformationGlobal::new(&parameters.global_variables))
-            .expect("TransformationGlobal does not introduce validation errors");
-
         Self::initialize(program, parameters.import_manager).await
     }
 
@@ -362,8 +357,9 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         &self.program_handle
     }
 
-    /// Return the [ProgramHandle] of the original program, if it exists.
-    pub fn original_program_handle(&self) -> Option<ProgramHandle> {
+    /// Return the [ProgramHandle] of the original program, i.e. the program as
+    /// it was created from the user input (the first revision of the pipeline).
+    pub fn original_program_handle(&self) -> ProgramHandle {
         self.program_handle.original_revision()
     }
 
@@ -472,7 +468,6 @@ mod test {
     use tokio;
 
     use crate::{
-        api::load_program,
         execution::{DefaultExecutionEngine, execution_parameters::ExecutionParameters},
         rule_file::RuleFile,
     };
@@ -490,9 +485,7 @@ mod test {
             .into_object();
 
         // The frontend resolves a tracing rule id via the original program handle.
-        let original = engine
-            .original_program_handle()
-            .expect("program was loaded from a file");
+        let original = engine.original_program_handle();
 
         // Rule id 0 is the first (and only) rule, which is on line 2, column 1.
         let rule = original.rule_by_index(0).expect("rule id is valid");
@@ -509,14 +502,12 @@ mod test {
     async fn issue_759() {
         const ITERATIONS: usize = 32_768;
 
-        let program = load_program("foo(bar).".to_string(), Default::default()).unwrap();
+        let file = RuleFile::new("foo(bar).".to_string(), Default::default());
 
         for _ in 1..=ITERATIONS {
-            let engine = DefaultExecutionEngine::from_program(
-                program.clone(),
-                ExecutionParameters::default(),
-            )
-            .await;
+            let engine =
+                DefaultExecutionEngine::from_file(file.clone(), ExecutionParameters::default())
+                    .await;
             assert_matches!(engine, Ok(_));
         }
     }

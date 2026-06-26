@@ -36,18 +36,11 @@ impl ProgramHandle {
         Self { pipeline, revision }
     }
 
-    /// Return a [ProgramHandle] to the original revision of the [ProgramPipeline].
-    pub fn original_revision(&self) -> Option<ProgramHandle> {
+    /// Return a [ProgramHandle] to the original revision of this handle's
+    /// [ProgramPipeline], i.e. the first revision (the program as it was created
+    /// from the user input).
+    pub fn original_revision(&self) -> ProgramHandle {
         self.pipeline.clone().original_revision()
-    }
-
-    /// Mark the revision this handle points to as the "original" revision
-    /// of its [ProgramPipeline], i.e. the one created from the user input.
-    ///
-    /// All revisions later derived from the same pipeline can recover this
-    /// revision via [ProgramHandle::original_revision].
-    pub fn mark_as_original(&self) {
-        self.pipeline.set_original_revision(self.revision);
     }
 
     /// Create a [ProgramHandle] from a [RuleFile].

@@ -1,7 +1,7 @@
 use std::{collections::HashSet, fs::read_to_string, time::Duration};
 
 use nemo::{
-    api::load_program,
+    api::load_program_handle,
     datavalues::{AnyDataValue, DataValue},
     error::Error,
     execution::{
@@ -17,7 +17,7 @@ use nemo::{
             tag::Tag,
             term::{Term, primitive::Primitive},
         },
-        programs::ProgramRead,
+        programs::{ProgramRead, handle::ProgramHandle},
         substitution::Substitution,
     },
 };
@@ -52,9 +52,10 @@ impl<T> PythonResult for (T, Vec<Error>) {
     }
 }
 
-#[pyclass(from_py_object)]
+/// A parsed and transformed nemo program.
+#[pyclass(from_py_object, unsendable)]
 #[derive(Clone)]
-struct NemoProgram(nemo::rule_model::programs::program::Program);
+struct NemoProgram(ProgramHandle);
 
 #[pyfunction]
 fn load_file(file: String) -> PyResult<NemoProgram> {
@@ -64,11 +65,11 @@ fn load_file(file: String) -> PyResult<NemoProgram> {
 
 #[pyfunction]
 fn load_string(rules: String) -> PyResult<NemoProgram> {
-    let program = load_program(rules, String::default())
+    let handle = load_program_handle(rules, String::default())
         .map_err(Error::ProgramReport)
         .py_res()?;
 
-    Ok(NemoProgram(program))
+    Ok(NemoProgram(handle))
 }
 
 #[pymethods]
@@ -411,8 +412,11 @@ impl NemoEngine {
             .build()?;
 
         let execution_parameters = ExecutionParameters::default();
+
+        // Build the engine from the program's existing handle, so that parsing,
+        // to keep the same program pipeline
         let engine = rt
-            .block_on(ExecutionEngine::from_program(
+            .block_on(ExecutionEngine::from_handle(
                 program.0,
                 execution_parameters,
             ))
