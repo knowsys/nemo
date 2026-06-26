@@ -7,7 +7,6 @@ use crate::{
     execution::planning::normalization::program::NormalizedProgram,
     rule_model::{
         components::{ComponentIdentity, rule::Rule},
-        pipeline::id::ProgramComponentId,
         programs::{ProgramRead, handle::ProgramHandle},
     },
 };
@@ -30,98 +29,88 @@ use super::resolve_origin::tracing_resolve_origin_id;
 /// (https://github.com/knowsys/nemo/issues/774)
 #[derive(Debug, Clone)]
 pub(crate) struct RuleIdTranslation {
-    /// The (transformed) program handle the normalized program was derived from,
-    /// used to resolve the original rule that should be displayed.
-    handle: ProgramHandle,
+    /// The original program (the first revision of the pipeline), used to look up
+    /// the [Rule] a normalized rule should be displayed as, by its index.
+    original: ProgramHandle,
 
-    /// For each normalized rule index, the [ProgramComponentId] of the original
-    /// rule it should be displayed as.
-    norm_to_orig_id: Vec<ProgramComponentId>,
-    /// For each normalized rule index, the corresponding original rule index (if any).
-    norm_to_orig: Vec<Option<usize>>,
-    /// For each original rule index, the corresponding normalized rule indices.
-    orig_to_norm: HashMap<usize, Vec<usize>>,
+    /// For each normalized rule index, the corresponding original rule index.
+    norm_to_orig: Vec<usize>,
+    /// Inverse of [Self::norm_to_orig].
+    orig_to_norm: HashMap<usize, usize>,
 }
 
 impl RuleIdTranslation {
     /// Build the translation for a given (transformed) [ProgramHandle]
     /// and the [NormalizedProgram] derived from it.
     pub(crate) fn new(handle: &ProgramHandle, normalized: &NormalizedProgram) -> Self {
-        // Resolve, for each normalized rule, the original rule it should be displayed as.
-        let norm_to_orig_id = normalized
+        let original = handle.original_revision();
+
+        // Map each original rule's id to its position in the original program.
+        let orig_index_by_id = original
+            .rules()
+            .enumerate()
+            .map(|(index, rule)| (rule.id(), index))
+            .collect::<HashMap<_, _>>();
+
+        // For each normalized rule, resolve the original rule it should be
+        // displayed as and record that rule's index in the original program.
+        //
+        // This relies on the transformations being one-to-one on rules and
+        // recording their provenance: if a normalized rule cannot be resolved to
+        // an original rule, a transformation created a rule without an origin
+        // back-pointer, and we fail loudly rather than return a wrong rule id.
+        let norm_to_orig = normalized
             .rules()
             .iter()
-            .map(|rule| tracing_resolve_origin_id(handle, rule.id()))
-            .collect::<Vec<_>>();
+            .map(|rule| {
+                let origin_id = tracing_resolve_origin_id(handle, rule.id());
+                *orig_index_by_id.get(&origin_id).expect(
+                    "a normalized rule has no corresponding original rule; a \
+                     transformation created a rule without recording its origin",
+                )
+            })
+            .collect::<Vec<usize>>();
 
-        // Index the rules of the original program to map a rule's
-        // [ProgramComponentId] to its position in the original program.
-        let mut orig_index_by_id = HashMap::new();
-        for (index, rule) in handle.original_revision().rules().enumerate() {
-            orig_index_by_id.insert(rule.id(), index);
+        // Invert the mapping. As the transformations are one-to-one on rules, no
+        // two normalized rules map to the same original rule, so every insert is
+        // into a fresh slot (checked via the resulting length below).
+        let mut orig_to_norm = HashMap::with_capacity(norm_to_orig.len());
+        for (norm_index, &orig_index) in norm_to_orig.iter().enumerate() {
+            orig_to_norm.insert(orig_index, norm_index);
         }
-
-        let mut norm_to_orig = Vec::with_capacity(norm_to_orig_id.len());
-        let mut orig_to_norm: HashMap<usize, Vec<usize>> = HashMap::new();
-
-        for (norm_index, origin_id) in norm_to_orig_id.iter().enumerate() {
-            let orig_index = orig_index_by_id.get(origin_id).copied();
-
-            norm_to_orig.push(orig_index);
-
-            if let Some(orig_index) = orig_index {
-                orig_to_norm.entry(orig_index).or_default().push(norm_index);
-            }
-        }
-
-        // The translation assumes that the transformations between the original
-        // and the normalized program are one-to-one on rules and record their
-        // provenance
-        debug_assert!(
-            norm_to_orig.iter().all(Option::is_some),
-            "tracing rule translation: a normalized rule has no corresponding \
-             original rule; a transformation created a rule without recording \
-             its origin"
-        );
-        debug_assert!(
-            orig_to_norm.values().all(|indices| indices.len() == 1),
+        debug_assert_eq!(
+            orig_to_norm.len(),
+            norm_to_orig.len(),
             "tracing rule translation: several normalized rules map to the same \
              original rule; a transformation is not one-to-one on rules"
         );
 
         Self {
-            handle: handle.clone(),
-            norm_to_orig_id,
+            original,
             norm_to_orig,
             orig_to_norm,
         }
     }
 
     /// Return the original [Rule] that the normalized rule with the given index
-    /// should be displayed as.
-    ///
-    /// This walks the chain of transformations back to the rule the user wrote,
-    /// as far as it can be resolved.
+    /// should be displayed as, i.e. the rule the user wrote that this normalized
+    /// rule was (transitively) derived from.
     ///
     /// # Panics
     /// Panics if `normalized` is not a valid normalized rule index.
     pub(crate) fn original_rule(&self, normalized: usize) -> Rule {
-        let origin_id = self.norm_to_orig_id[normalized];
-
-        self.handle
-            .rule_by_id(origin_id)
-            .expect("resolved id must point to a rule")
+        self.original
+            .rule_by_index(self.norm_to_orig[normalized])
+            .expect("normalized rule maps to an existing original rule")
             .clone()
     }
 
     /// Translate a normalized rule index into the original rule index used on the frontend.
     ///
     /// # Panics
-    /// Panics if `normalized` is not a valid normalized rule index, or if it has
-    /// no corresponding original rule.
+    /// Panics if `normalized` is not a valid normalized rule index.
     pub(crate) fn to_original(&self, normalized: usize) -> usize {
         self.norm_to_orig[normalized]
-            .expect("every normalized rule maps to an original rule (checked in `new`)")
     }
 
     /// Translate an original (frontend) rule index into the normalized rule index used internally.
@@ -131,7 +120,7 @@ impl RuleIdTranslation {
     pub(crate) fn to_normalized(&self, original: usize) -> usize {
         self.orig_to_norm
             .get(&original)
-            .and_then(|indices| indices.first().copied())
+            .copied()
             .expect("original rule index has a corresponding normalized rule")
     }
 }
