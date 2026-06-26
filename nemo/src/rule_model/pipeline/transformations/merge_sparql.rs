@@ -272,3 +272,39 @@ fn update_import(
 
     commit.add_rule(rule);
 }
+
+#[cfg(test)]
+mod test {
+    use crate::{
+        rule_file::RuleFile,
+        rule_model::{
+            components::{ComponentIdentity, ComponentSource},
+            origin::Origin,
+            pipeline::transformations::incremental::TransformationIncremental,
+            programs::{ProgramRead, handle::ProgramHandle},
+        },
+    };
+
+    use super::TransformationMergeSparql;
+
+    #[test]
+    fn records_origin_of_merged_rule() {
+        let program = r#"@import ra :- sparql {endpoint = "http://example.org", query = "SELECT ?a ?b WHERE {?a ?b ?z.}"} .
+            @import rb :- sparql {endpoint = "http://example.org", query = "SELECT ?a ?c WHERE {?a ?c ?z.}"} .
+            seed(1) .
+            out(?a, ?b, ?c) :- seed(?a), ra(?a, ?b), rb(?a, ?c) .
+            @output out ."#;
+        let handle =
+            ProgramHandle::from_file(&RuleFile::new(program.to_string(), String::default()))
+                .expect("program parses")
+                .into_object();
+
+        let inlined = handle.transform(TransformationIncremental::new()).unwrap();
+        let predecessor = inlined.rules().next().unwrap().id();
+
+        let transformed = inlined.transform(TransformationMergeSparql).unwrap();
+        let rule = transformed.rules().next().unwrap();
+
+        assert!(matches!(rule.origin(), Origin::MergeSparql(id) if id == predecessor));
+    }
+}

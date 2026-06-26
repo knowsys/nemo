@@ -148,3 +148,35 @@ impl ProgramTransformation for TransformationNormalize {
         commit.submit()
     }
 }
+
+#[cfg(test)]
+mod test {
+    use crate::{
+        rule_file::RuleFile,
+        rule_model::{
+            components::{ComponentIdentity, ComponentSource},
+            origin::Origin,
+            programs::{ProgramRead, handle::ProgramHandle},
+        },
+    };
+
+    use super::TransformationNormalize;
+
+    #[test]
+    fn records_origin_of_normalized_rule() {
+        let program = "a(?x) :- b(?x, 5) .";
+        let handle =
+            ProgramHandle::from_file(&RuleFile::new(program.to_string(), String::default()))
+                .expect("program parses")
+                .into_object();
+
+        let original = handle.rules().next().unwrap().id();
+
+        let transformed = handle
+            .transform(TransformationNormalize::default())
+            .unwrap();
+        let rule = transformed.rules().next().unwrap();
+
+        assert!(matches!(rule.origin(), Origin::Normalization(id) if id == original));
+    }
+}

@@ -335,3 +335,36 @@ impl ProgramTransformation for TransformationIncremental {
         commit.submit()
     }
 }
+
+#[cfg(test)]
+mod test {
+    use crate::{
+        rule_file::RuleFile,
+        rule_model::{
+            components::{ComponentIdentity, ComponentSource},
+            origin::Origin,
+            programs::{ProgramRead, handle::ProgramHandle},
+        },
+    };
+
+    use super::TransformationIncremental;
+
+    #[test]
+    fn records_origin_of_inlined_rule() {
+        let program = r#"@import remote :- sparql {endpoint = "http://example.org", query = "SELECT ?a ?b WHERE {?a ?b ?z.}"} .
+            seed(1) .
+            out(?a, ?b) :- seed(?a), remote(?a, ?b) .
+            @output out ."#;
+        let handle =
+            ProgramHandle::from_file(&RuleFile::new(program.to_string(), String::default()))
+                .expect("program parses")
+                .into_object();
+
+        let original = handle.rules().next().unwrap().id();
+
+        let transformed = handle.transform(TransformationIncremental::new()).unwrap();
+        let rule = transformed.rules().next().unwrap();
+
+        assert!(matches!(rule.origin(), Origin::Incremental(id) if id == original));
+    }
+}

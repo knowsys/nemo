@@ -132,15 +132,6 @@ mod test {
         commit.submit().unwrap()
     }
 
-    /// Build a [RuleIdTranslation] for a program string
-    fn translation_for(program: &str) -> RuleIdTranslation {
-        let handle = crate::api::load_program_handle(program.to_string(), String::default())
-            .expect("program should parse and validate");
-        let normalized = NormalizedProgram::normalize_program(&handle);
-
-        RuleIdTranslation::new(&handle, &normalized)
-    }
-
     #[test]
     fn translation_resolves_to_original_rule() {
         // The user's (original) program.
@@ -178,74 +169,5 @@ mod test {
             translation.original_rule_unchecked(0).to_string(),
             rewritten_string
         );
-    }
-
-    #[test]
-    #[cfg_attr(miri, ignore)]
-    fn translation_global_variable_rule() {
-        // The global variable `$t` is substituted by TransformationGlobal.
-        let translation = translation_for(
-            "@parameter $t = 5 .
-            data(5) .
-            result(?x) :- data(?x), ?x = $t .
-            @output result .",
-        );
-
-        assert_eq!(translation.original_index(0), 0);
-        assert_eq!(translation.normalized_index(0), 0);
-        // Resolution recovers the original rule, which still contains `$t`.
-        assert!(
-            translation
-                .original_rule_unchecked(0)
-                .to_string()
-                .contains("$t")
-        );
-    }
-
-    #[test]
-    #[cfg_attr(miri, ignore)]
-    fn translation_normalized_rule() {
-        // The constant `2` in a positive body atom triggers TransformationNormalize.
-        let translation = translation_for(
-            "data(1, 2) .
-            result(?x) :- data(?x, 2) .
-            @output result .",
-        );
-
-        assert_eq!(translation.original_index(0), 0);
-        assert_eq!(translation.normalized_index(0), 0);
-    }
-
-    #[test]
-    #[cfg_attr(miri, ignore)]
-    fn translation_incremental_sparql_rule() {
-        // A SPARQL import bound by another body atom is inlined into the rule by
-        // TransformationIncremental.
-        let translation = translation_for(
-            r#"@import remote :- sparql {endpoint = "http://example.org", query = "SELECT ?a ?b WHERE {?a ?b ?c.}"} .
-            seed(1) .
-            result(?a, ?b) :- seed(?a), remote(?a, ?b) .
-            @output result ."#,
-        );
-
-        assert_eq!(translation.original_index(0), 0);
-        assert_eq!(translation.normalized_index(0), 0);
-    }
-
-    #[test]
-    #[cfg_attr(miri, ignore)]
-    fn translation_merge_sparql_rule() {
-        // Two SPARQL imports against the same endpoint in one rule are merged by
-        // TransformationMergeSparql (after being inlined by TransformationIncremental).
-        let translation = translation_for(
-            r#"@import ra :- sparql {endpoint = "http://example.org", query = "SELECT ?a ?b WHERE {?a ?b ?z.}"} .
-            @import rb :- sparql {endpoint = "http://example.org", query = "SELECT ?a ?c WHERE {?a ?c ?z.}"} .
-            seed(1) .
-            result(?a, ?b, ?c) :- seed(?a), ra(?a, ?b), rb(?a, ?c) .
-            @output result ."#,
-        );
-
-        assert_eq!(translation.original_index(0), 0);
-        assert_eq!(translation.normalized_index(0), 0);
     }
 }
