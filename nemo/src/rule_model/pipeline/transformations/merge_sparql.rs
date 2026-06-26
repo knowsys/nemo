@@ -275,6 +275,8 @@ fn update_import(
 
 #[cfg(test)]
 mod test {
+    use std::assert_matches;
+
     use crate::{
         rule_file::RuleFile,
         rule_model::{
@@ -305,6 +307,6 @@ mod test {
         let transformed = inlined.transform(TransformationMergeSparql).unwrap();
         let rule = transformed.rules().next().unwrap();
 
-        assert!(matches!(rule.origin(), Origin::MergeSparql(id) if id == predecessor));
+        assert_matches!(rule.origin(), Origin::MergeSparql(id) if id == predecessor);
     }
 }

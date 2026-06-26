@@ -102,7 +102,7 @@ impl<'a> ProgramTransformation for TransformationGlobal<'a> {
 
 #[cfg(test)]
 mod test {
-    use std::collections::HashMap;
+    use std::{assert_matches, collections::HashMap};
 
     use crate::{
         rule_file::RuleFile,
@@ -130,6 +130,6 @@ mod test {
             .unwrap();
         let rule = transformed.rules().next().unwrap();
 
-        assert!(matches!(rule.origin(), Origin::Global(id) if id == original));
+        assert_matches!(rule.origin(), Origin::Global(id) if id == original);
     }
 }

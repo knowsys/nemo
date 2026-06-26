@@ -338,6 +338,8 @@ impl ProgramTransformation for TransformationIncremental {
 
 #[cfg(test)]
 mod test {
+    use std::assert_matches;
+
     use crate::{
         rule_file::RuleFile,
         rule_model::{
@@ -365,6 +367,6 @@ mod test {
         let transformed = handle.transform(TransformationIncremental::new()).unwrap();
         let rule = transformed.rules().next().unwrap();
 
-        assert!(matches!(rule.origin(), Origin::Incremental(id) if id == original));
+        assert_matches!(rule.origin(), Origin::Incremental(id) if id == original);
     }
 }
