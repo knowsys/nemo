@@ -38,7 +38,20 @@ pub enum Origin {
     },
 
     /// Rule that was created by normalizing a rule
+    /// (see [crate::rule_model::pipeline::transformations::normalize::TransformationNormalize]).
     Normalization(ProgramComponentId),
+
+    /// Rule that was created by substituting global variables in a rule
+    /// (see [crate::rule_model::pipeline::transformations::global::TransformationGlobal]).
+    Global(ProgramComponentId),
+
+    /// Rule that was created by inlining incremental imports into a rule
+    /// (see [crate::rule_model::pipeline::transformations::incremental::TransformationIncremental]).
+    Incremental(ProgramComponentId),
+
+    /// Rule that was created by merging SPARQL imports in a rule
+    /// (see [crate::rule_model::pipeline::transformations::merge_sparql::TransformationMergeSparql]).
+    MergeSparql(ProgramComponentId),
 }
 
 impl Origin {

@@ -6,7 +6,7 @@ use itertools::Itertools;
 
 use crate::rule_model::{
     components::{
-        IterableVariables,
+        ComponentIdentity, ComponentSource, IterableVariables,
         atom::Atom,
         import_export::clause::{ImportClause, ImportLiteral},
         literal::Literal,
@@ -19,6 +19,7 @@ use crate::rule_model::{
         },
     },
     error::ValidationReport,
+    origin::Origin,
     pipeline::commit::ProgramCommit,
     programs::{ProgramRead, ProgramWrite, handle::ProgramHandle},
 };
@@ -162,7 +163,12 @@ fn update_import(
         })
         .unwrap_or_default();
 
+    let original_id = rule.id();
     let mut rule = rule.clone();
+    // Record that this rule was derived from the original rule, so tracing can
+    // resolve it back and the rule-index translation between the original and
+    // the normalized program stays 1:1.
+    rule.set_origin(Origin::MergeSparql(original_id));
     rule.imports_mut().clear();
 
     if let Some(positive) = positive {

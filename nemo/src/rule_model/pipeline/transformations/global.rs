@@ -4,7 +4,8 @@ use std::collections::{HashMap, HashSet};
 
 use crate::rule_model::{
     components::{
-        ComponentSource, IterableVariables,
+        ComponentIdentity, ComponentSource, IterableVariables,
+        statement::Statement,
         term::primitive::{ground::GroundTerm, variable::global::GlobalVariable},
     },
     error::ValidationReport,
@@ -87,6 +88,13 @@ impl<'a> ProgramTransformation for TransformationGlobal<'a> {
             {
                 let mut new_statement = statement.clone();
                 substitution.apply(&mut new_statement);
+
+                // Record that this rule was derived from the original rule, so
+                // tracing can resolve it back and the rule-index translation
+                // between the original and the normalized program stays 1:1.
+                if let Statement::Rule(rule) = &mut new_statement {
+                    rule.set_origin(Origin::Global(statement.id()));
+                }
 
                 commit.add_statement(new_statement);
             } else {

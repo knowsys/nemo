@@ -39,6 +39,9 @@ pub fn tracing_resolve_origin_id(
         | Origin::Component(_)
         | Origin::Extern
         | Origin::Substitution { .. } => id,
-        Origin::Normalization(origin_id) => tracing_resolve_origin_id(handle, origin_id),
+        Origin::Normalization(origin_id)
+        | Origin::Global(origin_id)
+        | Origin::Incremental(origin_id)
+        | Origin::MergeSparql(origin_id) => tracing_resolve_origin_id(handle, origin_id),
     }
 }
