@@ -413,8 +413,6 @@ impl NemoEngine {
 
         let execution_parameters = ExecutionParameters::default();
 
-        // Build the engine from the program's existing handle, so that parsing,
-        // to keep the same program pipeline
         let engine = rt
             .block_on(ExecutionEngine::from_handle(
                 program.0,

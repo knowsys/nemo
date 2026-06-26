@@ -409,7 +409,8 @@ mod test {
     #[test]
     fn source_positions_line_and_column() {
         let source = "abc\nde\n\nf";
-        //            offsets: a0 b1 c2 \n3 d4 e5 \n6 \n7 f8
+
+        // offsets: a0 b1 c2 \n3 d4 e5 \n6 \n7 f8
         let positions = SourcePositions::new(source);
 
         // First character of the file: line 1, column 1.
@@ -436,7 +437,9 @@ mod test {
 
     #[test]
     fn source_positions_range() {
-        let source = "a(1).\nb(?x) :- a(?x).";
+        let source = "a(1).
+        b(?x) :- a(?x).";
+
         let positions = SourcePositions::new(source);
 
         // The rule starts right after the newline at offset 6.

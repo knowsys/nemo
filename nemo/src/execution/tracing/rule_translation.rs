@@ -45,45 +45,29 @@ impl RuleIdTranslation {
     pub(crate) fn new(handle: &ProgramHandle, normalized: &NormalizedProgram) -> Self {
         let original = handle.original_revision();
 
-        // Map each original rule's id to its position in the original program.
         let orig_index_by_id = original
             .rules()
             .enumerate()
             .map(|(index, rule)| (rule.id(), index))
             .collect::<HashMap<_, _>>();
 
-        // For each normalized rule, resolve the original rule it should be
-        // displayed as and record that rule's index in the original program.
-        //
-        // This relies on the transformations being one-to-one on rules and
-        // recording their provenance: if a normalized rule cannot be resolved to
-        // an original rule, a transformation created a rule without an origin
-        // back-pointer, and we fail loudly rather than return a wrong rule id.
-        let norm_to_orig = normalized
-            .rules()
-            .iter()
-            .map(|rule| {
-                let origin_id = tracing_resolve_origin_id(handle, rule.id());
-                *orig_index_by_id.get(&origin_id).expect(
-                    "a normalized rule has no corresponding original rule; a \
-                     transformation created a rule without recording its origin",
-                )
-            })
-            .collect::<Vec<usize>>();
+        let mut norm_to_orig = Vec::with_capacity(normalized.rules().len());
+        let mut orig_to_norm = HashMap::with_capacity(normalized.rules().len());
 
-        // Invert the mapping. As the transformations are one-to-one on rules, no
-        // two normalized rules map to the same original rule, so every insert is
-        // into a fresh slot (checked via the resulting length below).
-        let mut orig_to_norm = HashMap::with_capacity(norm_to_orig.len());
-        for (norm_index, &orig_index) in norm_to_orig.iter().enumerate() {
-            orig_to_norm.insert(orig_index, norm_index);
+        for (normalized_index, rule) in normalized.rules().iter().enumerate() {
+            let origin_id = tracing_resolve_origin_id(handle, rule.id());
+            let original_index = *orig_index_by_id
+                .get(&origin_id)
+                .expect("each normalized rule has a corresponding original rule");
+
+            norm_to_orig.push(original_index);
+
+            let previous = orig_to_norm.insert(original_index, normalized_index);
+            debug_assert!(
+                previous.is_none(),
+                "each original rule maps to at most one normalized rule"
+            );
         }
-        debug_assert_eq!(
-            orig_to_norm.len(),
-            norm_to_orig.len(),
-            "tracing rule translation: several normalized rules map to the same \
-             original rule; a transformation is not one-to-one on rules"
-        );
 
         Self {
             original,
@@ -98,7 +82,7 @@ impl RuleIdTranslation {
     ///
     /// # Panics
     /// Panics if `normalized` is not a valid normalized rule index.
-    pub(crate) fn original_rule(&self, normalized: usize) -> Rule {
+    pub(crate) fn original_rule_unchecked(&self, normalized: usize) -> Rule {
         self.original
             .rule_by_index(self.norm_to_orig[normalized])
             .expect("normalized rule maps to an existing original rule")
@@ -109,7 +93,7 @@ impl RuleIdTranslation {
     ///
     /// # Panics
     /// Panics if `normalized` is not a valid normalized rule index.
-    pub(crate) fn to_original(&self, normalized: usize) -> usize {
+    pub(crate) fn original_index(&self, normalized: usize) -> usize {
         self.norm_to_orig[normalized]
     }
 
@@ -117,7 +101,7 @@ impl RuleIdTranslation {
     ///
     /// # Panics
     /// Panics if `original` has no corresponding normalized rule.
-    pub(crate) fn to_normalized(&self, original: usize) -> usize {
+    pub(crate) fn normalized_index(&self, original: usize) -> usize {
         self.orig_to_norm
             .get(&original)
             .copied()
@@ -182,12 +166,18 @@ mod test {
         assert_eq!(normalized.rules().len(), 1);
 
         // Index translation round-trips between the single normalized and original rule.
-        assert_eq!(translation.to_original(0), 0);
-        assert_eq!(translation.to_normalized(0), 0);
+        assert_eq!(translation.original_index(0), 0);
+        assert_eq!(translation.normalized_index(0), 0);
 
         // The displayed rule is the original one, not the rewritten (normalized) one.
-        assert_eq!(translation.original_rule(0).to_string(), original_string);
-        assert_ne!(translation.original_rule(0).to_string(), rewritten_string);
+        assert_eq!(
+            translation.original_rule_unchecked(0).to_string(),
+            original_string
+        );
+        assert_ne!(
+            translation.original_rule_unchecked(0).to_string(),
+            rewritten_string
+        );
     }
 
     #[test]
@@ -195,24 +185,35 @@ mod test {
     fn translation_global_variable_rule() {
         // The global variable `$t` is substituted by TransformationGlobal.
         let translation = translation_for(
-            "@parameter $t = 5 .\ndata(5) .\nresult(?x) :- data(?x), ?x = $t .\n@output result .",
+            "@parameter $t = 5 .
+            data(5) .
+            result(?x) :- data(?x), ?x = $t .
+            @output result .",
         );
 
-        assert_eq!(translation.to_original(0), 0);
-        assert_eq!(translation.to_normalized(0), 0);
+        assert_eq!(translation.original_index(0), 0);
+        assert_eq!(translation.normalized_index(0), 0);
         // Resolution recovers the original rule, which still contains `$t`.
-        assert!(translation.original_rule(0).to_string().contains("$t"));
+        assert!(
+            translation
+                .original_rule_unchecked(0)
+                .to_string()
+                .contains("$t")
+        );
     }
 
     #[test]
     #[cfg_attr(miri, ignore)]
     fn translation_normalized_rule() {
         // The constant `2` in a positive body atom triggers TransformationNormalize.
-        let translation =
-            translation_for("data(1, 2) .\nresult(?x) :- data(?x, 2) .\n@output result .");
+        let translation = translation_for(
+            "data(1, 2) .
+            result(?x) :- data(?x, 2) .
+            @output result .",
+        );
 
-        assert_eq!(translation.to_original(0), 0);
-        assert_eq!(translation.to_normalized(0), 0);
+        assert_eq!(translation.original_index(0), 0);
+        assert_eq!(translation.normalized_index(0), 0);
     }
 
     #[test]
@@ -227,8 +228,8 @@ mod test {
             @output result ."#,
         );
 
-        assert_eq!(translation.to_original(0), 0);
-        assert_eq!(translation.to_normalized(0), 0);
+        assert_eq!(translation.original_index(0), 0);
+        assert_eq!(translation.normalized_index(0), 0);
     }
 
     #[test]
@@ -244,7 +245,7 @@ mod test {
             @output result ."#,
         );
 
-        assert_eq!(translation.to_original(0), 0);
-        assert_eq!(translation.to_normalized(0), 0);
+        assert_eq!(translation.original_index(0), 0);
+        assert_eq!(translation.normalized_index(0), 0);
     }
 }

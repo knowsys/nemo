@@ -113,7 +113,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         // Recursive call to this function for all successor nodes
 
         if let Some(successor) = &node.next {
-            let successor_rule = self.rule_translation.to_normalized(successor.rule);
+            let successor_rule = self.rule_translation.normalized_index(successor.rule);
             let rule = program.rules()[successor_rule].clone();
 
             for (index, (atom, node_atom)) in rule
@@ -158,7 +158,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         manager.add_discard(&address, discarded_columns);
 
         if let Some(successor) = &node.next {
-            let successor_rule = self.rule_translation.to_normalized(successor.rule);
+            let successor_rule = self.rule_translation.normalized_index(successor.rule);
             let rule = program.rules()[successor_rule].clone();
             let order = rule.variable_order().clone();
 
@@ -341,7 +341,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         let discarded_columns = manager.discard(&address);
 
         if let Some(successor) = &node.next {
-            let successor_rule = self.rule_translation.to_normalized(successor.rule);
+            let successor_rule = self.rule_translation.normalized_index(successor.rule);
             let rule = program.rules()[successor_rule].clone();
 
             let order = rule.variable_order().clone();
@@ -533,9 +533,9 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             .chase_program()
             .rules_with_body_predicate(predicate)
             .flat_map(|index| {
-                let logical_rule = self.rule_translation.original_rule(index);
+                let logical_rule = self.rule_translation.original_rule_unchecked(index);
                 TraceRule::all_possible_single_head_rules(
-                    self.rule_translation.to_original(index),
+                    self.rule_translation.original_index(index),
                     &logical_rule,
                 )
                 .collect::<Vec<_>>()
@@ -546,10 +546,10 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             .chase_program()
             .rules_with_head_predicate(predicate)
             .flat_map(|index| {
-                let logical_rule = self.rule_translation.original_rule(index);
+                let logical_rule = self.rule_translation.original_rule_unchecked(index);
 
                 TraceRule::possible_rules_for_head_predicate(
-                    self.rule_translation.to_original(index),
+                    self.rule_translation.original_index(index),
                     &logical_rule,
                     predicate,
                 )
@@ -584,7 +584,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         elements.push(element);
 
         if let Some(successor) = &node.next {
-            let successor_rule = self.rule_translation.to_normalized(successor.rule);
+            let successor_rule = self.rule_translation.normalized_index(successor.rule);
             let rule = self.chase_program().rules()[successor_rule].clone();
 
             // Call this function recursively for each successor

@@ -349,12 +349,12 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         &self.program
     }
 
-    /// Return a reference to the [ProgramHandle] backing this engine.
+    /// Return the current [ProgramHandle].
     ///
     /// Note that this represents the transformed program and not the original.
-    /// To obtain the original program, use [ProgramHandle::original_revision].
-    pub fn program_handle(&self) -> &ProgramHandle {
-        &self.program_handle
+    /// To obtain the original program, use [Self::original_program_handle].
+    pub fn current_program_handle(&self) -> ProgramHandle {
+        self.program_handle.clone()
     }
 
     /// Return the [ProgramHandle] of the original program, i.e. the program as
@@ -476,7 +476,9 @@ mod test {
     #[cfg_attr(miri, ignore)]
     async fn rule_source_position_reports_line() {
         // A fact on line 1 and a rule on line 2.
-        let source = "a(1).\nb(?x) :- a(?x).";
+        let source = "a(1).
+b(?x) :- a(?x).";
+
         let file = RuleFile::new(source.to_string(), "test".to_string());
 
         let engine = DefaultExecutionEngine::from_file(file, ExecutionParameters::default())

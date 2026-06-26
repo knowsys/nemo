@@ -112,7 +112,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 Box::pin(self.trace_tree_add_negation(child)).await;
             }
 
-            let rule_index = self.rule_translation.to_normalized(next.rule.id);
+            let rule_index = self.rule_translation.normalized_index(next.rule.id);
             let rule = self.chase_program().rules()[rule_index].clone();
             for negative_atom in rule.negative() {
                 let rows =
@@ -212,9 +212,9 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             .chase_program()
             .rules_with_body_predicate(&predicate)
             .flat_map(|index| {
-                let logical_rule = self.rule_translation.original_rule(index);
+                let logical_rule = self.rule_translation.original_rule_unchecked(index);
                 TraceRule::all_possible_single_head_rules(
-                    self.rule_translation.to_original(index),
+                    self.rule_translation.original_index(index),
                     &logical_rule,
                 )
                 .collect::<Vec<_>>()
@@ -225,9 +225,9 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             .chase_program()
             .rules_with_head_predicate(&predicate)
             .flat_map(|index| {
-                let logical_rule = self.rule_translation.original_rule(index);
+                let logical_rule = self.rule_translation.original_rule_unchecked(index);
                 TraceRule::possible_rules_for_head_predicate(
-                    self.rule_translation.to_original(index),
+                    self.rule_translation.original_index(index),
                     &logical_rule,
                     &predicate,
                 )
@@ -290,7 +290,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         }
 
         let chase_rule = &self.chase_program().rules()[rule_index].clone();
-        let logical_rule = self.rule_translation.original_rule(rule_index);
+        let logical_rule = self.rule_translation.original_rule_unchecked(rule_index);
 
         for (head_index, _) in chase_rule.head().iter().enumerate() {
             let Some(combination) = facts
@@ -373,7 +373,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 if let Some(children) = children_option {
                     result.next = Some(TreeForTableResponseSuccessor {
                         rule: TraceRule::from_rule_and_head(
-                            self.rule_translation.to_original(rule_index),
+                            self.rule_translation.original_index(rule_index),
                             &logical_rule,
                             head_index,
                             &logical_rule.head()[head_index],
@@ -494,9 +494,9 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 .program
                 .rules_with_body_predicate(&predicate)
                 .flat_map(|index| {
-                    let logical_rule = self.rule_translation.original_rule(index);
+                    let logical_rule = self.rule_translation.original_rule_unchecked(index);
                     TraceRule::all_possible_single_head_rules(
-                        self.rule_translation.to_original(index),
+                        self.rule_translation.original_index(index),
                         &logical_rule,
                     )
                     .collect::<Vec<_>>()
@@ -507,9 +507,9 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 .program
                 .rules_with_head_predicate(&predicate)
                 .flat_map(|index| {
-                    let logical_rule = self.rule_translation.original_rule(index);
+                    let logical_rule = self.rule_translation.original_rule_unchecked(index);
                     TraceRule::possible_rules_for_head_predicate(
-                        self.rule_translation.to_original(index),
+                        self.rule_translation.original_index(index),
                         &logical_rule,
                         &predicate,
                     )

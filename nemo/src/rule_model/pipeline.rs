@@ -56,7 +56,7 @@ impl ProgramPipeline {
     /// original program (see the tracing modules).
     pub fn original_revision(self: &Rc<Self>) -> ProgramHandle {
         debug_assert!(
-            self.revisions.len() > 0,
+            !self.revisions.is_empty(),
             "a pipeline a handle exists for always has at least one revision"
         );
 
@@ -67,7 +67,8 @@ impl ProgramPipeline {
     ///
     /// Has no effect if a source has already been set.
     pub fn set_source(&self, source: &str) {
-        let _ = self.source.set(SourcePositions::new(source));
+        let set = self.source.set(SourcePositions::new(source));
+        debug_assert!(set.is_ok(), "source position is not already set");
     }
 
     /// Return the [SourcePositions] index over the source text, if one was recorded.

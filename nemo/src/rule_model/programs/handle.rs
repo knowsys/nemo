@@ -115,9 +115,6 @@ impl ProgramHandle {
     }
 
     /// Return the [Rule] at the given index, counting rules only.
-    ///
-    /// This is the index used to refer to rules in tracing
-    /// (see [crate::execution::tracing::shared::RuleId]).
     pub fn rule_by_index(&self, index: usize) -> Option<&Rule> {
         self.rules().nth(index)
     }

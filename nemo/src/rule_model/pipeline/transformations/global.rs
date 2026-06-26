@@ -5,7 +5,6 @@ use std::collections::{HashMap, HashSet};
 use crate::rule_model::{
     components::{
         ComponentIdentity, ComponentSource, IterableVariables,
-        statement::Statement,
         term::primitive::{ground::GroundTerm, variable::global::GlobalVariable},
     },
     error::ValidationReport,
@@ -89,9 +88,7 @@ impl<'a> ProgramTransformation for TransformationGlobal<'a> {
                 let mut new_statement = statement.clone();
                 substitution.apply(&mut new_statement);
 
-                if let Statement::Rule(rule) = &mut new_statement {
-                    rule.set_origin(Origin::Global(statement.id()));
-                }
+                new_statement.set_origin(Origin::Global(statement.id()));
 
                 commit.add_statement(new_statement);
             } else {
