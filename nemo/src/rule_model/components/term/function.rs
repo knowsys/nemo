@@ -97,6 +97,11 @@ impl FunctionTerm {
         self.terms.iter_mut()
     }
 
+    /// Return an iterator over the arguments of this functino term.
+    pub fn into_terms(self) -> impl Iterator<Item = Term> {
+        self.terms.into_iter()
+    }
+
     /// Push a [Term] to the end of this function term.
     pub fn push(&mut self, term: Term) {
         self.terms.push(term);
@@ -320,6 +325,17 @@ impl IterablePrimitives for FunctionTerm {
                 .iter_mut()
                 .flat_map(|term| term.primitive_terms_mut()),
         )
+    }
+}
+
+impl From<(&Tag, Vec<Term>)> for FunctionTerm {
+    fn from((predicate, terms): (&Tag, Vec<Term>)) -> Self {
+        Self {
+            origin: Origin::Created,
+            id: ProgramComponentId::default(),
+            tag: predicate.clone(),
+            terms,
+        }
     }
 }
 

@@ -1,0 +1,4 @@
+A(!V), B(!Vprime), E(?X, ?Z) :- A(?X), B(?X), A(?Y), C(?Z) .
+
+@export A :- csv {} .
+

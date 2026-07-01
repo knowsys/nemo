@@ -1,0 +1,7 @@
+E(?Y, !Z) :- E(?X, ?Y) .
+R(?X, ?Y, !Z) :- E(?X, ?Xprime), E(?Y, ?Yprime) .
+X(?X, ?Z), Y(?Y, ?Z) :- R(?X, ?Y, ?Z) .
+
+@export E :- csv {} .
+@export R :- csv {} .
+@export Y :- csv {} .
