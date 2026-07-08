@@ -419,6 +419,26 @@ impl<'a> Token<'a> {
         })
     }
 
+    /// Parse [TokenKind::Name], allowing hyphens.
+    pub fn hyphenated_name(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
+        context(
+            ParserContext::token(TokenKind::Name),
+            recognize(pair(
+                context(ParserContext::AlphaNum, alpha1),
+                many0(alt((alphanumeric1, tag("_"), tag("%"), tag("-")))),
+            )),
+        )(input)
+        .map(|(rest_input, result)| {
+            (
+                rest_input,
+                Token {
+                    span: result.span,
+                    kind: TokenKind::Name,
+                },
+            )
+        })
+    }
+
     /// Parse [TokenKind::Iri].
     pub fn iri(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
         is_not("> \n")(input).map(|(rest, result)| {

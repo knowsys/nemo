@@ -65,6 +65,39 @@ impl<'a> StructureTag<'a> {
             _ => None,
         }
     }
+
+    pub(crate) fn parse_hyphenated(input: ParserInput<'a>) -> ParserResult<'a, Self>
+    where
+        Self: Sized + 'a,
+    {
+        let input_span = input.span;
+
+        context(
+            CONTEXT,
+            alt((
+                map(
+                    separated_pair(
+                        alt((Token::name, Token::empty)),
+                        Token::namespace_separator,
+                        Token::hyphenated_name,
+                    ),
+                    |(prefix, tag)| StructureTagKind::Prefixed { prefix, tag },
+                ),
+                map(Token::hyphenated_name, StructureTagKind::Plain),
+                map(Iri::parse, StructureTagKind::Iri),
+            )),
+        )(input)
+        .map(|(rest, kind)| {
+            let rest_span = rest.span;
+            (
+                rest,
+                Self {
+                    span: input_span.until_rest(&rest_span),
+                    kind,
+                },
+            )
+        })
+    }
 }
 
 impl Display for StructureTag<'_> {

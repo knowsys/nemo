@@ -91,7 +91,7 @@ impl<'a> ProgramAST<'a> for N3PathItemKind<'a> {
             map(
                 context(
                     ParserContext::notation3(Notation3Context::Iri),
-                    StructureTag::parse,
+                    StructureTag::parse_hyphenated,
                 ),
                 Self::Iri,
             ),
