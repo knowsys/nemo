@@ -85,10 +85,14 @@ impl<'a> Variable<'a> {
         })(input)
     }
 
-    pub(crate) fn universal_from_span_and_name(span: Span<'a>, name: Token<'a>) -> Self {
+    pub(crate) fn from_span_kind_and_name(
+        span: Span<'a>,
+        kind: VariableType,
+        name: Token<'a>,
+    ) -> Self {
         Self {
             span,
-            kind: VariableType::Universal,
+            kind,
             name: Some(name),
         }
     }

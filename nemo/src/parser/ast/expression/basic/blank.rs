@@ -14,10 +14,10 @@ use crate::parser::{
 #[derive(Clone, Debug)]
 pub struct Blank<'a> {
     /// [Span] associated with this node
-    span: Span<'a>,
+    pub(crate) span: Span<'a>,
 
     /// Name of the blank node
-    name: Token<'a>,
+    pub(crate) name: Token<'a>,
 }
 
 impl<'a> Blank<'a> {

@@ -9,7 +9,10 @@ use crate::parser::{
         ProgramAST,
         expression::{
             Expression,
-            basic::{constant::Constant, variable::Variable},
+            basic::{
+                constant::Constant,
+                variable::{Variable, VariableType},
+            },
         },
     },
     context::{Notation3Context, ParserContext, context},
@@ -88,6 +91,17 @@ impl<'a> N3Expression<'a> {
         {
             return Some(Variable::from(variable.clone()));
         }
+
+        if let Some(item) = self.try_as_single_forward_item()
+            && let N3PathItemKind::Bnode(bnode) = &item.kind
+        {
+            return Some(Variable::from_span_kind_and_name(
+                bnode.span,
+                VariableType::Existential,
+                bnode.name.clone(),
+            ));
+        }
+
         None
     }
 

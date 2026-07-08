@@ -36,7 +36,7 @@ impl<'a> N3Variable<'a> {
 
 impl<'a> From<N3Variable<'a>> for Variable<'a> {
     fn from(value: N3Variable<'a>) -> Self {
-        Variable::universal_from_span_and_name(value.span, value.name)
+        Variable::from_span_kind_and_name(value.span, VariableType::Universal, value.name)
     }
 }
 
