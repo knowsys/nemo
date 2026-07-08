@@ -16,6 +16,7 @@ use crate::parser::{
         token::Token,
     },
     context::{Notation3Context, ParserContext, context},
+    error::{recover_n3, report_error},
     input::ParserInput,
     span::Span,
 };
@@ -107,9 +108,13 @@ impl<'a> ProgramAST<'a> for N3Document<'a> {
             CONTEXT,
             pair(
                 opt(N3Comment::parse),
-                many0(terminated(
-                    N3Statement::parse,
-                    delimited(WSoC::parse, Token::dot, WSoC::parse),
+                many0(delimited(
+                    WSoC::parse,
+                    terminated(
+                        recover_n3(report_error(N3Statement::parse)),
+                        delimited(WSoC::parse, Token::dot, WSoC::parse),
+                    ),
+                    WSoC::parse,
                 )),
             ),
         )(input)

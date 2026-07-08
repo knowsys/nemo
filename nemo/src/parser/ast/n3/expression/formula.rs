@@ -1,6 +1,6 @@
 //! This module defines [N3Formula].
 
-use nom::{bytes::complete::tag, multi::separated_list1, sequence::delimited};
+use nom::{bytes::complete::tag, multi::separated_list0, sequence::delimited};
 
 use crate::parser::{
     ParserResult,
@@ -79,7 +79,7 @@ impl<'a> ProgramAST<'a> for N3Formula<'a> {
             CONTEXT,
             delimited(
                 delimited(WSoC::parse, tag("{"), WSoC::parse),
-                separated_list1(
+                separated_list0(
                     delimited(WSoC::parse, Token::dot, WSoC::parse),
                     N3Statement::parse,
                 ),

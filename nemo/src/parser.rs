@@ -131,18 +131,18 @@ impl<'a> Parser<'a> {
     }
 
     /// Parse the input as Notation3 Logic.
-    pub fn parse_n3(&'a self) -> Result<Program<'a>, (Box<N3Document<'a>>, ParserErrorReport)> {
+    pub fn parse_n3(self) -> Result<Program<'a>, (Box<N3Document<'a>>, ParserErrorReport)> {
         let parser_input = ParserInput::new(self.input, self.state.clone());
 
         let (_, document) = N3Document::parse(parser_input).expect("parsing should always succeed");
 
         if self.state.errors.borrow().is_empty() {
-            Ok(document.try_into_program()?)
+            document.try_into_program()
         } else {
             Err((
                 Box::new(document),
                 ParserErrorReport {
-                    errors: Rc::try_unwrap(self.state.errors.clone())
+                    errors: Rc::try_unwrap(self.state.errors)
                         .expect("there should only be one owner now")
                         .into_inner(),
                 },

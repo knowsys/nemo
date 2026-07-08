@@ -290,5 +290,12 @@ mod test {
         let result = all_consuming(N3Statement::parse)(parser_input);
 
         assert_matches!(result, Ok(_));
+
+        let rule = r#"{} => { :foo :bar :quux }"#;
+
+        let parser_input = ParserInput::new(rule, ParserState::default());
+        let result = all_consuming(N3Statement::parse)(parser_input);
+
+        assert_matches!(result, Ok(_));
     }
 }

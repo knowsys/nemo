@@ -17,6 +17,7 @@ use crate::error::rich::RichError;
 use super::{
     ParserInput, ParserResult,
     ast::{
+        n3::statement::{N3Statement, N3StatementKind},
         statement::{Statement, StatementKind},
         token::Token,
     },
@@ -114,6 +115,27 @@ pub(crate) fn recover<'a>(
     }
 }
 
+pub(crate) fn recover_n3<'a>(
+    mut parser: impl Parser<ParserInput<'a>, N3Statement<'a>, ParserErrorTree<'a>>,
+) -> impl FnMut(ParserInput<'a>) -> ParserResult<'a, N3Statement<'a>> {
+    move |input: ParserInput<'a>| match parser.parse(input.clone()) {
+        Ok((rest, statement)) => Ok((rest, statement)),
+        Err(err) if input.span.fragment().is_empty() => Err(err),
+        Err(nom::Err::Error(_)) | Err(nom::Err::Failure(_)) => {
+            let (rest_input, token) = skip_statement(input).expect("this parser cannot fail");
+            Ok((
+                rest_input,
+                N3Statement {
+                    span: token.span(),
+                    comment: None,
+                    kind: N3StatementKind::Error(token),
+                },
+            ))
+        }
+        Err(err) => Err(err),
+    }
+}
+
 pub(crate) fn translate_error_tree<'a>(error: &nom::Err<ParserErrorTree<'a>>) -> Vec<ParserError> {
     match error {
         nom::Err::Incomplete(_) => vec![],
@@ -121,9 +143,9 @@ pub(crate) fn translate_error_tree<'a>(error: &nom::Err<ParserErrorTree<'a>>) ->
     }
 }
 
-pub(crate) fn report_error<'a>(
-    mut parser: impl Parser<ParserInput<'a>, Statement<'a>, ParserErrorTree<'a>>,
-) -> impl FnMut(ParserInput<'a>) -> ParserResult<'a, Statement<'a>> {
+pub(crate) fn report_error<'a, T>(
+    mut parser: impl Parser<ParserInput<'a>, T, ParserErrorTree<'a>>,
+) -> impl FnMut(ParserInput<'a>) -> ParserResult<'a, T> {
     move |input| match parser.parse(input.clone()) {
         Ok(result) => Ok(result),
         Err(e) => {
