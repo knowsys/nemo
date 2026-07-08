@@ -286,7 +286,7 @@ impl<'a> ProgramAST<'a> for N3Triples<'a> {
 
             for (subject, object_predicate_list) in expressions {
                 if object_predicate_list.is_empty() {
-                    log::debug!("rest: {rest:?}");
+                    log::debug!("subject: {subject:?} rest: {rest:?}");
                     unimplemented!("subject-only triples not yet implemented") // TODO(MX): implement `[ :p :o ].`
                 }
 
@@ -350,5 +350,13 @@ mod test {
 
         assert_matches!(result, Ok(_));
         assert_eq!(result.unwrap().1.triples.len(), 3);
+
+        let rule = r#"{} => { :foo :bar :quux }"#;
+
+        let parser_input = ParserInput::new(rule, ParserState::default());
+        let result = all_consuming(N3Triples::parse)(parser_input);
+
+        assert_matches!(result, Ok(_));
+        assert_eq!(result.unwrap().1.triples.len(), 1);
     }
 }
