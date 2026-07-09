@@ -32,7 +32,11 @@ use crate::{
 
 use super::{
     components::{
-        fact::Fact, output::Output, rule::Rule, tag::Tag, term::{Term, primitive::ground::GroundTerm}
+        fact::Fact,
+        output::Output,
+        rule::Rule,
+        tag::Tag,
+        term::{Term, primitive::ground::GroundTerm},
     },
     error::{TranslationReport, translation_error::TranslationError},
 };

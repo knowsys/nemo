@@ -257,5 +257,14 @@ pub enum Notation3Context {
     Formula,
     /// Document
     #[assoc(name = "document")]
-    Document,    
+    Document,
+    /// Bnode property list
+    #[assoc(name = "bnode-property-list")]
+    BnodePropertyList,
+    /// Iri property list
+    #[assoc(name = "iri-property-list")]
+    IriPropertyList,
+    /// Collection
+    #[assoc(name = "collection")]
+    Collection,
 }

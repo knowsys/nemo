@@ -1,6 +1,11 @@
 //! This module defines [N3Formula].
 
-use nom::{bytes::complete::tag, multi::many0, sequence::delimited};
+use nom::{
+    bytes::complete::tag,
+    combinator::opt,
+    multi::separated_list0,
+    sequence::{delimited, pair},
+};
 
 use crate::parser::{
     ParserResult,
@@ -79,12 +84,14 @@ impl<'a> ProgramAST<'a> for N3Formula<'a> {
             CONTEXT,
             delimited(
                 delimited(WSoC::parse, tag("{"), WSoC::parse),
-                many0(delimited(
-                    WSoC::parse,
-                    N3Statement::parse,
+                separated_list0(
                     delimited(WSoC::parse, Token::dot, WSoC::parse),
-                )),
-                delimited(WSoC::parse, tag("}"), WSoC::parse),
+                    N3Statement::parse,
+                ),
+                pair(
+                    opt(pair(WSoC::parse, Token::dot)),
+                    delimited(WSoC::parse, tag("}"), WSoC::parse),
+                ),
             ),
         )(input)
         .map(|(rest, content)| {
@@ -121,6 +128,12 @@ mod test {
     #[cfg_attr(miri, ignore)]
     fn parse_paths() {
         let formula = r#"{ ?x a :Person }"#;
+
+        let parser_input = ParserInput::new(formula, ParserState::default());
+        let result = all_consuming(N3Formula::parse)(parser_input);
+
+        assert_matches!(result, Ok(_));
+        let formula = r#"{ ?x a :Person .}"#;
 
         let parser_input = ParserInput::new(formula, ParserState::default());
         let result = all_consuming(N3Formula::parse)(parser_input);

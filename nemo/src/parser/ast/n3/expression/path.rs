@@ -17,7 +17,10 @@ use crate::parser::{
     span::Span,
 };
 
-use super::formula::N3Formula;
+use super::{
+    formula::N3Formula,
+    propertylist::{N3BnodePropertyList, N3IriPropertyList},
+};
 
 /// A Notation3 expression
 #[derive(Clone, Debug)]
@@ -31,9 +34,9 @@ pub enum N3PathItemKind<'a> {
     /// Collection
     Collection, // FIXME
     /// Blank Node property list
-    BnodePropertyList, // FIXME
+    BnodePropertyList(N3BnodePropertyList<'a>),
     /// IRI property list
-    IriPropertyList, // FIXME
+    IriPropertyList(N3IriPropertyList<'a>),
     /// Literal
     Literal(N3Literal<'a>),
     /// Formula
@@ -48,8 +51,8 @@ impl N3PathItemKind<'_> {
             Self::Bnode(blank) => blank.context(),
             Self::Variable(n3_variable) => n3_variable.context(),
             Self::Collection => todo!(),
-            Self::BnodePropertyList => todo!(),
-            Self::IriPropertyList => todo!(),
+            Self::BnodePropertyList(list) => list.context(),
+            Self::IriPropertyList(list) => list.context(),
             Self::Literal(n3_literal) => n3_literal.context(),
             Self::Formula(n3_formula) => n3_formula.context(),
         }
@@ -63,8 +66,8 @@ impl<'a> ProgramAST<'a> for N3PathItemKind<'a> {
             Self::Bnode(blank) => blank.children(),
             Self::Variable(n3_variable) => n3_variable.children(),
             Self::Collection => todo!(),
-            Self::BnodePropertyList => todo!(),
-            Self::IriPropertyList => todo!(),
+            Self::BnodePropertyList(list) => list.children(),
+            Self::IriPropertyList(list) => list.children(),
             Self::Literal(n3_literal) => n3_literal.children(),
             Self::Formula(n3_formula) => n3_formula.children(),
         }
@@ -76,8 +79,8 @@ impl<'a> ProgramAST<'a> for N3PathItemKind<'a> {
             Self::Bnode(blank) => blank.span(),
             Self::Variable(n3_variable) => n3_variable.span(),
             Self::Collection => todo!(),
-            Self::BnodePropertyList => todo!(),
-            Self::IriPropertyList => todo!(),
+            Self::BnodePropertyList(list) => list.span(),
+            Self::IriPropertyList(list) => list.span(),
             Self::Literal(n3_literal) => n3_literal.span(),
             Self::Formula(n3_formula) => n3_formula.span(),
         }
@@ -88,6 +91,8 @@ impl<'a> ProgramAST<'a> for N3PathItemKind<'a> {
         Self: Sized + 'a,
     {
         alt((
+            // map(N3IriPropertyList::parse, Self::IriPropertyList),
+            // map(N3BnodePropertyList::parse, Self::BnodePropertyList),
             map(
                 context(
                     ParserContext::notation3(Notation3Context::Iri),

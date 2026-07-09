@@ -26,7 +26,9 @@ use crate::{
 pub mod formula;
 pub mod literal;
 pub mod path;
+pub mod propertylist;
 pub mod variable;
+//pub mod collection;
 
 /// How to translate a blank node.
 #[derive(Clone, Copy, Debug)]
@@ -89,9 +91,9 @@ impl<'a> N3Expression<'a> {
             N3PathItemKind::Variable(n3_variable) => {
                 Some(Primitive::universal_variable(&n3_variable.name()))
             }
-            N3PathItemKind::Collection => None,
-            N3PathItemKind::BnodePropertyList => None,
-            N3PathItemKind::IriPropertyList => None,
+            N3PathItemKind::Collection => todo!(),
+            N3PathItemKind::BnodePropertyList(_) => todo!(),
+            N3PathItemKind::IriPropertyList(_) => todo!(),
             N3PathItemKind::Literal(n3_literal) => Some(Primitive::ground(
                 n3_literal
                     .to_any_data_value(translation)

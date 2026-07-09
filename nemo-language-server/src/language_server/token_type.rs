@@ -26,7 +26,9 @@ impl TokenType {
             ParserContext::DataType => Some(TokenType::Type),
             ParserContext::Variable => Some(TokenType::Variable),
             ParserContext::Iri
-            | ParserContext::Notation3 { kind: Notation3Context::Iri }
+            | ParserContext::Notation3 {
+                kind: Notation3Context::Iri,
+            }
             | ParserContext::Constant
             | ParserContext::RdfLiteral
             | ParserContext::Blank
