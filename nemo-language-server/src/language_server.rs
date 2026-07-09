@@ -3,7 +3,7 @@ mod nemo_position;
 mod token_type;
 
 use lsp_document::{IndexedText, TextAdapter, TextMap};
-use nemo::api::{validate, validate_n3};
+use nemo::api::validate_n3;
 use nemo::error::context::ContextError;
 use nemo::parser::ast::n3::document::N3Document;
 use std::collections::HashMap;
