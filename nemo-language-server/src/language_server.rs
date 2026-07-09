@@ -3,7 +3,7 @@ mod nemo_position;
 mod token_type;
 
 use lsp_document::{IndexedText, TextAdapter, TextMap};
-use nemo::api::validate;
+use nemo::api::{validate, validate_n3};
 use nemo::error::context::ContextError;
 use nemo::parser::ast::n3::document::N3Document;
 use std::collections::HashMap;
@@ -176,7 +176,7 @@ impl Backend {
 
         let mut diagnostics = Vec::<Diagnostic>::new();
 
-        let report = validate(text.to_owned(), label);
+        let report = validate_n3(text.to_owned(), label);
 
         for warning in report.warnings() {
             if let Some(diagnostic) = Self::create_diagnostic(

@@ -126,6 +126,29 @@ pub fn validate(input: String, label: String) -> ProgramReport {
     report
 }
 
+/// Validate the `input` as Notation3 and create a [ProgramReport] for error reporting
+pub fn validate_n3(input: String, label: String) -> ProgramReport {
+    let file = RuleFile::new(input, label);
+    let handle = ProgramHandle::from_n3_file(&file);
+    let report = ProgramReport::new(file);
+    let parameters = ExecutionParameters::default();
+
+    let (program, report) = match report.merge_program_parser_report(handle) {
+        Ok(result) => result,
+        Err(report) => return report,
+    };
+
+    let (_program, report) = match report.merge_validation_report(
+        &program,
+        program.transform(TransformationDefault::new(&parameters)),
+    ) {
+        Ok(result) => result,
+        Err(report) => return report,
+    };
+
+    report
+}
+
 /// Executes the reasoning process of the [Engine].
 ///
 /// # Note
