@@ -131,13 +131,13 @@ impl<'a> Parser<'a> {
     }
 
     /// Parse the input as Notation3 Logic.
-    pub fn parse_n3(self) -> Result<Program<'a>, (Box<N3Document<'a>>, ParserErrorReport)> {
+    pub fn parse_n3(self) -> Result<N3Document<'a>, (Box<N3Document<'a>>, ParserErrorReport)> {
         let parser_input = ParserInput::new(self.input, self.state.clone());
 
         let (_, document) = N3Document::parse(parser_input).expect("parsing should always succeed");
 
         if self.state.errors.borrow().is_empty() {
-            document.try_into_program()
+            Ok(document)
         } else {
             Err((
                 Box::new(document),

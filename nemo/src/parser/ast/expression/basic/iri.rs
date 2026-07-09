@@ -21,7 +21,7 @@ pub struct Iri<'a> {
     span: Span<'a>,
 
     /// Part of the Iri that is the content
-    content: Token<'a>,
+    pub(crate) content: Token<'a>,
 }
 
 impl<'a> Iri<'a> {
@@ -31,6 +31,17 @@ impl<'a> Iri<'a> {
         Self {
             span,
             content: Token::from_span_and_kind(content_span, TokenKind::Iri),
+        }
+    }
+
+    pub(crate) fn is_absolute(&self) -> bool {
+        let iri = self.content();
+        let first_slash = iri.find('/');
+        let first_colon = iri.find(':');
+
+        match (first_colon, first_slash) {
+            (Some(colon), Some(slash)) if colon < slash => true,
+            _ => false,
         }
     }
 

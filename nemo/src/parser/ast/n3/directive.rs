@@ -16,6 +16,11 @@ impl<'a> N3Directive<'a> {
     }
 
     /// Return the underlying [Directive].
+    pub fn inner(&'a self) -> &'a Directive<'a> {
+        &self.0
+    }
+
+    /// Return the underlying [Directive].
     pub fn into_inner(self) -> Directive<'a> {
         self.0
     }

@@ -72,7 +72,7 @@ impl ProgramHandle {
         let mut commit = ProgramCommit::empty(ProgramPipeline::new(), ValidationReport::default());
 
         ASTProgramTranslation::default()
-            .translate(&ast, &mut commit)
+            .translate_n3(&ast, &mut commit)
             .warned(commit.submit().expect("No validation has occurred yet"))
     }
 

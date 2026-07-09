@@ -84,7 +84,13 @@ impl<'a> StructureTag<'a> {
                     |(prefix, tag)| StructureTagKind::Prefixed { prefix, tag },
                 ),
                 map(Token::hyphenated_name, StructureTagKind::Plain),
-                map(Iri::parse, StructureTagKind::Iri),
+                map(Iri::parse, |iri| {
+                    if iri.is_absolute() {
+                        StructureTagKind::Iri(iri)
+                    } else {
+                        StructureTagKind::Plain(iri.content)
+                    }
+                }),
             )),
         )(input)
         .map(|(rest, kind)| {

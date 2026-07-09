@@ -27,6 +27,12 @@ pub enum BooleanValue {
     True,
 }
 
+impl From<BooleanValue> for bool {
+    fn from(value: BooleanValue) -> Self {
+        matches!(value, BooleanValue::True)
+    }
+}
+
 /// AST node representing a Boolean node
 #[derive(Clone, Debug)]
 pub struct Boolean<'a> {

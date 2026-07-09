@@ -18,7 +18,10 @@ use crate::{
     error::report::ProgramReport,
     parser::{
         ParserErrorReport, ParserState,
-        ast::{self, ProgramAST},
+        ast::{
+            self, ProgramAST,
+            n3::{document::N3Document, statement::N3StatementKind},
+        },
         error::translate_error_tree,
         input::ParserInput,
     },
@@ -28,7 +31,12 @@ use crate::{
 };
 
 use super::{
-    components::{fact::Fact, rule::Rule, term::Term},
+    components::{
+        fact::Fact,
+        rule::Rule,
+        tag::Tag,
+        term::{Term, primitive::ground::GroundTerm},
+    },
     error::{TranslationReport, translation_error::TranslationError},
 };
 
@@ -45,7 +53,7 @@ pub struct ASTProgramTranslation {
     statement_attributes: Bag<KnownAttributes, Vec<Term>>,
 
     /// Current error report
-    report: TranslationReport,
+    pub(crate) report: TranslationReport,
 }
 
 impl ASTProgramTranslation {
@@ -114,9 +122,44 @@ impl ASTProgramTranslation {
         self.report
     }
 
+    /// Translate the given [ProgramAST] into a [ProgramWrite].
+    pub fn translate_n3<'a, Writer: Debug + ProgramWrite>(
+        mut self,
+        ast: &N3Document<'a>,
+        program: &mut Writer,
+    ) -> TranslationReport {
+        program.add_fact(Fact::new(
+            Tag::new("_dummy".to_string()),
+            [Term::Primitive(
+                super::components::term::primitive::Primitive::Ground(GroundTerm::constant(
+                    "_dummy",
+                )),
+            )],
+        ));
+
+        // Now handle facts and rules
+        for statement in ast.statements() {
+            match statement.kind() {
+                N3StatementKind::Directive(n3_directive) => {
+                    handle_define_directive(&mut self, n3_directive.inner())
+                }
+                N3StatementKind::Triples(n3_triples) => {
+                    for triple in n3_triples.iter() {
+                        triple.add_to_program(program, &mut self)
+                    }
+                }
+                N3StatementKind::Error(_token) => {
+                    unreachable!("Parser errors should have been reported already")
+                }
+            }
+        }
+
+        self.report
+    }
+
     /// Recreate the name from a [ast::tag::structure::StructureTag]
     /// by resolving prefixes or bases.
-    pub(super) fn resolve_tag<'a>(
+    pub(crate) fn resolve_tag<'a>(
         &mut self,
         tag: &ast::tag::structure::StructureTag<'a>,
     ) -> Option<String> {

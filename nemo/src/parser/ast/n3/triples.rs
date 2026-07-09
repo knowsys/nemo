@@ -1,28 +1,38 @@
 //! This module defines [N3Triples].
 
+use std::fmt::Debug;
+
 use nom::{
     multi::{separated_list0, separated_list1},
     sequence::{delimited, preceded, tuple},
 };
 use verb::{N3Verb, N3VerbKind};
 
-use crate::parser::{
-    ParserResult,
-    ast::{
-        ProgramAST,
-        expression::complex::atom::Atom,
-        guard::Guard,
-        n3::{comment::WSoC, expression::N3Expression},
-        rule::Rule,
-        sequence::simple::ExpressionSequenceSimple,
-        statement::{Statement, StatementKind},
-        tag::structure::StructureTag,
-        token::{Token, TokenKind},
+use crate::{
+    parser::{
+        ParserResult,
+        ast::{
+            self, ProgramAST,
+            expression::{self},
+            guard::Guard,
+            n3::{comment::WSoC, expression::N3Expression},
+            sequence::simple::ExpressionSequenceSimple,
+            statement::{Statement, StatementKind},
+            tag::structure::StructureTag,
+            token::{Token, TokenKind},
+        },
+        context::{Notation3Context, ParserContext, context},
+        input::ParserInput,
+        span::Span,
     },
-    context::{Notation3Context, ParserContext, context},
-    input::ParserInput,
-    span::Span,
+    rule_model::{
+        components::{atom::Atom, fact::Fact, literal::Literal, rule::Rule, tag::Tag, term::Term},
+        programs::ProgramWrite,
+        translation::ASTProgramTranslation,
+    },
 };
+
+use super::expression::BnodeTarget;
 
 pub mod verb;
 
@@ -67,8 +77,133 @@ impl<'a> N3Triple<'a> {
         N3VerbKind::from(self.predicate.clone()).is_backward_implication()
     }
 
+    pub(crate) fn add_to_program<Writer: Debug + ProgramWrite>(
+        &self,
+        program: &mut Writer,
+        translation: &mut ASTProgramTranslation,
+    ) {
+        let predicate = Tag::new("_TRIPLES".to_string());
+
+        if !self.is_rule() {
+            let fact = Fact::new(
+                predicate,
+                [
+                    Term::Primitive(
+                        self.subject
+                            .to_primitive(translation, BnodeTarget::Constant)
+                            .expect("is a valid primitive"),
+                    ),
+                    Term::Primitive(
+                        self.predicate
+                            .to_primitive(translation, BnodeTarget::Constant)
+                            .expect("is a valid primitive"),
+                    ),
+                    Term::Primitive(
+                        self.object
+                            .to_primitive(translation, BnodeTarget::Constant)
+                            .expect("is a valid primitive"),
+                    ),
+                ],
+            );
+            program.add_fact(fact);
+        } else {
+            let (body, head) = if self.is_forward_rule() {
+                (self.subject.clone(), self.object.clone())
+            } else {
+                (self.object.clone(), self.subject.clone())
+            };
+
+            let mut rule_body = body
+                .try_into_formula()
+                .expect("body is a valid formula")
+                .iter()
+                .flat_map(|statement| {
+                    statement
+                        .clone()
+                        .try_into_triples()
+                        .expect("formula contains only triples")
+                        .iter()
+                        .map(|triple| {
+                            Literal::Positive(Atom::new(
+                                predicate.clone(),
+                                [
+                                    Term::Primitive(
+                                        triple
+                                            .subject
+                                            .to_primitive(translation, BnodeTarget::Universal)
+                                            .expect("is a valid primitive"),
+                                    ),
+                                    Term::Primitive(
+                                        triple
+                                            .predicate
+                                            .to_primitive(translation, BnodeTarget::Universal)
+                                            .expect("is a valid primitive"),
+                                    ),
+                                    Term::Primitive(
+                                        triple
+                                            .object
+                                            .to_primitive(translation, BnodeTarget::Universal)
+                                            .expect("is a valid primitive"),
+                                    ),
+                                ],
+                            ))
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .collect::<Vec<_>>();
+
+            if rule_body.is_empty() {
+                rule_body.push(Literal::Positive(Atom::new(
+                    Tag::new("_dummy".to_string()),
+                    [Term::anonymous_variable()],
+                )));
+            }
+
+            let rule_head = head
+                .try_into_formula()
+                .expect("head is a valid formula")
+                .iter()
+                .flat_map(|statement| {
+                    statement
+                        .clone()
+                        .try_into_triples()
+                        .expect("formula contains only triples")
+                        .iter()
+                        .map(|triple| {
+                            Atom::new(
+                                predicate.clone(),
+                                [
+                                    Term::Primitive(
+                                        triple
+                                            .subject
+                                            .to_primitive(translation, BnodeTarget::Existential)
+                                            .expect("is a valid primitive"),
+                                    ),
+                                    Term::Primitive(
+                                        triple
+                                            .predicate
+                                            .to_primitive(translation, BnodeTarget::Existential)
+                                            .expect("is a valid primitive"),
+                                    ),
+                                    Term::Primitive(
+                                        triple
+                                            .object
+                                            .to_primitive(translation, BnodeTarget::Existential)
+                                            .expect("is a valid primitive"),
+                                    ),
+                                ],
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .collect::<Vec<_>>();
+
+            program.add_rule(Rule::new(rule_head, rule_body));
+        }
+    }
+
     /// Returns the rule body and rule head if this triple corresponds to a rule.
-    pub fn try_into_rule(self) -> Option<Rule<'a>> {
+    pub fn try_into_rule(self) -> Option<ast::rule::Rule<'a>> {
         if !self.is_rule() {
             return None;
         }
@@ -89,7 +224,7 @@ impl<'a> N3Triple<'a> {
             .expect("head is a valid formula")
             .try_into_guards();
 
-        Some(Rule::from_span_body_and_head(
+        Some(ast::rule::Rule::from_span_body_and_head(
             self.span, rule_body, rule_head,
         ))
     }
@@ -109,7 +244,7 @@ impl<'a> N3Triple<'a> {
                 span,
             })
         } else {
-            let atom = Atom::from(self);
+            let atom = expression::complex::atom::Atom::from(self);
 
             Some(Statement {
                 kind: StatementKind::Fact(Guard::from_atom(atom)),
@@ -121,7 +256,7 @@ impl<'a> N3Triple<'a> {
     }
 }
 
-impl<'a> From<N3Triple<'a>> for Atom<'a> {
+impl<'a> From<N3Triple<'a>> for expression::complex::atom::Atom<'a> {
     fn from(value: N3Triple<'a>) -> Self {
         let subject = value
             .subject

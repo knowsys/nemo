@@ -1,10 +1,6 @@
 //! This module defines [N3Formula].
 
-use nom::{
-    bytes::complete::tag,
-    multi::{many0, separated_list0},
-    sequence::delimited,
-};
+use nom::{bytes::complete::tag, multi::many0, sequence::delimited};
 
 use crate::parser::{
     ParserResult,

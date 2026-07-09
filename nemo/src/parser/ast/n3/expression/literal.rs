@@ -1,18 +1,25 @@
 //! This module defines [N3Literal].
 
+use nemo_physical::datavalues::{AnyDataValue, DataValueCreationError, syntax::XSD_PREFIX};
 use nom::{branch::alt, combinator::map};
 
-use crate::parser::{
-    ParserResult,
-    ast::{
-        ProgramAST,
-        expression::basic::{
-            boolean::Boolean, number::Number, rdf_literal::RdfLiteral, string::StringLiteral,
+use crate::{
+    parser::{
+        ParserResult,
+        ast::{
+            ProgramAST,
+            expression::basic::{
+                boolean::Boolean,
+                number::{Number, NumberValue},
+                rdf_literal::RdfLiteral,
+                string::StringLiteral,
+            },
         },
+        context::{Notation3Context, ParserContext, context},
+        input::ParserInput,
+        span::Span,
     },
-    context::{Notation3Context, ParserContext, context},
-    input::ParserInput,
-    span::Span,
+    rule_model::translation::ASTProgramTranslation,
 };
 
 /// A Notation3 variable
@@ -39,6 +46,38 @@ impl N3Literal<'_> {
             Self::Boolean(boolean) => boolean.context(),
             Self::String(string_literal) => string_literal.context(),
         }
+    }
+
+    pub(crate) fn to_any_data_value(
+        &self,
+        translation: &mut ASTProgramTranslation,
+    ) -> Result<AnyDataValue, DataValueCreationError> {
+        Ok(match self {
+            N3Literal::Rdf(rdf_literal) => {
+                let lexical_value = rdf_literal.content();
+                let datatype_iri = translation
+                    .resolve_tag(rdf_literal.tag())
+                    .unwrap_or_else(|| rdf_literal.tag().to_string());
+
+                AnyDataValue::new_from_typed_literal(lexical_value, datatype_iri)?
+            }
+            N3Literal::Numeric(number) => match number.value() {
+                NumberValue::Integer(value) => AnyDataValue::new_integer_from_i64(value),
+                NumberValue::Float(value) => AnyDataValue::new_float_from_f32(value)?,
+                NumberValue::Double(value) => AnyDataValue::new_double_from_f64(value)?,
+                NumberValue::Large(value) => {
+                    AnyDataValue::new_other(value, format!("{}decimal", XSD_PREFIX))
+                }
+            },
+            N3Literal::Boolean(boolean) => AnyDataValue::new_boolean(bool::from(boolean.value())),
+            N3Literal::String(string_literal) => {
+                if let Some(lang_tag) = string_literal.language_tag() {
+                    AnyDataValue::new_language_tagged_string(string_literal.content(), lang_tag)
+                } else {
+                    AnyDataValue::new_plain_string(string_literal.content())
+                }
+            }
+        })
     }
 }
 
