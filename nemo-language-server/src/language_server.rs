@@ -16,7 +16,6 @@ use futures::lock::Mutex;
 use line_index::{LineCol, LineIndex, WideEncoding};
 use lsp_component::LSPComponent;
 use nemo::parser::ast::ProgramAST;
-use nemo::parser::ast::program::Program;
 use nemo::parser::context::ParserContext;
 use nemo::parser::span::CharacterPosition;
 use nemo::parser::{Parser, ParserErrorReport};
@@ -378,8 +377,8 @@ impl LanguageServer for Backend {
         let text = info.text;
         let line_index = LineIndex::new(&text);
 
-        let (program, _): (Program, Option<ParserErrorReport>) = Parser::initialize(&text)
-            .parse()
+        let (program, _): (N3Document, Option<ParserErrorReport>) = Parser::initialize(&text)
+            .parse_n3()
             .map(|prg| (prg, None))
             .unwrap_or_else(|(prg, err)| (*prg, Some(err)));
 
@@ -405,8 +404,8 @@ impl LanguageServer for Backend {
         let text = info.text;
         let line_index = LineIndex::new(&text);
 
-        let (program, _): (Program, Option<ParserErrorReport>) = Parser::initialize(&text)
-            .parse()
+        let (program, _): (N3Document, Option<ParserErrorReport>) = Parser::initialize(&text)
+            .parse_n3()
             .map(|prg| (prg, None))
             .unwrap_or_else(|(prg, err)| (*prg, Some(err)));
 
