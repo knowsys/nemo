@@ -105,6 +105,7 @@ impl<'a> N3Triple<'a> {
                     ),
                 ],
             );
+            log::debug!("adding fact: {fact:?}");
             program.add_fact(fact);
         } else {
             let (body, head) = if self.is_forward_rule() {

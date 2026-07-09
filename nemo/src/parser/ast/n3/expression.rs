@@ -75,17 +75,9 @@ impl<'a> N3Expression<'a> {
         bnode: BnodeTarget,
     ) -> Option<Primitive> {
         match &self.try_as_single_forward_item()?.kind {
-            N3PathItemKind::Iri(structure_tag) => {
-                log::debug!(
-                    "resolving tag: {:?} ~> {:?}",
-                    structure_tag.to_string(),
-                    translation.resolve_tag(&structure_tag)
-                );
-
-                Some(Primitive::constant(
-                    &translation.resolve_tag(&structure_tag)?,
-                ))
-            }
+            N3PathItemKind::Iri(structure_tag) => Some(Primitive::constant(
+                &translation.resolve_tag(&structure_tag)?,
+            )),
             N3PathItemKind::Bnode(blank) => {
                 let name = format!("_bnode_{}", blank.name());
                 match bnode {

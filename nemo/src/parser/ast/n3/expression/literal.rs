@@ -71,10 +71,21 @@ impl N3Literal<'_> {
             },
             N3Literal::Boolean(boolean) => AnyDataValue::new_boolean(bool::from(boolean.value())),
             N3Literal::String(string_literal) => {
+                let content = string_literal
+                    .content()
+                    .replace(r#"\t"#, "\t")
+                    .replace(r#"\b"#, "\0u008")
+                    .replace(r#"\n"#, "\n")
+                    .replace(r#"\r"#, "\r")
+                    .replace(r#"\f"#, "\0u00c")
+                    .replace(r#"\""#, r#"""#)
+                    .replace(r#"\'"#, "'")
+                    .replace(r#"\\"#, r#"\"#);
+
                 if let Some(lang_tag) = string_literal.language_tag() {
-                    AnyDataValue::new_language_tagged_string(string_literal.content(), lang_tag)
+                    AnyDataValue::new_language_tagged_string(content, lang_tag)
                 } else {
-                    AnyDataValue::new_plain_string(string_literal.content())
+                    AnyDataValue::new_plain_string(content)
                 }
             }
         })

@@ -2,7 +2,10 @@
 #![allow(missing_docs)]
 
 use nom::{
-    branch::alt, bytes::complete::tag, combinator::opt, sequence::{delimited, pair}
+    branch::alt,
+    bytes::complete::tag,
+    combinator::opt,
+    sequence::{delimited, pair},
 };
 
 use crate::parser::{
@@ -71,7 +74,7 @@ impl<'a> StringLiteral<'a> {
                 tag("'"),
             ),
         ))(input)
-    }    
+    }
 
     /// Parse the language tag of the string.
     pub fn parse_language_tag(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
@@ -90,7 +93,6 @@ impl<'a> StringLiteral<'a> {
         )(input)
         .map(|(rest, (content, language_tag))| {
             let rest_span = rest.span;
-
             (
                 rest,
                 StringLiteral {
