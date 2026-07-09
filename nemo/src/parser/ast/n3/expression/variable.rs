@@ -4,11 +4,7 @@ use nom::{combinator::cut, sequence::preceded};
 
 use crate::parser::{
     ParserResult,
-    ast::{
-        ProgramAST,
-        expression::basic::variable::{Variable, VariableType},
-        token::Token,
-    },
+    ast::{ProgramAST, expression::basic::variable::VariableType, token::Token},
     context::{Notation3Context, ParserContext, context},
     input::ParserInput,
     span::Span,
@@ -34,11 +30,11 @@ impl<'a> N3Variable<'a> {
     }
 }
 
-impl<'a> From<N3Variable<'a>> for Variable<'a> {
-    fn from(value: N3Variable<'a>) -> Self {
-        Variable::from_span_kind_and_name(value.span, VariableType::Universal, value.name)
-    }
-}
+// impl<'a> From<N3Variable<'a>> for Variable<'a> {
+//     fn from(value: N3Variable<'a>) -> Self {
+//         Variable::from_span_kind_and_name(value.span, VariableType::Universal, value.name)
+//     }
+// }
 
 const CONTEXT: ParserContext = ParserContext::notation3(Notation3Context::Variable);
 

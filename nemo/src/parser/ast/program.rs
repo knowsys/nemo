@@ -36,18 +36,6 @@ pub struct Program<'a> {
 }
 
 impl<'a> Program<'a> {
-    pub(crate) fn from_span_comment_and_statements(
-        span: Span<'a>,
-        comment: Option<TopLevelComment<'a>>,
-        statements: Vec<Statement<'a>>,
-    ) -> Self {
-        Self {
-            span,
-            comment,
-            statements,
-        }
-    }
-
     /// Return the top-level comment attached to this program,
     /// if there is any
     pub fn comment(&self) -> Option<&TopLevelComment<'a>> {

@@ -13,6 +13,7 @@ use std::{collections::HashMap, fmt::Debug, fmt::Display, ops::Range};
 
 use attribute::{KnownAttributes, process_attributes};
 use directive::{handle_define_directive, handle_use_directive};
+use nemo_physical::datavalues::AnyDataValue;
 
 use crate::{
     error::report::ProgramReport,
@@ -27,6 +28,7 @@ use crate::{
     },
     rule_file::RuleFile,
     rule_model::programs::ProgramWrite,
+    syntax::n3::translation::{DUMMY_PREDICATE, FRESH_BNODE_PREFIX, TRIPLES_PREDICATE},
     util::bag::Bag,
 };
 
@@ -36,7 +38,10 @@ use super::{
         output::Output,
         rule::Rule,
         tag::Tag,
-        term::{Term, primitive::ground::GroundTerm},
+        term::{
+            Term,
+            primitive::{Primitive, ground::GroundTerm},
+        },
     },
     error::{TranslationReport, translation_error::TranslationError},
 };
@@ -55,12 +60,32 @@ pub struct ASTProgramTranslation {
 
     /// Current error report
     pub(crate) report: TranslationReport,
+
+    /// Counter for minted blank nodes
+    next_bnode: usize,
 }
 
 impl ASTProgramTranslation {
     /// Return a reference to attributes of the current statement.
     pub(crate) fn statement_attributes(&self) -> &Bag<KnownAttributes, Vec<Term>> {
         &self.statement_attributes
+    }
+
+    /// Return a fresh bnode index
+    pub(crate) fn fresh_bnode_index(&mut self) -> usize {
+        let result = self.next_bnode;
+        self.next_bnode += 1;
+        result
+    }
+
+    /// Return a fresh bnode name
+    pub(crate) fn fresh_bnode_name(&mut self) -> String {
+        format!("{FRESH_BNODE_PREFIX}_{}", self.fresh_bnode_index())
+    }
+
+    /// Return a fresh bnode index
+    pub(crate) fn fresh_bnode(&mut self) -> Term {
+        Term::Primitive(Primitive::constant(&self.fresh_bnode_name()))
     }
 }
 
@@ -130,15 +155,13 @@ impl ASTProgramTranslation {
         program: &mut Writer,
     ) -> TranslationReport {
         program.add_fact(Fact::new(
-            Tag::new("_dummy".to_string()),
-            [Term::Primitive(
-                super::components::term::primitive::Primitive::Ground(GroundTerm::constant(
-                    "_dummy",
-                )),
-            )],
+            Tag::new(DUMMY_PREDICATE.to_string()),
+            [Term::Primitive(Primitive::Ground(GroundTerm::new(
+                AnyDataValue::new_boolean(true),
+            )))],
         ));
 
-        program.add_output(Output::new(Tag::new("_TRIPLES".to_string())));
+        program.add_output(Output::new(Tag::new(TRIPLES_PREDICATE.to_string())));
 
         // Now handle facts and rules
         for statement in ast.statements() {

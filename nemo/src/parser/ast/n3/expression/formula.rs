@@ -7,19 +7,31 @@ use nom::{
     sequence::{delimited, pair},
 };
 
-use crate::parser::{
-    ParserResult,
-    ast::{
-        ProgramAST,
-        expression::complex::atom::Atom,
-        guard::Guard,
-        n3::{comment::WSoC, statement::N3Statement},
-        token::Token,
+use crate::{
+    parser::{
+        ParserResult,
+        ast::{
+            ProgramAST,
+            n3::{
+                comment::WSoC,
+                statement::{N3Statement, N3StatementKind},
+            },
+            token::Token,
+        },
+        context::{Notation3Context, ParserContext, context},
+        input::ParserInput,
+        span::Span,
     },
-    context::{Notation3Context, ParserContext, context},
-    input::ParserInput,
-    span::Span,
+    rule_model::{
+        components::{
+            tag::Tag,
+            term::{Term, primitive::Primitive},
+        },
+        translation::ASTProgramTranslation,
+    },
 };
+
+use super::TranslationFor;
 
 #[derive(Clone, Debug)]
 /// A Notation3 formula.
@@ -40,20 +52,37 @@ impl<'a> N3Formula<'a> {
         self.content.clone()
     }
 
-    /// Convert this formula into a list of [Guard]s.
-    pub fn try_into_guards(self) -> Vec<Guard<'a>> {
-        self.content
-            .into_iter()
-            .flat_map(|statement| {
-                statement
-                    .try_into_triples()
-                    .expect("formula contains only triples")
-                    .triples()
-                    .into_iter()
-                    .map(|triple| Guard::from_atom(Atom::from(triple)))
-                    .collect::<Vec<_>>()
-            })
-            .collect()
+    pub(crate) fn to_terms(
+        &self,
+        translation: &mut ASTProgramTranslation,
+        target: TranslationFor,
+    ) -> Vec<(Tag, Vec<Term>)> {
+        match target {
+            TranslationFor::Fact => {
+                unimplemented!("cannot translate a formula into terms for a fact")
+            }
+            TranslationFor::Body | TranslationFor::Head => {
+                let mut terms = Vec::new();
+
+                for statement in &self.statements() {
+                    match statement.kind() {
+                        N3StatementKind::Triples(triples) => {
+                            for triple in triples.iter() {
+                                terms.append(&mut triple.to_terms(translation, target));
+                            }
+                        }
+                        N3StatementKind::Directive(directive) => {
+                            log::warn!("ignoring directive {directive:?} in formula; not supported")
+                        }
+                        N3StatementKind::Error(token) => {
+                            log::warn!("ignoring erroneous statement: {token:?}")
+                        }
+                    }
+                }
+
+                terms
+            }
+        }
     }
 }
 

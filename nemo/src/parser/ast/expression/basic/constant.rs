@@ -23,13 +23,6 @@ impl<'a> Constant<'a> {
     pub fn tag(&self) -> &StructureTag<'a> {
         &self.constant
     }
-
-    pub(crate) fn from_span_and_tag(span: Span<'a>, tag: StructureTag<'a>) -> Self {
-        Self {
-            span,
-            constant: tag,
-        }
-    }
 }
 
 const CONTEXT: ParserContext = ParserContext::Constant;

@@ -89,15 +89,6 @@ impl<'a> N3Statement<'a> {
         &self.kind
     }
 
-    /// Return the underlying [N3Triples], if any.
-    pub fn try_into_triples(self) -> Option<N3Triples<'a>> {
-        if let N3StatementKind::Triples(triples) = self.kind {
-            return Some(triples);
-        }
-
-        None
-    }
-
     fn parse_sparql_directive(input: ParserInput<'a>) -> ParserResult<'a, N3StatementKind<'a>> {
         enum SparqlDirective<'a> {
             Base(Iri<'a>),

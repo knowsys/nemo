@@ -1,5 +1,6 @@
 //! This module defines [N3Verb].
 
+use delegate::delegate;
 use nom::{
     branch::alt,
     bytes::complete::tag,
@@ -7,25 +8,29 @@ use nom::{
     sequence::{delimited, preceded},
 };
 
-use crate::parser::{
-    ParserResult,
-    ast::{
-        ProgramAST,
-        n3::{
-            comment::WSoC,
-            expression::{N3Expression, path::N3PathDirection},
+use crate::{
+    parser::{
+        ParserResult,
+        ast::{
+            ProgramAST,
+            n3::{
+                comment::WSoC,
+                expression::{N3Expression, TranslationFor},
+            },
         },
-        tag::structure::StructureTagKind,
+        context::{Notation3Context, ParserContext},
+        input::ParserInput,
+        span::Span,
     },
-    context::{Notation3Context, ParserContext},
-    input::ParserInput,
-    span::Span,
+    rule_model::{
+        components::{tag::Tag, term::Term},
+        translation::ASTProgramTranslation,
+    },
+    syntax::n3::{
+        iri::{OWL_SAME_AS, RDF_TYPE},
+        translation::TRIPLES_PREDICATE,
+    },
 };
-
-const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
-const OWL_SAME_AS: &str = "http://www.w3.org/2002/07/owl#sameAs";
-const LOG_IMPLIES: &str = "http://www.w3.org/2000/10/swap/log#implies";
-const LOG_IMPLIED_BY: &str = "http://www.w3.org/2000/10/swap/log#impliedBy";
 
 /// The different kinds of verbs in Notation3.
 #[derive(Clone, Debug)]
@@ -65,56 +70,58 @@ impl N3VerbKind<'_> {
     }
 }
 
-impl<'a> From<N3Expression<'a>> for N3VerbKind<'a> {
-    fn from(value: N3Expression<'a>) -> Self {
-        if let Some(constant) = value.try_to_constant() {
-            match constant.tag().kind() {
-                StructureTagKind::Iri(iri) if iri.content() == RDF_TYPE => N3VerbKind::A,
-                StructureTagKind::Iri(iri) if iri.content() == OWL_SAME_AS => N3VerbKind::Equal,
-                StructureTagKind::Iri(iri) if iri.content() == LOG_IMPLIED_BY => {
-                    N3VerbKind::ImpliedBy
-                }
-                StructureTagKind::Iri(iri) if iri.content() == LOG_IMPLIES => N3VerbKind::Implies,
-                _ => N3VerbKind::Predicate(N3Expression::forward(value)),
-            }
-        } else {
-            if value
-                .path
-                .items
-                .first()
-                .expect("path should not be empty")
-                .0
-                == N3PathDirection::Forward
-            {
-                N3VerbKind::Predicate(N3Expression::forward(value))
-            } else {
-                N3VerbKind::Inverse(N3Expression::backward(value))
-            }
-        }
-    }
-}
-
 /// A Notation3 Verb.
 #[derive(Clone, Debug)]
 pub struct N3Verb<'a> {
     span: Span<'a>,
-    kind: N3VerbKind<'a>,
+    pub(crate) kind: N3VerbKind<'a>,
 }
 
-impl<'a> From<N3Verb<'a>> for N3Expression<'a> {
-    fn from(value: N3Verb<'a>) -> Self {
-        match value.kind {
-            N3VerbKind::Predicate(n3_expression) | N3VerbKind::Has(n3_expression) => {
-                N3Expression::forward(n3_expression)
-            }
-            N3VerbKind::Inverse(n3_expression) | N3VerbKind::IsOf(n3_expression) => {
-                N3Expression::backward(n3_expression)
-            }
-            N3VerbKind::A => N3Expression::from_span_and_iri(value.span, RDF_TYPE),
-            N3VerbKind::Equal => N3Expression::from_span_and_iri(value.span, OWL_SAME_AS),
-            N3VerbKind::ImpliedBy => N3Expression::from_span_and_iri(value.span, LOG_IMPLIED_BY),
-            N3VerbKind::Implies => N3Expression::from_span_and_iri(value.span, LOG_IMPLIES),
+impl N3Verb<'_> {
+    delegate! {
+        to self.kind {
+            /// Returns true if the verb corresponds to a forward implication.
+            pub fn is_forward_implication(&self) -> bool;
+
+            /// Returns true if the verb corresponds to a backward implication.
+            pub fn is_backward_implication(&self) -> bool;
+
+            /// Returns true if the verb corresponds to an implication.
+            pub fn is_implication(&self) -> bool;
         }
+    }
+
+    pub(crate) fn to_terms(
+        &self,
+        translation: &mut ASTProgramTranslation,
+        target: TranslationFor,
+        subject: Term,
+        object: Term,
+    ) -> Vec<(Tag, Vec<Term>)> {
+        let mut result = Vec::new();
+        let tag = Tag::new(TRIPLES_PREDICATE.to_string());
+
+        match &self.kind {
+            N3VerbKind::Predicate(expression) | N3VerbKind::Has(expression) => {
+                let (predicate, mut facts) = expression.to_terms(translation, target);
+                result.append(&mut facts);
+                result.push((tag, vec![subject, predicate, object]));
+            }
+            N3VerbKind::Inverse(expression) | N3VerbKind::IsOf(expression) => {
+                let (predicate, mut facts) = expression.to_terms(translation, target);
+                result.append(&mut facts);
+                result.push((tag, vec![object, predicate, subject]));
+            }
+            N3VerbKind::A => {
+                result.push((tag, vec![subject, Term::constant(RDF_TYPE), object]));
+            }
+            N3VerbKind::Equal => {
+                result.push((tag, vec![subject, Term::constant(OWL_SAME_AS), object]));
+            }
+            N3VerbKind::ImpliedBy | N3VerbKind::Implies => (),
+        };
+
+        result
     }
 }
 

@@ -84,18 +84,6 @@ impl<'a> Variable<'a> {
             VariableType::token(indicator.kind()).expect("unknown variable indicator")
         })(input)
     }
-
-    pub(crate) fn from_span_kind_and_name(
-        span: Span<'a>,
-        kind: VariableType,
-        name: Token<'a>,
-    ) -> Self {
-        Self {
-            span,
-            kind,
-            name: Some(name),
-        }
-    }
 }
 
 const CONTEXT: ParserContext = ParserContext::Variable;

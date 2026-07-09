@@ -502,7 +502,46 @@ pub mod import_export {
 }
 
 pub mod n3 {
-    //! Notation3 specific syntax
+    //! Notation3 specific syntax.
 
-    pub(crate) const COMMENT: &str = "#";
+    /// The comment character.
+    pub const COMMENT: &str = "#";
+
+    /// IRIs with special meaning.
+    pub mod iri {
+        /// Prefix definitions
+        pub mod prefixes {
+            /// The `rdf` prefix.
+            pub const RDF: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
+            /// The `rdf` prefix
+            pub const OWL: &str = "http://www.w3.org/2002/07/owl#";
+            /// The `log` prefix
+            pub const LOG: &str = "http://www.w3.org/2000/10/swap/log#";
+            /// The `math` prefix
+            pub const MATH: &str = "http://www.w3.org/2000/10/swap/math#";
+        }
+
+        /// `rdf:type`.
+        pub const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+        /// `owl:same-as`.
+        pub const OWL_SAME_AS: &str = "http://www.w3.org/2002/07/owl#sameAs";
+        /// `log:implies`.
+        pub const LOG_IMPLIES: &str = "http://www.w3.org/2000/10/swap/log#implies";
+        /// `log:implied-by`.
+        pub const LOG_IMPLIED_BY: &str = "http://www.w3.org/2000/10/swap/log#impliedBy";
+    }
+
+    /// Names used in translating Notation3 into Nemo rules
+    pub mod translation {
+        /// The predicate used for translating triples
+        pub const TRIPLES_PREDICATE: &str = "_TRIPLES";
+        /// The predicate used to simulate empty-body rules
+        pub const DUMMY_PREDICATE: &str = "_DUMMY";
+        /// The predicate base name used to simulate collections
+        pub const COLLECTION_PREDICATE_BASE: &str = "_COLLECTION";
+        /// The base IRI used for skolemising named bnodes.
+        pub const NAMED_BNODE_PREFIX: &str = "_bnode";
+        /// The base IRI used for skolemising anonymous bnodes.
+        pub const FRESH_BNODE_PREFIX: &str = "_fresh_bnode";
+    }
 }

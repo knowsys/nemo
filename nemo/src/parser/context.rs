@@ -246,6 +246,9 @@ pub enum Notation3Context {
     /// Subject
     #[assoc(name = "subject")]
     Subject,
+    /// Blank node
+    #[assoc(name = "bnode")]
+    Bnode,
     /// Path item
     #[assoc(name = "path item")]
     PathItem,

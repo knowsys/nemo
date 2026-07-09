@@ -6,20 +6,51 @@ use nom::{
     sequence::{delimited, pair, preceded, tuple},
 };
 
-use crate::parser::{
-    ParserResult,
-    ast::{
-        ProgramAST,
-        n3::{comment::WSoC, triples::verb::N3Verb},
-        tag::structure::StructureTag,
-        token::Token,
+use crate::{
+    parser::{
+        ParserResult,
+        ast::{
+            ProgramAST,
+            n3::{comment::WSoC, triples::verb::N3Verb},
+            tag::structure::StructureTag,
+            token::Token,
+        },
+        context::{Notation3Context, ParserContext, context},
+        input::ParserInput,
+        span::Span,
     },
-    context::{Notation3Context, ParserContext, context},
-    input::ParserInput,
-    span::Span,
+    rule_model::{
+        components::{
+            tag::Tag,
+            term::{Term, primitive::Primitive},
+        },
+        translation::ASTProgramTranslation,
+    },
 };
 
-use super::N3Expression;
+use super::{N3Expression, TranslationFor};
+
+fn terms_for_pairs<'a>(
+    translation: &mut ASTProgramTranslation,
+    target: TranslationFor,
+    subject: &Primitive,
+    pairs: &[(N3Verb, N3Expression)],
+) -> Vec<(Tag, Vec<Term>)> {
+    let mut result = Vec::new();
+
+    for (verb, object) in pairs {
+        let (object, mut facts) = object.to_terms(translation, target);
+        result.append(&mut facts);
+        result.append(&mut verb.to_terms(
+            translation,
+            target,
+            Term::Primitive(subject.clone()),
+            object,
+        ));
+    }
+
+    result
+}
 
 /// A Notation3 Bnode property list
 #[derive(Clone, Debug)]
@@ -27,6 +58,30 @@ pub struct N3BnodePropertyList<'a> {
     span: Span<'a>,
 
     pub(crate) pairs: Vec<(N3Verb<'a>, N3Expression<'a>)>,
+}
+
+impl<'a> N3BnodePropertyList<'a> {
+    pub(crate) fn to_terms(
+        &self,
+        translation: &mut ASTProgramTranslation,
+        target: TranslationFor,
+    ) -> (Primitive, Vec<(Tag, Vec<Term>)>) {
+        let name = translation.fresh_bnode_name();
+        let primitive = match target {
+            TranslationFor::Fact => Primitive::constant(&name),
+            TranslationFor::Body => Primitive::universal_variable(&name),
+            TranslationFor::Head => Primitive::existential_variable(&name),
+        };
+
+        let facts = terms_for_pairs(
+            translation,
+            target,
+            &Primitive::constant(&name),
+            &self.pairs,
+        );
+
+        (primitive, facts)
+    }
 }
 
 const BNODE_CONTEXT: ParserContext = ParserContext::notation3(Notation3Context::BnodePropertyList);
@@ -111,6 +166,22 @@ pub struct N3IriPropertyList<'a> {
 
     pub(crate) id: StructureTag<'a>,
     pub(crate) pairs: Vec<(N3Verb<'a>, N3Expression<'a>)>,
+}
+
+impl<'a> N3IriPropertyList<'a> {
+    pub(crate) fn to_terms(
+        &self,
+        translation: &mut ASTProgramTranslation,
+        target: TranslationFor,
+    ) -> (Primitive, Vec<(Tag, Vec<Term>)>) {
+        let iri = translation
+            .resolve_tag(&self.id)
+            .unwrap_or_else(|| self.id.to_string());
+        let constant = Primitive::constant(&iri);
+        let facts = terms_for_pairs(translation, target, &constant, &self.pairs);
+
+        (constant, facts)
+    }
 }
 
 const IRI_CONTEXT: ParserContext = ParserContext::notation3(Notation3Context::IriPropertyList);

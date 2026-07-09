@@ -330,12 +330,6 @@ pub struct Token<'a> {
     kind: TokenKind,
 }
 
-impl<'a> Token<'a> {
-    pub(crate) const fn from_span_and_kind(span: Span<'a>, kind: TokenKind) -> Self {
-        Self { span, kind }
-    }
-}
-
 impl<'a> ComponentSource for Token<'a> {
     type Source = Range<usize>;
 
@@ -518,14 +512,19 @@ impl<'a> Token<'a> {
         Self::parse_character_sequence(input, string::QUOTE)
     }
 
-    /// Parse [TokenKind::String].
+    /// Parse [TokenKind::String], but with single quotes as delimiters.
     pub fn string_single(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
         Self::parse_character_sequence(input, "'")
     }
 
-    /// Parse a multi-line [TokenKind::String].o
+    /// Parse a multi-line [TokenKind::String].
     pub fn multiline_string(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
         Self::parse_character_sequence_until(input, string::TRIPLE_QUOTE)
+    }
+
+    /// Parse a multi-line [TokenKind::String], but with single quotes as delimiters.
+    pub fn multiline_string_single(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
+        Self::parse_character_sequence_until(input, "'''")
     }
 
     /// Parse [TokenKind::FormatString].

@@ -7,14 +7,8 @@ use nom::{
 };
 
 use crate::parser::{
-    ParserErrorReport, ParserResult,
-    ast::{
-        ProgramAST,
-        comment::{doc::DocComment, toplevel::TopLevelComment},
-        program::Program,
-        statement::{Statement, StatementKind},
-        token::Token,
-    },
+    ParserResult,
+    ast::{ProgramAST, token::Token},
     context::{Notation3Context, ParserContext, context},
     error::{recover_n3, report_error},
     input::ParserInput,
@@ -23,7 +17,7 @@ use crate::parser::{
 
 use super::{
     comment::{N3Comment, WSoC},
-    statement::{N3Statement, N3StatementKind},
+    statement::N3Statement,
 };
 
 /// A Notation3 Graph.
@@ -46,39 +40,6 @@ impl<'a> N3Document<'a> {
     /// Return an iterator of statements in the graph.
     pub fn statements(&self) -> impl Iterator<Item = &N3Statement<'a>> {
         self.statements.iter()
-    }
-
-    /// Try to convert into a [Program].
-    pub fn try_into_program(self) -> Result<Program<'a>, (Box<N3Document<'a>>, ParserErrorReport)> {
-        let comment = self.comment.clone().map(TopLevelComment::from);
-        let mut statements = Vec::new();
-
-        for statement in self.statements {
-            let span = statement.span;
-            let comment = statement.comment.clone().map(DocComment::from);
-            let attributes = Vec::new();
-            match statement.kind {
-                N3StatementKind::Triples(n3_triples) => {
-                    statements.extend(n3_triples.into_statements());
-                }
-                N3StatementKind::Directive(n3_directive) => statements.push(Statement {
-                    kind: StatementKind::Directive(n3_directive.into_inner()),
-                    span,
-                    comment,
-                    attributes,
-                }),
-                N3StatementKind::Error(token) => statements.push(Statement {
-                    kind: StatementKind::Error(token.clone()),
-                    span,
-                    comment,
-                    attributes,
-                }),
-            };
-        }
-
-        Ok(Program::from_span_comment_and_statements(
-            self.span, comment, statements,
-        ))
     }
 }
 

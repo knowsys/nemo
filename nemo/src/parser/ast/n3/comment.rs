@@ -10,11 +10,7 @@ use nom::{
 
 use crate::parser::{
     ParserResult,
-    ast::{
-        ProgramAST,
-        comment::{doc::DocComment, line::LineComment, toplevel::TopLevelComment},
-        token::Token,
-    },
+    ast::{ProgramAST, comment::line::LineComment, token::Token},
     context::{ParserContext, context},
     input::ParserInput,
     span::Span,
@@ -108,18 +104,6 @@ impl<'a> WSoC<'a> {
                 },
             )
         })
-    }
-}
-
-impl<'a> From<N3Comment<'a>> for TopLevelComment<'a> {
-    fn from(value: N3Comment<'a>) -> Self {
-        TopLevelComment::from(value.0)
-    }
-}
-
-impl<'a> From<N3Comment<'a>> for DocComment<'a> {
-    fn from(value: N3Comment<'a>) -> Self {
-        DocComment::from(value.0)
     }
 }
 

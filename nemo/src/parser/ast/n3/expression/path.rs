@@ -1,23 +1,43 @@
 //! This module defines [N3Path].
 
-use std::ops::Not;
+use std::{collections::VecDeque, iter::chain, ops::Not};
 
-use nom::{branch::alt, bytes::complete::tag, combinator::map, multi::many0, sequence::pair};
+use nom::{
+    branch::alt,
+    bytes::complete::tag,
+    combinator::map,
+    multi::many0,
+    sequence::{delimited, pair},
+};
 
-use crate::parser::{
-    ParserResult,
-    ast::{
-        ProgramAST,
-        expression::basic::{blank::Blank, iri::Iri},
-        n3::expression::{literal::N3Literal, variable::N3Variable},
-        tag::structure::StructureTag,
+use crate::{
+    parser::{
+        ParserResult,
+        ast::{
+            ProgramAST,
+            expression::basic::blank::Blank,
+            n3::{
+                comment::WSoC,
+                expression::{literal::N3Literal, variable::N3Variable},
+            },
+            tag::structure::StructureTag,
+        },
+        context::{Notation3Context, ParserContext, context},
+        input::ParserInput,
+        span::Span,
     },
-    context::{Notation3Context, ParserContext, context},
-    input::ParserInput,
-    span::Span,
+    rule_model::{
+        components::{
+            tag::Tag,
+            term::{Term, primitive::Primitive},
+        },
+        translation::ASTProgramTranslation,
+    },
+    syntax::n3::translation::{DUMMY_PREDICATE, NAMED_BNODE_PREFIX, TRIPLES_PREDICATE},
 };
 
 use super::{
+    TranslationFor,
     formula::N3Formula,
     propertylist::{N3BnodePropertyList, N3IriPropertyList},
 };
@@ -27,6 +47,8 @@ use super::{
 pub enum N3PathItemKind<'a> {
     /// IRI
     Iri(StructureTag<'a>),
+    /// Anonymous blank node
+    Anonymous(Span<'a>),
     /// Blank node
     Bnode(Blank<'a>),
     /// Variable
@@ -48,6 +70,7 @@ impl N3PathItemKind<'_> {
     pub fn context_type(&self) -> ParserContext {
         match self {
             Self::Iri(iri) => iri.context(),
+            Self::Anonymous(_) => ParserContext::notation3(Notation3Context::Bnode),
             Self::Bnode(blank) => blank.context(),
             Self::Variable(n3_variable) => n3_variable.context(),
             Self::Collection => todo!(),
@@ -57,12 +80,96 @@ impl N3PathItemKind<'_> {
             Self::Formula(n3_formula) => n3_formula.context(),
         }
     }
+
+    fn parse_anonymous_bnode<'a>(input: ParserInput<'a>) -> ParserResult<'a, Span<'a>> {
+        let input_span = input.span;
+
+        delimited(tag("["), WSoC::parse, tag("]"))(input).map(|(rest, _)| {
+            let rest_span = rest.span;
+
+            (rest, input_span.until_rest(&rest_span))
+        })
+    }
+
+    pub(crate) fn to_terms(
+        &self,
+        translation: &mut ASTProgramTranslation,
+        target: TranslationFor,
+    ) -> (Term, Vec<(Tag, Vec<Term>)>) {
+        let mut terms = Vec::new();
+
+        let primitive = match self {
+            Self::Iri(structure_tag) => Primitive::constant(
+                &translation
+                    .resolve_tag(&structure_tag)
+                    .unwrap_or_else(|| structure_tag.to_string()),
+            ),
+            Self::Anonymous(_) => {
+                let name = translation.fresh_bnode_name();
+                match target {
+                    TranslationFor::Fact => Primitive::constant(&name),
+                    TranslationFor::Body => Primitive::universal_variable(&name),
+                    TranslationFor::Head => Primitive::existential_variable(&name),
+                }
+            }
+            Self::Formula(formula) => {
+                let primitive = match target {
+                    TranslationFor::Fact => Primitive::constant(&translation.fresh_bnode_name()),
+                    TranslationFor::Body | TranslationFor::Head => {
+                        let mut formula_terms = formula.to_terms(translation, target);
+                        terms.append(&mut formula_terms);
+
+                        match formula_terms
+                            .first()
+                            .map(|(_, terms)| terms.first())
+                            .flatten()
+                        {
+                            Some(Term::Primitive(primitive)) => primitive.clone(),
+                            _ => Primitive::constant(&DUMMY_PREDICATE),
+                        }
+                    }
+                };
+
+                primitive
+            }
+            Self::BnodePropertyList(list) => {
+                let (primitive, mut bnode_terms) = list.to_terms(translation, target);
+                terms.append(&mut bnode_terms);
+
+                primitive
+            }
+            Self::Bnode(blank) => {
+                let name = format!("{NAMED_BNODE_PREFIX}_{}", blank.name());
+                match target {
+                    TranslationFor::Fact => Primitive::constant(&name),
+                    TranslationFor::Body => Primitive::universal_variable(&name),
+                    TranslationFor::Head => Primitive::existential_variable(&name),
+                }
+            }
+            Self::Variable(n3_variable) => Primitive::universal_variable(&n3_variable.name()),
+            Self::Collection => todo!(),
+            Self::IriPropertyList(list) => {
+                let (primitive, mut list_terms) = list.to_terms(translation, target);
+                terms.append(&mut list_terms);
+
+                primitive
+            }
+            Self::Literal(n3_literal) => Primitive::ground(
+                n3_literal
+                    .to_any_data_value(translation)
+                    .expect("is a valid data value"),
+            ),
+        };
+
+        (Term::Primitive(primitive), terms)
+    }
 }
 
 impl<'a> ProgramAST<'a> for N3PathItemKind<'a> {
     fn children(&self) -> Vec<&dyn ProgramAST<'a>> {
         match self {
             Self::Iri(iri) => iri.children(),
+            Self::Anonymous(_) => Vec::default(),
             Self::Bnode(blank) => blank.children(),
             Self::Variable(n3_variable) => n3_variable.children(),
             Self::Collection => todo!(),
@@ -76,6 +183,7 @@ impl<'a> ProgramAST<'a> for N3PathItemKind<'a> {
     fn span(&self) -> Span<'a> {
         match self {
             Self::Iri(iri) => iri.span(),
+            Self::Anonymous(span) => span.clone(),
             Self::Bnode(blank) => blank.span(),
             Self::Variable(n3_variable) => n3_variable.span(),
             Self::Collection => todo!(),
@@ -91,8 +199,9 @@ impl<'a> ProgramAST<'a> for N3PathItemKind<'a> {
         Self: Sized + 'a,
     {
         alt((
-            // map(N3IriPropertyList::parse, Self::IriPropertyList),
-            // map(N3BnodePropertyList::parse, Self::BnodePropertyList),
+            map(N3IriPropertyList::parse, Self::IriPropertyList),
+            map(N3BnodePropertyList::parse, Self::BnodePropertyList),
+            map(N3Literal::parse, Self::Literal),
             map(
                 context(
                     ParserContext::notation3(Notation3Context::Iri),
@@ -100,9 +209,9 @@ impl<'a> ProgramAST<'a> for N3PathItemKind<'a> {
                 ),
                 Self::Iri,
             ),
+            map(Self::parse_anonymous_bnode, Self::Anonymous),
             map(Blank::parse, Self::Bnode),
             map(N3Variable::parse, Self::Variable),
-            map(N3Literal::parse, Self::Literal),
             map(N3Formula::parse, Self::Formula),
         ))(input)
     }
@@ -150,19 +259,17 @@ pub struct N3PathItem<'a> {
 }
 
 impl<'a> N3PathItem<'a> {
-    pub(crate) fn from_span_and_iri(span: Span<'a>, iri: &'a str) -> Self {
-        Self {
-            span,
-            kind: N3PathItemKind::Iri(StructureTag::from_span_and_iri(
-                span,
-                Iri::from_span_and_content(span, iri),
-            )),
-        }
-    }
-
     /// Return the [ParserContext] of the underlying expression type.
     pub fn context_type(&self) -> ParserContext {
         self.kind.context_type()
+    }
+
+    pub(crate) fn to_terms(
+        &self,
+        translation: &mut ASTProgramTranslation,
+        target: TranslationFor,
+    ) -> (Term, Vec<(Tag, Vec<Term>)>) {
+        self.kind.to_terms(translation, target)
     }
 }
 
@@ -201,53 +308,177 @@ impl<'a> ProgramAST<'a> for N3PathItem<'a> {
     }
 }
 
-/// A Notation3 path.
+/// The different kinds of Notation3 paths.
 #[derive(Clone, Debug)]
-pub struct N3Path<'a> {
-    span: Span<'a>,
-
-    pub(crate) items: Vec<(N3PathDirection, N3PathItem<'a>)>,
+pub enum N3PathKind<'a> {
+    /// A path consisting of a single [N3PathItem].
+    Single(N3PathItem<'a>),
+    /// A path consisting of an [N3PathItem] with a forward edge to another [N3PathKind].
+    Forward(N3PathItem<'a>, Box<N3PathKind<'a>>),
+    /// A path consisting of an [N3PathItem] with a backward edge to another [N3PathKind].
+    Backward(N3PathItem<'a>, Box<N3PathKind<'a>>),
 }
 
-impl<'a> N3Path<'a> {
-    pub(crate) fn from_span_and_iri(span: Span<'a>, iri: &'a str) -> Self {
-        Self {
-            span,
-            items: vec![(
-                N3PathDirection::Forward,
-                N3PathItem::from_span_and_iri(span, iri),
-            )],
+impl<'a> N3PathKind<'a> {
+    /// Create a new [N3PathKind] from an [N3PathItem] and a list of further path elements.
+    pub fn new(
+        first: N3PathItem<'a>,
+        mut further: VecDeque<(N3PathDirection, N3PathItem<'a>)>,
+    ) -> Self {
+        match further.pop_front() {
+            None => Self::Single(first),
+            Some((direction, next)) => match direction {
+                N3PathDirection::Forward => {
+                    Self::Forward(first, Box::new(Self::new(next, further)))
+                }
+                N3PathDirection::Backward => {
+                    Self::Backward(first, Box::new(Self::new(next, further)))
+                }
+            },
         }
     }
 
-    /// Return an iterator over the path components.
-    pub fn iter(&self) -> impl Iterator<Item = &(N3PathDirection, N3PathItem<'a>)> {
-        self.items.iter()
+    pub(crate) fn item(&'a self) -> &'a N3PathItem<'a> {
+        match self {
+            Self::Single(item) => item,
+            Self::Forward(item, _) | Self::Backward(item, _) => item,
+        }
     }
 
-    pub(crate) fn reverse(path: N3Path<'a>) -> Self {
-        Self {
-            span: path.span(),
-            items: path
-                .items
-                .into_iter()
-                .map(|(direction, item)| (!direction, item))
-                .collect(),
+    pub(crate) fn to_terms(
+        &self,
+        translation: &mut ASTProgramTranslation,
+        target: TranslationFor,
+    ) -> (Term, Vec<(Tag, Vec<Term>)>) {
+        match self {
+            Self::Single(item) => item.to_terms(translation, target),
+            Self::Forward(item, next) => {
+                let (subject, mut facts) = item.to_terms(translation, target);
+                let bnode = translation.fresh_bnode();
+
+                let (predicate, mut predicate_facts) = next.item().to_terms(translation, target);
+
+                facts.append(&mut predicate_facts);
+                facts.push((
+                    Tag::new(TRIPLES_PREDICATE.to_string()),
+                    vec![subject, predicate, bnode.clone()],
+                ));
+                let (end, mut rest_facts) = next.to_terms_continuation(translation, target, bnode);
+                facts.append(&mut rest_facts);
+
+                (end, facts)
+            }
+            Self::Backward(item, next) => {
+                let (object, mut facts) = item.to_terms(translation, target);
+                let bnode = translation.fresh_bnode();
+
+                let (predicate, mut predicate_facts) = next.item().to_terms(translation, target);
+
+                facts.append(&mut predicate_facts);
+                facts.push((
+                    Tag::new(TRIPLES_PREDICATE.to_string()),
+                    vec![bnode.clone(), predicate, object],
+                ));
+                let (end, mut rest_facts) = next.to_terms_continuation(translation, target, bnode);
+                facts.append(&mut rest_facts);
+
+                (end, facts)
+            }
+        }
+    }
+
+    pub(crate) fn to_terms_continuation(
+        &self,
+        translation: &mut ASTProgramTranslation,
+        target: TranslationFor,
+        term: Term,
+    ) -> (Term, Vec<(Tag, Vec<Term>)>) {
+        let tag = Tag::new(TRIPLES_PREDICATE.to_string());
+        match self {
+            Self::Single(item) => {
+                let (predicate, mut facts) = item.to_terms(translation, target);
+                let bnode = translation.fresh_bnode();
+                facts.push((tag, vec![term, predicate, bnode.clone()]));
+                (bnode, facts)
+            }
+            Self::Forward(item, next) => {
+                let (predicate, mut facts) = item.to_terms(translation, target);
+                let bnode = translation.fresh_bnode();
+                facts.push((tag, vec![term, predicate, bnode.clone()]));
+                let (end, mut rest_facts) = next.to_terms_continuation(translation, target, bnode);
+                facts.append(&mut rest_facts);
+
+                (end, facts)
+            }
+            Self::Backward(item, next) => {
+                let (predicate, mut facts) = item.to_terms(translation, target);
+                let bnode = translation.fresh_bnode();
+                facts.push((tag, vec![bnode.clone(), predicate, term]));
+                let (end, mut rest_facts) = next.to_terms_continuation(translation, target, bnode);
+                facts.append(&mut rest_facts);
+
+                (end, facts)
+            }
         }
     }
 }
 
 const PATH_CONTEXT: ParserContext = ParserContext::notation3(Notation3Context::Path);
 
+impl<'a> ProgramAST<'a> for N3PathKind<'a> {
+    fn children(&self) -> Vec<&dyn ProgramAST<'a>> {
+        match self {
+            N3PathKind::Single(item) => item.children(),
+            N3PathKind::Forward(item, next) => chain(item.children(), next.children()).collect(),
+            N3PathKind::Backward(item, next) => chain(item.children(), next.children()).collect(),
+        }
+    }
+
+    fn span(&self) -> Span<'a> {
+        match self {
+            N3PathKind::Single(item) => item.span(),
+            N3PathKind::Forward(item, _) => item.span(),
+            N3PathKind::Backward(item, _) => item.span(),
+        }
+    }
+
+    fn parse(input: ParserInput<'a>) -> ParserResult<'a, Self>
+    where
+        Self: Sized + 'a,
+    {
+        context(
+            PATH_CONTEXT,
+            pair(
+                N3PathItem::parse,
+                many0(pair(N3PathDirection::parse, N3PathItem::parse)),
+            ),
+        )(input)
+        .map(|(rest, (first, further))| (rest, Self::new(first, VecDeque::from(further))))
+    }
+
+    fn context(&self) -> ParserContext {
+        PATH_CONTEXT
+    }
+}
+
+/// A Notation3 path.
+#[derive(Clone, Debug)]
+pub struct N3Path<'a> {
+    span: Span<'a>,
+
+    kind: N3PathKind<'a>,
+}
+
+impl<'a> N3Path<'a> {
+    /// Return the underlying [N3PathKind].
+    pub fn kind(&'a self) -> &'a N3PathKind<'a> {
+        &self.kind
+    }
+}
+
 impl<'a> ProgramAST<'a> for N3Path<'a> {
     fn children(&self) -> Vec<&dyn ProgramAST<'a>> {
-        let mut result = Vec::<&dyn ProgramAST>::new();
-
-        for (_, child) in &self.items {
-            result.push(child);
-        }
-
-        result
+        self.kind.children()
     }
 
     fn span(&self) -> Span<'a> {
@@ -260,23 +491,14 @@ impl<'a> ProgramAST<'a> for N3Path<'a> {
     {
         let input_span = input.span;
 
-        context(
-            PATH_CONTEXT,
-            pair(
-                N3PathItem::parse,
-                many0(pair(N3PathDirection::parse, N3PathItem::parse)),
-            ),
-        )(input)
-        .map(|(rest, (first, mut further))| {
+        N3PathKind::parse(input).map(|(rest, kind)| {
             let rest_span = rest.span;
-            let mut items = vec![(N3PathDirection::Forward, first)];
-            items.append(&mut further);
 
             (
                 rest,
                 Self {
                     span: input_span.until_rest(&rest_span),
-                    items,
+                    kind,
                 },
             )
         })
@@ -326,6 +548,6 @@ mod test {
         let parser_input = ParserInput::new(path, ParserState::default());
         let result = all_consuming(N3Path::parse)(parser_input);
 
-        assert_matches!(result, Ok((_, N3Path { .. })));
+        assert_matches!(result, Ok(_));
     }
 }

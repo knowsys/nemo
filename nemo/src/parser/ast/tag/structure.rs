@@ -39,20 +39,6 @@ pub struct StructureTag<'a> {
 }
 
 impl<'a> StructureTag<'a> {
-    pub(crate) const fn from_span_and_token(span: Span<'a>, plain: Token<'a>) -> Self {
-        Self {
-            span,
-            kind: StructureTagKind::Plain(plain),
-        }
-    }
-
-    pub(crate) const fn from_span_and_iri(span: Span<'a>, iri: Iri<'a>) -> Self {
-        Self {
-            span,
-            kind: StructureTagKind::Iri(iri),
-        }
-    }
-
     /// Return the type of structure tag.
     pub fn kind(&self) -> &StructureTagKind<'a> {
         &self.kind

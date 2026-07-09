@@ -1,26 +1,19 @@
 //! This module defines [N3Expression].
 
-use formula::N3Formula;
-use path::{N3Path, N3PathDirection, N3PathItem, N3PathItemKind};
+use path::N3Path;
 
 use crate::{
     parser::{
         ParserResult,
-        ast::{
-            ProgramAST,
-            expression::{
-                Expression,
-                basic::{
-                    constant::Constant,
-                    variable::{Variable, VariableType},
-                },
-            },
-        },
+        ast::ProgramAST,
         context::{Notation3Context, ParserContext, context},
         input::ParserInput,
         span::Span,
     },
-    rule_model::{components::term::primitive::Primitive, translation::ASTProgramTranslation},
+    rule_model::{
+        components::{tag::Tag, term::Term},
+        translation::ASTProgramTranslation,
+    },
 };
 
 pub mod formula;
@@ -30,15 +23,15 @@ pub mod propertylist;
 pub mod variable;
 //pub mod collection;
 
-/// How to translate a blank node.
+/// What to translate for
 #[derive(Clone, Copy, Debug)]
-pub enum BnodeTarget {
-    /// Blank node should be turned into a constant (skolemised).
-    Constant,
-    /// Blank node should be turned into a universally quantified variable.
-    Universal,
-    /// Blank node should be turned into an existentially quantified variable.    
-    Existential,
+pub enum TranslationFor {
+    /// We are translating into (part of) a fact.
+    Fact,
+    /// We are translating into (part of) a rule body.
+    Body,
+    /// We are translating into (part of) a rule head.
+    Head,
 }
 
 /// A Notation3 expression
@@ -50,128 +43,12 @@ pub struct N3Expression<'a> {
 }
 
 impl<'a> N3Expression<'a> {
-    pub(crate) fn from_span_and_iri(span: Span<'a>, iri: &'a str) -> Self {
-        Self {
-            span,
-            path: N3Path::from_span_and_iri(span, iri),
-        }
-    }
-
-    pub(crate) fn forward(expression: N3Expression<'a>) -> Self {
-        Self {
-            span: expression.span(),
-            path: expression.path,
-        }
-    }
-
-    pub(crate) fn backward(expression: N3Expression<'a>) -> Self {
-        Self {
-            span: expression.span(),
-            path: N3Path::reverse(expression.path),
-        }
-    }
-
-    pub(crate) fn to_primitive(
+    pub(crate) fn to_terms(
         &self,
         translation: &mut ASTProgramTranslation,
-        bnode: BnodeTarget,
-    ) -> Option<Primitive> {
-        match &self.try_as_single_forward_item()?.kind {
-            N3PathItemKind::Iri(structure_tag) => Some(Primitive::constant(
-                &translation.resolve_tag(&structure_tag)?,
-            )),
-            N3PathItemKind::Bnode(blank) => {
-                let name = format!("_bnode_{}", blank.name());
-                match bnode {
-                    BnodeTarget::Constant => Some(Primitive::constant(&name)),
-                    BnodeTarget::Universal => Some(Primitive::universal_variable(&name)),
-                    BnodeTarget::Existential => Some(Primitive::existential_variable(&name)),
-                }
-            }
-            N3PathItemKind::Variable(n3_variable) => {
-                Some(Primitive::universal_variable(&n3_variable.name()))
-            }
-            N3PathItemKind::Collection => todo!(),
-            N3PathItemKind::BnodePropertyList(_) => todo!(),
-            N3PathItemKind::IriPropertyList(_) => todo!(),
-            N3PathItemKind::Literal(n3_literal) => Some(Primitive::ground(
-                n3_literal
-                    .to_any_data_value(translation)
-                    .expect("is a valid data value"),
-            )),
-            N3PathItemKind::Formula(_) => None,
-        }
-    }
-
-    fn try_as_single_forward_item(&self) -> Option<&N3PathItem<'a>> {
-        if self.path.items.len() == 1
-            && let Some((N3PathDirection::Forward, item)) = self.path.items.first()
-        {
-            return Some(item);
-        }
-
-        None
-    }
-
-    fn try_into_single_forward_item(mut self) -> Option<N3PathItem<'a>> {
-        if self.path.items.len() == 1
-            && let (N3PathDirection::Forward, item) = self.path.items.remove(0)
-        {
-            return Some(item);
-        }
-
-        None
-    }
-
-    pub(crate) fn try_into_formula(self) -> Option<N3Formula<'a>> {
-        if let Some(item) = self.try_into_single_forward_item()
-            && let N3PathItemKind::Formula(formula) = item.kind
-        {
-            return Some(formula);
-        }
-
-        None
-    }
-
-    pub(crate) fn try_to_variable(&self) -> Option<Variable<'a>> {
-        if let Some(item) = self.try_as_single_forward_item()
-            && let N3PathItemKind::Variable(variable) = &item.kind
-        {
-            return Some(Variable::from(variable.clone()));
-        }
-
-        if let Some(item) = self.try_as_single_forward_item()
-            && let N3PathItemKind::Bnode(bnode) = &item.kind
-        {
-            return Some(Variable::from_span_kind_and_name(
-                bnode.span,
-                VariableType::Existential,
-                bnode.name.clone(),
-            ));
-        }
-
-        None
-    }
-
-    pub(crate) fn try_to_constant(&self) -> Option<Constant<'a>> {
-        if let Some(item) = self.try_as_single_forward_item()
-            && let N3PathItemKind::Iri(iri) = &item.kind
-        {
-            return Some(Constant::from_span_and_tag(self.span, iri.clone()));
-        }
-        None
-    }
-
-    pub(crate) fn try_to_expression(&self) -> Option<Expression<'a>> {
-        if let Some(variable) = self.try_to_variable() {
-            return Some(Expression::Variable(variable));
-        }
-
-        if let Some(constant) = self.try_to_constant() {
-            return Some(Expression::Constant(constant));
-        }
-
-        None
+        target: TranslationFor,
+    ) -> (Term, Vec<(Tag, Vec<Term>)>) {
+        self.path.kind().to_terms(translation, target)
     }
 }
 

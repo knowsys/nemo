@@ -6,10 +6,7 @@ use crate::parser::context::{ParserContext, context};
 
 use super::{
     ProgramAST,
-    expression::{
-        Expression,
-        complex::{atom::Atom, infix::InfixExpression},
-    },
+    expression::{Expression, complex::infix::InfixExpression},
 };
 
 /// An expression that is the building block of rules.
@@ -28,10 +25,6 @@ impl<'a> Guard<'a> {
             Guard::Expression(expression) => expression.context_type(),
             Guard::Infix(infix) => infix.context(),
         }
-    }
-
-    pub(crate) fn from_atom(atom: Atom<'a>) -> Self {
-        Self::Expression(Expression::Atom(atom))
     }
 }
 

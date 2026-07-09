@@ -22,16 +22,6 @@ pub struct ExpressionSequenceSimple<'a> {
 }
 
 impl<'a> ExpressionSequenceSimple<'a> {
-    pub(crate) fn from_span_and_expressions(
-        span: Span<'a>,
-        expressions: Vec<Expression<'a>>,
-    ) -> Self {
-        Self {
-            _span: span,
-            expressions,
-        }
-    }
-
     /// Return an iterator over the [Expression]s.
     pub fn iter(&self) -> impl Iterator<Item = &Expression<'a>> {
         self.into_iter()

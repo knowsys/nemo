@@ -5,10 +5,7 @@ use nom::sequence::delimited;
 
 use crate::parser::{
     ParserResult,
-    ast::{
-        ProgramAST,
-        token::{Token, TokenKind},
-    },
+    ast::{ProgramAST, token::Token},
     context::{ParserContext, context},
     input::ParserInput,
     span::Span,
@@ -25,15 +22,6 @@ pub struct Iri<'a> {
 }
 
 impl<'a> Iri<'a> {
-    pub(crate) fn from_span_and_content(span: Span<'a>, content: &'a str) -> Self {
-        let content_span = Span::new(content);
-
-        Self {
-            span,
-            content: Token::from_span_and_kind(content_span, TokenKind::Iri),
-        }
-    }
-
     pub(crate) fn is_absolute(&self) -> bool {
         let iri = self.content();
         let first_slash = iri.find('/');

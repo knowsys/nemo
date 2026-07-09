@@ -69,6 +69,11 @@ impl<'a> StringLiteral<'a> {
                 Token::quote,
             ),
             delimited(
+                tag("'''"),
+                alt((Token::multiline_string_single, Token::empty)),
+                tag("'''"),
+            ),
+            delimited(
                 tag("'"),
                 alt((Token::string_single, Token::empty)),
                 tag("'"),
