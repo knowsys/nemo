@@ -1,4 +1,4 @@
-use nemo::parser::context::ParserContext;
+use nemo::parser::context::{Notation3Context, ParserContext};
 use strum_macros::EnumIter;
 use tower_lsp::lsp_types::SemanticTokenType;
 
@@ -26,6 +26,7 @@ impl TokenType {
             ParserContext::DataType => Some(TokenType::Type),
             ParserContext::Variable => Some(TokenType::Variable),
             ParserContext::Iri
+            | ParserContext::Notation3 { kind: Notation3Context::Iri }
             | ParserContext::Constant
             | ParserContext::RdfLiteral
             | ParserContext::Blank
@@ -40,6 +41,7 @@ impl TokenType {
             ParserContext::Comment | ParserContext::DocComment | ParserContext::TopLevelComment => {
                 Some(TokenType::Comment)
             }
+
             // TODO: imports, base, etc. (everything starting with @ should be handled via
             // ParserContext::Token {} but this requires changes to the children method of the AST
             // nodes in the nemo crate)
