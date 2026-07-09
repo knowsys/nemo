@@ -2,9 +2,7 @@
 #![allow(missing_docs)]
 
 use nom::{
-    branch::alt,
-    combinator::opt,
-    sequence::{delimited, pair},
+    branch::alt, bytes::complete::tag, combinator::opt, sequence::{delimited, pair}
 };
 
 use crate::parser::{
@@ -54,7 +52,8 @@ impl<'a> StringLiteral<'a> {
         ))(input)
     }
 
-    pub fn parse_string(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
+    /// Parse the main part of the string, accepting Notation3 delimiters.
+    pub fn parse_string_n3(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
         alt((
             delimited(
                 Token::triple_quote,
@@ -66,12 +65,41 @@ impl<'a> StringLiteral<'a> {
                 alt((Token::string, Token::empty)),
                 Token::quote,
             ),
+            delimited(
+                tag("'"),
+                alt((Token::string_single, Token::empty)),
+                tag("'"),
+            ),
         ))(input)
     }    
 
     /// Parse the language tag of the string.
     pub fn parse_language_tag(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
         pair(Token::lang_tag_indicator, Token::name)(input).map(|(rest, (_, tag))| (rest, tag))
+    }
+
+    pub(crate) fn parse_n3(input: ParserInput<'a>) -> ParserResult<'a, Self>
+    where
+        Self: Sized + 'a,
+    {
+        let input_span = input.span;
+
+        context(
+            CONTEXT,
+            pair(Self::parse_string_n3, opt(Self::parse_language_tag)),
+        )(input)
+        .map(|(rest, (content, language_tag))| {
+            let rest_span = rest.span;
+
+            (
+                rest,
+                StringLiteral {
+                    span: input_span.until_rest(&rest_span),
+                    content,
+                    language_tag,
+                },
+            )
+        })
     }
 }
 

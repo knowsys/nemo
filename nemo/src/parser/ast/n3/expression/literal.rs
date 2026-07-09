@@ -110,7 +110,7 @@ impl<'a> ProgramAST<'a> for N3Literal<'a> {
                 map(Boolean::parse, Self::Boolean),
                 map(Number::parse, Self::Numeric),
                 map(RdfLiteral::parse, Self::Rdf),
-                map(StringLiteral::parse, Self::String),
+                map(StringLiteral::parse_n3, Self::String),
             )),
         )(input)
     }

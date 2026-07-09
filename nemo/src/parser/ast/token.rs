@@ -518,6 +518,11 @@ impl<'a> Token<'a> {
         Self::parse_character_sequence(input, string::QUOTE)
     }
 
+    /// Parse [TokenKind::String].
+    pub fn string_single(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
+        Self::parse_character_sequence(input, "'")
+    }
+
     /// Parse a multi-line [TokenKind::String].o
     pub fn multiline_string(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
         Self::parse_character_sequence_until(input, string::TRIPLE_QUOTE)
