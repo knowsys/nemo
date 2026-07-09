@@ -5,6 +5,7 @@ mod token_type;
 use lsp_document::{IndexedText, TextAdapter, TextMap};
 use nemo::api::validate;
 use nemo::error::context::ContextError;
+use nemo::parser::ast::n3::document::N3Document;
 use std::collections::HashMap;
 use std::vec;
 use strum::IntoEnumIterator;
@@ -331,8 +332,8 @@ impl LanguageServer for Backend {
                 .map_err(Into::into)
                 .map_err(jsonrpc_error)?;
 
-        let (program, _): (Program, Option<ParserErrorReport>) = Parser::initialize(&text)
-            .parse()
+        let (program, _): (N3Document, Option<ParserErrorReport>) = Parser::initialize(&text)
+            .parse_n3()
             .map(|prg| (prg, None))
             .unwrap_or_else(|(prg, err)| (*prg, Some(err)));
 
@@ -456,8 +457,8 @@ impl LanguageServer for Backend {
                 .map_err(Into::into)
                 .map_err(jsonrpc_error)?;
 
-        let (program, _): (Program, Option<ParserErrorReport>) = Parser::initialize(&text)
-            .parse()
+        let (program, _): (N3Document, Option<ParserErrorReport>) = Parser::initialize(&text)
+            .parse_n3()
             .map(|prg| (prg, None))
             .unwrap_or_else(|(prg, err)| (*prg, Some(err)));
 
@@ -520,8 +521,8 @@ impl LanguageServer for Backend {
             .map_err(Into::into)
             .map_err(jsonrpc_error)?;
 
-        let (program, _): (Program, Option<ParserErrorReport>) = Parser::initialize(&text)
-            .parse()
+        let (program, _): (N3Document, Option<ParserErrorReport>) = Parser::initialize(&text)
+            .parse_n3()
             .map(|prg| (prg, None))
             .unwrap_or_else(|(prg, err)| (*prg, Some(err)));
 
@@ -645,7 +646,7 @@ fn find_by_identifier_recurse<'a>(
 
 /// Returns the path of AST nodes that lead to a given position from a given node
 fn find_in_ast<'a>(
-    node: &'a Program<'a>,
+    node: &'a N3Document<'a>,
     position: CharacterPosition,
 ) -> Vec<&'a dyn ProgramAST<'a>> {
     let mut path = Vec::new();
