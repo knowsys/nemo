@@ -32,10 +32,7 @@ use crate::{
 
 use super::{
     components::{
-        fact::Fact,
-        rule::Rule,
-        tag::Tag,
-        term::{Term, primitive::ground::GroundTerm},
+        fact::Fact, output::Output, rule::Rule, tag::Tag, term::{Term, primitive::ground::GroundTerm}
     },
     error::{TranslationReport, translation_error::TranslationError},
 };
@@ -136,6 +133,8 @@ impl ASTProgramTranslation {
                 )),
             )],
         ));
+
+        program.add_output(Output::new(Tag::new("_TRIPLES".to_string())));
 
         // Now handle facts and rules
         for statement in ast.statements() {
