@@ -3,6 +3,7 @@
 use std::{assert_matches, fmt::Debug};
 
 use nom::{
+    combinator::opt,
     multi::{separated_list0, separated_list1},
     sequence::{delimited, preceded, tuple},
 };
@@ -93,7 +94,7 @@ impl<'a> N3Triple<'a> {
         translation: &mut ASTProgramTranslation,
         target: TranslationFor,
     ) -> Vec<(Tag, Vec<Term>)> {
-        assert!(!self.is_rule());
+        assert!(!self.is_rule(), "nested rules are not supported");
         let (subject, mut result) = self.subject.to_terms(translation, target);
 
         match &self.predicate_object {
@@ -279,7 +280,7 @@ impl<'a> ProgramAST<'a> for N3Triples<'a> {
                             delimited(WSoC::parse, Token::semicolon, WSoC::parse),
                             context(
                                 ParserContext::notation3(Notation3Context::PredicateObjectList),
-                                tuple((
+                                opt(tuple((
                                     N3Verb::parse,
                                     preceded(
                                         WSoC::parse,
@@ -296,7 +297,7 @@ impl<'a> ProgramAST<'a> for N3Triples<'a> {
                                             ),
                                         ),
                                     ),
-                                )),
+                                ))),
                             ),
                         ),
                     ),
@@ -318,13 +319,15 @@ impl<'a> ProgramAST<'a> for N3Triples<'a> {
                     });
                 }
 
-                for (verb, objects) in object_predicate_list {
-                    for object in objects {
-                        triples.push(N3Triple {
-                            subject: subject.clone(),
-                            predicate_object: Some((verb.clone(), object)),
-                            span: input_span.until_rest(&rest_span),
-                        });
+                for predicate_object in object_predicate_list {
+                    if let Some((verb, objects)) = predicate_object {
+                        for object in objects {
+                            triples.push(N3Triple {
+                                subject: subject.clone(),
+                                predicate_object: Some((verb.clone(), object)),
+                                span: input_span.until_rest(&rest_span),
+                            });
+                        }
                     }
                 }
             }
