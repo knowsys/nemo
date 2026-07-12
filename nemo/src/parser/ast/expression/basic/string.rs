@@ -86,6 +86,11 @@ impl<'a> StringLiteral<'a> {
         pair(Token::lang_tag_indicator, Token::name)(input).map(|(rest, (_, tag))| (rest, tag))
     }
 
+    pub fn parse_language_tag_n3(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
+        pair(Token::lang_tag_indicator, Token::hyphenated_name)(input)
+            .map(|(rest, (_, tag))| (rest, tag))
+    }
+
     pub(crate) fn parse_n3(input: ParserInput<'a>) -> ParserResult<'a, Self>
     where
         Self: Sized + 'a,
@@ -94,7 +99,7 @@ impl<'a> StringLiteral<'a> {
 
         context(
             CONTEXT,
-            pair(Self::parse_string_n3, opt(Self::parse_language_tag)),
+            pair(Self::parse_string_n3, opt(Self::parse_language_tag_n3)),
         )(input)
         .map(|(rest, (content, language_tag))| {
             let rest_span = rest.span;
