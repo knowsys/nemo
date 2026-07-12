@@ -84,20 +84,16 @@ impl ASTProgramTranslation {
     }
 
     /// Return a fresh bnode index.
-    pub(crate) fn fresh_bnode(&mut self) -> Term {
-        Term::Primitive(Primitive::constant(&self.fresh_bnode_name()))
+    pub(crate) fn fresh_bnode(&mut self) -> Primitive {
+        Primitive::constant(&self.fresh_bnode_name())
     }
 
     /// Return a fresh bnode or a (universal or existential) variable, depending on the [TranslationFor].
-    pub(crate) fn fresh_bnode_or_variable(&mut self, target: TranslationFor) -> Term {
+    pub(crate) fn fresh_bnode_or_variable(&mut self, target: TranslationFor) -> Primitive {
         match target {
             TranslationFor::Fact => self.fresh_bnode(),
-            TranslationFor::Body => {
-                Term::Primitive(Primitive::universal_variable(&self.fresh_bnode_name()))
-            }
-            TranslationFor::Head => {
-                Term::Primitive(Primitive::existential_variable(&self.fresh_bnode_name()))
-            }
+            TranslationFor::Body => Primitive::universal_variable(&self.fresh_bnode_name()),
+            TranslationFor::Head => Primitive::existential_variable(&self.fresh_bnode_name()),
         }
     }
 }

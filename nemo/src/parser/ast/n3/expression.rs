@@ -16,12 +16,12 @@ use crate::{
     },
 };
 
+pub mod collection;
 pub mod formula;
 pub mod literal;
 pub mod path;
 pub mod propertylist;
 pub mod variable;
-//pub mod collection;
 
 /// What to translate for
 #[derive(Clone, Copy, Debug)]

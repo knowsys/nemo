@@ -4,7 +4,7 @@ use nom::{
     branch::alt,
     character::complete::{line_ending, not_line_ending},
     combinator::eof,
-    multi::many0,
+    multi::{many0, many1},
     sequence::delimited,
 };
 
@@ -94,6 +94,23 @@ impl<'a> WSoC<'a> {
         let input_span = input.span;
 
         many0(alt((Self::parse_whitespace, Self::parse_comment)))(input).map(|(rest, comments)| {
+            let rest_span = rest.span;
+
+            (
+                rest,
+                Self {
+                    _span: input_span.until_rest(&rest_span),
+                    comments: comments.into_iter().flatten().collect(),
+                },
+            )
+        })
+    }
+
+    /// Parse non-optional whitespace or comments.
+    pub fn parse_required(input: ParserInput<'a>) -> ParserResult<'a, Self> {
+        let input_span = input.span;
+
+        many1(alt((Self::parse_whitespace, Self::parse_comment)))(input).map(|(rest, comments)| {
             let rest_span = rest.span;
 
             (

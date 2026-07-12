@@ -38,6 +38,7 @@ use crate::{
 
 use super::{
     TranslationFor,
+    collection::N3Collection,
     formula::N3Formula,
     propertylist::{N3BnodePropertyList, N3IriPropertyList},
 };
@@ -54,7 +55,7 @@ pub enum N3PathItemKind<'a> {
     /// Variable
     Variable(N3Variable<'a>),
     /// Collection
-    Collection, // FIXME
+    Collection(N3Collection<'a>),
     /// Blank Node property list
     BnodePropertyList(N3BnodePropertyList<'a>),
     /// IRI property list
@@ -72,12 +73,12 @@ impl N3PathItemKind<'_> {
             Self::Iri(iri) => iri.context(),
             Self::Anonymous(_) => ParserContext::notation3(Notation3Context::Bnode),
             Self::Bnode(blank) => blank.context(),
-            Self::Variable(n3_variable) => n3_variable.context(),
-            Self::Collection => todo!(),
+            Self::Variable(variable) => variable.context(),
+            Self::Collection(collection) => collection.context(),
             Self::BnodePropertyList(list) => list.context(),
             Self::IriPropertyList(list) => list.context(),
-            Self::Literal(n3_literal) => n3_literal.context(),
-            Self::Formula(n3_formula) => n3_formula.context(),
+            Self::Literal(literal) => literal.context(),
+            Self::Formula(formula) => formula.context(),
         }
     }
 
@@ -146,16 +147,21 @@ impl N3PathItemKind<'_> {
                     TranslationFor::Head => Primitive::existential_variable(&name),
                 }
             }
-            Self::Variable(n3_variable) => Primitive::universal_variable(&n3_variable.name()),
-            Self::Collection => todo!(),
+            Self::Variable(variable) => Primitive::universal_variable(&variable.name()),
+            Self::Collection(collection) => {
+                let (primitive, mut collection_terms) = collection.to_terms(translation, target);
+                terms.append(&mut collection_terms);
+
+                primitive
+            }
             Self::IriPropertyList(list) => {
                 let (primitive, mut list_terms) = list.to_terms(translation, target);
                 terms.append(&mut list_terms);
 
                 primitive
             }
-            Self::Literal(n3_literal) => Primitive::ground(
-                n3_literal
+            Self::Literal(literal) => Primitive::ground(
+                literal
                     .to_any_data_value(translation)
                     .expect("is a valid data value"),
             ),
@@ -171,12 +177,12 @@ impl<'a> ProgramAST<'a> for N3PathItemKind<'a> {
             Self::Iri(iri) => iri.children(),
             Self::Anonymous(_) => Vec::default(),
             Self::Bnode(blank) => blank.children(),
-            Self::Variable(n3_variable) => n3_variable.children(),
-            Self::Collection => todo!(),
+            Self::Variable(variable) => variable.children(),
+            Self::Collection(collection) => collection.children(),
             Self::BnodePropertyList(list) => list.children(),
             Self::IriPropertyList(list) => list.children(),
-            Self::Literal(n3_literal) => n3_literal.children(),
-            Self::Formula(n3_formula) => n3_formula.children(),
+            Self::Literal(literal) => literal.children(),
+            Self::Formula(formula) => formula.children(),
         }
     }
 
@@ -185,12 +191,12 @@ impl<'a> ProgramAST<'a> for N3PathItemKind<'a> {
             Self::Iri(iri) => iri.span(),
             Self::Anonymous(span) => span.clone(),
             Self::Bnode(blank) => blank.span(),
-            Self::Variable(n3_variable) => n3_variable.span(),
-            Self::Collection => todo!(),
+            Self::Variable(variable) => variable.span(),
+            Self::Collection(collection) => collection.span(),
             Self::BnodePropertyList(list) => list.span(),
             Self::IriPropertyList(list) => list.span(),
-            Self::Literal(n3_literal) => n3_literal.span(),
-            Self::Formula(n3_formula) => n3_formula.span(),
+            Self::Literal(literal) => literal.span(),
+            Self::Formula(formula) => formula.span(),
         }
     }
 
@@ -213,6 +219,7 @@ impl<'a> ProgramAST<'a> for N3PathItemKind<'a> {
             map(Blank::parse, Self::Bnode),
             map(N3Variable::parse, Self::Variable),
             map(N3Formula::parse, Self::Formula),
+            map(N3Collection::parse, Self::Collection),
         ))(input)
     }
 
@@ -375,7 +382,7 @@ impl<'a> N3PathKind<'a> {
         match self {
             Self::Single(item) => {
                 let (predicate, mut facts) = item.to_terms(translation, target);
-                let link = translation.fresh_bnode_or_variable(target);
+                let link = Term::Primitive(translation.fresh_bnode_or_variable(target));
                 facts.push((
                     tag,
                     if is_forward {
@@ -388,7 +395,7 @@ impl<'a> N3PathKind<'a> {
             }
             Self::Forward(item, next) => {
                 let (predicate, mut facts) = item.to_terms(translation, target);
-                let link = translation.fresh_bnode_or_variable(target);
+                let link = Term::Primitive(translation.fresh_bnode_or_variable(target));
                 facts.push((tag, vec![term, predicate, link.clone()]));
                 let (end, mut rest_facts) =
                     next.to_terms_continuation(translation, target, link, true);
@@ -398,7 +405,7 @@ impl<'a> N3PathKind<'a> {
             }
             Self::Backward(item, next) => {
                 let (predicate, mut facts) = item.to_terms(translation, target);
-                let link = translation.fresh_bnode_or_variable(target);
+                let link = Term::Primitive(translation.fresh_bnode_or_variable(target));
                 facts.push((tag, vec![link.clone(), predicate, term]));
                 let (end, mut rest_facts) =
                     next.to_terms_continuation(translation, target, link, false);
