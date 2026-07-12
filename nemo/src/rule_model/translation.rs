@@ -176,8 +176,6 @@ impl ASTProgramTranslation {
 
         program.add_output(Output::new(Tag::new(TRIPLES_PREDICATE.to_string())));
 
-        log::debug!("ast: {ast:?}");
-
         // Now handle facts and rules
         for statement in ast.statements() {
             match statement.kind() {

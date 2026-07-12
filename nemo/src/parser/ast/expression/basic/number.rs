@@ -125,16 +125,15 @@ impl<'a> Number<'a> {
 
         if let Some(NumberTypeMarker::Float) = self.type_marker
             && let Ok(float) = str::parse::<f32>(&string)
+            && float.is_finite()
         {
             return NumberValue::Float(float);
         }
 
-        if let Ok(double) = str::parse::<f64>(&string) {
+        if let Ok(double) = str::parse::<f64>(&string)
+            && double.is_finite()
+        {
             return NumberValue::Double(double);
-        }
-
-        if let Ok(float) = str::parse::<f32>(&string) {
-            return NumberValue::Float(float);
         }
 
         NumberValue::Large(string)
