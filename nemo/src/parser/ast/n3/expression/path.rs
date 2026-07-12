@@ -338,13 +338,6 @@ impl<'a> N3PathKind<'a> {
         }
     }
 
-    pub(crate) fn item(&'a self) -> &'a N3PathItem<'a> {
-        match self {
-            Self::Single(item) => item,
-            Self::Forward(item, _) | Self::Backward(item, _) => item,
-        }
-    }
-
     pub(crate) fn to_terms(
         &self,
         translation: &mut ASTProgramTranslation,
@@ -354,32 +347,16 @@ impl<'a> N3PathKind<'a> {
             Self::Single(item) => item.to_terms(translation, target),
             Self::Forward(item, next) => {
                 let (subject, mut facts) = item.to_terms(translation, target);
-                let bnode = translation.fresh_bnode();
-
-                let (predicate, mut predicate_facts) = next.item().to_terms(translation, target);
-
-                facts.append(&mut predicate_facts);
-                facts.push((
-                    Tag::new(TRIPLES_PREDICATE.to_string()),
-                    vec![subject, predicate, bnode.clone()],
-                ));
-                let (end, mut rest_facts) = next.to_terms_continuation(translation, target, bnode);
+                let (end, mut rest_facts) =
+                    next.to_terms_continuation(translation, target, subject, true);
                 facts.append(&mut rest_facts);
 
                 (end, facts)
             }
             Self::Backward(item, next) => {
                 let (object, mut facts) = item.to_terms(translation, target);
-                let bnode = translation.fresh_bnode();
-
-                let (predicate, mut predicate_facts) = next.item().to_terms(translation, target);
-
-                facts.append(&mut predicate_facts);
-                facts.push((
-                    Tag::new(TRIPLES_PREDICATE.to_string()),
-                    vec![bnode.clone(), predicate, object],
-                ));
-                let (end, mut rest_facts) = next.to_terms_continuation(translation, target, bnode);
+                let (end, mut rest_facts) =
+                    next.to_terms_continuation(translation, target, object, false);
                 facts.append(&mut rest_facts);
 
                 (end, facts)
@@ -392,29 +369,39 @@ impl<'a> N3PathKind<'a> {
         translation: &mut ASTProgramTranslation,
         target: TranslationFor,
         term: Term,
+        is_forward: bool,
     ) -> (Term, Vec<(Tag, Vec<Term>)>) {
         let tag = Tag::new(TRIPLES_PREDICATE.to_string());
         match self {
             Self::Single(item) => {
                 let (predicate, mut facts) = item.to_terms(translation, target);
-                let bnode = translation.fresh_bnode();
-                facts.push((tag, vec![term, predicate, bnode.clone()]));
-                (bnode, facts)
+                let link = translation.fresh_bnode_or_variable(target);
+                facts.push((
+                    tag,
+                    if is_forward {
+                        vec![term, predicate, link.clone()]
+                    } else {
+                        vec![link.clone(), predicate, term]
+                    },
+                ));
+                (link, facts)
             }
             Self::Forward(item, next) => {
                 let (predicate, mut facts) = item.to_terms(translation, target);
-                let bnode = translation.fresh_bnode();
-                facts.push((tag, vec![term, predicate, bnode.clone()]));
-                let (end, mut rest_facts) = next.to_terms_continuation(translation, target, bnode);
+                let link = translation.fresh_bnode_or_variable(target);
+                facts.push((tag, vec![term, predicate, link.clone()]));
+                let (end, mut rest_facts) =
+                    next.to_terms_continuation(translation, target, link, true);
                 facts.append(&mut rest_facts);
 
                 (end, facts)
             }
             Self::Backward(item, next) => {
                 let (predicate, mut facts) = item.to_terms(translation, target);
-                let bnode = translation.fresh_bnode();
-                facts.push((tag, vec![bnode.clone(), predicate, term]));
-                let (end, mut rest_facts) = next.to_terms_continuation(translation, target, bnode);
+                let link = translation.fresh_bnode_or_variable(target);
+                facts.push((tag, vec![link.clone(), predicate, term]));
+                let (end, mut rest_facts) =
+                    next.to_terms_continuation(translation, target, link, false);
                 facts.append(&mut rest_facts);
 
                 (end, facts)

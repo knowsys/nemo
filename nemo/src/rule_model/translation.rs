@@ -21,7 +21,7 @@ use crate::{
         ParserErrorReport, ParserState,
         ast::{
             self, ProgramAST,
-            n3::{document::N3Document, statement::N3StatementKind},
+            n3::{document::N3Document, expression::TranslationFor, statement::N3StatementKind},
         },
         error::translate_error_tree,
         input::ParserInput,
@@ -71,21 +71,34 @@ impl ASTProgramTranslation {
         &self.statement_attributes
     }
 
-    /// Return a fresh bnode index
+    /// Return a fresh bnode index.
     pub(crate) fn fresh_bnode_index(&mut self) -> usize {
         let result = self.next_bnode;
         self.next_bnode += 1;
         result
     }
 
-    /// Return a fresh bnode name
+    /// Return a fresh bnode name.
     pub(crate) fn fresh_bnode_name(&mut self) -> String {
         format!("{FRESH_BNODE_PREFIX}_{}", self.fresh_bnode_index())
     }
 
-    /// Return a fresh bnode index
+    /// Return a fresh bnode index.
     pub(crate) fn fresh_bnode(&mut self) -> Term {
         Term::Primitive(Primitive::constant(&self.fresh_bnode_name()))
+    }
+
+    /// Return a fresh bnode or a (universal or existential) variable, depending on the [TranslationFor].
+    pub(crate) fn fresh_bnode_or_variable(&mut self, target: TranslationFor) -> Term {
+        match target {
+            TranslationFor::Fact => self.fresh_bnode(),
+            TranslationFor::Body => {
+                Term::Primitive(Primitive::universal_variable(&self.fresh_bnode_name()))
+            }
+            TranslationFor::Head => {
+                Term::Primitive(Primitive::existential_variable(&self.fresh_bnode_name()))
+            }
+        }
     }
 }
 
@@ -162,6 +175,8 @@ impl ASTProgramTranslation {
         ));
 
         program.add_output(Output::new(Tag::new(TRIPLES_PREDICATE.to_string())));
+
+        log::debug!("ast: {ast:?}");
 
         // Now handle facts and rules
         for statement in ast.statements() {

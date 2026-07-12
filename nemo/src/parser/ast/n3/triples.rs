@@ -122,8 +122,6 @@ impl<'a> N3Triple<'a> {
             &self.predicate_object.as_ref().expect("is present").1
         };
 
-        log::debug!("getting rule body: {formula:?}");
-
         let (_, mut literals) = formula.to_terms(translation, TranslationFor::Body);
 
         if literals.is_empty() {
@@ -164,14 +162,14 @@ impl<'a> N3Triple<'a> {
     ) {
         if !self.is_rule() {
             for fact in self.to_facts(translation) {
-                log::debug!("adding fact: {fact:?}");
+                log::debug!("adding fact: {fact}");
                 program.add_fact(fact);
             }
         } else {
             let body = self.to_body_literals(translation);
             let head = self.to_head_atoms(translation);
             let rule = Rule::new(head, body);
-            log::debug!("adding rule: {rule:?}");
+            log::debug!("adding rule: {rule}");
             program.add_rule(rule);
         }
     }

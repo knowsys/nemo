@@ -23,10 +23,7 @@ use crate::{
         span::Span,
     },
     rule_model::{
-        components::{
-            tag::Tag,
-            term::{Term, primitive::Primitive},
-        },
+        components::{tag::Tag, term::Term},
         translation::ASTProgramTranslation,
     },
 };

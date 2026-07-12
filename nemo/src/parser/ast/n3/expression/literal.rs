@@ -130,3 +130,25 @@ impl<'a> ProgramAST<'a> for N3Literal<'a> {
         CONTEXT
     }
 }
+
+#[cfg(test)]
+mod test {
+    use nom::combinator::all_consuming;
+    use std::assert_matches;
+    use test_log::test;
+
+    use crate::parser::{
+        ParserState, ProgramAST, ast::n3::expression::literal::N3Literal, input::ParserInput,
+    };
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn parse_literal() {
+        let literal = r#""German"@de"#;
+
+        let parser_input = ParserInput::new(literal, ParserState::default());
+        let result = all_consuming(N3Literal::parse)(parser_input);
+
+        assert_matches!(result, Ok(_));
+    }
+}

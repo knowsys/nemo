@@ -73,12 +73,7 @@ impl<'a> N3BnodePropertyList<'a> {
             TranslationFor::Head => Primitive::existential_variable(&name),
         };
 
-        let facts = terms_for_pairs(
-            translation,
-            target,
-            &Primitive::constant(&name),
-            &self.pairs,
-        );
+        let facts = terms_for_pairs(translation, target, &primitive, &self.pairs);
 
         (primitive, facts)
     }
