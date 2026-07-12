@@ -419,7 +419,7 @@ impl<'a> Token<'a> {
             ParserContext::token(TokenKind::Name),
             recognize(pair(
                 context(ParserContext::AlphaNum, alpha1),
-                many0(alt((alphanumeric1, tag("_"), tag("%"), tag("-")))),
+                many0(alt((alphanumeric1, tag("_"), tag("%"), tag("-"), tag(":")))),
             )),
         )(input)
         .map(|(rest_input, result)| {
