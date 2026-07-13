@@ -2,8 +2,6 @@
 
 use std::collections::HashSet;
 
-use nemo_physical::datavalues::DataValue;
-
 use crate::{
     rule_model::{
         components::{
@@ -21,7 +19,7 @@ use crate::{
     syntax::n3::translation::TRIPLES_PREDICATE,
 };
 
-use super::ProgramTransformation;
+use super::{ProgramTransformation, tag_from_term};
 
 /// SplitTriples transformation
 ///
@@ -70,8 +68,8 @@ impl ProgramTransformation for TransformationN3SplitTriples {
 
         for predicate in predicates {
             let tag = Tag::new(TRIPLES_PREDICATE.to_string());
-            let subject = Term::Primitive(Primitive::universal_variable("?s"));
-            let object = Term::Primitive(Primitive::universal_variable("?o"));
+            let subject = Term::Primitive(Primitive::universal_variable("subject"));
+            let object = Term::Primitive(Primitive::universal_variable("object"));
 
             commit.add_rule(Rule::new(
                 vec![Atom::new(
@@ -95,16 +93,6 @@ impl ProgramTransformation for TransformationN3SplitTriples {
 
 fn is_not_splittable(atom: &Atom) -> bool {
     atom.predicate().name() == TRIPLES_PREDICATE && tag_from_term(&atom[1]).is_none()
-}
-
-fn tag_from_term(term: &Term) -> Option<Tag> {
-    if let Term::Primitive(primitive) = term
-        && let Primitive::Ground(ground) = primitive
-    {
-        return ground.value().to_iri().map(Tag::new);
-    }
-
-    None
 }
 
 fn split_fact(predicates: &mut HashSet<Tag>, fact: &Fact) -> Fact {

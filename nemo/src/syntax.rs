@@ -531,6 +531,14 @@ pub mod n3 {
         pub const LOG_IMPLIED_BY: &str = "http://www.w3.org/2000/10/swap/log#impliedBy";
         /// `log:notIncludes`.
         pub const LOG_NOT_INCLUDES: &str = "http://www.w3.org/2000/10/swap/log#notIncludes";
+
+        /// Builtins
+        pub mod builtins {
+            /// >=
+            pub const MATH_NOT_LESS_THAN: &str = "http://www.w3.org/2000/10/swap/math#notLessThan";
+            /// absolute value
+            pub const MATH_ABSOLUTE_VALUE: &str = "http://www.w3.org/2000/10/swap/math#absoluteValue";
+        }
     }
 
     /// Names used in translating Notation3 into Nemo rules
