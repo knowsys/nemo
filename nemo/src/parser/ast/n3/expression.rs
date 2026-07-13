@@ -1,6 +1,6 @@
 //! This module defines [N3Expression].
 
-use path::N3Path;
+use path::{N3Path, N3PathItemKind};
 
 use crate::{
     parser::{
@@ -14,6 +14,7 @@ use crate::{
         components::{tag::Tag, term::Term},
         translation::ASTProgramTranslation,
     },
+    syntax::n3::iri::LOG_NOT_INCLUDES,
 };
 
 pub mod collection;
@@ -24,7 +25,7 @@ pub mod propertylist;
 pub mod variable;
 
 /// What to translate for
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TranslationFor {
     /// We are translating into (part of) a fact.
     Fact,
@@ -43,6 +44,18 @@ pub struct N3Expression<'a> {
 }
 
 impl<'a> N3Expression<'a> {
+    /// Returns true if the expression corresponds to [LOG_NOT_INCLUDES]
+    pub fn is_negation(&self, translation: &mut ASTProgramTranslation) -> bool {
+        if let path::N3PathKind::Single(item) = self.path.kind()
+            && let N3PathItemKind::Iri(tag) = &item.kind
+            && let Some(iri) = translation.resolve_tag(&tag)
+        {
+            iri == LOG_NOT_INCLUDES
+        } else {
+            false
+        }
+    }
+
     pub(crate) fn to_terms(
         &self,
         translation: &mut ASTProgramTranslation,

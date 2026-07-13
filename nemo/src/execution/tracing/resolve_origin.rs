@@ -43,6 +43,7 @@ pub fn tracing_resolve_origin_id(
         | Origin::Skolemization(origin_id)
         | Origin::Global(origin_id)
         | Origin::Incremental(origin_id)
-        | Origin::MergeSparql(origin_id) => tracing_resolve_origin_id(handle, origin_id),
+        | Origin::MergeSparql(origin_id)
+        | Origin::N3Rule(origin_id) => tracing_resolve_origin_id(handle, origin_id),
     }
 }

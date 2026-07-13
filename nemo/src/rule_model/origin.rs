@@ -51,6 +51,9 @@ pub enum Origin {
 
     /// Rule that was created by merging SPARQL imports in a rule
     MergeSparql(ProgramComponentId),
+
+    /// Rule that was created by transforming a Notation3 rule.
+    N3Rule(ProgramComponentId),
 }
 
 impl Origin {

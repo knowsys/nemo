@@ -32,7 +32,7 @@ use crate::{
     rule_file::RuleFile,
     rule_model::{
         components::tag::Tag,
-        pipeline::transformations::default::TransformationDefault,
+        pipeline::transformations::{default::TransformationDefault, n3::TransformationN3Default},
         programs::{handle::ProgramHandle, program::Program},
     },
 };
@@ -140,7 +140,7 @@ pub fn validate_n3(input: String, label: String) -> ProgramReport {
 
     let (_program, report) = match report.merge_validation_report(
         &program,
-        program.transform(TransformationDefault::new(&parameters)),
+        program.transform(TransformationN3Default::new(&parameters)),
     ) {
         Ok(result) => result,
         Err(report) => return report,

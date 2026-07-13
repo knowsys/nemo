@@ -56,17 +56,16 @@ impl RuleIdTranslation {
 
         for (normalized_index, rule) in normalized.rules().iter().enumerate() {
             let origin_id = tracing_resolve_origin_id(handle, rule.id());
-            let original_index = *orig_index_by_id
-                .get(&origin_id)
-                .expect("each normalized rule has a corresponding original rule");
+            if let Some(original_index) = orig_index_by_id.get(&origin_id) {
+                // TODO(mx): dirty hack
+                norm_to_orig.push(*original_index);
 
-            norm_to_orig.push(original_index);
-
-            let previous = orig_to_norm.insert(original_index, normalized_index);
-            debug_assert!(
-                previous.is_none(),
-                "each original rule maps to at most one normalized rule"
-            );
+                let previous = orig_to_norm.insert(*original_index, normalized_index);
+                debug_assert!(
+                    previous.is_none(),
+                    "each original rule maps to at most one normalized rule"
+                );
+            }
         }
 
         Self {

@@ -68,6 +68,14 @@ impl N3VerbKind<'_> {
     pub fn is_implication(&self) -> bool {
         matches!(self, Self::ImpliedBy | Self::Implies)
     }
+
+    /// Returns true if the verb corresponds to negation.
+    pub fn is_negation(&self, translation: &mut ASTProgramTranslation) -> bool {
+        matches!(
+            self,
+            Self::Predicate(expression) | Self::Has(expression) if expression.is_negation(translation)
+        )
+    }
 }
 
 /// A Notation3 Verb.
@@ -88,6 +96,9 @@ impl N3Verb<'_> {
 
             /// Returns true if the verb corresponds to an implication.
             pub fn is_implication(&self) -> bool;
+
+            /// Returns true if the verb corresponds to negation.
+            pub fn is_negation(&self, translation: &mut ASTProgramTranslation) -> bool;
         }
     }
 

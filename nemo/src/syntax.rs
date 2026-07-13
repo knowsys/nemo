@@ -527,8 +527,10 @@ pub mod n3 {
         pub const OWL_SAME_AS: &str = "http://www.w3.org/2002/07/owl#sameAs";
         /// `log:implies`.
         pub const LOG_IMPLIES: &str = "http://www.w3.org/2000/10/swap/log#implies";
-        /// `log:implied-by`.
+        /// `log:impliedBy`.
         pub const LOG_IMPLIED_BY: &str = "http://www.w3.org/2000/10/swap/log#impliedBy";
+        /// `log:notIncludes`.
+        pub const LOG_NOT_INCLUDES: &str = "http://www.w3.org/2000/10/swap/log#notIncludes";
     }
 
     /// Names used in translating Notation3 into Nemo rules

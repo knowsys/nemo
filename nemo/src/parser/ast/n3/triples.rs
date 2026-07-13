@@ -1,6 +1,6 @@
 //! This module defines [N3Triples].
 
-use std::{assert_matches, fmt::Debug};
+use std::{assert_matches, fmt::Debug, iter::chain};
 
 use nom::{
     combinator::opt,
@@ -14,7 +14,11 @@ use crate::{
         ProgramAST,
         n3::{
             comment::WSoC,
-            expression::{N3Expression, TranslationFor},
+            expression::{
+                N3Expression, TranslationFor,
+                path::{N3PathItemKind, N3PathKind},
+            },
+            statement::N3StatementKind,
         },
         token::Token,
     },
@@ -58,7 +62,7 @@ pub struct N3Triple<'a> {
 }
 
 impl<'a> N3Triple<'a> {
-    /// Returns true if this triple corresponds to a rule
+    /// Returns true if this triple corresponds to a rule.
     pub fn is_rule(&self) -> bool {
         self.predicate_object
             .as_ref()
@@ -66,7 +70,7 @@ impl<'a> N3Triple<'a> {
             .unwrap_or_default()
     }
 
-    /// Returns true if this triple corresponds to a forward rule
+    /// Returns true if this triple corresponds to a forward rule.
     pub fn is_forward_rule(&self) -> bool {
         self.predicate_object
             .as_ref()
@@ -74,11 +78,19 @@ impl<'a> N3Triple<'a> {
             .unwrap_or_default()
     }
 
-    /// Returns true if this triple corresponds to a backward rule
+    /// Returns true if this triple corresponds to a backward rule.
     pub fn is_backward_rule(&self) -> bool {
         self.predicate_object
             .as_ref()
             .map(|(verb, _)| verb.is_backward_implication())
+            .unwrap_or_default()
+    }
+
+    /// Returns true if this triple corresponds to negation.
+    pub fn is_negation(&self, translation: &mut ASTProgramTranslation) -> bool {
+        self.predicate_object
+            .as_ref()
+            .map(|(verb, _)| verb.is_negation(translation))
             .unwrap_or_default()
     }
 
@@ -94,8 +106,12 @@ impl<'a> N3Triple<'a> {
         translation: &mut ASTProgramTranslation,
         target: TranslationFor,
     ) -> Vec<(Tag, Vec<Term>)> {
-        assert!(!self.is_rule(), "nested rules are not supported");
-        let (subject, mut result) = self.subject.to_terms(translation, target);
+        assert!(!self.is_rule(), "rules are not nested");
+
+        let mut result = Vec::new();
+
+        let (subject, mut terms) = self.subject.to_terms(translation, target);
+        result.append(&mut terms);
 
         match &self.predicate_object {
             None if result.is_empty() => log::warn!(
@@ -104,11 +120,11 @@ impl<'a> N3Triple<'a> {
             ),
             None => (),
             Some((verb, object)) => {
-                let (object, mut object_facts) = object.to_terms(translation, target);
-                result.append(&mut object_facts);
+                let (object, mut object_terms) = object.to_terms(translation, target);
+                result.append(&mut object_terms);
                 result.append(&mut verb.to_terms(translation, target, subject, object));
             }
-        };
+        }
 
         result
     }
@@ -123,19 +139,55 @@ impl<'a> N3Triple<'a> {
             &self.predicate_object.as_ref().expect("is present").1
         };
 
-        let (_, mut literals) = formula.to_terms(translation, TranslationFor::Body);
+        let mut positive = Vec::new();
+        let mut negative = Vec::new();
 
-        if literals.is_empty() {
-            literals.push((
+        if let N3PathKind::Single(formula) = formula.path.kind()
+            && let N3PathItemKind::Formula(formula) = &formula.kind
+        {
+            for statement in formula.iter() {
+                match statement.kind() {
+                    N3StatementKind::Triples(triples) => {
+                        for triple in triples.iter() {
+                            if triple.is_negation(translation) {
+                                let (_, object) =
+                                    triple.predicate_object.as_ref().expect("is present");
+                                let (_, mut terms) =
+                                    object.to_terms(translation, TranslationFor::Body);
+                                negative.append(&mut terms);
+                            } else {
+                                positive.append(
+                                    &mut triple.to_terms(translation, TranslationFor::Body),
+                                );
+                            }
+                        }
+                    }
+                    N3StatementKind::Directive(_) => {
+                        log::warn!("directive unsupported in formula")
+                    }
+                    N3StatementKind::Error(_) => log::warn!("erroneous statement in formula"),
+                }
+            }
+        } else {
+            log::warn!("rule body is not a formula");
+        }
+
+        if positive.is_empty() {
+            positive.push((
                 Tag::new(DUMMY_PREDICATE.to_string()),
                 vec![Term::Primitive(Primitive::anonymous_variable())],
             ));
         }
 
-        literals
-            .into_iter()
-            .map(|(tag, terms)| Literal::Positive(Atom::new(tag, terms)))
-            .collect()
+        chain(
+            positive
+                .into_iter()
+                .map(|(tag, terms)| Literal::Positive(Atom::new(tag, terms))),
+            negative
+                .into_iter()
+                .map(|(tag, terms)| Literal::Negative(Atom::new(tag, terms))),
+        )
+        .collect()
     }
 
     pub(crate) fn to_head_atoms(&self, translation: &mut ASTProgramTranslation) -> Vec<Atom> {

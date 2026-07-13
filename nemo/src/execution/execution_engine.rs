@@ -17,7 +17,8 @@ use crate::{
     io::{formats::Export, import_manager::ImportManager},
     rule_file::RuleFile,
     rule_model::{
-        components::tag::Tag, pipeline::transformations::default::TransformationDefault,
+        components::tag::Tag,
+        pipeline::transformations::{default::TransformationDefault, n3::TransformationN3Default},
         programs::handle::ProgramHandle,
     },
     table_manager::{MemoryUsage, TableManager},
@@ -119,7 +120,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         let (program, report) = report.merge_program_parser_report(handle)?;
         let (program, report) = report.merge_validation_report(
             &program,
-            program.transform(TransformationDefault::new(&parameters)),
+            program.transform(TransformationN3Default::new(&parameters)),
         )?;
 
         let engine = Self::initialize(program, parameters.import_manager).await?;

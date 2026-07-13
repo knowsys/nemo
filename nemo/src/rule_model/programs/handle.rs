@@ -69,7 +69,12 @@ impl ProgramHandle {
         let parser = Parser::initialize(file.content());
         let ast = parser.parse_n3().map_err(|(_tail, report)| report)?;
 
-        let mut commit = ProgramCommit::empty(ProgramPipeline::new(), ValidationReport::default());
+        let pipeline = ProgramPipeline::new();
+        // Record the source so that component origins can later be resolved
+        // to source positions (line and column numbers).
+        pipeline.set_source(file.content());
+
+        let mut commit = ProgramCommit::empty(pipeline, ValidationReport::default());
 
         ASTProgramTranslation::default()
             .translate_n3(&ast, &mut commit)
