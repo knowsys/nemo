@@ -39,11 +39,16 @@ impl ProgramTransformation for TransformationN3SplitTriples {
     fn apply(self, program: &ProgramHandle) -> Result<ProgramHandle, ValidationReport> {
         let mut commit = program.fork();
         let mut is_splittable = true;
+        let mut need_to_split = false;
         let mut predicates = HashSet::new();
 
         for statement in program.statements() {
             match statement {
                 Statement::Rule(rule) => {
+                    if rule.body_negative().next().is_some() {
+                        need_to_split = true;
+                    }
+
                     if rule.body_atoms().any(is_not_splittable)
                         || rule.head().iter().any(is_not_splittable)
                     {
@@ -54,8 +59,14 @@ impl ProgramTransformation for TransformationN3SplitTriples {
             }
         }
 
+        if need_to_split && !is_splittable {
+            log::warn!(
+                "rules combine negation and variables in the predicate position, program will likely not be stratified"
+            );
+        }
+
         for statement in program.statements() {
-            if is_splittable {
+            if is_splittable && need_to_split {
                 match statement {
                     Statement::Rule(rule) => commit.add_rule(split_rule(&mut predicates, rule)),
                     Statement::Fact(fact) => commit.add_fact(split_fact(&mut predicates, fact)),
