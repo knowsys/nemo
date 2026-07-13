@@ -111,7 +111,7 @@ impl GeneratorRestrictedHead {
     /// Generate the predicate name used to store the result of this generator.
     fn generate_predicate(rule_index: usize) -> Tag {
         let name = format!("_SATISFIED_{rule_index}");
-        println!("generated predicate: {}", name);
+        //println!("generated predicate: {}", name);
         Tag::new(name)
     }
 
