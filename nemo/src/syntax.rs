@@ -534,10 +534,13 @@ pub mod n3 {
 
         /// Builtins
         pub mod builtins {
-            /// >=
+            /// `>=`.
             pub const MATH_NOT_LESS_THAN: &str = "http://www.w3.org/2000/10/swap/math#notLessThan";
-            /// absolute value
-            pub const MATH_ABSOLUTE_VALUE: &str = "http://www.w3.org/2000/10/swap/math#absoluteValue";
+            /// Absolute value.
+            pub const MATH_ABSOLUTE_VALUE: &str =
+                "http://www.w3.org/2000/10/swap/math#absoluteValue";
+            /// Sum.
+            pub const MATH_SUM: &str = "http://www.w3.org/2000/10/swap/math#sum";
         }
     }
 
