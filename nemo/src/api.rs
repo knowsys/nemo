@@ -140,7 +140,7 @@ pub fn validate_n3(input: String, label: String) -> ProgramReport {
 
     let (_program, report) = match report.merge_validation_report(
         &program,
-        program.transform(TransformationN3Default::new(&parameters)),
+        program.transform(TransformationN3Default::new(None, &parameters)),
     ) {
         Ok(result) => result,
         Err(report) => return report,

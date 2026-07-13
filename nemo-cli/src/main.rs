@@ -185,8 +185,16 @@ async fn run(mut cli: CliApp) -> Result<(), CliError> {
 
     let (mut engine, warnings) = (if is_n3 {
         log::info!("loading Notation3 document");
-        ExecutionEngine::from_n3_file(program_file, execution_parameters).await?
+        ExecutionEngine::from_n3_file(
+            program_file,
+            cli.extra_triples_file.clone(),
+            execution_parameters,
+        )
+        .await?
     } else {
+        if cli.extra_triples_file.is_some() {
+            log::warn!("ignoring extra triples file (not loading a Notation3 document)");
+        }
         ExecutionEngine::from_file(program_file, execution_parameters).await?
     })
     .into_pair();

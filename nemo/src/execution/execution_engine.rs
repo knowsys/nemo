@@ -1,6 +1,9 @@
 //! Functionality which handles the execution of a program
 
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    path::PathBuf,
+};
 
 use nemo_physical::{
     datavalues::AnyDataValue,
@@ -112,6 +115,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     /// the contents of the given file.
     pub async fn from_n3_file(
         n3_file: RuleFile,
+        extra_triples: Option<PathBuf>,
         parameters: ExecutionParameters,
     ) -> Result<Warned<Self, ProgramReport>, Error> {
         let handle = ProgramHandle::from_n3_file(&n3_file);
@@ -120,7 +124,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         let (program, report) = report.merge_program_parser_report(handle)?;
         let (program, report) = report.merge_validation_report(
             &program,
-            program.transform(TransformationN3Default::new(&parameters)),
+            program.transform(TransformationN3Default::new(extra_triples, &parameters)),
         )?;
 
         let engine = Self::initialize(program, parameters.import_manager).await?;

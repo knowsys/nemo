@@ -223,6 +223,9 @@ pub struct CliApp {
     /// Disable warnings when validating rule files
     #[arg(long = "no-warnings")]
     pub(crate) disable_warnings: bool,
+    /// Extra
+    #[arg(long = "with-extra-triples-from-file")]
+    pub(crate) extra_triples_file: Option<PathBuf>,
 }
 
 /// Key-Value pair for global variable
