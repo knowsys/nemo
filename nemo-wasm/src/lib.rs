@@ -206,7 +206,7 @@ impl NemoEngine {
         let mut execution_parameters = ExecutionParameters::default();
         execution_parameters.set_import_manager(import_manager);
 
-        let (engine, _warnings) = ExecutionEngine::from_n3_file(rule_file, execution_parameters)
+        let (engine, _warnings) = ExecutionEngine::from_n3_file(rule_file, None, execution_parameters)
             .await
             .map_err(|error| {
                 if let nemo::error::Error::ProgramReport(report) = error {
