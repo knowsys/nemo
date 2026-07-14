@@ -26,7 +26,7 @@ use crate::{
         programs::{ProgramWrite, handle::ProgramHandle},
         translation::directive::FormatContext,
     },
-    syntax::n3::translation::TRIPLES_PREDICATE,
+    syntax::n3::translation::IMPORTS_PREDICATE,
 };
 
 use super::{ProgramTransformation, default::TransformationDefault};
@@ -57,9 +57,9 @@ impl ProgramTransformation for TransformationN3Default<'_> {
     fn apply(self, program: &ProgramHandle) -> Result<ProgramHandle, ValidationReport> {
         let mut commit = program.fork_full();
 
-        if let Some(extra_triples) = self.extra_triples {
+        if let Some(extra_triples) = &self.extra_triples {
             commit.add_import(ImportDirective::new(
-                Tag::new(TRIPLES_PREDICATE.to_string()),
+                Tag::new(IMPORTS_PREDICATE.to_string()),
                 ImportExportSpec::new(
                     "rdf",
                     vec![(
@@ -67,6 +67,7 @@ impl ProgramTransformation for TransformationN3Default<'_> {
                         Term::Primitive(Primitive::Ground(GroundTerm::new(
                             AnyDataValue::new_plain_string(
                                 extra_triples
+                                    .clone()
                                     .into_os_string()
                                     .into_string()
                                     .expect("path is valid UTF-8"),
@@ -82,7 +83,9 @@ impl ProgramTransformation for TransformationN3Default<'_> {
         commit
             .submit()?
             .transform(TransformationN3Builtins::default())?
-            .transform(TransformationN3SplitTriples::default())?
+            .transform(TransformationN3SplitTriples::new(
+                self.extra_triples.is_some(),
+            ))?
             .transform(TransformationDefault::new(self.parameters))
     }
 }

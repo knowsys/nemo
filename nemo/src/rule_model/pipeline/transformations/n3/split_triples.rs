@@ -16,7 +16,7 @@ use crate::{
         error::ValidationReport,
         programs::{ProgramRead, ProgramWrite, handle::ProgramHandle},
     },
-    syntax::n3::translation::TRIPLES_PREDICATE,
+    syntax::n3::translation::{IMPORTS_PREDICATE, TRIPLES_PREDICATE},
 };
 
 use super::{ProgramTransformation, tag_from_term};
@@ -26,12 +26,14 @@ use super::{ProgramTransformation, tag_from_term};
 /// This transformation will be applied to every nemo program
 /// before executing
 #[derive(Debug, Default, Copy, Clone)]
-pub struct TransformationN3SplitTriples {}
+pub struct TransformationN3SplitTriples {
+    have_extra_triples: bool,
+}
 
 impl TransformationN3SplitTriples {
     /// Create a new [TransformationN3SplitTriples].
-    pub fn new() -> Self {
-        Self {}
+    pub fn new(have_extra_triples: bool) -> Self {
+        Self { have_extra_triples }
     }
 }
 
@@ -66,7 +68,7 @@ impl ProgramTransformation for TransformationN3SplitTriples {
         }
 
         for statement in program.statements() {
-            if is_splittable && need_to_split {
+            if is_splittable {
                 match statement {
                     Statement::Rule(rule) => commit.add_rule(split_rule(&mut predicates, rule)),
                     Statement::Fact(fact) => commit.add_fact(split_fact(&mut predicates, fact)),
@@ -77,6 +79,23 @@ impl ProgramTransformation for TransformationN3SplitTriples {
             }
         }
 
+        if !is_splittable && self.have_extra_triples {
+            let subject = Term::Primitive(Primitive::universal_variable("subject"));
+            let predicate = Term::Primitive(Primitive::universal_variable("predicate"));
+            let object = Term::Primitive(Primitive::universal_variable("object"));
+
+            commit.add_rule(Rule::new(
+                vec![Atom::new(
+                    Tag::new(TRIPLES_PREDICATE.to_string()),
+                    vec![subject.clone(), predicate.clone(), object.clone()],
+                )],
+                vec![Literal::Positive(Atom::new(
+                    Tag::new(IMPORTS_PREDICATE.to_string()),
+                    vec![subject.clone(), predicate.clone(), object.clone()],
+                ))],
+            ));
+        }
+
         for predicate in predicates {
             let tag = Tag::new(TRIPLES_PREDICATE.to_string());
             let subject = Term::Primitive(Primitive::universal_variable("subject"));
@@ -84,7 +103,7 @@ impl ProgramTransformation for TransformationN3SplitTriples {
 
             commit.add_rule(Rule::new(
                 vec![Atom::new(
-                    tag,
+                    tag.clone(),
                     vec![
                         subject.clone(),
                         Term::Primitive(Primitive::constant(&predicate.name())),
@@ -92,10 +111,28 @@ impl ProgramTransformation for TransformationN3SplitTriples {
                     ],
                 )],
                 vec![Literal::Positive(Atom::new(
-                    predicate,
+                    predicate.clone(),
                     vec![subject.clone(), object.clone()],
                 ))],
             ));
+
+            if self.have_extra_triples {
+                let tag = Tag::new(IMPORTS_PREDICATE.to_string());
+                commit.add_rule(Rule::new(
+                    vec![Atom::new(
+                        predicate.clone(),
+                        vec![subject.clone(), object.clone()],
+                    )],
+                    vec![Literal::Positive(Atom::new(
+                        tag.clone(),
+                        vec![
+                            subject.clone(),
+                            Term::Primitive(Primitive::constant(&predicate.name())),
+                            object.clone(),
+                        ],
+                    ))],
+                ));
+            }
         }
 
         commit.submit()

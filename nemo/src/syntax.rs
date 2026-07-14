@@ -548,6 +548,8 @@ pub mod n3 {
     pub mod translation {
         /// The predicate used for translating triples
         pub const TRIPLES_PREDICATE: &str = "_TRIPLES";
+        /// The predicate used for translating extra imports
+        pub const IMPORTS_PREDICATE: &str = "_IMPORTS";
         /// The predicate used to simulate empty-body rules
         pub const DUMMY_PREDICATE: &str = "_DUMMY";
         /// The predicate base name used to simulate collections
