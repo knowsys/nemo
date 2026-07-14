@@ -552,6 +552,8 @@ pub mod n3 {
         pub const IMPORTS_PREDICATE: &str = "_IMPORTS";
         /// The predicate used to simulate empty-body rules
         pub const DUMMY_PREDICATE: &str = "_DUMMY";
+        /// The predicate used to simulate negation rules
+        pub const NEGATION_PREDICATE: &str = "_NEGATION";
         /// The predicate base name used to simulate collections
         pub const COLLECTION_PREDICATE_BASE: &str = "_COLLECTION";
         /// The base IRI used for skolemising named bnodes.

@@ -2,10 +2,12 @@
 
 pub mod builtins;
 pub mod split_triples;
+pub mod fixup_negation;
 
 use std::path::PathBuf;
 
 use builtins::TransformationN3Builtins;
+use fixup_negation::TransformationN3FixupNegation;
 use nemo_physical::datavalues::{AnyDataValue, DataValue};
 use split_triples::TransformationN3SplitTriples;
 
@@ -83,6 +85,7 @@ impl ProgramTransformation for TransformationN3Default<'_> {
         commit
             .submit()?
             .transform(TransformationN3Builtins::default())?
+            .transform(TransformationN3FixupNegation::default())?
             .transform(TransformationN3SplitTriples::new(
                 self.extra_triples.is_some(),
             ))?
