@@ -5,10 +5,13 @@ use std::{collections::HashSet, iter::chain};
 use crate::{
     rule_model::{
         components::{
-            IterableVariables, atom::Atom, literal::Literal, rule::Rule, statement::Statement, tag::Tag, term::{
-                Term,
-                primitive::Primitive,
-            }
+            IterableVariables,
+            atom::Atom,
+            literal::Literal,
+            rule::Rule,
+            statement::Statement,
+            tag::Tag,
+            term::{Term, primitive::Primitive},
         },
         error::ValidationReport,
         programs::{ProgramRead, ProgramWrite, handle::ProgramHandle},
@@ -49,15 +52,36 @@ impl ProgramTransformation for TransformationN3FixupNegation {
             match statement {
                 Statement::Rule(rule) => {
                     let head = rule.head().clone();
-                    let mut body = chain(rule.body_positive().cloned().map(Literal::Positive), rule.body_operations().cloned().map(Literal::Operation)).collect::<Vec<_>>();
+                    let mut body = chain(
+                        rule.body_positive().cloned().map(Literal::Positive),
+                        rule.body_operations().cloned().map(Literal::Operation),
+                    )
+                    .collect::<Vec<_>>();
                     let negative_body = rule.body_negative().cloned().collect::<Vec<_>>();
-                    let variables = negative_body.iter().flat_map(|atom| atom.variables().cloned()).collect::<HashSet<_>>();
-                    let helper_atom = Atom::new(self.fresh_predicate(), variables.into_iter().map(|variable| Term::Primitive(Primitive::Variable(variable))).collect::<Vec<_>>());
-                    body.push(Literal::Negative(helper_atom.clone()));
-                    let helper_rule = Rule::new(vec![helper_atom], negative_body.into_iter().map(Literal::Positive).collect());
 
-                    commit.add_rule(helper_rule);
-                    commit.add_rule(Rule::new(head, body));
+                    if negative_body.is_empty() {
+                        commit.keep(rule);
+                    } else {
+                        let variables = negative_body
+                            .iter()
+                            .flat_map(|atom| atom.variables().cloned())
+                            .collect::<HashSet<_>>();
+                        let helper_atom = Atom::new(
+                            self.fresh_predicate(),
+                            variables
+                                .into_iter()
+                                .map(|variable| Term::Primitive(Primitive::Variable(variable)))
+                                .collect::<Vec<_>>(),
+                        );
+                        body.push(Literal::Negative(helper_atom.clone()));
+                        let helper_rule = Rule::new(
+                            vec![helper_atom],
+                            negative_body.into_iter().map(Literal::Positive).collect(),
+                        );
+
+                        commit.add_rule(helper_rule);
+                        commit.add_rule(Rule::new(head, body));
+                    }
                 }
                 _ => commit.keep(statement),
             }
