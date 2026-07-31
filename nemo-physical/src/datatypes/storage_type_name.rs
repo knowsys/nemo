@@ -24,7 +24,7 @@ pub(crate) enum StorageTypeName {
 
 /// A list of [StorageTypeName],
 /// in the order they appear in the enum.
-pub(crate) const STORAFE_TYPES: &[StorageTypeName] = &[
+pub(crate) const STORAGE_TYPES: &[StorageTypeName] = &[
     StorageTypeName::Id32,
     StorageTypeName::Id64,
     StorageTypeName::Int64,
@@ -111,6 +111,14 @@ impl StorageTypeBitSet {
             }
         }
         result
+    }
+
+    /// Return the first [StorageTypeName] contained in this set, if any.
+    pub(crate) fn first_type(&self) -> Option<StorageTypeName> {
+        STORAGE_TYPES
+            .iter()
+            .copied()
+            .find(|storage_type| self.contains(storage_type))
     }
 
     /// Returns `true` if there is exactly one possible type.

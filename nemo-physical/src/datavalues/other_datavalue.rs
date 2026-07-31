@@ -34,6 +34,10 @@ impl DataValue for OtherDataValue {
             + RDF_DATATYPE_INDICATOR
             + &super::datavalue::quote_iri(self.1.as_str())
     }
+
+    fn to_other_unchecked(&self) -> (String, String) {
+        (self.0.to_owned(), self.1.to_owned())
+    }
 }
 
 impl std::hash::Hash for OtherDataValue {

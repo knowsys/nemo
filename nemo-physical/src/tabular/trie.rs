@@ -16,7 +16,7 @@ use crate::{
     datasources::tuple_writer::TupleWriter,
     datatypes::{
         StorageTypeName, StorageValueT,
-        storage_type_name::{STORAFE_TYPES, StorageTypeBitSet},
+        storage_type_name::{STORAGE_TYPES, StorageTypeBitSet},
     },
     management::bytesized::ByteSized,
     tabular::{buffer::tuple_buffer::TupleBuffer, rowscan::RowScan},
@@ -632,7 +632,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanGeneric<'a> {
     fn possible_types(&self, layer: usize) -> StorageTypeBitSet {
         let mut result = BitSet::default();
 
-        for (index, storage_type) in STORAFE_TYPES.iter().enumerate() {
+        for (index, storage_type) in STORAGE_TYPES.iter().enumerate() {
             if !self.trie.is_empty_layer(layer, *storage_type) {
                 result.set(index, true);
             }

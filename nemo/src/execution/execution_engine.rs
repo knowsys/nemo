@@ -5,6 +5,7 @@ use std::collections::{HashMap, HashSet};
 use nemo_physical::{
     datavalues::AnyDataValue,
     dictionary::DvDict,
+    function::definitions::set_now_timestamp,
     management::database::sources::{SimpleTable, TableSource},
     meta::timing::TimedCode,
 };
@@ -127,6 +128,9 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         program_handle: ProgramHandle,
         import_manager: ImportManager,
     ) -> Result<Self, Error> {
+        // Capture the current time for NOW()
+        set_now_timestamp();
+
         let normalized_program = NormalizedProgram::normalize_program(&program_handle);
         let rule_translation = RuleIdTranslation::new(&program_handle, &normalized_program);
 

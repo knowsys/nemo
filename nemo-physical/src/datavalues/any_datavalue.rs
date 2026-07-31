@@ -615,6 +615,8 @@ impl DataValue for AnyDataValue {
             fn to_boolean_unchecked(&self) -> bool;
             fn to_null(&self) -> Option<NullDataValue>;
             fn to_null_unchecked(&self) -> NullDataValue;
+            fn to_other(&self) -> Option<(String, String)>;
+            fn to_other_unchecked(&self) -> (String, String);
             fn label(&self) -> Option<&IriDataValue>;
             fn length(&self) -> Option<usize>;
             fn len_unchecked(&self) -> usize;

@@ -522,14 +522,7 @@ impl DvDict for MetaDvDictionary {
     }
 
     fn len(&self) -> usize {
-        let mut len = 0;
-        log::info!("Computing total meta dict length ...");
-        for dr in self.dicts.iter() {
-            log::info!("+ {} entries in dict {:?}", dr.dict.len(), dr.dict_type);
-            len += dr.dict.len();
-        }
-        log::info!("Total len {len}");
-        len
+        self.dicts.iter().map(|dr| dr.dict.len()).sum()
     }
 
     fn is_iri(&self, id: usize) -> bool {

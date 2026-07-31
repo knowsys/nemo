@@ -1,8 +1,9 @@
 //! This module defines functions on string.
 
+use fancy_regex::{NoExpand, Regex, RegexBuilder, escape};
 use levenshtein::levenshtein;
 use once_cell::sync::OnceCell;
-use std::{cmp::Ordering, num::NonZero, sync::Mutex};
+use std::{borrow::Cow, cmp::Ordering, num::NonZero, sync::Mutex};
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{
@@ -141,8 +142,7 @@ impl BinaryFunction for StringCompare {
 
 /// Concatenation of strings
 ///
-/// Returns a string, that results from merging together
-/// all input strings.
+/// Returns a string that results from merging together all input strings.
 ///
 /// Returns a language tagged string if all parameters have an identical language tag.
 /// Otherwise, return a plain string.
@@ -441,42 +441,103 @@ impl BinaryFunction for StringSubstring {
 }
 
 const REGEX_CACHE_SIZE: NonZero<usize> = NonZero::new(32).unwrap();
-static REGEX_CACHE: OnceCell<Mutex<lru::LruCache<String, regex::Regex>>> = OnceCell::new();
+static REGEX_CACHE: OnceCell<Mutex<lru::LruCache<(String, String), Regex>>> = OnceCell::new();
+
+/// Compile the regular expression `pattern` under the given `flags`,
+/// consulting a cache of previous compilations first.
+///
+/// The pattern uses the syntax of the [fancy_regex] crate,
+/// which closely matches, but is not identical to,
+/// the regular expression syntax of the XPath specification.
+///
+/// The available flags are defined by the
+/// [XPath specification](https://www.w3.org/TR/xpath-functions/#flags):
+/// `s` (dot matches newline), `m` (multi-line), `i` (case-insensitive),
+/// `x` (ignore whitespace), and `q` (interpret the pattern as a literal string).
+/// Per the specification, `q` disables `m`, `s`, and `x`,
+/// but may be combined with `i`.
+///
+/// Returns `None` if `flags` contains any other character
+/// or if `pattern` is not a valid regular expression.
+fn compile_regex(pattern: String, flags: String) -> Option<Regex> {
+    let mut case_insensitive = false;
+    let mut multi_line = false;
+    let mut dot_matches_new_line = false;
+    let mut ignore_whitespace = false;
+    let mut literal = false;
+
+    for flag in flags.chars() {
+        match flag {
+            'i' => case_insensitive = true,
+            'm' => multi_line = true,
+            's' => dot_matches_new_line = true,
+            'x' => ignore_whitespace = true,
+            'q' => literal = true,
+            _ => return None,
+        }
+    }
+
+    let mut cache = REGEX_CACHE
+        .get_or_init(|| Mutex::new(lru::LruCache::new(REGEX_CACHE_SIZE)))
+        .lock()
+        .expect("no thread should panic while holding the lock");
+
+    let key = (pattern, flags);
+    if let Some(regex) = cache.get(&key) {
+        return Some(regex.clone());
+    }
+
+    let pattern = if literal {
+        escape(&key.0)
+    } else {
+        Cow::Borrowed(key.0.as_str())
+    };
+
+    let mut builder = RegexBuilder::new(&pattern);
+    builder.case_insensitive(case_insensitive);
+    if !literal {
+        builder
+            .multi_line(multi_line)
+            .dot_matches_new_line(dot_matches_new_line)
+            .ignore_whitespace(ignore_whitespace);
+    }
+
+    let regex = builder.build().ok()?;
+    cache.put(key, regex.clone());
+
+    Some(regex)
+}
 
 /// Regex string matching
 ///
 /// Returns `true` from the boolean value space if the regex provided as the second parameter
 /// is matched in the string provided as the first parameter and `false` otherwise.
+/// An optional third parameter may provide regex flags (e.g. `"i"` for case-insensitive),
+/// corresponding to the SPARQL `regex(string, pattern [, flags])` function.
+/// The available flags are documented at [compile_regex].
 ///
-/// Returns a plain string.
-///
-/// Returns `None` if either parameter is not a (language tagged) string, if the second parameter is not
-/// a regular expression or if the two language tags do not comply with Argument Compatibility Rules.
+/// Returns `None` if the first parameter is not a (language tagged) string,
+/// if the pattern or the flags are not plain strings,
+/// if the flags are invalid, or if the pattern is not a valid regular expression.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct StringRegex;
-impl BinaryFunction for StringRegex {
-    fn evaluate(
-        &self,
-        parameter_first: AnyDataValue,
-        parameter_second: AnyDataValue,
-    ) -> Option<AnyDataValue> {
-        lang_string_pair_from_any(parameter_first, parameter_second).map(
-            |(lang_string, lang_pattern)| {
-                let mut cache = REGEX_CACHE
-                    .get_or_init(|| Mutex::new(lru::LruCache::new(REGEX_CACHE_SIZE)))
-                    .lock()
-                    .unwrap();
+impl NaryFunction for StringRegex {
+    fn evaluate(&self, parameters: &[AnyDataValue]) -> Option<AnyDataValue> {
+        if parameters.len() < 2 || parameters.len() > 3 {
+            return None;
+        }
 
-                let regex = cache.try_get_or_insert(lang_pattern.string.clone(), || {
-                    regex::Regex::new(&lang_pattern.string)
-                });
+        let text = LangTaggedString::try_from(parameters[0].clone()).ok()?;
+        let pattern = parameters[1].to_plain_string()?;
+        let flags = match parameters.get(2) {
+            Some(parameter) => parameter.to_plain_string()?,
+            None => String::default(),
+        };
 
-                match regex {
-                    Ok(regex) => AnyDataValue::new_boolean(regex.is_match(&lang_string.string)),
-                    Err(_) => AnyDataValue::new_boolean(false),
-                }
-            },
-        )
+        let regex = compile_regex(pattern, flags)?;
+        let is_match = regex.is_match(&text.string).ok()?;
+
+        Some(AnyDataValue::new_boolean(is_match))
     }
 
     fn type_propagation(&self) -> FunctionTypePropagation {
@@ -494,8 +555,6 @@ impl BinaryFunction for StringRegex {
 /// insertions, deletions, or character substitutions required to
 /// change one argument into the other) between the two given strings
 /// as a number from the integer value space.
-///
-/// Returns a plain string.
 ///
 /// Returns `None` if either parameter is not a (language tagged) string or
 /// if the two language tags do not comply with Argument Compatibility Rules.
@@ -521,8 +580,6 @@ impl BinaryFunction for StringLevenshtein {
 ///
 /// Returns the length of the given string as a number from the integer value space.
 ///
-/// Returns a plain string.
-///
 /// Returns `None` if the provided argument is not a (language tagged) string
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct StringLength;
@@ -535,6 +592,93 @@ impl UnaryFunction for StringLength {
 
     fn type_propagation(&self) -> FunctionTypePropagation {
         FunctionTypePropagation::KnownOutput(StorageTypeName::Int64.bitset())
+    }
+}
+
+/// Removal of leading and trailing whitespace from a string
+///
+/// Returns the string with leading and trailing whitespace removed.
+///
+/// Returns a language tagged string if the first parameter has a language tag.
+/// Otherwise, return a plain string.
+///
+/// Returns `None` if the provided argument is not a (language tagged) string.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct StringTrim;
+impl UnaryFunction for StringTrim {
+    fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
+        LangTaggedString::try_from(parameter)
+            .ok()
+            .map(|lang_string| {
+                let trimmed = lang_string.string.trim().to_string();
+                LangTaggedString::new(trimmed, lang_string.tag).into_data_value()
+            })
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::KnownOutput(
+            StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Id64.bitset()),
+        )
+    }
+}
+
+/// Removal of leading whitespace from a string
+///
+/// Returns the string with leading whitespace removed.
+///
+/// Returns a language tagged string if the first parameter has a language tag.
+/// Otherwise, return a plain string.
+///
+/// Returns `None` if the provided argument is not a (language tagged) string.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct StringTrimStart;
+impl UnaryFunction for StringTrimStart {
+    fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
+        LangTaggedString::try_from(parameter)
+            .ok()
+            .map(|lang_string| {
+                let trimmed = lang_string.string.trim_start().to_string();
+                LangTaggedString::new(trimmed, lang_string.tag).into_data_value()
+            })
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::KnownOutput(
+            StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Id64.bitset()),
+        )
+    }
+}
+
+/// Removal of trailing whitespace from a string
+///
+/// Returns the string with trailing whitespace removed.
+///
+/// Returns a language tagged string if the first parameter has a language tag.
+/// Otherwise, return a plain string.
+///
+/// Returns `None` if the provided argument is not a (language tagged) string.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct StringTrimEnd;
+impl UnaryFunction for StringTrimEnd {
+    fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
+        LangTaggedString::try_from(parameter)
+            .ok()
+            .map(|lang_string| {
+                let trimmed = lang_string.string.trim_end().to_string();
+                LangTaggedString::new(trimmed, lang_string.tag).into_data_value()
+            })
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::KnownOutput(
+            StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Id64.bitset()),
+        )
     }
 }
 
@@ -650,9 +794,9 @@ impl UnaryFunction for StringUriEncode {
     }
 }
 
-/// URI encoding (percent encoding) of a string
+/// URI decoding (percent decoding) of a string
 ///
-/// Returns the percent-encoded version of the provided string.
+/// Returns the percent-decoded version of the provided string.
 ///
 /// Returns a plain string.
 ///
@@ -731,6 +875,107 @@ impl TernaryFunction for StringSubstringLength {
     }
 }
 
+/// Regex-based replacement within a string
+///
+/// Corresponds to SPARQL REPLACE(arg, pattern, replacement [, flags]).
+/// Returns a copy of `arg` with every match of the regex `pattern` replaced by `replacement`.
+/// The optional `flags` parameter (4th element) sets regex flags,
+/// which are documented at [compile_regex].
+/// Replacement may reference capture groups via `$1`, `$2`, etc.; use `$$` for a literal `$`.
+/// Under the `q` flag, the replacement is used literally.
+///
+/// The replacement string follows the conventions of the [fancy_regex] crate,
+/// which deviate from the XPath specification in the following respects:
+/// a literal `$` is written as `$$` instead of `\$`,
+/// a backslash has no special meaning,
+/// references to capture groups that do not exist in the pattern
+/// expand to the empty string instead of being an error,
+/// and patterns that match a zero-length string are permitted
+/// (where XPath raises an error).
+///
+/// Returns `None` if the first parameter is not a (language tagged) string,
+/// if the pattern, replacement, or flags are not plain strings,
+/// if the flags are invalid, or if the pattern is not a valid regex.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct StringReplace;
+impl NaryFunction for StringReplace {
+    fn evaluate(&self, parameters: &[AnyDataValue]) -> Option<AnyDataValue> {
+        if parameters.len() < 3 || parameters.len() > 4 {
+            return None;
+        }
+
+        let input = LangTaggedString::try_from(parameters[0].clone()).ok()?;
+        let pattern = parameters[1].to_plain_string()?;
+        let replacement = parameters[2].to_plain_string()?;
+        let flags = match parameters.get(3) {
+            Some(parameter) => parameter.to_plain_string()?,
+            None => String::default(),
+        };
+
+        let literal = flags.contains('q');
+        let regex = compile_regex(pattern, flags)?;
+        let result = if literal {
+            regex.try_replacen(&input.string, 0, NoExpand(&replacement))
+        } else {
+            regex.try_replacen(&input.string, 0, replacement.as_str())
+        }
+        .ok()?
+        .into_owned();
+
+        Some(LangTaggedString::new(result, input.tag).into_data_value())
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::KnownOutput(
+            StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Id64.bitset()),
+        )
+    }
+}
+
+/// Language tag matching
+///
+/// Corresponds to SPARQL langMatches(language-tag, language-range).
+/// Returns `true` if `language-tag` matches `language-range` per RFC 4647 basic filtering:
+/// - A range of `"*"` matches any non-empty language tag.
+/// - Otherwise the tag matches if it equals the range or starts with `"<range>-"` (case-insensitive).
+///
+/// Returns `None` if either argument is not a plain string.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct StringLangMatches;
+impl BinaryFunction for StringLangMatches {
+    fn evaluate(
+        &self,
+        parameter_first: AnyDataValue,
+        parameter_second: AnyDataValue,
+    ) -> Option<AnyDataValue> {
+        let tag = parameter_first.to_plain_string()?;
+        let range = parameter_second.to_plain_string()?;
+
+        let tag = tag.as_bytes();
+        let range = range.as_bytes();
+
+        let matches = if range == b"*" {
+            !tag.is_empty()
+        } else {
+            tag.len() >= range.len()
+                && tag[..range.len()].eq_ignore_ascii_case(range)
+                && (tag.len() == range.len() || tag[range.len()] == b'-')
+        };
+
+        Some(AnyDataValue::new_boolean(matches))
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::KnownOutput(
+            StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Id64.bitset()),
+        )
+    }
+}
+
 #[cfg(test)]
 mod test {
 
@@ -743,8 +988,9 @@ mod test {
 
     use super::{
         StringAfter, StringBefore, StringCompare, StringConcatenation, StringContains, StringEnds,
-        StringLength, StringLevenshtein, StringLowercase, StringRegex, StringReverse, StringStarts,
-        StringSubstring, StringSubstringLength, StringUppercase, StringUriDecode, StringUriEncode,
+        StringLength, StringLevenshtein, StringLowercase, StringRegex, StringReplace,
+        StringReverse, StringStarts, StringSubstring, StringSubstringLength, StringTrim,
+        StringTrimEnd, StringTrimStart, StringUppercase, StringUriDecode, StringUriEncode,
     };
 
     #[test]
@@ -1147,6 +1393,45 @@ mod test {
     }
 
     #[test]
+    fn test_string_trim() {
+        let string = AnyDataValue::new_plain_string("  hello  ".to_string());
+        let result = AnyDataValue::new_plain_string("hello".to_string());
+        let actual_result = StringTrim.evaluate(string.clone());
+        assert!(actual_result.is_some());
+        assert_eq!(result, actual_result.unwrap());
+
+        let string_notstring = AnyDataValue::new_integer_from_i64(1);
+        let actual_result_notstring = StringTrim.evaluate(string_notstring);
+        assert!(actual_result_notstring.is_none());
+
+        let string_lang =
+            AnyDataValue::new_language_tagged_string("  hola  ".to_string(), "es".to_string());
+        let result_lang =
+            AnyDataValue::new_language_tagged_string("hola".to_string(), "es".to_string());
+        let actual_result_lang = StringTrim.evaluate(string_lang);
+        assert!(actual_result_lang.is_some());
+        assert_eq!(result_lang, actual_result_lang.unwrap());
+    }
+
+    #[test]
+    fn test_string_trim_start() {
+        let string = AnyDataValue::new_plain_string("  hello  ".to_string());
+        let result = AnyDataValue::new_plain_string("hello  ".to_string());
+        let actual_result = StringTrimStart.evaluate(string.clone());
+        assert!(actual_result.is_some());
+        assert_eq!(result, actual_result.unwrap());
+    }
+
+    #[test]
+    fn test_string_trim_end() {
+        let string = AnyDataValue::new_plain_string("  hello  ".to_string());
+        let result = AnyDataValue::new_plain_string("  hello".to_string());
+        let actual_result = StringTrimEnd.evaluate(string.clone());
+        assert!(actual_result.is_some());
+        assert_eq!(result, actual_result.unwrap());
+    }
+
+    #[test]
     fn test_string_before() {
         let string = AnyDataValue::new_plain_string("hello".to_string());
         let start = AnyDataValue::new_plain_string("l".to_string());
@@ -1347,23 +1632,169 @@ mod test {
         let string = AnyDataValue::new_plain_string("hello".to_string());
         let pattern = AnyDataValue::new_plain_string("l".to_string());
         let result = AnyDataValue::new_boolean(true);
-        let actual_result = StringRegex.evaluate(string.clone(), pattern);
+        let actual_result = StringRegex.evaluate(&[string.clone(), pattern]);
         assert!(actual_result.is_some());
         assert_eq!(result, actual_result.unwrap());
 
         let string_unicode = AnyDataValue::new_plain_string("loẅks".to_string());
         let pattern_unicode = AnyDataValue::new_plain_string("ẅ".to_string());
         let result_unicode = AnyDataValue::new_boolean(true);
-        let actual_result_unicode = StringRegex.evaluate(string_unicode.clone(), pattern_unicode);
+        let actual_result_unicode =
+            StringRegex.evaluate(&[string_unicode.clone(), pattern_unicode]);
         assert!(actual_result_unicode.is_some());
         assert_eq!(result_unicode, actual_result_unicode.unwrap());
 
         let string_regex = AnyDataValue::new_plain_string("looks".to_string());
         let pattern_regex = AnyDataValue::new_plain_string("o+".to_string());
         let result_regex = AnyDataValue::new_boolean(true);
-        let actual_result_regex = StringRegex.evaluate(string_regex.clone(), pattern_regex);
+        let actual_result_regex = StringRegex.evaluate(&[string_regex.clone(), pattern_regex]);
         assert!(actual_result_regex.is_some());
         assert_eq!(result_regex, actual_result_regex.unwrap());
+
+        // With flags: case-insensitive match
+        let string_flags = AnyDataValue::new_plain_string("Hello".to_string());
+        let pattern_flags = AnyDataValue::new_plain_string("hello".to_string());
+        let flags = AnyDataValue::new_plain_string("i".to_string());
+        let result_flags = AnyDataValue::new_boolean(true);
+        let actual_result_flags = StringRegex.evaluate(&[string_flags, pattern_flags, flags]);
+        assert!(actual_result_flags.is_some());
+        assert_eq!(result_flags, actual_result_flags.unwrap());
+
+        // The q flag treats the pattern as a literal string
+        let q_flag = AnyDataValue::new_plain_string("q".to_string());
+        assert_eq!(
+            StringRegex.evaluate(&[
+                AnyDataValue::new_plain_string("a.c".to_string()),
+                AnyDataValue::new_plain_string("a.c".to_string()),
+                q_flag.clone(),
+            ]),
+            Some(AnyDataValue::new_boolean(true))
+        );
+        assert_eq!(
+            StringRegex.evaluate(&[
+                AnyDataValue::new_plain_string("abc".to_string()),
+                AnyDataValue::new_plain_string("a.c".to_string()),
+                q_flag.clone(),
+            ]),
+            Some(AnyDataValue::new_boolean(false))
+        );
+
+        // The q flag may be combined with i
+        assert_eq!(
+            StringRegex.evaluate(&[
+                AnyDataValue::new_plain_string("A.C".to_string()),
+                AnyDataValue::new_plain_string("a.c".to_string()),
+                AnyDataValue::new_plain_string("qi".to_string()),
+            ]),
+            Some(AnyDataValue::new_boolean(true))
+        );
+
+        // Invalid flags are rejected
+        assert_eq!(
+            StringRegex.evaluate(&[
+                AnyDataValue::new_plain_string("abc".to_string()),
+                AnyDataValue::new_plain_string("abc".to_string()),
+                AnyDataValue::new_plain_string("g".to_string()),
+            ]),
+            None
+        );
+
+        // Backreferences are supported
+        assert_eq!(
+            StringRegex.evaluate(&[
+                AnyDataValue::new_plain_string("abcabc".to_string()),
+                AnyDataValue::new_plain_string(r"(abc)\1".to_string()),
+            ]),
+            Some(AnyDataValue::new_boolean(true))
+        );
+
+        // Pattern and flags must be plain strings
+        assert_eq!(
+            StringRegex.evaluate(&[
+                AnyDataValue::new_plain_string("abc".to_string()),
+                AnyDataValue::new_language_tagged_string("abc".to_string(), "en".to_string()),
+            ]),
+            None
+        );
+        assert_eq!(
+            StringRegex.evaluate(&[
+                AnyDataValue::new_plain_string("abc".to_string()),
+                AnyDataValue::new_plain_string("abc".to_string()),
+                AnyDataValue::new_language_tagged_string("i".to_string(), "en".to_string()),
+            ]),
+            None
+        );
+    }
+
+    #[test]
+    fn test_string_replace() {
+        // Capture group references in the replacement
+        assert_eq!(
+            StringReplace.evaluate(&[
+                AnyDataValue::new_plain_string("abc".to_string()),
+                AnyDataValue::new_plain_string("([ab])(.*)".to_string()),
+                AnyDataValue::new_plain_string("$2".to_string()),
+            ]),
+            Some(AnyDataValue::new_plain_string("bc".to_string()))
+        );
+
+        // Invalid flags are rejected instead of being spliced into the pattern
+        // (otherwise "i:." would introduce a capture group "(?i:.)",
+        // shifting all capture group references)
+        assert_eq!(
+            StringReplace.evaluate(&[
+                AnyDataValue::new_plain_string("abc".to_string()),
+                AnyDataValue::new_plain_string("([ab])(.*)".to_string()),
+                AnyDataValue::new_plain_string("$2".to_string()),
+                AnyDataValue::new_plain_string("i:.".to_string()),
+            ]),
+            None
+        );
+
+        // Case-insensitive replacement
+        assert_eq!(
+            StringReplace.evaluate(&[
+                AnyDataValue::new_plain_string("aBc".to_string()),
+                AnyDataValue::new_plain_string("b".to_string()),
+                AnyDataValue::new_plain_string("x".to_string()),
+                AnyDataValue::new_plain_string("i".to_string()),
+            ]),
+            Some(AnyDataValue::new_plain_string("axc".to_string()))
+        );
+
+        // The q flag treats both pattern and replacement literally
+        assert_eq!(
+            StringReplace.evaluate(&[
+                AnyDataValue::new_plain_string("a.c".to_string()),
+                AnyDataValue::new_plain_string(".".to_string()),
+                AnyDataValue::new_plain_string("$1".to_string()),
+                AnyDataValue::new_plain_string("q".to_string()),
+            ]),
+            Some(AnyDataValue::new_plain_string("a$1c".to_string()))
+        );
+
+        // The language tag of the input is kept
+        assert_eq!(
+            StringReplace.evaluate(&[
+                AnyDataValue::new_language_tagged_string("abc".to_string(), "en".to_string()),
+                AnyDataValue::new_plain_string("b".to_string()),
+                AnyDataValue::new_plain_string("x".to_string()),
+            ]),
+            Some(AnyDataValue::new_language_tagged_string(
+                "axc".to_string(),
+                "en".to_string()
+            ))
+        );
+
+        // Pattern and replacement must be plain strings
+        assert_eq!(
+            StringReplace.evaluate(&[
+                AnyDataValue::new_plain_string("abc".to_string()),
+                AnyDataValue::new_language_tagged_string("b".to_string(), "en".to_string()),
+                AnyDataValue::new_plain_string("x".to_string()),
+            ]),
+            None
+        );
     }
 
     #[test]

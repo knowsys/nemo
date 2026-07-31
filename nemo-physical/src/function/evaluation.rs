@@ -12,7 +12,8 @@ use crate::{
 use super::{
     definitions::{
         BinaryFunction, BinaryFunctionEnum, FunctionTypePropagation, NaryFunction,
-        NaryFunctionEnum, TernaryFunction, TernaryFunctionEnum, UnaryFunction, UnaryFunctionEnum,
+        NaryFunctionEnum, NullaryFunction, NullaryFunctionEnum, TernaryFunction,
+        TernaryFunctionEnum, UnaryFunction, UnaryFunctionEnum,
     },
     tree::FunctionTree,
 };
@@ -55,6 +56,8 @@ pub(crate) enum StackOperation {
     BinaryFunction(BinaryFunctionEnum),
     /// Evaluate the given ternary function on the top three elements in the stack.
     TernaryFunction(TernaryFunctionEnum),
+    /// Evaluate the given nullary function and push the result onto the stack.
+    NullaryFunction(NullaryFunctionEnum),
     /// Evaluate the given n-ary function on the top n elements in the stack.
     NaryFunction(NaryFunctionEnum, usize),
 }
@@ -109,12 +112,16 @@ impl StackProgram {
 
                     current_height -= 2;
                 }
+                StackOperation::NullaryFunction(_) => {
+                    current_height += 1;
+                }
                 StackOperation::NaryFunction(_, parameter_count) => {
                     if current_height < *parameter_count {
                         return Err(Error::MalformedStackProgram);
                     }
 
-                    current_height -= parameter_count - 1;
+                    current_height -= parameter_count;
+                    current_height += 1;
                 }
             }
 
@@ -185,6 +192,9 @@ impl StackProgram {
 
                     operations.push(StackOperation::TernaryFunction(*function));
                 }
+                FunctionTree::Nullary(function) => {
+                    operations.push(StackOperation::NullaryFunction(*function));
+                }
                 FunctionTree::Nary {
                     function,
                     parameters,
@@ -250,6 +260,9 @@ impl StackProgram {
                         .expect("This program is valid, so the stack cannot be empty.");
 
                     stack.push(function.evaluate(first_input, second_input, third_input)?);
+                }
+                StackOperation::NullaryFunction(function) => {
+                    stack.push(function.evaluate()?);
                 }
                 StackOperation::NaryFunction(function, parameter_count) => {
                     let mut inputs = Vec::new();
@@ -325,6 +338,7 @@ impl StackProgram {
                 },
                 StackOperation::BinaryFunction(function) => (2, function.type_propagation()),
                 StackOperation::TernaryFunction(function) => (3, function.type_propagation()),
+                StackOperation::NullaryFunction(function) => (0, function.type_propagation()),
                 StackOperation::NaryFunction(function, num_arguments) => (*num_arguments, function.type_propagation()),
             };
 
@@ -469,10 +483,10 @@ mod test {
         );
         evaluate_expect(&tree_not_contains, Some(AnyDataValue::new_boolean(false)));
 
-        let tree_regex = Function::string_regex(
+        let tree_regex = Function::string_regex(vec![
             Function::constant(any_string("hello")),
             Function::constant(any_string("l+")),
-        );
+        ]);
         evaluate_expect(&tree_regex, Some(AnyDataValue::new_boolean(true)));
 
         let tree_substring_length = Function::string_substring_length(
@@ -1036,5 +1050,46 @@ mod test {
         evaluate_bool_expect(&tree_is_string, true);
         let tree_not_string = Function::check_is_string(tree_double.clone());
         evaluate_bool_expect(&tree_not_string, false);
+    }
+
+    /// Tests for UUID and STRUUID.
+    ///
+    /// These are nondeterministic — we verify output domain and structural properties.
+    #[test]
+    fn evaluate_nondeterministic() {
+        let program_uuid =
+            StackProgram::from_function_tree(&Function::func_uuid(), &HashMap::new(), None);
+        let program_struuid =
+            StackProgram::from_function_tree(&Function::func_struuid(), &HashMap::new(), None);
+
+        // UUID() must produce an IRI holding a valid UUID of the form urn:uuid:…
+        let u = program_uuid.evaluate_data(&[]).unwrap();
+        assert_eq!(u.value_domain(), ValueDomain::Iri);
+        let iri = u.to_iri_unchecked();
+        let uuid = iri
+            .strip_prefix("urn:uuid:")
+            .unwrap_or_else(|| panic!("UUID() IRI has wrong prefix: {iri}"));
+        assert!(
+            uuid::Uuid::try_parse(uuid).is_ok(),
+            "UUID() IRI does not contain a valid UUID: {iri}"
+        );
+
+        // STRUUID() must produce a plain string holding a valid UUID
+        let s = program_struuid.evaluate_data(&[]).unwrap();
+        assert_eq!(s.value_domain(), ValueDomain::PlainString);
+        let s_str = s.to_plain_string_unchecked();
+        assert!(
+            uuid::Uuid::try_parse(&s_str).is_ok(),
+            "STRUUID() is not a valid UUID: {s_str}"
+        );
+        assert_eq!(
+            s_str,
+            s_str.to_lowercase(),
+            "STRUUID() is not lowercase: {s_str}"
+        );
+
+        // Two UUIDs must not be equal
+        let u2 = program_uuid.evaluate_data(&[]).unwrap();
+        assert_ne!(u, u2, "UUID() returned the same value twice");
     }
 }

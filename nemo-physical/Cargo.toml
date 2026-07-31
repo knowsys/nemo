@@ -12,6 +12,7 @@ repository.workspace = true
 [features]
 check_column_sorting = []
 old_dictionaries = []
+js = ["uuid/js", "oxsdatatypes/js"]
 
 [[bin]]
 name = "dict-bench"
@@ -31,7 +32,6 @@ lru = "0.16"
 cpu-time = "1.0"
 reqwest = { workspace = true }
 delegate = { workspace = true }
-regex = "1.9.5"
 hashbrown = "0.16.0"
 streaming-iterator = "0.1.9"
 flate2 = { workspace = true }
@@ -40,9 +40,17 @@ urlencoding = { workspace = true }
 oxiri = { workspace = true }
 path-slash = "0.2.1"
 levenshtein = "1.0.5"
+rand = { workspace = true }
+uuid = { workspace = true }
+sha2 = "0.10"
+sha1 = "0.10"
+md5 = { package = "md-5", version = "0.10" }
+digest = "0.10"
 serde_urlencoded = "0.7.1"
 serde = { workspace = true, features =["derive"]}
 itertools = { workspace = true }
+oxsdatatypes = "0.2.2"
+fancy-regex = "0.18"
 
 [dev-dependencies]
 rand = { workspace = true }

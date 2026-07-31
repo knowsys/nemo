@@ -3,13 +3,25 @@
 pub(crate) mod boolean;
 pub(crate) mod casting;
 pub(crate) mod checktype;
+pub(crate) mod datetime;
 pub(crate) mod generic;
+pub(crate) mod hashing;
 pub(crate) mod language;
+pub(crate) mod nondeterministic;
 pub(crate) mod numeric;
 pub(crate) mod string;
 
+pub use datetime::set_now_timestamp;
+
 use casting::CastingIntoIri;
+use nondeterministic::{FuncRand, FuncStruuid, FuncUuid};
+
+use datetime::{
+    DateTimeDay, DateTimeHours, DateTimeMinutes, DateTimeMonth, DateTimeSeconds, DateTimeTimezone,
+    DateTimeTz, DateTimeYear, FuncNow,
+};
 use delegate::delegate;
+use hashing::{StringMd5, StringSha1, StringSha256, StringSha384, StringSha512};
 use string::StringLevenshtein;
 
 use crate::{
@@ -25,7 +37,7 @@ use self::{
         CheckIsDouble, CheckIsFloat, CheckIsInteger, CheckIsIri, CheckIsNull, CheckIsNumeric,
         CheckIsString,
     },
-    generic::{CanonicalString, Datatype, Equals, LexicalValue, Unequals},
+    generic::{CanonicalString, Datatype, Equals, LexicalValue, TypedLiteral, Unequals},
     language::LanguageTag,
     numeric::{
         BitAnd, BitOr, BitShiftLeft, BitShiftRight, BitShiftRightUnsigned, BitXor, NumericAbsolute,
@@ -38,8 +50,9 @@ use self::{
     },
     string::{
         StringAfter, StringBefore, StringCompare, StringConcatenation, StringContains, StringEnds,
-        StringLength, StringLowercase, StringRegex, StringReverse, StringStarts, StringSubstring,
-        StringSubstringLength, StringUppercase, StringUriDecode, StringUriEncode,
+        StringLangMatches, StringLength, StringLowercase, StringRegex, StringReplace,
+        StringReverse, StringStarts, StringSubstring, StringSubstringLength, StringTrim,
+        StringTrimEnd, StringTrimStart, StringUppercase, StringUriDecode, StringUriEncode,
     },
 };
 
@@ -127,6 +140,11 @@ pub trait UnaryFunction {
     /// Return a [FunctionTypePropagation] indicating how storage types are propagated
     /// when applying this function.
     fn type_propagation(&self) -> FunctionTypePropagation;
+
+    /// Return `true` if this function is nondeterministic (must not be constant-folded).
+    fn is_nondeterministic(&self) -> bool {
+        false
+    }
 }
 
 /// Enum containing all implementations of [UnaryFunction]
@@ -184,6 +202,12 @@ pub enum UnaryFunctionEnum {
     NumericTangent(NumericTangent),
     /// Length of a string
     StringLength(StringLength),
+    /// Trim whitespace from both ends of a string
+    StringTrim(StringTrim),
+    /// Trim whitespace from the start of a string
+    StringTrimStart(StringTrimStart),
+    /// Trim whitespace from the end of a string
+    StringTrimEnd(StringTrimEnd),
     /// Reverse of a string
     StringReverse(StringReverse),
     /// Lowercase of a string
@@ -194,6 +218,32 @@ pub enum UnaryFunctionEnum {
     StringUriEncode(StringUriEncode),
     /// Iri-decoding of a string
     StringUriDecode(StringUriDecode),
+    /// MD5 hash of a string
+    StringMd5(StringMd5),
+    /// SHA1 hash of a string
+    StringSha1(StringSha1),
+    /// SHA256 hash of a string
+    StringSha256(StringSha256),
+    /// SHA384 hash of a string
+    StringSha384(StringSha384),
+    /// SHA512 hash of a string
+    StringSha512(StringSha512),
+    /// Year component of a date/dateTime value
+    DateTimeYear(DateTimeYear),
+    /// Month component of a date/dateTime value
+    DateTimeMonth(DateTimeMonth),
+    /// Day component of a date/dateTime value
+    DateTimeDay(DateTimeDay),
+    /// Hours component of a dateTime/time value
+    DateTimeHours(DateTimeHours),
+    /// Minutes component of a dateTime/time value
+    DateTimeMinutes(DateTimeMinutes),
+    /// Seconds component of a dateTime/time value
+    DateTimeSeconds(DateTimeSeconds),
+    /// Timezone of a date/dateTime/time value as xsd:dayTimeDuration
+    DateTimeTimezone(DateTimeTimezone),
+    /// Timezone of a date/dateTime/time value as a plain string
+    DateTimeTz(DateTimeTz),
 }
 
 impl UnaryFunction for UnaryFunctionEnum {
@@ -225,14 +275,31 @@ impl UnaryFunction for UnaryFunctionEnum {
             Self::NumericSquareroot(function) => function,
             Self::NumericTangent(function) => function,
             Self::StringLength(function) => function,
+            Self::StringTrim(function) => function,
+            Self::StringTrimStart(function) => function,
+            Self::StringTrimEnd(function) => function,
             Self::StringReverse(function) => function,
             Self::StringLowercase(function) => function,
             Self::StringUppercase(function) => function,
             Self::StringUriEncode(function) => function,
             Self::StringUriDecode(function) => function,
+            Self::StringMd5(function) => function,
+            Self::StringSha1(function) => function,
+            Self::StringSha256(function) => function,
+            Self::StringSha384(function) => function,
+            Self::StringSha512(function) => function,
+            Self::DateTimeYear(function) => function,
+            Self::DateTimeMonth(function) => function,
+            Self::DateTimeDay(function) => function,
+            Self::DateTimeHours(function) => function,
+            Self::DateTimeMinutes(function) => function,
+            Self::DateTimeSeconds(function) => function,
+            Self::DateTimeTimezone(function) => function,
+            Self::DateTimeTz(function) => function,
         } {
             fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue>;
             fn type_propagation(&self) -> FunctionTypePropagation;
+            fn is_nondeterministic(&self) -> bool;
         }
     }
 }
@@ -251,6 +318,11 @@ pub trait BinaryFunction {
     /// Return a [FunctionTypePropagation] indicating how storage types are propagated
     /// when applying this function.
     fn type_propagation(&self) -> FunctionTypePropagation;
+
+    /// Return `true` if this function is nondeterministic (must not be constant-folded).
+    fn is_nondeterministic(&self) -> bool {
+        false
+    }
 }
 
 /// Enum containing all implementations of [BinaryFunction]
@@ -292,8 +364,6 @@ pub enum BinaryFunctionEnum {
     StringCompare(StringCompare),
     /// Containment of strings
     StringContains(StringContains),
-    /// Regex matching of strings
-    StringRegex(StringRegex),
     /// Levenshtein distance of two strings
     StringLevenshtein(StringLevenshtein),
     /// Is the second string a suffix of the first string?
@@ -308,6 +378,10 @@ pub enum BinaryFunctionEnum {
     BitShiftRight(BitShiftRight),
     /// Shift value right by given number of bits, filling with zeros
     BitShiftRightUnsigned(BitShiftRightUnsigned),
+    /// Check if a language tag matches a language range
+    StringLangMatches(StringLangMatches),
+    /// Construct a typed literal from a lexical value and a datatype IRI
+    TypedLiteral(TypedLiteral),
 }
 
 impl BinaryFunction for BinaryFunctionEnum {
@@ -331,7 +405,6 @@ impl BinaryFunction for BinaryFunctionEnum {
             Self::StringBefore(function) => function,
             Self::StringCompare(function) => function,
             Self::StringContains(function) => function,
-            Self::StringRegex(function) => function,
             Self::StringLevenshtein(function) => function,
             Self::StringEnds(function) => function,
             Self::StringStarts(function) => function,
@@ -339,9 +412,12 @@ impl BinaryFunction for BinaryFunctionEnum {
             Self::BitShiftLeft(function) => function,
             Self::BitShiftRightUnsigned(function) => function,
             Self::BitShiftRight(function) => function,
+            Self::StringLangMatches(function) => function,
+            Self::TypedLiteral(function) => function,
         } {
             fn evaluate(&self, first_parameter: AnyDataValue, second_parameter: AnyDataValue) -> Option<AnyDataValue>;
             fn type_propagation(&self) -> FunctionTypePropagation;
+            fn is_nondeterministic(&self) -> bool;
         }
     }
 }
@@ -361,6 +437,11 @@ pub trait TernaryFunction {
     /// Return a [FunctionTypePropagation] indicating how storage types are propagated
     /// when applying this function.
     fn type_propagation(&self) -> FunctionTypePropagation;
+
+    /// Return `true` if this function is nondeterministic (must not be constant-folded).
+    fn is_nondeterministic(&self) -> bool {
+        false
+    }
 }
 
 /// Enum containing all implementations of [TernaryFunction]
@@ -377,6 +458,52 @@ impl TernaryFunction for TernaryFunctionEnum {
         } {
             fn evaluate(&self, first_parameter: AnyDataValue, second_parameter: AnyDataValue, third_paramter: AnyDataValue) -> Option<AnyDataValue>;
             fn type_propagation(&self) -> FunctionTypePropagation;
+            fn is_nondeterministic(&self) -> bool;
+        }
+    }
+}
+
+/// Defines a nullary function on [AnyDataValue] (takes no arguments)
+pub trait NullaryFunction {
+    /// Evaluate this function.
+    ///
+    /// Returns `None` if the result of the operation is undefined.
+    fn evaluate(&self) -> Option<AnyDataValue>;
+
+    /// Return a [FunctionTypePropagation] indicating how storage types are propagated
+    /// when applying this function.
+    fn type_propagation(&self) -> FunctionTypePropagation;
+
+    /// Return `true` if this function is nondeterministic (must not be constant-folded).
+    fn is_nondeterministic(&self) -> bool {
+        false
+    }
+}
+
+/// Enum containing all implementations of [NullaryFunction]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NullaryFunctionEnum {
+    /// Pseudo-random double in [0, 1)
+    FuncRand(FuncRand),
+    /// Fresh UUID as an IRI
+    FuncUuid(FuncUuid),
+    /// Fresh UUID as a plain string
+    FuncStruuid(FuncStruuid),
+    /// Current date and time
+    FuncNow(FuncNow),
+}
+
+impl NullaryFunction for NullaryFunctionEnum {
+    delegate! {
+        to match self {
+            Self::FuncRand(function) => function,
+            Self::FuncUuid(function) => function,
+            Self::FuncStruuid(function) => function,
+            Self::FuncNow(function) => function,
+        } {
+            fn evaluate(&self) -> Option<AnyDataValue>;
+            fn type_propagation(&self) -> FunctionTypePropagation;
+            fn is_nondeterministic(&self) -> bool;
         }
     }
 }
@@ -391,6 +518,11 @@ pub trait NaryFunction {
     /// Return a [FunctionTypePropagation] indicating how storage types are propagated
     /// when applying this function.
     fn type_propagation(&self) -> FunctionTypePropagation;
+
+    /// Return `true` if this function is nondeterministic (must not be constant-folded).
+    fn is_nondeterministic(&self) -> bool {
+        false
+    }
 }
 
 /// Enum containing all implementations of [NaryFunction]
@@ -418,6 +550,10 @@ pub enum NaryFunctionEnum {
     NumericProduct(NumericProduct),
     /// Concatenation of given strings
     StringConcatenation(StringConcatenation),
+    /// Regex matching of strings (with optional flags)
+    StringRegex(StringRegex),
+    /// Regex-based replacement within a string
+    StringReplace(StringReplace),
 }
 
 impl NaryFunction for NaryFunctionEnum {
@@ -434,9 +570,12 @@ impl NaryFunction for NaryFunctionEnum {
             Self::NumericSum(function) => function,
             Self::NumericProduct(function) => function,
             Self::StringConcatenation(function) => function,
+            Self::StringRegex(function) => function,
+            Self::StringReplace(function) => function,
         } {
             fn evaluate(&self, parameters: &[AnyDataValue]) -> Option<AnyDataValue>;
             fn type_propagation(&self) -> FunctionTypePropagation;
+            fn is_nondeterministic(&self) -> bool;
         }
     }
 }

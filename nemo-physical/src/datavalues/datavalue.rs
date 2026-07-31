@@ -487,6 +487,24 @@ pub trait DataValue: Debug + Display + Into<AnyDataValue> + PartialEq + Eq + Has
         panic!("Value is not a null.");
     }
 
+    /// If this value is an other literal, return the pair of its lexical value and the IRI of its datatype.
+    #[must_use]
+    fn to_other(&self) -> Option<(String, String)> {
+        match self.value_domain() {
+            ValueDomain::Other => Some(self.to_other_unchecked()),
+            _ => None,
+        }
+    }
+
+    /// If this value is an other literal, return the pair of its lexical value and the IRI of its datatype.
+    ///
+    /// # Panics
+    /// Panics if this value is not an other literal.
+    #[must_use]
+    fn to_other_unchecked(&self) -> (String, String) {
+        panic!("Value is not an other literal.");
+    }
+
     /// Return the IRI-valued label of this complex value if it has a label,
     /// and None otherwise. Only values in the domain [ValueDomain::Tuple] or
     /// [ValueDomain::Map] can have labels.
