@@ -1,0 +1,39 @@
+[package]
+name = "nemo-static-checks"
+description.workspace = true
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "nemo-static-checks"
+path = "src/main.rs"
+# required-features = ["tokio"]
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+colored = "3"
+log = "0.4"
+nemo = { path = "../nemo", default-features = false }
+nemo-cli = { path = "../nemo-cli", default-features = false }
+petgraph = "0.6.3"
+tokio = { version = "1.47.1", features = ["rt", "macros"] }
+clap = { version = "4.0.32", features = ["derive", "cargo", "env"] }
+# tokio = { version = "1.45.1", features = [
+#   "macros",
+#   "io-util",
+#   "rt-multi-thread",
+#   "io-std",
+# ], optional = true }
+
+[dev-dependencies]
+dir-test = "0.2.1"
+env_logger = "*"
+assert_cmd = "2.0"
+predicates = "3.0.3"

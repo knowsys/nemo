@@ -1,0 +1,11 @@
+Ancestor(?X, ?Z) :- C(?X), Ancestor(?X, ?Y), Ancestor(?Y, ?Z) .
+Ancestor(?X, ?Y) :- Parent(?X, ?Y) .
+Person(?X) :- C(?X) .
+Parent(?X, !W), Person(!W) :- Person(?X) .
+Parent(?X, !V), Parent(?Y, !V), C(!V) :- Sibling(?X, ?Y) .
+Uncle(?X, ?Z) :- Parent(?X, ?Y), Sibling(?Y, ?Z) .
+
+@export Ancestor :- csv {} .
+@export Person :- csv {} .
+@export Parent :- csv {} .
+@export Uncle :- csv {} .

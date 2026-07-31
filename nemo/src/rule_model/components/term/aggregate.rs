@@ -247,6 +247,8 @@ impl PartialEq for Aggregate {
     }
 }
 
+impl Eq for Aggregate {}
+
 impl Hash for Aggregate {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.kind.hash(state);

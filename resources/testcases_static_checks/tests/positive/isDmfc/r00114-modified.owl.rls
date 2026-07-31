@@ -1,0 +1,9 @@
+<http://www.owl-ontologies.com/generations.owl#hasParent_PROPERTY>(?X, !Z), <http://www.owl-ontologies.com/generations.owl#Person_CLASS>(!Z) :- <http://www.owl-ontologies.com/generations.owl#OffSpring_CLASS>(?X) .
+<http://www.owl-ontologies.com/generations.owl#hasChild_PROPERTY>(?X, !Z), <http://www.owl-ontologies.com/generations.owl#Person_CLASS>(!Z) :- <http://www.owl-ontologies.com/generations.owl#Parent_CLASS>(?X) .
+<http://FreshClass-8092672229044770958_CLASS>(?Y) :- <http://www.owl-ontologies.com/generations.owl#hasParent_PROPERTY>(?Y, ?X), <http://www.owl-ontologies.com/generations.owl#Person_CLASS>(?X) .
+<http://FreshClass-5496473578722112551_CLASS>(?Y) :- <http://www.owl-ontologies.com/generations.owl#hasChild_PROPERTY>(?Y, ?X), <http://www.owl-ontologies.com/generations.owl#Person_CLASS>(?X) .
+<http://www.owl-ontologies.com/generations.owl#OffSpring_CLASS>(?X) :- <http://FreshClass-8092672229044770958_CLASS>(?X), <http://www.owl-ontologies.com/generations.owl#Person_CLASS>(?X) .
+<http://www.owl-ontologies.com/generations.owl#Parent_CLASS>(?X) :- <http://FreshClass-5496473578722112551_CLASS>(?X), <http://www.owl-ontologies.com/generations.owl#Person_CLASS>(?X) .
+<http://www.owl-ontologies.com/generations.owl#Person_CLASS>(?X) :- <http://www.owl-ontologies.com/generations.owl#OffSpring_CLASS>(?X) .
+<http://www.owl-ontologies.com/generations.owl#hasParent_PROPERTY>(?X, ?Y) :- <http://www.owl-ontologies.com/generations.owl#hasChild_PROPERTY>(?Y, ?X) .
+<http://www.owl-ontologies.com/generations.owl#hasChild_PROPERTY>(?X, ?Y) :- <http://www.owl-ontologies.com/generations.owl#hasParent_PROPERTY>(?Y, ?X) .

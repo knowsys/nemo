@@ -18,6 +18,7 @@ use super::{
     atom::Atom,
     component_iterator, component_iterator_mut,
     literal::Literal,
+    tag::Tag,
     term::{
         Term,
         primitive::{Primitive, variable::Variable},
@@ -106,6 +107,11 @@ impl Rule {
         self.name.clone()
     }
 
+    /// Return an iterator over the terms of the head.
+    pub fn head_terms(&self) -> impl Iterator<Item = &Term> {
+        self.head().iter().flat_map(|atom| atom.terms())
+    }
+
     /// Return a string representation of the rule's description with the given [Substitution].
     ///
     /// Returns `None` if `description` results not in a ground term after applying the substitution.
@@ -164,6 +170,28 @@ impl Rule {
         &mut self.head
     }
 
+    pub fn existential_variables(&self) -> HashSet<&Variable> {
+        self.variables()
+            .filter(|var| var.is_existential())
+            .collect()
+    }
+
+    pub fn positive_variables_iter(&self) -> impl Iterator<Item = &Variable> {
+        self.body_positive().flat_map(|atom| {
+            atom.terms()
+                .filter_map(|term| match term {
+                    Term::Primitive(Primitive::Variable(variable)) => Some(variable),
+                    _ => None,
+                })
+                .filter(|variable| variable.is_universal() && variable.name().is_some())
+        })
+    }
+
+    /// Return the set of variables that are bound in positive body atoms.
+    pub fn positive_variables(&self) -> HashSet<&Variable> {
+        self.positive_variables_iter().collect()
+    }
+
     /// Return an iterator over all positive and negative [Atom]s
     /// contained in the body of this rule.
     pub fn body_atoms(&self) -> impl Iterator<Item = &Atom> {
@@ -177,6 +205,22 @@ impl Rule {
     /// including the head and the positive and negative body.
     pub fn atoms(&self) -> impl Iterator<Item = &Atom> {
         self.head.iter().chain(self.body_atoms())
+    }
+
+    pub fn predicates_ref(&self) -> Vec<&Tag> {
+        self.body()
+            .iter()
+            .filter_map(|literal| literal.predicate_ref())
+            .chain(self.head().iter().map(|atom| atom.predicate_ref()))
+            .collect()
+    }
+
+    pub fn predicates_ref_and_lens(&self) -> Vec<(&Tag, usize)> {
+        self.body()
+            .iter()
+            .filter_map(|literal| literal.predicate_ref_and_len())
+            .chain(self.head().iter().map(|atom| atom.predicate_ref_and_len()))
+            .collect()
     }
 
     /// Return an iterator over all [ImportLiteral]s
@@ -196,24 +240,45 @@ impl Rule {
         self.imports.push(import);
     }
 
-    /// Return the set of variables that are bound in positive body atoms.
-    pub fn positive_variables(&self) -> HashSet<&Variable> {
-        let mut result = HashSet::new();
+    // /// Return the set of variables that are bound in positive body atoms.
+    // pub fn positive_variables(&self) -> HashSet<&Variable> {
+    //     let mut result = HashSet::new();
+    //
+    //     for literal in &self.body {
+    //         if let Literal::Positive(atom) = literal {
+    //             for term in atom.terms() {
+    //                 if let Term::Primitive(Primitive::Variable(variable)) = term
+    //                     && variable.is_universal()
+    //                     && variable.name().is_some()
+    //                 {
+    //                     result.insert(variable);
+    //                 }
+    //             }
+    //         }
+    //     }
+    // }
 
-        for literal in &self.body {
-            if let Literal::Positive(atom) = literal {
-                for term in atom.terms() {
-                    if let Term::Primitive(Primitive::Variable(variable)) = term
-                        && variable.is_universal()
-                        && variable.name().is_some()
-                    {
-                        result.insert(variable);
-                    }
-                }
-            }
-        }
+    pub fn frontier_variables(&self) -> HashSet<&Variable> {
+        let positive_body_variables: HashSet<&Variable> = self.positive_variables();
+        let universal_head_variables: HashSet<&Variable> = self.universal_head_variables();
+        positive_body_variables
+            .intersection(&universal_head_variables)
+            .copied()
+            .collect()
+    }
 
-        result
+    fn universal_head_variables(&self) -> HashSet<&Variable> {
+        self.head().iter().fold(
+            HashSet::<&Variable>::new(),
+            |mut universal_head_variables: HashSet<&Variable>, atom| {
+                let un_vars_of_atom: HashSet<&Variable> = atom.universal_variables();
+                un_vars_of_atom.into_iter().for_each(|var| {
+                    universal_head_variables.insert(var);
+                });
+                universal_head_variables
+                // universal_head_variables.insert_all_take_ret(un_vars_of_atom)
+            },
+        )
     }
 
     /// Return the set of variables that are bound by import statements
@@ -366,6 +431,13 @@ impl Rule {
         } else {
             None
         }
+    }
+
+    pub fn contains_func(&self) -> bool {
+        self.head().iter().any(|atom| {
+            atom.terms()
+                .any(|term| matches!(term, Term::FunctionTerm(_)))
+        })
     }
 }
 
