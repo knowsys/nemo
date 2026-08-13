@@ -19,7 +19,8 @@ pub struct RuleSet(pub Vec<Rule>);
 
 /// Type to relate 2 Variable(s) together.
 #[derive(Debug, Eq, Hash, PartialEq)]
-pub struct RuleAndVariablePair<'a>(pub [RuleAndVariable<'a>; 2]);
+pub struct RuleAndVariablePair<'a>(RuleAndVariable<'a>, RuleAndVariable<'a>);
+// pub struct RuleAndVariablePair<'a>(pub [RuleAndVariable<'a>; 2]);
 
 pub trait ExistentialVariables {
     /// Returns all existential variables combined with its rule of a rule.
@@ -210,10 +211,10 @@ impl SpecialVariables for Rule {
                     .iter()
                     .filter(|var2| var1 != *var2)
                     .for_each(|var2| {
-                        pairs.insert(RuleAndVariablePair([
+                        pairs.insert(RuleAndVariablePair(
                             RuleAndVariable(self, var1),
                             RuleAndVariable(self, var2),
-                        ]));
+                        ));
                     });
                 pairs
             })
@@ -636,13 +637,13 @@ impl<'a> RuleAndVariable<'a> {
 /// different positive body atoms of a rule.
 impl RuleAndVariablePair<'_> {
     /// Returns the first RuleAndVariable of the RuleAndVariablePair.
-    fn fst(&'_ self) -> &RuleAndVariable<'_> {
-        &self.0[0]
+    pub fn fst(&'_ self) -> &RuleAndVariable<'_> {
+        &self.0
     }
 
     /// Returns the second RuleAndVariable of the RuleAndVariablePair.
-    fn snd(&'_ self) -> &RuleAndVariable<'_> {
-        &self.0[1]
+    pub fn snd(&'_ self) -> &RuleAndVariable<'_> {
+        &self.1
     }
 
     /// Checks if some Variables of a VariablePair appear at different atoms in the positive body

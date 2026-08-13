@@ -1,6 +1,6 @@
 //! Functionality that provides the static checks for a Rule.
 use crate::static_checks::positions::{Positions, PositionsByRuleAndVariables};
-use crate::static_checks::rule_set::{RuleAndVariable, RuleAndVariablePair};
+use crate::static_checks::rule_set::RuleAndVariable;
 use nemo::rule_model::components::{
     IterablePrimitives, rule::Rule, term::primitive::variable::Variable,
 };
@@ -156,11 +156,12 @@ impl RuleProperties for Rule {
         let frontier_vars_that_appear_in_diff_body_atoms_are_not_att_by_same_var: bool = self
             .frontier_rule_and_variable_pairs()
             .iter()
-            .filter(|rule_and_var_pair| rule_and_var_pair.appear_in_different_positive_body_atoms())
-            .all(|RuleAndVariablePair([rule_and_var_1, rule_and_var_2])| {
+            .filter(|pair| pair.appear_in_different_positive_body_atoms())
+            .map(|pair| (pair.fst(), pair.snd()))
+            .all(|(fst_rule_and_var, snd_rule_and_var)| {
                 attacked_pos_by_rule_and_vars.0.values().all(|ex_var_pos| {
-                    !rule_and_var_1.is_attacked_by_positions(ex_var_pos)
-                        || !rule_and_var_2.is_attacked_by_positions(ex_var_pos)
+                    !fst_rule_and_var.is_attacked_by_positions(ex_var_pos)
+                        || !snd_rule_and_var.is_attacked_by_positions(ex_var_pos)
                 })
             });
         join_vars_in_multiple_body_atoms_are_not_attacked
