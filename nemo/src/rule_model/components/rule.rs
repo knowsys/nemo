@@ -657,6 +657,20 @@ impl PartialEq for Rule {
 
 impl Eq for Rule {}
 
+impl Ord for Rule {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.head
+            .cmp(&other.head)
+            .then_with(|| self.body.cmp(&other.body))
+    }
+}
+
+impl PartialOrd for Rule {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 impl Hash for Rule {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.head.hash(state);

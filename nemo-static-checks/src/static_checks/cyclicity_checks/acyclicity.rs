@@ -18,16 +18,21 @@ use nemo::rule_model::{
 
 use crate::static_checks::collection_traits::InsertAll;
 use crate::static_checks::cyclicity_checks::{
-    Assignment, CoreReasoner, Cyclic, CyclicityStrategy, FactsByPred, NoBlockStrategy,
-    StrategySelector, Trigger, VarPerAtomIdxPosIdxPerRule, assignments_for_facts,
-    backtrack_sk_term, body_for_assignment, build_var_index_for_rule, build_var_index_for_rules,
-    predicates_ref, reverse_sk, union,
+    Assignment, CoreReasoner, Cyclic, CyclicityStrategy, FactsByPred, NoBlockStrategy, Trigger,
+    VarPerAtomIdxPosIdxPerRule, assignments_for_facts, backtrack_sk_term, body_for_assignment,
+    build_var_index_for_rule, build_var_index_for_rules, predicates_ref, reverse_sk, union,
 };
 use crate::static_checks::rule_set::RuleSet;
 
 use std::collections::{HashMap, HashSet};
 
-pub fn mfa_handle(handle: ProgramHandle) -> ProgramHandle {
+#[derive(Clone, Copy)]
+pub enum AcyclicityStrategySelector {
+    MFA,
+    RMFA,
+}
+
+pub fn mfa_transformation(handle: ProgramHandle) -> ProgramHandle {
     handle
         .transform(TransformationCriticalInstance::default())
         .expect("TransformationCriticalInstance Error")
@@ -109,7 +114,10 @@ fn convert_set_to_map(facts: Vec<&Fact>) -> FactsByPred<'_> {
         })
 }
 
-pub async fn check_acyclicity(handle: ProgramHandle, strat_sel: StrategySelector) -> bool {
+pub async fn check_acyclicity(
+    handle: ProgramHandle,
+    strat_sel: AcyclicityStrategySelector,
+) -> bool {
     let rules: RuleSet = RuleSet(handle.rules().cloned().collect());
     let rules_ref: Vec<&Rule> = rules.0.iter().collect();
 
@@ -134,15 +142,14 @@ pub async fn check_acyclicity(handle: ProgramHandle, strat_sel: StrategySelector
     );
 
     let strat: &dyn CyclicityStrategy = match strat_sel {
-        StrategySelector::MFA => &MFAStrategy,
-        StrategySelector::RMFA => &RMFAStrategy::new(
+        AcyclicityStrategySelector::MFA => &MFAStrategy,
+        AcyclicityStrategySelector::RMFA => &RMFAStrategy::new(
             &existential_rules,
             &datalog_rules,
             &datalog_pr,
             &all_pr,
             &var_per_atom_idx_pos_idx_per_rule,
         ),
-        _ => unreachable!(),
     };
 
     let mut existential_reasoner: CoreReasoner = CoreReasoner::new(
@@ -245,7 +252,7 @@ fn special_reasoning_set<'a>(
         skolem_terms
             .iter()
             .fold(HashMap::<&Tag, HashSet<Fact>>::new(), |facts, sk_term| {
-                let facts_for_sk_term = backtrack_sk_term(sk_term, ex_rules, true);
+                let facts_for_sk_term = backtrack_sk_term(sk_term, ex_rules, 0, true);
                 union(facts, facts_for_sk_term)
             });
     let mut ret_val = union(facts_by_pred, involved_facts_in_derivation);

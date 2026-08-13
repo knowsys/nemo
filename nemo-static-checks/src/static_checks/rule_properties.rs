@@ -88,10 +88,6 @@ impl RuleProperties for Rule {
         self.existential_variables().is_empty()
     }
 
-    // fn is_deterministic(&self) -> bool {
-    //     1 == self.head().len()
-    // }
-
     fn is_monadic(&self) -> bool {
         self.head()
             .iter()
@@ -151,7 +147,6 @@ impl RuleProperties for Rule {
         self.is_guarded_for_variables(attacked_frontier_glut_variables)
     }
 
-    // TODO: SHORTEN FUNCTION
     fn is_shy(&self, attacked_pos_by_rule_and_vars: &PositionsByRuleAndVariables) -> bool {
         let join_vars_in_multiple_body_atoms_are_not_attacked: bool = self
             .join_variables()
@@ -171,39 +166,4 @@ impl RuleProperties for Rule {
         join_vars_in_multiple_body_atoms_are_not_attacked
             && frontier_vars_that_appear_in_diff_body_atoms_are_not_att_by_same_var
     }
-
-    // fn is_mfa(&self) -> bool {
-    //     todo!("IMPLEMENT");
-    //     // TODO: IMPLEMENT
-    // }
-    //
-    // fn is_dmfa(&self) -> bool {
-    //     todo!("IMPLEMENT");
-    //     // TODO: IMPLEMENT
-    // }
-    //
-    // fn is_rmfa(&self) -> bool {
-    //     todo!("IMPLEMENT");
-    //     // TODO: IMPLEMENT
-    // }
-    //
-    // fn is_mfc(&self) -> bool {
-    //     todo!("IMPLEMENT");
-    //     // TODO: IMPLEMENT
-    // }
-    //
-    // fn is_dmfc(&self) -> bool {
-    //     todo!("IMPLEMENT");
-    //     // TODO: IMPLEMENT
-    // }
-    //
-    // fn is_drpc(&self) -> bool {
-    //     todo!("IMPLEMENT");
-    //     // TODO: IMPLEMENT
-    // }
-    //
-    // fn is_rpc(&self) -> bool {
-    //     todo!("IMPLEMENT");
-    //     // TODO: IMPLEMENT
-    // }
 }

@@ -234,6 +234,12 @@ impl PartialEq for Map {
 
 impl Eq for Map {}
 
+impl Ord for Map {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.map.cmp(&other.map)
+    }
+}
+
 impl PartialOrd for Map {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         self.map.partial_cmp(&other.map)

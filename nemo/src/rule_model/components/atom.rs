@@ -198,6 +198,20 @@ impl PartialEq for Atom {
 
 impl Eq for Atom {}
 
+impl Ord for Atom {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.predicate
+            .cmp(&other.predicate)
+            .then_with(|| self.terms.cmp(&other.terms))
+    }
+}
+
+impl PartialOrd for Atom {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 impl Hash for Atom {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.predicate.hash(state);

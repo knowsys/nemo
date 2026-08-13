@@ -18,7 +18,7 @@ use nemo::rule_model::{
 };
 
 use crate::static_checks::cyclicity_checks::{
-    Assignment, CoreReasoner, Cyclic, CyclicityStrategy, FactsByPred, StrategySelector, Trigger,
+    Assignment, CoreReasoner, Cyclic, CyclicityStrategy, FactsByPred, Trigger,
     VarPerAtomIdxPosIdxPerRule, assignments_for_facts, backtrack_sk_term, body_for_assignment,
     build_var_index_for_rule, build_var_index_for_rules, head_for_assignment, predicates_ref,
     predicates_ref_and_lens, reverse_sk, union,
@@ -29,6 +29,12 @@ use crate::static_checks::rule_properties::RuleProperties;
 use crate::static_checks::rule_set::{RuleRefs, RuleSet};
 
 use std::collections::{HashMap, HashSet};
+
+#[derive(Clone, Copy)]
+pub enum CyclicityStrategySelector {
+    MFC,
+    DRPC,
+}
 
 pub struct MFCStrategy;
 
@@ -233,7 +239,7 @@ fn backtrack_trigger<'a>(existential_rules: &Vec<&'a Rule>, trig: &Trigger) -> F
         .into_iter()
         .fold(FactsByPred::new(), |ret_val, var| {
             let term = trig.ass().get(var).unwrap();
-            let facts_of_ass_var = backtrack_sk_term(term, existential_rules, false);
+            let facts_of_ass_var = backtrack_sk_term(term, existential_rules, 0, false);
             union(ret_val, facts_of_ass_var)
         })
 }
@@ -249,7 +255,7 @@ pub fn mfc_handle(handle: ProgramHandle) -> ProgramHandle {
         .expect("TransformationSkolemize Error")
 }
 
-pub async fn check_cyclicity(handle: ProgramHandle, strat: StrategySelector) -> bool {
+pub async fn check_cyclicity(handle: ProgramHandle, strat: CyclicityStrategySelector) -> bool {
     let rule_set: RuleSet = RuleSet(handle.rules().cloned().collect());
     let det_rules: Vec<&Rule> = rule_set.0.iter().collect();
     let ex_rules: Vec<&Rule> = rule_set.existential_rules();
@@ -265,7 +271,7 @@ pub async fn check_cyclicity(handle: ProgramHandle, strat: StrategySelector) -> 
 pub async fn check_cyclicity_for_rule(
     rule: &Rule,
     rule_set: &Vec<&Rule>,
-    strat: &StrategySelector,
+    strat: &CyclicityStrategySelector,
 ) -> bool {
     let unique_ass: Assignment = unique_ass(rule);
 
@@ -278,8 +284,8 @@ pub async fn check_cyclicity_for_rule(
     let var_per_atom_idx_pos_idx_per_rule = build_var_index_for_rules(rule_set);
 
     let strat: &dyn CyclicityStrategy = match strat {
-        StrategySelector::MFC => &MFCStrategy,
-        StrategySelector::DRPC => {
+        CyclicityStrategySelector::MFC => &MFCStrategy,
+        CyclicityStrategySelector::DRPC => {
             &DRPCStrategy::new(rule, rule_set, &var_per_atom_idx_pos_idx_per_rule)
         }
         _ => unreachable!(),

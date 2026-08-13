@@ -28,10 +28,10 @@ pub type Position<'a> = (&'a Tag, Index);
 /// cycles in the joint acyclicity graph) to be the attacking variables.
 #[derive(Clone, Copy, Debug)]
 pub enum AttackingType {
-    /// The attacking variables will be all existential variables.
-    Cycle,
     /// The attacking variables will be the existential variables that appear in cycles in the
     /// joint acyclicity graph.
+    Cycle,
+    /// The attacking variables will be all existential variables.
     Existential,
 }
 
@@ -63,7 +63,7 @@ impl<'a> From<HashSet<Position<'a>>> for Positions<'a> {
     fn from(value: HashSet<Position<'a>>) -> Self {
         value
             .into_iter()
-            .fold(Positions::new(), |mut positions, (tag, index)| {
+            .fold(Positions::default(), |mut positions, (tag, index)| {
                 if !positions.0.contains_key(tag) {
                     positions.0.insert(tag, HashSet::<usize>::new());
                 }
@@ -73,20 +73,12 @@ impl<'a> From<HashSet<Position<'a>>> for Positions<'a> {
     }
 }
 
-/// This Impl-Block contains a method to create new positions.
-impl Positions<'_> {
-    /// Creates new positions.
-    pub fn new() -> Self {
-        Self(HashMap::<&Tag, HashSet<Index>>::new())
-    }
-}
-
 /// This Impl-Block provides methods to get (affected positions |
 /// attacked (all existential | cycle existential) positions |
 /// marked (sticky | weakly-sticky) positions ) of a RuleSet.
 impl RuleSet {
     /// Builds and Returns the affected Positions of a RuleSet.
-    pub fn affected_positions(&self) -> Positions {
+    pub fn affected_positions(&'_ self) -> Positions<'_> {
         let mut aff_pos: Positions = self.initial_affected_positions();
         let mut new_found_aff_pos: Positions = aff_pos.clone();
         while !new_found_aff_pos.0.is_empty() {
@@ -155,16 +147,18 @@ trait AffectedPositionsInference<'a> {
 
 impl<'a> AffectedPositionsInference<'a> for RuleSet {
     fn initial_affected_positions(&'a self) -> Positions<'a> {
-        self.0.iter().fold(Positions::new(), |init_aff_pos, rule| {
-            let pos_of_ex_vars: Positions = rule.initial_affected_positions();
-            init_aff_pos.insert_all_take_ret(pos_of_ex_vars)
-        })
+        self.0
+            .iter()
+            .fold(Positions::default(), |init_aff_pos, rule| {
+                let pos_of_ex_vars: Positions = rule.initial_affected_positions();
+                init_aff_pos.insert_all_take_ret(pos_of_ex_vars)
+            })
     }
 
     fn conclude_affected_positions(&'a self, last_it_pos: &Positions<'a>) -> Positions<'a> {
         self.0
             .iter()
-            .fold(Positions::new(), |new_con_aff_pos, rule| {
+            .fold(Positions::default(), |new_con_aff_pos, rule| {
                 let new_con_aff_pos_in_rule: Positions =
                     rule.conclude_affected_positions(last_it_pos);
                 new_con_aff_pos.insert_all_take_ret(new_con_aff_pos_in_rule)
@@ -184,7 +178,7 @@ impl<'a> AffectedPositionsInference<'a> for Rule {
                 let positive_body_atoms: Vec<&Atom> = self.body_positive_refs();
                 var.appears_at_some_positions_in_atoms(last_it_pos, &positive_body_atoms)
             })
-            .fold(Positions::new(), |new_aff_pos_in_rule, var| {
+            .fold(Positions::default(), |new_aff_pos_in_rule, var| {
                 let pos_of_var_in_head: Positions = RuleAndVariable(self, var).positions_in_head();
                 new_aff_pos_in_rule.insert_all_take_ret(pos_of_var_in_head)
             })
@@ -198,18 +192,18 @@ trait AttackedPositionsInference<'a> {
 
 impl<'a> AttackedPositionsInference<'a> for RuleSet {
     fn conclude_attacked_positions(&'a self, cur_att_pos: &Positions<'a>) -> Positions<'a> {
-        self.0
-            .iter()
-            .fold(Positions::new(), |new_found_attacked_positions, rule| {
+        self.0.iter().fold(
+            Positions::default(),
+            |new_found_attacked_positions, rule| {
                 let new_att_pos_in_rule: Positions = rule.conclude_attacked_positions(cur_att_pos);
                 new_found_attacked_positions.insert_all_take_ret(new_att_pos_in_rule)
-            })
+            },
+        )
     }
 
-    // TODO: INSTEAD OF POSITIONS_IN_HEAD CALL, CALL INIT_ATT_POS OF RULE
     fn initial_attacked_positions(&'a self, rule_and_var: &RuleAndVariable<'a>) -> Positions<'a> {
         self.0.iter().filter(|rule| *rule == rule_and_var.0).fold(
-            Positions::new(),
+            Positions::default(),
             |initial_pos, _| {
                 let initial_pos_of_rule: Positions = rule_and_var.positions_in_head();
                 initial_pos.insert_all_take_ret(initial_pos_of_rule)
@@ -219,20 +213,19 @@ impl<'a> AttackedPositionsInference<'a> for RuleSet {
 }
 
 impl<'a> AttackedPositionsInference<'a> for Rule {
-    fn conclude_attacked_positions(&self, cur_att_pos: &Positions) -> Positions {
+    fn conclude_attacked_positions(&'a self, cur_att_pos: &Positions) -> Positions<'a> {
         self.positive_variables()
             .iter()
             .map(|var| RuleAndVariable(self, var))
             .filter(|rule_and_var| rule_and_var.is_attacked_by_positions(cur_att_pos))
-            .fold(Positions::new(), |new_att_pos_in_rule, rule_and_var| {
+            .fold(Positions::default(), |new_att_pos_in_rule, rule_and_var| {
                 let pos_of_var_in_head: Positions = rule_and_var.positions_in_head();
                 new_att_pos_in_rule.insert_all_take_ret(pos_of_var_in_head)
             })
     }
 
     fn initial_attacked_positions(&'a self, _rule_and_var: &RuleAndVariable<'a>) -> Positions<'a> {
-        todo!("IMPLEMENT");
-        // TODO: IMPLEMENT
+        unreachable!();
     }
 }
 
@@ -274,14 +267,14 @@ trait MarkedPositionsInference<'a> {
     fn conclude_marked_positions(&'a self, last_it_pos: &Positions<'a>) -> Option<Positions<'a>>;
     fn initial_marked_positions(&'a self) -> Option<Positions<'a>>;
     fn initial_weakly_marked_positions(&'a self, inf_rank_pos: &Positions)
-        -> Option<Positions<'a>>;
+    -> Option<Positions<'a>>;
 }
 
 impl<'a> MarkedPositionsInference<'a> for RuleSet {
     fn conclude_marked_positions(&'a self, last_it_pos: &Positions<'a>) -> Option<Positions<'a>> {
         self.0
             .iter()
-            .try_fold(Positions::new(), |new_con_mar_pos, rule| {
+            .try_fold(Positions::default(), |new_con_mar_pos, rule| {
                 let new_mar_pos_in_rule: Positions = rule.conclude_marked_positions(last_it_pos)?;
                 Some(new_con_mar_pos.insert_all_take_ret(new_mar_pos_in_rule))
             })
@@ -290,7 +283,7 @@ impl<'a> MarkedPositionsInference<'a> for RuleSet {
     fn initial_marked_positions(&'a self) -> Option<Positions<'a>> {
         self.0
             .iter()
-            .try_fold(Positions::new(), |init_mar_pos, rule| {
+            .try_fold(Positions::default(), |init_mar_pos, rule| {
                 let init_mar_pos_of_rule: Positions = rule.initial_marked_positions()?;
                 Some(init_mar_pos.insert_all_take_ret(init_mar_pos_of_rule))
             })
@@ -304,7 +297,7 @@ impl<'a> MarkedPositionsInference<'a> for RuleSet {
         let inf_rank_pos: Positions = we_ac_graph.infinite_rank_positions();
         self.0
             .iter()
-            .try_fold(Positions::new(), |init_we_mar_pos, rule| {
+            .try_fold(Positions::default(), |init_we_mar_pos, rule| {
                 let init_we_mar_pos_of_rule: Positions =
                     rule.initial_weakly_marked_positions(&inf_rank_pos)?;
                 Some(init_we_mar_pos.insert_all_take_ret(init_we_mar_pos_of_rule))
@@ -320,7 +313,7 @@ impl<'a> MarkedPositionsInference<'a> for Rule {
                 let positive_body_atoms: Vec<&Atom> = self.body_positive_refs();
                 var.appears_at_some_positions_in_atoms(last_it_pos, &positive_body_atoms)
             })
-            .try_fold(Positions::new(), |new_mar_pos_in_rule, var| {
+            .try_fold(Positions::default(), |new_mar_pos_in_rule, var| {
                 if self
                     .head()
                     .iter()
@@ -337,7 +330,7 @@ impl<'a> MarkedPositionsInference<'a> for Rule {
         let join_vars: HashSet<&Variable> = self.join_variables();
         join_vars
             .iter()
-            .try_fold(Positions::new(), |new_mar_pos_in_rule, var| {
+            .try_fold(Positions::default(), |new_mar_pos_in_rule, var| {
                 if self
                     .head()
                     .iter()
@@ -364,7 +357,7 @@ impl<'a> MarkedPositionsInference<'a> for Rule {
                     &positive_body_atoms,
                 )
             })
-            .try_fold(Positions::new(), |new_we_mar_pos_in_rule, var| {
+            .try_fold(Positions::default(), |new_we_mar_pos_in_rule, var| {
                 if self
                     .head()
                     .iter()
@@ -386,7 +379,9 @@ impl<'a> MarkedPositionsInferenceExtended<'a> for RuleSet {
     fn match_initial_marked_positions(&'a self, mar_type: MarkingType) -> Option<Positions<'a>> {
         match mar_type {
             MarkingType::Sticky => self.initial_marked_positions(),
-            MarkingType::WeaklySticky => self.initial_weakly_marked_positions(&Positions::new()),
+            MarkingType::WeaklySticky => {
+                self.initial_weakly_marked_positions(&Positions::default())
+            }
         }
     }
 }
@@ -403,7 +398,7 @@ impl<'a> Disjoint for Positions<'a> {
     }
 }
 
-impl<'a> InsertAll<Positions<'a>, (&'a Tag, HashSet<Index>)> for Positions<'a> {
+impl<'a> InsertAll<Positions<'a> /*(&'a Tag, HashSet<Index>)*/> for Positions<'a> {
     fn insert_all(&mut self, other: &Positions<'a>) {
         other.0.iter().for_each(|(pred, other_indices)| {
             if !self.0.contains_key(pred) {

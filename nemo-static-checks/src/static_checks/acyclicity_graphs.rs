@@ -282,7 +282,7 @@ impl<'a> WeakAcyclicityGraphBuilder<'a> {
         all_pos_of_positive_body_set: &HashSet<Position<'a>>,
     ) {
         let pos_of_ex_vars_set: HashSet<Position> =
-            rule.positions_of_existential_variables_as_set();
+            HashSet::from(rule.positions_of_existential_variables());
         all_pos_of_positive_body_set.iter().for_each(|body_pos| {
             pos_of_ex_vars_set.iter().for_each(|ex_pos| {
                 self.0

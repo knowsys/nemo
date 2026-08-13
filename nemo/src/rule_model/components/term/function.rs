@@ -218,13 +218,19 @@ impl PartialEq for FunctionTerm {
 
 impl Eq for FunctionTerm {}
 
-impl PartialOrd for FunctionTerm {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        match self.tag.partial_cmp(&other.tag) {
-            Some(core::cmp::Ordering::Equal) => {}
+impl Ord for FunctionTerm {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        match self.tag.cmp(&other.tag) {
+            core::cmp::Ordering::Equal => {}
             ord => return ord,
         }
-        self.terms.partial_cmp(&other.terms)
+        self.terms.cmp(&other.terms)
+    }
+}
+
+impl PartialOrd for FunctionTerm {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
     }
 }
 

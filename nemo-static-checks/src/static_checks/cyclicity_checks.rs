@@ -22,6 +22,7 @@ pub mod cyclicity;
 fn backtrack_sk_term<'a>(
     in_term: &Term,
     ex_rules: &Vec<&'a Rule>,
+    mut const_count: usize,
     with_body: bool,
 ) -> HashMap<&'a Tag, HashSet<Fact>> {
     let sk_term;
@@ -45,7 +46,7 @@ fn backtrack_sk_term<'a>(
         })
         .unwrap();
     let front_vars = rule.frontier_variables();
-    let mut const_count = 0;
+    // let mut const_count = 0;
     let ass = rule.variables().fold(Assignment::new(), |mut ass, var| {
         if front_vars.contains(var) {
             let index = unassigned_sk_term
@@ -90,7 +91,7 @@ fn backtrack_sk_term<'a>(
         .fold(ret_val, |ret_val, inner_sk_term| {
             union(
                 ret_val,
-                backtrack_sk_term(inner_sk_term, ex_rules, with_body),
+                backtrack_sk_term(inner_sk_term, ex_rules, const_count, with_body),
             )
         })
 }
@@ -124,14 +125,6 @@ pub fn head_for_assignment<'a>(
 ) -> HashMap<&'a Tag, HashSet<Fact>> {
     let head: Vec<&Atom> = rule.head_refs();
     head.assign(ass)
-}
-
-#[derive(Clone, Copy)]
-pub enum StrategySelector {
-    MFA,
-    RMFA,
-    MFC,
-    DRPC,
 }
 
 pub trait CyclicityStrategy {

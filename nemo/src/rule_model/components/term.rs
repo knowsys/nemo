@@ -44,7 +44,7 @@ use super::{
 /// Term
 ///
 /// Basic building block for expressions like atoms or facts.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Term {
     /// Unstructured, primitive term
     Primitive(Primitive),

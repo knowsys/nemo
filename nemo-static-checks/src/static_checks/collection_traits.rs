@@ -4,7 +4,7 @@ use std::hash::Hash;
 use std::iter::IntoIterator;
 
 /// This Trait provides methods for collections to insert every element of another collection.
-pub trait InsertAll<C, T> {
+pub trait InsertAll<C> {
     /// Inserts all elements of another collection into the current collection.
     fn insert_all(&mut self, other: &C);
     /// Inserts all elements of another collection into the current collection and returns it.
@@ -15,8 +15,7 @@ pub trait InsertAll<C, T> {
     fn insert_all_take_ret(self, other: C) -> Self;
 }
 
-// NOTE: HASH NEEDED FOR T?
-impl<T> InsertAll<Vec<T>, T> for Vec<T>
+impl<T> InsertAll<Vec<T>> for Vec<T>
 where
     T: Clone + PartialEq + PartialEq,
 {
@@ -43,7 +42,7 @@ where
     }
 }
 
-impl<T> InsertAll<HashSet<T>, T> for HashSet<T>
+impl<T> InsertAll<HashSet<T>> for HashSet<T>
 where
     T: Clone + Eq + Hash + PartialEq,
 {
@@ -70,7 +69,7 @@ where
     }
 }
 
-impl<T> InsertAll<Vec<T>, T> for HashSet<T>
+impl<T> InsertAll<Vec<T>> for HashSet<T>
 where
     T: Clone + Eq + Hash + PartialEq,
 {
@@ -98,7 +97,6 @@ where
 }
 
 /// This Trait provides methods for collections to remove every element of another collection.
-#[allow(dead_code)]
 pub trait RemoveAll<C, T> {
     /// Removes all elements of another collection from the current collection.
     fn remove_all(&mut self, other: &C);
@@ -143,7 +141,7 @@ pub trait Superset {
     fn is_superset(&self, other: &Self) -> bool;
 }
 
-/// This Trait provides a method to look for a disjoint relation between two instances for some type.
+///This Trait provides a method to look for a disjoint relation between two instances for some type.
 pub trait Disjoint {
     /// Checks if there is a disjoint relation between two instances for some type
     fn is_disjoint(&self, other: &Self) -> bool;

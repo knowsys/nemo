@@ -186,9 +186,15 @@ impl Hash for Tuple {
     }
 }
 
+impl Ord for Tuple {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.terms.cmp(&other.terms)
+    }
+}
+
 impl PartialOrd for Tuple {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.terms.partial_cmp(&other.terms)
+        Some(self.cmp(&other))
     }
 }
 

@@ -257,17 +257,23 @@ impl Hash for Aggregate {
     }
 }
 
+impl Ord for Aggregate {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        match self.kind.cmp(&other.kind) {
+            core::cmp::Ordering::Equal => {}
+            ord => return ord,
+        }
+        match self.aggregate.cmp(&other.aggregate) {
+            core::cmp::Ordering::Equal => {}
+            ord => return ord,
+        }
+        self.distinct.cmp(&other.distinct)
+    }
+}
+
 impl PartialOrd for Aggregate {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        match self.kind.partial_cmp(&other.kind) {
-            Some(core::cmp::Ordering::Equal) => {}
-            ord => return ord,
-        }
-        match self.aggregate.partial_cmp(&other.aggregate) {
-            Some(core::cmp::Ordering::Equal) => {}
-            ord => return ord,
-        }
-        self.distinct.partial_cmp(&other.distinct)
+        Some(self.cmp(other))
     }
 }
 

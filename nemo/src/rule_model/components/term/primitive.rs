@@ -29,7 +29,7 @@ use super::{Term, value_type::ValueType};
 ///
 /// Represents a basic, indivisble values, which can either be [GroundTerm]s or [Variable]s.
 /// Such terms are the atomic values used in the construction of more complex expressions.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Primitive {
     /// Variable
     Variable(Variable),
