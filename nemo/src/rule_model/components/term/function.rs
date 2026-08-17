@@ -73,7 +73,7 @@ impl FunctionTerm {
     }
 
     /// Create a new [FunctionTerm] with a [Tag].
-    pub(crate) fn new_tagged<Terms: IntoIterator<Item = Term>>(tag: Tag, subterms: Terms) -> Self {
+    pub fn new_tagged<Terms: IntoIterator<Item = Term>>(tag: Tag, subterms: Terms) -> Self {
         Self {
             origin: Origin::default(),
             id: ProgramComponentId::default(),
@@ -95,11 +95,6 @@ impl FunctionTerm {
     /// Return an iterator over the arguments of this function term.
     pub fn terms_mut(&mut self) -> impl Iterator<Item = &mut Term> {
         self.terms.iter_mut()
-    }
-
-    /// Return an iterator over the arguments of this functino term.
-    pub fn into_terms(self) -> impl Iterator<Item = Term> {
-        self.terms.into_iter()
     }
 
     /// Push a [Term] to the end of this function term.
@@ -334,16 +329,16 @@ impl IterablePrimitives for FunctionTerm {
     }
 }
 
-impl From<(&Tag, Vec<Term>)> for FunctionTerm {
-    fn from((predicate, terms): (&Tag, Vec<Term>)) -> Self {
-        Self {
-            origin: Origin::Created,
-            id: ProgramComponentId::default(),
-            tag: predicate.clone(),
-            terms,
-        }
-    }
-}
+// impl From<(&Tag, Vec<Term>)> for FunctionTerm {
+//     fn from((predicate, terms): (&Tag, Vec<Term>)) -> Self {
+//         Self {
+//             origin: Origin::Created,
+//             id: ProgramComponentId::default(),
+//             tag: predicate.clone(),
+//             terms,
+//         }
+//     }
+// }
 
 #[cfg(test)]
 mod test {

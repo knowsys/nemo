@@ -6,7 +6,7 @@ use nemo::io::{import_manager::ImportManager, resource_providers::ResourceProvid
 use nemo::rule_model::pipeline::transformations::{
     crit_instance::TransformationCriticalInstance, msa::TransformationMSA,
 };
-use nemo::rule_model::programs::{handle::ProgramHandle, program::Program};
+use nemo::rule_model::programs::handle::ProgramHandle;
 
 pub async fn msa_execution_engine_from_handle(mut handle: ProgramHandle) -> DefaultExecutionEngine {
     handle = handle
@@ -14,7 +14,6 @@ pub async fn msa_execution_engine_from_handle(mut handle: ProgramHandle) -> Defa
         .expect("TransformationCriticalInstance Error")
         .transform(TransformationMSA::default())
         .expect("TransformationMSA Error");
-    // let prog: Program = handle.materialize();
     let import_manager: ImportManager = ImportManager::new(ResourceProviders::empty());
     ExecutionEngine::initialize(handle, import_manager)
         .await

@@ -34,18 +34,21 @@ fn backtrack_sk_term<'a>(
     let (rule, unassigned_sk_term): (&Rule, &FunctionTerm) = ex_rules
         .iter()
         .find_map(|rule| {
-            rule.head_terms().find_map(|term| {
-                if let Term::FunctionTerm(f_term) = term
-                    && f_term.tag() == sk_term.tag()
-                {
-                    Some((*rule, f_term))
-                } else {
-                    None
-                }
-            })
+            rule.head()
+                .iter()
+                .flat_map(|atom| atom.terms())
+                .find_map(|term| {
+                    if let Term::FunctionTerm(f_term) = term
+                        && f_term.tag() == sk_term.tag()
+                    {
+                        Some((*rule, f_term))
+                    } else {
+                        None
+                    }
+                })
         })
         .unwrap();
-    let front_vars = rule.frontier_variables();
+    let front_vars: HashSet<&Variable> = rule.frontier_variables().collect();
     // let mut const_count = 0;
     let ass = rule.variables().fold(Assignment::new(), |mut ass, var| {
         if front_vars.contains(var) {
@@ -411,8 +414,8 @@ fn reverse_sk_atom<'a>(
             _ => panic!(),
         })
         .collect();
-    let pred: &Tag = atom.predicate_ref();
-    Atom::from((pred, subterms))
+    let pred: Tag = atom.predicate();
+    Atom::new(pred, subterms)
 }
 
 fn reverse_sk(rule: &Rule) -> Rule {
@@ -529,7 +532,7 @@ impl<'a, 'b> Trigger<'a, 'b> {
             &var_atom_pos_unsk_rule,
         );
 
-        let frontier_vars = self.rule.frontier_variables();
+        let frontier_vars: HashSet<&Variable> = self.rule.frontier_variables().collect();
         possible_ass_for_chase_result.iter().any(|pos_ass| {
             frontier_vars
                 .iter()
@@ -557,8 +560,8 @@ impl Assign for Atom {
                 _ => panic!(),
             })
             .collect();
-        let pred: &Tag = self.predicate_ref();
-        Fact::from((pred, subterms))
+        let pred: Tag = self.predicate();
+        Fact::new(pred, subterms)
     }
 }
 
@@ -575,7 +578,7 @@ impl Assign for FunctionTerm {
             })
             .collect();
         let pred: &Tag = self.tag();
-        Term::FunctionTerm(FunctionTerm::from((pred, subterms)))
+        Term::FunctionTerm(FunctionTerm::new_tagged(pred.clone(), subterms))
     }
 }
 

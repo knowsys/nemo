@@ -84,11 +84,6 @@ impl GroundTerm {
     pub fn set_value(&mut self, value: AnyDataValue) {
         self.value = value;
     }
-
-    // TODO: DELETE FUNCTION ONCE MFA CHECK CAN BE IMPLEMENTED DIFFERENTLY
-    pub fn value_ref(&self) -> &AnyDataValue {
-        &self.value
-    }
 }
 
 impl TryFrom<Term> for GroundTerm {
@@ -206,7 +201,7 @@ impl Ord for GroundTerm {
 
 impl PartialOrd for GroundTerm {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.value.cmp(&other.value))
+        Some(self.cmp(other))
     }
 }
 

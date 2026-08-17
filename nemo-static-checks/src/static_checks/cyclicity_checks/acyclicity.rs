@@ -1,14 +1,9 @@
 use nemo::rule_model::{
     components::{
-        atom::Atom,
         fact::Fact,
         rule::Rule,
         tag::Tag,
-        term::{
-            Term,
-            function::FunctionTerm,
-            primitive::{Primitive, variable::Variable},
-        },
+        term::{Term, function::FunctionTerm, primitive::Primitive},
     },
     pipeline::transformations::{
         crit_instance::TransformationCriticalInstance, skolem::TransformationSkolemize,
@@ -19,8 +14,8 @@ use nemo::rule_model::{
 use crate::static_checks::collection_traits::InsertAll;
 use crate::static_checks::cyclicity_checks::{
     Assignment, CoreReasoner, Cyclic, CyclicityStrategy, FactsByPred, NoBlockStrategy, Trigger,
-    VarPerAtomIdxPosIdxPerRule, assignments_for_facts, backtrack_sk_term, body_for_assignment,
-    build_var_index_for_rule, build_var_index_for_rules, predicates_ref, reverse_sk, union,
+    VarPerAtomIdxPosIdxPerRule, backtrack_sk_term, body_for_assignment, build_var_index_for_rules,
+    predicates_ref, union,
 };
 use crate::static_checks::rule_set::RuleSet;
 
@@ -209,7 +204,8 @@ fn rename_consts_in_term(term: Term, count: &mut u32) -> Term {
         Term::FunctionTerm(func_term) => {
             let name: String = func_term.tag().name().to_string();
             let inner_terms = func_term
-                .into_terms()
+                .terms()
+                .cloned()
                 .map(|inner_term| rename_consts_in_term(inner_term, count));
             let new_func_term = FunctionTerm::new(&name, inner_terms);
             Term::from(new_func_term)

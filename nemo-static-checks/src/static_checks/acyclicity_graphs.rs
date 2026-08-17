@@ -90,7 +90,7 @@ impl<'a> JointAcyclicityGraphBuilder<'a> {
         attacked_pos_by_rule_and_vars: &PositionsByRuleAndVariables<'a>,
     ) {
         let ex_rule_and_vars: HashSet<RuleAndVariable> = rule.existential_rule_and_variables();
-        let positive_variables: HashSet<&Variable> = rule.positive_variables();
+        let positive_variables: HashSet<&Variable> = rule.positive_variables().collect();
         positive_variables.iter().for_each(|var| {
             let rule_and_body_var: RuleAndVariable = RuleAndVariable(rule, var);
             attacked_pos_by_rule_and_vars
@@ -167,7 +167,7 @@ impl<'a> WeakAcyclicityGraph<'a> {
 /// This Impl-Block provides a method to get the inifinite rank Positions of some WeakAcyclicityGraph.
 impl<'a> WeakAcyclicityGraph<'a> {
     /// Returns all nodes of a Graph.
-    fn all_nodes(&self) -> HashSet<Position> {
+    fn all_nodes(&'_ self) -> HashSet<Position<'_>> {
         self.0.nodes().collect()
     }
 
@@ -181,7 +181,7 @@ impl<'a> WeakAcyclicityGraph<'a> {
     }
 
     /// Builds the infinite rank Positions for some WeakAcyclicityGraph.
-    pub fn infinite_rank_positions(&self) -> Positions {
+    pub fn infinite_rank_positions(&'_ self) -> Positions<'_> {
         let cycs_con_spe_edge: HashSet<Cycle<Position>> = self.cycles_containing_special_edges();
         let repr_of_cycles: HashSet<Position> = self.represantatives_of_cycles(&cycs_con_spe_edge);
         let mut inf_rank_pos_set: HashSet<Position> = self.cycles_into_nodes(cycs_con_spe_edge);

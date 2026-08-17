@@ -3,7 +3,7 @@ use crate::static_checks::acyclicity_graphs::{JointAcyclicityGraph, WeakAcyclici
 use crate::static_checks::collection_traits::{Disjoint, InsertAll, RemoveAll, Superset};
 use crate::static_checks::rule_set::{RuleAndVariable, RuleSet};
 use nemo::rule_model::components::{
-    atom::Atom, rule::Rule, tag::Tag, term::primitive::variable::Variable,
+    IterableVariables, atom::Atom, rule::Rule, tag::Tag, term::primitive::variable::Variable,
 };
 
 use std::collections::{HashMap, HashSet};
@@ -91,7 +91,7 @@ impl RuleSet {
 
     /// Builds all attacked positions ordered by (all existential / existential variables which appea
     /// in cycles of the joint acyclicity graph) (PositionsByRuleIdxVariables) of some RuleSet.
-    fn attacked_positions(&self, att_type: AttackingType) -> PositionsByRuleAndVariables {
+    fn attacked_positions(&'_ self, att_type: AttackingType) -> PositionsByRuleAndVariables<'_> {
         let att_variables: HashSet<RuleAndVariable> = self.match_attacking_variables(att_type);
         let att_pos_by_rule_and_vars_unwrapped: HashMap<RuleAndVariable, Positions> = att_variables
             .into_iter()
@@ -107,28 +107,30 @@ impl RuleSet {
 
     /// Builds and Returns the attacked Positions by existential Variables that appear in a Cycle of the
     /// JointAcyclicityGraph of a RuleSet.
-    pub fn attacked_positions_by_cycle_rule_and_variables(&self) -> PositionsByRuleAndVariables {
+    pub fn attacked_positions_by_cycle_rule_and_variables(
+        &self,
+    ) -> PositionsByRuleAndVariables<'_> {
         self.attacked_positions(AttackingType::Cycle)
     }
 
     /// Builds and Returns the attacked Positions by all existential Variables of a RuleSet.
     pub fn attacked_positions_by_existential_rule_and_variables(
         &self,
-    ) -> PositionsByRuleAndVariables {
+    ) -> PositionsByRuleAndVariables<'_> {
         self.attacked_positions(AttackingType::Existential)
     }
 
     /// Returns the marking for the sticky-check of a RuleSet.
-    pub fn build_and_check_sticky_marking(&self) -> Option<Positions> {
+    pub fn build_and_check_sticky_marking(&self) -> Option<Positions<'_>> {
         self.marking(MarkingType::Sticky)
     }
 
     /// Returns the marking for the weakly-sticky-check of a RuleSet.
-    pub fn build_and_check_weakly_sticky_marking(&self) -> Option<Positions> {
+    pub fn build_and_check_weakly_sticky_marking(&self) -> Option<Positions<'_>> {
         self.marking(MarkingType::WeaklySticky)
     }
 
-    fn marking(&self, mar_type: MarkingType) -> Option<Positions> {
+    fn marking(&self, mar_type: MarkingType) -> Option<Positions<'_>> {
         let mut mar_pos: Positions = self.match_initial_marked_positions(mar_type)?;
         let mut new_found_mar_pos: Positions = mar_pos.clone();
         while !new_found_mar_pos.0.is_empty() {
@@ -173,7 +175,6 @@ impl<'a> AffectedPositionsInference<'a> for Rule {
 
     fn conclude_affected_positions(&'a self, last_it_pos: &Positions<'a>) -> Positions<'a> {
         self.positive_variables()
-            .iter()
             .filter(|var| {
                 let positive_body_atoms: Vec<&Atom> = self.body_positive_refs();
                 var.appears_at_some_positions_in_atoms(last_it_pos, &positive_body_atoms)
@@ -215,7 +216,6 @@ impl<'a> AttackedPositionsInference<'a> for RuleSet {
 impl<'a> AttackedPositionsInference<'a> for Rule {
     fn conclude_attacked_positions(&'a self, cur_att_pos: &Positions) -> Positions<'a> {
         self.positive_variables()
-            .iter()
             .map(|var| RuleAndVariable(self, var))
             .filter(|rule_and_var| rule_and_var.is_attacked_by_positions(cur_att_pos))
             .fold(Positions::default(), |new_att_pos_in_rule, rule_and_var| {
@@ -234,7 +234,7 @@ trait AttackedPositionsBuilderInferenceExtended<'a> {
         &'a self,
         rule_and_var: &RuleAndVariable<'a>,
     ) -> Positions<'a>;
-    fn match_attacking_variables(&self, att_type: AttackingType) -> HashSet<RuleAndVariable>;
+    fn match_attacking_variables(&self, att_type: AttackingType) -> HashSet<RuleAndVariable<'_>>;
 }
 
 impl<'a> AttackedPositionsBuilderInferenceExtended<'a> for RuleSet {
@@ -252,7 +252,7 @@ impl<'a> AttackedPositionsBuilderInferenceExtended<'a> for RuleSet {
         att_pos
     }
 
-    fn match_attacking_variables(&self, att_type: AttackingType) -> HashSet<RuleAndVariable> {
+    fn match_attacking_variables(&self, att_type: AttackingType) -> HashSet<RuleAndVariable<'_>> {
         match att_type {
             AttackingType::Cycle => {
                 let jo_ac_graph = JointAcyclicityGraph::new(self);
@@ -308,7 +308,6 @@ impl<'a> MarkedPositionsInference<'a> for RuleSet {
 impl<'a> MarkedPositionsInference<'a> for Rule {
     fn conclude_marked_positions(&'a self, last_it_pos: &Positions<'a>) -> Option<Positions<'a>> {
         self.positive_variables()
-            .iter()
             .filter(|var| {
                 let positive_body_atoms: Vec<&Atom> = self.body_positive_refs();
                 var.appears_at_some_positions_in_atoms(last_it_pos, &positive_body_atoms)
@@ -317,7 +316,7 @@ impl<'a> MarkedPositionsInference<'a> for Rule {
                 if self
                     .head()
                     .iter()
-                    .any(|atom| !atom.variables_refs().contains(var))
+                    .any(|atom| !atom.variables().any(|var_in_at| var_in_at == var))
                 {
                     return None;
                 }
@@ -334,7 +333,7 @@ impl<'a> MarkedPositionsInference<'a> for Rule {
                 if self
                     .head()
                     .iter()
-                    .any(|atom| !atom.variables_refs().contains(var))
+                    .any(|atom| !atom.variables().any(|var_in_at| var_in_at == *var))
                 {
                     return None;
                 }
@@ -361,7 +360,7 @@ impl<'a> MarkedPositionsInference<'a> for Rule {
                 if self
                     .head()
                     .iter()
-                    .any(|atom| !atom.variables_refs().contains(var))
+                    .any(|atom| !atom.variables().any(|var_in_at| var_in_at == *var))
                 {
                     return None;
                 }

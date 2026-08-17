@@ -53,8 +53,8 @@ impl Literal {
         }
     }
 
-    /// If literal is not an operation, return the predicate as a reference.
-    /// Returns `None` otherwise.
+    // /// If literal is not an operation, return the predicate as a reference.
+    // /// Returns `None` otherwise.
     pub fn predicate_ref(&self) -> Option<&Tag> {
         match self {
             Literal::Positive(atom) | Literal::Negative(atom) => Some(atom.predicate_ref()),
@@ -62,8 +62,8 @@ impl Literal {
         }
     }
 
-    /// Return the predicate as a reference and its length (positive Atom | negative Atom) or None (Operation) of the
-    /// Literal
+    // /// Return the predicate as a reference and its length (positive Atom | negative Atom) or None (Operation) of the
+    // /// Literal
     pub fn predicate_ref_and_len(&self) -> Option<(&Tag, usize)> {
         match self {
             Literal::Positive(atom) | Literal::Negative(atom) => Some(atom.predicate_ref_and_len()),

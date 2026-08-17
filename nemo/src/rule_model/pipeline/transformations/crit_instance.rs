@@ -1,29 +1,64 @@
 use super::ProgramTransformation;
+use crate::rule_model::components::IterablePrimitives;
 use crate::rule_model::components::{
-    fact::Fact, rule::Rule, statement::Statement, tag::Tag, term::Term,
+    fact::Fact, literal::Literal, rule::Rule, statement::Statement, tag::Tag, term::Term,
 };
 use crate::rule_model::error::ValidationReport;
-use crate::rule_model::programs::handle::ProgramHandle;
-use crate::rule_model::programs::{ProgramRead, ProgramWrite};
+use crate::rule_model::programs::{ProgramRead, ProgramWrite, handle::ProgramHandle};
 
+use itertools::Itertools;
 use std::collections::HashSet;
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct TransformationCriticalInstance {}
 
-fn critical_instance(rules: &[&Rule]) -> HashSet<Fact> {
-    let star_term: Term = Term::from("__STAR__");
-    let predicates_and_lens: HashSet<(&Tag, usize)> = rules
+fn preds_and_lens_of_rule(rule: &Rule) -> Vec<(Tag, usize)> {
+    rule.body()
         .iter()
-        .flat_map(|rule| rule.predicates_ref_and_lens())
+        .filter_map(|literal| match literal {
+            Literal::Positive(atom) | Literal::Negative(atom) => Some(atom),
+            _ => None,
+        })
+        .chain(rule.head().iter())
+        .map(|atom| (atom.predicate(), atom.len()))
+        // .chain(rule.head().iter().map(|atom| atom.predicate_ref_and_len()))
+        .collect()
+}
+
+/// Return every fact for the given predicate and arity that can be formed
+/// from the provided constants.
+pub fn facts_for_predicate_and_constants(
+    predicate: &Tag,
+    arity: usize,
+    constants: &[Term],
+) -> HashSet<Fact> {
+    (0..arity)
+        .map(|_| constants.iter().cloned())
+        .multi_cartesian_product()
+        .map(|terms| Fact::new(predicate.clone(), terms))
+        .collect()
+}
+
+fn critical_instance(rules: &[&Rule]) -> impl Iterator<Item = Fact> {
+    let mut constants: Vec<Term> = rules
+        .iter()
+        .flat_map(|rule| rule.primitive_terms())
+        .filter(|primitive| primitive.is_ground())
+        .cloned()
+        .map(Term::from)
         .collect();
+    constants.push(Term::from("__STAR__"));
+
+    let predicates_and_lens: HashSet<(Tag, usize)> = rules
+        .iter()
+        .flat_map(|rule| preds_and_lens_of_rule(rule))
+        .collect();
+
     predicates_and_lens
         .into_iter()
-        .map(|(pred, len)| {
-            let terms: Vec<Term> = vec![star_term.clone(); len];
-            Fact::from((pred, terms))
+        .flat_map(move |(predicate, arity)| {
+            facts_for_predicate_and_constants(&predicate, arity, &constants)
         })
-        .collect()
 }
 
 impl ProgramTransformation for TransformationCriticalInstance {
@@ -39,8 +74,7 @@ impl ProgramTransformation for TransformationCriticalInstance {
             }
         }
 
-        let crit_inst: HashSet<Fact> = critical_instance(&rules);
-        crit_inst.into_iter().for_each(|fact| {
+        critical_instance(&rules).for_each(|fact| {
             commit.add_fact(fact);
         });
 

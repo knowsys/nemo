@@ -456,15 +456,11 @@ impl<'a> TestCase<'a> {
         let mut cmd = Command::cargo_bin("nemo-static-checks")?;
 
         let output = cmd
-            .current_dir("/Users/louis/kbs/nemo/")
             .arg("-c")
             .arg(self.check)
             .arg(self.file.as_path())
             .output()
             .expect("failed to execute");
-
-        println!("{}", str::from_utf8(&output.stderr).expect("no error"));
-        println!("hello");
 
         assert_eq!(
             str::from_utf8(&output.stdout).expect("no output").trim(),

@@ -1,7 +1,6 @@
 //! This module defines an [Atom].
 
 use std::{
-    collections::HashSet,
     fmt::Display,
     hash::Hash,
     ops::{Deref, DerefMut, Index, IndexMut},
@@ -21,7 +20,6 @@ use super::{
     ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent, IterablePrimitives,
     IterableVariables, ProgramComponent, ProgramComponentKind, component_iterator,
     component_iterator_mut,
-    fact::Fact,
     literal::Literal,
     tag::Tag,
     term::{
@@ -96,12 +94,12 @@ impl Atom {
         self.predicate.clone()
     }
 
-    /// Return the predicate as a reference of this atom.
+    // /// Return the predicate as a reference of this atom.
     pub fn predicate_ref(&self) -> &Tag {
         &self.predicate
     }
 
-    /// Return the predicate of this atom as a reference with its length.
+    // /// Return the predicate of this atom as a reference with its length.
     pub fn predicate_ref_and_len(&self) -> (&Tag, usize) {
         (self.predicate_ref(), self.len())
     }
@@ -160,17 +158,9 @@ impl DerefMut for Atom {
 
 /// This Impl-Block contains a method for an atom to get its universal variables.
 impl Atom {
-    /// This method returns the universal Variables of an Atom.
-    pub fn universal_variables(&self) -> HashSet<&Variable> {
-        self.variables().filter(|var| var.is_universal()).collect()
-    }
-}
-
-/// This Impl-Block contains a method for an atom to get its variables as a reference.
-impl Atom {
-    /// Returns all the Variables of an Atom.
-    pub fn variables_refs(&self) -> HashSet<&Variable> {
-        self.variables().collect()
+    // /// This method returns the universal Variables of an Atom.
+    pub fn universal_variables(&self) -> impl Iterator<Item = &Variable> + '_ {
+        self.variables().filter(|var| var.is_universal())
     }
 }
 
@@ -309,17 +299,6 @@ impl IterablePrimitives for Atom {
                 .iter_mut()
                 .flat_map(|term| term.primitive_terms_mut()),
         )
-    }
-}
-
-impl From<(&Tag, Vec<Term>)> for Atom {
-    fn from((predicate, terms): (&Tag, Vec<Term>)) -> Self {
-        Self {
-            origin: Origin::Created,
-            id: ProgramComponentId::default(),
-            predicate: predicate.clone(),
-            terms,
-        }
     }
 }
 

@@ -54,7 +54,7 @@ fn modified_msa_rule(
     let head_of_rule_mut: &mut Vec<Atom> = ret_val.head_mut();
     let ex_vars_as_terms: Vec<Term> = ex_vars_as_terms(&ex_vars_of_rule);
     let preds_zip_terms: Vec<(Tag, Term)> = f_preds.iter().cloned().zip(ex_vars_as_terms).collect();
-    let frontier_vars: HashSet<&Variable> = rule.frontier_variables();
+    let frontier_vars: HashSet<&Variable> = rule.frontier_variables().collect();
 
     preds_zip_terms.into_iter().for_each(|(f_pred, ex_term)| {
         let f_atom: Atom = Atom::new(f_pred, Vec::from([ex_term.clone()]));
@@ -154,7 +154,7 @@ impl ProgramTransformation for TransformationMSA {
 
         for (i, statement) in program.statements().enumerate() {
             if let Statement::Rule(rule) = statement {
-                let ex_vars_of_rule: HashSet<&Variable> = rule.existential_variables();
+                let ex_vars_of_rule: HashSet<&Variable> = rule.existential_variables().collect();
                 if ex_vars_of_rule.is_empty() {
                     commit.keep(statement);
                     continue;

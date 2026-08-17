@@ -67,25 +67,26 @@ impl RuleProperties for Rule {
     }
 
     fn is_guarded(&self) -> bool {
-        let positive_variables: HashSet<&Variable> = self.positive_variables();
+        let positive_variables: HashSet<&Variable> = self.positive_variables().collect();
         self.is_guarded_for_variables(positive_variables)
     }
 
     fn is_domain_restricted(&self) -> bool {
-        let positive_body_variables: HashSet<&Variable> = self.positive_variables();
+        let positive_body_variables: HashSet<&Variable> = self.positive_variables().collect();
         self.head().iter().all(|atom| {
-            let universal_variables_of_atom: HashSet<&Variable> = atom.universal_variables();
+            let universal_variables_of_atom: HashSet<&Variable> =
+                atom.universal_variables().collect();
             universal_variables_of_atom.is_empty()
                 || universal_variables_of_atom == positive_body_variables
         })
     }
 
     fn is_frontier_one(&self) -> bool {
-        1 >= self.frontier_variables().len()
+        1 >= self.frontier_variables().count()
     }
 
     fn is_datalog(&self) -> bool {
-        self.existential_variables().is_empty()
+        0 == self.existential_variables().count()
     }
 
     fn is_monadic(&self) -> bool {
@@ -95,7 +96,7 @@ impl RuleProperties for Rule {
     }
 
     fn is_frontier_guarded(&self) -> bool {
-        let frontier_variables: HashSet<&Variable> = self.frontier_variables();
+        let frontier_variables: HashSet<&Variable> = self.frontier_variables().collect();
         self.is_guarded_for_variables(frontier_variables)
     }
 

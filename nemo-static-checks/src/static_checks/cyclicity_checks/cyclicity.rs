@@ -1,34 +1,21 @@
 use nemo::rule_model::{
-    components::{
-        IterableVariables,
-        atom::Atom,
-        fact::Fact,
-        rule::Rule,
-        tag::Tag,
-        term::{
-            Term,
-            function::FunctionTerm,
-            primitive::{Primitive, variable::Variable},
-        },
-    },
+    components::{rule::Rule, tag::Tag, term::Term},
     pipeline::transformations::{
-        crit_instance::TransformationCriticalInstance, skolem::TransformationSkolemize,
+        crit_instance::facts_for_predicate_and_constants, skolem::TransformationSkolemize,
     },
     programs::{ProgramRead, handle::ProgramHandle},
 };
 
 use crate::static_checks::cyclicity_checks::{
     Assignment, CoreReasoner, Cyclic, CyclicityStrategy, FactsByPred, Trigger,
-    VarPerAtomIdxPosIdxPerRule, assignments_for_facts, backtrack_sk_term, body_for_assignment,
-    build_var_index_for_rule, build_var_index_for_rules, head_for_assignment, predicates_ref,
-    predicates_ref_and_lens, reverse_sk, union,
+    VarPerAtomIdxPosIdxPerRule, backtrack_sk_term, body_for_assignment, build_var_index_for_rules,
+    head_for_assignment, predicates_ref, predicates_ref_and_lens, union,
 };
 
 use crate::static_checks::collection_traits::InsertAll;
-use crate::static_checks::rule_properties::RuleProperties;
-use crate::static_checks::rule_set::{RuleRefs, RuleSet};
+use crate::static_checks::rule_set::RuleSet;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 #[derive(Clone, Copy)]
 pub enum CyclicityStrategySelector {
@@ -183,41 +170,19 @@ fn possible_facts<'a>(
     preds_and_lens: HashSet<(&'a Tag, usize)>,
     skeleton: &[Term],
 ) -> FactsByPred<'a> {
-    let skeleton_consts = skeleton.iter().filter(|term| !term.is_function()).collect();
+    let skeleton_consts: Vec<Term> = skeleton
+        .iter()
+        .filter(|term| !term.is_function())
+        .cloned()
+        .collect();
+
     preds_and_lens
         .into_iter()
-        .fold(FactsByPred::new(), |mut ret_val, (pred, size)| {
-            let mut term_sequences = Vec::new();
-            construct_term_sequences_rec(
-                &mut term_sequences,
-                &mut Vec::new(),
-                &skeleton_consts,
-                size,
-            );
-            let facts = term_sequences
-                .into_iter()
-                .map(|seq| Fact::from((pred, seq)))
-                .collect();
-            ret_val.insert(pred, facts);
-            ret_val
+        .map(|(predicate, arity)| {
+            let facts = facts_for_predicate_and_constants(predicate, arity, &skeleton_consts);
+            (predicate, facts)
         })
-}
-
-fn construct_term_sequences_rec(
-    ret_val: &mut Vec<Vec<Term>>,
-    cur_seq: &mut Vec<Term>,
-    skeleton_consts: &Vec<&Term>,
-    rem_size: usize,
-) {
-    if rem_size == 0 {
-        ret_val.push(cur_seq.clone());
-        return;
-    }
-    skeleton_consts.iter().for_each(|cons| {
-        cur_seq.push((*cons).clone());
-        construct_term_sequences_rec(ret_val, cur_seq, skeleton_consts, rem_size - 1);
-        cur_seq.pop();
-    })
+        .collect()
 }
 
 fn skeleton_of_trigger_backtrack(backtrack: &FactsByPred) -> Vec<Term> {
@@ -260,7 +225,7 @@ pub async fn check_cyclicity(handle: ProgramHandle, strat: CyclicityStrategySele
     let det_rules: Vec<&Rule> = rule_set.0.iter().collect();
     let ex_rules: Vec<&Rule> = rule_set.existential_rules();
 
-    for rule in ex_rules.iter().filter(|rule| rule.contains_func()) {
+    for rule in ex_rules.iter() {
         if check_cyclicity_for_rule(rule, &det_rules, &strat).await {
             return true;
         }
@@ -288,7 +253,6 @@ pub async fn check_cyclicity_for_rule(
         CyclicityStrategySelector::DRPC => {
             &DRPCStrategy::new(rule, rule_set, &var_per_atom_idx_pos_idx_per_rule)
         }
-        _ => unreachable!(),
     };
 
     let mut reasoner: CoreReasoner =
@@ -297,7 +261,9 @@ pub async fn check_cyclicity_for_rule(
     reasoner.run_saturating(mfc_set);
 
     let sk_func_tags_of_rule: Vec<&Tag> = rule
-        .head_terms()
+        .head()
+        .iter()
+        .flat_map(|atom| atom.terms())
         .filter_map(|term| {
             if let Term::FunctionTerm(f_term) = term {
                 Some(f_term.tag())
@@ -316,7 +282,7 @@ pub async fn check_cyclicity_for_rule(
 
 fn unique_ass(rule: &'_ Rule) -> Assignment<'_> {
     let mut count = 0;
-    rule.positive_variables_iter()
+    rule.positive_variables()
         .fold(Assignment::new(), |mut ass, var| {
             let fresh_const = Term::from(format!("__FR_CONST_{count}__"));
             count += 1;
