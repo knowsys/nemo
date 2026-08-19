@@ -10,7 +10,6 @@ use crate::static_checks::rule_set::RuleSet;
 use crate::static_checks::{positions::Positions, rule_properties::RuleProperties};
 use nemo::execution::DefaultExecutionEngine;
 use nemo::rule_model::{components::tag::Tag, programs::handle::ProgramHandle};
-use std::collections::HashSet;
 
 /// This trait gives some static checks for some ruleset.
 pub trait RulesProperties {
@@ -70,232 +69,137 @@ pub trait RulesProperties {
     fn is_rpc(&self) -> bool;
 }
 
-impl RulesProperties for RuleSet {
+impl RulesProperties for ProgramHandle {
     fn is_joinless(&self) -> bool {
-        self.0.iter().all(|rule| rule.is_joinless())
+        let rule_set = RuleSet::from(self.clone());
+        rule_set.0.iter().all(|rule| rule.is_joinless())
     }
 
     fn is_linear(&self) -> bool {
-        self.0.iter().all(|rule| rule.is_linear())
+        let rule_set = RuleSet::from(self.clone());
+        rule_set.0.iter().all(|rule| rule.is_linear())
     }
 
     fn is_guarded(&self) -> bool {
-        self.0.iter().all(|rule| rule.is_guarded())
+        let rule_set = RuleSet::from(self.clone());
+        rule_set.0.iter().all(|rule| rule.is_guarded())
     }
 
     fn is_sticky(&self) -> bool {
-        self.build_and_check_sticky_marking().is_some()
+        RuleSet::from(self.clone())
+            .build_and_check_sticky_marking()
+            .is_some()
     }
 
     fn is_weakly_sticky(&self) -> bool {
-        self.build_and_check_weakly_sticky_marking().is_some()
+        RuleSet::from(self.clone())
+            .build_and_check_weakly_sticky_marking()
+            .is_some()
     }
 
     fn is_domain_restricted(&self) -> bool {
-        self.0.iter().all(|rule| rule.is_domain_restricted())
+        let rule_set = RuleSet::from(self.clone());
+        rule_set.0.iter().all(|rule| rule.is_domain_restricted())
     }
 
     fn is_frontier_one(&self) -> bool {
-        self.0.iter().all(|rule| rule.is_frontier_one())
+        let rule_set = RuleSet::from(self.clone());
+        rule_set.0.iter().all(|rule| rule.is_frontier_one())
     }
 
     fn is_datalog(&self) -> bool {
-        self.0.iter().all(|rule| rule.is_datalog())
+        let rule_set = RuleSet::from(self.clone());
+        rule_set.0.iter().all(|rule| rule.is_datalog())
     }
 
     fn is_monadic(&self) -> bool {
-        self.0.iter().all(|rule| rule.is_monadic())
+        let rule_set = RuleSet::from(self.clone());
+        rule_set.0.iter().all(|rule| rule.is_monadic())
     }
 
     fn is_frontier_guarded(&self) -> bool {
-        self.0.iter().all(|rule| rule.is_frontier_guarded())
+        let rule_set = RuleSet::from(self.clone());
+        rule_set.0.iter().all(|rule| rule.is_frontier_guarded())
     }
 
     fn is_weakly_guarded(&self) -> bool {
-        let affected_positions: Positions = self.affected_positions();
-        self.0
+        let rule_set = RuleSet::from(self.clone());
+        let affected_positions: Positions = rule_set.affected_positions();
+        rule_set
+            .0
             .iter()
             .all(|rule| rule.is_weakly_guarded(&affected_positions))
     }
 
     fn is_weakly_frontier_guarded(&self) -> bool {
-        let affected_positions: Positions = self.affected_positions();
-        self.0
+        let rule_set = RuleSet::from(self.clone());
+        let affected_positions: Positions = rule_set.affected_positions();
+        rule_set
+            .0
             .iter()
             .all(|rule| rule.is_weakly_frontier_guarded(&affected_positions))
     }
 
     fn is_jointly_guarded(&self) -> bool {
+        let rule_set = RuleSet::from(self.clone());
         let attacked_pos_by_ex_rule_and_vars: PositionsByRuleAndVariables =
-            self.attacked_positions_by_existential_rule_and_variables();
-        self.0
+            rule_set.attacked_positions_by_existential_rule_and_variables();
+        rule_set
+            .0
             .iter()
             .all(|rule| rule.is_jointly_guarded(&attacked_pos_by_ex_rule_and_vars))
     }
 
     fn is_jointly_frontier_guarded(&self) -> bool {
+        let rule_set = RuleSet::from(self.clone());
         let attacked_pos_by_ex_rule_and_vars: PositionsByRuleAndVariables =
-            self.attacked_positions_by_existential_rule_and_variables();
-        self.0
+            rule_set.attacked_positions_by_existential_rule_and_variables();
+        rule_set
+            .0
             .iter()
             .all(|rule| rule.is_jointly_frontier_guarded(&attacked_pos_by_ex_rule_and_vars))
     }
 
     fn is_weakly_acyclic(&self) -> bool {
-        let we_ac_graph: WeakAcyclicityGraph = WeakAcyclicityGraph::new(self);
+        let rule_set = RuleSet::from(self.clone());
+        let we_ac_graph: WeakAcyclicityGraph = WeakAcyclicityGraph::new(&rule_set);
         !we_ac_graph.contains_cycle_with_special_edge()
     }
 
     fn is_jointly_acyclic(&self) -> bool {
-        let jo_ac_graph: JointAcyclicityGraph = JointAcyclicityGraph::new(self);
+        let rule_set = RuleSet::from(self.clone());
+        let jo_ac_graph: JointAcyclicityGraph = JointAcyclicityGraph::new(&rule_set);
         !jo_ac_graph.is_cyclic()
     }
 
     fn is_glut_guarded(&self) -> bool {
+        let rule_set = RuleSet::from(self.clone());
         let attacked_pos_by_cycle_rule_and_vars: PositionsByRuleAndVariables =
-            self.attacked_positions_by_cycle_rule_and_variables();
-        self.0
+            rule_set.attacked_positions_by_cycle_rule_and_variables();
+        rule_set
+            .0
             .iter()
             .all(|rule| rule.is_glut_guarded(&attacked_pos_by_cycle_rule_and_vars))
     }
 
     fn is_glut_frontier_guarded(&self) -> bool {
+        let rule_set = RuleSet::from(self.clone());
         let attacked_pos_by_cycle_rule_and_vars: PositionsByRuleAndVariables =
-            self.attacked_positions_by_cycle_rule_and_variables();
-        self.0
+            rule_set.attacked_positions_by_cycle_rule_and_variables();
+        rule_set
+            .0
             .iter()
             .all(|rule| rule.is_glut_frontier_guarded(&attacked_pos_by_cycle_rule_and_vars))
     }
 
     fn is_shy(&self) -> bool {
+        let rule_set = RuleSet::from(self.clone());
         let attacked_pos_by_existential_rule_and_vars: PositionsByRuleAndVariables =
-            self.attacked_positions_by_existential_rule_and_variables();
-        self.0
+            rule_set.attacked_positions_by_existential_rule_and_variables();
+        rule_set
+            .0
             .iter()
             .all(|rule| rule.is_shy(&attacked_pos_by_existential_rule_and_vars))
-    }
-
-    async fn is_mfa(&self) -> bool {
-        unreachable!();
-    }
-
-    async fn is_msa(&self) -> bool {
-        unreachable!();
-        // let mut msa_exec_eng: DefaultExecutionEngine =
-        //     msa_execution_engine_from_rules(&self.0).await;
-        // msa_exec_eng.execute().await.expect("no errors possible");
-        // let c_pred: Tag = Tag::from("_msa_C");
-        // if msa_exec_eng
-        //     .predicate_rows(&c_pred)
-        //     .await
-        //     .expect("no errors possible")
-        //     .is_none()
-        // {
-        //     return true;
-        // }
-        // false
-    }
-
-    fn is_dmfa(&self) -> bool {
-        unreachable!();
-    }
-
-    async fn is_rmfa(&self) -> bool {
-        unreachable!();
-    }
-
-    async fn is_mfc(&self) -> bool {
-        unreachable!();
-    }
-
-    fn is_dmfc(&self) -> bool {
-        unreachable!();
-    }
-
-    async fn is_drpc(&self) -> bool {
-        unreachable!();
-    }
-
-    fn is_rpc(&self) -> bool {
-        unreachable!();
-    }
-}
-
-impl RulesProperties for ProgramHandle {
-    fn is_joinless(&self) -> bool {
-        unreachable!();
-    }
-
-    fn is_linear(&self) -> bool {
-        unreachable!();
-    }
-
-    fn is_guarded(&self) -> bool {
-        unreachable!();
-    }
-
-    fn is_sticky(&self) -> bool {
-        unreachable!();
-    }
-
-    fn is_weakly_sticky(&self) -> bool {
-        unreachable!();
-    }
-
-    fn is_domain_restricted(&self) -> bool {
-        unreachable!();
-    }
-
-    fn is_frontier_one(&self) -> bool {
-        unreachable!();
-    }
-
-    fn is_datalog(&self) -> bool {
-        unreachable!();
-    }
-
-    fn is_monadic(&self) -> bool {
-        unreachable!();
-    }
-
-    fn is_frontier_guarded(&self) -> bool {
-        unreachable!();
-    }
-
-    fn is_weakly_guarded(&self) -> bool {
-        unreachable!();
-    }
-
-    fn is_weakly_frontier_guarded(&self) -> bool {
-        unreachable!();
-    }
-
-    fn is_jointly_guarded(&self) -> bool {
-        unreachable!();
-    }
-
-    fn is_jointly_frontier_guarded(&self) -> bool {
-        unreachable!();
-    }
-
-    fn is_weakly_acyclic(&self) -> bool {
-        unreachable!();
-    }
-
-    fn is_jointly_acyclic(&self) -> bool {
-        unreachable!();
-    }
-
-    fn is_glut_guarded(&self) -> bool {
-        unreachable!();
-    }
-
-    fn is_glut_frontier_guarded(&self) -> bool {
-        unreachable!();
-    }
-
-    fn is_shy(&self) -> bool {
-        unreachable!();
     }
 
     async fn is_mfa(&self) -> bool {

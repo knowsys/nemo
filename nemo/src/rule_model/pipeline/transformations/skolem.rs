@@ -65,26 +65,22 @@ impl ProgramTransformation for TransformationSkolemize {
                     .collect::<Vec<_>>();
 
                 let mut new_rule = rule.clone();
-                let mut count_by_ex_vars: HashMap<ExistentialVariable, usize> =
-                    HashMap::<ExistentialVariable, usize>::new();
+                let mut sk_terms_by_ex_var = HashMap::new();
                 for head_atom in new_rule.head_mut() {
                     for term in head_atom.terms_mut() {
-                        if let Term::Primitive(Primitive::Variable(Variable::Existential(ex_var))) =
-                            term
+                        if let Term::Primitive(Primitive::Variable(Variable::Existential(
+                            existential,
+                        ))) = term
                         {
-                            if let Some(sk_count) = count_by_ex_vars.get(ex_var) {
-                                let name = format!("_SKOLEM_{}", sk_count);
-                                *term = Term::from(FunctionTerm::new(
-                                    &name,
-                                    frontier_variables.clone(),
-                                ));
-                                continue;
-                            }
-                            self.skolem_count += 1;
-                            count_by_ex_vars.insert(ex_var.clone(), self.skolem_count);
-                            let name = format!("_SKOLEM_{}", self.skolem_count);
-                            *term =
-                                Term::from(FunctionTerm::new(&name, frontier_variables.clone()));
+                            let skolem_term = sk_terms_by_ex_var
+                                .entry(existential.clone())
+                                .or_insert_with(|| {
+                                    self.skolem_count += 1;
+                                    let name = format!("_SKOLEM_{}", self.skolem_count);
+                                    Term::from(FunctionTerm::new(&name, frontier_variables.clone()))
+                                })
+                                .clone();
+                            *term = skolem_term;
                         }
                     }
                 }

@@ -11,7 +11,7 @@ use nemo::{
 };
 
 use crate::cli::Check;
-use crate::static_checks::{rule_set::RuleSet, rules_properties::RulesProperties};
+use crate::static_checks::rules_properties::RulesProperties;
 
 use colored::Colorize;
 
@@ -42,81 +42,79 @@ async fn run(mut cli: CliApp) -> Result<(), CliError> {
     let program_path = cli.rules.pop().ok_or(CliError::NoInput)?;
     let program_file = RuleFile::load(program_path)?;
     let handle: ProgramHandle = get_handle_from_rule_file(program_file)?;
-    let rule_set: RuleSet = RuleSet(handle.materialize().all_rules());
     for check in cli.checks.into_iter() {
-        // let check_str: &str = &check;
         match check {
-            Check::Joinless => println!("joinless: {}", RulesProperties::is_joinless(&rule_set)),
-            Check::Linear => println!("linear: {}", RulesProperties::is_linear(&rule_set)),
-            Check::Guarded => println!("guarded: {}", RulesProperties::is_guarded(&rule_set)),
-            Check::Sticky => println!("sticky: {}", RulesProperties::is_sticky(&rule_set)),
+            Check::Joinless => println!("joinless: {}", RulesProperties::is_joinless(&handle)),
+            Check::Linear => println!("linear: {}", RulesProperties::is_linear(&handle)),
+            Check::Guarded => println!("guarded: {}", RulesProperties::is_guarded(&handle)),
+            Check::Sticky => println!("sticky: {}", RulesProperties::is_sticky(&handle)),
             Check::DomainRestricted => println!(
                 "domain-restricted: {}",
-                RulesProperties::is_domain_restricted(&rule_set)
+                RulesProperties::is_domain_restricted(&handle)
             ),
             Check::FrontierOne => println!(
                 "frontier-one: {}",
-                RulesProperties::is_frontier_one(&rule_set)
+                RulesProperties::is_frontier_one(&handle)
             ),
-            Check::Datalog => println!("datalog: {}", RulesProperties::is_datalog(&rule_set)),
-            Check::Monadic => println!("monadic: {}", RulesProperties::is_monadic(&rule_set)),
+            Check::Datalog => println!("datalog: {}", RulesProperties::is_datalog(&handle)),
+            Check::Monadic => println!("monadic: {}", RulesProperties::is_monadic(&handle)),
             Check::FrontierGuarded => println!(
                 "frontier-guarded: {}",
-                RulesProperties::is_frontier_guarded(&rule_set)
+                RulesProperties::is_frontier_guarded(&handle)
             ),
             Check::WeaklyGuarded => println!(
                 "weakly-guarded: {}",
-                RulesProperties::is_weakly_guarded(&rule_set)
+                RulesProperties::is_weakly_guarded(&handle)
             ),
             Check::WeaklyFrontierGuarded => println!(
                 "weakly-frontier-guarded: {}",
-                RulesProperties::is_weakly_frontier_guarded(&rule_set)
+                RulesProperties::is_weakly_frontier_guarded(&handle)
             ),
             Check::JointlyGuarded => println!(
                 "jointly-guarded: {}",
-                RulesProperties::is_jointly_guarded(&rule_set)
+                RulesProperties::is_jointly_guarded(&handle)
             ),
             Check::JointlyFrontierGuarded => println!(
                 "jointly-frontier-guarded: {}",
-                RulesProperties::is_jointly_frontier_guarded(&rule_set)
+                RulesProperties::is_jointly_frontier_guarded(&handle)
             ),
             Check::WeaklyAcyclic => println!(
                 "weakly-acyclic: {}",
-                RulesProperties::is_weakly_acyclic(&rule_set)
+                RulesProperties::is_weakly_acyclic(&handle)
             ),
             Check::JointlyAcyclic => println!(
                 "jointly-acyclic: {}",
-                RulesProperties::is_jointly_acyclic(&rule_set)
+                RulesProperties::is_jointly_acyclic(&handle)
             ),
             Check::WeaklySticky => println!(
                 "weakly-sticky: {}",
-                RulesProperties::is_weakly_sticky(&rule_set)
+                RulesProperties::is_weakly_sticky(&handle)
             ),
             Check::GlutGuarded => println!(
                 "glut-guarded: {}",
-                RulesProperties::is_glut_guarded(&rule_set)
+                RulesProperties::is_glut_guarded(&handle)
             ),
             Check::GlutFrontierGuarded => println!(
                 "glut-frontier-guarded: {}",
-                RulesProperties::is_glut_frontier_guarded(&rule_set)
+                RulesProperties::is_glut_frontier_guarded(&handle)
             ),
-            Check::Shy => println!("shy: {}", RulesProperties::is_shy(&rule_set)),
+            Check::Shy => println!("shy: {}", RulesProperties::is_shy(&handle)),
             Check::Mfa => println!("mfa: {}", RulesProperties::is_mfa(&handle).await),
             Check::Msa => println!("msa: {}", RulesProperties::is_msa(&handle).await),
             Check::Dmfa => println!(
                 "dmfa: not yet implemented",
-                // RulesProperties::is_dmfa(&rule_set)
+                // RulesProperties::is_dmfa(&handle)
             ),
             Check::Rmfa => println!("rmfa: {}", RulesProperties::is_rmfa(&handle).await),
             Check::Mfc => println!("mfc: {}", RulesProperties::is_mfc(&handle).await),
             Check::Dmfc => println!(
                 "dmfc: not yet implemented",
-                // RulesProperties::is_dmfc(&rule_set)
+                // RulesProperties::is_dmfc(&handle)
             ),
             Check::Drpc => println!("drpc: {}", RulesProperties::is_drpc(&handle).await),
             Check::Rpc => println!(
                 "rpc: not yet implemented",
-                // RulesProperties::is_rpc(&rule_set)
+                // RulesProperties::is_rpc(&handle)
             ),
         }
     }

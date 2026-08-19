@@ -4,7 +4,7 @@ use crate::static_checks::positions::{Position, Positions, PositionsByRuleAndVar
 use nemo::rule_model::components::{
     IterableVariables, atom::Atom, rule::Rule, term::primitive::variable::Variable,
 };
-
+use nemo::rule_model::programs::handle::ProgramHandle;
 use std::collections::{HashMap, HashSet};
 
 /// Type to relate an (existential) Variable to a Rule. Therefore a type to identificate an
@@ -805,5 +805,11 @@ pub trait AtomAppearance {
 impl AtomAppearance for Variable {
     fn appears_in_atom(&self, atom: &Atom) -> bool {
         atom.variables().any(|var| self == var)
+    }
+}
+
+impl From<ProgramHandle> for RuleSet {
+    fn from(handle: ProgramHandle) -> Self {
+        RuleSet(handle.materialize().all_rules())
     }
 }
