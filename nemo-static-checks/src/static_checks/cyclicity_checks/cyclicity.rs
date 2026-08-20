@@ -210,8 +210,12 @@ fn backtrack_trigger<'a>(existential_rules: &Vec<&'a Rule>, trig: &Trigger) -> F
 }
 
 fn ass_is_injective(ass: &Assignment) -> bool {
-    let mut seen_terms: HashSet<&Term> = HashSet::new();
-    ass.values().all(|term| seen_terms.insert(term))
+    let terms: Vec<&Term> = ass.values().collect();
+
+    terms
+        .iter()
+        .enumerate()
+        .all(|(index, term)| !terms[..index].contains(term))
 }
 
 pub fn mfc_handle(handle: ProgramHandle) -> ProgramHandle {

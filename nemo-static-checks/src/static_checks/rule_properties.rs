@@ -54,7 +54,8 @@ pub trait RuleProperties {
         attacked_pos_by_cycle_rule_and_vars: &PositionsByRuleAndVariables,
     ) -> bool;
     /// Determines if the rule is shy.
-    fn is_shy(&self, attacked_pos_by_vars: &PositionsByRuleAndVariables) -> bool;
+    fn is_shy(&self, rule_index: usize, attacked_pos_by_vars: &PositionsByRuleAndVariables)
+    -> bool;
 }
 
 impl RuleProperties for Rule {
@@ -148,14 +149,22 @@ impl RuleProperties for Rule {
         self.is_guarded_for_variables(attacked_frontier_glut_variables)
     }
 
-    fn is_shy(&self, attacked_pos_by_rule_and_vars: &PositionsByRuleAndVariables) -> bool {
+    fn is_shy(
+        &self,
+        rule_index: usize,
+        attacked_pos_by_rule_and_vars: &PositionsByRuleAndVariables,
+    ) -> bool {
         let join_vars_in_multiple_body_atoms_are_not_attacked: bool = self
             .join_variables()
             .iter()
-            .filter(|var| RuleAndVariable(self, var).appears_in_multiple_positive_body_atoms())
-            .all(|var| !RuleAndVariable(self, var).is_attacked(attacked_pos_by_rule_and_vars));
+            .filter(|var| {
+                RuleAndVariable(self, rule_index, var).appears_in_multiple_positive_body_atoms()
+            })
+            .all(|var| {
+                !RuleAndVariable(self, rule_index, var).is_attacked(attacked_pos_by_rule_and_vars)
+            });
         let frontier_vars_that_appear_in_diff_body_atoms_are_not_att_by_same_var: bool = self
-            .frontier_rule_and_variable_pairs()
+            .frontier_rule_and_variable_pairs(rule_index)
             .iter()
             .filter(|pair| pair.appear_in_different_positive_body_atoms())
             .map(|pair| (pair.fst(), pair.snd()))

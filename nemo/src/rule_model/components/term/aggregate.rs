@@ -247,8 +247,6 @@ impl PartialEq for Aggregate {
     }
 }
 
-impl Eq for Aggregate {}
-
 impl Hash for Aggregate {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.kind.hash(state);
@@ -257,23 +255,17 @@ impl Hash for Aggregate {
     }
 }
 
-impl Ord for Aggregate {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        match self.kind.cmp(&other.kind) {
-            core::cmp::Ordering::Equal => {}
-            ord => return ord,
-        }
-        match self.aggregate.cmp(&other.aggregate) {
-            core::cmp::Ordering::Equal => {}
-            ord => return ord,
-        }
-        self.distinct.cmp(&other.distinct)
-    }
-}
-
 impl PartialOrd for Aggregate {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
+        match self.kind.cmp(&other.kind) {
+            core::cmp::Ordering::Equal => {}
+            ordering => return Some(ordering),
+        }
+        match self.aggregate.partial_cmp(&other.aggregate)? {
+            core::cmp::Ordering::Equal => {}
+            ordering => return Some(ordering),
+        }
+        self.distinct.partial_cmp(&other.distinct)
     }
 }
 

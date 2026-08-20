@@ -193,15 +193,9 @@ impl PartialEq for GroundTerm {
 
 impl Eq for GroundTerm {}
 
-impl Ord for GroundTerm {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.value.cmp(&other.value)
-    }
-}
-
 impl PartialOrd for GroundTerm {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
+        self.value.partial_cmp(&other.value)
     }
 }
 

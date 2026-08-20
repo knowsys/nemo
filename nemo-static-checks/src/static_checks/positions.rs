@@ -3,7 +3,7 @@ use crate::static_checks::acyclicity_graphs::{JointAcyclicityGraph, WeakAcyclici
 use crate::static_checks::collection_traits::{Disjoint, InsertAll, RemoveAll, Superset};
 use crate::static_checks::rule_set::{RuleAndVariable, RuleSet};
 use nemo::rule_model::components::{
-    IterableVariables, atom::Atom, rule::Rule, tag::Tag, term::primitive::variable::Variable,
+    IterableVariables, rule::Rule, tag::Tag, term::primitive::variable::Variable,
 };
 
 use std::collections::{HashMap, HashSet};
@@ -174,13 +174,12 @@ impl<'a> AffectedPositionsInference<'a> for Rule {
     }
 
     fn conclude_affected_positions(&'a self, last_it_pos: &Positions<'a>) -> Positions<'a> {
+        let positive_body_atoms = self.body_positive_refs();
+        let head_atoms = self.head_refs();
         self.positive_variables()
-            .filter(|var| {
-                let positive_body_atoms: Vec<&Atom> = self.body_positive_refs();
-                var.appears_at_some_positions_in_atoms(last_it_pos, &positive_body_atoms)
-            })
+            .filter(|var| var.appears_at_some_positions_in_atoms(last_it_pos, &positive_body_atoms))
             .fold(Positions::default(), |new_aff_pos_in_rule, var| {
-                let pos_of_var_in_head: Positions = RuleAndVariable(self, var).positions_in_head();
+                let pos_of_var_in_head = var.positions_in_atoms(&head_atoms);
                 new_aff_pos_in_rule.insert_all_take_ret(pos_of_var_in_head)
             })
     }
@@ -203,23 +202,26 @@ impl<'a> AttackedPositionsInference<'a> for RuleSet {
     }
 
     fn initial_attacked_positions(&'a self, rule_and_var: &RuleAndVariable<'a>) -> Positions<'a> {
-        self.0.iter().filter(|rule| *rule == rule_and_var.0).fold(
-            Positions::default(),
-            |initial_pos, _| {
-                let initial_pos_of_rule: Positions = rule_and_var.positions_in_head();
-                initial_pos.insert_all_take_ret(initial_pos_of_rule)
-            },
-        )
+        let indexed_rule = self
+            .0
+            .get(rule_and_var.1)
+            .expect("RuleAndVariable contains an invalid rule index");
+        debug_assert!(std::ptr::eq(indexed_rule, rule_and_var.0));
+        rule_and_var.positions_in_head()
     }
 }
 
 impl<'a> AttackedPositionsInference<'a> for Rule {
     fn conclude_attacked_positions(&'a self, cur_att_pos: &Positions) -> Positions<'a> {
+        let positive_body_atoms = self.body_positive_refs();
+        let head_atoms = self.head_refs();
         self.positive_variables()
-            .map(|var| RuleAndVariable(self, var))
-            .filter(|rule_and_var| rule_and_var.is_attacked_by_positions(cur_att_pos))
-            .fold(Positions::default(), |new_att_pos_in_rule, rule_and_var| {
-                let pos_of_var_in_head: Positions = rule_and_var.positions_in_head();
+            .filter(|var| {
+                let positions_in_body = var.positions_in_atoms(&positive_body_atoms);
+                cur_att_pos.is_superset(&positions_in_body)
+            })
+            .fold(Positions::default(), |new_att_pos_in_rule, var| {
+                let pos_of_var_in_head = var.positions_in_atoms(&head_atoms);
                 new_att_pos_in_rule.insert_all_take_ret(pos_of_var_in_head)
             })
     }
@@ -307,11 +309,10 @@ impl<'a> MarkedPositionsInference<'a> for RuleSet {
 
 impl<'a> MarkedPositionsInference<'a> for Rule {
     fn conclude_marked_positions(&'a self, last_it_pos: &Positions<'a>) -> Option<Positions<'a>> {
+        let positive_body_atoms = self.body_positive_refs();
+        let head_atoms = self.head_refs();
         self.positive_variables()
-            .filter(|var| {
-                let positive_body_atoms: Vec<&Atom> = self.body_positive_refs();
-                var.appears_at_some_positions_in_atoms(last_it_pos, &positive_body_atoms)
-            })
+            .filter(|var| var.appears_at_some_positions_in_atoms(last_it_pos, &positive_body_atoms))
             .try_fold(Positions::default(), |new_mar_pos_in_rule, var| {
                 if self
                     .head()
@@ -320,13 +321,14 @@ impl<'a> MarkedPositionsInference<'a> for Rule {
                 {
                     return None;
                 }
-                let pos_of_var_in_head: Positions = RuleAndVariable(self, var).positions_in_head();
+                let pos_of_var_in_head = var.positions_in_atoms(&head_atoms);
                 Some(new_mar_pos_in_rule.insert_all_take_ret(pos_of_var_in_head))
             })
     }
 
     fn initial_marked_positions(&'a self) -> Option<Positions<'a>> {
         let join_vars: HashSet<&Variable> = self.join_variables();
+        let head_atoms = self.head_refs();
         join_vars
             .iter()
             .try_fold(Positions::default(), |new_mar_pos_in_rule, var| {
@@ -337,7 +339,7 @@ impl<'a> MarkedPositionsInference<'a> for Rule {
                 {
                     return None;
                 }
-                let pos_of_var_in_head: Positions = RuleAndVariable(self, var).positions_in_head();
+                let pos_of_var_in_head = var.positions_in_atoms(&head_atoms);
                 Some(new_mar_pos_in_rule.insert_all_take_ret(pos_of_var_in_head))
             })
     }
@@ -347,10 +349,11 @@ impl<'a> MarkedPositionsInference<'a> for Rule {
         infinite_rank_positions: &Positions,
     ) -> Option<Positions<'a>> {
         let join_vars: HashSet<&Variable> = self.join_variables();
+        let positive_body_atoms = self.body_positive_refs();
+        let head_atoms = self.head_refs();
         join_vars
             .iter()
             .filter(|var| {
-                let positive_body_atoms: Vec<&Atom> = self.body_positive_refs();
                 var.appears_only_at_positions_in_atoms(
                     infinite_rank_positions,
                     &positive_body_atoms,
@@ -364,7 +367,7 @@ impl<'a> MarkedPositionsInference<'a> for Rule {
                 {
                     return None;
                 }
-                let pos_of_var_in_head: Positions = RuleAndVariable(self, var).positions_in_head();
+                let pos_of_var_in_head = var.positions_in_atoms(&head_atoms);
                 Some(new_we_mar_pos_in_rule.insert_all_take_ret(pos_of_var_in_head))
             })
     }
@@ -397,7 +400,7 @@ impl<'a> Disjoint for Positions<'a> {
     }
 }
 
-impl<'a> InsertAll<Positions<'a> /*(&'a Tag, HashSet<Index>)*/> for Positions<'a> {
+impl<'a> InsertAll<Positions<'a>> for Positions<'a> {
     fn insert_all(&mut self, other: &Positions<'a>) {
         other.0.iter().for_each(|(pred, other_indices)| {
             if !self.0.contains_key(pred) {

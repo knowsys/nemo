@@ -61,9 +61,13 @@ impl<'a> JointAcyclicityGraphBuilder<'a> {
     fn add_edges(&mut self, rule_set: &'a RuleSet) {
         let attacked_pos_by_ex_rule_and_vars: PositionsByRuleAndVariables =
             rule_set.attacked_positions_by_existential_rule_and_variables();
-        rule_set.0.iter().for_each(|rule| {
-            self.add_edges_for_rule(rule, &attacked_pos_by_ex_rule_and_vars);
-        })
+        rule_set
+            .0
+            .iter()
+            .enumerate()
+            .for_each(|(rule_index, rule)| {
+                self.add_edges_for_rule(rule_index, rule, &attacked_pos_by_ex_rule_and_vars);
+            })
     }
 
     fn add_nodes(&mut self, rule_set: &'a RuleSet) {
@@ -86,13 +90,15 @@ impl<'a> JointAcyclicityGraphBuilder<'a> {
 impl<'a> JointAcyclicityGraphBuilder<'a> {
     fn add_edges_for_rule(
         &mut self,
+        rule_index: usize,
         rule: &'a Rule,
         attacked_pos_by_rule_and_vars: &PositionsByRuleAndVariables<'a>,
     ) {
-        let ex_rule_and_vars: HashSet<RuleAndVariable> = rule.existential_rule_and_variables();
+        let ex_rule_and_vars: HashSet<RuleAndVariable> =
+            rule.existential_rule_and_variables(rule_index);
         let positive_variables: HashSet<&Variable> = rule.positive_variables().collect();
         positive_variables.iter().for_each(|var| {
-            let rule_and_body_var: RuleAndVariable = RuleAndVariable(rule, var);
+            let rule_and_body_var: RuleAndVariable = RuleAndVariable(rule, rule_index, var);
             attacked_pos_by_rule_and_vars
                 .0
                 .keys()

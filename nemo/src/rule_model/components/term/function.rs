@@ -213,19 +213,12 @@ impl PartialEq for FunctionTerm {
 
 impl Eq for FunctionTerm {}
 
-impl Ord for FunctionTerm {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        match self.tag.cmp(&other.tag) {
-            core::cmp::Ordering::Equal => {}
-            ord => return ord,
-        }
-        self.terms.cmp(&other.terms)
-    }
-}
-
 impl PartialOrd for FunctionTerm {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
+        match self.tag.partial_cmp(&other.tag) {
+            Some(core::cmp::Ordering::Equal) => self.terms.partial_cmp(&other.terms),
+            ordering => ordering,
+        }
     }
 }
 
@@ -328,17 +321,6 @@ impl IterablePrimitives for FunctionTerm {
         )
     }
 }
-
-// impl From<(&Tag, Vec<Term>)> for FunctionTerm {
-//     fn from((predicate, terms): (&Tag, Vec<Term>)) -> Self {
-//         Self {
-//             origin: Origin::Created,
-//             id: ProgramComponentId::default(),
-//             tag: predicate.clone(),
-//             terms,
-//         }
-//     }
-// }
 
 #[cfg(test)]
 mod test {

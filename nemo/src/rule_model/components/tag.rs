@@ -54,12 +54,6 @@ impl Display for Tag {
     }
 }
 
-impl Ord for Tag {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.tag.cmp(&other.tag)
-    }
-}
-
 impl PartialEq for Tag {
     fn eq(&self, other: &Self) -> bool {
         self.tag == other.tag
@@ -68,9 +62,15 @@ impl PartialEq for Tag {
 
 impl Eq for Tag {}
 
+impl Ord for Tag {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.tag.cmp(&other.tag)
+    }
+}
+
 impl PartialOrd for Tag {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.tag.cmp(&other.tag))
+        Some(self.cmp(other))
     }
 }
 

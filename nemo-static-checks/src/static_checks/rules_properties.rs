@@ -196,10 +196,9 @@ impl RulesProperties for ProgramHandle {
         let rule_set = RuleSet::from(self.clone());
         let attacked_pos_by_existential_rule_and_vars: PositionsByRuleAndVariables =
             rule_set.attacked_positions_by_existential_rule_and_variables();
-        rule_set
-            .0
-            .iter()
-            .all(|rule| rule.is_shy(&attacked_pos_by_existential_rule_and_vars))
+        rule_set.0.iter().enumerate().all(|(rule_index, rule)| {
+            rule.is_shy(rule_index, &attacked_pos_by_existential_rule_and_vars)
+        })
     }
 
     async fn is_mfa(&self) -> bool {

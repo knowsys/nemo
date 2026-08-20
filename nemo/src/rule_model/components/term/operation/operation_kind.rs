@@ -66,7 +66,7 @@ impl Display for OperationNumArguments {
 }
 
 /// Supported operations
-#[derive(Assoc, EnumIter, Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Assoc, EnumIter, Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd)]
 #[func(pub fn name(&self) -> &'static str)]
 #[func(pub fn num_arguments(&self) -> OperationNumArguments)]
 #[func(pub fn return_type(&self) -> ValueType)]

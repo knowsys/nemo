@@ -6,11 +6,39 @@ use nemo::rule_model::components::{
 };
 use nemo::rule_model::programs::handle::ProgramHandle;
 use std::collections::{HashMap, HashSet};
+use std::hash::{Hash, Hasher};
 
 /// Type to relate an (existential) Variable to a Rule. Therefore a type to identificate an
 /// (existential) Variable.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Ord, PartialOrd)]
-pub struct RuleAndVariable<'a>(pub &'a Rule, pub &'a Variable);
+#[derive(Clone, Copy, Debug)]
+pub struct RuleAndVariable<'a>(pub &'a Rule, pub usize, pub &'a Variable);
+
+impl PartialEq for RuleAndVariable<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.1 == other.1 && self.2 == other.2
+    }
+}
+
+impl Eq for RuleAndVariable<'_> {}
+
+impl PartialOrd for RuleAndVariable<'_> {
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for RuleAndVariable<'_> {
+    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
+        self.1.cmp(&other.1).then_with(|| self.2.cmp(other.2))
+    }
+}
+
+impl Hash for RuleAndVariable<'_> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.1.hash(state);
+        self.2.hash(state);
+    }
+}
 
 // TODO: USE A REFERENCE TO RULE
 /// Type to wrap a 'set' (Vec) of Rule(s).
@@ -24,28 +52,26 @@ pub struct RuleAndVariablePair<'a>(RuleAndVariable<'a>, RuleAndVariable<'a>);
 
 pub trait ExistentialVariables {
     /// Returns all existential variables combined with its rule of a rule.
-    fn existential_rule_and_variables(&'_ self) -> HashSet<RuleAndVariable<'_>>;
+    fn existential_rule_and_variables(&'_ self, rule_index: usize) -> HashSet<RuleAndVariable<'_>>;
     /// Returns the Positions of the existential Variables of a rule.
     fn positions_of_existential_variables(&'_ self) -> Positions<'_>;
 }
 
 impl ExistentialVariables for Rule {
-    fn existential_rule_and_variables(&'_ self) -> HashSet<RuleAndVariable<'_>> {
+    fn existential_rule_and_variables(&'_ self, rule_index: usize) -> HashSet<RuleAndVariable<'_>> {
         let ex_vars_of_rule: HashSet<&Variable> = self.existential_variables().collect();
         ex_vars_of_rule
             .into_iter()
-            .map(|var| RuleAndVariable(self, var))
+            .map(|var| RuleAndVariable(self, rule_index, var))
             .collect()
     }
 
     fn positions_of_existential_variables(&'_ self) -> Positions<'_> {
-        self.existential_rule_and_variables().into_iter().fold(
-            Positions::default(),
-            |pos_of_ex_var, rule_and_var| {
-                let pos_of_ex_var_in_head: Positions = rule_and_var.positions_in_head();
-                pos_of_ex_var.insert_all_take_ret(pos_of_ex_var_in_head)
-            },
-        )
+        let head_atoms = self.head_refs();
+        self.existential_variables()
+            .fold(Positions::default(), |positions, variable| {
+                positions.insert_all_take_ret(variable.positions_in_atoms(&head_atoms))
+            })
     }
 }
 
@@ -179,7 +205,10 @@ pub trait SpecialVariables {
     /// Returns the frontier Variables of a Rule.
     // fn frontier_variables(&self) -> HashSet<&Variable>;
     /// Returns all pairs of frontier Variables of a Rule excluding the reflexive pairs.
-    fn frontier_rule_and_variable_pairs(&self) -> HashSet<RuleAndVariablePair<'_>>;
+    fn frontier_rule_and_variable_pairs(
+        &self,
+        rule_index: usize,
+    ) -> HashSet<RuleAndVariablePair<'_>>;
     // fn universal_head_variables(&self) -> HashSet<&Variable>;
 }
 
@@ -199,7 +228,10 @@ impl SpecialVariables for Rule {
     //         .collect()
     // }
 
-    fn frontier_rule_and_variable_pairs(&self) -> HashSet<RuleAndVariablePair<'_>> {
+    fn frontier_rule_and_variable_pairs(
+        &self,
+        rule_index: usize,
+    ) -> HashSet<RuleAndVariablePair<'_>> {
         let frontier_variables: HashSet<&Variable> = self.frontier_variables().collect();
         frontier_variables
             .iter()
@@ -209,8 +241,8 @@ impl SpecialVariables for Rule {
                     .filter(|var2| var1 != *var2)
                     .for_each(|var2| {
                         pairs.insert(RuleAndVariablePair(
-                            RuleAndVariable(self, var1),
-                            RuleAndVariable(self, var2),
+                            RuleAndVariable(self, rule_index, var1),
+                            RuleAndVariable(self, rule_index, var2),
                         ));
                     });
                 pairs
@@ -380,9 +412,13 @@ impl<'a> AffectedPositions<'a> for Rule {
         variables: HashSet<&'a Variable>,
         affected_positions: &Positions,
     ) -> HashSet<&'a Variable> {
+        let positive_body_atoms = self.body_positive_refs();
         variables
             .iter()
-            .filter(|var| RuleAndVariable(self, var).is_affected(affected_positions))
+            .filter(|var| {
+                let positions = var.positions_in_atoms(&positive_body_atoms);
+                affected_positions.is_superset(&positions)
+            })
             .copied()
             .collect()
     }
@@ -496,9 +532,16 @@ impl<'a> AttackedVariables<'a> for Rule {
         variables: HashSet<&'a Variable>,
         attacked_pos_by_rule_and_vars: &PositionsByRuleAndVariables,
     ) -> HashSet<&'a Variable> {
+        let positive_body_atoms = self.body_positive_refs();
         variables
             .iter()
-            .filter(|var| RuleAndVariable(self, var).is_attacked(attacked_pos_by_rule_and_vars))
+            .filter(|var| {
+                let positions = var.positions_in_atoms(&positive_body_atoms);
+                attacked_pos_by_rule_and_vars
+                    .0
+                    .values()
+                    .any(|attacked_positions| attacked_positions.is_superset(&positions))
+            })
             .copied()
             .collect()
     }
@@ -542,13 +585,14 @@ impl<'a> RuleSet {
 impl RuleSet {
     /// Returns all existential variables combined with its rule of a ruleset.
     pub fn existential_rule_and_variables(&self) -> HashSet<RuleAndVariable<'_>> {
-        self.0
-            .iter()
-            .fold(HashSet::<RuleAndVariable>::new(), |ex_vars, rule| {
+        self.0.iter().enumerate().fold(
+            HashSet::<RuleAndVariable>::new(),
+            |ex_vars, (rule_index, rule)| {
                 let ex_rule_and_vars: HashSet<RuleAndVariable> =
-                    rule.existential_rule_and_variables();
+                    rule.existential_rule_and_variables(rule_index);
                 ex_vars.union(&ex_rule_and_vars).copied().collect()
-            })
+            },
+        )
     }
 }
 
@@ -584,16 +628,6 @@ impl RuleAndVariable<'_> {
     }
 }
 
-/// This Impl-Block contains a method for a variable to check if it is affected.
-impl RuleAndVariable<'_> {
-    /// Checks whether a Variable is attacked in some Rule based on the
-    /// affected Positions.
-    fn is_affected(&self, affected_positions: &Positions) -> bool {
-        let positions_of_variable_in_body: Positions = self.positions_in_positive_body();
-        affected_positions.is_superset(&positions_of_variable_in_body)
-    }
-}
-
 /// This Impl-Block contains methods for a variable to determine if it appears in a special way in
 /// a rule.
 impl RuleAndVariable<'_> {
@@ -602,7 +636,7 @@ impl RuleAndVariable<'_> {
         self.0
             .body_positive_refs()
             .iter()
-            .filter(|atom| self.1.appears_in_atom(atom))
+            .filter(|atom| self.2.appears_in_atom(atom))
             .count()
             > 1
     }
@@ -611,7 +645,7 @@ impl RuleAndVariable<'_> {
         self.0
             .body_positive_refs()
             .iter()
-            .any(|atom| self.1.appears_in_atom(atom) && !other.1.appears_in_atom(atom))
+            .any(|atom| self.2.appears_in_atom(atom) && !other.2.appears_in_atom(atom))
     }
 }
 
@@ -620,13 +654,13 @@ impl<'a> RuleAndVariable<'a> {
     /// Returns the positions of a variable in the head of a rule.
     fn positions_in_positive_body(self) -> Positions<'a> {
         let positive_body_atoms: Vec<&Atom> = self.0.body_positive_refs();
-        self.1.positions_in_atoms(&positive_body_atoms)
+        self.2.positions_in_atoms(&positive_body_atoms)
     }
 
     /// Returns the positions of a variable in the positive body of a rule.
     pub fn positions_in_head(self) -> Positions<'a> {
         let head_atoms: Vec<&Atom> = self.0.head_refs();
-        self.1.positions_in_atoms(&head_atoms)
+        self.2.positions_in_atoms(&head_atoms)
     }
 }
 
