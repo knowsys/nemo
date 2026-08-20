@@ -1,8 +1,10 @@
 //! Computes the maximum of all input values.
 
+use std::cmp::Ordering;
+
 use crate::datatypes::StorageValueT;
 
-use super::processor::{AggregateGroupProcessor, AggregateProcessor};
+use super::processor::{AggregateGroupProcessor, AggregateProcessor, select_extremum};
 
 #[derive(Debug)]
 pub(crate) struct MaxAggregateProcessor {}
@@ -38,14 +40,10 @@ impl MaxAggregateGroupProcessor {
 
 impl AggregateGroupProcessor for MaxAggregateGroupProcessor {
     fn write_aggregate_input_value(&mut self, value: StorageValueT) {
-        match &self.current_max_value {
-            Some(current_max_value) => {
-                if value > *current_max_value {
-                    self.current_max_value = Some(value);
-                }
-            }
-            None => self.current_max_value = Some(value),
-        }
+        self.current_max_value = Some(match self.current_max_value {
+            Some(current) => select_extremum(current, value, Ordering::Greater),
+            None => value,
+        });
     }
 
     fn finish(&self) -> Option<StorageValueT> {

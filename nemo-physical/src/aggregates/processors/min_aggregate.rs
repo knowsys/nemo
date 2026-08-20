@@ -1,8 +1,10 @@
 //! Computes the minimum of all input values.
 
+use std::cmp::Ordering;
+
 use crate::datatypes::StorageValueT;
 
-use super::processor::{AggregateGroupProcessor, AggregateProcessor};
+use super::processor::{AggregateGroupProcessor, AggregateProcessor, select_extremum};
 
 #[derive(Debug)]
 pub(crate) struct MinAggregateProcessor {}
@@ -38,14 +40,10 @@ impl MinAggregateGroupProcessor {
 
 impl AggregateGroupProcessor for MinAggregateGroupProcessor {
     fn write_aggregate_input_value(&mut self, value: StorageValueT) {
-        match &self.current_min_value {
-            Some(current_min_value) => {
-                if value < *current_min_value {
-                    self.current_min_value = Some(value);
-                }
-            }
-            None => self.current_min_value = Some(value),
-        }
+        self.current_min_value = Some(match self.current_min_value {
+            Some(current) => select_extremum(current, value, Ordering::Less),
+            None => value,
+        });
     }
 
     fn finish(&self) -> Option<StorageValueT> {
