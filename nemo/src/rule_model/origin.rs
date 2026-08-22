@@ -39,6 +39,9 @@ pub enum Origin {
 
     /// Rule that was created by normalizing a rule
     Normalization(ProgramComponentId),
+
+    /// Rule that was created by skolemizing a rule
+    Skolemization(ProgramComponentId),
 }
 
 impl Origin {

@@ -65,14 +65,16 @@ impl ProgramTransformation for TransformationCriticalInstance {
     fn apply(self, program: &ProgramHandle) -> Result<ProgramHandle, ValidationReport> {
         let mut commit = program.fork();
 
-        let mut rules: Vec<&Rule> = Vec::new();
-
-        for stmt in program.statements() {
-            if let Statement::Rule(rule) = stmt {
-                rules.push(rule);
-                commit.keep(stmt)
-            }
-        }
+        let rules: Vec<&Rule> = program
+            .statements()
+            .filter_map(|stmt| {
+                if let Statement::Rule(rule) = stmt {
+                    commit.keep(stmt);
+                    return Some(rule);
+                }
+                None
+            })
+            .collect();
 
         critical_instance(&rules).for_each(|fact| {
             commit.add_fact(fact);

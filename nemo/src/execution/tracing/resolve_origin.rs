@@ -23,6 +23,6 @@ pub fn tracing_resolve_origin(handle: &ProgramHandle, id: ProgramComponentId) ->
         | Origin::Component(_)
         | Origin::Extern
         | Origin::Substitution { .. } => rule.clone(),
-        Origin::Normalization(id) => tracing_resolve_origin(handle, id),
+        Origin::Normalization(id) | Origin::Skolemization(id) => tracing_resolve_origin(handle, id),
     }
 }

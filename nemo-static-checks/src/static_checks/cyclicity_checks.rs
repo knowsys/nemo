@@ -1,17 +1,21 @@
 //! Functionality
 use crate::static_checks::collection_traits::InsertAll;
-use crate::static_checks::rule_set::{RuleRefs, RuleSet};
-use nemo::rule_model::components::{
-    IterableVariables,
-    atom::Atom,
-    fact::Fact,
-    rule::Rule,
-    tag::Tag,
-    term::{
-        Term,
-        function::FunctionTerm,
-        primitive::{Primitive, variable::Variable},
+use crate::static_checks::rule_set::RuleRefs;
+use nemo::rule_model::{
+    components::{
+        ComponentSource, IterableVariables,
+        atom::Atom,
+        fact::Fact,
+        rule::Rule,
+        tag::Tag,
+        term::{
+            Term,
+            function::FunctionTerm,
+            primitive::{Primitive, variable::Variable},
+        },
     },
+    origin::Origin,
+    programs::handle::ProgramHandle,
 };
 
 use std::collections::{HashMap, HashSet};
@@ -49,7 +53,6 @@ fn backtrack_sk_term<'a>(
         })
         .unwrap();
     let front_vars: HashSet<&Variable> = rule.frontier_variables().collect();
-    // let mut const_count = 0;
     let ass = rule.variables().fold(Assignment::new(), |mut ass, var| {
         if front_vars.contains(var) {
             let index = unassigned_sk_term
@@ -82,21 +85,12 @@ fn backtrack_sk_term<'a>(
     } else {
         head_for_assignment(rule, &ass)
     };
-    sk_term
-        .terms()
-        // .filter_map(|term| {
-        //     if let Term::FunctionTerm(inner_sk_term) = term {
-        //         Some(inner_sk_term)
-        //     } else {
-        //         None
-        //     }
-        // })
-        .fold(ret_val, |ret_val, inner_sk_term| {
-            union(
-                ret_val,
-                backtrack_sk_term(inner_sk_term, ex_rules, const_count, with_body),
-            )
-        })
+    sk_term.terms().fold(ret_val, |ret_val, inner_sk_term| {
+        union(
+            ret_val,
+            backtrack_sk_term(inner_sk_term, ex_rules, const_count, with_body),
+        )
+    })
 }
 
 pub fn union<'a>(
@@ -190,6 +184,26 @@ fn build_var_index_for_rules<'a>(rules: &[&'a Rule]) -> VarPerAtomIdxPosIdxPerRu
             var_atom_pos_rule
         },
     )
+}
+
+fn build_obsolescence_variable_indices<'a>(
+    program: &'a ProgramHandle,
+    rules: &[&'a Rule],
+) -> ObsolescenceVariableIndices<'a> {
+    rules
+        .iter()
+        .copied()
+        .map(|rule| {
+            let original_rule = match rule.origin() {
+                Origin::Skolemization(id) => program
+                    .rule_by_id(id)
+                    .expect("skolemized rule must reference its original rule"),
+                _ => rule,
+            };
+
+            (rule, build_var_index_for_rule(original_rule))
+        })
+        .collect()
 }
 
 fn assignment_for_fact<'a>(
@@ -394,88 +408,6 @@ impl<'a, 's> CoreReasoner<'a, 's> {
     }
 }
 
-fn reverse_sk_atom<'a>(
-    atom: &'a Atom,
-    sk_funcs_to_ex_vars: &mut HashMap<&'a FunctionTerm, Variable>,
-    ex_var_count: &mut usize,
-) -> Atom {
-    let subterms: Vec<Term> = atom
-        .terms()
-        .map(|term| match term {
-            Term::Primitive(prim) => Term::Primitive(prim.clone()),
-            Term::FunctionTerm(sk_func) => {
-                let ex_var: &mut Variable = sk_funcs_to_ex_vars.entry(sk_func).or_insert({
-                    let var = Variable::existential(&format!("_NEXV_{}", ex_var_count));
-                    *ex_var_count += 1;
-                    var
-                });
-                Term::from(ex_var.clone())
-            }
-            _ => panic!(),
-        })
-        .collect();
-    let pred: Tag = atom.predicate();
-    Atom::new(pred, subterms)
-}
-
-fn reverse_sk(rule: &Rule) -> Rule {
-    let body = rule.body().clone();
-    let head = rule
-        .head()
-        .iter()
-        .fold(Vec::<Atom>::new(), |mut head, atom| {
-            let mut stored_sk_funcs_to_ex_vars: HashMap<&FunctionTerm, Variable> = HashMap::new();
-            let mut ex_var_count = 0;
-            let new_atom =
-                reverse_sk_atom(atom, &mut stored_sk_funcs_to_ex_vars, &mut ex_var_count);
-            head.push(new_atom);
-            head
-        });
-    Rule::new(head, body)
-}
-
-impl RuleSet {
-    fn datalog_rules(&self) -> Vec<&Rule> {
-        self.0.iter().filter(|rule| !rule.contains_func()).collect()
-    }
-
-    fn existential_rules(&self) -> Vec<&Rule> {
-        self.0.iter().filter(|rule| rule.contains_func()).collect()
-    }
-}
-
-// trait PredicateRef {
-//     type PredOutput<'a>
-//     where
-//         Self: 'a;
-//     type PredLenOutput<'a>
-//     where
-//         Self: 'a;
-//
-//     fn predicate_ref(&self) -> Self::PredOutput<'_>;
-//     fn predicate_ref_and_len(&self) -> Self::PredLenOutput<'_>;
-// }
-//
-// impl PredicateRef for Atom {
-//     type PredOutput<'a> = &'a Tag;
-//     type PredLenOutput<'a> = (&'a Tag, usize);
-//
-//     fn predicate_ref(&self) -> Self::PredOutput<'_> {
-//         &self.predicate
-//     }
-//
-//     fn predicate_ref_and_len(&self) -> Self::PredLenOutput<'_> {
-//
-//     }
-// }
-//
-// trait PredicatesRef {
-//     type PredOutput;
-//     type PredLenOutput;
-//     fn predicates_ref(&self) -> Vec<Self::PredOutput>;
-//     fn predicates_ref_and_lens(&self) -> Vec<Self::PredLenOutput>;
-// }
-
 fn predicates_ref<'a>(rule_set: &[&'a Rule]) -> HashSet<&'a Tag> {
     rule_set
         .iter()
@@ -512,7 +444,11 @@ impl<'a, 'b> Trigger<'a, 'b> {
         self.ass
     }
 
-    fn is_obsolete(&self, facts_by_pred: &FactsByPred<'_>) -> bool {
+    fn is_obsolete(
+        &self,
+        variable_index: &VarPerAtomIdxPosIdx<'_>,
+        facts_by_pred: &FactsByPred<'_>,
+    ) -> bool {
         let preds_in_head: Vec<&Tag> = self
             .rule
             .head()
@@ -521,15 +457,13 @@ impl<'a, 'b> Trigger<'a, 'b> {
             .collect();
 
         let count_preds_body = self.rule.body().iter().count();
-        let unsk_rule = reverse_sk(self.rule);
-        let var_atom_pos_unsk_rule = build_var_index_for_rule(&unsk_rule);
 
         let possible_ass_for_chase_result = assignments_for_facts(
             count_preds_body,
             preds_in_head,
             facts_by_pred,
             facts_by_pred,
-            &var_atom_pos_unsk_rule,
+            variable_index,
         );
 
         let frontier_vars: HashSet<&Variable> = self.rule.frontier_variables().collect();
@@ -667,3 +601,4 @@ pub type FactsByPred<'a> = HashMap<&'a Tag, HashSet<Fact>>;
 pub type Assignment<'a> = HashMap<&'a Variable, Term>;
 pub type VarPerAtomIdxPosIdx<'a> = HashMap<(usize, usize, Option<usize>), &'a Variable>;
 pub type VarPerAtomIdxPosIdxPerRule<'a> = HashMap<&'a Rule, VarPerAtomIdxPosIdx<'a>>;
+pub type ObsolescenceVariableIndices<'a> = HashMap<&'a Rule, VarPerAtomIdxPosIdx<'a>>;

@@ -6,18 +6,20 @@ use nemo::rule_model::{
         term::{Term, function::FunctionTerm, primitive::Primitive},
     },
     pipeline::transformations::{
-        crit_instance::TransformationCriticalInstance, skolem::TransformationSkolemize,
+        crit_instance::TransformationCriticalInstance,
+        filter_rules::{RuleSelector, TransformationFilterRules},
+        skolem::TransformationSkolemize,
     },
     programs::{ProgramRead, handle::ProgramHandle},
 };
 
 use crate::static_checks::collection_traits::InsertAll;
 use crate::static_checks::cyclicity_checks::{
-    Assignment, CoreReasoner, Cyclic, CyclicityStrategy, FactsByPred, NoBlockStrategy, Trigger,
-    VarPerAtomIdxPosIdxPerRule, backtrack_sk_term, body_for_assignment, build_var_index_for_rules,
+    Assignment, CoreReasoner, Cyclic, CyclicityStrategy, FactsByPred, NoBlockStrategy,
+    ObsolescenceVariableIndices, Trigger, VarPerAtomIdxPosIdxPerRule, backtrack_sk_term,
+    body_for_assignment, build_obsolescence_variable_indices, build_var_index_for_rules,
     predicates_ref, union,
 };
-use crate::static_checks::rule_set::RuleSet;
 
 use std::collections::{HashMap, HashSet};
 
@@ -25,14 +27,6 @@ use std::collections::{HashMap, HashSet};
 pub enum AcyclicityStrategySelector {
     MFA,
     RMFA,
-}
-
-pub fn mfa_transformation(handle: ProgramHandle) -> ProgramHandle {
-    handle
-        .transform(TransformationCriticalInstance::default())
-        .expect("TransformationCriticalInstance Error")
-        .transform(TransformationSkolemize::default())
-        .expect("TransformationSkolemize Error")
 }
 
 pub struct MFAStrategy;
@@ -45,6 +39,7 @@ pub struct RMFAStrategy<'a> {
     datalog_pr: &'a HashSet<&'a Tag>,
     pub preds: &'a HashSet<&'a Tag>,
     pub var_per_atom_idx_pos_idx_per_rule: &'a VarPerAtomIdxPosIdxPerRule<'a>,
+    obsolescence_variable_indices: &'a ObsolescenceVariableIndices<'a>,
 }
 
 impl<'a> RMFAStrategy<'a> {
@@ -54,6 +49,7 @@ impl<'a> RMFAStrategy<'a> {
         datalog_pr: &'a HashSet<&'a Tag>,
         preds: &'a HashSet<&'a Tag>,
         var_per_atom_idx_pos_idx_per_rule: &'a VarPerAtomIdxPosIdxPerRule<'a>,
+        obsolescence_variable_indices: &'a ObsolescenceVariableIndices<'a>,
     ) -> Self {
         Self {
             existential_rules,
@@ -61,6 +57,7 @@ impl<'a> RMFAStrategy<'a> {
             datalog_pr,
             preds,
             var_per_atom_idx_pos_idx_per_rule,
+            obsolescence_variable_indices,
         }
     }
 }
@@ -91,41 +88,58 @@ impl<'a> CyclicityStrategy for RMFAStrategy<'a> {
             facts_after_reasoning = union(facts_after_reasoning, datalog_reasoner.into_facts());
         }
 
-        Trigger::new(trig.rule(), &renamed_ass).is_obsolete(&facts_after_reasoning)
+        let variable_index = self
+            .obsolescence_variable_indices
+            .get(trig.rule())
+            .expect("every reasoning rule must have an obsolescence variable index");
+
+        Trigger::new(trig.rule(), &renamed_ass).is_obsolete(variable_index, &facts_after_reasoning)
     }
 }
 
-fn convert_set_to_map(facts: Vec<&Fact>) -> FactsByPred<'_> {
-    facts
-        .into_iter()
-        .fold(FactsByPred::new(), |mut ret_val, fact| {
-            ret_val
-                .entry(fact.predicate())
-                .and_modify(|facts_of_pred| {
-                    facts_of_pred.insert(fact.clone());
-                })
-                .or_insert(HashSet::from([fact.clone()]));
-            ret_val
-        })
+fn facts_by_pred<'a>(facts: impl Iterator<Item = &'a Fact>) -> FactsByPred<'a> {
+    facts.fold(FactsByPred::new(), |mut ret_val, fact| {
+        ret_val
+            .entry(fact.predicate())
+            .and_modify(|facts_of_pred| {
+                facts_of_pred.insert(fact.clone());
+            })
+            .or_insert(HashSet::from([fact.clone()]));
+        ret_val
+    })
 }
 
 pub async fn check_acyclicity(
-    handle: ProgramHandle,
+    handle: &ProgramHandle,
     strat_sel: AcyclicityStrategySelector,
 ) -> bool {
-    let rules: RuleSet = RuleSet(handle.rules().cloned().collect());
-    let rules_ref: Vec<&Rule> = rules.0.iter().collect();
+    let sk_ex_rules_handle = handle
+        .transform(TransformationFilterRules(RuleSelector::Existential))
+        .expect("TransformationFilterRules Error")
+        .transform(TransformationSkolemize::default())
+        .expect("TransformationSkolemize Error");
+    let non_ex_rules_handle = handle
+        .transform(TransformationFilterRules(RuleSelector::NonExistential))
+        .expect("TransformationFilterRules Error");
+    let handle = handle
+        .transform(TransformationCriticalInstance::default())
+        .expect("TransformationCriticalInstance Error");
 
-    let new_facts_by_pred: FactsByPred = convert_set_to_map(handle.facts().collect());
+    let new_facts_by_pred: FactsByPred = facts_by_pred(handle.facts());
 
-    let datalog_rules: Vec<&Rule> = rules.datalog_rules();
-    let existential_rules: Vec<&Rule> = rules.existential_rules();
+    let datalog_rules: Vec<&Rule> = non_ex_rules_handle.rules().collect();
+    let existential_rules: Vec<&Rule> = sk_ex_rules_handle.rules().collect();
+    let rules: Vec<&Rule> = non_ex_rules_handle
+        .rules()
+        .chain(sk_ex_rules_handle.rules())
+        .collect();
 
     let datalog_pr: HashSet<&Tag> = predicates_ref(&datalog_rules);
     let existential_pr: HashSet<&Tag> = predicates_ref(&existential_rules);
     let all_pr: HashSet<&Tag> = datalog_pr.union(&existential_pr).copied().collect();
 
-    let var_per_atom_idx_pos_idx_per_rule = build_var_index_for_rules(&rules_ref);
+    let var_per_atom_idx_pos_idx_per_rule = build_var_index_for_rules(&rules);
+    let obsolescence_variable_indices = build_obsolescence_variable_indices(&handle, &rules);
 
     let no_bl_strat = NoBlockStrategy;
 
@@ -144,6 +158,7 @@ pub async fn check_acyclicity(
             &datalog_pr,
             &all_pr,
             &var_per_atom_idx_pos_idx_per_rule,
+            &obsolescence_variable_indices,
         ),
     };
 

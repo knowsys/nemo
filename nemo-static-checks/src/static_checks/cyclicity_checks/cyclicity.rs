@@ -1,20 +1,21 @@
 use nemo::rule_model::{
     components::{rule::Rule, tag::Tag, term::Term},
     pipeline::transformations::{
-        crit_instance::facts_for_predicate_and_constants, skolem::TransformationSkolemize,
+        crit_instance::facts_for_predicate_and_constants,
+        filter_rules::{RuleSelector, TransformationFilterRules},
+        skolem::TransformationSkolemize,
     },
     programs::{ProgramRead, handle::ProgramHandle},
 };
 
 use crate::static_checks::cyclicity_checks::{
-    Assignment, CoreReasoner, Cyclic, CyclicityStrategy, FactsByPred, Trigger,
-    VarPerAtomIdxPosIdxPerRule, backtrack_sk_term, body_for_assignment, build_var_index_for_rules,
-    head_for_assignment, predicates_ref, predicates_ref_and_lens, union,
+    Assignment, CoreReasoner, Cyclic, CyclicityStrategy, FactsByPred, ObsolescenceVariableIndices,
+    Trigger, VarPerAtomIdxPosIdxPerRule, backtrack_sk_term, body_for_assignment,
+    build_obsolescence_variable_indices, build_var_index_for_rules, head_for_assignment,
+    predicates_ref, predicates_ref_and_lens, union,
 };
 
 use crate::static_checks::collection_traits::InsertAll;
-use crate::static_checks::rule_set::RuleSet;
-
 use std::collections::HashSet;
 
 #[derive(Clone, Copy)]
@@ -83,34 +84,38 @@ impl CyclicityStrategy for OverapproximationStrategy<'_> {
 
 pub struct DRPCStrategy<'a> {
     rule: &'a Rule,
-    rule_set: &'a Vec<&'a Rule>,
-    ex_rule_set: Vec<&'a Rule>,
+    rules: &'a Vec<&'a Rule>,
+    ex_rules: &'a Vec<&'a Rule>,
     var_per_atom_idx_pos_idx_per_rule: &'a VarPerAtomIdxPosIdxPerRule<'a>,
+    obsolescence_variable_indices: &'a ObsolescenceVariableIndices<'a>,
 }
 
 impl<'a> DRPCStrategy<'a> {
     fn new(
         rule: &'a Rule,
-        rule_set: &'a Vec<&'a Rule>,
+        rules: &'a Vec<&'a Rule>,
+        ex_rules: &'a Vec<&'a Rule>,
         var_per_atom_idx_pos_idx_per_rule: &'a VarPerAtomIdxPosIdxPerRule<'a>,
+        obsolescence_variable_indices: &'a ObsolescenceVariableIndices<'a>,
     ) -> Self {
         Self {
             rule,
-            rule_set,
-            ex_rule_set: rule_set
-                .iter()
-                .filter(|r| r.contains_func())
-                .copied()
-                .collect(),
+            rules,
+            ex_rules,
             var_per_atom_idx_pos_idx_per_rule,
+            obsolescence_variable_indices,
         }
     }
 
     fn is_star_unblockable(&self, trig: &Trigger) -> bool {
         let head_for_ass = head_for_assignment(trig.rule(), trig.ass());
         let h_star_operapproximation = self.h_star_overapproximation(trig, &head_for_ass);
+        let variable_index = self
+            .obsolescence_variable_indices
+            .get(trig.rule())
+            .expect("every reasoning rule must have an obsolescence variable index");
 
-        !trig.is_obsolete(&h_star_operapproximation)
+        !trig.is_obsolete(variable_index, &h_star_operapproximation)
     }
 
     fn h_star_overapproximation(
@@ -118,13 +123,13 @@ impl<'a> DRPCStrategy<'a> {
         trig: &Trigger,
         head_for_ass: &FactsByPred<'_>,
     ) -> FactsByPred<'a> {
-        let backtrack_of_trigger = backtrack_trigger(&self.ex_rule_set, trig);
+        let backtrack_of_trigger = backtrack_trigger(self.ex_rules, trig);
 
         let mut skeleton_of_trigger = skeleton_of_trigger_backtrack(&backtrack_of_trigger);
         let star_const = Term::from("__STAR__");
         skeleton_of_trigger.push(star_const);
 
-        let preds_and_lens = predicates_ref_and_lens(self.rule_set);
+        let preds_and_lens = predicates_ref_and_lens(self.rules);
         let preds = preds_and_lens.iter().map(|(pred, _)| *pred).collect();
 
         let possible_facts_for_preds_and_skeleton_consts =
@@ -135,7 +140,7 @@ impl<'a> DRPCStrategy<'a> {
 
         let mut reasoner = CoreReasoner::new(
             &preds,
-            self.rule_set,
+            self.rules,
             self.var_per_atom_idx_pos_idx_per_rule,
             &overapprox_strat,
         );
@@ -218,19 +223,48 @@ fn ass_is_injective(ass: &Assignment) -> bool {
         .all(|(index, term)| !terms[..index].contains(term))
 }
 
-pub fn mfc_handle(handle: ProgramHandle) -> ProgramHandle {
-    handle
+pub async fn check_cyclicity(handle: &ProgramHandle, strat_sel: CyclicityStrategySelector) -> bool {
+    let sk_ex_rules_handle = handle
+        .transform(TransformationFilterRules(RuleSelector::Existential))
+        .expect("TransformationFilterRules Error")
         .transform(TransformationSkolemize::default())
-        .expect("TransformationSkolemize Error")
-}
+        .expect("TransformationSkolemize Error");
+    let non_ex_rules_handle = handle
+        .transform(TransformationFilterRules(RuleSelector::NonExistential))
+        .expect("TransformationFilterRules Error");
 
-pub async fn check_cyclicity(handle: ProgramHandle, strat: CyclicityStrategySelector) -> bool {
-    let rule_set: RuleSet = RuleSet(handle.rules().cloned().collect());
-    let det_rules: Vec<&Rule> = rule_set.0.iter().collect();
-    let ex_rules: Vec<&Rule> = rule_set.existential_rules();
+    let det_rules: Vec<&Rule> = non_ex_rules_handle
+        .rules()
+        .chain(sk_ex_rules_handle.rules())
+        .collect();
+    let ex_rules: Vec<&Rule> = sk_ex_rules_handle.rules().collect();
+
+    let preds: HashSet<&Tag> = predicates_ref(&det_rules);
+
+    let var_per_atom_idx_pos_idx_per_rule = build_var_index_for_rules(&det_rules);
+    let obsolescence_variable_indices =
+        build_obsolescence_variable_indices(&sk_ex_rules_handle, &det_rules);
 
     for rule in ex_rules.iter() {
-        if check_cyclicity_for_rule(rule, &det_rules, &strat).await {
+        let strat: &dyn CyclicityStrategy = match strat_sel {
+            CyclicityStrategySelector::MFC => &MFCStrategy,
+            CyclicityStrategySelector::DRPC => &DRPCStrategy::new(
+                rule,
+                &det_rules,
+                &ex_rules,
+                &var_per_atom_idx_pos_idx_per_rule,
+                &obsolescence_variable_indices,
+            ),
+        };
+        if check_cyclicity_for_rule(
+            rule,
+            &det_rules,
+            &preds,
+            &var_per_atom_idx_pos_idx_per_rule,
+            strat,
+        )
+        .await
+        {
             return true;
         }
     }
@@ -239,8 +273,10 @@ pub async fn check_cyclicity(handle: ProgramHandle, strat: CyclicityStrategySele
 
 pub async fn check_cyclicity_for_rule(
     rule: &Rule,
-    rule_set: &Vec<&Rule>,
-    strat: &CyclicityStrategySelector,
+    rules: &Vec<&Rule>,
+    preds: &HashSet<&Tag>,
+    var_per_atom_idx_pos_idx_per_rule: &VarPerAtomIdxPosIdxPerRule<'_>,
+    strat: &dyn CyclicityStrategy,
 ) -> bool {
     let unique_ass: Assignment = unique_ass(rule);
 
@@ -249,18 +285,8 @@ pub async fn check_cyclicity_for_rule(
         body_for_assignment(rule, &unique_ass),
     );
 
-    let preds: HashSet<&Tag> = predicates_ref(rule_set);
-    let var_per_atom_idx_pos_idx_per_rule = build_var_index_for_rules(rule_set);
-
-    let strat: &dyn CyclicityStrategy = match strat {
-        CyclicityStrategySelector::MFC => &MFCStrategy,
-        CyclicityStrategySelector::DRPC => {
-            &DRPCStrategy::new(rule, rule_set, &var_per_atom_idx_pos_idx_per_rule)
-        }
-    };
-
     let mut reasoner: CoreReasoner =
-        CoreReasoner::new(&preds, rule_set, &var_per_atom_idx_pos_idx_per_rule, strat);
+        CoreReasoner::new(&preds, rules, &var_per_atom_idx_pos_idx_per_rule, strat);
 
     reasoner.run_saturating(mfc_set);
 

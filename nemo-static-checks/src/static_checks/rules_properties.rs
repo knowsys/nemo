@@ -1,9 +1,9 @@
-//! Functionality that provides the static checks for a RuleSet.
+//! Functionality that provides the static checks for a [ProgramHandle].
 use crate::static_checks::acyclicity_graphs::{JointAcyclicityGraph, WeakAcyclicityGraph};
 use crate::static_checks::cyclicity_checks::acyclicity::AcyclicityStrategySelector;
-use crate::static_checks::cyclicity_checks::acyclicity::{check_acyclicity, mfa_transformation};
+use crate::static_checks::cyclicity_checks::acyclicity::check_acyclicity;
 use crate::static_checks::cyclicity_checks::cyclicity::CyclicityStrategySelector;
-use crate::static_checks::cyclicity_checks::cyclicity::{check_cyclicity, mfc_handle};
+use crate::static_checks::cyclicity_checks::cyclicity::check_cyclicity;
 use crate::static_checks::msa::msa_execution_engine_from_handle;
 use crate::static_checks::positions::PositionsByRuleAndVariables;
 use crate::static_checks::rule_set::RuleSet;
@@ -202,8 +202,7 @@ impl RulesProperties for ProgramHandle {
     }
 
     async fn is_mfa(&self) -> bool {
-        let handle = mfa_transformation(self.clone());
-        check_acyclicity(handle, AcyclicityStrategySelector::MFA).await
+        check_acyclicity(self, AcyclicityStrategySelector::MFA).await
     }
 
     async fn is_msa(&self) -> bool {
@@ -227,13 +226,11 @@ impl RulesProperties for ProgramHandle {
     }
 
     async fn is_rmfa(&self) -> bool {
-        let handle = mfa_transformation(self.clone());
-        check_acyclicity(handle, AcyclicityStrategySelector::RMFA).await
+        check_acyclicity(self, AcyclicityStrategySelector::RMFA).await
     }
 
     async fn is_mfc(&self) -> bool {
-        let handle = mfc_handle(self.clone());
-        check_cyclicity(handle, CyclicityStrategySelector::MFC).await
+        check_cyclicity(self, CyclicityStrategySelector::MFC).await
     }
 
     fn is_dmfc(&self) -> bool {
@@ -241,8 +238,7 @@ impl RulesProperties for ProgramHandle {
     }
 
     async fn is_drpc(&self) -> bool {
-        let handle = mfc_handle(self.clone());
-        check_cyclicity(handle, CyclicityStrategySelector::DRPC).await
+        check_cyclicity(self, CyclicityStrategySelector::DRPC).await
     }
 
     fn is_rpc(&self) -> bool {
