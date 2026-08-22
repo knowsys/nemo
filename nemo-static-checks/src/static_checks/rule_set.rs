@@ -4,7 +4,7 @@ use crate::static_checks::positions::{Position, Positions, PositionsByRuleAndVar
 use nemo::rule_model::components::{
     IterableVariables, atom::Atom, rule::Rule, term::primitive::variable::Variable,
 };
-use nemo::rule_model::programs::handle::ProgramHandle;
+use nemo::rule_model::programs::{ProgramRead, handle::ProgramHandle};
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 
@@ -842,8 +842,8 @@ impl AtomAppearance for Variable {
     }
 }
 
-impl From<ProgramHandle> for RuleSet {
-    fn from(handle: ProgramHandle) -> Self {
-        RuleSet(handle.materialize().all_rules())
+impl From<&ProgramHandle> for RuleSet {
+    fn from(handle: &ProgramHandle) -> Self {
+        RuleSet(handle.rules().cloned().collect())
     }
 }

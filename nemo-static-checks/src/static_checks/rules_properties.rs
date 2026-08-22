@@ -71,59 +71,59 @@ pub trait RulesProperties {
 
 impl RulesProperties for ProgramHandle {
     fn is_joinless(&self) -> bool {
-        let rule_set = RuleSet::from(self.clone());
+        let rule_set = RuleSet::from(self);
         rule_set.0.iter().all(|rule| rule.is_joinless())
     }
 
     fn is_linear(&self) -> bool {
-        let rule_set = RuleSet::from(self.clone());
+        let rule_set = RuleSet::from(self);
         rule_set.0.iter().all(|rule| rule.is_linear())
     }
 
     fn is_guarded(&self) -> bool {
-        let rule_set = RuleSet::from(self.clone());
+        let rule_set = RuleSet::from(self);
         rule_set.0.iter().all(|rule| rule.is_guarded())
     }
 
     fn is_sticky(&self) -> bool {
-        RuleSet::from(self.clone())
+        RuleSet::from(self)
             .build_and_check_sticky_marking()
             .is_some()
     }
 
     fn is_weakly_sticky(&self) -> bool {
-        RuleSet::from(self.clone())
+        RuleSet::from(self)
             .build_and_check_weakly_sticky_marking()
             .is_some()
     }
 
     fn is_domain_restricted(&self) -> bool {
-        let rule_set = RuleSet::from(self.clone());
+        let rule_set = RuleSet::from(self);
         rule_set.0.iter().all(|rule| rule.is_domain_restricted())
     }
 
     fn is_frontier_one(&self) -> bool {
-        let rule_set = RuleSet::from(self.clone());
+        let rule_set = RuleSet::from(self);
         rule_set.0.iter().all(|rule| rule.is_frontier_one())
     }
 
     fn is_datalog(&self) -> bool {
-        let rule_set = RuleSet::from(self.clone());
+        let rule_set = RuleSet::from(self);
         rule_set.0.iter().all(|rule| rule.is_datalog())
     }
 
     fn is_monadic(&self) -> bool {
-        let rule_set = RuleSet::from(self.clone());
+        let rule_set = RuleSet::from(self);
         rule_set.0.iter().all(|rule| rule.is_monadic())
     }
 
     fn is_frontier_guarded(&self) -> bool {
-        let rule_set = RuleSet::from(self.clone());
+        let rule_set = RuleSet::from(self);
         rule_set.0.iter().all(|rule| rule.is_frontier_guarded())
     }
 
     fn is_weakly_guarded(&self) -> bool {
-        let rule_set = RuleSet::from(self.clone());
+        let rule_set = RuleSet::from(self);
         let affected_positions: Positions = rule_set.affected_positions();
         rule_set
             .0
@@ -132,7 +132,7 @@ impl RulesProperties for ProgramHandle {
     }
 
     fn is_weakly_frontier_guarded(&self) -> bool {
-        let rule_set = RuleSet::from(self.clone());
+        let rule_set = RuleSet::from(self);
         let affected_positions: Positions = rule_set.affected_positions();
         rule_set
             .0
@@ -141,7 +141,7 @@ impl RulesProperties for ProgramHandle {
     }
 
     fn is_jointly_guarded(&self) -> bool {
-        let rule_set = RuleSet::from(self.clone());
+        let rule_set = RuleSet::from(self);
         let attacked_pos_by_ex_rule_and_vars: PositionsByRuleAndVariables =
             rule_set.attacked_positions_by_existential_rule_and_variables();
         rule_set
@@ -151,7 +151,7 @@ impl RulesProperties for ProgramHandle {
     }
 
     fn is_jointly_frontier_guarded(&self) -> bool {
-        let rule_set = RuleSet::from(self.clone());
+        let rule_set = RuleSet::from(self);
         let attacked_pos_by_ex_rule_and_vars: PositionsByRuleAndVariables =
             rule_set.attacked_positions_by_existential_rule_and_variables();
         rule_set
@@ -161,19 +161,19 @@ impl RulesProperties for ProgramHandle {
     }
 
     fn is_weakly_acyclic(&self) -> bool {
-        let rule_set = RuleSet::from(self.clone());
+        let rule_set = RuleSet::from(self);
         let we_ac_graph: WeakAcyclicityGraph = WeakAcyclicityGraph::new(&rule_set);
         !we_ac_graph.contains_cycle_with_special_edge()
     }
 
     fn is_jointly_acyclic(&self) -> bool {
-        let rule_set = RuleSet::from(self.clone());
+        let rule_set = RuleSet::from(self);
         let jo_ac_graph: JointAcyclicityGraph = JointAcyclicityGraph::new(&rule_set);
         !jo_ac_graph.is_cyclic()
     }
 
     fn is_glut_guarded(&self) -> bool {
-        let rule_set = RuleSet::from(self.clone());
+        let rule_set = RuleSet::from(self);
         let attacked_pos_by_cycle_rule_and_vars: PositionsByRuleAndVariables =
             rule_set.attacked_positions_by_cycle_rule_and_variables();
         rule_set
@@ -183,7 +183,7 @@ impl RulesProperties for ProgramHandle {
     }
 
     fn is_glut_frontier_guarded(&self) -> bool {
-        let rule_set = RuleSet::from(self.clone());
+        let rule_set = RuleSet::from(self);
         let attacked_pos_by_cycle_rule_and_vars: PositionsByRuleAndVariables =
             rule_set.attacked_positions_by_cycle_rule_and_variables();
         rule_set
@@ -193,7 +193,7 @@ impl RulesProperties for ProgramHandle {
     }
 
     fn is_shy(&self) -> bool {
-        let rule_set = RuleSet::from(self.clone());
+        let rule_set = RuleSet::from(self);
         let attacked_pos_by_existential_rule_and_vars: PositionsByRuleAndVariables =
             rule_set.attacked_positions_by_existential_rule_and_variables();
         rule_set.0.iter().enumerate().all(|(rule_index, rule)| {
