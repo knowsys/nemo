@@ -1,6 +1,7 @@
 //! This module defines [ProgramTransformation]s.
 
 pub mod active;
+pub mod crit_instance;
 pub mod default;
 pub mod empty;
 pub mod exports;
