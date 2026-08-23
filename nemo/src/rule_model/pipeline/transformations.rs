@@ -10,6 +10,7 @@ pub mod filter_rules;
 pub mod global;
 pub mod incremental;
 pub mod merge_sparql;
+pub mod msa;
 pub mod normalize;
 pub mod set_default_outputs;
 pub mod skolem;
