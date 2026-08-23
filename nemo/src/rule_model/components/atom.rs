@@ -116,6 +116,11 @@ impl Atom {
     pub fn remove(&mut self, index: usize) -> Term {
         self.terms.remove(index)
     }
+
+    /// Return an iterator over the universal variables in this atom.
+    pub fn universal_variables(&self) -> impl Iterator<Item = &Variable> {
+        self.variables().filter(|variable| variable.is_universal())
+    }
 }
 
 impl Index<usize> for Atom {
