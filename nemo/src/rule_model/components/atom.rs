@@ -94,6 +94,11 @@ impl Atom {
         self.predicate.clone()
     }
 
+    /// Return a reference to the predicate of this atom.
+    pub fn predicate_ref(&self) -> &Tag {
+        &self.predicate
+    }
+
     /// Return an iterator over the terms of this atom.
     pub fn terms(&self) -> impl Iterator<Item = &Term> {
         self.terms.iter()

@@ -18,6 +18,7 @@ use super::{
     atom::Atom,
     component_iterator, component_iterator_mut,
     literal::Literal,
+    tag::Tag,
     term::{
         Term,
         primitive::{Primitive, variable::Variable},
@@ -195,6 +196,15 @@ impl Rule {
     /// including the head and the positive and negative body.
     pub fn atoms(&self) -> impl Iterator<Item = &Atom> {
         self.head.iter().chain(self.body_atoms())
+    }
+
+    /// Return references to the predicates of all atoms in this rule.
+    pub fn predicates_ref(&self) -> Vec<&Tag> {
+        self.body
+            .iter()
+            .filter_map(Literal::predicate_ref)
+            .chain(self.head.iter().map(Atom::predicate_ref))
+            .collect()
     }
 
     /// Return an iterator over all [ImportLiteral]s
