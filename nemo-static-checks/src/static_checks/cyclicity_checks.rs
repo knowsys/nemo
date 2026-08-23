@@ -416,14 +416,6 @@ fn predicates_ref<'a>(rule_set: &[&'a Rule]) -> HashSet<&'a Tag> {
         })
 }
 
-fn predicates_ref_and_lens<'a>(rule_set: &[&'a Rule]) -> HashSet<(&'a Tag, usize)> {
-    rule_set
-        .iter()
-        .fold(HashSet::<(&Tag, usize)>::new(), |ret_val, rule| {
-            ret_val.insert_all_take_ret(rule.predicates_ref_and_lens())
-        })
-}
-
 pub struct Trigger<'a, 'b> {
     rule: &'a Rule,
     ass: &'a Assignment<'b>,

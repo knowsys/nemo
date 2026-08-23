@@ -12,7 +12,7 @@ use std::collections::HashSet;
 #[derive(Debug, Default, Clone, Copy)]
 pub struct TransformationCriticalInstance {}
 
-fn preds_and_lens_of_rule(rule: &Rule) -> Vec<(Tag, usize)> {
+fn preds_and_lens_of_rule(rule: &Rule) -> impl Iterator<Item = (&Tag, usize)> {
     rule.body()
         .iter()
         .filter_map(|literal| match literal {
@@ -20,9 +20,11 @@ fn preds_and_lens_of_rule(rule: &Rule) -> Vec<(Tag, usize)> {
             _ => None,
         })
         .chain(rule.head().iter())
-        .map(|atom| (atom.predicate(), atom.len()))
-        // .chain(rule.head().iter().map(|atom| atom.predicate_ref_and_len()))
-        .collect()
+        .map(|atom| (atom.predicate_ref(), atom.len()))
+}
+
+pub fn preds_and_lens_of_rules<'a>(rules: &[&'a Rule]) -> impl Iterator<Item = (&'a Tag, usize)> {
+    rules.iter().flat_map(|rule| preds_and_lens_of_rule(rule))
 }
 
 /// Return every fact for the given predicate and arity that can be formed
@@ -49,15 +51,16 @@ fn critical_instance(rules: &[&Rule]) -> impl Iterator<Item = Fact> {
         .collect();
     constants.push(Term::from("__STAR__"));
 
-    let predicates_and_lens: HashSet<(Tag, usize)> = rules
-        .iter()
-        .flat_map(|rule| preds_and_lens_of_rule(rule))
-        .collect();
+    // let predicates_and_lens: HashSet<(Tag, usize)> = rules
+    //     .iter()
+    //     .flat_map(|rule| preds_and_lens_of_rule(rule))
+    //     .collect();
+    let preds_and_lens: HashSet<(&Tag, usize)> = preds_and_lens_of_rules(rules).collect();
 
-    predicates_and_lens
+    preds_and_lens
         .into_iter()
         .flat_map(move |(predicate, arity)| {
-            facts_for_predicate_and_constants(&predicate, arity, &constants)
+            facts_for_predicate_and_constants(predicate, arity, &constants)
         })
 }
 

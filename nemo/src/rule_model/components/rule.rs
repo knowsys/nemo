@@ -208,14 +208,6 @@ impl Rule {
             .collect()
     }
 
-    pub fn predicates_ref_and_lens(&self) -> Vec<(&Tag, usize)> {
-        self.body()
-            .iter()
-            .filter_map(|literal| literal.predicate_ref_and_len())
-            .chain(self.head().iter().map(|atom| atom.predicate_ref_and_len()))
-            .collect()
-    }
-
     /// Return an iterator over all [ImportLiteral]s
     /// that are evaluated as part of this rule.
     pub fn imports(&self) -> impl Iterator<Item = &ImportLiteral> {

@@ -94,14 +94,9 @@ impl Atom {
         self.predicate.clone()
     }
 
-    // /// Return the predicate as a reference of this atom.
+    /// Return the predicate as a reference of this atom.
     pub fn predicate_ref(&self) -> &Tag {
         &self.predicate
-    }
-
-    // /// Return the predicate of this atom as a reference with its length.
-    pub fn predicate_ref_and_len(&self) -> (&Tag, usize) {
-        (self.predicate_ref(), self.len())
     }
 
     /// Return an iterator over the terms of this atom.

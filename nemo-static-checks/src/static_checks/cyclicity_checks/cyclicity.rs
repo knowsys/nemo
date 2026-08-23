@@ -1,7 +1,7 @@
 use nemo::rule_model::{
     components::{rule::Rule, tag::Tag, term::Term},
     pipeline::transformations::{
-        crit_instance::facts_for_predicate_and_constants,
+        crit_instance::{facts_for_predicate_and_constants, preds_and_lens_of_rules},
         filter_rules::{RuleSelector, TransformationFilterRules},
         skolem::TransformationSkolemize,
     },
@@ -12,7 +12,7 @@ use crate::static_checks::cyclicity_checks::{
     Assignment, CoreReasoner, Cyclic, CyclicityStrategy, FactsByPred, ObsolescenceVariableIndices,
     Trigger, VarPerAtomIdxPosIdxPerRule, backtrack_sk_term, body_for_assignment,
     build_obsolescence_variable_indices, build_var_index_for_rules, head_for_assignment,
-    predicates_ref, predicates_ref_and_lens, union,
+    predicates_ref, union,
 };
 
 use crate::static_checks::collection_traits::InsertAll;
@@ -129,7 +129,7 @@ impl<'a> DRPCStrategy<'a> {
         let star_const = Term::from("__STAR__");
         skeleton_of_trigger.push(star_const);
 
-        let preds_and_lens = predicates_ref_and_lens(self.rules);
+        let preds_and_lens: HashSet<(&Tag, usize)> = preds_and_lens_of_rules(self.rules).collect();
         let preds = preds_and_lens.iter().map(|(pred, _)| *pred).collect();
 
         let possible_facts_for_preds_and_skeleton_consts =
