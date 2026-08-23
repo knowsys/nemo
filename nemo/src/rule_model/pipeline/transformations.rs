@@ -6,6 +6,7 @@ pub mod default;
 pub mod empty;
 pub mod exports;
 pub mod filter_imports;
+pub mod filter_rules;
 pub mod global;
 pub mod incremental;
 pub mod merge_sparql;
