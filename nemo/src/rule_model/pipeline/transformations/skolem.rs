@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::rule_model::{
     components::{
-        IterableVariables,
+        ComponentIdentity, ComponentSource, IterableVariables,
         literal::Literal,
         statement::Statement,
         term::{
@@ -14,6 +14,7 @@ use crate::rule_model::{
         },
     },
     error::ValidationReport,
+    origin::Origin,
     programs::{ProgramRead, ProgramWrite, handle::ProgramHandle},
 };
 
@@ -62,6 +63,7 @@ impl ProgramTransformation for TransformationSkolemize {
                     .collect::<Vec<_>>();
 
                 let mut new_rule = rule.clone();
+                new_rule.set_origin(Origin::Skolemization(rule.id()));
                 let mut sk_terms_by_ex_var = HashMap::new();
                 for head_atom in new_rule.head_mut() {
                     for term in head_atom.terms_mut() {
