@@ -164,6 +164,24 @@ impl Rule {
         &mut self.head
     }
 
+    /// Return an iterator over all existential variables in this rule.
+    pub fn existential_variables(&self) -> impl Iterator<Item = &Variable> {
+        self.variables()
+            .filter(|variable| variable.is_existential())
+    }
+
+    /// Return an iterator over the variables bound in positive body atoms.
+    pub fn positive_variables(&self) -> impl Iterator<Item = &Variable> {
+        self.body_positive().flat_map(|atom| {
+            atom.terms()
+                .filter_map(|term| match term {
+                    Term::Primitive(Primitive::Variable(variable)) => Some(variable),
+                    _ => None,
+                })
+                .filter(|variable| variable.is_universal() && variable.name().is_some())
+        })
+    }
+
     /// Return an iterator over all positive and negative [Atom]s
     /// contained in the body of this rule.
     pub fn body_atoms(&self) -> impl Iterator<Item = &Atom> {
@@ -196,32 +214,24 @@ impl Rule {
         self.imports.push(import);
     }
 
-    /// Return the set of variables that are bound in positive body atoms.
-    pub fn positive_variables(&self) -> HashSet<&Variable> {
-        let mut result = HashSet::new();
-
-        for literal in &self.body {
-            if let Literal::Positive(atom) = literal {
-                for term in atom.terms() {
-                    if let Term::Primitive(Primitive::Variable(variable)) = term
-                        && variable.is_universal()
-                        && variable.name().is_some()
-                    {
-                        result.insert(variable);
-                    }
-                }
-            }
-        }
-
-        result
+    /// Return an iterator over the frontier variables of this rule.
+    pub fn frontier_variables(&self) -> impl Iterator<Item = &Variable> {
+        let positive_variables = self.positive_variables().collect::<HashSet<_>>();
+        self.universal_head_variables()
+            .filter(move |variable| positive_variables.contains(variable))
     }
 
-    /// Return the set of variables that are bound by import statements
-    pub fn import_variables(&self) -> HashSet<&Variable> {
-        self.imports
+    /// Return an iterator over all universal variables in the head of this rule.
+    fn universal_head_variables(&self) -> impl Iterator<Item = &Variable> {
+        self.head
             .iter()
-            .flat_map(|import| import.variables())
-            .collect::<HashSet<_>>()
+            .flat_map(|atom| atom.variables())
+            .filter(|variable| variable.is_universal())
+    }
+
+    /// Return an iterator over the variables bound by import statements.
+    pub fn import_variables(&self) -> impl Iterator<Item = &Variable> {
+        self.imports.iter().flat_map(|import| import.variables())
     }
 
     /// Return a set of "safe" variables.
@@ -233,8 +243,7 @@ impl Rule {
     pub fn safe_variables(&self) -> HashSet<&Variable> {
         let mut result = self
             .positive_variables()
-            .union(&self.import_variables())
-            .cloned()
+            .chain(self.import_variables())
             .collect::<HashSet<_>>();
 
         loop {
