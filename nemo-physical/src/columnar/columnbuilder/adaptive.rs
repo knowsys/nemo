@@ -125,6 +125,10 @@ where
     }
 
     fn finalize(mut self) -> Self::Col {
+        if self.count() == 0 {
+            return Self::Col::ColumnVector(ColumnVector::new(Vec::new()));
+        }
+
         self.expand_sparse_rle_columns();
 
         match self.builder {
