@@ -1,0 +1,34 @@
+# Git
+.git
+.gitignore
+.gitmodules
+
+# Rust build artifacts
+target
+**/target
+
+# Node build artifacts
+node_modules
+**/node_modules
+dist
+**/dist
+
+# Submodule-internal build outputs (rebuilt inside the image)
+nemo-web/nemoWASMBundler
+nemo-web/nemoWASMWeb
+nemo-web/nemoVSIX
+nemo-web/.vite
+nemo-vscode-extension/out
+nemo-vscode-extension/dist
+nemo-vscode-extension/*.vsix
+
+# Editor / OS
+.vscode
+.idea
+.DS_Store
+*.swp
+
+# Nix
+result
+.direnv
+flake.lock

@@ -610,6 +610,11 @@
               RUST_TEST_TIME_DOCTEST
               ;
 
+            # Use mold as the linker. Nix's binutils ld.bfd fails on aarch64
+            # with Rust's `--fix-cortex-a53-843419` flag (it cannot find the
+            # .rcgu.o object files), which breaks builds like nemo-python.
+            RUSTFLAGS = "-C link-arg=-fuse-ld=mold";
+
             shellHook = ''
               export PATH=''${HOME}/.cargo/bin''${PATH+:''${PATH}}
             '';
@@ -636,6 +641,7 @@
 
                   gnuplot
                   nodejs
+                  mold
                   ;
               })
             ];

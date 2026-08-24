@@ -1,0 +1,43 @@
+{
+  "name": "nemo (Nix + Rust + Python + WASM)",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/nix:1": {
+      "version": "latest",
+      "extraNixConfig": "experimental-features = nix-command flakes"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "rust-lang.rust-analyzer",
+        "tamasfe.even-better-toml",
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-toolsai.jupyter",
+        "ms-toolsai.jupyter-keymap",
+        "ms-toolsai.jupyter-renderers",
+        "arrterian.nix-env-selector",
+        "bbenoist.nix"
+      ],
+      "settings": {
+        "rust-analyzer.cargo.buildScripts.enable": true,
+        "rust-analyzer.checkOnSave.command": "clippy",
+        "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+        "python.terminal.activateEnvironment": true,
+        "nixEnvSelector.nixFile": "${workspaceFolder}/flake.nix",
+        "nixEnvSelector.useFlakes": true,
+        "nixEnvSelector.flakeAttr": "devShells.${nixSystem}.default"
+      }
+    }
+  },
+  "postStartCommand": "nix develop --command bash -c 'echo \"Nix dev shell ready\"' || true",
+  "postCreateCommand": "nix develop --command bash .devcontainer/postCreateCommand.sh",
+  "remoteUser": "vscode",
+  "mounts": [
+    "source=nemo-nix-store,target=/nix,type=volume",
+    "source=nemo-cargo-cache,target=/home/vscode/.cargo,type=volume"
+  ]
+}

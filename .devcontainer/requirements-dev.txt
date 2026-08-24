@@ -1,0 +1,5 @@
+# Jupyter tooling for development; used by the Nemo kernel (nemo-jupyter/).
+notebook
+jupyterlab
+ipykernel
+ipywidgets

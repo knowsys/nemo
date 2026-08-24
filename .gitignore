@@ -32,5 +32,8 @@ flycheck_*.el
 # nix build
 /result
 
+# Python virtualenv (devcontainer)
+/.venv/
+
 # ide settings
 /.vscode

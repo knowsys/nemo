@@ -1,0 +1,17 @@
+services:
+  nemo-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: nemo-web
+    ports:
+      - "5173:5173"
+    # Bind-mount the nemo-web sources so edits are picked up live by Vite HMR
+    volumes:
+      - ./nemo-web/src:/app/src
+      - ./nemo-web/public:/app/public
+      - ./nemo-web/index.html:/app/index.html
+      - ./nemo-web/vite.config.ts:/app/vite.config.ts
+    environment:
+      - NODE_OPTIONS=--max_old_space_size=4096
+    restart: unless-stopped

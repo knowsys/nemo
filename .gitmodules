@@ -1,0 +1,6 @@
+[submodule "nemo-web"]
+	path = nemo-web
+	url = https://github.com/knowsys/nemo-web.git
+[submodule "nemo-vscode-extension"]
+	path = nemo-vscode-extension
+	url = https://github.com/knowsys/nemo-vscode-extension.git

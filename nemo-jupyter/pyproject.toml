@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nemo-jupyter"
+version = "0.1.0"
+description = "Jupyter kernel and nbconvert exporter for the Nemo rule engine"
+requires-python = ">=3.9"
+dependencies = ["ipykernel", "nmo-python"]
+
+[project.entry-points."nbconvert.exporters.script"]
+nemo = "nemo_jupyter.nbconvert:NemoScriptExporter"
+
+[tool.setuptools]
+packages = ["nemo_jupyter"]
