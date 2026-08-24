@@ -73,7 +73,7 @@ impl FunctionTerm {
     }
 
     /// Create a new [FunctionTerm] with a [Tag].
-    pub(crate) fn new_tagged<Terms: IntoIterator<Item = Term>>(tag: Tag, subterms: Terms) -> Self {
+    pub fn new_tagged<Terms: IntoIterator<Item = Term>>(tag: Tag, subterms: Terms) -> Self {
         Self {
             origin: Origin::default(),
             id: ProgramComponentId::default(),

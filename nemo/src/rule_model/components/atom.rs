@@ -94,6 +94,11 @@ impl Atom {
         self.predicate.clone()
     }
 
+    /// Return a reference to the predicate of this atom.
+    pub fn predicate_ref(&self) -> &Tag {
+        &self.predicate
+    }
+
     /// Return an iterator over the terms of this atom.
     pub fn terms(&self) -> impl Iterator<Item = &Term> {
         self.terms.iter()
@@ -115,6 +120,11 @@ impl Atom {
     /// Panics if the index is out of bounds.
     pub fn remove(&mut self, index: usize) -> Term {
         self.terms.remove(index)
+    }
+
+    /// Return an iterator over the universal variables in this atom.
+    pub fn universal_variables(&self) -> impl Iterator<Item = &Variable> {
+        self.variables().filter(|variable| variable.is_universal())
     }
 }
 

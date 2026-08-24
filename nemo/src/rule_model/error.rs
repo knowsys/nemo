@@ -407,6 +407,7 @@ impl ValidationReport {
                 None
             }
             Origin::Normalization(id)
+            | Origin::Skolemization(id)
             | Origin::Global(id)
             | Origin::Incremental(id)
             | Origin::MergeSparql(id) => Self::id_to_range(program, *id, error),
