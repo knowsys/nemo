@@ -39,8 +39,7 @@ ascii_tree = { workspace = true }
 async-trait = { workspace = true }
 serde_json = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
-nom-greedyerror = "0.5.0"
-nom-supreme = "0.8.0"
+smallvec = "1.15"
 enum-assoc = "1.1.0"
 ariadne = { workspace = true, features = ["auto-color"] }
 strum = { workspace = true }
@@ -63,4 +62,9 @@ env_logger = { workspace = true }
 assert_fs = { workspace = true }
 test-log = { workspace = true }
 tokio = { workspace = true, features = [ "rt", "macros" ] }
+criterion = { version = "0.8.2", default-features = false, features = [ "cargo_bench_support" ] }
+
+[[bench]]
+name = "parser"
+harness = false
 

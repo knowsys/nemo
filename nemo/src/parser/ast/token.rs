@@ -8,21 +8,17 @@ use enum_assoc::Assoc;
 use nom::{
     FindSubstring, InputTake,
     branch::alt,
-    bytes::complete::{is_a, is_not, tag, take_until, take_while1},
-    character::complete::{
-        alpha1, alphanumeric1, digit1, hex_digit1, multispace1, oct_digit1, space0, space1,
-    },
+    bytes::complete::{is_a, is_not, tag, take_until, take_while, take_while1},
+    character::complete::{alpha1, digit1, hex_digit1, multispace1, oct_digit1, space0, space1},
     combinator::{map, opt, recognize, verify},
-    multi::many0,
     sequence::pair,
 };
-use nom_supreme::error::{BaseErrorKind, Expectation};
 
 use crate::{
     parser::{
         ParserInput, ParserResult,
         context::{ParserContext, context},
-        error::ParserErrorTree,
+        error::ParserErrors,
         span::Span,
     },
     rule_model::components::ComponentSource,
@@ -342,6 +338,20 @@ impl Display for Token<'_> {
     }
 }
 
+/// Whether `character` may start a [TokenKind::Name].
+pub(crate) fn is_name_start(character: char) -> bool {
+    character.is_alphabetic()
+}
+
+/// Whether `character` may occur in a [TokenKind::Name] after the first one.
+///
+/// `%` is allowed because a name can be the local part of a prefixed name, which
+/// is expanded into an IRI and may therefore be percent-encoded.
+/// `-` cannot be told apart from subtraction and is therefore excluded (issue #543).
+pub(crate) fn is_name_continue(character: char) -> bool {
+    character.is_alphanumeric() || character == '_' || character == '%'
+}
+
 /// Macro for generating token parser functions
 macro_rules! string_token {
     ($func_name: ident, $token: expr) => {
@@ -388,7 +398,7 @@ impl<'a> Token<'a> {
             ParserContext::token(TokenKind::Name),
             recognize(pair(
                 context(ParserContext::AlphaNum, alpha1),
-                many0(alt((alphanumeric1, tag("_"), tag("%")))),
+                take_while(is_name_continue),
             )),
         )(input)
         .map(|(rest_input, result)| {
@@ -455,14 +465,8 @@ impl<'a> Token<'a> {
             .filter_map(|tag| input.find_substring(tag))
             .min()
         {
-            None => Err(nom::Err::Error(ParserErrorTree::Base {
-                location: input,
-                kind: BaseErrorKind::Expected(Expectation::Tag(tags[0])),
-            })),
-            Some(0) => Err(nom::Err::Error(ParserErrorTree::Base {
-                location: input,
-                kind: BaseErrorKind::Kind(nom::error::ErrorKind::Eof),
-            })),
+            None => Err(nom::Err::Error(ParserErrors::at(input.span))),
+            Some(0) => Err(nom::Err::Error(ParserErrors::at(input.span))),
             Some(idx @ 1..) => {
                 let (rest, result) = input.take_split(idx);
                 Ok((

@@ -8,7 +8,6 @@ use nom::{
     multi::many0,
     sequence::{delimited, pair, preceded, separated_pair},
 };
-use nom_supreme::error::{BaseErrorKind, Expectation};
 
 use crate::parser::{
     ParserResult,
@@ -19,7 +18,7 @@ use crate::parser::{
         token::{Token, TokenKind},
     },
     context::{ParserContext, context},
-    error::ParserErrorTree,
+    error::ParserErrors,
     input::ParserInput,
     span::Span,
 };
@@ -153,50 +152,32 @@ impl<'a> Arithmetic<'a> {
     }
 
     /// Parse parenthesized non-arithmetic expressions.
-    fn parse_parenthesized_non_arithmetic(
-        input: ParserInput<'a>,
-    ) -> ParserResult<'a, Expression<'a>> {
-        let input_span = input.span;
-        delimited(
-            pair(Token::open_parenthesis, WSoC::parse),
-            Self::parse_non_arithmetic,
-            pair(WSoC::parse, Token::closed_parenthesis),
-        )(input)
-        .map(|(rest, expression)| {
-            let rest_span = rest.span;
-            (
-                rest,
-                Expression::Parenthesized(ParenthesizedExpression::new(
-                    input_span.until_rest(&rest_span),
-                    expression,
-                )),
-            )
-        })
-    }
-
-    /// Parse an expression enclosed in parenthesis.
-    fn parse_parenthesized_expression(input: ParserInput<'a>) -> ParserResult<'a, Expression<'a>> {
+    fn parse_parenthesized(input: ParserInput<'a>) -> ParserResult<'a, Expression<'a>> {
         let input_span = input.span;
 
         delimited(
             pair(Token::open_parenthesis, WSoC::parse),
-            Self::parse,
+            Expression::parse,
             pair(WSoC::parse, Token::closed_parenthesis),
         )(input)
-        .map(|(rest, mut arithmetic_expression)| {
-            arithmetic_expression.span = input_span.until_rest(&rest.span);
+        .map(|(rest, inner)| {
+            let span = input_span.until_rest(&rest.span);
 
-            (rest, Expression::Arithmetic(arithmetic_expression))
+            let expression = match inner {
+                Expression::Arithmetic(mut arithmetic) => {
+                    arithmetic.span = span;
+                    Expression::Arithmetic(arithmetic)
+                }
+                inner => Expression::Parenthesized(ParenthesizedExpression::new(span, inner)),
+            };
+
+            (rest, expression)
         })
     }
 
     /// Parse factor.
     fn parse_factor(input: ParserInput<'a>) -> ParserResult<'a, Expression<'a>> {
-        alt((
-            Self::parse_parenthesized_non_arithmetic,
-            Self::parse_non_arithmetic,
-            Self::parse_parenthesized_expression,
-        ))(input)
+        alt((Self::parse_parenthesized, Self::parse_non_arithmetic))(input)
     }
 
     /// Parse product.
@@ -216,7 +197,9 @@ impl<'a> Arithmetic<'a> {
     }
 
     /// Parse sum.
-    fn parse_sum(input: ParserInput<'a>) -> ParserResult<'a, Expression<'a>> {
+    ///
+    /// Returns the operand itself when no operator follows.
+    pub(crate) fn parse_sum(input: ParserInput<'a>) -> ParserResult<'a, Expression<'a>> {
         pair(
             Self::parse_product,
             many0(preceded(
@@ -264,10 +247,7 @@ impl<'a> ProgramAST<'a> for Arithmetic<'a> {
                 return Ok((rest, result));
             }
 
-            Err(nom::Err::Error(ParserErrorTree::Base {
-                location: input,
-                kind: BaseErrorKind::Expected(Expectation::Tag("arithmetic expression")),
-            }))
+            Err(nom::Err::Error(ParserErrors::at(input.span)))
         };
 
         context(CONTEXT, arithmetic_parser)(input)

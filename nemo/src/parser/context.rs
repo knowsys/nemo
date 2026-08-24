@@ -2,13 +2,17 @@
 #![allow(missing_docs)]
 
 use enum_assoc::Assoc;
-use nom_supreme::context::ContextError;
 
-use super::{ParserInput, ParserResult, ast::token::TokenKind, error::ParserErrorTree};
+use super::{ParserInput, ParserResult, ast::token::TokenKind, error::ParserErrors};
 
 /// Context, in which a particular parse error occurred
+///
+/// [ParserContext::names_construct] marks the contexts that can be used to say
+/// which construct an error occurred in. It is false for contexts that hold no
+/// information for the reader.
 #[derive(Assoc, Debug, Clone, Copy, PartialEq, Eq)]
 #[func(pub fn name(&self) -> &'static str)]
+#[func(pub fn names_construct(&self) -> bool { true })]
 pub enum ParserContext {
     /// Token
     #[assoc(name = _kind.name())]
@@ -54,24 +58,28 @@ pub enum ParserContext {
     Base,
     /// body of base directive
     #[assoc(name = "base body")]
+    #[assoc(names_construct = false)]
     BaseBody,
     /// Declare directive
     #[assoc(name = "declare directive")]
     Declare,
     /// body of declare directive
     #[assoc(name = "declare body")]
+    #[assoc(names_construct = false)]
     DeclareBody,
     /// Export directive
     #[assoc(name = "export directive")]
     Export,
     /// body of export directive
     #[assoc(name = "export body")]
+    #[assoc(names_construct = false)]
     ExportBody,
     /// Import directive
     #[assoc(name = "import directive")]
     Import,
     /// body of import directive
     #[assoc(name = "import body")]
+    #[assoc(names_construct = false)]
     ImportBody,
     /// Output directive
     #[assoc(name = "output directive")]
@@ -81,12 +89,14 @@ pub enum ParserContext {
     Prefix,
     /// body of prefix directive
     #[assoc(name = "prefix body")]
+    #[assoc(names_construct = false)]
     PrefixBody,
     /// parameter directive
     #[assoc(name = "parameter directive")]
     ParameterDecl,
     /// body of parameter directive
     #[assoc(name = "parameter directive body")]
+    #[assoc(names_construct = false)]
     ParameterDeclBody,
     /// Unknown directive
     #[assoc(name = "unknown directive")]
@@ -96,6 +106,7 @@ pub enum ParserContext {
     DeclareNameTypePair,
     /// Expression
     #[assoc(name = "expression")]
+    #[assoc(names_construct = false)]
     Expression,
     /// Guard
     #[assoc(name = "expression")] // Guard seems like a technical name
@@ -114,6 +125,7 @@ pub enum ParserContext {
     KeyValuePair,
     /// Sequence
     #[assoc(name = "sequence")]
+    #[assoc(names_construct = false)]
     Sequence,
     /// Arithmetic expression
     #[assoc(name = "arithmetic expression")]
@@ -159,9 +171,11 @@ pub enum ParserContext {
     Directive,
     /// Statement
     #[assoc(name = "statement")]
+    #[assoc(names_construct = false)]
     Statement,
     /// Statement kind
-    #[assoc(name = "statement kind")]
+    #[assoc(name = "fact, rule or directive")]
+    #[assoc(names_construct = false)]
     StatementKind,
     /// Program
     #[assoc(name = "program")]
@@ -187,16 +201,18 @@ pub(crate) fn context<'a, Output, NomParser>(
     mut f: NomParser,
 ) -> impl FnMut(ParserInput<'a>) -> ParserResult<'a, Output>
 where
-    NomParser: nom::Parser<ParserInput<'a>, Output, ParserErrorTree<'a>>,
+    NomParser: nom::Parser<ParserInput<'a>, Output, ParserErrors<'a>>,
 {
-    move |i| match f.parse(i.clone()) {
+    move |i| match f.parse(i) {
         Ok(o) => Ok(o),
         Err(nom::Err::Incomplete(i)) => Err(nom::Err::Incomplete(i)),
-        Err(nom::Err::Error(e)) => {
-            Err(nom::Err::Error(ParserErrorTree::add_context(i, context, e)))
+        Err(nom::Err::Error(mut e)) => {
+            e.push_context(context);
+            Err(nom::Err::Error(e))
         }
-        Err(nom::Err::Failure(e)) => Err(nom::Err::Failure(ParserErrorTree::add_context(
-            i, context, e,
-        ))),
+        Err(nom::Err::Failure(mut e)) => {
+            e.push_context(context);
+            Err(nom::Err::Failure(e))
+        }
     }
 }

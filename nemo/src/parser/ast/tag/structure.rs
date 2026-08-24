@@ -2,11 +2,15 @@
 
 use std::fmt::Display;
 
-use nom::{branch::alt, combinator::map, sequence::separated_pair};
+use nom::branch::alt;
 
 use crate::parser::{
     ParserResult,
-    ast::{ProgramAST, expression::basic::iri::Iri, token::Token},
+    ast::{
+        ProgramAST,
+        expression::basic::iri::Iri,
+        token::{Token, TokenKind},
+    },
     context::{ParserContext, context},
     input::ParserInput,
     span::Span,
@@ -78,22 +82,23 @@ impl<'a> ProgramAST<'a> for StructureTag<'a> {
     {
         let input_span = input.span;
 
-        context(
-            CONTEXT,
-            alt((
-                map(
-                    separated_pair(
-                        alt((Token::name, Token::empty)),
-                        Token::namespace_separator,
-                        Token::name,
-                    ),
-                    |(prefix, tag)| StructureTagKind::Prefixed { prefix, tag },
-                ),
-                map(Token::name, StructureTagKind::Plain),
-                map(Iri::parse, StructureTagKind::Iri),
-            )),
-        )(input)
-        .map(|(rest, kind)| {
+        let parse_tag = |input: ParserInput<'a>| {
+            let (rest, name) = alt((Token::name, Token::empty))(input.clone())?;
+
+            if let Ok((rest, _)) = Token::namespace_separator(rest.clone())
+                && let Ok((rest, tag)) = Token::name(rest)
+            {
+                return Ok((rest, StructureTagKind::Prefixed { prefix: name, tag }));
+            }
+
+            if name.kind() == TokenKind::Name {
+                return Ok((rest, StructureTagKind::Plain(name)));
+            }
+
+            Iri::parse(input).map(|(rest, iri)| (rest, StructureTagKind::Iri(iri)))
+        };
+
+        context(CONTEXT, parse_tag)(input).map(|(rest, kind)| {
             let rest_span = rest.span;
             (
                 rest,

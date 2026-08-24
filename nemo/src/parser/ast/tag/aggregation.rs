@@ -1,20 +1,31 @@
 //! This module defines [AggregationTag].
 
-use nom::{branch::alt, bytes::complete::tag_no_case, combinator::map};
-use nom_supreme::error::{BaseErrorKind, Expectation};
+use std::sync::LazyLock;
+
+use nom::{branch::alt, combinator::map};
 use strum::IntoEnumIterator;
 
 use crate::{
     parser::{
         ParserResult,
-        ast::{ProgramAST, token::Token},
+        ast::{
+            ProgramAST,
+            tag::{KeywordTable, parse_keyword},
+            token::Token,
+        },
         context::{ParserContext, context},
-        error::ParserErrorTree,
         input::ParserInput,
         span::Span,
     },
     rule_model::components::term::aggregate::AggregateKind,
 };
+
+/// All [AggregateKind]s
+static AGGREGATES: LazyLock<KeywordTable<AggregateKind>> = LazyLock::new(|| {
+    KeywordTable::new_ignore_ascii_case(
+        AggregateKind::iter().map(|aggregate| (aggregate.name(), aggregate)),
+    )
+});
 
 /// Tags that is used to identify aggregations
 #[derive(Debug)]
@@ -53,20 +64,7 @@ impl<'a> ProgramAST<'a> for AggregationTag<'a> {
     where
         Self: Sized + 'a,
     {
-        let keyword_parser = |input: ParserInput<'a>| {
-            for operation in AggregateKind::iter() {
-                let result = tag_no_case::<&str, ParserInput<'_>, ParserErrorTree>(
-                    operation.name(),
-                )(input.clone());
-                if let Ok((rest, _matched)) = result {
-                    return Ok((rest, operation));
-                }
-            }
-            Err(nom::Err::Error(ParserErrorTree::Base {
-                location: input,
-                kind: BaseErrorKind::Expected(Expectation::Tag("aggregation name")),
-            }))
-        };
+        let keyword_parser = |input: ParserInput<'a>| parse_keyword(input, &AGGREGATES);
 
         let input_span = input.span;
 

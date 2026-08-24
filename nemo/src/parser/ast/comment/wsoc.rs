@@ -1,13 +1,12 @@
 //! This module defines [WSoC].
 
-use nom::{branch::alt, combinator::map, multi::many0};
+use nom::{InputTake, branch::alt, combinator::map};
 
 use crate::parser::{
     ParserResult,
     ast::{
         ProgramAST,
         comment::{closed::ClosedComment, line::LineComment},
-        token::Token,
     },
     input::ParserInput,
     span::Span,
@@ -37,33 +36,50 @@ impl<'a> WSoC<'a> {
         &self.comments
     }
 
-    fn parse_whitespace(input: ParserInput<'a>) -> ParserResult<'a, Option<CommentType<'a>>> {
-        Token::whitespace(input).map(|(rest, _)| (rest, None))
-    }
-
-    fn parse_comment(input: ParserInput<'a>) -> ParserResult<'a, Option<CommentType<'a>>> {
+    fn parse_comment(input: ParserInput<'a>) -> ParserResult<'a, CommentType<'a>> {
         alt((
             map(LineComment::parse, CommentType::Line),
             map(ClosedComment::parse, CommentType::Closed),
         ))(input)
-        .map(|(rest, comment)| (rest, Some(comment)))
     }
 
     /// Parse whitespace or comments.
     pub fn parse(input: ParserInput<'a>) -> ParserResult<'a, Self> {
         let input_span = input.span;
 
-        many0(alt((WSoC::parse_whitespace, WSoC::parse_comment)))(input).map(|(rest, comments)| {
-            let rest_span = rest.span;
+        let mut rest = input;
+        let mut comments = Vec::new();
 
-            (
-                rest,
-                Self {
-                    _span: input_span.until_rest(&rest_span),
-                    comments: comments.into_iter().flatten().collect(),
-                },
-            )
-        })
+        loop {
+            let whitespace = rest
+                .span
+                .fragment()
+                .bytes()
+                .take_while(|byte| matches!(byte, b' ' | b'\t' | b'\r' | b'\n'))
+                .count();
+
+            if whitespace > 0 {
+                rest = rest.take_split(whitespace).0;
+                continue;
+            }
+
+            let Ok((next, comment)) = Self::parse_comment(rest.clone()) else {
+                break;
+            };
+
+            comments.push(comment);
+            rest = next;
+        }
+
+        let span = input_span.until_rest(&rest.span);
+
+        Ok((
+            rest,
+            Self {
+                _span: span,
+                comments,
+            },
+        ))
     }
 }
 

@@ -128,4 +128,16 @@ mod test {
             assert_eq!(expected, result.1.kind());
         }
     }
+
+    #[test]
+    fn unknown_names_starting_with_an_operation() {
+        for input in ["SUMX(1)", "STRX(1)", "STRLENGTH(1)"] {
+            let parser_input = ParserInput::new(input, ParserState::default());
+
+            assert!(
+                all_consuming(Operation::parse)(parser_input).is_err(),
+                "`{input}` should not parse as an operation"
+            );
+        }
+    }
 }

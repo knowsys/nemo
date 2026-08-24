@@ -261,6 +261,11 @@ impl<'a> Span<'a> {
         unsafe { str::from_raw_parts(self.allocation_start, self.location_offset()) }
     }
 
+    /// Return the input preceding this span.
+    pub(crate) fn text_before(&self) -> &str {
+        self.get_slice_before()
+    }
+
     /// The offset represents the position of the fragment relatively to the input of the parser. It starts at offset 0.
     pub fn location_offset(&self) -> usize {
         // SAFETY: self.fragment.as_ptr() is greater then or equal to self.allocation start
@@ -319,12 +324,6 @@ where
             fragment: next_fragment,
             line: self.line + line_offset,
         }
-    }
-}
-
-impl nom_greedyerror::Position for Span<'_> {
-    fn position(&self) -> usize {
-        self.location_offset()
     }
 }
 

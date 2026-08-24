@@ -76,22 +76,26 @@ impl ProgramReport {
         !self.errors.is_empty()
     }
 
+    /// Build the cache that messages are rendered against.
+    fn cache(&self) -> (String, Source<&str>) {
+        (
+            self.program.name().to_owned(),
+            Source::from(self.program.content()),
+        )
+    }
+
     /// Print the error messages, provided the source string and label
     pub fn eprint(&self, disbale_warnings: bool) -> Result<(), std::io::Error> {
+        let mut cache = self.cache();
+
         if !disbale_warnings {
             for warning in self.warnings() {
-                warning.report(self.program.name()).eprint((
-                    self.program.name().to_owned(),
-                    Source::from(self.program.content()),
-                ))?;
+                warning.report(self.program.name()).eprint(&mut cache)?;
             }
         }
 
         for error in self.errors() {
-            error.report(self.program.name()).eprint((
-                self.program.name().to_owned(),
-                Source::from(self.program.content()),
-            ))?;
+            error.report(self.program.name()).eprint(&mut cache)?;
         }
 
         Ok(())
@@ -99,14 +103,12 @@ impl ProgramReport {
 
     /// Write this report to a given writer.
     pub fn write(&self, writer: &mut impl std::io::Write) -> Result<(), std::io::Error> {
+        let mut cache = self.cache();
+
         for error in self.warnings.iter().chain(self.errors.iter()) {
-            error.report(self.program.name()).write(
-                (
-                    self.program.name().to_owned(),
-                    Source::from(self.program.content()),
-                ),
-                &mut *writer,
-            )?
+            error
+                .report(self.program.name())
+                .write(&mut cache, &mut *writer)?
         }
 
         Ok(())
