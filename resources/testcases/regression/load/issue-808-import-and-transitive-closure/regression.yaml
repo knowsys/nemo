@@ -1,0 +1,4 @@
+issue: 808
+title: panic when computing transitive-closure over imported triples
+tracker: https://github.com/knowsys/nemo/issues/808
+type: bug

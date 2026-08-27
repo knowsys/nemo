@@ -1,0 +1,8 @@
+@import triple :- ntriples{resource = "data.nt"} .
+
+par(?X, ?Y) :- triple(?X, <urn:e#p>, ?Y) .
+
+tc(?X, ?Y) :- par(?X, ?Y) .
+tc(?X, ?Y) :- par(?X, ?Z), tc(?Z, ?Y) .
+
+@export tc :- csv{resource = "tc.csv"} .
