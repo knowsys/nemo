@@ -1,16 +1,19 @@
 use std::collections::HashSet;
 
-use crate::execution::planning::normalization::{atom::body::BodyAtom, rule::NormalizedRule};
+use crate::execution::planning::normalization::atom::body::BodyAtom;
 use crate::execution::selection_strategy::strategy_full_chain_stratification::util::atom::Atom;
-use crate::rule_model::substitution::Substitution;
 
 use crate::execution::selection_strategy::strategy_full_chain_stratification::reliance_memoization::RuleMemoization;
 use crate::execution::selection_strategy::strategy_full_chain_stratification::util::extend::{AtomMapping, CheckResult, Reliance, extend_init};
 use crate::execution::selection_strategy::strategy_full_chain_stratification::util::database::{RepresentativeDatabase, RepresentativeAtom};
 
+use crate::execution::selection_strategy::strategy_full_chain_stratification::types::{
+    Rule, Substitution,
+};
+
 pub(super) fn check_posr(
-    rule1: &NormalizedRule,
-    rule2: &NormalizedRule,
+    rule1: &Rule,
+    rule2: &Rule,
     mu: &AtomMapping,
     eta: &Substitution,
 ) -> CheckResult {
@@ -166,6 +169,9 @@ pub fn is_positive_reliance<'b, 'a: 'b>(
     rule2_index: usize,
     previous_opt: Option<&Reliance>,
 ) -> Option<Reliance> {
+    if mem.normalized_rules.len() == 2 {
+        panic!("{:#?}", mem.normalized_rules);
+    }
     extend_init::<BodyAtom>(
         mem,
         rule1_index,

@@ -2,7 +2,6 @@ use std::collections::HashMap;
 
 use crate::execution::planning::normalization::rule::NormalizedRule;
 
-use crate::execution::selection_strategy::strategy_full_chain_stratification::EdgeLabel;
 use crate::execution::selection_strategy::strategy_full_chain_stratification::reliances::{
     aggr::is_aggregation_reliance, negr::is_negation_reliance, posr::is_positive_reliance,
     restr::is_restraint_reliance, self_restr::is_self_restraint_reliance,
@@ -13,8 +12,17 @@ use crate::execution::selection_strategy::strategy_full_chain_stratification::ut
     extend::Reliance,
     ordered_atoms::{Mem, ReorderAtoms, SortedHeadAtoms},
 };
+use crate::execution::selection_strategy::strategy_full_chain_stratification::{EdgeLabel, types};
+
+use nemo_physical::datavalues::AnyDataValue;
 
 use strum::EnumCount;
+
+use crate::execution::selection_strategy::strategy_full_chain_stratification::types::ComponentMap;
+
+use crate::rule_model::components::tag::Tag;
+
+use crate::rule_model::components::term::primitive::variable::Variable as OrigVariable;
 
 #[derive(Default, Debug)]
 enum Progress<T> {
@@ -48,8 +56,33 @@ impl<T> Progress<T> {
 type Reliances = [Progress<Vec<Reliance>>; EdgeLabel::COUNT];
 
 #[derive(Debug)]
+pub struct Rules<'a> {
+    pub normalized_rules: &'a Vec<&'a NormalizedRule>,
+
+    pred_map: ComponentMap<Tag>,
+    const_map: ComponentMap<AnyDataValue>,
+    rules: Vec<Option<(types::Rule, ComponentMap<OrigVariable>)>>,
+}
+
+impl<'a> Rules<'a> {
+    fn new(normalized_rules: &'a Vec<&'a NormalizedRule>) -> Self {
+        Self {
+            normalized_rules,
+
+            pred_map: ComponentMap::new(),
+            const_map: ComponentMap::new(),
+            rules: vec![None; normalized_rules.len()],
+        }
+    }
+
+    pub fn get(&mut self, rule_index: usize) -> types::Rule {
+        self.rules.get_or_insert_with(|| types::Rule::from_normalized_rule(&mut self.pred_map, &mut self.const_map, self.normalized_rules[rule_index]))
+    }
+}
+
+#[derive(Debug)]
 pub struct RuleMemoization<'a> {
-    pub rules: &'a Vec<&'a NormalizedRule>,
+    pub rules: Rules<'a>,
 
     // these fields memoize auxiliary per-rule data
     // uses `Vec<Option<X>>` (initialized to `vec![None; rules.len()]`) instead of `HashMap<usize,X>`
@@ -60,17 +93,18 @@ pub struct RuleMemoization<'a> {
 }
 
 impl<'a> RuleMemoization<'a> {
-    pub fn new(rules: &'a Vec<&'a NormalizedRule>) -> Self {
+    pub fn new(normalized_rules: &'a Vec<&'a NormalizedRule>) -> Self {
+        let len = normalized_rules.len();
         Self {
-            rules,
+            rules: Rules::new(normalized_rules),
             reordered_atoms: ReorderAtoms {
-                reordered_body_atoms: Mem::new(rules.len()),
-                reordered_negative_body_atoms: Mem::new(rules.len()),
-                reordered_head_atoms: Mem::new(rules.len()),
+                reordered_body_atoms: Mem::new(len),
+                reordered_negative_body_atoms: Mem::new(len),
+                reordered_head_atoms: Mem::new(len),
             },
-            sorted_head_atoms: Mem::new(rules.len()),
-            head_pieces: Mem::new(rules.len()),
-            encoded_rules: vec![None; rules.len()],
+            sorted_head_atoms: Mem::new(len),
+            head_pieces: Mem::new(len),
+            encoded_rules: vec![None; len],
         }
     }
 }
@@ -106,8 +140,8 @@ impl<'a> RelianceMemoization<'a> {
     where
         'a: 'b,
     {
-        let rule1 = *&self.data.rules[rule1_index];
-        let rule2 = *&self.data.rules[rule2_index];
+        let rule1 = &self.data.rules.get(rule1_index);
+        let rule2 = &self.data.rules.get(rule2_index);
         let reliances_index = *self
             .reliances_edge_map
             .entry((rule1_index, rule2_index))

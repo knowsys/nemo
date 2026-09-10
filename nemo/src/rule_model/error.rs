@@ -36,7 +36,7 @@ where
     message: String,
 }
 
-/// Error associated wiht a source
+/// Error associated with a source
 #[derive(Debug, Clone)]
 pub struct SourceError<Source, Error>
 where

@@ -5,8 +5,9 @@ use crate::execution::selection_strategy::strategy_full_chain_stratification::ut
 };
 use crate::rule_model::{
     components::term::primitive::{Primitive, variable::Variable},
-    substitution::Substitution,
 };
+
+use crate::execution::selection_strategy::strategy_full_chain_stratification::types::Substitution;
 
 #[derive(Eq, PartialEq, Hash, Debug)]
 pub struct RepresentativeAtom {
@@ -32,7 +33,7 @@ impl RepresentativeAtom {
             predicate: atom.pred(),
             primitives: atom
                 .primitives()
-                .map(|p| eta.get_primitive(p.as_ref()).unwrap_or(p.as_ref()).clone())
+                .map(|p| eta.get_term(p.as_ref()).unwrap_or(p.as_ref()).clone())
                 .collect(),
         }
     }

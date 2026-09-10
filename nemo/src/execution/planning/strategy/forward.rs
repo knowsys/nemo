@@ -62,7 +62,8 @@ impl StrategyForward {
             &mut operations,
         );
 
-        body.output_variables();
+        // Since the result of this call is not used, I think it does nothing apart from some clones?
+        //body.output_variables();
 
         let aggregation = rule.aggregate().cloned().map(|aggregation| {
             GeneratorAggregation::new(body.output_variables(), aggregation, &mut operations)

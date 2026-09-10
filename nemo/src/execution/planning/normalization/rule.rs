@@ -36,7 +36,6 @@ use crate::{
             import_export::clause::ImportLiteral,
             tag::Tag,
             term::{
-                Term,
                 operation::operation_kind::OperationKind,
                 primitive::{Primitive, variable::Variable},
             },
@@ -697,17 +696,13 @@ impl NormalizedRule {
         let mut rule = self.clone();
         rule.operations
             .extend(eta.into_iter().filter_map(|(from_primitive, to_term)| {
-                if let Term::Primitive(to_primitive) = to_term {
-                    Some(Operation::Operation {
-                        kind: OperationKind::Equal,
-                        subterms: vec![
-                            Operation::Primitive(from_primitive.clone()),
-                            Operation::Primitive(to_primitive.clone()),
-                        ],
-                    })
-                } else {
-                    None
-                }
+                Some(Operation::Operation {
+                    kind: OperationKind::Equal,
+                    subterms: vec![
+                        Operation::Primitive(from_primitive.clone()),
+                        Operation::Primitive(to_term.as_primitive()?.clone()),
+                    ],
+                })
             }));
         rule
     }

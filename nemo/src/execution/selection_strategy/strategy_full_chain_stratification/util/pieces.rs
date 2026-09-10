@@ -2,9 +2,11 @@ use std::collections::HashSet;
 
 use crate::execution::selection_strategy::strategy_full_chain_stratification::util::ordered_atoms::GetRuleMem; // should be somewhere else...
 use crate::{
-    execution::planning::normalization::{atom::head::HeadAtom, rule::NormalizedRule},
+    execution::planning::normalization::atom::head::HeadAtom,
     rule_model::components::term::primitive::variable::Variable,
 };
+
+use crate::execution::selection_strategy::strategy_full_chain_stratification::types::Rule;
 
 #[derive(Debug, Clone)]
 pub(crate) struct Piece {
@@ -14,7 +16,7 @@ pub(crate) struct Piece {
 
 impl<'a> GetRuleMem<'a> for Vec<Piece> {
     /// Decompose the head into pieces.
-    fn compute(rule: &'a NormalizedRule) -> Vec<Piece> {
+    fn compute(rule: &'a mut Rule) -> Vec<Piece> {
         let vars_exists = rule.existentials();
         let mut head_pieces = Vec::new();
 

@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::execution::planning::normalization::{atom::body::NegBodyAtom, rule::NormalizedRule};
+use crate::execution::planning::normalization::atom::body::NegBodyAtom;
 use crate::execution::selection_strategy::strategy_full_chain_stratification::util::database::{
     RepresentativeAtom, RepresentativeDatabase,
 };
@@ -9,12 +9,11 @@ use crate::rule_model::substitution::Substitution;
 use crate::execution::selection_strategy::strategy_full_chain_stratification::reliance_memoization::RuleMemoization;
 use crate::execution::selection_strategy::strategy_full_chain_stratification::util::extend::{AtomMapping, CheckResult, Reliance, extend_init};
 
-fn check_negr(
-    rule1: &NormalizedRule,
-    rule2: &NormalizedRule,
-    _mu: &AtomMapping,
-    eta: &Substitution,
-) -> CheckResult {
+use crate::execution::selection_strategy::strategy_full_chain_stratification::types::{
+    Rule, Substitution,
+};
+
+fn check_negr(rule1: &Rule, rule2: &Rule, _mu: &AtomMapping, eta: &Substitution) -> CheckResult {
     // idea:
     // - rule1 and rule2 start off both being applicable
     // - then rule1 is applied

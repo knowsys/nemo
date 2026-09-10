@@ -1,10 +1,7 @@
 use std::collections::HashMap;
 
 use crate::execution::planning::normalization::rule::NormalizedRule;
-use crate::rule_model::components::term::{
-    Term, operation::operation_kind::OperationKind, primitive::Primitive,
-};
-use crate::rule_model::substitution::Substitution;
+use crate::rule_model::components::term::operation::operation_kind::OperationKind;
 
 use crate::execution::selection_strategy::strategy_full_chain_stratification::util::{
     atom::Atom,
@@ -12,7 +9,12 @@ use crate::execution::selection_strategy::strategy_full_chain_stratification::ut
     unify::unify
 };
 use crate::execution::selection_strategy::strategy_full_chain_stratification::reliance_memoization::RuleMemoization;
-use crate::execution::planning::normalization::operation::Operation;
+//use crate::execution::planning::normalization::operation::Operation;
+
+use crate::execution::selection_strategy::strategy_full_chain_stratification::types::Substitution;
+use crate::execution::selection_strategy::strategy_full_chain_stratification::types::{
+    Operation, Term,
+};
 
 /// maps indices of body/head atoms of the 2nd rule to indices of head atoms of the 1st rule
 #[derive(Debug, Clone, Default)]
@@ -66,8 +68,8 @@ where
         }) => (*idx_dom, *idx_ran + 1), // look for "next" one
         None => (0, 0),
     };
-    let rule1 = mem.rules[rule1_index];
-    let rule2 = mem.rules[rule2_index];
+    let rule1 = mem.rules.get(rule1_index);
+    let rule2 = mem.rules.get(rule2_index);
 
     // initialize the substitution with known constant replacements (possibly from normalization)
     for op in rule1.operations().iter().chain(rule2.operations().iter()) {
@@ -77,14 +79,11 @@ where
         } = op
         {
             if let [
-                Operation::Primitive(Primitive::Variable(var)),
+                Operation::Primitive(Term::Variable(var)),
                 Operation::Primitive(prim),
-            ] = subterms.as_slice()
+            ] = subterms.as_ref()
             {
-                eta.insert(
-                    Primitive::Variable(var.clone()),
-                    Term::Primitive(prim.clone()),
-                );
+                eta.insert(var.clone(), prim.clone());
             }
         }
     }
@@ -92,8 +91,8 @@ where
     extend::<T>(
         rule1,
         rule2,
-        mem.sorted_head_atoms.get(mem.rules, rule1_index),
-        T::reorder(&mut mem.reordered_atoms).get(mem.rules, rule2_index),
+        mem.sorted_head_atoms.get(mem.normalized_rules, rule1_index),
+        T::reorder(&mut mem.reordered_atoms).get(mem.normalized_rules, rule2_index),
         check,
         &mut AtomMapping::new(),
         eta,

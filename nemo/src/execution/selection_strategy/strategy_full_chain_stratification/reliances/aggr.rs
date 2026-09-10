@@ -13,8 +13,8 @@ pub fn is_aggregation_reliance<'b, 'a: 'b>(
     rule2_index: usize,
     previous_opt: Option<&Reliance>,
 ) -> Option<Reliance> {
-    let rule1 = mem.rules[rule1_index];
-    let rule2 = mem.rules[rule2_index];
+    let rule1 = mem.normalized_rules[rule1_index];
+    let rule2 = mem.normalized_rules[rule2_index];
     debug_assert!(
         rule2.contains_aggregates(),
         "aggregation reliance checks should not be called with aggregate-free target rules",

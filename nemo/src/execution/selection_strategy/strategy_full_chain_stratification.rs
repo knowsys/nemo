@@ -21,6 +21,25 @@ mod reliances {
 }
 mod reliance_memoization;
 
+mod types;
+
+mod chain {
+    mod atoms;
+    mod bitset;
+    mod chain_rule;
+    mod constraint;
+    mod core_solver;
+    mod domain;
+    mod hypergraph;
+    mod relation;
+    mod solver;
+    mod trail;
+    mod tuples;
+
+    #[cfg(test)]
+    mod test;
+}
+
 use std::collections::{HashMap, HashSet};
 
 use crate::execution::planning::normalization::rule::NormalizedRule;
@@ -159,6 +178,14 @@ impl<SubStrategy: RuleSelectionStrategy> StrategyFullChainStratification<SubStra
         stratum: &Vec<usize>,
     ) -> Result<Graph, SelectionStrategyError> {
         let mut reliance_graph = Graph::default();
+
+        //let mut pred_map = Map::new();
+        //let mut const_map = Map::new();
+        //let r = types::Rule::from_normalized_rule(
+        //    &mut pred_map,
+        //    &mut const_map,
+        //    mem.data.normalized_rules[0],
+        //);
 
         for &rule_index in stratum {
             reliance_graph.add_node(rule_index);

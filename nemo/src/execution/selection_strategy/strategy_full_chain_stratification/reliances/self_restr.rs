@@ -1,20 +1,23 @@
 use std::collections::HashSet;
 
 use crate::execution::planning::normalization::atom::body::BodyAtom;
-use crate::execution::planning::normalization::{atom::head::HeadAtom, rule::NormalizedRule};
+use crate::execution::planning::normalization::atom::head::HeadAtom;
 use crate::execution::selection_strategy::strategy_full_chain_stratification::util::database::{
     RepresentativeAtom, RepresentativeDatabase,
 };
 use crate::rule_model::components::term::Term;
 use crate::rule_model::components::term::primitive::Primitive;
-use crate::rule_model::substitution::Substitution;
 
 use crate::execution::selection_strategy::strategy_full_chain_stratification::reliance_memoization::RuleMemoization;
 use crate::execution::selection_strategy::strategy_full_chain_stratification::util::extend::{AtomMapping, CheckResult, Reliance, extend_init};
 
+use crate::execution::selection_strategy::strategy_full_chain_stratification::types::{
+    Rule, Substitution,
+};
+
 fn check_self_restr(
-    rule: &NormalizedRule,
-    _rule: &NormalizedRule,
+    rule: &Rule,
+    _rule: &Rule,
     mu: &AtomMapping,
     eta: &Substitution,
 ) -> CheckResult {
@@ -137,7 +140,7 @@ pub fn is_self_restraint_reliance<'b, 'a: 'b>(
     rule_index: usize,
     previous_opt: Option<&Reliance>,
 ) -> Option<Reliance> {
-    let rule = mem.rules[rule_index];
+    let rule = mem.normalized_rules[rule_index];
 
     // assuming the rule is not datalog, it has a trivial self-restraint if there are head atoms w/o existentials
     debug_assert!(
@@ -172,7 +175,7 @@ pub fn is_self_restraint_reliance<'b, 'a: 'b>(
     // trivial self-restraint,
     // if there are multiple pieces and there is an existential piece,
     // s.t. the entire head is not entailed when it is satisfied
-    let pp = mem.head_pieces.get(mem.rules, rule_index);
+    let pp = mem.head_pieces.get(mem.normalized_rules, rule_index);
     if pp.len() > 1 {
         for p in pp {
             if p.existentials.len() == 0 {

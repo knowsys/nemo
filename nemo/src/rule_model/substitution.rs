@@ -1,7 +1,7 @@
 //! This module defines [Substitution].
 
 use std::collections::{
-    HashMap, HashSet,
+    HashMap,
     hash_map::{IntoIter, Iter, IterMut},
 };
 use std::fmt::Display;
@@ -10,10 +10,7 @@ use crate::rule_model::origin::Origin;
 
 use super::components::{
     IterablePrimitives,
-    term::{
-        Term,
-        primitive::{Primitive, variable::Variable},
-    },
+    term::{Term, primitive::Primitive},
 };
 
 /// Map from [Primitive] terms to each other
@@ -48,100 +45,6 @@ impl Substitution {
         self.map.insert(from.into(), to.into());
     }
 
-    /// Add a new mapping from `old_y` to `new_y` and adjust existing mappings onto `old_y`.
-    pub fn remap(&mut self, old_y: Primitive, new_y: Primitive) {
-        debug_assert!(old_y != new_y, "trying to add identity transmutation");
-        debug_assert!(
-            !self.map.contains_key(&old_y),
-            "domain and range of unifier are not disjoint"
-        );
-        // modify all entries pointing to old_y to now point to new_y instead
-        let term_old_y = Term::Primitive(old_y.clone());
-        self.map
-            .iter_mut()
-            .filter(|(_k, v)| **v == term_old_y)
-            .for_each(|(_k, v)| {
-                *v = Term::Primitive(new_y.clone());
-            });
-        self.map.insert(old_y, Term::Primitive(new_y));
-    }
-
-    /// Resolve a primitive w.r.t. the substitution.
-    pub fn get_primitive<'a>(&'a self, primitive: &'a Primitive) -> Option<&'a Primitive> {
-        match primitive {
-            Primitive::Variable(_) => Some(self.map.get(primitive)?.as_primitive()?),
-            Primitive::Ground(_) => Some(primitive),
-        }
-    }
-
-    /// Resolve a variable w.r.t. the substitution.
-    pub fn get_variable<'a>(&'a self, variable: &'a Variable) -> Option<&'a Variable> {
-        self.map
-            .get(&Primitive::Variable(variable.clone()))?
-            .as_variable()
-    }
-
-    /// Resolve all variables in the iterator w.r.t. the substitution.
-    pub fn substitute_variables<'a>(
-        &'a self,
-        vars: impl IntoIterator<Item = &'a Variable>,
-    ) -> impl Iterator<Item = &'a Variable> {
-        vars.into_iter().filter_map(|v| self.get_variable(v))
-    }
-
-    /// Check if the gien variable is mapped by this substitution.
-    pub fn contains_variable(&self, k: &Variable) -> bool {
-        self.map.contains_key(&Primitive::Variable(k.clone()))
-    }
-
-    /// Restrict this substitution to the given domain of variables.
-    pub fn restriction(&self, domain: &HashSet<&Variable>) -> Self {
-        Self {
-            map: self
-                .map
-                .clone()
-                .into_iter()
-                .filter(|(from, _to)| {
-                    if let Primitive::Variable(var) = from {
-                        domain.contains(var)
-                    } else {
-                        false
-                    }
-                })
-                .collect(),
-        }
-    }
-
-    /// f.compose(g) means (f ∘︎ g)(x) = f(g(x)
-    pub fn compose(&self, other: &Self) -> Self {
-        Self {
-            map: other
-                .map
-                .iter()
-                .map(|(k, v)| {
-                    (
-                        k.clone(),
-                        match v {
-                            Term::Primitive(primitive) => match primitive {
-                                Primitive::Variable(_) => self.map.get(primitive).cloned(),
-                                _ => None,
-                            },
-                            _ => None,
-                        }
-                        .unwrap_or(v.clone()),
-                    )
-                })
-                .chain(
-                    self.map
-                        .iter()
-                        .filter(|(k, _v)| !other.map.contains_key(k))
-                        .map(|(k, v)| (k.clone(), v.clone())),
-                )
-                .filter(|(k, v)| Term::Primitive(k.clone()) != *v)
-                .collect(),
-        }
-    }
-
     /// Apply mapping to a program component.
     pub fn apply<Component: IterablePrimitives<TermType = Term>>(&self, component: &mut Component) {
         for term in component.primitive_terms_mut() {
@@ -154,22 +57,6 @@ impl Substitution {
             }
         }
     }
-
-    /// Return an iterator over all mapped variables in this substitution.
-    pub fn variables(&self) -> impl Iterator<Item = &Variable> {
-        self.map.keys().filter_map(|term| {
-            if let Primitive::Variable(variable) = term {
-                Some(variable)
-            } else {
-                None
-            }
-        })
-    }
-
-    /// Check is this is the identity substitution.
-    pub fn is_empty(&self) -> bool {
-        self.map.is_empty()
-    }
 }
 
 impl<TypeFrom, TypeTo> From<HashMap<TypeFrom, TypeTo>> for Substitution
@@ -178,12 +65,7 @@ where
     TypeTo: Into<Term>,
 {
     fn from(value: HashMap<TypeFrom, TypeTo>) -> Self {
-        Self {
-            map: value
-                .into_iter()
-                .map(|(key, value)| (key.into(), value.into()))
-                .collect(),
-        }
+        Self::new(value)
     }
 }
 

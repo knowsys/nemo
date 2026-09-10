@@ -1,20 +1,18 @@
 use std::collections::HashSet;
 
-use crate::execution::planning::normalization::{atom::head::HeadAtom, rule::NormalizedRule};
+use crate::execution::planning::normalization::atom::head::HeadAtom;
 use crate::execution::selection_strategy::strategy_full_chain_stratification::util::database::{
     RepresentativeAtom, RepresentativeDatabase,
 };
-use crate::rule_model::substitution::Substitution;
 
 use crate::execution::selection_strategy::strategy_full_chain_stratification::reliance_memoization::RuleMemoization;
 use crate::execution::selection_strategy::strategy_full_chain_stratification::util::extend::{AtomMapping, CheckResult, Reliance, extend_init};
 
-fn check_restr(
-    rule1: &NormalizedRule,
-    rule2: &NormalizedRule,
-    mu: &AtomMapping,
-    eta: &Substitution,
-) -> CheckResult {
+use crate::execution::selection_strategy::strategy_full_chain_stratification::types::{
+    Rule, Substitution,
+};
+
+fn check_restr(rule1: &Rule, rule2: &Rule, mu: &AtomMapping, eta: &Substitution) -> CheckResult {
     let r1_existentials = rule1.existentials();
     if r1_existentials.iter().any(|x| {
         if let Some(to) = eta.get_variable(x) {

@@ -16,6 +16,9 @@ use crate::execution::selection_strategy::strategy_full_chain_stratification::ut
     Atom, Predicate,
 };
 
+use crate::execution::selection_strategy::strategy_full_chain_stratification::types::Rule;
+use crate::execution::selection_strategy::strategy_full_chain_stratification::reliance_memoization::Rules;
+
 pub type ReorderedAtoms<'a, T> = Vec<&'a T>;
 pub type ReorderedBodyAtoms<'a> = ReorderedAtoms<'a, BodyAtom>;
 pub type ReorderedNegBodyAtoms<'a> = ReorderedAtoms<'a, NegBodyAtom>;
@@ -31,12 +34,12 @@ impl<T: Clone> Mem<T> {
 }
 
 pub trait GetRuleMem<'a> {
-    fn compute(rule: &'a NormalizedRule) -> Self;
+    fn compute(rule: &'a mut Rule) -> Self;
 }
 
 impl<'a, T: GetRuleMem<'a>> Mem<T> {
-    pub fn get(&mut self, rules: &'a Vec<&'a NormalizedRule>, rule_index: usize) -> &T {
-        self.0[rule_index].get_or_insert_with(|| T::compute(&rules[rule_index]))
+    pub fn get(&mut self, rules: &'a mut Rules<'a>, rule_index: usize) -> &T {
+        self.0[rule_index].get_or_insert_with(|| T::compute(&rules.get(rule_index)))
     }
 }
 
@@ -64,7 +67,7 @@ impl<'a> GetRuleMem<'a> for ReorderedBodyAtoms<'a> {
     /// to be applied to body / head of rule2 before calling extend
     /// maybe reuse Nemo's heuristic for join order?
     /// use NormalizeRule::variable_order --> should be Some
-    fn compute(rule: &'a NormalizedRule) -> ReorderedBodyAtoms<'a> {
+    fn compute(rule: &'a mut Rule) -> ReorderedBodyAtoms<'a> {
         reorder_atoms(rule.positive(), rule.body_variable_order())
     }
 }
@@ -72,8 +75,8 @@ impl<'a> GetRuleMem<'a> for ReorderedBodyAtoms<'a> {
 impl<'a> GetRuleMem<'a> for ReorderedNegBodyAtoms<'a> {
     /// Reorder negative body atoms.
     /// Such a variable order has not been computed anwhere else, as negative atoms don't partake in joins, so we just apply the heuristic manually.
-    fn compute(rule: &'a NormalizedRule) -> ReorderedNegBodyAtoms<'a> {
-        fn construct_auxiliary_negation_rule(rule: &NormalizedRule) -> NormalizedRule {
+    fn compute(rule: &'a mut Rule) -> ReorderedNegBodyAtoms<'a> {
+        fn construct_auxiliary_negation_rule(rule: &Rule) -> Rule {
             let mut universal_variables = rule
                 .negative()
                 .flat_map(|atom| atom.terms())
@@ -101,7 +104,7 @@ impl<'a> GetRuleMem<'a> for ReorderedNegBodyAtoms<'a> {
 
 impl<'a> GetRuleMem<'a> for ReorderedHeadAtoms<'a> {
     /// Reorder head atoms.
-    fn compute(rule: &'a NormalizedRule) -> ReorderedHeadAtoms<'a> {
+    fn compute(rule: &'a mut Rule) -> ReorderedHeadAtoms<'a> {
         reorder_atoms(rule.head(), rule.head_variable_order())
     }
 }
@@ -121,7 +124,7 @@ pub(crate) struct SortedHeadAtoms<'a> {
 
 impl<'a> GetRuleMem<'a> for SortedHeadAtoms<'a> {
     /// to be applied to head of rule1 before calling extend
-    fn compute(rule: &'a NormalizedRule) -> SortedHeadAtoms<'a> {
+    fn compute(rule: &'a mut Rule) -> SortedHeadAtoms<'a> {
         let mut sorted_atoms: Vec<_> = rule.head().iter().collect();
         sorted_atoms.sort_unstable_by_key(|atom| atom.predicate());
         let mut ranges = HashMap::new();
