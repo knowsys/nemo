@@ -1,22 +1,26 @@
 use std::collections::HashSet;
 
-use crate::execution::planning::normalization::atom::head::HeadAtom;
+use crate::execution::selection_strategy::strategy_full_chain_stratification::chain::atoms::{
+    Rule, combined_consts,
+};
+use crate::execution::selection_strategy::strategy_full_chain_stratification::chain::substitution::Substitution;
+use crate::execution::selection_strategy::strategy_full_chain_stratification::util::atom::Head;
 use crate::execution::selection_strategy::strategy_full_chain_stratification::util::database::{
     RepresentativeAtom, RepresentativeDatabase,
 };
 
 use crate::execution::selection_strategy::strategy_full_chain_stratification::reliance_memoization::RuleMemoization;
-use crate::execution::selection_strategy::strategy_full_chain_stratification::util::extend::{AtomMapping, CheckResult, Reliance, extend_init};
-
-use crate::execution::selection_strategy::strategy_full_chain_stratification::types::{
-    Rule, Substitution,
+use crate::execution::selection_strategy::strategy_full_chain_stratification::util::extend::{
+    AtomMapping, CheckResult, Reliance, extend_init,
 };
 
 fn check_restr(rule1: &Rule, rule2: &Rule, mu: &AtomMapping, eta: &Substitution) -> CheckResult {
+    let consts = combined_consts(rule1, rule2);
+
     let r1_existentials = rule1.existentials();
-    if r1_existentials.iter().any(|x| {
+    if r1_existentials.iter().any(|&x| {
         if let Some(to) = eta.get_variable(x) {
-            r1_existentials.contains(to)
+            r1_existentials.contains(&to)
         } else {
             false
         }
@@ -33,9 +37,9 @@ fn check_restr(rule1: &Rule, rule2: &Rule, mu: &AtomMapping, eta: &Substitution)
         .collect::<HashSet<_>>();
 
     // mu failed if a universal variable has been mapped onto an existential of rule1 by eta
-    if r1_r2_universals.iter().any(|x| {
-        if let Some(to) = eta.get_variable(*x) {
-            r1_existentials.contains(to)
+    if r1_r2_universals.iter().any(|&x| {
+        if let Some(to) = eta.get_variable(x) {
+            r1_existentials.contains(&to)
         } else {
             false
         }
@@ -49,7 +53,7 @@ fn check_restr(rule1: &Rule, rule2: &Rule, mu: &AtomMapping, eta: &Substitution)
     let eta_forall = eta.restriction(&r1_r2_universals);
     log::trace!("eta_forall = {eta_forall}");
 
-    let rule2_head_mapped_set = mu.mapped(&rule2.head()).collect::<HashSet<_>>();
+    let rule2_head_mapped_set = mu.mapped(rule2.head()).collect::<HashSet<_>>();
     let rule2_head_unmapped = rule2
         .head()
         .iter()
@@ -115,7 +119,7 @@ fn check_restr(rule1: &Rule, rule2: &Rule, mu: &AtomMapping, eta: &Substitution)
     // mu has to be extended if there are no existential variables in rule2_head_mapped
     if rule2_head_mapped_set
         .iter()
-        .all(|atom| atom.variables().all(|x| r2_universals.contains(x)))
+        .all(|atom| atom.variables().all(|x| r2_universals.contains(&x)))
     {
         log::trace!(
             "no existential variables in mapped part of the head of rule2 => mu must be extended"
@@ -125,7 +129,8 @@ fn check_restr(rule1: &Rule, rule2: &Rule, mu: &AtomMapping, eta: &Substitution)
 
     // construct representative interpretation I_a'
     let rule2_body_eta_forall =
-        RepresentativeAtom::substitute_atoms(&eta_forall, rule2.positive()).collect::<HashSet<_>>();
+        RepresentativeAtom::substitute_atoms(&eta_forall, &consts, rule2.positive())
+            .collect::<HashSet<_>>();
     let interpretation_a_pre_db = RepresentativeDatabase::new(&rule2_body_eta_forall);
     log::trace!(
         "I_a' = {}",
@@ -134,10 +139,9 @@ fn check_restr(rule1: &Rule, rule2: &Rule, mu: &AtomMapping, eta: &Substitution)
 
     // mu has failed if rule2 under eta_forall is satisfied on I_a'
     let rule2_head_eta_forall =
-        RepresentativeAtom::substitute_atoms(&eta_forall, rule2.head()).collect::<HashSet<_>>();
-    let r2_existentials_eta_forall = eta_forall
-        .substitute_variables(rule2.existentials())
-        .collect();
+        RepresentativeAtom::substitute_atoms(&eta_forall, &consts, rule2.head())
+            .collect::<HashSet<_>>();
+    let r2_existentials_eta_forall = eta_forall.substitute_variables(r2_existentials).collect();
     if interpretation_a_pre_db.entails(&r2_existentials_eta_forall, &rule2_head_eta_forall) {
         log::trace!("I_a' models the head of rule2 under eta_forall => mu failed");
         return CheckResult::Reject;
@@ -151,10 +155,11 @@ fn check_restr(rule1: &Rule, rule2: &Rule, mu: &AtomMapping, eta: &Substitution)
 
     // construct representative interpretation I_b'
     let rule1_body_eta_cup_rule2_head_unmapped_eta =
-        RepresentativeAtom::substitute_atoms(&eta_forall, rule1.positive())
+        RepresentativeAtom::substitute_atoms(&eta_forall, &consts, rule1.positive())
             .into_iter()
             .chain(RepresentativeAtom::substitute_atoms(
                 eta,
+                &consts,
                 rule2_head_unmapped.iter().copied(),
             ))
             .collect::<HashSet<_>>();
@@ -169,7 +174,8 @@ fn check_restr(rule1: &Rule, rule2: &Rule, mu: &AtomMapping, eta: &Substitution)
         interpretation_a_db.add_facts(&rule1_body_eta_cup_rule2_head_unmapped_eta);
 
     let rule1_head_eta_forall =
-        RepresentativeAtom::substitute_atoms(&eta_forall, rule1.head()).collect::<HashSet<_>>();
+        RepresentativeAtom::substitute_atoms(&eta_forall, &consts, rule1.head())
+            .collect::<HashSet<_>>();
     let rule1_vars_exists_eta_forall = eta_forall.substitute_variables(r1_existentials).collect();
     // \mu has to be extended if rule1 under \eta_\forall is satisfied on I_b' --> I_b' \models \psi_1\eta_\forall
     if interpretation_b_pre_db.entails(&rule1_vars_exists_eta_forall, &rule1_head_eta_forall) {
@@ -179,7 +185,7 @@ fn check_restr(rule1: &Rule, rule2: &Rule, mu: &AtomMapping, eta: &Substitution)
     // have to make sure that eta_exists takes variables from rule2 to variables of rule1 and not the other way around!!!
     // mu has to be extended if rule2_head under eta is fully contained in I_b'
     let rule2_head_eta =
-        RepresentativeAtom::substitute_atoms(eta, rule2.head()).collect::<HashSet<_>>();
+        RepresentativeAtom::substitute_atoms(eta, &consts, rule2.head()).collect::<HashSet<_>>();
     if interpretation_b_pre_db.contains(&rule2_head_eta) {
         log::trace!("head of rule2 under eta subseteq I_b' => mu must be extended",);
         return CheckResult::Extend;
@@ -189,7 +195,7 @@ fn check_restr(rule1: &Rule, rule2: &Rule, mu: &AtomMapping, eta: &Substitution)
         .substitute_variables(rule1.universals())
         .collect::<HashSet<_>>();
     for n in rule1.negative() {
-        let n = RepresentativeAtom::from_atom_with_substitution(eta, n);
+        let n = RepresentativeAtom::from_atom_with_substitution(eta, &consts, n);
         let existentials = n
             .variables()
             .filter(|v| !r1_universals_eta.contains(v))
@@ -204,7 +210,8 @@ fn check_restr(rule1: &Rule, rule2: &Rule, mu: &AtomMapping, eta: &Substitution)
     #[cfg(debug_assertions)]
     {
         let rule1_head_eta =
-            RepresentativeAtom::substitute_atoms(&eta_forall, rule1.head()).collect::<HashSet<_>>();
+            RepresentativeAtom::substitute_atoms(&eta_forall, &consts, rule1.head())
+                .collect::<HashSet<_>>();
         log::trace!(
             "I_b = I_b' U {}",
             RepresentativeDatabase::display(&rule1_head_eta, Some(&interpretation_b_pre_db))
@@ -226,7 +233,7 @@ pub fn is_restraint_reliance<'b, 'a: 'b>(
     rule2_index: usize,
     previous_opt: Option<&Reliance>,
 ) -> Option<Reliance> {
-    extend_init::<HeadAtom>(
+    extend_init::<Head>(
         mem,
         rule1_index,
         rule2_index,

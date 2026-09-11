@@ -1,9 +1,11 @@
 use rand::Rng;
 
-use super::hypergraph::Hypergraph;
+use super::bitset::BitSet;
+use super::domain::{Domain, Domains};
+use super::hypergraph::{EdgeId, Hypergraph};
 use super::solver::Solver;
 use super::core_solver::CoreSolver;
-use super::domain::Domains;
+use super::tuples::Tuples;
 
 type Graph = Vec<Vec<Vec<usize>>>;
 

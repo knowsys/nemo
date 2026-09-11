@@ -1,73 +1,64 @@
 use std::collections::HashSet;
 
-use crate::execution::selection_strategy::strategy_full_chain_stratification::util::ordered_atoms::GetRuleMem; // should be somewhere else...
-use crate::{
-    execution::planning::normalization::atom::head::HeadAtom,
-    rule_model::components::term::primitive::variable::Variable,
+use crate::execution::selection_strategy::strategy_full_chain_stratification::chain::atoms::{
+    Atom, Rule, Var,
 };
-
-use crate::execution::selection_strategy::strategy_full_chain_stratification::types::Rule;
 
 #[derive(Debug, Clone)]
 pub(crate) struct Piece {
-    pub(crate) existentials: HashSet<Variable>,
-    pub(crate) atoms: Vec<HeadAtom>,
+    pub(crate) existentials: HashSet<Var>,
+    pub(crate) atoms: Vec<Atom>,
 }
 
-impl<'a> GetRuleMem<'a> for Vec<Piece> {
-    /// Decompose the head into pieces.
-    fn compute(rule: &'a mut Rule) -> Vec<Piece> {
-        let vars_exists = rule.existentials();
-        let mut head_pieces = Vec::new();
+/// Decompose `rule`'s head into pieces: maximal groups of head atoms transitively connected via
+/// shared existential variables.
+pub(crate) fn compute_pieces(rule: &Rule) -> Vec<Piece> {
+    let vars_exists = rule.existentials();
+    let mut head_pieces = Vec::new();
 
-        let mut atom_existentials: Vec<(_, _)> = rule
-            .head()
-            .iter()
-            .map(|atom| {
-                (
-                    atom,
-                    atom.variables()
-                        .filter(|var| vars_exists.contains(var))
-                        .collect::<HashSet<_>>(),
-                )
-            })
-            .collect();
+    let mut atom_existentials: Vec<(Atom, HashSet<Var>)> = rule
+        .head()
+        .iter()
+        .map(|atom| {
+            let existentials = atom
+                .variables()
+                .filter(|var| vars_exists.contains(var))
+                .collect::<HashSet<_>>();
+            (atom.clone(), existentials)
+        })
+        .collect();
 
-        while let Some((atom, mut existentials)) = atom_existentials.pop() {
-            let mut head_piece = vec![atom.clone()];
-            if existentials.len() > 0 {
-                let mut remaining = true;
-                while remaining {
-                    let mut removed: Vec<(&HeadAtom, HashSet<&Variable>)> = Vec::new();
-                    atom_existentials.retain(|(other_atom, other_existentials)| {
-                        if !other_existentials.is_disjoint(&existentials) {
-                            removed.push((other_atom, other_existentials.clone()));
-                            false
-                        } else {
-                            true
-                        }
-                    });
-                    remaining = removed.len() > 0;
-                    if remaining {
-                        let (further_atoms, further_existentials): (Vec<_>, Vec<_>) =
-                            removed.into_iter().unzip();
-                        head_piece.extend(further_atoms.into_iter().cloned());
-                        existentials.extend(further_existentials.into_iter().flatten());
+    while let Some((atom, mut existentials)) = atom_existentials.pop() {
+        let mut head_piece = vec![atom];
+        if !existentials.is_empty() {
+            let mut remaining = true;
+            while remaining {
+                let mut removed: Vec<(Atom, HashSet<Var>)> = Vec::new();
+                atom_existentials.retain(|(other_atom, other_existentials)| {
+                    if !other_existentials.is_disjoint(&existentials) {
+                        removed.push((other_atom.clone(), other_existentials.clone()));
+                        false
+                    } else {
+                        true
+                    }
+                });
+                remaining = !removed.is_empty();
+                if remaining {
+                    for (further_atom, further_existentials) in removed {
+                        head_piece.push(further_atom);
+                        existentials.extend(further_existentials);
                     }
                 }
             }
-            head_pieces.push(Piece {
-                existentials: head_piece
-                    .iter()
-                    .flat_map(|atom| atom.variables())
-                    .collect::<HashSet<_>>()
-                    .intersection(&vars_exists)
-                    .copied()
-                    .cloned()
-                    .collect(),
-                atoms: head_piece,
-            });
         }
-        head_pieces
+        head_pieces.push(Piece {
+            existentials: head_piece
+                .iter()
+                .flat_map(|atom| atom.variables())
+                .filter(|v| vars_exists.contains(v))
+                .collect(),
+            atoms: head_piece,
+        });
     }
+    head_pieces
 }

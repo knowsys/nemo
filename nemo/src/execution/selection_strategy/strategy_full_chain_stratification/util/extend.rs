@@ -1,19 +1,16 @@
 use std::collections::HashMap;
 
-use crate::execution::planning::normalization::rule::NormalizedRule;
 use crate::rule_model::components::term::operation::operation_kind::OperationKind;
 
-use crate::execution::selection_strategy::strategy_full_chain_stratification::util::{
-    atom::Atom,
-    ordered_atoms::{GetRuleMem, SortedHeadAtoms, ReorderedAtoms},
-    unify::unify
+use crate::execution::selection_strategy::strategy_full_chain_stratification::chain::atoms::{
+    combined_consts, Atom, Constant, Operation, Rule, Var,
 };
+use crate::execution::selection_strategy::strategy_full_chain_stratification::chain::substitution::Substitution;
 use crate::execution::selection_strategy::strategy_full_chain_stratification::reliance_memoization::RuleMemoization;
-//use crate::execution::planning::normalization::operation::Operation;
-
-use crate::execution::selection_strategy::strategy_full_chain_stratification::types::Substitution;
-use crate::execution::selection_strategy::strategy_full_chain_stratification::types::{
-    Operation, Term,
+use crate::execution::selection_strategy::strategy_full_chain_stratification::util::{
+    atom::AtomsPart,
+    ordered_atoms::{SortedHeadAtoms, reorder_atoms, sorted_head_atoms},
+    unify::unify,
 };
 
 /// maps indices of body/head atoms of the 2nd rule to indices of head atoms of the 1st rule
@@ -25,7 +22,7 @@ impl AtomMapping {
         Self(HashMap::new())
     }
 
-    pub fn mapped<'a, T>(&'a self, domain: &'a Vec<T>) -> impl Iterator<Item = &'a T> + 'a {
+    pub fn mapped<'a, T>(&'a self, domain: &'a [T]) -> impl Iterator<Item = &'a T> + 'a {
         self.0.keys().copied().map(|k| &domain[k])
     }
 
@@ -41,7 +38,7 @@ pub enum CheckResult {
     Reject,
 }
 
-type CheckFn = fn(&NormalizedRule, &NormalizedRule, &AtomMapping, &Substitution) -> CheckResult;
+type CheckFn = fn(&Rule, &Rule, &AtomMapping, &Substitution) -> CheckResult;
 
 #[derive(Debug, Default)]
 pub struct Reliance {
@@ -51,25 +48,29 @@ pub struct Reliance {
 }
 
 // Check whether subset of rule2_part unifies with rule1_head, s.t. the CheckFn accepts.
-pub fn extend_init<'b, 'a: 'b, T: Atom + 'static>(
+pub fn extend_init<'b, 'a: 'b, T: AtomsPart>(
     mem: &'b mut RuleMemoization<'a>,
     rule1_index: usize,
     rule2_index: usize,
     check: CheckFn,
     previous_opt: Option<&Reliance>,
     mut eta: Substitution,
-) -> Option<Reliance>
-where
-    Vec<&'a T>: GetRuleMem<'a>,
-{
+) -> Option<Reliance> {
     let (idx_dom, idx_ran) = match previous_opt {
         Some(Reliance {
             idx_dom, idx_ran, ..
         }) => (*idx_dom, *idx_ran + 1), // look for "next" one
         None => (0, 0),
     };
+
+    mem.rules.ensure(rule1_index);
+    mem.rules.ensure(rule2_index);
     let rule1 = mem.rules.get(rule1_index);
-    let rule2 = mem.rules.get(rule2_index);
+    // Give rule2 a disjoint working copy of its variables (rule1 keeps ids `0..rule1.var_count()`,
+    // rule2's copy gets `rule1.var_count()..`), so the two rules' variables can never collide --
+    // this also correctly handles the self-restraint case where rule1_index == rule2_index.
+    let rule2 = mem.rules.get(rule2_index).prime(rule1.var_count());
+    let rule2 = &rule2;
 
     // initialize the substitution with known constant replacements (possibly from normalization)
     for op in rule1.operations().iter().chain(rule2.operations().iter()) {
@@ -78,21 +79,22 @@ where
             subterms,
         } = op
         {
-            if let [
-                Operation::Primitive(Term::Variable(var)),
-                Operation::Primitive(prim),
-            ] = subterms.as_ref()
-            {
-                eta.insert(var.clone(), prim.clone());
+            if let [Operation::Primitive(var), Operation::Primitive(val)] = subterms.as_ref() {
+                eta.insert(*var, *val);
             }
         }
     }
 
-    extend::<T>(
+    let rule1_head = sorted_head_atoms(rule1);
+    let rule2_part = reorder_atoms(T::atoms(rule2), T::variable_order(rule2));
+    let consts = combined_consts(rule1, rule2);
+
+    extend(
         rule1,
         rule2,
-        mem.sorted_head_atoms.get(mem.normalized_rules, rule1_index),
-        T::reorder(&mut mem.reordered_atoms).get(mem.normalized_rules, rule2_index),
+        &rule1_head,
+        &rule2_part,
+        &consts,
         check,
         &mut AtomMapping::new(),
         eta,
@@ -101,11 +103,13 @@ where
     )
 }
 
-fn extend<T: Atom>(
-    rule1: &NormalizedRule,
-    rule2: &NormalizedRule,
+#[allow(clippy::too_many_arguments)]
+fn extend(
+    rule1: &Rule,
+    rule2: &Rule,
     rule1_head: &SortedHeadAtoms,
-    rule2_part: &ReorderedAtoms<'_, T>,
+    rule2_part: &[Atom],
+    consts: &HashMap<Var, Constant>,
     check: CheckFn,
     mu: &mut AtomMapping,
     eta: Substitution,
@@ -113,14 +117,14 @@ fn extend<T: Atom>(
     idx_ran: usize,
 ) -> Option<Reliance> {
     for i in idx_dom..rule2_part.len() {
-        let atom_i = rule2_part[i];
+        let atom_i = &rule2_part[i];
 
         debug_assert!(
             !mu.0.contains_key(&i),
             "extend tried to change previous mapping"
         );
 
-        let (ran_start, ran_end) = match rule1_head.ranges.get(&atom_i.pred()).copied() {
+        let (ran_start, ran_end) = match rule1_head.ranges.get(&atom_i.predicate()).copied() {
             Some((start, end)) => (
                 if i == idx_dom && idx_ran > start {
                     idx_ran
@@ -133,10 +137,15 @@ fn extend<T: Atom>(
         };
 
         for j in ran_start..ran_end {
-            let atom_j = rule1_head.sorted_atoms[j];
+            let atom_j = &rule1_head.sorted_atoms[j];
 
-            // prefer mapping variables of rule1 to variables of rule2
-            if let Some(eta) = unify(atom_j.terms(), atom_i.primitives(), eta.clone()) {
+            // prefer mapping variables of rule2 onto variables of rule1
+            if let Some(eta) = unify(
+                atom_j.terms().iter().copied(),
+                atom_i.terms().iter().copied(),
+                consts,
+                eta.clone(),
+            ) {
                 mu.0.insert(i, j);
                 match check(rule1, rule2, mu, &eta) {
                     CheckResult::Accept => {
@@ -152,6 +161,7 @@ fn extend<T: Atom>(
                             rule2,
                             rule1_head,
                             rule2_part,
+                            consts,
                             check,
                             mu,
                             eta,

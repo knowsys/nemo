@@ -1,14 +1,17 @@
 use std::collections::HashSet;
 
-use crate::execution::planning::normalization::atom::body::BodyAtom;
-use crate::execution::selection_strategy::strategy_full_chain_stratification::util::atom::Atom;
+use crate::execution::selection_strategy::strategy_full_chain_stratification::chain::atoms::{
+    Rule, combined_consts,
+};
+use crate::execution::selection_strategy::strategy_full_chain_stratification::chain::substitution::Substitution;
+use crate::execution::selection_strategy::strategy_full_chain_stratification::util::atom::Positive;
 
 use crate::execution::selection_strategy::strategy_full_chain_stratification::reliance_memoization::RuleMemoization;
-use crate::execution::selection_strategy::strategy_full_chain_stratification::util::extend::{AtomMapping, CheckResult, Reliance, extend_init};
-use crate::execution::selection_strategy::strategy_full_chain_stratification::util::database::{RepresentativeDatabase, RepresentativeAtom};
-
-use crate::execution::selection_strategy::strategy_full_chain_stratification::types::{
-    Rule, Substitution,
+use crate::execution::selection_strategy::strategy_full_chain_stratification::util::database::{
+    RepresentativeAtom, RepresentativeDatabase,
+};
+use crate::execution::selection_strategy::strategy_full_chain_stratification::util::extend::{
+    AtomMapping, CheckResult, Reliance, extend_init,
 };
 
 pub(super) fn check_posr(
@@ -17,10 +20,12 @@ pub(super) fn check_posr(
     mu: &AtomMapping,
     eta: &Substitution,
 ) -> CheckResult {
+    let consts = combined_consts(rule1, rule2);
+
     let r1_existentials = rule1.existentials();
 
     // mu failed if eta assigned a variable in rule1.body to an existential
-    if r1_existentials.iter().any(|v| eta.contains_variable(*v)) {
+    if r1_existentials.iter().any(|&v| eta.contains_variable(v)) {
         log::trace!("existential of rule1 mapped");
         return CheckResult::Reject;
     }
@@ -35,7 +40,7 @@ pub(super) fn check_posr(
         return CheckResult::Reject;
     }
 
-    let rule2_body_mapped_set = mu.mapped(&rule2.positive()).collect::<HashSet<_>>();
+    let rule2_body_mapped_set = mu.mapped(rule2.positive()).collect::<HashSet<_>>();
 
     let mu_maxidx = mu.maxidx();
 
@@ -84,10 +89,11 @@ pub(super) fn check_posr(
     }
 
     let rule1_body_eta =
-        RepresentativeAtom::substitute_atoms(eta, rule1.positive()).collect::<HashSet<_>>();
+        RepresentativeAtom::substitute_atoms(eta, &consts, rule1.positive()).collect::<HashSet<_>>();
 
     let rule2_body_unmapped_eta = RepresentativeAtom::substitute_atoms(
         eta,
+        &consts,
         rule2
             .positive()
             .iter()
@@ -113,14 +119,14 @@ pub(super) fn check_posr(
 
     // mu has to be extended if rule1 under eta is satisfied on I_a
     let rule1_head_eta =
-        RepresentativeAtom::substitute_atoms(eta, rule1.head()).collect::<HashSet<_>>();
+        RepresentativeAtom::substitute_atoms(eta, &consts, rule1.head()).collect::<HashSet<_>>();
     if interpretation_a_db.entails(&r1_existentials, &rule1_head_eta) {
         log::trace!("I_a models the head of rule1 under eta => mu must be extended");
         return CheckResult::Extend;
     }
 
     let rule2_body_eta =
-        RepresentativeAtom::substitute_atoms(eta, rule2.positive()).collect::<HashSet<_>>();
+        RepresentativeAtom::substitute_atoms(eta, &consts, rule2.positive()).collect::<HashSet<_>>();
 
     // mu has to be extended if rule2_body under eta is fully contained in I_a
     if interpretation_a_db.contains(&rule2_body_eta) {
@@ -138,7 +144,7 @@ pub(super) fn check_posr(
     // mu has failed if rule2 under eta is satisfied in I_b
     let r2_existentials = eta.substitute_variables(rule2.existentials()).collect();
     let rule2_head_eta =
-        RepresentativeAtom::substitute_atoms(eta, rule2.head()).collect::<HashSet<_>>();
+        RepresentativeAtom::substitute_atoms(eta, &consts, rule2.head()).collect::<HashSet<_>>();
     if interpretation_b_db.entails(&r2_existentials, &rule2_head_eta) {
         log::trace!("I_b models head of rule2 under eta => mu failed");
         return CheckResult::Reject;
@@ -148,7 +154,7 @@ pub(super) fn check_posr(
         .substitute_variables(rule2.universals())
         .collect::<HashSet<_>>();
     for n in rule2.negative() {
-        let n = RepresentativeAtom::from_atom_with_substitution(eta, n);
+        let n = RepresentativeAtom::from_atom_with_substitution(eta, &consts, n);
         let existentials = n
             .variables()
             .filter(|v| !r2_universals_eta.contains(v))
@@ -169,10 +175,7 @@ pub fn is_positive_reliance<'b, 'a: 'b>(
     rule2_index: usize,
     previous_opt: Option<&Reliance>,
 ) -> Option<Reliance> {
-    if mem.normalized_rules.len() == 2 {
-        panic!("{:#?}", mem.normalized_rules);
-    }
-    extend_init::<BodyAtom>(
+    extend_init::<Positive>(
         mem,
         rule1_index,
         rule2_index,

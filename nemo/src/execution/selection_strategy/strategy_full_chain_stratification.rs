@@ -21,10 +21,8 @@ mod reliances {
 }
 mod reliance_memoization;
 
-mod types;
-
 mod chain {
-    mod atoms;
+    pub(crate) mod atoms;
     mod bitset;
     mod chain_rule;
     mod constraint;
@@ -32,9 +30,10 @@ mod chain {
     mod domain;
     mod hypergraph;
     mod relation;
+    pub(crate) mod substitution;
     mod solver;
     mod trail;
-    mod tuples;
+    pub(crate) mod tuples;
 
     #[cfg(test)]
     mod test;
@@ -43,9 +42,10 @@ mod chain {
 use std::collections::{HashMap, HashSet};
 
 use crate::execution::planning::normalization::rule::NormalizedRule;
-use crate::execution::selection_strategy::strategy_full_chain_stratification::{
-    reliance_memoization::RelianceMemoization, util::atom::Predicate,
-};
+use crate::execution::selection_strategy::strategy_full_chain_stratification::reliance_memoization::RelianceMemoization;
+
+/// A predicate name, used locally to group rules by which predicates they mention.
+type Predicate = String;
 
 use super::strategy::{RuleSelectionStrategy, SelectionStrategyError};
 

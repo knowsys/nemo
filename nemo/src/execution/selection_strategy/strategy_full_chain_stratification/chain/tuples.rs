@@ -1,5 +1,5 @@
 pub struct Tuples {
-    arity: usize,
+    pub(super) arity: usize,
     /// flat tuple storage
     /// lexicographically sorted; set-semantics
     pub(super) data: Vec<usize>,
@@ -67,7 +67,7 @@ impl std::ops::IndexMut<usize> for Tuples {
     }
 }
 
-struct TuplesIter<'a> {
+pub(super) struct TuplesIter<'a> {
     rel: &'a Tuples,
     i: usize,
 }

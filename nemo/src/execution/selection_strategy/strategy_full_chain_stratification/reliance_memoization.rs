@@ -2,6 +2,9 @@ use std::collections::HashMap;
 
 use crate::execution::planning::normalization::rule::NormalizedRule;
 
+use crate::execution::selection_strategy::strategy_full_chain_stratification::chain::atoms::{
+    ComponentMap, Rule,
+};
 use crate::execution::selection_strategy::strategy_full_chain_stratification::reliances::{
     aggr::is_aggregation_reliance, negr::is_negation_reliance, posr::is_positive_reliance,
     restr::is_restraint_reliance, self_restr::is_self_restraint_reliance,
@@ -10,19 +13,15 @@ use crate::execution::selection_strategy::strategy_full_chain_stratification::ut
 use crate::execution::selection_strategy::strategy_full_chain_stratification::util::{
     encode::{RuleEncoding, encode_rule, encode_rule_pair},
     extend::Reliance,
-    ordered_atoms::{Mem, ReorderAtoms, SortedHeadAtoms},
+    ordered_atoms::Mem,
 };
-use crate::execution::selection_strategy::strategy_full_chain_stratification::{EdgeLabel, types};
+use crate::execution::selection_strategy::strategy_full_chain_stratification::EdgeLabel;
 
 use nemo_physical::datavalues::AnyDataValue;
 
 use strum::EnumCount;
 
-use crate::execution::selection_strategy::strategy_full_chain_stratification::types::ComponentMap;
-
 use crate::rule_model::components::tag::Tag;
-
-use crate::rule_model::components::term::primitive::variable::Variable as OrigVariable;
 
 #[derive(Default, Debug)]
 enum Progress<T> {
@@ -55,13 +54,14 @@ impl<T> Progress<T> {
 ///   Progress::Complete(vec![mu1,mu2]) --> found reliance of this type with multiple possible AtomMappings (relevant for chain computations)
 type Reliances = [Progress<Vec<Reliance>>; EdgeLabel::COUNT];
 
+/// Lazily converts and caches [NormalizedRule]s into the simplified [Rule] representation.
 #[derive(Debug)]
 pub struct Rules<'a> {
     pub normalized_rules: &'a Vec<&'a NormalizedRule>,
 
     pred_map: ComponentMap<Tag>,
     const_map: ComponentMap<AnyDataValue>,
-    rules: Vec<Option<(types::Rule, ComponentMap<OrigVariable>)>>,
+    rules: Vec<Option<Rule>>,
 }
 
 impl<'a> Rules<'a> {
@@ -71,12 +71,35 @@ impl<'a> Rules<'a> {
 
             pred_map: ComponentMap::new(),
             const_map: ComponentMap::new(),
-            rules: vec![None; normalized_rules.len()],
+            rules: (0..normalized_rules.len()).map(|_| None).collect(),
         }
     }
 
-    pub fn get(&mut self, rule_index: usize) -> types::Rule {
-        self.rules.get_or_insert_with(|| types::Rule::from_normalized_rule(&mut self.pred_map, &mut self.const_map, self.normalized_rules[rule_index]))
+    /// Ensure the rule at `rule_index` has been converted and cached.
+    pub fn ensure(&mut self, rule_index: usize) {
+        if self.rules[rule_index].is_none() {
+            let Self {
+                rules,
+                pred_map,
+                const_map,
+                normalized_rules,
+            } = self;
+            rules[rule_index] = Some(Rule::from_normalized_rule(
+                pred_map,
+                const_map,
+                normalized_rules[rule_index],
+            ));
+        }
+    }
+
+    /// Get the (already-converted) rule at `rule_index`.
+    ///
+    /// # Panics
+    /// Panics if [Self::ensure] has not been called for this index yet.
+    pub fn get(&self, rule_index: usize) -> &Rule {
+        self.rules[rule_index]
+            .as_ref()
+            .expect("rule should have been converted via `ensure`")
     }
 }
 
@@ -86,8 +109,6 @@ pub struct RuleMemoization<'a> {
 
     // these fields memoize auxiliary per-rule data
     // uses `Vec<Option<X>>` (initialized to `vec![None; rules.len()]`) instead of `HashMap<usize,X>`
-    pub reordered_atoms: ReorderAtoms<'a>,
-    pub sorted_head_atoms: Mem<SortedHeadAtoms<'a>>,
     pub head_pieces: Mem<Vec<Piece>>,
     encoded_rules: Vec<Option<RuleEncoding>>,
 }
@@ -97,12 +118,6 @@ impl<'a> RuleMemoization<'a> {
         let len = normalized_rules.len();
         Self {
             rules: Rules::new(normalized_rules),
-            reordered_atoms: ReorderAtoms {
-                reordered_body_atoms: Mem::new(len),
-                reordered_negative_body_atoms: Mem::new(len),
-                reordered_head_atoms: Mem::new(len),
-            },
-            sorted_head_atoms: Mem::new(len),
             head_pieces: Mem::new(len),
             encoded_rules: vec![None; len],
         }
@@ -140,8 +155,10 @@ impl<'a> RelianceMemoization<'a> {
     where
         'a: 'b,
     {
-        let rule1 = &self.data.rules.get(rule1_index);
-        let rule2 = &self.data.rules.get(rule2_index);
+        self.data.rules.ensure(rule1_index);
+        self.data.rules.ensure(rule2_index);
+        let rule1 = self.data.rules.get(rule1_index);
+        let rule2 = self.data.rules.get(rule2_index);
         let reliances_index = *self
             .reliances_edge_map
             .entry((rule1_index, rule2_index))

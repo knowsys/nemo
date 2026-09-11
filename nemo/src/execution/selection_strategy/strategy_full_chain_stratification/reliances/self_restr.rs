@@ -1,26 +1,28 @@
 use std::collections::HashSet;
 
-use crate::execution::planning::normalization::atom::body::BodyAtom;
-use crate::execution::planning::normalization::atom::head::HeadAtom;
+use crate::execution::selection_strategy::strategy_full_chain_stratification::chain::atoms::{
+    Rule, combined_consts,
+};
+use crate::execution::selection_strategy::strategy_full_chain_stratification::chain::substitution::Substitution;
+use crate::execution::selection_strategy::strategy_full_chain_stratification::util::atom::Head;
 use crate::execution::selection_strategy::strategy_full_chain_stratification::util::database::{
     RepresentativeAtom, RepresentativeDatabase,
 };
-use crate::rule_model::components::term::Term;
-use crate::rule_model::components::term::primitive::Primitive;
+use crate::execution::selection_strategy::strategy_full_chain_stratification::util::pieces::compute_pieces;
 
 use crate::execution::selection_strategy::strategy_full_chain_stratification::reliance_memoization::RuleMemoization;
-use crate::execution::selection_strategy::strategy_full_chain_stratification::util::extend::{AtomMapping, CheckResult, Reliance, extend_init};
-
-use crate::execution::selection_strategy::strategy_full_chain_stratification::types::{
-    Rule, Substitution,
+use crate::execution::selection_strategy::strategy_full_chain_stratification::util::extend::{
+    AtomMapping, CheckResult, Reliance, extend_init,
 };
 
 fn check_self_restr(
     rule: &Rule,
-    _rule: &Rule,
+    rule2: &Rule,
     mu: &AtomMapping,
     eta: &Substitution,
 ) -> CheckResult {
+    let consts = combined_consts(rule, rule2);
+
     let r_universals = rule.universals();
     let r_existentials = rule.existentials();
     let eta_forall = eta.restriction(&r_universals);
@@ -53,10 +55,11 @@ fn check_self_restr(
     }
 
     let rule_body_eta_cup_rule_head_unmapped_eta =
-        RepresentativeAtom::substitute_atoms(eta, rule.positive())
+        RepresentativeAtom::substitute_atoms(eta, &consts, rule.positive())
             .into_iter()
             .chain(RepresentativeAtom::substitute_atoms(
                 eta,
+                &consts,
                 rule_head_unmapped.iter().copied(),
             ))
             .collect::<Vec<_>>();
@@ -70,17 +73,18 @@ fn check_self_restr(
 
     // mu has to be extended if rule under eta_forall is satisfied on I'
     let rule_head_eta_forall =
-        RepresentativeAtom::substitute_atoms(&eta_forall, rule.head()).collect::<HashSet<_>>();
+        RepresentativeAtom::substitute_atoms(&eta_forall, &consts, rule.head())
+            .collect::<HashSet<_>>();
     if interpretation_pre_db.entails(&r_existentials, &rule_head_eta_forall) {
         log::trace!("I' models the head under eta_forall => mu must be extended");
         return CheckResult::Extend;
     }
 
     let r_universals_eta = eta
-        .substitute_variables(r_universals)
+        .substitute_variables(r_universals.iter().copied())
         .collect::<HashSet<_>>();
     for n in rule.negative() {
-        let n = RepresentativeAtom::from_atom_with_substitution(eta, n);
+        let n = RepresentativeAtom::from_atom_with_substitution(eta, &consts, n);
         let existentials = n
             .variables()
             .filter(|v| !r_universals_eta.contains(v))
@@ -97,16 +101,18 @@ fn check_self_restr(
         .substitute_variables(rule_head_unmapped.iter().flat_map(|a| a.variables()))
         .collect::<HashSet<_>>();
     let used_existentials = rule_head_unmapped_vars_eta.intersection(&r_existentials); // existential variables that are already used
-    let fresh_existentials = Substitution::new(used_existentials.map(|v| {
-        (
-            Primitive::Variable((*v).clone()),
-            Term::Primitive(todo!("v.prime()")),
-        )
-    }));
-    // todo change everything to PrimedVariables !!!
-    let rule_head_eta_forall_fresh_existentials =
-        RepresentativeAtom::substitute_atoms(&fresh_existentials.compose(&eta_forall), rule.head())
-            .collect::<HashSet<_>>();
+    // fresh variable ids, disjoint from both rule's (0..n) and its primed copy's (n..2n) ranges
+    let base_fresh = rule.var_count() + rule2.var_count();
+    let mut fresh_existentials = Substitution::new();
+    for (i, &v) in used_existentials.enumerate() {
+        fresh_existentials.insert(v, base_fresh + i);
+    }
+    let rule_head_eta_forall_fresh_existentials = RepresentativeAtom::substitute_atoms(
+        &fresh_existentials.compose(&eta_forall),
+        &consts,
+        rule.head(),
+    )
+    .collect::<HashSet<_>>();
     log::trace!(
         "I = I' U {}",
         RepresentativeDatabase::display(
@@ -125,7 +131,8 @@ fn check_self_restr(
     //   concluding ρ ≺☐ ρ now would be wrong, so check containment of { q(X,Y,Y) }
     // Note: The prior VLog implementation handled this case by ensuring that `unify` returns specific mappings,
     //       and then forbidding that existantials map to universals.
-    let r_head_eta = RepresentativeAtom::substitute_atoms(eta, rule.head()).collect::<HashSet<_>>();
+    let r_head_eta =
+        RepresentativeAtom::substitute_atoms(eta, &consts, rule.head()).collect::<HashSet<_>>();
     if !interpretation_db.contains(&r_head_eta) {
         log::trace!("alternative match is not contained...");
         return CheckResult::Extend;
@@ -140,33 +147,18 @@ pub fn is_self_restraint_reliance<'b, 'a: 'b>(
     rule_index: usize,
     previous_opt: Option<&Reliance>,
 ) -> Option<Reliance> {
-    let rule = mem.normalized_rules[rule_index];
+    mem.rules.ensure(rule_index);
+    let rule = mem.rules.get(rule_index);
 
     // assuming the rule is not datalog, it has a trivial self-restraint if there are head atoms w/o existentials
-    debug_assert!(
-        !rule.is_datalog(),
-        "self-restraint checks should not be called on datalog rules"
-    );
+    let universals = rule.universals();
     if rule.head().iter().any(|atom| {
-        let not_contained_in_body = if let Some(body_terms) = atom
-            .terms()
-            .map(|t| match t {
-                Primitive::Variable(var) => Some(var.clone()),
-                _ => None,
-            })
-            .collect::<Option<Vec<_>>>()
-        {
-            !rule
-                .positive()
-                .contains(&BodyAtom::new(atom.predicate(), body_terms.into_iter()))
-        } else {
-            true
-        };
+        let not_contained_in_body = !rule.positive().contains(atom);
         not_contained_in_body
-            && atom.terms().all(|arg| match arg {
-                Primitive::Variable(var) => rule.universals().contains(var),
-                _ => true,
-            })
+            && atom
+                .terms()
+                .iter()
+                .all(|t| rule.consts().contains_key(t) || universals.contains(t))
     }) {
         log::trace!("non-datalog rule with datalog pieces => trivially self-restraining");
         return Some(Reliance::default());
@@ -175,18 +167,21 @@ pub fn is_self_restraint_reliance<'b, 'a: 'b>(
     // trivial self-restraint,
     // if there are multiple pieces and there is an existential piece,
     // s.t. the entire head is not entailed when it is satisfied
-    let pp = mem.head_pieces.get(mem.normalized_rules, rule_index);
+    let pp = mem
+        .head_pieces
+        .get_or_insert_with(rule_index, || compute_pieces(rule));
     if pp.len() > 1 {
+        let identity = Substitution::new();
         for p in pp {
-            if p.existentials.len() == 0 {
+            if p.existentials.is_empty() {
                 // skip datalog pieces
                 continue;
             }
             let rule_body_cup_rule_head_unmapped = rule
                 .positive()
                 .iter()
-                .map(|a| RepresentativeAtom::from(a))
-                .chain(p.atoms.iter().map(|a| a.into()))
+                .chain(p.atoms.iter())
+                .map(|a| RepresentativeAtom::from_atom_with_substitution(&identity, rule.consts(), a))
                 .collect::<HashSet<_>>();
             log::trace!(
                 "I' = {}",
@@ -194,7 +189,11 @@ pub fn is_self_restraint_reliance<'b, 'a: 'b>(
             );
             let interpretation_pre_db =
                 RepresentativeDatabase::new(&rule_body_cup_rule_head_unmapped);
-            let rule_head = rule.head().iter().map(|a| a.into()).collect::<HashSet<_>>();
+            let rule_head = rule
+                .head()
+                .iter()
+                .map(|a| RepresentativeAtom::from_atom_with_substitution(&identity, rule.consts(), a))
+                .collect::<HashSet<_>>();
             if !interpretation_pre_db.entails(&rule.existentials(), &rule_head) {
                 log::trace!("found problem piece");
                 return Some(Reliance::default());
@@ -203,7 +202,7 @@ pub fn is_self_restraint_reliance<'b, 'a: 'b>(
     }
     // NOTE: with this pre-check, we know that identity atom mappings do not need to be considered any more
 
-    extend_init::<HeadAtom>(
+    extend_init::<Head>(
         mem,
         rule_index,
         rule_index,

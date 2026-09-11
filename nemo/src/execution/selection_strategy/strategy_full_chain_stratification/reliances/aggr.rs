@@ -1,11 +1,15 @@
-use crate::execution::planning::normalization::atom::body::BodyAtom;
+use crate::execution::selection_strategy::strategy_full_chain_stratification::chain::atoms::combined_consts;
+use crate::execution::selection_strategy::strategy_full_chain_stratification::chain::substitution::Substitution;
+use crate::execution::selection_strategy::strategy_full_chain_stratification::util::atom::Positive;
 use crate::execution::selection_strategy::strategy_full_chain_stratification::util::unify::unify;
-use crate::rule_model::components::term::primitive::Primitive;
-use crate::rule_model::substitution::Substitution;
 
 use crate::execution::selection_strategy::strategy_full_chain_stratification::reliance_memoization::RuleMemoization;
-use crate::execution::selection_strategy::strategy_full_chain_stratification::util::extend::{Reliance, extend_init};
-use crate::execution::selection_strategy::strategy_full_chain_stratification::reliances::posr::{is_positive_reliance, check_posr};
+use crate::execution::selection_strategy::strategy_full_chain_stratification::reliances::posr::{
+    check_posr, is_positive_reliance,
+};
+use crate::execution::selection_strategy::strategy_full_chain_stratification::util::extend::{
+    Reliance, extend_init,
+};
 
 pub fn is_aggregation_reliance<'b, 'a: 'b>(
     mem: &'b mut RuleMemoization<'a>,
@@ -13,35 +17,30 @@ pub fn is_aggregation_reliance<'b, 'a: 'b>(
     rule2_index: usize,
     previous_opt: Option<&Reliance>,
 ) -> Option<Reliance> {
-    let rule1 = mem.normalized_rules[rule1_index];
-    let rule2 = mem.normalized_rules[rule2_index];
-    debug_assert!(
-        rule2.contains_aggregates(),
-        "aggregation reliance checks should not be called with aggregate-free target rules",
-    );
+    mem.rules.ensure(rule1_index);
+    mem.rules.ensure(rule2_index);
+    let rule1 = mem.rules.get(rule1_index);
+    let rule2 = mem.rules.get(rule2_index).prime(rule1.var_count());
+
     let have_same_heads = rule1.head() == rule2.head();
 
     if have_same_heads {
-        let terms_a = rule1
-            .aggregate()
-            .expect("should have aggregate")
-            .group_by_variables()
-            .iter()
-            .map(|v| Primitive::Variable(v.clone()));
-        let terms_b = rule2
-            .aggregate()
-            .expect("should have aggregate")
-            .group_by_variables()
-            .iter()
-            .map(|v| Primitive::Variable(v.clone()));
-
         log::trace!("check that group-by variables are unifiable");
-        let eta = unify(terms_a, terms_b, Substitution::default())?;
+        // NOTE: this codebase does not yet model aggregates on the new `Rule` representation, so
+        // group-by unification degenerates to head unification here (falling straight through to
+        // a check for positive reliance, same as the "heads differ" case below).
+        let consts = combined_consts(rule1, &rule2);
+        let eta = unify(
+            rule1.head().iter().flat_map(|a| a.terms().iter().copied()),
+            rule2.head().iter().flat_map(|a| a.terms().iter().copied()),
+            &consts,
+            Substitution::default(),
+        )?;
 
         log::trace!(
             "test for positive reliance when unifying the group-by variables in the aggregate atoms"
         );
-        return extend_init::<BodyAtom>(
+        return extend_init::<Positive>(
             mem,
             rule1_index,
             rule2_index,
@@ -52,5 +51,5 @@ pub fn is_aggregation_reliance<'b, 'a: 'b>(
     }
 
     log::trace!("heads of rule1 and rule2 differ => check for normal positive reliance");
-    is_positive_reliance(mem, rule1_index, rule1_index, previous_opt)
+    is_positive_reliance(mem, rule1_index, rule2_index, previous_opt)
 }

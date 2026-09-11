@@ -1,144 +1,72 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::execution::planning::analysis::variable_order::{
-    VariableOrder, build_preferable_variable_orders_for_rule,
-};
-use crate::execution::planning::normalization::{
-    atom::{
-        body::{BodyAtom, NegBodyAtom},
-        head::HeadAtom,
-    },
-    rule::NormalizedRule,
-};
-use crate::rule_model::components::{tag::Tag, term::primitive::Primitive};
-
-use crate::execution::selection_strategy::strategy_full_chain_stratification::util::atom::{
-    Atom, Predicate,
+use crate::execution::selection_strategy::strategy_full_chain_stratification::chain::atoms::{
+    Atom, Predicate, Rule, Var,
 };
 
-use crate::execution::selection_strategy::strategy_full_chain_stratification::types::Rule;
-use crate::execution::selection_strategy::strategy_full_chain_stratification::reliance_memoization::Rules;
-
-pub type ReorderedAtoms<'a, T> = Vec<&'a T>;
-pub type ReorderedBodyAtoms<'a> = ReorderedAtoms<'a, BodyAtom>;
-pub type ReorderedNegBodyAtoms<'a> = ReorderedAtoms<'a, NegBodyAtom>;
-pub type ReorderedHeadAtoms<'a> = ReorderedAtoms<'a, HeadAtom>;
-
+/// A simple `Vec<Option<T>>`-backed per-rule-index cache.
 #[derive(Debug)]
 pub struct Mem<T>(Vec<Option<T>>);
 
-impl<T: Clone> Mem<T> {
+impl<T> Mem<T> {
     pub fn new(len: usize) -> Self {
-        Self(vec![None; len])
+        Self((0..len).map(|_| None).collect())
+    }
+
+    pub fn get_or_insert_with(&mut self, index: usize, f: impl FnOnce() -> T) -> &T {
+        self.0[index].get_or_insert_with(f)
     }
 }
 
-pub trait GetRuleMem<'a> {
-    fn compute(rule: &'a mut Rule) -> Self;
-}
-
-impl<'a, T: GetRuleMem<'a>> Mem<T> {
-    pub fn get(&mut self, rules: &'a mut Rules<'a>, rule_index: usize) -> &T {
-        self.0[rule_index].get_or_insert_with(|| T::compute(&rules.get(rule_index)))
-    }
-}
-
-fn reorder_atoms<'a, T: Atom>(
-    atoms: impl IntoIterator<Item = &'a T>,
-    order: &VariableOrder,
-) -> ReorderedAtoms<'a, T> {
-    let mut atoms: Vec<_> = atoms.into_iter().collect();
+/// Reorder `atoms` so that, scanning left-to-right through `order`, every atom becomes eligible
+/// (all its variables known) as early as possible. Mirrors the join-order heuristic used
+/// elsewhere for query planning, just applied to pick a good order to extend an atom mapping in.
+pub(crate) fn reorder_atoms(atoms: &[Atom], order: &[Var]) -> Vec<Atom> {
+    let mut atoms: Vec<Atom> = atoms.to_vec();
     let mut reordered = Vec::with_capacity(atoms.len());
-    let mut vars_so_far = HashSet::new();
-    for v in order.iter() {
+    let mut vars_so_far: HashSet<Var> = HashSet::new();
+
+    for &v in order {
         vars_so_far.insert(v);
-        // find all atoms which only use variables from vars_so_far
-        let (only_active_vars, remainder): (Vec<_>, Vec<_>) = atoms
+        let (ready, remainder): (Vec<_>, Vec<_>) = atoms
             .into_iter()
-            .partition(|atom| atom.variables().all(|var| vars_so_far.contains(var)));
-        reordered.extend_from_slice(&only_active_vars);
+            .partition(|atom| atom.variables().all(|var| vars_so_far.contains(&var)));
+        reordered.extend(ready);
         atoms = remainder;
     }
+    // any atoms whose variables weren't all covered by `order` keep their original relative order
+    reordered.extend(atoms);
+
     reordered
 }
 
-impl<'a> GetRuleMem<'a> for ReorderedBodyAtoms<'a> {
-    /// Reorder body atoms.
-    /// to be applied to body / head of rule2 before calling extend
-    /// maybe reuse Nemo's heuristic for join order?
-    /// use NormalizeRule::variable_order --> should be Some
-    fn compute(rule: &'a mut Rule) -> ReorderedBodyAtoms<'a> {
-        reorder_atoms(rule.positive(), rule.body_variable_order())
-    }
-}
-
-impl<'a> GetRuleMem<'a> for ReorderedNegBodyAtoms<'a> {
-    /// Reorder negative body atoms.
-    /// Such a variable order has not been computed anwhere else, as negative atoms don't partake in joins, so we just apply the heuristic manually.
-    fn compute(rule: &'a mut Rule) -> ReorderedNegBodyAtoms<'a> {
-        fn construct_auxiliary_negation_rule(rule: &Rule) -> Rule {
-            let mut universal_variables = rule
-                .negative()
-                .flat_map(|atom| atom.terms())
-                .collect::<Vec<_>>();
-            universal_variables.dedup();
-
-            let head = HeadAtom::new(
-                Tag::new(String::from("__AUX")),
-                universal_variables
-                    .into_iter()
-                    .cloned()
-                    .map(Primitive::from),
-            );
-
-            NormalizedRule::positive_rule(vec![head], rule.negative().cloned().collect(), vec![])
-        }
-
-        let auxiliary_rule = construct_auxiliary_negation_rule(rule);
-        let auxiliary_order = build_preferable_variable_orders_for_rule(&auxiliary_rule, None)
-            .restrict_to(&rule.variables().cloned().collect::<HashSet<_>>());
-
-        reorder_atoms(rule.negative_atoms(), &auxiliary_order)
-    }
-}
-
-impl<'a> GetRuleMem<'a> for ReorderedHeadAtoms<'a> {
-    /// Reorder head atoms.
-    fn compute(rule: &'a mut Rule) -> ReorderedHeadAtoms<'a> {
-        reorder_atoms(rule.head(), rule.head_variable_order())
-    }
-}
-
-#[derive(Debug)]
-pub(crate) struct ReorderAtoms<'a> {
-    pub(crate) reordered_body_atoms: Mem<ReorderedBodyAtoms<'a>>,
-    pub(crate) reordered_negative_body_atoms: Mem<ReorderedNegBodyAtoms<'a>>,
-    pub(crate) reordered_head_atoms: Mem<ReorderedHeadAtoms<'a>>,
-}
-
 #[derive(Clone, Debug)]
-pub(crate) struct SortedHeadAtoms<'a> {
-    pub(crate) sorted_atoms: ReorderedHeadAtoms<'a>,
+pub(crate) struct SortedHeadAtoms {
+    pub(crate) sorted_atoms: Vec<Atom>,
     pub(crate) ranges: HashMap<Predicate, (usize, usize)>,
 }
 
-impl<'a> GetRuleMem<'a> for SortedHeadAtoms<'a> {
-    /// to be applied to head of rule1 before calling extend
-    fn compute(rule: &'a mut Rule) -> SortedHeadAtoms<'a> {
-        let mut sorted_atoms: Vec<_> = rule.head().iter().collect();
-        sorted_atoms.sort_unstable_by_key(|atom| atom.predicate());
-        let mut ranges = HashMap::new();
-        let mut last = 0;
-        for i in 1..sorted_atoms.len() {
-            let p = sorted_atoms[i - 1].predicate();
-            if &p != &sorted_atoms[i].predicate() {
-                ranges.insert(p.name().to_string(), (last, i));
-                last = i;
-            }
+/// Sort `rule`'s head atoms by predicate, and record the `[start, end)` range each predicate
+/// occupies (to be applied to the head of rule1 before calling `extend`).
+pub(crate) fn sorted_head_atoms(rule: &Rule) -> SortedHeadAtoms {
+    let mut sorted_atoms: Vec<Atom> = rule.head().to_vec();
+    sorted_atoms.sort_unstable_by_key(|atom| atom.predicate().0);
+
+    let mut ranges = HashMap::new();
+    let mut last = 0;
+    for i in 1..sorted_atoms.len() {
+        let p = sorted_atoms[i - 1].predicate();
+        if p != sorted_atoms[i].predicate() {
+            ranges.insert(p, (last, i));
+            last = i;
         }
-        SortedHeadAtoms {
-            sorted_atoms,
-            ranges,
-        }
+    }
+    if let Some(last_atom) = sorted_atoms.last() {
+        ranges.insert(last_atom.predicate(), (last, sorted_atoms.len()));
+    }
+
+    SortedHeadAtoms {
+        sorted_atoms,
+        ranges,
     }
 }

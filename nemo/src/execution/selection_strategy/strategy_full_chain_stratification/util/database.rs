@@ -1,122 +1,133 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::execution::selection_strategy::strategy_full_chain_stratification::util::atom::{
-    Atom, Predicate,
+use crate::execution::selection_strategy::strategy_full_chain_stratification::chain::atoms::{
+    Atom, Constant, Predicate, Var,
 };
-use crate::rule_model::{
-    components::term::primitive::{Primitive, variable::Variable},
-};
+use crate::execution::selection_strategy::strategy_full_chain_stratification::chain::substitution::Substitution;
 
-use crate::execution::selection_strategy::strategy_full_chain_stratification::types::Substitution;
+/// The resolved value of a term slot: either it turned out to be bound to a constant, or it is
+/// still a (possibly still-free) variable.
+#[derive(Eq, PartialEq, Hash, Debug, Clone, Copy)]
+pub(crate) enum Value {
+    Constant(Constant),
+    Variable(Var),
+}
 
-#[derive(Eq, PartialEq, Hash, Debug)]
-pub struct RepresentativeAtom {
+#[derive(Eq, PartialEq, Hash, Debug, Clone)]
+pub(crate) struct RepresentativeAtom {
     predicate: Predicate,
-    primitives: Vec<Primitive>,
+    values: Vec<Value>,
 }
 
 impl RepresentativeAtom {
-    pub fn predicate(&self) -> &Predicate {
-        &self.predicate
+    pub(crate) fn predicate(&self) -> Predicate {
+        self.predicate
     }
-    pub fn primitives(&self) -> &Vec<Primitive> {
-        &self.primitives
+
+    pub(crate) fn values(&self) -> &[Value] {
+        &self.values
     }
-    pub fn variables(&self) -> impl Iterator<Item = &Variable> {
-        self.primitives().into_iter().filter_map(|prim| match prim {
-            Primitive::Variable(variable) => Some(variable),
-            Primitive::Ground(_) => None,
+
+    pub(crate) fn variables(&self) -> impl Iterator<Item = Var> + '_ {
+        self.values.iter().filter_map(|v| match v {
+            Value::Variable(x) => Some(*x),
+            Value::Constant(_) => None,
         })
     }
-    pub fn from_atom_with_substitution<T: Atom>(eta: &Substitution, atom: &T) -> Self {
+
+    /// Resolve `atom`'s terms w.r.t. `eta`, and classify each resolved id as constant or variable
+    /// via `consts` (which must cover every rule whose variable ids `atom` or `eta`'s range may
+    /// reference, e.g. via [`super::super::chain::atoms::combined_consts`]).
+    pub(crate) fn from_atom_with_substitution(
+        eta: &Substitution,
+        consts: &HashMap<Var, Constant>,
+        atom: &Atom,
+    ) -> Self {
         Self {
-            predicate: atom.pred(),
-            primitives: atom
-                .primitives()
-                .map(|p| eta.get_term(p.as_ref()).unwrap_or(p.as_ref()).clone())
+            predicate: atom.predicate(),
+            values: atom
+                .terms()
+                .iter()
+                .map(|&t| {
+                    let resolved = eta.resolve(t);
+                    match consts.get(&resolved) {
+                        Some(&c) => Value::Constant(c),
+                        None => Value::Variable(resolved),
+                    }
+                })
                 .collect(),
         }
     }
-    pub fn substitute_atoms<'a, T: Atom + 'a>(
-        eta: &Substitution,
-        atoms: impl IntoIterator<Item = &'a T>,
-    ) -> impl Iterator<Item = Self> {
+
+    pub(crate) fn substitute_atoms<'a>(
+        eta: &'a Substitution,
+        consts: &'a HashMap<Var, Constant>,
+        atoms: impl IntoIterator<Item = &'a Atom> + 'a,
+    ) -> impl Iterator<Item = Self> + 'a {
         atoms
             .into_iter()
-            .map(|atom| Self::from_atom_with_substitution(eta, atom))
-    }
-}
-
-impl<T: Atom> From<&T> for RepresentativeAtom {
-    fn from(atom: &T) -> Self {
-        Self {
-            predicate: atom.pred(),
-            primitives: atom.primitives().map(|p| p.as_ref().clone()).collect(),
-        }
+            .map(move |atom| Self::from_atom_with_substitution(eta, consts, atom))
     }
 }
 
 #[derive(Debug)]
-pub struct RepresentativeDatabase(HashMap<Predicate, HashSet<Vec<Primitive>>>);
+pub(crate) struct RepresentativeDatabase(HashMap<Predicate, HashSet<Vec<Value>>>);
 
 impl RepresentativeDatabase {
-    pub fn new<'a>(facts: impl IntoIterator<Item = &'a RepresentativeAtom>) -> Self {
+    pub(crate) fn new<'a>(facts: impl IntoIterator<Item = &'a RepresentativeAtom>) -> Self {
         Self(HashMap::new()).add_facts(facts)
     }
 
-    pub fn add_facts<'a>(
+    pub(crate) fn add_facts<'a>(
         mut self,
         facts: impl IntoIterator<Item = &'a RepresentativeAtom>,
     ) -> Self {
         // here, variables are allowed in the database with the understanding that they are replaced with fresh variables injectively
         for fact in facts.into_iter() {
             self.0
-                .entry(fact.predicate().clone())
-                .or_insert_with(HashSet::new)
-                .insert(fact.primitives().clone());
+                .entry(fact.predicate())
+                .or_default()
+                .insert(fact.values().to_vec());
         }
         self
     }
 
-    pub fn entails<'a>(
+    pub(crate) fn entails<'a>(
         &self,
-        existentials: &HashSet<&Variable>,
+        existentials: &HashSet<Var>,
         atoms: impl IntoIterator<Item = &'a RepresentativeAtom>,
     ) -> bool {
-        // we assume that all but the existential variables are actually constants
+        // we assume that all but the existential variables are actually constants (or otherwise fixed)
         let atoms = atoms.into_iter().collect::<Vec<_>>();
 
-        // first, check that all mentioned predicates are present in the databse
+        // first, check that all mentioned predicates are present in the database
         let mut atom_pred_extend = Vec::with_capacity(atoms.len());
         for &atom in &atoms {
-            if let Some(pred_extend) = self.0.get(atom.predicate()) {
+            if let Some(pred_extend) = self.0.get(&atom.predicate()) {
                 atom_pred_extend.push(pred_extend);
             } else {
                 return false;
             }
         }
 
-        // then restrict the predicate to only those facts where universals match
+        // then restrict the predicate to only those facts where non-existential values match
         let mut atom_facts = Vec::with_capacity(atoms.len());
 
-        for (i, &atom) in (&atoms).into_iter().enumerate() {
+        for (i, &atom) in atoms.iter().enumerate() {
             let options = atom_pred_extend[i]
                 .iter()
                 .filter(|fact| {
-                    atom.primitives()
+                    atom.values()
                         .iter()
                         .enumerate()
-                        .filter(|(_, arg)| {
-                            if let Primitive::Variable(var) = arg {
-                                !existentials.contains(var)
-                            } else {
-                                true
-                            }
+                        .filter(|(_, value)| match value {
+                            Value::Variable(var) => !existentials.contains(var),
+                            Value::Constant(_) => true,
                         })
-                        .all(|(k, arg)| &fact[k] == arg)
+                        .all(|(k, value)| &fact[k] == value)
                 })
                 .collect::<HashSet<_>>();
-            if options.len() == 0 {
+            if options.is_empty() {
                 return false;
             }
             atom_facts.push(options);
@@ -126,11 +137,10 @@ impl RepresentativeDatabase {
 
         fn is_entailed<'a>(
             remaining_atoms: &'a [&'a RepresentativeAtom],
-            atom_facts: &'a [HashSet<&'a Vec<Primitive>>],
-            existentials: &HashSet<&Variable>,
-            existentials_map: &mut HashMap<&'a Variable, Primitive>,
+            atom_facts: &'a [HashSet<&'a Vec<Value>>],
+            existentials_map: &mut HashMap<Var, Value>,
         ) -> bool {
-            if remaining_atoms.len() == 0 {
+            if remaining_atoms.is_empty() {
                 return true;
             }
 
@@ -138,83 +148,56 @@ impl RepresentativeDatabase {
             let options = &atom_facts[0];
 
             for option in options.iter() {
-                let mut inserted_terms = HashSet::new();
-                if atom.primitives().iter().enumerate().all(|(k, arg)| {
-                    if let Primitive::Variable(var) = arg {
+                let mut inserted_terms = Vec::new();
+                if atom.values().iter().enumerate().all(|(k, value)| {
+                    if let Value::Variable(var) = value {
                         match existentials_map.get(var) {
                             Some(val) => *val == option[k],
                             None => {
-                                existentials_map.insert(var, option[k].clone());
-                                inserted_terms.insert(var);
+                                existentials_map.insert(*var, option[k]);
+                                inserted_terms.push(*var);
                                 true
                             }
                         }
                     } else {
                         true
                     }
-                }) {
-                    if is_entailed(
-                        &remaining_atoms[1..],
-                        &atom_facts[1..],
-                        existentials,
-                        existentials_map,
-                    ) {
-                        return true;
-                    }
+                }) && is_entailed(&remaining_atoms[1..], &atom_facts[1..], existentials_map)
+                {
+                    return true;
                 }
-                inserted_terms.iter().for_each(|t| {
+                for t in &inserted_terms {
                     existentials_map.remove(t);
-                });
+                }
             }
             false
         }
 
-        is_entailed(
-            &atoms[..],
-            &atom_facts[..],
-            existentials,
-            &mut existentials_map,
-        )
+        is_entailed(&atoms[..], &atom_facts[..], &mut existentials_map)
     }
 
-    pub fn contains<'a>(&self, facts: impl IntoIterator<Item = &'a RepresentativeAtom>) -> bool {
-        facts
-            .into_iter()
-            .all(|fact| match self.0.get(fact.predicate()) {
-                Some(extent) => extent.contains(fact.primitives()),
-                None => false,
-            })
+    pub(crate) fn contains<'a>(
+        &self,
+        facts: impl IntoIterator<Item = &'a RepresentativeAtom>,
+    ) -> bool {
+        facts.into_iter().all(|fact| {
+            self.0
+                .get(&fact.predicate())
+                .is_some_and(|extent| extent.contains(fact.values()))
+        })
     }
 
-    pub fn display<'a>(
+    /// Debug-format a set of facts (for `log::trace!` call sites); `db`, if given, restricts the
+    /// printed facts to those already contained in it.
+    pub(crate) fn display<'a>(
         facts: impl IntoIterator<Item = &'a RepresentativeAtom>,
         db: Option<&Self>,
     ) -> String {
-        let it = ["{ ".to_string()].into_iter();
-        let it = it.chain(
-            facts
-                .into_iter()
-                .filter(|fact| {
-                    if let Some(db) = db {
-                        db.contains([*fact])
-                    } else {
-                        true
-                    }
-                })
-                .map(|fact| {
-                    format!(
-                        "{}({})",
-                        fact.predicate(),
-                        fact.primitives()
-                            .into_iter()
-                            .map(|p| p.to_string())
-                            .intersperse(",".to_string())
-                            .collect::<String>()
-                    )
-                })
-                .intersperse(", ".to_string()),
-        );
-        let it = it.chain([" }".to_string()].into_iter());
-        it.collect()
+        let parts: Vec<String> = facts
+            .into_iter()
+            .filter(|fact| db.map(|db| db.contains([*fact])).unwrap_or(true))
+            .map(|fact| format!("{:?}({:?})", fact.predicate(), fact.values()))
+            .collect();
+        format!("{{ {} }}", parts.join(", "))
     }
 }

@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 use super::tuples::Tuples;
 
 #[derive(Clone)]
-struct EdgeId {
+pub(super) struct EdgeId {
     pub color: usize,
     pub idx: usize,
 }

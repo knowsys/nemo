@@ -53,7 +53,7 @@ impl Domain {
     }
 }
 
-struct Domains(Box<[Domain]>);
+pub(super) struct Domains(pub(super) Box<[Domain]>);
 
 impl fmt::Display for Domain {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
