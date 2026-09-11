@@ -13,7 +13,7 @@ use crate::execution::selection_strategy::strategy_full_chain_stratification::ut
 use crate::execution::selection_strategy::strategy_full_chain_stratification::util::{
     encode::{RuleEncoding, encode_rule, encode_rule_pair},
     extend::Reliance,
-    ordered_atoms::Mem,
+    ordered_atoms::{Mem, ReorderAtoms, SortedHeadAtoms},
 };
 use crate::execution::selection_strategy::strategy_full_chain_stratification::EdgeLabel;
 
@@ -22,6 +22,7 @@ use nemo_physical::datavalues::AnyDataValue;
 use strum::EnumCount;
 
 use crate::rule_model::components::tag::Tag;
+use crate::rule_model::components::term::primitive::variable::Variable as OrigVariable;
 
 #[derive(Default, Debug)]
 enum Progress<T> {
@@ -54,14 +55,16 @@ impl<T> Progress<T> {
 ///   Progress::Complete(vec![mu1,mu2]) --> found reliance of this type with multiple possible AtomMappings (relevant for chain computations)
 type Reliances = [Progress<Vec<Reliance>>; EdgeLabel::COUNT];
 
-/// Lazily converts and caches [NormalizedRule]s into the simplified [Rule] representation.
+/// Lazily converts and caches [NormalizedRule]s into the simplified [Rule] representation,
+/// together with the map from each of its `Var` ids back to the original [OrigVariable] it came
+/// from.
 #[derive(Debug)]
 pub struct Rules<'a> {
     pub normalized_rules: &'a Vec<&'a NormalizedRule>,
 
     pred_map: ComponentMap<Tag>,
     const_map: ComponentMap<AnyDataValue>,
-    rules: Vec<Option<Rule>>,
+    rules: Vec<Option<(Rule, ComponentMap<OrigVariable>)>>,
 }
 
 impl<'a> Rules<'a> {
@@ -71,12 +74,12 @@ impl<'a> Rules<'a> {
 
             pred_map: ComponentMap::new(),
             const_map: ComponentMap::new(),
-            rules: (0..normalized_rules.len()).map(|_| None).collect(),
+            rules: vec![None; normalized_rules.len()],
         }
     }
 
     /// Ensure the rule at `rule_index` has been converted and cached.
-    pub fn ensure(&mut self, rule_index: usize) {
+    fn ensure(&mut self, rule_index: usize) {
         if self.rules[rule_index].is_none() {
             let Self {
                 rules,
@@ -92,14 +95,40 @@ impl<'a> Rules<'a> {
         }
     }
 
-    /// Get the (already-converted) rule at `rule_index`.
-    ///
-    /// # Panics
-    /// Panics if [Self::ensure] has not been called for this index yet.
-    pub fn get(&self, rule_index: usize) -> &Rule {
-        self.rules[rule_index]
-            .as_ref()
-            .expect("rule should have been converted via `ensure`")
+    /// Get the (already-converted) rule at `rule_index`, converting and caching it first if
+    /// necessary.
+    pub fn get(&mut self, rule_index: usize) -> &Rule {
+        self.ensure(rule_index);
+        &self.rules[rule_index].as_ref().expect("just ensured").0
+    }
+
+    /// Get the variable map for the rule at `rule_index`, converting and caching it first if
+    /// necessary.
+    pub fn var_map(&mut self, rule_index: usize) -> &ComponentMap<OrigVariable> {
+        self.ensure(rule_index);
+        &self.rules[rule_index].as_ref().expect("just ensured").1
+    }
+
+    /// Get the (already-converted) rules at `idx1` and `idx2`, converting and caching them first
+    /// if necessary. Unlike two separate calls to [Self::get], this can be used when both need to
+    /// be alive at once (regardless of whether `idx1 == idx2`).
+    pub fn get_two(&mut self, idx1: usize, idx2: usize) -> (&Rule, &Rule) {
+        self.ensure(idx1);
+        self.ensure(idx2);
+        if idx1 == idx2 {
+            let rule = &self.rules[idx1].as_ref().expect("just ensured").0;
+            (rule, rule)
+        } else {
+            let (lo, hi) = (idx1.min(idx2), idx1.max(idx2));
+            let (left, right) = self.rules.split_at(hi);
+            let lo_rule = &left[lo].as_ref().expect("just ensured").0;
+            let hi_rule = &right[0].as_ref().expect("just ensured").0;
+            if idx1 < idx2 {
+                (lo_rule, hi_rule)
+            } else {
+                (hi_rule, lo_rule)
+            }
+        }
     }
 }
 
@@ -109,6 +138,8 @@ pub struct RuleMemoization<'a> {
 
     // these fields memoize auxiliary per-rule data
     // uses `Vec<Option<X>>` (initialized to `vec![None; rules.len()]`) instead of `HashMap<usize,X>`
+    pub reordered_atoms: ReorderAtoms,
+    pub sorted_head_atoms: Mem<SortedHeadAtoms>,
     pub head_pieces: Mem<Vec<Piece>>,
     encoded_rules: Vec<Option<RuleEncoding>>,
 }
@@ -118,6 +149,8 @@ impl<'a> RuleMemoization<'a> {
         let len = normalized_rules.len();
         Self {
             rules: Rules::new(normalized_rules),
+            reordered_atoms: ReorderAtoms::new(len),
+            sorted_head_atoms: Mem::new(len),
             head_pieces: Mem::new(len),
             encoded_rules: vec![None; len],
         }
@@ -155,10 +188,7 @@ impl<'a> RelianceMemoization<'a> {
     where
         'a: 'b,
     {
-        self.data.rules.ensure(rule1_index);
-        self.data.rules.ensure(rule2_index);
-        let rule1 = self.data.rules.get(rule1_index);
-        let rule2 = self.data.rules.get(rule2_index);
+        let (rule1, rule2) = self.data.rules.get_two(rule1_index, rule2_index);
         let reliances_index = *self
             .reliances_edge_map
             .entry((rule1_index, rule2_index))

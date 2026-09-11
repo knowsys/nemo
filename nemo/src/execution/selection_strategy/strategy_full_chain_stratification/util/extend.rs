@@ -3,13 +3,13 @@ use std::collections::HashMap;
 use crate::rule_model::components::term::operation::operation_kind::OperationKind;
 
 use crate::execution::selection_strategy::strategy_full_chain_stratification::chain::atoms::{
-    combined_consts, Atom, Constant, Operation, Rule, Var,
+    combined_consts, shift_atom, Atom, Constant, Operation, Rule, Var,
 };
 use crate::execution::selection_strategy::strategy_full_chain_stratification::chain::substitution::Substitution;
 use crate::execution::selection_strategy::strategy_full_chain_stratification::reliance_memoization::RuleMemoization;
 use crate::execution::selection_strategy::strategy_full_chain_stratification::util::{
     atom::AtomsPart,
-    ordered_atoms::{SortedHeadAtoms, reorder_atoms, sorted_head_atoms},
+    ordered_atoms::SortedHeadAtoms,
     unify::unify,
 };
 
@@ -63,13 +63,24 @@ pub fn extend_init<'b, 'a: 'b, T: AtomsPart>(
         None => (0, 0),
     };
 
-    mem.rules.ensure(rule1_index);
-    mem.rules.ensure(rule2_index);
-    let rule1 = mem.rules.get(rule1_index);
+    let (rule1, rule2_native) = mem.rules.get_two(rule1_index, rule2_index);
     // Give rule2 a disjoint working copy of its variables (rule1 keeps ids `0..rule1.var_count()`,
     // rule2's copy gets `rule1.var_count()..`), so the two rules' variables can never collide --
     // this also correctly handles the self-restraint case where rule1_index == rule2_index.
-    let rule2 = mem.rules.get(rule2_index).prime(rule1.var_count());
+    let offset = rule1.var_count();
+
+    // Rule1 is never primed, so its cached sorted head atoms are used as-is; rule2's cached
+    // reordered atoms (computed against its native, unprimed ids, and shared across every rule1
+    // it's compared against) just get their ids shifted here -- a cheap pass over the small,
+    // already-ordered list, avoiding rerunning the heuristic itself for every pair.
+    let rule1_head: &SortedHeadAtoms = mem.sorted_head_atoms.get(rule1, rule1_index);
+    let rule2_part_native = T::reordered_mem(&mut mem.reordered_atoms).get(rule2_native, rule2_index);
+    let rule2_part: Vec<Atom> = T::atoms(rule2_part_native)
+        .iter()
+        .map(|a| shift_atom(a, offset))
+        .collect();
+
+    let rule2 = rule2_native.prime(offset);
     let rule2 = &rule2;
 
     // initialize the substitution with known constant replacements (possibly from normalization)
@@ -85,14 +96,12 @@ pub fn extend_init<'b, 'a: 'b, T: AtomsPart>(
         }
     }
 
-    let rule1_head = sorted_head_atoms(rule1);
-    let rule2_part = reorder_atoms(T::atoms(rule2), T::variable_order(rule2));
     let consts = combined_consts(rule1, rule2);
 
     extend(
         rule1,
         rule2,
-        &rule1_head,
+        rule1_head,
         &rule2_part,
         &consts,
         check,

@@ -1,11 +1,17 @@
-use crate::execution::selection_strategy::strategy_full_chain_stratification::chain::atoms::{
-    Atom, Rule, Var,
+use crate::execution::selection_strategy::strategy_full_chain_stratification::chain::atoms::Atom;
+use crate::execution::selection_strategy::strategy_full_chain_stratification::util::ordered_atoms::{
+    GetRuleMem, Mem, ReorderAtoms, ReorderedHead, ReorderedNegative, ReorderedPositive,
 };
 
 /// Marker for which part of a rule a search step (see `util::extend`) operates over.
 pub(crate) trait AtomsPart {
-    fn atoms(rule: &Rule) -> &[Atom];
-    fn variable_order(rule: &Rule) -> &[Var];
+    type Reordered: GetRuleMem;
+
+    /// Select this part's slot in the per-rule-index reordering cache.
+    fn reordered_mem(cache: &mut ReorderAtoms) -> &mut Mem<Self::Reordered>;
+
+    /// Unwrap the reordered atoms out of the cached value.
+    fn atoms(reordered: &Self::Reordered) -> &[Atom];
 }
 
 pub(crate) struct Positive;
@@ -13,31 +19,37 @@ pub(crate) struct Negative;
 pub(crate) struct Head;
 
 impl AtomsPart for Positive {
-    fn atoms(rule: &Rule) -> &[Atom] {
-        rule.positive()
+    type Reordered = ReorderedPositive;
+
+    fn reordered_mem(cache: &mut ReorderAtoms) -> &mut Mem<Self::Reordered> {
+        &mut cache.positive
     }
 
-    fn variable_order(rule: &Rule) -> &[Var] {
-        rule.body_variable_order()
+    fn atoms(reordered: &Self::Reordered) -> &[Atom] {
+        &reordered.0
     }
 }
 
 impl AtomsPart for Negative {
-    fn atoms(rule: &Rule) -> &[Atom] {
-        rule.negative_atoms()
+    type Reordered = ReorderedNegative;
+
+    fn reordered_mem(cache: &mut ReorderAtoms) -> &mut Mem<Self::Reordered> {
+        &mut cache.negative
     }
 
-    fn variable_order(rule: &Rule) -> &[Var] {
-        rule.negative_variable_order()
+    fn atoms(reordered: &Self::Reordered) -> &[Atom] {
+        &reordered.0
     }
 }
 
 impl AtomsPart for Head {
-    fn atoms(rule: &Rule) -> &[Atom] {
-        rule.head()
+    type Reordered = ReorderedHead;
+
+    fn reordered_mem(cache: &mut ReorderAtoms) -> &mut Mem<Self::Reordered> {
+        &mut cache.head
     }
 
-    fn variable_order(rule: &Rule) -> &[Var] {
-        rule.head_variable_order()
+    fn atoms(reordered: &Self::Reordered) -> &[Atom] {
+        &reordered.0
     }
 }

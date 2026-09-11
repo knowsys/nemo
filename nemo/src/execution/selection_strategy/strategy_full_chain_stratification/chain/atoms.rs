@@ -29,17 +29,45 @@ pub(crate) struct Predicate(pub(crate) usize);
 pub(crate) struct Constant(pub(crate) usize);
 
 /// Interns values of type `T` into dense `usize` keys, assigned in first-seen order.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub(crate) struct ComponentMap<T>(HashMap<T, usize>);
 
-impl<T: Eq + Hash + Clone> ComponentMap<T> {
+impl<T> ComponentMap<T> {
     pub(crate) fn new() -> Self {
         Self(HashMap::new())
     }
+}
 
+impl<T: Eq + Hash> ComponentMap<T> {
+    /// Look up `t`'s id without interning it if it's not already present.
+    pub(crate) fn get_existing(&self, t: &T) -> Option<usize> {
+        self.0.get(t).copied()
+    }
+
+    pub(crate) fn len(&self) -> usize {
+        self.0.len()
+    }
+}
+
+impl<T: Eq + Hash + Clone> ComponentMap<T> {
     pub(crate) fn get(&mut self, t: &T) -> usize {
         let len = self.0.len();
         *self.0.entry(t.clone()).or_insert(len)
+    }
+
+    /// Like [Self::get], but for callers that need `t`'s id to come from a counter shared with
+    /// something else (e.g. so it stays disjoint from ids handed out for a different purpose):
+    /// if `t` is new, it's inserted under the given `id` instead of one `self` computes itself.
+    /// Returns `t`'s id together with whether `id` was actually consumed (`t` was new), so the
+    /// caller knows whether to advance its shared counter.
+    pub(crate) fn get_or_insert(&mut self, t: &T, id: usize) -> (usize, bool) {
+        match self.0.get(t) {
+            Some(&existing) => (existing, false),
+            None => {
+                self.0.insert(t.clone(), id);
+                (id, true)
+            }
+        }
     }
 }
 
@@ -63,6 +91,14 @@ impl Atom {
     }
 }
 
+/// Shift every variable id occurring in `atom` by `offset`.
+pub(crate) fn shift_atom(atom: &Atom, offset: usize) -> Atom {
+    Atom {
+        predicate: atom.predicate,
+        terms: atom.terms.iter().map(|v| v + offset).collect(),
+    }
+}
+
 #[derive(Debug, Clone)]
 pub(crate) enum Operation {
     /// A single term slot.
@@ -76,7 +112,7 @@ pub(crate) enum Operation {
 
 impl Operation {
     fn from_normalized_operation(
-        var_ids: &mut HashMap<OrigVariable, Var>,
+        var_map: &mut ComponentMap<OrigVariable>,
         next_id: &mut Var,
         consts: &mut HashMap<Var, Constant>,
         const_map: &mut ComponentMap<AnyDataValue>,
@@ -84,7 +120,7 @@ impl Operation {
     ) -> Self {
         match operation {
             normalization::operation::Operation::Primitive(primitive) => Operation::Primitive(
-                convert_primitive(var_ids, next_id, consts, const_map, primitive),
+                convert_primitive(var_map, next_id, consts, const_map, primitive),
             ),
             normalization::operation::Operation::Operation { kind, subterms } => {
                 Operation::Operation {
@@ -93,7 +129,7 @@ impl Operation {
                         .iter()
                         .map(|operation| {
                             Operation::from_normalized_operation(
-                                var_ids, next_id, consts, const_map, operation,
+                                var_map, next_id, consts, const_map, operation,
                             )
                         })
                         .collect(),
@@ -103,27 +139,33 @@ impl Operation {
     }
 }
 
+/// Resolve a variable into a `Var`, interning it into `var_map` on first encounter using the
+/// next id from `next_id` (shared with [convert_primitive] below, so that variable ids and the
+/// fresh ids handed out for ground terms never collide).
 fn convert_variable(
-    var_ids: &mut HashMap<OrigVariable, Var>,
+    var_map: &mut ComponentMap<OrigVariable>,
     next_id: &mut Var,
     variable: &OrigVariable,
 ) -> Var {
-    *var_ids.entry(variable.clone()).or_insert_with(|| {
-        let id = *next_id;
+    let (id, is_new) = var_map.get_or_insert(variable, *next_id);
+    if is_new {
         *next_id += 1;
-        id
-    })
+    }
+    id
 }
 
+/// Resolve a primitive term into a `Var`: a variable is interned on first encounter (see
+/// [convert_variable]); a ground term always gets a fresh id from the same shared counter,
+/// recorded in `consts`.
 fn convert_primitive(
-    var_ids: &mut HashMap<OrigVariable, Var>,
+    var_map: &mut ComponentMap<OrigVariable>,
     next_id: &mut Var,
     consts: &mut HashMap<Var, Constant>,
     const_map: &mut ComponentMap<AnyDataValue>,
     primitive: &Primitive,
 ) -> Var {
     match primitive {
-        Primitive::Variable(variable) => convert_variable(var_ids, next_id, variable),
+        Primitive::Variable(variable) => convert_variable(var_map, next_id, variable),
         Primitive::Ground(ground_term) => {
             let id = *next_id;
             *next_id += 1;
@@ -226,15 +268,15 @@ impl Rule {
         vars
     }
 
+    /// Return whether this rule is Datalog, i.e. free of negative body atoms and existential
+    /// variables.
+    pub(crate) fn is_datalog(&self) -> bool {
+        self.body_neg.is_empty() && self.existentials().is_empty()
+    }
+
     /// Return a copy of this rule with every variable id shifted by `offset`, so that it becomes
     /// disjoint from any rule using ids below `offset`.
     pub(crate) fn prime(&self, offset: usize) -> Self {
-        fn shift_atom(atom: &Atom, offset: usize) -> Atom {
-            Atom {
-                predicate: atom.predicate,
-                terms: atom.terms.iter().map(|v| v + offset).collect(),
-            }
-        }
         fn shift_operation(operation: &Operation, offset: usize) -> Operation {
             match operation {
                 Operation::Primitive(v) => Operation::Primitive(v + offset),
@@ -279,8 +321,11 @@ impl Rule {
         pred_map: &mut ComponentMap<Tag>,
         const_map: &mut ComponentMap<AnyDataValue>,
         normalized_rule: &NormalizedRule,
-    ) -> Self {
-        let mut var_ids: HashMap<OrigVariable, Var> = HashMap::new();
+    ) -> (Self, ComponentMap<OrigVariable>) {
+        // Single pass, in the same order as before: every variable is interned into `var_map` on
+        // first encounter, and ground terms get a fresh id from the same shared `next_id`
+        // counter, so the two never collide regardless of which is seen first.
+        let mut var_map: ComponentMap<OrigVariable> = ComponentMap::new();
         let mut next_id: Var = 0;
         let mut consts: HashMap<Var, Constant> = HashMap::new();
 
@@ -292,7 +337,7 @@ impl Rule {
                 terms: head_atom
                     .terms()
                     .map(|primitive| {
-                        convert_primitive(&mut var_ids, &mut next_id, &mut consts, const_map, primitive)
+                        convert_primitive(&mut var_map, &mut next_id, &mut consts, const_map, primitive)
                     })
                     .collect(),
             })
@@ -305,7 +350,7 @@ impl Rule {
                 predicate: Predicate(pred_map.get(&body_atom.predicate())),
                 terms: body_atom
                     .terms()
-                    .map(|variable| convert_variable(&mut var_ids, &mut next_id, variable))
+                    .map(|variable| convert_variable(&mut var_map, &mut next_id, variable))
                     .collect(),
             })
             .collect();
@@ -316,7 +361,7 @@ impl Rule {
                 predicate: Predicate(pred_map.get(&body_atom.predicate())),
                 terms: body_atom
                     .terms()
-                    .map(|variable| convert_variable(&mut var_ids, &mut next_id, variable))
+                    .map(|variable| convert_variable(&mut var_map, &mut next_id, variable))
                     .collect(),
             })
             .collect();
@@ -326,7 +371,7 @@ impl Rule {
             .iter()
             .map(|operation| {
                 Operation::from_normalized_operation(
-                    &mut var_ids,
+                    &mut var_map,
                     &mut next_id,
                     &mut consts,
                     const_map,
@@ -338,12 +383,12 @@ impl Rule {
         let body_variable_order: Box<[Var]> = normalized_rule
             .body_variable_order()
             .iter()
-            .filter_map(|v| var_ids.get(v).copied())
+            .filter_map(|v| var_map.get_existing(v))
             .collect();
         let head_variable_order: Box<[Var]> = normalized_rule
             .head_variable_order()
             .iter()
-            .filter_map(|v| var_ids.get(v).copied())
+            .filter_map(|v| var_map.get_existing(v))
             .collect();
 
         // There is no join to guide an order for the negative-body atoms (they don't partake in
@@ -369,20 +414,23 @@ impl Rule {
             let order =
                 build_preferable_variable_orders_for_rule(&aux_rule, None).restrict_to(&all_vars);
 
-            order.iter().filter_map(|v| var_ids.get(v).copied()).collect()
+            order.iter().filter_map(|v| var_map.get_existing(v)).collect()
         };
 
-        Self {
-            head,
-            body_pos,
-            body_neg,
-            operations,
-            consts,
-            var_count: next_id,
-            body_variable_order,
-            head_variable_order,
-            negative_variable_order,
-        }
+        (
+            Self {
+                head,
+                body_pos,
+                body_neg,
+                operations,
+                consts,
+                var_count: next_id,
+                body_variable_order,
+                head_variable_order,
+                negative_variable_order,
+            },
+            var_map,
+        )
     }
 }
 

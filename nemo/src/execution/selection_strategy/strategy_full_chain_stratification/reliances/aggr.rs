@@ -17,10 +17,8 @@ pub fn is_aggregation_reliance<'b, 'a: 'b>(
     rule2_index: usize,
     previous_opt: Option<&Reliance>,
 ) -> Option<Reliance> {
-    mem.rules.ensure(rule1_index);
-    mem.rules.ensure(rule2_index);
-    let rule1 = mem.rules.get(rule1_index);
-    let rule2 = mem.rules.get(rule2_index).prime(rule1.var_count());
+    let (rule1, rule2_native) = mem.rules.get_two(rule1_index, rule2_index);
+    let rule2 = rule2_native.prime(rule1.var_count());
 
     let have_same_heads = rule1.head() == rule2.head();
 

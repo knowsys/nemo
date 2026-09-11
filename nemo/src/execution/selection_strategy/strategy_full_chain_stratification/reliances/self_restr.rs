@@ -8,7 +8,6 @@ use crate::execution::selection_strategy::strategy_full_chain_stratification::ut
 use crate::execution::selection_strategy::strategy_full_chain_stratification::util::database::{
     RepresentativeAtom, RepresentativeDatabase,
 };
-use crate::execution::selection_strategy::strategy_full_chain_stratification::util::pieces::compute_pieces;
 
 use crate::execution::selection_strategy::strategy_full_chain_stratification::reliance_memoization::RuleMemoization;
 use crate::execution::selection_strategy::strategy_full_chain_stratification::util::extend::{
@@ -147,8 +146,11 @@ pub fn is_self_restraint_reliance<'b, 'a: 'b>(
     rule_index: usize,
     previous_opt: Option<&Reliance>,
 ) -> Option<Reliance> {
-    mem.rules.ensure(rule_index);
     let rule = mem.rules.get(rule_index);
+    debug_assert!(
+        !rule.is_datalog(),
+        "self-restraint checks should not be called on datalog rules"
+    );
 
     // assuming the rule is not datalog, it has a trivial self-restraint if there are head atoms w/o existentials
     let universals = rule.universals();
@@ -167,9 +169,7 @@ pub fn is_self_restraint_reliance<'b, 'a: 'b>(
     // trivial self-restraint,
     // if there are multiple pieces and there is an existential piece,
     // s.t. the entire head is not entailed when it is satisfied
-    let pp = mem
-        .head_pieces
-        .get_or_insert_with(rule_index, || compute_pieces(rule));
+    let pp = mem.head_pieces.get(rule, rule_index);
     if pp.len() > 1 {
         let identity = Substitution::new();
         for p in pp {
