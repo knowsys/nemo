@@ -18,13 +18,13 @@ pub(crate) fn compute_pieces(rule: &Rule) -> Vec<Piece> {
 
     let mut atom_existentials: Vec<(Atom, HashSet<Var>)> = rule
         .head()
-        .iter()
+        .atoms()
         .map(|atom| {
             let existentials = atom
                 .variables()
                 .filter(|var| vars_exists.contains(var))
                 .collect::<HashSet<_>>();
-            (atom.clone(), existentials)
+            (atom, existentials)
         })
         .collect();
 

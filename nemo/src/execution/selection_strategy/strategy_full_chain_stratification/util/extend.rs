@@ -3,31 +3,39 @@ use std::collections::HashMap;
 use crate::rule_model::components::term::operation::operation_kind::OperationKind;
 
 use crate::execution::selection_strategy::strategy_full_chain_stratification::chain::atoms::{
-    combined_consts, shift_atom, Atom, Constant, Operation, Rule, Var,
+    Atoms, Constant, EdgeId, Operation, Rule, Var, combined_consts,
 };
 use crate::execution::selection_strategy::strategy_full_chain_stratification::chain::substitution::Substitution;
 use crate::execution::selection_strategy::strategy_full_chain_stratification::reliance_memoization::RuleMemoization;
 use crate::execution::selection_strategy::strategy_full_chain_stratification::util::{
-    atom::AtomsPart,
-    ordered_atoms::SortedHeadAtoms,
-    unify::unify,
+    atom::AtomsPart, unify::unify,
 };
 
-/// maps indices of body/head atoms of the 2nd rule to indices of head atoms of the 1st rule
+/// Maps rule2's atoms (by [EdgeId], identifying an atom independent of any particular search
+/// order) to the rule1 head atom each unified with.
 #[derive(Debug, Clone, Default)]
-pub struct AtomMapping(HashMap<usize, usize>);
+pub struct AtomMapping(HashMap<EdgeId, EdgeId>);
 
 impl AtomMapping {
     pub fn new() -> Self {
         Self(HashMap::new())
     }
 
-    pub fn mapped<'a, T>(&'a self, domain: &'a [T]) -> impl Iterator<Item = &'a T> + 'a {
-        self.0.keys().copied().map(|k| &domain[k])
+    fn insert(&mut self, rule2_edge: EdgeId, rule1_edge: EdgeId) {
+        self.0.insert(rule2_edge, rule1_edge);
     }
 
-    pub fn maxidx(&self) -> usize {
-        self.0.keys().copied().max().unwrap_or(0)
+    fn remove(&mut self, rule2_edge: EdgeId) {
+        self.0.remove(&rule2_edge);
+    }
+
+    pub fn contains(&self, rule2_edge: EdgeId) -> bool {
+        self.0.contains_key(&rule2_edge)
+    }
+
+    /// The set of rule2 atoms currently mapped.
+    pub fn domain(&self) -> impl Iterator<Item = EdgeId> + '_ {
+        self.0.keys().copied()
     }
 }
 
@@ -38,7 +46,11 @@ pub enum CheckResult {
     Reject,
 }
 
-type CheckFn = fn(&Rule, &Rule, &AtomMapping, &Substitution) -> CheckResult;
+/// `rule1, rule2, rule2_part, i, mu, eta`: `rule2_part` is rule2's heuristically-ordered edge list
+/// for whichever part is being searched over (positive/negative/head body, see `AtomsPart`), and
+/// `i` is the current search frontier: `rule2_part[..i]` have already been visited by the search
+/// (whether or not they ended up in `mu`), `rule2_part[i..]` have not.
+type CheckFn = fn(&Rule, &Rule, &[EdgeId], usize, &AtomMapping, &Substitution) -> CheckResult;
 
 #[derive(Debug, Default)]
 pub struct Reliance {
@@ -69,19 +81,14 @@ pub fn extend_init<'b, 'a: 'b, T: AtomsPart>(
     // this also correctly handles the self-restraint case where rule1_index == rule2_index.
     let offset = rule1.var_count();
 
-    // Rule1 is never primed, so its cached sorted head atoms are used as-is; rule2's cached
-    // reordered atoms (computed against its native, unprimed ids, and shared across every rule1
-    // it's compared against) just get their ids shifted here -- a cheap pass over the small,
-    // already-ordered list, avoiding rerunning the heuristic itself for every pair.
-    let rule1_head: &SortedHeadAtoms = mem.sorted_head_atoms.get(rule1, rule1_index);
-    let rule2_part_native = T::reordered_mem(&mut mem.reordered_atoms).get(rule2_native, rule2_index);
-    let rule2_part: Vec<Atom> = T::atoms(rule2_part_native)
-        .iter()
-        .map(|a| shift_atom(a, offset))
-        .collect();
+    // Cached against rule2's native (unprimed) ids and shared across every rule1 it's compared
+    // against -- priming only changes the *values* an edge's row holds, never which edges exist
+    // or their order, so this same edge list stays valid against the primed `rule2` below.
+    let rule2_part = T::edges(T::reordered_mem(&mut mem.reordered_atoms).get(rule2_native, rule2_index)).to_vec();
 
     let rule2 = rule2_native.prime(offset);
     let rule2 = &rule2;
+    let atoms2 = T::atoms(rule2);
 
     // initialize the substitution with known constant replacements (possibly from normalization)
     for op in rule1.operations().iter().chain(rule2.operations().iter()) {
@@ -101,7 +108,7 @@ pub fn extend_init<'b, 'a: 'b, T: AtomsPart>(
     extend(
         rule1,
         rule2,
-        rule1_head,
+        atoms2,
         &rule2_part,
         &consts,
         check,
@@ -116,8 +123,8 @@ pub fn extend_init<'b, 'a: 'b, T: AtomsPart>(
 fn extend(
     rule1: &Rule,
     rule2: &Rule,
-    rule1_head: &SortedHeadAtoms,
-    rule2_part: &[Atom],
+    atoms2: &Atoms,
+    rule2_part: &[EdgeId],
     consts: &HashMap<Var, Constant>,
     check: CheckFn,
     mu: &mut AtomMapping,
@@ -125,38 +132,38 @@ fn extend(
     idx_dom: usize,
     idx_ran: usize,
 ) -> Option<Reliance> {
+    let rule1_head = rule1.head();
+
     for i in idx_dom..rule2_part.len() {
-        let atom_i = &rule2_part[i];
+        let edge_i = rule2_part[i];
+        let pred_i = atoms2.predicate_of(edge_i);
+        let terms_i = atoms2.row(edge_i);
 
-        debug_assert!(
-            !mu.0.contains_key(&i),
-            "extend tried to change previous mapping"
-        );
+        debug_assert!(!mu.contains(edge_i), "extend tried to change previous mapping");
 
-        let (ran_start, ran_end) = match rule1_head.ranges.get(&atom_i.predicate()).copied() {
-            Some((start, end)) => (
-                if i == idx_dom && idx_ran > start {
-                    idx_ran
-                } else {
-                    start
-                },
-                end,
-            ),
-            None => (0, 0), // pred does not occur in rule1_head --> nothing to map to
-        };
+        let tuples1 = rule1_head.tuples_for(pred_i);
+        let tuple_count = tuples1.map_or(0, |t| t.len());
+        let j_start = if i == idx_dom { idx_ran } else { 0 };
 
-        for j in ran_start..ran_end {
-            let atom_j = &rule1_head.sorted_atoms[j];
+        for j in j_start..tuple_count {
+            let atom1_row = &tuples1.expect("tuple_count > 0 implies Some")[j];
 
             // prefer mapping variables of rule2 onto variables of rule1
             if let Some(eta) = unify(
-                atom_j.terms().iter().copied(),
-                atom_i.terms().iter().copied(),
+                atom1_row.iter().copied(),
+                terms_i.iter().copied(),
                 consts,
                 eta.clone(),
             ) {
-                mu.0.insert(i, j);
-                match check(rule1, rule2, mu, &eta) {
+                let color1 = rule1_head
+                    .color_of(pred_i)
+                    .expect("tuple_count > 0 implies this predicate has a color");
+                let edge_j = EdgeId {
+                    color: color1,
+                    idx: j,
+                };
+                mu.insert(edge_i, edge_j);
+                match check(rule1, rule2, rule2_part, i, mu, &eta) {
                     CheckResult::Accept => {
                         return Some(Reliance {
                             mu: mu.clone(),
@@ -168,7 +175,7 @@ fn extend(
                         if let Some(Reliance { mu, .. }) = extend(
                             rule1,
                             rule2,
-                            rule1_head,
+                            atoms2,
                             rule2_part,
                             consts,
                             check,
@@ -188,7 +195,7 @@ fn extend(
                 }
             }
         }
-        mu.0.remove(&i);
+        mu.remove(edge_i);
     }
 
     None

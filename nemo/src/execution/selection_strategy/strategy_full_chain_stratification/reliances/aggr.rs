@@ -29,8 +29,8 @@ pub fn is_aggregation_reliance<'b, 'a: 'b>(
         // a check for positive reliance, same as the "heads differ" case below).
         let consts = combined_consts(rule1, &rule2);
         let eta = unify(
-            rule1.head().iter().flat_map(|a| a.terms().iter().copied()),
-            rule2.head().iter().flat_map(|a| a.terms().iter().copied()),
+            rule1.head().atoms().flat_map(|a| a.terms().to_vec()),
+            rule2.head().atoms().flat_map(|a| a.terms().to_vec()),
             &consts,
             Substitution::default(),
         )?;

@@ -1,13 +1,8 @@
 use std::fmt;
 use std::collections::{HashMap, HashSet};
 
+pub(super) use super::atoms::EdgeId;
 use super::tuples::Tuples;
-
-#[derive(Clone)]
-pub(super) struct EdgeId {
-    pub color: usize,
-    pub idx: usize,
-}
 
 pub struct Hypergraph {
     /// tuples per color
@@ -33,6 +28,21 @@ impl fmt::Display for Hypergraph {
 impl Hypergraph {
     pub fn new(tuples: Vec<Tuples>, incidence: Vec<Vec<EdgeId>>) -> Self {
         Self { tuples, incidence }
+    }
+
+    /// Build from tuples and the total vertex count, computing incidence automatically.
+    pub(crate) fn from_tuples(tuples: Vec<Tuples>, vertex_count: usize) -> Self {
+        let mut incidence = vec![Vec::new(); vertex_count];
+        for (edge_id, vars) in tuples.iter().enumerate().flat_map(|(color, t)| {
+            t.iter()
+                .enumerate()
+                .map(move |(idx, tt)| (EdgeId { color, idx }, tt))
+        }) {
+            for &v in vars {
+                incidence[v].push(edge_id);
+            }
+        }
+        Self::new(tuples, incidence)
     }
 
     pub fn incidence(&self, v: usize) -> &Vec<EdgeId> {

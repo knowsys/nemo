@@ -13,7 +13,7 @@ use crate::execution::selection_strategy::strategy_full_chain_stratification::ut
 use crate::execution::selection_strategy::strategy_full_chain_stratification::util::{
     encode::{RuleEncoding, encode_rule, encode_rule_pair},
     extend::Reliance,
-    ordered_atoms::{Mem, ReorderAtoms, SortedHeadAtoms},
+    ordered_atoms::{Mem, ReorderAtoms},
 };
 use crate::execution::selection_strategy::strategy_full_chain_stratification::EdgeLabel;
 
@@ -139,7 +139,6 @@ pub struct RuleMemoization<'a> {
     // these fields memoize auxiliary per-rule data
     // uses `Vec<Option<X>>` (initialized to `vec![None; rules.len()]`) instead of `HashMap<usize,X>`
     pub reordered_atoms: ReorderAtoms,
-    pub sorted_head_atoms: Mem<SortedHeadAtoms>,
     pub head_pieces: Mem<Vec<Piece>>,
     encoded_rules: Vec<Option<RuleEncoding>>,
 }
@@ -150,7 +149,6 @@ impl<'a> RuleMemoization<'a> {
         Self {
             rules: Rules::new(normalized_rules),
             reordered_atoms: ReorderAtoms::new(len),
-            sorted_head_atoms: Mem::new(len),
             head_pieces: Mem::new(len),
             encoded_rules: vec![None; len],
         }

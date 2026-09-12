@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use crate::execution::selection_strategy::strategy_full_chain_stratification::chain::atoms::{
-    Rule, combined_consts,
+    EdgeId, Rule, combined_consts,
 };
 use crate::execution::selection_strategy::strategy_full_chain_stratification::chain::substitution::Substitution;
 use crate::execution::selection_strategy::strategy_full_chain_stratification::util::atom::Negative;
@@ -14,7 +14,14 @@ use crate::execution::selection_strategy::strategy_full_chain_stratification::ut
     AtomMapping, CheckResult, Reliance, extend_init,
 };
 
-fn check_negr(rule1: &Rule, rule2: &Rule, _mu: &AtomMapping, eta: &Substitution) -> CheckResult {
+fn check_negr(
+    rule1: &Rule,
+    rule2: &Rule,
+    _rule2_part: &[EdgeId],
+    _i: usize,
+    _mu: &AtomMapping,
+    eta: &Substitution,
+) -> CheckResult {
     // idea:
     // - rule1 and rule2 start off both being applicable
     // - then rule1 is applied
@@ -42,11 +49,11 @@ fn check_negr(rule1: &Rule, rule2: &Rule, _mu: &AtomMapping, eta: &Substitution)
 
     // construct representative interpretation I_a
     let rule1_body_eta_cup_rule2_body_eta =
-        RepresentativeAtom::substitute_atoms(eta, &consts, rule1.positive())
+        RepresentativeAtom::substitute_atoms(eta, &consts, rule1.positive().atoms())
             .chain(RepresentativeAtom::substitute_atoms(
                 eta,
                 &consts,
-                rule2.positive(),
+                rule2.positive().atoms(),
             ))
             .collect::<HashSet<_>>();
     log::trace!(
@@ -57,7 +64,7 @@ fn check_negr(rule1: &Rule, rule2: &Rule, _mu: &AtomMapping, eta: &Substitution)
 
     // mu has to be extended if rule1 under eta is satisfied on I_a
     let rule1_head_eta =
-        RepresentativeAtom::substitute_atoms(eta, &consts, rule1.head()).collect::<HashSet<_>>();
+        RepresentativeAtom::substitute_atoms(eta, &consts, rule1.head().atoms()).collect::<HashSet<_>>();
     if interpretation_db.entails(&r1_existentials, &rule1_head_eta) {
         log::trace!("I models head of rule1 under eta => mu failed");
         return CheckResult::Reject;
@@ -65,7 +72,7 @@ fn check_negr(rule1: &Rule, rule2: &Rule, _mu: &AtomMapping, eta: &Substitution)
     }
 
     for n in rule1.negative() {
-        let n = RepresentativeAtom::from_atom_with_substitution(eta, &consts, n);
+        let n = RepresentativeAtom::from_atom_with_substitution(eta, &consts, &n);
         let existentials = n
             .variables()
             .filter(|v| !r1_universals_eta.contains(v))
@@ -78,7 +85,7 @@ fn check_negr(rule1: &Rule, rule2: &Rule, _mu: &AtomMapping, eta: &Substitution)
 
     // mu has to be extended if rule2 under eta is satisfied on I_a
     let rule2_head_eta =
-        RepresentativeAtom::substitute_atoms(eta, &consts, rule2.head()).collect::<HashSet<_>>();
+        RepresentativeAtom::substitute_atoms(eta, &consts, rule2.head().atoms()).collect::<HashSet<_>>();
     let r2_existentials_eta = eta
         .substitute_variables(rule2.existentials())
         .collect::<HashSet<_>>();
@@ -92,7 +99,7 @@ fn check_negr(rule1: &Rule, rule2: &Rule, _mu: &AtomMapping, eta: &Substitution)
         .substitute_variables(rule2.universals())
         .collect::<HashSet<_>>();
     for n in rule2.negative() {
-        let n = RepresentativeAtom::from_atom_with_substitution(eta, &consts, n);
+        let n = RepresentativeAtom::from_atom_with_substitution(eta, &consts, &n);
         let existentials = n
             .variables()
             .filter(|v| !r2_universals_eta.contains(v))

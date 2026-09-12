@@ -83,10 +83,13 @@ pub(crate) fn encode_rule(rule: &Rule) -> RuleEncoding {
         consts,
     };
 
-    state.encode_slice(rule.positive(), EncodeState::encode_atom);
-    state.encode_slice(rule.negative_atoms(), EncodeState::encode_atom);
+    for atoms in [rule.positive(), rule.negative_atoms(), rule.head()] {
+        state.arg_stream.push(atoms.len());
+        for atom in atoms.atoms() {
+            state.encode_atom(&atom);
+        }
+    }
     state.encode_slice(rule.operations(), EncodeState::encode_operation);
-    state.encode_slice(rule.head(), EncodeState::encode_atom);
 
     RuleEncoding {
         pred_stream: state.pred_stream,

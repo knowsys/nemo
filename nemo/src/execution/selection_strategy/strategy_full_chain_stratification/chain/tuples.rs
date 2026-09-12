@@ -1,3 +1,4 @@
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Tuples {
     pub(super) arity: usize,
     /// flat tuple storage
@@ -13,6 +14,16 @@ impl Tuples {
             data: Vec::new(),
         }
     }
+    /// Build from a sequence of equal-arity rows.
+    pub(crate) fn from_rows(arity: usize, rows: impl IntoIterator<Item = Vec<usize>>) -> Self {
+        let mut data = Vec::new();
+        for row in rows {
+            debug_assert_eq!(row.len(), arity);
+            data.extend(row);
+        }
+        Self { arity, data }
+    }
+
     pub fn iter<'a>(&'a self) -> TuplesIter<'a> {
         TuplesIter { rel: self, i: 0 }
     }
@@ -67,7 +78,7 @@ impl std::ops::IndexMut<usize> for Tuples {
     }
 }
 
-pub(super) struct TuplesIter<'a> {
+pub(crate) struct TuplesIter<'a> {
     rel: &'a Tuples,
     i: usize,
 }

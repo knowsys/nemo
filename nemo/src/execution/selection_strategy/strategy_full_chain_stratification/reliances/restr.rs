@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use crate::execution::selection_strategy::strategy_full_chain_stratification::chain::atoms::{
-    Rule, combined_consts,
+    EdgeId, Rule, combined_consts,
 };
 use crate::execution::selection_strategy::strategy_full_chain_stratification::chain::substitution::Substitution;
 use crate::execution::selection_strategy::strategy_full_chain_stratification::util::atom::Head;
@@ -14,8 +14,16 @@ use crate::execution::selection_strategy::strategy_full_chain_stratification::ut
     AtomMapping, CheckResult, Reliance, extend_init,
 };
 
-fn check_restr(rule1: &Rule, rule2: &Rule, mu: &AtomMapping, eta: &Substitution) -> CheckResult {
+fn check_restr(
+    rule1: &Rule,
+    rule2: &Rule,
+    rule2_part: &[EdgeId],
+    i: usize,
+    mu: &AtomMapping,
+    eta: &Substitution,
+) -> CheckResult {
     let consts = combined_consts(rule1, rule2);
+    let atoms2 = rule2.head();
 
     let r1_existentials = rule1.existentials();
     if r1_existentials.iter().any(|&x| {
@@ -53,21 +61,17 @@ fn check_restr(rule1: &Rule, rule2: &Rule, mu: &AtomMapping, eta: &Substitution)
     let eta_forall = eta.restriction(&r1_r2_universals);
     log::trace!("eta_forall = {eta_forall}");
 
-    let rule2_head_mapped_set = mu.mapped(rule2.head()).collect::<HashSet<_>>();
-    let rule2_head_unmapped = rule2
-        .head()
+    let rule2_head_mapped_set: HashSet<EdgeId> = mu.domain().collect();
+    let rule2_head_unmapped: HashSet<EdgeId> = atoms2
         .iter()
-        .collect::<HashSet<_>>()
-        .difference(&rule2_head_mapped_set)
-        .copied()
-        .collect::<HashSet<_>>();
-    let mu_maxidx = mu.maxidx();
-    let rule2_head_unmapped_left = rule2.head()[..mu_maxidx]
+        .map(|(e, _)| e)
+        .filter(|e| !rule2_head_mapped_set.contains(e))
+        .collect();
+    let rule2_head_unmapped_left: HashSet<EdgeId> = rule2_part[..i]
         .iter()
-        .collect::<HashSet<_>>()
-        .difference(&rule2_head_mapped_set)
         .copied()
-        .collect::<HashSet<_>>();
+        .filter(|e| !rule2_head_mapped_set.contains(e))
+        .collect();
 
     // mu failed if an existential in rule2_head_unmapped_left has been mapped onto an existential of rule1 by eta
     let r2_existentials = rule2.existentials();
@@ -75,7 +79,7 @@ fn check_restr(rule1: &Rule, rule2: &Rule, mu: &AtomMapping, eta: &Substitution)
         .substitute_variables(
             rule2_head_unmapped_left
                 .iter()
-                .flat_map(|atom| atom.variables())
+                .flat_map(|&e| atoms2.row(e).iter().copied())
                 .collect::<HashSet<_>>()
                 .intersection(&r2_existentials)
                 .copied(),
@@ -91,19 +95,18 @@ fn check_restr(rule1: &Rule, rule2: &Rule, mu: &AtomMapping, eta: &Substitution)
         return CheckResult::Reject;
     }
 
-    let rule2_head_unmapped_right = rule2.head()[mu_maxidx..]
+    let rule2_head_unmapped_right: HashSet<EdgeId> = rule2_part[i..]
         .iter()
-        .collect::<HashSet<_>>()
-        .difference(&rule2_head_mapped_set)
         .copied()
-        .collect::<HashSet<_>>();
+        .filter(|e| !rule2_head_mapped_set.contains(e))
+        .collect();
 
     // mu has to be extended if eta assigned an existential in rule2_head_unmapped_right onto an existential of rule1
     let rule2_head_unmapped_right_vars_exists_eta = eta
         .substitute_variables(
             rule2_head_unmapped_right
                 .iter()
-                .flat_map(|atom| atom.variables())
+                .flat_map(|&e| atoms2.row(e).iter().copied())
                 .collect::<HashSet<_>>()
                 .intersection(&r2_existentials)
                 .copied()
@@ -117,10 +120,12 @@ fn check_restr(rule1: &Rule, rule2: &Rule, mu: &AtomMapping, eta: &Substitution)
         return CheckResult::Extend;
     }
     // mu has to be extended if there are no existential variables in rule2_head_mapped
-    if rule2_head_mapped_set
-        .iter()
-        .all(|atom| atom.variables().all(|x| r2_universals.contains(&x)))
-    {
+    if rule2_head_mapped_set.iter().all(|&e| {
+        atoms2
+            .row(e)
+            .iter()
+            .all(|x| r2_universals.contains(x))
+    }) {
         log::trace!(
             "no existential variables in mapped part of the head of rule2 => mu must be extended"
         );
@@ -129,7 +134,7 @@ fn check_restr(rule1: &Rule, rule2: &Rule, mu: &AtomMapping, eta: &Substitution)
 
     // construct representative interpretation I_a'
     let rule2_body_eta_forall =
-        RepresentativeAtom::substitute_atoms(&eta_forall, &consts, rule2.positive())
+        RepresentativeAtom::substitute_atoms(&eta_forall, &consts, rule2.positive().atoms())
             .collect::<HashSet<_>>();
     let interpretation_a_pre_db = RepresentativeDatabase::new(&rule2_body_eta_forall);
     log::trace!(
@@ -139,7 +144,7 @@ fn check_restr(rule1: &Rule, rule2: &Rule, mu: &AtomMapping, eta: &Substitution)
 
     // mu has failed if rule2 under eta_forall is satisfied on I_a'
     let rule2_head_eta_forall =
-        RepresentativeAtom::substitute_atoms(&eta_forall, &consts, rule2.head())
+        RepresentativeAtom::substitute_atoms(&eta_forall, &consts, atoms2.atoms())
             .collect::<HashSet<_>>();
     let r2_existentials_eta_forall = eta_forall.substitute_variables(r2_existentials).collect();
     if interpretation_a_pre_db.entails(&r2_existentials_eta_forall, &rule2_head_eta_forall) {
@@ -155,12 +160,12 @@ fn check_restr(rule1: &Rule, rule2: &Rule, mu: &AtomMapping, eta: &Substitution)
 
     // construct representative interpretation I_b'
     let rule1_body_eta_cup_rule2_head_unmapped_eta =
-        RepresentativeAtom::substitute_atoms(&eta_forall, &consts, rule1.positive())
+        RepresentativeAtom::substitute_atoms(&eta_forall, &consts, rule1.positive().atoms())
             .into_iter()
             .chain(RepresentativeAtom::substitute_atoms(
                 eta,
                 &consts,
-                rule2_head_unmapped.iter().copied(),
+                rule2_head_unmapped.iter().map(|&e| atoms2.get(e)),
             ))
             .collect::<HashSet<_>>();
     log::trace!(
@@ -174,7 +179,7 @@ fn check_restr(rule1: &Rule, rule2: &Rule, mu: &AtomMapping, eta: &Substitution)
         interpretation_a_db.add_facts(&rule1_body_eta_cup_rule2_head_unmapped_eta);
 
     let rule1_head_eta_forall =
-        RepresentativeAtom::substitute_atoms(&eta_forall, &consts, rule1.head())
+        RepresentativeAtom::substitute_atoms(&eta_forall, &consts, rule1.head().atoms())
             .collect::<HashSet<_>>();
     let rule1_vars_exists_eta_forall = eta_forall.substitute_variables(r1_existentials).collect();
     // \mu has to be extended if rule1 under \eta_\forall is satisfied on I_b' --> I_b' \models \psi_1\eta_\forall
@@ -185,7 +190,7 @@ fn check_restr(rule1: &Rule, rule2: &Rule, mu: &AtomMapping, eta: &Substitution)
     // have to make sure that eta_exists takes variables from rule2 to variables of rule1 and not the other way around!!!
     // mu has to be extended if rule2_head under eta is fully contained in I_b'
     let rule2_head_eta =
-        RepresentativeAtom::substitute_atoms(eta, &consts, rule2.head()).collect::<HashSet<_>>();
+        RepresentativeAtom::substitute_atoms(eta, &consts, atoms2.atoms()).collect::<HashSet<_>>();
     if interpretation_b_pre_db.contains(&rule2_head_eta) {
         log::trace!("head of rule2 under eta subseteq I_b' => mu must be extended",);
         return CheckResult::Extend;
@@ -195,7 +200,7 @@ fn check_restr(rule1: &Rule, rule2: &Rule, mu: &AtomMapping, eta: &Substitution)
         .substitute_variables(rule1.universals())
         .collect::<HashSet<_>>();
     for n in rule1.negative() {
-        let n = RepresentativeAtom::from_atom_with_substitution(eta, &consts, n);
+        let n = RepresentativeAtom::from_atom_with_substitution(eta, &consts, &n);
         let existentials = n
             .variables()
             .filter(|v| !r1_universals_eta.contains(v))
@@ -210,7 +215,7 @@ fn check_restr(rule1: &Rule, rule2: &Rule, mu: &AtomMapping, eta: &Substitution)
     #[cfg(debug_assertions)]
     {
         let rule1_head_eta =
-            RepresentativeAtom::substitute_atoms(&eta_forall, &consts, rule1.head())
+            RepresentativeAtom::substitute_atoms(&eta_forall, &consts, rule1.head().atoms())
                 .collect::<HashSet<_>>();
         log::trace!(
             "I_b = I_b' U {}",

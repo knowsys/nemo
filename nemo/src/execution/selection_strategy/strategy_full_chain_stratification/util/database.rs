@@ -1,9 +1,12 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::execution::selection_strategy::strategy_full_chain_stratification::chain::atoms::{
-    Atom, Constant, Predicate, Var,
+    Atom, ComponentMap, Constant, Predicate, Var,
 };
+use crate::execution::selection_strategy::strategy_full_chain_stratification::chain::hypergraph::Hypergraph;
+use crate::execution::selection_strategy::strategy_full_chain_stratification::chain::solver::Solver;
 use crate::execution::selection_strategy::strategy_full_chain_stratification::chain::substitution::Substitution;
+use crate::execution::selection_strategy::strategy_full_chain_stratification::chain::tuples::Tuples;
 
 /// The resolved value of a term slot: either it turned out to be bound to a constant, or it is
 /// still a (possibly still-free) variable.
@@ -62,11 +65,11 @@ impl RepresentativeAtom {
     pub(crate) fn substitute_atoms<'a>(
         eta: &'a Substitution,
         consts: &'a HashMap<Var, Constant>,
-        atoms: impl IntoIterator<Item = &'a Atom> + 'a,
+        atoms: impl IntoIterator<Item = Atom> + 'a,
     ) -> impl Iterator<Item = Self> + 'a {
         atoms
             .into_iter()
-            .map(move |atom| Self::from_atom_with_substitution(eta, consts, atom))
+            .map(move |atom| Self::from_atom_with_substitution(eta, consts, &atom))
     }
 }
 
@@ -92,88 +95,91 @@ impl RepresentativeDatabase {
         self
     }
 
+    /// Is there an assignment of `existentials` such that all of `atoms` (with every other value
+    /// treated as fixed) hold in this database? This is a homomorphism-existence query: build the
+    /// atoms as a pattern hypergraph (existentials as free source vertices, everything else
+    /// pre-assigned to its known target vertex) and the matching facts as the target hypergraph,
+    /// then ask the `chain` solver whether a homomorphism exists.
     pub(crate) fn entails<'a>(
         &self,
         existentials: &HashSet<Var>,
         atoms: impl IntoIterator<Item = &'a RepresentativeAtom>,
     ) -> bool {
-        // we assume that all but the existential variables are actually constants (or otherwise fixed)
-        let atoms = atoms.into_iter().collect::<Vec<_>>();
-
-        // first, check that all mentioned predicates are present in the database
-        let mut atom_pred_extend = Vec::with_capacity(atoms.len());
-        for &atom in &atoms {
-            if let Some(pred_extend) = self.0.get(&atom.predicate()) {
-                atom_pred_extend.push(pred_extend);
-            } else {
-                return false;
-            }
+        let atoms: Vec<&RepresentativeAtom> = atoms.into_iter().collect();
+        if atoms.is_empty() {
+            return true;
         }
 
-        // then restrict the predicate to only those facts where non-existential values match
-        let mut atom_facts = Vec::with_capacity(atoms.len());
-
-        for (i, &atom) in atoms.iter().enumerate() {
-            let options = atom_pred_extend[i]
-                .iter()
-                .filter(|fact| {
-                    atom.values()
-                        .iter()
-                        .enumerate()
-                        .filter(|(_, value)| match value {
-                            Value::Variable(var) => !existentials.contains(var),
-                            Value::Constant(_) => true,
-                        })
-                        .all(|(k, value)| &fact[k] == value)
-                })
-                .collect::<HashSet<_>>();
-            if options.is_empty() {
-                return false;
+        // Distinct predicates referenced, in first-appearance order, with their arity and the
+        // database's facts -- bail out immediately if any has no facts at all (nothing could
+        // possibly match), exactly as the direct check used to.
+        let mut pred_index: HashMap<Predicate, usize> = HashMap::new();
+        let mut arities: Vec<usize> = Vec::new();
+        let mut facts_per_color: Vec<&HashSet<Vec<Value>>> = Vec::new();
+        for atom in &atoms {
+            let pred = atom.predicate();
+            if !pred_index.contains_key(&pred) {
+                let Some(facts) = self.0.get(&pred) else {
+                    return false;
+                };
+                pred_index.insert(pred, arities.len());
+                arities.push(atom.values().len());
+                facts_per_color.push(facts);
             }
-            atom_facts.push(options);
         }
+        let colors = arities.len();
 
-        let mut existentials_map = HashMap::new();
+        // Intern query values into source (pattern) vertices; every non-existential slot's value
+        // is already fixed, so it's additionally interned into a target vertex right away.
+        let mut source_vertex_of: ComponentMap<Value> = ComponentMap::new();
+        let mut target_vertex_of: ComponentMap<Value> = ComponentMap::new();
+        let mut pre_assigned: Vec<Option<usize>> = Vec::new();
+        let mut source_rows: Vec<Vec<usize>> = vec![Vec::new(); colors];
 
-        fn is_entailed<'a>(
-            remaining_atoms: &'a [&'a RepresentativeAtom],
-            atom_facts: &'a [HashSet<&'a Vec<Value>>],
-            existentials_map: &mut HashMap<Var, Value>,
-        ) -> bool {
-            if remaining_atoms.is_empty() {
-                return true;
-            }
-
-            let atom = &remaining_atoms[0];
-            let options = &atom_facts[0];
-
-            for option in options.iter() {
-                let mut inserted_terms = Vec::new();
-                if atom.values().iter().enumerate().all(|(k, value)| {
-                    if let Value::Variable(var) = value {
-                        match existentials_map.get(var) {
-                            Some(val) => *val == option[k],
-                            None => {
-                                existentials_map.insert(*var, option[k]);
-                                inserted_terms.push(*var);
-                                true
-                            }
-                        }
+        for atom in &atoms {
+            let color = pred_index[&atom.predicate()];
+            for &value in atom.values() {
+                let before = source_vertex_of.len();
+                let source_vertex = source_vertex_of.get(&value);
+                if source_vertex == before {
+                    let is_existential = matches!(value, Value::Variable(v) if existentials.contains(&v));
+                    pre_assigned.push(if is_existential {
+                        None
                     } else {
-                        true
-                    }
-                }) && is_entailed(&remaining_atoms[1..], &atom_facts[1..], existentials_map)
-                {
-                    return true;
+                        Some(target_vertex_of.get(&value))
+                    });
                 }
-                for t in &inserted_terms {
-                    existentials_map.remove(t);
-                }
+                source_rows[color].push(source_vertex);
             }
-            false
         }
 
-        is_entailed(&atoms[..], &atom_facts[..], &mut existentials_map)
+        // Intern every relevant fact's values into target vertices too, aligned with the
+        // pattern's colors.
+        let mut target_rows: Vec<Vec<usize>> = vec![Vec::new(); colors];
+        for (color, facts) in facts_per_color.iter().enumerate() {
+            for fact in facts.iter() {
+                for &v in fact {
+                    target_rows[color].push(target_vertex_of.get(&v));
+                }
+            }
+        }
+
+        let source_tuples: Vec<Tuples> = source_rows
+            .into_iter()
+            .zip(&arities)
+            .map(|(data, &arity)| Tuples::from_rows(arity, data.chunks(arity).map(|c| c.to_vec())))
+            .collect();
+        let target_tuples: Vec<Tuples> = target_rows
+            .into_iter()
+            .zip(&arities)
+            .map(|(data, &arity)| Tuples::from_rows(arity, data.chunks(arity).map(|c| c.to_vec())))
+            .collect();
+
+        let source = Hypergraph::from_tuples(source_tuples, source_vertex_of.len());
+        let target = Hypergraph::from_tuples(target_tuples, target_vertex_of.len());
+
+        let mut solver = Solver::from_hypergraphs_partial(&source, &target, &pre_assigned);
+        solver.solve()
     }
 
     pub(crate) fn contains<'a>(

@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use crate::execution::selection_strategy::strategy_full_chain_stratification::chain::atoms::{
-    Rule, combined_consts,
+    EdgeId, Rule, combined_consts,
 };
 use crate::execution::selection_strategy::strategy_full_chain_stratification::chain::substitution::Substitution;
 use crate::execution::selection_strategy::strategy_full_chain_stratification::util::atom::Positive;
@@ -17,10 +17,13 @@ use crate::execution::selection_strategy::strategy_full_chain_stratification::ut
 pub(super) fn check_posr(
     rule1: &Rule,
     rule2: &Rule,
+    rule2_part: &[EdgeId],
+    i: usize,
     mu: &AtomMapping,
     eta: &Substitution,
 ) -> CheckResult {
     let consts = combined_consts(rule1, rule2);
+    let atoms2 = rule2.positive();
 
     let r1_existentials = rule1.existentials();
 
@@ -40,23 +43,19 @@ pub(super) fn check_posr(
         return CheckResult::Reject;
     }
 
-    let rule2_body_mapped_set = mu.mapped(rule2.positive()).collect::<HashSet<_>>();
-
-    let mu_maxidx = mu.maxidx();
-
-    let rule2_body_unmapped_left = &rule2.positive()[..mu_maxidx]
-        .iter()
-        .collect::<HashSet<_>>()
-        .difference(&rule2_body_mapped_set)
-        .copied()
-        .collect::<HashSet<_>>();
+    let rule2_body_mapped_set: HashSet<EdgeId> = mu.domain().collect();
 
     // mu failed if eta assigned a variable in the left unmapped portion of rule2.body to an existential
+    let rule2_body_unmapped_left: HashSet<EdgeId> = rule2_part[..i]
+        .iter()
+        .copied()
+        .filter(|e| !rule2_body_mapped_set.contains(e))
+        .collect();
     let rule2_body_unmapped_left_vars_eta = eta
         .substitute_variables(
             rule2_body_unmapped_left
                 .iter()
-                .flat_map(|atom| atom.variables()),
+                .flat_map(|&e| atoms2.row(e).iter().copied()),
         )
         .collect::<HashSet<_>>();
     if !rule2_body_unmapped_left_vars_eta.is_disjoint(&r1_existentials) {
@@ -66,19 +65,17 @@ pub(super) fn check_posr(
         return CheckResult::Reject;
     }
 
-    let rule2_body_unmapped_right = &rule2.positive()[mu_maxidx..]
-        .iter()
-        .collect::<HashSet<_>>()
-        .difference(&rule2_body_mapped_set)
-        .copied()
-        .collect::<HashSet<_>>();
-
     // mu has to be extended if eta assigned a variable from the right unmapped portion of rule2.body to an existential
+    let rule2_body_unmapped_right: HashSet<EdgeId> = rule2_part[i..]
+        .iter()
+        .copied()
+        .filter(|e| !rule2_body_mapped_set.contains(e))
+        .collect();
     let rule2_body_unmapped_right_vars_eta = eta
         .substitute_variables(
             rule2_body_unmapped_right
                 .iter()
-                .flat_map(|atom| atom.variables()),
+                .flat_map(|&e| atoms2.row(e).iter().copied()),
         )
         .collect::<HashSet<_>>();
     if !rule2_body_unmapped_right_vars_eta.is_disjoint(&r1_existentials) {
@@ -89,17 +86,16 @@ pub(super) fn check_posr(
     }
 
     let rule1_body_eta =
-        RepresentativeAtom::substitute_atoms(eta, &consts, rule1.positive()).collect::<HashSet<_>>();
+        RepresentativeAtom::substitute_atoms(eta, &consts, rule1.positive().atoms())
+            .collect::<HashSet<_>>();
 
     let rule2_body_unmapped_eta = RepresentativeAtom::substitute_atoms(
         eta,
         &consts,
-        rule2
-            .positive()
+        atoms2
             .iter()
-            .collect::<HashSet<_>>()
-            .difference(&rule2_body_mapped_set)
-            .copied(),
+            .filter(|(e, _)| !rule2_body_mapped_set.contains(e))
+            .map(|(_, a)| a),
     )
     .collect();
 
@@ -119,14 +115,14 @@ pub(super) fn check_posr(
 
     // mu has to be extended if rule1 under eta is satisfied on I_a
     let rule1_head_eta =
-        RepresentativeAtom::substitute_atoms(eta, &consts, rule1.head()).collect::<HashSet<_>>();
+        RepresentativeAtom::substitute_atoms(eta, &consts, rule1.head().atoms()).collect::<HashSet<_>>();
     if interpretation_a_db.entails(&r1_existentials, &rule1_head_eta) {
         log::trace!("I_a models the head of rule1 under eta => mu must be extended");
         return CheckResult::Extend;
     }
 
     let rule2_body_eta =
-        RepresentativeAtom::substitute_atoms(eta, &consts, rule2.positive()).collect::<HashSet<_>>();
+        RepresentativeAtom::substitute_atoms(eta, &consts, atoms2.atoms()).collect::<HashSet<_>>();
 
     // mu has to be extended if rule2_body under eta is fully contained in I_a
     if interpretation_a_db.contains(&rule2_body_eta) {
@@ -144,7 +140,7 @@ pub(super) fn check_posr(
     // mu has failed if rule2 under eta is satisfied in I_b
     let r2_existentials = eta.substitute_variables(rule2.existentials()).collect();
     let rule2_head_eta =
-        RepresentativeAtom::substitute_atoms(eta, &consts, rule2.head()).collect::<HashSet<_>>();
+        RepresentativeAtom::substitute_atoms(eta, &consts, rule2.head().atoms()).collect::<HashSet<_>>();
     if interpretation_b_db.entails(&r2_existentials, &rule2_head_eta) {
         log::trace!("I_b models head of rule2 under eta => mu failed");
         return CheckResult::Reject;
@@ -154,7 +150,7 @@ pub(super) fn check_posr(
         .substitute_variables(rule2.universals())
         .collect::<HashSet<_>>();
     for n in rule2.negative() {
-        let n = RepresentativeAtom::from_atom_with_substitution(eta, &consts, n);
+        let n = RepresentativeAtom::from_atom_with_substitution(eta, &consts, &n);
         let existentials = n
             .variables()
             .filter(|v| !r2_universals_eta.contains(v))

@@ -32,17 +32,40 @@ pub struct Solver<'a> {
 impl<'a> Solver<'a> {
     pub fn from_hypergraphs(h: &'a Hypergraph, g: &Hypergraph) -> Self {
         let target_vertices = g.vertex_count();
+        let domains = (0..h.vertex_count())
+            .map(|_| Domain::Unassigned(BitSet::filled(target_vertices)))
+            .collect();
+
+        Self::build(h, g, domains)
+    }
+
+    /// Like [Self::from_hypergraphs], but some source vertices start pre-assigned to a known
+    /// target vertex rather than unconstrained: `assigned[v] == Some(t)` pins source vertex `v`
+    /// to target vertex `t` from the start (e.g. because its value is already known, and only
+    /// some *other* source vertices are actually being searched over).
+    pub fn from_hypergraphs_partial(
+        h: &'a Hypergraph,
+        g: &Hypergraph,
+        assigned: &[Option<usize>],
+    ) -> Self {
+        let target_vertices = g.vertex_count();
+        let domains = (0..h.vertex_count())
+            .map(|v| match assigned.get(v).copied().flatten() {
+                Some(target) => Domain::Assigned(target),
+                None => Domain::Unassigned(BitSet::filled(target_vertices)),
+            })
+            .collect();
+
+        Self::build(h, g, domains)
+    }
+
+    fn build(h: &'a Hypergraph, g: &Hypergraph, domains: Box<[Domain]>) -> Self {
+        let target_vertices = g.vertex_count();
 
         let relations: Box<[_]> = g
             .tuples()
             .iter()
             .map(|tuples| Relation::from_flat_tuples(tuples, target_vertices))
-            .collect();
-
-        let variable_count = h.vertex_count();
-
-        let domains = (0..variable_count)
-            .map(|_| Domain::Unassigned(BitSet::filled(target_vertices)))
             .collect();
 
         let mut color_offsets = vec![0; relations.len()];

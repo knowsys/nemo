@@ -28,10 +28,10 @@ mod chain {
     mod constraint;
     mod core_solver;
     mod domain;
-    mod hypergraph;
+    pub(crate) mod hypergraph;
     mod relation;
     pub(crate) mod substitution;
-    mod solver;
+    pub(crate) mod solver;
     mod trail;
     pub(crate) mod tuples;
 

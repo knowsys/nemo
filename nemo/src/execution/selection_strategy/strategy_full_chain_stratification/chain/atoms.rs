@@ -15,6 +15,8 @@ use nemo_physical::datavalues::AnyDataValue;
 
 use crate::rule_model::components::term::primitive::variable::Variable as OrigVariable;
 
+use super::tuples::Tuples;
+
 /// A variable is just a dense, per-rule id in `0..rule.var_count()`.
 /// A term slot holding a ground value uses a reserved id too (see [`Rule::consts`]) so that
 /// atoms/operations can stay uniformly `usize`-based.
@@ -27,6 +29,15 @@ pub(crate) struct Predicate(pub(crate) usize);
 /// An interned constant (ground value).
 #[derive(Debug, Hash, PartialEq, Eq, Copy, Clone)]
 pub(crate) struct Constant(pub(crate) usize);
+
+/// Identifies one atom/edge: the `color` (index into an [Atoms]' predicate-grouped `Tuples`) and
+/// the row within that color's `Tuples`. Shared with the `chain` solver's `Hypergraph`, which
+/// groups its edges the same way.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) struct EdgeId {
+    pub(crate) color: usize,
+    pub(crate) idx: usize,
+}
 
 /// Interns values of type `T` into dense `usize` keys, assigned in first-seen order.
 #[derive(Debug, Default, Clone)]
@@ -71,6 +82,8 @@ impl<T: Eq + Hash + Clone> ComponentMap<T> {
     }
 }
 
+/// An atom, as a value (predicate plus its argument variables). Not how rules store their atoms
+/// (see [Atoms]) -- this is just what iterating/looking one up hands back.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct Atom {
     pub(crate) predicate: Predicate,
@@ -91,11 +104,123 @@ impl Atom {
     }
 }
 
-/// Shift every variable id occurring in `atom` by `offset`.
-pub(crate) fn shift_atom(atom: &Atom, offset: usize) -> Atom {
-    Atom {
-        predicate: atom.predicate,
-        terms: atom.terms.iter().map(|v| v + offset).collect(),
+/// A set of atoms, grouped by predicate ("color") into [Tuples] -- the same shape the `chain`
+/// solver's `Hypergraph` groups its edges into (each color's rows all have that predicate's fixed
+/// arity), so this is directly the material a `Hypergraph` gets built from.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Atoms {
+    tuples: Box<[Tuples]>,
+    /// `colors[c]` is the predicate whose rows are `tuples[c]` (the inverse of `preds`).
+    colors: Box<[Predicate]>,
+    preds: HashMap<Predicate, usize>,
+}
+
+impl Atoms {
+    /// Group `rows` by predicate, in first-appearance order.
+    fn from_rows(rows: impl IntoIterator<Item = (Predicate, Box<[Var]>)>) -> Self {
+        let mut preds: HashMap<Predicate, usize> = HashMap::new();
+        let mut colors: Vec<Predicate> = Vec::new();
+        let mut grouped: Vec<Vec<Vec<usize>>> = Vec::new();
+
+        for (pred, terms) in rows {
+            let &mut color = preds.entry(pred).or_insert_with(|| {
+                colors.push(pred);
+                grouped.push(Vec::new());
+                colors.len() - 1
+            });
+            grouped[color].push(terms.into_vec());
+        }
+
+        let tuples = grouped
+            .into_iter()
+            .map(|rows| {
+                let arity = rows[0].len();
+                Tuples::from_rows(arity, rows)
+            })
+            .collect();
+
+        Self {
+            tuples,
+            colors: colors.into_boxed_slice(),
+            preds,
+        }
+    }
+
+    /// The predicate's color (index into the internal per-predicate storage), if this collection
+    /// has any atom with that predicate.
+    pub(crate) fn color_of(&self, pred: Predicate) -> Option<usize> {
+        self.preds.get(&pred).copied()
+    }
+
+    /// The predicate's rows, if this collection has any atom with that predicate.
+    pub(crate) fn tuples_for(&self, pred: Predicate) -> Option<&Tuples> {
+        self.color_of(pred).map(|c| &self.tuples[c])
+    }
+
+    pub(crate) fn predicate_of(&self, edge: EdgeId) -> Predicate {
+        self.colors[edge.color]
+    }
+
+    pub(crate) fn row(&self, edge: EdgeId) -> &[Var] {
+        &self.tuples[edge.color][edge.idx]
+    }
+
+    pub(crate) fn get(&self, edge: EdgeId) -> Atom {
+        Atom {
+            predicate: self.predicate_of(edge),
+            terms: self.row(edge).into(),
+        }
+    }
+
+    /// All atoms, in a deterministic (colors in storage order, then rows within a color) order.
+    pub(crate) fn iter(&self) -> impl Iterator<Item = (EdgeId, Atom)> + '_ {
+        self.tuples.iter().enumerate().flat_map(move |(color, t)| {
+            let predicate = self.colors[color];
+            t.iter().enumerate().map(move |(idx, row)| {
+                (
+                    EdgeId { color, idx },
+                    Atom {
+                        predicate,
+                        terms: row.into(),
+                    },
+                )
+            })
+        })
+    }
+
+    pub(crate) fn variables(&self) -> impl Iterator<Item = Var> + '_ {
+        self.tuples.iter().flat_map(|t| t.iter().flatten().copied())
+    }
+
+    /// Every atom in this collection, as a value (dropping its [EdgeId]).
+    pub(crate) fn atoms(&self) -> impl Iterator<Item = Atom> + '_ {
+        self.iter().map(|(_, atom)| atom)
+    }
+
+    pub(crate) fn contains_row(&self, pred: Predicate, terms: &[Var]) -> bool {
+        self.tuples_for(pred)
+            .is_some_and(|t| t.iter().any(|row| row == terms))
+    }
+
+    pub(crate) fn len(&self) -> usize {
+        self.tuples.iter().map(Tuples::len).sum()
+    }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        self.tuples.iter().all(Tuples::is_empty)
+    }
+
+    /// A copy of this collection with every variable id shifted by `offset`.
+    pub(crate) fn shift(&self, offset: usize) -> Self {
+        Self {
+            tuples: self
+                .tuples
+                .iter()
+                .map(|t| Tuples::from_rows(t.arity, t.iter().map(|row| row.iter().map(|v| v + offset).collect())))
+                .collect(),
+            colors: self.colors.clone(),
+            preds: self.preds.clone(),
+        }
     }
 }
 
@@ -183,9 +308,9 @@ fn convert_primitive(
 /// rather than relying on global uniqueness.
 #[derive(Debug, Clone)]
 pub(crate) struct Rule {
-    head: Box<[Atom]>,
-    body_pos: Box<[Atom]>,
-    body_neg: Box<[Atom]>,
+    head: Atoms,
+    body_pos: Atoms,
+    body_neg: Atoms,
     operations: Box<[Operation]>,
     /// Which variable ids are actually bound to a ground value.
     consts: HashMap<Var, Constant>,
@@ -199,20 +324,20 @@ pub(crate) struct Rule {
 }
 
 impl Rule {
-    pub(crate) fn head(&self) -> &[Atom] {
+    pub(crate) fn head(&self) -> &Atoms {
         &self.head
     }
 
-    pub(crate) fn positive(&self) -> &[Atom] {
+    pub(crate) fn positive(&self) -> &Atoms {
         &self.body_pos
     }
 
-    pub(crate) fn negative_atoms(&self) -> &[Atom] {
+    pub(crate) fn negative_atoms(&self) -> &Atoms {
         &self.body_neg
     }
 
-    pub(crate) fn negative(&self) -> impl Iterator<Item = &Atom> {
-        self.body_neg.iter()
+    pub(crate) fn negative(&self) -> impl Iterator<Item = Atom> + '_ {
+        self.body_neg.iter().map(|(_, atom)| atom)
     }
 
     pub(crate) fn operations(&self) -> &[Operation] {
@@ -241,14 +366,11 @@ impl Rule {
 
     /// Return the set of universal (body) variables in this rule.
     pub(crate) fn universals(&self) -> HashSet<Var> {
-        self.body_pos
-            .iter()
-            .flat_map(|atom| atom.variables())
-            .collect()
+        self.body_pos.variables().collect()
     }
 
     fn head_variables(&self) -> HashSet<Var> {
-        self.head.iter().flat_map(|atom| atom.variables()).collect()
+        self.head.variables().collect()
     }
 
     /// Return the set of existential (head-only) variables in this rule.
@@ -264,7 +386,7 @@ impl Rule {
     pub(crate) fn variables(&self) -> HashSet<Var> {
         let mut vars = self.head_variables();
         vars.extend(self.universals());
-        vars.extend(self.body_neg.iter().flat_map(|atom| atom.variables()));
+        vars.extend(self.body_neg.variables());
         vars
     }
 
@@ -291,9 +413,9 @@ impl Rule {
         }
 
         Self {
-            head: self.head.iter().map(|a| shift_atom(a, offset)).collect(),
-            body_pos: self.body_pos.iter().map(|a| shift_atom(a, offset)).collect(),
-            body_neg: self.body_neg.iter().map(|a| shift_atom(a, offset)).collect(),
+            head: self.head.shift(offset),
+            body_pos: self.body_pos.shift(offset),
+            body_neg: self.body_neg.shift(offset),
             operations: self
                 .operations
                 .iter()
@@ -329,40 +451,46 @@ impl Rule {
         let mut next_id: Var = 0;
         let mut consts: HashMap<Var, Constant> = HashMap::new();
 
-        let head: Box<[Atom]> = normalized_rule
+        let head_rows: Vec<(Predicate, Box<[Var]>)> = normalized_rule
             .head()
             .iter()
-            .map(|head_atom| Atom {
-                predicate: Predicate(pred_map.get(&head_atom.predicate())),
-                terms: head_atom
-                    .terms()
-                    .map(|primitive| {
-                        convert_primitive(&mut var_map, &mut next_id, &mut consts, const_map, primitive)
-                    })
-                    .collect(),
+            .map(|head_atom| {
+                (
+                    Predicate(pred_map.get(&head_atom.predicate())),
+                    head_atom
+                        .terms()
+                        .map(|primitive| {
+                            convert_primitive(&mut var_map, &mut next_id, &mut consts, const_map, primitive)
+                        })
+                        .collect(),
+                )
             })
             .collect();
 
-        let body_pos: Box<[Atom]> = normalized_rule
+        let body_pos_rows: Vec<(Predicate, Box<[Var]>)> = normalized_rule
             .positive()
             .iter()
-            .map(|body_atom| Atom {
-                predicate: Predicate(pred_map.get(&body_atom.predicate())),
-                terms: body_atom
-                    .terms()
-                    .map(|variable| convert_variable(&mut var_map, &mut next_id, variable))
-                    .collect(),
+            .map(|body_atom| {
+                (
+                    Predicate(pred_map.get(&body_atom.predicate())),
+                    body_atom
+                        .terms()
+                        .map(|variable| convert_variable(&mut var_map, &mut next_id, variable))
+                        .collect(),
+                )
             })
             .collect();
 
-        let body_neg: Box<[Atom]> = normalized_rule
+        let body_neg_rows: Vec<(Predicate, Box<[Var]>)> = normalized_rule
             .negative()
-            .map(|body_atom| Atom {
-                predicate: Predicate(pred_map.get(&body_atom.predicate())),
-                terms: body_atom
-                    .terms()
-                    .map(|variable| convert_variable(&mut var_map, &mut next_id, variable))
-                    .collect(),
+            .map(|body_atom| {
+                (
+                    Predicate(pred_map.get(&body_atom.predicate())),
+                    body_atom
+                        .terms()
+                        .map(|variable| convert_variable(&mut var_map, &mut next_id, variable))
+                        .collect(),
+                )
             })
             .collect();
 
@@ -419,9 +547,9 @@ impl Rule {
 
         (
             Self {
-                head,
-                body_pos,
-                body_neg,
+                head: Atoms::from_rows(head_rows),
+                body_pos: Atoms::from_rows(body_pos_rows),
+                body_neg: Atoms::from_rows(body_neg_rows),
                 operations,
                 consts,
                 var_count: next_id,
@@ -440,13 +568,4 @@ pub(crate) fn combined_consts(rule1: &Rule, rule2: &Rule) -> HashMap<Var, Consta
     let mut consts = rule1.consts.clone();
     consts.extend(&rule2.consts);
     consts
-}
-
-/// A collection of atoms grouped by predicate ("color"), as flat tuples.
-/// This is the compact representation used by the `chain` solver machinery; it is
-/// derived from a [Rule] rather than being the primary representation reliance-checking
-/// works against (see [Rule] for that).
-pub(crate) struct Atoms {
-    pub(crate) tuples: Box<[super::tuples::Tuples]>,
-    pub(crate) preds: HashMap<Predicate, usize>,
 }
