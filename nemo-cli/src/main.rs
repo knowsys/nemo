@@ -29,16 +29,17 @@ use cli::{CliApp, FactPrinting, Reporting};
 
 use crate::tracing::handle_tracing;
 
-use ::tracing::{debug, error, info, warn};
+use ::tracing::{Instrument, Level, debug_span, event, info_span, instrument};
 use error::CliError;
 use nemo::{
     datavalues::AnyDataValue,
     error::Error,
     execution::{
-        DefaultExecutionEngine, ExecutionEngine, execution_parameters::ExecutionParameters,
+        DefaultExecutionEngine, DefaultExecutionStrategy, ExecutionEngine,
+        execution_parameters::ExecutionParameters,
         planning::normalization::program::NormalizedProgram,
     },
-    io::{ImportManager, resource_providers::ResourceProviders},
+    io::{ExportManager, ImportManager, resource_providers::ResourceProviders},
     meta::timing::{TimedCode, TimedDisplay},
     rule_file::RuleFile,
     rule_model::components::{fact::Fact, tag::Tag, term::Term},
@@ -152,94 +153,128 @@ fn print_memory_details(engine: &DefaultExecutionEngine) {
     println!("\nMemory report:\n\n{}", engine.memory_usage());
 }
 
-async fn run(mut cli: CliApp) -> Result<(), CliError> {
+#[instrument(level = Level::INFO, name = "Reading & Preprocessing", skip(cli))]
+async fn preprocess(
+    cli: &mut CliApp,
+) -> Result<(ExecutionEngine<DefaultExecutionStrategy>, ExportManager), CliError> {
     TimedCode::instance().start();
     TimedCode::instance().sub("Reading & Preprocessing").start();
 
-    info!("Parsing rules ...");
+    let (engine, export_manager) = async move {
+        if cli.rules.len() > 1 {
+            return Err(CliError::MultipleFilesNotImplemented);
+        }
 
-    if cli.rules.len() > 1 {
-        return Err(CliError::MultipleFilesNotImplemented);
+        let program_path = cli.rules.pop().ok_or(CliError::NoInput)?;
+        let program_file = RuleFile::load(program_path)?;
+
+        let export_manager = cli.output.export_manager()?;
+        let import_manager = ImportManager::new(ResourceProviders::with_base_path(
+            cli.import_directory.clone(),
+        ));
+
+        let mut execution_parameters = ExecutionParameters::default();
+        execution_parameters.set_export_parameters(cli.output.export_setting.into());
+        execution_parameters.set_import_manager(import_manager);
+
+        if let Err(parameter) = execution_parameters.set_global(
+            cli.parameters
+                .drain(..)
+                .map(|parameter| (parameter.key, parameter.value)),
+        ) {
+            return Err(CliError::InvalidParameter { parameter });
+        }
+
+        let (engine, warnings) = ExecutionEngine::from_file(program_file, execution_parameters)
+            .instrument(debug_span!("Creating execution engine"))
+            .await?
+            .into_pair();
+        warnings.eprint(cli.disable_warnings)?;
+
+        Ok((engine, export_manager))
     }
-
-    let program_path = cli.rules.pop().ok_or(CliError::NoInput)?;
-    let program_file = RuleFile::load(program_path)?;
-
-    let export_manager = cli.output.export_manager()?;
-    let import_manager = ImportManager::new(ResourceProviders::with_base_path(
-        cli.import_directory.clone(),
-    ));
-
-    let mut execution_parameters = ExecutionParameters::default();
-    execution_parameters.set_export_parameters(cli.output.export_setting.into());
-    execution_parameters.set_import_manager(import_manager);
-
-    if let Err(parameter) = execution_parameters.set_global(
-        cli.parameters
-            .drain(..)
-            .map(|parameter| (parameter.key, parameter.value)),
-    ) {
-        return Err(CliError::InvalidParameter { parameter });
-    }
-
-    let (mut engine, warnings) = ExecutionEngine::from_file(program_file, execution_parameters)
-        .await?
-        .into_pair();
-    warnings.eprint(cli.disable_warnings)?;
-
-    info!("Rules parsed");
+    .instrument(info_span!("Parsing rules"))
+    .await?;
 
     for (predicate, handler) in engine.exports() {
-        export_manager.validate(&predicate, &handler)?;
+        debug_span!(
+            "Validating import handler",
+            predicate = predicate.to_string(),
+            handler = debug(&handler)
+        )
+        .in_scope(|| export_manager.validate(&predicate, &handler))?
     }
 
     TimedCode::instance().sub("Reading & Preprocessing").stop();
 
-    TimedCode::instance().sub("Reasoning").start();
-    info!("Reasoning ... ");
-    engine.execute().await?;
-    info!("Reasoning done");
-    TimedCode::instance().sub("Reasoning").stop();
+    Ok((engine, export_manager))
+}
 
-    let mut stdout_used = false;
+async fn run(mut cli: CliApp) -> Result<(), CliError> {
+    let (mut engine, export_manager, stdout_used) = async {
+        let (mut engine, export_manager) = preprocess(&mut cli).await?;
 
-    if !export_manager.write_disabled() {
-        TimedCode::instance()
-            .sub("Output & Final Materialization")
-            .start();
-        info!("writing output");
+        TimedCode::instance().sub("Reasoning").start();
+        engine.execute().instrument(info_span!("Reasoning")).await?;
+        TimedCode::instance().sub("Reasoning").stop();
 
-        for (predicate, handler) in engine.exports() {
-            stdout_used |= export_manager.export_table(
-                &predicate,
-                &handler,
-                engine.predicate_rows(&predicate).await?,
-            )?;
-        }
+        let mut stdout_used = false;
 
-        TimedCode::instance()
-            .sub("Output & Final Materialization")
-            .stop();
-    }
+        if !export_manager.write_disabled() {
+            async {
+                TimedCode::instance()
+                    .sub("Output & Final Materialization")
+                    .start();
+                event!(Level::INFO, "writing output");
 
-    if cli.output.print_facts_setting.is_enabled() {
-        TimedCode::instance().sub("Printing Facts").start();
-        info!("Printing facts");
+                for (predicate, handler) in engine.exports() {
+                    stdout_used |= export_manager.export_table(
+                        &predicate,
+                        &handler,
+                        engine.predicate_rows(&predicate).await?,
+                    )?;
+                }
 
-        let mut stdout = Box::new(stdout().lock());
+                TimedCode::instance()
+                    .sub("Output & Final Materialization")
+                    .stop();
 
-        for predicate in
-            predicates_to_print_facts_for(cli.output.print_facts_setting, engine.chase_program())
-        {
-            if let Some(table) = engine.predicate_rows(&predicate).await? {
-                print_facts_for_table(&mut stdout, table, predicate)?;
+                Ok::<_, CliError>(())
             }
+            .instrument(info_span!("Output & Final Materialization"))
+            .await?;
         }
 
-        TimedCode::instance().sub("Printing Facts").stop();
-    }
+        if cli.output.print_facts_setting.is_enabled() {
+            async {
+                TimedCode::instance().sub("Printing Facts").start();
+                event!(Level::INFO, "Printing facts");
 
-    TimedCode::instance().stop();
+                let mut stdout = Box::new(stdout().lock());
+
+                for predicate in predicates_to_print_facts_for(
+                    cli.output.print_facts_setting,
+                    engine.chase_program(),
+                ) {
+                    if let Some(table) = engine.predicate_rows(&predicate).await? {
+                        print_facts_for_table(&mut stdout, table, predicate)?;
+                    }
+                }
+
+                TimedCode::instance().sub("Printing Facts").stop();
+
+                Ok::<_, CliError>(())
+            }
+            .instrument(info_span!("Printing Facts"))
+            .await?;
+        }
+
+        TimedCode::instance().stop();
+
+        Ok::<_, CliError>((engine, export_manager, stdout_used))
+    }
+    .instrument(info_span!("run"))
+    .await?;
 
     let (print_summary, print_times, print_memory) = match cli.reporting {
         Reporting::All => (true, true, true),
@@ -273,8 +308,8 @@ async fn main() {
     let disable_warnings = cli.disable_warnings;
 
     cli.logging.initialize_logging();
-    info!("Version: {}", clap::crate_version!());
-    debug!("Rule files: {:?}", cli.rules);
+    event!(Level::INFO, "Version: {}", clap::crate_version!());
+    event!(Level::DEBUG, rule_files = ?cli.rules);
 
     if let Err(error) = run(cli).await {
         if let CliError::NemoError(Error::ProgramReport(report)) = error {
@@ -284,7 +319,7 @@ async fn main() {
                 std::process::exit(1);
             }
         } else {
-            error!("error: {error}");
+            event!(Level::ERROR, "error: {error}");
             std::process::exit(1);
         }
     }

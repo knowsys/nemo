@@ -5,7 +5,11 @@ use clap::ArgAction;
 use nemo::{error::Error, execution::execution_parameters::ExportParameters, io::ExportManager};
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::{
-    EnvFilter, Layer, filter::Directive, fmt, layer::SubscriberExt, registry,
+    EnvFilter, Layer,
+    filter::Directive,
+    fmt::{self, format::FmtSpan},
+    layer::SubscriberExt,
+    registry,
     util::SubscriberInitExt,
 };
 
@@ -128,6 +132,11 @@ impl LoggingArgs {
 
         let logging = fmt::layer()
             .with_writer(std::io::stderr)
+            .with_span_events(if self.verbose > 1 {
+                FmtSpan::NEW | FmtSpan::CLOSE
+            } else {
+                FmtSpan::NONE
+            })
             .with_filter(filter);
 
         registry().with(logging).init();
