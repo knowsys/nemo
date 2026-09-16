@@ -27,6 +27,9 @@ use colored::Colorize;
 
 use cli::{CliApp, FactPrinting, Reporting};
 
+use crate::tracing::handle_tracing;
+
+use ::tracing::{debug, error, info, warn};
 use error::CliError;
 use nemo::{
     datavalues::AnyDataValue,
@@ -40,7 +43,6 @@ use nemo::{
     rule_file::RuleFile,
     rule_model::components::{fact::Fact, tag::Tag, term::Term},
 };
-use tracing::handle_tracing;
 
 fn print_facts_for_table<W: Write>(
     writer: &mut W,
@@ -154,7 +156,7 @@ async fn run(mut cli: CliApp) -> Result<(), CliError> {
     TimedCode::instance().start();
     TimedCode::instance().sub("Reading & Preprocessing").start();
 
-    log::info!("Parsing rules ...");
+    info!("Parsing rules ...");
 
     if cli.rules.len() > 1 {
         return Err(CliError::MultipleFilesNotImplemented);
@@ -185,7 +187,7 @@ async fn run(mut cli: CliApp) -> Result<(), CliError> {
         .into_pair();
     warnings.eprint(cli.disable_warnings)?;
 
-    log::info!("Rules parsed");
+    info!("Rules parsed");
 
     for (predicate, handler) in engine.exports() {
         export_manager.validate(&predicate, &handler)?;
@@ -194,9 +196,9 @@ async fn run(mut cli: CliApp) -> Result<(), CliError> {
     TimedCode::instance().sub("Reading & Preprocessing").stop();
 
     TimedCode::instance().sub("Reasoning").start();
-    log::info!("Reasoning ... ");
+    info!("Reasoning ... ");
     engine.execute().await?;
-    log::info!("Reasoning done");
+    info!("Reasoning done");
     TimedCode::instance().sub("Reasoning").stop();
 
     let mut stdout_used = false;
@@ -205,7 +207,7 @@ async fn run(mut cli: CliApp) -> Result<(), CliError> {
         TimedCode::instance()
             .sub("Output & Final Materialization")
             .start();
-        log::info!("writing output");
+        info!("writing output");
 
         for (predicate, handler) in engine.exports() {
             stdout_used |= export_manager.export_table(
@@ -222,7 +224,7 @@ async fn run(mut cli: CliApp) -> Result<(), CliError> {
 
     if cli.output.print_facts_setting.is_enabled() {
         TimedCode::instance().sub("Printing Facts").start();
-        log::info!("Printing facts");
+        info!("Printing facts");
 
         let mut stdout = Box::new(stdout().lock());
 
@@ -271,8 +273,8 @@ async fn main() {
     let disable_warnings = cli.disable_warnings;
 
     cli.logging.initialize_logging();
-    log::info!("Version: {}", clap::crate_version!());
-    log::debug!("Rule files: {:?}", cli.rules);
+    info!("Version: {}", clap::crate_version!());
+    debug!("Rule files: {:?}", cli.rules);
 
     if let Err(error) = run(cli).await {
         if let CliError::NemoError(Error::ProgramReport(report)) = error {
@@ -282,7 +284,7 @@ async fn main() {
                 std::process::exit(1);
             }
         } else {
-            log::error!("{} {error}", "error:".red().bold());
+            error!("error: {error}");
             std::process::exit(1);
         }
     }

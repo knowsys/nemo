@@ -55,7 +55,7 @@ pub(crate) async fn trace_selected_facts(
             })
             .collect::<Vec<_>>();
         let total_facts = predicates.iter().map(|(_, count)| count).sum::<usize>();
-        log::info!(
+        tracing::info!(
             "Starting tracing of {total_facts} for {} predicates",
             predicates.len()
         );
@@ -72,7 +72,7 @@ pub(crate) async fn trace_selected_facts(
             return Ok(());
         }
 
-        log::info!("Starting tracing of {} facts...", tracing_facts.len());
+        tracing::info!("Starting tracing of {} facts...", tracing_facts.len());
         let mut facts = Vec::<Fact>::with_capacity(tracing_facts.len());
         for fact_string in &tracing_facts {
             let fact = Fact::parse(fact_string).map_err(|_| CliError::TracingInvalidFact {

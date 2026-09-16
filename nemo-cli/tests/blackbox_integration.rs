@@ -10,6 +10,7 @@ use std::{
 use assert_cmd::cargo_bin_cmd;
 use assert_fs::{TempDir, prelude::*};
 use dir_test::{Fixture, dir_test};
+
 /// Testcase-generator. Each set of testcases needs a directory in resources/testcases.
 /// Every testcase is represented by a single .rls file in the testcases directory
 /// To check the correctness of the output, the expected output (in csv-export format) needs to be in a directory with the same name (without extension) as the rule-file
@@ -53,18 +54,16 @@ use dir_test::{Fixture, dir_test};
 /// transitive_closure_test1
 /// transitive_closure_test2
 
-#[dir_test(
+#[test_log::test(dir_test(
     dir: "$CARGO_MANIFEST_DIR/../resources/testcases",
     glob: "**/*/*.rls",
-)]
+))]
 fn test(fixture: Fixture<&str>) {
     let path = PathBuf::from_str(fixture.path())
         .unwrap()
         .canonicalize()
         .unwrap();
     assert!(path.exists());
-
-    _ = env_logger::builder().is_test(true).try_init();
 
     let test_case = TestCase::test_from_rule_file(path).unwrap();
     test_case.run().unwrap();
@@ -109,7 +108,7 @@ impl TestCase {
             let expected_name = expected_file.file_name().and_then(|s| s.to_str()).unwrap();
             let output_file =
                 PathBuf::from_str(self.output_dir.child(expected_name).to_str().unwrap()).unwrap();
-            log::info!("output file: {output_file:?}");
+            tracing::info!("output file: {output_file:?}");
 
             assert!(output_file.exists());
             let mut output_lines = read_to_string(output_file)

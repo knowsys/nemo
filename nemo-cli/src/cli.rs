@@ -3,6 +3,11 @@ use std::path::PathBuf;
 
 use clap::ArgAction;
 use nemo::{error::Error, execution::execution_parameters::ExportParameters, io::ExportManager};
+use tracing::level_filters::LevelFilter;
+use tracing_subscriber::{
+    EnvFilter, Layer, filter::Directive, fmt, layer::SubscriberExt, registry,
+    util::SubscriberInitExt,
+};
 
 /// Default export directory.
 const DEFAULT_OUTPUT_DIRECTORY: &str = "results";
@@ -99,25 +104,33 @@ impl LoggingArgs {
     ///  * `Warn` otherwise
     #[allow(dead_code)]
     pub(crate) fn initialize_logging(&self) {
-        let mut builder = env_logger::Builder::new();
+        // default logging layer
+        let mut filter = EnvFilter::builder()
+            .with_default_directive(Directive::from(LevelFilter::WARN)) // default log level
+            .with_env_var("NMO_LOG")
+            .from_env_lossy();
 
-        // Default log level
-        builder.filter_level(log::LevelFilter::Warn);
-
-        builder.parse_env("NMO_LOG");
-        if let Some(ref level) = self.log_level {
-            builder.parse_filters(level);
+        if let Some(ref level) = self.log_level
+            && let Ok(directive) = level.parse()
+        {
+            filter = filter.add_directive(directive);
         } else if self.quiet {
-            builder.filter_level(log::LevelFilter::Error);
+            filter = filter.add_directive(Directive::from(LevelFilter::ERROR));
         } else if self.verbose > 0 {
-            builder.filter_level(match self.verbose {
-                1 => log::LevelFilter::Info,
-                2 => log::LevelFilter::Debug,
-                3 => log::LevelFilter::Trace,
-                _ => log::LevelFilter::Warn,
-            });
+            filter = filter.add_directive(Directive::from(match self.verbose {
+                1 => LevelFilter::INFO,
+                2 => LevelFilter::DEBUG,
+                _ => LevelFilter::TRACE,
+            }));
         }
-        builder.init();
+
+        // todo(mx): refine filtering for verbosity levels
+
+        let logging = fmt::layer()
+            .with_writer(std::io::stderr)
+            .with_filter(filter);
+
+        registry().with(logging).init();
     }
 }
 
