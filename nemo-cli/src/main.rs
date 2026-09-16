@@ -29,14 +29,13 @@ use cli::{CliApp, FactPrinting, Reporting};
 
 use crate::tracing::handle_tracing;
 
-use ::tracing::{Instrument, Level, debug_span, event, info_span, instrument};
+use ::tracing::{Instrument, Level, debug_span, event, instrument};
 use error::CliError;
 use nemo::{
     datavalues::AnyDataValue,
     error::Error,
     execution::{
-        DefaultExecutionEngine, DefaultExecutionStrategy, ExecutionEngine,
-        execution_parameters::ExecutionParameters,
+        DefaultExecutionEngine, ExecutionEngine, execution_parameters::ExecutionParameters,
         planning::normalization::program::NormalizedProgram,
     },
     io::{ExportManager, ImportManager, resource_providers::ResourceProviders},
@@ -153,19 +152,40 @@ fn print_memory_details(engine: &DefaultExecutionEngine) {
     println!("\nMemory report:\n\n{}", engine.memory_usage());
 }
 
-#[instrument(level = Level::INFO, name = "Reading & Preprocessing", skip(cli))]
-async fn preprocess(
-    cli: &mut CliApp,
-) -> Result<(ExecutionEngine<DefaultExecutionStrategy>, ExportManager), CliError> {
-    TimedCode::instance().start();
-    TimedCode::instance().sub("Reading & Preprocessing").start();
+/// Holds intermediate information pertaining to the run.
+#[derive(Debug)]
+struct Run {
+    stdout_used: bool,
+    engine: DefaultExecutionEngine,
+    export_manager: ExportManager,
+}
 
-    let (engine, export_manager) = async move {
+impl Run {
+    #[instrument(level = Level::INFO, name="Execution", skip(cli))]
+    async fn run(cli: &CliApp) -> Result<Self, CliError> {
+        let mut run = Self::preprocess(cli).await?.reason().await?;
+
+        if !run.export_manager.write_disabled() {
+            run = run.export().await?;
+        }
+
+        if cli.output.print_facts_setting.is_enabled() {
+            run = run.print(cli).await?;
+        }
+
+        Ok(run)
+    }
+
+    #[instrument(level = Level::INFO, name = "Parsing rules", skip(cli))]
+    async fn parse(cli: &CliApp) -> Result<Self, CliError> {
+        event!(Level::INFO, "Parsing rules");
+
         if cli.rules.len() > 1 {
             return Err(CliError::MultipleFilesNotImplemented);
         }
 
-        let program_path = cli.rules.pop().ok_or(CliError::NoInput)?;
+        let mut rules = cli.rules.clone();
+        let program_path = rules.pop().ok_or(CliError::NoInput)?;
         let program_file = RuleFile::load(program_path)?;
 
         let export_manager = cli.output.export_manager()?;
@@ -179,8 +199,8 @@ async fn preprocess(
 
         if let Err(parameter) = execution_parameters.set_global(
             cli.parameters
-                .drain(..)
-                .map(|parameter| (parameter.key, parameter.value)),
+                .iter()
+                .map(|parameter| (parameter.key.clone(), parameter.value.clone())),
         ) {
             return Err(CliError::InvalidParameter { parameter });
         }
@@ -191,90 +211,93 @@ async fn preprocess(
             .into_pair();
         warnings.eprint(cli.disable_warnings)?;
 
-        Ok((engine, export_manager))
-    }
-    .instrument(info_span!("Parsing rules"))
-    .await?;
+        event!(Level::INFO, "Rules parsed");
 
-    for (predicate, handler) in engine.exports() {
-        debug_span!(
-            "Validating import handler",
-            predicate = predicate.to_string(),
-            handler = debug(&handler)
-        )
-        .in_scope(|| export_manager.validate(&predicate, &handler))?
+        Ok(Self {
+            engine,
+            export_manager,
+            stdout_used: false,
+        })
     }
 
-    TimedCode::instance().sub("Reading & Preprocessing").stop();
+    #[instrument(level = Level::INFO, name = "Reading & Preprocessing", skip(cli))]
+    async fn preprocess(cli: &CliApp) -> Result<Self, CliError> {
+        TimedCode::instance().start();
+        TimedCode::instance().sub("Reading & Preprocessing").start();
 
-    Ok((engine, export_manager))
-}
+        let run = Self::parse(cli).await?;
 
-async fn run(mut cli: CliApp) -> Result<(), CliError> {
-    let (mut engine, export_manager, stdout_used) = async {
-        let (mut engine, export_manager) = preprocess(&mut cli).await?;
+        for (predicate, handler) in run.engine.exports() {
+            debug_span!(
+                "Validating import handler",
+                predicate = predicate.to_string(),
+                handler = debug(&handler)
+            )
+            .in_scope(|| run.export_manager.validate(&predicate, &handler))?
+        }
 
+        TimedCode::instance().sub("Reading & Preprocessing").stop();
+
+        Ok(run)
+    }
+
+    #[instrument(level = Level::INFO, name = "Reasoning", skip(self))]
+    async fn reason(mut self) -> Result<Self, CliError> {
+        event!(Level::INFO, "Reasoning ...");
         TimedCode::instance().sub("Reasoning").start();
-        engine.execute().instrument(info_span!("Reasoning")).await?;
+        self.engine.execute().await?;
+        event!(Level::INFO, "Reasoning done");
         TimedCode::instance().sub("Reasoning").stop();
 
-        let mut stdout_used = false;
-
-        if !export_manager.write_disabled() {
-            async {
-                TimedCode::instance()
-                    .sub("Output & Final Materialization")
-                    .start();
-                event!(Level::INFO, "writing output");
-
-                for (predicate, handler) in engine.exports() {
-                    stdout_used |= export_manager.export_table(
-                        &predicate,
-                        &handler,
-                        engine.predicate_rows(&predicate).await?,
-                    )?;
-                }
-
-                TimedCode::instance()
-                    .sub("Output & Final Materialization")
-                    .stop();
-
-                Ok::<_, CliError>(())
-            }
-            .instrument(info_span!("Output & Final Materialization"))
-            .await?;
-        }
-
-        if cli.output.print_facts_setting.is_enabled() {
-            async {
-                TimedCode::instance().sub("Printing Facts").start();
-                event!(Level::INFO, "Printing facts");
-
-                let mut stdout = Box::new(stdout().lock());
-
-                for predicate in predicates_to_print_facts_for(
-                    cli.output.print_facts_setting,
-                    engine.chase_program(),
-                ) {
-                    if let Some(table) = engine.predicate_rows(&predicate).await? {
-                        print_facts_for_table(&mut stdout, table, predicate)?;
-                    }
-                }
-
-                TimedCode::instance().sub("Printing Facts").stop();
-
-                Ok::<_, CliError>(())
-            }
-            .instrument(info_span!("Printing Facts"))
-            .await?;
-        }
-
-        TimedCode::instance().stop();
-
-        Ok::<_, CliError>((engine, export_manager, stdout_used))
+        Ok(self)
     }
-    .instrument(info_span!("run"))
-    .await?;
+
+    #[instrument(level = Level::INFO, name = "Output & Final Materialization", skip(self))]
+    async fn export(mut self) -> Result<Self, CliError> {
+        TimedCode::instance()
+            .sub("Output & Final Materialization")
+            .start();
+        event!(Level::INFO, "writing output");
+
+        for (predicate, handler) in self.engine.exports() {
+            self.stdout_used |= self.export_manager.export_table(
+                &predicate,
+                &handler,
+                self.engine.predicate_rows(&predicate).await?,
+            )?;
+        }
+
+        TimedCode::instance()
+            .sub("Output & Final Materialization")
+            .stop();
+
+        Ok(self)
+    }
+
+    #[instrument(level = Level::INFO, name = "Printing Facts", skip(self, cli))]
+    async fn print(mut self, cli: &CliApp) -> Result<Self, CliError> {
+        TimedCode::instance().sub("Printing Facts").start();
+        event!(Level::INFO, "Printing facts");
+
+        let mut stdout = Box::new(stdout().lock());
+
+        for predicate in predicates_to_print_facts_for(
+            cli.output.print_facts_setting,
+            self.engine.chase_program(),
+        ) {
+            if let Some(table) = self.engine.predicate_rows(&predicate).await? {
+                print_facts_for_table(&mut stdout, table, predicate)?;
+            }
+        }
+
+        TimedCode::instance().sub("Printing Facts").stop();
+
+        Ok(self)
+    }
+}
+
+async fn run(cli: CliApp) -> Result<(), CliError> {
+    let mut run = Run::run(&cli).await?;
 
     let (print_summary, print_times, print_memory) = match cli.reporting {
         Reporting::All => (true, true, true),
@@ -282,23 +305,23 @@ async fn run(mut cli: CliApp) -> Result<(), CliError> {
         Reporting::Time => (true, true, false),
         Reporting::Mem => (true, false, true),
         Reporting::None => (false, false, false),
-        Reporting::Auto => (!stdout_used, false, false),
+        Reporting::Auto => (!run.stdout_used, false, false),
     };
 
     if print_summary {
         print_finished_message(
-            engine.count_facts_in_memory_for_derived_predicates(),
-            !export_manager.write_disabled(),
+            run.engine.count_facts_in_memory_for_derived_predicates(),
+            !run.export_manager.write_disabled(),
         );
     }
     if print_times {
         print_timing_details();
     }
     if print_memory {
-        print_memory_details(&engine);
+        print_memory_details(&run.engine);
     }
 
-    handle_tracing(&cli, &mut engine).await
+    handle_tracing(&cli, &mut run.engine).await
 }
 
 #[tokio::main(flavor = "current_thread")]

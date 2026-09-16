@@ -10,6 +10,7 @@ use nemo::{
     },
     rule_model::components::{ComponentBehavior, fact::Fact},
 };
+use tracing::{Level, instrument};
 
 use crate::{cli::CliApp, error::CliError};
 
@@ -28,6 +29,7 @@ pub(crate) fn parse_trace_facts(cli: &CliApp) -> Result<Vec<String>, Error> {
 }
 
 /// Handle all tracing-related options specified on the command line.
+#[instrument(level = Level::INFO, name = "Tracing", skip(cli, engine))]
 pub(crate) async fn handle_tracing(
     cli: &CliApp,
     engine: &mut DefaultExecutionEngine,
