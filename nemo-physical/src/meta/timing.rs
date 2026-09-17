@@ -3,6 +3,7 @@
 use ascii_tree::{Tree, write_tree};
 #[cfg(not(target_family = "wasm"))]
 use cpu_time::ProcessTime;
+
 #[cfg(all(not(test), not(target_family = "wasm")))]
 use cpu_time::ThreadTime;
 use linked_hash_map::LinkedHashMap;
@@ -11,11 +12,17 @@ use once_cell::sync::Lazy;
 use std::time::Instant;
 use std::{
     cmp::Reverse,
-    fmt,
+    fmt::{self, Display},
+    ops::AddAssign,
     str::FromStr,
     sync::{Mutex, MutexGuard},
     time::Duration,
 };
+use tracing::{
+    Level, Subscriber, event,
+    span::{self, Id},
+};
+use tracing_subscriber::{Layer, layer::Context, registry::LookupSpan};
 #[cfg(target_family = "wasm")]
 use wasmtimer::std::Instant;
 
@@ -355,5 +362,155 @@ impl TimedCode {
         write_tree(&mut output, &tree).expect("Should be fine");
 
         output
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct TimingLayer {}
+
+#[derive(Debug, Clone, Default)]
+struct TimingRecord {
+    system: Duration,
+    process: Duration,
+    thread: Duration,
+}
+
+impl Display for TimingRecord {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "[system/process/thread (ms): {}/{}/{}]",
+            self.system.as_millis(),
+            self.process.as_millis(),
+            self.thread.as_millis()
+        )
+    }
+}
+
+impl AddAssign for TimingRecord {
+    fn add_assign(&mut self, rhs: Self) {
+        self.system += rhs.system;
+        self.process += rhs.process;
+        self.thread += rhs.thread;
+    }
+}
+
+#[derive(Debug, Clone)]
+struct IdleTime(TimingRecord);
+
+#[derive(Debug, Clone)]
+struct BusyTime(TimingRecord);
+
+#[derive(Debug, Clone)]
+struct Timings {
+    entered: usize,
+    last_system: Instant,
+    last_process: ProcessTime,
+    last_thread: Duration,
+    idle: TimingRecord,
+    busy: TimingRecord,
+}
+
+impl Default for Timings {
+    fn default() -> Self {
+        Self {
+            entered: 0,
+            last_system: Instant::now(),
+            last_process: ProcessTime::now(),
+            //last_thread: cpu_time::ThreadTime::now().as_duration(),
+            last_thread: Default::default(),
+            idle: Default::default(),
+            busy: Default::default(),
+        }
+    }
+}
+
+impl Timings {
+    fn new() -> Self {
+        Default::default()
+    }
+
+    fn since_last(&mut self) -> TimingRecord {
+        let system = Instant::now();
+        let process = ProcessTime::now();
+        let thread = cpu_time::ThreadTime::now().as_duration();
+
+        let record = TimingRecord {
+            system: system.duration_since(self.last_system),
+            process: process.duration_since(self.last_process),
+            thread: thread - self.last_thread,
+        };
+
+        self.last_system = system;
+        self.last_process = process;
+        self.last_thread = thread;
+
+        record
+    }
+
+    fn enter(&mut self) {
+        if self.entered == 0 {
+            let last = self.since_last();
+            self.idle += last;
+        }
+        self.entered += 1;
+    }
+
+    fn exit(&mut self) {
+        self.entered -= 1;
+        if self.entered == 0 {
+            let last = self.since_last();
+            self.busy += last;
+        }
+    }
+
+    fn close(&mut self) -> (IdleTime, BusyTime) {
+        let last = self.since_last();
+        self.idle += last;
+
+        (IdleTime(self.idle.clone()), BusyTime(self.busy.clone()))
+    }
+}
+
+impl<S> Layer<S> for TimingLayer
+where
+    S: Subscriber + for<'a> LookupSpan<'a>,
+{
+    fn on_new_span(&self, _attrs: &span::Attributes<'_>, id: &Id, ctx: Context<'_, S>) {
+        let span = ctx.span(&id).expect("span exists");
+        let mut extensions = span.extensions_mut();
+        extensions.insert(Timings::new());
+    }
+
+    fn on_enter(&self, id: &Id, ctx: Context<'_, S>) {
+        let span = ctx.span(&id).expect("span exists");
+
+        for span in span.scope() {
+            if let Some(timings) = span.extensions_mut().get_mut::<Timings>() {
+                timings.enter()
+            }
+        }
+    }
+
+    fn on_exit(&self, id: &Id, ctx: Context<'_, S>) {
+        let span = ctx.span(&id).expect("span exists");
+
+        for span in span.scope() {
+            if let Some(timings) = span.extensions_mut().get_mut::<Timings>() {
+                timings.exit()
+            }
+        }
+    }
+
+    fn on_close(&self, id: Id, ctx: Context<'_, S>) {
+        let span = ctx.span(&id).expect("span exists");
+        if let Some(timings) = span.extensions_mut().get_mut::<Timings>() {
+            let (idle, busy) = timings.close();
+            if let Some(parent) = span.parent() {
+                event!(parent: parent.id(), Level::INFO, name = span.name(), time.idle = %idle.0, time.busy = %busy.0);
+            } else {
+                event!(Level::INFO, name = span.name(), time.idle = %idle.0, time.busy = %busy.0);
+            }
+        }
     }
 }

@@ -20,7 +20,7 @@ path = "src/lib.rs"
 [dependencies]
 # log = { workspace = true, features = [ "max_level_trace", "release_max_level_info" ] }
 tracing = { workspace = true, features = [ "max_level_trace", "release_max_level_debug" ] }
-tracing-subscriber = { workspace = true }
+tracing-subscriber = { workspace = true, features = [ "env-filter", "fmt", "registry", "local-time", "chrono" ] }
 clap = { workspace = true, features = [ "derive", "cargo", "env" ] }
 colored = { workspace = true }
 env_logger = { workspace = true }

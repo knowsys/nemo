@@ -2,7 +2,7 @@
 use std::path::PathBuf;
 
 use clap::ArgAction;
-use nemo::{error::Error, execution::execution_parameters::ExportParameters, io::ExportManager};
+use nemo::{error::Error, execution::execution_parameters::ExportParameters, io::ExportManager, meta::timing::TimingLayer};
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::{
     EnvFilter, Layer,
@@ -139,7 +139,7 @@ impl LoggingArgs {
             })
             .with_filter(filter);
 
-        registry().with(logging).init();
+        registry().with(logging).with(TimingLayer {}).init();
     }
 }
 

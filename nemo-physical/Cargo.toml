@@ -43,6 +43,8 @@ levenshtein = "1.0.5"
 serde_urlencoded = "0.7.1"
 serde = { workspace = true, features =["derive"]}
 itertools = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
 
 [dev-dependencies]
 rand = { workspace = true }
