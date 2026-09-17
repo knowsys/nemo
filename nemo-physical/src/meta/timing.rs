@@ -417,8 +417,7 @@ impl Default for Timings {
             entered: 0,
             last_system: Instant::now(),
             last_process: ProcessTime::now(),
-            //last_thread: cpu_time::ThreadTime::now().as_duration(),
-            last_thread: Default::default(),
+            last_thread: cpu_time::ThreadTime::now().as_duration(),
             idle: Default::default(),
             busy: Default::default(),
         }
@@ -448,27 +447,34 @@ impl Timings {
         record
     }
 
-    fn enter(&mut self) {
+    fn enter(&mut self) -> TimingRecord {
+        let mut last = Default::default();
         if self.entered == 0 {
-            let last = self.since_last();
-            self.idle += last;
+            last = self.since_last();
+            self.idle += last.clone();
         }
         self.entered += 1;
+        last
     }
 
-    fn exit(&mut self) {
+    fn exit(&mut self) -> TimingRecord {
+        let mut last = Default::default();
         self.entered -= 1;
         if self.entered == 0 {
-            let last = self.since_last();
-            self.busy += last;
+            last = self.since_last();
+            self.busy += last.clone();
         }
+        last
     }
 
-    fn close(&mut self) -> (IdleTime, BusyTime) {
+    fn close(&mut self) -> ((IdleTime, BusyTime), TimingRecord) {
         let last = self.since_last();
-        self.idle += last;
+        self.idle += last.clone();
 
-        (IdleTime(self.idle.clone()), BusyTime(self.busy.clone()))
+        (
+            (IdleTime(self.idle.clone()), BusyTime(self.busy.clone())),
+            last,
+        )
     }
 }
 
@@ -484,10 +490,13 @@ where
 
     fn on_enter(&self, id: &Id, ctx: Context<'_, S>) {
         let span = ctx.span(&id).expect("span exists");
+        if let Some(timings) = span.extensions_mut().get_mut::<Timings>() {
+            let update = timings.enter();
 
-        for span in span.scope() {
-            if let Some(timings) = span.extensions_mut().get_mut::<Timings>() {
-                timings.enter()
+            for span in span.scope().skip(1) {
+                span.extensions_mut()
+                    .get_mut::<Timings>()
+                    .map(|timings| timings.idle += update.clone());
             }
         }
     }
@@ -495,18 +504,30 @@ where
     fn on_exit(&self, id: &Id, ctx: Context<'_, S>) {
         let span = ctx.span(&id).expect("span exists");
 
-        for span in span.scope() {
-            if let Some(timings) = span.extensions_mut().get_mut::<Timings>() {
-                timings.exit()
+        if let Some(timings) = span.extensions_mut().get_mut::<Timings>() {
+            let update = timings.exit();
+
+            for span in span.scope().skip(1) {
+                span.extensions_mut()
+                    .get_mut::<Timings>()
+                    .map(|timings| timings.busy += update.clone());
             }
         }
     }
 
     fn on_close(&self, id: Id, ctx: Context<'_, S>) {
         let span = ctx.span(&id).expect("span exists");
+
         if let Some(timings) = span.extensions_mut().get_mut::<Timings>() {
-            let (idle, busy) = timings.close();
+            let ((idle, busy), update) = timings.close();
+
             if let Some(parent) = span.parent() {
+                for span in parent.scope() {
+                    span.extensions_mut()
+                        .get_mut::<Timings>()
+                        .map(|timings| timings.idle += update.clone());
+                }
+
                 event!(parent: parent.id(), Level::INFO, name = span.name(), time.idle = %idle.0, time.busy = %busy.0);
             } else {
                 event!(Level::INFO, name = span.name(), time.idle = %idle.0, time.busy = %busy.0);
