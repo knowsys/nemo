@@ -921,8 +921,32 @@ mod test {
         let tree_to_int = Function::casting_to_integer64(Function::constant(any_float(4.0)));
         evaluate_expect(&tree_to_int, Some(any_int(4)));
 
+        let tree_to_int =
+            Function::casting_to_integer64(Function::constant(any_double(i64::MIN as f64)));
+        evaluate_expect(&tree_to_int, Some(any_int(i64::MIN)));
+
+        let tree_to_int = Function::casting_to_integer64(Function::constant(any_double(
+            i64::MAX as f64 - 1024.0,
+        )));
+        evaluate_expect(&tree_to_int, Some(any_int(i64::MAX - 1023)));
+
+        for value in [1.0e20_f32, -1.0e20_f32] {
+            let tree_to_int = Function::casting_to_integer64(Function::constant(any_float(value)));
+            evaluate_expect(&tree_to_int, None);
+        }
+
+        for value in [1.0e20, -1.0e20] {
+            let tree_to_int = Function::casting_to_integer64(Function::constant(any_double(value)));
+            evaluate_expect(&tree_to_int, None);
+        }
+
         let tree_to_float = Function::casting_to_float(Function::constant(any_int(4)));
         evaluate_expect(&tree_to_float, Some(any_float(4.0)));
+
+        for value in [1.0e100, -1.0e100] {
+            let tree_to_float = Function::casting_to_float(Function::constant(any_double(value)));
+            evaluate_expect(&tree_to_float, None);
+        }
 
         let tree_to_double = Function::casting_to_double(Function::constant(any_int(4)));
         evaluate_expect(&tree_to_double, Some(any_double(4.0)));

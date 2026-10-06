@@ -53,7 +53,6 @@ pub(super) fn variable_translation(
 
     let positive_variables = rule
         .positive_all()
-        .iter()
         .flat_map(|atom| atom.terms())
         .cloned()
         .collect::<HashSet<_>>();
@@ -75,7 +74,6 @@ pub(super) fn variable_translation(
                 {
                     if !rule
                         .positive_all()
-                        .iter()
                         .flat_map(|atom| atom.terms())
                         .contains(variable)
                     {
@@ -183,7 +181,7 @@ pub(super) fn valid_tables_plan(
         node_join.add_subnode(node_query);
     }
 
-    for (body_index, body_atom) in rule.positive_all().iter().enumerate() {
+    for (body_index, body_atom) in rule.positive_all().enumerate() {
         let mut body_address = address.clone();
         body_address.push(body_index);
 
@@ -199,7 +197,6 @@ pub(super) fn valid_tables_plan(
 
     let input_variables = rule
         .positive_all()
-        .iter()
         .flat_map(|atom| atom.terms())
         .chain(head_variables.iter())
         .cloned()
@@ -487,7 +484,7 @@ where
             let node = subplan_union(
                 plan,
                 table_manager,
-                &atom.predicate(),
+                atom.predicate(),
                 0..current_step_number,
                 subtract_markers.clone(),
             );

@@ -56,6 +56,7 @@ delegate = { workspace = true }
 orx-imp-vec = "2.14"
 itertools = { workspace = true }
 indexmap = { workspace = true }
+line-index = { workspace = true }
 
 [dev-dependencies]
 env_logger = { workspace = true }

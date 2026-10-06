@@ -16,7 +16,7 @@ use crate::{
     },
     rule_model::{
         components::rule::Rule, error::ValidationReport, origin::Origin,
-        pipeline::id::ProgramComponentId,
+        pipeline::id::ProgramComponentId, translation::directive::FormatContext,
     },
     syntax::{self, import_export::attribute::QUERY},
 };
@@ -78,6 +78,8 @@ pub(crate) struct ImportExportDirective {
     bindings: Vec<Operation>,
     /// Sub-rules for filtered import/export
     filter_rules: Vec<Rule>,
+    /// Base IRI (if any is set) and Hashmap of any Prefixes
+    format_context: FormatContext,
 }
 
 impl std::fmt::Display for ImportExportDirective {
@@ -167,7 +169,12 @@ pub struct ImportDirective(pub(crate) ImportExportDirective);
 
 impl ImportDirective {
     /// Create a new [ImportDirective].
-    pub fn new(predicate: Tag, spec: ImportExportSpec, bindings: Vec<Operation>) -> Self {
+    pub fn new(
+        predicate: Tag,
+        spec: ImportExportSpec,
+        bindings: Vec<Operation>,
+        format_context: FormatContext,
+    ) -> Self {
         Self(ImportExportDirective {
             origin: Origin::default(),
             id: ProgramComponentId::default(),
@@ -175,6 +182,7 @@ impl ImportDirective {
             spec,
             bindings,
             filter_rules: Vec::new(),
+            format_context,
         })
     }
 
@@ -374,6 +382,7 @@ impl ImportDirective {
             self.filter_rules(),
             Direction::Import,
             report,
+            self.format_context().clone(),
         )
     }
 
@@ -387,7 +396,13 @@ impl ImportDirective {
             self.filter_rules(),
             Direction::Import,
             &mut report,
+            self.format_context().clone(),
         )
+    }
+
+    /// Return the FormatContext
+    pub fn format_context(&self) -> &FormatContext {
+        &self.0.format_context
     }
 
     /// Return the predicate.
@@ -565,6 +580,7 @@ impl ExportDirective {
             spec,
             bindings,
             filter_rules: Vec::new(),
+            format_context: FormatContext::default(),
         })
     }
 
@@ -596,6 +612,7 @@ impl ExportDirective {
             self.filter_rules(),
             Direction::Export,
             report,
+            self.format_context().clone(),
         )
     }
 
@@ -609,7 +626,13 @@ impl ExportDirective {
             self.filter_rules(),
             Direction::Export,
             &mut report,
+            self.format_context().clone(),
         )
+    }
+
+    /// Return the FormatContext
+    pub fn format_context(&self) -> &FormatContext {
+        &self.0.format_context
     }
 
     /// Return the predicate.

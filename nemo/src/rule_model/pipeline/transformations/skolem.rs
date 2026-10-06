@@ -14,7 +14,10 @@ use crate::rule_model::{
         },
     },
     error::ValidationReport,
+<<<<<<< HEAD
     origin::Origin,
+=======
+>>>>>>> main
     programs::{ProgramRead, ProgramWrite, handle::ProgramHandle},
 };
 
@@ -91,5 +94,49 @@ impl ProgramTransformation for TransformationSkolemize {
         }
 
         commit.submit()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::{
+        rule_file::RuleFile,
+        rule_model::{
+            components::term::Term,
+            pipeline::transformations::skolem::TransformationSkolemize,
+            programs::{ProgramRead, handle::ProgramHandle},
+        },
+    };
+
+    #[test]
+    fn repeated_existential_variables_use_the_same_skolem_term() {
+        let program = "p(!e, !e, !f), q(!e) :- input(?x) .";
+        let handle =
+            ProgramHandle::from_file(&RuleFile::new(program.to_string(), String::default()))
+                .expect("program parses")
+                .into_object();
+
+        let transformed = handle
+            .transform(TransformationSkolemize::default())
+            .expect("skolem transformation succeeds");
+        let mut rules = transformed.rules();
+        let rule = rules.next().expect("transformed rule is retained");
+        assert!(rules.next().is_none());
+
+        let head_terms = rule
+            .head()
+            .iter()
+            .flat_map(|atom| atom.terms())
+            .collect::<Vec<_>>();
+
+        assert_eq!(head_terms.len(), 4);
+        assert!(
+            head_terms
+                .iter()
+                .all(|term| matches!(term, Term::FunctionTerm(_)))
+        );
+        assert_eq!(head_terms[0], head_terms[1]);
+        assert_eq!(head_terms[0], head_terms[3]);
+        assert_ne!(head_terms[0], head_terms[2]);
     }
 }

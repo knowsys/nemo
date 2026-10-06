@@ -30,7 +30,6 @@ use crate::{
                 TableEntriesForTreeNodesResponse, TableEntriesForTreeNodesResponseElement,
                 TreeAddress,
             },
-            resolve_origin::tracing_resolve_origin,
             shared::{
                 PaginationResponse, ResponseMetaInformation, Rule as TraceRule, TableEntryQuery,
                 TableEntryResponse,
@@ -114,11 +113,11 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         // Recursive call to this function for all successor nodes
 
         if let Some(successor) = &node.next {
-            let rule = program.rules()[successor.rule].clone();
+            let successor_rule = self.rule_translation.normalized_index(successor.rule);
+            let rule = program.rules()[successor_rule].clone();
 
             for (index, (atom, node_atom)) in rule
                 .positive_all()
-                .iter()
                 .zip(successor.children.iter())
                 .enumerate()
             {
@@ -129,7 +128,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                     manager,
                     node_atom,
                     next_address,
-                    &atom.predicate(),
+                    atom.predicate(),
                     program,
                 ))
                 .await?;
@@ -158,7 +157,8 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         manager.add_discard(&address, discarded_columns);
 
         if let Some(successor) = &node.next {
-            let rule = program.rules()[successor.rule].clone();
+            let successor_rule = self.rule_translation.normalized_index(successor.rule);
+            let rule = program.rules()[successor_rule].clone();
             let order = rule.variable_order().clone();
 
             // True if all children do not have any restrictions
@@ -170,7 +170,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             let next_step = {
                 self.rule_history[..before_step]
                     .iter()
-                    .rposition(|rule| *rule == successor.rule)
+                    .rposition(|rule| *rule == successor_rule)
                     .unwrap_or(self.rule_history.len())
             };
 
@@ -178,7 +178,6 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
             for (index, (atom, node_atom)) in rule
                 .positive_all()
-                .iter()
                 .zip(successor.children.iter())
                 .enumerate()
             {
@@ -199,7 +198,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                     manager,
                     node_atom,
                     next_address,
-                    &atom.predicate(),
+                    atom.predicate(),
                     &discarded_columns,
                     next_step,
                     program,
@@ -211,7 +210,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 predicate,
                 0..before_step,
                 &self.rule_history,
-                successor.rule,
+                successor_rule,
             ) {
                 // We iterate over all tables of the current predicate
                 // that was derived within the step limit
@@ -340,7 +339,8 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         let discarded_columns = manager.discard(&address);
 
         if let Some(successor) = &node.next {
-            let rule = program.rules()[successor.rule].clone();
+            let successor_rule = self.rule_translation.normalized_index(successor.rule);
+            let rule = program.rules()[successor_rule].clone();
 
             let order = rule.variable_order().clone();
 
@@ -366,7 +366,6 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
             for (index, (atom, node_atom)) in rule
                 .positive_all()
-                .iter()
                 .zip(successor.children.iter())
                 .enumerate()
             {
@@ -531,9 +530,12 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             .chase_program()
             .rules_with_body_predicate(predicate)
             .flat_map(|index| {
-                let chase_rule = &self.chase_program().rules()[index];
-                let logical_rule = tracing_resolve_origin(&self.program_handle, chase_rule.id());
-                TraceRule::all_possible_single_head_rules(index, &logical_rule).collect::<Vec<_>>()
+                let logical_rule = self.rule_translation.original_rule_unchecked(index);
+                TraceRule::all_possible_single_head_rules(
+                    self.rule_translation.original_index(index),
+                    &logical_rule,
+                )
+                .collect::<Vec<_>>()
             })
             .collect::<Vec<_>>();
 
@@ -541,11 +543,14 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             .chase_program()
             .rules_with_head_predicate(predicate)
             .flat_map(|index| {
-                let chase_rule = &self.chase_program().rules()[index];
-                let logical_rule = tracing_resolve_origin(&self.program_handle, chase_rule.id());
+                let logical_rule = self.rule_translation.original_rule_unchecked(index);
 
-                TraceRule::possible_rules_for_head_predicate(index, &logical_rule, predicate)
-                    .collect::<Vec<_>>()
+                TraceRule::possible_rules_for_head_predicate(
+                    self.rule_translation.original_index(index),
+                    &logical_rule,
+                    predicate,
+                )
+                .collect::<Vec<_>>()
             })
             .collect::<Vec<_>>();
 
@@ -576,7 +581,8 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         elements.push(element);
 
         if let Some(successor) = &node.next {
-            let rule = self.chase_program().rules()[successor.rule].clone();
+            let successor_rule = self.rule_translation.normalized_index(successor.rule);
+            let rule = self.chase_program().rules()[successor_rule].clone();
 
             // Call this function recursively for each successor
 
@@ -595,7 +601,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                     elements,
                     child,
                     next_address,
-                    &next_predicate,
+                    next_predicate,
                 ))
                 .await?;
             }
@@ -605,10 +611,10 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
             for (index, negative_atom) in rule.negative().iter().enumerate() {
                 let mut next_address = address.clone();
-                next_address.push(rule.positive_all().len() + index);
+                next_address.push(rule.positive_all().count() + index);
 
                 let rows =
-                    if let Some(rows) = self.predicate_rows(&negative_atom.predicate()).await? {
+                    if let Some(rows) = self.predicate_rows(negative_atom.predicate()).await? {
                         rows.collect::<Vec<_>>()
                     } else {
                         Vec::default()
@@ -619,7 +625,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 for row in rows {
                     let (entry_id, _step) = self
                         .table_manager
-                        .table_row_id(&negative_atom.predicate(), &row)
+                        .table_row_id(negative_atom.predicate(), &row)
                         .await
                         .expect("rows has been filled from tables and therefore must have an id");
 
@@ -694,5 +700,5 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 fn rule_is_simple(program: &NormalizedProgram, rule: &NormalizedRule) -> bool {
     rule.positive()
         .iter()
-        .all(|atom| program.rules_with_head_predicate(&atom.predicate()).count() <= 1)
+        .all(|atom| program.rules_with_head_predicate(atom.predicate()).count() <= 1)
 }

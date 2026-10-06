@@ -41,7 +41,7 @@ pub struct StrategyTracing {
 impl StrategyTracing {
     /// Creata a new [StrategyTracing].
     pub fn new(rule: &NormalizedRule, grounding: HashMap<Variable, AnyDataValue>) -> Self {
-        let positive = rule.positive_all().clone();
+        let positive = rule.positive_all_cloned();
         let ranges = vec![UnionRange::Old; positive.len()];
         let mut negative = rule.negative().clone();
         let mut operations = rule.operations().clone();

@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::rule_model::{
     components::{
-        ComponentSource, IterableVariables,
+        ComponentIdentity, ComponentSource, IterableVariables,
         term::primitive::{ground::GroundTerm, variable::global::GlobalVariable},
     },
     error::ValidationReport,
@@ -88,6 +88,8 @@ impl<'a> ProgramTransformation for TransformationGlobal<'a> {
                 let mut new_statement = statement.clone();
                 substitution.apply(&mut new_statement);
 
+                new_statement.set_origin(Origin::Global(statement.id()));
+
                 commit.add_statement(new_statement);
             } else {
                 commit.keep(statement);
@@ -95,5 +97,39 @@ impl<'a> ProgramTransformation for TransformationGlobal<'a> {
         }
 
         commit.submit()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::{assert_matches, collections::HashMap};
+
+    use crate::{
+        rule_file::RuleFile,
+        rule_model::{
+            components::{ComponentIdentity, ComponentSource},
+            origin::Origin,
+            programs::{ProgramRead, handle::ProgramHandle},
+        },
+    };
+
+    use super::TransformationGlobal;
+
+    #[test]
+    fn records_origin_of_substituted_rule() {
+        let program = "@parameter $t = 5 . a(?x) :- b(?x), ?x = $t .";
+        let handle =
+            ProgramHandle::from_file(&RuleFile::new(program.to_string(), String::default()))
+                .expect("program parses")
+                .into_object();
+
+        let original = handle.rules().next().unwrap().id();
+
+        let transformed = handle
+            .transform(TransformationGlobal::new(&HashMap::new()))
+            .unwrap();
+        let rule = transformed.rules().next().unwrap();
+
+        assert_matches!(rule.origin(), Origin::Global(id) if id == original);
     }
 }

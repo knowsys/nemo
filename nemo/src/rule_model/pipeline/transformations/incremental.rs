@@ -11,7 +11,7 @@ use crate::{
     },
     rule_model::{
         components::{
-            IterableVariables,
+            ComponentIdentity, ComponentSource, IterableVariables,
             import_export::{ImportDirective, clause::ImportLiteral},
             literal::Literal,
             rule::Rule,
@@ -24,6 +24,7 @@ use crate::{
             },
         },
         error::ValidationReport,
+        origin::Origin,
         programs::{ProgramRead, ProgramWrite, handle::ProgramHandle},
     },
 };
@@ -309,12 +310,14 @@ impl ProgramTransformation for TransformationIncremental {
                         .len()
                         == 1 =>
                 {
-                    let new_rule = Self::incremental_rule(
+                    let mut new_rule = Self::incremental_rule(
                         rule,
                         &incremental_predicates,
                         &derived_predicates,
                         &mut name_id,
                     );
+
+                    new_rule.set_origin(Origin::Incremental(rule.id()));
 
                     commit.add_rule(new_rule);
                 }
@@ -330,5 +333,40 @@ impl ProgramTransformation for TransformationIncremental {
         }
 
         commit.submit()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::assert_matches;
+
+    use crate::{
+        rule_file::RuleFile,
+        rule_model::{
+            components::{ComponentIdentity, ComponentSource},
+            origin::Origin,
+            programs::{ProgramRead, handle::ProgramHandle},
+        },
+    };
+
+    use super::TransformationIncremental;
+
+    #[test]
+    fn records_origin_of_inlined_rule() {
+        let program = r#"@import remote :- sparql {endpoint = "http://example.org", query = "SELECT ?a ?b WHERE {?a ?b ?z.}"} .
+            seed(1) .
+            out(?a, ?b) :- seed(?a), remote(?a, ?b) .
+            @output out ."#;
+        let handle =
+            ProgramHandle::from_file(&RuleFile::new(program.to_string(), String::default()))
+                .expect("program parses")
+                .into_object();
+
+        let original = handle.rules().next().unwrap().id();
+
+        let transformed = handle.transform(TransformationIncremental::new()).unwrap();
+        let rule = transformed.rules().next().unwrap();
+
+        assert_matches!(rule.origin(), Origin::Incremental(id) if id == original);
     }
 }

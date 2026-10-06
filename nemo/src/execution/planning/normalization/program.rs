@@ -91,7 +91,7 @@ impl NormalizedProgram {
         }
 
         for body in rule.positive() {
-            self.add_body_predicate_rule(body.predicate(), rule_index);
+            self.add_body_predicate_rule(body.predicate_cloned(), rule_index);
         }
 
         for head in rule.head() {
@@ -283,7 +283,10 @@ impl NormalizedProgram {
             let arity = result.predicate_arities.get(import.predicate()).cloned();
             let normalized_import = ImportInstruction::normalize_import(import, arity);
 
-            result.add_predicate_arity(normalized_import.predicate(), normalized_import.arity());
+            result.add_predicate_arity(
+                normalized_import.predicate_cloned(),
+                normalized_import.arity(),
+            );
             result.imports.push(normalized_import);
         }
 

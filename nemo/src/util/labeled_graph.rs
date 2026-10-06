@@ -1,11 +1,16 @@
 //! Contains structures that represent graphs.
 
-use std::collections::hash_map::Entry;
-use std::hash::Hash;
-use std::{collections::HashMap, fmt::Debug};
+use std::{
+    collections::{BTreeSet, HashMap, hash_map::Entry},
+    fmt::Debug,
+    hash::Hash,
+};
 
-use petgraph::graph::NodeIndex;
-use petgraph::{EdgeType, Graph};
+use petgraph::{
+    EdgeType, Graph,
+    graph::NodeIndex,
+    visit::{EdgeFiltered, EdgeRef},
+};
 
 /// Graph with labeled nodes.
 ///
@@ -67,100 +72,139 @@ where
         &self.graph
     }
 
-    /// Remove every edge that connects a node to itself.
-    /// If the function detects a self cycle with a label contained in `by_edge_labels`
-    /// it will abort the computation and return true.
-    /// Otherwise it will return false.
-    fn remove_self_cycles<T: Clone>(
-        graph: &mut Graph<T, EdgeLabel, Type>,
-        by_edge_labels: &[EdgeLabel],
-    ) -> bool {
-        for node in graph.node_indices() {
-            for edge in graph.edges_connecting(node, node) {
-                if by_edge_labels.contains(edge.weight()) {
-                    return true;
-                }
-            }
-        }
-
-        graph.retain_edges(|g, e| {
-            let (start, end) = g.edge_endpoints(e).unwrap();
-            start != end
+    /// Divides the nodes of the graph into its strongly connected components
+    /// and returns them in topological order,
+    /// meaning that every component is preceded by the components it depends on.
+    ///
+    /// We distinguish between strong and weak edges.
+    /// Strong edges must be respected, while weak edges merely express a preference.
+    ///
+    /// Components that do not depend on each other are ordered by the node
+    /// that was added to the graph first.
+    ///
+    /// Returns `None` if some component contains an edge
+    /// with a label contained in `strong_edge_labels`.
+    pub fn topological_components(
+        &self,
+        strong_edge_labels: &[EdgeLabel],
+        weak_edge_labels: &[EdgeLabel],
+    ) -> Option<Vec<Vec<NodeLabel>>> {
+        // Nodes only belong to the same component
+        // if they lie on a cycle that does not use a weak edge
+        let strong_graph = EdgeFiltered::from_fn(&self.graph, |edge| {
+            !weak_edge_labels.contains(edge.weight())
         });
+        let components = petgraph::algo::tarjan_scc(&strong_graph);
 
-        false
-    }
-
-    /// Given a map, reverses the keys and values.
-    /// Since multiple keys can map to the same value this results in
-    /// map from the values to a vector of keys.
-    fn reverse_map(map: HashMap<NodeIndex, usize>) -> HashMap<usize, Vec<NodeIndex>> {
-        let mut result = HashMap::<usize, Vec<NodeIndex>>::new();
-
-        for (key, value) in map {
-            let vec = result.entry(value).or_default();
-            vec.push(key);
+        // Assign each node to its component index
+        let mut node_to_component = vec![0; self.graph.node_count()];
+        for (component_index, component) in components.iter().enumerate() {
+            for node in component {
+                node_to_component[node.index()] = component_index;
+            }
         }
 
-        result
-    }
+        // Contract every component into a single node, counting separately
+        // how many components it has to be preceded by and how many it should be
+        let mut dependents = vec![BTreeSet::<(usize, bool)>::new(); components.len()];
+        let mut required_count = vec![0; components.len()];
+        let mut preferred_count = vec![0; components.len()];
 
-    /// Divides the nodes of the graph into a series of strata
-    /// such that there is no edge of label contained in `by_edge_labels`
-    /// from a node in a higher strata to a node in a lower strata.
-    pub fn stratify(&self, by_edge_labels: &[EdgeLabel]) -> Option<Vec<Vec<NodeLabel>>> {
-        let mut graph_scc = petgraph::algo::condensation(self.graph.clone(), false);
-        if Self::remove_self_cycles(&mut graph_scc, by_edge_labels) {
-            return None;
+        for edge in self.graph.edge_references() {
+            let source = node_to_component[edge.source().index()];
+            let target = node_to_component[edge.target().index()];
+
+            if source == target {
+                if strong_edge_labels.contains(edge.weight()) {
+                    return None;
+                }
+
+                continue;
+            }
+
+            let weak = weak_edge_labels.contains(edge.weight());
+
+            if dependents[source].insert((target, weak)) {
+                if weak {
+                    preferred_count[target] += 1;
+                } else {
+                    required_count[target] += 1;
+                }
+            }
         }
 
-        let scc_sorted = petgraph::algo::toposort(&graph_scc, None)
-            .expect("Previous call to remove_cycles should have removed all cycles");
-        let scc_count = scc_sorted.len();
+        // The position of each component among the ones that may be emitted
+        let priority = components
+            .iter()
+            .enumerate()
+            .map(|(component_index, component)| {
+                let position = component
+                    .iter()
+                    .map(|node| node.index())
+                    .min()
+                    .expect("components are not empty");
 
-        graph_scc.reverse();
+                (position, component_index)
+            })
+            .collect::<Vec<_>>();
 
-        let mut scc_to_stratum = HashMap::<NodeIndex, usize>::new();
-        for scc in scc_sorted {
-            let mut stratum: usize = 0;
-            for neighbor in graph_scc.neighbors(scc) {
-                for edge in graph_scc.edges_connecting(scc, neighbor) {
-                    if scc == neighbor {
-                        continue;
-                    }
+        // Components all of whose dependencies have been emitted,
+        let mut ready = BTreeSet::new();
+        // and those that only wait for a component they merely prefer to follow
+        let mut delayed = BTreeSet::new();
 
-                    if by_edge_labels.contains(edge.weight()) {
-                        stratum = stratum.max(
-                            1 + *scc_to_stratum
-                                .get(&neighbor)
-                                .expect("Topolical sorting should ensure that there is an entry."),
-                        );
+        for component_index in 0..components.len() {
+            if required_count[component_index] == 0 {
+                if preferred_count[component_index] == 0 {
+                    ready.insert(priority[component_index]);
+                } else {
+                    delayed.insert(priority[component_index]);
+                }
+            }
+        }
+
+        let mut emitted = vec![false; components.len()];
+        let mut result = Vec::with_capacity(components.len());
+
+        while result.len() < components.len() {
+            // Falling back to a delayed component gives up on its preferences,
+            // which is what happens if they demand a cyclic order
+            let (_, component_index) = ready
+                .pop_first()
+                .or_else(|| delayed.pop_first())
+                .expect("ignoring the weak edges leaves an acyclic graph");
+
+            emitted[component_index] = true;
+
+            for &(dependent, weak) in &dependents[component_index] {
+                if emitted[dependent] {
+                    continue;
+                }
+
+                ready.remove(&priority[dependent]);
+                delayed.remove(&priority[dependent]);
+
+                if weak {
+                    preferred_count[dependent] -= 1;
+                } else {
+                    required_count[dependent] -= 1;
+                }
+
+                if required_count[dependent] == 0 {
+                    if preferred_count[dependent] == 0 {
+                        ready.insert(priority[dependent]);
                     } else {
-                        stratum = stratum.max(
-                            *scc_to_stratum
-                                .get(&neighbor)
-                                .expect("Topolical sorting should ensure that there is an entry."),
-                        );
+                        delayed.insert(priority[dependent]);
                     }
                 }
             }
 
-            scc_to_stratum.insert(scc, stratum);
-        }
-
-        let stratum_to_sccs = Self::reverse_map(scc_to_stratum);
-
-        let mut result = Vec::new();
-        for stratum in 0..scc_count {
-            if let Some(sccs) = stratum_to_sccs.get(&stratum) {
-                result.push(
-                    sccs.iter()
-                        .flat_map(|&i| graph_scc.node_weight(i).unwrap().clone())
-                        .collect(),
-                )
-            } else {
-                break;
-            }
+            result.push(
+                components[component_index]
+                    .iter()
+                    .map(|&node| self.graph[node].clone())
+                    .collect(),
+            );
         }
 
         Some(result)
@@ -191,10 +235,29 @@ mod test {
     enum EdgeLabel {
         Positive,
         Negative,
+        Weak,
+    }
+
+    /// Compute the components of `graph`, sorting the nodes within each of them.
+    ///
+    /// The order of the nodes within a component is unspecified,
+    /// while the order of the components themselves is what is under test.
+    fn components(graph: &LabeledGraph<String, EdgeLabel, Directed>) -> Option<Vec<Vec<String>>> {
+        graph
+            .topological_components(&[EdgeLabel::Negative], &[EdgeLabel::Weak])
+            .map(|components| {
+                components
+                    .into_iter()
+                    .map(|mut component| {
+                        component.sort();
+                        component
+                    })
+                    .collect()
+            })
     }
 
     #[test]
-    fn stratification() {
+    fn topological_order() {
         let mut graph = LabeledGraph::<String, EdgeLabel, Directed>::default();
 
         let node_a = String::from("A");
@@ -209,19 +272,16 @@ mod test {
         graph.add_edge(node_c.clone(), node_d.clone(), EdgeLabel::Positive);
         graph.add_edge(node_c.clone(), node_d.clone(), EdgeLabel::Negative);
 
-        let mut stratums = graph.stratify(&[EdgeLabel::Negative]).unwrap();
-        for stratum in &mut stratums {
-            stratum.sort();
-        }
-
+        // `B` and `C` lie on a common cycle and form a single component,
+        // which the positive self loop on `C` does not split.
         assert_eq!(
-            stratums,
-            vec![vec![node_a], vec![node_b, node_c], vec![node_d]]
+            components(&graph),
+            Some(vec![vec![node_a], vec![node_b, node_c], vec![node_d]])
         );
     }
 
     #[test]
-    fn stratification_2() {
+    fn topological_order_independent_components() {
         let mut graph = LabeledGraph::<String, EdgeLabel, Directed>::default();
 
         let node_a = String::from("A");
@@ -233,13 +293,81 @@ mod test {
         graph.add_edge(node_b.clone(), node_c.clone(), EdgeLabel::Positive);
         graph.add_edge(node_c.clone(), node_d.clone(), EdgeLabel::Positive);
 
-        let mut stratums = graph.stratify(&[EdgeLabel::Negative]).unwrap();
+        // `A` and `B` do not depend on each other,
+        // so they are ordered by the node that was added first.
+        assert_eq!(
+            components(&graph),
+            Some(vec![vec![node_a], vec![node_b], vec![node_c], vec![node_d]])
+        );
+    }
 
-        for stratum in &mut stratums {
-            stratum.sort();
-        }
+    #[test]
+    fn topological_order_isolated_node() {
+        let mut graph = LabeledGraph::<String, EdgeLabel, Directed>::default();
 
-        assert_eq!(stratums, vec![vec![node_a, node_b], vec![node_c, node_d]]);
+        let node_a = String::from("A");
+        let node_b = String::from("B");
+        let node_c = String::from("C");
+
+        graph.add_node(node_a.clone());
+        graph.add_edge(node_b.clone(), node_c.clone(), EdgeLabel::Negative);
+
+        // A node without any edge forms a component of its own,
+        // which nothing constrains beyond having been added first.
+        assert_eq!(
+            components(&graph),
+            Some(vec![vec![node_a], vec![node_b], vec![node_c]])
+        );
+    }
+
+    #[test]
+    fn weak_edge_orders_components() {
+        let mut graph = LabeledGraph::<String, EdgeLabel, Directed>::default();
+
+        let node_a = String::from("A");
+        let node_b = String::from("B");
+        let node_c = String::from("C");
+
+        graph.add_node(node_a.clone());
+        graph.add_edge(node_a.clone(), node_b.clone(), EdgeLabel::Positive);
+        graph.add_edge(node_c.clone(), node_a.clone(), EdgeLabel::Weak);
+
+        // `C` is placed before `A` even though `A` was added first,
+        // while the dependency of `B` on `A` is respected as usual.
+        assert_eq!(
+            components(&graph),
+            Some(vec![vec![node_c], vec![node_a], vec![node_b]])
+        );
+    }
+
+    #[test]
+    fn weak_edge_yields_to_dependency() {
+        let mut graph = LabeledGraph::<String, EdgeLabel, Directed>::default();
+
+        let node_a = String::from("A");
+        let node_b = String::from("B");
+
+        graph.add_edge(node_a.clone(), node_b.clone(), EdgeLabel::Positive);
+        graph.add_edge(node_b.clone(), node_a.clone(), EdgeLabel::Weak);
+
+        // The weak edge neither puts both nodes into one component
+        // nor outweighs the dependency pointing the other way.
+        assert_eq!(components(&graph), Some(vec![vec![node_a], vec![node_b]]));
+    }
+
+    #[test]
+    fn weak_edge_cycle_is_ignored() {
+        let mut graph = LabeledGraph::<String, EdgeLabel, Directed>::default();
+
+        let node_a = String::from("A");
+        let node_b = String::from("B");
+
+        graph.add_edge(node_a.clone(), node_b.clone(), EdgeLabel::Weak);
+        graph.add_edge(node_b.clone(), node_a.clone(), EdgeLabel::Weak);
+
+        // Only one of the two preferences can be honoured,
+        // and giving up on the other one is not an error.
+        assert_eq!(components(&graph), Some(vec![vec![node_a], vec![node_b]]));
     }
 
     #[test]
@@ -252,7 +380,17 @@ mod test {
         graph.add_edge(node_a.clone(), node_b.clone(), EdgeLabel::Negative);
         graph.add_edge(node_b, node_a, EdgeLabel::Positive);
 
-        let stratums = graph.stratify(&[EdgeLabel::Negative]);
-        assert!(stratums.is_none());
+        assert_eq!(components(&graph), None);
+    }
+
+    #[test]
+    fn not_stratified_self_loop() {
+        let mut graph = LabeledGraph::<String, EdgeLabel, Directed>::default();
+
+        let node_a = String::from("A");
+
+        graph.add_edge(node_a.clone(), node_a, EdgeLabel::Negative);
+
+        assert_eq!(components(&graph), None);
     }
 }

@@ -82,7 +82,11 @@ impl GeneratorUnion {
 
     /// Create a new [Union] form a [BodyAtom].
     pub fn new_atom(atom: &BodyAtom, range: UnionRange) -> Self {
-        Self::new(atom.predicate(), atom.terms().cloned().collect(), range)
+        Self::new(
+            atom.predicate_cloned(),
+            atom.terms().cloned().collect(),
+            range,
+        )
     }
 
     /// Append this operation to the plan

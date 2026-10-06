@@ -226,7 +226,8 @@ impl ProgramTransformation for TransformationFilterImports {
 }
 
 fn push_projections_and_filters(import: &mut ImportDirective, filter_rules: &[&Rule]) {
-    let mut rules = filter_rules.to_owned();
+    let rules = filter_rules.to_owned();
+    let mut obsolete_rules = HashSet::new();
 
     // can we push projections?
     let format = import.spec().format().to_string();
@@ -238,7 +239,6 @@ fn push_projections_and_filters(import: &mut ImportDirective, filter_rules: &[&R
 
         // All head predicates of all rules are the same
         let mut positions = Vec::new();
-        let mut obsolete_rules = Vec::new();
 
         for rule in &rules {
             let body = rule
@@ -246,27 +246,24 @@ fn push_projections_and_filters(import: &mut ImportDirective, filter_rules: &[&R
                 .next()
                 .expect("import rules have exactly one body atom");
             let head_variables = rule.head()[0].variables().collect::<HashSet<_>>();
-            let binding_variables = rule
+            // Variables in operations can generate bindings or appear in filters, keep them.
+            let operation_variables = rule
                 .body_operations()
-                .filter_map(|operation| {
-                    if operation.variable_assignment().is_some() {
-                        Some(operation.variables())
-                    } else {
-                        None
-                    }
-                })
-                .flatten()
+                .flat_map(|operation| operation.variables())
                 .collect::<HashSet<_>>();
 
             positions.resize(max(positions.len(), body.terms().count()), false);
 
             for (position, term) in body.terms().enumerate() {
-                if let Term::Primitive(Primitive::Variable(variable)) = term
-                    && (head_variables.contains(variable) || binding_variables.contains(variable))
-                {
-                    positions[position] = true;
-                } else if let Term::Primitive(Primitive::Ground(_)) = term {
-                    positions[position] = true;
+                positions[position] = match term {
+                    Term::Primitive(Primitive::Variable(variable))
+                        if (head_variables.contains(variable)
+                            || operation_variables.contains(variable)) =>
+                    {
+                        true
+                    }
+                    Term::Primitive(Primitive::Ground(_)) => true,
+                    _ => positions[position],
                 }
             }
 
@@ -294,7 +291,9 @@ fn push_projections_and_filters(import: &mut ImportDirective, filter_rules: &[&R
 
                 // now figure out which rules we need to keep
                 for (idx, rule) in rules.iter().enumerate() {
-                    if rule.head()[0].terms().any(|term| !term.is_variable())
+                    // keep the rule if we have operations (i.e., filters or assignments), or non-variables in head or body
+                    if rule.body_operations().next().is_some()
+                        || rule.head()[0].terms().any(|term| !term.is_variable())
                         || rule.body()[0].terms().any(|term| !term.is_variable())
                     {
                         continue;
@@ -317,17 +316,17 @@ fn push_projections_and_filters(import: &mut ImportDirective, filter_rules: &[&R
                         continue;
                     }
 
-                    obsolete_rules.push(idx);
+                    obsolete_rules.insert(idx);
                 }
             }
         }
-
-        for idx in obsolete_rules {
-            rules.remove(idx);
-        }
     }
 
-    for &rule in rules.iter() {
+    for (idx, &rule) in rules.iter().enumerate() {
+        if obsolete_rules.contains(&idx) {
+            continue;
+        }
+
         import.add_filter_rule(rule.clone());
     }
 }

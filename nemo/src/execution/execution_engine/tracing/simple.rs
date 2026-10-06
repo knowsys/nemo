@@ -134,8 +134,8 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
                 let mut fully_derived = true;
                 let mut subtraces = Vec::<TraceFactHandle>::new();
-                for body_atom in rule.positive_all() {
-                    let next_fact_predicate = body_atom.predicate();
+                for body_atom in rule.positive_all_cloned() {
+                    let next_fact_predicate = body_atom.predicate_cloned();
                     let next_fact_terms = body_atom
                         .terms()
                         .map(|variable| {

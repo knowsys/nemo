@@ -57,8 +57,79 @@ impl BodyAtom {
     }
 
     /// Return the predicate of this atom.
-    pub fn predicate(&self) -> Tag {
+    pub fn predicate(&self) -> &Tag {
+        &self.predicate
+    }
+
+    /// Return a (cloned) predicate of this atom.
+    pub fn predicate_cloned(&self) -> Tag {
         self.predicate.clone()
+    }
+
+    /// Return a borrowed view of this atom.
+    pub fn as_ref(&self) -> BodyAtomRef<'_> {
+        BodyAtomRef::new(&self.predicate, &self.terms)
+    }
+}
+
+/// A borrowed view of an atom occurring in the body of a rule.
+///
+/// This allows treating [BodyAtom]s and
+/// [ImportAtom][super::import::ImportAtom]s uniformly
+/// without having to clone them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct BodyAtomRef<'a> {
+    /// Predicate name of this atom
+    predicate: &'a Tag,
+    /// Terms contained in this atom
+    terms: &'a [Variable],
+}
+
+impl Display for BodyAtomRef<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let terms = DisplaySeperatedList::display(
+            self.terms(),
+            &format!("{} ", syntax::SEQUENCE_SEPARATOR),
+        );
+        let predicate = self.predicate();
+
+        f.write_str(&format!(
+            "{predicate}{}{terms}{}",
+            syntax::expression::atom::OPEN,
+            syntax::expression::atom::CLOSE
+        ))
+    }
+}
+
+impl<'a> BodyAtomRef<'a> {
+    /// Construct a new [BodyAtomRef].
+    pub fn new(predicate: &'a Tag, terms: &'a [Variable]) -> Self {
+        Self { predicate, terms }
+    }
+
+    /// Return an iterator over all terms contained in this atom.
+    pub fn terms(self) -> impl Iterator<Item = &'a Variable> {
+        self.terms.iter()
+    }
+
+    /// Return a slice containing all terms of this atom.
+    pub fn term_slice(self) -> &'a [Variable] {
+        self.terms
+    }
+
+    /// Return the arity of this atom.
+    pub fn arity(self) -> usize {
+        self.terms.len()
+    }
+
+    /// Return the predicate of this atom.
+    pub fn predicate(self) -> &'a Tag {
+        self.predicate
+    }
+
+    /// Clone this view into an owned [BodyAtom].
+    pub fn to_owned(self) -> BodyAtom {
+        BodyAtom::new(self.predicate.clone(), self.terms.iter().cloned())
     }
 }
 

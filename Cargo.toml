@@ -21,7 +21,7 @@ members = [
 
 [workspace.package]
 description = "Nemo, a datalog-based rule engine for fast and scalable analytic data processing in memory"
-version = "0.10.1-dev"
+version = "0.10.2-dev"
 authors = [
     "Alex Ivliev <alex.ivliev@tu-dresden.de>",
     "Aidan Bailey <dev@aidanbailey.me>",
@@ -66,6 +66,7 @@ test-log = "0.2"
 thiserror = "2.0"
 tokio = "1.47.1"
 urlencoding = "2.1.3"
+line-index = "0.1.1"
 
 [profile.dev]
 panic = "unwind"

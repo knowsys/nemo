@@ -27,12 +27,12 @@ ascii_tree = { workspace = true }
 async-trait = { workspace = true }
 once_cell = "1"
 linked-hash-map = "0.5.6"
-lru = "0.16"
+lru = "0.17"
 cpu-time = "1.0"
 reqwest = { workspace = true }
 delegate = { workspace = true }
 regex = "1.9.5"
-hashbrown = "0.16.0"
+hashbrown = "0.17.0"
 streaming-iterator = "0.1.9"
 flate2 = { workspace = true }
 unicode-segmentation = "1.11.0"

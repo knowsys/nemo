@@ -126,6 +126,16 @@ pub enum TranslationError {
     #[assoc(note = "parameter names must have the form `$name'")]
     #[assoc(code = 130)]
     ParamDeclarationNotGlobal,
+    /// Base is not a valid IRI
+    #[error(r#"base is not a valid IRI"#)]
+    #[assoc(note = "base must be a valid absolute IRI (RFC 3987)")]
+    #[assoc(code = 131)]
+    BaseInvalid,
+    /// Prefix is not a valid IRI
+    #[error(r#"prefix is not a valid IRI"#)]
+    #[assoc(note = "prefix must be a valid IRI either absolute or relative to base (RFC 3987)")]
+    #[assoc(code = 132)]
+    PrefixInvalid,
 
     /// Unsupported: Declare statements
     #[error(r#"declare statements are currently unsupported"#)]

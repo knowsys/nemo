@@ -18,6 +18,7 @@ use crate::{
         origin::Origin,
         translation::{
             ASTProgramTranslation, TranslationComponent, complex::infix::InfixOperation,
+            directive::FormatContext,
         },
     },
 };
@@ -119,8 +120,18 @@ impl TranslationComponent for ImportDirective {
 
         let bindings = import_export_bindings(translation, import.guards())?;
 
+        let mut format_context = FormatContext::default();
+
+        if let Some(base) = &translation.base {
+            format_context.add_base(base.0.clone());
+        }
+
+        for (prefix, iri) in &translation.prefix_mapping {
+            format_context.add_prefix(prefix.clone(), iri.0.clone());
+        }
+
         Some(Origin::ast(
-            ImportDirective::new(predicate, spec, bindings),
+            ImportDirective::new(predicate, spec, bindings, format_context),
             import,
         ))
     }

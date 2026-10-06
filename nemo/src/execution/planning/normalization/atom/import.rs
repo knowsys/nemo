@@ -3,7 +3,7 @@
 use std::fmt::Display;
 
 use crate::{
-    execution::planning::normalization::import::ImportInstruction,
+    execution::planning::normalization::{atom::body::BodyAtomRef, import::ImportInstruction},
     io::formats::Import,
     rule_model::components::{tag::Tag, term::primitive::variable::Variable},
     syntax,
@@ -47,8 +47,18 @@ impl ImportAtom {
     }
 
     /// Return the predicate.
-    pub fn predicate(&self) -> Tag {
+    pub fn predicate(&self) -> &Tag {
         self.import.predicate()
+    }
+
+    /// Return a (cloned) predicate.
+    pub fn predicate_cloned(&self) -> Tag {
+        self.import.predicate_cloned()
+    }
+
+    /// Return a borrowed view of this atom as a body atom.
+    pub fn as_body_atom(&self) -> BodyAtomRef<'_> {
+        BodyAtomRef::new(self.import.predicate(), &self.variables)
     }
 
     /// Return the arity of this atom.

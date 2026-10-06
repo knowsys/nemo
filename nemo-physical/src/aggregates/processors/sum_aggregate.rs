@@ -86,7 +86,7 @@ impl AggregateGroupProcessor for SumAggregateGroupProcessor {
 
     fn finish(&self) -> Option<StorageValueT> {
         if self.current_sum_f64.is_some()
-            || (self.current_sum_i64.is_some() && self.current_sum_f64.is_some())
+            || (self.current_sum_i64.is_some() && self.current_sum_f32.is_some())
         {
             let mut overall_sum = self.current_sum_f64.unwrap_or(Double::zero());
 
@@ -113,5 +113,22 @@ impl AggregateGroupProcessor for SumAggregateGroupProcessor {
                 .map(Into::into)
                 .or_else(|| self.current_sum_f32.map(Into::into))
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn sum_mixed_integer_and_float() {
+        let mut processor = SumAggregateGroupProcessor::new();
+        processor.write_aggregate_input_value(StorageValueT::Int64(1));
+        processor.write_aggregate_input_value(StorageValueT::Float(Float::from_number(2.5)));
+
+        assert_eq!(
+            processor.finish(),
+            Some(StorageValueT::Double(Double::from_number(3.5)))
+        );
     }
 }

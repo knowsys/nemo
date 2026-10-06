@@ -29,7 +29,12 @@ impl ImportInstruction {
     }
 
     /// Return the predicate.
-    pub fn predicate(&self) -> Tag {
+    pub fn predicate(&self) -> &Tag {
+        &self.predicate
+    }
+
+    /// Return a (cloned) predicate.
+    pub fn predicate_cloned(&self) -> Tag {
         self.predicate.clone()
     }
 

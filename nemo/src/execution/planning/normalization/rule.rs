@@ -20,7 +20,11 @@ use crate::{
         analysis::variable_order::VariableOrder,
         normalization::{
             aggregate::Aggregation,
-            atom::{body::BodyAtom, head::HeadAtom, import::ImportAtom},
+            atom::{
+                body::{BodyAtom, BodyAtomRef},
+                head::HeadAtom,
+                import::ImportAtom,
+            },
             generator::VariableGenerator,
             operation::Operation,
         },
@@ -142,18 +146,20 @@ impl NormalizedRule {
         &self.negative_imports
     }
 
-    /// Return a list of all positive atoms, including import atoms
-    pub fn positive_all(&self) -> Vec<BodyAtom> {
-        let mut positive = self.positive.clone();
+    /// Return an iterator over all positive atoms, including import atoms.
+    ///
+    /// This borrows from the rule and hence performs no allocation;
+    /// use [NormalizedRule::positive_all_cloned] if owned atoms are required.
+    pub fn positive_all(&self) -> impl Iterator<Item = BodyAtomRef<'_>> + Clone {
+        self.positive
+            .iter()
+            .map(BodyAtom::as_ref)
+            .chain(self.positive_imports.iter().map(ImportAtom::as_body_atom))
+    }
 
-        positive.extend(self.positive_imports.iter().map(|atom| {
-            BodyAtom::new(
-                atom.predicate(),
-                atom.variables().cloned().collect::<Vec<_>>(),
-            )
-        }));
-
-        positive
+    /// Return a (cloned) list of all positive atoms, including import atoms.
+    pub fn positive_all_cloned(&self) -> Vec<BodyAtom> {
+        self.positive_all().map(|atom| atom.to_owned()).collect()
     }
 
     /// Return the list of operations in this rule.
@@ -233,7 +239,7 @@ impl NormalizedRule {
             let head_predicate = head_atom.predicate();
 
             for positive_atom in &self.positive {
-                if positive_atom.predicate() == head_predicate {
+                if *positive_atom.predicate() == head_predicate {
                     return true;
                 }
             }
@@ -317,11 +323,11 @@ impl NormalizedRule {
         let positive = self
             .positive
             .iter()
-            .map(|atom| (atom.predicate(), atom.arity()));
+            .map(|atom| (atom.predicate_cloned(), atom.arity()));
         let import = self
             .positive_imports
             .iter()
-            .map(|atom| (atom.predicate(), atom.arity()));
+            .map(|atom| (atom.predicate_cloned(), atom.arity()));
 
         positive.chain(import)
     }
@@ -331,11 +337,11 @@ impl NormalizedRule {
         let negative = self
             .negative
             .iter()
-            .map(|atom| (atom.predicate(), atom.arity()));
+            .map(|atom| (atom.predicate_cloned(), atom.arity()));
         let import = self
             .negative_imports
             .iter()
-            .map(|atom| (atom.predicate(), atom.arity()));
+            .map(|atom| (atom.predicate_cloned(), atom.arity()));
 
         negative.chain(import)
     }
@@ -344,6 +350,15 @@ impl NormalizedRule {
     pub fn predicates_head(&self) -> impl Iterator<Item = (Tag, usize)> {
         self.head
             .iter()
+            .map(|atom| (atom.predicate(), atom.arity()))
+    }
+
+    /// Return an iterator over all predicates occurring in a head atom
+    /// that contains an existential variable.
+    pub fn predicates_head_existential(&self) -> impl Iterator<Item = (Tag, usize)> {
+        self.head
+            .iter()
+            .filter(|atom| atom.variables_existential().next().is_some())
             .map(|atom| (atom.predicate(), atom.arity()))
     }
 
@@ -357,19 +372,19 @@ impl NormalizedRule {
         let positive = self
             .positive
             .iter()
-            .map(|atom| (atom.predicate(), atom.arity()));
+            .map(|atom| (atom.predicate_cloned(), atom.arity()));
         let negative = self
             .negative
             .iter()
-            .map(|atom| (atom.predicate(), atom.arity()));
+            .map(|atom| (atom.predicate_cloned(), atom.arity()));
         let positive_import = self
             .positive_imports
             .iter()
-            .map(|atom| (atom.predicate(), atom.arity()));
+            .map(|atom| (atom.predicate_cloned(), atom.arity()));
         let negative_import = self
             .negative_imports
             .iter()
-            .map(|atom| (atom.predicate(), atom.arity()));
+            .map(|atom| (atom.predicate_cloned(), atom.arity()));
 
         head.chain(positive)
             .chain(negative)

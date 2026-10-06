@@ -1,0 +1,29 @@
+%%% Test related to
+%%% https://github.com/knowsys/nemo/issues/792
+
+@import t1 :- ntriples{resource = "sources/data.nt"} .
+@import t2 :- ntriples{resource = "sources/data.nt"} .
+@import t3 :- ntriples{resource = "sources/data.nt"} .
+@import t4 :- ntriples{resource = "sources/data.nt"} .
+@import t5 :- ntriples{resource = "sources/data.nt"} .
+
+% Ensure we do not silently drop the filter.
+unconstrained(?v) :- t1(?s, ?p, ?v), STRSTARTS(?v, "al") .
+
+% Ensure we do not project away column 3.
+projected(?s) :- t2(?s, <http://example.org/label>, ?v), STRSTARTS(?v, "al") .
+
+% The filter matches nothing, ensure that this rule doesn't either.
+nomatch(?v) :- t3(?s, ?p, ?v), STRSTARTS(?v, "zz") .
+
+% Ensure filtering works even if the filtered column is projected away.
+both(?s) :- t4(?s, ?p, ?v), STRSTARTS(?v, "al") .
+
+% Ensure the filter gets pushed.
+kept(?v) :- t5(?s, <http://example.org/label>, ?v), STRSTARTS(?v, "al") .
+
+@export unconstrained :- csv{} .
+@export projected :- csv{} .
+@export nomatch :- csv{} .
+@export both :- csv{} .
+@export kept :- csv{} .

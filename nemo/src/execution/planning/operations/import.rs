@@ -319,7 +319,7 @@ impl GeneratorImport {
         for atom in positive_import_atoms.iter().chain(negative_import_atoms) {
             let binding_patterns = BindingPattern::new(&input_variables, atom);
 
-            let mut product_pattern = ProductBinding::new(atom.predicate(), atom.arity());
+            let mut product_pattern = ProductBinding::new(atom.predicate_cloned(), atom.arity());
 
             for (pattern, binding, origin) in binding_patterns {
                 let binding_index = bindings.add(binding, origin);
@@ -334,11 +334,11 @@ impl GeneratorImport {
             let (import_index, _) = imports.insert_full(product_pattern);
 
             predicates
-                .entry(atom.predicate())
+                .entry(atom.predicate_cloned())
                 .or_default()
                 .push(import_index);
 
-            handlers.insert(atom.predicate(), atom.handler());
+            handlers.insert(atom.predicate_cloned(), atom.handler());
         }
 
         Self {

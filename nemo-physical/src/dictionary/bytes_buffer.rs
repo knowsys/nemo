@@ -359,9 +359,7 @@ impl<B: GlobalBytesBuffer> ByteSized for BytesRef<B> {
 
 impl<B: GlobalBytesBuffer> Display for BytesRef<B> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        unsafe {
-            write! {f, "{:?}", self.as_bytes()}
-        }
+        unsafe { write!(f, "{:?}", self.as_bytes()) }
     }
 }
 

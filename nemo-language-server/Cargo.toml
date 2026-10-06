@@ -22,7 +22,6 @@ tokio = ["dep:tokio"]
 
 [dependencies]
 anyhow = "1.0"
-line-index = "0.1.1"
 nemo = { path = "../nemo", default-features = false }
 futures = { workspace = true }
 strum = { workspace = true }
@@ -31,3 +30,4 @@ tokio = { workspace = true, features = ["macros", "io-util", "rt-multi-thread", 
 tower-lsp = { version = "0.20.0" }
 tower-service = "0.3.2"
 lsp-document = "0.6.0"
+line-index = { workspace = true }

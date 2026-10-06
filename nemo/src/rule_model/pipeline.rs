@@ -1,17 +1,18 @@
 //! This module defines [ProgramPipeline].
 
-use std::rc::Rc;
+use std::{cell::OnceCell, rc::Rc};
 
 use id::ProgramComponentId;
 use orx_imp_vec::{ImpVec, PinnedVec};
 
+use crate::parser::span::SourcePositions;
 use crate::rule_model::{
     components::statement::Statement,
     pipeline::{
         arena::{Arena, Id},
         revision::ProgramRevision,
     },
-    programs::{ProgramWrite, program::Program},
+    programs::{ProgramWrite, handle::ProgramHandle, program::Program},
 };
 
 use super::components::{IterableComponent, ProgramComponent, atom::Atom, rule::Rule};
@@ -33,12 +34,46 @@ pub struct ProgramPipeline {
 
     /// Collection of all revisions, i.e. version of nemo prorams
     revisions: ImpVec<ProgramRevision>,
+
+    /// Index over the source text the program was parsed from,
+    /// used to resolve byte offsets (e.g. in [crate::rule_model::origin::Origin::File])
+    /// to source positions (line and column numbers).
+    source: OnceCell<SourcePositions>,
 }
 
 impl ProgramPipeline {
     /// Create a new managed [ProgramPipeline].
     pub fn new() -> Rc<Self> {
         Rc::new(Self::default())
+    }
+
+    /// Return a [ProgramHandle] to the original revision of the [ProgramPipeline],
+    /// i.e. the first revision. This holds the program as it was created from the
+    /// user input, before any transformation.
+    ///
+    /// Every revision derived from this pipeline shares the same first revision,
+    /// so this is the single reference point for resolving components back to the
+    /// original program (see the tracing modules).
+    pub fn original_revision(self: &Rc<Self>) -> ProgramHandle {
+        debug_assert!(
+            !self.revisions.is_empty(),
+            "a pipeline a handle exists for always has at least one revision"
+        );
+
+        ProgramHandle::new(self.clone(), 0)
+    }
+
+    /// Record the source text the program was parsed from.
+    ///
+    /// Has no effect if a source has already been set.
+    pub fn set_source(&self, source: &str) {
+        let set = self.source.set(SourcePositions::new(source));
+        debug_assert!(set.is_ok(), "source position is not already set");
+    }
+
+    /// Return the [SourcePositions] index over the source text, if one was recorded.
+    pub fn source_positions(&self) -> Option<&SourcePositions> {
+        self.source.get()
     }
 
     /// Search for the [ProgramComponent] with a given [ProgramComponentId]

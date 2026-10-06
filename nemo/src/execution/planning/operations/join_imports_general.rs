@@ -68,7 +68,11 @@ impl GeneratorJoinImportsGeneral {
         let imports = import_atoms
             .into_iter()
             .map(|atom| {
-                GeneratorUnion::new(atom.predicate(), atom.variables_cloned(), UnionRange::All)
+                GeneratorUnion::new(
+                    atom.predicate_cloned(),
+                    atom.variables_cloned(),
+                    UnionRange::All,
+                )
             })
             .collect::<Vec<_>>();
 
@@ -76,8 +80,11 @@ impl GeneratorJoinImportsGeneral {
         let mut negative_filters = Vec::default();
 
         for atom in negative_import_atoms.into_iter() {
-            let union =
-                GeneratorUnion::new(atom.predicate(), atom.variables_cloned(), UnionRange::All);
+            let union = GeneratorUnion::new(
+                atom.predicate_cloned(),
+                atom.variables_cloned(),
+                UnionRange::All,
+            );
 
             let filter = GeneratorFilter::new(atom.variables_cloned(), operations);
 

@@ -1,5 +1,7 @@
 //! This module defines functions on string.
 
+use num::ToPrimitive;
+
 use crate::{
     datatypes::StorageTypeName,
     datavalues::{AnyDataValue, DataValue, syntax::encodings},
@@ -52,22 +54,18 @@ impl UnaryFunction for CastingIntoInteger64 {
 
                 Some(AnyDataValue::new_integer_from_i64(result))
             }
-            // FIXME: This seems suspicious. Can't f32 also represent integer numbers *without any fraction) that are still too large for i64?
             crate::datavalues::ValueDomain::Float => {
                 let value = parameter.to_f32_unchecked();
                 if value.round() == value {
-                    #[allow(clippy::cast_possible_truncation)]
-                    Some(AnyDataValue::new_integer_from_i64(value as i64))
+                    value.to_i64().map(AnyDataValue::new_integer_from_i64)
                 } else {
                     None
                 }
             }
-            // FIXME: This seems suspicious. Can't f64 also represent integer numbers *without any fraction) that are still too large for i64?
             crate::datavalues::ValueDomain::Double => {
                 let value = parameter.to_f64_unchecked();
                 if value.round() == value {
-                    #[allow(clippy::cast_possible_truncation)]
-                    Some(AnyDataValue::new_integer_from_i64(value as i64))
+                    value.to_i64().map(AnyDataValue::new_integer_from_i64)
                 } else {
                     None
                 }
@@ -128,10 +126,7 @@ impl UnaryFunction for CastingIntoFloat {
             crate::datavalues::ValueDomain::Double =>
             {
                 #[allow(clippy::cast_possible_truncation)]
-                Some(
-                    AnyDataValue::new_float_from_f32(parameter.to_f64_unchecked() as f32)
-                        .expect("resulting float must be finite"),
-                )
+                AnyDataValue::new_float_from_f32(parameter.to_f64_unchecked() as f32).ok()
             }
             crate::datavalues::ValueDomain::UnsignedLong => Some(
                 AnyDataValue::new_float_from_f32(parameter.to_u64_unchecked() as f32)

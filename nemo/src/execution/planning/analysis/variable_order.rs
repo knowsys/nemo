@@ -2,7 +2,7 @@
 // https://github.com/phil-hanisch/rulewerk/blob/lftj/rulewerk-lftj/src/main/java/org/semanticweb/rulewerk/lftj/implementation/Heuristic.java
 // NOTE: some functions are slightly modified but the overall idea is reflected
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BinaryHeap, HashMap, HashSet, hash_map::Entry};
 
 use nemo_physical::{
     management::execution_plan::ColumnOrder, permutator::Permutator,
@@ -11,136 +11,133 @@ use nemo_physical::{
 
 use crate::{
     execution::planning::normalization::{
-        atom::body::BodyAtom, program::NormalizedProgram, rule::NormalizedRule,
+        atom::body::BodyAtomRef, program::NormalizedProgram, rule::NormalizedRule,
     },
     rule_model::components::{tag::Tag, term::primitive::variable::Variable},
 };
 
-/// Represents an ordering of variables as [HashMap].
-#[repr(transparent)]
-#[derive(Clone, Default, PartialEq, Eq)]
-pub struct VariableOrder(HashMap<Variable, usize>);
+/// Represents an ordering of variables
+#[derive(Clone, Default)]
+pub struct VariableOrder {
+    /// Variables in the order prescribed by this object
+    variables: Vec<Variable>,
+    /// Maps each variable in `variables` to its position
+    positions: HashMap<Variable, usize>,
+}
+
+impl PartialEq for VariableOrder {
+    fn eq(&self, other: &Self) -> bool {
+        self.variables == other.variables
+    }
+}
+
+impl Eq for VariableOrder {}
 
 impl VariableOrder {
     /// Create new [VariableOrder].
     pub fn new<Iterator: IntoIterator<Item = Variable>>(variables: Iterator) -> Self {
-        let mut order = HashMap::new();
-        for (index, variable) in variables.into_iter().enumerate() {
-            order.insert(variable, index);
+        let mut result = Self::default();
+        for variable in variables {
+            result.push(variable);
         }
-        Self(order)
+
+        result
     }
 
     /// Insert new variable in the last position.
+    ///
+    /// Does nothing if the variable is already contained in this order.
     pub fn push(&mut self, variable: Variable) {
-        let max_index = self.0.values().max();
-        self.0.insert(variable, max_index.map_or(0, |i| i + 1));
+        if let Entry::Vacant(entry) = self.positions.entry(variable.clone()) {
+            entry.insert(self.variables.len());
+            self.variables.push(variable);
+        }
+    }
+
+    /// Remove the variable in the last position.
+    fn pop(&mut self) {
+        if let Some(variable) = self.variables.pop() {
+            self.positions.remove(&variable);
+        }
+    }
+
+    /// Call `function` with this order temporarily extended by `variable`,
+    /// restoring the original order afterwards.
+    fn with_extended<Result>(
+        &mut self,
+        variable: &Variable,
+        function: impl FnOnce(&Self) -> Result,
+    ) -> Result {
+        if self.contains(variable) {
+            return function(self);
+        }
+
+        self.push(variable.clone());
+        let result = function(self);
+        self.pop();
+
+        result
     }
 
     /// Insert a new variable at a certain position.
     pub fn _push_position(&mut self, variable: Variable, position: usize) {
-        for current_position in &mut self.0.values_mut() {
-            if *current_position >= position {
-                *current_position += 1;
-            }
-        }
+        debug_assert!(!self.positions.contains_key(&variable));
 
-        let insert_result = self.0.insert(variable, position);
-        debug_assert!(insert_result.is_none());
+        self.variables.insert(position, variable);
+        self.positions.clear();
+        self.positions
+            .extend(self.variables.iter().cloned().zip(0..));
     }
 
     /// Get position of a variable.
     pub fn get(&self, variable: &Variable) -> Option<&usize> {
-        self.0.get(variable)
+        self.positions.get(variable)
     }
 
     /// Check if variable is part of the [VariableOrder].
     pub fn contains(&self, variable: &Variable) -> bool {
-        self.0.contains_key(variable)
+        self.positions.contains_key(variable)
     }
 
     /// Returns a [VariableOrder] which is restricted to the given variables (but preserve their order)
     pub fn restrict_to(&self, variables: &HashSet<Variable>) -> Self {
-        let mut variable_vector = Vec::<Variable>::with_capacity(variables.len());
-        for variable in variables {
-            if self.0.contains_key(variable) {
-                variable_vector.push(variable.clone());
-            }
-        }
-
-        variable_vector.sort_by(|a, b| {
-            self.get(a)
-                .unwrap()
-                .partial_cmp(self.get(b).unwrap())
-                .unwrap()
-        });
-
-        let mut result = HashMap::<Variable, usize>::new();
-
-        for (index, variable) in variable_vector.into_iter().enumerate() {
-            result.insert(variable, index);
-        }
-
-        Self(result)
+        Self::new(
+            self.variables
+                .iter()
+                .filter(|variable| variables.contains(*variable))
+                .cloned(),
+        )
     }
 
     /// Returns the number of entries.
     pub fn len(&self) -> usize {
-        self.0.len()
+        self.variables.len()
     }
 
     /// Returns whether it contains any entry.
     pub fn _is_empty(&self) -> bool {
-        self.0.is_empty()
+        self.variables.is_empty()
     }
 
     /// Return an iterator over all mapped variables.
-    pub fn iter(&self) -> impl Iterator<Item = &Variable> {
-        let mut vars: Vec<&Variable> = self.0.keys().collect();
-        vars.sort_by_key(|var| {
-            self.0
-                .get(var)
-                .expect("we are iterating over existing keys")
-        });
-        vars.into_iter()
+    pub fn iter(&self) -> impl Iterator<Item = &Variable> + Clone {
+        self.variables.iter()
     }
 
     /// Return a vector which puts the variables in the order prescribed by `self`.
     pub fn as_ordered_list(&self) -> Vec<Variable> {
-        let mut variables: Vec<Variable> = self.iter().cloned().collect();
-        variables.sort_by(|a, b| self.get(a).unwrap().cmp(self.get(b).unwrap()));
-
-        variables
+        self.variables.clone()
     }
 
     /// Return [String] with the contents of this object for debugging.
     pub(crate) fn _debug(&self) -> String {
-        let mut variable_vector = Vec::<Variable>::new();
-        variable_vector.resize_with(self.0.len(), || Variable::universal("PLACEHOLDER"));
+        let names = self
+            .variables
+            .iter()
+            .map(|variable| variable.name().unwrap_or("_"))
+            .collect::<Vec<_>>();
 
-        for (variable, index) in &self.0 {
-            if *index >= variable_vector.len() {
-                return String::from("TODO: Fix this function");
-            }
-
-            variable_vector[*index] = variable.clone();
-        }
-
-        let mut result = String::new();
-
-        result += "[";
-        for (index, variable) in variable_vector.iter().enumerate() {
-            let identifier = variable.name().unwrap_or("_");
-
-            result += identifier;
-
-            if index < variable_vector.len() - 1 {
-                result += ", ";
-            }
-        }
-        result += "]";
-
-        result
+        format!("[{}]", names.join(", "))
     }
 
     /// Extend this order with the variables provided by the iterator.
@@ -170,12 +167,19 @@ impl std::fmt::Debug for VariableOrder {
     }
 }
 
-#[derive(Debug)]
+#[allow(dead_code)]
+#[derive(Debug, Clone, Copy)]
 enum IterationOrder {
     Forward,
     Backward,
     InsideOut,
 }
+
+/// The [IterationOrder]s used to generate variable orders.
+///
+/// Every entry produces one variable order per rule,
+/// and the distinct results are collected.
+const ITERATION_ORDERS: &[IterationOrder] = &[IterationOrder::Backward];
 
 impl IterationOrder {
     fn get_permutator(&self, len: usize) -> Permutator {
@@ -193,27 +197,17 @@ impl IterationOrder {
     }
 }
 
-fn column_order_for(atom: &BodyAtom, var_order: &VariableOrder) -> ColumnOrder {
-    let mut partial_col_order: Vec<usize> = var_order
-        .iter()
-        .flat_map(|var| {
-            atom.terms()
-                .enumerate()
-                .filter(move |(_, lit_var)| *lit_var == var)
-                .map(|(i, _)| i)
-        })
-        .collect();
+/// Compute the [ColumnOrder] for `atom` induced by `var_order`:
+/// columns whose variable occurs in `var_order` come first, in that order,
+/// followed by the remaining columns in their original order.
+fn column_order_for(atom: BodyAtomRef<'_>, var_order: &VariableOrder) -> ColumnOrder {
+    let terms = atom.term_slice();
+    let mut column_order: Vec<usize> = (0..terms.len()).collect();
 
-    let mut remaining_vars: Vec<usize> = atom
-        .terms()
-        .enumerate()
-        .map(|(i, _)| i)
-        .filter(|i| !partial_col_order.contains(i))
-        .collect();
+    column_order
+        .sort_by_key(|&column| var_order.get(&terms[column]).copied().unwrap_or(usize::MAX));
 
-    partial_col_order.append(&mut remaining_vars);
-
-    ColumnOrder::from_vector(partial_col_order)
+    ColumnOrder::from_vector(column_order)
 }
 
 trait RuleVariableList {
@@ -225,7 +219,7 @@ trait RuleVariableList {
 
     fn filter_tries<P: FnMut(&Tag) -> bool>(
         self,
-        partial_var_order: &VariableOrder,
+        partial_var_order: &mut VariableOrder,
         rule: &NormalizedRule,
         required_trie_column_orders: &HashMap<Tag, HashSet<ColumnOrder>>,
         predicate_filter: P,
@@ -241,12 +235,10 @@ impl RuleVariableList for Vec<Variable> {
         let result: Vec<Variable> = self
             .iter()
             .filter(|var| {
-                rule.positive_all().iter().any(|atom| {
-                    let predicate_vars: Vec<Variable> = atom.terms().cloned().collect();
-
-                    predicate_vars.iter().any(|pred_var| pred_var == *var)
-                        && predicate_vars
-                            .iter()
+                rule.positive_all().any(|atom| {
+                    atom.terms().any(|pred_var| pred_var == *var)
+                        && atom
+                            .terms()
                             .any(|pred_var| partial_var_order.contains(pred_var))
                 })
             })
@@ -258,7 +250,7 @@ impl RuleVariableList for Vec<Variable> {
 
     fn filter_tries<P: FnMut(&Tag) -> bool>(
         self,
-        partial_var_order: &VariableOrder,
+        partial_var_order: &mut VariableOrder,
         rule: &NormalizedRule,
         required_trie_column_orders: &HashMap<Tag, HashSet<ColumnOrder>>,
         mut predicate_filter: P,
@@ -266,28 +258,24 @@ impl RuleVariableList for Vec<Variable> {
         let ratios: Vec<(usize, usize)> = self
             .iter()
             .map(|var| {
-                let mut extended_var_order: VariableOrder = partial_var_order.clone();
-                extended_var_order.push(var.clone());
+                partial_var_order.with_extended(var, |extended_var_order| {
+                    let atoms = rule
+                        .positive_all()
+                        .filter(|atom| predicate_filter(atom.predicate()))
+                        .filter(|atom| atom.terms().any(|atom_var| atom_var == var));
 
-                let atoms = rule
-                    .positive_all()
-                    .into_iter()
-                    .filter(|atom| predicate_filter(&atom.predicate()))
-                    .filter(|atom| atom.terms().any(|atom_var| atom_var == var));
+                    atoms.fold((0, 0), |acc, atom| {
+                        let fitting_column_order_exists: bool = required_trie_column_orders
+                            .get(atom.predicate())
+                            .map(|set| set.contains(&column_order_for(atom, extended_var_order)))
+                            .unwrap_or(false);
 
-                let (atoms_requiring_new_orders, total_atoms) = atoms.fold((0, 0), |acc, atom| {
-                    let fitting_column_order_exists: bool = required_trie_column_orders
-                        .get(&atom.predicate())
-                        .map(|set| set.contains(&column_order_for(&atom, &extended_var_order)))
-                        .unwrap_or(false);
+                        let new_col_order_required = !fitting_column_order_exists;
 
-                    let new_col_order_required = !fitting_column_order_exists;
-
-                    (acc.0 + usize::from(new_col_order_required), acc.1 + 1)
-                    // bool is coverted to 1 for true and 0 for false
-                });
-
-                (atoms_requiring_new_orders, total_atoms)
+                        (acc.0 + usize::from(new_col_order_required), acc.1 + 1)
+                        // bool is coverted to 1 for true and 0 for false
+                    })
+                })
             })
             .collect();
 
@@ -319,6 +307,16 @@ struct VariableOrderBuilder<'a> {
     iteration_order_within_rule: IterationOrder,
     required_trie_column_orders: HashMap<Tag, HashSet<ColumnOrder>>, // maps predicates to sets of column orders
     idb_preds: HashSet<Tag>,
+    /// Maps each predicate to the indices of the rules containing it in their positive body,
+    /// listing a rule once per occurrence of that predicate
+    predicate_to_rules: HashMap<Tag, Vec<usize>>,
+    /// Predicates that have at least one entry in `required_trie_column_orders`
+    active_predicates: HashSet<Tag>,
+    /// For each rule, the number of idb and edb predicates in its body
+    /// for which a trie is already available
+    rule_counts: Vec<(usize, usize)>,
+    /// Rules whose entry in `rule_counts` changed since it was last read
+    dirty_rules: Vec<usize>,
 }
 
 struct BuilderResult {
@@ -334,11 +332,44 @@ impl VariableOrderBuilder<'_> {
         iteration_order_within_rule: IterationOrder,
         initial_column_orders: HashMap<Tag, HashSet<ColumnOrder>>,
     ) -> BuilderResult {
+        // Predicates that already have at least one column order available
+        let active_predicates: HashSet<Tag> = initial_column_orders
+            .iter()
+            .filter(|(_, orders)| !orders.is_empty())
+            .map(|(predicate, _)| predicate.clone())
+            .collect();
+
+        // Maps a predicate to the indices of the rules containing it in their positive body.
+        // A rule is listed once per occurrence, since `rule_counts` counts occurrences.
+        let mut predicate_to_rules = HashMap::<Tag, Vec<usize>>::new();
+        let mut rule_counts = Vec::with_capacity(program.rules().len());
+
+        for (rule_index, rule) in program.rules().iter().enumerate() {
+            let mut counts = (0, 0);
+
+            for atom in rule.positive_all() {
+                predicate_to_rules
+                    .entry(atom.predicate().clone())
+                    .or_default()
+                    .push(rule_index);
+
+                if active_predicates.contains(atom.predicate()) {
+                    increment_counts(&mut counts, program.derived_predicates(), atom.predicate());
+                }
+            }
+
+            rule_counts.push(counts);
+        }
+
         let mut builder = VariableOrderBuilder {
             program,
             iteration_order_within_rule,
             required_trie_column_orders: initial_column_orders,
             idb_preds: program.derived_predicates().clone(),
+            predicate_to_rules,
+            active_predicates,
+            rule_counts,
+            dirty_rules: Vec::new(),
         };
 
         let variable_orders = builder.generate_variable_orders();
@@ -350,63 +381,65 @@ impl VariableOrderBuilder<'_> {
         }
     }
 
-    fn get_already_present_idb_edb_count_for_rule_in_tries(
-        &self,
-        rule: &NormalizedRule,
-    ) -> (usize, usize) {
-        let preds_with_tries = rule.positive_all().into_iter().filter_map(|atom| {
-            let pred = atom.predicate();
-            self.required_trie_column_orders
-                .get(&pred)
-                .is_some_and(|orders| !orders.is_empty())
-                .then_some(pred)
-        });
+    /// Record that `predicate` now has at least one column order available.
+    fn activate_predicate(&mut self, predicate: &Tag) {
+        if !self.active_predicates.insert(predicate.clone()) {
+            return;
+        }
 
-        let (idb_count, edb_count) = preds_with_tries.fold((0, 0), |(idb, edb), pred| {
-            if self.idb_preds.contains(&pred) {
-                (idb + 1, edb)
-            } else {
-                (idb, edb + 1)
-            }
-        });
+        let Some(rule_indices) = self.predicate_to_rules.get(predicate) else {
+            return;
+        };
 
-        (idb_count, edb_count)
+        for &rule_index in rule_indices {
+            increment_counts(
+                &mut self.rule_counts[rule_index],
+                &self.idb_preds,
+                predicate,
+            );
+            self.dirty_rules.push(rule_index);
+        }
     }
 
     fn generate_variable_orders(&mut self) -> Vec<VariableOrder> {
-        // NOTE: We use a BTreeMap to determinise the iteration order for easier debugging; this should not be performance critical
-        let mut remaining_rules: BTreeMap<usize, &NormalizedRule> =
-            self.program.rules().iter().enumerate().collect();
+        let program = self.program;
 
-        let mut result: Vec<(usize, VariableOrder)> =
-            Vec::with_capacity(self.program.rules().len());
-
-        while !remaining_rules.is_empty() {
-            let (next_index, next_rule) = remaining_rules
-                .iter()
-                .max_by(|(_, rule_a), (_, rule_b)| {
-                    let (idb_count_a, edb_count_a) =
-                        self.get_already_present_idb_edb_count_for_rule_in_tries(rule_a);
-                    let (idb_count_b, edb_count_b) =
-                        self.get_already_present_idb_edb_count_for_rule_in_tries(rule_b);
-
-                    if idb_count_a != idb_count_b {
-                        idb_count_a.cmp(&idb_count_b)
-                    } else {
-                        edb_count_a.cmp(&edb_count_b)
-                    }
-                })
-                .expect("the remaining rules are never empty here");
-
-            let next_index = *next_index;
-            let var_order = self.generate_variable_order_for_rule(next_rule);
-
-            remaining_rules.remove(&next_index);
-            result.push((next_index, var_order));
+        // Rules are processed in order of how many of their body predicates already
+        // have tries available, preferring idb over edb predicates.
+        //
+        // Since `rule_counts` only ever grows, a rule whose counts changed can simply be
+        // pushed again; outdated entries are recognized and skipped when they are popped.
+        let mut queue = BinaryHeap::with_capacity(program.rules().len());
+        for (rule_index, &(idb_count, edb_count)) in self.rule_counts.iter().enumerate() {
+            queue.push((idb_count, edb_count, rule_index));
         }
 
-        result.sort_by_key(|(i, _)| *i);
-        result.into_iter().map(|(_, ord)| ord).collect()
+        let mut result = vec![None; program.rules().len()];
+
+        while let Some((idb_count, edb_count, rule_index)) = queue.pop() {
+            // Outdated entries are left behind whenever a rule is pushed again with higher counts
+            if result[rule_index].is_some()
+                || self.rule_counts[rule_index] != (idb_count, edb_count)
+            {
+                continue;
+            }
+
+            let variable_order =
+                self.generate_variable_order_for_rule(&program.rules()[rule_index]);
+            result[rule_index] = Some(variable_order);
+
+            for index in self.dirty_rules.drain(..) {
+                if result[index].is_none() {
+                    let (idb_count, edb_count) = self.rule_counts[index];
+                    queue.push((idb_count, edb_count, index));
+                }
+            }
+        }
+
+        result
+            .into_iter()
+            .map(|order| order.expect("every rule is pushed initially and re-pushed when its counts change, so it gets processed"))
+            .collect()
     }
 
     fn generate_variable_order_for_rule(&mut self, rule: &NormalizedRule) -> VariableOrder {
@@ -414,7 +447,6 @@ impl VariableOrderBuilder<'_> {
         let mut remaining_vars = {
             let remaining_vars_unpermutated: Vec<Variable> = rule
                 .positive_all()
-                .iter()
                 .flat_map(|lit| lit.terms())
                 .fold(vec![], |mut acc, var| {
                     if !acc.contains(var) {
@@ -438,7 +470,7 @@ impl VariableOrderBuilder<'_> {
                     .filter_cartesian_product(&variable_order, rule);
 
                 let after_trie_idb = after_cart.filter_tries(
-                    &variable_order,
+                    &mut variable_order,
                     rule,
                     &self.required_trie_column_orders,
                     |pred| self.idb_preds.contains(pred),
@@ -446,7 +478,7 @@ impl VariableOrderBuilder<'_> {
 
                 after_trie_idb
                     .filter_tries(
-                        &variable_order,
+                        &mut variable_order,
                         rule,
                         &self.required_trie_column_orders,
                         |pred| !self.idb_preds.contains(pred),
@@ -458,7 +490,7 @@ impl VariableOrderBuilder<'_> {
 
             variable_order.push(next_var.clone());
             remaining_vars.retain(|var| var != &next_var);
-            self.update_trie_column_orders(&variable_order, HashSet::from([next_var]), rule);
+            self.update_trie_column_orders(&variable_order, &next_var, rule);
         }
 
         variable_order
@@ -467,29 +499,47 @@ impl VariableOrderBuilder<'_> {
     fn update_trie_column_orders(
         &mut self,
         variable_order: &VariableOrder,
-        must_contain: HashSet<Variable>,
+        must_contain: &Variable,
         rule: &NormalizedRule,
     ) {
-        let atoms = rule.positive_all().into_iter().filter(|atom| {
-            let vars: Vec<Variable> = atom.terms().cloned().collect();
-            must_contain.iter().all(|var| vars.contains(var))
-                && vars.iter().all(|var| variable_order.contains(var))
+        let atoms = rule.positive_all().filter(|atom| {
+            atom.terms().any(|var| var == must_contain)
+                && atom.terms().all(|var| variable_order.contains(var))
         });
 
+        let mut activated = Vec::new();
+
         for atom in atoms {
-            let column_ord: ColumnOrder = column_order_for(&atom, variable_order);
+            let column_ord: ColumnOrder = column_order_for(atom, variable_order);
 
             let set = self
                 .required_trie_column_orders
-                .entry(atom.predicate())
+                .entry(atom.predicate().clone())
                 .or_default();
 
             set.insert(column_ord);
+
+            if !self.active_predicates.contains(atom.predicate()) {
+                activated.push(atom.predicate().clone());
+            }
+        }
+
+        for predicate in activated {
+            self.activate_predicate(&predicate);
         }
     }
 
     fn get_column_orders(self) -> HashMap<Tag, HashSet<ColumnOrder>> {
         self.required_trie_column_orders
+    }
+}
+
+/// Add one to the idb or the edb count, depending on whether `predicate` is derived.
+fn increment_counts(counts: &mut (usize, usize), idb_preds: &HashSet<Tag>, predicate: &Tag) {
+    if idb_preds.contains(predicate) {
+        counts.0 += 1;
+    } else {
+        counts.1 += 1;
     }
 }
 
@@ -518,12 +568,6 @@ pub(crate) fn build_preferable_variable_orders(
     program: &NormalizedProgram,
     initial_column_orders: Option<HashMap<Tag, HashSet<ColumnOrder>>>,
 ) -> BuilderResultVariants {
-    let iteration_orders = [
-        IterationOrder::Forward,
-        IterationOrder::Backward,
-        IterationOrder::InsideOut,
-    ];
-
     let initial_column_orders = initial_column_orders.unwrap_or_else(|| {
         let mut result: HashMap<Tag, HashSet<Permutation>> = Default::default();
         for fact in program.facts().iter() {
@@ -541,7 +585,7 @@ pub(crate) fn build_preferable_variable_orders(
     let mut all_variable_orders = vec![Vec::<VariableOrder>::new(); program.rules().len()];
     let mut all_column_orders = Vec::new();
 
-    for iteration_order in iteration_orders {
+    for &iteration_order in ITERATION_ORDERS {
         let BuilderResult {
             variable_orders,
             column_orders,
@@ -596,7 +640,7 @@ mod test {
 
     impl VariableOrder {
         fn from_vec(vec: Vec<Variable>) -> Self {
-            Self(vec.into_iter().enumerate().map(|(i, v)| (v, i)).collect())
+            Self::new(vec)
         }
     }
 
@@ -761,12 +805,12 @@ mod test {
     {
         let (rule, vars) = get_test_rule_with_vars_where_predicates_are_different();
         let y = vars[1].clone();
-        let empty_ord = VariableOrder::default();
+        let mut empty_ord = VariableOrder::default();
         let empty_trie_cache: HashMap<Tag, HashSet<ColumnOrder>> = HashMap::new();
 
         let expected = vec![y];
 
-        let filtered_vars = vars.filter_tries(&empty_ord, &rule, &empty_trie_cache, |_| true);
+        let filtered_vars = vars.filter_tries(&mut empty_ord, &rule, &empty_trie_cache, |_| true);
 
         assert_eq!(expected, filtered_vars);
     }
@@ -775,12 +819,12 @@ mod test {
     fn filter_tries_where_rule_predicates_are_the_same_with_empty_var_order_and_empty_trie_cache() {
         let (rule, vars) = get_test_rule_with_vars_where_predicates_are_the_same();
         let y = vars[1].clone();
-        let empty_ord = VariableOrder::default();
+        let mut empty_ord = VariableOrder::default();
         let empty_trie_cache: HashMap<Tag, HashSet<ColumnOrder>> = HashMap::new();
 
         let expected = vec![y];
 
-        let filtered_vars = vars.filter_tries(&empty_ord, &rule, &empty_trie_cache, |_| true);
+        let filtered_vars = vars.filter_tries(&mut empty_ord, &rule, &empty_trie_cache, |_| true);
 
         assert_eq!(expected, filtered_vars);
     }
@@ -798,18 +842,11 @@ mod test {
         }
 
         let rule_vars = &var_lists[0];
-        let rule_var_orders: Vec<VariableOrder> = vec![
-            VariableOrder::from_vec(vec![
-                rule_vars[1].clone(),
-                rule_vars[0].clone(),
-                rule_vars[2].clone(),
-            ]),
-            VariableOrder::from_vec(vec![
-                rule_vars[1].clone(),
-                rule_vars[2].clone(),
-                rule_vars[0].clone(),
-            ]),
-        ];
+        let rule_var_orders: Vec<VariableOrder> = vec![VariableOrder::from_vec(vec![
+            rule_vars[1].clone(),
+            rule_vars[2].clone(),
+            rule_vars[0].clone(),
+        ])];
 
         assert_eq!(
             vec![rule_var_orders],
@@ -830,18 +867,11 @@ mod test {
         }
 
         let rule_vars = &var_lists[0];
-        let rule_var_orders: Vec<VariableOrder> = vec![
-            VariableOrder::from_vec(vec![
-                rule_vars[1].clone(),
-                rule_vars[0].clone(),
-                rule_vars[2].clone(),
-            ]),
-            VariableOrder::from_vec(vec![
-                rule_vars[1].clone(),
-                rule_vars[2].clone(),
-                rule_vars[0].clone(),
-            ]),
-        ];
+        let rule_var_orders: Vec<VariableOrder> = vec![VariableOrder::from_vec(vec![
+            rule_vars[1].clone(),
+            rule_vars[2].clone(),
+            rule_vars[0].clone(),
+        ])];
 
         assert_eq!(
             vec![rule_var_orders],
@@ -870,18 +900,11 @@ mod test {
             rule_1_vars[2].clone(),
         ])];
         let rule_2_vars = &var_lists[1];
-        let rule_2_var_orders: Vec<VariableOrder> = vec![
-            VariableOrder::from_vec(vec![
-                rule_2_vars[1].clone(),
-                rule_2_vars[0].clone(),
-                rule_2_vars[2].clone(),
-            ]),
-            VariableOrder::from_vec(vec![
-                rule_2_vars[1].clone(),
-                rule_2_vars[2].clone(),
-                rule_2_vars[0].clone(),
-            ]),
-        ];
+        let rule_2_var_orders: Vec<VariableOrder> = vec![VariableOrder::from_vec(vec![
+            rule_2_vars[1].clone(),
+            rule_2_vars[2].clone(),
+            rule_2_vars[0].clone(),
+        ])];
 
         assert_eq!(
             vec![rule_1_var_orders, rule_2_var_orders],
@@ -1034,20 +1057,12 @@ mod test {
             rule_3_vars[3].clone(),
         ])];
         let rule_4_vars = &var_lists[3];
-        let rule_4_var_orders: Vec<VariableOrder> = vec![
-            VariableOrder::from_vec(vec![
-                rule_4_vars[0].clone(),
-                rule_4_vars[1].clone(),
-                rule_4_vars[2].clone(),
-                rule_4_vars[3].clone(),
-            ]),
-            VariableOrder::from_vec(vec![
-                rule_4_vars[0].clone(),
-                rule_4_vars[2].clone(),
-                rule_4_vars[1].clone(),
-                rule_4_vars[3].clone(),
-            ]),
-        ];
+        let rule_4_var_orders: Vec<VariableOrder> = vec![VariableOrder::from_vec(vec![
+            rule_4_vars[0].clone(),
+            rule_4_vars[2].clone(),
+            rule_4_vars[1].clone(),
+            rule_4_vars[3].clone(),
+        ])];
         let rule_5_vars = &var_lists[4];
         let rule_5_var_orders: Vec<VariableOrder> = vec![VariableOrder::from_vec(vec![
             rule_5_vars[0].clone(),
@@ -1324,20 +1339,12 @@ mod test {
             rule_3_vars[3].clone(),
         ])];
         let rule_4_vars = &var_lists[3];
-        let rule_4_var_orders: Vec<VariableOrder> = vec![
-            VariableOrder::from_vec(vec![
-                rule_4_vars[0].clone(),
-                rule_4_vars[1].clone(),
-                rule_4_vars[2].clone(),
-                rule_4_vars[3].clone(),
-            ]),
-            VariableOrder::from_vec(vec![
-                rule_4_vars[0].clone(),
-                rule_4_vars[2].clone(),
-                rule_4_vars[1].clone(),
-                rule_4_vars[3].clone(),
-            ]),
-        ];
+        let rule_4_var_orders: Vec<VariableOrder> = vec![VariableOrder::from_vec(vec![
+            rule_4_vars[0].clone(),
+            rule_4_vars[2].clone(),
+            rule_4_vars[1].clone(),
+            rule_4_vars[3].clone(),
+        ])];
         let rule_5_vars = &var_lists[4];
         let rule_5_var_orders: Vec<VariableOrder> = vec![VariableOrder::from_vec(vec![
             rule_5_vars[1].clone(),
@@ -1353,20 +1360,12 @@ mod test {
             rule_6_vars[0].clone(),
         ])];
         let rule_7_vars = &var_lists[6];
-        let rule_7_var_orders: Vec<VariableOrder> = vec![
-            VariableOrder::from_vec(vec![
-                rule_7_vars[1].clone(),
-                rule_7_vars[0].clone(),
-                rule_7_vars[2].clone(),
-                rule_7_vars[3].clone(),
-            ]),
-            VariableOrder::from_vec(vec![
-                rule_7_vars[1].clone(),
-                rule_7_vars[0].clone(),
-                rule_7_vars[3].clone(),
-                rule_7_vars[2].clone(),
-            ]),
-        ];
+        let rule_7_var_orders: Vec<VariableOrder> = vec![VariableOrder::from_vec(vec![
+            rule_7_vars[1].clone(),
+            rule_7_vars[0].clone(),
+            rule_7_vars[3].clone(),
+            rule_7_vars[2].clone(),
+        ])];
         let rule_8_vars = &var_lists[7];
         let rule_8_var_orders: Vec<VariableOrder> = vec![VariableOrder::from_vec(vec![
             rule_8_vars[0].clone(),
@@ -1381,28 +1380,16 @@ mod test {
             rule_9_vars[0].clone(),
         ])];
         let rule_10_vars = &var_lists[9];
-        let rule_10_var_orders: Vec<VariableOrder> = vec![
-            VariableOrder::from_vec(vec![
-                rule_10_vars[0].clone(),
-                rule_10_vars[1].clone(),
-                rule_10_vars[4].clone(),
-                rule_10_vars[2].clone(),
-                rule_10_vars[3].clone(),
-                rule_10_vars[5].clone(),
-                rule_10_vars[6].clone(),
-                rule_10_vars[7].clone(),
-            ]),
-            VariableOrder::from_vec(vec![
-                rule_10_vars[0].clone(),
-                rule_10_vars[4].clone(),
-                rule_10_vars[1].clone(),
-                rule_10_vars[3].clone(),
-                rule_10_vars[2].clone(),
-                rule_10_vars[5].clone(),
-                rule_10_vars[6].clone(),
-                rule_10_vars[7].clone(),
-            ]),
-        ];
+        let rule_10_var_orders: Vec<VariableOrder> = vec![VariableOrder::from_vec(vec![
+            rule_10_vars[0].clone(),
+            rule_10_vars[4].clone(),
+            rule_10_vars[1].clone(),
+            rule_10_vars[3].clone(),
+            rule_10_vars[2].clone(),
+            rule_10_vars[5].clone(),
+            rule_10_vars[6].clone(),
+            rule_10_vars[7].clone(),
+        ])];
         let rule_11_vars = &var_lists[10];
         let rule_11_var_orders: Vec<VariableOrder> = vec![VariableOrder::from_vec(vec![
             rule_11_vars[0].clone(),
@@ -1410,10 +1397,10 @@ mod test {
             rule_11_vars[2].clone(),
         ])];
         let rule_12_vars = &var_lists[11];
-        let rule_12_var_orders: Vec<VariableOrder> = vec![
-            VariableOrder::from_vec(vec![rule_12_vars[0].clone(), rule_12_vars[1].clone()]),
-            VariableOrder::from_vec(vec![rule_12_vars[1].clone(), rule_12_vars[0].clone()]),
-        ];
+        let rule_12_var_orders: Vec<VariableOrder> = vec![VariableOrder::from_vec(vec![
+            rule_12_vars[1].clone(),
+            rule_12_vars[0].clone(),
+        ])];
 
         assert_eq!(
             vec![

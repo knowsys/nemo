@@ -1,0 +1,4 @@
+issue: 792
+title: Dropped rules and skipped columns when pushing filters
+tracker: https://github.com/knowsys/nemo/issues/792
+type: bugfix
