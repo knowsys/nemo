@@ -174,12 +174,8 @@ impl Rule {
     /// Return an iterator over the variables bound in positive body atoms.
     pub fn positive_variables(&self) -> impl Iterator<Item = &Variable> {
         self.body_positive().flat_map(|atom| {
-            atom.terms()
-                .filter_map(|term| match term {
-                    Term::Primitive(Primitive::Variable(variable)) => Some(variable),
-                    _ => None,
-                })
-                .filter(|variable| variable.is_universal() && variable.name().is_some())
+            atom.universal_variables()
+                .filter(|var| var.name().is_some())
         })
     }
 
