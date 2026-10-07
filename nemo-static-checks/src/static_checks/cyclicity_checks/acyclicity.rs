@@ -134,8 +134,8 @@ pub async fn check_acyclicity(
         .chain(sk_ex_rules_handle.rules())
         .collect();
 
-    let datalog_pr: HashSet<&Tag> = predicates_ref(&datalog_rules);
-    let existential_pr: HashSet<&Tag> = predicates_ref(&existential_rules);
+    let datalog_pr: HashSet<&Tag> = predicates_ref(&datalog_rules).collect();
+    let existential_pr: HashSet<&Tag> = predicates_ref(&existential_rules).collect();
     let all_pr: HashSet<&Tag> = datalog_pr.union(&existential_pr).copied().collect();
 
     let var_per_atom_idx_pos_idx_per_rule = build_var_index_for_rules(&rules);

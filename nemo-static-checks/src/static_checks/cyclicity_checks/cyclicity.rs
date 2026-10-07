@@ -239,7 +239,7 @@ pub async fn check_cyclicity(handle: &ProgramHandle, strat_sel: CyclicityStrateg
         .collect();
     let ex_rules: Vec<&Rule> = sk_ex_rules_handle.rules().collect();
 
-    let preds: HashSet<&Tag> = predicates_ref(&det_rules);
+    let preds: HashSet<&Tag> = predicates_ref(&det_rules).collect();
 
     let var_per_atom_idx_pos_idx_per_rule = build_var_index_for_rules(&det_rules);
     let obsolescence_variable_indices =

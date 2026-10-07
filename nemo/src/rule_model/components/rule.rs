@@ -200,12 +200,11 @@ impl Rule {
         self.head.iter().chain(self.body_atoms())
     }
 
-    pub fn predicates_ref(&self) -> Vec<&Tag> {
+    pub fn predicates_ref(&self) -> impl Iterator<Item = &Tag> {
         self.body()
             .iter()
             .filter_map(|literal| literal.predicate_ref())
             .chain(self.head().iter().map(|atom| atom.predicate_ref()))
-            .collect()
     }
 
     /// Return an iterator over all [ImportLiteral]s

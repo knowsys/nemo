@@ -408,12 +408,8 @@ impl<'a, 's> CoreReasoner<'a, 's> {
     }
 }
 
-fn predicates_ref<'a>(rule_set: &[&'a Rule]) -> HashSet<&'a Tag> {
-    rule_set
-        .iter()
-        .fold(HashSet::<&Tag>::new(), |ret_val, rule| {
-            ret_val.insert_all_take_ret(rule.predicates_ref())
-        })
+fn predicates_ref<'a>(rule_set: &'a [&'a Rule]) -> impl Iterator<Item = &'a Tag> + 'a {
+    rule_set.iter().flat_map(|rule| rule.predicates_ref())
 }
 
 pub struct Trigger<'a, 'b> {
