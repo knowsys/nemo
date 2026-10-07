@@ -228,10 +228,7 @@ impl Rule {
 
     /// Return an iterator over all universal variables in the head of this rule.
     fn universal_head_variables(&self) -> impl Iterator<Item = &Variable> {
-        self.head
-            .iter()
-            .flat_map(|atom| atom.variables())
-            .filter(|variable| variable.is_universal())
+        self.head.iter().flat_map(|atom| atom.universal_variables())
     }
 
     /// Return an iterator over the variables bound by import statements.
