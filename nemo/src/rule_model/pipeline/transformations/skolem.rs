@@ -14,10 +14,7 @@ use crate::rule_model::{
         },
     },
     error::ValidationReport,
-<<<<<<< HEAD
     origin::Origin,
-=======
->>>>>>> main
     programs::{ProgramRead, ProgramWrite, handle::ProgramHandle},
 };
 
