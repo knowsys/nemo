@@ -40,6 +40,9 @@ pub enum Origin {
     /// Rule that was created by normalizing a rule
     Normalization(ProgramComponentId),
 
+    /// Rule that was created by skolemizing a rule
+    Skolemization(ProgramComponentId),
+
     /// Statement that was created by substituting global variables in a rule
     Global(ProgramComponentId),
 
