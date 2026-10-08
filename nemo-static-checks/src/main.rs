@@ -1,5 +1,6 @@
 pub mod cli;
 pub mod static_checks;
+pub mod transformations;
 
 use nemo::{
     error::{Error, report::ProgramReport},

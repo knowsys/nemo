@@ -1,16 +1,20 @@
-use super::ProgramTransformation;
-use crate::rule_model::components::IterablePrimitives;
-use crate::rule_model::components::{
-    fact::Fact, literal::Literal, rule::Rule, statement::Statement, tag::Tag, term::Term,
+//! This module defines [TransformationCriticalInstance].
+use nemo::rule_model::{
+    components::{
+        IterablePrimitives, fact::Fact, literal::Literal, rule::Rule, statement::Statement,
+        tag::Tag, term::Term,
+    },
+    error::ValidationReport,
+    pipeline::transformations::ProgramTransformation,
+    programs::{ProgramRead, ProgramWrite, handle::ProgramHandle},
 };
-use crate::rule_model::error::ValidationReport;
-use crate::rule_model::programs::{ProgramRead, ProgramWrite, handle::ProgramHandle};
 
 use itertools::Itertools;
 use std::collections::HashSet;
 
+/// Program transformation that replaces a program's facts with its critical instance.
 #[derive(Debug, Default, Clone, Copy)]
-pub struct TransformationCriticalInstance {}
+pub struct TransformationCriticalInstance;
 
 fn preds_and_lens_of_rule(rule: &Rule) -> impl Iterator<Item = (&Tag, usize)> {
     rule.body()
@@ -23,6 +27,7 @@ fn preds_and_lens_of_rule(rule: &Rule) -> impl Iterator<Item = (&Tag, usize)> {
         .map(|atom| (atom.predicate_ref(), atom.len()))
 }
 
+/// Return predicate and arity pairs for all atoms in the provided rules.
 pub fn preds_and_lens_of_rules<'a>(rules: &[&'a Rule]) -> impl Iterator<Item = (&'a Tag, usize)> {
     rules.iter().flat_map(|rule| preds_and_lens_of_rule(rule))
 }
@@ -51,10 +56,6 @@ fn critical_instance(rules: &[&Rule]) -> impl Iterator<Item = Fact> {
         .collect();
     constants.push(Term::from("__STAR__"));
 
-    // let predicates_and_lens: HashSet<(Tag, usize)> = rules
-    //     .iter()
-    //     .flat_map(|rule| preds_and_lens_of_rule(rule))
-    //     .collect();
     let preds_and_lens: HashSet<(&Tag, usize)> = preds_and_lens_of_rules(rules).collect();
 
     preds_and_lens

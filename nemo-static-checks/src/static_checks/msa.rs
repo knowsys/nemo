@@ -1,15 +1,15 @@
 //! Functionality for the msa check
-use nemo::execution::DefaultExecutionEngine;
-use nemo::execution::{ExecutionEngine, execution_parameters::ExecutionParameters};
-use nemo::io::{import_manager::ImportManager, resource_providers::ResourceProviders};
-use nemo::rule_model::pipeline::transformations::{
+use crate::transformations::{
     crit_instance::TransformationCriticalInstance, msa::TransformationMSA,
 };
+use nemo::execution::DefaultExecutionEngine;
+use nemo::execution::ExecutionEngine;
+use nemo::io::{import_manager::ImportManager, resource_providers::ResourceProviders};
 use nemo::rule_model::programs::handle::ProgramHandle;
 
 pub async fn msa_execution_engine_from_handle(mut handle: ProgramHandle) -> DefaultExecutionEngine {
     handle = handle
-        .transform(TransformationCriticalInstance::default())
+        .transform(TransformationCriticalInstance)
         .expect("TransformationCriticalInstance Error")
         .transform(TransformationMSA::default())
         .expect("TransformationMSA Error");

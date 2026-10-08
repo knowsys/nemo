@@ -1,10 +1,6 @@
 use nemo::rule_model::{
     components::{rule::Rule, tag::Tag, term::Term},
-    pipeline::transformations::{
-        crit_instance::{facts_for_predicate_and_constants, preds_and_lens_of_rules},
-        filter_rules::{RuleSelector, TransformationFilterRules},
-        skolem::TransformationSkolemize,
-    },
+    pipeline::transformations::skolem::TransformationSkolemize,
     programs::{ProgramRead, handle::ProgramHandle},
 };
 
@@ -13,6 +9,10 @@ use crate::static_checks::cyclicity_checks::{
     Trigger, VarPerAtomIdxPosIdxPerRule, backtrack_sk_term, body_for_assignment,
     build_obsolescence_variable_indices, build_var_index_for_rules, head_for_assignment,
     predicates_ref, union,
+};
+use crate::transformations::{
+    crit_instance::{facts_for_predicate_and_constants, preds_and_lens_of_rules},
+    filter_rules::{RuleSelector, TransformationFilterRules},
 };
 
 use crate::static_checks::collection_traits::InsertAll;
@@ -286,7 +286,7 @@ pub async fn check_cyclicity_for_rule(
     );
 
     let mut reasoner: CoreReasoner =
-        CoreReasoner::new(&preds, rules, &var_per_atom_idx_pos_idx_per_rule, strat);
+        CoreReasoner::new(preds, rules, var_per_atom_idx_pos_idx_per_rule, strat);
 
     reasoner.run_saturating(mfc_set);
 

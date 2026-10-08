@@ -210,15 +210,11 @@ impl RulesProperties for ProgramHandle {
             msa_execution_engine_from_handle(self.clone()).await;
         msa_exec_eng.execute().await.expect("no errors possible");
         let c_pred: Tag = Tag::from("_msa_C");
-        if msa_exec_eng
+        msa_exec_eng
             .predicate_rows(&c_pred)
             .await
             .expect("no errors possible")
             .is_none()
-        {
-            return true;
-        }
-        false
     }
 
     fn is_dmfa(&self) -> bool {

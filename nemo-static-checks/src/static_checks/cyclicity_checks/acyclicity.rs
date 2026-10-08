@@ -1,3 +1,14 @@
+use crate::static_checks::collection_traits::InsertAll;
+use crate::static_checks::cyclicity_checks::{
+    Assignment, CoreReasoner, Cyclic, CyclicityStrategy, FactsByPred, NoBlockStrategy,
+    ObsolescenceVariableIndices, Trigger, VarPerAtomIdxPosIdxPerRule, backtrack_sk_term,
+    body_for_assignment, build_obsolescence_variable_indices, build_var_index_for_rules,
+    predicates_ref, union,
+};
+use crate::transformations::{
+    crit_instance::TransformationCriticalInstance,
+    filter_rules::{RuleSelector, TransformationFilterRules},
+};
 use nemo::rule_model::{
     components::{
         fact::Fact,
@@ -5,20 +16,8 @@ use nemo::rule_model::{
         tag::Tag,
         term::{Term, function::FunctionTerm, primitive::Primitive},
     },
-    pipeline::transformations::{
-        crit_instance::TransformationCriticalInstance,
-        filter_rules::{RuleSelector, TransformationFilterRules},
-        skolem::TransformationSkolemize,
-    },
+    pipeline::transformations::skolem::TransformationSkolemize,
     programs::{ProgramRead, handle::ProgramHandle},
-};
-
-use crate::static_checks::collection_traits::InsertAll;
-use crate::static_checks::cyclicity_checks::{
-    Assignment, CoreReasoner, Cyclic, CyclicityStrategy, FactsByPred, NoBlockStrategy,
-    ObsolescenceVariableIndices, Trigger, VarPerAtomIdxPosIdxPerRule, backtrack_sk_term,
-    body_for_assignment, build_obsolescence_variable_indices, build_var_index_for_rules,
-    predicates_ref, union,
 };
 
 use std::collections::{HashMap, HashSet};
@@ -122,7 +121,7 @@ pub async fn check_acyclicity(
         .transform(TransformationFilterRules(RuleSelector::NonExistential))
         .expect("TransformationFilterRules Error");
     let handle = handle
-        .transform(TransformationCriticalInstance::default())
+        .transform(TransformationCriticalInstance)
         .expect("TransformationCriticalInstance Error");
 
     let new_facts_by_pred: FactsByPred = facts_by_pred(handle.facts());
