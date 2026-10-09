@@ -1,0 +1,5 @@
+R(?X, !Y), B(!Y) :- A(?X) .
+A(?Y) :- R(?X, ?Y), B(?X) .
+
+@export A :- csv {} .
+@export R :- csv {} .

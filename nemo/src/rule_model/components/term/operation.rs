@@ -255,10 +255,9 @@ impl Eq for Operation {}
 impl PartialOrd for Operation {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         match self.kind.partial_cmp(&other.kind) {
-            Some(core::cmp::Ordering::Equal) => {}
-            ord => return ord,
+            Some(core::cmp::Ordering::Equal) => self.subterms.partial_cmp(&other.subterms),
+            ordering => ordering,
         }
-        self.subterms.partial_cmp(&other.subterms)
     }
 }
 

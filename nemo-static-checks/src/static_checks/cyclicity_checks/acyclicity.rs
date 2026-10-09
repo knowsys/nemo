@@ -1,0 +1,275 @@
+use crate::static_checks::collection_traits::InsertAll;
+use crate::static_checks::cyclicity_checks::{
+    Assignment, CoreReasoner, Cyclic, CyclicityStrategy, FactsByPred, NoBlockStrategy,
+    ObsolescenceVariableIndices, Trigger, VarPerAtomIdxPosIdxPerRule, backtrack_sk_term,
+    body_for_assignment, build_obsolescence_variable_indices, build_var_index_for_rules,
+    predicates_ref, union,
+};
+use crate::transformations::{
+    crit_instance::TransformationCriticalInstance,
+    filter_rules::{RuleSelector, TransformationFilterRules},
+};
+use nemo::rule_model::{
+    components::{
+        fact::Fact,
+        rule::Rule,
+        tag::Tag,
+        term::{Term, function::FunctionTerm, primitive::Primitive},
+    },
+    pipeline::transformations::skolem::TransformationSkolemize,
+    programs::{ProgramRead, handle::ProgramHandle},
+};
+
+use std::collections::{HashMap, HashSet};
+
+#[derive(Clone, Copy)]
+pub enum AcyclicityStrategySelector {
+    MFA,
+    RMFA,
+}
+
+pub struct MFAStrategy;
+
+impl CyclicityStrategy for MFAStrategy {}
+
+pub struct RMFAStrategy<'a> {
+    pub existential_rules: &'a Vec<&'a Rule>,
+    pub datalog_rules: &'a Vec<&'a Rule>,
+    datalog_pr: &'a HashSet<&'a Tag>,
+    pub preds: &'a HashSet<&'a Tag>,
+    pub var_per_atom_idx_pos_idx_per_rule: &'a VarPerAtomIdxPosIdxPerRule<'a>,
+    obsolescence_variable_indices: &'a ObsolescenceVariableIndices<'a>,
+}
+
+impl<'a> RMFAStrategy<'a> {
+    fn new(
+        existential_rules: &'a Vec<&'a Rule>,
+        datalog_rules: &'a Vec<&'a Rule>,
+        datalog_pr: &'a HashSet<&'a Tag>,
+        preds: &'a HashSet<&'a Tag>,
+        var_per_atom_idx_pos_idx_per_rule: &'a VarPerAtomIdxPosIdxPerRule<'a>,
+        obsolescence_variable_indices: &'a ObsolescenceVariableIndices<'a>,
+    ) -> Self {
+        Self {
+            existential_rules,
+            datalog_rules,
+            datalog_pr,
+            preds,
+            var_per_atom_idx_pos_idx_per_rule,
+            obsolescence_variable_indices,
+        }
+    }
+}
+
+impl<'a> CyclicityStrategy for RMFAStrategy<'a> {
+    fn is_blocked(&self, trig: Trigger) -> bool {
+        let renamed_ass = rename_consts(trig.ass());
+        let body_for_renamed_consts = body_for_assignment(trig.rule(), &renamed_ass);
+        let skolem_terms_in_body = get_skolem_terms(&body_for_renamed_consts);
+        let mut special_reasoning_set = special_reasoning_set(
+            self.existential_rules,
+            body_for_renamed_consts,
+            skolem_terms_in_body,
+            self.preds,
+        );
+
+        let no_bl_strat = NoBlockStrategy;
+        let mut datalog_reasoner = CoreReasoner::new(
+            self.preds,
+            self.datalog_rules,
+            self.var_per_atom_idx_pos_idx_per_rule,
+            &no_bl_strat,
+        );
+        let mut facts_after_reasoning = special_reasoning_set.clone();
+        if !self.datalog_rules.is_empty() {
+            filter_new_facts(&mut special_reasoning_set, self.datalog_pr);
+            datalog_reasoner.run_saturating(special_reasoning_set);
+            facts_after_reasoning = union(facts_after_reasoning, datalog_reasoner.into_facts());
+        }
+
+        let variable_index = self
+            .obsolescence_variable_indices
+            .get(trig.rule())
+            .expect("every reasoning rule must have an obsolescence variable index");
+
+        Trigger::new(trig.rule(), &renamed_ass).is_obsolete(variable_index, &facts_after_reasoning)
+    }
+}
+
+fn facts_by_pred<'a>(facts: impl Iterator<Item = &'a Fact>) -> FactsByPred<'a> {
+    facts.fold(FactsByPred::new(), |mut ret_val, fact| {
+        ret_val
+            .entry(fact.predicate())
+            .and_modify(|facts_of_pred| {
+                facts_of_pred.insert(fact.clone());
+            })
+            .or_insert(HashSet::from([fact.clone()]));
+        ret_val
+    })
+}
+
+pub async fn check_acyclicity(
+    handle: &ProgramHandle,
+    strat_sel: AcyclicityStrategySelector,
+) -> bool {
+    let sk_ex_rules_handle = handle
+        .transform(TransformationFilterRules(RuleSelector::Existential))
+        .expect("TransformationFilterRules Error")
+        .transform(TransformationSkolemize::default())
+        .expect("TransformationSkolemize Error");
+    let non_ex_rules_handle = handle
+        .transform(TransformationFilterRules(RuleSelector::NonExistential))
+        .expect("TransformationFilterRules Error");
+    let handle = handle
+        .transform(TransformationCriticalInstance)
+        .expect("TransformationCriticalInstance Error");
+
+    let new_facts_by_pred: FactsByPred = facts_by_pred(handle.facts());
+
+    let datalog_rules: Vec<&Rule> = non_ex_rules_handle.rules().collect();
+    let existential_rules: Vec<&Rule> = sk_ex_rules_handle.rules().collect();
+    let rules: Vec<&Rule> = non_ex_rules_handle
+        .rules()
+        .chain(sk_ex_rules_handle.rules())
+        .collect();
+
+    let datalog_pr: HashSet<&Tag> = predicates_ref(&datalog_rules).collect();
+    let existential_pr: HashSet<&Tag> = predicates_ref(&existential_rules).collect();
+    let all_pr: HashSet<&Tag> = datalog_pr.union(&existential_pr).copied().collect();
+
+    let var_per_atom_idx_pos_idx_per_rule = build_var_index_for_rules(&rules);
+    let obsolescence_variable_indices = build_obsolescence_variable_indices(&handle, &rules);
+
+    let no_bl_strat = NoBlockStrategy;
+
+    let mut datalog_reasoner: CoreReasoner = CoreReasoner::new(
+        &datalog_pr,
+        &datalog_rules,
+        &var_per_atom_idx_pos_idx_per_rule,
+        &no_bl_strat,
+    );
+
+    let strat: &dyn CyclicityStrategy = match strat_sel {
+        AcyclicityStrategySelector::MFA => &MFAStrategy,
+        AcyclicityStrategySelector::RMFA => &RMFAStrategy::new(
+            &existential_rules,
+            &datalog_rules,
+            &datalog_pr,
+            &all_pr,
+            &var_per_atom_idx_pos_idx_per_rule,
+            &obsolescence_variable_indices,
+        ),
+    };
+
+    let mut existential_reasoner: CoreReasoner = CoreReasoner::new(
+        &existential_pr,
+        &existential_rules,
+        &var_per_atom_idx_pos_idx_per_rule,
+        strat,
+    );
+
+    let mut new_datalog_facts_by_pred: FactsByPred = new_facts_by_pred
+        .iter()
+        .filter(|(pred, _)| datalog_pr.contains(*pred))
+        .map(|(pred, facts)| (*pred, facts.clone()))
+        .collect();
+    let mut new_existential_facts_by_pred: FactsByPred = new_facts_by_pred
+        .iter()
+        .filter(|(pred, _)| existential_pr.contains(*pred))
+        .map(|(pred, facts)| (*pred, facts.clone()))
+        .collect();
+
+    while !new_existential_facts_by_pred.is_empty() {
+        new_existential_facts_by_pred = union(
+            datalog_reasoner.run_saturating(new_datalog_facts_by_pred),
+            new_existential_facts_by_pred,
+        );
+        filter_new_facts(&mut new_existential_facts_by_pred, &existential_pr);
+        new_existential_facts_by_pred =
+            existential_reasoner.run_every_rule_once(&new_existential_facts_by_pred);
+
+        new_datalog_facts_by_pred = new_existential_facts_by_pred
+            .iter()
+            .filter(|(pred, _)| datalog_pr.contains(*pred))
+            .map(|(pred, facts)| (*pred, facts.clone()))
+            .collect();
+
+        if new_existential_facts_by_pred
+            .values()
+            .flatten()
+            .any(|fact| fact.is_cyclic(&mut Vec::default()))
+        {
+            return false;
+        }
+    }
+    true
+}
+
+fn filter_new_facts(facts_by_pred: &mut FactsByPred, preds: &HashSet<&Tag>) {
+    facts_by_pred.retain(|pred, _| preds.contains(pred))
+}
+
+fn rename_consts_in_term(term: Term, count: &mut u32) -> Term {
+    match term {
+        Term::Primitive(Primitive::Ground(_)) => {
+            *count += 1;
+            Term::from(format!("__STAR_{count}__"))
+        }
+        Term::FunctionTerm(func_term) => {
+            let name: String = func_term.tag().name().to_string();
+            let inner_terms = func_term
+                .terms()
+                .cloned()
+                .map(|inner_term| rename_consts_in_term(inner_term, count));
+            let new_func_term = FunctionTerm::new(&name, inner_terms);
+            Term::from(new_func_term)
+        }
+        _ => panic!("not possible"),
+    }
+}
+
+fn rename_consts<'a>(ass: &Assignment<'a>) -> Assignment<'a> {
+    let mut count = 0;
+    ass.clone()
+        .into_iter()
+        .map(|(var, term)| (var, rename_consts_in_term(term, &mut count)))
+        .collect()
+}
+
+fn get_skolem_terms(facts_by_pred: &FactsByPred) -> Vec<Term> {
+    facts_by_pred
+        .values()
+        .fold(Vec::<Term>::new(), |mut ret_val, facts| {
+            facts.iter().for_each(|fact| {
+                let skolem_terms_of_fact: Vec<Term> = fact
+                    .terms()
+                    .filter(|term| term.is_function())
+                    .cloned()
+                    .collect();
+                ret_val.insert_all(&skolem_terms_of_fact);
+            });
+            ret_val
+        })
+}
+
+fn special_reasoning_set<'a>(
+    ex_rules: &Vec<&'a Rule>,
+    facts_by_pred: FactsByPred<'a>,
+    skolem_terms: Vec<Term>,
+    preds: &HashSet<&'a Tag>,
+) -> FactsByPred<'a> {
+    let involved_facts_in_derivation =
+        skolem_terms
+            .iter()
+            .fold(HashMap::<&Tag, HashSet<Fact>>::new(), |facts, sk_term| {
+                let facts_for_sk_term = backtrack_sk_term(sk_term, ex_rules, 0, true);
+                union(facts, facts_for_sk_term)
+            });
+    let mut ret_val = union(facts_by_pred, involved_facts_in_derivation);
+    preds.iter().for_each(|pred| {
+        if !ret_val.contains_key(pred) {
+            ret_val.insert(pred, HashSet::default());
+        }
+    });
+    ret_val
+}

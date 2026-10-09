@@ -1,0 +1,6 @@
+NextOrder(?X, !Z), Pizza(!Z) | LastForToday(?X) :- Pizza(?X) .
+A(?Y) :- NextOrder(?X, ?Y) .
+B(?X) :- A(?X) .
+LastForToday(?X) :- B(?X) .
+C(?X) :- A(?X) .
+A(?X) :- C(?X) .
