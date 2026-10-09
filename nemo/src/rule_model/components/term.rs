@@ -22,7 +22,7 @@ use delegate::delegate;
 use aggregate::Aggregate;
 use function::FunctionTerm;
 use map::Map;
-use nemo_physical::datavalues::{AnyDataValue, StringDataValue};
+use nemo_physical::datavalues::AnyDataValue;
 use operation::Operation;
 use primitive::{
     Primitive,
@@ -33,7 +33,7 @@ use tuple::Tuple;
 use value_type::ValueType;
 
 use crate::rule_model::{
-    components::tag::Tag, error::ValidationReport, origin::Origin, pipeline::id::ProgramComponentId,
+    error::ValidationReport, origin::Origin, pipeline::id::ProgramComponentId,
 };
 
 use super::{
