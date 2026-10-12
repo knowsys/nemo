@@ -27,7 +27,7 @@ type NegationGraph = LabeledGraph<usize, EdgeLabel, Directed>;
 /// once every rule it depends on has been applied exhaustively.
 /// In particular, the table for every negated atom
 /// will not get any new elements after that point.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct StrategyStratifiedNegation<SubStrategy: RuleSelectionStrategy> {
     /// The components of the dependency graph, in the order they are executed
     ordered_components: Vec<Vec<usize>>,

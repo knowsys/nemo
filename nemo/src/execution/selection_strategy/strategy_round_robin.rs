@@ -10,7 +10,7 @@ use super::strategy::{RuleSelectionStrategy, SelectionStrategyError};
 /// Once every rule was applied it loops back to the first one.
 /// If a round is completed without new derivations, the execution stops.
 /// One exception to this are self-recursive rules, which will be applied exhaustively.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct StrategyRoundRobin {
     rule_count: usize,
     self_recursive: Vec<bool>,

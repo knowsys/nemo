@@ -1,7 +1,7 @@
 //! Functionality for evaluating an existential rule program.
 
 pub mod execution_engine;
-pub use execution_engine::ExecutionEngine;
+pub use execution_engine::{ExecutionEngine, PreparedPlan};
 
 use self::selection_strategy::{
     strategy_round_robin::StrategyRoundRobin,
@@ -18,3 +18,6 @@ pub type DefaultExecutionStrategy = StrategyStratifiedNegation<StrategyRoundRobi
 
 /// Shorthand for an execution engine using the default strategy
 pub type DefaultExecutionEngine = ExecutionEngine<DefaultExecutionStrategy>;
+
+/// Shorthand for a prepared plan using the default strategy
+pub type DefaultPreparedPlan = PreparedPlan<DefaultExecutionStrategy>;

@@ -9,7 +9,7 @@ use crate::execution::planning::normalization::rule::NormalizedRule;
 use super::strategy::{RuleSelectionStrategy, SelectionStrategyError};
 
 /// Defines a strategy that selects rules randomly.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[allow(dead_code)] // This is just an example strategy
 pub struct StrategyRandom {
     rule_count: usize,
