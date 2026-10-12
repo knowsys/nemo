@@ -37,3 +37,11 @@ pub(crate) mod table_manager;
 // we use datavalues and meta from nemo_physical in our API, so re-export it here.
 pub use nemo_physical::datavalues;
 pub use nemo_physical::meta;
+
+/// Lock for tests that execute programs.
+///
+/// Executing a program records timings in the global [meta::TimedCode],
+/// which does not support measuring the same block on several threads at once,
+/// so such tests must not run in parallel.
+#[cfg(test)]
+pub(crate) static EXECUTION_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());

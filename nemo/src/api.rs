@@ -187,6 +187,7 @@ mod test {
     #[cfg_attr(miri, ignore)]
     #[tokio::test]
     async fn reason() {
+        let _lock = crate::EXECUTION_TEST_LOCK.lock().await;
         std::env::set_current_dir("../resources/testcases/lcs-diff-computation/").unwrap();
         let mut engine = load("run-lcs-10.rls".into()).await.unwrap();
         super::reason(&mut engine).await.unwrap();
