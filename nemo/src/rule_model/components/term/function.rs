@@ -73,7 +73,7 @@ impl FunctionTerm {
     }
 
     /// Create a new [FunctionTerm] with a [Tag].
-    pub(crate) fn new_tagged<Terms: IntoIterator<Item = Term>>(tag: Tag, subterms: Terms) -> Self {
+    pub fn new_tagged<Terms: IntoIterator<Item = Term>>(tag: Tag, subterms: Terms) -> Self {
         Self {
             origin: Origin::default(),
             id: ProgramComponentId::default(),
@@ -216,10 +216,9 @@ impl Eq for FunctionTerm {}
 impl PartialOrd for FunctionTerm {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         match self.tag.partial_cmp(&other.tag) {
-            Some(core::cmp::Ordering::Equal) => {}
-            ord => return ord,
+            Some(core::cmp::Ordering::Equal) => self.terms.partial_cmp(&other.terms),
+            ordering => ordering,
         }
-        self.terms.partial_cmp(&other.terms)
     }
 }
 

@@ -1,0 +1,3 @@
+A(?Y) :- A(?X), E(?X, ?Y) .
+
+@export A :- csv {} .
