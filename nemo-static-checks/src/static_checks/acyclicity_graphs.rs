@@ -2,7 +2,6 @@
 /// a RuleSet.
 use crate::static_checks::collection_traits::{InsertAll, RemoveAll};
 use crate::static_checks::positions::{Position, Positions, PositionsByRuleAndVariables};
-// use crate::static_checks::rule_set::*;
 use crate::static_checks::rule_set::{RuleAndVariable, RuleSet};
 use nemo::rule_model::components::{rule::Rule, term::primitive::variable::Variable};
 use petgraph::algo::is_cyclic_directed;
@@ -117,8 +116,8 @@ impl<'a> JointAcyclicityGraphBuilder<'a> {
     }
 }
 
-#[derive(Debug)]
 /// This struct declares a WeakAcyclicityGraph of a RuleSet.
+#[derive(Debug)]
 pub struct WeakAcyclicityGraph<'a>(DiGraphMap<Position<'a>, WeakAcyclicityGraphEdgeType>);
 
 /// This Impl-Block contains the function for creating the WeakAcyclicityGraph.

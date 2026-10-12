@@ -1,4 +1,5 @@
-//! Functionality
+//! Functionality that provides common data structures and functions for acyclicity and cyclicity
+//! checks.
 use crate::static_checks::collection_traits::InsertAll;
 use crate::static_checks::rule_set::RuleRefs;
 use nemo::rule_model::{
@@ -463,7 +464,6 @@ impl<'a, 'b> Trigger<'a, 'b> {
     }
 }
 
-// TODO: Traits that should only be just functions
 trait Assign {
     type Output;
 
