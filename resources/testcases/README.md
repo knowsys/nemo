@@ -5,10 +5,6 @@ End-to-end programs with their expected results, run by
 
     cargo test -p nemo --test testcases
 
-A case is a program `name.rls` with its expected facts in `name.expect`.
+A test case is a program `name.rls` with its expected facts in `name.expect`.
 A directory `name/` holds the files its exports must write. Data files sit
 in the `sources/` directory of a topic.
-
-The cases in `unchanged/` must pass. The cases in `changed/` and `new/`
-describe behaviour this engine does not have yet and are ignored; run them
-with `-- --include-ignored`.
