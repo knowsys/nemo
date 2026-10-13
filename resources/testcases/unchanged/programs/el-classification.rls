@@ -1,0 +1,16 @@
+% Classifying a small OWL EL ontology by the rules of the EL calculus,
+% with an existential rule for the role restrictions.
+
+subClass(dog, mammal) .
+subClass(mammal, animal) .
+subClass(person, animal) .
+subClass(owner, person) .
+someValues(dog, hasOwner, owner) .
+someValuesSub(hasOwner, owner, petOwner) .
+type(rex, dog) .
+type(tom, person) .
+
+type(?x, ?d) :- type(?x, ?c), subClass(?c, ?d) .
+role(?x, ?r, !y), type(!y, ?d) :- type(?x, ?c), someValues(?c, ?r, ?d) .
+type(?y, ?e) :- role(?x, ?r, ?y), type(?y, ?d), someValuesSub(?r, ?d, ?e) .
+animal(?x) :- type(?x, animal) .

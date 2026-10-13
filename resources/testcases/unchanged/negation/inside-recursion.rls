@@ -1,0 +1,11 @@
+% A negated atom of a lower stratum inside a recursive rule.
+
+edge(1, 2) .
+edge(2, 3) .
+edge(3, 4) .
+edge(2, 5) .
+edge(5, 6) .
+blocked(3) .
+
+safe(1) .
+safe(?y) :- safe(?x), edge(?x, ?y), ~blocked(?y) .

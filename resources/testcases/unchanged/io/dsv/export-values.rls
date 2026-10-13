@@ -1,0 +1,15 @@
+% Exported CSV writes each kind of value in its own form:
+%   - integers, names and IRIs bare,
+%   - strings, language strings and typed literals, doubles among them,
+%     in term syntax.
+
+value(int, 42) .
+value(double, 2.5E0) .
+value(name, alice) .
+value(iri, <http://example.org/a>) .
+value(string, "plain") .
+value(comma, "a,b") .
+value(tagged, "hallo"@de) .
+value(typed, "5cm"^^<http://example.org/length>) .
+
+@export value :- csv { resource = "values.csv" } .

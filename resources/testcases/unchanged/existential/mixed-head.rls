@@ -1,0 +1,6 @@
+% A head combining a datalog atom with an existential one.
+
+@import data :- csv { resource = "sources/data.csv" }.
+
+result(?X, ?X) :- data(?X, ?X) .
+datalog(?X), result(?X, !V) :- data(?X, ?Y) .

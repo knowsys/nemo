@@ -1,0 +1,2 @@
+cell(escaped, "a\"b") .
+cell(hex, 31) .

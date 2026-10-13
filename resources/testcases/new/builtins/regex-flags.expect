@@ -1,0 +1,9 @@
+result(dot_all, true) .
+result(insensitive, true) .
+result(literal, true) .
+result(literal_no_match, false) .
+result(multiline, true) .
+result(regex_flags, true) .
+result(regex_q_false, false) .
+result(regex_q_true, true) .
+result(regex_qi, true) .

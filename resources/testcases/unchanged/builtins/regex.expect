@@ -1,0 +1,8 @@
+result(alternative, true) .
+result(anchored, true) .
+result(anchored_case, false) .
+result(class, true) .
+result(empty_pattern, true) .
+result(no_match, false) .
+result(regex, true) .
+result(regex_unicode, true) .

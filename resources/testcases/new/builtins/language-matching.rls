@@ -1,0 +1,20 @@
+% langMatches: basic language ranges, wildcards, case-insensitivity.
+
+go(1) .
+
+result(exact, ?r) :- go(1), ?r = langMatches("en", "en") .
+result(subtag, ?r) :- go(1), ?r = langMatches("en-US", "en") .
+result(not_prefix, ?r) :- go(1), ?r = langMatches("eng", "en") .
+result(wildcard, ?r) :- go(1), ?r = langMatches("de", "*") .
+result(wildcard_empty, ?r) :- go(1), ?r = langMatches("", "*") .
+result(case, ?r) :- go(1), ?r = langMatches("EN-us", "en-US") .
+result(more_specific_range, ?r) :- go(1), ?r = langMatches("en", "en-US") .
+
+tagged("test"@en) .
+
+result(langmatches_exact, ?R) :- tagged(?L), ?R = langMatches(LANG(?L), "en") .
+result(langmatches_subtag, ?R) :- tagged(?L), ?R = langMatches("en-US", "en") .
+result(langmatches_wildcard, ?R) :- tagged(?L), ?R = langMatches(LANG(?L), "*") .
+result(langmatches_no_match, ?R) :- tagged(?L), ?R = langMatches(LANG(?L), "de") .
+result(langmatches_empty_wildcard, ?R) :- tagged(?L), ?R = langMatches("", "*") .
+result(langmatches_case, ?R) :- tagged(?L), ?R = langMatches("EN-US", "en") .

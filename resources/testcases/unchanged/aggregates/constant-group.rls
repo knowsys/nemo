@@ -1,0 +1,10 @@
+% A head may group by constants next to its variables.
+
+p(1) .
+p(2) .
+p(3) .
+q(x, 10) .
+q(y, 20) .
+
+summary(numbers, #count(?x)) :- p(?x) .
+labeled(?k, total, #sum(?v)) :- q(?k, ?v) .

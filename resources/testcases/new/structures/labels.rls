@@ -1,0 +1,14 @@
+% Labeled tuples and maps. The label is part of the value, so a labeled
+% pattern matches only values with that label. LABEL reads the label.
+
+shape(circle(1.5)) .
+shape(square(2)) .
+shape(rect(2, 3)) .
+shape((7, 8)) .
+server(backend{host = "10.0.0.1", port = 9000}) .
+server(frontend{host = "10.0.0.2", port = 80}) .
+
+circleRadius(?r) :- shape(circle(?r)) .
+anyPair(?a, ?b) :- shape(?s), LENGTH(?s) = 2, ?a = ?s[0], ?b = ?s[1] .
+kind(?s, LABEL(?s)) :- shape(?s) .
+backendPort(?p) :- server(backend{host = _, port = ?p}) .

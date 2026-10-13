@@ -1,0 +1,11 @@
+% Predicates named by full and prefixed IRIs are one predicate when they
+% name the same IRI.
+
+@prefix ex: <http://example.org/> .
+
+ex:parent(alice, bob) .
+<http://example.org/parent>(bob, carol) .
+ex:parent(carol, dave) .
+
+ex:ancestor(?x, ?y) :- ex:parent(?x, ?y) .
+<http://example.org/ancestor>(?x, ?z) :- ex:ancestor(?x, ?y), <http://example.org/parent>(?y, ?z) .

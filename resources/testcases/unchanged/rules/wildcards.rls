@@ -1,0 +1,6 @@
+% Regression test for https://github.com/knowsys/nemo/issues/408:
+% anonymous variables in a body atom.
+
+@import input :- csv { resource = "sources/main.csv" }.
+
+result(?x) :- input(?x, _, _).

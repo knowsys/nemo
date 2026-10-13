@@ -1,0 +1,5 @@
+% One fresh null per match of an existential rule.
+
+@import data :- csv { resource = "sources/data.csv" }.
+
+result(?X, !V) :- data(?X, ?Y) .

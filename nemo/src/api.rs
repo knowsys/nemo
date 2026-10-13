@@ -10,8 +10,8 @@
 //! # #[tokio::main(flavor = "current_thread")]
 //! # async fn main() {
 //! use nemo::api::{load, reason, output_predicates};
-//! std::env::set_current_dir("../resources/testcases/lcs-diff-computation/").unwrap();
-//! let mut engine = load("run-lcs-10.rls".into()).await.unwrap();
+//! std::env::set_current_dir("../resources/testcases/unchanged/programs/").unwrap();
+//! let mut engine = load("lcs-diff.rls".into()).await.unwrap();
 //! // reasoning on the rule file
 //! reason(&mut engine).await.unwrap();
 //! // write the results to a temporary directory
@@ -187,17 +187,17 @@ mod test {
     #[cfg_attr(miri, ignore)]
     #[tokio::test]
     async fn reason() {
-        std::env::set_current_dir("../resources/testcases/lcs-diff-computation/").unwrap();
-        let mut engine = load("run-lcs-10.rls".into()).await.unwrap();
+        std::env::set_current_dir("../resources/testcases/unchanged/io/dsv/").unwrap();
+        let mut engine = load("export-formats.rls".into()).await.unwrap();
         super::reason(&mut engine).await.unwrap();
 
-        // writing only the results where the predicates contain an "i"
+        // writing only the results of the joins
         let results = output_predicates(&engine)
             .into_iter()
-            .filter(|pred| pred.to_string().contains('i'))
+            .filter(|pred| pred.to_string().starts_with('J'))
             .collect::<Vec<_>>();
 
-        assert_eq!(results.len(), 4);
+        assert_eq!(results.len(), 3);
         let _temp_dir = TempDir::new().unwrap();
         // Disabled:
         // write(temp_dir.to_str().unwrap().to_string(), &mut engine, results).unwrap();

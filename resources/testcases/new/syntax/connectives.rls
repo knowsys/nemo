@@ -1,0 +1,6 @@
+% `@import … from` and `@export … to` connect predicates and formats.
+
+@import data from csv { resource = "sources/pairs.csv" } .
+@export result to csv {} .
+
+result(?y, ?x) :- data(?x, ?y) .

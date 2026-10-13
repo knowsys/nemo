@@ -1,0 +1,12 @@
+% Shortest hop distances: every path length up to a bound, then the
+% smallest per pair.
+
+edge(a, b) .
+edge(b, c) .
+edge(a, c) .
+edge(c, d) .
+edge(d, a) .
+
+distance(?x, ?y, 1) :- edge(?x, ?y) .
+distance(?x, ?z, ?d + 1) :- distance(?x, ?y, ?d), edge(?y, ?z), ?d < 4 .
+shortest(?x, ?y, #min(?d)) :- distance(?x, ?y, ?d) .

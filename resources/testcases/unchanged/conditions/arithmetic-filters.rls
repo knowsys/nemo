@@ -1,0 +1,16 @@
+% Comparisons over arithmetic terms; a division by zero drops its row.
+
+a(1, 0).
+a(1, 1).
+a(2, 2).
+a(3, 1).
+
+r0(?a, ?b) :- a(?a, ?b), ?a / ?b < 2.
+
+r1(?x) :- a(?x, ?y), 2 / ?y = 1.
+
+r2(?x) :- a(?x, ?y), 2 / ?y != 1.
+
+r3(?x) :- a(?x, ?y), ?z = ?x + ?y, ?z = 4.
+
+r4(?x, ?y) :- a(?x, ?y), OR(NUMGREATER(?x, 2), EQUALITY(?y, 0)).

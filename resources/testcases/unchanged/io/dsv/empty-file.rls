@@ -1,0 +1,6 @@
+% Regression test for https://github.com/knowsys/nemo/issues/308:
+% an empty CSV file.
+
+@import source :- csv { resource = "sources/empty.csv" }.
+
+out(?X, ?Y, ?Z) :- source(?X, ?Y, ?Z) .

@@ -1,0 +1,17 @@
+% Exports to TSV, to CSV, and to DSV with a custom delimiter.
+
+@import sourceA :- csv{resource = "sources/dataA.csv"}.
+@import sourceB :- dsv{resource = "sources/dataB.csv", delimiter = ","}.
+@import sourceC :- csv{resource = "sources/dataC.csv"}.
+
+@export sourceA :- tsv{resource = "sourceA.tsv"}.
+@export sourceB :- dsv{resource = "sourceB.dsv", delimiter = ";"}.
+@export sourceC :- csv{resource = "sourceC.csv"}.
+
+@export J1 :- tsv{resource = "J1.tsv"}.
+@export J2 :- dsv{resource = "J2.dsv", delimiter = ";"}.
+@export J3 :- csv{resource = "J3.csv"}.
+
+J1(?X, ?Y, ?Z) :- sourceA(?X, ?Z, ?Y), sourceB(?X, ?Y, ?T) .
+J2(?X, ?Y, ?Z) :- sourceA(?Z, ?Y, ?X), sourceC(?X, ?Y, ?T) .
+J3(?X, ?Y, ?W) :- sourceA(?T, ?Y, ?X), sourceB(?T, ?Y, ?X), sourceC(?X, ?Y, ?W) .

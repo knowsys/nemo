@@ -1,0 +1,21 @@
+% Aggregates over floats mixed with integers and doubles:
+%   - #min and #max compare numbers by value, whatever their type.
+%   - The sum of an integer and a float is a float.
+%
+% Old Nemo orders numbers by type first (integers, then floats, then
+% doubles) and only then by value. It sums an integer and a float to a
+% double. The sum of the float and the double agrees:
+%   total(a, "1.5"^^xsd:double) .
+%   smallest(a, 1) .
+%   largest(a, "0.5"^^xsd:float) .
+%   smallest(b, "0.5"^^xsd:float) .
+%   largest(b, "0.25"^^xsd:double) .
+
+v(a, 1) .
+v(a, 0.5f) .
+v(b, 0.5f) .
+v(b, 0.25E0) .
+
+total(?k, #sum(?x)) :- v(?k, ?x) .
+smallest(?k, #min(?x)) :- v(?k, ?x) .
+largest(?k, #max(?x)) :- v(?k, ?x) .

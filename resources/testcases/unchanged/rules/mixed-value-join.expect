@@ -1,0 +1,6 @@
+both(one) .
+both("1") .
+both(1) .
+
+onlyLeft("one") .
+onlyLeft("one"@en) .

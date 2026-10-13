@@ -1,0 +1,8 @@
+% A pattern may refer back to a group.
+%
+% Old Nemo does not match the backreference:
+%   result(regex_backref, "false"^^xsd:boolean) .
+
+strings("Hello", "World") .
+
+result(regex_backref, ?R) :- strings(?A, _), ?R = REGEX("abcabc", "(abc)\1") .

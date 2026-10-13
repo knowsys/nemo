@@ -1,0 +1,11 @@
+asLabeled(link(<a>, <b>)) .
+asLabeled(link(<b>, <c>)) .
+
+asMap({<from> = <a>, <to> = <b>, <weight> = 3}) .
+asMap({<from> = <b>, <to> = <c>, <weight> = 4}) .
+
+asTuple((<a>, <b>)) .
+asTuple((<b>, <c>)) .
+
+nested((<a>, (<b>, 6))) .
+nested((<b>, (<c>, 8))) .

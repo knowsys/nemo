@@ -1,0 +1,7 @@
+% An existential rule does not fire where a recursive datalog rule
+% satisfies its head.
+
+R(a, b) .
+
+R(?Y, ?X) :- R(?X, ?Y) .
+R(?Y, !Z) :- R(?X, ?Y) .

@@ -1,0 +1,10 @@
+% The empty string is not a language tag, so STRLANG with an empty tag
+% derives nothing.
+%
+% Old Nemo crashes ("assertion failed: !string2.is_empty()"), so not
+% even the `tag` fact holds.
+
+go(1) .
+
+result(tag, ?r) :- go(1), ?r = STRLANG("x", "en") .
+result(empty_tag, ?r) :- go(1), ?r = STRLANG("x", "") .

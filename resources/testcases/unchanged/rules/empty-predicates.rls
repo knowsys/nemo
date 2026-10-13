@@ -1,0 +1,10 @@
+% Rules over a predicate nothing feeds derive nothing, and a union with
+% it derives the other side.
+
+known(1) .
+known(2) .
+
+fromNothing(?x) :- nothing(?x) .
+either(?x) :- known(?x) .
+either(?x) :- nothing(?x) .
+joined(?x) :- known(?x), nothing(?x) .

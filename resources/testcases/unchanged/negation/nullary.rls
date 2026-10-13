@@ -1,0 +1,10 @@
+% Regression test for https://github.com/knowsys/nemo/issues/428:
+% negation of a predicate without arguments, which used to crash.
+
+Input(-1).
+
+Assert(positive) :- Input(?i), ?i > 0.
+Assert(negative) :- Input(?i), ?i < 0.
+
+NonPositive(?r) :- Input(?r), ~Assert(positive).
+NonNegative(?r) :- Input(?r), ~Assert(negative).

@@ -1,0 +1,2 @@
+measurement("alice", 34, true) .
+measurement("bob", 27, false) .

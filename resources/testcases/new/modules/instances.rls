@@ -1,0 +1,14 @@
+% One module instantiated twice with different bindings: each instance
+% derives on its own.
+
+@use "sources/hops.rls" { edge = flight, $limit = 1 } as direct .
+@use "sources/hops.rls" { edge = flight, $limit = 3 } as short .
+
+flight(berlin, dresden) .
+flight(dresden, prague) .
+flight(prague, vienna) .
+
+nonstop(?x, ?y) :- direct::within(?x, ?y) .
+trip(?x, ?y) :- short::within(?x, ?y) .
+
+@output nonstop, trip .

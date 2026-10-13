@@ -1,0 +1,10 @@
+% Derived triples exported as N-Triples.
+
+@prefix ex: <http://example.org/> .
+
+edge(ex:a, ex:b) .
+edge(ex:b, ex:c) .
+
+triple(?x, ex:reaches, ?z) :- edge(?x, ?y), edge(?y, ?z) .
+
+@export triple :- ntriples { resource = "reaches.nt" } .

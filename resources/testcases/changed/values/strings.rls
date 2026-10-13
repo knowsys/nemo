@@ -1,0 +1,17 @@
+% String literals: escapes, the empty string, and text beyond ASCII.
+%
+% The lengths of the empty string and of the text beyond ASCII agree
+% with old Nemo: it counts grapheme clusters rather than code points,
+% but every character here is a single code point either way. Old Nemo
+% keeps an escape as written, as two characters:
+%   size(backslash, 11) .
+%   size(tab, 4) .
+%   size(newline, 4) .
+
+s(empty, "") .
+s(backslash, "back\\slash") .
+s(tab, "a\tb") .
+s(newline, "a\nb") .
+s(unicode, "é 日本 😀") .
+
+size(?k, ?n) :- s(?k, ?v), ?n = STRLEN(?v) .

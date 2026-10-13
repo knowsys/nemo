@@ -1,0 +1,8 @@
+% A negated atom over nulls excludes exactly the nulls it holds.
+
+p(a) .
+p(b) .
+
+n(?x, !v) :- p(?x) .
+marked(?v) :- n(a, ?v) .
+unmarked(?x) :- n(?x, ?v), ~marked(?v) .

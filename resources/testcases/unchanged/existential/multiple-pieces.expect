@@ -1,0 +1,11 @@
+result(A, A) .
+result(C, _:1) .
+result(D, _:3) .
+result(_:0, B) .
+result(_:2, C) .
+
+test(A) .
+test(_:0) .
+test(_:1) .
+test(_:2) .
+test(_:3) .

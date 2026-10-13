@@ -1,0 +1,14 @@
+% Arithmetic precedence and associativity: `*` binds tighter than `+`,
+% operators of one level group from the left, parentheses override.
+
+go(1) .
+
+value(a, ?v) :- go(1), ?v = 2 + 3 * 4 .
+value(b, ?v) :- go(1), ?v = (2 + 3) * 4 .
+value(c, ?v) :- go(1), ?v = 10 - 4 - 3 .
+value(d, ?v) :- go(1), ?v = 2 * 3 - 4 * 5 .
+value(e, ?v) :- go(1), ?v = -3 + 5 .
+value(f, ?v) :- go(1), ?v = 10 - -2 .
+value(g, ?v) :- go(1), ?v = 2 * (3 + 4) * 5 .
+value(h, ?v) :- go(1), ?v = 100 - (20 - 5) .
+value(i, ?v) :- go(1), ?v = ((((1)))) .

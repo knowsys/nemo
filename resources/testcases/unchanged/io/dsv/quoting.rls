@@ -1,0 +1,7 @@
+% Quoted fields hold language strings; without quoting, quotes are data.
+
+@import noQuoting :- csv{resource="sources/langstrings.csv", quoting=false} .
+@import quoting :- csv{resource="sources/langstrings.csv"} .
+
+withQuoting(?X, ?Y) :- quoting(?X, ?Y) .
+withoutQuoting(?X, ?Y) :- noQuoting(?X, ?Y) .

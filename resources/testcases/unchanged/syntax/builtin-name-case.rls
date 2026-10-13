@@ -1,0 +1,7 @@
+% Builtin names are case-insensitive.
+
+w("hello") .
+
+upper(?r) :- w(?w), ?r = STRLEN(?w) .
+lower(?r) :- w(?w), ?r = strlen(?w) .
+mixed(?r) :- w(?w), ?r = StrLen(?w) .

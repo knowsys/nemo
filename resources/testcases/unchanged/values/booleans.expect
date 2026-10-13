@@ -1,0 +1,2 @@
+negated(false, true) .
+negated(true, false) .

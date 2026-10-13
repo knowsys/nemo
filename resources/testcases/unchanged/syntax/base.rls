@@ -1,0 +1,10 @@
+% A base IRI prefixes bare names, of predicates and of values; an IRI
+% in angle brackets is taken as written.
+
+@base <http://example.org/> .
+
+edge(a, <b>) .
+<edge>(<b>, <http://other.org/c>) .
+
+path(?x, ?y) :- edge(?x, ?y) .
+path(?x, ?z) :- path(?x, ?y), <http://example.org/edge>(?y, ?z) .

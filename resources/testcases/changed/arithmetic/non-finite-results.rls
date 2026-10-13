@@ -1,0 +1,17 @@
+% Floating-point arithmetic follows IEEE 754:
+%   - A result too large for a double is an infinity.
+%   - An undefined result, such as 0/0, is NaN.
+% Both are ordinary values that rules derive.
+%
+% Old Nemo drops every result that is not finite, so no `result` fact
+% holds.
+
+go(1) .
+
+result(positive_by_zero, ?r) :- go(1), ?r = 1.0E0 / 0.0E0 .
+result(negative_by_zero, ?r) :- go(1), ?r = -1.0E0 / 0.0E0 .
+result(zero_by_zero, ?r) :- go(1), ?r = 0.0E0 / 0.0E0 .
+result(product, ?r) :- go(1), ?r = 1.0E300 * 1.0E300 .
+result(sqrt_negative, ?r) :- go(1), ?r = SQRT(-1.0E0) .
+result(log_zero, ?r) :- go(1), ?r = LOG(0.0E0, 2.0E0) .
+result(pow_negative_base, ?r) :- go(1), ?r = POW(-8.0E0, 0.5E0) .

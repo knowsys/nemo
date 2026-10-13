@@ -1,0 +1,5 @@
+size(backslash, 10) .
+size(empty, 0) .
+size(newline, 3) .
+size(tab, 3) .
+size(unicode, 6) .

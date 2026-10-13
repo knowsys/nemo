@@ -1,0 +1,8 @@
+result(double_beyond, "INF"^^<http://www.w3.org/2001/XMLSchema#double>) .
+result(double_inf, "INF"^^<http://www.w3.org/2001/XMLSchema#double>) .
+result(double_nan, "NaN"^^<http://www.w3.org/2001/XMLSchema#double>) .
+result(double_negative_inf, "-INF"^^<http://www.w3.org/2001/XMLSchema#double>) .
+result(double_true, 1d) .
+result(float_beyond, "INF"^^<http://www.w3.org/2001/XMLSchema#float>) .
+result(float_false, 0f) .
+result(int_true, 1) .

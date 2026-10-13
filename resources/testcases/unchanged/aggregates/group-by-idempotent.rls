@@ -1,0 +1,6 @@
+% #min and #max grouped by one variable, another body variable unused.
+
+@import sourceA :- csv { resource = "sources/dataA.csv" }.
+
+r0(?X, #min(?Z)) :- sourceA(?X, ?Y, ?Z).
+r1(?X, #max(?Z)) :- sourceA(?X, ?Y, ?Z).

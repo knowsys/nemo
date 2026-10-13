@@ -1,0 +1,7 @@
+% A header line is data unless `ignore_headers` skips it.
+
+@import noIgnore :- csv{resource="sources/headers.csv"} .
+@import doIgnore :- csv{resource="sources/headers.csv", ignore_headers=true} .
+
+withHeaders(?X, ?Y) :- noIgnore(?X, ?Y) .
+noHeaders(?X, ?Y) :- doIgnore(?X, ?Y) .

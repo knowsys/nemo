@@ -1,0 +1,18 @@
+combined(-6) .
+combined(-2) .
+combined(-1) .
+combined(2) .
+combined(3) .
+combined(4) .
+
+constant(-3, 42) .
+constant(1, 42) .
+constant(2, 42) .
+
+shifted(-3, -2, -4) .
+shifted(1, 2, 0) .
+shifted(2, 3, 1) .
+
+squared(-3, 9) .
+squared(1, 1) .
+squared(2, 4) .

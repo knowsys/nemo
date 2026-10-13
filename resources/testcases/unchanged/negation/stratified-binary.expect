@@ -1,0 +1,22 @@
+equal(a, a) .
+equal(b, b) .
+equal(c, c) .
+equal(d, d) .
+equal(e, e) .
+equal(f, f) .
+equal(g, g) .
+equal(h, h) .
+equal(i, i) .
+equal(j, j) .
+equal(k, k) .
+equal(l, l) .
+equal(m, m) .
+equal(n, n) .
+equal(o, o) .
+equal(p, p) .
+equal(z, z) .
+
+result(a, b) .
+result(c, d) .
+result(h, i) .
+result(z, c) .

@@ -1,0 +1,15 @@
+% A bill of materials: quantities multiply along the assembly tree, and
+% the totals of each part sum over its paths.
+
+part(bike, frame, 1) .
+part(bike, wheel, 2) .
+part(wheel, spoke, 32) .
+part(wheel, rim, 1) .
+part(frame, tube, 3) .
+part(bike, bell, 1) .
+
+needs(?a, ?p, ?n) :- part(?a, ?p, ?n) .
+needs(?a, ?q, ?n * ?m) :- needs(?a, ?p, ?n), part(?p, ?q, ?m) .
+total(?a, ?p, #sum(?n)) :- needs(?a, ?p, ?n) .
+leaf(?p) :- part(_, ?p, _), ~hasParts(?p) .
+hasParts(?p) :- part(?p, _, _) .

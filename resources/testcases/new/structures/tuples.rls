@@ -1,0 +1,13 @@
+% Tuples: matched by position in body patterns, nested, and read with
+% LENGTH, GET and the index notation.
+
+point((1, 2)) .
+point((3, 4)) .
+point((5, (6, 7))) .
+
+first(?x) :- point((?x, _)) .
+inner(?a, ?b) :- point((_, (?a, ?b))) .
+size(?p, LENGTH(?p)) :- point(?p) .
+second(?p, ?y) :- point(?p), ?y = ?p[1] .
+viaGet(?p, ?x) :- point(?p), ?x = GET(?p, 0) .
+swapped((?y, ?x)) :- point((?x, ?y)) .

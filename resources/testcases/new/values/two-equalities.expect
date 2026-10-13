@@ -1,0 +1,15 @@
+sameTerm("1", "1") .
+sameTerm(1, 1) .
+sameTerm(1f, 1f) .
+sameTerm(1d, 1d) .
+
+sameValue("1", "1") .
+sameValue(1, 1) .
+sameValue(1, 1f) .
+sameValue(1, 1d) .
+sameValue(1f, 1) .
+sameValue(1f, 1f) .
+sameValue(1f, 1d) .
+sameValue(1d, 1) .
+sameValue(1d, 1f) .
+sameValue(1d, 1d) .

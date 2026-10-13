@@ -1,0 +1,7 @@
+% Regression test for https://github.com/knowsys/nemo/issues/765:
+% a fact next to a rule reading an import.
+
+@import foo :- csv{resource="sources/file1.csv"} .
+
+bar(1, 3) .
+bar(1, ?x) :- foo(1, ?x) .

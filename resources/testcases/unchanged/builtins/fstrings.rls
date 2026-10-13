@@ -1,0 +1,17 @@
+% Format strings: variables and expressions in braces, any kind of value
+% formatted as its lexical form, over one line or several.
+
+v(1, "one") .
+v(2, "two") .
+
+result(?n, f"{?s} is {?n}") :- v(?n, ?s) .
+doubled(?n, f"{?n} * 2 = {?n * 2}") :- v(?n, ?s) .
+plain(f"no placeholders") :- v(1, _) .
+
+strings("Hello", "World") .
+
+result(fstring_basic, ?R) :- strings(?A, ?B), ?R = f"{?A} and {?B}" .
+result(fstring_multiline, ?R) :- strings(?A, ?B), ?M = f"""{?A}
+and
+{?B}""", ?R = CONCAT(SUBSTR(?M, 1, 5), " ", SUBSTR(?M, 7, 3), " ", SUBSTR(?M, 11)) .
+result(fstring_arithmetic, ?R) :- strings(?A, ?B), ?R = f"len*10={STRLEN(?A) * 10}" .

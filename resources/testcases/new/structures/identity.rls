@@ -1,0 +1,13 @@
+% Structured values are equal when their parts are identical terms: a
+% join over them matches exactly those.
+
+left((1, 2)) .
+left((1, 2.0d)) .
+left({a = 1, b = 2}) .
+left(p(1)) .
+right((1, 2)) .
+right({b = 2, a = 1}) .
+right(q(1)) .
+right((1, 2.0)) .
+
+both(?x) :- left(?x), right(?x) .

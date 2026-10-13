@@ -1,0 +1,6 @@
+lives("Alice", "Dresden") .
+lives("Bob", "Berlin") .
+lives("Carol", "Prague") .
+
+senior("Alice") .
+senior("Carol") .

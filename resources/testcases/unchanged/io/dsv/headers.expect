@@ -1,0 +1,8 @@
+noHeaders(13, 37) .
+noHeaders(23, 42) .
+noHeaders(256, 512) .
+
+withHeaders(foo, bar) .
+withHeaders(13, 37) .
+withHeaders(23, 42) .
+withHeaders(256, 512) .

@@ -1,0 +1,3 @@
+result(compare_equal, 0) .
+result(compare_greater, 1) .
+result(compare_less, -1) .

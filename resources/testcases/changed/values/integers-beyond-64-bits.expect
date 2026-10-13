@@ -1,0 +1,7 @@
+integer(-9223372036854775809) .
+integer(9223372036854775808) .
+integer(18446744073709551616) .
+
+kind(-9223372036854775809, <http://www.w3.org/2001/XMLSchema#integer>) .
+kind(9223372036854775808, <http://www.w3.org/2001/XMLSchema#integer>) .
+kind(18446744073709551616, <http://www.w3.org/2001/XMLSchema#integer>) .

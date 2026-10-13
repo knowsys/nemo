@@ -1,0 +1,8 @@
+items(fruit, (<apple>, <date>)) .
+items(vegetable, (<carrot>,)) .
+
+joined(fruit, "apple, date") .
+joined(vegetable, "carrot") .
+
+prices(fruit, {<apple> = 2, <date> = 2}) .
+prices(vegetable, {<carrot> = 3}) .

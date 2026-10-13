@@ -1,0 +1,15 @@
+animal(rex) .
+animal(tom) .
+animal(_:0) .
+
+role(rex, hasOwner, _:0) .
+
+type(rex, animal) .
+type(rex, dog) .
+type(rex, mammal) .
+type(tom, animal) .
+type(tom, person) .
+type(_:0, animal) .
+type(_:0, owner) .
+type(_:0, person) .
+type(_:0, petOwner) .

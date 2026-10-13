@@ -1,0 +1,6 @@
+% Ungrouped aggregates over the last column of an import.
+
+@import sourceA :- csv{resource = "sources/dataA.csv"}.
+
+r0(#min(?Z)) :- sourceA(?X, ?Y, ?Z).
+r1(#max(?Z)) :- sourceA(?X, ?Y, ?Z).

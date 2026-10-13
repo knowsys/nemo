@@ -63,4 +63,9 @@ env_logger = { workspace = true }
 assert_fs = { workspace = true }
 test-log = { workspace = true }
 tokio = { workspace = true, features = [ "rt", "macros" ] }
+libtest-mimic = "0.8"
+
+[[test]]
+name = "testcases"
+harness = false
 

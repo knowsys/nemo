@@ -1,0 +1,13 @@
+% fullStr writes an exact number bare instead of as a typed literal, and
+% an IRI without its angle brackets.
+%
+% Old Nemo writes integers as xsd:int literals and keeps the brackets:
+%   complete(int, "\"42\"^^<http://www.w3.org/2001/XMLSchema#int>") .
+%   complete(negative, "\"-7\"^^<http://www.w3.org/2001/XMLSchema#int>") .
+%   complete(iri, "<http://example.org/a>") .
+
+value(int, 42) .
+value(negative, -7) .
+value(iri, <http://example.org/a>) .
+
+complete(?kind, ?r) :- value(?kind, ?v), ?r = fullStr(?v) .

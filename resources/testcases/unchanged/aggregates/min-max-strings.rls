@@ -1,0 +1,10 @@
+% #min and #max over strings follow the code point order of strings.
+
+word(g1, "pear") .
+word(g1, "Apple") .
+word(g1, "apple") .
+word(g2, "") .
+word(g2, "zebra") .
+
+first(?g, #min(?w)) :- word(?g, ?w) .
+last(?g, #max(?w)) :- word(?g, ?w) .

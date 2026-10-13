@@ -1,0 +1,3 @@
+complete(int, "42") .
+complete(iri, "http://example.org/a") .
+complete(negative, "-7") .

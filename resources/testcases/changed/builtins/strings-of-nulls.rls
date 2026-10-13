@@ -1,0 +1,9 @@
+% A null has no lexical form, so STR of a null derives nothing.
+%
+% Old Nemo returns the null's internal number as a string:
+%   result(str, "0") .
+
+go(1) .
+anonymous(!n) :- go(1) .
+
+result(str, ?r) :- anonymous(?n), ?r = STR(?n) .

@@ -1,0 +1,3 @@
+# Kept byte for byte: the line endings are what the test reads.
+windows-line-endings.csv -text
+no-final-newline.csv -text

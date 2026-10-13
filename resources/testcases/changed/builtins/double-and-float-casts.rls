@@ -1,0 +1,20 @@
+% DOUBLE and FLOAT cast:
+%   - true to 1 and false to 0, as XPath does,
+%   - the strings "INF", "-INF" and "NaN" to the infinities and NaN,
+%   - a value too large for the target type to infinity.
+%
+% Old Nemo casts no boolean to a double or a float and drops every value
+% that is not finite, so only `int_true` holds.
+
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+go(1) .
+
+result(double_true, ?r) :- go(1), ?r = DOUBLE("true"^^xsd:boolean) .
+result(float_false, ?r) :- go(1), ?r = FLOAT("false"^^xsd:boolean) .
+result(int_true, ?r) :- go(1), ?r = INT("true"^^xsd:boolean) .
+result(double_inf, ?r) :- go(1), ?r = DOUBLE("INF") .
+result(double_negative_inf, ?r) :- go(1), ?r = DOUBLE("-INF") .
+result(double_nan, ?r) :- go(1), ?r = DOUBLE("NaN") .
+result(double_beyond, ?r) :- go(1), ?r = DOUBLE("1e400") .
+result(float_beyond, ?r) :- go(1), ?r = FLOAT(1.0E40) .

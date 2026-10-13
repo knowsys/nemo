@@ -1,0 +1,20 @@
+% Aggregates over a null and a number:
+%   - For #min and #max, a null is larger than every number.
+%   - #sum fails on the null, so it derives nothing.
+%   - #count counts the null like any other value.
+%
+% Old Nemo takes a null as smaller than every number and leaves it out
+% of the sum. The count agrees:
+%   smallest(_:0) .
+%   largest(3) .
+%   total(3) .
+
+number(3) .
+anonymous(!n) :- number(3) .
+v(?x) :- number(?x) .
+v(?n) :- anonymous(?n) .
+
+smallest(#min(?x)) :- v(?x) .
+largest(#max(?x)) :- v(?x) .
+total(#sum(?x)) :- v(?x) .
+howMany(#count(?x)) :- v(?x) .

@@ -1,0 +1,17 @@
+% Numbers of different types compare by their exact values, as in XPath
+% 4.0, not after rounding to a common type:
+%   - A double is the binary fraction it denotes, so 0.3 is greater than
+%     0.3E0, whose exact value is 0.29999999999999998889….
+%   - 2^53 + 1 is greater than the double 2^53 it would round to.
+% Rounding first would make the order intransitive.
+%
+% Old Nemo reads 0.3 as a double and compares an integer with a double
+% as doubles, so the `above(decimal, double)` and `above(integer,
+% rounded)` facts are missing.
+
+n(decimal, 0.3) .
+n(double, 0.3E0) .
+n(integer, 9007199254740993) .
+n(rounded, 9007199254740992.0E0) .
+
+above(?a, ?b) :- n(?a, ?x), n(?b, ?y), ?x > ?y .

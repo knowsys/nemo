@@ -1,0 +1,11 @@
+highest(12) .
+
+lowest(-3) .
+
+personalBest(alice, 7) .
+personalBest(bob, 12) .
+personalBest(carol, 0) .
+
+personalWorst(alice, -3) .
+personalWorst(bob, 12) .
+personalWorst(carol, 0) .

@@ -1,0 +1,6 @@
+% An existential rule does not fire where a fact satisfies its head.
+
+R(a, b) .
+S(b, c) .
+
+S(?Y, !Z) :- R(?X, ?Y) .

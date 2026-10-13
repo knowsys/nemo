@@ -1,0 +1,22 @@
+% Casts and rounding of 3.0 and 4.2, which are exact decimals (3.0 is
+% the integer 3):
+%   - INT truncates 4.2 to 4.
+%   - ROUND gives integers.
+%   - DATATYPE names xsd:integer and xsd:decimal.
+%
+% Old Nemo reads both literals as doubles: INT of 4.2 derives nothing,
+% ROUND gives doubles, and DATATYPE names xsd:double. FLOAT and DOUBLE
+% agree:
+%   result(int, 3) .
+%   result(round, "3"^^xsd:double) .
+%   result(round, "4"^^xsd:double) .
+%   result(datatype, xsd:double) .
+
+cast(3.0) .
+cast(4.2) .
+
+result(int, ?R) :- cast(?A), ?R = INT(?A) .
+result(float, ?R) :- cast(?A), ?R = FLOAT(?A) .
+result(double, ?R) :- cast(?A), ?R = DOUBLE(?A) .
+result(round, ?R) :- cast(?A), ?R = ROUND(?A) .
+result(datatype, ?R) :- cast(?A), ?R = DATATYPE(?A) .

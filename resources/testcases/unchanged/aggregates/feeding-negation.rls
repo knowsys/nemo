@@ -1,0 +1,10 @@
+% An aggregate's result used in a later negation and join.
+
+score(alice, 7) .
+score(bob, 12) .
+score(carol, 12) .
+score(dave, 3) .
+
+best(#max(?s)) :- score(?p, ?s) .
+winner(?p) :- score(?p, ?s), best(?s) .
+loser(?p) :- score(?p, ?s), ~best(?s) .

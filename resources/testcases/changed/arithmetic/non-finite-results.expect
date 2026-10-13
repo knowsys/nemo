@@ -1,0 +1,7 @@
+result(log_zero, "-INF"^^<http://www.w3.org/2001/XMLSchema#double>) .
+result(negative_by_zero, "-INF"^^<http://www.w3.org/2001/XMLSchema#double>) .
+result(positive_by_zero, "INF"^^<http://www.w3.org/2001/XMLSchema#double>) .
+result(pow_negative_base, "NaN"^^<http://www.w3.org/2001/XMLSchema#double>) .
+result(product, "INF"^^<http://www.w3.org/2001/XMLSchema#double>) .
+result(sqrt_negative, "NaN"^^<http://www.w3.org/2001/XMLSchema#double>) .
+result(zero_by_zero, "NaN"^^<http://www.w3.org/2001/XMLSchema#double>) .

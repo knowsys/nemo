@@ -1,0 +1,6 @@
+% Regression test for https://github.com/knowsys/nemo/issues/438:
+% a variable bound only through a chain of equalities.
+
+b(3). b(4).
+
+r(?x) :- b(?x), ?x = ?y, ?y = 3.

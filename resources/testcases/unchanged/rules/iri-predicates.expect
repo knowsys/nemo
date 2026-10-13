@@ -1,0 +1,6 @@
+<http://example.org/ancestor>(alice, bob) .
+<http://example.org/ancestor>(alice, carol) .
+<http://example.org/ancestor>(alice, dave) .
+<http://example.org/ancestor>(bob, carol) .
+<http://example.org/ancestor>(bob, dave) .
+<http://example.org/ancestor>(carol, dave) .

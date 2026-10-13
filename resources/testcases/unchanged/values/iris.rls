@@ -1,0 +1,13 @@
+% IRIs written as full IRIs, prefixed names, and bare names; a full IRI
+% and its prefixed form are one value.
+
+@prefix ex: <http://example.org/> .
+
+i(<http://example.org/a>) .
+i(ex:a) .
+i(ex:b) .
+i(<urn:isbn:0451450523>) .
+i(bare) .
+i(<bare>) .
+
+distinctValues(#count(?x)) :- i(?x) .

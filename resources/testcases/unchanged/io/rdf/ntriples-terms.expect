@@ -1,0 +1,14 @@
+blank(_:0) .
+
+object(<http://example.org/blank>, "first") .
+object(<http://example.org/blank>, "second") .
+object(<http://example.org/boolean>, true) .
+object(<http://example.org/custom>, "5cm"^^<http://example.org/length>) .
+object(<http://example.org/decimal>, 1.5) .
+object(<http://example.org/double>, 2.5d) .
+object(<http://example.org/escaped>, "line
+break \"quoted\" é") .
+object(<http://example.org/integer>, 42) .
+object(<http://example.org/iri>, <http://example.org/o>) .
+object(<http://example.org/plain>, "plain") .
+object(<http://example.org/tagged>, "chat"@fr) .

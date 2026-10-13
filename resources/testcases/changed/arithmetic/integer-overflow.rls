@@ -1,0 +1,18 @@
+% Integer arithmetic beyond 64 bits stays exact instead of failing.
+%
+% Old Nemo's arithmetic fails as soon as a result, or an intermediate
+% result, does not fit into 64 bits, so no `result` fact holds. The one
+% exception is ABS, whose result wraps around to the smallest 64-bit
+% integer:
+%   result(absolute, -9223372036854775808) .
+
+go(1) .
+
+result(sum, ?r) :- go(1), ?r = 9223372036854775807 + 1 .
+result(difference, ?r) :- go(1), ?r = -9223372036854775808 - 1 .
+result(product, ?r) :- go(1), ?r = 4294967296 * 4294967296 .
+result(square, ?r) :- go(1), ?r = 9223372036854775807 * 9223372036854775807 .
+result(back, ?r) :- go(1), ?r = 9223372036854775807 + 1 - 1 .
+result(compare, ok) :- go(1), 9223372036854775807 + 1 > 9223372036854775807 .
+result(absolute, ?r) :- go(1), ?r = ABS(-9223372036854775808) .
+result(negation, ?r) :- go(1), ?r = INVERTSIGN(-9223372036854775808) .

@@ -1,0 +1,5 @@
+% The special double values, given as typed literals.
+
+x("NaN"^^<http://www.w3.org/2001/XMLSchema#double>) .
+x("INF"^^<http://www.w3.org/2001/XMLSchema#double>) .
+x("-INF"^^<http://www.w3.org/2001/XMLSchema#double>) .

@@ -1,0 +1,8 @@
+% `!=` holds between any two distinct terms, of whatever kind.
+
+v(1) .
+v(2) .
+v(a) .
+v("a") .
+
+different(?x, ?y) :- v(?x), v(?y), ?x != ?y .

@@ -1,0 +1,14 @@
+% Typed literals of known datatypes are the values they spell, so they
+% equal their canonical forms. Unknown datatypes are kept as written.
+
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+v("42"^^xsd:integer) .
+v("042"^^xsd:integer) .
+v(42) .
+v("text"^^xsd:string) .
+v("text") .
+v("5cm"^^<http://example.org/length>) .
+v("2024-01-31"^^xsd:date) .
+
+distinctValues(#count(?x)) :- v(?x) .

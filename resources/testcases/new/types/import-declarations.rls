@@ -1,0 +1,7 @@
+% A declaration also types imported rows: an `int` column parses its
+% fields as integers, and rows outside the declaration are dropped.
+
+@declare person(name: string, age: int) .
+@import person from csv { resource = "sources/people.csv" } .
+
+adult(?n) :- person(?n, ?a), ?a >= 18 .

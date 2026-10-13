@@ -1,0 +1,10 @@
+@prefix ex: <http://example.org/> .
+
+ex:alice a ex:Person ;
+    ex:knows ex:bob, ex:carol ;
+    ex:age 42 ;
+    ex:size 1.5 ;
+    ex:active true ;
+    ex:member [ ex:name "chess club" ] .
+
+ex:bob a ex:Person, ex:Agent .

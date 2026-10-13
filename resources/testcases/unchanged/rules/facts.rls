@@ -1,0 +1,9 @@
+% Facts: duplicates and differently spaced copies collapse, and a
+% predicate can be given by facts and rules at once.
+
+p(1) .
+p(1) .
+p( 1 ) .
+p(2) .
+q(?x) :- p(?x) .
+q(3) .

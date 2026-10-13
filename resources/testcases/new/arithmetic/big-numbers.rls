@@ -1,0 +1,13 @@
+% Arithmetic stays exact beyond 64 bits.
+
+fact(0, 1) .
+fact(?n + 1, ?f * (?n + 1)) :- fact(?n, ?f), ?n < 30 .
+
+factorial(?f) :- fact(30, ?f) .
+half(?f / 2) :- fact(30, ?f) .
+back(?f - 265252859812191058636308480000000 + 42) :- fact(30, ?f) .
+large(?n) :- fact(?n, ?f), ?f > 9223372036854775807 .
+total(#sum(?f)) :- fact(?n, ?f) .
+
+@import cells from csv { resource = "sources/big.csv", format = (int, decimal) } .
+cell_sum(?x + ?y) :- cells(?x, ?y) .

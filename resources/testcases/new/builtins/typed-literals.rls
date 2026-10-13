@@ -1,0 +1,14 @@
+% STRDT builds a literal of a datatype from its lexical form; known
+% datatypes give their values.
+
+go(1) .
+
+result(integer, ?r) :- go(1), ?r = STRDT("42", IRI("http://www.w3.org/2001/XMLSchema#integer")) .
+result(date, ?r) :- go(1), ?r = STRDT("2024-01-31", IRI("http://www.w3.org/2001/XMLSchema#date")) .
+result(custom, ?r) :- go(1), ?r = STRDT("5cm", IRI("http://example.org/length")) .
+result(string, ?r) :- go(1), ?r = STRDT("text", IRI("http://www.w3.org/2001/XMLSchema#string")) .
+
+strings("Hello", "World") .
+
+result(strdt_int, ?R) :- strings(?A, _), ?DT = IRI("http://www.w3.org/2001/XMLSchema#integer"), ?R = STRDT("42", ?DT) .
+result(strdt_other, ?R) :- strings(?A, _), ?DT = IRI("http://www.w3.org/2001/XMLSchema#date"), ?R = STRDT("2024-01-01", ?DT) .

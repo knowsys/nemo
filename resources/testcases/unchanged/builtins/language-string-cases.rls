@@ -1,0 +1,9 @@
+% Case and substring builtins keep the language tag of their input.
+
+go(1) .
+
+result(ucase, ?r) :- go(1), ?r = UCASE("hello"@en) .
+result(substr, ?r) :- go(1), ?r = SUBSTR("hello"@en, 2, 3) .
+result(concat_same_tags, ?r) :- go(1), ?r = CONCAT("a"@en, "b"@en) .
+result(concat_mixed, ?r) :- go(1), ?r = CONCAT("a"@en, "b") .
+result(before, ?r) :- go(1), ?r = STRBEFORE("hello"@en, "l") .

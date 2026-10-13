@@ -1,0 +1,6 @@
+result(ceil_negative_fraction, -0d) .
+result(round_negative_float_half, -0f) .
+result(round_negative_fraction, -0d) .
+result(round_negative_half, -0d) .
+result(round_negative_one_and_a_half, -1d) .
+result(round_positive_half, 1d) .

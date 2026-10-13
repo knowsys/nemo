@@ -1,0 +1,48 @@
+result(after_empty, "abc") .
+result(after_first, "b-c") .
+result(before_absent, "") .
+result(before_first, "a") .
+result(compare, -10) .
+result(compare_strings, -1) .
+result(concat, "Hello World") .
+result(concat_many, "abc") .
+result(concat_one, "a") .
+result(contains, true) .
+result(contains_absent, false) .
+result(contains_empty, true) .
+result(ends, true) .
+result(lcase, "world") .
+result(lcase_umlauts, "äöü") .
+result(levenshtein, 3) .
+result(levenshtein_ab, 4) .
+result(levenshtein_ac, 3) .
+result(levenshtein_ar, 4) .
+result(levenshtein_ba, 4) .
+result(levenshtein_bc, 2) .
+result(levenshtein_empty, 3) .
+result(levenshtein_id, 0) .
+result(reverse_accents, "olléh") .
+result(reverse_empty, "") .
+result(starts_empty, true) .
+result(stringafter, "o") .
+result(stringbefore, "He") .
+result(stringends_false, false) .
+result(stringends_true, true) .
+result(stringreverse, "olleH") .
+result(stringstarts_false, false) .
+result(stringstarts_true, true) .
+result(strlen_accents, 5) .
+result(strlen_cjk, 3) .
+result(strlen_empty, 0) .
+result(subString, "ello") .
+result(subStringLength, "ell") .
+result(substr_accents, "él") .
+result(substr_past_end, "") .
+result(substr_tail, "lo") .
+result(substr_whole, "hello") .
+result(ucase, "HELLO") .
+result(ucase_words, "HELLO WORLD") .
+result(uri_roundtrip, "x & y") .
+result(uridecode_plain, "a b/c") .
+result(uriencode, "%3Ffoo%5B%5D%3D%22bar%20quuz%22") .
+result(uriencode_reserved, "a%20b%2Fc%3Fd%3D%C3%A9") .

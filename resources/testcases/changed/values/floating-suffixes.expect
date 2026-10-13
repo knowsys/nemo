@@ -1,0 +1,7 @@
+doubles(2d) .
+doubles(2.5d) .
+
+floats(2f) .
+floats(2.5f) .
+
+integers(2) .

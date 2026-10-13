@@ -1,0 +1,17 @@
+complete(double, "\"2.5\"^^<http://www.w3.org/2001/XMLSchema#double>") .
+complete(langString, "\"text\"@en") .
+complete(string, "\"text\"") .
+
+lexical(double, "2.5") .
+lexical(int, "42") .
+lexical(iri, "http://example.org/a") .
+lexical(langString, "text") .
+lexical(negative, "-7") .
+lexical(string, "text") .
+
+result(fullstring, "\"2\"^^<http://www.w3.org/2001/XMLSchema#double>") .
+result(fullstring, "\"Hello\"") .
+result(fullstring, "\"test\"@en") .
+result(string, "2") .
+result(string, "Hello") .
+result(string, "test") .

@@ -1,0 +1,29 @@
+J1(A, C, B) .
+J1(B, D, B) .
+J1(C, D, D) .
+
+J2(D, B, B) .
+J2(F, E, A) .
+
+J3(D, B, F) .
+J3(D, B, Q) .
+J3(D, B, Z) .
+
+sourceA(A, B, C) .
+sourceA(A, E, F) .
+sourceA(B, B, D) .
+sourceA(C, D, D) .
+
+sourceB(A, C, F) .
+sourceB(A, G, Q) .
+sourceB(B, B, D) .
+sourceB(B, D, A) .
+sourceB(C, D, D) .
+sourceB(Q, Q, A) .
+
+sourceC(D, B, F) .
+sourceC(D, B, Q) .
+sourceC(D, B, Z) .
+sourceC(F, E, D) .
+sourceC(Q, Q, A) .
+sourceC(Z, Z, Z) .

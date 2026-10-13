@@ -1,0 +1,15 @@
+% A join matches identical terms only: a number, a string and an IRI
+% with the same spelling are three different values.
+
+left(1) .
+left("1") .
+left(<one>) .
+left("one") .
+left("one"@en) .
+right(1) .
+right("1") .
+right(one) .
+right("one"@de) .
+
+both(?x) :- left(?x), right(?x) .
+onlyLeft(?x) :- left(?x), ~right(?x) .

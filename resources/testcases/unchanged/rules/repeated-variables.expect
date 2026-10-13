@@ -1,0 +1,11 @@
+RepeatAll(Z, Z, Z, Z) .
+
+RepeatAlternative(C, A) .
+RepeatAlternative(C, C) .
+
+RepeatBody(D, A) .
+RepeatBody(D, C) .
+
+RepeatHead(A, C, A, C, B, B, A) .
+RepeatHead(B, D, B, D, B, B, B) .
+RepeatHead(C, D, C, D, D, D, C) .

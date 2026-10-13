@@ -1,0 +1,3 @@
+<http://example.org/s> <http://example.org/int> "7"^^<http://www.w3.org/2001/XMLSchema#int> .
+<http://example.org/s> <http://example.org/decimal> "1.50"^^<http://www.w3.org/2001/XMLSchema#decimal> .
+<http://example.org/s> <http://example.org/big> "18446744073709551616"^^<http://www.w3.org/2001/XMLSchema#integer> .

@@ -1,0 +1,5 @@
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix ex: <http://example.org/> .
+
+ex:report ex:due "2024-03-31"^^xsd:date .
+ex:review ex:due "2024-04-15Z"^^xsd:date .

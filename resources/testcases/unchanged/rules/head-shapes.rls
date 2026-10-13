@@ -1,0 +1,11 @@
+% Heads with several atoms, constants, repeated variables, and no
+% variables at all.
+
+e(1, 2) .
+e(2, 3) .
+
+source(?x), target(?y) :- e(?x, ?y) .
+tagged(edge, ?x, ?y) :- e(?x, ?y) .
+diagonal(?x, ?x) :- e(?x, _) .
+nonEmpty(yes) :- e(_, _) .
+swapped(?y, ?x), swapped(?x, ?y) :- e(?x, ?y) .

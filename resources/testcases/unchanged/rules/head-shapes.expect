@@ -1,0 +1,18 @@
+diagonal(1, 1) .
+diagonal(2, 2) .
+
+nonEmpty(yes) .
+
+source(1) .
+source(2) .
+
+swapped(1, 2) .
+swapped(2, 1) .
+swapped(2, 3) .
+swapped(3, 2) .
+
+tagged(edge, 1, 2) .
+tagged(edge, 2, 3) .
+
+target(2) .
+target(3) .

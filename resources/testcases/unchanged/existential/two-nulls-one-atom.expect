@@ -1,0 +1,2 @@
+parents(alice, _:0, _:1) .
+parents(bob, _:2, _:3) .

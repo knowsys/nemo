@@ -1,0 +1,5 @@
+hex,0x1F
+escaped,"""a\""b"""
+unterminated,"""abc"
+prefixedDatatype,"""5""^^xsd:int"
+invalidTag,"""x""@not a tag"

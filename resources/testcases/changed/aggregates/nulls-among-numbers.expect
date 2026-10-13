@@ -1,0 +1,10 @@
+anonymous(_:0) .
+
+howMany(2) .
+
+largest(_:0) .
+
+smallest(3) .
+
+v(3) .
+v(_:0) .

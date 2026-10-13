@@ -1,0 +1,21 @@
+% Hash digests of strings, as lowercase hex; non-strings derive nothing.
+
+go(1) .
+
+result(md5_abc, ?r) :- go(1), ?r = MD5("abc") .
+result(md5_empty, ?r) :- go(1), ?r = MD5("") .
+result(sha1_abc, ?r) :- go(1), ?r = SHA1("abc") .
+result(sha256_abc, ?r) :- go(1), ?r = SHA256("abc") .
+result(sha384_abc, ?r) :- go(1), ?r = SHA384("abc") .
+result(sha512_abc, ?r) :- go(1), ?r = SHA512("abc") .
+result(sha256_unicode, ?r) :- go(1), ?r = SHA256("é") .
+result(md5_number, ?r) :- go(1), ?r = MD5(42) .
+
+strings("Hello", "World") .
+
+result(md5, ?R) :- strings(?A, _), ?R = MD5(?A) .
+result(md5_nonstring, ?R) :- strings(?A, _), ?R = MD5(42) .
+result(sha1, ?R) :- strings(?A, _), ?R = SHA1(?A) .
+result(sha256, ?R) :- strings(?A, _), ?R = SHA256(?A) .
+result(sha384, ?R) :- strings(?A, _), ?R = SHA384(?A) .
+result(sha512, ?R) :- strings(?A, _), ?R = SHA512(?A) .

@@ -1,0 +1,5 @@
+different(negative, positive) .
+different(positive, negative) .
+
+same(negative, negative) .
+same(positive, positive) .

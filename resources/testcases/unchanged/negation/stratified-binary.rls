@@ -1,0 +1,16 @@
+% Stratified negation: the negated predicate is complete from facts,
+% imports and rules before it is negated
+% (https://github.com/knowsys/nemo/pull/220).
+
+@import equal :- csv { resource = "sources/equal.csv" }.
+@import data :- csv { resource = "sources/data.csv" }.
+
+equal(b, b) .
+equal(c, c) .
+
+start(a) .
+end(z) .
+
+equal(?X, ?X) :- start(?X) .
+result(?X, ?Y) :- data(?X, ?Y), ~equal(?X, ?Y).
+equal(?X, ?X) :- end(?X) .

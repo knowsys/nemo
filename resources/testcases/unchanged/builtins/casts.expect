@@ -1,0 +1,37 @@
+converted(int, double, 42d) .
+converted(int, float, 42f) .
+converted(int, int, 42) .
+converted(iri, iri, x) .
+converted(iriString, iri, <http://example.org/x>) .
+converted(negative, double, -3d) .
+converted(negative, float, -3f) .
+converted(negative, int, -3) .
+converted(numberString, double, 40d) .
+converted(numberString, float, 40f) .
+converted(numberString, int, 40) .
+converted(numberString, iri, <40>) .
+converted(signedString, double, -12d) .
+converted(signedString, float, -12f) .
+converted(signedString, int, -12) .
+converted(signedString, iri, <-12>) .
+converted(textString, iri, abc) .
+
+result(double, 5d) .
+result(double, 40d) .
+result(double, 2023d) .
+result(float, 5f) .
+result(float, 40f) .
+result(float, 2023f) .
+result(int, 5) .
+result(int, 40) .
+result(int, 41) .
+result(int, 42) .
+result(int, 43) .
+result(int, 2023) .
+result(iri, <0b101001>) .
+result(iri, <0o52>) .
+result(iri, <0x2B>) .
+result(iri, <40>) .
+result(iri, <https://example.org>) .
+result(iri, test) .
+result(round, 5) .

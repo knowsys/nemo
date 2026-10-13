@@ -1,0 +1,12 @@
+between(1, 3, 5) .
+between(1, 3, 9) .
+between(1, 5, 9) .
+between(1, 7, 9) .
+between(5, 7, 9) .
+
+equalSum(5, 5) .
+
+smaller(1, 3) .
+smaller(1, 5) .
+smaller(1, 7) .
+smaller(5, 7) .

@@ -1,0 +1,5 @@
+result(difference, 2.5f) .
+result(float_and_double, 0.75d) .
+result(product, 0.5f) .
+result(quotient, 0.5f) .
+result(sum, 1.5f) .

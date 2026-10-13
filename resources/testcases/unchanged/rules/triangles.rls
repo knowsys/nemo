@@ -1,0 +1,14 @@
+% A cyclic join: every triangle of a directed graph, found once from
+% each of its corners.
+
+edge(1, 2) .
+edge(2, 3) .
+edge(3, 1) .
+edge(1, 4) .
+edge(4, 2) .
+edge(4, 5) .
+edge(5, 6) .
+edge(6, 4) .
+edge(2, 2) .
+
+triangle(?x, ?y, ?z) :- edge(?x, ?y), edge(?y, ?z), edge(?z, ?x) .

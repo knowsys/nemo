@@ -1,0 +1,20 @@
+between("P336D"^^<http://www.w3.org/2001/XMLSchema#dayTimeDuration>) .
+
+minusDay(feb28, "2024-02-27"^^<http://www.w3.org/2001/XMLSchema#date>) .
+minusDay(feb28common, "2023-02-27"^^<http://www.w3.org/2001/XMLSchema#date>) .
+minusDay(jan31, "2024-01-30"^^<http://www.w3.org/2001/XMLSchema#date>) .
+minusDay(mar1, "2023-02-28"^^<http://www.w3.org/2001/XMLSchema#date>) .
+
+months("P2Y1M"^^<http://www.w3.org/2001/XMLSchema#yearMonthDuration>) .
+
+plusDay(feb28, "2024-02-29"^^<http://www.w3.org/2001/XMLSchema#date>) .
+plusDay(feb28common, "2023-03-01"^^<http://www.w3.org/2001/XMLSchema#date>) .
+plusDay(jan31, "2024-02-01"^^<http://www.w3.org/2001/XMLSchema#date>) .
+plusDay(mar1, "2023-03-02"^^<http://www.w3.org/2001/XMLSchema#date>) .
+
+plusMonth(feb28, "2024-03-28"^^<http://www.w3.org/2001/XMLSchema#date>) .
+plusMonth(feb28common, "2023-03-28"^^<http://www.w3.org/2001/XMLSchema#date>) .
+plusMonth(jan31, "2024-02-29"^^<http://www.w3.org/2001/XMLSchema#date>) .
+plusMonth(mar1, "2023-04-01"^^<http://www.w3.org/2001/XMLSchema#date>) .
+
+shorter(ok) .

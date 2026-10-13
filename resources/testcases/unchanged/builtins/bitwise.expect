@@ -1,0 +1,13 @@
+result(and, 8) .
+result(and_negative, 255) .
+result(and_three, 4) .
+result(bitand, 0) .
+result(bitor, 3) .
+result(bitshl, 4) .
+result(bitshr, 0) .
+result(bitxor, 0) .
+result(or, 14) .
+result(shl, 4611686018427387904) .
+result(shr, -4) .
+result(shr_zero, 8) .
+result(xor, 6) .

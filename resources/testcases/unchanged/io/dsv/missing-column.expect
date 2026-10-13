@@ -1,0 +1,3 @@
+withHeader(23, 42) .
+
+withoutHeader(23, 42) .

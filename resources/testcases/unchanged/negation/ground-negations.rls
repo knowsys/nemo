@@ -1,0 +1,8 @@
+% Negated atoms without variables hold for every row or for none.
+
+n(1) .
+n(2) .
+fact(1, 2) .
+
+whenAbsent(?x) :- n(?x), ~fact(2, 1) .
+whenPresent(?x) :- n(?x), ~fact(1, 2) .

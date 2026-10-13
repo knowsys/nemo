@@ -1,0 +1,9 @@
+% Structures built in rule heads from body values, nested and labeled.
+
+edge(a, b, 3) .
+edge(b, c, 4) .
+
+asTuple((?x, ?y)) :- edge(?x, ?y, _) .
+asMap({from = ?x, to = ?y, weight = ?w}) :- edge(?x, ?y, ?w) .
+asLabeled(link(?x, ?y)) :- edge(?x, ?y, _) .
+nested((?x, (?y, ?w * 2))) :- edge(?x, ?y, ?w) .

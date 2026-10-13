@@ -1,0 +1,13 @@
+applied(contains, "Hello"@en, false) .
+applied(contains, "chat"@fr, true) .
+applied(lang, "Hello"@en, "en") .
+applied(lang, "chat"@fr, "fr") .
+applied(lang_plain, "x", "") .
+applied(str, "Hello"@en, "Hello") .
+applied(str, "chat"@fr, "chat") .
+applied(strlang, "x", "x"@de) .
+applied(strlen, "Hello"@en, 5) .
+applied(strlen, "chat"@fr, 4) .
+
+result(langtag, "Hello"@en) .
+result(tag, "en") .

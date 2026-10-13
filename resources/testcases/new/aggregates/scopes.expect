@@ -1,0 +1,14 @@
+bare(fruit, 9) .
+bare(vegetable, 2) .
+
+combinations(fruit, 3) .
+
+distinctValues(fruit, 7) .
+distinctValues(vegetable, 2) .
+
+matches(fruit, 3) .
+matches(vegetable, 1) .
+
+perItem(fruit, 4) .
+
+perItemDay(fruit, 6) .

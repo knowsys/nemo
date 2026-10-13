@@ -1,0 +1,13 @@
+% Negative and positive zero are different terms, so `=` and `!=` tell
+% them apart, even though they are equal as values.
+%
+% Old Nemo stores both as the same double, so `same` relates every pair
+% and `different` derives nothing:
+%   same(negative, positive) .
+%   same(positive, negative) .
+
+z(positive, 0.0E0) .
+z(negative, -0.0E0) .
+
+same(?a, ?b) :- z(?a, ?x), z(?b, ?y), ?x = ?y .
+different(?a, ?b) :- z(?a, ?x), z(?b, ?y), ?x != ?y .

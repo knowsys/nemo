@@ -1,0 +1,9 @@
+% Nulls flow through datalog rules like any value: each match got its
+% own, so no two people share one.
+
+person(alice) .
+person(bob) .
+
+hasMother(?x, !m) :- person(?x) .
+mother(?m) :- hasMother(_, ?m) .
+siblings(?x, ?y) :- hasMother(?x, ?m), hasMother(?y, ?m) .

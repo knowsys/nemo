@@ -1,0 +1,5 @@
+colleagues(alice, bob) .
+colleagues(bob, alice) .
+
+team(alice, bob, _:0) .
+team(bob, alice, _:1) .

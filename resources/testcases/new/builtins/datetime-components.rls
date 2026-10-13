@@ -1,0 +1,55 @@
+% The components and timezones of dates, times and dateTimes, at their
+% edge cases; wrong datatypes derive nothing.
+
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+strings("Hello", "World") .
+datetimeonly("2023-06-15T10:30:45"^^xsd:dateTime) .
+datetime_tz("2023-06-15T10:30:45Z"^^xsd:dateTime) .
+datetime_tz_offset("2023-06-15T10:30:45-05:00"^^xsd:dateTime) .
+datetime_tz_pos("2023-06-15T10:30:45+05:30"^^xsd:dateTime) .
+datetime_neg("-0002-06-06T00:00:00"^^xsd:dateTime) .
+datetime_eod("1999-12-31T24:00:00"^^xsd:dateTime) .
+dateonly("2023-06-15"^^xsd:date) .
+dateonly_tz("1999-05-31-05:00"^^xsd:date) .
+timeonly("10:30:45.5"^^xsd:time) .
+timeonly_tz("13:20:00-05:00"^^xsd:time) .
+
+result(dt_year, ?R) :- datetimeonly(?D), ?R = YEAR(?D) .
+result(dt_month, ?R) :- datetimeonly(?D), ?R = MONTH(?D) .
+result(dt_day, ?R) :- datetimeonly(?D), ?R = DAY(?D) .
+result(dt_hours, ?R) :- datetimeonly(?D), ?R = HOURS(?D) .
+result(dt_minutes, ?R) :- datetimeonly(?D), ?R = MINUTES(?D) .
+result(dt_seconds, ?R) :- datetimeonly(?D), ?R = SECONDS(?D) .
+result(dt_year_date, ?R) :- dateonly(?D), ?R = YEAR(?D) .
+result(dt_hours_time, ?R) :- timeonly(?D), ?R = HOURS(?D) .
+result(dt_seconds_frac, ?R) :- timeonly(?D), ?R = SECONDS(?D) .
+result(dt_tz_absent, ?R) :- datetimeonly(?D), ?R = TZ(?D) .
+result(dt_tz_utc, ?R) :- datetime_tz(?D), ?R = TZ(?D) .
+result(dt_tz_offset, ?R) :- datetime_tz_offset(?D), ?R = TZ(?D) .
+result(dt_timezone_utc, ?R) :- datetime_tz(?D), ?R = TIMEZONE(?D) .
+result(dt_timezone_offset, ?R) :- datetime_tz_offset(?D), ?R = TIMEZONE(?D) .
+
+% Negative year
+result(dt_year_neg, ?R) :- datetime_neg(?D), ?R = YEAR(?D) .
+% End-of-day T24:00:00 rolls over to the next day
+result(dt_year_eod, ?R) :- datetime_eod(?D), ?R = YEAR(?D) .
+result(dt_hours_eod, ?R) :- datetime_eod(?D), ?R = HOURS(?D) .
+% Components are extracted in local time, not normalized to UTC
+result(dt_hours_offset, ?R) :- datetime_tz_offset(?D), ?R = HOURS(?D) .
+% TZ with a positive offset
+result(dt_tz_pos, ?R) :- datetime_tz_pos(?D), ?R = TZ(?D) .
+% TIMEZONE extracted from date and time values
+result(dt_timezone_date, ?R) :- dateonly_tz(?D), ?R = TIMEZONE(?D) .
+result(dt_timezone_time, ?R) :- timeonly_tz(?D), ?R = TIMEZONE(?D) .
+% TIMEZONE on a value without a timezone must derive nothing
+result(dt_timezone_absent, ?R) :- datetimeonly(?D), ?R = TIMEZONE(?D) .
+% Wrong datatypes must derive nothing
+result(dt_year_wrongtype, ?R) :- timeonly(?D), ?R = YEAR(?D) .
+result(dt_year_string, ?R) :- strings(?A, _), ?R = YEAR("2011-01-10") .
+result(dt_month_wrongtype, ?R) :- timeonly(?D), ?R = MONTH(?D) .
+result(dt_day_wrongtype, ?R) :- timeonly(?D), ?R = DAY(?D) .
+result(dt_hours_wrongtype, ?R) :- dateonly(?D), ?R = HOURS(?D) .
+result(dt_minutes_wrongtype, ?R) :- dateonly(?D), ?R = MINUTES(?D) .
+result(dt_seconds_wrongtype, ?R) :- dateonly(?D), ?R = SECONDS(?D) .
+result(dt_timezone_wrongtype, ?R) :- strings(?A, _), ?R = TIMEZONE("2011-01-10T14:45:13Z") .

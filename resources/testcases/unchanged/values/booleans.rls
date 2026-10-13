@@ -1,0 +1,11 @@
+% Booleans: the keywords and their typed literal forms are one value.
+
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+b(true) .
+b(false) .
+b("true"^^xsd:boolean) .
+b("false"^^xsd:boolean) .
+b("1"^^xsd:boolean) .
+
+negated(?x, ?y) :- b(?x), ?y = NOT(?x) .

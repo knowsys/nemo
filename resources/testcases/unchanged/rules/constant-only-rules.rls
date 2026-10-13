@@ -1,0 +1,11 @@
+% Rules whose heads hold constants only, fired once whatever their body
+% matches.
+
+item(1) .
+item(2) .
+item(3) .
+
+hasItems(yes) :- item(_) .
+hasThree(yes) :- item(3) .
+hasFour(yes) :- item(4) .
+summary(items, many) :- item(?x), item(?y), ?x != ?y .

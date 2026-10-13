@@ -1,0 +1,15 @@
+% TriG with named graphs, from the specification's example.
+
+@prefix eg: <http://example.org/>.
+@prefix dc: <http://purl.org/dc/terms/>.
+@prefix foaf: <http://xmlns.com/foaf/0.1/>.
+
+@import quads :- rdf{resource = "sources/example2.trig"}.
+
+goal(42) :- quads(?default_graph, eg:bob, dc:publisher, "Bob"),
+            quads(?default_graph, eg:alice, dc:publisher, "Alice"),
+            quads(eg:bob, ?a, foaf:name, "Bob"),
+            quads(eg:bob, ?a, foaf:mbox, <mailto:bob@oldcorp.example.org>),
+            quads(eg:bob, ?a, foaf:knows, ?b),
+            quads(eg:alice, ?b, foaf:name, "Alice"),
+            quads(eg:alice, ?b, foaf:mbox, <mailto:alice@work.example.org>).

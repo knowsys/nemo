@@ -1,0 +1,13 @@
+% A scalar wrapper is a type of its own over a base value: an angle is
+% not the decimal it wraps.
+
+@type angle(decimal) .
+
+@declare rotation(by: angle) .
+
+rotation(angle(0.5)) .
+rotation(angle(2)) .
+plain(0.5) .
+
+turns(?v) :- rotation(angle(?v)) .
+sameAsPlain(?a) :- rotation(?a), plain(?a) .

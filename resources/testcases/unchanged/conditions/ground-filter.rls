@@ -1,0 +1,8 @@
+% Regression test for https://github.com/knowsys/nemo/issues/500: a
+% filter of constants only, which used to crash. It never holds here, so
+% `equal` stays empty.
+
+pair(1, 2) .
+pair(3, 3) .
+
+equal(?x) :- pair(?x, ?y), c = d .
