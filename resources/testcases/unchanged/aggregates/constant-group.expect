@@ -1,0 +1,4 @@
+labeled(x, total, 10) .
+labeled(y, total, 20) .
+
+summary(numbers, 3) .

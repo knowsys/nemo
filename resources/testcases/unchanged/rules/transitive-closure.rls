@@ -1,0 +1,14 @@
+% Transitive closure on a graph with a cycle, in linear and in
+% doubling form.
+
+edge(a, b) .
+edge(b, c) .
+edge(c, d) .
+edge(d, b) .
+edge(x, y) .
+
+linear(?x, ?y) :- edge(?x, ?y) .
+linear(?x, ?z) :- linear(?x, ?y), edge(?y, ?z) .
+
+doubling(?x, ?y) :- edge(?x, ?y) .
+doubling(?x, ?z) :- doubling(?x, ?y), doubling(?y, ?z) .

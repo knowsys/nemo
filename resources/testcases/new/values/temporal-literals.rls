@@ -1,0 +1,13 @@
+% Dates, times and durations as values: canonical forms, and the
+% difference between an equal instant and an identical term.
+
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+t("2024-03-01T12:00:00Z"^^xsd:dateTime) .
+t("2024-03-01T13:00:00+01:00"^^xsd:dateTime) .
+t("2024-03-01"^^xsd:date) .
+t("12:30:00"^^xsd:time) .
+t("P1Y2M"^^xsd:yearMonthDuration) .
+t("PT36H"^^xsd:dayTimeDuration) .
+
+sameInstant(?x, ?y) :- t(?x), t(?y), ?x == ?y, ?x != ?y .

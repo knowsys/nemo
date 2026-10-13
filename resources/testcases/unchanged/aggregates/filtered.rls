@@ -1,0 +1,5 @@
+% An aggregate over a join filtered by a comparison.
+
+@import sourceA :- csv { resource = "sources/dataA.csv" }.
+
+r0(?X, #count(?Y)) :- sourceA(?X, _, _), sourceA(?Y, _, _), ?X > ?Y.

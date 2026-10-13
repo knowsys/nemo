@@ -1,0 +1,8 @@
+% Every null is its own value for an aggregate.
+
+p(a) .
+p(b) .
+p(c) .
+
+n(?x, !v) :- p(?x) .
+nulls(#count(?v)) :- n(_, ?v) .

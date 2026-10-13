@@ -1,0 +1,5 @@
+% N-Triples, from the specification's example.
+
+@import triples :- rdf{resource="sources/example2.nt"} .
+
+goal(42) :- triples(<http://example.org/#spiderman>, <http://www.perceive.net/schemas/relationship/enemyOf>, <http://example.org/#green-goblin>) .

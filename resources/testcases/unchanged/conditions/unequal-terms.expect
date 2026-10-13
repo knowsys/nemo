@@ -1,0 +1,12 @@
+different(a, "a") .
+different(a, 1) .
+different(a, 2) .
+different("a", a) .
+different("a", 1) .
+different("a", 2) .
+different(1, a) .
+different(1, "a") .
+different(1, 2) .
+different(2, a) .
+different(2, "a") .
+different(2, 1) .

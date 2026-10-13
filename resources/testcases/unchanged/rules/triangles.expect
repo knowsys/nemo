@@ -1,0 +1,7 @@
+triangle(1, 2, 3) .
+triangle(2, 2, 2) .
+triangle(2, 3, 1) .
+triangle(3, 1, 2) .
+triangle(4, 5, 6) .
+triangle(5, 6, 4) .
+triangle(6, 4, 5) .

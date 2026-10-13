@@ -1,0 +1,17 @@
+% Three strata: a recursion, its complement, and a negation of that.
+
+node(1) .
+node(2) .
+node(3) .
+node(4) .
+node(5) .
+edge(1, 2) .
+edge(2, 3) .
+edge(3, 4) .
+edge(1, 5) .
+
+reach(?x, ?y) :- edge(?x, ?y) .
+reach(?x, ?z) :- reach(?x, ?y), edge(?y, ?z) .
+unreachable(?x, ?y) :- node(?x), node(?y), ~reach(?x, ?y), ?x != ?y .
+missesSome(?x) :- unreachable(?x, _) .
+reachesAll(?x) :- node(?x), ~missesSome(?x) .

@@ -1,0 +1,7 @@
+% Language tags compare without regard to case.
+
+t("chat"@fr) .
+t("chat"@FR) .
+t("color"@en) .
+
+sameTerm(?x, ?y) :- t(?x), t(?y), ?x = ?y .

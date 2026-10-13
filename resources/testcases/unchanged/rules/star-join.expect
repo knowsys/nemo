@@ -1,0 +1,3 @@
+profile(1, alice, 30, dresden) .
+profile(1, alice, 30, leipzig) .
+profile(2, bob, 25, berlin) .

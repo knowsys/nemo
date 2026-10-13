@@ -1,0 +1,16 @@
+age(<http://example.org/alice>, 42) .
+
+flag(<http://example.org/alice>, true) .
+
+groupName("chess club") .
+
+knows(<http://example.org/alice>, <http://example.org/bob>) .
+knows(<http://example.org/alice>, <http://example.org/carol>) .
+
+member(<http://example.org/alice>, _:0) .
+
+size(<http://example.org/alice>, 1.5) .
+
+typed(<http://example.org/alice>, <http://example.org/Person>) .
+typed(<http://example.org/bob>, <http://example.org/Agent>) .
+typed(<http://example.org/bob>, <http://example.org/Person>) .

@@ -1,0 +1,6 @@
+distinctValues(4) .
+
+i(bare) .
+i(<http://example.org/a>) .
+i(<http://example.org/b>) .
+i(<urn:isbn:0451450523>) .

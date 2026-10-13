@@ -1,0 +1,10 @@
+% A map type declares the keys and value types of its maps.
+
+@type config {host: string, port: int} .
+
+@declare server(config) .
+
+server(config{host = "localhost", port = 8080}) .
+server(config{host = "example.org", port = 443}) .
+
+port(?h, ?p) :- server(config{host = ?h, port = ?p}) .

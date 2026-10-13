@@ -1,0 +1,6 @@
+converted(-2.75d, double, -2.75d) .
+converted(-2.75d, float, -2.75f) .
+converted(-2.75d, int, -2) .
+converted(2.75d, double, 2.75d) .
+converted(2.75d, float, 2.75f) .
+converted(2.75d, int, 2) .

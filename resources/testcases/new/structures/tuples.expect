@@ -1,0 +1,21 @@
+first(1) .
+first(3) .
+first(5) .
+
+inner(6, 7) .
+
+second((1, 2), 2) .
+second((3, 4), 4) .
+second((5, (6, 7)), (6, 7)) .
+
+size((1, 2), 2) .
+size((3, 4), 2) .
+size((5, (6, 7)), 2) .
+
+swapped((2, 1)) .
+swapped((4, 3)) .
+swapped(((6, 7), 5)) .
+
+viaGet((1, 2), 1) .
+viaGet((3, 4), 3) .
+viaGet((5, (6, 7)), 5) .

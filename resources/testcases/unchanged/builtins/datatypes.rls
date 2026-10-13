@@ -1,0 +1,17 @@
+% DATATYPE names the datatype of a literal.
+
+value(double, 2.5E0) .
+value(string, "text") .
+value(langString, "text"@en) .
+value(year, "2023"^^<http://www.w3.org/2001/XMLSchema#gYear>) .
+value(custom, "5cm"^^<http://example.org/length>) .
+
+typeOf(?kind, ?r) :- value(?kind, ?v), ?r = DATATYPE(?v) .
+
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+cast("2023"^^xsd:gYear) .
+cast("40") .
+cast("https://example.org") .
+
+result(datatype, ?R) :- cast(?A), ?R = DATATYPE(?A) .

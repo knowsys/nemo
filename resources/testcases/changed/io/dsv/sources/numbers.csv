@@ -1,0 +1,7 @@
+integer,7
+decimal,2.5
+exponent,2.5E0
+lowerExponent,2.5e0
+bareExponent,1E3
+double,2.5d
+float,2.5f

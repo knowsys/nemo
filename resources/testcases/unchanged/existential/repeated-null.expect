@@ -1,0 +1,6 @@
+main(A, _:0, _:0, A) .
+main(A, _:1, A, A) .
+main(B, _:2, C, C) .
+main(C, _:3, D, D) .
+
+side(_:0) .

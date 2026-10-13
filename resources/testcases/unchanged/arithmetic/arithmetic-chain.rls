@@ -1,0 +1,8 @@
+% Regression test for https://github.com/knowsys/nemo/issues/443: a
+% value assigned from two joined atoms, filtered, and used in an
+% arithmetic head term.
+
+A(1, 2).
+B(1, 10).
+
+C(?x, ?y * 5) :- A(?x, ?z), B(?x, ?v), ?y = ?z + ?v, ?y > 10 .

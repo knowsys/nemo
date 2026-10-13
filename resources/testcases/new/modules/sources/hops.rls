@@ -1,0 +1,10 @@
+% Pairs of nodes within a number of hops of each other.
+
+@input edge(from: any, to: any) .
+@parameter $limit: int = 3 .
+
+hops(?x, ?y, 1) :- edge(?x, ?y) .
+hops(?x, ?z, ?n + 1) :- hops(?x, ?y, ?n), edge(?y, ?z), ?n < $limit .
+within(?x, ?y) :- hops(?x, ?y, _) .
+
+@output within .

@@ -1,0 +1,11 @@
+result(all_matches, "bonono") .
+result(groups, "15.03.2024") .
+result(insensitive, "bye bye") .
+result(keeps_tag, "colour"@en) .
+result(literal, "1-1") .
+result(no_match, "abc") .
+result(replace_basic, "Herro") .
+result(replace_capture, "World Hello") .
+result(replace_flags, "Hi") .
+result(replace_lang, "tESt"@en) .
+result(replace_q, "a$1c") .

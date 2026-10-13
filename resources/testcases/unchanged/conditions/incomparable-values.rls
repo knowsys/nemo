@@ -1,0 +1,10 @@
+% Values of different kinds have no order: comparing them drops the row
+% instead of failing the program.
+
+v(1) .
+v(one) .
+v("one"@en) .
+
+less(?x, ?y) :- v(?x), v(?y), ?x < ?y .
+atMost(?x, ?y) :- v(?x), v(?y), ?x <= ?y .
+greater(?x, ?y) :- v(?x), v(?y), ?x > ?y .

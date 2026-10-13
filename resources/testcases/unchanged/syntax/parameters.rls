@@ -1,0 +1,6 @@
+% Global parameters, one defined from another.
+
+@parameter $i = 30.
+@parameter $a = $i + 12.
+
+the_answer($a).

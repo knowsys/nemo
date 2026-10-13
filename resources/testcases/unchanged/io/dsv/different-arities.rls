@@ -1,0 +1,8 @@
+% Regression test for https://github.com/knowsys/nemo/issues/761:
+% CSV files of different widths, each feeding its own predicate.
+
+@import data1 :- csv{ resource="sources/file1.csv" } .
+@import data2 :- csv{ resource="sources/file2.csv" } .
+
+out(?x, ?y) :- data1(?x, ?y) .
+out(?x, ?y) :- data2(?x, ?y, ?z) .

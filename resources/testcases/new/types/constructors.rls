@@ -1,0 +1,14 @@
+% User-defined types: constructors checked against their contracts,
+% composed, and matched in bodies.
+
+@type point(int, int) .
+@type segment(point, point) .
+
+@declare road(span: segment, name: string) .
+
+road(segment(point(1, 2), point(3, 4)), "A4") .
+road(segment(point(0, 0), point(0, 5)), "B2") .
+
+shifted(segment(point(?x1 + 1, ?y1), point(?x2 + 1, ?y2)), ?n) :-
+    road(segment(point(?x1, ?y1), point(?x2, ?y2)), ?n) .
+vertical(?n) :- road(segment(point(?x, _), point(?x, _)), ?n) .

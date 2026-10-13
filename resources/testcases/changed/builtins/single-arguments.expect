@@ -1,0 +1,8 @@
+result(and, true) .
+result(bitand, 5) .
+result(max, 5) .
+result(min, 5) .
+result(or, false) .
+result(product, 5) .
+result(sum, 5) .
+result(sum_double, 2.5d) .

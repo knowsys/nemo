@@ -1,0 +1,3 @@
+regionOf("color"@en, "en") .
+regionOf("color"@en-us, "en-us") .
+regionOf("colour"@en-gb, "en-gb") .

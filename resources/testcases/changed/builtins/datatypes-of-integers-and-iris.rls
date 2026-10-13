@@ -1,0 +1,18 @@
+% DATATYPE names xsd:integer for an integer. An IRI is no literal, so it
+% has no datatype to name.
+%
+% Old Nemo names xsd:int for integers and xsd:anyURI for IRIs:
+%   typeOf(int, xsd:int) .
+%   typeOf(iri, xsd:anyURI) .
+%   result(datatype, xsd:int) .
+%   result(datatype, xsd:anyURI) .
+
+value(int, 42) .
+value(iri, x) .
+
+typeOf(?kind, ?r) :- value(?kind, ?v), ?r = DATATYPE(?v) .
+
+cast(5) .
+cast(test) .
+
+result(datatype, ?R) :- cast(?A), ?R = DATATYPE(?A) .

@@ -1,0 +1,7 @@
+% Existential variables take any variable name.
+
+p(a) .
+
+q(?x, !v) :- p(?x) .
+r(?x, !longer_name1) :- p(?x) .
+s(?x, !Y) :- p(?x) .

@@ -1,0 +1,14 @@
+% Two nulls in one head, each in its own atom.
+
+@import data :- csv { resource = "sources/data.csv" }.
+
+result(?X, ?X) :- data(?X, ?X) .
+result(!W, ?X), result(?X, !V) :- data(?X, ?Y) .
+
+test(?X) :- result(A, ?X) .
+test(?X) :- result(B, ?X) .
+test(?X) :- result(C, ?X) .
+
+test(?X) :- result(?X, A) .
+test(?X) :- result(?X, B) .
+test(?X) :- result(?X, C) .

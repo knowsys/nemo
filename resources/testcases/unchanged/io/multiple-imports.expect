@@ -1,0 +1,12 @@
+combined(A, B, C) .
+combined(B, A, D) .
+combined(B, C, D) .
+combined(Q, B, C) .
+combined(Q, E, D) .
+combined(T, B, C) .
+combined(X, Y, Z) .
+
+constant(A) .
+constant(Q) .
+constant(T) .
+constant(X) .

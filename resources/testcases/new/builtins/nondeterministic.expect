@@ -1,0 +1,8 @@
+result(now_datatype, <http://www.w3.org/2001/XMLSchema#dateTime>) .
+result(now_stable, ok) .
+result(now_year, "ok") .
+result(rand_in_range, ok) .
+result(rand_range, "ok") .
+result(struuid_length, 36) .
+result(uuid_iri, true) .
+result(uuid_scheme, true) .

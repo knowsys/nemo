@@ -1,0 +1,19 @@
+% Several matches share the aggregated value:
+%   - `?v` takes the value once,
+%   - `?v, ?w` takes it once for each value of the witness `?w`.
+
+employee(alice, sales) .
+employee(bob, sales) .
+employee(carol, it) .
+skill(alice, java) .
+skill(alice, sql) .
+skill(bob, sql) .
+skill(carol, rust) .
+price(apple, 2) .
+price(pear, 2) .
+price(plum, 3) .
+
+skills(?dept, #count(?s)) :- employee(?e, ?dept), skill(?e, ?s) .
+skillsPerEmployee(?dept, #count(?s, ?e)) :- employee(?e, ?dept), skill(?e, ?s) .
+prices(#sum(?p)) :- price(?item, ?p) .
+pricesPerItem(#sum(?p, ?item)) :- price(?item, ?p) .

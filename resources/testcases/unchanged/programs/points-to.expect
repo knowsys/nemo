@@ -1,0 +1,10 @@
+heapPointsTo(h1, f, h2) .
+heapPointsTo(h3, g, h3) .
+
+pointsTo(a, h1) .
+pointsTo(b, h2) .
+pointsTo(c, h3) .
+pointsTo(d, h1) .
+pointsTo(e, h2) .
+pointsTo(x, h2) .
+pointsTo(y, h3) .

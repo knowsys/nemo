@@ -1,0 +1,5 @@
+withQuoting(de, <Foo@de>) .
+withQuoting(en, <Foo@en>) .
+
+withoutQuoting(de, "Foo"@de) .
+withoutQuoting(en, "Foo"@en) .

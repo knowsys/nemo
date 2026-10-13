@@ -1,0 +1,6 @@
+distinctValues(4) .
+
+v("text") .
+v(42) .
+v("2024-01-31"^^<http://www.w3.org/2001/XMLSchema#date>) .
+v("5cm"^^<http://example.org/length>) .

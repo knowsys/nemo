@@ -1,0 +1,5 @@
+first(g1, "Apple") .
+first(g2, "") .
+
+last(g1, "pear") .
+last(g2, "zebra") .

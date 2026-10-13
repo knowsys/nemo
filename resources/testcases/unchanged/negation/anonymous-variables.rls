@@ -1,0 +1,13 @@
+% Anonymous variables in a negated atom: excluded is any row with some
+% value in their place.
+
+e(1, 2) .
+e(3, 3) .
+n(1) .
+n(2) .
+n(3) .
+n(4) .
+
+noOutgoing(?x) :- n(?x), ~e(?x, _) .
+noIncoming(?x) :- n(?x), ~e(_, ?x) .
+noEdgeAtAll(?x) :- n(?x), ~e(?x, _), ~e(_, ?x) .

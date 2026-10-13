@@ -1,0 +1,38 @@
+ConstantBodyHead(Q, C, A, B, B, Z) .
+
+ConstantBodyX(B) .
+ConstantBodyX(C) .
+
+ConstantBodyXY(B, B) .
+ConstantBodyXY(C, D) .
+
+ConstantBodyXZ(A, C) .
+ConstantBodyXZ(B, D) .
+
+ConstantBodyY(G) .
+ConstantBodyY(Q) .
+
+ConstantBodyYZ(B, C) .
+ConstantBodyYZ(E, F) .
+
+ConstantBodyZ(A) .
+ConstantBodyZ(D) .
+
+ConstantHeadAfter(A, B, A, B, Z) .
+ConstantHeadAfter(A, E, A, B, Z) .
+ConstantHeadAfter(B, B, A, B, Z) .
+ConstantHeadAfter(C, D, A, B, Z) .
+
+ConstantHeadBefore(A, Z, B, A, C) .
+ConstantHeadBefore(A, Z, B, A, F) .
+ConstantHeadBefore(A, Z, B, B, D) .
+ConstantHeadBefore(A, Z, B, C, D) .
+
+ConstantHeadEverywhere(A, B, A, C, A, C, B, E, F) .
+ConstantHeadEverywhere(A, B, A, F, A, C, E, E, F) .
+ConstantHeadEverywhere(A, B, B, D, B, C, B, E, F) .
+ConstantHeadEverywhere(A, B, C, D, C, C, D, E, F) .
+
+Exist(B, D) .
+
+OnlyNewConstants(A, B, C) .

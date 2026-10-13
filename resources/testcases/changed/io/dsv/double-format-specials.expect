@@ -1,0 +1,5 @@
+cell(beyond, "INF"^^<http://www.w3.org/2001/XMLSchema#double>) .
+cell(infinity, "INF"^^<http://www.w3.org/2001/XMLSchema#double>) .
+cell(negativeInfinity, "-INF"^^<http://www.w3.org/2001/XMLSchema#double>) .
+cell(notANumber, "NaN"^^<http://www.w3.org/2001/XMLSchema#double>) .
+cell(plain, 2.5d) .

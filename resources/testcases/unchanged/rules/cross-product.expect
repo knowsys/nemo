@@ -1,0 +1,19 @@
+pair(1, x) .
+pair(1, y) .
+pair(1, z) .
+pair(2, x) .
+pair(2, y) .
+pair(2, z) .
+
+triple(1, x, 1) .
+triple(1, x, 2) .
+triple(1, y, 1) .
+triple(1, y, 2) .
+triple(1, z, 1) .
+triple(1, z, 2) .
+triple(2, x, 1) .
+triple(2, x, 2) .
+triple(2, y, 1) .
+triple(2, y, 2) .
+triple(2, z, 1) .
+triple(2, z, 2) .

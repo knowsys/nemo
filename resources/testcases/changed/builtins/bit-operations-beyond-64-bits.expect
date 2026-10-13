@@ -1,0 +1,9 @@
+result(and_wide, 18446744073709551616) .
+result(or_wide, -18446744073709551615) .
+result(shift_is_product, ok) .
+result(shl_63, 9223372036854775808) .
+result(shl_64, 18446744073709551616) .
+result(shl_negative, -55340232221128654848) .
+result(shr_64, -1) .
+result(shr_wide, 2) .
+result(xor_wide, 1) .

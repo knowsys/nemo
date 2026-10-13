@@ -1,0 +1,28 @@
+% The bit operations work on integers of any size, read as two's
+% complement of unbounded width:
+%   - A shift left by n multiplies by 2^n, as arithmetic does.
+%   - A shift right by n divides by 2^n, rounding down.
+%   - A negative integer has one bits all the way up.
+%
+% Old Nemo computes on 64 bits:
+%   - A shift left wraps around.
+%   - The distance of a shift is taken modulo 64.
+%   - Integers beyond 64 bits are doubles to it, so the operations on
+%     them, and the product the shift is compared with, derive nothing.
+% `shr_64` agrees; the others differ:
+%   result(shl_63, -9223372036854775808) .
+%   result(shl_64, 1) .
+%   result(shl_negative, -3) .
+
+go(1) .
+
+result(shl_63, ?r) :- go(1), ?r = BITSHL(1, 63) .
+result(shl_64, ?r) :- go(1), ?r = BITSHL(1, 64) .
+result(shl_negative, ?r) :- go(1), ?r = BITSHL(-3, 64) .
+result(shr_64, ?r) :- go(1), ?r = BITSHR(-1, 64) .
+result(shr_wide, ?r) :- go(1), ?r = BITSHR(36893488147419103232, 64) .
+result(and_wide, ?r) :- go(1), ?r = BITAND(-1, 18446744073709551616) .
+result(or_wide, ?r) :- go(1), ?r = BITOR(-18446744073709551616, 1) .
+result(xor_wide, ?r) :- go(1), ?r = BITXOR(18446744073709551616, 18446744073709551617) .
+result(shift_is_product, ok) :-
+    go(1), BITSHL(4611686018427387904, 1) = 4611686018427387904 * 2 .

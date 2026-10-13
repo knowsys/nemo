@@ -1,0 +1,8 @@
+% Negating an empty predicate keeps every row; negating the matched
+% atom itself keeps none.
+
+p(1) .
+p(2) .
+
+everything(?x) :- p(?x), ~nothing(?x) .
+nothingLeft(?x) :- p(?x), ~p(?x) .

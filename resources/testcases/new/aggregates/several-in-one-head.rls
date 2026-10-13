@@ -1,0 +1,7 @@
+% One head may hold several aggregates over the same group.
+
+sale(north, 10) .
+sale(north, 30) .
+sale(south, 5) .
+
+stats(?region, #count(), #sum(?v), #min(?v), #max(?v)) :- sale(?region, ?v) .

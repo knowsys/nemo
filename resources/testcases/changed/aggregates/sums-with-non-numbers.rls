@@ -1,0 +1,16 @@
+% #sum fails for a group that holds a value which is not a number, so
+% that group derives nothing.
+%
+% Old Nemo leaves out the values that are not numbers and sums the rest:
+%   total(text, 3) .
+%   total(iri, 1) .
+
+v(numbers, 1) .
+v(numbers, 2) .
+v(text, 1) .
+v(text, "a") .
+v(text, 2) .
+v(iri, 1) .
+v(iri, a) .
+
+total(?k, #sum(?x)) :- v(?k, ?x) .

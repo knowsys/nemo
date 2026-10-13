@@ -1,0 +1,12 @@
+% Filters relating variables of different atoms, applied to the join.
+
+a(1) .
+a(5) .
+a(9) .
+b(3) .
+b(5) .
+b(7) .
+
+smaller(?x, ?y) :- a(?x), b(?y), ?x < ?y .
+equalSum(?x, ?y) :- a(?x), b(?y), ?x + ?y = 10 .
+between(?x, ?y, ?z) :- a(?x), b(?y), a(?z), ?x < ?y, ?y < ?z .

@@ -1,0 +1,11 @@
+% A null is not a literal and has no datatype, so DATATYPE of a null
+% derives nothing.
+%
+% Old Nemo crashes ("There is no canonical datatype for Null defined in
+% Nemo yet."), so not even the `string` fact holds.
+
+go(1) .
+anonymous(!n) :- go(1) .
+
+result(string, ?r) :- go(1), ?r = DATATYPE("x") .
+result(null, ?r) :- anonymous(?n), ?r = DATATYPE(?n) .

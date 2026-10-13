@@ -1,0 +1,7 @@
+% N-Triples terms: IRIs, blank nodes, plain, tagged and typed literals,
+% and escapes in literals.
+
+@import triples :- ntriples { resource = "sources/terms.nt" } .
+
+object(?p, ?o) :- triples(_, ?p, ?o) .
+blank(?s) :- triples(?s, <http://example.org/blank>, _) .

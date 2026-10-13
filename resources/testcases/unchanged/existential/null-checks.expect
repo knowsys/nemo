@@ -1,0 +1,8 @@
+check(isIri, false) .
+check(isNull, true) .
+
+n(a, _:0) .
+n(b, _:1) .
+
+same(a, a) .
+same(b, b) .

@@ -1,0 +1,13 @@
+% A triple whose literal is not valid for its datatype ("abc" as an
+% integer) is malformed and skipped with a warning. The other triples
+% are read normally.
+%
+% Old Nemo drops the invalid literal but not the rest of its triple, so
+% every later value moves one column to the left. The values left over
+% at the end are lost, and only the first triple agrees:
+%   triple(<http://example.org/b>, <http://example.org/p>, <http://example.org/c>) .
+%   triple(<http://example.org/p>, 3, <http://example.org/d>) .
+
+@import triples :- ntriples { resource = "sources/invalid-literal.nt" } .
+
+triple(?s, ?p, ?o) :- triples(?s, ?p, ?o) .

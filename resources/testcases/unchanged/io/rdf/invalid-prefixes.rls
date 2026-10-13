@@ -1,0 +1,6 @@
+% Regression test for https://github.com/knowsys/nemo/issues/623:
+% malformed prefixes in a Turtle file.
+
+@import source :- turtle { resource = "sources/invalid-prefixes.ttl" } .
+
+out(?X, ?Y, ?Z) :- source(?X, ?Y, ?Z) .

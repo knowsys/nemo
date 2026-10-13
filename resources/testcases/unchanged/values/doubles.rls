@@ -1,0 +1,8 @@
+% Double literals in exponent notation and as typed literals.
+
+x(1.5E0) .
+x(1E3) .
+x(-2.5E-3) .
+x(0.0E0) .
+x("1.5"^^<http://www.w3.org/2001/XMLSchema#double>) .
+x("2.5"^^<http://www.w3.org/2001/XMLSchema#double>) .

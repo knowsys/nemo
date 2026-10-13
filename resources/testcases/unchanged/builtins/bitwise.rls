@@ -1,0 +1,20 @@
+% Bitwise builtins over integers, negative ones in two's complement.
+
+go(1) .
+
+result(and, ?r) :- go(1), ?r = BITAND(12, 10) .
+result(and_three, ?r) :- go(1), ?r = BITAND(7, 6, 4) .
+result(and_negative, ?r) :- go(1), ?r = BITAND(-1, 255) .
+result(or, ?r) :- go(1), ?r = BITOR(12, 10) .
+result(xor, ?r) :- go(1), ?r = BITXOR(12, 10) .
+result(shl, ?r) :- go(1), ?r = BITSHL(1, 62) .
+result(shr, ?r) :- go(1), ?r = BITSHR(-8, 1) .
+result(shr_zero, ?r) :- go(1), ?r = BITSHR(8, 0) .
+
+integers(1, 2, 3) .
+
+result(bitshl, ?R) :- integers(?A, ?B, _), ?R = BITSHL(?A, ?B) .
+result(bitshr, ?R) :- integers(?A, ?B, _), ?R = BITSHR(?A, ?B) .
+result(bitand, ?R) :- integers(?A, ?B, ?C), ?R = BITAND(?A, ?B, ?C) .
+result(bitor, ?R) :- integers(?A, ?B, ?C), ?R = BITOR(?A, ?B, ?C) .
+result(bitxor, ?R) :- integers(?A, ?B, ?C), ?R = BITXOR(?A, ?B, ?C) .

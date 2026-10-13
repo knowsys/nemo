@@ -1,0 +1,16 @@
+% The `any` format reads a field as program syntax, so every spelling of
+% a number reads as that number.
+%
+% Old Nemo reads 7 as an integer and 2.5 as an xsd:decimal literal that
+% is no number to it. The other spellings become IRIs:
+%   value(exponent, <2.5E0>) .
+%   value(lowerExponent, <2.5e0>) .
+%   value(bareExponent, <1E3>) .
+%   value(double, <2.5d>) .
+%   value(float, <2.5f>) .
+%   numeric(integer) .
+
+@import n :- csv { resource = "sources/numbers.csv", format = (any, any) } .
+
+value(?k, ?x) :- n(?k, ?x) .
+numeric(?k) :- n(?k, ?x), isNumeric(?x) .

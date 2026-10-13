@@ -1,0 +1,18 @@
+% The `any` format reads each field as a term in program syntax:
+%   - numbers in every notation a program accepts (here hexadecimal),
+%   - quoted strings, with their escapes resolved.
+% A field that is not a valid term is malformed, and its row is skipped
+% with a warning.
+%
+% Old Nemo reads the hexadecimal number and most malformed fields as
+% IRIs, accepts the malformed language tag, and keeps the backslash in
+% the quoted string:
+%   cell(hex, <0x1F>) .
+%   cell(escaped, "a\\\"b") .
+%   cell(unterminated, <"abc>) .
+%   cell(prefixedDatatype, <"5"^^xsd:int>) .
+%   cell(invalidTag, "x"@not a tag) .
+
+@import cells :- csv { resource = "sources/literals.csv", format = (any, any) } .
+
+cell(?k, ?v) :- cells(?k, ?v) .

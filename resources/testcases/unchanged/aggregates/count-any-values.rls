@@ -1,0 +1,7 @@
+% #count over a column mixing names and numbers.
+
+sourceA(test).
+sourceA(2).
+sourceA(test2).
+
+r0(#count(?X)) :- sourceA(?X).

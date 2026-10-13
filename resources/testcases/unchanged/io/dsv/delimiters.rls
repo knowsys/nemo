@@ -1,0 +1,9 @@
+% Delimited files with tabs, semicolons and pipes between the fields.
+
+@import tabs :- tsv { resource = "sources/table.tsv" } .
+@import semicolons :- dsv { resource = "sources/table-semicolon.txt", delimiter = ";" } .
+@import pipes :- dsv { resource = "sources/table-pipe.txt", delimiter = "|" } .
+
+all(?x, ?y, ?z) :- tabs(?x, ?y, ?z) .
+all(?x, ?y, ?z) :- semicolons(?x, ?y, ?z) .
+all(?x, ?y, ?z) :- pipes(?x, ?y, ?z) .

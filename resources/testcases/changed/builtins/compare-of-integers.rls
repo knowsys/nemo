@@ -1,0 +1,11 @@
+% COMPARE orders two integers: it gives -1, 0 or 1 as the first is
+% smaller than, equal to or greater than the second.
+%
+% Old Nemo's COMPARE derives nothing for integer arguments, so no
+% `result` fact holds.
+
+go(1) .
+
+result(compare_less, ?r) :- go(1), ?r = COMPARE(1, 2) .
+result(compare_equal, ?r) :- go(1), ?r = COMPARE(2, 2) .
+result(compare_greater, ?r) :- go(1), ?r = COMPARE(3, 2) .

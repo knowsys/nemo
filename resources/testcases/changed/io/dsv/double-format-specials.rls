@@ -1,0 +1,12 @@
+% The `double` format reads:
+%   - INF, -INF and NaN as the special double values,
+%   - a number too large for a double as infinity.
+% Other spellings, such as `inf` and `nan`, are malformed, and their
+% rows are skipped with a warning.
+%
+% Old Nemo reads finite numbers only and drops the other rows, so only
+% `cell(plain, …)` holds.
+
+@import cells :- csv { resource = "sources/specials.csv", format = (any, double) } .
+
+cell(?k, ?v) :- cells(?k, ?v) .

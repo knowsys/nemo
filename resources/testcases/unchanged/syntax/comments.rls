@@ -1,0 +1,13 @@
+% Comments run to the end of the line, wherever they start.
+
+%% A comment line of its own.
+p(1) . % after a fact
+p(2) .
+
+q(?x) :- % inside a rule
+    p(?x), % between atoms
+    ?x > 1 . % after a rule
+
+/* A block comment
+   over several lines */
+r(?x) :- p(?x) /* inside a rule */ .

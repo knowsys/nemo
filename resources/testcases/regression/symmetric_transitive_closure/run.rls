@@ -1,8 +1,0 @@
-@import city :- csv { resource = "city.csv" }.
-@import conn :- csv { resource = "conn.csv" }.
-
-connected(?X,?Y) :- city(?X), city(?Y), conn(?X,?Y).
-conn(?X,?Y) :- conn(?Y,?X).
-connected(?X,?Y) :- city(?X), city(?XY), city(?Y), connected(?X,?XY), conn(?XY, ?Y).
-
-@export connected :- csv {}.

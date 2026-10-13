@@ -1,0 +1,9 @@
+% A declaration types the columns of a predicate: an integral decimal is
+% the integer it equals, so it fits an `int` column.
+
+@declare person(name: string, age: int) .
+
+person("Alice", 30) .
+person("Dora", 20.0) .
+
+adult(?n, ?a) :- person(?n, ?a), ?a >= 18 .

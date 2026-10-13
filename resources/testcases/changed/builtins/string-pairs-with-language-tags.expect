@@ -1,0 +1,4 @@
+result(compare_plain, -1) .
+result(levenshtein_other_tags, 1) .
+result(levenshtein_plain_and_tagged, 1) .
+result(levenshtein_same_tags, 1) .

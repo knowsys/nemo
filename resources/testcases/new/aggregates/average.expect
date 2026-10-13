@@ -1,0 +1,5 @@
+average(alice, 1.5) .
+average(bob, 2.5) .
+average(carol, 4) .
+
+overall(2.4) .

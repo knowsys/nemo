@@ -1,0 +1,9 @@
+fromFacts(1, 4) .
+fromFacts(2, 5) .
+fromFacts(3, 6) .
+fromFacts(42, 7) .
+
+fromImport(1, 4) .
+fromImport(2, 5) .
+fromImport(3, 6) .
+fromImport(42, 7) .

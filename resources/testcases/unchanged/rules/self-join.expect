@@ -1,0 +1,17 @@
+mutual(3, 4) .
+mutual(4, 3) .
+mutual(5, 5) .
+
+selfLoop(5) .
+
+sharedTarget(2, 4) .
+sharedTarget(4, 2) .
+
+twoSteps(1, 3) .
+twoSteps(2, 1) .
+twoSteps(2, 4) .
+twoSteps(3, 2) .
+twoSteps(3, 3) .
+twoSteps(4, 1) .
+twoSteps(4, 4) .
+twoSteps(5, 5) .

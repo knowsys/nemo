@@ -1,0 +1,60 @@
+% String builtins: lengths and cases beyond ASCII, empty arguments,
+% positions at the ends of the string.
+
+go(1) .
+
+result(strlen_empty, ?r) :- go(1), ?r = STRLEN("") .
+result(strlen_accents, ?r) :- go(1), ?r = STRLEN("héllo") .
+result(strlen_cjk, ?r) :- go(1), ?r = STRLEN("日本語") .
+result(ucase_words, ?r) :- go(1), ?r = UCASE("Hello World") .
+result(lcase_umlauts, ?r) :- go(1), ?r = LCASE("ÄÖÜ") .
+result(contains_empty, ?r) :- go(1), ?r = CONTAINS("abc", "") .
+result(contains_absent, ?r) :- go(1), ?r = CONTAINS("abc", "d") .
+result(starts_empty, ?r) :- go(1), ?r = STRSTARTS("abc", "") .
+result(ends, ?r) :- go(1), ?r = STRENDS("abc", "bc") .
+result(concat_one, ?r) :- go(1), ?r = CONCAT("a") .
+result(concat_many, ?r) :- go(1), ?r = CONCAT("a", "", "b", "c") .
+result(substr_whole, ?r) :- go(1), ?r = SUBSTR("hello", 1) .
+result(substr_tail, ?r) :- go(1), ?r = SUBSTR("hello", 4, 10) .
+result(substr_past_end, ?r) :- go(1), ?r = SUBSTR("hello", 10) .
+result(substr_accents, ?r) :- go(1), ?r = SUBSTR("héllo", 2, 2) .
+result(before_absent, ?r) :- go(1), ?r = STRBEFORE("abc", "z") .
+result(before_first, ?r) :- go(1), ?r = STRBEFORE("a-b-c", "-") .
+result(after_first, ?r) :- go(1), ?r = STRAFTER("a-b-c", "-") .
+result(after_empty, ?r) :- go(1), ?r = STRAFTER("abc", "") .
+result(reverse_accents, ?r) :- go(1), ?r = STRREV("héllo") .
+result(reverse_empty, ?r) :- go(1), ?r = STRREV("") .
+result(levenshtein, ?r) :- go(1), ?r = LEVENSHTEIN("kitten", "sitting") .
+result(levenshtein_empty, ?r) :- go(1), ?r = LEVENSHTEIN("", "abc") .
+result(compare_strings, ?r) :- go(1), ?r = COMPARE("apple", "banana") .
+result(uriencode_reserved, ?r) :- go(1), ?r = URIENCODE("a b/c?d=é") .
+result(uridecode_plain, ?r) :- go(1), ?r = URIDECODE("a%20b%2Fc") .
+result(uri_roundtrip, ?r) :- go(1), ?r = URIDECODE(URIENCODE("x & y")) .
+
+% The second column of the CSV file reads as an IRI, not a string, so
+% `uridecode` derives nothing.
+strings("Hello", "World") .
+@import uri_strings :- csv { resource = "sources/uri_strings.csv" } .
+
+result(concat, ?R) :- strings(?A, ?B), ?R = CONCAT(?A, " ", ?B) .
+result(compare, ?R) :- strings(?A, ?B), ?R = 10 * COMPARE(?A, ?B) .
+result(contains, ?R) :- strings(?A, _), ?R = CONTAINS(?A, "lo") .
+result(levenshtein_id, ?R) :- strings(?A, _), ?R = LEVENSHTEIN(?A, ?A) .
+result(levenshtein_ab, ?R) :- strings(?A, ?B), ?R = LEVENSHTEIN(?A, ?B) .
+result(levenshtein_ba, ?R) :- strings(?A, ?B), ?R = LEVENSHTEIN(?B, ?A) .
+result(levenshtein_ac, ?R) :- strings(?A, _), ?R = LEVENSHTEIN(?A, "Hej") .
+result(levenshtein_bc, ?R) :- strings(_, ?B), ?R = LEVENSHTEIN(?B, "värld") .
+result(levenshtein_ar, ?R) :- strings(?A, _), ?R = LEVENSHTEIN(?A, STRREV(?A)) .
+result(subString, ?R) :- strings(?A, ?B), ?R = SUBSTR(?A, INT(STRLEN(?B) / 2)) .
+result(stringreverse, ?R) :- strings(?A, _), ?R = STRREV(?A) .
+result(subStringLength, ?R) :- strings(?A, _), ?R = SUBSTR(?A, 2, 3) .
+result(ucase, ?R) :- strings(?A, _), ?R = UCASE(?A) .
+result(lcase, ?R) :- strings(_, ?B), ?R = LCASE(?B) .
+result(stringbefore, ?R) :- strings(?A, _), ?R = STRBEFORE(?A, "ll") .
+result(stringafter, ?R) :- strings(?A, _), ?R = STRAFTER(?A, "ll") .
+result(stringstarts_true, ?R) :- strings(?A, _), ?R = STRSTARTS(?A, "Hell") .
+result(stringstarts_false, ?R) :- strings(_, ?B), ?R = STRSTARTS(?B, "Hell") .
+result(stringends_true, ?R) :- strings(?A, _), ?R = STRENDS(?A, "ello") .
+result(stringends_false, ?R) :- strings(_, ?B), ?R = STRENDS(?B, "ello") .
+result(uriencode, ?R) :- uri_strings(?A, _), ?R = URIENCODE(?A) .
+result(uridecode, ?R) :- uri_strings(_, ?A), ?R = URIDECODE(?A) .

@@ -1,0 +1,8 @@
+result(datatype, <http://www.w3.org/2001/XMLSchema#gYear>) .
+result(datatype, <http://www.w3.org/2001/XMLSchema#string>) .
+
+typeOf(custom, <http://example.org/length>) .
+typeOf(double, <http://www.w3.org/2001/XMLSchema#double>) .
+typeOf(langString, <http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>) .
+typeOf(string, <http://www.w3.org/2001/XMLSchema#string>) .
+typeOf(year, <http://www.w3.org/2001/XMLSchema#gYear>) .

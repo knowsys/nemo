@@ -1,0 +1,12 @@
+% #sum fails for a group in which no value is a number, so that group
+% derives nothing. A group of numbers in the same rule sums as usual.
+%
+% Old Nemo crashes ("failed to compute aggregate result"), so not even
+% the sum of the `numbers` group holds.
+
+v(numbers, 1) .
+v(numbers, 2) .
+v(text, "a") .
+v(text, b) .
+
+total(?k, #sum(?x)) :- v(?k, ?x) .

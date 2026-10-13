@@ -1,0 +1,3 @@
+lines("a \"quoted\" word", 15) .
+lines("first line
+second line", 22) .

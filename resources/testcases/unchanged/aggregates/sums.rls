@@ -1,0 +1,11 @@
+% #sum over integers: negative values, zeros, a single row per group.
+
+amount(a, 5) .
+amount(a, -8) .
+amount(a, 0) .
+amount(b, 100) .
+amount(c, -1) .
+amount(c, -2) .
+
+balance(?k, #sum(?v)) :- amount(?k, ?v) .
+grand(#sum(?v)) :- amount(?k, ?v) .

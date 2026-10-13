@@ -1,0 +1,8 @@
+datalog(A) .
+datalog(B) .
+datalog(C) .
+
+result(A, A) .
+result(A, _:0) .
+result(B, _:1) .
+result(C, _:2) .

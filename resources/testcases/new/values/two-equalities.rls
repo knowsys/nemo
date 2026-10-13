@@ -1,0 +1,11 @@
+% `=` compares terms and `==` compares values: the integer 1 and the
+% double 1.0 are the same value but not the same term.
+
+one(1) .
+one(1.0d) .
+one(1f) .
+one("1") .
+
+sameTerm(?x, ?y) :- one(?x), one(?y), ?x = ?y .
+sameValue(?x, ?y) :- one(?x), one(?y), ?x == ?y .
+differentValue(?x, ?y) :- one(?x), one(?y), ?x !== ?y .

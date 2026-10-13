@@ -1,5 +1,0 @@
-@import dataB :- csv{ resource = f"./sources/data{?X}.csv" }, ?X = "B" .
-
-data(?Z, ?Y, ?X) :- dataB(?X, ?Y, ?Z) .
-
-@export data :- csv{ resource = f"data{?X}.csv" }, ?X = f"{23 * 42}-output" .

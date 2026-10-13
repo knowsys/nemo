@@ -1,0 +1,20 @@
+% Two strings, some with language tags:
+%   - COMPARE orders plain strings only; with a tagged string it derives
+%     nothing.
+%   - LEVENSHTEIN compares the texts and ignores the tags.
+%
+% Old Nemo applies SPARQL's argument compatibility to both functions:
+% the second string must be plain or have the first one's tag. So it
+% compares the tagged strings, and the `levenshtein_other_tags` and
+% `levenshtein_plain_and_tagged` facts are missing:
+%   result(compare_same_tags, -1) .
+%   result(compare_tagged_and_plain, -1) .
+
+go(1) .
+
+result(compare_plain, ?r) :- go(1), ?r = COMPARE("a", "b") .
+result(compare_same_tags, ?r) :- go(1), ?r = COMPARE("a"@en, "b"@en) .
+result(compare_tagged_and_plain, ?r) :- go(1), ?r = COMPARE("a"@en, "b") .
+result(levenshtein_same_tags, ?r) :- go(1), ?r = LEVENSHTEIN("ab"@en, "ac"@en) .
+result(levenshtein_other_tags, ?r) :- go(1), ?r = LEVENSHTEIN("ab"@en, "ac"@de) .
+result(levenshtein_plain_and_tagged, ?r) :- go(1), ?r = LEVENSHTEIN("ab", "ac"@de) .

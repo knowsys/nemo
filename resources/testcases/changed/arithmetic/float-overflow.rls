@@ -1,0 +1,13 @@
+% Regression test for https://github.com/knowsys/nemo/issues/582: NaN
+% and infinite results of floating-point arithmetic used to crash.
+%
+% Both quotients lie beyond the double range (one divides by zero), so
+% each is infinity, as IEEE 754 and XPath define.
+%
+% Old Nemo drops a quotient that is not finite and derives no `result`.
+
+big(1.7976931348623157E308) .
+small(1.0E-32) .
+small(0.0) .
+
+result(?a / ?b) :- big(?a), small(?b) .

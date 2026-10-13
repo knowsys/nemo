@@ -1,0 +1,12 @@
+chain(1, 20) .
+chain(2, 30) .
+chain(3, 40) .
+
+fixed(2) .
+
+late(2, 20) .
+late(3, 30) .
+
+named(1, "item") .
+named(2, "item") .
+named(3, "item") .

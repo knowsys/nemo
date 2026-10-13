@@ -1,0 +1,23 @@
+A(A, C) .
+A(A, F) .
+A(B, D) .
+A(C, D) .
+
+B(C, A) .
+B(D, B) .
+B(D, C) .
+B(F, A) .
+
+C(A) .
+C(B) .
+C(C) .
+
+D(B, C) .
+D(B, D) .
+D(D, D) .
+D(E, F) .
+
+E(C, B) .
+E(D, B) .
+E(D, D) .
+E(F, E) .

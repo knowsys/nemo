@@ -1,0 +1,6 @@
+data(A, D, B) .
+data(A, Q, Q) .
+data(D, B, B) .
+data(D, D, C) .
+data(F, C, A) .
+data(Q, G, A) .

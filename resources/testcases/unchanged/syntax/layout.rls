@@ -1,0 +1,13 @@
+% Statements may span lines and need no spaces; tabs are whitespace.
+
+p(1).p(2).
+q(?x):-p(?x).
+r(
+    ?x
+) :-
+	p(?x)
+	,
+	?x
+	>
+	1
+	.

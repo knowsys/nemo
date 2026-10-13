@@ -1,0 +1,13 @@
+% REM is the remainder of integer division and is defined for integers
+% only: if an argument is a double, it derives nothing.
+%
+% Old Nemo also computes the remainder of doubles, converting an integer
+% argument to a double:
+%   result(doubles, "1.5"^^xsd:double) .
+%   result(integer_and_double, "1"^^xsd:double) .
+
+go(1) .
+
+result(integers, ?r) :- go(1), ?r = REM(7, 2) .
+result(doubles, ?r) :- go(1), ?r = REM(7.5E0, 2.0E0) .
+result(integer_and_double, ?r) :- go(1), ?r = REM(7, 2.0E0) .

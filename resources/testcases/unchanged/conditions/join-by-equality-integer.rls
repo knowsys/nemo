@@ -1,0 +1,18 @@
+% Regression test for https://github.com/knowsys/nemo/issues/355:
+% an equality between two integer variables joins two atoms.
+
+odd(1).
+odd(3).
+odd(5).
+odd(7).
+odd(9).
+
+prime(2).
+prime(3).
+prime(5).
+prime(7).
+
+intInBody(?a,?b):-
+    odd(?a),
+    prime(?b),
+    ?a = ?b.

@@ -1,0 +1,7 @@
+% An existential head without frontier variables: once one fact
+% satisfies it, no match needs another null.
+
+start(a) .
+start(b) .
+
+thing(!x) :- start(?y) .

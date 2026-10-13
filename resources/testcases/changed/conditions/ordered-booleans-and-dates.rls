@@ -1,0 +1,14 @@
+% `<` compares booleans, false before true, and dates, earlier before
+% later.
+%
+% Old Nemo compares neither, so `before` derives nothing.
+
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+b(false) .
+b(true) .
+d("2020-01-01"^^xsd:date) .
+d("2021-06-30"^^xsd:date) .
+
+before(?x, ?y) :- b(?x), b(?y), ?x < ?y .
+before(?x, ?y) :- d(?x), d(?y), ?x < ?y .

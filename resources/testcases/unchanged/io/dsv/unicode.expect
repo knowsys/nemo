@@ -1,0 +1,4 @@
+word("de", "Größe", 5) .
+word("emoji", "😀👍", 2) .
+word("fr", "déjà vu", 7) .
+word("ja", "日本語", 3) .

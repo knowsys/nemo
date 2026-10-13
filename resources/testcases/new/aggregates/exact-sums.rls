@@ -1,0 +1,10 @@
+% Sums stay exact: decimals do not accumulate rounding errors, and
+% integer sums grow beyond 64 bits.
+
+part(a, 0.1) .
+part(a, 0.2) .
+part(b, 9223372036854775807) .
+part(b, 9223372036854775807) .
+part(b, 2) .
+
+total(?k, #sum(?v)) :- part(?k, ?v) .

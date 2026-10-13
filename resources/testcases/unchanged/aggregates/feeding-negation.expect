@@ -1,0 +1,7 @@
+best(12) .
+
+loser(alice) .
+loser(dave) .
+
+winner(bob) .
+winner(carol) .

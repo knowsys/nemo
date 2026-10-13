@@ -1,0 +1,10 @@
+% Parameters stand for their values in assignments and filters of rule
+% bodies.
+
+@parameter $limit = 3 .
+
+n(1) .
+n(5) .
+
+scaled(?x, ?y) :- n(?x), ?y = ?x * $limit .
+small(?x) :- n(?x), ?x < $limit .

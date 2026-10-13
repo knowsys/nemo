@@ -1,0 +1,19 @@
+% Language-tagged strings: the tag is read with LANG and set with
+% STRLANG, and string builtins work on the text.
+
+go(1) .
+text("chat"@fr) .
+text("Hello"@en) .
+
+applied(lang, ?t, ?r) :- text(?t), ?r = LANG(?t) .
+applied(lang_plain, "x", ?r) :- go(1), ?r = LANG("x") .
+applied(strlang, "x", ?r) :- go(1), ?r = STRLANG("x", "de") .
+applied(strlen, ?t, ?r) :- text(?t), ?r = STRLEN(?t) .
+applied(str, ?t, ?r) :- text(?t), ?r = STR(?t) .
+applied(contains, ?t, ?r) :- text(?t), ?r = CONTAINS(?t, "a") .
+
+strings("Hello", "World") .
+tagged("test"@en) .
+
+result(tag, ?R) :- tagged(?L), ?R = LANG(?L) .
+result(langtag, ?R) :- strings(?S, _), ?R = STRLANG(?S, "en") .

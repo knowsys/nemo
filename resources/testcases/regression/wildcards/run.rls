@@ -1,5 +1,0 @@
-@import input :- csv { resource = "sources/main.csv" }.
-
-result(?x) :- input(?x, _, _).
-
-@export result :- csv {}.

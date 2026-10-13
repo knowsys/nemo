@@ -1,0 +1,5 @@
+% An existential head with a constant, the null in two positions.
+
+@import data :- csv { resource = "sources/data.csv" }.
+
+result(!V, X), result(?X, !V) :- data(?X, ?Y) .

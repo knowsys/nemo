@@ -1,0 +1,14 @@
+% The pattern of REGEX must be a plain string and a valid regular
+% expression. A malformed pattern, or one with a language tag, derives
+% nothing.
+%
+% Old Nemo returns false for a malformed pattern, and accepts a pattern
+% with the same language tag as the string:
+%   result(malformed, "false"^^xsd:boolean) .
+%   result(tagged_pattern, "true"^^xsd:boolean) .
+
+go(1) .
+
+result(malformed, ?r) :- go(1), ?r = REGEX("abc", "(") .
+result(tagged_pattern, ?r) :- go(1), ?r = REGEX("abc"@en, "b"@en) .
+result(plain_pattern, ?r) :- go(1), ?r = REGEX("abc"@en, "b") .

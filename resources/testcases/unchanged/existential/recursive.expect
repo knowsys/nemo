@@ -1,0 +1,5 @@
+resultA(A, B) .
+resultA(_:0, C) .
+
+resultB(A, _:0) .
+resultB(B, C) .

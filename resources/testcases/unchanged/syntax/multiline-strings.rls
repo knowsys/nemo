@@ -1,0 +1,7 @@
+% Triple-quoted strings hold line breaks and quotes verbatim.
+
+text("""first line
+second line""") .
+text("""a "quoted" word""") .
+
+lines(?t, ?n) :- text(?t), ?n = STRLEN(?t) .

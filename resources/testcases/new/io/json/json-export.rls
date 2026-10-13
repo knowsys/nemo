@@ -1,0 +1,6 @@
+% JSON export writes each row as an array of its values.
+
+measurement("alice", 34, true) .
+measurement("bob", 27, false) .
+
+@export measurement to json { resource = "measurements.json" } .

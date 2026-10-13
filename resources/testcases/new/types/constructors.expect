@@ -1,0 +1,4 @@
+shifted(segment(point(1, 0), point(1, 5)), "B2") .
+shifted(segment(point(2, 2), point(4, 4)), "A4") .
+
+vertical("B2") .

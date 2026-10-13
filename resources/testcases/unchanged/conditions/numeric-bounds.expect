@@ -1,0 +1,53 @@
+complex(1, 2) .
+complex(1, 4) .
+complex(1, 5) .
+complex(2, 7) .
+complex(2, 9) .
+
+x_greater_than_five(7, 8) .
+x_greater_than_five(7, 10) .
+x_greater_than_five(12, 9) .
+x_greater_than_five(12, 18) .
+
+x_less_than_three(1, 2) .
+x_less_than_three(1, 4) .
+x_less_than_three(1, 5) .
+x_less_than_three(2, 7) .
+x_less_than_three(2, 9) .
+
+x_unequals_three(1, 2) .
+x_unequals_three(1, 4) .
+x_unequals_three(1, 5) .
+x_unequals_three(2, 7) .
+x_unequals_three(2, 9) .
+x_unequals_three(7, 8) .
+x_unequals_three(7, 10) .
+x_unequals_three(12, 9) .
+x_unequals_three(12, 18) .
+
+y_equals_nine(2, 9) .
+y_equals_nine(12, 9) .
+
+y_greater_than_eq_seven(2, 7) .
+y_greater_than_eq_seven(2, 9) .
+y_greater_than_eq_seven(7, 8) .
+y_greater_than_eq_seven(7, 10) .
+y_greater_than_eq_seven(12, 9) .
+y_greater_than_eq_seven(12, 18) .
+
+y_less_than_eq_five(1, 2) .
+y_less_than_eq_five(1, 4) .
+y_less_than_eq_five(1, 5) .
+y_less_than_eq_five(3, 1) .
+y_less_than_eq_five(3, 4) .
+
+y_unequals_five(1, 2) .
+y_unequals_five(1, 4) .
+y_unequals_five(2, 7) .
+y_unequals_five(2, 9) .
+y_unequals_five(3, 1) .
+y_unequals_five(3, 4) .
+y_unequals_five(7, 8) .
+y_unequals_five(7, 10) .
+y_unequals_five(12, 9) .
+y_unequals_five(12, 18) .

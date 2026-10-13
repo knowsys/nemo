@@ -1,0 +1,10 @@
+iris(alice) .
+iris(<http://example.org/bob>) .
+
+numbers(1, 1d) .
+numbers(0.1, 1000d) .
+numbers(2.5, 2.5d) .
+
+term(-1, <http://example.org/a>) .
+term(42, word) .
+term(2.5, "quoted") .

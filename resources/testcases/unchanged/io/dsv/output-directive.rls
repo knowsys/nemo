@@ -1,0 +1,16 @@
+% `@output` names imported and derived predicates as results.
+
+@import sourceA :- csv{resource = "sources/dataA.csv"}.
+@import sourceB :- dsv{resource = "sources/dataB.csv", delimiter = ","}.
+@import sourceC :- csv{resource = "sources/dataC.csv"}.
+
+@output sourceA.
+@output sourceB.
+@output sourceC.
+@output J1.
+@output J2.
+@output J3.
+
+J1(?X, ?Y, ?Z) :- sourceA(?X, ?Z, ?Y), sourceB(?X, ?Y, ?T) .
+J2(?X, ?Y, ?Z) :- sourceA(?Z, ?Y, ?X), sourceC(?X, ?Y, ?T) .
+J3(?X, ?Y, ?W) :- sourceA(?T, ?Y, ?X), sourceB(?T, ?Y, ?X), sourceC(?X, ?Y, ?W) .

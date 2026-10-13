@@ -1,0 +1,12 @@
+% Casting a double with a fraction to an integer truncates it, as
+% XPath's cast to xsd:integer does.
+%
+% Old Nemo's INT derives nothing for a double with a fraction, so the
+% two `int` facts are missing; DOUBLE and FLOAT agree.
+
+input(2.75E0) .
+input(-2.75E0) .
+
+converted(?v, int, ?r) :- input(?v), ?r = INT(?v) .
+converted(?v, double, ?r) :- input(?v), ?r = DOUBLE(?v) .
+converted(?v, float, ?r) :- input(?v), ?r = FLOAT(?v) .

@@ -1,0 +1,27 @@
+person(a) .
+person(b) .
+person(c) .
+person(d) .
+person(e) .
+person(f) .
+person(g) .
+person(h) .
+
+sameGeneration(a, a) .
+sameGeneration(b, b) .
+sameGeneration(b, c) .
+sameGeneration(c, b) .
+sameGeneration(c, c) .
+sameGeneration(d, d) .
+sameGeneration(d, e) .
+sameGeneration(e, d) .
+sameGeneration(e, e) .
+sameGeneration(f, f) .
+sameGeneration(f, g) .
+sameGeneration(f, h) .
+sameGeneration(g, f) .
+sameGeneration(g, g) .
+sameGeneration(g, h) .
+sameGeneration(h, f) .
+sameGeneration(h, g) .
+sameGeneration(h, h) .

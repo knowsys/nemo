@@ -1,0 +1,10 @@
+J1(A, C, B) .
+J1(B, D, B) .
+J1(C, D, D) .
+
+J2(D, B, B) .
+J2(F, E, A) .
+
+J3(D, B, F) .
+J3(D, B, Q) .
+J3(D, B, Z) .

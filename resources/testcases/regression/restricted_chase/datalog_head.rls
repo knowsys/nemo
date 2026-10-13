@@ -1,6 +1,0 @@
-@import data :- csv { resource = "sources/data.csv" }.
-@export result :- csv { }.
-
-result(?X, ?X) :- data(?X, ?X) .
-datalog(?X), result(?X, !V) :- data(?X, ?Y) .
-@export datalog :- csv {}.

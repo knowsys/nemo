@@ -1,0 +1,12 @@
+% Prefixes abbreviate IRIs in facts, rule atoms and predicate names; the
+% empty prefix is a prefix too.
+
+@prefix ex: <http://example.org/> .
+@prefix : <http://default.org/> .
+
+ex:edge(ex:a, :b) .
+ex:edge(:b, <http://example.org/c>) .
+
+ex:path(?x, ?y) :- ex:edge(?x, ?y) .
+ex:path(?x, ?z) :- ex:path(?x, ?y), <http://example.org/edge>(?y, ?z) .
+fromA(?y) :- ex:path(ex:a, ?y) .

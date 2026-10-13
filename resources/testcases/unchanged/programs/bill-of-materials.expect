@@ -1,0 +1,28 @@
+hasParts(bike) .
+hasParts(frame) .
+hasParts(wheel) .
+
+leaf(bell) .
+leaf(rim) .
+leaf(spoke) .
+leaf(tube) .
+
+needs(bike, bell, 1) .
+needs(bike, frame, 1) .
+needs(bike, rim, 2) .
+needs(bike, spoke, 64) .
+needs(bike, tube, 3) .
+needs(bike, wheel, 2) .
+needs(frame, tube, 3) .
+needs(wheel, rim, 1) .
+needs(wheel, spoke, 32) .
+
+total(bike, bell, 1) .
+total(bike, frame, 1) .
+total(bike, rim, 2) .
+total(bike, spoke, 64) .
+total(bike, tube, 3) .
+total(bike, wheel, 2) .
+total(frame, tube, 3) .
+total(wheel, rim, 1) .
+total(wheel, spoke, 32) .

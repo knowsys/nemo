@@ -1,0 +1,7 @@
+noEdgeAtAll(4) .
+
+noIncoming(1) .
+noIncoming(4) .
+
+noOutgoing(2) .
+noOutgoing(4) .

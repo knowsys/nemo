@@ -1,0 +1,8 @@
+% One file imported twice, under two formats.
+
+@import asTerms :- csv { resource = "sources/mixed.csv", format = (any, any) } .
+@import asStrings :- csv { resource = "sources/mixed.csv", format = (string, string) } .
+
+terms(?x, ?y) :- asTerms(?x, ?y) .
+strings(?x, ?y) :- asStrings(?x, ?y) .
+same(?x) :- asTerms(?x, _), asStrings(?x, _) .

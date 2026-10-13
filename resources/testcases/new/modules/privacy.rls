@@ -1,0 +1,13 @@
+% A module's own predicates are private: a predicate of the same name in
+% the using program is another one.
+
+@use "sources/hops.rls" { edge = road, $limit = 2 } as routes .
+
+road(a, b) .
+road(b, c) .
+hops(local, value, 0) .
+
+near(?x, ?y) :- routes::within(?x, ?y) .
+localHops(?x, ?y, ?n) :- hops(?x, ?y, ?n) .
+
+@output near, localHops .

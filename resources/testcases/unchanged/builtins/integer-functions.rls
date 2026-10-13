@@ -1,0 +1,28 @@
+% Numeric builtins over integers, at their edge cases.
+
+go(1) .
+
+result(abs_negative, ?r) :- go(1), ?r = ABS(-5) .
+result(abs_zero, ?r) :- go(1), ?r = ABS(0) .
+result(round_integer, ?r) :- go(1), ?r = ROUND(7) .
+result(ceil_integer, ?r) :- go(1), ?r = CEIL(-7) .
+result(floor_integer, ?r) :- go(1), ?r = FLOOR(-7) .
+result(rem, ?r) :- go(1), ?r = REM(7, 3) .
+result(rem_negative_dividend, ?r) :- go(1), ?r = REM(-7, 3) .
+result(rem_negative_divisor, ?r) :- go(1), ?r = REM(7, -3) .
+% A remainder of a division by zero derives nothing.
+result(rem_by_zero, ?r) :- go(1), ?r = REM(7, 0) .
+result(max, ?r) :- go(1), ?r = MAX(3, 1, 2) .
+result(max_single, ?r) :- go(1), ?r = MAX(5) .
+result(min, ?r) :- go(1), ?r = MIN(3, -1, 2) .
+result(sum, ?r) :- go(1), ?r = SUM(1, 2, 3, 4) .
+result(product, ?r) :- go(1), ?r = PRODUCT(2, 3, 4) .
+result(subtraction, ?r) :- go(1), ?r = SUBTRACTION(10, 3) .
+result(invertsign, ?r) :- go(1), ?r = INVERTSIGN(5) .
+result(invertsign_negative, ?r) :- go(1), ?r = INVERTSIGN(-5) .
+result(pow, ?r) :- go(1), ?r = POW(2, 10) .
+result(pow_zero, ?r) :- go(1), ?r = POW(0, 0) .
+
+integers(1, 2, 3) .
+
+result(remainder, ?R) :- integers(_, ?A, ?B), ?R = REM(?B, ?A) .

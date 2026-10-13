@@ -1,0 +1,9 @@
+% Conditions without variables hold for every row or for none.
+
+n(1) .
+n(2) .
+
+always(?x) :- n(?x), 3 < 5 .
+never(?x) :- n(?x), 5 < 3 .
+alsoAlways(?x) :- n(?x), 2 + 2 = 4 .
+alsoNever(?x) :- n(?x), a = b .

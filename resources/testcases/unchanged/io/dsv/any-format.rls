@@ -1,0 +1,6 @@
+% The `any` format reads each field as a term: integers, IRIs, quoted
+% strings and typed literals.
+
+@import cells :- csv { resource = "sources/terms.csv", format = (any, any) } .
+
+cell(?k, ?v) :- cells(?k, ?v) .

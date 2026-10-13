@@ -1,0 +1,30 @@
+% REPLACE: every match replaced, groups in the replacement, flags, and
+% invalid input deriving nothing.
+
+go(1) .
+
+result(all_matches, ?r) :- go(1), ?r = REPLACE("banana", "a", "o") .
+result(groups, ?r) :- go(1), ?r = REPLACE("2024-03-15", "(\d+)-(\d+)-(\d+)", "$3.$2.$1") .
+result(insensitive, ?r) :- go(1), ?r = REPLACE("Hello hello", "hello", "bye", "i") .
+result(literal, ?r) :- go(1), ?r = REPLACE("1+1", "+", "-", "q") .
+result(no_match, ?r) :- go(1), ?r = REPLACE("abc", "x", "y") .
+result(keeps_tag, ?r) :- go(1), ?r = REPLACE("color"@en, "or", "our") .
+result(invalid_pattern, ?r) :- go(1), ?r = REPLACE("abc", "[", "x") .
+result(not_a_string, ?r) :- go(1), ?r = REPLACE(42, "4", "x") .
+
+strings("Hello", "World") .
+tagged("test"@en) .
+
+result(replace_basic, ?R) :- strings(?A, _), ?R = REPLACE(?A, "l", "r") .
+result(replace_capture, ?R) :- strings(?A, ?B), ?R = REPLACE(CONCAT(?A, " ", ?B), "(\w+) (\w+)", "$2 $1") .
+result(replace_flags, ?R) :- strings(?A, _), ?R = REPLACE(?A, "hello", "Hi", "i") .
+% The q flag treats pattern and replacement as literal strings
+result(replace_q, ?R) :- strings(?A, _), ?R = REPLACE("a.c", ".", "$1", "q") .
+% Invalid flags must derive nothing
+result(replace_invalid_flags, ?R) :- strings(?A, _), ?R = REPLACE("abc", "([ab])(.*)", "$2", "i:.") .
+% Invalid regex pattern must derive nothing
+result(replace_invalid_pattern, ?R) :- strings(?A, _), ?R = REPLACE("test", "[", "x") .
+% Non-string input must derive nothing
+result(replace_nonstring, ?R) :- strings(?A, _), ?R = REPLACE(42, ".", "x") .
+% The language tag of the input is kept
+result(replace_lang, ?R) :- tagged(?L), ?R = REPLACE(?L, "es", "ES") .

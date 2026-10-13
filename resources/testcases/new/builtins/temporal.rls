@@ -1,0 +1,72 @@
+% Dates, times and durations: arithmetic, comparison, components,
+% timezones, casts and aggregates.
+
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+% Input values: dates, times and durations are values of their own,
+% whichever of the duration datatypes they are written in.
+event(launch, "2024-03-01T12:30:00+01:00"^^xsd:dateTime).
+event(landing, "2024-03-15T08:00:00Z"^^xsd:dateTime).
+milestone(start, "2024-03-01"^^xsd:date).
+milestone(end, "2024-03-15"^^xsd:date).
+clock(noon, "12:00:00Z"^^xsd:time).
+span(twoWeeks, "P14D"^^xsd:dayTimeDuration).
+span(quarter, "P3M"^^xsd:yearMonthDuration).
+span(mixed, "P1Y2M3DT4H"^^xsd:duration).
+shift(early, "PT8H"^^xsd:dayTimeDuration).
+shift(late, "PT7H30M"^^xsd:duration).
+@import offsets :- csv{resource="sources/offsets.csv"}.
+@import deadlines :- turtle{resource="sources/deadlines.ttl"}.
+
+% Arithmetic
+result(days_between, ?R) :- milestone(end, ?E), milestone(start, ?S), ?R = ?E - ?S.
+result(flight_time, ?R) :- event(landing, ?L), event(launch, ?S), ?R = ?L - ?S.
+result(day_plus_weeks, ?R) :- milestone(start, ?S), span(twoWeeks, ?D), ?R = ?S + ?D.
+result(quarter_plus_day, ?R) :- milestone(start, ?S), span(quarter, ?D), ?R = ?D + ?S.
+result(clock_minus_hours, ?R) :- clock(noon, ?T), ?R = ?T - DAYTIMEDURATION("PT13H").
+result(weeks_scaled, ?R) :- span(twoWeeks, ?D), ?R = ?D * 1.5.
+result(weeks_ratio, ?R) :- span(twoWeeks, ?D), ?R = ?D / DAYTIMEDURATION("P4D").
+result(quarters_summed, ?R) :- span(quarter, ?Q), ?R = ?Q + ?Q.
+% Durations of different kinds do not add up: this derives nothing.
+result(mixed_plus_weeks, ?R) :- span(mixed, ?M), span(twoWeeks, ?D), ?R = ?M + ?D.
+
+% Comparison
+result(start_before_end, "ok") :- milestone(start, ?S), milestone(end, ?E), ?S < ?E.
+result(weeks_equal_hours, "ok") :- span(twoWeeks, ?D), ?D == "PT336H"^^xsd:duration.
+% Months and days have no order between them: this derives nothing.
+result(quarter_exceeds_weeks, "ok") :- span(quarter, ?Q), span(twoWeeks, ?D), ?Q > ?D.
+
+% Components
+result(mixed_years, ?R) :- span(mixed, ?D), ?R = YEAR(?D).
+result(mixed_hours, ?R) :- span(mixed, ?D), ?R = HOURS(?D).
+result(weeks_days, ?R) :- span(twoWeeks, ?D), ?R = DAY(?D).
+
+% Timezones: a TIMEZONE result joins with duration literals from data
+result(launch_in_utc, ?R) :- event(launch, ?T), ?R = ADJUST(?T, DAYTIMEDURATION("PT0S")).
+result(landing_zone, ?N) :- event(landing, ?T), offsets(?N, ?O), ?O = TIMEZONE(?T).
+
+% Casts
+result(launch_date, ?R) :- event(launch, ?T), ?R = DATE(?T).
+result(launch_time, ?R) :- event(launch, ?T), ?R = TIME(?T).
+result(start_datetime, ?R) :- milestone(start, ?S), ?R = DATETIME(?S).
+result(mixed_day_time, ?R) :- span(mixed, ?D), ?R = DAYTIMEDURATION(?D).
+result(mixed_year_month, ?R) :- span(mixed, ?D), ?R = YEARMONTHDURATION(?D).
+result(leap_day, ?R) :- clock(noon, _), ?R = DATE("2024-02-29").
+% No such day: this derives nothing.
+result(no_leap_day, ?R) :- clock(noon, _), ?R = DATE("2023-02-29").
+
+% Datatypes: a duration takes the most specific of the three duration types
+result(datatype_weeks, ?R) :- span(twoWeeks, ?D), ?R = DATATYPE(?D).
+result(datatype_late, ?R) :- shift(late, ?D), ?R = DATATYPE(?D).
+result(datatype_mixed, ?R) :- span(mixed, ?D), ?R = DATATYPE(?D).
+
+% Dates from RDF
+result(deadline_distance, ?R) :- deadlines(?Task, _, ?Due), milestone(start, ?S), ?R = ?Due - ?S.
+
+% Aggregates
+total(#sum(?D)) :- shift(?N, ?D).
+average(#avg(?D)) :- shift(?N, ?D).
+earliest(#min(?S)) :- milestone(?N, ?S).
+result(shifts_total, ?R) :- total(?R).
+result(shifts_average, ?R) :- average(?R).
+result(earliest_day, ?R) :- earliest(?R).

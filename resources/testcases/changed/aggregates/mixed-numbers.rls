@@ -1,0 +1,15 @@
+% Aggregates over integers and doubles together.
+%
+% Old Nemo takes the double 0.5E0 for the maximum of -1, 4 and 0.5E0;
+% the other results agree:
+%   largest(b, "0.5"^^xsd:double) .
+
+v(a, 1) .
+v(a, 2.5E0) .
+v(b, -1) .
+v(b, 4) .
+v(b, 0.5E0) .
+
+total(?k, #sum(?x)) :- v(?k, ?x) .
+smallest(?k, #min(?x)) :- v(?k, ?x) .
+largest(?k, #max(?x)) :- v(?k, ?x) .

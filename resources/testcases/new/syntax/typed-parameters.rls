@@ -1,0 +1,15 @@
+% Parameters with types and defaults, used in heads, filters and other
+% parameters.
+
+@parameter $limit: int = 3 .
+@parameter $label: string = "item" .
+@parameter $double = $limit * 2 .
+
+n(1) .
+n(2) .
+n(3) .
+n(4) .
+
+small(?x) :- n(?x), ?x < $limit .
+named(?x, $label) :- n(?x), ?x = $limit .
+doubled(?x, $double) :- n(?x), ?x > $limit .

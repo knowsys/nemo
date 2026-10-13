@@ -1,0 +1,11 @@
+% Assignments and filters may be written in any order: each is applied
+% once its inputs are bound. An assignment to a bound variable filters.
+
+n(1) .
+n(2) .
+n(3) .
+
+chain(?x, ?z) :- ?z = ?y * 10, ?y = ?x + 1, n(?x) .
+fixed(?x) :- n(?x), ?x = 2 .
+named(?x, ?s) :- n(?x), ?s = "item" .
+late(?x, ?y) :- ?y > 15, n(?x), ?y = ?x * 10 .

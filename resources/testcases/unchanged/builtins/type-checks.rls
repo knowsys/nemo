@@ -1,0 +1,32 @@
+% The type-checking builtins over a value of each kind.
+
+value(int, 1) .
+value(double, 1.5E0) .
+value(string, "x") .
+value(langString, "x"@en) .
+value(iri, x) .
+value(numberString, "1") .
+freshNull(!n) :- value(int, _) .
+value(null, ?n) :- freshNull(?n) .
+
+check(?kind, isInteger, ?r) :- value(?kind, ?v), ?r = isInteger(?v) .
+check(?kind, isDouble, ?r) :- value(?kind, ?v), ?r = isDouble(?v) .
+check(?kind, isFloat, ?r) :- value(?kind, ?v), ?r = isFloat(?v) .
+check(?kind, isNumeric, ?r) :- value(?kind, ?v), ?r = isNumeric(?v) .
+check(?kind, isString, ?r) :- value(?kind, ?v), ?r = isString(?v) .
+check(?kind, isIri, ?r) :- value(?kind, ?v), ?r = isIri(?v) .
+check(?kind, isNull, ?r) :- value(?kind, ?v), ?r = isNull(?v) .
+
+strings("Hello", "World") .
+doubles(2.0E0, 1.5E0, 0.5E0) .
+integers(1, 2, 3) .
+constant(constant) .
+null(!V) :- constant(?X) .
+
+result(isString, ?R) :- strings(?A, _), ?R = isString(?A) .
+result(isint, ?R) :- integers(?A, _, _), ?R = isInteger(?A) .
+result(isfloat, ?R) :- doubles(?A, _, _), ?R = isFloat(?A) .
+result(isdouble, ?R) :- doubles(?A, _, _), ?R = isDouble(?A) .
+result(isnumeric, ?R) :- integers(?A, _, _), ?R = isNumeric(?A) .
+result(isiri, ?R) :- constant(?A), ?R = isIri(?A) .
+result(isnull, ?R) :- null(?A), ?R = isNull(?A) .

@@ -1,0 +1,13 @@
+result(case, true) .
+result(exact, true) .
+result(langmatches_case, true) .
+result(langmatches_empty_wildcard, false) .
+result(langmatches_exact, true) .
+result(langmatches_no_match, false) .
+result(langmatches_subtag, true) .
+result(langmatches_wildcard, true) .
+result(more_specific_range, false) .
+result(not_prefix, false) .
+result(subtag, true) .
+result(wildcard, true) .
+result(wildcard_empty, false) .

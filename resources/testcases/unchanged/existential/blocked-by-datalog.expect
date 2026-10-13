@@ -1,0 +1,3 @@
+result(A, A) .
+result(B, _:0) .
+result(C, _:1) .

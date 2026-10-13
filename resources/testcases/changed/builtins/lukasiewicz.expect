@@ -1,0 +1,6 @@
+result(integer_ones, 1d) .
+result(integer_zero, 0d) .
+result(ordered, 0.75d) .
+result(reordered, 0.75d) .
+result(single, 0.75d) .
+result(single_negative, 0d) .

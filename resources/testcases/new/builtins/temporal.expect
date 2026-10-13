@@ -1,0 +1,34 @@
+average("PT7H45M"^^<http://www.w3.org/2001/XMLSchema#dayTimeDuration>) .
+
+earliest("2024-03-01"^^<http://www.w3.org/2001/XMLSchema#date>) .
+
+result(clock_minus_hours, "23:00:00Z"^^<http://www.w3.org/2001/XMLSchema#time>) .
+result(datatype_late, <http://www.w3.org/2001/XMLSchema#dayTimeDuration>) .
+result(datatype_mixed, <http://www.w3.org/2001/XMLSchema#duration>) .
+result(datatype_weeks, <http://www.w3.org/2001/XMLSchema#dayTimeDuration>) .
+result(day_plus_weeks, "2024-03-15"^^<http://www.w3.org/2001/XMLSchema#date>) .
+result(days_between, "P14D"^^<http://www.w3.org/2001/XMLSchema#dayTimeDuration>) .
+result(deadline_distance, "P30D"^^<http://www.w3.org/2001/XMLSchema#dayTimeDuration>) .
+result(earliest_day, "2024-03-01"^^<http://www.w3.org/2001/XMLSchema#date>) .
+result(flight_time, "P13DT20H30M"^^<http://www.w3.org/2001/XMLSchema#dayTimeDuration>) .
+result(landing_zone, utc) .
+result(launch_date, "2024-03-01+01:00"^^<http://www.w3.org/2001/XMLSchema#date>) .
+result(launch_in_utc, "2024-03-01T11:30:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>) .
+result(launch_time, "12:30:00+01:00"^^<http://www.w3.org/2001/XMLSchema#time>) .
+result(leap_day, "2024-02-29"^^<http://www.w3.org/2001/XMLSchema#date>) .
+result(mixed_day_time, "P3DT4H"^^<http://www.w3.org/2001/XMLSchema#dayTimeDuration>) .
+result(mixed_hours, 4) .
+result(mixed_year_month, "P1Y2M"^^<http://www.w3.org/2001/XMLSchema#yearMonthDuration>) .
+result(mixed_years, 1) .
+result(quarter_plus_day, "2024-06-01"^^<http://www.w3.org/2001/XMLSchema#date>) .
+result(quarters_summed, "P6M"^^<http://www.w3.org/2001/XMLSchema#yearMonthDuration>) .
+result(shifts_average, "PT7H45M"^^<http://www.w3.org/2001/XMLSchema#dayTimeDuration>) .
+result(shifts_total, "PT15H30M"^^<http://www.w3.org/2001/XMLSchema#dayTimeDuration>) .
+result(start_before_end, "ok") .
+result(start_datetime, "2024-03-01T00:00:00"^^<http://www.w3.org/2001/XMLSchema#dateTime>) .
+result(weeks_days, 14) .
+result(weeks_equal_hours, "ok") .
+result(weeks_ratio, 3.5) .
+result(weeks_scaled, "P21D"^^<http://www.w3.org/2001/XMLSchema#dayTimeDuration>) .
+
+total("PT15H30M"^^<http://www.w3.org/2001/XMLSchema#dayTimeDuration>) .

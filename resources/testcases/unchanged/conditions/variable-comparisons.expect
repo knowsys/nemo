@@ -1,0 +1,52 @@
+combine(1, 12, 3) .
+combine(7, 10, 3) .
+combine(7, 12, 3) .
+combine(7, 16, 3) .
+
+equal(4, 4) .
+equal(8, 8) .
+
+g_eq(2, 1) .
+g_eq(3, 1) .
+g_eq(4, 4) .
+g_eq(7, 3) .
+g_eq(7, 5) .
+g_eq(8, 8) .
+g_eq(9, 2) .
+
+g_un(2, 1) .
+g_un(3, 1) .
+g_un(7, 3) .
+g_un(7, 5) .
+g_un(9, 2) .
+
+l_eq(1, 3) .
+l_eq(2, 4) .
+l_eq(2, 5) .
+l_eq(4, 4) .
+l_eq(8, 8) .
+
+l_un(1, 3) .
+l_un(2, 4) .
+l_un(2, 5) .
+
+multi(3, 1) .
+multi(7, 3) .
+multi(9, 2) .
+
+r_xy(1, 3) .
+r_xy(2, 4) .
+r_xy(2, 5) .
+
+r_yx(1, 3) .
+r_yx(2, 4) .
+r_yx(2, 5) .
+
+uneq(1, 3) .
+uneq(2, 1) .
+uneq(2, 4) .
+uneq(2, 5) .
+uneq(3, 1) .
+uneq(7, 3) .
+uneq(7, 5) .
+uneq(9, 2) .

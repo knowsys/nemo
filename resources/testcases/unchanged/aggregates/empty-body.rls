@@ -1,0 +1,9 @@
+% An aggregate over a body without matches derives no fact at all, also
+% when it is grouped.
+
+pairs(a, 1) .
+
+total(#sum(?x)) :- nothing(?x) .
+howMany(#count(?x)) :- nothing(?x) .
+smallest(#min(?x)) :- nothing(?x) .
+perGroup(?g, #count(?x)) :- pairs(?g, ?x), nothing(?x) .

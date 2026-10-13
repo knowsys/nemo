@@ -1,0 +1,18 @@
+% Calendar arithmetic:
+%   - Adding months at the end of a month clamps to its last day.
+%   - Leap days exist in leap years only.
+%   - Durations add up.
+
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+onDay(jan31, "2024-01-31"^^xsd:date) .
+onDay(feb28, "2024-02-28"^^xsd:date) .
+onDay(feb28common, "2023-02-28"^^xsd:date) .
+onDay(mar1, "2023-03-01"^^xsd:date) .
+
+plusMonth(?k, ?r) :- onDay(?k, ?d), ?r = ?d + "P1M"^^xsd:yearMonthDuration .
+plusDay(?k, ?r) :- onDay(?k, ?d), ?r = ?d + "P1D"^^xsd:dayTimeDuration .
+minusDay(?k, ?r) :- onDay(?k, ?d), ?r = ?d - "P1D"^^xsd:dayTimeDuration .
+months(?r) :- onDay(jan31, _), ?r = "P1Y"^^xsd:yearMonthDuration + "P13M"^^xsd:yearMonthDuration .
+shorter(ok) :- onDay(jan31, _), "P1D"^^xsd:dayTimeDuration < "PT25H"^^xsd:dayTimeDuration .
+between(?r) :- onDay(jan31, ?a), onDay(mar1, ?b), ?r = ?a - ?b .

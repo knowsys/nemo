@@ -1,0 +1,13 @@
+% The `limit` option reads at most that many rows of a file; a limit of
+% zero reads none.
+%
+% Old Nemo takes a limit of zero as no limit and reads all ten rows:
+%   nothing(1) .
+%   …
+%   nothing(10) .
+
+@import firstTwo :- csv { resource = "sources/ten-rows.csv", limit = 2 } .
+@import none :- csv { resource = "sources/ten-rows.csv", limit = 0 } .
+
+row(?x) :- firstTwo(?x) .
+nothing(?x) :- none(?x) .
