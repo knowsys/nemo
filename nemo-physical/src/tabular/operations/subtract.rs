@@ -104,7 +104,9 @@ impl OperationGenerator for GeneratorSubtract {
                     for (subtract_index, (trie_subtract, layer_map)) in
                         (tries_subtract.iter().zip(layer_maps.iter())).enumerate()
                     {
-                        let used_layer = layer_map.iter().position(|&layer| layer == output_layer);
+                        let used_layer = layer_map
+                            .iter()
+                            .position(|&layer| layer == output_layer);
 
                         if let Some(used_layer) = used_layer {
                             let is_last = used_layer == layer_map.len() - 1;

@@ -47,7 +47,15 @@ type Results = BTreeMap<String, Vec<Vec<String>>>;
 
 /// Registers one test per case and runs them.
 fn main() {
-    let mut arguments = Arguments::from_args();
+    // Miri runs without file system access, so the corpus is unreadable.
+    if cfg!(miri) {
+        return;
+    }
+
+    // CI passes libtest's `--report-time` to every test binary; there is no
+    // such option here.
+    let mut arguments =
+        Arguments::from_iter(std::env::args().filter(|argument| argument != "--report-time"));
     arguments.test_threads = Some(1);
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../resources/testcases");
 
