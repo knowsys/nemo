@@ -1,0 +1,13 @@
+% An existential rule does not fire where imported facts satisfy its head.
+%
+% Unless the program states facts for a head predicate, old Nemo's check
+% sees only the heads in which a derived fact takes part, and the rule
+% fires for alice as well:
+%   takes(alice, _:0) .
+%   course(_:0) .
+
+@import student :- csv { resource = "sources/students.csv" } .
+@import takes :- csv { resource = "sources/takes.csv" } .
+@import course :- csv { resource = "sources/courses.csv" } .
+
+takes(?S, !C), course(!C) :- student(?S) .
