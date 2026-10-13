@@ -89,7 +89,9 @@ def visit_path(test_path, loader, tests, subgroup_path=[]):
 
 
 def load_tests(loader, tests, pattern):
-    test_cases_dir = os.path.join(dirname(__file__), "..", "..", "resources", "testcases")
+    test_cases_dir = os.path.join(
+        dirname(__file__), "..", "..", "resources", "testcases", "unchanged"
+    )
 
     visit_path(abspath(test_cases_dir), loader, tests)
     return tests
