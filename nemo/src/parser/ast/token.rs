@@ -348,7 +348,12 @@ macro_rules! string_token {
         /// Parse this token.
         pub fn $func_name(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
             map(
-                context(ParserContext::Token { kind: $token }, tag($token.name())),
+                context(
+                    ParserContext::Token {
+                        kind: $token,
+                    },
+                    tag($token.name()),
+                ),
                 |input: ParserInput| Token {
                     span: input.span,
                     kind: $token,
