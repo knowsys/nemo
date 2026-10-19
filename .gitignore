@@ -34,3 +34,6 @@ flycheck_*.el
 
 # ide settings
 /.vscode
+
+# macOS specific files
+.DS_Store

@@ -26,7 +26,7 @@ pub mod universal;
 ///
 /// A general placeholder that can be bound to any value.
 /// We distinguish [UniversalVariable] and [ExistentialVariable].
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub enum Variable {
     /// Universal variable
     Universal(UniversalVariable),
