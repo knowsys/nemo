@@ -448,6 +448,8 @@ impl Engine {
     /// Checks a program without loading it:
     /// parameters resolve, directives validate, rules compile, and the whole program
     /// stratifies, but no imported data is read and no facts are stored.
+    /// A parameter without a value, which a run needs supplied, is read as any value of its
+    /// declared type, as an `@input` predicate holds any rows its declaration allows.
     ///
     /// Unlike [load](Self::load), a check collects problems rather than ending at the first,
     /// and reports everything it found, warnings included,

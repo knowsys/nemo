@@ -16,6 +16,7 @@ use crate::{
     diagnostics::EngineError,
     engine::{
         CheckReport, Engine, InferredTypes,
+        check::open_parameters,
         compile::compiled::CompiledProgram,
         compile::translation::{self, Purpose, TranslationState},
         compile::types,
@@ -225,6 +226,7 @@ impl Engine {
     /// The analysis of the program, and its strata, are proved over these statements.
     /// The pipeline stages rewrite the program afterwards,
     /// and the translation of what they made then reports only what reading finds.
+    /// A check reads the parameters without a value as inputs (see [open_parameters]).
     ///
     /// Returns the compiled program and the predicates registered for it.
     pub(super) fn translate_written(
@@ -240,6 +242,11 @@ impl Engine {
             .statements(written)
             .map(|(id, statement)| (id, statement.clone()))
             .unzip();
+        let (statements, ids) = if purpose == Purpose::Check {
+            open_parameters(statements, ids)
+        } else {
+            (statements, ids)
+        };
         let mut scratch = self.scratch_stores(predicates);
         let (stores, setup) = self.scratch_translation_parts(purpose, &mut scratch);
         let mut translator = translation::Translator::new(stores, setup, state, preloaded);
