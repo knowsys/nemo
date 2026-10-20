@@ -26,7 +26,7 @@ flycheck_*.el
 /nemo/test-files
 
 # default output directory
-results/
+/results
 
 # nix build
 /result

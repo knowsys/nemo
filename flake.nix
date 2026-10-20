@@ -16,20 +16,14 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    nemo-vscode-extension = {
-      url = "github:knowsys/nemo-vscode-extension";
-      inputs = {
-        nixpkgs.follows = "nixpkgs";
-        dream2nix.follows = "dream2nix";
-      };
-    };
-
     nemo-web = {
       url = "github:knowsys/nemo-web";
       inputs = {
         nixpkgs.follows = "nixpkgs";
         dream2nix.follows = "dream2nix";
-        nemo.follows = "nemo-vscode-extension/nemo";
+        # this flake provides both, including the editor extension
+        nemo.follows = "";
+        nemo-vscode-extension.follows = "";
       };
     };
 
@@ -77,8 +71,10 @@
               (lib.fileset.fileFilter (
                 file:
                 lib.any file.hasExt [
+                  "html" # included into the timing report
                   "md"
                   "py"
+                  "pyi"
                 ]
               ) root)
               ./resources # contains the integration tests
@@ -88,7 +84,7 @@
           };
 
           inherit (pkgs) python3; # this should match the install hook version below
-          inherit (pkgs.python3Packages) pypaInstallHook pycodestyle; # this should match the python version above
+          inherit (pkgs.python3Packages) pypaInstallHook pycodestyle pytest; # this should match the python version above
           # find correct wasm-bindgen-version
           wasm-bindgen =
             let
@@ -116,13 +112,6 @@
               # avoid rebuilds by pinning python:
               # https://crane.dev/faq/rebuilds-pyo3.html
               PYO3_PYTHON = lib.getExe python3;
-
-              # thresholds for the time reporting for cargo test
-              # first value is warning, second is critical
-              # values are in milliseconds
-              RUST_TEST_TIME_UNIT = "15000,60000";
-              RUST_TEST_TIME_INTEGRATION = "15000,60000";
-              RUST_TEST_TIME_DOCTEST = "15000,60000";
             };
 
             buildInputs =
@@ -144,7 +133,8 @@
                   profile ? "release",
                   target ? null,
                 }:
-                "cargo hack --workspace --feature-powerset ${task} --profile ${profile} ${
+                # the language server's two runtimes cannot share a build
+                "cargo hack --workspace --feature-powerset --mutually-exclusive-features stdio,wasm ${task} --profile ${profile} ${
                   lib.optionalString (target != null) "--target ${target}"
                 }";
             in
@@ -165,7 +155,7 @@
             commonArgs
             // {
               pname = "nemo-cargo-workspace-wasm";
-              cargoExtraArgs = "--target wasm32-unknown-unknown --package nemo-wasm --package nemo-language-server --no-default-features --features js";
+              cargoExtraArgs = "--target wasm32-unknown-unknown --package nemo-wasm";
 
               doCheck = false; # skip tests for WASM, since they wouldn't run anyways
             }
@@ -186,28 +176,6 @@
               ];
             };
           };
-
-          cargoUdeps =
-            {
-              cargoUdepsArgs ? "--workspace --all-targets",
-              ...
-            }@origArgs:
-            let
-              args = removeAttrs origArgs [ "cargoUdepsArgs" ];
-            in
-            crane.mkCargoDerivation (
-              args
-              // {
-                inherit cargoArtifacts src;
-                pname = "nemo-udeps";
-                buildPhaseCargoCommand = "cargo udeps ${cargoUdepsArgs}";
-                buildInputs = args.buildInputs or commonArgs.buildInputs;
-                nativeBuildInputs = [
-                  pkgs.cargo-udeps
-                ]
-                ++ (args.nativeBuildInputs or commonArgs.nativeBuildInputs);
-              }
-            );
 
           cargoXtask =
             {
@@ -306,6 +274,8 @@
               }
             );
 
+          vscodeExtensionMeta = lib.importJSON ./nemo-vscode/package.json;
+
           nemo-cli-manpages = cargoXtaskGenerate "manpages";
           nemo-cli-shell-completions = cargoXtaskGenerate "shell-completions";
         in
@@ -360,7 +330,7 @@
               nativeBuildInputs =
                 crateArgs.nativeBuildInputs
                 ++ (lib.attrValues {
-                  inherit pypaInstallHook;
+                  inherit pypaInstallHook pytest;
                   inherit (pkgs) maturin;
                 });
 
@@ -382,7 +352,7 @@
               installPhaseCommand = "pypaInstallPhase";
 
               installCheckPhase = ''
-                PYTHONPATH=''${PYTHONPATH:+''${PYTHONPATH}:}out python3 -m unittest discover -s nemo-python/tests -v
+                PYTHONPATH=$out/${python3.sitePackages}''${PYTHONPATH:+:''${PYTHONPATH}} python3 -m pytest nemo-python/tests -q
               '';
             };
 
@@ -413,22 +383,107 @@
               '';
             };
 
-            nemo-vscode-extension-vsix =
-              (inputs.nemo-vscode-extension.packages.${system}.nemo-vscode-extension-vsix.extendModules {
-                modules = [
+            nemo-vscode-extension-vsix = inputs.dream2nix.lib.evalModules {
+              packageSets.nixpkgs = pkgs;
+
+              modules = [
+                {
+                  paths = {
+                    projectRoot = ./.;
+                    projectRootFile = "flake.nix";
+                    package = ./nemo-vscode;
+                  };
+                }
+
+                (
                   {
-                    deps = {
-                      inherit (self.packages.${system}) nemo-wasm-web;
+                    config,
+                    dream2nix,
+                    ...
+                  }:
+                  {
+                    name = "nemo-vscode-extension-vsix";
+                    inherit (vscodeExtensionMeta) version;
+
+                    imports = [
+                      dream2nix.modules.dream2nix.nodejs-package-lock-v3
+                      dream2nix.modules.dream2nix.nodejs-granular-v3
+                    ];
+
+                    mkDerivation = {
+                      # the extension's sources, with the module `npm run wasm` would build;
+                      # `vsce` runs the prepublish script, which builds that module, so it is dropped
+                      src =
+                        pkgs.runCommandLocal "nemo-vscode-extension-source" { nativeBuildInputs = [ config.deps.jq ]; }
+                          ''
+                            cp -R ${lib.cleanSource ./nemo-vscode} $out
+                            chmod -R u+w $out
+                            cp -R ${config.deps.nemo-wasm-web}/lib/node_modules/nemo-wasm $out/wasm
+                            cat ${./LICENSE-APACHE} ${./LICENSE-MIT} > $out/LICENSE
+                            jq 'del(.scripts["vscode:prepublish"])' ${./nemo-vscode/package.json} > $out/package.json
+                          '';
+
+                      nativeBuildInputs = [ config.deps.vsce ];
+
+                      installPhase = ''
+                        runHook preInstall
+
+                        mkdir -p $out
+                        cp nemo-${config.version}.vsix $out/
+
+                        runHook postInstall
+                      '';
                     };
+
+                    deps =
+                      { nixpkgs, ... }:
+                      {
+                        inherit (nixpkgs) jq vsce;
+                        nemo-wasm-web = lib.mkDefault self.packages.${system}.nemo-wasm-web;
+                      };
+
+                    nodejs-package-lock-v3.packageLockFile = ./nemo-vscode/package-lock.json;
+
+                    nodejs-granular-v3.buildScript = "npm run compile && vsce package";
                   }
-                ];
-              }).config.public;
+                )
+              ];
+            };
 
             nemo-vscode-extension =
-              inputs.nemo-vscode-extension.packages.${system}.nemo-vscode-extension.overrideAttrs
-                (old: {
-                  src = "${self.packages.${system}.nemo-vscode-extension-vsix}/nemo-${old.version}.vsix";
-                });
+              let
+                pname = "nemo";
+                publisher = "knowsys";
+                inherit (vscodeExtensionMeta) version;
+              in
+              pkgs.vscode-utils.buildVscodeExtension {
+                inherit pname version;
+                name = "${pname}-${version}";
+                src = "${self.packages.${system}.nemo-vscode-extension-vsix}/${pname}-${version}.vsix";
+                vscodeExtUniqueId = "${publisher}.${pname}";
+                vscodeExtPublisher = publisher;
+                vscodeExtName = pname;
+
+                nativeBuildInputs = lib.attrValues {
+                  inherit (pkgs) jq moreutils unzip;
+                };
+
+                unpackPhase = ''
+                  unzip $src
+                '';
+
+                # by default, the extension starts the language server of this flake
+                preInstall = ''
+                  jq '.contributes.configuration.properties."nemo.server.path".default = $s' \
+                    --arg s "${self.packages.${system}.nemo-language-server}/bin/nemo-language-server" \
+                    package.json | sponge package.json
+                '';
+
+                meta = {
+                  inherit (vscodeExtensionMeta) description;
+                  homepage = vscodeExtensionMeta.repository.url;
+                };
+              };
 
             nemo-web =
               (inputs.nemo-web.packages.${system}.nemo-web.extendModules {
@@ -497,11 +552,10 @@
                       exit 1
                     fi
 
-                    cargo test --workspace --all-targets -- -Z unstable-options --report-time
+                    cargo test --workspace --all-targets
                     cargo clippy --workspace --all-targets -- --deny warnings
                     cargo fmt --all -- --check
                     cargo doc --workspace
-                    cargo udeps --workspace --all-targets
 
                     pushd nemo-python
                       pycodestyle .
@@ -510,14 +564,12 @@
                       # shellcheck disable=SC1091
                       . "''${VENV}"/bin/activate
                       maturin develop
-                      python3 -m unittest discover tests -v
+                      python3 -m pytest tests -q
                       deactivate
                       rm -rf "''${VENV}"
                     popd
 
                     RUSTFLAGS="" wasm-pack build --weak-refs --mode=no-install nemo-wasm
-
-                    cargo miri test -- -Z unstable-options --report-time
                   '';
                 };
               };
@@ -571,14 +623,6 @@
               }
             );
 
-            udeps = cargoUdeps (
-              commonArgs
-              // {
-                pname = "nemo-cargo-udeps";
-                inherit cargoArtifacts;
-              }
-            );
-
             python-codestyle =
               pkgs.runCommandLocal "nemo-check-python-codestyle"
                 {
@@ -603,12 +647,7 @@
             RUST_LOG = "debug";
             RUST_BACKTRACE = 1;
             RUST_SRC_PATH = "${toolchain}/lib/rustlib/src/rust/library";
-            inherit (commonArgs.env)
-              PYO3_PYTHON
-              RUST_TEST_TIME_UNIT
-              RUST_TEST_TIME_INTEGRATION
-              RUST_TEST_TIME_DOCTEST
-              ;
+            inherit (commonArgs.env) PYO3_PYTHON;
 
             shellHook = ''
               export PATH=''${HOME}/.cargo/bin''${PATH+:''${PATH}}
@@ -622,13 +661,13 @@
                 inherit
                   python3
                   pycodestyle
+                  pytest
                   wasm-bindgen
                   ;
                 inherit (pkgs)
                   cargo-audit
                   cargo-license
                   cargo-tarpaulin
-                  cargo-udeps
 
                   maturin
                   binaryen
@@ -670,7 +709,6 @@
               nodePackages = lib.makeExtensible (lib.extends pkgs.nodePackages prev.nodePackages);
             };
 
-          nemo-vscode-extension = inputs.nemo-vscode-extension.overlays.default;
           nemo-web = inputs.nemo-web.overlays.default;
         };
       };

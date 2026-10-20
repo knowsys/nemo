@@ -162,7 +162,6 @@ def test_registered_resources_shadow_the_filesystem():
     assert engine.count("q") == 3
 
 
-
 CLOSURE = """
     @input edge .
     @output reach .
@@ -196,6 +195,7 @@ def test_a_module_root_names_the_modules_in_its_directory(tmp_path):
     assert engine.count("out") == 3
     with pytest.raises(nmo.DiagnosticsError):
         engine.add_module_root("a::b", str(tmp_path))
+
 
 @pytest.fixture
 def server():
@@ -237,8 +237,9 @@ def test_remote_imports_are_fetched_by_the_load(server):
 
 def test_failed_fetches_fail_the_load_unless_the_import_warns(server):
     missing = f'resource = "{server}/missing.csv"'
+    program = nmo.Program.parse(f"@import p from csv {{ {missing} }} . q(?x) :- p(?x) .")
     with pytest.raises(nmo.DiagnosticsError) as raised:
-        nmo.Engine().load(nmo.Program.parse(f"@import p from csv {{ {missing} }} . q(?x) :- p(?x) ."))
+        nmo.Engine().load(program)
     assert raised.value.diagnostics[0].code == "N0111"
 
     engine = nmo.Engine()
@@ -263,7 +264,8 @@ def test_the_import_directory_resolves_every_relative_import(tmp_path):
     (tmp_path / "rows.csv").write_text("1\n")
     engine = nmo.Engine()
     engine.set_import_directory(str(tmp_path))
-    engine.load(nmo.Program.parse('@import p from csv { resource = "rows.csv" } . q(?x) :- p(?x) .'))
+    program = '@import p from csv { resource = "rows.csv" } . q(?x) :- p(?x) .'
+    engine.load(nmo.Program.parse(program))
     engine.reason()
     assert engine.count("q") == 1
 
