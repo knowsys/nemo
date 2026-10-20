@@ -163,12 +163,13 @@ fn fetch_retrying(
         let Some(delay) = delay else {
             return Err(failure);
         };
-        tracing::debug!(
+        // A warning, since a wait the server asks for can take minutes.
+        tracing::warn!(
             url = request.url.as_str(),
             status = failure.status,
             attempt,
             wait_seconds = delay.as_secs_f64(),
-            "retrying a remote request"
+            "retrying a remote request after a wait"
         );
         if !wait(delay, abandoned) {
             return Err(failure);
