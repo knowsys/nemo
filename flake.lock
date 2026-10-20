@@ -82,22 +82,22 @@
           "dream2nix"
         ],
         "nemo": [],
-        "nemo-vscode-extension": [],
         "nev": "nev",
         "nixpkgs": [
           "nixpkgs"
         ]
       },
       "locked": {
-        "lastModified": 1792358416,
-        "narHash": "sha256-WOQnwJKt5GJfJQf01vMttG/ASvWUCXIbV0SbokUcnWw=",
+        "lastModified": 1792501546,
+        "narHash": "sha256-EL7x5EHYizoU4ivej/oeW4NdM7Jm/+bOGhKxoBkN08A=",
         "owner": "knowsys",
         "repo": "nemo-web",
-        "rev": "071b3b7195abe9b04d9b8efd1d3492b2fabcb170",
+        "rev": "3df050ed6085cdd6ad53a00100cdece694e9a1ac",
         "type": "github"
       },
       "original": {
         "owner": "knowsys",
+        "ref": "lazer",
         "repo": "nemo-web",
         "type": "github"
       }

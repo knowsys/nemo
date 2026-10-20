@@ -17,13 +17,12 @@
     };
 
     nemo-web = {
-      url = "github:knowsys/nemo-web";
+      url = "github:knowsys/nemo-web/lazer";
       inputs = {
         nixpkgs.follows = "nixpkgs";
         dream2nix.follows = "dream2nix";
-        # this flake provides both, including the editor extension
+        # this flake, which also provides the editor extension
         nemo.follows = "";
-        nemo-vscode-extension.follows = "";
       };
     };
 
