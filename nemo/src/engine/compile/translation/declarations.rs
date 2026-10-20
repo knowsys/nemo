@@ -5,7 +5,6 @@ use std::collections::HashMap;
 
 use nemo_physical::{
     diagnostics::Diagnostic,
-    function::EvaluationContext,
     value::{
         DataValue, DomainSet, LabelBound, MapShape, Shape, TupleShape, Type, ValueDomain, ValueRef,
     },
@@ -193,7 +192,7 @@ impl<'a> Translator<'a> {
         let program = builder.finish(term.span)?;
         let mut stack = Vec::with_capacity(program.stack_bound());
         program
-            .evaluate(EvaluationContext::now(), &mut stack, &[])
+            .evaluate(self.context, &mut stack, &[])
             .as_result()
             .map(|value| value.to_owned())
             .map_err(|_| TranslationError::OptionUnevaluable.at(term.span))

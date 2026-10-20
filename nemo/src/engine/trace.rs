@@ -45,7 +45,9 @@ impl Engine {
             }
         }
         let state = std::mem::take(&mut self.translation);
-        let (stores, setup) = self.translation_parts(translation::Purpose::Load);
+        // The facts are evaluated as the latest run evaluated its own.
+        let context = self.contexts.latest();
+        let (stores, setup) = self.translation_parts(translation::Purpose::Load, context);
         let mut translator = translation::Translator::new(stores, setup, state, Vec::new());
         let mut resolved = Vec::with_capacity(facts.len());
         let mut problem = None;
@@ -75,7 +77,8 @@ impl Engine {
             return HashMap::new();
         }
         let state = std::mem::take(&mut self.translation);
-        let (stores, setup) = self.translation_parts(translation::Purpose::Load);
+        let context = self.contexts.latest();
+        let (stores, setup) = self.translation_parts(translation::Purpose::Load, context);
         let translator = translation::Translator::new(stores, setup, state, Vec::new());
         let values: Vec<_> = constants
             .into_iter()

@@ -285,12 +285,13 @@ impl Writer for DsvWriter {
 ///     format::ValueFormat,
 ///     load::Reader,
 /// };
-/// use nemo_physical::dictionary::Dictionary;
+/// use nemo_physical::{dictionary::Dictionary, function::EvaluationContext};
 ///
 /// let reader = DsvReader::new(DsvOptions::csv(vec![ValueFormat::Term, ValueFormat::Integer]));
 /// let mut dictionary = Dictionary::new();
+/// let text = "alice,1\nbob,two\ncarol,3\n";
 /// let loaded = reader
-///     .read("alice,1\nbob,two\ncarol,3\n".as_bytes(), &mut dictionary)
+///     .read(text.as_bytes(), &mut dictionary, EvaluationContext::now())
 ///     .expect("the text reads");
 ///
 /// // The row whose second cell is not an integer is malformed: counted, not delivered.
@@ -394,10 +395,14 @@ impl Reader for DsvReader {
     ///
     /// Returns an error if the stream fails or a record cannot be read:
     /// broken quoting, or text that is not valid UTF-8.
-    fn read(&self, source: impl Read, dictionary: &mut Dictionary) -> Result<Loaded, Diagnostic> {
-        let context = EvaluationContext::now();
+    fn read(
+        &self,
+        source: impl Read,
+        dictionary: &mut Dictionary,
+        context: EvaluationContext,
+    ) -> Result<Loaded, Diagnostic> {
         let runs = RunPool::new(context);
-        let mut loaded = Loaded::with_context(self.options.arity(), context);
+        let mut loaded = Loaded::new(self.options.arity(), context);
         self.parse(source, &runs, |run| {
             run.encode_into(&mut loaded, dictionary, 0);
             runs.give(run);
@@ -428,7 +433,11 @@ mod tests {
         let reader = DsvReader::new(DsvOptions::csv_terms(3));
         let input = "alice,42,-2.5\nbob,7,1e3\n";
         let loaded = reader
-            .read(Cursor::new(input), &mut dictionary)
+            .read(
+                Cursor::new(input),
+                &mut dictionary,
+                EvaluationContext::now(),
+            )
             .expect("the source reads");
 
         assert_eq!(loaded.malformed, 0);
@@ -459,7 +468,11 @@ mod tests {
         // Line 2 has a bad integer, line 3 the wrong arity.
         let input = "a,1\nb,oops\nc\nd,4\n";
         let loaded = reader
-            .read(Cursor::new(input), &mut dictionary)
+            .read(
+                Cursor::new(input),
+                &mut dictionary,
+                EvaluationContext::now(),
+            )
             .expect("the source reads");
 
         assert_eq!(loaded.rows.len(), 2);
@@ -472,7 +485,11 @@ mod tests {
         let mut dictionary = Dictionary::new();
         let reader = DsvReader::new(DsvOptions::tsv(vec![ValueFormat::Term, ValueFormat::Term]));
         let loaded = reader
-            .read(Cursor::new("a\t1\n"), &mut dictionary)
+            .read(
+                Cursor::new("a\t1\n"),
+                &mut dictionary,
+                EvaluationContext::now(),
+            )
             .expect("the source reads");
         assert_eq!(
             loaded.decoded(&dictionary),
@@ -485,7 +502,7 @@ mod tests {
         let mut dictionary = Dictionary::new();
         let reader = DsvReader::new(DsvOptions::csv_terms(2));
         let loaded = reader
-            .read(Cursor::new(""), &mut dictionary)
+            .read(Cursor::new(""), &mut dictionary, EvaluationContext::now())
             .expect("the source reads");
         assert!(loaded.rows.is_empty());
         assert_eq!(loaded.malformed, 0);
@@ -586,7 +603,7 @@ mod tests {
 
         let mut dictionary = Dictionary::new();
         let loaded = DsvReader::new(DsvOptions::new(b',', vec![ValueFormat::Term; 3]))
-            .read_path(&path, &mut dictionary)
+            .read_path(&path, &mut dictionary, EvaluationContext::now())
             .expect("the file reads back");
         std::fs::remove_file(&path).ok();
         assert_eq!(loaded.rows.len(), 1);
@@ -618,7 +635,7 @@ mod tests {
 
         let mut dictionary = Dictionary::new();
         let loaded = DsvReader::new(DsvOptions::csv(vec![ValueFormat::Term; width]))
-            .read(target.as_slice(), &mut dictionary)
+            .read(target.as_slice(), &mut dictionary, EvaluationContext::now())
             .expect("the output reads back");
         assert_eq!(loaded.malformed, 0, "no row is malformed");
         (0..loaded.rows.len())
@@ -669,13 +686,47 @@ mod tests {
         options.limit = Some(3);
         let mut dictionary = Dictionary::new();
         let loaded = DsvReader::new(options)
-            .read("1\n2\n3\n4\n5\n".as_bytes(), &mut dictionary)
+            .read(
+                "1\n2\n3\n4\n5\n".as_bytes(),
+                &mut dictionary,
+                EvaluationContext::now(),
+            )
             .expect("the source reads");
         assert_eq!((loaded.rows.len(), loaded.excluded), (1, 2));
         assert_eq!(
             dictionary.decode(loaded.rows.row(0)[0]).expect("decodes"),
             DataValue::integer(3).as_ref()
         );
+    }
+
+    #[test]
+    fn a_condition_reads_the_callers_instant() {
+        use nemo_physical::{
+            function::{OpCode, StackProgram},
+            value::{DateTime, TimezoneOffset},
+        };
+
+        // The row keeps 1970, the year of `NOW()` only at the epoch.
+        let mut options = DsvOptions::csv(vec![ValueFormat::Integer]);
+        options.filter = Some(RowFilter::new(
+            vec![0],
+            StackProgram::new(
+                vec![OpCode::Input(0), OpCode::Now, OpCode::Year, OpCode::Equal],
+                Vec::new(),
+                1,
+            ),
+        ));
+        let reader = DsvReader::new(options);
+        let kept = |context| {
+            reader
+                .read("1970\n".as_bytes(), &mut Dictionary::new(), context)
+                .expect("the source reads")
+                .rows
+                .len()
+        };
+        let epoch = DateTime::from_unix_millis(0, Some(TimezoneOffset::UTC));
+        assert_eq!(kept(EvaluationContext::at(epoch)), 1);
+        assert_eq!(kept(EvaluationContext::now()), 0);
     }
 
     #[test]

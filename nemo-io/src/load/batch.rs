@@ -237,15 +237,19 @@ impl ResourceBatch {
 
     /// Loads every resource, delivering the loads in the batch's order.
     ///
+    /// The sources' conditions evaluate in the given context.
+    ///
     /// # Errors
     ///
     /// Returns the first failure to read a resource.
-    pub fn load(&self, dictionary: &mut Dictionary) -> Result<Vec<Loaded>, Diagnostic> {
+    pub fn load(
+        &self,
+        dictionary: &mut Dictionary,
+        context: EvaluationContext,
+    ) -> Result<Vec<Loaded>, Diagnostic> {
         let windows: Vec<Window> = (0..self.sources.len())
             .flat_map(|index| self.windows(index))
             .collect();
-        // One load is one run of the sources' conditions.
-        let context = EvaluationContext::now();
         // Several windows go to the pool whatever their size, so only a
         // lone window's file is measured.
         let tasks = if windows.len() > 1 || self.input_bytes() >= POOL_BYTES {
@@ -257,7 +261,7 @@ impl ResourceBatch {
         let mut loads: Vec<Loaded> = self
             .sources
             .iter()
-            .map(|source| Loaded::with_context(source.options.arity(), context))
+            .map(|source| Loaded::new(source.options.arity(), context))
             .collect();
         // Lines the earlier windows of each source consumed, and the
         // window being interned with the lines it consumed so far: a

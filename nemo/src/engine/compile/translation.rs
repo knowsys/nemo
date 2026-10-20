@@ -25,7 +25,7 @@ use nemo_io::file_format::FileFormat;
 use nemo_physical::{
     diagnostics::{Diagnostic, Severity},
     dictionary::Dictionary,
-    function::StackProgram,
+    function::{EvaluationContext, StackProgram},
     management::{TableId, TableManager},
     trie::RowBuffer,
     value::{DataValue, ErrorCounts, LabelTypes, Type},
@@ -98,6 +98,8 @@ pub(crate) struct TranslationSetup<'a> {
     /// The column types the loaded program was analyzed with,
     /// if a program is loaded, so that an error of a change can say what it widened.
     pub(crate) previous_types: Option<&'a HashMap<TableId, Vec<Type>>>,
+    /// The context ground expressions evaluate in: the instant of their `NOW()`.
+    pub(crate) context: EvaluationContext,
 }
 
 /// What a translation is for:
@@ -315,6 +317,8 @@ pub(crate) struct Translator<'a> {
     pub(super) written: Option<&'a WrittenProgram>,
     /// The column types the loaded program was analyzed with, if one is loaded.
     previous_types: Option<&'a HashMap<TableId, Vec<Type>>>,
+    /// The context ground expressions evaluate in: the instant of their `NOW()`.
+    context: EvaluationContext,
     /// The remote requests found without a response while the imports ran,
     /// which suspend the translation.
     requests: Vec<ResourceRequest>,
@@ -368,6 +372,7 @@ impl<'a> Translator<'a> {
             purpose: setup.purpose,
             written: setup.written,
             previous_types: setup.previous_types,
+            context: setup.context,
             requests: Vec::new(),
             preloaded,
         }
@@ -975,13 +980,21 @@ impl ScratchStores {
 }
 
 impl Engine {
+    /// Returns the instant a loading method translates at:
+    /// the one chosen since the last reasoning run began, or now, which the next run then shares.
+    pub(in crate::engine) fn loading_instant(&mut self) -> EvaluationContext {
+        *self.instant.get_or_insert_with(EvaluationContext::now)
+    }
+
     /// Returns the stores and setup one translation runs with,
+    /// its ground expressions evaluated in the given context,
     /// borrowed separately so that the translation writes the stores while reading the rest.
     pub(in crate::engine) fn translation_parts<'a>(
         &'a mut self,
         purpose: Purpose<'a>,
+        context: EvaluationContext,
     ) -> (TranslationStores<'a>, TranslationSetup<'a>) {
-        self.parts(purpose, None)
+        self.parts(purpose, None, context)
     }
 
     /// Returns scratch stores beside the engine's tables, starting from the given predicates.
@@ -999,12 +1012,16 @@ impl Engine {
 
     /// Returns the scratch stores and the setup of a translation that leaves the engine's
     /// stores as they were, and reports to the engine's pipeline.
+    ///
+    /// Its ground expressions evaluate at the instant chosen for the next run, if there is one,
+    /// without choosing it.
     pub(in crate::engine) fn scratch_translation_parts<'a>(
         &'a mut self,
         purpose: Purpose<'a>,
         scratch: &'a mut ScratchStores,
     ) -> (TranslationStores<'a>, TranslationSetup<'a>) {
-        self.parts(purpose, Some(scratch))
+        let context = self.instant.unwrap_or_else(EvaluationContext::now);
+        self.parts(purpose, Some(scratch), context)
     }
 
     /// Returns the stores and setup of a translation, the stores being the scratch ones if given
@@ -1013,6 +1030,7 @@ impl Engine {
         &'a mut self,
         purpose: Purpose<'a>,
         scratch: Option<&'a mut ScratchStores>,
+        context: EvaluationContext,
     ) -> (TranslationStores<'a>, TranslationSetup<'a>) {
         let (manager, dictionary, predicates, errors) = match scratch {
             Some(scratch) => (
@@ -1045,6 +1063,7 @@ impl Engine {
                 purpose,
                 written: None,
                 previous_types: self.program.as_ref().map(|program| &program.column_types),
+                context,
             },
         )
     }

@@ -5,7 +5,6 @@ use std::collections::BTreeSet;
 
 use nemo_physical::{
     diagnostics::Diagnostic,
-    function::EvaluationContext,
     value::{DataValue, MapValue, TupleValue},
 };
 
@@ -384,10 +383,7 @@ impl<'a> Translator<'a> {
                 builder.operation(self, VariableScope::Ground, operation)?;
                 let program = builder.finish(term.span)?;
                 let mut stack = Vec::with_capacity(program.stack_bound());
-                match program
-                    .evaluate(EvaluationContext::now(), &mut stack, &[])
-                    .as_result()
-                {
+                match program.evaluate(self.context, &mut stack, &[]).as_result() {
                     Ok(value) => Ok(value.to_owned()),
                     Err(error) => {
                         let problem = TranslationError::ConstantExpressionErrors.diagnostic();

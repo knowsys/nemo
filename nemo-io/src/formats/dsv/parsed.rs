@@ -90,7 +90,7 @@ impl Parsed {
     /// Creates an empty run of the given arity, its conditions evaluated in `context`.
     pub(crate) fn new(arity: usize, context: EvaluationContext) -> Self {
         Self {
-            loaded: Loaded::with_context(arity, context),
+            loaded: Loaded::new(arity, context),
             cells: Vec::new(),
             text: String::new(),
             owned: Vec::new(),
@@ -102,7 +102,7 @@ impl Parsed {
 
     /// Empties the run for rows of the given arity, keeping its buffers.
     pub(crate) fn reset(&mut self, arity: usize, context: EvaluationContext) {
-        self.loaded = Loaded::with_context(arity, context);
+        self.loaded = Loaded::new(arity, context);
         self.cells.clear();
         self.text.clear();
         self.owned.clear();

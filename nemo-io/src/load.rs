@@ -46,19 +46,13 @@ pub struct Loaded {
     /// This is what a limit counts, so a condition never changes which rows a limited resource
     /// yields.
     pub(crate) well_formed: u64,
-    /// The context the selection's condition evaluates in: one load is
-    /// one run of it.
+    /// The context the selection's condition evaluates in, the caller's.
     context: EvaluationContext,
 }
 
 impl Loaded {
-    /// Creates an empty load of the given arity.
-    pub(crate) fn new(arity: usize) -> Self {
-        Self::with_context(arity, EvaluationContext::now())
-    }
-
     /// Creates an empty load of the given arity whose condition evaluates in `context`.
-    pub(crate) fn with_context(arity: usize, context: EvaluationContext) -> Self {
+    pub(crate) fn new(arity: usize, context: EvaluationContext) -> Self {
         Self {
             rows: RowBuffer::new(arity),
             malformed: 0,

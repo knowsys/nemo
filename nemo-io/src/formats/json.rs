@@ -22,7 +22,8 @@ use std::{
 use serde::de::{DeserializeSeed, Deserializer, MapAccess, SeqAccess, Visitor};
 
 use nemo_physical::{
-    diagnostics::Diagnostic, dictionary::Dictionary, storage::StorageValue, value::DataValue,
+    diagnostics::Diagnostic, dictionary::Dictionary, function::EvaluationContext,
+    storage::StorageValue, value::DataValue,
 };
 
 use crate::{
@@ -39,11 +40,12 @@ use crate::{
 ///
 /// ```
 /// use nemo_io::{json::JsonReader, load::Reader};
-/// use nemo_physical::dictionary::Dictionary;
+/// use nemo_physical::{dictionary::Dictionary, function::EvaluationContext};
 ///
 /// let mut dictionary = Dictionary::new();
+/// let document = r#"{"name": "Alice", "age": 42}"#;
 /// let loaded = JsonReader::new()
-///     .read(r#"{"name": "Alice", "age": 42}"#.as_bytes(), &mut dictionary)
+///     .read(document.as_bytes(), &mut dictionary, EvaluationContext::now())
 ///     .expect("the document reads");
 ///
 /// // The object edges to its two members, and each scalar member carries its
@@ -85,6 +87,7 @@ impl Reader for JsonReader {
         &self,
         mut source: impl Read,
         dictionary: &mut Dictionary,
+        context: EvaluationContext,
     ) -> Result<Loaded, Diagnostic> {
         let mut document = Vec::new();
         source
@@ -97,7 +100,7 @@ impl Reader for JsonReader {
             .diagnostic()
         })?;
 
-        let mut triples = Triples::new(&self.selection);
+        let mut triples = Triples::new(&self.selection, context);
         triples.walk(document, dictionary);
         let loaded = triples.loaded;
         tracing::debug!(
@@ -123,11 +126,12 @@ struct Triples<'a> {
 }
 
 impl<'a> Triples<'a> {
-    /// Creates an empty collection of triples under a selection.
-    fn new(selection: &'a RowSelection) -> Self {
+    /// Creates an empty collection of triples under a selection,
+    /// whose condition evaluates in `context`.
+    fn new(selection: &'a RowSelection, context: EvaluationContext) -> Self {
         Self {
             selection,
-            loaded: Loaded::new(selection.arity(3)),
+            loaded: Loaded::new(selection.arity(3), context),
             kept: Vec::with_capacity(3),
             encoded: Vec::with_capacity(3),
         }
@@ -509,7 +513,7 @@ mod tests {
     fn values(text: &str) -> BTreeMap<i64, DataValue> {
         let mut dictionary = Dictionary::new();
         let loaded = JsonReader::new()
-            .read(text.as_bytes(), &mut dictionary)
+            .read(text.as_bytes(), &mut dictionary, EvaluationContext::now())
             .expect("the document reads");
         let key_value = DataValue::iri("value");
         (0..loaded.rows.len())
@@ -537,7 +541,11 @@ mod tests {
         assert_eq!(values[&5], DataValue::boolean(true));
         assert!(
             JsonReader::new()
-                .read("{\"a\": ".as_bytes(), &mut Dictionary::new())
+                .read(
+                    "{\"a\": ".as_bytes(),
+                    &mut Dictionary::new(),
+                    EvaluationContext::now()
+                )
                 .is_err()
         );
     }

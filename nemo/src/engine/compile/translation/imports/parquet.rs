@@ -66,7 +66,7 @@ impl<'a> Translator<'a> {
             ));
         }
         let loaded = ParquetReader::with_selection(selection)
-            .read_path(&path, self.dictionary)
+            .read_path(&path, self.dictionary, self.context)
             .map_err(ImportFailure::Reading)?;
         self.absorb(table, layout.delivered(), loaded, &resource);
         Ok(())

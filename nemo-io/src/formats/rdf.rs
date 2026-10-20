@@ -7,6 +7,7 @@ use oxrdfio::{RdfFormat, RdfParser, RdfSerializer};
 use nemo_physical::{
     diagnostics::Diagnostic,
     dictionary::Dictionary,
+    function::EvaluationContext,
     storage::StorageValue,
     value::{DataValue, IriRef, ValueRef},
 };
@@ -92,14 +93,14 @@ impl RdfOptions {
 ///     load::Reader,
 ///     rdf::{RdfOptions, RdfReader},
 /// };
-/// use nemo_physical::{dictionary::Dictionary, value::DataValue};
+/// use nemo_physical::{dictionary::Dictionary, function::EvaluationContext, value::DataValue};
 ///
 /// let triples = "<http://example.org/a> <http://example.org/knows> _:b .\n\
 ///                _:b <http://example.org/name> \"Bob\" .\n";
 /// let reader = RdfReader::new(RdfOptions::new(RdfVariant::NTriples));
 /// let mut dictionary = Dictionary::new();
 /// let loaded = reader
-///     .read(triples.as_bytes(), &mut dictionary)
+///     .read(triples.as_bytes(), &mut dictionary, EvaluationContext::now())
 ///     .expect("the triples read");
 /// assert_eq!(loaded.rows.len(), 2);
 ///
@@ -158,9 +159,14 @@ impl Reader for RdfReader {
     /// # Errors
     ///
     /// Returns an error if the base is not an IRI or the stream cannot be read.
-    fn read(&self, source: impl Read, dictionary: &mut Dictionary) -> Result<Loaded, Diagnostic> {
+    fn read(
+        &self,
+        source: impl Read,
+        dictionary: &mut Dictionary,
+        context: EvaluationContext,
+    ) -> Result<Loaded, Diagnostic> {
         let parser = self.parser()?;
-        let mut statements = Statements::new(&self.options);
+        let mut statements = Statements::new(&self.options, context);
         let limit = self.options.limit.unwrap_or(u64::MAX);
         let unreadable = |error: std::io::Error| {
             IoError::StreamUnreadable {
@@ -240,12 +246,13 @@ struct Statements<'a> {
 }
 
 impl<'a> Statements<'a> {
-    /// Creates the empty rows of a read of the given shape.
-    fn new(options: &'a RdfOptions) -> Self {
+    /// Creates the empty rows of a read of the given shape,
+    /// whose condition evaluates in `context`.
+    fn new(options: &'a RdfOptions, context: EvaluationContext) -> Self {
         let arity = options.variant.arity();
         Self {
             options,
-            loaded: Loaded::new(options.selection.arity(arity)),
+            loaded: Loaded::new(options.selection.arity(arity), context),
             blanks: BlankNodes::default(),
             terms: Vec::with_capacity(arity),
             kept: Vec::with_capacity(arity),
@@ -572,7 +579,7 @@ mod tests {
 
         let mut dictionary = Dictionary::new();
         let loaded = RdfReader::new(RdfOptions::new(RdfVariant::Turtle))
-            .read(text.as_bytes(), &mut dictionary)
+            .read(text.as_bytes(), &mut dictionary, EvaluationContext::now())
             .expect("the output reads back");
         assert_eq!((loaded.rows.len(), loaded.malformed), (2, 0));
         let cell = |row: usize, column: usize| -> DataValue {
@@ -599,7 +606,7 @@ mod tests {
         std::thread::spawn(move || {
             let mut dictionary = Dictionary::new();
             let result = RdfReader::new(RdfOptions::new(variant))
-                .read(source, &mut dictionary)
+                .read(source, &mut dictionary, EvaluationContext::now())
                 .map(|loaded| loaded.rows.len());
             sender.send(result).ok();
         });
@@ -660,7 +667,11 @@ mod tests {
                        <http://x/s5> <http://x/p> <http://x/o> .";
         let mut dictionary = Dictionary::new();
         let loaded = RdfReader::new(RdfOptions::new(RdfVariant::NTriples))
-            .read(triples.as_bytes(), &mut dictionary)
+            .read(
+                triples.as_bytes(),
+                &mut dictionary,
+                EvaluationContext::now(),
+            )
             .expect("the triples read");
         assert_eq!((loaded.rows.len(), loaded.malformed), (2, 3));
         assert_eq!(loaded.first_malformed, Some(1));
@@ -700,7 +711,7 @@ mod tests {
         options.limit = Some(3);
         let mut dictionary = Dictionary::new();
         let loaded = RdfReader::new(options)
-            .read(text.as_bytes(), &mut dictionary)
+            .read(text.as_bytes(), &mut dictionary, EvaluationContext::now())
             .expect("the source reads");
         assert_eq!((loaded.rows.len(), loaded.excluded), (1, 2));
         assert_eq!(
@@ -750,7 +761,7 @@ mod tests {
             let mut options = RdfOptions::new(variant);
             options.base = Some(String::from("not an iri"));
             let problem = RdfReader::new(options)
-                .read(&b""[..], &mut Dictionary::new())
+                .read(&b""[..], &mut Dictionary::new(), EvaluationContext::now())
                 .expect_err("the base is refused");
             assert_eq!(problem.code(), crate::codes::NOT_A_BASE_IRI, "{variant:?}");
         }

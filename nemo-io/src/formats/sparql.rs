@@ -17,7 +17,9 @@ use std::io::{Cursor, Read};
 
 use csv::ReaderBuilder;
 
-use nemo_physical::{diagnostics::Diagnostic, dictionary::Dictionary, value::DataValue};
+use nemo_physical::{
+    diagnostics::Diagnostic, dictionary::Dictionary, function::EvaluationContext, value::DataValue,
+};
 
 use crate::{
     AboutResource,
@@ -339,6 +341,8 @@ impl SparqlReader {
 
     /// Reads one response: checks that it is whole, then reads its solutions.
     ///
+    /// The selection's condition evaluates in the given context.
+    ///
     /// # Errors
     ///
     /// Returns an error if the response is cut off or is not SPARQL TSV.
@@ -348,10 +352,17 @@ impl SparqlReader {
         endpoint: &str,
         body: &[u8],
         dictionary: &mut Dictionary,
+        context: EvaluationContext,
     ) -> Result<Loaded, Diagnostic> {
         check_complete(endpoint, body)?;
-        read_tsv(Cursor::new(body), self.arity, &self.selection, dictionary)
-            .map_err(|diagnostic| diagnostic.with_resource(endpoint.to_owned()))
+        read_tsv(
+            Cursor::new(body),
+            self.arity,
+            &self.selection,
+            dictionary,
+            context,
+        )
+        .map_err(|diagnostic| diagnostic.with_resource(endpoint.to_owned()))
     }
 
     /// Returns whether an endpoint cut a response off partway, as [read](Self::read) reports.
@@ -407,13 +418,15 @@ fn cut_off(body: &[u8]) -> Option<String> {
 /// An *unbound* cell (an `OPTIONAL` that did not match) mints a fresh null of its own:
 /// the value exists, but is unknown.
 /// A cell that is not a term makes the row malformed, and is counted.
+/// The selection's condition evaluates in `context`.
 fn read_tsv(
     source: impl Read,
     arity: usize,
     selection: &RowSelection,
     dictionary: &mut Dictionary,
+    context: EvaluationContext,
 ) -> Result<Loaded, Diagnostic> {
-    let mut loaded = Loaded::new(selection.arity(arity));
+    let mut loaded = Loaded::new(selection.arity(arity), context);
     let mut blanks = BlankNodes::default();
     let mut row = Vec::with_capacity(arity);
     let mut kept: Vec<DataValue> = Vec::with_capacity(arity);

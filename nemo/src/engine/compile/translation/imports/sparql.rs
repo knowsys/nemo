@@ -135,7 +135,7 @@ impl<'a> Translator<'a> {
             .or_else(|| self.resources.get(&spec.resource()).cloned())
             .expect("the prefetch fetched or diagnosed every SPARQL import");
         let loaded = nemo_io::sparql::SparqlReader::new(source_width, selection)
-            .read(&spec.endpoint, &bytes, self.dictionary)
+            .read(&spec.endpoint, &bytes, self.dictionary, self.context)
             .map_err(ImportFailure::Reading)?;
         self.absorb(table, spec.layout.delivered(), loaded, &spec.endpoint);
         Ok(())

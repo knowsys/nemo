@@ -60,6 +60,7 @@ use std::{
 use nemo_physical::{
     diagnostics::Diagnostic,
     dictionary::Dictionary,
+    function::EvaluationContext,
     management::{Revision, TableId, TableManager},
     value::{DataValue, ErrorCounts, Type, ValueRef},
 };
@@ -153,6 +154,10 @@ pub struct Engine {
     /// An explanation re-executes a run's applications in the run's context.
     /// Cleared with the application log.
     contexts: evaluate::contexts::RunContexts,
+    /// The instant of what the loading methods translated since the last reasoning run began:
+    /// the `NOW()` of its facts and option values, and of the next run.
+    /// `None` if nothing was translated since.
+    instant: Option<EvaluationContext>,
     /// The plan skeletons of the compiled program's rules.
     skeletons: evaluate::application::PlanSkeletons,
     /// The directory relative import resources resolve against, if one is set.
@@ -567,8 +572,11 @@ impl Engine {
     /// Runs semi-naive evaluation to the fixpoint, stratum by stratum.
     ///
     /// A stratum's negated predicates are final before it starts.
-    /// The run is one evaluation [context](nemo_physical::function::EvaluationContext):
-    /// every `NOW()` it evaluates reads the instant the run began at.
+    /// The run is one evaluation [context](EvaluationContext):
+    /// every `NOW()` it evaluates reads the same instant, the one the facts loaded for it
+    /// were evaluated at.
+    /// That is the instant of the first loading method since the last run,
+    /// or, if there was none, the instant the run began at.
     ///
     /// # Errors
     ///

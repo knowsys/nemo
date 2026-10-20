@@ -246,7 +246,7 @@ impl<'a> Translator<'a> {
             .iter()
             .map(|prepared| prepared.source.clone())
             .collect();
-        let loaded = ResourceBatch::new(sources).load(self.dictionary)?;
+        let loaded = ResourceBatch::new(sources).load(self.dictionary, self.context)?;
         for (prepared, loaded) in batch.into_iter().zip(loaded) {
             self.absorb(prepared.table, prepared.arity, loaded, &prepared.resource);
         }

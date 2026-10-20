@@ -380,3 +380,36 @@ fn a_check_collects_what_parsing_and_the_engine_report() {
     assert!(codes.contains(&String::from("N0204")), "{codes:?}");
     assert!(engine.predicates().is_empty(), "nothing loaded");
 }
+
+/// A run's `NOW()` is the instant its facts were loaded at, however long after the load it
+/// starts, and the run after an extension has the instant of the extension.
+#[test]
+fn a_run_evaluates_at_the_instant_its_facts_were_loaded_at() {
+    let pause = || std::thread::sleep(std::time::Duration::from_millis(5));
+    let mut engine = Engine::new();
+    engine
+        .load(parse(
+            "started(NOW()) .
+             same(yes) :- started(?now), NOW() = ?now .",
+        ))
+        .expect("the program loads");
+    pause();
+    engine.reason().expect("reasoning reaches the fixpoint");
+    assert_eq!(rows(&mut engine, "same"), vec![vec![String::from("yes")]]);
+
+    pause();
+    engine
+        .extend(parse(
+            "restarted(NOW()) .
+             again(yes) :- restarted(?now), NOW() = ?now .",
+        ))
+        .expect("the extension loads");
+    pause();
+    engine.reason().expect("reasoning reaches the fixpoint");
+    assert_eq!(rows(&mut engine, "again"), vec![vec![String::from("yes")]]);
+    assert_ne!(
+        rows(&mut engine, "started"),
+        rows(&mut engine, "restarted"),
+        "each run has its own instant"
+    );
+}

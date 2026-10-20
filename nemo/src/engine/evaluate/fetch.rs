@@ -115,12 +115,15 @@ pub(super) enum FetchOutcome {
 /// Resumed with them, it splits the requests the endpoint found too large or cut off,
 /// suspends again for the halves, and reads the other responses.
 /// A failed request fails the application, or, under `on_error = warn`, is counted and skipped.
+/// The import's conditions evaluate in the run's context.
+#[expect(clippy::too_many_arguments, reason = "the parts of one application")]
 pub(super) fn apply(
     rule: &CompiledRule,
     index: usize,
     step: u64,
     manager: &mut TableManager,
     dictionary: &mut Dictionary,
+    context: EvaluationContext,
     resumed: Option<PendingFetch>,
     ids: &mut u64,
 ) -> Result<FetchOutcome, Diagnostic> {
@@ -137,7 +140,7 @@ pub(super) fn apply(
             pending
         }
         None => {
-            let requests = requests(rule, fetch, step, manager, dictionary)?;
+            let requests = requests(rule, fetch, step, manager, dictionary, context)?;
             if requests.is_empty() {
                 return Ok(FetchOutcome::Applied(Box::default(), Fetched::default()));
             }
@@ -165,7 +168,7 @@ pub(super) fn apply(
         return Ok(FetchOutcome::Suspended(pending));
     }
 
-    let (buffer, fetched) = solutions(fetch, arity, pending, dictionary)?;
+    let (buffer, fetched) = solutions(fetch, arity, pending, dictionary, context)?;
     let mut applied = Applied {
         errors: fetched.errors,
         ..Applied::default()
@@ -180,11 +183,11 @@ pub(super) fn apply(
     let fresh = subtract_stored(
         fetch.scratch,
         head.table,
-        arity,
         step,
         buffer,
         manager,
         dictionary,
+        context,
     );
     // Drop the scratch rows, whether or not the subtraction failed.
     manager.drop_rows(fetch.scratch, Revision(step)..Revision(step + 1));
@@ -252,6 +255,7 @@ fn requests(
     step: u64,
     manager: &mut TableManager,
     dictionary: &mut Dictionary,
+    context: EvaluationContext,
 ) -> Result<Vec<(Request, ValuesBlocks)>, Diagnostic> {
     let last = Revision(rule.last_applied);
     let now = Revision(step);
@@ -275,7 +279,7 @@ fn requests(
         if empty {
             continue;
         }
-        let rows = binding_rows(rule, fetch, &ranges, pivot, manager, dictionary)?;
+        let rows = binding_rows(rule, fetch, &ranges, pivot, manager, dictionary, context)?;
         if rows.iter().any(Vec::is_empty) {
             continue;
         }
@@ -295,6 +299,7 @@ fn solutions(
     arity: usize,
     pending: PendingFetch,
     dictionary: &mut Dictionary,
+    context: EvaluationContext,
 ) -> Result<(RowBuffer, Fetched), Diagnostic> {
     let written = fetch.query.arity();
     let mut buffer = RowBuffer::new(arity);
@@ -309,7 +314,7 @@ fn solutions(
             .expect("a fetch reads the responses once every request has one");
         let loaded = response
             .map_err(|failure| failure.diagnostic(&fetch.endpoint))
-            .and_then(|bytes| reader.read(&fetch.endpoint, &bytes, dictionary));
+            .and_then(|bytes| reader.read(&fetch.endpoint, &bytes, dictionary, context));
         let loaded = match loaded {
             Ok(loaded) => loaded,
             Err(problem) if fetch.on_error == OnError::Warn => {
@@ -368,12 +373,13 @@ fn request_with(fetch: &CompiledFetch, text: &str) -> Request {
 fn subtract_stored(
     scratch: TableId,
     head: TableId,
-    arity: usize,
     step: u64,
     batch: RowBuffer,
     manager: &mut TableManager,
     dictionary: &mut Dictionary,
+    context: EvaluationContext,
 ) -> Result<Trie, Diagnostic> {
+    let arity = batch.arity();
     manager.add_rows(scratch, Revision(step), ColumnOrder::identity(arity), batch);
     let mut plan = OperationPlan::new();
     let markers: Vec<Marker> = (0..arity).map(|_| plan.marker()).collect();
@@ -381,7 +387,7 @@ fn subtract_stored(
     let stored = plan.load(head, Revision(0)..Revision(step), markers.clone());
     let fresh = plan.subtract(batch, stored);
     let output = plan.output(fresh);
-    let mut results = plan.execute(manager, dictionary, EvaluationContext::now());
+    let mut results = plan.execute(manager, dictionary, context);
     Ok(std::mem::take(&mut results.outputs[output]))
 }
 
@@ -418,6 +424,7 @@ fn binding_rows(
     pivot: usize,
     manager: &mut TableManager,
     dictionary: &mut Dictionary,
+    context: EvaluationContext,
 ) -> Result<Vec<Vec<Vec<GroundTerm>>>, Diagnostic> {
     let mut plan = OperationPlan::new();
     let space = BodySpace::new(&mut plan, rule);
@@ -435,7 +442,7 @@ fn binding_rows(
             )?);
         }
     }
-    let mut results = plan.execute(manager, dictionary, EvaluationContext::now());
+    let mut results = plan.execute(manager, dictionary, context);
 
     let mut per_atom = Vec::with_capacity(rule.body.len());
     for (index, columns) in fetch.atoms.iter().enumerate() {

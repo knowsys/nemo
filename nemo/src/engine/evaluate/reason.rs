@@ -196,6 +196,7 @@ impl Engine {
                 step,
                 &mut self.manager,
                 &mut self.dictionary,
+                context,
                 waiting.map(|waiting| *waiting),
                 &mut self.request_ids,
             )?;
@@ -320,9 +321,11 @@ impl Engine {
             }
         };
         self.fixpoint = false;
-        let context = resumed
-            .as_ref()
-            .map_or_else(EvaluationContext::now, |suspended| suspended.context);
+        // A new run evaluates at the instant its facts were loaded at, if any were.
+        let context = match &resumed {
+            Some(suspended) => suspended.context,
+            None => self.instant.take().unwrap_or_else(EvaluationContext::now),
+        };
         // New input facts first invalidate the derived facts that depend
         // on them through negation or aggregation (see `recover`). The
         // strata are moved out for the iterations and put back afterwards,

@@ -14,7 +14,9 @@ use arrow::{
 };
 use parquet::arrow::{ArrowWriter, ProjectionMask, arrow_reader::ParquetRecordBatchReaderBuilder};
 
-use nemo_physical::{diagnostics::Diagnostic, dictionary::Dictionary, value::DataValue};
+use nemo_physical::{
+    diagnostics::Diagnostic, dictionary::Dictionary, function::EvaluationContext, value::DataValue,
+};
 
 use crate::{
     AboutResource, arrow::ColumnKind, error::IoError, load::Loaded, selection::RowSelection,
@@ -65,6 +67,8 @@ impl ParquetReader {
 
     /// Reads all rows of a file, interning values as they arrive.
     ///
+    /// The selection's condition evaluates in the given context.
+    ///
     /// # Errors
     ///
     /// Returns an error if the file cannot be opened or read as Parquet,
@@ -73,6 +77,7 @@ impl ParquetReader {
         &self,
         path: impl AsRef<Path>,
         dictionary: &mut Dictionary,
+        context: EvaluationContext,
     ) -> Result<Loaded, Diagnostic> {
         let path = path.as_ref();
         let file = File::open(path).map_err(|error| IoError::unreadable(path, &error))?;
@@ -116,7 +121,7 @@ impl ParquetReader {
         for batch in reader {
             let batch = batch.map_err(|error| IoError::unreadable(path, error))?;
             let arity = delivered.iter().filter(|&&delivered| delivered).count();
-            let loaded = loaded.get_or_insert_with(|| Loaded::new(arity));
+            let loaded = loaded.get_or_insert_with(|| Loaded::new(arity, context));
             // Dictionary-encoded columns read through their value type.
             let columns: Vec<arrow::array::ArrayRef> = batch
                 .columns()
@@ -146,7 +151,7 @@ impl ParquetReader {
                 }
             }
         }
-        let loaded = loaded.unwrap_or_else(|| Loaded::new(0));
+        let loaded = loaded.unwrap_or_else(|| Loaded::new(0, context));
         tracing::debug!(
             rows = loaded.rows.len(),
             malformed = loaded.malformed,
@@ -397,7 +402,7 @@ mod tests {
         assert_eq!(ParquetReader::arity(&path).expect("the schema reads"), 4);
         let mut dictionary = Dictionary::new();
         let loaded = ParquetReader::new()
-            .read_path(&path, &mut dictionary)
+            .read_path(&path, &mut dictionary, EvaluationContext::now())
             .expect("the file reads back");
         std::fs::remove_file(&path).ok();
         assert_eq!((loaded.rows.len(), loaded.malformed), (2, 0));
@@ -452,7 +457,7 @@ mod tests {
             filter: None,
         };
         let loaded = ParquetReader::with_selection(selection)
-            .read_path(&path, &mut Dictionary::new())
+            .read_path(&path, &mut Dictionary::new(), EvaluationContext::now())
             .expect("the file reads");
         std::fs::remove_file(&path).ok();
         // The second row's null makes it malformed, whether its column is delivered or not.

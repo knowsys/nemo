@@ -265,6 +265,7 @@ fn tsv_cells_parse_as_turtle_terms() {
         3,
         &RowSelection::default(),
         &mut dictionary,
+        EvaluationContext::now(),
     )
     .expect("the response reads");
     assert_eq!((loaded.rows.len(), loaded.malformed), (4, 0));
@@ -344,6 +345,7 @@ fn a_cell_that_is_no_term_makes_the_row_malformed() {
         1,
         &RowSelection::default(),
         &mut dictionary,
+        EvaluationContext::now(),
     )
     .expect("reads");
     assert_eq!((loaded.rows.len(), loaded.malformed), (1, 1));

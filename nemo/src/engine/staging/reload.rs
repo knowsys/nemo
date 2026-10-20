@@ -340,7 +340,8 @@ impl Engine {
 
             let mut state = std::mem::take(&mut self.translation);
             state.clear_statement_state();
-            let (stores, mut setup) = self.translation_parts(Purpose::of_load(stages));
+            let instant = self.loading_instant();
+            let (stores, mut setup) = self.translation_parts(Purpose::of_load(stages), instant);
             setup.written = Some(written);
             setup.responses = Some(responses);
             setup.previous_types = Some(previous);

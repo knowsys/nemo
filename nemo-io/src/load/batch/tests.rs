@@ -37,14 +37,16 @@ fn batches_match_sequential_reads() {
 
     let mut batch_dictionary = Dictionary::new();
     let batch = ResourceBatch::new(sources.clone());
-    let batch_loaded = batch.load(&mut batch_dictionary).expect("the batch loads");
+    let batch_loaded = batch
+        .load(&mut batch_dictionary, EvaluationContext::now())
+        .expect("the batch loads");
 
     let mut sequential_dictionary = Dictionary::new();
     let sequential: Vec<Loaded> = paths
         .iter()
         .map(|path| {
             DsvReader::new(DsvOptions::csv_terms(2))
-                .read_path(path, &mut sequential_dictionary)
+                .read_path(path, &mut sequential_dictionary, EvaluationContext::now())
                 .expect("the source reads")
         })
         .collect();
@@ -76,11 +78,17 @@ fn byte_sources_match_file_reads() {
     batch.window_bytes = 256;
     assert!(batch.windows(0).len() > 2, "the buffer split");
     let mut bytes_dictionary = Dictionary::new();
-    let from_bytes = batch.load(&mut bytes_dictionary).expect("the batch loads");
+    let from_bytes = batch
+        .load(&mut bytes_dictionary, EvaluationContext::now())
+        .expect("the batch loads");
 
     let mut read_dictionary = Dictionary::new();
     let from_read = DsvReader::new(options)
-        .read(Cursor::new(content), &mut read_dictionary)
+        .read(
+            Cursor::new(content),
+            &mut read_dictionary,
+            EvaluationContext::now(),
+        )
         .expect("the source reads");
 
     assert_eq!(from_bytes[0].rows.len(), 500);
@@ -104,10 +112,10 @@ fn all_skip_sources_keep_their_record_count_in_batches() {
 
     let mut dictionary = Dictionary::new();
     let batched = ResourceBatch::new(vec![source.clone(), source.clone()])
-        .load(&mut dictionary)
+        .load(&mut dictionary, EvaluationContext::now())
         .expect("the batch loads");
     let streamed = DsvReader::new(options)
-        .read_path(&path, &mut dictionary)
+        .read_path(&path, &mut dictionary, EvaluationContext::now())
         .expect("the source reads");
 
     assert_eq!(streamed.rows.len(), 2);
@@ -131,10 +139,10 @@ fn batches_and_streams_agree_on_wide_values() {
 
     let mut dictionary = Dictionary::new();
     let batched = ResourceBatch::new(vec![source.clone(), source.clone()])
-        .load(&mut dictionary)
+        .load(&mut dictionary, EvaluationContext::now())
         .expect("the batch loads");
     let streamed = DsvReader::new(options)
-        .read_path(&path, &mut dictionary)
+        .read_path(&path, &mut dictionary, EvaluationContext::now())
         .expect("the source reads");
 
     assert_eq!(streamed.malformed, 0);
@@ -162,12 +170,12 @@ fn windowed_batches_match_sequential_reads() {
     batch.window_bytes = 64;
     let mut windowed_dictionary = Dictionary::new();
     let windowed = batch
-        .load(&mut windowed_dictionary)
+        .load(&mut windowed_dictionary, EvaluationContext::now())
         .expect("the batch loads");
 
     let mut sequential_dictionary = Dictionary::new();
     let sequential = DsvReader::new(options)
-        .read_path(&path, &mut sequential_dictionary)
+        .read_path(&path, &mut sequential_dictionary, EvaluationContext::now())
         .expect("the source reads");
 
     assert!(
@@ -201,7 +209,9 @@ fn windowed_malformed_rows_keep_their_global_lines() {
     let mut batch = ResourceBatch::new(vec![source]);
     batch.window_bytes = 256;
     let mut dictionary = Dictionary::new();
-    let loaded = batch.load(&mut dictionary).expect("the batch loads");
+    let loaded = batch
+        .load(&mut dictionary, EvaluationContext::now())
+        .expect("the batch loads");
 
     assert_eq!(loaded[0].rows.len(), 401);
     assert_eq!(loaded[0].malformed, 1);
@@ -242,10 +252,10 @@ e,9
 
     let mut dictionary = Dictionary::new();
     let streamed = DsvReader::new(options.clone())
-        .read_path(&path, &mut dictionary)
+        .read_path(&path, &mut dictionary, EvaluationContext::now())
         .expect("the source reads");
     let batched = ResourceBatch::new(vec![DsvResource::path(path.clone(), options)])
-        .load(&mut dictionary)
+        .load(&mut dictionary, EvaluationContext::now())
         .expect("the batch loads");
     for loaded in [&streamed, &batched[0]] {
         assert_eq!(loaded.rows.len(), 2);
@@ -268,10 +278,10 @@ fn an_erroring_condition_is_counted_by_its_kind_in_both_paths() {
 
     let mut dictionary = Dictionary::new();
     let streamed = DsvReader::new(options.clone())
-        .read_path(&path, &mut dictionary)
+        .read_path(&path, &mut dictionary, EvaluationContext::now())
         .expect("the source reads");
     let batched = ResourceBatch::new(vec![DsvResource::path(path.clone(), options)])
-        .load(&mut dictionary)
+        .load(&mut dictionary, EvaluationContext::now())
         .expect("the batch loads");
     for loaded in [&streamed, &batched[0]] {
         assert_eq!(loaded.rows.len(), 1);
@@ -313,12 +323,12 @@ fn limited_sources_read_as_one_window_and_count_like_the_streaming_reader() {
     assert_eq!(batch.windows(0).len(), 1, "a limited source is one window");
     let mut windowed_dictionary = Dictionary::new();
     let windowed = batch
-        .load(&mut windowed_dictionary)
+        .load(&mut windowed_dictionary, EvaluationContext::now())
         .expect("the batch loads");
 
     let mut sequential_dictionary = Dictionary::new();
     let sequential = DsvReader::new(options)
-        .read_path(&path, &mut sequential_dictionary)
+        .read_path(&path, &mut sequential_dictionary, EvaluationContext::now())
         .expect("the source reads");
 
     // The first 200 well-formed rows are `0..200` (the six below the
@@ -390,11 +400,13 @@ fn runs_intern_like_a_straight_read() {
                 ResourceBatch::new(vec![DsvResource::path(path.clone(), options.clone())]);
             batch.window_bytes = window_bytes;
             let mut dictionary = Dictionary::new();
-            let batched = batch.load(&mut dictionary).expect("the batch loads");
+            let batched = batch
+                .load(&mut dictionary, EvaluationContext::now())
+                .expect("the batch loads");
 
             let mut sequential_dictionary = Dictionary::new();
             let sequential = DsvReader::new(options.clone())
-                .read_path(path, &mut sequential_dictionary)
+                .read_path(path, &mut sequential_dictionary, EvaluationContext::now())
                 .expect("the source reads");
 
             let raw = |loaded: &Loaded| -> Vec<Vec<StorageValue>> {
@@ -421,12 +433,12 @@ fn missing_files_are_reported() {
     let mut dictionary = Dictionary::new();
     assert!(
         DsvReader::new(DsvOptions::csv_terms(1))
-            .read_path(&path, &mut dictionary)
+            .read_path(&path, &mut dictionary, EvaluationContext::now())
             .is_err()
     );
     assert!(
         ResourceBatch::new(vec![DsvResource::path(path, DsvOptions::csv_terms(1))])
-            .load(&mut dictionary)
+            .load(&mut dictionary, EvaluationContext::now())
             .is_err()
     );
 }

@@ -68,10 +68,13 @@ impl<'a> Translator<'a> {
         let compression = options.compression;
         let loaded = match self.source_stream(&resource, compression, fetched) {
             Some(source) => RdfReader::new(options)
-                .read(source, self.dictionary)
+                .read(source, self.dictionary, self.context)
                 .map_err(|diagnostic| diagnostic.with_resource(resource.clone())),
-            None => RdfReader::new(options)
-                .read_path(self.resource_path(import.span, &resource), self.dictionary),
+            None => RdfReader::new(options).read_path(
+                self.resource_path(import.span, &resource),
+                self.dictionary,
+                self.context,
+            ),
         }
         .map_err(ImportFailure::Reading)?;
         self.absorb(table, layout.delivered(), loaded, &resource);

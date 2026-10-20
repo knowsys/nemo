@@ -33,9 +33,13 @@ impl<'a> Translator<'a> {
         let reader = JsonReader::with_selection(selection);
         let loaded = match self.source_stream(&resource, Compression::Auto, fetched) {
             Some(source) => reader
-                .read(source, self.dictionary)
+                .read(source, self.dictionary, self.context)
                 .map_err(|diagnostic| diagnostic.with_resource(resource.clone())),
-            None => reader.read_path(self.resource_path(import.span, &resource), self.dictionary),
+            None => reader.read_path(
+                self.resource_path(import.span, &resource),
+                self.dictionary,
+                self.context,
+            ),
         }
         .map_err(ImportFailure::Reading)?;
         self.absorb(table, layout.delivered(), loaded, &resource);

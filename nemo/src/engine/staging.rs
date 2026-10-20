@@ -132,7 +132,8 @@ impl Engine {
         let saved_predicates = self.predicates.clone();
         let responses = load.responses();
         let stages = self.rewriting_stages(&load.staged);
-        let (stores, mut setup) = self.translation_parts(Purpose::of_load(&stages));
+        let instant = self.loading_instant();
+        let (stores, mut setup) = self.translation_parts(Purpose::of_load(&stages), instant);
         setup.written = Some(&written);
         setup.responses = Some(&responses);
         let mut translator =
@@ -414,7 +415,8 @@ impl Engine {
         state.clear_statement_state();
         let responses = load.responses();
         let stages = self.rewriting_stages(&load.staged);
-        let (stores, mut setup) = self.translation_parts(Purpose::of_load(&stages));
+        let instant = self.loading_instant();
+        let (stores, mut setup) = self.translation_parts(Purpose::of_load(&stages), instant);
         setup.written = Some(&written);
         setup.responses = Some(&responses);
         setup.previous_types = Some(&old.column_types);
@@ -584,7 +586,8 @@ impl Engine {
         // translation state. A refused call leaves the seeds as they were.
         let seeds_before = self.translation.seeds.get(&table).cloned();
         let state = std::mem::take(&mut self.translation);
-        let (stores, setup) = self.translation_parts(Purpose::Load);
+        let instant = self.loading_instant();
+        let (stores, setup) = self.translation_parts(Purpose::Load, instant);
         let mut translator = translation::Translator::new(stores, setup, state, Vec::new());
         let mut outcome = Ok(());
         for row in rows {
