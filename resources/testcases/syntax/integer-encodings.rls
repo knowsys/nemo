@@ -1,0 +1,35 @@
+% Integers written in binary, octal and hexadecimal, up to the largest
+% 64-bit integer and one beyond it.
+
+% Binary.
+
+Bin(0b00).
+Bin(0b101010).
+
+% The largest 64-bit integer.
+Bin(0b0111111111111111111111111111111111111111111111111111111111111111).
+
+% 2^63, one beyond the 64-bit range.
+Bin(0b1000000000000000000000000000000000000000000000000000000000000000).
+
+% Octal.
+
+Oct(0o00).
+Oct(0o52).
+
+% The largest 64-bit integer.
+Oct(0o0777777777777777777777).
+
+% 2^63, one beyond the 64-bit range.
+Oct(0o01000000000000000000000).
+
+% Hexadecimal.
+
+Hex(0x00).
+Hex(0x02A).
+
+% The largest 64-bit integer.
+Hex(0x7FFFFFFFFFFFFFFF).
+
+% 2^63, one beyond the 64-bit range.
+Hex(0x8000000000000000).

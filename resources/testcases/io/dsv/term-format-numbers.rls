@@ -1,0 +1,7 @@
+% The `term` format reads a field as program syntax, so every spelling of
+% a number reads as that number.
+
+@import n from csv { resource = "sources/numbers.csv", format = (term, term) } .
+
+value(?k, ?x) :- n(?k, ?x) .
+numeric(?k) :- n(?k, ?x), isNumeric(?x) .

@@ -1,0 +1,6 @@
+% SUBSTR at a quotient of integers. The quotient 5 / 2 is the exact
+% decimal 2.5, which is no position, so nothing is derived.
+
+strings("Hello", "World") .
+
+result(subString, ?R) :- strings(?A, ?B), ?R = SUBSTR(?A, STRLEN(?B) / 2) .

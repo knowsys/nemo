@@ -1,0 +1,6 @@
+% A null used twice in one head atom and again in a second one.
+
+@import data from csv { resource = "sources/data.csv" } .
+
+main(?X, !V, !V, ?X), side(!V) :- data(?X, ?X) .
+main(?X, !V, ?Y, ?Y) :- data(?X, ?Y) .

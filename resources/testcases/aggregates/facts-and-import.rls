@@ -1,0 +1,17 @@
+% The same rows aggregate alike whether they are given as facts or read
+% from a file. #count() counts every match, even where the matches
+% differ only in columns no rule reads.
+
+@import imported from csv { resource = "sources/dataA.csv" } .
+
+given(-30, 2, 3) .
+given(1, 2, 7) .
+given(1, 5, 6) .
+given(1, 9, 12) .
+given(1, 9, 15) .
+given(2, 2, 4) .
+given(3, 4, 5) .
+given(42, 1, 4) .
+
+fromFacts(?x, #count()) :- given(?x, _, _), given(?y, _, _), ?x > ?y .
+fromImport(?x, #count()) :- imported(?x, _, _), imported(?y, _, _), ?x > ?y .

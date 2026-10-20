@@ -1,0 +1,56 @@
+% Everything the grammar knows how to colour, in one file.
+% Open it with the extension loaded to see the highlighting; open it with
+% the language server running to hover, rename, and navigate.
+
+@base <http://example.org/> .
+@prefix ex: <http://example.org/vocabulary#> .
+
+@parameter $limit = 100 .
+
+% ── Facts ────────────────────────────────────────────────────────────
+edge(1, 2) . edge(2, 3) . edge(3, 4) .
+labelled(1, "start", true) .
+typed("2.5"^^<http://www.w3.org/2001/XMLSchema#decimal>) .
+greeting("hello"@en) .
+numbers(0xff, 0b1011, 0o17, 2.5f, 9d, 1.0e3) .
+
+% A `%` inside a name is part of the name, not a comment.
+encoded(Hello%20World) .
+
+% Structured values: tuples, labelled tuples, and maps.
+point((1, 2)) .
+city("Dresden", location(51.05, 13.74)) .
+config({host = "localhost", port = 8080}) .
+
+% ── Rules ────────────────────────────────────────────────────────────
+reach(?x, ?y) :- edge(?x, ?y) .
+reach(?x, ?z) :- reach(?x, ?y), edge(?y, ?z) .
+
+% A filter, and a builtin called by name.
+near(?x, ?y) :- reach(?x, ?y), ?y < $limit .
+shouted(?x, ?s) :- labelled(?x, ?text, _), ?s = UCASE(CONCAT(?text, "!")) .
+
+% Negation, and an anonymous variable.
+isolated(?x) :- edge(?x, _), ~reach(?x, 4) .
+
+% A format string, including the doubled braces that are not holes.
+described(?d) :- edge(?x, ?y), ?d = f"{?x} reaches {?y}, written {{like this}}" .
+
+% An aggregate, and a rule named by an attribute.
+#[name("how many edges leave each node")]
+outgoing(?x, #count(?y)) :- edge(?x, ?y) .
+
+% An existential head, and a prefixed name.
+ex:hasParent(?x, !p) :- ex:Person(?x) .
+
+% ── Modules ──────────────────────────────────────────────────────────
+% `t::reach` reads what the instantiation makes public.
+% @use closure { edge = edge } as t .
+% answer(?x, ?y) :- t::reach(?x, ?y) .
+
+% ── Reading and writing ──────────────────────────────────────────────
+@import extra from csv { resource = "extra.csv", format = (int, int), ignore_headers = true } .
+@export reach to csv { resource = "reach.csv", compression = "gzip" } .
+@output reach .
+
+@declare edge(int, int) .

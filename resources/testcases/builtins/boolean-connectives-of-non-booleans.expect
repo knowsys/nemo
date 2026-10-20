@@ -1,0 +1,7 @@
+result(and_number, true) .
+result(not_double_zero, true) .
+result(not_empty, true) .
+result(not_one, false) .
+result(not_text, false) .
+result(not_zero, true) .
+result(or_number, false) .

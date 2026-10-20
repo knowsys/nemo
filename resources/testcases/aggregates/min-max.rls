@@ -1,0 +1,12 @@
+% #min and #max over integers, negative ones included, grouped and not.
+
+score(alice, 7) .
+score(alice, -3) .
+score(bob, 12) .
+score(bob, 12) .
+score(carol, 0) .
+
+lowest(#min(?s)) :- score(?p, ?s) .
+highest(#max(?s)) :- score(?p, ?s) .
+personalBest(?p, #max(?s)) :- score(?p, ?s) .
+personalWorst(?p, #min(?s)) :- score(?p, ?s) .

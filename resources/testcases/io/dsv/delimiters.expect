@@ -1,0 +1,6 @@
+all(1, a, first) .
+all(2, b, second) .
+all(3, c, third) .
+all(4, d, fourth) .
+all(5, e, fifth) .
+all(6, f, sixth) .

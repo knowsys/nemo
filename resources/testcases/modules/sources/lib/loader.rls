@@ -1,0 +1,4 @@
+% Offers the rows of the file `sources/rows.csv` beside this module.
+
+@import rows from csv { resource = "sources/rows.csv" } .
+@output rows .

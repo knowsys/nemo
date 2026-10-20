@@ -1,0 +1,7 @@
+% A module named like `lib/closure.rls` that derives something else, so
+% a module in `lib` naming `closure` shows which one it reaches.
+
+@input edge .
+@output reach .
+
+reach(0, 0) .

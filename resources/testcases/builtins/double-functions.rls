@@ -1,0 +1,36 @@
+% Numeric builtins over doubles: roots, trigonometry, logarithms,
+% rounding in both directions and at halves.
+
+go(1) .
+
+result(sqrt, ?r) :- go(1), ?r = SQRT(16.0E0) .
+result(sqrt_irrational, ?r) :- go(1), ?r = SQRT(2.0E0) .
+result(sin_zero, ?r) :- go(1), ?r = SIN(0.0E0) .
+result(cos_zero, ?r) :- go(1), ?r = COS(0.0E0) .
+result(tan_zero, ?r) :- go(1), ?r = TAN(0.0E0) .
+result(log_base_two, ?r) :- go(1), ?r = LOG(8.0E0, 2.0E0) .
+result(log_one, ?r) :- go(1), ?r = LOG(1.0E0, 10.0E0) .
+result(pow_root, ?r) :- go(1), ?r = POW(4.0E0, 0.5E0) .
+result(round_half_up, ?r) :- go(1), ?r = ROUND(2.5E0) .
+result(round_negative_half, ?r) :- go(1), ?r = ROUND(-2.5E0) .
+result(round_down, ?r) :- go(1), ?r = ROUND(2.4E0) .
+result(ceil, ?r) :- go(1), ?r = CEIL(1.2E0) .
+result(ceil_negative, ?r) :- go(1), ?r = CEIL(-1.2E0) .
+result(floor, ?r) :- go(1), ?r = FLOOR(1.8E0) .
+result(floor_negative, ?r) :- go(1), ?r = FLOOR(-1.2E0) .
+result(abs, ?r) :- go(1), ?r = ABS(-2.5E0) .
+result(luka, ?r) :- go(1), ?r = LUKA(0.5E0, 0.75E0) .
+result(max_mixed, ?r) :- go(1), ?r = MAX(1, 2.5E0) .
+result(sum_mixed, ?r) :- go(1), ?r = 1 + 0.5E0 .
+
+doubles(2.0E0, 1.5E0, 0.5E0) .
+integers(1, 2, 3) .
+
+result(mixedsum, ?R) :-
+    integers(?I1, ?I2, ?I3), doubles(?D1, ?D2, ?D3),
+    ?R = ?I1 * ?D1 + ?I2 * ?D2 + ?I3 * ?D3 .
+result(calculation, ?R) :- doubles(?A, ?B, ?C), ?R = POW((?A + ?B + ?C) / 2E0, 3E0) * LOG(16E0, 4E0) + SIN(?C + 0.023599E0) * SQRT(16E0) .
+result(sum, ?R) :- doubles(?A, ?B, ?C), ?R = SUM(?A, ?B, ?C) .
+result(prod, ?R) :- doubles(?A, ?B, ?C), ?R = PRODUCT(?A, ?B, ?C) .
+result(min, ?R) :- doubles(?A, ?B, ?C), ?R = MIN(?A, ?B, ?C) .
+result(max, ?R) :- doubles(?A, ?B, ?C), ?R = MAX(?A, ?B, ?C) .

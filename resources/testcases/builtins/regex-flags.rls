@@ -1,0 +1,23 @@
+% REGEX flags:
+%   - case-insensitive matching,
+%   - line anchors,
+%   - literal patterns,
+%   - invalid flags or patterns, which derive nothing.
+
+go(1) .
+
+result(insensitive, ?r) :- go(1), ?r = REGEX("Hello", "^h", "i") .
+result(multiline, ?r) :- go(1), ?r = REGEX("a\nb", "^b$", "m") .
+result(dot_all, ?r) :- go(1), ?r = REGEX("a\nb", "a.b", "s") .
+result(literal, ?r) :- go(1), ?r = REGEX("a.c", "a.c", "q") .
+result(literal_no_match, ?r) :- go(1), ?r = REGEX("abc", "a.c", "q") .
+result(invalid_flag, ?r) :- go(1), ?r = REGEX("abc", "a", "g") .
+result(invalid_pattern, ?r) :- go(1), ?r = REGEX("abc", "(") .
+
+strings("Hello", "World") .
+
+result(regex_flags, ?R) :- strings(?A, _), ?R = REGEX(?A, "HELLO", "i") .
+result(regex_invalid_flags, ?R) :- strings(?A, _), ?R = REGEX(?A, "l+", "g") .
+result(regex_q_true, ?R) :- strings(?A, _), ?R = REGEX("a.c", "a.c", "q") .
+result(regex_q_false, ?R) :- strings(?A, _), ?R = REGEX("abc", "a.c", "q") .
+result(regex_qi, ?R) :- strings(?A, _), ?R = REGEX("A.C", "a.c", "qi") .

@@ -1,0 +1,12 @@
+% Maps. A pattern names every key of the maps it matches. KEYS, HASKEY
+% and GET read a map directly.
+
+config({host = "localhost", port = 8080}) .
+config({host = "example.org", port = 443, secure = true}) .
+config({}) .
+
+endpoint(?h, ?p) :- config({host = ?h, port = ?p}) .
+keyList(?c, KEYS(?c)) :- config(?c) .
+secure(?c) :- config(?c), HASKEY(?c, secure) .
+port(?c, ?p) :- config(?c), ?p = GET(?c, port) .
+size(?c, LENGTH(?c)) :- config(?c) .

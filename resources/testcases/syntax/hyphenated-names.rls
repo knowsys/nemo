@@ -1,0 +1,16 @@
+% A `-` between two parts of a name without a marker belongs to the name, as
+% in SPARQL's prefixed names: `stock-item`, `item-1` and `ex:spare-part` are
+% names. Behind a marker it stays a minus, so `?count-1` subtracts, and with
+% space around it a `-` always subtracts.
+
+@prefix ex: <https://example.org/> .
+
+stock-item(item-1, 5) .
+stock-item(ex:spare-part, 3) .
+
+reduced(?item, ?count-1) :- stock-item(?item, ?count) .
+spaced(?item, ?count - 1) :- stock-item(?item, ?count) .
+
+@output stock-item .
+@output reduced .
+@output spaced .

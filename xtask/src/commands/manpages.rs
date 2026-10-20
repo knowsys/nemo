@@ -5,7 +5,7 @@ use clap::{CommandFactory, Subcommand};
 
 use crate::bin_name::nemo_cli_bin_name;
 use clap_mangen::generate_to;
-use nemo_cli::cli::CliApp;
+use nemo_cli::arguments::Arguments;
 
 use super::Task;
 
@@ -19,7 +19,7 @@ impl Task for Manpages {
     fn handle(self) -> Result<()> {
         match self {
             Self::GenerateManpages { out_dir } => {
-                let command = CliApp::command().name(nemo_cli_bin_name());
+                let command = Arguments::command().name(nemo_cli_bin_name());
                 generate_to(command, out_dir)
             }
         }

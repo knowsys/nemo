@@ -1,0 +1,6 @@
+marked(_:0) .
+
+n(a, _:0) .
+n(b, _:1) .
+
+unmarked(b) .

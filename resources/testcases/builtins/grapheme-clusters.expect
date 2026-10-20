@@ -1,0 +1,11 @@
+result(after, "́a") .
+result(before, "ae") .
+result(contains, true) .
+result(ends, true) .
+result(reverse, "éfac") .
+result(starts, true) .
+result(strlen_accent, 5) .
+result(strlen_family, 5) .
+result(strlen_flag, 2) .
+result(substr_accent, "e") .
+result(substr_after_accent, "́!") .

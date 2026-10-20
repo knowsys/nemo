@@ -1,0 +1,8 @@
+% Regression test for https://github.com/knowsys/nemo/issues/543: a
+% variable name may contain `_` but not `-`, so `?arithmetic-1` is a
+% subtraction.
+
+fact(1) .
+
+result(?variable_name) :- fact(?variable_name) .
+result(?arithmetic-1) :- fact(?arithmetic) .

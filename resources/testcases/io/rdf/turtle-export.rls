@@ -1,0 +1,9 @@
+% Turtle export abbreviates IRIs with the program's prefixes.
+
+@prefix ex: <http://example.org/> .
+
+triple(ex:alice, ex:knows, ex:bob) .
+triple(ex:alice, ex:age, 34) .
+triple(ex:bob, ex:name, "Bob") .
+
+@export triple to turtle { resource = "triples.ttl" } .

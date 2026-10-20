@@ -1,0 +1,9 @@
+prices(5) .
+
+pricesPerItem(7) .
+
+skills(it, 1) .
+skills(sales, 2) .
+
+skillsPerEmployee(it, 1) .
+skillsPerEmployee(sales, 3) .

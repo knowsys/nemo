@@ -1,0 +1,17 @@
+% Andersen's points-to analysis of a small program: allocations,
+% assignments, field stores and field loads.
+
+alloc(a, h1) .
+alloc(b, h2) .
+alloc(c, h3) .
+assign(d, a) .
+store(d, f, b) .
+load(e, a, f) .
+assign(x, e) .
+store(c, g, c) .
+load(y, c, g) .
+
+pointsTo(?v, ?h) :- alloc(?v, ?h) .
+pointsTo(?v, ?h) :- assign(?v, ?w), pointsTo(?w, ?h) .
+heapPointsTo(?h, ?f, ?g) :- store(?v, ?f, ?w), pointsTo(?v, ?h), pointsTo(?w, ?g) .
+pointsTo(?v, ?g) :- load(?v, ?w, ?f), pointsTo(?w, ?h), heapPointsTo(?h, ?f, ?g) .

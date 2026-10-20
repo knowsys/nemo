@@ -1,0 +1,12 @@
+% Dividing integers gives the exact quotient, also when it is no integer
+% and when the divisor is negative. A division by zero drops the row.
+
+pair(7, 2) .
+pair(8, 4) .
+pair(-7, 2) .
+pair(7, -2) .
+pair(1, 3) .
+pair(0, 5) .
+pair(5, 0) .
+
+quotient(?x, ?y, ?x / ?y) :- pair(?x, ?y) .

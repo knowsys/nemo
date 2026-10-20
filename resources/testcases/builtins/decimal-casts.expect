@@ -1,0 +1,10 @@
+result(datatype, <http://www.w3.org/2001/XMLSchema#decimal>) .
+result(datatype, <http://www.w3.org/2001/XMLSchema#integer>) .
+result(double, 3d) .
+result(double, 4.2d) .
+result(float, 3f) .
+result(float, 4.2f) .
+result(int, 3) .
+result(int, 4) .
+result(round, 3) .
+result(round, 4) .

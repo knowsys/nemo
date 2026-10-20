@@ -1,0 +1,15 @@
+% A pattern of the wrong shape is a non-match, never an error, and an
+% accessor out of range derives nothing.
+
+v((1, 2)) .
+v((1, 2, 3)) .
+v({a = 1}) .
+v(plain) .
+
+pair(?x, ?y) :- v((?x, ?y)) .
+withA(?x) :- v({a = ?x}) .
+withB(?x) :- v({b = ?x}) .
+third(?v, ?z) :- v(?v), ?z = ?v[2] .
+keyB(?v, ?z) :- v(?v), ?z = GET(?v, b) .
+tuples(?v) :- v(?v), isTuple(?v) .
+maps(?v) :- v(?v), isMap(?v) .

@@ -1,0 +1,15 @@
+% Turtle abbreviations: prefixes, `a`, predicate and object lists, blank
+% node property lists, and numbers and booleans written bare.
+
+@import triples from turtle { resource = "sources/syntax.ttl" } .
+
+@prefix ex: <http://example.org/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+
+typed(?s, ?t) :- triples(?s, rdf:type, ?t) .
+knows(?x, ?y) :- triples(?x, ex:knows, ?y) .
+age(?x, ?a) :- triples(?x, ex:age, ?a) .
+size(?x, ?v) :- triples(?x, ex:size, ?v) .
+member(?x, ?b) :- triples(?x, ex:member, ?b) .
+flag(?x, ?f) :- triples(?x, ex:active, ?f) .
+groupName(?n) :- triples(_, ex:member, ?b), triples(?b, ex:name, ?n) .

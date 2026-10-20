@@ -1,0 +1,9 @@
+kept(true) .
+
+result(Boolean, "true") .
+result(and, false) .
+result(and_true, true) .
+result(nested, false) .
+result(not, false) .
+result(or, true) .
+result(or_false, false) .

@@ -1,0 +1,9 @@
+% The pattern of REGEX must be a plain string and a valid regular
+% expression. A malformed pattern, or one with a language tag, derives
+% nothing.
+
+go(1) .
+
+result(malformed, ?r) :- go(1), ?r = REGEX("abc", "(") .
+result(tagged_pattern, ?r) :- go(1), ?r = REGEX("abc"@en, "b"@en) .
+result(plain_pattern, ?r) :- go(1), ?r = REGEX("abc"@en, "b") .

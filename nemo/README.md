@@ -1,17 +1,20 @@
 # nemo
 
-This library crate provides all required components for the nemo rule engine. Internally it is based on [nemo-physical](../nemo-physical/README.md), which implements the needed physical database operations.
+The logical layer of the Nemo rule engine, and the crate to depend on to use Nemo as a library.
+It implements the Nemo language (parser, rule model, program transformations), reasoning
+(normalization, planning, semi-naive execution), and tracing, on top of the database layer
+[nemo-physical](../nemo-physical/README.md) and the format adapters [nemo-io](../nemo-io/README.md).
 
-You can access the functionality of this crate via the `nmo` command line interface ([nemo-cli](../nemo-cli/README.md)) or through various language bindings ([nemo-python](../nemo-python/README.md), [nemo-wasm](../nemo-wasm/README.md)).
+The engine does no network IO itself: a method that needs remote data suspends and lists the
+requests it needs. With the `http` feature, the `driver` module performs them.
 
-## High level overview
+Two runnable examples show the API:
 
-Running a nemo `Program` can be roughly structured into three different phases:
+```
+cargo run -p nemo --example api     # build a program, run it, read the results
+cargo run -p nemo --example embed   # data in from the host, results out in bounded memory
+```
 
-- **Parsing and Analysis** - which forms the frontend of the reasoner. The relevant modules for this are `io::parser` (which contains the parsing logic) and `model` (which contains the definitions for the object model of a parsed program)
-
-- **Execution** - the main module for this is `execution`.
-
-- **Output** - this is implemented in the `io` module.
-
-If you just want an easy to use interface, have a look at the `api` module, which provides convenient access to some common operations.
+Nemo is also available as the `nmo` command line ([nemo-cli](../nemo-cli/README.md)) and through
+bindings for Python ([nemo-python](../nemo-python/README.md)) and WebAssembly
+([nemo-wasm](../nemo-wasm/README.md)).

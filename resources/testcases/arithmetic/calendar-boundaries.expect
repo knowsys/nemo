@@ -1,0 +1,23 @@
+backwards("2024-01-31T10:00:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>) .
+
+fields("0000-12-31T23:59:59.5", 0, 12, 31, 23) .
+
+halfSecondBefore("-0044-03-14"^^<http://www.w3.org/2001/XMLSchema#date>) .
+
+monthBefore(dec25, "2023-11-25"^^<http://www.w3.org/2001/XMLSchema#date>) .
+monthBefore(jan31, "2023-12-31"^^<http://www.w3.org/2001/XMLSchema#date>) .
+monthBefore(mar15, "2024-02-15T10:00:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>) .
+
+shorter("-P2M"^^<http://www.w3.org/2001/XMLSchema#yearMonthDuration>, "-P1M"^^<http://www.w3.org/2001/XMLSchema#yearMonthDuration>) .
+shorter("-P2M"^^<http://www.w3.org/2001/XMLSchema#yearMonthDuration>, "P6000000000000Y"^^<http://www.w3.org/2001/XMLSchema#yearMonthDuration>) .
+shorter("-P1M"^^<http://www.w3.org/2001/XMLSchema#yearMonthDuration>, "P6000000000000Y"^^<http://www.w3.org/2001/XMLSchema#yearMonthDuration>) .
+
+subtracted("2024-01-30T23:00:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>) .
+
+threeBack(dec25, "2023-09-25"^^<http://www.w3.org/2001/XMLSchema#date>) .
+threeBack(jan31, "2023-10-31"^^<http://www.w3.org/2001/XMLSchema#date>) .
+threeBack(mar15, "2023-12-15T10:00:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>) .
+
+yearBefore(dec25, "2022-12-25"^^<http://www.w3.org/2001/XMLSchema#date>) .
+yearBefore(jan31, "2023-01-31"^^<http://www.w3.org/2001/XMLSchema#date>) .
+yearBefore(mar15, "2023-03-15T10:00:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>) .

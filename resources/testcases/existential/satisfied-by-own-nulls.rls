@@ -1,0 +1,16 @@
+% Regression test for https://github.com/knowsys/nemo/issues/756: firing
+% an existential rule for one match may satisfy another match of the
+% same rule.
+%
+% Here, firing for x = n, v = 1 also satisfies x = m, v = 1. An earlier
+% optimization of the restricted chase took only the matches a rule
+% fired for as satisfied, and missed this.
+
+H(1) .
+
+% Derives P(n).
+P(!z) :- H(?p) .
+
+% Derives P(m), E(n, 1, m) and E(m, 1, m) for the match x = n, v = 1,
+% which satisfies the match x = m, v = 1 as well.
+P(!z), E(?x, ?v, !z), E(!z, ?v, !z) :- P(?x), H(?v) .

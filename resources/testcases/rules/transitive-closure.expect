@@ -1,0 +1,27 @@
+doubling(a, b) .
+doubling(a, c) .
+doubling(a, d) .
+doubling(b, b) .
+doubling(b, c) .
+doubling(b, d) .
+doubling(c, b) .
+doubling(c, c) .
+doubling(c, d) .
+doubling(d, b) .
+doubling(d, c) .
+doubling(d, d) .
+doubling(x, y) .
+
+linear(a, b) .
+linear(a, c) .
+linear(a, d) .
+linear(b, b) .
+linear(b, c) .
+linear(b, d) .
+linear(c, b) .
+linear(c, c) .
+linear(c, d) .
+linear(d, b) .
+linear(d, c) .
+linear(d, d) .
+linear(x, y) .

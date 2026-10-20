@@ -1,0 +1,17 @@
+% Connected components of an undirected graph, each named by its
+% smallest node, with their sizes.
+
+edge(1, 2) .
+edge(2, 3) .
+edge(4, 5) .
+edge(6, 6) .
+edge(7, 3) .
+
+node(?x) :- edge(?x, _) .
+node(?y) :- edge(_, ?y) .
+connected(?x, ?x) :- node(?x) .
+connected(?x, ?y) :- edge(?x, ?y) .
+connected(?y, ?x) :- edge(?x, ?y) .
+connected(?x, ?z) :- connected(?x, ?y), connected(?y, ?z) .
+component(?x, #min(?y)) :- connected(?x, ?y) .
+componentSize(?c, #count(?x)) :- component(?x, ?c) .

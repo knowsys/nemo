@@ -1,0 +1,8 @@
+% The closure of its input, by the module `util::closure` one directory
+% up.
+
+@input edge .
+@output reach .
+@use super::util::closure { edge = edge } as c .
+
+reach(?x, ?y) :- c::reach(?x, ?y) .

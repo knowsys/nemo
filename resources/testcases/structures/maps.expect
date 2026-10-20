@@ -1,0 +1,14 @@
+endpoint("localhost", 8080) .
+
+keyList({}, ()) .
+keyList({host = "example.org", port = 443, secure = true}, (host, port, secure)) .
+keyList({host = "localhost", port = 8080}, (host, port)) .
+
+port({host = "example.org", port = 443, secure = true}, 443) .
+port({host = "localhost", port = 8080}, 8080) .
+
+secure({host = "example.org", port = 443, secure = true}) .
+
+size({}, 0) .
+size({host = "example.org", port = 443, secure = true}, 3) .
+size({host = "localhost", port = 8080}, 2) .

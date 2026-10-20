@@ -1,0 +1,16 @@
+% AND, OR and NOT accept any value and convert it to a boolean, as
+% SPARQL's effective boolean value does:
+%   - Zero and the empty string are false.
+%   - Other numbers and strings are true.
+%   - An IRI has no boolean value, so NOT of an IRI derives nothing.
+
+go(1) .
+
+result(not_zero, ?r) :- go(1), ?r = NOT(0) .
+result(not_one, ?r) :- go(1), ?r = NOT(1) .
+result(not_double_zero, ?r) :- go(1), ?r = NOT(0.0E0) .
+result(not_empty, ?r) :- go(1), ?r = NOT("") .
+result(not_text, ?r) :- go(1), ?r = NOT("x") .
+result(not_iri, ?r) :- go(1), ?r = NOT(a) .
+result(and_number, ?r) :- go(1), ?r = AND(true, 1) .
+result(or_number, ?r) :- go(1), ?r = OR(false, 0) .

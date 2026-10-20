@@ -1,0 +1,7 @@
+% Decimals and integers beyond 64 bits read from RDF are numbers:
+% isNumeric holds for them, and arithmetic on them is exact.
+
+@import triples from ntriples { resource = "sources/numbers.nt" } .
+
+numeric(?p) :- triples(_, ?p, ?o), isNumeric(?o) .
+next(?p, ?o + 1) :- triples(_, ?p, ?o) .

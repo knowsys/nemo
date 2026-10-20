@@ -1,0 +1,9 @@
+% String literals: escapes, the empty string, and text beyond ASCII.
+
+s(empty, "") .
+s(backslash, "back\\slash") .
+s(tab, "a\tb") .
+s(newline, "a\nb") .
+s(unicode, "é 日本 😀") .
+
+size(?k, ?n) :- s(?k, ?v), ?n = STRLEN(?v) .

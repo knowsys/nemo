@@ -1,0 +1,5 @@
+balance(a, -3) .
+balance(b, 100) .
+balance(c, -3) .
+
+grand(94) .

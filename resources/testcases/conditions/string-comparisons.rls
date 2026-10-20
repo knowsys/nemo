@@ -1,0 +1,14 @@
+% Strings are ordered by code point:
+%   - upper case before lower case,
+%   - a prefix before its extensions,
+%   - the empty string first.
+
+s("") .
+s("a") .
+s("ab") .
+s("b") .
+s("B") .
+s("é") .
+
+before(?x, ?y) :- s(?x), s(?y), ?x < ?y .
+notAfter(?x) :- s(?x), ?x <= "a" .

@@ -4,17 +4,20 @@ build-backend = "maturin"
 
 [project]
 name = "nmo-python"
+description = "Python bindings for the Nemo rule engine"
+readme = "README.md"
+requires-python = ">=3.9"
+license = "MIT OR Apache-2.0"
 dynamic = ["version"]
-requires-python = ">=3.7"
 classifiers = [
     "Programming Language :: Rust",
     "Programming Language :: Python :: Implementation :: CPython",
-    "Programming Language :: Python :: Implementation :: PyPy",
+    "Topic :: Scientific/Engineering",
 ]
 
+[project.optional-dependencies]
+arrow = ["pyarrow>=14"]
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
-
-[tool.black]
-line-length = 90
+module-name = "nmo"

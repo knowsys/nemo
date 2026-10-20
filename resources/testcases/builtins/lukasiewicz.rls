@@ -1,0 +1,15 @@
+% LUKA is the Łukasiewicz t-norm of all its arguments at once,
+% max(0, a₁ + … + aₙ - (n - 1)):
+%   - It takes integers as well as doubles.
+%   - The order of the arguments does not matter, also for numbers
+%     outside [0, 1].
+%   - A single negative argument gives 0.
+
+go(1) .
+
+result(integer_ones, ?r) :- go(1), ?r = LUKA(1, 1, 1) .
+result(integer_zero, ?r) :- go(1), ?r = LUKA(1, 0) .
+result(ordered, ?r) :- go(1), ?r = LUKA(0.25E0, 0.5E0, 2.0E0) .
+result(reordered, ?r) :- go(1), ?r = LUKA(2.0E0, 0.25E0, 0.5E0) .
+result(single, ?r) :- go(1), ?r = LUKA(0.75E0) .
+result(single_negative, ?r) :- go(1), ?r = LUKA(-0.5E0) .

@@ -1,0 +1,11 @@
+% Several rules deriving into one predicate.
+
+@import sourceA from csv { resource = "sources/dataA.csv" }.
+@import sourceB from csv { resource = "sources/dataB.csv" }.
+@import sourceC from csv { resource = "sources/dataC.csv" }.
+
+ABC(?X, ?Y, ?Z) :- sourceA(?X, ?Y, ?Z) .
+ABC(?X, ?Y, ?Z) :- sourceB(?X, ?Y, ?Z) .
+ABC(?X, ?Y, ?Z) :- sourceC(?X, ?Y, ?Z) .
+AB(?X, ?Y, ?Z) :- sourceA(?X, ?Y, ?Z) .
+AB(?X, ?Y, ?Z) :- sourceB(?X, ?Y, ?Z) .

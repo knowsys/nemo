@@ -1,0 +1,12 @@
+% A parameter stands for its value wherever a constant can: in a negated
+% atom, an existential head and an aggregate head.
+
+@parameter $c = 1 .
+
+p(1) .
+p(2) .
+r(1, 1) .
+
+q(?x) :- p(?x), ~r(?x, $c) .
+e(?x, !v, $c) :- p(?x) .
+a($c, #count()) :- p(?x) .

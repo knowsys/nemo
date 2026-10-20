@@ -1,0 +1,15 @@
+% A map's label is part of the value: a labeled map is built in a head,
+% matches labeled patterns and reads back through LABEL, and the
+% unlabeled map with the same pairs is a different value.
+
+n(8080) .
+
+p(config{port = 80}) .
+p({port = 80}) .
+
+labeled(?m) :- p(?m), LABEL(?m) = config .
+viaLabel(?v) :- p(config{port = ?v}) .
+plain(?v) :- p({port = ?v}) .
+built(config{port = ?x}) :- n(?x) .
+
+@output p, labeled, viaLabel, plain, built .

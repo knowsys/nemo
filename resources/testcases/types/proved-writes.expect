@@ -1,0 +1,5 @@
+counts(alice, 7) .
+
+located(alice, point(1, 2)) .
+
+years(alice, 31) .

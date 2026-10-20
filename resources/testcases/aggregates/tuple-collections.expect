@@ -1,0 +1,9 @@
+diary((alice, alice, bob)) .
+
+guests((alice, bob)) .
+
+roster(team_a, (alice, bob, carol)) .
+roster(team_b, (dana,)) .
+
+teamSize(team_a, 3) .
+teamSize(team_b, 1) .

@@ -1,0 +1,14 @@
+% Casts and rounding of 3.0 and 4.2, which are exact decimals (3.0 is
+% the integer 3):
+%   - INT truncates 4.2 to 4.
+%   - ROUND gives integers.
+%   - DATATYPE names xsd:integer and xsd:decimal.
+
+cast(3.0) .
+cast(4.2) .
+
+result(int, ?R) :- cast(?A), ?R = INT(?A) .
+result(float, ?R) :- cast(?A), ?R = FLOAT(?A) .
+result(double, ?R) :- cast(?A), ?R = DOUBLE(?A) .
+result(round, ?R) :- cast(?A), ?R = ROUND(?A) .
+result(datatype, ?R) :- cast(?A), ?R = DATATYPE(?A) .

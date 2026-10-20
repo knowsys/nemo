@@ -1,0 +1,11 @@
+% Named arguments resolve against a declaration in any order; a body
+% atom may leave named columns out.
+
+@declare person(name: string, age: int, city: string) .
+
+person(name: "Alice", age: 30, city: "Dresden") .
+person(city: "Berlin", name: "Bob", age: 25) .
+person("Carol", 41, "Prague") .
+
+senior(?n) :- person(name: ?n, age: ?a), ?a > 28 .
+lives(?n, ?c) :- person(city: ?c, name: ?n) .

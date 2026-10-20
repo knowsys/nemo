@@ -1,0 +1,7 @@
+cell(integer, 42) .
+cell(iri, <http://example.org/a>) .
+cell(name, alice) .
+cell(negative, -7) .
+cell(string, "quoted") .
+cell(tagged, "hallo"@de) .
+cell(typed, "5cm"^^<http://example.org/length>) .

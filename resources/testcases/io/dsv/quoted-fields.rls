@@ -1,0 +1,6 @@
+% CSV quoting: a quoted field may hold the delimiter, doubled quotes and
+% a line break.
+
+@import quoted from csv { resource = "sources/quoted.csv", format = (string, string) } .
+
+field(?k, ?v) :- quoted(?k, ?v) .

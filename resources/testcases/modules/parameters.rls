@@ -1,0 +1,22 @@
+% A use binds a module's parameters:
+%   - a parameter without a default takes the value the use gives it,
+%   - a module passes its own parameter on to a module it uses,
+%   - a module's parameters are its own, whatever the using program
+%     declares under the same name.
+
+@parameter $limit = 100 .
+
+n(1) .
+n(2) .
+n(5) .
+n(50) .
+
+@use sources::below { number = n, $limit = 3 } as given .
+@use sources::below-chain { number = n, $limit = 3 } as chained .
+@use sources::below-ten { number = n } as own .
+
+givenSmall(?x) :- given::small(?x) .
+chainedSmall(?x) :- chained::result(?x) .
+ownSmall(?x) :- own::small(?x) .
+
+@output givenSmall, chainedSmall, ownSmall .

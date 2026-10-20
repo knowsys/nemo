@@ -1,0 +1,11 @@
+% A variable repeated in a negated atom: only rows matching on both
+% positions are excluded.
+
+e(1, 1) .
+e(1, 2) .
+e(2, 3) .
+n(1) .
+n(2) .
+n(3) .
+
+noLoop(?x) :- n(?x), ~e(?x, ?x) .

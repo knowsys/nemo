@@ -1,0 +1,8 @@
+% URIDECODE fails on a malformed percent escape, a `%` that is not
+% followed by two hex digits, and derives nothing.
+
+go(1) .
+
+result(bare_percent, ?r) :- go(1), ?r = URIDECODE("100%") .
+result(bad_digits, ?r) :- go(1), ?r = URIDECODE("a%zzb") .
+result(well_formed, ?r) :- go(1), ?r = URIDECODE("100%25") .

@@ -1,6 +1,6 @@
 [package]
 name = "nemo-cli"
-description.workspace = true
+description = "The command line interface of the Nemo rule engine"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -8,32 +8,33 @@ homepage.workspace = true
 license.workspace = true
 readme = "README.md"
 repository.workspace = true
-default-run = "nmo"
 
 [[bin]]
 name = "nmo"
 path = "src/main.rs"
 
-[lib]
-path = "src/lib.rs"
-
 [dependencies]
-log = { workspace = true, features = [ "max_level_trace", "release_max_level_info" ] }
-clap = { workspace = true, features = [ "derive", "cargo", "env" ] }
-colored = { workspace = true }
-env_logger = { workspace = true }
-serde_json = { workspace = true }
-thiserror = { workspace = true }
-tokio = { workspace = true, features = [ "rt", "macros" ] }
+# The command line ships the full IO surface: remote resources, SPARQL
+# endpoints, and Parquet.
+nemo = { path = "../nemo", features = ["http", "sparql", "parquet", "subscriber"] }
+nemo-io = { path = "../nemo-io" }
+nemo-physical = { path = "../nemo-physical" }
 
-nemo = { path = "../nemo" }
-ariadne = { workspace = true }
-serde = { workspace = true }
+clap = { version = "4.5", features = ["derive"] }
+# `--trace-tree` and `--trace-node` read the protocol's serde types, and
+# `--trace-output` writes the inference list as JSON.
+serde = "1"
+serde_json = "1"
+# The global subscriber: `-v`/`--log`/`NMO_LOG` to stderr, the telemetry
+# stream into the recorder, and `--events` as JSON lines.
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", default-features = false, features = [
+    "env-filter",
+    "fmt",
+    "json",
+    "registry",
+    "std",
+] }
 
-[dev-dependencies]
-assert_cmd = "2.0"
-assert_fs = { workspace = true }
-dir-test = "0.4.1"
-predicates = "3.0"
-test-log = { workspace = true }
-
+[lints]
+workspace = true

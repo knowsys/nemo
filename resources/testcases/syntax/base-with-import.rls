@@ -1,0 +1,9 @@
+% Regression test for https://github.com/knowsys/nemo/issues/662: a base
+% IRI next to an import. The base used to be applied to the `csv` before
+% the import's options, which failed to parse.
+
+@base <https://example.org/> .
+
+@import input from csv { resource = "sources/input.csv" }.
+
+result(?x, ?y) :- input(?x, ?y).

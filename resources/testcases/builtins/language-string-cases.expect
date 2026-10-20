@@ -1,0 +1,5 @@
+result(before, "he"@en) .
+result(concat_mixed, "ab") .
+result(concat_same_tags, "ab"@en) .
+result(substr, "ell"@en) .
+result(ucase, "HELLO"@en) .

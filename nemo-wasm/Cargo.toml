@@ -1,6 +1,6 @@
 [package]
 name = "nemo-wasm"
-description = "WebAssembly bindings for nemo, a fast in-memory rule engine"
+description = "WebAssembly bindings for the Nemo rule engine"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -12,34 +12,33 @@ repository.workspace = true
 [lib]
 crate-type = ["cdylib", "rlib"]
 
-[features]
-default = ["web_sys_unstable_apis"]
-web_sys_unstable_apis = []
-
-[lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(wasm_bindgen_unstable_test_coverage)'] }
-
 [dependencies]
-async-trait = { workspace = true }
-console_error_panic_hook = "0.1.7"
-indexmap = { workspace = true }
-js-sys = "0.3.63"
-nemo = { path = "../nemo", features = [ "js" ], default-features = false }
-nemo-physical = { path = "../nemo-physical", default-features = false }
-nemo-language-server = { path = "../nemo-language-server", features = [ "js" ], default-features = false}
-futures = { workspace = true }
-gloo-utils = { version = "0.3.0", features = ["serde"] }
-thiserror = { workspace = true }
-# NOTE: the version of wasm-bindgen must be available in nixpkgs-26.05, cf.  https://search.nixos.org/packages?query=wasm-bindgen-cli
-wasm-bindgen = "=0.2.126"
-wasm-bindgen-futures = "0.4.37"
-web-sys = { version = "0.3.64", features = [ "Blob", "FileReaderSync", "FileSystemSyncAccessHandle" ]}
-serde = { workspace = true }
-serde_json = { workspace = true }
+# SPARQL imports load and reason in the browser too, fetched through the
+# global `fetch`.
+nemo = { path = "../nemo", features = ["sparql"] }
+wasm-bindgen = "0.2"
+serde = { version = "1", features = ["derive"] }
+serde-wasm-bindgen = "0.6"
+# Protocol queries cross through their JSON form.
+serde_json = "1"
+js-sys = "0.3"
+console_error_panic_hook = "0.1"
+# The async methods and the language server await JavaScript promises.
+futures = { version = "0.3", default-features = false, features = ["std"] }
+wasm-bindgen-futures = "0.4"
+# oxrdf (via nemo-io) uses randomness, which on wasm needs the JS
+# entropy source.
+getrandom = { version = "0.2", features = ["js"] }
+
+# The language server runs inside the browser too; it is a wasm-only
+# dependency because the protocol crate's browser runtime and the native
+# server's tokio runtime cannot share one build.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+nemo-language-server = { path = "../nemo-language-server", default-features = false, features = ["wasm"] }
+tower-service = "0.3"
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3"
 
-[package.metadata.cargo-udeps.ignore]
-development = ["wasm-bindgen-test"] # not actually used, since we don't have wasm tests
-
+[lints]
+workspace = true

@@ -1,0 +1,12 @@
+% Aggregates over floats mixed with integers and doubles:
+%   - #min and #max compare numbers by value, whatever their type.
+%   - The sum of an integer and a float is a float.
+
+v(a, 1) .
+v(a, 0.5f) .
+v(b, 0.5f) .
+v(b, 0.25E0) .
+
+total(?k, #sum(?x)) :- v(?k, ?x) .
+smallest(?k, #min(?x)) :- v(?k, ?x) .
+largest(?k, #max(?x)) :- v(?k, ?x) .

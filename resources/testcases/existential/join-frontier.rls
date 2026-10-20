@@ -1,0 +1,8 @@
+% An existential rule whose frontier spans two atoms of a join.
+
+works(alice, acme) .
+works(bob, acme) .
+works(carol, initech) .
+
+colleagues(?x, ?y) :- works(?x, ?c), works(?y, ?c), ?x != ?y .
+team(?x, ?y, !t) :- colleagues(?x, ?y) .

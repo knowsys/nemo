@@ -1,0 +1,19 @@
+% The aggregate scopes:
+%   - bare ranges over distinct values,
+%   - `?v per ?w` over distinct pairs of value and witness,
+%   - `#count()` counts every body match.
+
+price(apple, fruit, 2) .
+price(date, fruit, 2) .
+price(cherry, fruit, 5) .
+price(carrot, vegetable, 2) .
+stocked(apple, monday, alice) .
+stocked(apple, monday, bob) .
+stocked(apple, tuesday, alice) .
+stocked(date, monday, alice) .
+
+bare(?kind, #sum(?p)) :- price(?item, ?kind, ?p) .
+perItem(?kind, #sum(?p per ?item)) :- price(?item, ?kind, ?p), stocked(?item, ?day, ?by) .
+perItemDay(?kind, #sum(?p per ?item, ?day)) :- price(?item, ?kind, ?p), stocked(?item, ?day, ?by) .
+matches(?kind, #count()) :- price(?item, ?kind, ?p) .
+combinations(?kind, #count(per ?item, ?day)) :- price(?item, ?kind, ?p), stocked(?item, ?day, ?by) .

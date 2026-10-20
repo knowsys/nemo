@@ -1,0 +1,7 @@
+% A row with too few columns is skipped, with or without a header.
+
+@import noHeader from csv{ resource="sources/missing-columns.csv", ignore_headers=true } .
+@import header from csv{ resource="sources/missing-columns.csv", ignore_headers=false } .
+
+withHeader(?x, ?y) :- header(?x, ?y) .
+withoutHeader(?x, ?y) :- noHeader(?x, ?y) .

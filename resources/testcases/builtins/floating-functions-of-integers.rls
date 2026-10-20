@@ -1,0 +1,15 @@
+% SQRT, LOG, SIN, COS and TAN return doubles, also for integer
+% arguments. POW returns an exact integer for a non-negative integer
+% exponent and a double for a negative one.
+
+go(1) .
+
+result(sqrt, ?r) :- go(1), ?r = SQRT(16) .
+result(sqrt_irrational, ?r) :- go(1), ?r = SQRT(2) .
+result(log, ?r) :- go(1), ?r = LOG(8, 2) .
+result(log_inexact, ?r) :- go(1), ?r = LOG(10, 3) .
+result(sin, ?r) :- go(1), ?r = SIN(0) .
+result(cos, ?r) :- go(1), ?r = COS(0) .
+result(tan, ?r) :- go(1), ?r = TAN(0) .
+result(pow, ?r) :- go(1), ?r = POW(2, 3) .
+result(pow_negative, ?r) :- go(1), ?r = POW(2, -1) .

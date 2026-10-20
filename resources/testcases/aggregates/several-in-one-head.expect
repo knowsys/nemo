@@ -1,0 +1,2 @@
+stats(north, 2, 40, 10, 30) .
+stats(south, 1, 5, 5, 5) .

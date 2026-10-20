@@ -1,0 +1,16 @@
+% REGEX: anchors, character classes, alternatives, no match, text beyond
+% ASCII.
+
+go(1) .
+
+result(anchored, ?r) :- go(1), ?r = REGEX("Hello", "^H") .
+result(anchored_case, ?r) :- go(1), ?r = REGEX("Hello", "^h") .
+result(class, ?r) :- go(1), ?r = REGEX("abc123", "[0-9]+$") .
+result(alternative, ?r) :- go(1), ?r = REGEX("cat", "dog|cat") .
+result(no_match, ?r) :- go(1), ?r = REGEX("cat", "^at") .
+result(empty_pattern, ?r) :- go(1), ?r = REGEX("cat", "") .
+
+strings("Hello", "World") .
+
+result(regex, ?R) :- strings(?A, _), ?R = REGEX(?A, "l+") .
+result(regex_unicode, ?R) :- strings(?A, _), ?R = REGEX("loẅks", "ẅ") .

@@ -1,0 +1,7 @@
+% A declaration also gives an import its formats: an `int` column parses
+% its fields as integers, and a field that does not parse is malformed.
+
+@declare person(name: string, age: int) .
+@import person from csv { resource = "sources/people.csv" } .
+
+adult(?n) :- person(?n, ?a), ?a >= 18 .

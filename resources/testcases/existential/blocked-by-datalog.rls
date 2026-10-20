@@ -1,0 +1,7 @@
+% The restricted chase: a datalog rule's facts satisfy an existential
+% rule's head for some of its matches.
+
+@import data from csv { resource = "sources/data.csv" }.
+
+result(?X, ?X) :- data(?X, ?X) .
+result(?X, !V) :- data(?X, ?Y) .

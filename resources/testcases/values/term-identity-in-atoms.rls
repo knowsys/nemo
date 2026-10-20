@@ -1,0 +1,12 @@
+% A constant in an atom, a repeated variable, `=` and `!=` all mean term
+% identity: the integer 1 and the double 1d are different terms, equal in
+% value only, which `==` compares.
+
+p(1, 1d) .
+p(2, 2) .
+
+constant(?x) :- p(?x, 1) .
+repeated(?x) :- p(?x, ?x) .
+sameTerm(?x) :- p(?x, ?y), ?x = ?y .
+differentTerm(?x) :- p(?x, ?y), ?x != ?y .
+sameValue(?x) :- p(?x, ?y), ?x == ?y .

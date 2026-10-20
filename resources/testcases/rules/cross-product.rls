@@ -1,0 +1,13 @@
+% Atoms without a shared variable join as a cross product; one empty
+% atom empties the whole product.
+
+a(1) .
+a(2) .
+b(x) .
+b(y) .
+b(z) .
+
+pair(?a, ?b) :- a(?a), b(?b) .
+triple(?a, ?b, ?c) :- a(?a), b(?b), a(?c) .
+none(?a, ?c) :- a(?a), c(?c) .
+c(?x) :- b(?x), a(3) .

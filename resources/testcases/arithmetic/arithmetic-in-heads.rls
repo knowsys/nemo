@@ -1,0 +1,11 @@
+% Arithmetic written directly in head terms, over variables and
+% constants.
+
+n(1) .
+n(2) .
+n(-3) .
+
+shifted(?x, ?x + 1, ?x - 1) :- n(?x) .
+squared(?x, ?x * ?x) :- n(?x) .
+constant(?x, 6 * 7) :- n(?x) .
+combined(?x + ?y) :- n(?x), n(?y) .

@@ -1,6 +1,6 @@
 [package]
 name = "nemo-python"
-description = "Python bindings for nemo, a fast in-memory rule engine"
+description = "Python bindings for the Nemo rule engine"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -9,11 +9,32 @@ license.workspace = true
 readme = "README.md"
 repository.workspace = true
 
+# The importable module is `nmo` (maturin's `module-name`) — matching
+# the `nmo` command line, and steering clear of the `nemo` package name
+# NVIDIA NeMo occupies on PyPI. The library target itself is named apart
+# from the command line's binary, which shares the build directory.
 [lib]
-name = "nmo_python"
+name = "nemo_python"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = { version = "0.29", features = ["extension-module"] }
-tokio = { workspace = true, features = ["rt"] }
-nemo = { path = "../nemo" }
+# The bindings ship every IO feature: remote resources, SPARQL
+# endpoints, and Parquet.
+nemo = { path = "../nemo", features = ["http", "sparql", "parquet"] }
+nemo-io = { path = "../nemo-io", optional = true }
+pyo3 = { version = "0.29", features = ["extension-module", "abi3-py39"] }
+# The tracing protocol crosses as its JSON form, keys unchanged, and
+# arrives as plain dicts.
+serde = "1"
+serde_json = "1"
+# `to_arrow` hands record batches — built by nemo-io's shared Arrow
+# mapping — to pandas/polars through the capsule interface
+# (`__arrow_c_stream__`), without a pyarrow dependency on this side.
+arrow = { version = "56", optional = true, default-features = false, features = ["ffi"] }
+
+[features]
+default = ["arrow"]
+arrow = ["dep:arrow", "dep:nemo-io", "nemo-io/arrow"]
+
+[lints]
+workspace = true

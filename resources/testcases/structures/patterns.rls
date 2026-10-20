@@ -1,0 +1,32 @@
+% Body patterns match structured values by shape:
+%   - a constant in a pattern matches only that element,
+%   - a variable bound elsewhere in the body filters, while the pattern
+%     still binds the others,
+%   - a repeated variable matches equal elements, `_` any element,
+%   - an unlabeled pattern matches only unlabeled tuples,
+%   - a nested pattern must match all the way down: a row that fits the
+%     outer tuple but not the inner one is a non-match.
+
+p((1, 2)) .
+p((1, 3)) .
+p((2, 9)) .
+p((3, 3)) .
+p(point(1, 2)) .
+
+withOne(?x) :- p((1, ?x)) .
+first(?x) :- p((?x, _)) .
+same(?x) :- p((?x, ?x)) .
+labeled(?x, ?y) :- p(point(?x, ?y)) .
+
+n(2) .
+n(3) .
+
+boundFirst(?x, ?y) :- n(?x), p((?x, ?y)) .
+
+q((1, (2, 3))) .
+q((1, (9, 9))) .
+q((1, 5)) .
+q((2, (2, 8))) .
+
+inner(?y) :- q((1, (2, ?y))) .
+innerMap(?h) :- q((1, {host = ?h})) .

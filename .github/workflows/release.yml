@@ -42,7 +42,7 @@ jobs:
         uses: houseabsolute/actions-rust-cross@v1
         with:
           command: "build"
-          toolchain: "nightly"
+          toolchain: "stable"
           target: ${{ matrix.platform.target }}
           args: "--locked --release --bin=nmo --bin=nemo-language-server"
           strip: true

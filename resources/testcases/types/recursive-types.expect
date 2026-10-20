@@ -1,0 +1,10 @@
+countdown(0, nil()) .
+countdown(1, list(1, nil())) .
+countdown(2, list(2, list(1, nil()))) .
+countdown(3, list(3, list(2, list(1, nil())))) .
+countdown(4, list(4, list(3, list(2, list(1, nil()))))) .
+
+heads(1, 1) .
+heads(2, 2) .
+heads(3, 3) .
+heads(4, 4) .

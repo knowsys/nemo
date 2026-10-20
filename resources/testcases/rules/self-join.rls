@@ -1,0 +1,13 @@
+% A predicate joined with itself, along and against its direction.
+
+edge(1, 2) .
+edge(2, 3) .
+edge(3, 1) .
+edge(3, 4) .
+edge(4, 3) .
+edge(5, 5) .
+
+twoSteps(?x, ?z) :- edge(?x, ?y), edge(?y, ?z) .
+mutual(?x, ?y) :- edge(?x, ?y), edge(?y, ?x) .
+selfLoop(?x) :- edge(?x, ?x) .
+sharedTarget(?x, ?y) :- edge(?x, ?z), edge(?y, ?z), ?x != ?y .

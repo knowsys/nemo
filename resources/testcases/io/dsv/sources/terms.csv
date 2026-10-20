@@ -1,0 +1,7 @@
+integer,42
+negative,-7
+name,alice
+iri,<http://example.org/a>
+string,"""quoted"""
+tagged,"""hallo""@de"
+typed,"""5cm""^^<http://example.org/length>"

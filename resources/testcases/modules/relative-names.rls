@@ -1,0 +1,16 @@
+% A module names other modules relative to its own directory: `closure`
+% in `lib/tc.rls` is `lib/closure.rls`, and `super` leads one directory
+% up. Module names and aliases may contain hyphens.
+
+link(1, 2) .
+link(2, 3) .
+
+@use sources::lib::tc { edge = link } as beside .
+@use sources::lib::tc-above { edge = link } as above .
+@use sources::graph-tools::closure { edge = link } as my-closure .
+
+besideReach(?x, ?y) :- beside::reach(?x, ?y) .
+aboveReach(?x, ?y) :- above::reach(?x, ?y) .
+hyphenated(?x, ?y) :- my-closure::reach(?x, ?y) .
+
+@output besideReach, aboveReach, hyphenated .

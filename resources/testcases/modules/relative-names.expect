@@ -1,0 +1,11 @@
+aboveReach(1, 2) .
+aboveReach(1, 3) .
+aboveReach(2, 3) .
+
+besideReach(1, 2) .
+besideReach(1, 3) .
+besideReach(2, 3) .
+
+hyphenated(1, 2) .
+hyphenated(1, 3) .
+hyphenated(2, 3) .

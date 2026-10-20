@@ -1,0 +1,875 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Nemo",
+  "scopeName": "source.nemo",
+  "patterns": [
+    {
+      "include": "#any"
+    }
+  ],
+  "repository": {
+    "any": {
+      "patterns": [
+        {
+          "include": "#comment"
+        },
+        {
+          "include": "#attribute"
+        },
+        {
+          "include": "#language-tag"
+        },
+        {
+          "include": "#prefix-declaration"
+        },
+        {
+          "include": "#import-statement"
+        },
+        {
+          "include": "#declare-statement"
+        },
+        {
+          "include": "#type-statement"
+        },
+        {
+          "include": "#parameter-statement"
+        },
+        {
+          "include": "#directive-statement"
+        },
+        {
+          "include": "#directive"
+        },
+        {
+          "include": "#aggregate"
+        },
+        {
+          "include": "#format-string-block"
+        },
+        {
+          "include": "#format-string"
+        },
+        {
+          "include": "#string-block"
+        },
+        {
+          "include": "#string"
+        },
+        {
+          "include": "#iri"
+        },
+        {
+          "include": "#number"
+        },
+        {
+          "include": "#variable"
+        },
+        {
+          "include": "#boolean"
+        },
+        {
+          "include": "#builtin"
+        },
+        {
+          "include": "#qualified-call"
+        },
+        {
+          "include": "#qualified"
+        },
+        {
+          "include": "#prefixed-call"
+        },
+        {
+          "include": "#prefixed"
+        },
+        {
+          "include": "#predicate"
+        },
+        {
+          "include": "#aggregate-scope"
+        },
+        {
+          "include": "#label"
+        },
+        {
+          "include": "#constant"
+        },
+        {
+          "include": "#operator"
+        },
+        {
+          "include": "#punctuation"
+        }
+      ]
+    },
+    "prefix-declaration": {
+      "match": "(@prefix)(?![A-Za-z0-9_%])\\s*([A-Za-z_][A-Za-z0-9_%]*(?:-[A-Za-z0-9_][A-Za-z0-9_%]*)*)?(:)",
+      "captures": {
+        "1": {
+          "name": "keyword.control.directive.nemo"
+        },
+        "2": {
+          "name": "entity.name.namespace.nemo"
+        },
+        "3": {
+          "name": "punctuation.separator.namespace.nemo"
+        }
+      }
+    },
+    "import-statement": {
+      "begin": "(@(?:import|export))(?![A-Za-z0-9_%])(?:\\s*(?:([A-Za-z_][A-Za-z0-9_%]*(?:-[A-Za-z0-9_][A-Za-z0-9_%]*)*)(::?))?([A-Za-z_][A-Za-z0-9_%]*(?:-[A-Za-z0-9_][A-Za-z0-9_%]*)*))?",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.control.directive.nemo"
+        },
+        "2": {
+          "name": "entity.name.namespace.nemo"
+        },
+        "3": {
+          "name": "punctuation.separator.namespace.nemo"
+        },
+        "4": {
+          "name": "entity.name.function.nemo"
+        }
+      },
+      "end": "\\.",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.terminator.statement.nemo"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#comment"
+        },
+        {
+          "include": "#import-format"
+        },
+        {
+          "include": "#import-where"
+        },
+        {
+          "include": "#import-options"
+        },
+        {
+          "include": "#parenthesized"
+        },
+        {
+          "include": "#any"
+        }
+      ]
+    },
+    "import-format": {
+      "begin": "(?<![A-Za-z0-9_%])(from|to)(?![A-Za-z0-9_%]|-[A-Za-z0-9_])(?!\\s*\\()",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.control.connective.nemo"
+        }
+      },
+      "end": "([A-Za-z_][A-Za-z0-9_%]*(?:-[A-Za-z0-9_][A-Za-z0-9_%]*)*)|(?=[^\\s%])",
+      "endCaptures": {
+        "1": {
+          "name": "support.type.nemo"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#comment"
+        }
+      ]
+    },
+    "import-where": {
+      "match": "(?<![A-Za-z0-9_%])where(?![A-Za-z0-9_%]|-[A-Za-z0-9_])(?!\\s*\\()",
+      "name": "keyword.control.connective.nemo"
+    },
+    "import-options": {
+      "begin": "\\{",
+      "end": "\\}",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.section.nemo"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.nemo"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#comment"
+        },
+        {
+          "include": "#column-formats"
+        },
+        {
+          "match": "(?<![A-Za-z0-9_%])[A-Za-z_][A-Za-z0-9_%]*(?:-[A-Za-z0-9_][A-Za-z0-9_%]*)*(?=\\s*=(?!=))",
+          "name": "support.type.property-name.nemo"
+        },
+        {
+          "include": "#braced"
+        },
+        {
+          "include": "#parenthesized"
+        },
+        {
+          "include": "#any"
+        }
+      ]
+    },
+    "column-formats": {
+      "begin": "(?<![A-Za-z0-9_%])(format)\\s*(=)(?!=)",
+      "beginCaptures": {
+        "1": {
+          "name": "support.type.property-name.nemo"
+        },
+        "2": {
+          "name": "keyword.operator.comparison.nemo"
+        }
+      },
+      "end": "(?=[,}])",
+      "patterns": [
+        {
+          "include": "#type-tuple"
+        },
+        {
+          "include": "#type-expression"
+        }
+      ]
+    },
+    "parenthesized": {
+      "begin": "\\(",
+      "end": "\\)",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.section.nemo"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.nemo"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#parenthesized"
+        },
+        {
+          "include": "#any"
+        }
+      ]
+    },
+    "braced": {
+      "begin": "\\{",
+      "end": "\\}",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.section.nemo"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.nemo"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#braced"
+        },
+        {
+          "include": "#any"
+        }
+      ]
+    },
+    "declare-statement": {
+      "begin": "(@(?:declare|extern|input))(?![A-Za-z0-9_%])(?:\\s*(?:([A-Za-z_][A-Za-z0-9_%]*(?:-[A-Za-z0-9_][A-Za-z0-9_%]*)*)(::?))?([A-Za-z_][A-Za-z0-9_%]*(?:-[A-Za-z0-9_][A-Za-z0-9_%]*)*))?",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.control.directive.nemo"
+        },
+        "2": {
+          "name": "entity.name.namespace.nemo"
+        },
+        "3": {
+          "name": "punctuation.separator.namespace.nemo"
+        },
+        "4": {
+          "name": "entity.name.function.nemo"
+        }
+      },
+      "end": "\\.",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.terminator.statement.nemo"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#type-expression"
+        },
+        {
+          "include": "#operator"
+        }
+      ]
+    },
+    "type-statement": {
+      "begin": "(@type)(?![A-Za-z0-9_%])(?:\\s*([A-Za-z_][A-Za-z0-9_%]*(?:-[A-Za-z0-9_][A-Za-z0-9_%]*)*))?",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.control.directive.nemo"
+        },
+        "2": {
+          "name": "entity.name.type.nemo"
+        }
+      },
+      "end": "\\.",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.terminator.statement.nemo"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#type-expression"
+        }
+      ]
+    },
+    "parameter-statement": {
+      "begin": "(@parameter)(?![A-Za-z0-9_%])\\s*(\\$[A-Za-z_][A-Za-z0-9_%]*)?",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.control.directive.nemo"
+        },
+        "2": {
+          "name": "variable.parameter.nemo"
+        }
+      },
+      "end": "\\.",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.terminator.statement.nemo"
+        }
+      },
+      "patterns": [
+        {
+          "begin": "\\G\\s*(:)",
+          "beginCaptures": {
+            "1": {
+              "name": "punctuation.separator.nemo"
+            }
+          },
+          "end": "(?=[=.])",
+          "patterns": [
+            {
+              "include": "#type-expression"
+            }
+          ]
+        },
+        {
+          "include": "#any"
+        }
+      ]
+    },
+    "directive-statement": {
+      "begin": "(?=@(?:base|output|use)(?![A-Za-z0-9_%]))",
+      "end": "\\.",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.terminator.statement.nemo"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#comment"
+        },
+        {
+          "include": "#use-module"
+        },
+        {
+          "include": "#directive"
+        },
+        {
+          "include": "#use-alias"
+        },
+        {
+          "include": "#format-string-block"
+        },
+        {
+          "include": "#format-string"
+        },
+        {
+          "include": "#string-block"
+        },
+        {
+          "include": "#string"
+        },
+        {
+          "include": "#iri"
+        },
+        {
+          "include": "#number"
+        },
+        {
+          "include": "#variable"
+        },
+        {
+          "include": "#boolean"
+        },
+        {
+          "include": "#builtin"
+        },
+        {
+          "include": "#label"
+        },
+        {
+          "include": "#qualified-call"
+        },
+        {
+          "include": "#qualified"
+        },
+        {
+          "include": "#prefixed-call"
+        },
+        {
+          "include": "#prefixed"
+        },
+        {
+          "match": "(?<![A-Za-z0-9_%])[A-Za-z_][A-Za-z0-9_%]*(?:-[A-Za-z0-9_][A-Za-z0-9_%]*)*",
+          "name": "entity.name.function.nemo"
+        },
+        {
+          "include": "#operator"
+        },
+        {
+          "include": "#punctuation"
+        }
+      ]
+    },
+    "use-module": {
+      "begin": "(@use)(?![A-Za-z0-9_%])",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.control.directive.nemo"
+        }
+      },
+      "end": "(?=[{.]|(?<![A-Za-z0-9_%])as(?![A-Za-z0-9_%]|-[A-Za-z0-9_]))",
+      "patterns": [
+        {
+          "include": "#comment"
+        },
+        {
+          "match": "(?<![A-Za-z0-9_%])super(?![A-Za-z0-9_%]|-[A-Za-z0-9_])",
+          "name": "keyword.other.super.nemo"
+        },
+        {
+          "match": "::",
+          "name": "punctuation.separator.namespace.nemo"
+        },
+        {
+          "match": "(?<![A-Za-z0-9_%])[A-Za-z_][A-Za-z0-9_%]*(?:-[A-Za-z0-9_][A-Za-z0-9_%]*)*",
+          "name": "entity.name.namespace.nemo"
+        }
+      ]
+    },
+    "use-alias": {
+      "match": "(?<![A-Za-z0-9_%])(as)\\s+([A-Za-z_][A-Za-z0-9_%]*(?:-[A-Za-z0-9_][A-Za-z0-9_%]*)*)",
+      "captures": {
+        "1": {
+          "name": "keyword.control.connective.nemo"
+        },
+        "2": {
+          "name": "entity.name.namespace.nemo"
+        }
+      }
+    },
+    "type-expression": {
+      "patterns": [
+        {
+          "include": "#comment"
+        },
+        {
+          "include": "#label"
+        },
+        {
+          "include": "#variable"
+        },
+        {
+          "match": "(?<![A-Za-z0-9_%])(?:yearmonthduration|daytimeduration|langstring|datetime|duration|decimal|string|double|number|float|tuple|date|time|bool|null|term|skip|any|iri|int|map)(?![A-Za-z0-9_%]|-[A-Za-z0-9_])(?!\\s*[({])",
+          "name": "support.type.nemo"
+        },
+        {
+          "match": "(?<![A-Za-z0-9_%])[A-Za-z_][A-Za-z0-9_%]*(?:-[A-Za-z0-9_][A-Za-z0-9_%]*)*",
+          "name": "entity.name.type.nemo"
+        },
+        {
+          "include": "#punctuation"
+        }
+      ]
+    },
+    "type-tuple": {
+      "begin": "\\(",
+      "end": "\\)",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.section.nemo"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.nemo"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#type-tuple"
+        },
+        {
+          "include": "#type-expression"
+        }
+      ]
+    },
+    "comment": {
+      "name": "comment.line.percentage.nemo",
+      "begin": "%",
+      "end": "$",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.comment.nemo"
+        }
+      }
+    },
+    "attribute": {
+      "name": "meta.attribute.nemo",
+      "begin": "(#\\[)",
+      "end": "(\\])",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.attribute.nemo"
+        }
+      },
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.attribute.nemo"
+        }
+      },
+      "patterns": [
+        {
+          "match": "[A-Za-z_][A-Za-z0-9_%]*(?:-[A-Za-z0-9_][A-Za-z0-9_%]*)*",
+          "name": "entity.other.attribute-name.nemo"
+        },
+        {
+          "include": "#any"
+        }
+      ]
+    },
+    "language-tag": {
+      "match": "(?<=\")(@)([A-Za-z_][A-Za-z0-9_%]*(?:-[A-Za-z0-9][A-Za-z0-9_%]*)*)",
+      "captures": {
+        "1": {
+          "name": "punctuation.definition.tag.nemo"
+        },
+        "2": {
+          "name": "entity.name.tag.language.nemo"
+        }
+      }
+    },
+    "directive": {
+      "match": "@(?:parameter|declare|define|export|extern|import|output|prefix|input|base|type|use)(?![A-Za-z0-9_%])",
+      "name": "keyword.control.directive.nemo"
+    },
+    "aggregate": {
+      "match": "#(?:count|tuple|min|max|sum|avg|map)(?![A-Za-z0-9_%])",
+      "name": "keyword.other.aggregate.nemo"
+    },
+    "format-string-block": {
+      "name": "string.quoted.triple.nemo",
+      "begin": "f\"\"\"",
+      "end": "\"\"\"",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.begin.nemo"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.end.nemo"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#interpolation"
+        },
+        {
+          "include": "#escape"
+        }
+      ]
+    },
+    "format-string": {
+      "name": "string.quoted.double.nemo",
+      "begin": "f\"",
+      "end": "\"",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.begin.nemo"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.end.nemo"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#interpolation"
+        },
+        {
+          "include": "#escape"
+        }
+      ]
+    },
+    "interpolation": {
+      "patterns": [
+        {
+          "match": "\\{\\{|\\}\\}",
+          "name": "constant.character.escape.nemo"
+        },
+        {
+          "name": "meta.embedded.expression.nemo",
+          "begin": "\\{",
+          "end": "\\}",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.section.embedded.begin.nemo"
+            }
+          },
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.section.embedded.end.nemo"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#any"
+            }
+          ]
+        }
+      ]
+    },
+    "string-block": {
+      "name": "string.quoted.triple.nemo",
+      "begin": "\"\"\"",
+      "end": "\"\"\"",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.begin.nemo"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.end.nemo"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#escape"
+        }
+      ]
+    },
+    "string": {
+      "name": "string.quoted.double.nemo",
+      "begin": "\"",
+      "end": "\"",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.begin.nemo"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.end.nemo"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#escape"
+        }
+      ]
+    },
+    "escape": {
+      "match": "\\\\[\\\\\"ntr]",
+      "name": "constant.character.escape.nemo"
+    },
+    "iri": {
+      "match": "<[^\\s>]*>",
+      "name": "variable.other.constant.nemo constant.other.iri.nemo"
+    },
+    "number": {
+      "patterns": [
+        {
+          "match": "(?<![A-Za-z0-9_%])0b[01]+",
+          "name": "constant.numeric.binary.nemo"
+        },
+        {
+          "match": "(?<![A-Za-z0-9_%])0o[0-7]+",
+          "name": "constant.numeric.octal.nemo"
+        },
+        {
+          "match": "(?<![A-Za-z0-9_%])0x[0-9a-fA-F]+",
+          "name": "constant.numeric.hex.nemo"
+        },
+        {
+          "match": "(?<![A-Za-z0-9_%])[0-9]+(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?(?:[fFdD](?![A-Za-z0-9_%]))?",
+          "name": "constant.numeric.decimal.nemo"
+        }
+      ]
+    },
+    "variable": {
+      "patterns": [
+        {
+          "match": "\\?[A-Za-z_][A-Za-z0-9_%]*",
+          "name": "variable.other.nemo"
+        },
+        {
+          "match": "![A-Za-z_][A-Za-z0-9_%]*",
+          "name": "variable.other.existential.nemo"
+        },
+        {
+          "match": "\\$[A-Za-z_][A-Za-z0-9_%]*",
+          "name": "variable.parameter.nemo"
+        },
+        {
+          "match": "(?<![A-Za-z0-9_%])_(?![A-Za-z0-9_%]|-[A-Za-z0-9_])",
+          "name": "variable.language.anonymous.nemo"
+        }
+      ]
+    },
+    "boolean": {
+      "match": "(?<![A-Za-z0-9_%])(?:true|false)(?![A-Za-z0-9_%]|-[A-Za-z0-9_])(?!\\s*\\()",
+      "name": "constant.language.boolean.nemo"
+    },
+    "builtin": {
+      "match": "(?<![A-Za-z0-9_%])(?i:ISYEARMONTHDURATION|ISDAYTIMEDURATION|YEARMONTHDURATION|VALUEUNEQUALITY|DAYTIMEDURATION|VALUEEQUALITY|NUMGREATEREQ|ISLANGSTRING|STRTRIMSTART|SUBTRACTION|LANGMATCHES|LEVENSHTEIN|UNEQUALITY|NUMGREATER|INVERTSIGN|ISDATETIME|ISDURATION|STRTRIMEND|NUMLESSEQ|ISNUMERIC|STRSTARTS|ISINTEGER|ISDECIMAL|ISBOOLEAN|STRBEFORE|URIENCODE|URIDECODE|EQUALITY|DIVISION|NEGATION|CONTAINS|ISSTRING|ISDOUBLE|DATATYPE|DATETIME|DURATION|STRAFTER|TIMEZONE|NUMLESS|PRODUCT|STRENDS|ISFLOAT|FULLSTR|STRLANG|COMPARE|STRTRIM|REPLACE|MINUTES|SECONDS|STRUUID|ISTUPLE|STRJOIN|STRLEN|CONCAT|ISNULL|ISDATE|ISTIME|DOUBLE|BITAND|BITXOR|BITSHL|BITSHR|STRREV|SUBSTR|SHA256|SHA384|SHA512|ADJUST|LENGTH|HASKEY|ISIRI|UCASE|LCASE|STRDT|FLOAT|ROUND|FLOOR|BITOR|REGEX|MONTH|HOURS|LABEL|ISMAP|LANG|DATE|TIME|SQRT|CEIL|LUKA|SHA1|YEAR|RAND|UUID|KEYS|SUM|ABS|MAX|MIN|AND|NOT|STR|INT|IRI|POW|LOG|SIN|COS|TAN|REM|MD5|DAY|NOW|GET|OR|TZ)(?![A-Za-z0-9_%]|-[A-Za-z0-9_])(?=\\s*\\()",
+      "name": "keyword.other.builtin.nemo"
+    },
+    "qualified-call": {
+      "match": "([A-Za-z_][A-Za-z0-9_%]*(?:-[A-Za-z0-9_][A-Za-z0-9_%]*)*)(::)([A-Za-z_][A-Za-z0-9_%]*(?:-[A-Za-z0-9_][A-Za-z0-9_%]*)*)(?=\\s*\\()",
+      "captures": {
+        "1": {
+          "name": "entity.name.namespace.nemo"
+        },
+        "2": {
+          "name": "punctuation.separator.namespace.nemo"
+        },
+        "3": {
+          "name": "entity.name.function.nemo"
+        }
+      }
+    },
+    "qualified": {
+      "match": "([A-Za-z_][A-Za-z0-9_%]*(?:-[A-Za-z0-9_][A-Za-z0-9_%]*)*)(::)([A-Za-z_][A-Za-z0-9_%]*(?:-[A-Za-z0-9_][A-Za-z0-9_%]*)*)",
+      "captures": {
+        "1": {
+          "name": "entity.name.namespace.nemo"
+        },
+        "2": {
+          "name": "punctuation.separator.namespace.nemo"
+        },
+        "3": {
+          "name": "variable.other.constant.nemo constant.other.nemo"
+        }
+      }
+    },
+    "prefixed-call": {
+      "match": "([A-Za-z_][A-Za-z0-9_%]*(?:-[A-Za-z0-9_][A-Za-z0-9_%]*)*)(:)([A-Za-z_][A-Za-z0-9_%]*(?:-[A-Za-z0-9_][A-Za-z0-9_%]*)*)(?=\\s*\\()",
+      "captures": {
+        "1": {
+          "name": "entity.name.namespace.nemo"
+        },
+        "2": {
+          "name": "punctuation.separator.namespace.nemo"
+        },
+        "3": {
+          "name": "entity.name.function.nemo"
+        }
+      }
+    },
+    "prefixed": {
+      "match": "([A-Za-z_][A-Za-z0-9_%]*(?:-[A-Za-z0-9_][A-Za-z0-9_%]*)*)(:)([A-Za-z_][A-Za-z0-9_%]*(?:-[A-Za-z0-9_][A-Za-z0-9_%]*)*)",
+      "captures": {
+        "1": {
+          "name": "entity.name.namespace.nemo"
+        },
+        "2": {
+          "name": "punctuation.separator.namespace.nemo"
+        },
+        "3": {
+          "name": "variable.other.constant.nemo constant.other.nemo"
+        }
+      }
+    },
+    "predicate": {
+      "match": "(?<![A-Za-z0-9_%])[A-Za-z_][A-Za-z0-9_%]*(?:-[A-Za-z0-9_][A-Za-z0-9_%]*)*(?=\\s*\\()",
+      "name": "entity.name.function.nemo"
+    },
+    "label": {
+      "match": "(?<![A-Za-z0-9_%])[A-Za-z_][A-Za-z0-9_%]*(?:-[A-Za-z0-9_][A-Za-z0-9_%]*)*(?=\\s*:(?![A-Za-z0-9_%:]))",
+      "name": "variable.parameter.nemo"
+    },
+    "aggregate-scope": {
+      "match": "(?<![A-Za-z0-9_%])(?:per)(?![A-Za-z0-9_%]|-[A-Za-z0-9_])(?=\\s*[?$!])",
+      "name": "keyword.control.connective.nemo"
+    },
+    "constant": {
+      "match": "(?<![A-Za-z0-9_%])[A-Za-z_][A-Za-z0-9_%]*(?:-[A-Za-z0-9_][A-Za-z0-9_%]*)*",
+      "name": "variable.other.constant.nemo constant.other.nemo"
+    },
+    "operator": {
+      "patterns": [
+        {
+          "match": ":-",
+          "name": "keyword.operator.rule.nemo"
+        },
+        {
+          "match": "->",
+          "name": "keyword.operator.arrow.nemo"
+        },
+        {
+          "match": "\\^\\^",
+          "name": "keyword.operator.datatype.nemo"
+        },
+        {
+          "match": "!==|!=|==|>=|<=|=|>|<",
+          "name": "keyword.operator.comparison.nemo"
+        },
+        {
+          "match": "[+\\-*/]",
+          "name": "keyword.operator.arithmetic.nemo"
+        },
+        {
+          "match": "~",
+          "name": "keyword.operator.negation.nemo"
+        }
+      ]
+    },
+    "punctuation": {
+      "patterns": [
+        {
+          "match": "\\.",
+          "name": "punctuation.terminator.statement.nemo"
+        },
+        {
+          "match": ",",
+          "name": "punctuation.separator.nemo"
+        },
+        {
+          "match": "[()\\[\\]{}]",
+          "name": "punctuation.section.nemo"
+        },
+        {
+          "match": ":",
+          "name": "punctuation.separator.namespace.nemo"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,5 @@
+anyTriple(yes) .
+
+fresh(_:0) .
+
+hasPeople(1) .

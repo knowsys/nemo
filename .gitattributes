@@ -1,0 +1,6 @@
+# Normalize line endings: every text file is stored and checked out with LF.
+* text=auto eol=lf
+
+# Binary formats that must never be normalized.
+*.parquet -text
+*.gz -text

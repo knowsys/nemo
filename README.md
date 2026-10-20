@@ -1,7 +1,7 @@
 # Nemo
 
-[![Build and Test main](https://img.shields.io/github/actions/workflow/status/knowsys/nemo/build.yml?branch=main&label=build)](https://github.com/knowsys/nemo/actions/workflows/build.yml)
-[![Documentations](https://img.shields.io/github/actions/workflow/status/knowsys/nemo/build.yml?branch=main&label=documentation)](https://knowsys.github.io/nemo-doc)
+[![Build and Test main](https://img.shields.io/github/actions/workflow/status/knowsys/nemo/ci.yml?branch=main&label=build)](https://github.com/knowsys/nemo/actions/workflows/ci.yml)
+[![Documentations](https://img.shields.io/github/actions/workflow/status/knowsys/nemo/ci.yml?branch=main&label=documentation)](https://knowsys.github.io/nemo-doc)
 [![dependency status](https://deps.rs/repo/github/knowsys/nemo/status.svg)](https://deps.rs/repo/github/knowsys/nemo)
 [![built with nix](https://img.shields.io/static/v1?logo=nixos&logoColor=white&label=&message=Built%20with%20Nix&color=41439a)](https://builtwithnix.org)
 [![Gitter](https://badges.gitter.im/nemo/community.svg)](https://gitter.im/nemo/community)

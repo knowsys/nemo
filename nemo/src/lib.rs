@@ -1,39 +1,27 @@
-//! A fast in-memory rule engine
+//! The logical layer of the Nemo rule engine.
+//!
+//! This crate implements the Nemo language (parser, rule model, program transformations),
+//! reasoning (normalization, planning, semi-naive execution), and tracing,
+//! on top of the [`nemo_physical`] database layer and the [`nemo_io`] adapters.
+//! It is the crate to depend on to use Nemo as a library.
+//!
+//! The engine does no network IO itself.
+//! A method that needs data from the network suspends and lists the requests it needs
+//! (see [pending](engine::Engine::pending)).
+//! With the `http` feature, the `driver` module performs these requests over HTTP.
 
-#![type_length_limit = "5000000000"]
-#![deny(
-    missing_debug_implementations,
-    missing_copy_implementations,
-    trivial_casts,
-    trivial_numeric_casts
-)]
-#![warn(
-    missing_docs,
-    unused_import_braces,
-    unused_qualifications,
-    unused_extern_crates,
-    variant_size_differences
-)]
-#![feature(iter_intersperse)]
-#![feature(iterator_try_reduce)]
-#![feature(str_from_raw_parts)]
-#![feature(associated_type_defaults)]
+pub mod codes;
 
-/// The crate for underlying physical operations.
-pub extern crate nemo_physical;
-
-pub mod api;
-pub mod error;
-pub mod execution;
-pub mod io;
+pub mod diagnostics;
+#[cfg(feature = "http")]
+pub mod driver;
+pub mod engine;
+pub mod model;
 pub mod parser;
-pub mod rule_file;
-pub mod rule_model;
-pub mod syntax;
-pub mod util;
+pub mod pipeline;
+pub mod telemetry;
+pub mod trace;
+pub mod values;
 
-pub(crate) mod table_manager;
-
-// we use datavalues and meta from nemo_physical in our API, so re-export it here.
-pub use nemo_physical::datavalues;
-pub use nemo_physical::meta;
+#[cfg(test)]
+mod testing;

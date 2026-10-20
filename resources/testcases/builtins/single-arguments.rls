@@ -1,0 +1,18 @@
+% The n-ary builtins also take a single argument:
+%   - A number is its own sum, product, maximum and minimum.
+%   - A boolean is its own conjunction and disjunction.
+%   - A single argument that is not a number has no sum.
+
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+go(1) .
+
+result(sum, ?r) :- go(1), ?r = SUM(5) .
+result(sum_double, ?r) :- go(1), ?r = SUM(2.5E0) .
+result(sum_text, ?r) :- go(1), ?r = SUM("a") .
+result(product, ?r) :- go(1), ?r = PRODUCT(5) .
+result(max, ?r) :- go(1), ?r = MAX(5) .
+result(min, ?r) :- go(1), ?r = MIN(5) .
+result(and, ?r) :- go(1), ?r = AND("true"^^xsd:boolean) .
+result(or, ?r) :- go(1), ?r = OR("false"^^xsd:boolean) .
+result(bitand, ?r) :- go(1), ?r = BITAND(5) .

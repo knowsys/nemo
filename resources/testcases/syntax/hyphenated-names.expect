@@ -1,0 +1,8 @@
+reduced(<https://example.org/spare-part>, 2) .
+reduced(item-1, 4) .
+
+spaced(<https://example.org/spare-part>, 2) .
+spaced(item-1, 4) .
+
+stock-item(<https://example.org/spare-part>, 3) .
+stock-item(item-1, 5) .

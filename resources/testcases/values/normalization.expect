@@ -1,0 +1,19 @@
+b(AnotherConstant) .
+b(Some%20Constant%20With%20Spaces) .
+b(YetAnotherConstant) .
+b("") .
+b("An invalid constant that will be handled as string literal when parsed from CSV because of the white spaces") .
+b("Another String Literal") .
+b("String Litral") .
+b(6789) .
+b(12345) .
+
+c(AnotherConstant) .
+c(Some%20Constant%20With%20Spaces) .
+c(YetAnotherConstant) .
+c("") .
+c("An invalid constant that will be handled as string literal when parsed from CSV because of the white spaces") .
+c("Another String Literal") .
+c("String Litral") .
+c(6789) .
+c(12345) .

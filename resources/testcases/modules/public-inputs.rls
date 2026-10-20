@@ -1,0 +1,14 @@
+% An input a module offers is the predicate the use binds it to, so a use
+% can also bind an input to what another instance offers.
+
+link(1, 2) .
+link(2, 3) .
+
+@use sources::pass { edge = link } as direct .
+@use sources::util::closure { edge = link } as closed .
+@use sources::pass { edge = closed::reach } as passed .
+
+seen(?x, ?y) :- direct::edge(?x, ?y) .
+reached(?x, ?y) :- passed::edge(?x, ?y) .
+
+@output seen, reached .

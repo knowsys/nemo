@@ -1,0 +1,10 @@
+% Builtins over nulls: a null is a null, not an IRI, and identical only
+% to itself.
+
+p(a) .
+p(b) .
+
+n(?x, !v) :- p(?x) .
+check(isNull, ?r) :- n(a, ?v), ?r = isNull(?v) .
+check(isIri, ?r) :- n(a, ?v), ?r = isIri(?v) .
+same(?x, ?y) :- n(?x, ?v), n(?y, ?w), ?v = ?w .

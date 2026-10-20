@@ -1,0 +1,10 @@
+null(_:0) .
+null(_:1) .
+null(_:2) .
+
+result(A, _:0) .
+result(B, _:1) .
+result(C, _:2) .
+result(_:0, A) .
+result(_:1, B) .
+result(_:2, C) .

@@ -1,6 +1,6 @@
 [package]
 name = "nemo"
-description.workspace = true
+description = "The logical layer of the Nemo rule engine: language, rule model, planning, and execution"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -10,57 +10,43 @@ readme = "README.md"
 repository.workspace = true
 
 [features]
-# Allows building for web assembly environments
-# Enables the "js" feature of the "getrandom" crate
-js = ["getrandom/wasm_js"]
+# The driver: performs the HTTP requests of suspended engine methods
+# (remote http/https resources), with retries.
+http = ["nemo-io/http"]
+# SPARQL endpoint imports: validation and requests. The `http` driver
+# performs the requests, or the responses are passed in through `respond`.
+sparql = ["nemo-io/sparql"]
+# Parquet import and export.
+parquet = ["nemo-io/parquet"]
+# The `tracing` subscriber side: a layer feeding an event sink from the
+# telemetry stream. The command line, which owns the global subscriber,
+# enables it. The bindings install a sink on the engine directly.
+subscriber = ["dep:tracing-subscriber"]
 
 [dependencies]
-nemo-physical = { path = "../nemo-physical", default-features = false }
-log = { workspace = true }
-nom = "7.1.1"
-petgraph = "0.8.3"
-petgraph-graphml = "5.0.0"
-rand = { workspace = true }
-csv = "1.1.6"
-thiserror = { workspace = true }
-flate2 = { workspace = true }
-sanitise-file-name = "1.0.0"
-getrandom = { version = "0.3.4" }
-oxiri = { workspace = true }
-reqwest = { workspace = true, features = [
-    "form",
-    "gzip",
-    "brotli",
-    "zstd",
-    "deflate",
+nemo-physical = { path = "../nemo-physical" }
+nemo-io = { path = "../nemo-io" }
+# The default diagnostic renderer (`render`) quotes snippets through it.
+ariadne = "0.6"
+# The tracing protocol DTOs are serde-first: one derived dialect, shared
+# verbatim by every surface.
+serde = { version = "1", features = ["derive"] }
+# The telemetry documents are written as JSON.
+serde_json = "1"
+# Developer logging and the telemetry stream's wire: the facade always,
+# the subscriber side behind `subscriber`.
+tracing = { version = "0.1", default-features = false, features = ["std"] }
+tracing-subscriber = { version = "0.3", optional = true, default-features = false, features = [
+    "registry",
+    "std",
 ] }
-num = { workspace = true }
-ascii_tree = { workspace = true }
-async-trait = { workspace = true }
-serde_json = { workspace = true }
-serde = { workspace = true, features = ["derive"] }
-nom-greedyerror = "0.5.0"
-nom-supreme = "0.8.0"
-enum-assoc = "1.1.0"
-ariadne = { workspace = true, features = ["auto-color"] }
-strum = { workspace = true }
-strum_macros = { workspace = true }
-similar-string = "1.4.3"
-bytecount = "0.6.8"
-colored = { workspace = true }
-spargebra = { version = "0.4.6" }
-urlencoding = { workspace = true }
-oxrdfio = "0.2.4"
-oxrdf = "0.3.3"
-delegate = { workspace = true }
-orx-imp-vec = "2.14"
-itertools = { workspace = true }
-indexmap = { workspace = true }
-line-index = { workspace = true }
 
 [dev-dependencies]
-env_logger = { workspace = true }
-assert_fs = { workspace = true }
-test-log = { workspace = true }
-tokio = { workspace = true, features = [ "rt", "macros" ] }
+# The testcase corpus registers one test per program.
+libtest-mimic = "0.8"
+[[test]]
+name = "testcases"
+harness = false
 
+[lints]
+workspace = true

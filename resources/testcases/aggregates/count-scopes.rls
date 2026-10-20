@@ -1,0 +1,11 @@
+% A count has no value apart from its scope, so `#count(per ?a, ?b)`,
+% `#count(?a per ?b)` and `#count((?a, ?b))` all count the distinct pairs
+% of a and b. Group 1 has four matches over three such pairs and two
+% distinct a.
+
+data(1, 2, 7, x) .
+data(1, 2, 7, y) .
+data(1, 2, 8, x) .
+data(1, 3, 7, x) .
+
+pairs(?g, #count(per ?a, ?b), #count(?a per ?b), #count((?a, ?b)), #count(per ?a)) :- data(?g, ?a, ?b, ?c) .

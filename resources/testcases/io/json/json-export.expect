@@ -1,0 +1,4 @@
+measurement("alice", 34, true) .
+measurement("bob", 27, false) .
+
+mixed(1, "a", <http://example.org/x>) .

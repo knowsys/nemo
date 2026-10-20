@@ -1,0 +1,5 @@
+strings("1", "a") .
+strings("b", "2") .
+
+terms(b, 2) .
+terms(1, a) .

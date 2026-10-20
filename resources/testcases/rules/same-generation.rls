@@ -1,0 +1,15 @@
+% The same-generation program: two nodes are of one generation if their
+% parents are.
+
+parent(a, b) .
+parent(a, c) .
+parent(b, d) .
+parent(c, e) .
+parent(d, f) .
+parent(e, g) .
+parent(e, h) .
+
+person(?x) :- parent(?x, _) .
+person(?x) :- parent(_, ?x) .
+sameGeneration(?x, ?x) :- person(?x) .
+sameGeneration(?x, ?y) :- parent(?p, ?x), parent(?q, ?y), sameGeneration(?p, ?q) .

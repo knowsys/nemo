@@ -1,0 +1,6 @@
+% An undeclared import takes its width from the file's first record,
+% read as the import reads every record: past a skipped header.
+
+@import people from csv { resource = "sources/narrow-header.csv", ignore_headers = true } .
+
+person(?n, ?a) :- people(?n, ?a) .

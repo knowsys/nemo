@@ -1,0 +1,15 @@
+numeric(bareExponent) .
+numeric(decimal) .
+numeric(double) .
+numeric(exponent) .
+numeric(float) .
+numeric(integer) .
+numeric(lowerExponent) .
+
+value(bareExponent, 1000d) .
+value(decimal, 2.5) .
+value(double, 2.5d) .
+value(exponent, 2.5d) .
+value(float, 2.5f) .
+value(integer, 7) .
+value(lowerExponent, 2.5d) .

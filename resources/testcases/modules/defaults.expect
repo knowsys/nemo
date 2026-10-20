@@ -1,0 +1,9 @@
+reachable(1, 2) .
+reachable(1, 3) .
+reachable(1, 4) .
+reachable(2, 3) .
+reachable(2, 4) .
+reachable(2, 5) .
+reachable(3, 4) .
+reachable(3, 5) .
+reachable(4, 5) .

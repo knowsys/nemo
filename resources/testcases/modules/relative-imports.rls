@@ -1,0 +1,10 @@
+% A relative import resolves beside the file that writes it: the
+% program's beside the program, a module's beside the module.
+
+@import p from csv { resource = "sources/rows.csv" } .
+@use sources::lib::loader {} as lib .
+
+q(?x) :- p(?x) .
+q(?x) :- lib::rows(?x) .
+
+@output q .

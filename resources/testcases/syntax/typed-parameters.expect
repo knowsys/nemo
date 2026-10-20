@@ -1,0 +1,6 @@
+doubled(4, 6) .
+
+named(3, "item") .
+
+small(1) .
+small(2) .

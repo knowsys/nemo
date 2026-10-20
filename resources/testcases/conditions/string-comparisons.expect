@@ -1,0 +1,19 @@
+before("", "B") .
+before("", "a") .
+before("", "ab") .
+before("", "b") .
+before("", "é") .
+before("B", "a") .
+before("B", "ab") .
+before("B", "b") .
+before("B", "é") .
+before("a", "ab") .
+before("a", "b") .
+before("a", "é") .
+before("ab", "b") .
+before("ab", "é") .
+before("b", "é") .
+
+notAfter("") .
+notAfter("B") .
+notAfter("a") .

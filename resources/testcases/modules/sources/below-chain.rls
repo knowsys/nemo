@@ -1,0 +1,8 @@
+% The numbers of its input below a limit, passed on to `below`.
+
+@input number .
+@output result .
+@parameter $limit: int .
+@use below { number = number, $limit = $limit } as i .
+
+result(?x) :- i::small(?x) .

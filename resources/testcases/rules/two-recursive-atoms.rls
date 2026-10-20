@@ -1,0 +1,13 @@
+% A recursive rule whose body joins two recursive predicates.
+
+edge(1, 2) .
+edge(2, 3) .
+edge(3, 4) .
+red(1) .
+red(3) .
+
+reach(?x, ?y) :- edge(?x, ?y) .
+reach(?x, ?z) :- reach(?x, ?y), reach(?y, ?z) .
+redReach(?x) :- red(?x) .
+redReach(?y) :- redReach(?x), reach(?x, ?y), redReach(?x) .
+bothWays(?x, ?y) :- reach(?x, ?y), redReach(?x), redReach(?y) .

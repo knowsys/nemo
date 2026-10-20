@@ -1,0 +1,10 @@
+% A module passes what it is given on to a module it uses.
+
+link(1, 2) .
+link(2, 3) .
+
+@use sources::pairs { source = link } as p .
+
+answer(?x, ?y) :- p::far(?x, ?y) .
+
+@output answer .

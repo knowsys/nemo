@@ -1,0 +1,9 @@
+% Heads made of nulls only: one such fact satisfies them all.
+
+@import data from csv { resource = "sources/data.csv" } .
+
+no_result(!V, !V) :- data(C, C) .
+no_result(!V, !V) :- data(D, D) .
+
+result(!V, !V) :- data(?X, ?Y) .
+result(!V, !V) :- data(?X, ?X) .

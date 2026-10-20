@@ -1,0 +1,8 @@
+int,42
+double,"""2.5""^^<http://www.w3.org/2001/XMLSchema#double>"
+name,alice
+iri,http://example.org/a
+string,"""plain"""
+comma,"""a,b"""
+tagged,"""hallo""@de"
+typed,"""5cm""^^<http://example.org/length>"

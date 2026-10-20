@@ -1,0 +1,16 @@
+% The suffixes `d` and `f` mark doubles and floats; a number with a
+% point and no suffix is a decimal. So 2.5, 2.5d and 2.5f are three
+% different values (2.5E0 is 2.5d), and 2d and 2f are a double and a
+% float, not the integer 2.
+
+kind(2.5) .
+kind(2.5d) .
+kind(2.5f) .
+kind(2.5E0) .
+kind(2) .
+kind(2d) .
+kind(2f) .
+
+doubles(?x) :- kind(?x), isDouble(?x) .
+floats(?x) :- kind(?x), isFloat(?x) .
+integers(?x) :- kind(?x), isInteger(?x) .

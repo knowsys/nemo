@@ -1,0 +1,8 @@
+% A file with Windows line endings and one without a final line break
+% read like any other.
+
+@import windows from csv { resource = "sources/windows-line-endings.csv" } .
+@import unterminated from csv { resource = "sources/no-final-newline.csv" } .
+
+both(?x, ?y) :- windows(?x, ?y) .
+both(?x, ?y) :- unterminated(?x, ?y) .

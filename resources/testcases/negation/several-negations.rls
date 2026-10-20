@@ -1,0 +1,12 @@
+% Several negated atoms in one body, each excluding on its own
+% variables.
+
+person(alice) .
+person(bob) .
+person(carol) .
+person(dave) .
+banned(bob) .
+inactive(carol) .
+admin(dave, root) .
+
+regular(?x) :- person(?x), ~banned(?x), ~inactive(?x), ~admin(?x, root) .

@@ -24,13 +24,19 @@ flycheck_*.el
 # Test data
 /test-files
 /nemo/test-files
-/nemo-benches/test-files
 
 # default output directory
-/results
+results/
 
 # nix build
 /result
 
 # ide settings
 /.vscode
+
+# packaged editor extension
+nemo-vscode/*.vsix
+
+# python wheels and caches
+/dist
+__pycache__/

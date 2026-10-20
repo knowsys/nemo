@@ -1,0 +1,16 @@
+% A head of two independent pieces, each with its own null.
+
+@import data from csv { resource = "sources/data.csv" }.
+
+result(?X, ?X) :- data(?X, ?X) .
+result(!W, ?X), result(?Y, !V) :- data(?X, ?Y) .
+
+test(?X) :- result(A, ?X) .
+test(?X) :- result(B, ?X) .
+test(?X) :- result(C, ?X) .
+test(?X) :- result(D, ?X) .
+
+test(?X) :- result(?X, A) .
+test(?X) :- result(?X, B) .
+test(?X) :- result(?X, C) .
+test(?X) :- result(?X, D) .

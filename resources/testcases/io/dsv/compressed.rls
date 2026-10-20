@@ -1,0 +1,7 @@
+% A gzip-compressed CSV file, detected by its name and declared.
+
+@import auto from csv{resource="sources/compressed.csv.gz"}.
+@import format from csv{resource="sources/compressed.csv.gz", compression="gzip"}.
+
+implicit(?x) :- auto(?x).
+explicit(?x) :- format(?x).

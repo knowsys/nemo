@@ -1,0 +1,12 @@
+% A module's prefixes stay inside it: the using program declares none.
+% A module without inputs or parameters is used with an empty binding.
+
+link(1, 2) .
+
+@use sources::vocabulary { edge = link } as v .
+@use sources::constants {} as c .
+
+answer(?x, ?y) :- v::reach(?x, ?y) .
+pi(?x) :- c::pi(?x) .
+
+@output answer, pi .

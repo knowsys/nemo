@@ -1,0 +1,11 @@
+adult(alice) .
+adult(carol) .
+
+j(0, type, "object") .
+j(1, type, "number") .
+j(2, type, "string") .
+j(2, value, "alice") .
+j(3, type, "array") .
+j(4, type, "string") .
+j(4, value, "x") .
+j(5, type, "number") .

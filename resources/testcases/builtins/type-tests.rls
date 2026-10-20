@@ -1,0 +1,28 @@
+% The type tests a declarable type had no test for, over a value of each
+% kind. Each test holds exactly for the values its declared type admits,
+% so integers are decimals and every duration is a duration.
+
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+value(int, 1) .
+value(decimal, 1.5) .
+value(double, 1.5E0) .
+value(bool, true) .
+value(string, "x") .
+value(langstring, "x"@en) .
+value(datetime, "2026-10-18T12:00:00Z"^^xsd:dateTime) .
+value(date, "2026-10-18"^^xsd:date) .
+value(time, "12:00:00"^^xsd:time) .
+value(daytimeduration, "PT1H"^^xsd:dayTimeDuration) .
+value(yearmonthduration, "P1Y"^^xsd:yearMonthDuration) .
+value(duration, "P1Y1D"^^xsd:duration) .
+
+holds(?kind, isDecimal) :- value(?kind, ?v), ISDECIMAL(?v) .
+holds(?kind, isBoolean) :- value(?kind, ?v), ISBOOLEAN(?v) .
+holds(?kind, isLangString) :- value(?kind, ?v), ISLANGSTRING(?v) .
+holds(?kind, isDateTime) :- value(?kind, ?v), ISDATETIME(?v) .
+holds(?kind, isDate) :- value(?kind, ?v), ISDATE(?v) .
+holds(?kind, isTime) :- value(?kind, ?v), ISTIME(?v) .
+holds(?kind, isDuration) :- value(?kind, ?v), ISDURATION(?v) .
+holds(?kind, isDayTimeDuration) :- value(?kind, ?v), ISDAYTIMEDURATION(?v) .
+holds(?kind, isYearMonthDuration) :- value(?kind, ?v), ISYEARMONTHDURATION(?v) .

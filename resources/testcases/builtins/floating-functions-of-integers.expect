@@ -1,0 +1,9 @@
+result(cos, 1d) .
+result(log, 3d) .
+result(log_inexact, 2.095903274289385d) .
+result(pow, 8) .
+result(pow_negative, 0.5d) .
+result(sin, 0d) .
+result(sqrt, 4d) .
+result(sqrt_irrational, 1.4142135623730951d) .
+result(tan, 0d) .

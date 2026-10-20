@@ -1,0 +1,15 @@
+% A recursive `@type` is checked by its label: a value carrying the label
+% is checked where it is built, so a list built by recursion fits its
+% type at any length.
+
+@type list(int, list | nil) .
+@type nil() .
+@declare countdown(from: int, items: list | nil) .
+@declare heads(from: int, first: int) .
+
+next(4, 3) . next(3, 2) . next(2, 1) . next(1, 0) .
+countdown(0, nil()) .
+countdown(?n, list(?n, ?rest)) :- next(?n, ?m), countdown(?m, ?rest) .
+
+% Reading a field gives its declared type.
+heads(?n, ?first) :- countdown(?n, ?items), LABEL(?items) = list, ?first = ?items[0] .

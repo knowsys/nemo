@@ -1,0 +1,5 @@
+localHops(local, value, 0) .
+
+near(a, b) .
+near(a, c) .
+near(b, c) .

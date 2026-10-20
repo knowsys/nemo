@@ -1,0 +1,10 @@
+manager(alice, _:0) .
+manager(bob, alice) .
+
+measure("comment", "none") .
+measure("count", 3) .
+measure("height", 1.8) .
+measure("ratio", 0.5d) .
+
+reading(1) .
+reading((2, 3)) .

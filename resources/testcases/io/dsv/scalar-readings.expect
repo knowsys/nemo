@@ -1,0 +1,3 @@
+reading(false, "2026-01-01"^^<http://www.w3.org/2001/XMLSchema#date>, 1.5, "bonjour"@fr, "P1D"^^<http://www.w3.org/2001/XMLSchema#dayTimeDuration>) .
+reading(false, "2026-03-01"^^<http://www.w3.org/2001/XMLSchema#date>, 2d, "hej"@sv, "PT30M"^^<http://www.w3.org/2001/XMLSchema#dayTimeDuration>) .
+reading(true, "2026-10-18"^^<http://www.w3.org/2001/XMLSchema#date>, 5, "hi"@en, "PT1H"^^<http://www.w3.org/2001/XMLSchema#dayTimeDuration>) .

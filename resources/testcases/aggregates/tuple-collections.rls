@@ -1,0 +1,18 @@
+% #tuple collects a group's values in term order, whatever order the
+% facts come in. The bare form collects the distinct values; with `per`,
+% a value repeats once for each witness.
+
+member(team_a, carol) .
+member(team_a, alice) .
+member(team_a, bob) .
+member(team_b, dana) .
+
+roster(?team, #tuple(?person)) :- member(?team, ?person) .
+teamSize(?team, LENGTH(?r)) :- roster(?team, ?r) .
+
+visit(alice, monday) .
+visit(alice, tuesday) .
+visit(bob, monday) .
+
+diary(#tuple(?who per ?day)) :- visit(?who, ?day) .
+guests(#tuple(?who)) :- visit(?who, ?day) .

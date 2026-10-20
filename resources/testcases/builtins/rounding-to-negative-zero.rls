@@ -1,0 +1,14 @@
+% Rounding near zero, as XPath's fn:round does:
+%   - ROUND takes a half toward positive infinity.
+%   - ROUND takes -0.5, and every number between it and zero, to
+%     negative zero.
+%   - CEIL takes a negative fraction to negative zero as well.
+
+go(1) .
+
+result(round_negative_half, ?r) :- go(1), ?r = ROUND(-0.5E0) .
+result(round_negative_fraction, ?r) :- go(1), ?r = ROUND(-0.4E0) .
+result(round_negative_float_half, ?r) :- go(1), ?r = ROUND(-0.5f) .
+result(round_negative_one_and_a_half, ?r) :- go(1), ?r = ROUND(-1.5E0) .
+result(round_positive_half, ?r) :- go(1), ?r = ROUND(0.5E0) .
+result(ceil_negative_fraction, ?r) :- go(1), ?r = CEIL(-0.5E0) .

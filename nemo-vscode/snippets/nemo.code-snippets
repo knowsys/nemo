@@ -1,0 +1,101 @@
+{
+  "Rule": {
+    "prefix": "rule",
+    "body": ["${1:head}(${2:?x}) :- ${3:body}(${2:?x}) ."],
+    "description": "A rule deriving a head from a body"
+  },
+  "Recursive rule": {
+    "prefix": "rec",
+    "body": [
+      "${1:reach}(?x, ?y) :- ${2:edge}(?x, ?y) .",
+      "${1:reach}(?x, ?z) :- ${1:reach}(?x, ?y), ${2:edge}(?y, ?z) ."
+    ],
+    "description": "A transitive closure over one relation"
+  },
+  "Rule with a negated body atom": {
+    "prefix": "rulenot",
+    "body": ["${1:head}(?x) :- ${2:body}(?x), ~${3:excluded}(?x) ."],
+    "description": "A rule excluding what another predicate holds"
+  },
+  "Rule with a filter": {
+    "prefix": "rulefilter",
+    "body": ["${1:head}(?x) :- ${2:body}(?x, ?v), ?v ${3:>=} ${4:0} ."],
+    "description": "A rule keeping only the rows a condition holds for"
+  },
+  "Aggregate rule": {
+    "prefix": "agg",
+    "body": ["${1:total}(#${2|sum,count,min,max,avg|}(?${3:v})) :- ${4:body}(?${3:v}) ."],
+    "description": "A rule aggregating over what a body derives"
+  },
+  "Fact": {
+    "prefix": "fact",
+    "body": ["${1:predicate}(${2:1}, ${3:2}) ."],
+    "description": "A fact"
+  },
+  "Import CSV": {
+    "prefix": "import",
+    "body": [
+      "@import ${1:predicate} from csv { resource = \"${2:data.csv}\" } ."
+    ],
+    "description": "Read a predicate's rows from a file"
+  },
+  "Import with column formats": {
+    "prefix": "importformat",
+    "body": [
+      "@import ${1:predicate} from csv { resource = \"${2:data.csv}\", format = (${3|term,text,string,int,double,decimal,iri,skip|}, ${4|term,text,string,int,double,decimal,iri,skip|}) } ."
+    ],
+    "description": "Read a file, saying how each column reads"
+  },
+  "Export CSV": {
+    "prefix": "export",
+    "body": ["@export ${1:predicate} to csv {} ."],
+    "description": "Write a predicate's rows to a file"
+  },
+  "Prefix declaration": {
+    "prefix": "prefix",
+    "body": ["@prefix ${1:ex}: <${2:http://example.org/}> ."],
+    "description": "Abbreviate an IRI namespace"
+  },
+  "Base declaration": {
+    "prefix": "base",
+    "body": ["@base <${1:http://example.org/}> ."],
+    "description": "The IRI relative names extend"
+  },
+  "Parameter": {
+    "prefix": "parameter",
+    "body": ["@parameter \\$${1:limit} = ${2:10} ."],
+    "description": "A global the program reads as a constant"
+  },
+  "Declare column types": {
+    "prefix": "declare",
+    "body": [
+      "@declare ${1:predicate}(${2|any,string,int,double,float,decimal,datetime,bool|}, ${3|any,string,int,double,float,decimal,datetime,bool|}) ."
+    ],
+    "description": "State a predicate's column types"
+  },
+  "Output": {
+    "prefix": "output",
+    "body": ["@output ${1:predicate} ."],
+    "description": "Name a predicate the program emits"
+  },
+  "Module header": {
+    "prefix": "module",
+    "body": [
+      "@module ${1:name}(${2:parameter}) .",
+      "@public ${3:result} .",
+      "",
+      "${3:result}(?x) :- ${2:parameter}(?x) ."
+    ],
+    "description": "Declare this file a module, with a parameter and an interface"
+  },
+  "Use a module": {
+    "prefix": "use",
+    "body": ["@use ${1:module} { ${2:parameter} = ${3:actual} } as ${4:alias} ."],
+    "description": "Instantiate a module over the program's own predicates"
+  },
+  "Format string": {
+    "prefix": "fstring",
+    "body": ["f\"${1:text}{${2:?x}}\""],
+    "description": "A string built from the values around it"
+  }
+}

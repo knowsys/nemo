@@ -1,0 +1,6 @@
+course(logic) .
+course(_:0) .
+
+takes(alice, logic) .
+takes(bob, algebra) .
+takes(bob, _:0) .

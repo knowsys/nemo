@@ -1,0 +1,12 @@
+holds(bool, isBoolean) .
+holds(date, isDate) .
+holds(datetime, isDateTime) .
+holds(daytimeduration, isDayTimeDuration) .
+holds(daytimeduration, isDuration) .
+holds(decimal, isDecimal) .
+holds(duration, isDuration) .
+holds(int, isDecimal) .
+holds(langstring, isLangString) .
+holds(time, isTime) .
+holds(yearmonthduration, isDuration) .
+holds(yearmonthduration, isYearMonthDuration) .

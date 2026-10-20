@@ -1,0 +1,6 @@
+% Offers its input as it is, and a copy of it.
+
+@input edge .
+@output edge, copy .
+
+copy(?x, ?y) :- edge(?x, ?y) .

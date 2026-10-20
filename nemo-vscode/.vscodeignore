@@ -1,0 +1,13 @@
+.gitignore
+.vscode/**
+src/**
+tools/**
+tsconfig.json
+out/**/*.map
+package-lock.json
+node_modules/.bin/**
+node_modules/**/test/**
+node_modules/**/*.md
+node_modules/**/*.map
+tsconfig.browser.json
+wasm/**

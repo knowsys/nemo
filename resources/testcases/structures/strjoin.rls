@@ -1,0 +1,7 @@
+% STRJOIN joins a tuple of strings with a separator.
+
+words(("a", "b", "c")) .
+words(("solo",)) .
+words(()) .
+
+joined(?w, STRJOIN(?w, "-")) :- words(?w) .

@@ -1,0 +1,7 @@
+both(<http://example.org/a>) .
+
+kept("alpha") .
+
+projected(<http://example.org/a>) .
+
+unconstrained("alpha") .

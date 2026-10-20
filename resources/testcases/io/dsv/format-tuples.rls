@@ -1,0 +1,7 @@
+% Regression test for https://github.com/knowsys/nemo/issues/644: a
+% `format` option given as a single name or as a one-element tuple.
+@import A from csv { resource = "sources/dataUnary.csv", format=int } .
+@import B from csv { resource = "sources/dataUnary.csv", format=(int) } .
+
+dataUnary(?X) :- A(?X) .
+dataUnary(?X) :- B(?X) .

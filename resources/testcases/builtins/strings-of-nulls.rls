@@ -1,0 +1,6 @@
+% A null has no lexical form, so STR of a null derives nothing.
+
+go(1) .
+anonymous(!n) :- go(1) .
+
+result(str, ?r) :- anonymous(?n), ?r = STR(?n) .

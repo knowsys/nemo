@@ -1,0 +1,8 @@
+% Column formats:
+%   - `int` parses integers and skips the rows that hold none,
+%   - `string` reads the field as it is,
+%   - `skip` leaves the column out.
+
+@import typed from csv { resource = "sources/typed.csv", format = (int, string, skip) } .
+
+row(?n, ?s) :- typed(?n, ?s) .

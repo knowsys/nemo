@@ -1,0 +1,8 @@
+% The legacy witness list `#sum(?v, ?w)` means `#sum(?v per ?w)`.
+
+sale(apple, monday, 2) .
+sale(apple, tuesday, 2) .
+sale(pear, monday, 3) .
+
+legacy(#sum(?p, ?day)) :- sale(?item, ?day, ?p) .
+keyword(#sum(?p per ?day)) :- sale(?item, ?day, ?p) .

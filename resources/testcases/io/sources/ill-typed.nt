@@ -1,0 +1,2 @@
+<http://example.org/s1> <http://example.org/p> "abc"^^<http://www.w3.org/2001/XMLSchema#integer> .
+<http://example.org/s2> <http://example.org/p> "2"^^<http://www.w3.org/2001/XMLSchema#integer> .

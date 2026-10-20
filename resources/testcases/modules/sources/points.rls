@@ -1,0 +1,8 @@
+% Points on the diagonal of the numbers given as input.
+
+@type point(int, int) .
+
+@input e .
+@output diagonal .
+
+diagonal(point(?x, ?x)) :- e(?x) .

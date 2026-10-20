@@ -1,0 +1,26 @@
+% String lengths and positions count code points, as SPARQL specifies,
+% not grapheme clusters (the characters a reader sees), and strings
+% match code point by code point. So:
+%   - an "é" written as "e" and a combining accent is two characters,
+%   - a flag is two,
+%   - a family of three emoji joined by zero-width joiners is five.
+% Only STRREV keeps a grapheme cluster together.
+%
+% The strings are written decomposed: "café" ends in "e" and U+0301
+% COMBINING ACUTE ACCENT, the flag is two regional indicator symbols,
+% the family three emoji with U+200D between them. An editor that
+% normalizes to NFC changes the case.
+
+go(1) .
+
+result(strlen_accent, ?r) :- go(1), ?r = STRLEN("café") .
+result(strlen_flag, ?r) :- go(1), ?r = STRLEN("🇩🇪") .
+result(strlen_family, ?r) :- go(1), ?r = STRLEN("👨‍👩‍👧") .
+result(substr_accent, ?r) :- go(1), ?r = SUBSTR("café!", 4, 1) .
+result(substr_after_accent, ?r) :- go(1), ?r = SUBSTR("café!", 5) .
+result(starts, ?r) :- go(1), ?r = STRSTARTS("éa", "e") .
+result(ends, ?r) :- go(1), ?r = STRENDS("café", "́") .
+result(contains, ?r) :- go(1), ?r = CONTAINS("éa", "e") .
+result(before, ?r) :- go(1), ?r = STRBEFORE("aéb", "́") .
+result(after, ?r) :- go(1), ?r = STRAFTER("éa", "e") .
+result(reverse, ?r) :- go(1), ?r = STRREV("café") .

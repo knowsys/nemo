@@ -1,0 +1,5 @@
+% A pattern may refer back to a group.
+
+strings("Hello", "World") .
+
+result(regex_backref, ?R) :- strings(?A, _), ?R = REGEX("abcabc", "(abc)\1") .

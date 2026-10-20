@@ -1,0 +1,6 @@
+doubled("ab") .
+
+follows(1) .
+
+next(1, "b") .
+next(2, "a") .

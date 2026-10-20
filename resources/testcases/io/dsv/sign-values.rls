@@ -1,0 +1,5 @@
+% Regression test for https://github.com/knowsys/nemo/issues/581: the
+% fields `+`, `-`, `+.` and `-.` look like the start of a number and
+% used to crash the `term` format. They read as IRIs.
+
+@import sign from csv { resource="sources/sign.csv", format=(term,)} .

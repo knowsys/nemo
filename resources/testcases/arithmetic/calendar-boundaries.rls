@@ -1,0 +1,34 @@
+% Calendar arithmetic across the boundaries of years, days and seconds:
+%   - Going back months may end in December of the year before.
+%   - A duration of months and seconds that runs backwards borrows hours
+%     from the day before.
+%   - A dateTime before year one keeps its fields with a fractional second.
+%   - Durations of one kind are ordered by their length, negative and huge
+%     ones too.
+
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+at(dec25, "2023-12-25"^^xsd:date) .
+at(jan31, "2024-01-31"^^xsd:date) .
+at(mar15, "2024-03-15T10:00:00Z"^^xsd:dateTime) .
+
+yearBefore(?k, ?r) :- at(?k, ?d), ?r = ?d - "P1Y"^^xsd:yearMonthDuration .
+monthBefore(?k, ?r) :- at(?k, ?d), ?r = ?d - "P1M"^^xsd:yearMonthDuration .
+threeBack(?k, ?r) :- at(?k, ?d), ?r = ?d + "-P3M"^^xsd:yearMonthDuration .
+
+morning("2024-03-01T10:00:00Z"^^xsd:dateTime) .
+
+backwards(?r) :- morning(?t), ?r = ?t + "-P1M1D"^^xsd:duration .
+subtracted(?r) :- morning(?t), ?r = ?t - "P1M1DT11H"^^xsd:duration .
+
+early("0000-12-31T23:59:59.5"^^xsd:dateTime) .
+
+fields(?s, ?y, ?m, ?d, ?h) :-
+    early(?v), ?s = STR(?v), ?y = YEAR(?v), ?m = MONTH(?v), ?d = DAY(?v), ?h = HOURS(?v) .
+halfSecondBefore(?r) :- early(_), ?r = "-0044-03-15"^^xsd:date - "PT0.5S"^^xsd:dayTimeDuration .
+
+span("-P2M"^^xsd:yearMonthDuration) .
+span("-P1M"^^xsd:yearMonthDuration) .
+span("P6000000000000Y"^^xsd:yearMonthDuration) .
+
+shorter(?a, ?b) :- span(?a), span(?b), ?a < ?b .

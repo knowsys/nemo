@@ -1,0 +1,5 @@
+% Fields beyond ASCII, read and compared as text.
+
+@import words from csv { resource = "sources/unicode.csv", format = (string, string) } .
+
+word(?lang, ?w, ?n) :- words(?lang, ?w), ?n = STRLEN(?w) .

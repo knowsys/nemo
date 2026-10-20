@@ -1,0 +1,9 @@
+even(0) .
+even(2) .
+even(4) .
+even(6) .
+
+odd(1) .
+odd(3) .
+odd(5) .
+odd(7) .

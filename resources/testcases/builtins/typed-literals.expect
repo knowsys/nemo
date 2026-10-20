@@ -1,0 +1,6 @@
+result(custom, "5cm"^^<http://example.org/length>) .
+result(date, "2024-01-31"^^<http://www.w3.org/2001/XMLSchema#date>) .
+result(integer, 42) .
+result(strdt_int, 42) .
+result(strdt_other, "2024-01-01"^^<http://www.w3.org/2001/XMLSchema#date>) .
+result(string, "text") .

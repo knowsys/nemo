@@ -1,0 +1,1 @@
+out(<http://example.org#test>, <http://example.org#is>, 42) .

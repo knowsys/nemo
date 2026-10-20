@@ -1,0 +1,9 @@
+% The closure of its input, through a predicate named with a prefix of
+% the module's own.
+
+@prefix ex: <http://example.org/> .
+@input edge .
+@output reach .
+
+ex:step(?x, ?y) :- edge(?x, ?y) .
+reach(?x, ?y) :- ex:step(?x, ?y) .

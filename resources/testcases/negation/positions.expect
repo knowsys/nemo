@@ -1,0 +1,121 @@
+filteredX(4, 0, 0) .
+filteredX(4, 2, 1) .
+filteredX(4, 5, 1) .
+filteredX(6, 2, 0) .
+filteredX(6, 9, 2) .
+
+filteredY(2, 1, 0) .
+filteredY(2, 5, 2) .
+filteredY(2, 5, 3) .
+filteredY(4, 2, 1) .
+filteredY(4, 5, 1) .
+filteredY(6, 2, 0) .
+filteredY(6, 9, 2) .
+filteredY(8, 1, 2) .
+filteredY(8, 4, 2) .
+filteredY(8, 5, 1) .
+
+filteredZ(2, 0, 0) .
+filteredZ(2, 0, 1) .
+filteredZ(2, 1, 0) .
+filteredZ(2, 5, 2) .
+filteredZ(4, 0, 0) .
+filteredZ(4, 2, 1) .
+filteredZ(4, 5, 1) .
+filteredZ(6, 2, 0) .
+filteredZ(6, 9, 2) .
+filteredZ(8, 1, 2) .
+filteredZ(8, 4, 2) .
+filteredZ(8, 5, 1) .
+
+multiple(2, 0, 0) .
+multiple(2, 0, 1) .
+multiple(2, 1, 0) .
+multiple(4, 0, 0) .
+multiple(4, 5, 1) .
+multiple(8, 5, 1) .
+
+projectedX(6, 2, 0) .
+projectedX(6, 9, 2) .
+projectedX(8, 1, 2) .
+projectedX(8, 4, 2) .
+projectedX(8, 5, 1) .
+
+projectedXY(6, 2) .
+projectedXY(6, 9) .
+
+projectedXZ(2, 3) .
+projectedXZ(4, 1) .
+projectedXZ(6, 0) .
+projectedXZ(8, 2) .
+
+projectedY(2, 0, 0) .
+projectedY(2, 0, 1) .
+projectedY(2, 1, 0) .
+projectedY(2, 5, 2) .
+projectedY(2, 5, 3) .
+projectedY(4, 0, 0) .
+projectedY(4, 2, 1) .
+projectedY(4, 5, 1) .
+projectedY(6, 2, 0) .
+projectedY(8, 1, 2) .
+projectedY(8, 4, 2) .
+projectedY(8, 5, 1) .
+
+projectedYZ(2, 0) .
+projectedYZ(4, 2) .
+projectedYZ(5, 1) .
+projectedYZ(5, 2) .
+projectedYZ(5, 3) .
+
+projectedZ(2, 0, 0) .
+projectedZ(2, 0, 1) .
+projectedZ(2, 1, 0) .
+projectedZ(2, 5, 2) .
+projectedZ(2, 5, 3) .
+projectedZ(4, 0, 0) .
+projectedZ(4, 2, 1) .
+projectedZ(4, 5, 1) .
+projectedZ(6, 2, 0) .
+projectedZ(6, 9, 2) .
+projectedZ(8, 1, 2) .
+projectedZ(8, 4, 2) .
+projectedZ(8, 5, 1) .
+
+reordered(2, 0, 0) .
+reordered(2, 0, 1) .
+reordered(2, 1, 0) .
+reordered(2, 5, 3) .
+reordered(4, 0, 0) .
+reordered(4, 2, 1) .
+reordered(4, 5, 1) .
+reordered(6, 2, 0) .
+reordered(6, 9, 2) .
+reordered(8, 1, 2) .
+reordered(8, 4, 2) .
+reordered(8, 5, 1) .
+
+singlePositionX(2, 0, 0) .
+singlePositionX(2, 0, 1) .
+singlePositionX(2, 1, 0) .
+singlePositionX(2, 5, 2) .
+singlePositionX(2, 5, 3) .
+singlePositionX(4, 0, 0) .
+singlePositionX(4, 2, 1) .
+singlePositionX(4, 5, 1) .
+singlePositionX(8, 1, 2) .
+singlePositionX(8, 4, 2) .
+singlePositionX(8, 5, 1) .
+
+singlePositionY(2, 5, 2) .
+singlePositionY(2, 5, 3) .
+singlePositionY(4, 2, 1) .
+singlePositionY(4, 5, 1) .
+singlePositionY(6, 2, 0) .
+singlePositionY(8, 4, 2) .
+singlePositionY(8, 5, 1) .
+
+singlePositionZ(2, 5, 2) .
+singlePositionZ(6, 9, 2) .
+singlePositionZ(8, 1, 2) .
+singlePositionZ(8, 4, 2) .

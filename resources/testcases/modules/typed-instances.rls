@@ -1,0 +1,13 @@
+% A module declaring a type, used twice: each instance declares the same
+% type again, which is no conflict.
+
+@use sources::points { e = small } as low .
+@use sources::points { e = large } as high .
+
+small(1) .
+large(100) .
+
+points(?p) :- low::diagonal(?p) .
+points(?p) :- high::diagonal(?p) .
+
+@output points .

@@ -1,0 +1,7 @@
+% The transitive closure of its input.
+
+@input edge .
+@output reach .
+
+reach(?x, ?y) :- edge(?x, ?y) .
+reach(?x, ?z) :- reach(?x, ?y), edge(?y, ?z) .

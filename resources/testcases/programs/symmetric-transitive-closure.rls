@@ -1,0 +1,8 @@
+% Connectivity over a symmetric relation between known cities.
+
+@import city from csv { resource = "sources/city.csv" }.
+@import conn from csv { resource = "sources/conn.csv" }.
+
+connected(?X,?Y) :- city(?X), city(?Y), conn(?X,?Y).
+conn(?X,?Y) :- conn(?Y,?X).
+connected(?X,?Y) :- city(?X), city(?XY), city(?Y), connected(?X,?XY), conn(?XY, ?Y).

@@ -1,0 +1,7 @@
+% A language tag may carry a region subtag, which is part of the tag.
+
+t("color"@en-US) .
+t("colour"@en-GB) .
+t("color"@en) .
+
+regionOf(?x, ?r) :- t(?x), ?r = LANG(?x) .

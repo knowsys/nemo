@@ -1,0 +1,21 @@
+% STRTRIM and its one-sided forms remove whitespace, keeping a language
+% tag.
+
+go(1) .
+
+result(trim, ?r) :- go(1), ?r = STRTRIM("  padded \t") .
+result(trim_start, ?r) :- go(1), ?r = STRTRIMSTART("  padded  ") .
+result(trim_end, ?r) :- go(1), ?r = STRTRIMEND("  padded  ") .
+result(trim_nothing, ?r) :- go(1), ?r = STRTRIM("tight") .
+result(trim_all, ?r) :- go(1), ?r = STRTRIM("   ") .
+result(trim_tagged, ?r) :- go(1), ?r = STRTRIM(" hola "@es) .
+
+strings("Hello", "World") .
+tagged_padded("  hola  "@es) .
+
+result(strtrim, ?R) :- strings(?A, _), ?R = STRTRIM(CONCAT("  ", ?A, "  ")) .
+result(strtrimstart, ?R) :- strings(?A, _), ?R = STRTRIMSTART(CONCAT("  ", ?A, "  ")) .
+result(strtrimend, ?R) :- strings(?A, _), ?R = STRTRIMEND(CONCAT("  ", ?A, "  ")) .
+result(strtrim_lang, ?R) :- tagged_padded(?L), ?R = STRTRIM(?L) .
+result(strtrimstart_lang, ?R) :- tagged_padded(?L), ?R = STRTRIMSTART(?L) .
+result(strtrimend_lang, ?R) :- tagged_padded(?L), ?R = STRTRIMEND(?L) .

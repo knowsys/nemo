@@ -1,0 +1,9 @@
+% The `term` format reads each field as a term in program syntax:
+%   - numbers in every notation a program accepts (here hexadecimal),
+%   - quoted strings, with their escapes resolved.
+% A field that is not a valid term is malformed, and its row is skipped
+% with a warning.
+
+@import cells from csv { resource = "sources/literals.csv", format = (term, term) } .
+
+cell(?k, ?v) :- cells(?k, ?v) .

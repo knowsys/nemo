@@ -1,0 +1,5 @@
+hasItems(yes) .
+
+hasThree(yes) .
+
+summary(items, many) .

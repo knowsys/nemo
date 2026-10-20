@@ -1,0 +1,11 @@
+% JSON export writes each row as an array of its values: the values JSON
+% has natively, others, such as an IRI, as strings in the export form.
+
+measurement("alice", 34, true) .
+measurement("bob", 27, false) .
+
+@export measurement to json { resource = "measurements.json" } .
+
+mixed(1, "a", <http://example.org/x>) .
+
+@export mixed to json { resource = "mixed.json" } .

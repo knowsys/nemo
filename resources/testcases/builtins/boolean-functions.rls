@@ -1,0 +1,15 @@
+% Boolean connectives over boolean values, n-ary where they can be.
+
+t("true"^^<http://www.w3.org/2001/XMLSchema#boolean>) .
+f("false"^^<http://www.w3.org/2001/XMLSchema#boolean>) .
+
+result(and, ?r) :- t(?t), f(?f), ?r = AND(?t, ?f) .
+result(and_true, ?r) :- t(?t), ?r = AND(?t, ?t, ?t) .
+result(or, ?r) :- t(?t), f(?f), ?r = OR(?f, ?t) .
+result(or_false, ?r) :- f(?f), ?r = OR(?f, ?f) .
+result(not, ?r) :- t(?t), ?r = NOT(?t) .
+result(nested, ?r) :- t(?t), f(?f), ?r = NOT(AND(OR(?t, ?f), NOT(?f))) .
+kept(?x) :- t(?x), AND(?x, ?x) .
+
+boolean("true"^^<http://www.w3.org/2001/XMLSchema#boolean>, "false"^^<http://www.w3.org/2001/XMLSchema#boolean>) .
+result(Boolean, ?R) :- boolean(?True, ?False), ?R = STR(OR(AND(?True, ?False, ?True), AND(?True, NOT(?False), NOT(NOT(?True))))) .

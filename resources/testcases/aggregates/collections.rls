@@ -1,0 +1,9 @@
+% #tuple and #map collect a group into one structured value.
+
+price(apple, fruit, 2) .
+price(date, fruit, 2) .
+price(carrot, vegetable, 3) .
+
+items(?kind, #tuple(?item)) :- price(?item, ?kind, ?p) .
+prices(?kind, #map(?item = ?p)) :- price(?item, ?kind, ?p) .
+joined(?kind, STRJOIN(#tuple(STR(?item)), ", ")) :- price(?item, ?kind, ?p) .

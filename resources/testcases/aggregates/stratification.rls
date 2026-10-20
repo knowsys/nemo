@@ -1,0 +1,17 @@
+% An aggregated predicate is complete before it is aggregated, also when
+% it is fed by a recursion.
+
+r0(1).
+r0(2).
+r0(3).
+
+r1(2).
+r1(#max(?X)) :- r0(?X).
+
+r2(8).
+r2(10).
+
+r2(?X) :- r1(?X).
+r1(?X) :- r2(?X).
+
+r3(#count(?X)) :- r1(?X).

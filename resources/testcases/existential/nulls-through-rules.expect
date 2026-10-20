@@ -1,0 +1,8 @@
+hasMother(alice, _:0) .
+hasMother(bob, _:1) .
+
+mother(_:0) .
+mother(_:1) .
+
+siblings(alice, alice) .
+siblings(bob, bob) .

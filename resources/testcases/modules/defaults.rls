@@ -1,0 +1,12 @@
+% A module parameter left unbound takes its default.
+
+@use sources::hops { edge = link } as defaulted .
+
+link(1, 2) .
+link(2, 3) .
+link(3, 4) .
+link(4, 5) .
+
+reachable(?x, ?y) :- defaulted::within(?x, ?y) .
+
+@output reachable .

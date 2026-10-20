@@ -1,0 +1,109 @@
+{
+  "name": "nemo",
+  "displayName": "Nemo",
+  "description": "Nemo rule language: highlighting, diagnostics, and navigation",
+  "publisher": "knowsys",
+  "version": "0.2.0",
+  "license": "MIT OR Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/knowsys/nemo"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Linters"
+  ],
+  "main": "./out/extension.js",
+  "browser": "./out/browser/client.js",
+  "activationEvents": [
+    "onLanguage:nemo"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "nemo",
+        "aliases": [
+          "Nemo",
+          "nemo"
+        ],
+        "extensions": [
+          ".rls"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "nemo",
+        "scopeName": "source.nemo",
+        "path": "./syntaxes/nemo.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "nemo",
+        "path": "./snippets/nemo.code-snippets"
+      }
+    ],
+    "commands": [
+      {
+        "command": "nemo.restartServer",
+        "title": "Nemo: Restart Language Server"
+      },
+      {
+        "command": "nemo.showOutput",
+        "title": "Nemo: Show Language Server Output"
+      }
+    ],
+    "configuration": {
+      "title": "Nemo",
+      "properties": {
+        "nemo.server.path": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Path to the `nemo-language-server` executable. Left empty, the extension looks for a build under the workspace's `target/release` and `target/debug`, then on the `PATH`."
+        },
+        "nemo.server.arguments": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Extra arguments passed to the language server."
+        },
+        "nemo.trace.server": {
+          "type": "string",
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
+          "default": "off",
+          "description": "Log the traffic between VS Code and the language server."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./ && tsc -p ./tsconfig.browser.json && node tools/bundle.js",
+    "watch": "tsc -watch -p ./",
+    "wasm": "wasm-pack build --release --target web --out-dir ../nemo-vscode/wasm ../nemo-wasm",
+    "check-browser": "node tools/check-browser-server.js",
+    "vscode:prepublish": "npm run wasm && npm run compile"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.90.0",
+    "esbuild": "^0.25.10",
+    "typescript": "^5.4.0",
+    "vscode-languageserver": "^9.0.1",
+    "vscode-oniguruma": "^2.0.1",
+    "vscode-textmate": "^9.3.2"
+  }
+}

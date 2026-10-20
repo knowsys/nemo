@@ -1,0 +1,11 @@
+% A parameter read inside a tuple or a map resolves like one read bare,
+% whatever order the declarations come in.
+
+@parameter $a = ($b, 1) .
+@parameter $b = 2 .
+
+q($a) .
+m({k = $b}) .
+
+@output q .
+@output m .

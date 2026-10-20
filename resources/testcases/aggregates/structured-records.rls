@@ -1,0 +1,19 @@
+% #map pivots rows into one record per group, which body patterns then
+% read. Aggregates nest: a #tuple can be a value that a #map collects.
+
+setting(api, port, 8080) .
+setting(api, host, "10.0.0.1") .
+setting(db, port, 5432) .
+setting(db, timeout, 30) .
+
+config(?service, #map(?key = ?value)) :- setting(?service, ?key, ?value) .
+apiPort(?p) :- config(api, {host = _, port = ?p}) .
+
+age(alice, 30) .
+likes(alice, tea) .
+likes(alice, rust) .
+
+likings(?p, #tuple(?x)) :- likes(?p, ?x) .
+attribute(?p, age, ?a) :- age(?p, ?a) .
+attribute(?p, likes, ?all) :- likings(?p, ?all) .
+profile(?p, #map(?k = ?v)) :- attribute(?p, ?k, ?v) .

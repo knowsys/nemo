@@ -1,0 +1,7 @@
+% Integer literals: negative numbers, zero, and the bounds of 64 bits.
+
+n(0) .
+n(-0) .
+n(-7) .
+n(9223372036854775807) .
+n(-9223372036854775808) .

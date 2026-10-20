@@ -1,0 +1,11 @@
+<http://example.org/s> <http://example.org/iri> <http://example.org/o> .
+<http://example.org/s> <http://example.org/plain> "plain" .
+<http://example.org/s> <http://example.org/tagged> "chat"@fr .
+<http://example.org/s> <http://example.org/integer> "42"^^<http://www.w3.org/2001/XMLSchema#integer> .
+<http://example.org/s> <http://example.org/decimal> "1.50"^^<http://www.w3.org/2001/XMLSchema#decimal> .
+<http://example.org/s> <http://example.org/double> "2.5E0"^^<http://www.w3.org/2001/XMLSchema#double> .
+<http://example.org/s> <http://example.org/boolean> "true"^^<http://www.w3.org/2001/XMLSchema#boolean> .
+<http://example.org/s> <http://example.org/custom> "5cm"^^<http://example.org/length> .
+<http://example.org/s> <http://example.org/escaped> "line\nbreak \"quoted\" é" .
+_:b1 <http://example.org/blank> "first" .
+_:b1 <http://example.org/blank> "second" .

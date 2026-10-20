@@ -1,0 +1,9 @@
+{
+  "name": "Größe",
+  "count": 3,
+  "ratio": 0.5,
+  "active": true,
+  "missing": null,
+  "tags": ["a", "b"],
+  "nested": {"inner": [1, [2, 3]]}
+}

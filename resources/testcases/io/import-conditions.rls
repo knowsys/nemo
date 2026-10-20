@@ -1,0 +1,14 @@
+% An import's conditions keep the rows they hold for, also where no rule
+% reads the column they test. With conditions, the columns of a JSON
+% import fit a declaration.
+
+@import person(?name, ?age) from csv { resource = "sources/ages.csv" } where ?age >= 18 .
+
+adult(?name) :- person(?name, _) .
+
+@declare j(node: int, key: iri, value: string) .
+@import j(?node, ?key, ?value) from json { resource = "sources/document.json" }
+    where ISINTEGER(?node), ISIRI(?key), ISSTRING(?value) .
+
+@output adult .
+@output j .

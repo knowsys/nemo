@@ -1,0 +1,15 @@
+boundFirst(2, 9) .
+boundFirst(3, 3) .
+
+first(1) .
+first(2) .
+first(3) .
+
+inner(3) .
+
+labeled(1, 2) .
+
+same(3) .
+
+withOne(2) .
+withOne(3) .

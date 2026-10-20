@@ -1,0 +1,22 @@
+% Every value a rule writes into a declared column must provably fit
+% the declaration. A condition narrows the values a rule reads, a
+% conversion yields values of its type, and a label narrows a value to
+% the type its `@type` declares.
+
+@type point(int, int) .
+
+@declare years(who: iri, years: int) .
+@declare counts(who: iri, count: int) .
+@declare located(who: iri, at: point) .
+
+attr(alice, age, 31) .
+attr(bob, age, "unknown") .
+attr(carol, age, 2.5) .
+attr(alice, visits, "7") .
+attr(bob, visits, "many") .
+attr(alice, home, point(1, 2)) .
+attr(bob, home, "nowhere") .
+
+years(?who, ?years) :- attr(?who, age, ?years), ISINTEGER(?years) .
+counts(?who, INT(?count)) :- attr(?who, visits, ?count) .
+located(?who, ?at) :- attr(?who, home, ?at), LABEL(?at) = point .

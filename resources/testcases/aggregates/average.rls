@@ -1,0 +1,11 @@
+% #avg divides exactly: the average of integers is a decimal.
+
+grade(alice, 1) .
+grade(alice, 2) .
+grade(bob, 2) .
+grade(bob, 3) .
+grade(bob, 3) .
+grade(carol, 4) .
+
+average(?s, #avg(?g)) :- grade(?s, ?g) .
+overall(#avg(?g per ?s)) :- grade(?s, ?g) .

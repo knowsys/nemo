@@ -1,0 +1,8 @@
+largest(a, 1) .
+largest(b, 0.5f) .
+
+smallest(a, 0.5f) .
+smallest(b, 0.25d) .
+
+total(a, 1.5f) .
+total(b, 0.75d) .

@@ -1,0 +1,11 @@
+% NaN is identical to itself as a term but not equal to itself as a
+% value, and it is no smaller or larger than anything.
+
+x("NaN"^^<http://www.w3.org/2001/XMLSchema#double>) .
+y(1.0d) .
+
+sameTerm(ok) :- x(?x), ?x = ?x .
+sameValue(ok) :- x(?x), ?x == ?x .
+less(ok) :- x(?x), y(?y), ?x < ?y .
+greater(ok) :- x(?x), y(?y), ?x > ?y .
+notEqual(ok) :- x(?x), ?x !== ?x .

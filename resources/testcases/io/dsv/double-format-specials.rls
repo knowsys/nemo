@@ -1,0 +1,9 @@
+% The `double` format reads:
+%   - INF, -INF and NaN as the special double values,
+%   - a number too large for a double as infinity.
+% Other spellings, such as `inf` and `nan`, are malformed, and their
+% rows are skipped with a warning.
+
+@import cells from csv { resource = "sources/specials.csv", format = (term, double) } .
+
+cell(?k, ?v) :- cells(?k, ?v) .

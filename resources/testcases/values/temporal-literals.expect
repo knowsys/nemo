@@ -1,0 +1,9 @@
+sameInstant("2024-03-01T12:00:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>, "2024-03-01T13:00:00+01:00"^^<http://www.w3.org/2001/XMLSchema#dateTime>) .
+sameInstant("2024-03-01T13:00:00+01:00"^^<http://www.w3.org/2001/XMLSchema#dateTime>, "2024-03-01T12:00:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>) .
+
+t("2024-03-01T12:00:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>) .
+t("2024-03-01T13:00:00+01:00"^^<http://www.w3.org/2001/XMLSchema#dateTime>) .
+t("2024-03-01"^^<http://www.w3.org/2001/XMLSchema#date>) .
+t("12:30:00"^^<http://www.w3.org/2001/XMLSchema#time>) .
+t("P1DT12H"^^<http://www.w3.org/2001/XMLSchema#dayTimeDuration>) .
+t("P1Y2M"^^<http://www.w3.org/2001/XMLSchema#yearMonthDuration>) .

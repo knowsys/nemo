@@ -1,0 +1,12 @@
+% Rules that read no column of an import still test whether it has a row,
+% so the import keeps one of its columns for them.
+
+@import triple from ntriples { resource = "sources/data.nt" } .
+@import person from csv { resource = "sources/ages.csv" } .
+
+n(1) .
+
+anyTriple(yes) :- triple(_, _, _) .
+hasPeople(?x) :- n(?x), person(_, ?unused) .
+noTriples(?x) :- n(?x), ~triple(_, _, _) .
+fresh(!z) :- triple(_, _, _) .

@@ -1,0 +1,7 @@
+% The closure of its input, by the module `closure` beside this one.
+
+@input edge .
+@output reach .
+@use closure { edge = edge } as c .
+
+reach(?x, ?y) :- c::reach(?x, ?y) .

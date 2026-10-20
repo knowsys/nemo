@@ -1,0 +1,23 @@
+% A union type admits the values of any of its members. `null` names
+% the nulls existential rules invent, and `number` every number.
+
+@declare manager(employee: iri, manager: iri | null) .
+@declare measure(name: string, value: number | string) .
+@declare reading(int | (int, int)) .
+
+@output manager .
+@output measure .
+@output reading .
+
+employee(alice) .
+employee(bob) .
+manager(bob, alice) .
+manager(?e, !m) :- employee(?e) .
+
+measure("height", 1.80) .
+measure("count", 3) .
+measure("ratio", 0.5E0) .
+measure("comment", "none") .
+
+reading(1) .
+reading((2, 3)) .

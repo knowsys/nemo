@@ -1,0 +1,8 @@
+% The index notation reads a tuple's element by position and a map's
+% value by key.
+
+t((7, 8)) .
+m({host = "a", port = 80}) .
+
+element(?x) :- t(?t), ?x = ?t[1] .
+port(?p) :- m(?m), ?p = ?m[port] .

@@ -1,0 +1,3 @@
+goal(42) .
+
+quads(<http://example.org/graphs/spiderman>, <http://example.org/#spiderman>, <http://www.perceive.net/schemas/relationship/enemyOf>, <http://example.org/#green-goblin>) .

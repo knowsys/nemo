@@ -1,0 +1,8 @@
+% An integer literal too large for 64 bits is still an integer.
+
+n(9223372036854775808) .
+n(-9223372036854775809) .
+n(18446744073709551616) .
+
+kind(?x, ?t) :- n(?x), ?t = DATATYPE(?x) .
+integer(?x) :- n(?x), isInteger(?x) .

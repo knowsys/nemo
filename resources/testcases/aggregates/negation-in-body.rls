@@ -1,0 +1,11 @@
+% An aggregate over a body with a negated atom.
+
+item(1) .
+item(2) .
+item(3) .
+item(4) .
+sold(2) .
+sold(4) .
+
+unsold(#count(?x)) :- item(?x), ~sold(?x) .
+unsoldSum(#sum(?x)) :- item(?x), ~sold(?x) .

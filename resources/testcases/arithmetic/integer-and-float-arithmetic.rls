@@ -1,0 +1,12 @@
+% Arithmetic on numbers of different types:
+%   - An integer and a float give a float: XPath converts the integer to
+%     the type of the other operand.
+%   - A float and a double give a double.
+
+go(1) .
+
+result(sum, ?r) :- go(1), ?r = 1 + 0.5f .
+result(difference, ?r) :- go(1), ?r = 3 - 0.5f .
+result(product, ?r) :- go(1), ?r = 2 * 0.25f .
+result(quotient, ?r) :- go(1), ?r = 1 / 2.0f .
+result(float_and_double, ?r) :- go(1), ?r = 0.5f + 0.25E0 .

@@ -1,0 +1,2 @@
+before(false, true) .
+before("2020-01-01"^^<http://www.w3.org/2001/XMLSchema#date>, "2021-06-30"^^<http://www.w3.org/2001/XMLSchema#date>) .

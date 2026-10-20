@@ -1,0 +1,16 @@
+% RAND, UUID, STRUUID and NOW give fresh values; only their shapes can
+% be checked. NOW is one instant throughout a run.
+
+go(1) .
+
+result(rand_in_range, ok) :- go(1), ?x = RAND(), ?x >= 0.0E0, ?x < 1.0E0 .
+result(uuid_scheme, ?r) :- go(1), ?r = STRSTARTS(STR(UUID()), "urn:uuid:") .
+result(now_stable, ok) :- go(1), ?a = NOW(), ?b = NOW(), ?a == ?b .
+
+constant(constant) .
+
+result(rand_range, "ok") :- constant(?C), ?X = RAND(), ?X >= 0.0E0, ?X < 1.0E0 .
+result(uuid_iri, ?R) :- constant(?C), ?R = isIri(UUID()) .
+result(struuid_length, ?R) :- constant(?C), ?R = STRLEN(STRUUID()) .
+result(now_datatype, ?R) :- constant(?C), ?R = DATATYPE(NOW()) .
+result(now_year, "ok") :- constant(?C), ?Y = YEAR(NOW()), ?Y >= 2025 .

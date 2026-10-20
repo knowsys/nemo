@@ -1,4 +1,6 @@
+# Nemo builds on stable Rust. The wasm32 target is for nemo-wasm; the nix
+# flake builds its toolchain from this file.
 [toolchain]
-channel = "nightly"
-components = [ "clippy", "miri", "rust-analyzer", "rust-docs", "rust-src", "rustfmt" ]
-targets = [ "wasm32-unknown-unknown" ]
+channel = "stable"
+components = ["clippy", "rust-analyzer", "rust-docs", "rust-src", "rustfmt"]
+targets = ["wasm32-unknown-unknown"]

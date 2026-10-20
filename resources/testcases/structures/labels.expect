@@ -1,0 +1,11 @@
+anyPair(2, 3) .
+anyPair(7, 8) .
+
+backendPort(9000) .
+
+circleRadius(1.5) .
+
+kind((7, 8), "") .
+kind(circle(1.5), circle) .
+kind(rect(2, 3), rect) .
+kind(square(2), square) .

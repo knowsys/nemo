@@ -1,0 +1,7 @@
+% The pairs its input connects, by the module `util::closure`.
+
+@input source .
+@output far .
+@use util::closure { edge = source } as inner .
+
+far(?x, ?y) :- inner::reach(?x, ?y) .

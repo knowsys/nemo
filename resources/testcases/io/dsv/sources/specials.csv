@@ -1,0 +1,7 @@
+plain,2.5
+infinity,INF
+negativeInfinity,-INF
+notANumber,NaN
+beyond,1e400
+infinityLower,inf
+notANumberLower,nan

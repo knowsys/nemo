@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use clap::{CommandFactory, Subcommand, ValueEnum};
 
 use clap_complete::{Shell, generate_to};
-use nemo_cli::cli::CliApp;
+use nemo_cli::arguments::Arguments;
 
 use super::Task;
 use crate::bin_name::nemo_cli_bin_name;
@@ -19,7 +19,7 @@ impl Task for ShellCompletions {
     fn handle(self) -> Result<()> {
         match self {
             Self::GenerateShellCompletions { out_dir } => {
-                let mut command = CliApp::command();
+                let mut command = Arguments::command();
                 Shell::value_variants().iter().try_for_each(|&shell| {
                     generate_to(shell, &mut command, nemo_cli_bin_name(), out_dir.clone())
                         .and(Ok(()))

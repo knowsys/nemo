@@ -1,0 +1,12 @@
+result(strtrim, "Hello") .
+result(strtrim_lang, "hola"@es) .
+result(strtrimend, "  Hello") .
+result(strtrimend_lang, "  hola"@es) .
+result(strtrimstart, "Hello  ") .
+result(strtrimstart_lang, "hola  "@es) .
+result(trim, "padded") .
+result(trim_all, "") .
+result(trim_end, "  padded") .
+result(trim_nothing, "tight") .
+result(trim_start, "padded  ") .
+result(trim_tagged, "hola"@es) .

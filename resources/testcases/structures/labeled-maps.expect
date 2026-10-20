@@ -1,0 +1,10 @@
+built(config{port = 8080}) .
+
+labeled(config{port = 80}) .
+
+p({port = 80}) .
+p(config{port = 80}) .
+
+plain(80) .
+
+viaLabel(80) .

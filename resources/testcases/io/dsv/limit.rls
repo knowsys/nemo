@@ -1,0 +1,8 @@
+% The `limit` option reads at most that many rows of a file; a limit of
+% zero reads none.
+
+@import firstTwo from csv { resource = "sources/ten-rows.csv", limit = 2 } .
+@import none from csv { resource = "sources/ten-rows.csv", limit = 0 } .
+
+row(?x) :- firstTwo(?x) .
+nothing(?x) :- none(?x) .

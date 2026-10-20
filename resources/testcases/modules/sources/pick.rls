@@ -1,0 +1,6 @@
+% Offers the value it is given.
+
+@output picked .
+@parameter $value .
+
+picked($value) .

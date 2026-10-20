@@ -1,0 +1,6 @@
+% Two existential variables in one atom: two fresh nulls per match.
+
+person(alice) .
+person(bob) .
+
+parents(?x, !mother, !father) :- person(?x) .

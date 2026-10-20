@@ -1,0 +1,8 @@
+value(comma, "a,b") .
+value(double, 2.5d) .
+value(int, 42) .
+value(iri, <http://example.org/a>) .
+value(name, alice) .
+value(string, "plain") .
+value(tagged, "hallo"@de) .
+value(typed, "5cm"^^<http://example.org/length>) .

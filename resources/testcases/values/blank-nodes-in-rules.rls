@@ -1,0 +1,21 @@
+% A rule reads a blank node like any constant: `_:a` in a body is the
+% one null every mention of `_:a` is. A blank node that only a parameter
+% names is a null too.
+
+/* Block comments are trivia. */
+p(_:a, 1) .
+p(_:a, 2) .
+p(_:b, 3) .
+
+q(?x) :- p(_:a, ?x) .
+same(?x, ?y) :- p(?x, _), p(?y, _), ?x = ?y .
+
+@parameter $x = _:c .
+
+r($x) .
+r(_:d) .
+
+@output p .
+@output q .
+@output same .
+@output r .

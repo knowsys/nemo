@@ -1,0 +1,15 @@
+% Several atoms joined on one shared variable, each contributing its own
+% columns.
+
+name(1, alice) .
+name(2, bob) .
+name(3, carol) .
+age(1, 30) .
+age(2, 25) .
+age(4, 99) .
+city(1, dresden) .
+city(1, leipzig) .
+city(2, berlin) .
+city(3, prague) .
+
+profile(?id, ?n, ?a, ?c) :- name(?id, ?n), age(?id, ?a), city(?id, ?c) .

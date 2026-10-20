@@ -1,0 +1,11 @@
+% A blank node in a program is a labeled null of its own: every mention
+% of one label is the same null, two labels are two nulls.
+
+knows(alice, _:someone) .
+knows(bob, _:someone) .
+likes(_:someone, _:other) .
+
+common(?x, ?y) :- knows(?x, ?z), knows(?y, ?z), ?x != ?y .
+nulls(?z) :- knows(_, ?z) .
+nulls(?z) :- likes(?z, _) .
+nulls(?z) :- likes(_, ?z) .

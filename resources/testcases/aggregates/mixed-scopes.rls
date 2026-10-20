@@ -1,0 +1,12 @@
+% Aggregates of every scope in one head:
+%   - `#count()` counts the body matches,
+%   - a bare aggregate ranges over distinct values,
+%   - `per` ranges over distinct pairs of value and witness.
+% Group 1 has three matches: (a, b) is (2, 7), (2, 8) and (3, 7).
+
+data(1, 2, 7) .
+data(1, 2, 8) .
+data(1, 3, 7) .
+data(2, 5, 5) .
+
+stats(?g, #count(), #count(?a), #sum(?b), #sum(?b per ?a)) :- data(?g, ?a, ?b) .

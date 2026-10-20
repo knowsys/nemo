@@ -1,0 +1,5 @@
+% One null shared by three head atoms.
+
+@import data from csv { resource = "sources/data.csv" }.
+
+null(!V), result(!V, ?X), result(?X, !V) :- data(?X, ?Y) .

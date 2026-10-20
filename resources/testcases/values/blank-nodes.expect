@@ -1,0 +1,5 @@
+common(alice, bob) .
+common(bob, alice) .
+
+nulls(_:0) .
+nulls(_:1) .

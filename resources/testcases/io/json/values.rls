@@ -1,0 +1,23 @@
+% A JSON document read as a graph of nodes:
+%   - each node has a type,
+%   - a leaf node has a value,
+%   - object keys and array indices lead to the children.
+% The queries below do not depend on how the nodes are numbered.
+
+@import doc from json { resource = "sources/values.json" } .
+
+typeEdge(type) .
+valueEdge(value) .
+
+edge(?p, ?k, ?c) :- doc(?p, ?k, ?c), ~typeEdge(?k), ~valueEdge(?k) .
+typeOf(?n, ?t) :- doc(?n, ?e, ?t), typeEdge(?e) .
+valueOf(?n, ?v) :- doc(?n, ?e, ?v), valueEdge(?e) .
+child(?c) :- edge(_, _, ?c) .
+root(?n) :- typeOf(?n, _), ~child(?n) .
+
+key(?k, ?t) :- root(?r), edge(?r, ?k, ?c), typeOf(?c, ?t) .
+keyValue(?k, ?v) :- root(?r), edge(?r, ?k, ?c), valueOf(?c, ?v) .
+tag(?i, ?v) :- root(?r), edge(?r, "tags", ?a), edge(?a, ?i, ?e), valueOf(?e, ?v) .
+deep(?i, ?v) :- root(?r), edge(?r, "nested", ?o), edge(?o, "inner", ?a), edge(?a, 1, ?b), edge(?b, ?i, ?e), valueOf(?e, ?v) .
+
+@output key, keyValue, tag, deep .

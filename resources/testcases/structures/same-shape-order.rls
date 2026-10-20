@@ -1,0 +1,19 @@
+% Tuples with the same label and arity are ordered element by element,
+% so wrapped scalars compare and have extrema. Tuples of different shapes
+% do not compare: such a comparison fails, so `q` only relates the two
+% points.
+
+@type angle(decimal) .
+
+turn(angle(0.5)) .
+turn(angle(1.5)) .
+turn(angle(1.0)) .
+
+small(?a) :- turn(?a), ?a < angle(1.0) .
+widest(#max(?a)) :- turn(?a) .
+
+p(point(1, 2)) .
+p(pixel(1, 2)) .
+p(point(1, 3)) .
+
+q(?a, ?b) :- p(?a), p(?b), ?a < ?b .

@@ -1,0 +1,7 @@
+% An existential rule does not fire where imported facts satisfy its head.
+
+@import student from csv { resource = "sources/students.csv" } .
+@import takes from csv { resource = "sources/takes.csv" } .
+@import course from csv { resource = "sources/courses.csv" } .
+
+takes(?S, !C), course(!C) :- student(?S) .

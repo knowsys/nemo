@@ -1,0 +1,14 @@
+% Decimal literals are exact:
+%   - trailing zeros vanish,
+%   - integral decimals are integers,
+%   - sums carry no rounding error.
+
+d(1.5) .
+d(1.50) .
+d(-0.5) .
+d(1.0) .
+d(0.1 + 0.2) .
+d(12345678901234567890.123456789) .
+
+integral(?x) :- d(?x), ?x = 1 .
+exactSum(ok) :- d(?x), ?x = 0.3 .

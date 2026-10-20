@@ -1,0 +1,5 @@
+node_modules/
+out/
+*.vsix
+# The WebAssembly module the browser entry bundles (`npm run wasm`).
+wasm/

@@ -1,0 +1,13 @@
+doubled(1, "1 * 2 = 2") .
+doubled(2, "2 * 2 = 4") .
+
+plain("no placeholders") .
+
+result(fstring_arithmetic, "len*10=50") .
+result(fstring_basic, "Hello and World") .
+result(fstring_braces_in_strings, "}Hello{") .
+result(fstring_language_tag, "[en]") .
+result(fstring_multiline, "Hello and World") .
+result(fstring_nested, "<(}Hello)>") .
+result(1, "one is 1") .
+result(2, "two is 2") .

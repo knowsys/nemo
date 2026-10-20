@@ -1,0 +1,3 @@
+Assert(negative) .
+
+NonPositive(-1) .

@@ -1,0 +1,17 @@
+% The column formats `term`, `iri` and `decimal`:
+%
+%   term     A cell is read as a program reads a term: a number in any
+%            notation, a "…" string, an <…> IRI, and a bare word such
+%            as `word` as an IRI.
+%   iri      A cell, as written, is an IRI: `alice` is <alice>.
+%   decimal  A cell is an exact decimal number.
+%
+% The case reads `double` columns too.
+
+@import asTerm from csv { resource = "sources/formats.csv", format = (term, term) } .
+@import asNumbers from csv { resource = "sources/numbers-only.csv", format = (decimal, double) } .
+@import asIris from csv { resource = "sources/names.csv", format = (iri) } .
+
+term(?a, ?b) :- asTerm(?a, ?b) .
+numbers(?a, ?b) :- asNumbers(?a, ?b) .
+iris(?a) :- asIris(?a) .

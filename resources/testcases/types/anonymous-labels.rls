@@ -1,0 +1,9 @@
+% The label `_` in a declared tuple type constrains the shape, not the
+% label: `_(int, int)` admits pairs of integers with any label or none.
+
+@declare p(_(int, int)) .
+
+p((1, 2)) .
+p(point(3, 4)) .
+
+first(?x) :- p(?t), ?x = ?t[0] .

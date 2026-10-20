@@ -1,0 +1,18 @@
+deep(0, 2) .
+deep(1, 3) .
+
+key("active", "bool") .
+key("count", "number") .
+key("missing", "null") .
+key("name", "string") .
+key("nested", "object") .
+key("ratio", "number") .
+key("tags", "array") .
+
+keyValue("active", true) .
+keyValue("count", 3) .
+keyValue("name", "Größe") .
+keyValue("ratio", 0.5d) .
+
+tag(0, "a") .
+tag(1, "b") .

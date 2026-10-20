@@ -1,0 +1,8 @@
+% A row whose cell its format rejects is malformed, also in a column no rule
+% reads: which columns the rules read never changes which rows load.
+
+@import pairs from csv { resource = "sources/ill-typed.csv", format = (term, int) } .
+@import triples from ntriples { resource = "sources/ill-typed.nt" } .
+
+name(?s) :- pairs(?s, _) .
+subject(?s) :- triples(?s, _, _) .

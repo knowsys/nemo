@@ -1,0 +1,10 @@
+% An aggregate over a recursive predicate sees its complete result.
+
+edge(1, 2) .
+edge(2, 3) .
+edge(3, 1) .
+edge(3, 4) .
+
+reach(?x, ?y) :- edge(?x, ?y) .
+reach(?x, ?z) :- reach(?x, ?y), edge(?y, ?z) .
+reachable(?x, #count(?y)) :- reach(?x, ?y) .

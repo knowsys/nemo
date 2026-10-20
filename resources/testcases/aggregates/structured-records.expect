@@ -1,0 +1,11 @@
+apiPort(8080) .
+
+attribute(alice, age, 30) .
+attribute(alice, likes, (rust, tea)) .
+
+config(api, {host = "10.0.0.1", port = 8080}) .
+config(db, {port = 5432, timeout = 30}) .
+
+likings(alice, (rust, tea)) .
+
+profile(alice, {age = 30, likes = (rust, tea)}) .

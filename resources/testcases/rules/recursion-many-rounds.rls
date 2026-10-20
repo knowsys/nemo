@@ -1,0 +1,4 @@
+% A recursion of a hundred rounds that each derive a single fact.
+
+count(0) .
+count(?n + 1) :- count(?n), ?n < 100 .

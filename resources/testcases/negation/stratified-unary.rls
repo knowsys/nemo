@@ -1,0 +1,13 @@
+% Stratified negation over a chain of derived unary predicates
+% (https://github.com/knowsys/nemo/pull/220).
+
+p1(a).
+p1(b).
+p2(a).
+
+q1(?X) :- p1(?X).
+q2(?X) :- p2(?X).
+
+q(?X) :- q1(?X), ~q2(?X).
+
+r(?X) :- q(?X).

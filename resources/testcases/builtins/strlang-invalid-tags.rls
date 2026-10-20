@@ -1,0 +1,7 @@
+% STRLANG builds a language-tagged string only if the tag is well
+% formed; otherwise it derives nothing.
+
+go(1) .
+
+result(region, ?r) :- go(1), ?r = STRLANG("x", "en-us") .
+result(invalid, ?r) :- go(1), ?r = STRLANG("x", "not a tag") .

@@ -1,0 +1,15 @@
+% Aggregates over a null and a number:
+%   - For #min and #max, a null is smaller than every number, as blank
+%     nodes come first in SPARQL's ORDER BY.
+%   - #sum fails on the null, so it derives nothing.
+%   - #count counts the null like any other value.
+
+number(3) .
+anonymous(!n) :- number(3) .
+v(?x) :- number(?x) .
+v(?n) :- anonymous(?n) .
+
+smallest(#min(?x)) :- v(?x) .
+largest(#max(?x)) :- v(?x) .
+total(#sum(?x)) :- v(?x) .
+howMany(#count(?x)) :- v(?x) .

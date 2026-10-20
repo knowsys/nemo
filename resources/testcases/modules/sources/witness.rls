@@ -1,0 +1,7 @@
+% A pair of facts sharing one blank node.
+
+@output pair .
+
+left(_:a) .
+right(_:a) .
+pair(?x) :- left(?x), right(?x) .

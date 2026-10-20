@@ -1,0 +1,7 @@
+% The numbers of its input below a limit it has no default for.
+
+@input number .
+@output small .
+@parameter $limit: int .
+
+small(?x) :- number(?x), ?x < $limit .

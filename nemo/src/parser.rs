@@ -1,132 +1,173 @@
-//! This module defines [Parser], which is responsible for parsing nemo programs.
+//! The parser: source text into program components.
+//!
+//! A hand-written lexer turns the whole input into a token buffer once,
+//! every byte of the input ending up in a token.
+//! A recursive descent parser with Pratt expression parsing consumes the buffer linearly.
+//! It decides by peeking at the next tokens and never backtracks.
+//! The program parser recovers per statement:
+//! a broken statement becomes a diagnostic, the parser resumes after the next ` .`,
+//! and every other statement still parses.
+//!
+//! The public surface is `parse` on the components.
+//! [Program::parse] returns the program with all diagnostics.
+//! The component forms ([Rule], [Fact], [Atom], [Term], [Statement], [ModuleName])
+//! parse one component that must span the whole input.
 
-pub mod ast;
-pub mod context;
-pub mod error;
-pub mod input;
-pub mod span;
+mod combinators;
+mod cursor;
+mod directive;
+mod lexer;
+mod name;
+mod statement;
+mod term;
 
-use std::{cell::RefCell, fmt::Display, rc::Rc};
-
-use ast::{ProgramAST, program::Program};
-use error::{ParserError, ParserErrorTree};
-use input::ParserInput;
-
-use nom::IResult;
+use nemo_physical::diagnostics::Diagnostic;
 
 use crate::{
-    error::{context::ContextError, report::ProgramReport},
-    rule_file::RuleFile,
+    diagnostics::ParseError,
+    model::{Atom, Fact, FileId, ModuleName, Program, Rule, Statement, Term},
+    parser::cursor::{Parser, excerpt},
 };
 
-/// State of the parser
-#[derive(Debug, Clone, Default)]
-pub struct ParserState {
-    /// Collection of all errors that occurred during parsing
-    errors: Rc<RefCell<Vec<ParserError>>>,
-}
+pub(crate) use self::lexer::is_bare_name;
 
-impl ParserState {
-    /// Append a [ParserError] to the current list of errors.
-    pub(crate) fn report_error(&self, error: ParserError) {
-        self.errors.borrow_mut().push(error);
+impl Program {
+    /// Parses a whole source file.
+    ///
+    /// A statement that does not parse becomes a diagnostic,
+    /// and every statement that parses is returned in the program.
+    pub fn parse(source: &str, file: FileId) -> (Program, Vec<Diagnostic>) {
+        let (statements, diagnostics) = Parser::program(source, file);
+        (Program::new(statements), diagnostics)
     }
 }
 
-/// Output of a nom parser function
-pub type ParserResult<'a, Output> = IResult<ParserInput<'a>, Output, ParserErrorTree<'a>>;
-
-/// Parser for the nemo rule language
-#[derive(Debug)]
-pub struct Parser<'a> {
-    /// Reference to the text that is going to be parsed
-    input: &'a str,
-    /// State of the parser
-    state: ParserState,
+impl Statement {
+    /// Parses one statement spanning the whole input.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first problem with the input.
+    pub fn parse(source: &str) -> Result<Self, Diagnostic> {
+        Parser::component(source, |parser| parser.statement())
+    }
 }
 
-/// Contains all errors that occurred during parsing
-#[derive(Debug)]
-pub struct ParserErrorReport {
-    /// List of [ParserError]s
-    errors: Vec<ParserError>,
-}
-
-impl Display for ParserErrorReport {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for (index, error) in self.errors.iter().enumerate() {
-            if index > 0 {
-                writeln!(f)?;
-            }
-
-            write!(f, "{error}")?;
+impl Rule {
+    /// Parses one rule spanning the whole input.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first problem with the input, or an error if the statement is not a rule.
+    pub fn parse(source: &str) -> Result<Self, Diagnostic> {
+        match Statement::parse(source)? {
+            Statement::Rule(rule) => Ok(rule),
+            _ => Err(other_statement("a rule", source)),
         }
-
-        Ok(())
     }
 }
 
-impl ParserErrorReport {
-    /// Construct an empty report, indicating there is some unspecified error.
-    pub fn empty() -> Self {
-        Self {
-            errors: Vec::default(),
+impl Fact {
+    /// Parses one fact spanning the whole input.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first problem with the input, or an error if the statement is not a fact.
+    pub fn parse(source: &str) -> Result<Self, Diagnostic> {
+        match Statement::parse(source)? {
+            Statement::Fact(fact) => Ok(fact),
+            _ => Err(other_statement("a fact", source)),
         }
     }
 
-    /// Convert this report to a list of [ContextError]s.
-    pub fn context_errors(self) -> impl Iterator<Item = (ContextError, bool)> {
-        self.errors.into_iter().map(|error| {
-            let range = error.position.range();
-            (ContextError::new(error, range), false)
-        })
-    }
-
-    /// Convert this report to a [ProgramReport].
-    pub fn program_report(self, file: RuleFile) -> ProgramReport {
-        let mut report = ProgramReport::new(file);
-        report.merge_parser_report(self);
-        report
-    }
-
-    /// Return raw [ParserError]s.
-    pub fn errors(&self) -> &Vec<ParserError> {
-        &self.errors
-    }
-}
-
-impl From<Vec<ParserError>> for ParserErrorReport {
-    fn from(errors: Vec<ParserError>) -> Self {
-        Self { errors }
-    }
-}
-
-impl<'a> Parser<'a> {
-    /// Initialize the parser.
-    pub fn initialize(input: &'a str) -> Self {
-        Self {
-            input,
-            state: ParserState::default(),
-        }
-    }
-
-    /// Parse the input.
-    pub fn parse(self) -> Result<Program<'a>, (Box<Program<'a>>, ParserErrorReport)> {
-        let parser_input = ParserInput::new(self.input, self.state.clone());
-
-        let (_, program) = Program::parse(parser_input).expect("parsing should always succeed");
-
-        if self.state.errors.borrow().is_empty() {
-            Ok(program)
+    /// Parses one fact written with or without its terminator.
+    ///
+    /// Facts given on a command line or through a language binding
+    /// often leave out the closing ` .`.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first problem with the input, or an error if the statement is not a fact.
+    pub fn parse_loose(source: &str) -> Result<Self, Diagnostic> {
+        let text = source.trim();
+        let statement = if text.ends_with('.') {
+            Statement::parse(text)?
         } else {
-            Err((
-                Box::new(program),
-                ParserErrorReport {
-                    errors: Rc::try_unwrap(self.state.errors)
-                        .expect("there should only be one owner now")
-                        .into_inner(),
-                },
-            ))
+            Statement::parse(&format!("{text} ."))
+                .map_err(|problem| at_end_of_text(problem, text.len()))?
+        };
+        match statement {
+            Statement::Fact(fact) => Ok(fact),
+            _ => Err(other_statement("a fact", text)),
         }
     }
 }
+
+/// Returns the error for a statement that parses but is not of the `expected` kind,
+/// quoting the start of its text.
+fn other_statement(expected: &str, source: &str) -> Diagnostic {
+    ParseError::Expected {
+        expected: expected.to_owned(),
+        found: format!("`{}`", excerpt(source.trim())),
+    }
+    .diagnostic()
+}
+
+/// Returns the problem of a text of the given length parsed with ` .` appended,
+/// where the appended terminator, found in place of something else,
+/// is reported as the end of the text that was given.
+fn at_end_of_text(problem: Diagnostic, length: usize) -> Diagnostic {
+    let at_terminator = problem
+        .labels()
+        .first()
+        .is_some_and(|label| label.span.start as usize > length)
+        && problem.field("found") == Some("`.`");
+    let expected = problem
+        .field("expected")
+        .filter(|_| at_terminator)
+        .map(str::to_owned);
+    match expected {
+        Some(expected) => ParseError::Expected {
+            expected,
+            found: String::from("the end of the input"),
+        }
+        .diagnostic(),
+        None => problem,
+    }
+}
+
+impl Atom {
+    /// Parses one atom spanning the whole input.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first problem with the input.
+    pub fn parse(source: &str) -> Result<Self, Diagnostic> {
+        Parser::component(source, |parser| parser.atom())
+    }
+}
+
+impl Term {
+    /// Parses one term spanning the whole input.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first problem with the input.
+    pub fn parse(source: &str) -> Result<Self, Diagnostic> {
+        Parser::component(source, |parser| parser.term())
+    }
+}
+
+impl ModuleName {
+    /// Parses one module name spanning the whole input, as a `@use` writes it.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first problem with the input.
+    pub fn parse(source: &str) -> Result<Self, Diagnostic> {
+        Parser::component(source, |parser| parser.module_name())
+    }
+}
+
+#[cfg(test)]
+mod tests;

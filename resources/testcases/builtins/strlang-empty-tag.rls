@@ -1,0 +1,7 @@
+% The empty string is not a language tag, so STRLANG with an empty tag
+% derives nothing.
+
+go(1) .
+
+result(tag, ?r) :- go(1), ?r = STRLANG("x", "en") .
+result(empty_tag, ?r) :- go(1), ?r = STRLANG("x", "") .

@@ -1,0 +1,6 @@
+adult("Alice") .
+adult("Dora") .
+
+person("Alice", 30) .
+person("Carol", 17) .
+person("Dora", 52) .

@@ -1,0 +1,26 @@
+% STR gives the lexical form of a value as a plain string, fullStr a
+% literal's complete term syntax.
+
+value(int, 42) .
+value(negative, -7) .
+value(double, 2.5E0) .
+value(string, "text") .
+value(langString, "text"@en) .
+value(iri, <http://example.org/a>) .
+literal(double, 2.5E0) .
+literal(string, "text") .
+literal(langString, "text"@en) .
+
+lexical(?kind, ?r) :- value(?kind, ?v), ?r = STR(?v) .
+complete(?kind, ?r) :- literal(?kind, ?v), ?r = fullStr(?v) .
+
+strings("Hello", "World") .
+doubles(2.0E0, 1.5E0, 0.5E0) .
+tagged("test"@en) .
+
+result(string, ?R) :- strings(?A, _), ?R = STR(?A) .
+result(string, ?R) :- doubles(?A, _, _), ?R = STR(?A) .
+result(string, ?R) :- tagged(?A), ?R = STR(?A) .
+result(fullstring, ?R) :- strings(?A, _), ?R = fullStr(?A) .
+result(fullstring, ?R) :- doubles(?A, _, _), ?R = fullStr(?A) .
+result(fullstring, ?R) :- tagged(?A), ?R = fullStr(?A) .

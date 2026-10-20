@@ -1,0 +1,6 @@
+% A quote inside a string is escaped with a backslash.
+
+s("say \"hi\"") .
+s("\"") .
+
+size(?v, ?n) :- s(?v), ?n = STRLEN(?v) .

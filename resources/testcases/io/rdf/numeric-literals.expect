@@ -1,0 +1,7 @@
+next(<http://example.org/big>, 18446744073709551617) .
+next(<http://example.org/decimal>, 2.5) .
+next(<http://example.org/int>, 8) .
+
+numeric(<http://example.org/big>) .
+numeric(<http://example.org/decimal>) .
+numeric(<http://example.org/int>) .

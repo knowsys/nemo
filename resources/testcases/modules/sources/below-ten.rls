@@ -1,0 +1,7 @@
+% The numbers of its input below its own limit of 10.
+
+@input number .
+@output small .
+@parameter $limit = 10 .
+
+small(?x) :- number(?x), ?x < $limit .

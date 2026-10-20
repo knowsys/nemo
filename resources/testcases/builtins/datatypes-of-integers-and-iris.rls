@@ -1,0 +1,12 @@
+% DATATYPE names xsd:integer for an integer. An IRI is no literal, so it
+% has no datatype to name.
+
+value(int, 42) .
+value(iri, x) .
+
+typeOf(?kind, ?r) :- value(?kind, ?v), ?r = DATATYPE(?v) .
+
+cast(5) .
+cast(test) .
+
+result(datatype, ?R) :- cast(?A), ?R = DATATYPE(?A) .

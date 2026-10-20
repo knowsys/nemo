@@ -1,0 +1,10 @@
+nonstop(berlin, dresden) .
+nonstop(dresden, prague) .
+nonstop(prague, vienna) .
+
+trip(berlin, dresden) .
+trip(berlin, prague) .
+trip(berlin, vienna) .
+trip(dresden, prague) .
+trip(dresden, vienna) .
+trip(prague, vienna) .

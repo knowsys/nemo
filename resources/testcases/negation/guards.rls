@@ -1,0 +1,10 @@
+% A negated atom sharing no variable with the rest of the body guards
+% the whole rule: it holds for every row or for none. A variable that
+% only the negated atom mentions stands for any value.
+
+input(1) .
+input(2) .
+flag(off) .
+
+allowed(?x) :- input(?x), ~flag(on) .
+blocked(?x) :- input(?x), ~flag(?any) .

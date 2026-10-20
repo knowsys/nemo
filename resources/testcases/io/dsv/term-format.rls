@@ -1,0 +1,6 @@
+% The `term` format reads each field as a term: integers, IRIs, quoted
+% strings and typed literals.
+
+@import cells from csv { resource = "sources/terms.csv", format = (term, term) } .
+
+cell(?k, ?v) :- cells(?k, ?v) .

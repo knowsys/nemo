@@ -1,0 +1,8 @@
+% Without formats of its own, an import takes them from the declaration:
+% an `iri` column reads each field as written as an IRI, numeric-looking
+% fields too.
+
+@declare p(x: iri) .
+@import p from csv { resource = "sources/codes.csv" } .
+
+q(?x) :- p(?x) .

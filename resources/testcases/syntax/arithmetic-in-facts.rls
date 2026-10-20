@@ -1,0 +1,5 @@
+% Regression test for https://github.com/knowsys/nemo/issues/598:
+% arithmetic in a fact is evaluated. Ground operations used to stay
+% unevaluated, which crashed.
+
+fact(5 * 2, 80 / 4).

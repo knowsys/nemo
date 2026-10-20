@@ -1,0 +1,16 @@
+% Every instance of a module has blank nodes of its own: inside one,
+% both mentions of `_:a` are one null. A blank node a use passes in is
+% the using program's.
+
+@use sources::witness {} as one .
+@use sources::witness {} as two .
+@use sources::pick { $value = _:a } as picker .
+
+mine(_:a) .
+
+all(?x) :- one::pair(?x) .
+all(?x) :- two::pair(?x) .
+all(?x) :- mine(?x) .
+same(?x) :- picker::picked(?x), mine(?x) .
+
+@output all, same .

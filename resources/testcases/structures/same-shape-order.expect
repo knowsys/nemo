@@ -1,0 +1,5 @@
+q(point(1, 2), point(1, 3)) .
+
+small(angle(0.5)) .
+
+widest(angle(1.5)) .

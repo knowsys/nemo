@@ -1,0 +1,23 @@
+% An expression in a body atom matches the stored values equal to its
+% result: `d(?x + 1, ?c)` reads the row after ?x. Its input may also
+% come later in the body, and a computed value no row holds simply
+% matches nothing.
+
+d(1, "a") .
+d(2, "b") .
+d(3, "a") .
+
+next(?x, ?c) :- d(?x, _), d(?x + 1, ?c) .
+twice(?x, ?c) :- d(?x, _), d(2 * ?x, ?c), ?x > 1 .
+
+e(1) .
+e(2) .
+e(4) .
+
+follows(?y) :- e(?y + 1), e(?y) .
+
+word("ab") .
+word("abab") .
+word("b") .
+
+doubled(?w) :- word(?w), word(CONCAT(?w, ?w)) .

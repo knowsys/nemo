@@ -1,0 +1,6 @@
+% A number literal may carry an explicit plus sign.
+
+n(+7) .
+n(-7) .
+
+m(?x) :- n(?x) .

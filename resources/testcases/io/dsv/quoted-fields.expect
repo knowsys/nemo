@@ -1,0 +1,6 @@
+field("comma", "a,b") .
+field("empty", "") .
+field("linebreak", "two
+lines") .
+field("plain", "text") .
+field("quotes", "say \"hi\"") .

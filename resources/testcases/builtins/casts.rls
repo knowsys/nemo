@@ -1,0 +1,37 @@
+% Casts between numbers, strings and IRIs; a value that does not cast
+% derives nothing.
+
+input(int, 42) .
+input(negative, -3) .
+input(numberString, "40") .
+input(signedString, "-12") .
+input(textString, "abc") .
+input(iriString, "http://example.org/x") .
+input(iri, x) .
+% What no IRI holds, as a space or `>`, casts to no IRI.
+input(spacedString, "a b") .
+input(bracketString, "a>b") .
+
+converted(?kind, int, ?r) :- input(?kind, ?v), ?r = INT(?v) .
+converted(?kind, double, ?r) :- input(?kind, ?v), ?r = DOUBLE(?v) .
+converted(?kind, float, ?r) :- input(?kind, ?v), ?r = FLOAT(?v) .
+converted(?kind, iri, ?r) :- input(?kind, ?v), ?r = IRI(?v) .
+
+% Strings in binary, octal and hexadecimal notation cast to the numbers
+% 41, 42 and 43.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+cast(5) .
+cast(test) .
+cast("2023"^^xsd:gYear) .
+cast("40") .
+cast("https://example.org") .
+cast("0b101001") .
+cast("0o52") .
+cast("0x2B") .
+
+result(int, ?R) :- cast(?A), ?R = INT(?A) .
+result(float, ?R) :- cast(?A), ?R = FLOAT(?A) .
+result(double, ?R) :- cast(?A), ?R = DOUBLE(?A) .
+result(iri, ?R) :- cast(?A), ?R = IRI(?A) .
+result(round, ?R) :- cast(?A), ?R = ROUND(?A) .

@@ -1,0 +1,7 @@
+% A triple whose literal is not valid for its datatype ("abc" as an
+% integer) is malformed and skipped with a warning. The other triples
+% are read normally.
+
+@import triples from ntriples { resource = "sources/invalid-literal.nt" } .
+
+triple(?s, ?p, ?o) :- triples(?s, ?p, ?o) .

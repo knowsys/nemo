@@ -1,0 +1,9 @@
+chainedSmall(1) .
+chainedSmall(2) .
+
+givenSmall(1) .
+givenSmall(2) .
+
+ownSmall(1) .
+ownSmall(2) .
+ownSmall(5) .

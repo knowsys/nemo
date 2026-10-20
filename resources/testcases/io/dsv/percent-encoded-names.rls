@@ -1,0 +1,7 @@
+% Percent signs in names, written in the program and read from CSV.
+
+@import fromCsv from csv{resource="sources/bareNameWithPercent.csv",format=(term,)}.
+
+% comments still work
+inProg(<Hello%20World>). % comments still work
+inProg2(Hello%20World). % comments still work
