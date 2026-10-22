@@ -212,12 +212,6 @@ where
     }
 }
 
-impl nom_greedyerror::Position for ParserInput<'_> {
-    fn position(&self) -> usize {
-        nom_greedyerror::Position::position(&self.span)
-    }
-}
-
 impl std::fmt::Display for ParserInput<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(

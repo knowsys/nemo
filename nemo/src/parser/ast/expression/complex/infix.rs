@@ -59,6 +59,21 @@ pub struct InfixExpression<'a> {
 }
 
 impl<'a> InfixExpression<'a> {
+    /// Create a new [InfixExpression].
+    pub(crate) fn new(
+        span: Span<'a>,
+        kind: InfixExpressionKind,
+        left: Expression<'a>,
+        right: Expression<'a>,
+    ) -> Self {
+        Self {
+            span,
+            kind,
+            left: Box::new(left),
+            right: Box::new(right),
+        }
+    }
+
     /// Return the pair of [Expression]s.
     pub fn pair(&self) -> (&Expression<'a>, &Expression<'a>) {
         (&self.left, &self.right)
@@ -70,7 +85,9 @@ impl<'a> InfixExpression<'a> {
     }
 
     /// Parse a [InfixExpressionKind].
-    fn parse_infix_kind(input: ParserInput<'a>) -> ParserResult<'a, InfixExpressionKind> {
+    pub(crate) fn parse_infix_kind(
+        input: ParserInput<'a>,
+    ) -> ParserResult<'a, InfixExpressionKind> {
         alt((
             Token::equal,
             Token::unequal,

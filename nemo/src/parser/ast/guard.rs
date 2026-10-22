@@ -1,11 +1,17 @@
 //! This module defines [Guard].
 
-use nom::{branch::alt, combinator::map};
+use nom::sequence::delimited;
 
-use crate::parser::context::{ParserContext, context};
+use crate::parser::{
+    ParserResult,
+    context::{ParserContext, context},
+    error::deepest,
+    input::ParserInput,
+};
 
 use super::{
     ProgramAST,
+    comment::wsoc::WSoC,
     expression::{Expression, complex::infix::InfixExpression},
 };
 
@@ -45,17 +51,41 @@ impl<'a> ProgramAST<'a> for Guard<'a> {
         }
     }
 
-    fn parse(input: crate::parser::input::ParserInput<'a>) -> crate::parser::ParserResult<'a, Self>
+    fn parse(input: ParserInput<'a>) -> ParserResult<'a, Self>
     where
         Self: Sized + 'a,
     {
-        context(
-            CONTEXT,
-            alt((
-                map(InfixExpression::parse, Self::Infix),
-                map(Expression::parse_complex, Self::Expression),
-            )),
-        )(input)
+        // Parsing the expression before looking for an operator avoids parsing
+        // it again as a complex expression when none follows.
+        let parse_guard = |input: ParserInput<'a>| {
+            let input_span = input.span;
+            let (rest, left) = Expression::parse(input.clone())?;
+
+            let infix = delimited(WSoC::parse, InfixExpression::parse_infix_kind, WSoC::parse)(
+                rest.clone(),
+            )
+            .and_then(|(rest, kind)| {
+                Expression::parse(rest).map(|(rest, right)| (rest, kind, right))
+            });
+
+            match infix {
+                Ok((rest, kind, right)) => {
+                    let span = input_span.until_rest(&rest.span);
+
+                    Ok((
+                        rest,
+                        Self::Infix(InfixExpression::new(span, kind, left, right)),
+                    ))
+                }
+                // Without an operator, only a complex expression is a guard.
+                Err(infix_error) if !left.is_complex() => Expression::parse_complex(input)
+                    .map(|(rest, expression)| (rest, Self::Expression(expression)))
+                    .map_err(|error| deepest(infix_error, error)),
+                Err(_) => Ok((rest, Self::Expression(left))),
+            }
+        };
+
+        context(CONTEXT, parse_guard)(input)
     }
 
     fn context(&self) -> ParserContext {

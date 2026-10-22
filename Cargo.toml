@@ -86,4 +86,4 @@ debug = false
 strip = true
 
 [profile.bench]
-inherits = "release-minimal"
+inherits = "release"

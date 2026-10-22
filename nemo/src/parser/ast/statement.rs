@@ -20,7 +20,7 @@ use super::{
     comment::{doc::DocComment, wsoc::WSoC},
     directive::Directive,
     guard::Guard,
-    rule::Rule,
+    rule::{Rule, RuleOrFact},
     token::Token,
 };
 
@@ -49,14 +49,28 @@ impl<'a> StatementKind<'a> {
         }
     }
 
+    /// Parse a rule or a fact.
+    ///
+    /// A fact is a rule head not followed by an arrow, so deciding between them
+    /// together avoids parsing every fact twice.
+    fn parse_rule_or_fact(input: ParserInput<'a>) -> ParserResult<'a, Self> {
+        let input_span = input.span;
+
+        let (rest, first) = Guard::parse(input)?;
+
+        match Rule::parse_continued(first, input_span, rest)? {
+            (rest, RuleOrFact::Rule(rule)) => Ok((rest, Self::Rule(rule))),
+            (rest, RuleOrFact::Fact(guard)) => Ok((rest, Self::Fact(guard))),
+        }
+    }
+
     /// Parse the [StatementKind].
     pub fn parse(input: ParserInput<'a>) -> ParserResult<'a, Self> {
         context(
             ParserContext::StatementKind,
             alt((
                 map(Directive::parse, Self::Directive),
-                map(Rule::parse, Self::Rule),
-                map(Guard::parse, Self::Fact),
+                Self::parse_rule_or_fact,
             )),
         )(input)
     }

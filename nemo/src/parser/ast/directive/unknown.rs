@@ -6,14 +6,13 @@ use nom::{
     combinator::{map, recognize},
     sequence::{preceded, separated_pair, terminated},
 };
-use nom_supreme::error::{BaseErrorKind, Expectation};
 use strum::IntoEnumIterator;
 
 use crate::parser::{
     ParserResult,
     ast::{ProgramAST, comment::wsoc::WSoC, expression::Expression, token::Token},
     context::{ParserContext, context},
-    error::ParserErrorTree,
+    error::ParserErrors,
     input::ParserInput,
     span::Span,
 };
@@ -66,10 +65,7 @@ impl<'a> UnknownDirective<'a> {
                 }
             }
 
-            Err(nom::Err::Error(ParserErrorTree::Base {
-                location: input,
-                kind: BaseErrorKind::Expected(Expectation::Tag("known directive")),
-            }))
+            Err(nom::Err::Error(ParserErrors::at(input.span)))
         };
 
         keyword_parser(input)

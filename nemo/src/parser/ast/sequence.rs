@@ -9,8 +9,8 @@ use std::vec::IntoIter;
 
 use nom::{
     combinator::opt,
-    multi::separated_list1,
-    sequence::{terminated, tuple},
+    multi::{many0, separated_list1},
+    sequence::{preceded, terminated, tuple},
 };
 
 use crate::parser::{
@@ -33,7 +33,15 @@ pub struct Sequence<'a, T> {
     elements: Vec<T>,
 }
 
-impl<T> Sequence<'_, T> {
+impl<'a, T> Sequence<'a, T> {
+    /// Build a [Sequence] from elements that have already been parsed.
+    pub(crate) fn new(span: Span<'a>, elements: Vec<T>) -> Self {
+        Self {
+            _span: span,
+            elements,
+        }
+    }
+
     /// Return an iterator over the elements.
     pub fn iter(&self) -> impl Iterator<Item = &T> {
         self.into_iter()
@@ -41,6 +49,19 @@ impl<T> Sequence<'_, T> {
 }
 
 impl<'a, T: ProgramAST<'a> + 'a> Sequence<'a, T> {
+    /// Parse the elements following one that has already been parsed.
+    ///
+    /// Together with that element this accepts what [Self::parse1] does.
+    pub(crate) fn parse_continued(input: ParserInput<'a>) -> ParserResult<'a, Vec<T>> {
+        terminated(
+            many0(preceded(
+                tuple((WSoC::parse, Token::seq_sep, WSoC::parse)),
+                T::parse,
+            )),
+            opt(tuple((WSoC::parse, Token::seq_sep, WSoC::parse))),
+        )(input)
+    }
+
     /// Parse one element with a trailing [SequenceSeparator](crate::parser::ast::token::TokenKind::SequenceSeparator)
     pub fn parse_first_trailing(input: ParserInput<'a>) -> ParserResult<'a, Self> {
         let input_span = input.span;

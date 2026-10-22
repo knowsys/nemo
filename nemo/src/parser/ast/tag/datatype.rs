@@ -1,20 +1,27 @@
 //! This module defines [DataTypeTag].
 
-use nom::bytes::complete::tag;
-use nom_supreme::error::{BaseErrorKind, Expectation};
+use std::sync::LazyLock;
+
 use strum::IntoEnumIterator;
 
 use crate::{
     parser::{
         ParserResult,
-        ast::ProgramAST,
+        ast::{
+            ProgramAST,
+            tag::{KeywordTable, parse_keyword},
+        },
         context::{ParserContext, context},
-        error::ParserErrorTree,
         input::ParserInput,
         span::Span,
     },
     rule_model::components::import_export::io_type::IOType,
 };
+
+/// All [IOType]s
+static DATA_TYPES: LazyLock<KeywordTable<IOType>> = LazyLock::new(|| {
+    KeywordTable::new(IOType::iter().map(|data_type| (data_type.name(), data_type)))
+});
 
 /// Tags that are used to identify operations
 #[derive(Debug, Clone)]
@@ -48,19 +55,7 @@ impl<'a> ProgramAST<'a> for DataTypeTag<'a> {
     where
         Self: Sized + 'a,
     {
-        let keyword_parser = |input: ParserInput<'a>| {
-            for data_type in IOType::iter() {
-                let result =
-                    tag::<&str, ParserInput<'_>, ParserErrorTree>(data_type.name())(input.clone());
-                if let Ok((rest, _matched)) = result {
-                    return Ok((rest, data_type));
-                }
-            }
-            Err(nom::Err::Error(ParserErrorTree::Base {
-                location: input,
-                kind: BaseErrorKind::Expected(Expectation::Tag("data type")),
-            }))
-        };
+        let keyword_parser = |input: ParserInput<'a>| parse_keyword(input, &DATA_TYPES);
 
         let input_span = input.span;
 
