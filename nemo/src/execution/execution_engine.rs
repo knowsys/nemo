@@ -30,9 +30,6 @@ use super::{
 
 pub mod tracing;
 
-// Number of tables that are periodically combined into one.
-const MAX_FRAGMENTATION: usize = 8;
-
 /// Stores useful information about a rule.
 #[derive(Default, Debug, Copy, Clone)]
 pub struct RuleInfo {
@@ -69,11 +66,6 @@ pub struct ExecutionEngine<RuleSelectionStrategy> {
     table_manager: TableManager,
     /// Managermet of imports
     import_manager: ImportManager,
-
-    /// Stores for each predicate the number of subtables
-    predicate_fragmentation: HashMap<Tag, usize>,
-    /// Stores for each predicate the step up until subtables have been combined
-    predicate_last_union: HashMap<Tag, usize>,
 
     /// For each rule in `program` additional information
     rule_infos: Vec<RuleInfo>,
@@ -150,8 +142,6 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             selection_strategy,
             table_manager,
             import_manager,
-            predicate_fragmentation: HashMap::new(),
-            predicate_last_union: HashMap::new(),
             rule_infos,
             rule_history: vec![usize::MAX], // Placeholder, Step counting starts at 1
             step_times_ms: vec![0],         // Placeholder, Step counting starts at 1
@@ -262,30 +252,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
     async fn defrag(&mut self, updated_predicates: Vec<Tag>) -> Result<(), Error> {
         for updated_pred in updated_predicates {
-            let counter = self
-                .predicate_fragmentation
-                .entry(updated_pred.clone())
-                .or_insert(0);
-            *counter += 1;
-
-            if *counter == MAX_FRAGMENTATION {
-                let start = if let Some(last_union) = self.predicate_last_union.get(&updated_pred) {
-                    last_union + 1
-                } else {
-                    0
-                };
-
-                let range = start..(self.current_step + 1);
-
-                self.table_manager
-                    .combine_tables(&updated_pred, range)
-                    .await?;
-
-                self.predicate_last_union
-                    .insert(updated_pred, self.current_step);
-
-                *counter = 0;
-            }
+            self.table_manager.defragment(&updated_pred).await?;
         }
 
         Ok(())

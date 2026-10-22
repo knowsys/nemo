@@ -63,10 +63,23 @@ impl PartialOrd for SubtableRange {
     }
 }
 
+/// Number of subtables that are combined into one table at a time.
+const MAX_FRAGMENTATION: usize = 8;
+
+/// Handler for subtables of a predicate
 #[derive(Debug, Default)]
 struct SubtableHandler {
+    /// List of subtables that have been created for a predicate,
+    /// stored as pairs of (step, table_id) in ascending order of step.
     single: Vec<(usize, PermanentTableId)>,
+    /// List of tables that represent the union of multiple subtables,
+    /// stored as pairs of (range, table_id) in ascending order of range.
     combined: Vec<(SubtableRange, PermanentTableId)>,
+    /// Number of subtables at the front of `single`
+    /// that have been combined by [SubtableHandler::next_defragmentation].
+    ///
+    /// Always a multiple of [MAX_FRAGMENTATION].
+    defragmented: usize,
 }
 
 impl SubtableHandler {
@@ -141,6 +154,26 @@ impl SubtableHandler {
         self.combined.sort_by_key(|x| x.0);
     }
 
+    /// Return the range of steps that should be combined into a single table next,
+    /// or `None` if fewer than [MAX_FRAGMENTATION] subtables have accumulated
+    /// since the last such combination.
+    ///
+    /// A new group of [MAX_FRAGMENTATION] subtables absorbs every preceding block
+    /// of its own size, doubling for each one.
+    fn next_defragmentation(&self) -> Option<Range<usize>> {
+        if self.single.len() - self.defragmented < MAX_FRAGMENTATION {
+            return None;
+        }
+
+        let groups = self.defragmented / MAX_FRAGMENTATION;
+        let size = MAX_FRAGMENTATION << groups.trailing_ones();
+
+        let end = self.defragmented + MAX_FRAGMENTATION;
+        let start = end - size;
+
+        Some(self.single[start].0..(self.single[end - 1].0 + 1))
+    }
+
     pub fn cover_range(&self, range: &Range<usize>) -> Vec<PermanentTableId> {
         let mut result = Vec::<PermanentTableId>::new();
 
@@ -162,15 +195,21 @@ impl SubtableHandler {
         while current_start <= target_end {
             let mut best: Option<(SubtableRange, PermanentTableId)> = None;
 
-            for &(current_interval, id) in self.combined.iter().skip(interval_index) {
-                interval_index += 1;
+            for (index, &(current_interval, id)) in
+                self.combined.iter().enumerate().skip(interval_index)
+            {
                 let (start, end) = current_interval.start_end();
 
                 if start > current_start {
+                    // Intervals are sorted by start, so this and all following
+                    // intervals may still be usable for a later `current_start`.
+                    interval_index = index;
                     break;
                 }
 
-                if start < target_start || end > target_end {
+                interval_index = index + 1;
+
+                if start < current_start || start < target_start || end > target_end {
                     continue;
                 }
 
@@ -674,6 +713,28 @@ impl TableManager {
         }
     }
 
+    /// Reduce the number of tables needed to cover the given predicate
+    /// by combining its subtables, as described in
+    /// [SubtableHandler::next_defragmentation].
+    ///
+    /// Does nothing if not enough new subtables have accumulated yet.
+    pub async fn defragment(&mut self, predicate: &Tag) -> Result<(), Error> {
+        while let Some(range) = self
+            .predicate_subtables
+            .get(predicate)
+            .and_then(SubtableHandler::next_defragmentation)
+        {
+            self.combine_tables(predicate, range).await?;
+
+            self.predicate_subtables
+                .get_mut(predicate)
+                .expect("predicate exists, as it was just looked up")
+                .defragmented += MAX_FRAGMENTATION;
+        }
+
+        Ok(())
+    }
+
     /// Execute a plan and add the results as subtables to the manager.
     ///
     /// The affected predicates are returned as a list of [Tag]s.
@@ -864,8 +925,49 @@ impl TableManager {
 mod test {
     use nemo_physical::management::database::id::{PermanentTableId, TableId};
 
-    use super::SubtableHandler;
+    use super::{MAX_FRAGMENTATION, SubtableHandler};
     use std::{collections::HashSet, ops::Range};
+
+    /// Collect the ranges that would be combined while adding `count` subtables,
+    /// one per step, defragmenting after each one.
+    fn defragmentation_ranges(count: usize) -> Vec<Range<usize>> {
+        let mut handler = SubtableHandler::default();
+        let mut id = PermanentTableId::default();
+        let mut result = Vec::new();
+
+        for step in 0..count {
+            handler.add_single_table(step, id.increment());
+
+            while let Some(range) = handler.next_defragmentation() {
+                result.push(range);
+                handler.defragmented += MAX_FRAGMENTATION;
+            }
+        }
+
+        result
+    }
+
+    #[test]
+    fn test_defragmentation_schedule() {
+        // Nothing is combined before a full group has accumulated.
+        assert!(defragmentation_ranges(7).is_empty());
+
+        // Each group either forms a block of its own or absorbs every preceding
+        // block of the same size, doubling in size for each one it absorbs.
+        assert_eq!(
+            defragmentation_ranges(64),
+            vec![
+                0..8,   // 8
+                0..16,  // absorbs 0..8
+                16..24, // 8
+                0..32,  // absorbs 16..24 and 0..16
+                32..40, // 8
+                32..48, // absorbs 32..40
+                48..56, // 8
+                0..64,  // absorbs 48..56, 32..48 and 0..32
+            ]
+        );
+    }
 
     fn handler_from_table_steps(
         steps: &[usize],
