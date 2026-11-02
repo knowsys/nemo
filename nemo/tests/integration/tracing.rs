@@ -153,17 +153,12 @@ fn a_chain_derivation_traces_to_its_asserted_leaves() {
     check(&mut engine, tree);
 
     // The chain bottoms out in asserted edges, each attributed to the
-    // program with a source position.
+    // program.
     fn leaves(node: &TraceNode, out: &mut Vec<(String, bool)>) {
         match node {
-            TraceNode::Asserted {
-                fact,
-                origin,
-                defined_at,
-            } => out.push((
-                fact.to_string(),
-                *origin == AssertedOrigin::Program && !defined_at.is_empty(),
-            )),
+            TraceNode::Asserted { fact, origin } => {
+                out.push((fact.to_string(), *origin == AssertedOrigin::Program));
+            }
             TraceNode::Derived { premises, .. } => {
                 for premise in premises {
                     leaves(premise, out);

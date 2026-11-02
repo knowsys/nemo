@@ -139,10 +139,10 @@ fn rewritten_rules_trace_as_written() {
         premises[1].fact().to_string(),
         "triple(<urn:b>, <urn:parent>, <urn:c>)"
     );
-    let TraceNode::Asserted { defined_at, .. } = &premises[1] else {
-        panic!("a remote premise is a leaf");
-    };
-    assert_eq!(defined_at.len(), 1, "the written import supplies it");
+    assert!(
+        matches!(premises[1], TraceNode::Asserted { .. }),
+        "a remote premise is a leaf"
+    );
 }
 
 #[test]

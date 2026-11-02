@@ -81,7 +81,6 @@ mod tests {
                             terms: vec!["<a>".into(), "<b>".into()],
                         },
                         origin: AssertedOrigin::Program,
-                        defined_at: Vec::new(),
                     }],
                     absences: Vec::new(),
                     aggregate: None,
@@ -91,7 +90,7 @@ mod tests {
         };
         let json = serde_json::to_string(&response).expect("serializes");
         assert!(!json.contains("\"finalConclusion\""));
-        assert!(!json.contains("\"definedAt\""), "empty lists are omitted");
+        assert!(!json.contains("\"absences\""), "empty lists are omitted");
         assert!(json.contains("\"kind\":\"derived\""), "{json}");
         assert!(json.contains("\"origin\":\"program\""), "{json}");
         let back: TraceResponse = serde_json::from_str(&json).expect("deserializes");
@@ -108,7 +107,6 @@ mod tests {
                 terms: vec!["<a>".into()],
             },
             origin: AssertedOrigin::Program,
-            defined_at: Vec::new(),
         };
         let derived = TraceNode::Derived {
             fact: FactText {

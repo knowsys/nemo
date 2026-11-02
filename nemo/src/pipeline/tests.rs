@@ -453,3 +453,41 @@ fn substitutions_add_definition_labels_to_diagnostics() {
     let refined = pipeline.refine(outside, new);
     assert_eq!(refined.labels().len(), 1);
 }
+
+#[test]
+fn line_columns_agree_with_a_scan_of_the_text() {
+    let mut pipeline = Pipeline::new();
+    let text = "p(1) .\n\nq(\"äö\") . r(2) .\r\n  s(3) .";
+    let file = pipeline.add_source("program.rls", text);
+    let instance = pipeline.add_instance(
+        file,
+        UseDirective {
+            module: ModuleName {
+                parents: 0,
+                segments: vec!["one".to_owned()],
+            },
+            bindings: Vec::new(),
+            values: Vec::new(),
+            alias: "one".to_owned(),
+            span: None,
+        },
+    );
+    let length = u32::try_from(text.len()).expect("the text is short");
+    for start in 0..=length + 2 {
+        let span = Span {
+            file,
+            start,
+            end: start,
+        };
+        let scanned = Some(span.line_column(text));
+        assert_eq!(pipeline.line_column(span), scanned, "at byte {start}");
+        assert_eq!(
+            pipeline.line_column(Span {
+                file: instance,
+                ..span
+            }),
+            scanned,
+            "an instance shares the text's lines"
+        );
+    }
+}

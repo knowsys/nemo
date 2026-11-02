@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::trace::{SourceLocation, WrittenRule};
+use crate::trace::WrittenRule;
 
 /// A fact: a predicate and its values, each in canonical term syntax.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -27,6 +27,8 @@ impl std::fmt::Display for FactText {
 }
 
 /// One node of a proof tree.
+// Most nodes of a tree are derivations, so boxing them would allocate for most nodes.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", tag = "kind")]
 pub enum TraceNode {
@@ -37,10 +39,6 @@ pub enum TraceNode {
         fact: FactText,
         /// Where the rows came from.
         origin: AssertedOrigin,
-        /// The source positions of the statements that can have supplied it:
-        /// the predicate's fact statements and import directives.
-        #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        defined_at: Vec<SourceLocation>,
     },
     /// A rule application: the fact follows from the premises by the
     /// rule under the assignment.

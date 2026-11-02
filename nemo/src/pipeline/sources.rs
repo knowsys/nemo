@@ -1,10 +1,10 @@
 //! The source texts a pipeline registers: the texts programs were read from,
 //! and the module instances made of them.
 
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use crate::{
-    model::{FileId, UseDirective},
+    model::{FileId, Span, UseDirective},
     pipeline::Pipeline,
 };
 
@@ -16,9 +16,34 @@ pub(super) struct SourceFile {
     name: String,
     /// The text, shared by the instances of a module file.
     text: Arc<str>,
+    /// The byte offsets at which the text's lines start, computed at first need
+    /// and shared like the text.
+    lines: Arc<OnceLock<Box<[usize]>>>,
     /// For a module instance, the `@use` that made it,
     /// and `None` for a text added with [Pipeline::add_source].
     instance: Option<UseDirective>,
+}
+
+impl SourceFile {
+    /// Returns where a span starts in the text, as [Span::line_column] counts,
+    /// finding the line in the text's line index.
+    fn line_column(&self, span: Span) -> (u32, u32) {
+        let text = &*self.text;
+        let lines = self.lines.get_or_init(|| {
+            std::iter::once(0)
+                .chain(text.match_indices('\n').map(|(index, _)| index + 1))
+                .collect()
+        });
+        let start = (span.start as usize).min(text.len());
+        let start = (0..=start)
+            .rev()
+            .find(|&index| text.is_char_boundary(index))
+            .unwrap_or(0);
+        let line = lines.partition_point(|&line_start| line_start <= start);
+        let column = text[lines[line - 1]..start].chars().count() + 1;
+        let saturate = |count: usize| u32::try_from(count).unwrap_or(u32::MAX);
+        (saturate(line), saturate(column))
+    }
 }
 
 impl Pipeline {
@@ -33,6 +58,7 @@ impl Pipeline {
         self.push_source(SourceFile {
             name: name.into(),
             text: Arc::from(text),
+            lines: Arc::default(),
             instance: None,
         })
     }
@@ -45,10 +71,15 @@ impl Pipeline {
     /// Panics if the file is not registered.
     pub(crate) fn add_instance(&mut self, file: FileId, directive: UseDirective) -> FileId {
         let source = self.source(file).expect("instances copy registered files");
-        let (name, text) = (source.name.clone(), source.text.clone());
+        let (name, text, lines) = (
+            source.name.clone(),
+            source.text.clone(),
+            source.lines.clone(),
+        );
         self.push_source(SourceFile {
             name,
             text,
+            lines,
             instance: Some(directive),
         })
     }
@@ -84,6 +115,13 @@ impl Pipeline {
     /// Returns the text of a registered source file.
     pub fn text(&self, file: FileId) -> Option<&str> {
         self.source(file).map(|source| &*source.text)
+    }
+
+    /// Returns where a span starts in its registered source file, as [Span::line_column] counts,
+    /// or `None` if the file is not registered.
+    pub(crate) fn line_column(&self, span: Span) -> Option<(u32, u32)> {
+        self.source(span.file)
+            .map(|source| source.line_column(span))
     }
 
     /// Returns every registered source, by id, name, and text, for rendering diagnostics.

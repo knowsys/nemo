@@ -11,7 +11,7 @@ use crate::{
         evaluate::extensional::ExtensionalOrigin,
         trace::proof::lift::{LiftedCell, LiftedNode, LiftedProof},
     },
-    model::{Directive, Identifier, Span, Statement, Term, TermKind},
+    model::{Identifier, Span, Statement, Term, TermKind},
     pipeline::StatementId,
     trace::{
         AggregateSummary, AssertedOrigin, FactText, SourceLocation, TraceNode, VariableBinding,
@@ -23,39 +23,16 @@ use crate::{
 pub(crate) struct Responder<'a> {
     /// The traced engine.
     engine: &'a Engine,
-    /// Per predicate name, the source positions of the written
-    /// statements defining it (facts and imports).
-    defined_at: HashMap<String, Vec<SourceLocation>>,
     /// The canonical rendering of each written constant the proofs
     /// hold, for the constants that evaluate.
     canonical_constants: HashMap<Term, String>,
 }
 
 impl<'a> Responder<'a> {
-    /// Prepares the responder, collecting the defining statements of
-    /// every predicate once.
+    /// Prepares the responder.
     pub(crate) fn new(engine: &'a Engine, canonical_constants: HashMap<Term, String>) -> Self {
-        let mut defined_at: HashMap<String, Vec<SourceLocation>> = HashMap::new();
-        if let Some(written) = &engine.written {
-            for (_, statement) in engine.pipeline.statements(written.revision()) {
-                let (predicate, span) = match statement {
-                    Statement::Fact(fact) => (&fact.predicate, fact.span),
-                    Statement::Directive(Directive::Import(import)) => {
-                        (&import.predicate, import.span)
-                    }
-                    _ => continue,
-                };
-                let (Some(name), Some(span)) = (engine.translation.resolve(predicate), span) else {
-                    continue;
-                };
-                if let Some(source) = source_location(engine, span) {
-                    defined_at.entry(name).or_default().push(source);
-                }
-            }
-        }
         Self {
             engine,
-            defined_at,
             canonical_constants,
         }
     }
@@ -112,10 +89,6 @@ impl<'a> Responder<'a> {
         let fact = self.lifted_fact(&node.predicate, &node.terms);
         match &node.proof {
             LiftedProof::Asserted { origin } => TraceNode::Asserted {
-                defined_at: match origin {
-                    ExtensionalOrigin::Load => self.defined_at(&fact.predicate),
-                    ExtensionalOrigin::ImportRows => Vec::new(),
-                },
                 origin: match origin {
                     ExtensionalOrigin::Load => AssertedOrigin::Program,
                     ExtensionalOrigin::ImportRows => AssertedOrigin::ImportRows,
@@ -123,7 +96,6 @@ impl<'a> Responder<'a> {
                 fact,
             },
             LiftedProof::Remote => TraceNode::Asserted {
-                defined_at: self.defined_at(&fact.predicate),
                 origin: AssertedOrigin::Program,
                 fact,
             },
@@ -157,17 +129,11 @@ impl<'a> Responder<'a> {
             },
         }
     }
-
-    /// Returns the source positions of the written statements defining a
-    /// predicate.
-    fn defined_at(&self, predicate: &str) -> Vec<SourceLocation> {
-        self.defined_at.get(predicate).cloned().unwrap_or_default()
-    }
 }
 
 /// Returns a span as a protocol source position.
 fn source_location(engine: &Engine, span: Span) -> Option<SourceLocation> {
-    let (line, column) = span.line_column(engine.pipeline.text(span.file)?);
+    let (line, column) = engine.pipeline.line_column(span)?;
     Some(SourceLocation {
         file: engine.pipeline.file_name(span.file)?.to_owned(),
         start: span.start,
