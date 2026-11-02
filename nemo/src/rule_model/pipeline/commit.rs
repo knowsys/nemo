@@ -38,7 +38,7 @@ pub struct ProgramCommit {
 
 impl ProgramCommit {
     /// Create a new [ProgramCommit] representing an empty program.
-    pub(crate) fn empty(pipeline: Rc<ProgramPipeline>, report: ValidationReport) -> Self {
+    pub fn empty(pipeline: Rc<ProgramPipeline>, report: ValidationReport) -> Self {
         Self {
             pipeline,
             new: Vec::default(),

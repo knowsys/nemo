@@ -94,6 +94,11 @@ impl Atom {
         self.predicate.clone()
     }
 
+    /// Return the predicate as a reference of this atom.
+    pub fn predicate_ref(&self) -> &Tag {
+        &self.predicate
+    }
+
     /// Return an iterator over the terms of this atom.
     pub fn terms(&self) -> impl Iterator<Item = &Term> {
         self.terms.iter()
@@ -143,6 +148,14 @@ impl Deref for Atom {
 impl DerefMut for Atom {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.terms
+    }
+}
+
+/// This Impl-Block contains a method for an atom to get its universal variables.
+impl Atom {
+    // /// This method returns the universal Variables of an Atom.
+    pub fn universal_variables(&self) -> impl Iterator<Item = &Variable> + '_ {
+        self.variables().filter(|var| var.is_universal())
     }
 }
 
