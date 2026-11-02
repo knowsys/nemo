@@ -42,10 +42,6 @@ diagnostic_kinds! {
                explain "A predicate is used with two different numbers of columns. Each \
                         predicate name has a single arity.",
                hint "if these are different predicates, rename one of them";
-        NoPositiveAtom
-            => NO_POSITIVE_ATOM = 255, error, "rule body has no positive atom",
-               explain "The body of a rule has no positive atom. Every rule needs at \
-                        least one, so that its variables range over stored facts.";
         UnboundAcrossNegations { variable: String }
             => UNBOUND_ACROSS_NEGATIONS = 256, error,
                "unbound variable `?{variable}` occurs in more than one negated atom",

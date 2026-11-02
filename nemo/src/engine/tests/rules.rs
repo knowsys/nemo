@@ -99,6 +99,48 @@ fn a_positive_nullary_body_atom_is_refused() {
 }
 
 #[test]
+fn a_rule_without_positive_atoms_fires_once_and_hides_what_it_reads() {
+    let mut engine = run("
+        q(1) .
+        p(?y) :- ?x = 2, ?y = ?x + 1 .
+    ");
+    assert_eq!(rows(&mut engine, "p"), vec![vec!["3".to_string()]]);
+    let listed: Vec<String> = engine
+        .predicates()
+        .into_iter()
+        .map(|info| info.name)
+        .collect();
+    assert_eq!(
+        listed,
+        ["p", "q"],
+        "the row the body reads is not a predicate"
+    );
+
+    // Its facts trace to the rule alone.
+    let fact = Fact::parse("p(3) .").expect("the fact parses");
+    let response = engine.trace(&[fact]).expect("tracing answers");
+    let Some(crate::trace::TraceNode::Derived { premises, .. }) = &response.facts[0].tree else {
+        panic!("a derived fact: {response:?}");
+    };
+    assert!(premises.is_empty(), "{premises:?}");
+
+    // A rule added later fires at the next run.
+    engine
+        .extend(parse("r(?x) :- ?x = 7 ."))
+        .expect("the rule joins the program");
+    engine.reason().expect("reasoning continues");
+    assert_eq!(rows(&mut engine, "r"), vec![vec!["7".to_string()]]);
+}
+
+#[test]
+fn a_rule_without_positive_atoms_still_binds_every_variable() {
+    let problem = Engine::new()
+        .load(parse("p(?x) :- ?x > 1 ."))
+        .expect_err("the variable is unbound");
+    assert_eq!(problem.code(), codes::UNSAFE_VARIABLE, "{problem:?}");
+}
+
+#[test]
 fn nondeterministic_assignments_draw_per_row() {
     let mut engine = run("
         data(1) . data(2) . data(3) .

@@ -26,9 +26,15 @@ use crate::{
         },
     },
     model::{
-        Aggregate, Atom, Operation, Operator, Span, Term, TermKind, Variable, VariableKind, Walk,
+        Aggregate, Atom, Fact, Identifier, Operation, Operator, Span, Term, TermKind, Variable,
+        VariableKind, Walk,
     },
 };
+
+/// The hidden predicate holding the one row a rule body without positive atoms reads.
+///
+/// Its name begins with a NUL byte, which no program can write.
+const UNIT: &str = "\u{0}unit";
 
 /// Returns the unsafe-rule diagnostic for a variable the body does not bind.
 fn unsafe_variable(role: &str, variable: &str, span: Option<Span>) -> Diagnostic {
@@ -159,6 +165,20 @@ impl RuleCompiler<'_, '_> {
             variables.push(variable);
         }
         self.body.push(BodyAtom { table, variables });
+        Ok(())
+    }
+
+    /// Adds the atom a body without positive atoms reads: the one row of a hidden table,
+    /// so that the body's conditions evaluate once.
+    pub(super) fn unit_atom(&mut self) -> Result<(), Diagnostic> {
+        let unit = Fact::new(Identifier::Iri(UNIT.to_owned()), vec![Term::integer(0)]);
+        self.translator.fact(&unit)?;
+        let table = self.translator.table(&unit.predicate, 1, None)?;
+        let variable = self.fresh();
+        self.body.push(BodyAtom {
+            table,
+            variables: vec![variable],
+        });
         Ok(())
     }
 

@@ -1,0 +1,11 @@
+holds(1) .
+
+heapAllocationType("<<main method array>>", "java.lang.String[]") .
+
+computed(6) .
+
+unblocked(2) .
+
+fresh(_:0) .
+
+counted(1) .

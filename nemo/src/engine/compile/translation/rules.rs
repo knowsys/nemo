@@ -133,7 +133,7 @@ impl RuleCompiler<'_, '_> {
             }
         }
         if self.body.is_empty() {
-            return Err(TranslationError::NoPositiveAtom.at(rule.span));
+            self.unit_atom()?;
         }
         self.conditions(operations)?;
 

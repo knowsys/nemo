@@ -1,0 +1,19 @@
+% Regression test for https://github.com/knowsys/nemo/issues/608 and
+% https://github.com/knowsys/nemo/issues/555: rules without positive
+% atoms. Each fires once, if its conditions hold, with the values its
+% assignments compute.
+
+holds(1) :- 1 = 1 .
+fails(2) :- 1 = 2 .
+heapAllocationType(?heap, ?type) :-
+    ?heap = "<<main method array>>", ?type = "java.lang.String[]" .
+computed(?y) :- ?x = 2, ?y = ?x * 3 .
+
+blocked(1) .
+unblocked(1) :- ~blocked(1) .
+unblocked(2) :- ~blocked(2) .
+
+fresh(!n) :- 1 = 1 .
+counted(#count(?x)) :- ?x = 5 .
+
+@output holds, fails, heapAllocationType, computed, unblocked, fresh, counted .
