@@ -1,0 +1,30 @@
+% Regression test for https://github.com/knowsys/nemo/issues/719 and
+% https://github.com/knowsys/nemo/issues/661: a local name may start with
+% a digit, and is empty where the `:` ends the term. A prefix, its `:` and
+% the local name touch; a space after the `:` makes a named argument.
+
+@prefix wd: <http://www.wikidata.org/entity/> .
+@prefix base: <http://example.com/clustering/> .
+@prefix ex: <http://example.org/> .
+
+in(1, wd:42, 2) .
+in(2, wd:Q42, 3) .
+test1(?x) :- in(?x, wd:42, _) .
+
+root(base:) .
+isRoot(?r) :- root(?r), ?r = <http://example.com/clustering/> .
+
+@declare person(id: any, age: int) .
+person(id: wd:7, age: 30) .
+adult(?p) :- person(id: ?p, age: ?a), ?a >= 18 .
+
+% A dot joins two parts of a local name; at its end, it ends the statement.
+@prefix fhir: <http://hl7.org/fhir/> .
+field(fhir:Observation.status, ex:v1.2) .
+field(fhir:Patient.name, wd:4.2) .
+named(?f) :- field(?f, _) .
+
+% A character escape in an IRI stands for its character.
+escaped(<http://example.com/caf\u00E9>) .
+
+@output test1, isRoot, adult, named, escaped .

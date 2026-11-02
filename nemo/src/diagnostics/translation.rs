@@ -28,7 +28,11 @@ diagnostic_kinds! {
         UndeclaredPrefix { prefix: String }
             => UNDECLARED_PREFIX = 251, error, "use of undeclared prefix `{prefix}:`",
                explain "A prefixed name uses a prefix that no `@prefix` directive \
-                        declares.";
+                        declares. A name, a `:` and what follows read as a prefixed name \
+                        when they touch, as in `wd:42`; with a space after the `:`, as in \
+                        `age: 30`, they are a named argument.",
+               hint "declare the prefix with `@prefix`, or write a space after the `:` for a \
+                     named argument";
         QualifiedWithoutModules { module: String, name: String }
             => QUALIFIED_WITHOUT_MODULES = 252, error,
                "`{module}::{name}` refers to a module, but the program uses no modules",

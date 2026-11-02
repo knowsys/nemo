@@ -29,8 +29,6 @@ use crate::{
     parser::cursor::{Parser, excerpt},
 };
 
-pub(crate) use self::lexer::is_bare_name;
-
 impl Program {
     /// Parses a whole source file.
     ///

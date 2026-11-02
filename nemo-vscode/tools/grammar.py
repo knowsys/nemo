@@ -18,19 +18,41 @@ OPERATIONS = os.path.join(ROOT, "nemo", "src", "model", "term", "operation", "op
 AGGREGATION = os.path.join(ROOT, "nemo", "src", "model", "term", "aggregate.rs")
 TARGET = os.path.join(os.path.dirname(HERE), "syntaxes", "nemo.tmLanguage.json")
 
-# What a name is made of, exactly as the lexer has it: `%` continues a
-# name, which is why a `%` inside one does not open a comment. A `-`
-# joins two parts of a name without a marker (`my-lib`) where a letter,
-# digit or `_` follows it; a name behind a marker (`?x`, `$x`, `@use`,
-# `#sum`) has no `-`, so `?x-1` subtracts.
-MARKED_NAME = "[A-Za-z_][A-Za-z0-9_%]*"
-NAME = rf"{MARKED_NAME}(?:-[A-Za-z0-9_][A-Za-z0-9_%]*)*"
-NOT_MARKED_NAME = "(?![A-Za-z0-9_%])"
-NOT_NAME = "(?![A-Za-z0-9_%]|-[A-Za-z0-9_])"
+# What a name is made of, exactly as `NameKind` in nemo-physical has it:
+# letters are those of Turtle's and SPARQL's names (`PN_CHARS_BASE`), and
+# a few marks, such as combining accents, continue a name too. `%`
+# continues a name, which is why a `%` inside one does not open a
+# comment. A `-` joins two parts of a name without a marker (`my-lib`)
+# where a letter, digit, `_` or mark follows it; a name behind a marker
+# (`?x`, `$x`, `@use`, `#sum`) has no `-`, so `?x-1` subtracts.
+LETTER = (
+    r"A-Za-z\x{00C0}-\x{00D6}\x{00D8}-\x{00F6}\x{00F8}-\x{02FF}"
+    r"\x{0370}-\x{037D}\x{037F}-\x{1FFF}\x{200C}-\x{200D}\x{2070}-\x{218F}"
+    r"\x{2C00}-\x{2FEF}\x{3001}-\x{D7FF}\x{F900}-\x{FDCF}\x{FDF0}-\x{FFFD}"
+    r"\x{10000}-\x{EFFFF}"
+)
+MARK = r"\x{00B7}\x{0300}-\x{036F}\x{203F}-\x{2040}"
+CONTINUES = f"[{LETTER}{MARK}0-9_%]"
+CONTINUES_JOINED = f"[{LETTER}{MARK}0-9_]"
+MARKED_NAME = f"[{LETTER}_]{CONTINUES}*"
+NAME = rf"{MARKED_NAME}(?:-{CONTINUES_JOINED}{CONTINUES}*)*"
+# A local name after a prefix's `:`, or a blank node label after `_:`, may
+# also start with a digit (`wd:42`), and a `.` joins two of its parts as a
+# `-` does (`ex:v1.2`). It is empty where the `:` ends the term (`ex:`):
+# before a closing bracket, a `,`, the end of a statement, or an operator
+# that cannot start a term (a `<` only with `=` or a space after it, since
+# `<…>` is an IRI).
+# The parser also reads a `:` at the end of the text that way; a line
+# ending there is not taken for it, since the term may well continue on
+# the next line.
+LOCAL_NAME = rf"[{LETTER}0-9_]{CONTINUES}*(?:[-.]{CONTINUES_JOINED}{CONTINUES}*)*"
+ENDS_TERM = r"\s*(?:[),.\]}|*/>=]|:-|->|!=|<[=\s]|\^\^)"
+NOT_MARKED_NAME = f"(?!{CONTINUES})"
+NOT_NAME = f"(?!{CONTINUES}|-{CONTINUES_JOINED})"
 # No match starts inside a hyphenated name, since the name patterns take
 # it whole; looking behind for a `-` too would leave the `1` of `?x-1`
 # uncoloured.
-AFTER_NAME = "(?<![A-Za-z0-9_%])"
+AFTER_NAME = f"(?<!{CONTINUES})"
 
 DIRECTIVES = [
     "base", "declare", "define", "export", "extern", "import",
@@ -424,9 +446,13 @@ def grammar():
                 "endCaptures": {"0": {"name": "punctuation.definition.string.end.nemo"}},
                 "patterns": [{"include": "#escape"}],
             },
-            # Exactly five escapes are recognized; anything else keeps
-            # its backslash, so `\w` in a regex is not an error.
-            "escape": {"match": r'\\[\\"ntr]', "name": "constant.character.escape.nemo"},
+            # The escapes of `Escape::in_string` in nemo-physical; anything
+            # else keeps its backslash, so `\w` or `\b` in a regex is not an
+            # error.
+            "escape": {
+                "match": r"\\(?:[\\\"'ntrf]|u[0-9A-Fa-f]{4}|U[0-9A-Fa-f]{8})",
+                "name": "constant.character.escape.nemo",
+            },
             # `<` opens an IRI only when a `>` follows before any
             # whitespace; otherwise it is the comparison operator.
             "iri": {
@@ -512,7 +538,7 @@ def grammar():
                 },
             },
             "prefixed-call": {
-                "match": rf"({NAME})(:)({NAME})(?=\s*\()",
+                "match": rf"({NAME})(:)({LOCAL_NAME})(?=\s*\()",
                 "captures": {
                     "1": {"name": "entity.name.namespace.nemo"},
                     "2": {"name": "punctuation.separator.namespace.nemo"},
@@ -520,7 +546,7 @@ def grammar():
                 },
             },
             "prefixed": {
-                "match": rf"({NAME})(:)({NAME})",
+                "match": rf"({NAME})(:)(?:({LOCAL_NAME})|(?={ENDS_TERM}))",
                 "captures": {
                     "1": {"name": "entity.name.namespace.nemo"},
                     "2": {"name": "punctuation.separator.namespace.nemo"},
@@ -533,9 +559,9 @@ def grammar():
             },
             # An argument's or a column's `name:`, told from a prefixed
             # name the way the parser tells them apart: a prefixed
-            # name's parts all touch.
+            # name's parts all touch, or its `:` ends the term.
             "label": {
-                "match": rf"{AFTER_NAME}{NAME}(?=\s*:(?![A-Za-z0-9_%:]))",
+                "match": rf"{AFTER_NAME}{NAME}(?=\s*:(?!{CONTINUES}|:)(?!{ENDS_TERM}))",
                 "name": "variable.parameter.nemo",
             },
             # `?v per ?w` in aggregates; the lookahead keeps `p(per)`'s

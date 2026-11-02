@@ -1,0 +1,10 @@
+test1(1) .
+
+isRoot(<http://example.com/clustering/>) .
+
+adult(<http://www.wikidata.org/entity/7>) .
+
+named(<http://hl7.org/fhir/Observation.status>) .
+named(<http://hl7.org/fhir/Patient.name>) .
+
+escaped(<http://example.com/café>) .

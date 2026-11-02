@@ -96,7 +96,26 @@ impl Parser<'_> {
             return Ok((terms, None));
         }
         if named < labels.len() {
-            return Err(ParseError::MixedArguments.at(Some(self.span_from(start))));
+            let mut problem = ParseError::MixedArguments.at(Some(self.span_from(start)));
+            // Among named arguments, a prefixed name most likely lacks the space that makes
+            // it one too.
+            let prefixed = labels
+                .iter()
+                .zip(&terms)
+                .find_map(|(label, term)| match &term.kind {
+                    TermKind::Constant(Identifier::Prefixed { prefix, name })
+                        if label.is_none() && !name.is_empty() =>
+                    {
+                        Some((prefix, name))
+                    }
+                    _ => None,
+                });
+            if let Some((prefix, name)) = prefixed {
+                problem = problem.with_hint(format!(
+                    "write `{prefix}: {name}` with a space for a named argument"
+                ));
+            }
+            return Err(problem);
         }
         Ok((terms, Some(labels.into_iter().flatten().collect())))
     }
@@ -104,16 +123,16 @@ impl Parser<'_> {
     /// Takes an argument's `label:` if the next tokens are one:
     /// a name and a `:` that are not the start of a prefixed name.
     ///
-    /// The parts of a prefixed name all touch, as in `xsd:integer`.
+    /// A prefixed name's prefix touches its `:`, and the `:` touches the local name,
+    /// as in `xsd:integer` or `wd:42`, or ends the term, as in `ex:` or `ex: = ?x`.
+    /// A `+` or `-` after the `:` starts the value of a named argument, as in `ex: +1`.
     fn argument_label(&mut self) -> Option<String> {
         let (name, colon, second) = (self.lookahead(0), self.lookahead(1), self.lookahead(2));
         if name.kind != TokenKind::Ident || colon.kind != TokenKind::Colon {
             return None;
         }
-        if second.kind == TokenKind::Ident
-            && Self::adjacent(name.span, colon.span)
-            && Self::adjacent(colon.span, second.span)
-        {
+        let local_name = second.kind == TokenKind::Ident && Self::adjacent(colon.span, second.span);
+        if Self::adjacent(name.span, colon.span) && (local_name || Self::ends_term(&second.kind)) {
             return None;
         }
         let name = self.advance();

@@ -6,7 +6,9 @@ pub(crate) use self::renaming::{IdentifierRenaming, IdentifierRole};
 
 use std::fmt::{self, Display, Formatter};
 
-use crate::{model::Operator, parser::is_bare_name};
+use nemo_physical::value::{IriRef, NameKind};
+
+use crate::model::Operator;
 
 /// A name as written in a program, in any of its forms: of a predicate, a constant, a function,
 /// a datatype, a structure label, an attribute, or a format.
@@ -49,17 +51,17 @@ impl Display for Identifier {
         match self {
             Identifier::Bare(name) => {
                 // `_`, the booleans and builtin names read as something else before a `(`.
-                let reads_back = is_bare_name(name)
+                let reads_back = NameKind::Bare.admits(name)
                     && !matches!(name.as_str(), "_" | "true" | "false")
                     && Operator::from_name(name).is_none();
                 if reads_back {
                     f.write_str(name)
                 } else {
-                    write!(f, "<{name}>")
+                    write!(f, "{}", IriRef::new(name).bracketed())
                 }
             }
             Identifier::Prefixed { prefix, name } => write!(f, "{prefix}:{name}"),
-            Identifier::Iri(iri) => write!(f, "<{iri}>"),
+            Identifier::Iri(iri) => write!(f, "{}", IriRef::new(iri).bracketed()),
             Identifier::Qualified { module, name } => write!(f, "{module}::{name}"),
         }
     }

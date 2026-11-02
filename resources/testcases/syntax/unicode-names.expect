@@ -1,0 +1,7 @@
+groß(münchen) .
+groß(zürich) .
+
+lokal(<http://example.org/café>) .
+lokal(<http://example.org/größe/3>) .
+
+zählt(1) .

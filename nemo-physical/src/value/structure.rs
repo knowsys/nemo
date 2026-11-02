@@ -17,6 +17,6 @@ fn write_label(f: &mut fmt::Formatter<'_>, label: &str, bare: bool) -> fmt::Resu
     if bare && IriRef::new(label).writes_bare() {
         f.write_str(label)
     } else {
-        write!(f, "<{label}>")
+        write!(f, "{}", IriRef::new(label).bracketed())
     }
 }

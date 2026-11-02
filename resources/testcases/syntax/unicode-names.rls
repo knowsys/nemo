@@ -1,0 +1,17 @@
+% Names take the letters of Turtle's and SPARQL's names beyond ASCII:
+% bare names, variables, parameters, prefixes, local names and blank
+% node labels.
+
+@prefix ex: <http://example.org/> .
+@prefix größe: <http://example.org/größe/> .
+@parameter $schwelle = 2 .
+
+straße(münchen, ex:café) .
+straße(zürich, größe:3) .
+blank(_:ü) .
+
+groß(?ort) :- straße(?ort, _), $schwelle > 1 .
+lokal(?örtlich) :- straße(_, ?örtlich) .
+zählt(#count(?x)) :- blank(?x) .
+
+@output groß, lokal, zählt .

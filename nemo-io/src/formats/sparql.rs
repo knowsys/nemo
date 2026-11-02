@@ -511,7 +511,7 @@ fn term(cell: &str, blanks: &mut BlankNodes, dictionary: &mut Dictionary) -> Opt
         return Some(DataValue::null(dictionary.fresh_null()));
     }
     if let Some(iri) = term::iri(cell) {
-        return Some(DataValue::iri(iri));
+        return Some(DataValue::iri(iri.as_ref()));
     }
     if let Some(label) = cell.strip_prefix("_:") {
         return Some(blanks.null(label, dictionary));

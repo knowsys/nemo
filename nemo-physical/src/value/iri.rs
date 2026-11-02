@@ -3,11 +3,13 @@
 use std::{
     borrow::Cow,
     cmp::Ordering,
-    fmt,
+    fmt::{self, Write},
     hash::{Hash, Hasher},
     ops::Deref,
     sync::Arc,
 };
+
+use crate::value::{Escape, NameKind};
 
 /// An owned [IRI](https://www.w3.org/TR/rdf11-concepts/#section-IRIs),
 /// the name of an RDF resource, in the form of
@@ -35,6 +37,43 @@ impl Iri {
                     '<' | '>' | '"' | '{' | '}' | '|' | '^' | '`' | '\\'
                 )
         })
+    }
+
+    /// Returns the text an IRI written between angle brackets spells:
+    /// its character escapes `\uXXXX` and `\UXXXXXXXX` decoded, as Turtle and SPARQL decode them.
+    ///
+    /// Any other backslash stays as written.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use nemo_physical::value::Iri;
+    ///
+    /// assert_eq!(Iri::unescape(r"http://e.org/caf\u00E9"), "http://e.org/café");
+    /// assert_eq!(Iri::unescape(r"file:C:\data"), r"file:C:\data");
+    /// ```
+    pub fn unescape(written: &str) -> Cow<'_, str> {
+        if !written.contains('\\') {
+            return Cow::Borrowed(written);
+        }
+        let mut text = String::with_capacity(written.len());
+        let mut rest = written;
+        while let Some(backslash) = rest.find('\\') {
+            text.push_str(&rest[..backslash]);
+            let after = &rest[backslash + 1..];
+            match Escape::in_iri(after) {
+                Some(escape) => {
+                    text.push(escape.character);
+                    rest = &after[escape.length..];
+                }
+                None => {
+                    text.push('\\');
+                    rest = after;
+                }
+            }
+        }
+        text.push_str(rest);
+        Cow::Owned(text)
     }
 
     /// Returns the text of the IRI.
@@ -243,28 +282,66 @@ impl PartialOrd for IriRef<'_> {
     }
 }
 
-impl IriRef<'_> {
+impl<'a> IriRef<'a> {
     /// Returns whether term syntax writes this IRI without angle brackets:
-    /// it is a bare name, which reads back as the IRI it spells,
+    /// it is a [bare name](NameKind::Bare), which reads back as the IRI it spells,
     /// as `alice` or `item-1` do.
     ///
-    /// A bare name is a letter or `_`, followed by letters, digits, `_` and `%`,
-    /// with single `-` joining parts.
     /// `_`, `true` and `false` read as something else and keep their brackets.
     pub fn writes_bare(self) -> bool {
-        if !self.namespace.is_empty() || matches!(self.local, "_" | "true" | "false") {
-            return false;
+        self.namespace.is_empty()
+            && !matches!(self.local, "_" | "true" | "false")
+            && NameKind::Bare.admits(self.local)
+    }
+
+    /// Returns the IRI in angle brackets, as term syntax writes it so that it reads back:
+    /// a `>`, whitespace or another control character as a character escape `\u…`,
+    /// and a `\` that would start one as `\u005C`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use nemo_physical::value::IriRef;
+    ///
+    /// let bracketed = |iri| IriRef::new(iri).bracketed().to_string();
+    /// assert_eq!(bracketed("http://e.org/a"), "<http://e.org/a>");
+    /// assert_eq!(bracketed("a b>c"), r"<a\u0020b\u003Ec>");
+    /// assert_eq!(bracketed(r"C:\data\u1"), r"<C:\data\u005Cu1>");
+    /// ```
+    pub fn bracketed(self) -> impl fmt::Display + 'a {
+        InBrackets(self)
+    }
+}
+
+/// An IRI written in angle brackets, as [IriRef::bracketed] returns it.
+struct InBrackets<'a>(IriRef<'a>);
+
+impl fmt::Display for InBrackets<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let IriRef { namespace, local } = self.0;
+        let plain = |text: &str| {
+            !text
+                .bytes()
+                .any(|byte| byte <= b' ' || matches!(byte, b'>' | b'\\' | 0x7F))
+        };
+        if plain(namespace) && plain(local) {
+            return write!(f, "<{namespace}{local}>");
         }
-        let bytes = self.local.as_bytes();
-        bytes
-            .first()
-            .is_some_and(|first| first.is_ascii_alphabetic() || *first == b'_')
-            && bytes.iter().enumerate().all(|(index, byte)| match byte {
-                b'-' => bytes
-                    .get(index + 1)
-                    .is_some_and(|next| next.is_ascii_alphanumeric() || *next == b'_'),
-                _ => byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'%'),
-            })
+        f.write_char('<')?;
+        let mut characters = namespace.chars().chain(local.chars()).peekable();
+        while let Some(character) = characters.next() {
+            let escaped = match character {
+                '>' | '\u{7F}' => true,
+                '\\' => matches!(characters.peek(), Some('u' | 'U')),
+                _ => character <= ' ',
+            };
+            if escaped {
+                write!(f, "\\u{:04X}", u32::from(character))?;
+            } else {
+                f.write_char(character)?;
+            }
+        }
+        f.write_char('>')
     }
 }
 

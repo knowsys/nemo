@@ -35,10 +35,11 @@ fn listed(grammar: &str, rule: &str) -> Vec<String> {
         .next()
         .expect("the pattern is terminated");
     // The names sit in the last parenthesised group before the
-    // trailing lookahead, whether or not it is case-insensitive, and
-    // whether or not the lookahead also stops at a hyphen.
+    // trailing lookahead that no name character follows, whether or not
+    // it is case-insensitive, and whether or not the lookahead also stops
+    // at a hyphen.
     let alternation = pattern
-        .rsplit_once("(?![A-Za-z0-9_%]")
+        .rsplit_once("(?![")
         .map_or(pattern, |(head, _)| head)
         .rsplit_once('(')
         .expect("the names are grouped")

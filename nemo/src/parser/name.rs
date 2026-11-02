@@ -9,12 +9,12 @@ use crate::{
 };
 
 impl Parser<'_> {
-    /// Parses a name: bare, prefixed (`pre:name`, adjacent), qualified
-    /// (`alias::name`), or a full IRI.
+    /// Parses a name: bare, prefixed (`pre:name`, adjacent, or `pre:` ending the term),
+    /// qualified (`alias::name`), or a full IRI.
     pub(super) fn identifier(&mut self) -> Result<Identifier, Diagnostic> {
         if self.at(&TokenKind::Iri) {
             let token = self.advance();
-            return Ok(Identifier::Iri(self.iri_text(&token).to_owned()));
+            return Ok(Identifier::Iri(self.iri_text(&token).into_owned()));
         }
         // `:name` resolves against the empty prefix.
         if self.at(&TokenKind::Colon) && self.peek_second() == &TokenKind::Ident {
@@ -29,18 +29,28 @@ impl Parser<'_> {
         }
         let first = self.expect(&TokenKind::Ident, "a name")?;
 
-        if self.at(&TokenKind::Colon)
-            && Self::adjacent(first.span, self.peek_span())
-            && self.peek_second() == &TokenKind::Ident
-        {
-            let colon = self.advance();
-            if Self::adjacent(colon.span, self.peek_span()) {
+        if self.at(&TokenKind::Colon) && Self::adjacent(first.span, self.peek_span()) {
+            if self.peek_second() == &TokenKind::Ident {
+                let colon = self.advance();
+                if Self::adjacent(colon.span, self.peek_span()) {
+                    return Ok(Identifier::Prefixed {
+                        prefix: self.text(&first).to_owned(),
+                        name: self.name("a name")?,
+                    });
+                }
+                return Err(self.unexpected("a name directly after the `:`"));
+            }
+            // A `:` that ends the term leaves the local name empty: `ex:` names the prefix's IRI.
+            // In an argument list, `ex: +1` is a named argument before this is reached;
+            // anywhere else, a `+` or `-` after the `:` is the operator.
+            let second = self.peek_second();
+            if Self::ends_term(second) || matches!(second, TokenKind::Plus | TokenKind::Minus) {
+                self.advance();
                 return Ok(Identifier::Prefixed {
                     prefix: self.text(&first).to_owned(),
-                    name: self.name("a name")?,
+                    name: String::new(),
                 });
             }
-            return Err(self.unexpected("a name directly after the `:`"));
         }
 
         if self.eat(&TokenKind::DoubleColon).is_some() {

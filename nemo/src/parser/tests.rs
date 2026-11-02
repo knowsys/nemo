@@ -41,6 +41,11 @@ const ROUND_TRIPS: &[&str] = &[
     "@output reach .",
     "person(name: \"alice\", age: 34) .",
     "adult(?p) :- person(name: ?p, age: ?a), ?a >= 18 .",
+    "in(wd:42, ex:, ex: * 2) .",
+    "in(ex:v1.2, wd:4.2, _:b.1, :42, :a.b) .",
+    "straße(café, ex:größe, _:ü, \"€\") .",
+    "groß(?größe) :- maß(?größe, $höhe) .",
+    "root(?x) :- p(?x), ?x = ex:, ex: != ?x + ex: .",
     "@declare city(name: string, location: point(double, double)) .",
     "@declare config(settings: { host: string, port: int }) .",
     "@parameter $threshold = 5 .",
@@ -102,6 +107,12 @@ fn iris_in_term_syntax_read_back_as_themselves() {
         "a-",
         "urn:a",
         "http://e.org/a#b",
+        "café",
+        "straße-1",
+        "a b",
+        "x>y",
+        r"C:\data\u1",
+        "tab	here",
     ] {
         let source = format!("p({}) .", nemo_physical::value::DataValue::iri(iri));
         let (program, diagnostics) = Program::parse(&source, FileId::new(0));
@@ -662,4 +673,86 @@ fn a_lone_caret_is_explained_by_what_precedes_it() {
     };
     assert!(hint("p(\"1\"^xsd:int) .").contains("`^^`"));
     assert!(hint("p(?y) :- q(?x), ?y = ?x ^ 2 .").contains("`POW(base, exponent)`"));
+}
+
+#[test]
+fn spacing_tells_a_prefixed_name_from_a_named_argument() {
+    let prefixed = |prefix: &str, name: &str| {
+        TermKind::Constant(Identifier::Prefixed {
+            prefix: prefix.to_owned(),
+            name: name.to_owned(),
+        })
+    };
+    let kinds = |fact: &Fact| -> Vec<TermKind> {
+        fact.terms.iter().map(|term| term.kind.clone()).collect()
+    };
+
+    // Touching parts are a prefixed name: its local name may start with a digit,
+    // and is empty where the `:` ends the term.
+    let fact = Fact::parse("in(wd:42, wd:4-2a, age:30, ex:, ex:) .").expect("the fact parses");
+    assert_eq!(fact.labels, None);
+    assert_eq!(
+        kinds(&fact),
+        [
+            prefixed("wd", "42"),
+            prefixed("wd", "4-2a"),
+            prefixed("age", "30"),
+            prefixed("ex", ""),
+            prefixed("ex", ""),
+        ]
+    );
+    assert_eq!(fact.to_string(), "in(wd:42, wd:4-2a, age:30, ex:, ex:) .");
+
+    // A space after the `:` makes a named argument.
+    let fact = Fact::parse("in(wd: 42, ex: Q1) .").expect("the fact parses");
+    assert_eq!(fact.labels, Some(vec!["wd".to_owned(), "ex".to_owned()]));
+    assert_eq!(fact.to_string(), "in(wd: 42, ex: Q1) .");
+
+    // Among named arguments, a prefixed name is told it lacks its space.
+    let (_, diagnostics) = Program::parse("person(name: \"Ann\", age:30) .", FileId::new(0));
+    assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
+    assert_eq!(diagnostics[0].code(), crate::codes::MIXED_ARGUMENTS);
+    assert_eq!(
+        diagnostics[0].hints(),
+        ["write `age: 30` with a space for a named argument"]
+    );
+
+    // A prefix alone also ends an embedded expression.
+    let (_, diagnostics) = Program::parse("p(f\"{ex:}x\") .", FileId::new(0));
+    assert!(diagnostics.is_empty(), "{diagnostics:?}");
+}
+
+#[test]
+fn a_dot_joins_a_local_name_only_inside_it() {
+    // A dot ends the statement where nothing of a name follows it.
+    let source = "p(?x) :- q(?x), ?x = ex:a.\nr(ex:v1.2).% the end\n";
+    let (program, diagnostics) = Program::parse(source, FileId::new(0));
+    assert!(diagnostics.is_empty(), "{diagnostics:?}");
+    assert_eq!(
+        program.to_string(),
+        "p(?x) :- q(?x), ?x = ex:a .\nr(ex:v1.2) ."
+    );
+
+    // After a label and a space, a `:` starts the value of a named argument.
+    let fact = Fact::parse("in(name :42) .").expect("the fact parses");
+    assert_eq!(fact.labels, Some(vec!["name".to_owned()]));
+    assert!(matches!(fact.terms[0].kind, TermKind::Number(_)));
+}
+
+#[test]
+fn escapes_decode_as_turtle_reads_them_except_a_word_boundary() {
+    let text = |source: &str| match Term::parse(source).expect(source).kind {
+        TermKind::String(text) => text,
+        other => panic!("{source} reads as {other:?}"),
+    };
+    assert_eq!(text(r#""a\fb\'c""#), "a\u{C}b'c");
+    assert_eq!(text(r#""\bcat\b""#), r"\bcat\b");
+    assert_eq!(text(r#""\d+""#), r"\d+");
+
+    let iri = Term::parse(r"<http://e.org/caf\u00E9>").expect("the IRI parses");
+    assert_eq!(
+        iri.kind,
+        TermKind::Constant(Identifier::Iri("http://e.org/café".to_owned()))
+    );
+    assert_eq!(iri.to_string(), "<http://e.org/café>");
 }

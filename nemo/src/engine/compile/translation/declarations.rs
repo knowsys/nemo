@@ -6,7 +6,8 @@ use std::collections::HashMap;
 use nemo_physical::{
     diagnostics::Diagnostic,
     value::{
-        DataValue, DomainSet, LabelBound, MapShape, Shape, TupleShape, Type, ValueDomain, ValueRef,
+        DataValue, DomainSet, LabelBound, MapShape, NameKind, Shape, TupleShape, Type, ValueDomain,
+        ValueRef,
     },
 };
 
@@ -625,19 +626,21 @@ impl<'a> Translator<'a> {
     ) -> Result<Vec<Term>, Diagnostic> {
         let name = self.resolve(predicate, span)?;
         let Some(declaration) = self.declarations.get(&name) else {
-            return Err(TranslationError::NamedArgumentsUndeclared {
+            let problem = TranslationError::NamedArgumentsUndeclared {
                 predicate: predicate.to_string(),
             }
-            .at(span));
+            .at(span);
+            return Err(self.explain_prefix_labels(problem, labels, terms));
         };
         let mut placed: Vec<Option<Term>> = vec![None; declaration.names.len()];
         for (label, term) in labels.iter().zip(terms) {
             let Some(position) = declaration.position(label) else {
-                return Err(TranslationError::UnknownColumn {
+                let problem = TranslationError::UnknownColumn {
                     predicate: predicate.to_string(),
                     column: label.clone(),
                 }
-                .at(term.span.or(span)));
+                .at(term.span.or(span));
+                return Err(self.explain_prefix_labels(problem, labels, terms));
             };
             if placed[position].is_some() {
                 return Err(TranslationError::ColumnGivenTwice {
@@ -672,6 +675,31 @@ impl<'a> Translator<'a> {
                 }
             })
             .collect()
+    }
+
+    /// Explains a problem with named arguments where a label is a declared prefix
+    /// and its value reads as a local name, as in `wd: 42`,
+    /// which a space makes a named argument rather than a prefixed name.
+    fn explain_prefix_labels(
+        &self,
+        problem: Diagnostic,
+        labels: &[String],
+        terms: &[Term],
+    ) -> Diagnostic {
+        let mistaken = labels.iter().zip(terms).find_map(|(label, term)| {
+            let local = match &term.kind {
+                TermKind::Number(_) | TermKind::Constant(Identifier::Bare(_)) => term.to_string(),
+                _ => return None,
+            };
+            (self.prefixes.contains_key(label) && NameKind::Local.admits(&local))
+                .then_some((label, local))
+        });
+        let Some((label, local)) = mistaken else {
+            return problem;
+        };
+        problem.with_hint(format!(
+            "write `{label}:{local}` without spaces for the prefixed name"
+        ))
     }
 
     /// Returns the fact with named arguments resolved to declared positions,

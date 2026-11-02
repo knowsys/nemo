@@ -6,7 +6,7 @@ mod token;
 
 pub(super) use self::token::{FStringPart, Token, TokenKind};
 
-use nemo_physical::diagnostics::Diagnostic;
+use nemo_physical::{diagnostics::Diagnostic, value::NameKind};
 
 use crate::{
     diagnostics::ParseError,
@@ -156,23 +156,17 @@ impl Lexer<'_> {
                 self.position += 1;
                 self.format_string(start);
             }
-            // `_:label` is a blank node, whose label may also start with a digit;
+            // `_:label` is a blank node, whose label is a local name;
             // a bare `_` (or `_name`) a name,
             // which the parser reads as anonymous where it is alone.
             b'_' if self.peek_at(1) == Some(b':')
-                && self
-                    .peek_at(2)
-                    .is_some_and(|byte| byte.is_ascii_digit() || is_name_start(byte)) =>
+                && NameKind::Local.length(&self.source[start + 2..]) > 0 =>
             {
-                self.position += 3;
-                self.hyphenated_name_rest();
+                self.position += 2;
+                self.take_name(NameKind::Local);
                 self.push(TokenKind::BlankNode, start);
             }
-            byte if is_name_start(byte) => {
-                self.position += 1;
-                self.hyphenated_name_rest();
-                self.push(TokenKind::Ident, start);
-            }
+            _ if self.take_name(NameKind::Bare) => self.push(TokenKind::Ident, start),
             _ => {
                 let character = self.character();
                 self.error(start, ParseError::UnexpectedCharacter { character });
@@ -181,7 +175,16 @@ impl Lexer<'_> {
     }
 
     /// Lexes what `:` opens: `::`, `:-`, or the colon itself.
+    ///
+    /// A colon that touches a name before it separates a prefix from a local name,
+    /// and so does a colon after no name at all, the empty prefix's, as in `:a`.
+    /// A local name directly after such a colon is lexed as one, as in `wd:42` or `ex:v1.2`.
+    /// A colon after a name and a space, as in `age :30`, separates a named argument's label
+    /// from its value instead.
     fn colon(&mut self, start: usize) {
+        let separates_prefix = self.tokens.last().is_none_or(|token| {
+            token.kind != TokenKind::Ident || token.span.end as usize == self.offset + start
+        });
         self.position += 1;
         let kind = if self.eat_byte(b':') {
             TokenKind::DoubleColon
@@ -190,7 +193,14 @@ impl Lexer<'_> {
         } else {
             TokenKind::Colon
         };
+        let colon = kind == TokenKind::Colon;
         self.push(kind, start);
+        if colon && separates_prefix {
+            let local = self.position;
+            if self.take_name(NameKind::Local) {
+                self.push(TokenKind::Ident, local);
+            }
+        }
     }
 
     /// Lexes what `!` opens: `!=`, `!==`, or an existential variable.
@@ -212,7 +222,7 @@ impl Lexer<'_> {
             self.marked_name(TokenKind::At, start);
             return;
         }
-        if !self.name_after_marker() {
+        if !self.take_name(NameKind::Marked) {
             self.error(start, ParseError::MarkerWithoutName);
             return;
         }
@@ -221,8 +231,8 @@ impl Lexer<'_> {
                 .peek_at(1)
                 .is_some_and(|byte| byte.is_ascii_alphanumeric())
         {
-            self.position += 2;
-            self.name_rest();
+            self.position += 1;
+            self.skip_while(|byte| byte.is_ascii_alphanumeric());
         }
         self.push(TokenKind::LanguageTag, start);
     }
@@ -302,43 +312,19 @@ impl Lexer<'_> {
     /// Consumes a name after a marker character, emitting the given kind
     /// (or an error if no name follows).
     fn marked_name(&mut self, kind: TokenKind, start: usize) {
-        if self.name_after_marker() {
+        if self.take_name(NameKind::Marked) {
             self.push(kind, start);
         } else {
             self.error(start, ParseError::MarkerWithoutName);
         }
     }
 
-    /// Consumes a name directly after a marker character,
+    /// Consumes the longest name of the given kind at the current position,
     /// returning whether there is one.
-    fn name_after_marker(&mut self) -> bool {
-        if !self.peek().is_some_and(is_name_start) {
-            return false;
-        }
-        self.position += 1;
-        self.name_rest();
-        true
-    }
-
-    /// Consumes the remaining characters of a name.
-    ///
-    /// A name behind a marker (`?x`, `$x`, `#sum`, `@use`) never contains `-`,
-    /// so `?x-1` subtracts.
-    fn name_rest(&mut self) {
-        self.skip_while(is_name_continue);
-    }
-
-    /// Consumes the remaining characters of a name without a marker,
-    /// in which a `-` directly followed by a letter, a digit, or `_` joins two parts:
-    /// `my-lib`, `ex:item-1`.
-    ///
-    /// Read as subtraction, such text would subtract from a name, which no value allows.
-    fn hyphenated_name_rest(&mut self) {
-        self.name_rest();
-        while self.peek() == Some(b'-') && self.peek_at(1).is_some_and(continues_after_hyphen) {
-            self.position += 1;
-            self.name_rest();
-        }
+    fn take_name(&mut self, kind: NameKind) -> bool {
+        let length = kind.length(&self.source[self.position..]);
+        self.position += length;
+        length > 0
     }
 
     /// Returns whether the previous token is a string ending exactly at the current start,
@@ -402,38 +388,6 @@ impl Lexer<'_> {
             end: u32::try_from(self.offset + self.position).expect("source files stay below 4 GiB"),
         }
     }
-}
-
-/// Returns whether a byte may start a name: a letter or `_`.
-fn is_name_start(byte: u8) -> bool {
-    byte.is_ascii_alphabetic() || byte == b'_'
-}
-
-/// Returns whether a byte may continue a name: a letter, a digit, `_`,
-/// or `%` (percent-encoded bare names, never decoded).
-fn is_name_continue(byte: u8) -> bool {
-    byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'%')
-}
-
-/// Returns whether a byte after a `-` in a name without a marker continues the name:
-/// a letter, a digit, or `_`.
-///
-/// A `%` after the `-` starts a comment, as it does after a minus.
-fn continues_after_hyphen(byte: u8) -> bool {
-    byte.is_ascii_alphanumeric() || byte == b'_'
-}
-
-/// Returns whether the lexer reads a text as exactly one name without a marker,
-/// so that it can be written without enclosing angle brackets.
-pub(crate) fn is_bare_name(name: &str) -> bool {
-    let bytes = name.as_bytes();
-    bytes.first().is_some_and(|first| is_name_start(*first))
-        && bytes.iter().enumerate().all(|(index, byte)| match byte {
-            b'-' => bytes
-                .get(index + 1)
-                .is_some_and(|next| continues_after_hyphen(*next)),
-            _ => is_name_continue(*byte),
-        })
 }
 
 /// Returns whether a text of the given length at the given offset within its

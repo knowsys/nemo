@@ -1,6 +1,8 @@
 //! The parser state: a cursor over the token buffer, and the primitives the grammar reads it by.
 
-use nemo_physical::diagnostics::Diagnostic;
+use std::borrow::Cow;
+
+use nemo_physical::{diagnostics::Diagnostic, value::Iri};
 
 use crate::{
     diagnostics::ParseError,
@@ -242,9 +244,10 @@ impl<'a> Parser<'a> {
         self.slice(token, 1, 0)
     }
 
-    /// Returns the content of an IRI token, without the angle brackets.
-    pub(super) fn iri_text(&self, token: &Token) -> &'a str {
-        self.slice(token, 1, 1)
+    /// Returns the IRI an IRI token spells: its text without the angle brackets,
+    /// its character escapes decoded.
+    pub(super) fn iri_text(&self, token: &Token) -> Cow<'a, str> {
+        Iri::unescape(self.slice(token, 1, 1))
     }
 
     /// Returns the label of a blank node token, without its `_:`.
@@ -255,6 +258,35 @@ impl<'a> Parser<'a> {
     /// Returns whether two spans touch without any characters between them.
     pub(super) fn adjacent(left: Span, right: Span) -> bool {
         left.end == right.start
+    }
+
+    /// Returns whether a token ends the term before it rather than starting one:
+    /// a closing bracket, a `,`, the end of a statement or of the input,
+    /// or an operator that only stands between two terms, such as `=` or `*`.
+    pub(super) fn ends_term(kind: &TokenKind) -> bool {
+        matches!(
+            kind,
+            TokenKind::ParenClose
+                | TokenKind::BracketClose
+                | TokenKind::BraceClose
+                | TokenKind::Comma
+                | TokenKind::Dot
+                | TokenKind::ArrowLeft
+                | TokenKind::ArrowRight
+                | TokenKind::Bar
+                | TokenKind::Equal
+                | TokenKind::Unequal
+                | TokenKind::ValueEqual
+                | TokenKind::ValueUnequal
+                | TokenKind::Less
+                | TokenKind::LessEq
+                | TokenKind::Greater
+                | TokenKind::GreaterEq
+                | TokenKind::Star
+                | TokenKind::Slash
+                | TokenKind::Carets
+                | TokenKind::End
+        )
     }
 
     /// Returns the span from a start position to the end of the last consumed

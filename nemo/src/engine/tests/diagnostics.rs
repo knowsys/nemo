@@ -192,3 +192,43 @@ fn import_directives_written_wrongly_are_reported_by_what_is_wrong() {
     let problem = refusal("@import p from csv { \"resource\" = \"p.csv\" } .");
     assert_eq!(problem.code(), codes::UNKNOWN_OPTION, "{problem:?}");
 }
+
+#[test]
+fn a_named_argument_and_a_prefixed_name_point_to_each_other() {
+    // A space after a declared prefix's `:` makes a named argument;
+    // the problem says how to write the prefixed name.
+    let hint = "write `wd:42` without spaces for the prefixed name";
+    for (source, code) in [
+        (
+            "@prefix wd: <http://www.wikidata.org/entity/> . in(wd: 42) .",
+            codes::NAMED_ARGUMENTS_UNDECLARED,
+        ),
+        (
+            "@prefix wd: <http://www.wikidata.org/entity/> .
+             @declare in(item: any) . in(wd: 42) .",
+            codes::UNKNOWN_COLUMN,
+        ),
+    ] {
+        let problem = refusal(source);
+        assert_eq!(problem.code(), code, "{problem:?}");
+        assert!(
+            problem.hints().iter().any(|given| given == hint),
+            "{problem:?}"
+        );
+    }
+    let problem = refusal("in(item: 42) .");
+    assert_eq!(
+        problem.hints().len(),
+        1,
+        "a label that is no prefix: {problem:?}"
+    );
+
+    // Without the space, a named argument reads as a prefixed name,
+    // and the undeclared prefix names the space.
+    let problem = refusal("@declare person(age: int) . person(age:30) .");
+    assert_eq!(problem.code(), codes::UNDECLARED_PREFIX, "{problem:?}");
+    assert!(
+        problem.hints()[0].contains("space after the `:`"),
+        "{problem:?}"
+    );
+}

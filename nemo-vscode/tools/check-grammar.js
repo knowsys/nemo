@@ -359,6 +359,38 @@ const CASES = [
     ],
   },
   {
+    name: "names take letters beyond ASCII, and local names a dot inside",
+    source: "straße(?größe, ex:café, fhir:Observation.status, $höhe) .",
+    expect: [
+      { text: "straße", scope: "entity.name.function" },
+      { text: "?größe", scope: "variable.other" },
+      { text: "café", scope: "variable.other.constant" },
+      { text: "Observation.status", scope: "variable.other.constant" },
+      { text: "$höhe", scope: "variable.parameter" },
+    ],
+  },
+  {
+    name: "string escapes are those the lexer decodes",
+    source: 'p("a\\fb\\u00E9c\\bd") .',
+    expect: [
+      { text: "\\f", scope: "constant.character.escape" },
+      { text: "\\u00E9", scope: "constant.character.escape" },
+      { text: "\\b", not: "constant.character.escape" },
+    ],
+  },
+  {
+    name: "spacing tells a prefixed name from a named argument",
+    source: "in(wd:42, ex:, age: 30, base: = ?x, iri: <http://e.org/>) .",
+    expect: [
+      { text: "wd", scope: "entity.name.namespace" },
+      { text: "42", scope: "variable.other.constant", not: "constant.numeric" },
+      { text: "ex", scope: "entity.name.namespace", not: "variable.parameter" },
+      { text: "age", scope: "variable.parameter" },
+      { text: "base", scope: "entity.name.namespace", not: "variable.parameter" },
+      { text: "iri", scope: "variable.parameter" },
+    ],
+  },
+  {
     name: "a declared prefix is a namespace",
     source: "@prefix ex: <http://e.org/> .",
     expect: [

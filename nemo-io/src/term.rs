@@ -9,7 +9,10 @@
 
 use std::{borrow::Cow, collections::HashMap};
 
-use nemo_physical::{dictionary::Dictionary, value::DataValue};
+use nemo_physical::{
+    dictionary::Dictionary,
+    value::{DataValue, Escape, Iri},
+};
 
 /// The XML Schema namespace.
 const XSD: &str = "http://www.w3.org/2001/XMLSchema#";
@@ -18,7 +21,7 @@ const XSD: &str = "http://www.w3.org/2001/XMLSchema#";
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum LiteralSyntax {
     /// Nemo's term syntax, which the DSV `term` format reads and writes:
-    /// the escapes `\\`, `\"`, `\n`, `\t`, `\r`, `\uXXXX`, and `\UXXXXXXXX`,
+    /// the escapes [Escape::in_string] reads,
     /// any other backslash kept as written, as programs keep it,
     /// and `xsd:` abbreviating the XML Schema namespace in a datatype.
     TermSyntax,
@@ -41,12 +44,14 @@ impl LiteralSyntax {
     }
 }
 
-/// Returns the text between the angle brackets of a cell, or `None` for a cell without them.
+/// Returns the IRI a cell spells between angle brackets, its character escapes decoded,
+/// or `None` for a cell without them.
 ///
-/// The text may be no [valid](nemo_physical::value::Iri::is_valid) IRI.
-pub(crate) fn iri(cell: &str) -> Option<&str> {
+/// The IRI may be no [valid](Iri::is_valid) one.
+pub(crate) fn iri(cell: &str) -> Option<Cow<'_, str>> {
     cell.strip_prefix('<')
         .and_then(|rest| rest.strip_suffix('>'))
+        .map(Iri::unescape)
 }
 
 /// Returns the value of a quoted literal (`"…"`, `"…"@lang`, or `"…"^^<datatype>`),
@@ -65,7 +70,7 @@ pub(crate) fn literal(rest: &str, syntax: LiteralSyntax) -> Option<DataValue> {
         .strip_prefix("^^<")
         .and_then(|rest| rest.strip_suffix('>'))
     {
-        DataValue::typed_literal(&syntax.datatype(datatype), &text)
+        DataValue::typed_literal(&syntax.datatype(&Iri::unescape(datatype)), &text)
     } else {
         None
     }
@@ -89,7 +94,8 @@ fn split(rest: &str) -> Option<(&str, &str)> {
     None
 }
 
-/// Resolves the escapes of a literal's raw text in a literal syntax.
+/// Resolves the escapes of a literal's raw text in a literal syntax:
+/// those [Escape::in_string] reads, and in Turtle also `\b`, a backspace.
 ///
 /// Returns `None` for an escape Turtle does not define, or a backslash that ends the text;
 /// term syntax keeps such a backslash, as programs do.
@@ -102,41 +108,17 @@ fn unescape(raw: &str, syntax: LiteralSyntax) -> Option<String> {
     while let Some(backslash) = rest.find('\\') {
         resolved.push_str(&rest[..backslash]);
         let after = &rest[backslash + 1..];
-        let (character, length) = match (after.chars().next(), syntax) {
-            (Some('\\'), _) => ('\\', 1),
-            (Some('"'), _) => ('"', 1),
-            (Some('n'), _) => ('\n', 1),
-            (Some('t'), _) => ('\t', 1),
-            (Some('r'), _) => ('\r', 1),
-            (Some('b'), LiteralSyntax::Turtle) => ('\u{8}', 1),
-            (Some('f'), LiteralSyntax::Turtle) => ('\u{C}', 1),
-            (Some('\''), LiteralSyntax::Turtle) => ('\'', 1),
-            (Some(letter @ ('u' | 'U')), _) => {
-                let width = if letter == 'u' { 4 } else { 8 };
-                match (character_escape(&after[1..], width), syntax) {
-                    (Some(character), _) => (character, 1 + width),
-                    (None, LiteralSyntax::TermSyntax) => ('\\', 0),
-                    (None, LiteralSyntax::Turtle) => return None,
-                }
-            }
-            (_, LiteralSyntax::TermSyntax) => ('\\', 0),
-            (_, LiteralSyntax::Turtle) => return None,
+        let (character, length) = match (Escape::in_string(after), syntax) {
+            (Some(escape), _) => (escape.character, escape.length),
+            (None, LiteralSyntax::Turtle) if after.starts_with('b') => ('\u{8}', 1),
+            (None, LiteralSyntax::Turtle) => return None,
+            (None, LiteralSyntax::TermSyntax) => ('\\', 0),
         };
         resolved.push(character);
         rest = &after[length..];
     }
     resolved.push_str(rest);
     Some(resolved)
-}
-
-/// Returns the character the given number of hexadecimal digits at the start of a text name,
-/// or `None` if they are not that many digits or name no character.
-fn character_escape(text: &str, width: usize) -> Option<char> {
-    let digits = text.get(..width)?;
-    if !digits.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-        return None;
-    }
-    char::from_u32(u32::from_str_radix(digits, 16).ok()?)
 }
 
 /// The blank node labels of one read, each naming one fresh null.
@@ -177,15 +159,15 @@ mod tests {
             assert_eq!(literal(r#"x"tail"#, syntax), None, "{syntax:?}");
             assert_eq!(literal(r#"trailing\"#, syntax), None, "{syntax:?}");
         }
-        // Turtle's further escapes are unknown to the rule language, which keeps the backslash,
-        // while both read character escapes.
+        // Turtle reads `\b` as a backspace; the rule language keeps it for regular expressions,
+        // and reads `\f` and `\'` as Turtle does.
         assert_eq!(
             literal(r#"café\b\f\'""#, LiteralSyntax::Turtle),
             Some(DataValue::string("café\u{8}\u{C}'"))
         );
         assert_eq!(
-            literal(r#"a\bc""#, LiteralSyntax::TermSyntax),
-            Some(DataValue::string(r"a\bc"))
+            literal(r#"café\b\f\'""#, LiteralSyntax::TermSyntax),
+            Some(DataValue::string("café\\b\u{C}'"))
         );
         assert_eq!(literal(r#"a\u00""#, LiteralSyntax::Turtle), None);
         assert_eq!(
@@ -212,7 +194,8 @@ mod tests {
             literal(r#"x"@en"#, LiteralSyntax::Turtle),
             DataValue::language_string("x", "en")
         );
-        assert_eq!(iri("<urn:a>"), Some("urn:a"));
+        assert_eq!(iri("<urn:a>").as_deref(), Some("urn:a"));
+        assert_eq!(iri(r"<urn:a\u0020b>").as_deref(), Some("urn:a b"));
         assert_eq!(iri("urn:a"), None);
     }
 

@@ -1,9 +1,11 @@
 //! String and format-string literals, which share one body scanner.
 
+use nemo_physical::value::{Escape, NameKind};
+
 use crate::{
     diagnostics::ParseError,
     model::Span,
-    parser::lexer::{FStringPart, Lexer, TokenKind, is_name_continue},
+    parser::lexer::{FStringPart, Lexer, TokenKind},
 };
 
 /// What one step through a literal's body met.
@@ -35,52 +37,21 @@ impl Lexer<'_> {
         self.peek_at(1) == Some(b'"') && self.peek_at(2) == Some(b'"')
     }
 
-    /// Consumes an escape sequence, its backslash at the current position, into the text:
-    /// `\\`, `\"`, `\n`, `\t`, `\r`, and the character escapes `\uXXXX` and `\UXXXXXXXX`
-    /// of Turtle and SPARQL.
+    /// Consumes an escape sequence, its backslash at the current position, into the text,
+    /// as [Escape::in_string] reads it.
     ///
-    /// An unknown escape, or a `\u` without the digits of a character, passes through verbatim,
+    /// An escape it does not read passes through verbatim,
     /// since the backslash may be meant for a later consumer
     /// (regular expressions, replacement patterns).
     fn escape(&mut self, text: &mut String) {
         self.position += 1;
-        let escaped = match self.peek() {
-            Some(b'\\') => '\\',
-            Some(b'"') => '"',
-            Some(b'n') => '\n',
-            Some(b't') => '\t',
-            Some(b'r') => '\r',
-            Some(letter @ (b'u' | b'U')) => {
-                let width = if letter == b'u' { 4 } else { 8 };
-                match self.character_escape(width) {
-                    Some(character) => {
-                        text.push(character);
-                        self.position += 1 + width;
-                    }
-                    None => text.push('\\'),
-                }
-                return;
+        match Escape::in_string(&self.source[self.position..]) {
+            Some(escape) => {
+                text.push(escape.character);
+                self.position += escape.length;
             }
-            _ => {
-                text.push('\\');
-                return;
-            }
-        };
-        text.push(escaped);
-        self.position += 1;
-    }
-
-    /// Returns the character the given number of hexadecimal digits after the current position
-    /// name, or `None` if they are not that many digits or name no character.
-    fn character_escape(&self, width: usize) -> Option<char> {
-        let digits = self
-            .bytes
-            .get(self.position + 1..self.position + 1 + width)?;
-        if !digits.iter().all(u8::is_ascii_hexdigit) {
-            return None;
+            None => text.push('\\'),
         }
-        let digits = std::str::from_utf8(digits).ok()?;
-        char::from_u32(u32::from_str_radix(digits, 16).ok()?)
     }
 
     /// Takes one step through the body of a string or format string into its text:
@@ -214,8 +185,10 @@ impl Lexer<'_> {
                 Some(b'"') => {
                     let format = self.position > expression
                         && self.bytes[self.position - 1] == b'f'
-                        && (self.position - 1 == expression
-                            || !is_name_continue(self.bytes[self.position - 2]));
+                        && !self.source[expression..self.position - 1]
+                            .chars()
+                            .next_back()
+                            .is_some_and(NameKind::continues);
                     if !self.skip_literal(start, format) {
                         return None;
                     }

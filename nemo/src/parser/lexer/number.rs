@@ -1,6 +1,8 @@
 //! Number literals.
 
-use crate::parser::lexer::{Lexer, TokenKind, is_name_continue};
+use nemo_physical::value::NameKind;
+
+use crate::parser::lexer::{Lexer, TokenKind};
 
 impl Lexer<'_> {
     /// Consumes a number literal: digits, an optional fraction, and an optional exponent,
@@ -42,7 +44,10 @@ impl Lexer<'_> {
         // A type suffix: `f`/`F` marks a float, `d`/`D` a double, taken
         // only if nothing name-like follows.
         if matches!(self.peek(), Some(b'f' | b'F' | b'd' | b'D'))
-            && !self.peek_at(1).is_some_and(is_name_continue)
+            && !self.source[self.position + 1..]
+                .chars()
+                .next()
+                .is_some_and(NameKind::continues)
         {
             self.position += 1;
         }

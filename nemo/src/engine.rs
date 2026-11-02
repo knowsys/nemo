@@ -919,7 +919,9 @@ impl Engine {
     /// or under a base IRI, as [term_text](Self::term_text) writes values.
     pub fn predicate_text(&self, predicate: &str) -> String {
         if self.translation.base_iri.is_some() {
-            format!("<{predicate}>")
+            nemo_physical::value::IriRef::new(predicate)
+                .bracketed()
+                .to_string()
         } else {
             crate::model::Identifier::bare(predicate).to_string()
         }

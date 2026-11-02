@@ -429,7 +429,7 @@ impl ValueRef<'_> {
     pub(super) fn write_term(self, f: &mut fmt::Formatter<'_>, bare: bool) -> fmt::Result {
         match self {
             ValueRef::Iri(iri) if bare && iri.writes_bare() => write!(f, "{iri}"),
-            ValueRef::Iri(iri) => write!(f, "<{iri}>"),
+            ValueRef::Iri(iri) => write!(f, "{}", iri.bracketed()),
             ValueRef::String(text) => write_quoted(f, text),
             ValueRef::LanguageString(value) => write!(f, "{value}"),
             ValueRef::Boolean(value) => write!(f, "{value}"),

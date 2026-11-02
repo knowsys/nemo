@@ -49,7 +49,7 @@ impl Parser<'_> {
     fn base_directive(&mut self) -> Result<BaseDirective, Diagnostic> {
         let iri = self.expect(&TokenKind::Iri, "the base IRI in angle brackets")?;
         Ok(BaseDirective {
-            iri: self.iri_text(&iri).to_owned(),
+            iri: self.iri_text(&iri).into_owned(),
             span: None,
         })
     }
@@ -72,7 +72,7 @@ impl Parser<'_> {
         let iri = self.expect(&TokenKind::Iri, "the expanded IRI in angle brackets")?;
         Ok(PrefixDirective {
             prefix,
-            iri: self.iri_text(&iri).to_owned(),
+            iri: self.iri_text(&iri).into_owned(),
             span: None,
         })
     }

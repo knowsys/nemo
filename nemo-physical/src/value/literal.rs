@@ -2,7 +2,7 @@
 
 use std::{fmt, sync::Arc};
 
-use crate::value::{datatype::Datatype, reference::write_quoted};
+use crate::value::{IriRef, datatype::Datatype, reference::write_quoted};
 
 /// An owned [literal](https://www.w3.org/TR/rdf11-concepts/#section-Graph-Literal)
 /// of a datatype this crate has no native representation for,
@@ -154,7 +154,7 @@ impl fmt::Display for OtherLiteralRef<'_> {
     /// the lexical form quoted with `\` and `"` escaped.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write_quoted(f, self.lexical)?;
-        write!(f, "^^<{}>", self.datatype)
+        write!(f, "^^{}", IriRef::new(self.datatype).bracketed())
     }
 }
 

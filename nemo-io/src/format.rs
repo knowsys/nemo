@@ -4,9 +4,12 @@ mod cell;
 
 pub(crate) use cell::CellValue;
 
-use std::fmt::{self, Display, Formatter};
+use std::{
+    borrow::Cow,
+    fmt::{self, Display, Formatter},
+};
 
-use nemo_physical::value::{DataValue, DomainSet, Iri, NumberRef, ValueDomain};
+use nemo_physical::value::{DataValue, DomainSet, Iri, IriRef, NumberRef, ValueDomain};
 
 use crate::term::{self, LiteralSyntax};
 
@@ -295,7 +298,10 @@ impl ValueFormat {
             return term::literal(rest, LiteralSyntax::TermSyntax).map(CellValue::Value);
         }
         if let Some(iri) = term::iri(cell) {
-            return Iri::is_valid(iri).then_some(CellValue::Iri(iri));
+            return Iri::is_valid(&iri).then(|| match iri {
+                Cow::Borrowed(iri) => CellValue::Iri(iri),
+                Cow::Owned(iri) => CellValue::Value(DataValue::iri(iri)),
+            });
         }
         if let Some(number) = DataValue::number_from_term_syntax(cell) {
             return Some(CellValue::Value(number));
@@ -350,7 +356,7 @@ impl ValueFormat {
                 if Self::reads_as_iri(&text) {
                     text
                 } else {
-                    format!("<{text}>")
+                    iri.bracketed().to_string()
                 }
             }
             ValueRef::String(text) => quote(text),
@@ -402,10 +408,11 @@ impl ValueFormat {
     /// Returns the text of a structure's label, as term syntax writes it:
     /// bare if it reads back as the label, in angle brackets otherwise.
     fn label_cell(label: &str) -> String {
-        if nemo_physical::value::IriRef::new(label).writes_bare() {
+        let label = IriRef::new(label);
+        if label.writes_bare() {
             label.to_string()
         } else {
-            format!("<{label}>")
+            label.bracketed().to_string()
         }
     }
 
