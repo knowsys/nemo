@@ -1,0 +1,21 @@
+% Regression test for https://github.com/knowsys/nemo/issues/768:
+% STRSPLIT splits a string at a separator into a tuple of strings,
+% which STRJOIN joins back.
+
+text("a,b,c") .
+text("solo") .
+text("") .
+text(",edge,") .
+
+parts(?t, STRSPLIT(?t, ",")) :- text(?t) .
+rejoined(?t) :- parts(?t, ?p), STRJOIN(?p, ",") = ?t .
+
+% A part is read like any tuple element.
+record("ann;42") .
+record("bob;7") .
+second(?r, ?f) :- record(?r), ?f = GET(STRSPLIT(?r, ";"), 1) .
+
+% An empty separator is an error, so nothing is derived.
+empty(?t, STRSPLIT(?t, "")) :- text(?t) .
+
+@output parts, rejoined, second, empty .

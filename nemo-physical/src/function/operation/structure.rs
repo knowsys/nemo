@@ -180,6 +180,21 @@ pub(crate) fn join_strings(tuple: ValueRef<'_>, separator: ValueRef<'_>) -> Stac
     StackValue::Owned(DataValue::string(joined))
 }
 
+/// Splits a plain string at every occurrence of a separator.
+///
+/// An empty separator is malformed, since it would occur between any two characters.
+pub(crate) fn split_string(text: ValueRef<'_>, separator: ValueRef<'_>) -> StackValue<'static> {
+    let (ValueRef::String(text), ValueRef::String(separator)) = (text, separator) else {
+        return StackValue::Error(EvaluationError::TypeMismatch);
+    };
+    if separator.is_empty() {
+        return StackValue::Error(EvaluationError::Malformed);
+    }
+
+    let parts: Vec<DataValue> = text.split(separator).map(DataValue::string).collect();
+    StackValue::Owned(DataValue::tuple(TupleValue::new(parts)))
+}
+
 /// Returns whether a map holds a key.
 pub(crate) fn has_key(map: ValueRef<'_>, key: ValueRef<'_>) -> StackValue<'static> {
     match map {

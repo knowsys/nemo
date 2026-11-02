@@ -557,6 +557,11 @@ impl Operator {
                 &["STRJOIN(parts: tuple, separator: string) -> string"],
                 "The strings of a tuple joined by the separator.",
             ),
+            Operator::StrSplit => doc(
+                &["STRSPLIT(text: string, separator: string) -> tuple"],
+                "The parts of the string between the occurrences of the separator, \
+                 as a tuple of strings. An empty separator is an error.",
+            ),
         }
     }
 }

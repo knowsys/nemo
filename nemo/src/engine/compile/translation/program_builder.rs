@@ -201,6 +201,7 @@ fn builtin_form(operator: Operator) -> BuiltinForm {
         Operator::IsTuple => Fixed(1, const { &[in_domain(ValueDomain::Tuple)] }),
         Operator::IsMap => Fixed(1, const { &[in_domain(ValueDomain::Map)] }),
         Operator::StrJoin => Fixed(2, &[OpCode::JoinStrings]),
+        Operator::StrSplit => Fixed(2, &[OpCode::SplitString]),
         Operator::BitAnd => Counted(1, OpCode::BitAnd),
         Operator::BitOr => Counted(1, OpCode::BitOr),
         Operator::BitXor => Counted(1, OpCode::BitXor),

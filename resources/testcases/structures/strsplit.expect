@@ -1,0 +1,12 @@
+parts("a,b,c", ("a", "b", "c")) .
+parts("solo", ("solo",)) .
+parts("", ("",)) .
+parts(",edge,", ("", "edge", "")) .
+
+rejoined("a,b,c") .
+rejoined("solo") .
+rejoined("") .
+rejoined(",edge,") .
+
+second("ann;42", "42") .
+second("bob;7", "7") .

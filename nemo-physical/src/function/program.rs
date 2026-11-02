@@ -239,6 +239,7 @@ impl StackProgram {
                 OpCode::Keys => unary(stack, structure::keys),
                 OpCode::HasKey => binary(stack, structure::has_key),
                 OpCode::JoinStrings => binary(stack, structure::join_strings),
+                OpCode::SplitString => binary(stack, structure::split_string),
 
                 OpCode::Year => unary(stack, |value| temporal::component(value, Component::Year)),
                 OpCode::Month => unary(stack, |value| temporal::component(value, Component::Month)),

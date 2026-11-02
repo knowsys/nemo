@@ -247,6 +247,37 @@ fn accessors_read_components() {
 }
 
 #[test]
+fn strings_split_into_tuples_and_join_back() {
+    use crate::value::TupleValue;
+
+    let text = DataValue::string("a, b");
+    let separator = DataValue::string(", ");
+    let parts = apply(OpCode::SplitString, &text, &separator);
+    assert_eq!(
+        parts,
+        Ok(DataValue::tuple(TupleValue::new(vec![
+            DataValue::string("a"),
+            DataValue::string("b"),
+        ])))
+    );
+    let parts = parts.expect("the string splits");
+    assert_eq!(
+        apply(OpCode::JoinStrings, &parts, &separator),
+        Ok(text.clone())
+    );
+
+    assert_eq!(
+        apply(OpCode::SplitString, &text, &DataValue::string("")),
+        Err(EvaluationError::Malformed),
+        "an empty separator occurs everywhere"
+    );
+    assert_eq!(
+        apply(OpCode::SplitString, &int(5), &separator),
+        Err(EvaluationError::TypeMismatch)
+    );
+}
+
+#[test]
 fn accessor_inference_follows_the_operand_types() {
     use crate::value::{DomainSet, LabelBound, TupleShape, Type, ValueDomain};
 

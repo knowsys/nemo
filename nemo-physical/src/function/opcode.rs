@@ -250,6 +250,9 @@ pub enum OpCode {
     HasKey,
     /// Pops a tuple of plain strings and a separator and pushes the strings joined by it.
     JoinStrings,
+    /// Pops a plain string and a separator and pushes the tuple of the parts between the
+    /// separator's occurrences.
+    SplitString,
 
     /// Pops a dateTime, date or duration and pushes its year, or its whole years.
     Year,
@@ -493,6 +496,7 @@ impl OpCode {
             OpCode::Keys => Fixed(&[Plain(&[D::MAP], D::TUPLE)]),
             OpCode::HasKey => Fixed(&[Plain(&[D::MAP, D::ANY], D::BOOLEAN)]),
             OpCode::JoinStrings => Fixed(&[Plain(&[D::TUPLE, D::STRING], D::STRING)]),
+            OpCode::SplitString => Fixed(&[Plain(&[D::STRING, D::STRING], D::TUPLE)]),
 
             OpCode::Year | OpCode::Month | OpCode::Day | OpCode::Hours | OpCode::Minutes => {
                 Fixed(&[Plain(&[TEMPORAL_OR_DURATION], D::INTEGER)])

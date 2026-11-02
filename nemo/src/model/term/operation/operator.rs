@@ -244,6 +244,8 @@ pub enum Operator {
     IsMap,
     /// A tuple of strings joined by a separator.
     StrJoin,
+    /// A string split at a separator into a tuple of strings.
+    StrSplit,
 }
 
 impl Operator {
@@ -412,6 +414,7 @@ impl Operator {
             Operator::IsTuple => "isTuple",
             Operator::IsMap => "isMap",
             Operator::StrJoin => "STRJOIN",
+            Operator::StrSplit => "STRSPLIT",
         }
     }
 
@@ -534,6 +537,7 @@ impl Operator {
         "ISTUPLE",
         "ISMAP",
         "STRJOIN",
+        "STRSPLIT",
     ];
 
     /// Resolves a function-style name to an operator, case-insensitively.
@@ -656,6 +660,7 @@ impl Operator {
             "ISTUPLE" => Operator::IsTuple,
             "ISMAP" => Operator::IsMap,
             "STRJOIN" => Operator::StrJoin,
+            "STRSPLIT" => Operator::StrSplit,
             _ => return None,
         })
     }
