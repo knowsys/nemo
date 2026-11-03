@@ -2,7 +2,6 @@
 
 use std::{
     collections::{HashMap, HashSet},
-    ops::Range,
     rc::Rc,
 };
 
@@ -10,7 +9,7 @@ use nemo_physical::{
     diagnostics::Diagnostic,
     dictionary::Dictionary,
     management::{Revision, TableId, TableManager},
-    plan::{FilterSpec, Marker, OperationPlan},
+    plan::OperationPlan,
     storage::StorageValue,
     trie::Trie,
     value::{DataValue, ValueRef},
@@ -26,7 +25,7 @@ use crate::{
         },
         evaluate::{
             application::{LoggedApplication, scope_columns},
-            body::{BodySpace, combined_positions, filtered, same_constant},
+            body::{BodySpace, combined_positions},
             contexts::RunContexts,
             extensional::{ExtensionalBlock, ExtensionalOrigin},
         },
@@ -35,36 +34,13 @@ use crate::{
     model::AggregateKind,
 };
 
-/// The outcome of a search.
-pub(super) enum Found {
-    /// A proof exists.
-    Proven(Rc<ProofNode>),
-    /// No proof was found.
-    Missing {
-        /// Whether the failure involved the cycle guard.
-        ///
-        /// Such a result depends on its context and must not be memoized.
-        blocked: bool,
-    },
-}
-
-/// The outcome of one candidate application's attempt.
-pub(super) enum Attempted {
-    /// The candidate explains the fact.
-    Proven(Rc<ProofNode>),
-    /// A premise search hit the cycle guard.
-    Blocked,
-    /// No witness of this candidate explains the fact.
-    NoWitness,
-}
-
 /// One candidate application of a rule, to explain one fact.
 #[derive(Debug, Clone, Copy)]
 pub(super) struct CandidateApplication<'f> {
     /// The rule's index.
     pub(super) rule: usize,
     /// The engine step of the application,
-    /// or the end of the fact's revision block if the application log has no entry for it.
+    /// or the revision the fact was added at if the application log has no entry for it.
     pub(super) step: u64,
     /// The fact's table.
     pub(super) table: TableId,
@@ -115,11 +91,7 @@ pub(super) struct ProofSearch<'a> {
     /// Every stored row's revision lies below it.
     pub(super) now: u64,
     /// The proven and refuted facts.
-    ///
-    /// Refutations are recorded only if they are free of context (no cycle guard involved).
     memo: HashMap<(TableId, Vec<StorageValue>), Option<Rc<ProofNode>>>,
-    /// The facts on the current search path, the cycle guard.
-    path: HashSet<(TableId, Vec<StorageValue>)>,
 }
 
 impl<'a> ProofSearch<'a> {
@@ -138,7 +110,6 @@ impl<'a> ProofSearch<'a> {
             extensional: &engine.extensional,
             now: engine.step.max(1),
             memo: HashMap::new(),
-            path: HashSet::new(),
         })
     }
 
@@ -157,10 +128,7 @@ impl<'a> ProofSearch<'a> {
         let Some(row) = row else {
             return Ok(None);
         };
-        Ok(match self.search(table, &row)? {
-            Found::Proven(node) => Some(node),
-            Found::Missing { .. } => None,
-        })
+        self.search(table, &row)
     }
 
     /// Returns the row's values, decoded.
@@ -173,26 +141,6 @@ impl<'a> ProofSearch<'a> {
                     .to_owned()
             })
             .collect()
-    }
-
-    /// Returns whether the table holds the row within the revision range (which
-    /// must align with block boundaries).
-    fn contains(&mut self, table: TableId, range: Range<Revision>, row: &[StorageValue]) -> bool {
-        let values = self.decode(row);
-        let mut plan = OperationPlan::new();
-        let markers: Vec<Marker> = row.iter().map(|_| plan.marker()).collect();
-        let load = plan.load(table, range, markers.clone());
-        let filters = markers
-            .iter()
-            .zip(values)
-            .map(|(&marker, value)| FilterSpec::from_program(vec![marker], same_constant(value)))
-            .collect();
-        let matching = filtered(&mut plan, load, filters);
-        let node = plan.project(matching, Vec::new());
-        let output = plan.output(node);
-        let context = self.contexts.latest();
-        let results = plan.execute(self.manager, self.dictionary, context);
-        !results.outputs[output].is_empty()
     }
 
     /// Returns the smallest revision at or above the given step that aligns with the table's
@@ -209,130 +157,89 @@ impl<'a> ProofSearch<'a> {
         at
     }
 
-    /// Returns the first revision block of the table holding the row, if any.
-    fn first_block(&mut self, table: TableId, row: &[StorageValue]) -> Option<Range<Revision>> {
+    /// Returns whether the table's row was added before the step.
+    pub(super) fn added_before(&self, table: TableId, row: &[StorageValue], step: u64) -> bool {
         self.manager
-            .blocks(table)
-            .into_iter()
-            .find(|block| self.contains(table, block.clone(), row))
+            .revision_of(table, row)
+            .is_some_and(|added| added.0 < step)
     }
 
-    /// Returns the origin of the extensional block covering a table's block, if
-    /// the block is extensional.
-    fn extensional_origin(
-        &self,
-        table: TableId,
-        block: &Range<Revision>,
-    ) -> Option<ExtensionalOrigin> {
+    /// Returns the origin of the table's extensional block holding a revision, if any.
+    fn extensional_origin(&self, table: TableId, revision: Revision) -> Option<ExtensionalOrigin> {
         self.extensional
             .get(&table)
             .into_iter()
             .flatten()
-            .find(|extensional| {
-                extensional.range.start <= block.start && block.end <= extensional.range.end
-            })
+            .find(|extensional| extensional.range.contains(&revision))
             .map(|extensional| extensional.origin)
     }
 
-    /// Returns the candidate applications for a fact of a derived block:
-    /// the logged applications within the block of rules writing the fact's table, ascending.
+    /// Returns the candidate applications for a fact added at a derived revision:
+    /// the logged application of that step, which wrote the fact.
     ///
-    /// The earliest is almost always the true producer.
     /// If the log holds no such application (it can be out of date after the engine recovers
-    /// from a program update), every rule writing the table is a candidate,
-    /// at the block's end.
-    fn candidates(&self, table: TableId, block: &Range<Revision>) -> Vec<(usize, u64)> {
+    /// from a program update), every rule writing the table is a candidate, at the revision.
+    fn candidates(&self, table: TableId, revision: Revision) -> Vec<(usize, u64)> {
         let program = self.program;
-        let candidates: Vec<(usize, u64)> = self
+        let at = self
             .applications
-            .iter()
-            .filter(|logged| block.start.0 <= logged.step && logged.step < block.end.0)
-            .map(|logged| (logged.rule as usize, logged.step))
-            .filter(|&(rule, _)| {
-                program
-                    .rules
-                    .get(rule)
-                    .is_some_and(|rule| targets(rule, table))
-            })
-            .collect();
-        if !candidates.is_empty() {
-            return candidates;
+            .partition_point(|logged| logged.step < revision.0);
+        if let Some(logged) = self.applications.get(at)
+            && logged.step == revision.0
+            && program
+                .rules
+                .get(logged.rule as usize)
+                .is_some_and(|rule| targets(rule, table))
+        {
+            return vec![(logged.rule as usize, logged.step)];
         }
         (0..program.rules.len())
             .filter(|&rule| {
                 !program.rules[rule].never_fires && targets(&program.rules[rule], table)
             })
-            .map(|rule| (rule, block.end.0))
+            .map(|rule| (rule, revision.0))
             .collect()
     }
 
-    /// Searches a proof for the fact.
+    /// Searches a proof for the fact, or `None` if it is not stored.
     pub(super) fn search(
         &mut self,
         table: TableId,
         row: &[StorageValue],
-    ) -> Result<Found, Diagnostic> {
+    ) -> Result<Option<Rc<ProofNode>>, Diagnostic> {
         let key = (table, row.to_vec());
         if let Some(memoized) = self.memo.get(&key) {
-            return Ok(match memoized {
-                Some(node) => Found::Proven(Rc::clone(node)),
-                None => Found::Missing { blocked: false },
-            });
-        }
-        if self.path.contains(&key) {
-            return Ok(Found::Missing { blocked: true });
+            return Ok(memoized.clone());
         }
 
-        // The fact's first block decides the outcome: no block means the
-        // fact is not stored, an extensional block means a leaf, and a
-        // derived block bounds the candidate applications and the premise reads.
-        let Some(block) = self.first_block(table, row) else {
-            self.memo.insert(key, None);
-            return Ok(Found::Missing { blocked: false });
-        };
-        if let Some(origin) = self.extensional_origin(table, &block) {
-            let node = Rc::new(ProofNode {
-                table,
-                row: row.to_vec(),
-                proof: Proof::Asserted { origin },
-            });
-            self.memo.insert(key, Some(Rc::clone(&node)));
-            return Ok(Found::Proven(node));
-        }
-
-        self.path.insert(key.clone());
-        let mut blocked = false;
+        // The revision the fact was added at decides the outcome: none means the fact is not
+        // stored, an extensional one means a leaf, and a derived one names the application.
         let mut proven = None;
-        for (rule, step) in self.candidates(table, &block) {
-            let candidate = CandidateApplication {
-                rule,
-                step,
-                table,
-                row,
-            };
-            match self.attempt(&candidate)? {
-                Attempted::Proven(node) => {
-                    proven = Some(node);
-                    break;
+        if let Some(revision) = self.manager.revision_of(table, row) {
+            if let Some(origin) = self.extensional_origin(table, revision) {
+                proven = Some(Rc::new(ProofNode {
+                    table,
+                    row: row.to_vec(),
+                    proof: Proof::Asserted { origin },
+                }));
+            } else {
+                for (rule, step) in self.candidates(table, revision) {
+                    let candidate = CandidateApplication {
+                        rule,
+                        step,
+                        table,
+                        row,
+                    };
+                    proven = self.attempt(&candidate)?;
+                    if proven.is_some() {
+                        break;
+                    }
                 }
-                Attempted::Blocked => blocked = true,
-                Attempted::NoWitness => {}
             }
         }
-        self.path.remove(&key);
 
-        match proven {
-            Some(node) => {
-                self.memo.insert(key, Some(Rc::clone(&node)));
-                Ok(Found::Proven(node))
-            }
-            None => {
-                if !blocked {
-                    self.memo.insert(key, None);
-                }
-                Ok(Found::Missing { blocked })
-            }
-        }
+        self.memo.insert(key, proven.clone());
+        Ok(proven)
     }
 
     /// Attempts to explain the fact by one candidate application.
@@ -340,7 +247,10 @@ impl<'a> ProofSearch<'a> {
     /// Each head of the rule that writes the fact's table (an ordinary head or an existential
     /// insert) grounds the body by the fact's values.
     /// The first grounding with a witness whose premises are all proven wins.
-    fn attempt(&mut self, candidate: &CandidateApplication<'_>) -> Result<Attempted, Diagnostic> {
+    fn attempt(
+        &mut self,
+        candidate: &CandidateApplication<'_>,
+    ) -> Result<Option<Rc<ProofNode>>, Diagnostic> {
         let program = self.program;
         let rule = &program.rules[candidate.rule];
         let values = self.decode(candidate.row);
@@ -383,20 +293,15 @@ impl<'a> ProofSearch<'a> {
             }
         }
 
-        let mut blocked = false;
         for (grounding, nondeterministic) in groundings {
             let witnesses = self.witnesses(candidate.rule, &grounding, candidate.step);
-            match self.prove_witnesses(candidate, &witnesses, nondeterministic, None, None)? {
-                Attempted::NoWitness => {}
-                Attempted::Blocked => blocked = true,
-                proven => return Ok(proven),
+            let proven =
+                self.prove_witnesses(candidate, &witnesses, nondeterministic, None, None)?;
+            if proven.is_some() {
+                return Ok(proven);
             }
         }
-        Ok(if blocked {
-            Attempted::Blocked
-        } else {
-            Attempted::NoWitness
-        })
+        Ok(None)
     }
 
     /// Attempts to explain a fact of an aggregate head.
@@ -408,7 +313,7 @@ impl<'a> ProofSearch<'a> {
         &mut self,
         candidate: &CandidateApplication<'_>,
         values: &[DataValue],
-    ) -> Result<Attempted, Diagnostic> {
+    ) -> Result<Option<Rc<ProofNode>>, Diagnostic> {
         let program = self.program;
         let rule = &program.rules[candidate.rule];
         let aggregate = rule
@@ -432,7 +337,7 @@ impl<'a> ProofSearch<'a> {
 
         let witnesses = self.witnesses(candidate.rule, &grounding, candidate.step);
         if witnesses.is_empty() {
-            return Ok(Attempted::NoWitness);
+            return Ok(None);
         }
         let positions = combined_positions(rule);
 
@@ -442,16 +347,16 @@ impl<'a> ProofSearch<'a> {
             Some(spec) => {
                 let scope = scope_columns(rule, spec);
                 let mut seen = HashSet::new();
-                witnesses.for_each_row(|witness| {
+                for witness in &witnesses {
                     let projected: Vec<StorageValue> = scope
                         .iter()
                         .map(|&column| witness[positions[column]])
                         .collect();
                     seen.insert(projected);
-                });
+                }
                 seen.len()
             }
-            None => witnesses.row_count(),
+            None => witnesses.len(),
         };
 
         // A min/max result names a witness row: the one achieving it.
@@ -463,17 +368,12 @@ impl<'a> ProofSearch<'a> {
                 .map(|input| (positions[input], target))
         });
 
-        match self.prove_witnesses(candidate, &witnesses, false, keep, Some(matches))? {
-            Attempted::Proven(node) => Ok(Attempted::Proven(node)),
-            // The group exists even if no single witness is fully proven
-            // (or none is called for): the summary explains it.
-            _ => Ok(Attempted::Proven(candidate.derived(
-                Vec::new(),
-                Vec::new(),
-                Some(matches),
-                false,
-            ))),
-        }
+        // The group exists even if no single witness is fully proven
+        // (or none is called for): the summary explains it.
+        let proven = self.prove_witnesses(candidate, &witnesses, false, keep, Some(matches))?;
+        Ok(Some(proven.unwrap_or_else(|| {
+            candidate.derived(Vec::new(), Vec::new(), Some(matches), false)
+        })))
     }
 
     /// Tries the witnesses in order, proving each one's premises,
@@ -484,19 +384,16 @@ impl<'a> ProofSearch<'a> {
     fn prove_witnesses(
         &mut self,
         candidate: &CandidateApplication<'_>,
-        witnesses: &Trie,
+        witnesses: &[Vec<StorageValue>],
         nondeterministic: bool,
         keep: Option<(usize, StorageValue)>,
         matches: Option<usize>,
-    ) -> Result<Attempted, Diagnostic> {
+    ) -> Result<Option<Rc<ProofNode>>, Diagnostic> {
         let program = self.program;
         let rule = &program.rules[candidate.rule];
         let positions = combined_positions(rule);
-        let mut blocked = false;
 
-        let mut rows = Vec::with_capacity(witnesses.row_count());
-        witnesses.for_each_row(|row| rows.push(row.to_vec()));
-        'witnesses: for witness in &rows {
+        'witnesses: for witness in witnesses {
             if let Some((column, value)) = keep
                 && witness[column] != value
             {
@@ -510,37 +407,66 @@ impl<'a> ProofSearch<'a> {
                     .map(|&variable| witness[positions[variable]])
                     .collect();
                 match self.search(atom.table, &premise)? {
-                    Found::Proven(node) => premises.push(node),
-                    Found::Missing { blocked: hit } => {
-                        blocked |= hit;
-                        continue 'witnesses;
-                    }
+                    Some(node) => premises.push(node),
+                    None => continue 'witnesses,
                 }
             }
-            return Ok(Attempted::Proven(candidate.derived(
+            return Ok(Some(candidate.derived(
                 witness.to_vec(),
                 premises,
                 matches,
                 nondeterministic,
             )));
         }
-        Ok(if blocked {
-            Attempted::Blocked
-        } else {
-            Attempted::NoWitness
-        })
+        Ok(None)
     }
 
-    /// Runs the rule's body grounded by the head fact, restricted to
-    /// the data before the application step, returning every witness:
-    /// distinct combined rows (the variables in the rule's order, then
-    /// computed columns).
+    /// Runs the rule's body grounded by the head fact over the data before the application step,
+    /// returning every witness:
+    /// distinct combined rows (the variables in the rule's order, then computed columns).
+    ///
+    /// Each premise of a witness was added before the step,
+    /// so a premise is always older than the fact it supports.
     fn witnesses(
         &mut self,
         rule_index: usize,
         grounding: &[(usize, DataValue)],
         step: u64,
-    ) -> Trie {
+    ) -> Vec<Vec<StorageValue>> {
+        let joined = self.joined(rule_index, grounding, step);
+
+        // A read ending inside a block also holds rows added from the step on;
+        // a body table read up to the step exactly holds none.
+        let rule = &self.program.rules[rule_index];
+        let positions = combined_positions(rule);
+        let checked: Vec<_> = rule
+            .body
+            .iter()
+            .filter(|atom| self.aligned_end(atom.table, step) > Revision(step))
+            .collect();
+        let mut witnesses = Vec::with_capacity(joined.row_count());
+        let mut premise = Vec::new();
+        joined.for_each_row(|witness| {
+            let before = checked.iter().all(|atom| {
+                premise.clear();
+                premise.extend(
+                    atom.variables
+                        .iter()
+                        .map(|&variable| witness[positions[variable]]),
+                );
+                self.added_before(atom.table, &premise, step)
+            });
+            if before {
+                witnesses.push(witness.to_vec());
+            }
+        });
+        witnesses
+    }
+
+    /// Runs the rule's body grounded by the head fact,
+    /// each body table read up to the end of the block holding the step,
+    /// returning the distinct combined rows.
+    fn joined(&mut self, rule_index: usize, grounding: &[(usize, DataValue)], step: u64) -> Trie {
         let program = self.program;
         let rule = &program.rules[rule_index];
         let mut plan = OperationPlan::new();

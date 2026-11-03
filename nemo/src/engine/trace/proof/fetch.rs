@@ -3,8 +3,10 @@
 //! Such a fact is one solution the endpoint returned
 //! for a request built from one binding row per binding atom.
 //! Each binding row is rebuilt from the fact's values at the bound columns,
-//! the atom's constants, and any stored row that matches at the free columns.
+//! the atom's constants, and any row added before the fetch that matches at the free columns.
 //! These rows are the premises, and the endpoint is not queried again.
+
+use std::rc::Rc;
 
 use nemo_physical::{
     diagnostics::Diagnostic,
@@ -16,7 +18,10 @@ use nemo_physical::{
 use crate::engine::{
     compile::compiled::{CompiledFetch, FetchColumn},
     evaluate::body::{filtered, same_constant},
-    trace::proof::search::{Attempted, CandidateApplication, Found, ProofSearch},
+    trace::proof::{
+        ProofNode,
+        search::{CandidateApplication, ProofSearch},
+    },
 };
 
 /// Returns the position in the stored row of each column of the query,
@@ -41,7 +46,7 @@ impl ProofSearch<'_> {
     pub(super) fn attempt_fetch(
         &mut self,
         candidate: &CandidateApplication<'_>,
-    ) -> Result<Attempted, Diagnostic> {
+    ) -> Result<Option<Rc<ProofNode>>, Diagnostic> {
         let program = self.program;
         let rule = &program.rules[candidate.rule];
         let fetch = rule
@@ -53,7 +58,7 @@ impl ProofSearch<'_> {
             .first()
             .filter(|head| head.table == candidate.table)
         else {
-            return Ok(Attempted::NoWitness);
+            return Ok(None);
         };
         let delivered = delivered_positions(fetch);
 
@@ -73,32 +78,24 @@ impl ProofSearch<'_> {
                 candidate.step,
             )?
             else {
-                return Ok(Attempted::NoWitness);
+                return Ok(None);
             };
             for (column, &variable) in atom.variables.iter().enumerate() {
                 witness[variable] = premise[column];
             }
             match self.search(atom.table, &premise)? {
-                Found::Proven(node) => premises.push(node),
-                Found::Missing { blocked } => {
-                    return Ok(if blocked {
-                        Attempted::Blocked
-                    } else {
-                        Attempted::NoWitness
-                    });
-                }
+                Some(node) => premises.push(node),
+                None => return Ok(None),
             }
         }
-        Ok(Attempted::Proven(
-            candidate.derived(witness, premises, None, false),
-        ))
+        Ok(Some(candidate.derived(witness, premises, None, false)))
     }
 
     /// Returns the binding row of one atom behind the fact:
     /// the bound columns from the fact, the constants as stored,
     /// and the free columns from any stored row agreeing with them.
     ///
-    /// Returns `None` if no stored row agrees,
+    /// Returns `None` if no row added before the step agrees,
     /// or if a constant of the atom is not in the dictionary.
     fn binding_premise(
         &mut self,
@@ -121,18 +118,16 @@ impl ProofSearch<'_> {
             });
         }
         if known.iter().all(Option::is_some) {
-            return Ok(Some(
-                known
-                    .into_iter()
-                    .map(|value| value.expect("every entry was just checked to be known"))
-                    .collect(),
-            ));
+            let row: Vec<StorageValue> = known
+                .into_iter()
+                .map(|value| value.expect("every entry was just checked to be known"))
+                .collect();
+            return Ok(self.added_before(table, &row, step).then_some(row));
         }
         self.any_row(table, &known, step)
     }
 
-    /// Returns some stored row of a table agreeing with the known columns,
-    /// from the data before the step.
+    /// Returns some row of a table added before the step that agrees with the known columns.
     fn any_row(
         &mut self,
         table: TableId,
@@ -158,7 +153,7 @@ impl ProofSearch<'_> {
         let results = plan.execute(self.manager, self.dictionary, context);
         let mut found = None;
         results.outputs[output].for_each_row(|row| {
-            if found.is_none() {
+            if found.is_none() && self.added_before(table, row, step) {
                 found = Some(row.to_vec());
             }
         });

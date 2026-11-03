@@ -542,6 +542,38 @@ fn a_proof_sharing_its_premises_stays_as_large_as_its_facts() {
 }
 
 #[test]
+fn recursion_over_a_cyclic_graph_traces_in_polynomial_time() {
+    // A random graph whose reachability facts share their blocks with their premises,
+    // so the search meets many cycles; backtracking around them takes exponential time.
+    let mut engine = run("
+        edge(n0, n12) . edge(n0, n39) . edge(n1, n34) . edge(n2, n0) . edge(n2, n37) .
+        edge(n3, n11) . edge(n5, n27) . edge(n5, n32) . edge(n5, n38) . edge(n6, n12) .
+        edge(n7, n16) . edge(n7, n23) . edge(n7, n38) . edge(n8, n31) . edge(n8, n38) .
+        edge(n9, n24) . edge(n9, n37) . edge(n10, n1) . edge(n11, n1) . edge(n12, n9) .
+        edge(n12, n16) . edge(n12, n17) . edge(n12, n23) . edge(n12, n24) . edge(n12, n26) .
+        edge(n13, n33) . edge(n16, n26) . edge(n16, n28) . edge(n16, n39) . edge(n17, n19) .
+        edge(n17, n31) . edge(n17, n39) . edge(n18, n6) . edge(n18, n35) . edge(n19, n22) .
+        edge(n19, n23) . edge(n20, n1) . edge(n20, n25) . edge(n21, n5) . edge(n21, n33) .
+        edge(n21, n35) . edge(n23, n10) . edge(n23, n15) . edge(n23, n26) . edge(n23, n31) .
+        edge(n24, n4) . edge(n24, n18) . edge(n24, n33) . edge(n25, n6) . edge(n26, n5) .
+        edge(n26, n39) . edge(n27, n38) . edge(n28, n3) . edge(n28, n15) . edge(n28, n31) .
+        edge(n29, n20) . edge(n30, n14) . edge(n30, n19) . edge(n30, n23) . edge(n30, n31) .
+        edge(n31, n10) . edge(n31, n12) . edge(n31, n16) . edge(n31, n17) . edge(n31, n19) .
+        edge(n32, n1) . edge(n32, n28) . edge(n32, n36) . edge(n33, n12) . edge(n33, n27) .
+        edge(n36, n5) . edge(n36, n35) . edge(n37, n3) . edge(n37, n7) . edge(n37, n23) .
+        edge(n38, n17) . edge(n38, n27) . edge(n38, n30) . edge(n39, n24) . edge(n39, n36) .
+        reach(?x, ?y) :- edge(?x, ?y) .
+        reach(?x, ?z) :- reach(?x, ?y), edge(?y, ?z) .
+    ");
+    let response = trace(&mut engine, "reach(n29, n14) .");
+    let tree = response.facts[0]
+        .tree
+        .as_ref()
+        .expect("reach(n29, n14) is derived");
+    check(&mut engine, tree);
+}
+
+#[test]
 fn responses_serialize_to_one_json_format() {
     let mut engine = run("edge(a, b) . reach(?x, ?y) :- edge(?x, ?y) .");
     let response = trace(&mut engine, "reach(a, b) .");

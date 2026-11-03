@@ -1,17 +1,14 @@
 //! Proof search: grounded backward derivation over the stored tables.
 //!
-//! The search first finds the earliest revision block of the fact's table that holds the fact.
-//! If that block was loaded (extensional), the fact is a leaf.
-//! Otherwise, the application log names the rule applications that wrote the block.
-//! For each of them, the rule body is grounded by the fact's values,
-//! restricted to the data from before the application,
-//! and evaluated again as an ordinary operation plan to find a witness.
-//! The witness's premises are then proven in turn.
+//! The search first asks the fact's table for the revision it added the fact at.
+//! If that revision was loaded (extensional), the fact is a leaf.
+//! Otherwise, the application log names the rule application of that step, which wrote it.
+//! Its rule body is grounded by the fact's values,
+//! and evaluated again as an ordinary operation plan over the data from before the application
+//! to find a witness, whose premises are then proven in turn.
 //!
-//! A block is the finest revision range the tables still distinguish after consolidation,
-//! so a premise can lie in the same block as the fact it supports.
-//! The search therefore guards against cycles along the current path,
-//! and backtracks across witnesses and candidates.
+//! The premises of a witness were all added before the fact,
+//! so the search never meets a cycle and remembers every outcome.
 //! Any tree the search returns is a valid proof,
 //! and the true derivation is always in the search space.
 //!
@@ -69,7 +66,7 @@ enum Proof {
         /// The rule's index.
         rule: usize,
         /// The engine step of the producing application,
-        /// or the end of the fact's revision block if the application log has no entry for it.
+        /// or the revision the fact was added at if the application log has no entry for it.
         step: u64,
         /// The witness: the rule's combined row
         /// (the variables in the rule's order, then computed columns),
