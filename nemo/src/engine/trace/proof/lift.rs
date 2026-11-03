@@ -45,7 +45,7 @@ use crate::{
 };
 
 /// One column of a lifted fact.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) enum LiftedCell {
     /// A value the evaluation computed.
     Value(DataValue),
@@ -100,22 +100,35 @@ type Lifted = (TableId, Vec<StorageValue>, Option<Vec<Term>>);
 
 /// The lifted proofs of one response: one node per fact,
 /// each after the nodes of its premises, which its derivation names by id.
+///
+/// The nodes are lifted in batches and taken out after each,
+/// and the ids continue from batch to batch.
 #[derive(Debug, Default)]
 pub(crate) struct LiftedGraph {
-    /// The nodes, by id.
+    /// The id of the batch's first node.
+    first: usize,
+    /// The nodes of the batch, by id from `first` on.
     pub(crate) nodes: Vec<LiftedNode>,
     /// The id of each stored fact lifted.
     lifted: HashMap<Lifted, usize>,
+    /// The id of each fact queried at an endpoint, by predicate and columns.
+    remote: HashMap<(String, Vec<LiftedCell>), usize>,
 }
 
 impl LiftedGraph {
     /// Adds a node, returning its id.
     fn push(&mut self, node: LiftedNode) -> usize {
         self.nodes.push(node);
-        self.nodes.len() - 1
+        self.first + self.nodes.len() - 1
     }
 
-    /// Collects the written constants of the nodes, for the responder to evaluate.
+    /// Takes out the batch's nodes, so that the next batch's ids follow them.
+    pub(crate) fn take(&mut self) -> Vec<LiftedNode> {
+        self.first += self.nodes.len();
+        std::mem::take(&mut self.nodes)
+    }
+
+    /// Collects the written constants of the batch's nodes, for the responder to evaluate.
     pub(crate) fn constants(&self) -> Vec<Term> {
         let constant = |cell: &LiftedCell| match cell {
             LiftedCell::Term(term) if term.is_ground() => Some(term.clone()),
@@ -535,11 +548,25 @@ impl<'a> Lifter<'a> {
                         Some(Premise::Node(node)) => {
                             premises.push(self.lift_at(node, Some(&written), graph))
                         }
-                        Some(Premise::Remote) => premises.push(graph.push(LiftedNode {
-                            predicate: self.name(atom),
-                            terms: instantiate(&written, &derivation.assignment),
-                            proof: LiftedProof::Leaf,
-                        })),
+                        Some(Premise::Remote) => {
+                            let key = (
+                                self.name(atom),
+                                instantiate(&written, &derivation.assignment),
+                            );
+                            let id = match graph.remote.get(&key) {
+                                Some(&id) => id,
+                                None => {
+                                    let id = graph.push(LiftedNode {
+                                        predicate: key.0.clone(),
+                                        terms: key.1.clone(),
+                                        proof: LiftedProof::Leaf,
+                                    });
+                                    graph.remote.insert(key, id);
+                                    id
+                                }
+                            };
+                            premises.push(id);
+                        }
                         None => {}
                     }
                 }

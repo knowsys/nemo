@@ -20,6 +20,30 @@ pub struct TraceNode {
     pub derivation: Option<Derivation>,
 }
 
+impl TraceNode {
+    /// Returns the instantiated rule that derives the fact as one line,
+    /// given the facts of its premises, or the fact alone if no rule derives it.
+    pub fn inference<'a>(&self, premises: impl IntoIterator<Item = &'a str>) -> String {
+        let Some(derivation) = &self.derivation else {
+            return self.fact.clone();
+        };
+        let mut body: Vec<String> = premises.into_iter().map(str::to_owned).collect();
+        body.extend(
+            derivation
+                .absences
+                .iter()
+                .map(|absent| format!("~{absent}")),
+        );
+        let mut line = format!("{} :- {} .", self.fact, body.join(", "));
+        if let Some(summary) = derivation.aggregate {
+            let matches = summary.matches;
+            let noun = if matches == 1 { "match" } else { "matches" };
+            line.push_str(&format!("  % aggregated over {matches} {noun}"));
+        }
+        line
+    }
+}
+
 /// How a rule derived a fact: the rule instance and its premises.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

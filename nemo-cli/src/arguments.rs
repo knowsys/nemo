@@ -124,9 +124,10 @@ pub struct Arguments {
     #[arg(long, alias = "trace-input-file", value_name = "FILE")]
     pub trace_input: Vec<PathBuf>,
 
-    /// Trace every fact of every derived predicate. Each derived fact is
-    /// printed once, as the rule instance that derives it, after its
-    /// premises, or written to `--trace-output` as one trace document.
+    /// Trace every fact of every derived predicate. Each fact is printed
+    /// once, after its premises: a derived fact as the rule instance that
+    /// derives it, a loaded one as a fact statement. Written to
+    /// `--trace-output`, the trace is one trace document.
     #[arg(long, alias = "trace-all-idb-facts")]
     pub trace_all: bool,
 

@@ -72,6 +72,10 @@ impl CandidateApplication<'_> {
     }
 }
 
+/// The outcome of every fact a search met, by table and row:
+/// its proof, or `None` if it has none.
+pub(super) type Proven = HashMap<(TableId, Vec<StorageValue>), Option<Rc<ProofNode>>>;
+
 /// The proof search over one engine's stores.
 pub(super) struct ProofSearch<'a> {
     /// The table store.
@@ -90,13 +94,14 @@ pub(super) struct ProofSearch<'a> {
     ///
     /// Every stored row's revision lies below it.
     pub(super) now: u64,
-    /// The proven and refuted facts.
-    memo: HashMap<(TableId, Vec<StorageValue>), Option<Rc<ProofNode>>>,
+    /// The proven and refuted facts, kept beyond the search.
+    proven: &'a mut Proven,
 }
 
 impl<'a> ProofSearch<'a> {
-    /// Returns a search over the engine's stores.
-    pub(super) fn over(engine: &'a mut Engine) -> Result<Self, Diagnostic> {
+    /// Returns a search over the engine's stores,
+    /// which remembers its outcomes beside those of earlier searches.
+    pub(super) fn over(engine: &'a mut Engine, proven: &'a mut Proven) -> Result<Self, Diagnostic> {
         let program = engine
             .program
             .as_ref()
@@ -109,7 +114,7 @@ impl<'a> ProofSearch<'a> {
             contexts: &engine.contexts,
             extensional: &engine.extensional,
             now: engine.step.max(1),
-            memo: HashMap::new(),
+            proven,
         })
     }
 
@@ -207,8 +212,8 @@ impl<'a> ProofSearch<'a> {
         row: &[StorageValue],
     ) -> Result<Option<Rc<ProofNode>>, Diagnostic> {
         let key = (table, row.to_vec());
-        if let Some(memoized) = self.memo.get(&key) {
-            return Ok(memoized.clone());
+        if let Some(known) = self.proven.get(&key) {
+            return Ok(known.clone());
         }
 
         // The revision the fact was added at decides the outcome: none means the fact is not
@@ -237,7 +242,7 @@ impl<'a> ProofSearch<'a> {
             }
         }
 
-        self.memo.insert(key, proven.clone());
+        self.proven.insert(key, proven.clone());
         Ok(proven)
     }
 

@@ -13,8 +13,8 @@ use crate::{
     model::{Identifier, Span, Statement, Term, TermKind},
     pipeline::StatementId,
     trace::{
-        AggregateSummary, Derivation, SourceLocation, TraceNode, TraceResponse, TracedFact,
-        VERSION, VariableBinding, WrittenRule, WrittenStatement, fact_text,
+        AggregateSummary, Derivation, SourceLocation, TraceNode, TracePart, TracedFact,
+        VariableBinding, WrittenRule, WrittenStatement, fact_text,
     },
 };
 
@@ -79,33 +79,20 @@ impl<'a> Responder<'a> {
         fact_text(predicate, &terms)
     }
 
-    /// Returns the response for the requested facts, given by table and decoded values,
-    /// from their lifted proofs: the graph, and each fact's node in it if the fact holds.
-    ///
-    /// Leaves with the same fact become one node, and every rule is listed once.
-    pub(super) fn response(
+    /// Takes the batch's nodes out of the graph as the part of a response they make,
+    /// listing the rules they apply that `listed` does not hold, by statement.
+    pub(super) fn part(
         &self,
-        facts: &[(TableId, Vec<DataValue>)],
-        graph: &LiftedGraph,
-        roots: &[Option<usize>],
-    ) -> TraceResponse {
-        let mut nodes = Vec::with_capacity(graph.nodes.len());
+        graph: &mut LiftedGraph,
+        listed: &mut HashMap<StatementId, usize>,
+    ) -> TracePart {
+        let lifted = graph.take();
         let mut rules = Vec::new();
-        // The response's id per node of the graph, and per leaf fact and rule.
-        let mut ids = Vec::with_capacity(graph.nodes.len());
-        let mut leaves: HashMap<String, usize> = HashMap::new();
-        let mut listed: HashMap<StatementId, usize> = HashMap::new();
-        for lifted in &graph.nodes {
-            let fact = self.lifted_fact(&lifted.predicate, &lifted.terms);
-            let id = match &lifted.proof {
-                LiftedProof::Leaf => *leaves.entry(fact).or_insert_with_key(|fact| {
-                    nodes.push(TraceNode {
-                        fact: fact.clone(),
-                        derivation: None,
-                    });
-                    nodes.len() - 1
-                }),
-                LiftedProof::Derived {
+        let nodes = lifted
+            .iter()
+            .map(|node| {
+                let fact = self.lifted_fact(&node.predicate, &node.terms);
+                let LiftedProof::Derived {
                     statement,
                     step,
                     assignment,
@@ -113,52 +100,58 @@ impl<'a> Responder<'a> {
                     absences,
                     matches,
                     nondeterministic,
-                } => {
-                    let rule = *listed.entry(*statement).or_insert_with(|| {
-                        rules.push(written_rule(self.engine, *statement));
-                        rules.len() - 1
-                    });
-                    nodes.push(TraceNode {
+                } = &node.proof
+                else {
+                    return TraceNode {
                         fact,
-                        derivation: Some(Derivation {
-                            rule,
-                            step: *step,
-                            assignment: assignment
-                                .iter()
-                                .map(|(variable, cell)| VariableBinding {
-                                    variable: variable.to_string(),
-                                    value: self.cell(cell),
-                                })
-                                .collect(),
-                            premises: premises.iter().map(|&premise| ids[premise]).collect(),
-                            absences: absences
-                                .iter()
-                                .map(|(predicate, cells)| self.lifted_fact(predicate, cells))
-                                .collect(),
-                            aggregate: matches.map(|matches| AggregateSummary { matches }),
-                            nondeterministic: *nondeterministic,
-                        }),
-                    });
-                    nodes.len() - 1
+                        derivation: None,
+                    };
+                };
+                let next = listed.len();
+                let rule = *listed.entry(*statement).or_insert_with_key(|statement| {
+                    rules.push(written_rule(self.engine, *statement));
+                    next
+                });
+                TraceNode {
+                    fact,
+                    derivation: Some(Derivation {
+                        rule,
+                        step: *step,
+                        assignment: assignment
+                            .iter()
+                            .map(|(variable, cell)| VariableBinding {
+                                variable: variable.to_string(),
+                                value: self.cell(cell),
+                            })
+                            .collect(),
+                        premises: premises.clone(),
+                        absences: absences
+                            .iter()
+                            .map(|(predicate, cells)| self.lifted_fact(predicate, cells))
+                            .collect(),
+                        aggregate: matches.map(|matches| AggregateSummary { matches }),
+                        nondeterministic: *nondeterministic,
+                    }),
                 }
-            };
-            ids.push(id);
-        }
-
-        let facts = facts
-            .iter()
-            .zip(roots)
-            .map(|((table, values), root)| TracedFact {
-                fact: self.fact(*table, values),
-                node: root.map(|root| ids[root]),
             })
             .collect();
-        TraceResponse {
-            version: VERSION,
-            facts,
-            nodes,
-            rules,
-        }
+        TracePart { nodes, rules }
+    }
+
+    /// Returns the requested facts, given by table and decoded values, each with its node.
+    pub(super) fn traced(
+        &self,
+        facts: &[(TableId, Vec<DataValue>)],
+        roots: &[Option<usize>],
+    ) -> Vec<TracedFact> {
+        facts
+            .iter()
+            .zip(roots)
+            .map(|((table, values), &node)| TracedFact {
+                fact: self.fact(*table, values),
+                node,
+            })
+            .collect()
     }
 }
 

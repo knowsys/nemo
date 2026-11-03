@@ -77,7 +77,7 @@ use crate::{
     model::{Fact, FileId, Program, Statement},
     pipeline::{Pipeline, RevisionId, Stages},
     telemetry::{EngineEvent, EngineTimings, EventSink, SinkSlot},
-    trace::TraceResponse,
+    trace::{TracePart, TraceResponse, TracedFact},
 };
 
 /// The reasoning engine over one program.
@@ -814,38 +814,27 @@ impl Engine {
         trace::proof::run(self, resolved)
     }
 
-    /// Traces a page of a predicate's stored rows:
-    /// the rows from `start` in the engine's row order, at most `budget` of them.
+    /// Traces every stored row of the given predicates and then the given facts,
+    /// as [trace](Self::trace) does,
+    /// and returns the facts, each with its node.
+    ///
+    /// The response is handed to the sink in [parts](crate::trace::TracePart) as it grows,
+    /// a batch of rows at a time:
+    /// each fact is proven once, and becomes one node, listed after its premises.
+    /// Memory holds every proof until the trace ends.
     ///
     /// # Errors
     ///
-    /// Returns what [trace](Self::trace) returns,
-    /// and what [cursor](Self::cursor) returns for the predicate.
-    pub fn trace_rows(
-        &mut self,
-        predicate: &str,
-        start: usize,
-        budget: usize,
-    ) -> Result<TraceResponse, Diagnostic> {
-        self.trace_page(predicate, start, budget)
-    }
-
-    /// Traces every stored row of the given predicates, a page of at most `budget` rows at a
-    /// time, handing each page's response to the sink as it is ready.
-    ///
-    /// Memory thus holds the proofs of one page at a time, not those of a whole predicate.
-    ///
-    /// # Errors
-    ///
-    /// Returns the first error of [trace_rows](Self::trace_rows) or of the sink,
-    /// which ends the tracing.
+    /// Returns what [trace](Self::trace) returns for the facts,
+    /// what [cursor](Self::cursor) returns for a predicate,
+    /// and the first error of the sink, which ends the tracing.
     pub fn trace_predicates(
         &mut self,
         predicates: &[String],
-        budget: usize,
-        sink: impl FnMut(TraceResponse) -> Result<(), Diagnostic>,
-    ) -> Result<(), Diagnostic> {
-        self.trace_in_pages(predicates, budget, sink)
+        facts: &[Fact],
+        sink: impl FnMut(TracePart) -> Result<(), Diagnostic>,
+    ) -> Result<Vec<TracedFact>, Diagnostic> {
+        self.trace_in_parts(predicates, facts, sink)
     }
 
     /// Answers a `treeForTable` query of the [query format](crate::trace::query):

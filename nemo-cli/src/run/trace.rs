@@ -1,7 +1,6 @@
 //! The traces a run asks for, and the destinations of the derivations and responses.
 
 use std::{
-    collections::HashMap,
     io::{self, BufWriter, Write},
     path::Path,
 };
@@ -10,7 +9,7 @@ use nemo::{
     engine::Engine,
     model::Fact,
     trace::{
-        Derivation, TraceNode, TraceResponse, TracedFact, VERSION, WrittenRule,
+        TracePart, TracedFact, VERSION, WrittenRule,
         query::{TableEntriesForTreeNodesQuery, TreeForTableQuery},
     },
 };
@@ -22,12 +21,6 @@ use crate::{
     run::{Run, selection::Reached},
     stdout,
 };
-
-/// Rows traced per page under `--trace-all`.
-///
-/// A page's proofs are held at once, and each page searches anew:
-/// a smaller page holds less, a larger one proves shared premises fewer times.
-const TRACE_BUDGET: usize = 1 << 6;
 
 /// Reads the query of `--trace-tree` or `--trace-node`: the JSON text
 /// itself, an object or an array, or the file holding it.
@@ -56,29 +49,29 @@ fn unwritable(path: &Path, error: io::Error) -> Diagnostic {
     .diagnostic()
 }
 
-/// Where `--trace-all` streams its responses as they arrive:
+/// Where `--trace-all` streams the response as its parts arrive:
 /// into the `--trace-output` file as one trace response, its nodes one per line,
-/// or to the standard output as one inference per line.
-///
-/// Each derived fact is written once, however many responses hold it.
+/// or to the standard output as one line per node:
+/// the rule instance of a derived fact, and a loaded fact as a fact statement.
 struct TraceStream<'a> {
     /// The file, if the trace is written rather than printed.
     path: Option<&'a Path>,
     /// The open destination.
     out: Box<dyn Write>,
-    /// The facts written, each with its id in the file's response.
-    ids: HashMap<String, usize>,
-    /// The rules of the file's response.
+    /// The number of nodes written.
+    written: usize,
+    /// The fact of every node printed, by id, to name the premises of later ones.
+    facts: Vec<String>,
+    /// The rules of the parts so far, for the end of the file's response.
     rules: Vec<WrittenRule>,
-    /// The position of each rule in the file's response, by its statement id.
-    listed: HashMap<usize, usize>,
     /// Whether the standard output closed under the stream: the reader
-    /// has all it wants, so no further page is derived for it.
+    /// has all it wants, so no further part is derived for it.
     closed: bool,
 }
 
 impl<'a> TraceStream<'a> {
-    /// Opens the stream on the file if one is named, and on the standard output otherwise.
+    /// Opens the stream on the file if one is named, and on the standard output otherwise,
+    /// and begins the file's response.
     fn open(path: Option<&'a Path>) -> Result<Self, Diagnostic> {
         let out: Box<dyn Write> = match path {
             None => Box::new(BufWriter::new(io::stdout().lock())),
@@ -86,122 +79,72 @@ impl<'a> TraceStream<'a> {
                 std::fs::File::create(path).map_err(|error| unwritable(path, error))?,
             )),
         };
-        Ok(Self {
+        let mut stream = Self {
             path,
             out,
-            ids: HashMap::new(),
+            written: 0,
+            facts: Vec::new(),
             rules: Vec::new(),
-            listed: HashMap::new(),
             closed: false,
-        })
+        };
+        if let Some(path) = path {
+            write!(stream.out, r#"{{"version":{VERSION},"nodes":["#)
+                .map_err(|error| unwritable(path, error))?;
+        }
+        Ok(stream)
     }
 
-    /// Writes the traced facts the run named, before any page.
-    fn start(&mut self, named: TraceResponse) -> Result<(), Diagnostic> {
-        let written = match self.path {
-            Some(_) => self.begin(named),
-            None => self.print(&named, true),
-        };
+    /// Writes a part of the response.
+    fn take(&mut self, part: TracePart) -> Result<(), Diagnostic> {
+        let written = self.write(part);
         written.map_err(|error| self.failed(error))
     }
 
-    /// Writes one page of traced rows.
-    fn take(&mut self, response: TraceResponse) -> Result<(), Diagnostic> {
-        let written = match self.path {
-            Some(_) => self.append(response).map(|_| ()),
-            None => self.print(&response, false),
-        };
-        written.map_err(|error| self.failed(error))
-    }
-
-    /// Prints each derived fact of a response not printed before as its inference,
-    /// and, if asked, each requested fact that does not hold as a note.
-    fn print(&mut self, response: &TraceResponse, notes: bool) -> io::Result<()> {
-        for id in 0..response.nodes.len() {
-            let proof = response.node(id);
-            if proof.derivation().is_some() && !self.ids.contains_key(proof.fact()) {
-                self.ids.insert(proof.fact().to_owned(), self.ids.len());
-                writeln!(self.out, "{proof}")?;
+    /// Writes a part's nodes: each on its own line of the file's response,
+    /// or printed as a rule instance or a fact statement.
+    fn write(&mut self, part: TracePart) -> io::Result<()> {
+        for node in part.nodes {
+            if self.path.is_some() {
+                let separator = if self.written == 0 { "\n" } else { ",\n" };
+                write!(self.out, "{separator}{}", json(&node))?;
+            } else {
+                let line = match &node.derivation {
+                    Some(derivation) => node.inference(
+                        derivation
+                            .premises
+                            .iter()
+                            .map(|&premise| self.facts[premise].as_str()),
+                    ),
+                    None => format!("{} .", node.fact),
+                };
+                writeln!(self.out, "{line}")?;
+                self.facts.push(node.fact);
             }
+            self.written += 1;
         }
-        if notes {
-            for traced in response.facts.iter().filter(|traced| traced.node.is_none()) {
-                writeln!(self.out, "{} does not hold", traced.fact)?;
-            }
-        }
+        self.rules.extend(part.rules);
         Ok(())
     }
 
-    /// Begins the file's response with the named facts and their derivations.
-    fn begin(&mut self, named: TraceResponse) -> io::Result<()> {
-        let facts = named.facts.clone();
-        write!(self.out, r#"{{"version":{VERSION},"facts":"#)?;
-        let ids = self.renumbered(&named);
-        let facts: Vec<TracedFact> = facts
-            .into_iter()
-            .map(|traced| TracedFact {
-                node: traced.node.map(|node| ids[node]),
-                ..traced
-            })
-            .collect();
-        write!(self.out, "{}", json(&facts))?;
-        write!(self.out, r#","nodes":["#)?;
-        self.append(named).map(|_| ())
-    }
-
-    /// Returns the file's id for every node of a response:
-    /// the id of the fact if it was written before, and the next free one otherwise.
-    fn renumbered(&self, response: &TraceResponse) -> Vec<usize> {
-        let mut next = self.ids.len();
-        let mut fresh = HashMap::new();
-        response
-            .nodes
-            .iter()
-            .map(|node| {
-                self.ids.get(&node.fact).copied().unwrap_or_else(|| {
-                    *fresh.entry(node.fact.as_str()).or_insert_with(|| {
-                        next += 1;
-                        next - 1
-                    })
-                })
-            })
-            .collect()
-    }
-
-    /// Writes the nodes of a response the file does not hold yet, each on its own line,
-    /// its premises and rule renumbered into the file's response, and returns the file's ids.
-    fn append(&mut self, response: TraceResponse) -> io::Result<Vec<usize>> {
-        let ids = self.renumbered(&response);
-        for (node, &id) in response.nodes.into_iter().zip(&ids) {
-            if self.ids.contains_key(&node.fact) {
-                continue;
+    /// Ends the stream with the traced facts the run named:
+    /// the file's response lists them after its rules,
+    /// and the standard output notes those that do not hold.
+    /// Says where the trace went.
+    fn finish(mut self, named: Vec<TracedFact>) -> Result<(), Diagnostic> {
+        let Some(path) = self.path else {
+            for traced in named.iter().filter(|traced| traced.node.is_none()) {
+                writeln!(self.out, "{} does not hold", traced.fact)
+                    .map_err(|error| self.failed(error))?;
             }
-            let derivation = node.derivation.map(|derivation| Derivation {
-                rule: self.listed(&response.rules[derivation.rule]),
-                premises: derivation
-                    .premises
-                    .iter()
-                    .map(|&premise| ids[premise])
-                    .collect(),
-                ..derivation
-            });
-            let separator = if id == 0 { "\n" } else { ",\n" };
-            let node = TraceNode {
-                fact: node.fact,
-                derivation,
-            };
-            write!(self.out, "{separator}{}", json(&node))?;
-            self.ids.insert(node.fact, id);
-        }
-        Ok(ids)
-    }
-
-    /// Returns the position of a rule in the file's response, listing it if it is new.
-    fn listed(&mut self, rule: &WrittenRule) -> usize {
-        *self.listed.entry(rule.rule).or_insert_with(|| {
-            self.rules.push(rule.clone());
-            self.rules.len() - 1
-        })
+            return self.out.flush().or_else(stdout::interrupted);
+        };
+        let rules = json(&self.rules);
+        let facts = json(&named);
+        write!(self.out, "\n],\"rules\":{rules},\"facts\":{facts}}}\n")
+            .and_then(|()| self.out.flush())
+            .map_err(|error| unwritable(path, error))?;
+        eprintln!("trace: {}", path.display());
+        Ok(())
     }
 
     /// Returns what a failed write amounts to:
@@ -216,21 +159,6 @@ impl<'a> TraceStream<'a> {
                     reason: error.to_string(),
                 }
                 .diagnostic()
-            }
-        }
-    }
-
-    /// Ends the response in the file and flushes the stream, and says where the trace went.
-    fn finish(mut self) -> Result<(), Diagnostic> {
-        match self.path {
-            None => self.out.flush().or_else(stdout::interrupted),
-            Some(path) => {
-                let rules = json(&self.rules);
-                write!(self.out, "\n],\"rules\":{rules}}}\n")
-                    .and_then(|()| self.out.flush())
-                    .map_err(|error| unwritable(path, error))?;
-                eprintln!("trace: {}", path.display());
-                Ok(())
             }
         }
     }
@@ -304,9 +232,9 @@ impl Run<'_> {
             .collect()
     }
 
-    /// Traces every fact of every derived predicate (and the named facts first),
-    /// streaming page by page:
-    /// one inference per line to standard output,
+    /// Traces every fact of every derived predicate, and the named facts,
+    /// streaming the response as it grows:
+    /// one line per fact to standard output,
     /// or one trace response, a node per line, into `--trace-output`.
     ///
     /// What the engine does not store whole is skipped, and reported once.
@@ -323,26 +251,12 @@ impl Run<'_> {
         if let Some(warning) = derived.warning() {
             self.show(&warning);
         }
-        let derived = derived.predicates;
-        let named = if facts.is_empty() {
-            TraceResponse {
-                version: VERSION,
-                facts: Vec::new(),
-                nodes: Vec::new(),
-                rules: Vec::new(),
-            }
-        } else {
-            engine.trace(facts)?
-        };
         let mut stream = TraceStream::open(self.arguments.trace_output.as_deref())?;
-        let streamed = stream.start(named).and_then(|()| {
-            engine.trace_predicates(&derived, TRACE_BUDGET, |response| stream.take(response))
-        });
+        let named = engine.trace_predicates(&derived.predicates, facts, |part| stream.take(part));
         if stream.closed {
             return Ok(());
         }
-        streamed?;
-        stream.finish()
+        stream.finish(named?)
     }
 
     /// Writes a query's response, as JSON, to the standard output or

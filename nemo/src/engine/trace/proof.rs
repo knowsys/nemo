@@ -18,12 +18,15 @@
 //! - [fetch] proves facts fetched from an endpoint by a bound import.
 //! - [lift] maps each proof onto the written program.
 //! - [response] converts it to the [crate::trace] protocol types.
-//! - [pages] traces a predicate's rows one page at a time.
+//! - [parts] traces every row of predicates, handing the response out in parts.
+//!
+//! A [Trace] keeps what its batches of facts have in common,
+//! so that they add up to one response in which each fact is proven and listed once.
 
 #[cfg(feature = "sparql")]
 mod fetch;
 mod lift;
-mod pages;
+mod parts;
 mod response;
 mod search;
 
@@ -31,7 +34,7 @@ pub(crate) use response::{Responder, written_rule};
 
 use lift::{LiftedGraph, Lifter};
 
-use std::rc::Rc;
+use std::{collections::HashMap, rc::Rc};
 
 use nemo_physical::{
     diagnostics::Diagnostic, management::TableId, storage::StorageValue, value::DataValue,
@@ -39,7 +42,8 @@ use nemo_physical::{
 
 use crate::{
     engine::{Engine, compile::compiled::CompiledRule},
-    trace::TraceResponse,
+    pipeline::StatementId,
+    trace::{TracePart, TraceResponse, TracedFact, VERSION},
 };
 
 /// One proven fact with its explanation.
@@ -80,32 +84,68 @@ enum Proof {
     },
 }
 
+/// What a trace keeps from one batch of facts to the next:
+/// the facts proven, the facts lifted with their nodes, and the rules listed.
+///
+/// The batches add up to one response, in which each fact is proven and listed once.
+#[derive(Debug, Default)]
+struct Trace {
+    /// The outcome of every fact the search met.
+    proven: search::Proven,
+    /// The facts lifted, with their nodes.
+    graph: LiftedGraph,
+    /// The position of each rule listed, by its statement.
+    rules: HashMap<StatementId, usize>,
+}
+
+impl Trace {
+    /// Traces a batch of facts, given by table and decoded values:
+    /// returns the nodes and rules the batch adds to the response, and each fact with its node.
+    fn batch(
+        &mut self,
+        engine: &mut Engine,
+        facts: &[(TableId, Vec<DataValue>)],
+    ) -> Result<(TracePart, Vec<TracedFact>), Diagnostic> {
+        let mut proofs: Vec<Option<Rc<ProofNode>>> = Vec::with_capacity(facts.len());
+        {
+            let mut search = search::ProofSearch::over(engine, &mut self.proven)?;
+            for (table, values) in facts {
+                proofs.push(search.prove(*table, values)?);
+            }
+        }
+
+        let roots: Vec<Option<usize>> = {
+            let lifter = Lifter::new(engine);
+            proofs
+                .iter()
+                .map(|proof| {
+                    proof
+                        .as_ref()
+                        .map(|node| lifter.lift(node, &mut self.graph))
+                })
+                .collect()
+        };
+        let canonical_constants = engine.render_constants(self.graph.constants());
+
+        let responder = Responder::new(engine, canonical_constants);
+        let part = responder.part(&mut self.graph, &mut self.rules);
+        Ok((part, responder.traced(facts, &roots)))
+    }
+}
+
 /// Traces the resolved facts against the engine's stores, returning the
 /// protocol response.
 pub(crate) fn run(
     engine: &mut Engine,
     facts: Vec<(TableId, Vec<DataValue>)>,
 ) -> Result<TraceResponse, Diagnostic> {
-    let mut proofs: Vec<Option<Rc<ProofNode>>> = Vec::with_capacity(facts.len());
-    {
-        let mut search = search::ProofSearch::over(engine)?;
-        for (table, values) in &facts {
-            proofs.push(search.prove(*table, values)?);
-        }
-    }
-
-    let mut graph = LiftedGraph::default();
-    let roots: Vec<Option<usize>> = {
-        let lifter = Lifter::new(engine);
-        proofs
-            .iter()
-            .map(|proof| proof.as_ref().map(|node| lifter.lift(node, &mut graph)))
-            .collect()
-    };
-    let canonical_constants = engine.render_constants(graph.constants());
-
-    let responder = Responder::new(engine, canonical_constants);
-    Ok(responder.response(&facts, &graph, &roots))
+    let (part, facts) = Trace::default().batch(engine, &facts)?;
+    Ok(TraceResponse {
+        version: VERSION,
+        facts,
+        nodes: part.nodes,
+        rules: part.rules,
+    })
 }
 
 /// Returns whether a rule writes into the table,

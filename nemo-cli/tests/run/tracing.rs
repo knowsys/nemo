@@ -37,19 +37,25 @@ fn tracing_every_derived_fact_streams_one_inference_per_fact() {
 
     let outcome = run(&directory, &["program.rls", "-e", "none", "--trace-all"]);
     assert_eq!(outcome.status, Some(0), "{}", outcome.stderr);
-    // A line per derived fact, its rule instance, and none for the given rows of `edge`
-    // and `both`, which no rule derives.
-    let mut derived: Vec<&str> = outcome
+    // A line per fact: a derived fact's rule instance after the lines of its premises,
+    // and a given row, of the derived `both` or of the `edge` the rules read,
+    // as a fact statement.
+    let position = |line: &str| outcome.stdout.lines().position(|printed| printed == line);
+    assert!(position("edge(1, 2) .") < position("reach(1, 2) :- edge(1, 2) ."));
+    let mut lines: Vec<&str> = outcome
         .stdout
         .lines()
         .map(|line| line.split(" :- ").next().expect("a rule instance"))
         .collect();
-    derived.sort_unstable();
+    lines.sort_unstable();
     assert_eq!(
-        derived,
+        lines,
         [
+            "both(0) .",
             "both(1)",
             "both(2)",
+            "edge(1, 2) .",
+            "edge(2, 3) .",
             "reach(1, 2)",
             "reach(1, 3)",
             "reach(2, 3)",

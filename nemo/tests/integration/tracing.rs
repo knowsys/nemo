@@ -512,9 +512,19 @@ fn a_fact_several_derivations_use_is_one_node() {
     let p_under_r = r.premises().next().expect("p(1) under r(1)");
     assert_eq!(p_under_q.id(), p_under_r.id(), "p(1) is one node");
     assert!(response.ascii().contains("p(1) (shown above)"));
+    let inferences: Vec<String> = (0..response.nodes.len())
+        .map(|id| response.node(id))
+        .filter(|proof| proof.rule().is_some())
+        .map(|proof| proof.to_string())
+        .collect();
     assert_eq!(
-        response.inference_lines(),
-        "p(1) :- e(1) .\nq(1) :- p(1) .\nr(1) :- p(1) .\ns(1) :- q(1), r(1) .\n"
+        inferences,
+        [
+            "p(1) :- e(1) .",
+            "q(1) :- p(1) .",
+            "r(1) :- p(1) .",
+            "s(1) :- q(1), r(1) ."
+        ]
     );
 }
 
@@ -649,51 +659,67 @@ big(?x) :- p(?x, ?label, ?n), ?n > 5 .
     );
 }
 
-/// Tracing by stored rows pages through a predicate: every page's
-/// proofs check, the pages add up to the predicate, and paging over
-/// several predicates hands each page to the sink as it is ready.
+/// Tracing every stored row of predicates hands out one response in parts:
+/// together they check, every row and named fact is one node,
+/// and a fact several rows use is proven and listed once.
 #[test]
-fn stored_rows_trace_page_by_page() {
+fn stored_rows_trace_into_one_response_in_parts() {
     let mut engine = run("
         edge(a, b) . edge(b, c) . edge(c, d) .
         reach(?x, ?y) :- edge(?x, ?y) .
         reach(?x, ?z) :- reach(?x, ?y), edge(?y, ?z) .
         far(?x) :- reach(?x, d) .
     ");
-    let total = engine.count("reach").expect("the predicate exists");
-    assert_eq!(total, 6);
-
-    let mut traced = 0;
-    let mut start = 0;
-    loop {
-        let response = engine.trace_rows("reach", start, 4).expect("a page traces");
-        if response.facts.is_empty() {
-            break;
-        }
-        for fact in &response.facts {
-            assert!(fact.node.is_some(), "a stored row holds: {fact:?}");
-        }
-        check(&mut engine, &response);
-        traced += response.facts.len();
-        start += response.facts.len();
-    }
-    assert_eq!(traced, total, "the pages add up to the predicate");
-
-    let mut pages = Vec::new();
-    engine
+    let named = [
+        Fact::parse("reach(a, d) .").expect("the fact parses"),
+        Fact::parse("reach(d, a) .").expect("the fact parses"),
+    ];
+    let mut response = TraceResponse {
+        version: nemo::trace::VERSION,
+        facts: Vec::new(),
+        nodes: Vec::new(),
+        rules: Vec::new(),
+    };
+    let mut parts = 0;
+    response.facts = engine
         .trace_predicates(
             &[String::from("far"), String::from("reach")],
-            4,
-            |response| {
-                pages.push(response.facts.len());
+            &named,
+            |part| {
+                parts += 1;
+                response.nodes.extend(part.nodes);
+                response.rules.extend(part.rules);
                 Ok(())
             },
         )
-        .expect("every page traces");
-    assert_eq!(pages, [3, 4, 2], "far in one page, reach in two");
+        .expect("every row traces");
+    check(&mut engine, &response);
+    assert_eq!(
+        parts, 3,
+        "one part per predicate, and one for the named facts"
+    );
+
+    let mut facts: Vec<&str> = response
+        .nodes
+        .iter()
+        .map(|node| node.fact.as_str())
+        .collect();
+    let listed = facts.len();
+    facts.sort_unstable();
+    facts.dedup();
+    assert_eq!(facts.len(), listed, "each fact is one node");
+    // The three far facts, the six reach facts, and the three edges they stand on.
+    assert_eq!(listed, 12);
+    assert_eq!(response.rules.len(), 3, "each rule is listed once");
+    assert!(
+        response.facts[0]
+            .node
+            .is_some_and(|node| response.nodes[node].fact == "reach(a, d)")
+    );
+    assert_eq!(response.facts[1].node, None);
 
     let refusal = engine
-        .trace_rows("nowhere", 0, 4)
+        .trace_predicates(&[String::from("nowhere")], &[], |_| Ok(()))
         .expect_err("an unknown predicate is refused");
     assert_eq!(
         refusal.code(),

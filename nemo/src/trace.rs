@@ -32,6 +32,7 @@
 
 mod ascii;
 mod node;
+mod part;
 mod proof;
 pub mod query;
 mod response;
@@ -40,6 +41,7 @@ mod written;
 pub(crate) use self::node::fact_text;
 pub use self::{
     node::{AggregateSummary, Derivation, TraceNode, VariableBinding},
+    part::TracePart,
     proof::Proof,
     response::{TraceResponse, TracedFact},
     written::{SourceLocation, WrittenRule, WrittenStatement},
