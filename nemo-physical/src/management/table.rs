@@ -4,6 +4,7 @@ use std::ops::Range;
 
 use crate::{
     management::{ArrangementWork, ColumnOrder, MergePolicy, Revision, subtable::Subtable},
+    storage::StorageValue,
     trie::Trie,
 };
 
@@ -49,7 +50,8 @@ impl Table {
     ///
     /// An empty trie stores nothing.
     /// Panics if the order or the trie does not match the table's arity,
-    /// or if a nonempty trie's revision does not follow the blocks of the table's subtables.
+    /// or if a nonempty trie's revision does not follow the blocks of the table's subtables,
+    /// or its order differs from theirs.
     pub(super) fn add(&mut self, revision: Revision, order: ColumnOrder, trie: Trie) -> usize {
         assert!(
             order.arity() == self.arity && trie.arity() == self.arity,
@@ -62,6 +64,10 @@ impl Table {
             assert!(
                 revision >= last.range.end,
                 "subtables must be added in ascending revision order"
+            );
+            assert!(
+                last.arrival_order() == &order,
+                "a table's batches arrive in one column order"
             );
         }
 
@@ -140,6 +146,15 @@ impl Table {
             .sum()
     }
 
+    /// Returns the earliest revision the row was added at, if the table holds it.
+    ///
+    /// The row's columns are in the order the table's batches arrive in.
+    pub(super) fn revision_of(&self, row: &[StorageValue]) -> Option<Revision> {
+        self.subtables
+            .iter()
+            .find_map(|subtable| subtable.revision_of(row))
+    }
+
     /// Returns the blocks of the subtables, in ascending order.
     pub(super) fn blocks(&self) -> impl Iterator<Item = Range<Revision>> {
         self.subtables.iter().map(|subtable| subtable.range.clone())
@@ -182,8 +197,7 @@ impl Table {
     /// Merges the subtables within a range into one,
     /// and returns the number of rows it holds.
     ///
-    /// Panics if the range does not align with the table's blocks,
-    /// holds no subtable, or holds subtables that share no column order.
+    /// Panics if the range does not align with the table's blocks, or holds no subtable.
     pub(super) fn consolidate(&mut self, range: Range<Revision>) -> usize {
         let within = self.within(&range);
         let merged = Subtable::merge(&self.subtables[within.clone()]);

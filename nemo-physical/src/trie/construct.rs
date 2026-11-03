@@ -46,25 +46,44 @@ trait ShardSource: Sync {
 
     /// Builds the columns, cut into about as many shards as the given tasks:
     /// each shard builds its column pieces on a task, and the pieces concatenate.
+    fn build(&self, tasks: Tasks) -> Vec<Column> {
+        let pieces = self.shards(tasks, |low, high| self.build_shard(low, high));
+        concat_pieces(self.arity(), pieces)
+    }
+
+    /// Runs a build per shard, cut into about as many shards as the given tasks,
+    /// each on a task, and returns the results in shard order.
     ///
     /// Without bounds there is one shard, unbounded on both sides.
-    fn build(&self, tasks: Tasks) -> Vec<Column> {
+    fn shards<P: Send>(
+        &self,
+        tasks: Tasks,
+        build: impl Fn(Option<StorageValue>, Option<StorageValue>) -> P + Sync,
+    ) -> Vec<P> {
         let bounds = self.bounds(tasks.count());
         debug_assert!(
             bounds.windows(2).all(|pair| pair[0] < pair[1]),
             "bounds are distinct and in order"
         );
         if bounds.is_empty() {
-            return self.build_shard(None, None);
+            return vec![build(None, None)];
         }
 
-        let pieces = parallel::map_tasks(tasks.over(bounds.len() + 1), |shard| {
+        parallel::map_tasks(tasks.over(bounds.len() + 1), |shard| {
             let low = shard.checked_sub(1).map(|before| bounds[before]);
             let high = bounds.get(shard).copied();
-            self.build_shard(low, high)
-        });
-        Column::concat_shards(self.arity(), pieces)
+            build(low, high)
+        })
     }
+}
+
+/// Concatenates the column pieces of consecutive shards; a single shard's are the columns.
+fn concat_pieces(arity: usize, mut pieces: Vec<Vec<Column>>) -> Vec<Column> {
+    if pieces.len() == 1 {
+        return pieces.pop().expect("one shard");
+    }
+
+    Column::concat_shards(arity, pieces)
 }
 
 /// Builds the columns of a trie of the given positive arity from runs.
@@ -103,19 +122,57 @@ pub(super) fn from_tries(sources: &[&Trie]) -> Vec<Column> {
         "merged tries share one arity"
     );
 
+    from_tries_in(sources, tasks_for(sources))
+}
+
+/// Returns the tasks to merge the tries on: as many as their values are worth,
+/// at most as many as the longest first column holds values.
+fn tasks_for(sources: &[&Trie]) -> Tasks {
     let total: usize = sources.iter().map(|source| source.row_count()).sum();
     let distinct = sources
         .iter()
         .map(|source| source.column(0).len())
         .max()
         .unwrap_or(0);
-    from_tries_in(sources, Tasks::cut(total * arity, distinct))
+    Tasks::cut(total * sources[0].arity(), distinct)
 }
 
 /// Builds the columns as [from_tries] does,
 /// cut into about as many shards as the given tasks.
 pub(super) fn from_tries_in(sources: &[&Trie], tasks: Tasks) -> Vec<Column> {
     Tries::new(sources).build(tasks)
+}
+
+/// Builds the columns as [from_tries] does, and a value per row of the merge:
+/// `value(source, row)` of the earliest source holding the row,
+/// with the row's index in that source.
+pub(super) fn from_tries_carrying<T: Send>(
+    sources: &[&Trie],
+    value: impl Fn(usize, usize) -> T + Sync,
+) -> (Vec<Column>, Vec<T>) {
+    let arity = sources[0].arity();
+    debug_assert!(arity > 0, "nullary tries hold no columns to build");
+
+    let tries = Tries::new(sources);
+    let pieces = tries.shards(tasks_for(sources), |low, high| {
+        let window = tries.window(low, high);
+        let mut values = Vec::with_capacity(window.rows());
+        let columns = tries.merge_window(window, |range| {
+            values.push(value(range.source(), range.index()))
+        });
+        (columns, values)
+    });
+    let (columns, mut values): (Vec<Vec<Column>>, Vec<Vec<T>>) = pieces.into_iter().unzip();
+    let carried = if values.len() == 1 {
+        values.pop().expect("one shard")
+    } else {
+        let mut carried = Vec::with_capacity(values.iter().map(Vec::len).sum());
+        for piece in values {
+            carried.extend(piece);
+        }
+        carried
+    };
+    (concat_pieces(arity, columns), carried)
 }
 
 /// Returns the number of distinct rows across the given tries,
@@ -125,7 +182,11 @@ pub(super) fn count_distinct(sources: &[&Trie]) -> usize {
     let arity = sources[0].arity();
     debug_assert!(arity > 0, "nullary tries hold no rows to merge");
 
-    let sources = sources.iter().map(|source| RowRange::all(source)).collect();
+    let sources = sources
+        .iter()
+        .enumerate()
+        .map(|(position, source)| RowRange::all(source, position))
+        .collect();
 
     let mut count = 0;
     merge::merge(sources, arity, |_, _| count += 1);

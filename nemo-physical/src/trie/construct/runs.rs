@@ -12,7 +12,7 @@ use crate::{
             ShardSource,
             builder::{ColumnBuilder, ColumnScan, KindScan, TrieBuilder},
             distinct::Distinct,
-            merge,
+            merge::{self, RowSource},
             runs::chain::RunChain,
         },
     },
@@ -136,6 +136,8 @@ fn merge_chains(arity: usize, chains: Vec<RunChain<'_>>) -> Vec<Column> {
         let blocks = if column == 0 { 1 } else { rows };
         ColumnBuilder::new(scan.kind(), rows, blocks)
     }));
-    merge::merge(chains, arity, |row, change| builder.push_row(row, change));
+    merge::merge(chains, arity, |chain, change| {
+        builder.push_row(chain.row(), change)
+    });
     builder.finish()
 }

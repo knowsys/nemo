@@ -165,6 +165,30 @@ impl Trie {
         Self::from_columns(arity, construct::from_tries(sources))
     }
 
+    /// Merges tries as [merge](Self::merge) does, and carries a value along with each row:
+    /// `value(source, row)` is the value of the row of the given index in a source,
+    /// and a merged row takes the value of the earliest source holding it.
+    ///
+    /// Returns the values in the merged trie's row order.
+    ///
+    /// # Panics
+    ///
+    /// Panics as [merge](Self::merge) does.
+    pub(crate) fn merge_carrying<T: Send>(
+        sources: &[&Trie],
+        value: impl Fn(usize, usize) -> T + Sync,
+    ) -> (Self, Vec<T>) {
+        let arity = Self::merged_arity(sources);
+        if arity == 0 {
+            let holding = sources.iter().position(|source| !source.is_empty());
+            let values = holding.map(|source| value(source, 0)).into_iter().collect();
+            return (Self::nullary(holding.is_some()), values);
+        }
+
+        let (columns, values) = construct::from_tries_carrying(sources, value);
+        (Self::from_columns(arity, columns), values)
+    }
+
     /// Returns the arity shared by the tries of a merge;
     /// panics on an empty or mixed-arity source list.
     fn merged_arity(sources: &[&Trie]) -> usize {
@@ -190,6 +214,31 @@ impl Trie {
         }
 
         construct::count_distinct(sources)
+    }
+
+    /// Returns the index of the row in storage order, or `None` if the trie does not hold it.
+    pub(crate) fn position(&self, row: &[StorageValue]) -> Option<usize> {
+        debug_assert_eq!(row.len(), self.arity, "the row matches the trie's arity");
+        if self.arity == 0 {
+            return (!self.is_empty()).then_some(0);
+        }
+
+        // Each value is sought among the children of the node the values before it lead to.
+        let mut position = 0;
+        for (index, &value) in row.iter().enumerate() {
+            let block = if index == 0 {
+                0..self.column(0).len()
+            } else {
+                self.intervals(index).children(position)
+            };
+            let column = self.column(index);
+            position = column.lower_bound_in(block.clone(), value);
+            if position == block.end || column.get(position) != value {
+                return None;
+            }
+        }
+
+        Some(position)
     }
 
     /// Returns the allocated bytes of the trie.

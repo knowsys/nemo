@@ -14,20 +14,35 @@ pub(super) struct RowRange<'a> {
     cursor: RowCursor<'a>,
     /// The exclusive end index.
     end: usize,
+    /// The position of the trie in the list of tries merged.
+    source: usize,
 }
 
 impl<'a> RowRange<'a> {
-    /// Creates the range of every row of the trie.
-    pub(super) fn all(trie: &'a Trie) -> Self {
-        Self::between(trie, 0..trie.row_count())
+    /// Creates the range of every row of the trie at the given position of a merge.
+    pub(super) fn all(trie: &'a Trie, source: usize) -> Self {
+        Self::between(trie, 0..trie.row_count(), source)
     }
 
-    /// Creates the range of the rows with indices in the given range.
-    pub(super) fn between(trie: &'a Trie, range: Range<usize>) -> Self {
+    /// Creates the range of the rows with indices in the given range
+    /// of the trie at the given position of a merge.
+    pub(super) fn between(trie: &'a Trie, range: Range<usize>, source: usize) -> Self {
         Self {
             cursor: RowCursor::new(trie, range.start),
             end: range.end,
+            source,
         }
+    }
+
+    /// Returns the position of the trie in the list of tries merged.
+    pub(super) fn source(&self) -> usize {
+        self.source
+    }
+
+    /// Returns the index of the current row in the trie;
+    /// valid while the range [has a row](RowSource::has_row).
+    pub(super) fn index(&self) -> usize {
+        self.cursor.index()
     }
 }
 
@@ -54,7 +69,7 @@ mod tests {
     #[test]
     fn ranges_stop_at_their_end() {
         let trie = int_trie(3, &[[1, 1, 2], [1, 2, 2], [2, 1, 1], [2, 1, 4]]);
-        let mut range = RowRange::between(&trie, 1..3);
+        let mut range = RowRange::between(&trie, 1..3, 0);
         let mut rows = Vec::new();
 
         while range.has_row() {

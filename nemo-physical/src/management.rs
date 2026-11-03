@@ -7,9 +7,10 @@
 //!
 //! A subtable stores its rows in arrangements: one [trie](Trie) per column order,
 //! a [ColumnOrder] of the table's columns.
-//! It starts with the order its rows arrived in,
+//! It starts with the order its rows arrived in, which is one order for all batches of a table,
 //! and builds arrangements in further orders on request, each from the closest one it stores.
 //! The arrangements are the indexes of the table.
+//! A subtable also knows the revision each of its rows was added at.
 //!
 //! A read addresses a range of revisions and a column order,
 //! and takes the arrangements in that order of the subtables whose blocks lie within it,
@@ -24,6 +25,7 @@
 mod column_order;
 mod policy;
 mod revision;
+mod row_revisions;
 mod subtable;
 mod table;
 
@@ -179,7 +181,8 @@ impl TableManager {
     ///
     /// Panics if the table is unknown or dropped (see [TableManager]),
     /// if the order or the trie does not match the table's arity,
-    /// or if the trie is nonempty and its revision does not follow the table's blocks.
+    /// or if the trie is nonempty and its revision does not follow the table's blocks
+    /// or its order differs from the order of the batches the table holds.
     pub fn add_trie(
         &mut self,
         table: TableId,
@@ -308,6 +311,19 @@ impl TableManager {
         self.table(table).row_count(range)
     }
 
+    /// Returns the revision the row was added at, the earliest if several batches added it,
+    /// or `None` if the table does not hold it.
+    ///
+    /// The row's columns are in the order the table's batches arrive in.
+    /// Consolidation keeps the revisions of the rows it merges.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the table is unknown or dropped. See [TableManager].
+    pub fn revision_of(&self, table: TableId, row: &[StorageValue]) -> Option<Revision> {
+        self.table(table).revision_of(row)
+    }
+
     /// Returns the blocks of the table's subtables, in ascending order.
     ///
     /// # Panics
@@ -380,8 +396,7 @@ impl TableManager {
     /// # Panics
     ///
     /// Panics if the table is unknown or dropped (see [TableManager]),
-    /// if the range does not align with the table's blocks or holds none of them,
-    /// or if the subtables within it share no column order.
+    /// or if the range does not align with the table's blocks or holds none of them.
     pub fn consolidate(&mut self, table: TableId, range: Range<Revision>) -> usize {
         tracing::trace!(
             table = table.index(),
@@ -400,8 +415,7 @@ impl TableManager {
     ///
     /// # Panics
     ///
-    /// Panics if the table is unknown or dropped (see [TableManager]),
-    /// or if subtables the policy merges share no column order.
+    /// Panics if the table is unknown or dropped. See [TableManager].
     pub fn consolidate_with(
         &mut self,
         table: TableId,
@@ -531,6 +545,53 @@ mod tests {
         assert_panics("ascending revision order", || {
             manager.add_rows(table, Revision(0), order, int_buffer(2, &[&[9, 9]]))
         });
+        assert_panics("one column order", || {
+            manager.add_rows(
+                table,
+                Revision(3),
+                ColumnOrder::new(&[1, 0]).expect("a permutation"),
+                int_buffer(2, &[&[9, 9]]),
+            )
+        });
+    }
+
+    #[test]
+    fn rows_keep_their_revisions_through_consolidation() {
+        let mut manager = TableManager::new();
+        let table = manager.register("edge", 2);
+        let order = ColumnOrder::identity(2);
+        let batches: [&[&[i64]]; 3] = [&[&[1, 2], &[5, 5]], &[&[1, 3], &[1, 2]], &[&[0, 7]]];
+        for (revision, rows) in (2..).zip(batches) {
+            manager.add_rows(
+                table,
+                Revision(revision),
+                order.clone(),
+                int_buffer(2, rows),
+            );
+        }
+        let revision_of = |manager: &TableManager, row: [i64; 2]| {
+            manager.revision_of(table, &row.map(StorageValue::integer))
+        };
+        let expected = [
+            ([1, 2], Some(Revision(2))),
+            ([5, 5], Some(Revision(2))),
+            ([1, 3], Some(Revision(3))),
+            ([0, 7], Some(Revision(4))),
+            ([7, 0], None),
+        ];
+        for (row, revision) in expected {
+            assert_eq!(revision_of(&manager, row), revision);
+        }
+
+        // A merge keeps them, and a row added twice keeps the earlier revision,
+        // whichever further orders the subtables store.
+        let swapped = ColumnOrder::new(&[1, 0]).expect("a permutation");
+        manager.ensure_order(table, Revision(0)..Revision(5), &swapped);
+        manager.consolidate_with(table, &[], MergePolicy::Whole);
+        assert_eq!(manager.blocks(table), vec![Revision(2)..Revision(5)]);
+        for (row, revision) in expected {
+            assert_eq!(revision_of(&manager, row), revision);
+        }
     }
 
     #[test]

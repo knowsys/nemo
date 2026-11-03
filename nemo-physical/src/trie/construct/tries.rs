@@ -9,7 +9,7 @@ use crate::{
         construct::{
             ShardSource,
             builder::{ColumnBuilder, ColumnKind, TrieBuilder},
-            merge,
+            merge::{self, RowSource},
             range::RowRange,
         },
     },
@@ -32,6 +32,39 @@ impl<'s, 't> Tries<'s, 't> {
             .collect();
 
         Self { sources, kinds }
+    }
+
+    /// Returns the window of the sources' rows whose first-column value lies in `low..high`.
+    pub(super) fn window(
+        &self,
+        low: Option<StorageValue>,
+        high: Option<StorageValue>,
+    ) -> Window<'t> {
+        Window::of(self.sources, self.kinds.len(), low, high)
+    }
+
+    /// Merges the rows of a window into one column piece per position,
+    /// and reports each merged row to `carry` by the range it was taken from,
+    /// that of the earliest source holding it.
+    pub(super) fn merge_window(
+        &self,
+        window: Window<'_>,
+        mut carry: impl FnMut(&RowRange<'_>),
+    ) -> Vec<Column> {
+        let arity = self.kinds.len();
+        let mut builder = TrieBuilder::new((0..arity).map(|column| {
+            let blocks = if column == 0 {
+                1
+            } else {
+                window.values[column - 1]
+            };
+            ColumnBuilder::new(self.kinds[column], window.values[column], blocks)
+        }));
+        merge::merge(window.ranges, arity, |range, change| {
+            builder.push_row(range.row(), change);
+            carry(range);
+        });
+        builder.finish()
     }
 }
 
@@ -59,21 +92,7 @@ impl ShardSource for Tries<'_, '_> {
 
     /// Merges the sources' rows of the shard into one column piece per position.
     fn build_shard(&self, low: Option<StorageValue>, high: Option<StorageValue>) -> Vec<Column> {
-        let arity = self.kinds.len();
-        let window = Window::of(self.sources, arity, low, high);
-
-        let mut builder = TrieBuilder::new((0..arity).map(|column| {
-            let blocks = if column == 0 {
-                1
-            } else {
-                window.values[column - 1]
-            };
-            ColumnBuilder::new(self.kinds[column], window.values[column], blocks)
-        }));
-        merge::merge(window.ranges, arity, |row, change| {
-            builder.push_row(row, change)
-        });
-        builder.finish()
+        self.merge_window(self.window(low, high), |_| {})
     }
 }
 
@@ -83,7 +102,7 @@ impl ShardSource for Tries<'_, '_> {
 /// A trie lays subtrees out in order, so in each source the window is a range
 /// of first-column positions and, beneath it, one range of positions per column.
 #[derive(Debug)]
-struct Window<'a> {
+pub(super) struct Window<'a> {
     /// The rows of each source in the window, sources without any left out.
     ranges: Vec<RowRange<'a>>,
     /// The number of values across the sources, per column.
@@ -91,6 +110,11 @@ struct Window<'a> {
 }
 
 impl<'a> Window<'a> {
+    /// Returns the number of rows across the ranges, which bounds the rows they merge into.
+    pub(super) fn rows(&self) -> usize {
+        self.values.last().copied().unwrap_or(0)
+    }
+
     /// Finds the window of the sources' rows whose first-column value lies in `low..high`.
     fn of(
         sources: &[&'a Trie],
@@ -100,7 +124,7 @@ impl<'a> Window<'a> {
     ) -> Self {
         let mut ranges = Vec::with_capacity(sources.len());
         let mut values = vec![0usize; arity];
-        for source in sources {
+        for (position, source) in sources.iter().enumerate() {
             let first = source.column(0);
             let start = low.map_or(0, |low| first.lower_bound(low));
             let end = high.map_or(first.len(), |high| first.lower_bound(high));
@@ -115,7 +139,7 @@ impl<'a> Window<'a> {
                 range = intervals.get(range.start)..intervals.get(range.end);
                 *count += range.len();
             }
-            ranges.push(RowRange::between(source, range));
+            ranges.push(RowRange::between(source, range, position));
         }
         Self { ranges, values }
     }

@@ -6,7 +6,8 @@
 //! that it is a repeat of the last row emitted,
 //! and steps the source it came from to its next row.
 //! Equal rows from different sources
-//! surface back to back, so the filter catches repeats across sources too.
+//! surface back to back, the earliest source's first,
+//! so the filter catches repeats across sources too and keeps the earliest source's row.
 
 use std::{
     cmp::{Ordering, Reverse},
@@ -30,27 +31,30 @@ pub(super) trait RowSource {
     fn advance(&mut self);
 }
 
-/// Visits the distinct rows of the sources in storage order, each with its [RowChange].
+/// Visits the distinct rows of the sources in storage order,
+/// each with the source it was taken from, positioned at it, and its [RowChange].
 ///
+/// A row several sources hold is taken from the earliest of them in the list.
 /// The least source steps in place through the heap's top handle,
 /// which sinks it to where its next row belongs when released,
 /// or removes it when it has none.
 pub(super) fn merge<S: RowSource>(
     sources: Vec<S>,
     arity: usize,
-    mut visit: impl FnMut(&[StorageValue], RowChange),
+    mut visit: impl FnMut(&S, RowChange),
 ) {
     let mut heap: BinaryHeap<Reverse<ByFront<S>>> = sources
         .into_iter()
-        .filter(RowSource::has_row)
-        .map(|source| Reverse(ByFront(source)))
+        .enumerate()
+        .filter(|(_, source)| source.has_row())
+        .map(|(position, source)| Reverse(ByFront(position, source)))
         .collect();
 
     let mut distinct = Distinct::copied(arity);
     while let Some(mut top) = heap.peek_mut() {
-        let source = &mut top.0.0;
+        let source = &mut top.0.1;
         if let Some(change) = distinct.pass(source.row()) {
-            visit(source.row(), change);
+            visit(source, change);
         }
 
         source.advance();
@@ -60,13 +64,13 @@ pub(super) fn merge<S: RowSource>(
     }
 }
 
-/// A source ordered by its front row, for the heap of a [merge];
-/// only sources that have a row are compared.
-struct ByFront<S>(S);
+/// A source with its position in the list, ordered by its front row and then the position,
+/// for the heap of a [merge]; only sources that have a row are compared.
+struct ByFront<S>(usize, S);
 
 impl<S: RowSource> PartialEq for ByFront<S> {
     fn eq(&self, other: &Self) -> bool {
-        self.0.row() == other.0.row()
+        self.cmp(other) == Ordering::Equal
     }
 }
 
@@ -80,7 +84,10 @@ impl<S: RowSource> PartialOrd for ByFront<S> {
 
 impl<S: RowSource> Ord for ByFront<S> {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.0.row().cmp(other.0.row())
+        self.1
+            .row()
+            .cmp(other.1.row())
+            .then_with(|| self.0.cmp(&other.0))
     }
 }
 
@@ -88,8 +95,8 @@ impl<S: RowSource> Ord for ByFront<S> {
 mod tests {
     use super::*;
 
-    /// A run of integer rows of arity 2, read as a source.
-    struct Rows(Vec<[StorageValue; 2]>, usize);
+    /// A run of integer rows of arity 2, read as a source, with a name.
+    struct Rows(Vec<[StorageValue; 2]>, usize, usize);
 
     impl RowSource for Rows {
         fn row(&self) -> &[StorageValue] {
@@ -105,38 +112,43 @@ mod tests {
         }
     }
 
-    /// A source of the given rows.
-    fn rows(rows: &[[i64; 2]]) -> Rows {
+    /// A source of the given rows, under the given name.
+    fn rows(name: usize, rows: &[[i64; 2]]) -> Rows {
         Rows(
             rows.iter()
                 .map(|row| row.map(StorageValue::integer))
                 .collect(),
             0,
+            name,
         )
     }
 
     #[test]
     fn merged_sources_interleave_and_drop_repeats() {
         let sources = vec![
-            rows(&[[1, 1], [2, 2], [3, 3]]),
-            rows(&[]),
-            rows(&[[1, 1], [1, 5], [3, 3]]),
-            rows(&[[0, 9], [2, 2]]),
+            rows(0, &[[1, 1], [2, 2], [3, 3]]),
+            rows(1, &[]),
+            rows(2, &[[1, 1], [1, 5], [3, 3]]),
+            rows(3, &[[0, 9], [2, 2]]),
         ];
         let mut merged = Vec::new();
-        merge(sources, 2, |row, change| {
-            merged.push((row.to_vec(), change))
+        merge(sources, 2, |source, change| {
+            merged.push((source.2, source.row().to_vec(), change))
         });
 
+        // A repeat is taken from the earliest source holding it.
         let expected = [
-            ([0, 9], RowChange::First),
-            ([1, 1], RowChange::At(0)),
-            ([1, 5], RowChange::At(1)),
-            ([2, 2], RowChange::At(0)),
-            ([3, 3], RowChange::At(0)),
+            (3, [0, 9], RowChange::First),
+            (0, [1, 1], RowChange::At(0)),
+            (2, [1, 5], RowChange::At(1)),
+            (0, [2, 2], RowChange::At(0)),
+            (0, [3, 3], RowChange::At(0)),
         ];
         assert_eq!(merged.len(), expected.len());
-        for ((row, change), (expected_row, expected_change)) in merged.iter().zip(&expected) {
+        for ((position, row, change), (expected_position, expected_row, expected_change)) in
+            merged.iter().zip(&expected)
+        {
+            assert_eq!(position, expected_position);
             assert_eq!(row, &expected_row.map(StorageValue::integer));
             assert_eq!(change, expected_change);
         }
