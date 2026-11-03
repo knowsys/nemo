@@ -8,14 +8,13 @@ use nemo_physical::{management::TableId, storage::StorageValue, value::DataValue
 use crate::{
     engine::{
         Engine,
-        evaluate::extensional::ExtensionalOrigin,
-        trace::proof::lift::{LiftedCell, LiftedNode, LiftedProof},
+        trace::proof::lift::{LiftedCell, LiftedGraph, LiftedProof},
     },
     model::{Identifier, Span, Statement, Term, TermKind},
     pipeline::StatementId,
     trace::{
-        AggregateSummary, AssertedOrigin, FactText, SourceLocation, TraceNode, VariableBinding,
-        WrittenRule, WrittenStatement,
+        AggregateSummary, Derivation, SourceLocation, TraceNode, TraceResponse, TracedFact,
+        VERSION, VariableBinding, WrittenRule, WrittenStatement, fact_text,
     },
 };
 
@@ -38,14 +37,12 @@ impl<'a> Responder<'a> {
     }
 
     /// Returns the text of a fact from decoded values.
-    pub(super) fn fact(&self, table: TableId, values: &[DataValue]) -> FactText {
-        FactText {
-            predicate: self.engine.manager.name(table).to_owned(),
-            terms: values
-                .iter()
-                .map(|value| self.engine.term_text(value.as_ref()))
-                .collect(),
-        }
+    fn fact(&self, table: TableId, values: &[DataValue]) -> String {
+        let terms: Vec<String> = values
+            .iter()
+            .map(|value| self.engine.term_text(value.as_ref()))
+            .collect();
+        fact_text(self.engine.manager.name(table), &terms)
     }
 
     /// Returns a stored value in canonical rendering.
@@ -77,56 +74,90 @@ impl<'a> Responder<'a> {
     }
 
     /// Returns the text of a fact from lifted cells.
-    fn lifted_fact(&self, predicate: &str, cells: &[LiftedCell]) -> FactText {
-        FactText {
-            predicate: predicate.to_owned(),
-            terms: cells.iter().map(|cell| self.cell(cell)).collect(),
-        }
+    fn lifted_fact(&self, predicate: &str, cells: &[LiftedCell]) -> String {
+        let terms: Vec<String> = cells.iter().map(|cell| self.cell(cell)).collect();
+        fact_text(predicate, &terms)
     }
 
-    /// Returns a lifted proof as a protocol tree node.
-    pub(super) fn node(&self, node: &LiftedNode) -> TraceNode {
-        let fact = self.lifted_fact(&node.predicate, &node.terms);
-        match &node.proof {
-            LiftedProof::Asserted { origin } => TraceNode::Asserted {
-                origin: match origin {
-                    ExtensionalOrigin::Load => AssertedOrigin::Program,
-                    ExtensionalOrigin::ImportRows => AssertedOrigin::ImportRows,
-                },
-                fact,
-            },
-            LiftedProof::Remote => TraceNode::Asserted {
-                origin: AssertedOrigin::Program,
-                fact,
-            },
-            LiftedProof::Repeated => TraceNode::Repeated { fact },
-            LiftedProof::Derived {
-                statement,
-                step,
-                assignment,
-                premises,
-                absences,
-                matches,
-                nondeterministic,
-            } => TraceNode::Derived {
-                fact,
-                rule: written_rule(self.engine, *statement),
-                step: *step,
-                assignment: assignment
-                    .iter()
-                    .map(|(variable, cell)| VariableBinding {
-                        variable: variable.to_string(),
-                        value: self.cell(cell),
-                    })
-                    .collect(),
-                premises: premises.iter().map(|premise| self.node(premise)).collect(),
-                absences: absences
-                    .iter()
-                    .map(|(predicate, cells)| self.lifted_fact(predicate, cells))
-                    .collect(),
-                aggregate: matches.map(|matches| AggregateSummary { matches }),
-                nondeterministic: *nondeterministic,
-            },
+    /// Returns the response for the requested facts, given by table and decoded values,
+    /// from their lifted proofs: the graph, and each fact's node in it if the fact holds.
+    ///
+    /// Leaves with the same fact become one node, and every rule is listed once.
+    pub(super) fn response(
+        &self,
+        facts: &[(TableId, Vec<DataValue>)],
+        graph: &LiftedGraph,
+        roots: &[Option<usize>],
+    ) -> TraceResponse {
+        let mut nodes = Vec::with_capacity(graph.nodes.len());
+        let mut rules = Vec::new();
+        // The response's id per node of the graph, and per leaf fact and rule.
+        let mut ids = Vec::with_capacity(graph.nodes.len());
+        let mut leaves: HashMap<String, usize> = HashMap::new();
+        let mut listed: HashMap<StatementId, usize> = HashMap::new();
+        for lifted in &graph.nodes {
+            let fact = self.lifted_fact(&lifted.predicate, &lifted.terms);
+            let id = match &lifted.proof {
+                LiftedProof::Leaf => *leaves.entry(fact).or_insert_with_key(|fact| {
+                    nodes.push(TraceNode {
+                        fact: fact.clone(),
+                        derivation: None,
+                    });
+                    nodes.len() - 1
+                }),
+                LiftedProof::Derived {
+                    statement,
+                    step,
+                    assignment,
+                    premises,
+                    absences,
+                    matches,
+                    nondeterministic,
+                } => {
+                    let rule = *listed.entry(*statement).or_insert_with(|| {
+                        rules.push(written_rule(self.engine, *statement));
+                        rules.len() - 1
+                    });
+                    nodes.push(TraceNode {
+                        fact,
+                        derivation: Some(Derivation {
+                            rule,
+                            step: *step,
+                            assignment: assignment
+                                .iter()
+                                .map(|(variable, cell)| VariableBinding {
+                                    variable: variable.to_string(),
+                                    value: self.cell(cell),
+                                })
+                                .collect(),
+                            premises: premises.iter().map(|&premise| ids[premise]).collect(),
+                            absences: absences
+                                .iter()
+                                .map(|(predicate, cells)| self.lifted_fact(predicate, cells))
+                                .collect(),
+                            aggregate: matches.map(|matches| AggregateSummary { matches }),
+                            nondeterministic: *nondeterministic,
+                        }),
+                    });
+                    nodes.len() - 1
+                }
+            };
+            ids.push(id);
+        }
+
+        let facts = facts
+            .iter()
+            .zip(roots)
+            .map(|((table, values), root)| TracedFact {
+                fact: self.fact(*table, values),
+                node: root.map(|root| ids[root]),
+            })
+            .collect();
+        TraceResponse {
+            version: VERSION,
+            facts,
+            nodes,
+            rules,
         }
     }
 }

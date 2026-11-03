@@ -33,11 +33,8 @@ fn predicates_named_like_builtins_render_in_brackets() {
     for name in ["strlen", "STRLEN", "_", "true", "http://example.org/edge"] {
         let atom = Atom::new(Identifier::bare(name), vec![Term::integer(1)]);
         assert_eq!(atom.to_string(), format!("<{name}>(1)"));
-        let fact = crate::trace::FactText {
-            predicate: name.to_owned(),
-            terms: vec!["1".to_owned()],
-        };
-        assert_eq!(fact.to_string(), format!("<{name}>(1)"));
+        let fact = crate::trace::fact_text(name, &["1".to_owned()]);
+        assert_eq!(fact, format!("<{name}>(1)"));
     }
     assert_eq!(
         Atom::new(Identifier::bare("edge"), Vec::<Term>::new()).to_string(),

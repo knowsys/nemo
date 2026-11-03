@@ -1,4 +1,4 @@
-//! The statements of the written program a proof tree names, and their source positions.
+//! The statements of the written program a derivation names, and their source positions.
 
 use serde::{Deserialize, Serialize};
 
@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 ///
 /// It is a rule statement, or a bound import (an import with a `where` clause),
 /// which also derives facts.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WrittenRule {
     /// The rule's statement id: its position in the written program.
@@ -27,7 +27,7 @@ pub struct WrittenRule {
 }
 
 /// A statement of the program as written, by its text and position.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WrittenStatement {
     /// The statement's rendered text.
@@ -39,7 +39,7 @@ pub struct WrittenStatement {
 
 /// A source position: a registered file, a byte range within it,
 /// and the line and column the range starts at, as an editor counts them.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SourceLocation {
     /// The file's registered name.

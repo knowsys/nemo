@@ -6,12 +6,16 @@ use std::{
     time::Duration,
 };
 
-use pyo3::{prelude::*, types::PyTuple};
+use pyo3::{
+    prelude::*,
+    types::{PyList, PyTuple},
+};
 
 use nemo::{
     diagnostics::render::SourceTexts,
     driver::HttpDriver,
     engine::PredicateCursor,
+    trace::TraceResponse,
     values::{DataValue, TypeSyntax},
 };
 
@@ -306,7 +310,9 @@ impl Engine {
 
     /// Traces facts, one fact string like `"reach(a, b)"` or a list of them,
     /// returning the protocol response as a dict:
-    /// per fact, whether it holds and, if it does, its proof tree.
+    /// per fact, its node if it holds, and the nodes of the derivations.
+    /// A node's `rule` is the rule's dict and its `premises` are the premises' nodes,
+    /// so a derivation walks like a tree, and a fact several derivations use is one dict.
     ///
     /// Raises `DiagnosticsError` if the engine holds updates `reason()` has not processed.
     fn trace(&self, py: Python<'_>, facts: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
@@ -316,7 +322,9 @@ impl Engine {
             .engine
             .trace(&facts)
             .map_err(|diagnostic| inner.raise(py, diagnostic))?;
-        into_python(py, &response)
+        let value = into_python(py, &response)?;
+        linked(py, &response, value.bind(py))?;
+        Ok(value)
     }
 
     /// Returns the `trace` rendered as ASCII proof trees, the terminal-style convenience.
@@ -622,6 +630,35 @@ fn from_python<T: serde::de::DeserializeOwned>(
 
 /// Returns a protocol value as Python objects, through its JSON form,
 /// with the protocol's keys unchanged.
+/// Replaces the ids in a trace response's Python value by what they name:
+/// a node's rule and premises, and a traced fact's node.
+fn linked(py: Python<'_>, response: &TraceResponse, value: &Bound<'_, PyAny>) -> PyResult<()> {
+    let nodes = value.get_item("nodes")?.cast_into::<PyList>()?;
+    let rules = value.get_item("rules")?.cast_into::<PyList>()?;
+    for (node, linked) in response.nodes.iter().zip(nodes.iter()) {
+        let Some(derivation) = &node.derivation else {
+            continue;
+        };
+        linked.set_item("rule", rules.get_item(derivation.rule)?)?;
+        let premises = derivation
+            .premises
+            .iter()
+            .map(|&premise| nodes.get_item(premise))
+            .collect::<PyResult<Vec<_>>>()?;
+        linked.set_item("premises", PyList::new(py, premises)?)?;
+    }
+    for (traced, linked) in response
+        .facts
+        .iter()
+        .zip(value.get_item("facts")?.try_iter()?)
+    {
+        if let Some(node) = traced.node {
+            linked?.set_item("node", nodes.get_item(node)?)?;
+        }
+    }
+    Ok(())
+}
+
 fn into_python<T: serde::Serialize>(py: Python<'_>, value: &T) -> PyResult<Py<PyAny>> {
     let json =
         serde_json::to_string(value).map_err(|error| NemoError::new_err(error.to_string()))?;

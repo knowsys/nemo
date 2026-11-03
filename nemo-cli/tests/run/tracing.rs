@@ -1,5 +1,5 @@
-//! Tracing: trees for named and for all derived facts, trace input files, and the explanation
-//! view's queries.
+//! Tracing: trees for named facts, inferences for all derived facts, trace input files,
+//! and the explanation view's queries.
 
 use std::fs;
 
@@ -25,38 +25,29 @@ fn a_fact_named_and_derived_prints_once_under_trace_all() {
     let roots = outcome
         .stdout
         .lines()
-        .filter(|line| line.starts_with(" reach(1, 3) :- "))
+        .filter(|line| line.starts_with("reach(1, 3) :- "))
         .count();
     assert_eq!(roots, 1, "{}", outcome.stdout);
 }
 
 #[test]
-fn tracing_every_derived_fact_streams_a_tree_per_fact() {
+fn tracing_every_derived_fact_streams_one_inference_per_fact() {
     let directory = workspace("trace-all");
     write(&directory, "program.rls", ROLES);
 
     let outcome = run(&directory, &["program.rls", "-e", "none", "--trace-all"]);
     assert_eq!(outcome.status, Some(0), "{}", outcome.stderr);
-    // A tree per derived fact (six roots, each on a line of its own
-    // behind one space, a premise sitting behind a branch), and none
-    // for the given rows of `edge`, which only ever appear as premises.
-    let mut roots: Vec<&str> = outcome
+    // A line per derived fact, its rule instance, and none for the given rows of `edge`
+    // and `both`, which no rule derives.
+    let mut derived: Vec<&str> = outcome
         .stdout
         .lines()
-        .filter(|line| {
-            let mut characters = line.chars();
-            characters.next() == Some(' ')
-                && characters
-                    .next()
-                    .is_some_and(|next| !matches!(next, ' ' | '│' | '├' | '└'))
-        })
-        .map(|line| line[1..].split(" :- ").next().expect("a label"))
+        .map(|line| line.split(" :- ").next().expect("a rule instance"))
         .collect();
-    roots.sort_unstable();
+    derived.sort_unstable();
     assert_eq!(
-        roots,
+        derived,
         [
-            "both(0)",
             "both(1)",
             "both(2)",
             "reach(1, 2)",
@@ -67,7 +58,7 @@ fn tracing_every_derived_fact_streams_a_tree_per_fact() {
         outcome.stdout
     );
 
-    // The old spelling still works, and JSON lines go into the file.
+    // The old spelling still works, and one trace response goes into the file.
     let outcome = run(
         &directory,
         &[
@@ -76,24 +67,30 @@ fn tracing_every_derived_fact_streams_a_tree_per_fact() {
             "none",
             "--trace-all-idb-facts",
             "--trace-output",
-            "trace.jsonl",
+            "trace.json",
         ],
     );
     assert_eq!(outcome.status, Some(0), "{}", outcome.stderr);
-    let written = fs::read_to_string(directory.join("trace.jsonl")).expect("the trace was written");
-    let lines: Vec<serde_json::Value> = written
-        .lines()
-        .map(|line| serde_json::from_str(line).expect("one JSON object per line"))
-        .collect();
-    let mut conclusions: Vec<&str> = lines
+    let written = fs::read_to_string(directory.join("trace.json")).expect("the trace was written");
+    let response: serde_json::Value = serde_json::from_str(&written).expect("one JSON document");
+    let nodes = response["nodes"].as_array().expect("nodes");
+    for (id, node) in nodes.iter().enumerate() {
+        let premises = node["premises"].as_array().into_iter().flatten();
+        assert!(
+            premises
+                .into_iter()
+                .all(|premise| premise.as_u64() < Some(id as u64)),
+            "premises come first: {written}"
+        );
+    }
+    let mut facts: Vec<&str> = nodes
         .iter()
-        .map(|line| line["conclusion"].as_str().expect("a conclusion"))
+        .map(|node| node["fact"].as_str().expect("a fact"))
         .collect();
-    conclusions.sort_unstable();
-    // Every derived fact once, and the given premises as asserted
-    // inferences.
+    facts.sort_unstable();
+    // Every derived fact once, and the given premises as nodes no rule derives.
     assert_eq!(
-        conclusions,
+        facts,
         [
             "both(0)",
             "both(1)",

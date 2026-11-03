@@ -29,7 +29,7 @@ mod search;
 
 pub(crate) use response::{Responder, written_rule};
 
-use lift::{LiftedNode, Lifter};
+use lift::{LiftedGraph, Lifter};
 
 use std::rc::Rc;
 
@@ -38,8 +38,8 @@ use nemo_physical::{
 };
 
 use crate::{
-    engine::{Engine, compile::compiled::CompiledRule, evaluate::extensional::ExtensionalOrigin},
-    trace::{TraceResponse, TracedFact, VERSION},
+    engine::{Engine, compile::compiled::CompiledRule},
+    trace::TraceResponse,
 };
 
 /// One proven fact with its explanation.
@@ -57,10 +57,7 @@ struct ProofNode {
 #[derive(Debug)]
 enum Proof {
     /// The fact was loaded, not derived.
-    Asserted {
-        /// Where its rows came from.
-        origin: ExtensionalOrigin,
-    },
+    Asserted,
     /// The fact follows from the premises by a rule instance.
     Derived {
         /// The rule's index.
@@ -97,33 +94,18 @@ pub(crate) fn run(
         }
     }
 
-    let lifted: Vec<Option<LiftedNode>> = {
+    let mut graph = LiftedGraph::default();
+    let roots: Vec<Option<usize>> = {
         let lifter = Lifter::new(engine);
         proofs
             .iter()
-            .map(|proof| proof.as_ref().map(|node| lifter.lift(node)))
+            .map(|proof| proof.as_ref().map(|node| lifter.lift(node, &mut graph)))
             .collect()
     };
-    let mut constants = Vec::new();
-    for proof in lifted.iter().flatten() {
-        proof.constants(&mut constants);
-    }
-    let canonical_constants = engine.render_constants(constants);
+    let canonical_constants = engine.render_constants(graph.constants());
 
     let responder = Responder::new(engine, canonical_constants);
-    let mut traced = Vec::with_capacity(facts.len());
-    for ((table, values), proof) in facts.iter().zip(&lifted) {
-        let fact = responder.fact(*table, values);
-        traced.push(TracedFact {
-            fact,
-            holds: proof.is_some(),
-            tree: proof.as_ref().map(|node| responder.node(node)),
-        });
-    }
-    Ok(TraceResponse {
-        version: VERSION,
-        facts: traced,
-    })
+    Ok(responder.response(&facts, &graph, &roots))
 }
 
 /// Returns whether a rule writes into the table,

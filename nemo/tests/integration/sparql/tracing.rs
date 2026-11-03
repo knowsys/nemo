@@ -5,7 +5,7 @@ use nemo::{
     engine::Engine,
     model::Fact,
     trace::{
-        TraceNode,
+        Proof,
         query::{
             EntriesQuery, EntryQuery, NodeResponse, QueryChildren, QueryNode,
             TableEntriesForTreeNodesQuery, TreeForTableQuery,
@@ -70,16 +70,10 @@ fn fetched_facts_trace_to_their_bindings() {
 
     let fact = Fact::parse("parent(<urn:b>, <urn:c>) .").expect("parses");
     let response = engine.trace(&[fact]).expect("tracing answers");
-    assert!(response.facts[0].holds);
-    let TraceNode::Derived {
-        rule,
-        premises,
-        assignment,
-        ..
-    } = response.facts[0].tree.as_ref().expect("a proof tree")
-    else {
-        panic!("a fetched fact is explained by its import");
-    };
+    let proof = response.proof(0).expect("the fact holds");
+    let rule = proof.rule().expect("a derived fact");
+    let derivation = proof.derivation().expect("a derived fact");
+    let premises: Vec<Proof<'_>> = proof.premises().collect();
     // The rule is the import directive, with a source position.
     assert!(
         rule.text.starts_with("@import parent(?c, ?p) from sparql"),
@@ -90,7 +84,8 @@ fn fetched_facts_trace_to_their_bindings() {
     // Its one premise is the binding row the endpoint was asked with.
     assert_eq!(premises.len(), 1);
     assert_eq!(premises[0].fact().to_string(), "anc(<urn:b>)");
-    let mut bindings: Vec<(String, String)> = assignment
+    let mut bindings: Vec<(String, String)> = derivation
+        .assignment
         .iter()
         .map(|binding| (binding.variable.clone(), binding.value.clone()))
         .collect();
@@ -119,11 +114,9 @@ fn rewritten_rules_trace_as_written() {
     let fact = Fact::parse("anc(<urn:c>) .").expect("parses");
     let response = engine.trace(&[fact]).expect("tracing answers");
     written_only(&response);
-    let TraceNode::Derived { rule, premises, .. } =
-        response.facts[0].tree.as_ref().expect("a proof tree")
-    else {
-        panic!("a derived fact gets a rule node");
-    };
+    let proof = response.proof(0).expect("the fact holds");
+    let rule = proof.rule().expect("a derived fact");
+    let premises: Vec<Proof<'_>> = proof.premises().collect();
     // The rule as written, by its position among the written statements.
     assert_eq!(
         rule.text,
@@ -134,13 +127,13 @@ fn rewritten_rules_trace_as_written() {
     // one matched at the endpoint.
     assert_eq!(premises.len(), 2);
     assert_eq!(premises[0].fact().to_string(), "anc(<urn:b>)");
-    assert!(matches!(premises[0], TraceNode::Derived { .. }));
+    assert!(premises[0].rule().is_some());
     assert_eq!(
         premises[1].fact().to_string(),
         "triple(<urn:b>, <urn:parent>, <urn:c>)"
     );
     assert!(
-        matches!(premises[1], TraceNode::Asserted { .. }),
+        premises[1].derivation().is_none(),
         "a remote premise is a leaf"
     );
 }
@@ -175,18 +168,8 @@ next(?e, ?n) :- event(?e), triple(?e, <urn:p1>, ?stmt), triple(?stmt, <urn:p2>, 
     let fact = Fact::parse("next(<urn:e>, <urn:n>) .").expect("parses");
     let response = engine.trace(&[fact]).expect("tracing answers");
     written_only(&response);
-    let TraceNode::Derived {
-        premises,
-        assignment,
-        ..
-    } = response.facts[0].tree.as_ref().expect("a proof tree")
-    else {
-        panic!("a derived fact gets a rule node");
-    };
-    let premises: Vec<String> = premises
-        .iter()
-        .map(|premise| premise.fact().to_string())
-        .collect();
+    let proof = response.proof(0).expect("the fact holds");
+    let premises: Vec<&str> = proof.premises().map(|premise| premise.fact()).collect();
     assert_eq!(
         premises,
         [
@@ -196,7 +179,10 @@ next(?e, ?n) :- event(?e), triple(?e, <urn:p1>, ?stmt), triple(?stmt, <urn:p2>, 
         ]
     );
     // The assignment lists what the run had, and ?stmt it never had.
-    let mut variables: Vec<&str> = assignment
+    let mut variables: Vec<&str> = proof
+        .derivation()
+        .expect("a derived fact")
+        .assignment
         .iter()
         .map(|binding| binding.variable.as_str())
         .collect();
@@ -233,20 +219,15 @@ event(?e) :- triple(?e, <urn:type>, <urn:Event>) .
     let fact = Fact::parse("event(<urn:x>) .").expect("parses");
     let response = engine.trace(&[fact]).expect("tracing answers");
     written_only(&response);
-    let TraceNode::Derived {
-        rule,
-        premises,
-        step,
-        ..
-    } = response.facts[0].tree.as_ref().expect("a proof tree")
-    else {
-        panic!("the import replaced the written rule");
-    };
+    let proof = response.proof(0).expect("the fact holds");
+    let rule = proof.rule().expect("a derived fact");
+    let derivation = proof.derivation().expect("a derived fact");
+    let premises: Vec<Proof<'_>> = proof.premises().collect();
     assert_eq!(
         rule.text,
         "event(?e) :- triple(?e, <urn:type>, <urn:Event>) ."
     );
-    assert_eq!(*step, 0, "the import was fetched while loading");
+    assert_eq!(derivation.step, 0, "the import was fetched while loading");
     assert_eq!(premises.len(), 1);
     assert_eq!(
         premises[0].fact().to_string(),

@@ -119,10 +119,9 @@ fn a_rule_without_positive_atoms_fires_once_and_hides_what_it_reads() {
     // Its facts trace to the rule alone.
     let fact = Fact::parse("p(3) .").expect("the fact parses");
     let response = engine.trace(&[fact]).expect("tracing answers");
-    let Some(crate::trace::TraceNode::Derived { premises, .. }) = &response.facts[0].tree else {
-        panic!("a derived fact: {response:?}");
-    };
-    assert!(premises.is_empty(), "{premises:?}");
+    let proof = response.proof(0).expect("the fact holds");
+    assert!(proof.rule().is_some(), "a derived fact: {response:?}");
+    assert_eq!(proof.premises().count(), 0, "{response:?}");
 
     // A rule added later fires at the next run.
     engine

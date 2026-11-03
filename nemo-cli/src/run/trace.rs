@@ -1,7 +1,7 @@
-//! The traces a run asks for, and the destinations of the trees and responses.
+//! The traces a run asks for, and the destinations of the derivations and responses.
 
 use std::{
-    collections::HashSet,
+    collections::HashMap,
     io::{self, BufWriter, Write},
     path::Path,
 };
@@ -10,7 +10,7 @@ use nemo::{
     engine::Engine,
     model::Fact,
     trace::{
-        TraceResponse,
+        Derivation, TraceNode, TraceResponse, TracedFact, VERSION, WrittenRule,
         query::{TableEntriesForTreeNodesQuery, TreeForTableQuery},
     },
 };
@@ -56,24 +56,29 @@ fn unwritable(path: &Path, error: io::Error) -> Diagnostic {
     .diagnostic()
 }
 
-/// Where `--trace-all` streams its pages: the `--trace-output` file as
-/// JSON lines, or the standard output as trees.
+/// Where `--trace-all` streams its responses as they arrive:
+/// into the `--trace-output` file as one trace response, its nodes one per line,
+/// or to the standard output as one inference per line.
+///
+/// Each derived fact is written once, however many responses hold it.
 struct TraceStream<'a> {
     /// The file, if the trace is written rather than printed.
     path: Option<&'a Path>,
     /// The open destination.
     out: Box<dyn Write>,
-    /// The conclusions written, so a fact traced as a premise and again
-    /// as a root goes into the file once,
-    /// or the roots printed, so a fact named and derived prints once.
-    seen: HashSet<String>,
+    /// The facts written, each with its id in the file's response.
+    ids: HashMap<String, usize>,
+    /// The rules of the file's response.
+    rules: Vec<WrittenRule>,
+    /// The position of each rule in the file's response, by its statement id.
+    listed: HashMap<usize, usize>,
     /// Whether the standard output closed under the stream: the reader
     /// has all it wants, so no further page is derived for it.
     closed: bool,
 }
 
 impl<'a> TraceStream<'a> {
-    /// Opens the stream: the file if one is named, the standard output otherwise.
+    /// Opens the stream on the file if one is named, and on the standard output otherwise.
     fn open(path: Option<&'a Path>) -> Result<Self, Diagnostic> {
         let out: Box<dyn Write> = match path {
             None => Box::new(BufWriter::new(io::stdout().lock())),
@@ -84,33 +89,119 @@ impl<'a> TraceStream<'a> {
         Ok(Self {
             path,
             out,
-            seen: HashSet::new(),
+            ids: HashMap::new(),
+            rules: Vec::new(),
+            listed: HashMap::new(),
             closed: false,
         })
     }
 
-    /// Writes one page:
-    /// its inferences as JSON lines, each conclusion once, into the file,
-    /// and its trees to the standard output, each root once.
-    fn take(&mut self, mut response: TraceResponse) -> Result<(), Diagnostic> {
+    /// Writes the traced facts the run named, before any page.
+    fn start(&mut self, named: TraceResponse) -> Result<(), Diagnostic> {
         let written = match self.path {
-            Some(_) => response
-                .inferences()
-                .inferences
-                .into_iter()
-                .filter(|inference| self.seen.insert(inference.conclusion.clone()))
-                .try_for_each(|inference| {
-                    let line = serde_json::to_string(&inference).expect("an inference serializes");
-                    writeln!(self.out, "{line}")
-                }),
-            None => {
-                response
-                    .facts
-                    .retain(|traced| self.seen.insert(traced.fact.to_string()));
-                write!(self.out, "{}", response.ascii())
-            }
+            Some(_) => self.begin(named),
+            None => self.print(&named, true),
         };
         written.map_err(|error| self.failed(error))
+    }
+
+    /// Writes one page of traced rows.
+    fn take(&mut self, response: TraceResponse) -> Result<(), Diagnostic> {
+        let written = match self.path {
+            Some(_) => self.append(response).map(|_| ()),
+            None => self.print(&response, false),
+        };
+        written.map_err(|error| self.failed(error))
+    }
+
+    /// Prints each derived fact of a response not printed before as its inference,
+    /// and, if asked, each requested fact that does not hold as a note.
+    fn print(&mut self, response: &TraceResponse, notes: bool) -> io::Result<()> {
+        for id in 0..response.nodes.len() {
+            let proof = response.node(id);
+            if proof.derivation().is_some() && !self.ids.contains_key(proof.fact()) {
+                self.ids.insert(proof.fact().to_owned(), self.ids.len());
+                writeln!(self.out, "{proof}")?;
+            }
+        }
+        if notes {
+            for traced in response.facts.iter().filter(|traced| traced.node.is_none()) {
+                writeln!(self.out, "{} does not hold", traced.fact)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Begins the file's response with the named facts and their derivations.
+    fn begin(&mut self, named: TraceResponse) -> io::Result<()> {
+        let facts = named.facts.clone();
+        write!(self.out, r#"{{"version":{VERSION},"facts":"#)?;
+        let ids = self.renumbered(&named);
+        let facts: Vec<TracedFact> = facts
+            .into_iter()
+            .map(|traced| TracedFact {
+                node: traced.node.map(|node| ids[node]),
+                ..traced
+            })
+            .collect();
+        write!(self.out, "{}", json(&facts))?;
+        write!(self.out, r#","nodes":["#)?;
+        self.append(named).map(|_| ())
+    }
+
+    /// Returns the file's id for every node of a response:
+    /// the id of the fact if it was written before, and the next free one otherwise.
+    fn renumbered(&self, response: &TraceResponse) -> Vec<usize> {
+        let mut next = self.ids.len();
+        let mut fresh = HashMap::new();
+        response
+            .nodes
+            .iter()
+            .map(|node| {
+                self.ids.get(&node.fact).copied().unwrap_or_else(|| {
+                    *fresh.entry(node.fact.as_str()).or_insert_with(|| {
+                        next += 1;
+                        next - 1
+                    })
+                })
+            })
+            .collect()
+    }
+
+    /// Writes the nodes of a response the file does not hold yet, each on its own line,
+    /// its premises and rule renumbered into the file's response, and returns the file's ids.
+    fn append(&mut self, response: TraceResponse) -> io::Result<Vec<usize>> {
+        let ids = self.renumbered(&response);
+        for (node, &id) in response.nodes.into_iter().zip(&ids) {
+            if self.ids.contains_key(&node.fact) {
+                continue;
+            }
+            let derivation = node.derivation.map(|derivation| Derivation {
+                rule: self.listed(&response.rules[derivation.rule]),
+                premises: derivation
+                    .premises
+                    .iter()
+                    .map(|&premise| ids[premise])
+                    .collect(),
+                ..derivation
+            });
+            let separator = if id == 0 { "\n" } else { ",\n" };
+            let node = TraceNode {
+                fact: node.fact,
+                derivation,
+            };
+            write!(self.out, "{separator}{}", json(&node))?;
+            self.ids.insert(node.fact, id);
+        }
+        Ok(ids)
+    }
+
+    /// Returns the position of a rule in the file's response, listing it if it is new.
+    fn listed(&mut self, rule: &WrittenRule) -> usize {
+        *self.listed.entry(rule.rule).or_insert_with(|| {
+            self.rules.push(rule.clone());
+            self.rules.len() - 1
+        })
     }
 
     /// Returns what a failed write amounts to:
@@ -129,12 +220,15 @@ impl<'a> TraceStream<'a> {
         }
     }
 
-    /// Flushes the stream, and says where the trace went.
+    /// Ends the response in the file and flushes the stream, and says where the trace went.
     fn finish(mut self) -> Result<(), Diagnostic> {
         match self.path {
             None => self.out.flush().or_else(stdout::interrupted),
             Some(path) => {
-                self.out.flush().map_err(|error| unwritable(path, error))?;
+                let rules = json(&self.rules);
+                write!(self.out, "\n],\"rules\":{rules}}}\n")
+                    .and_then(|()| self.out.flush())
+                    .map_err(|error| unwritable(path, error))?;
                 eprintln!("trace: {}", path.display());
                 Ok(())
             }
@@ -142,10 +236,15 @@ impl<'a> TraceStream<'a> {
     }
 }
 
+/// Returns a value of the trace format as JSON.
+fn json(value: &impl Serialize) -> String {
+    serde_json::to_string(value).expect("trace responses serialize")
+}
+
 impl Run<'_> {
     /// Traces what the run asked about: the facts of `--trace` and
     /// `--trace-input`, every derived fact under `--trace-all`, and the
-    /// queries of `--trace-tree` and `--trace-node`. Proof trees and
+    /// queries of `--trace-tree` and `--trace-node`. Derivations and
     /// responses go to standard output, or into `--trace-output` as
     /// JSON. Does nothing when nothing was asked.
     pub(super) fn trace(&self, engine: &mut Engine) -> Result<(), Diagnostic> {
@@ -156,11 +255,7 @@ impl Run<'_> {
             let response = engine.trace(&facts)?;
             match &self.arguments.trace_output {
                 None => stdout::write(&response.ascii())?,
-                Some(path) => {
-                    let json = serde_json::to_string(&response.inferences())
-                        .expect("the inference list serializes");
-                    self.write_trace(path, json.as_bytes())?;
-                }
+                Some(path) => self.write_trace(path, json(&response).as_bytes())?,
             }
         }
         if let Some(given) = &self.arguments.trace_tree {
@@ -211,8 +306,8 @@ impl Run<'_> {
 
     /// Traces every fact of every derived predicate (and the named facts first),
     /// streaming page by page:
-    /// ASCII trees to standard output,
-    /// or JSON lines (one inference per line, each conclusion once) into `--trace-output`.
+    /// one inference per line to standard output,
+    /// or one trace response, a node per line, into `--trace-output`.
     ///
     /// What the engine does not store whole is skipped, and reported once.
     fn trace_all(&self, engine: &mut Engine, facts: &[Fact]) -> Result<(), Diagnostic> {
@@ -229,15 +324,18 @@ impl Run<'_> {
             self.show(&warning);
         }
         let derived = derived.predicates;
-        let mut stream = TraceStream::open(self.arguments.trace_output.as_deref())?;
         let named = if facts.is_empty() {
-            Ok(())
+            TraceResponse {
+                version: VERSION,
+                facts: Vec::new(),
+                nodes: Vec::new(),
+                rules: Vec::new(),
+            }
         } else {
-            engine
-                .trace(facts)
-                .and_then(|response| stream.take(response))
+            engine.trace(facts)?
         };
-        let streamed = named.and_then(|()| {
+        let mut stream = TraceStream::open(self.arguments.trace_output.as_deref())?;
+        let streamed = stream.start(named).and_then(|()| {
             engine.trace_predicates(&derived, TRACE_BUDGET, |response| stream.take(response))
         });
         if stream.closed {
@@ -250,7 +348,7 @@ impl Run<'_> {
     /// Writes a query's response, as JSON, to the standard output or
     /// into `--trace-output`.
     fn write_query_response(&self, response: &impl Serialize) -> Result<(), Diagnostic> {
-        let json = serde_json::to_string(response).expect("the response serializes");
+        let json = json(response);
         match &self.arguments.trace_output {
             None => stdout::write(&format!("{json}\n")),
             Some(path) => self.write_trace(path, json.as_bytes()),

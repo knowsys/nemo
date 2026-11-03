@@ -1,7 +1,7 @@
 //! What reaches the endpoint: the projected variables, computed arguments as bindings,
 //! conditions and type tests as filters, and each binding asked once.
 
-use nemo::{engine::Engine, model::Fact, trace::TraceNode};
+use nemo::{engine::Engine, model::Fact};
 use nemo_physical::value::DataValue;
 
 use crate::common::{Responder, parse_into};
@@ -119,19 +119,14 @@ business(?id, ?org) :- org(?org), triple(?id, <urn:name>, STRLANG(?org, "en")) .
     let fact = Fact::parse("business(<urn:shell>, \"Shell\") .").expect("parses");
     let response = engine.trace(&[fact]).expect("tracing answers");
     written_only(&response);
-    let TraceNode::Derived { rule, premises, .. } =
-        response.facts[0].tree.as_ref().expect("a proof tree")
-    else {
-        panic!("a derived fact gets a rule node");
-    };
+    let proof = response.proof(0).expect("the fact holds");
+    let rule = proof.rule().expect("a derived fact");
+    let premises: Vec<&str> = proof.premises().map(|premise| premise.fact()).collect();
     assert_eq!(
         rule.text,
         "business(?id, ?org) :- org(?org), triple(?id, <urn:name>, STRLANG(?org, \"en\")) ."
     );
-    assert_eq!(
-        premises[1].fact().to_string(),
-        "triple(<urn:shell>, <urn:name>, \"Shell\"@en)"
-    );
+    assert_eq!(premises[1], "triple(<urn:shell>, <urn:name>, \"Shell\"@en)");
 }
 
 #[test]

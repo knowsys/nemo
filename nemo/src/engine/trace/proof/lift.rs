@@ -15,6 +15,8 @@
 //!
 //! A column whose value the evaluation never computed becomes the written term at its position,
 //! and so does a constant of a written atom, which the responder evaluates.
+//!
+//! The lifted proofs of one response form a [graph](LiftedGraph) with one node per fact.
 
 use std::{
     collections::{HashMap, HashSet},
@@ -32,7 +34,7 @@ use crate::{
     engine::{
         Engine,
         compile::{compiled::CompiledProgram, translation::TranslationState},
-        evaluate::{body::combined_positions, extensional::ExtensionalOrigin},
+        evaluate::body::combined_positions,
         trace::proof::{Proof, ProofNode},
     },
     model::{
@@ -52,7 +54,7 @@ pub(crate) enum LiftedCell {
     Term(Term),
 }
 
-/// A proof over the written program.
+/// A fact of a proof over the written program, and how it holds.
 #[derive(Debug)]
 pub(crate) struct LiftedNode {
     /// The fact's predicate, by its resolved name.
@@ -66,15 +68,8 @@ pub(crate) struct LiftedNode {
 /// How a lifted fact holds.
 #[derive(Debug)]
 pub(crate) enum LiftedProof {
-    /// The fact was stored as given.
-    Asserted {
-        /// Where its rows came from.
-        origin: ExtensionalOrigin,
-    },
-    /// The fact was queried at an import's endpoint instead of stored.
-    Remote,
-    /// The fact's derivation is shown at an earlier node of the same proof.
-    Repeated,
+    /// The fact was loaded, or queried at an import's endpoint instead of stored.
+    Leaf,
     /// The fact follows from the premises by an instance of a written
     /// statement.
     Derived {
@@ -85,8 +80,9 @@ pub(crate) enum LiftedProof {
         /// The values the evaluation computed for the statement's variables,
         /// in the order the statement mentions them.
         assignment: Vec<(Variable, LiftedCell)>,
-        /// One proof per positive literal, in order, or none for a summarized aggregate.
-        premises: Vec<LiftedNode>,
+        /// One premise per positive literal, in order, by its id in the graph,
+        /// or none for a summarized aggregate.
+        premises: Vec<usize>,
         /// Per negated literal, its predicate and columns.
         absences: Vec<(String, Vec<LiftedCell>)>,
         /// For an aggregate, the number of distinct contributions
@@ -98,36 +94,53 @@ pub(crate) enum LiftedProof {
     },
 }
 
-impl LiftedNode {
-    /// Collects the written constants of the proof, for the responder to evaluate.
-    pub(crate) fn constants(&self, into: &mut Vec<Term>) {
+/// A stored fact as lifted: its table and row,
+/// and the written literal it was widened to if its import drops columns.
+type Lifted = (TableId, Vec<StorageValue>, Option<Vec<Term>>);
+
+/// The lifted proofs of one response: one node per fact,
+/// each after the nodes of its premises, which its derivation names by id.
+#[derive(Debug, Default)]
+pub(crate) struct LiftedGraph {
+    /// The nodes, by id.
+    pub(crate) nodes: Vec<LiftedNode>,
+    /// The id of each stored fact lifted.
+    lifted: HashMap<Lifted, usize>,
+}
+
+impl LiftedGraph {
+    /// Adds a node, returning its id.
+    fn push(&mut self, node: LiftedNode) -> usize {
+        self.nodes.push(node);
+        self.nodes.len() - 1
+    }
+
+    /// Collects the written constants of the nodes, for the responder to evaluate.
+    pub(crate) fn constants(&self) -> Vec<Term> {
         let constant = |cell: &LiftedCell| match cell {
             LiftedCell::Term(term) if term.is_ground() => Some(term.clone()),
             _ => None,
         };
-        into.extend(self.terms.iter().filter_map(constant));
-        if let LiftedProof::Derived {
-            assignment,
-            premises,
-            absences,
-            ..
-        } = &self.proof
-        {
-            into.extend(assignment.iter().filter_map(|(_, cell)| constant(cell)));
-            into.extend(
-                absences
-                    .iter()
-                    .flat_map(|(_, cells)| cells.iter().filter_map(constant)),
-            );
-            for premise in premises {
-                premise.constants(into);
+        let mut constants = Vec::new();
+        for node in &self.nodes {
+            constants.extend(node.terms.iter().filter_map(constant));
+            if let LiftedProof::Derived {
+                assignment,
+                absences,
+                ..
+            } = &node.proof
+            {
+                constants.extend(assignment.iter().filter_map(|(_, cell)| constant(cell)));
+                constants.extend(
+                    absences
+                        .iter()
+                        .flat_map(|(_, cells)| cells.iter().filter_map(constant)),
+                );
             }
         }
+        constants
     }
 }
-
-/// The stored facts a proof expanded already, by table and row.
-type Expanded = HashSet<(TableId, Vec<StorageValue>)>;
 
 /// The premise matching a positive literal of a derivation's rule.
 #[derive(Debug, Clone)]
@@ -208,50 +221,42 @@ impl<'a> Lifter<'a> {
         lifter
     }
 
-    /// Lifts the proof of a traced fact.
-    ///
-    /// The proof expands each derived fact once, in depth-first order,
-    /// and a later occurrence is a [repeated](LiftedProof::Repeated) leaf.
-    pub(crate) fn lift(&self, node: &ProofNode) -> LiftedNode {
-        self.lift_at(node, None, &mut Expanded::new())
+    /// Lifts the proof of a traced fact into the graph, returning its node's id.
+    pub(crate) fn lift(&self, node: &ProofNode, graph: &mut LiftedGraph) -> usize {
+        self.lift_at(node, None, graph)
     }
 
-    /// Lifts a proof node, given the facts its proof expanded already.
+    /// Lifts a proof node into the graph, unless it is there, returning its node's id.
     ///
     /// `at` holds the terms of the written literal the node is a premise of, if any,
     /// in declaration order.
-    fn lift_at(
-        &self,
-        node: &ProofNode,
-        at: Option<&[Term]>,
-        expanded: &mut Expanded,
-    ) -> LiftedNode {
+    fn lift_at(&self, node: &ProofNode, at: Option<&[Term]>, graph: &mut LiftedGraph) -> usize {
+        let widened = at.filter(|written| written.len() > node.row.len());
+        let key = (node.table, node.row.clone(), widened.map(<[Term]>::to_vec));
+        if let Some(&id) = graph.lifted.get(&key) {
+            return id;
+        }
+
         let predicate = self.manager.name(node.table).to_owned();
         let terms = self.widen(&predicate, self.cells(&node.row), at);
-        if let Proof::Asserted { origin } = &node.proof
-            && !self.replacing.contains_key(&predicate)
-        {
-            return LiftedNode {
+        let lifted = match &node.proof {
+            Proof::Asserted if !self.replacing.contains_key(&predicate) => LiftedNode {
                 predicate,
                 terms,
-                proof: LiftedProof::Asserted { origin: *origin },
-            };
-        }
-        if !expanded.insert((node.table, node.row.clone())) {
-            return LiftedNode {
-                predicate,
-                terms,
-                proof: LiftedProof::Repeated,
-            };
-        }
-        let derivation = match &node.proof {
-            Proof::Asserted { .. } => {
-                self.replacing_derivation(self.replacing[&predicate], &terms, 0)
+                proof: LiftedProof::Leaf,
+            },
+            Proof::Asserted => {
+                let derivation = self.replacing_derivation(self.replacing[&predicate], &terms, 0);
+                self.finish(self.climb(derivation), predicate, terms, graph)
             }
-            Proof::Derived { .. } => self.derivation(node, &terms),
+            Proof::Derived { .. } => {
+                let derivation = self.derivation(node, &terms);
+                self.finish(self.climb(derivation), predicate, terms, graph)
+            }
         };
-        let derivation = self.climb(derivation);
-        self.finish(derivation, predicate, terms, expanded)
+        let id = graph.push(lifted);
+        graph.lifted.insert(key, id);
+        id
     }
 
     /// Collects the definitions and the imports that replace rules,
@@ -511,14 +516,14 @@ impl<'a> Lifter<'a> {
             .cloned()
     }
 
-    /// Completes a derivation at a written statement: its premises lifted in
-    /// turn, its negated literals instantiated.
+    /// Completes a derivation at a written statement: its premises lifted into the graph,
+    /// its negated literals instantiated.
     fn finish(
         &self,
         derivation: StageDerivation,
         predicate: String,
         terms: Vec<LiftedCell>,
-        expanded: &mut Expanded,
+        graph: &mut LiftedGraph,
     ) -> LiftedNode {
         let mut premises = Vec::new();
         let mut absences = Vec::new();
@@ -528,13 +533,13 @@ impl<'a> Lifter<'a> {
                     let written = self.state.positional(atom);
                     match premise {
                         Some(Premise::Node(node)) => {
-                            premises.push(self.lift_at(node, Some(&written), expanded))
+                            premises.push(self.lift_at(node, Some(&written), graph))
                         }
-                        Some(Premise::Remote) => premises.push(LiftedNode {
+                        Some(Premise::Remote) => premises.push(graph.push(LiftedNode {
                             predicate: self.name(atom),
                             terms: instantiate(&written, &derivation.assignment),
-                            proof: LiftedProof::Remote,
-                        }),
+                            proof: LiftedProof::Leaf,
+                        })),
                         None => {}
                     }
                 }

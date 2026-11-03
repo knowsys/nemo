@@ -492,14 +492,25 @@ fn tracing_returns_trees_and_query_responses() {
         .expect("the response holds facts")
         .into();
     let traced = facts.get(0);
+    let node = Reflect::get(&traced, &"node".into()).expect("a node");
     assert_eq!(
-        Reflect::get(&traced, &"holds".into()).expect("holds"),
-        JsValue::TRUE
+        Reflect::get(&node, &"fact".into()).expect("a fact"),
+        JsValue::from_str("ancestor(alice, carol)")
     );
-    let tree = Reflect::get(&traced, &"tree".into()).expect("a proof tree");
-    assert_eq!(
-        Reflect::get(&tree, &"kind".into()).expect("kind"),
-        JsValue::from_str("derived")
+    // The node's premises are the nodes themselves, and its rule the rule.
+    let premises: Array = Reflect::get(&node, &"premises".into())
+        .expect("premises")
+        .into();
+    let nodes: Array = Reflect::get(&response, &"nodes".into())
+        .expect("nodes")
+        .into();
+    assert!(premises.iter().all(|premise| nodes.includes(&premise, 0)));
+    let rule = Reflect::get(&node, &"rule".into()).expect("a rule");
+    assert!(
+        Reflect::get(&rule, &"text".into())
+            .expect("a text")
+            .as_string()
+            .is_some_and(|text| text.contains(":-"))
     );
 
     // The ASCII convenience renders an instantiated rule.

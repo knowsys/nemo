@@ -124,9 +124,9 @@ pub struct Arguments {
     #[arg(long, alias = "trace-input-file", value_name = "FILE")]
     pub trace_input: Vec<PathBuf>,
 
-    /// Trace every fact of every derived predicate. Proof trees are
-    /// printed to standard output, or written to `--trace-output` as
-    /// JSON lines, one inference per line.
+    /// Trace every fact of every derived predicate. Each derived fact is
+    /// printed once, as the rule instance that derives it, after its
+    /// premises, or written to `--trace-output` as one trace document.
     #[arg(long, alias = "trace-all-idb-facts")]
     pub trace_all: bool,
 
@@ -150,8 +150,8 @@ pub struct Arguments {
     )]
     pub trace_node: Option<String>,
 
-    /// Write the trace as JSON (the deduplicated list of inferences) to
-    /// this file instead of printing trees.
+    /// Write the trace as JSON (the derivations as one graph of facts) to
+    /// this file instead of printing it.
     #[arg(long, value_name = "FILE")]
     pub trace_output: Option<PathBuf>,
 

@@ -793,7 +793,8 @@ impl Engine {
     }
 
     /// Traces facts: for each, whether it holds after reasoning,
-    /// and if it does, a proof tree explaining why, as [trace](crate::trace) types.
+    /// and if it does, the derivation explaining why, as [trace](crate::trace) types:
+    /// the derivations of all of them as one graph of facts.
     ///
     /// Facts are ground atoms over the program's predicates,
     /// and their named arguments resolve as in the program text.

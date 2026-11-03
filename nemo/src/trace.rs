@@ -1,17 +1,22 @@
-//! Tracing: proof trees for derived facts, and the format they are exchanged in.
+//! Tracing: derivations of facts, and the format they are exchanged in.
 //!
-//! A proof tree is a static object over the written program:
+//! A derivation is a static object over the written program:
 //! the program as the user wrote it, with its modules instantiated.
-//! A node is a fact together with the rule instance that derives it:
-//! its rule, its variable assignment, and one child per body premise.
-//! Leaves are extensional facts.
+//! A derived fact comes with the rule instance that derives it:
+//! its rule, its variable assignment, and one premise per positive body literal.
+//! The facts at the bottom were loaded.
 //! Validity makes no reference to the history of the run:
-//! substitute the assignment, and every node checks out against the written rules.
-//! [Engine::trace](crate::engine::Engine::trace) finds such a tree for each requested fact
-//! by a grounded backward search over the compiled program.
-//! The tree is then translated back onto the written program.
+//! substitute the assignment, and every derivation checks out against the written rules.
+//! [Engine::trace](crate::engine::Engine::trace) finds a derivation for each requested fact
+//! by a grounded backward search over the compiled program,
+//! and translates it back onto the written program.
 //!
-//! Rules are named by *statement id*, a statement's position in the written program.
+//! The derivations of one response form a graph, a [TraceResponse]:
+//! every fact is one node, a premise of several derivations included,
+//! and a derived node names its premises by node id.
+//! A [Proof] walks it like a tree.
+//! Rules are listed once per response, and each carries its *statement id*,
+//! its position in the written program.
 //! If the run never had a value at a position
 //! (a variable a query to an endpoint did not return, a column no rule reads),
 //! a fact shows the written term there instead, a variable or `_`.
@@ -20,21 +25,22 @@
 //! used by the command line and the Python and WebAssembly bindings.
 //! They are serde-derived and camelCase on the wire,
 //! and every response carries a [version](VERSION) field.
-//! Terms are written in canonical term syntax, which parses back,
+//! Facts and terms are written in canonical term syntax, which parses back,
 //! except for nulls, which are written `_:id`.
 //! The derivation-structure queries of nemo-web's explanation viewer use that viewer's own
 //! format, described in [query].
 
 mod ascii;
-mod inference;
 mod node;
+mod proof;
 pub mod query;
 mod response;
 mod written;
 
+pub(crate) use self::node::fact_text;
 pub use self::{
-    inference::{Inference, InferenceList},
-    node::{AggregateSummary, AssertedOrigin, FactText, TraceNode, VariableBinding},
+    node::{AggregateSummary, Derivation, TraceNode, VariableBinding},
+    proof::Proof,
     response::{TraceResponse, TracedFact},
     written::{SourceLocation, WrittenRule, WrittenStatement},
 };
@@ -46,100 +52,75 @@ pub const VERSION: u32 = 1;
 mod tests {
     use super::*;
 
-    /// A response round-trips through its JSON rendering unchanged in
-    /// meaning, and the JSON field names are camelCase.
-    #[test]
-    fn responses_round_trip_through_camel_case_json() {
-        let response = TraceResponse {
+    /// A response of one derived fact over a loaded one.
+    fn response() -> TraceResponse {
+        TraceResponse {
             version: VERSION,
-            facts: vec![TracedFact {
-                fact: FactText {
-                    predicate: "reach".into(),
-                    terms: vec!["<a>".into(), "<b>".into()],
+            facts: vec![
+                TracedFact {
+                    fact: "reach(<a>, <b>)".into(),
+                    node: Some(1),
                 },
-                holds: true,
-                tree: Some(TraceNode::Derived {
-                    fact: FactText {
-                        predicate: "reach".into(),
-                        terms: vec!["<a>".into(), "<b>".into()],
-                    },
-                    rule: WrittenRule {
+                TracedFact {
+                    fact: "reach(<b>, <a>)".into(),
+                    node: None,
+                },
+            ],
+            nodes: vec![
+                TraceNode {
+                    fact: "edge(<a>, <b>)".into(),
+                    derivation: None,
+                },
+                TraceNode {
+                    fact: "reach(<a>, <b>)".into(),
+                    derivation: Some(Derivation {
                         rule: 0,
-                        text: "reach(?x, ?y) :- edge(?x, ?y) .".into(),
-                        name: None,
-                        source: None,
-                        instances: Vec::new(),
-                    },
-                    step: 1,
-                    assignment: vec![VariableBinding {
-                        variable: "?x".into(),
-                        value: "<a>".into(),
-                    }],
-                    premises: vec![TraceNode::Asserted {
-                        fact: FactText {
-                            predicate: "edge".into(),
-                            terms: vec!["<a>".into(), "<b>".into()],
-                        },
-                        origin: AssertedOrigin::Program,
-                    }],
-                    absences: Vec::new(),
-                    aggregate: None,
-                    nondeterministic: false,
-                }),
-            }],
-        };
-        let json = serde_json::to_string(&response).expect("serializes");
-        assert!(!json.contains("\"finalConclusion\""));
-        assert!(!json.contains("\"absences\""), "empty lists are omitted");
-        assert!(json.contains("\"kind\":\"derived\""), "{json}");
-        assert!(json.contains("\"origin\":\"program\""), "{json}");
-        let back: TraceResponse = serde_json::from_str(&json).expect("deserializes");
-        assert_eq!(back.facts.len(), 1);
-        assert!(back.facts[0].holds);
-    }
-
-    /// The inference list deduplicates shared subderivations.
-    #[test]
-    fn inferences_deduplicate_by_conclusion() {
-        let leaf = TraceNode::Asserted {
-            fact: FactText {
-                predicate: "edge".into(),
-                terms: vec!["<a>".into()],
-            },
-            origin: AssertedOrigin::Program,
-        };
-        let derived = TraceNode::Derived {
-            fact: FactText {
-                predicate: "reach".into(),
-                terms: vec!["<a>".into()],
-            },
-            rule: WrittenRule {
+                        step: 1,
+                        assignment: vec![VariableBinding {
+                            variable: "?x".into(),
+                            value: "<a>".into(),
+                        }],
+                        premises: vec![0],
+                        absences: Vec::new(),
+                        aggregate: None,
+                        nondeterministic: false,
+                    }),
+                },
+            ],
+            rules: vec![WrittenRule {
                 rule: 0,
-                text: "reach(?x) :- edge(?x), edge(?x) .".into(),
+                text: "reach(?x, ?y) :- edge(?x, ?y) .".into(),
                 name: None,
                 source: None,
                 instances: Vec::new(),
-            },
-            step: 1,
-            assignment: Vec::new(),
-            premises: vec![leaf.clone(), leaf],
-            absences: Vec::new(),
-            aggregate: None,
-            nondeterministic: false,
-        };
-        let response = TraceResponse {
-            version: VERSION,
-            facts: vec![TracedFact {
-                fact: FactText {
-                    predicate: "reach".into(),
-                    terms: vec!["<a>".into()],
-                },
-                holds: true,
-                tree: Some(derived),
             }],
-        };
-        let list = response.inferences();
-        assert_eq!(list.inferences.len(), 2, "the shared leaf appears once");
-        assert_eq!(list.final_conclusions, vec!["reach(<a>)"]);
+        }
+    }
+
+    /// A response round-trips through its JSON rendering, whose field names are camelCase,
+    /// a derivation's fields sit in its node, and empty lists are left out.
+    #[test]
+    fn responses_round_trip_through_camel_case_json() {
+        let response = response();
+        let json = serde_json::to_string(&response).expect("serializes");
+        assert!(json.contains(r#"{"fact":"edge(<a>, <b>)"}"#), "{json}");
+        assert!(json.contains(r#""rule":0,"step":1,"#), "{json}");
+        assert!(json.contains(r#""node":null"#), "{json}");
+        assert!(!json.contains("absences"), "{json}");
+        let back: TraceResponse = serde_json::from_str(&json).expect("deserializes");
+        assert_eq!(back, response);
+    }
+
+    /// A proof walks the graph from a requested fact to the loaded facts.
+    #[test]
+    fn proofs_walk_the_graph_like_a_tree() {
+        let response = response();
+        let proof = response.proof(0).expect("the fact holds");
+        assert_eq!(proof.rule().map(|rule| rule.rule), Some(0));
+        let premises: Vec<Proof<'_>> = proof.premises().collect();
+        assert_eq!(premises.len(), 1);
+        assert_eq!(premises[0].fact(), "edge(<a>, <b>)");
+        assert!(premises[0].derivation().is_none());
+        assert!(response.proof(1).is_none());
     }
 }

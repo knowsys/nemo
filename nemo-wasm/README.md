@@ -74,8 +74,10 @@ the negated predicate's facts.
 
 `rule(id)` returns the rule a statement id names — `{rule, text, name,
 source: {file, start, end, line, column}}` — so an editor can jump to
-it. `trace(facts)` and `traceAscii(facts)` explain single facts as
-proof trees.
+it. `trace(facts)` explains facts by their derivations: per fact its
+node, whose `rule` is the rule and whose `premises` are the premises'
+nodes, so a derivation walks like a tree; `traceAscii(facts)` renders
+them as trees.
 
 An imported predicate the rules read only in part is stored only in
 part, and a query over the rest throws. Call `retainImports()` before

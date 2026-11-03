@@ -357,24 +357,27 @@ def test_trace_returns_the_protocol_dict():
     response = engine.trace("ancestor(alice, carol)")
     assert response["version"] == 1
     [traced] = response["facts"]
-    assert traced["holds"]
-    tree = traced["tree"]
-    assert tree["kind"] == "derived"
-    assert tree["fact"]["predicate"] == "ancestor"
-    # The chain bottoms out in asserted parents.
-    kinds = set()
+    node = traced["node"]
+    assert node["fact"] == "ancestor(alice, carol)"
+    assert ":-" in node["rule"]["text"]
+    # The chain bottoms out in loaded parents, which no rule derives.
+    leaves = set()
 
     def walk(node):
-        kinds.add(node["kind"])
+        if "rule" not in node:
+            leaves.add(node["fact"])
         for premise in node.get("premises", []):
             walk(premise)
 
-    walk(tree)
-    assert kinds == {"derived", "asserted"}
-    # An underivable fact reports so, without a tree.
+    walk(node)
+    assert leaves == {"parent(alice, bob)", "parent(bob, carol)"}
+    # Every node is one dict, however many derivations use it.
+    assert all(
+        any(premise is listed for listed in response["nodes"]) for premise in node["premises"]
+    )
+    # An underivable fact reports so, without a node.
     [missing] = engine.trace(["ancestor(carol, alice)"])["facts"]
-    assert not missing["holds"]
-    assert "tree" not in missing
+    assert missing["node"] is None
 
 
 def test_trace_ascii_renders_trees():
@@ -391,7 +394,7 @@ def test_trace_raises_on_a_dirty_engine():
     with pytest.raises(nmo.DiagnosticsError):
         engine.trace("ancestor(alice, carol)")
     engine.reason()
-    assert engine.trace("ancestor(alice, dan)")["facts"][0]["holds"]
+    assert engine.trace("ancestor(alice, dan)")["facts"][0]["node"] is not None
 
 
 def test_tree_queries_expand_server_side():

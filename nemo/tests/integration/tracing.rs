@@ -1,11 +1,11 @@
-//! Tracing: proof trees for derived facts, derived again by grounded backward search.
+//! Tracing: derivations of facts, found by grounded backward search.
 //!
 //! The oracle is a proof checker over the written program:
 //! every node's fact must hold in the store,
 //! every derivation must be an instance of its written rule
 //! (the head and each premise its literal under the assignment),
-//! and every leaf must be extensional.
-//! A tree that passes is a valid proof whatever path the search took.
+//! and every premise must come before the node it supports.
+//! A response that passes is a valid proof whatever path the search took.
 
 mod query;
 
@@ -14,7 +14,7 @@ use std::collections::HashMap;
 use nemo::{
     engine::Engine,
     model::{Atom, Fact, Literal, Program, Rule, TermKind, VariableKind},
-    trace::{AssertedOrigin, FactText, TraceNode, TraceResponse},
+    trace::{Proof, TraceResponse},
 };
 use nemo_physical::value::DataValue;
 
@@ -36,81 +36,132 @@ fn stored(engine: &mut Engine, predicate: &str) -> Vec<Vec<String>> {
         .collect()
 }
 
-/// Checks a proof tree, validating every node against the engine and the written program:
-/// facts hold, derivations are instances of their written rules, leaves are extensional.
-fn check(engine: &mut Engine, node: &TraceNode) {
-    let fact = node.fact().clone();
-    let rows = stored(engine, &fact.predicate);
-    assert!(
-        rows.contains(&fact.terms),
-        "{fact} is claimed but not stored"
-    );
-    match node {
-        // A repeated node's derivation is checked where the tree expands it.
-        TraceNode::Asserted { .. } | TraceNode::Repeated { .. } => {}
-        TraceNode::Derived {
-            rule,
-            premises,
-            absences,
-            assignment,
-            aggregate,
-            step,
-            ..
-        } => {
-            assert!(*step >= 1, "derivations happen at reasoning steps");
-            let parsed = Rule::parse(&rule.text).expect("rule texts re-parse");
-            let values: HashMap<String, String> = assignment
-                .iter()
-                .map(|binding| (binding.variable.clone(), binding.value.clone()))
-                .collect();
-            assert!(
-                parsed
-                    .head
-                    .iter()
-                    .any(|atom| instance_of(atom, &fact, &values)),
-                "{fact} is no instance of a head of {}",
-                rule.text
-            );
-            let mut positives = Vec::new();
-            let mut negatives = Vec::new();
-            for literal in &parsed.body {
-                match literal {
-                    Literal::Positive(atom) => positives.push(atom),
-                    Literal::Negative(atom) => negatives.push(atom),
-                    Literal::Operation(_) => {}
-                }
+/// Splits a fact in term syntax into its predicate and its terms.
+fn parts(fact: &str) -> (String, Vec<String>) {
+    let open = if fact.starts_with('<') {
+        fact.find('>').expect("a closed predicate") + 1
+    } else {
+        fact.find('(').expect("an argument list")
+    };
+    let predicate = fact[..open]
+        .trim_start_matches('<')
+        .trim_end_matches('>')
+        .to_owned();
+    let inner = &fact[open + 1..fact.len() - 1];
+    let mut terms = Vec::new();
+    let (mut depth, mut quoted, mut escaped, mut start) = (0, false, false, 0);
+    for (position, character) in inner.char_indices() {
+        match character {
+            _ if escaped => escaped = false,
+            '\\' if quoted => escaped = true,
+            '"' => quoted = !quoted,
+            '(' | '[' | '{' | '<' if !quoted => depth += 1,
+            ')' | ']' | '}' | '>' if !quoted => depth -= 1,
+            ',' if !quoted && depth == 0 => {
+                terms.push(inner[start..position].trim().to_owned());
+                start = position + 1;
             }
-            if aggregate.is_some() {
-                assert!(
-                    premises.is_empty() || premises.len() == positives.len(),
-                    "an aggregate node carries either a witness or a summary"
-                );
-            } else {
-                assert_eq!(
-                    premises.len(),
-                    positives.len(),
-                    "one premise per positive body atom of {}",
-                    rule.text
-                );
-            }
-            for (premise, atom) in premises.iter().zip(&positives) {
-                assert!(
-                    instance_of(atom, premise.fact(), &values),
-                    "{} is no instance of `{atom}` in {}",
-                    premise.fact(),
-                    rule.text
-                );
-                check(engine, premise);
-            }
-            assert_eq!(absences.len(), negatives.len());
-            for (absence, atom) in absences.iter().zip(&negatives) {
-                assert!(
-                    instance_of(atom, absence, &values),
-                    "{absence} is no instance of `~{atom}` in {}",
-                    rule.text
-                );
-            }
+            _ => {}
         }
+    }
+    if !inner.trim().is_empty() {
+        terms.push(inner[start..].trim().to_owned());
+    }
+    (predicate, terms)
+}
+
+/// Checks a response, validating every node against the engine and the written program:
+/// facts hold, derivations are instances of their written rules,
+/// and premises come before the nodes they support.
+fn check(engine: &mut Engine, response: &TraceResponse) {
+    for traced in &response.facts {
+        if let Some(node) = traced.node {
+            assert_eq!(
+                response.nodes[node].fact, traced.fact,
+                "a fact's node is the fact"
+            );
+        }
+    }
+    for id in 0..response.nodes.len() {
+        check_node(engine, response.node(id));
+    }
+}
+
+/// Checks one node of a response, as [check] describes.
+fn check_node(engine: &mut Engine, proof: Proof<'_>) {
+    let (predicate, terms) = parts(proof.fact());
+    let rows = stored(engine, &predicate);
+    assert!(
+        rows.contains(&terms),
+        "{} is claimed but not stored",
+        proof.fact()
+    );
+    let (Some(rule), Some(derivation)) = (proof.rule(), proof.derivation()) else {
+        return;
+    };
+    assert!(
+        derivation.step >= 1,
+        "derivations happen at reasoning steps"
+    );
+    let parsed = Rule::parse(&rule.text).expect("rule texts re-parse");
+    let values: HashMap<String, String> = derivation
+        .assignment
+        .iter()
+        .map(|binding| (binding.variable.clone(), binding.value.clone()))
+        .collect();
+    assert!(
+        parsed
+            .head
+            .iter()
+            .any(|atom| instance_of(atom, proof.fact(), &values)),
+        "{} is no instance of a head of {}",
+        proof.fact(),
+        rule.text
+    );
+    let mut positives = Vec::new();
+    let mut negatives = Vec::new();
+    for literal in &parsed.body {
+        match literal {
+            Literal::Positive(atom) => positives.push(atom),
+            Literal::Negative(atom) => negatives.push(atom),
+            Literal::Operation(_) => {}
+        }
+    }
+    let premises: Vec<Proof<'_>> = proof.premises().collect();
+    if derivation.aggregate.is_some() {
+        assert!(
+            premises.is_empty() || premises.len() == positives.len(),
+            "an aggregate node carries either a witness or a summary"
+        );
+    } else {
+        assert_eq!(
+            premises.len(),
+            positives.len(),
+            "one premise per positive body atom of {}",
+            rule.text
+        );
+    }
+    for (premise, atom) in premises.iter().zip(&positives) {
+        assert!(
+            premise.id() < proof.id(),
+            "the premise {} comes before {}",
+            premise.fact(),
+            proof.fact()
+        );
+        assert!(
+            instance_of(atom, premise.fact(), &values),
+            "{} is no instance of `{atom}` in {}",
+            premise.fact(),
+            rule.text
+        );
+    }
+    assert_eq!(derivation.absences.len(), negatives.len());
+    for (absence, atom) in derivation.absences.iter().zip(&negatives) {
+        assert!(
+            instance_of(atom, absence, &values),
+            "{absence} is no instance of `~{atom}` in {}",
+            rule.text
+        );
     }
 }
 
@@ -118,16 +169,17 @@ fn check(engine: &mut Engine, node: &TraceNode) {
 /// assignment: same predicate, and every variable the assignment binds
 /// takes its value. Named arguments and constants are left to the
 /// engine.
-fn instance_of(atom: &Atom, fact: &FactText, values: &HashMap<String, String>) -> bool {
-    let predicate = atom.predicate.to_string();
-    if predicate.trim_start_matches('<').trim_end_matches('>') != fact.predicate {
+fn instance_of(atom: &Atom, fact: &str, values: &HashMap<String, String>) -> bool {
+    let (predicate, terms) = parts(fact);
+    let written = atom.predicate.to_string();
+    if written.trim_start_matches('<').trim_end_matches('>') != predicate {
         return false;
     }
     if atom.labels.is_some() {
         return true;
     }
-    atom.terms.len() == fact.terms.len()
-        && atom.terms.iter().zip(&fact.terms).all(|(term, value)| {
+    atom.terms.len() == terms.len()
+        && atom.terms.iter().zip(&terms).all(|(term, value)| {
             let TermKind::Variable(variable) = &term.kind else {
                 return true;
             };
@@ -141,39 +193,24 @@ fn instance_of(atom: &Atom, fact: &FactText, values: &HashMap<String, String>) -
 }
 
 #[test]
-fn a_chain_derivation_traces_to_its_asserted_leaves() {
+fn a_chain_derivation_traces_to_its_loaded_leaves() {
     let mut engine = run("
         edge(a, b) . edge(b, c) . edge(c, d) .
         reach(?x, ?y) :- edge(?x, ?y) .
         reach(?x, ?z) :- reach(?x, ?y), edge(?y, ?z) .
     ");
     let response = trace(&mut engine, "reach(a, d) .");
-    assert!(response.facts[0].holds);
-    let tree = response.facts[0].tree.as_ref().expect("a proof tree");
-    check(&mut engine, tree);
+    assert!(response.proof(0).is_some());
+    check(&mut engine, &response);
 
-    // The chain bottoms out in asserted edges, each attributed to the
-    // program.
-    fn leaves(node: &TraceNode, out: &mut Vec<(String, bool)>) {
-        match node {
-            TraceNode::Asserted { fact, origin } => {
-                out.push((fact.to_string(), *origin == AssertedOrigin::Program));
-            }
-            TraceNode::Derived { premises, .. } => {
-                for premise in premises {
-                    leaves(premise, out);
-                }
-            }
-            TraceNode::Repeated { .. } => {}
-        }
-    }
-    let mut collected = Vec::new();
-    leaves(tree, &mut collected);
-    assert_eq!(collected.len(), 3, "three edges ground the chain");
-    assert!(
-        collected.iter().all(|(_, attributed)| *attributed),
-        "every leaf is a program fact with a source position: {collected:?}"
-    );
+    // The chain bottoms out in the loaded edges, which no rule derives.
+    let leaves: Vec<&str> = response
+        .nodes
+        .iter()
+        .filter(|node| node.derivation.is_none())
+        .map(|node| node.fact.as_str())
+        .collect();
+    assert_eq!(leaves, ["edge(a, b)", "edge(b, c)", "edge(c, d)"]);
 
     // The ASCII rendering shows instantiated rules.
     let ascii = response.ascii();
@@ -191,9 +228,8 @@ fn derivations_are_traced_at_the_instant_of_their_run() {
     // The clock moves on between reasoning and tracing.
     std::thread::sleep(std::time::Duration::from_millis(5));
     let response = trace(&mut engine, "current(a) .");
-    assert!(response.facts[0].holds);
-    let tree = response.facts[0].tree.as_ref().expect("a proof tree");
-    check(&mut engine, tree);
+    assert!(response.proof(0).is_some());
+    check(&mut engine, &response);
 }
 
 #[test]
@@ -203,26 +239,18 @@ fn an_underivable_fact_reports_not_derived() {
         reach(?x, ?y) :- edge(?x, ?y) .
     ");
     let response = trace(&mut engine, "reach(b, a) .");
-    assert!(!response.facts[0].holds);
-    assert!(response.facts[0].tree.is_none());
+    assert_eq!(response.facts[0].node, None);
+    assert!(response.nodes.is_empty());
     assert_eq!(response.ascii(), " reach(b, a) does not hold\n");
-    let list = response.inferences();
-    assert!(list.final_conclusions.is_empty());
-    assert_eq!(list.not_derived, vec!["reach(b, a)"]);
 }
 
 #[test]
-fn an_asserted_fact_traces_to_a_leaf() {
+fn a_loaded_fact_traces_to_a_leaf() {
     let mut engine = run("edge(a, b) . reach(?x, ?y) :- edge(?x, ?y) .");
     let response = trace(&mut engine, "edge(a, b) .");
-    let tree = response.facts[0].tree.as_ref().expect("a proof tree");
-    assert!(matches!(
-        tree,
-        TraceNode::Asserted {
-            origin: AssertedOrigin::Program,
-            ..
-        }
-    ));
+    let proof = response.proof(0).expect("the fact holds");
+    assert!(proof.derivation().is_none());
+    assert!(response.rules.is_empty());
 }
 
 #[test]
@@ -232,12 +260,12 @@ fn assignments_name_the_source_variables() {
         reach(?x, ?z) :- edge(?x, ?y), edge(?y, ?z) .
     ");
     let response = trace(&mut engine, "reach(a, c) .");
-    let TraceNode::Derived { assignment, .. } =
-        response.facts[0].tree.as_ref().expect("a proof tree")
-    else {
-        panic!("a derived fact gets a rule node");
-    };
-    let mut bindings: Vec<(String, String)> = assignment
+    let derivation = response
+        .proof(0)
+        .and_then(|proof| proof.derivation())
+        .expect("a derived fact");
+    let mut bindings: Vec<(String, String)> = derivation
+        .assignment
         .iter()
         .map(|binding| (binding.variable.clone(), binding.value.clone()))
         .collect();
@@ -259,21 +287,13 @@ fn negation_shows_as_absence_patterns() {
         isolated(?x) :- node(?x), ~edge(?x, ?y), ~edge(?z, ?x) .
     ");
     let response = trace(&mut engine, "isolated(c) .");
-    assert!(response.facts[0].holds);
-    let tree = response.facts[0].tree.as_ref().expect("a proof tree");
-    check(&mut engine, tree);
-    let TraceNode::Derived {
-        premises, absences, ..
-    } = tree
-    else {
-        panic!("a derived fact gets a rule node");
-    };
-    assert_eq!(premises.len(), 1, "one positive premise: node(c)");
-    assert_eq!(absences.len(), 2, "both negations appear as absences");
-    let rendered: Vec<String> = absences.iter().map(ToString::to_string).collect();
+    check(&mut engine, &response);
+    let proof = response.proof(0).expect("the fact holds");
+    assert_eq!(proof.premises().count(), 1, "one positive premise: node(c)");
+    let absences = &proof.derivation().expect("a derived fact").absences;
     assert_eq!(
-        rendered,
-        ["edge(c, ?y)", "edge(?z, c)"],
+        absences,
+        &["edge(c, ?y)", "edge(?z, c)"],
         "shared columns ground, private ones stay as written"
     );
 }
@@ -285,14 +305,14 @@ fn aggregates_summarize_their_group() {
         total(?g, #count(?v)) :- data(?g, ?v) .
     ");
     let response = trace(&mut engine, "total(g, 3) .");
-    assert!(response.facts[0].holds);
-    let tree = response.facts[0].tree.as_ref().expect("a proof tree");
-    check(&mut engine, tree);
-    let TraceNode::Derived { aggregate, .. } = tree else {
-        panic!("a derived fact gets a rule node");
-    };
+    check(&mut engine, &response);
+    let derivation = response
+        .proof(0)
+        .and_then(|proof| proof.derivation())
+        .expect("a derived fact");
     assert_eq!(
-        aggregate
+        derivation
+            .aggregate
             .expect("an aggregate node carries its summary")
             .matches,
         3,
@@ -307,19 +327,18 @@ fn a_min_result_carries_its_witness() {
         cheapest(?item, #min(?p)) :- price(?item, ?p) .
     ");
     let response = trace(&mut engine, "cheapest(book, 3) .");
-    let tree = response.facts[0].tree.as_ref().expect("a proof tree");
-    check(&mut engine, tree);
-    let TraceNode::Derived {
+    check(&mut engine, &response);
+    let proof = response.proof(0).expect("the fact holds");
+    let summary = proof
+        .derivation()
+        .and_then(|derivation| derivation.aggregate);
+    assert_eq!(summary.expect("summary").matches, 3);
+    let premises: Vec<&str> = proof.premises().map(|premise| premise.fact()).collect();
+    assert_eq!(
         premises,
-        aggregate,
-        ..
-    } = tree
-    else {
-        panic!("a derived fact gets a rule node");
-    };
-    assert_eq!(aggregate.expect("summary").matches, 3);
-    assert_eq!(premises.len(), 1, "the minimum's witness row is inlined");
-    assert_eq!(premises[0].fact().to_string(), "price(book, 3)");
+        ["price(book, 3)"],
+        "the minimum's witness row is inlined"
+    );
 }
 
 #[test]
@@ -330,28 +349,26 @@ fn existential_derivations_trace_through_their_nulls() {
         parented(?x) :- parent(?x, ?y) .
     ");
     let response = trace(&mut engine, "parented(alice) .");
-    assert!(response.facts[0].holds);
-    let tree = response.facts[0].tree.as_ref().expect("a proof tree");
-    check(&mut engine, tree);
+    check(&mut engine, &response);
     // The premise is the created fact, whose null renders in data
     // syntax; its own proof grounds the frontier back to the person.
-    let TraceNode::Derived { premises, .. } = tree else {
-        panic!("a derived fact gets a rule node");
-    };
-    let created = &premises[0];
+    let proof = response.proof(0).expect("the fact holds");
+    let created = proof.premises().next().expect("a premise");
     assert!(
-        created.fact().terms[1].starts_with("_:"),
+        parts(created.fact()).1[1].starts_with("_:"),
         "the null renders as data syntax: {}",
         created.fact()
     );
-    let TraceNode::Derived { premises, .. } = created else {
-        panic!("the created fact is itself derived");
-    };
-    assert_eq!(premises[0].fact().to_string(), "person(alice)");
+    assert!(
+        created.rule().is_some(),
+        "the created fact is itself derived"
+    );
+    let premises: Vec<&str> = created.premises().map(|premise| premise.fact()).collect();
+    assert_eq!(premises, ["person(alice)"]);
 }
 
 #[test]
-fn imported_rows_trace_to_their_leaves_and_dirty_engines_refuse() {
+fn added_rows_trace_to_their_leaves_and_dirty_engines_refuse() {
     let mut engine = run("
         edge(a, b) .
         reach(?x, ?y) :- edge(?x, ?y) .
@@ -370,18 +387,13 @@ fn imported_rows_trace_to_their_leaves_and_dirty_engines_refuse() {
 
     engine.reason().expect("reasoning continues");
     let response = trace(&mut engine, "reach(a, c) .");
-    let tree = response.facts[0].tree.as_ref().expect("a proof tree");
-    check(&mut engine, tree);
-    fn finds_import_rows(node: &TraceNode) -> bool {
-        match node {
-            TraceNode::Asserted { origin, .. } => *origin == AssertedOrigin::ImportRows,
-            TraceNode::Derived { premises, .. } => premises.iter().any(finds_import_rows),
-            TraceNode::Repeated { .. } => false,
-        }
-    }
+    check(&mut engine, &response);
     assert!(
-        finds_import_rows(tree),
-        "the edge added through `import_rows` appears as a leaf of that origin"
+        response
+            .nodes
+            .iter()
+            .any(|node| node.fact == "edge(b, c)" && node.derivation.is_none()),
+        "the edge added through `import_rows` appears as a leaf"
     );
 }
 
@@ -393,10 +405,10 @@ fn rule_names_reach_the_protocol() {
         reach(?x, ?y) :- edge(?x, ?y) .
     ");
     let response = trace(&mut engine, "reach(a, b) .");
-    let TraceNode::Derived { rule, .. } = response.facts[0].tree.as_ref().expect("a proof tree")
-    else {
-        panic!("a derived fact gets a rule node");
-    };
+    let rule = response
+        .proof(0)
+        .and_then(|proof| proof.rule())
+        .expect("a derived fact");
     assert_eq!(rule.name.as_deref(), Some("base case"));
     assert!(rule.source.is_some(), "the rule has a source position");
 }
@@ -431,16 +443,15 @@ fn module_rules_attribute_back_to_their_use() {
     engine.load(program).expect("the program loads");
     engine.reason().expect("reasoning reaches the fixpoint");
     let response = trace(&mut engine, "path(a, b) .");
-    let tree = response.facts[0].tree.as_ref().expect("a proof tree");
-    check(&mut engine, tree);
+    check(&mut engine, &response);
     // The instantiated module rule carries provenance back to the
     // statements it derives from.
-    let TraceNode::Derived { premises, .. } = tree else {
-        panic!("a derived fact gets a rule node");
-    };
-    let TraceNode::Derived { rule, .. } = &premises[0] else {
-        panic!("the module rule derived the reach fact");
-    };
+    let proof = response.proof(0).expect("the fact holds");
+    let rule = proof
+        .premises()
+        .next()
+        .and_then(|premise| premise.rule())
+        .expect("the module rule derived the reach fact");
     // It stands in the module file, instantiated by the program's `@use`.
     assert_eq!(rule.instances.len(), 1, "{:?}", rule.instances);
     assert!(
@@ -458,33 +469,30 @@ fn module_rules_attribute_back_to_their_use() {
 }
 
 #[test]
-fn shared_subderivations_deduplicate_in_the_inference_list() {
+fn a_shared_premise_is_one_node() {
     let mut engine = run("
         p(a) .
         q(?x) :- p(?x) .
         r(?x) :- q(?x), p(?x) .
     ");
     let response = trace(&mut engine, "r(a) .");
-    let list = response.inferences();
-    assert_eq!(list.final_conclusions, vec!["r(a)"]);
-    let conclusions: Vec<&str> = list
-        .inferences
+    check(&mut engine, &response);
+    let facts: Vec<&str> = response
+        .nodes
         .iter()
-        .map(|inference| inference.conclusion.as_str())
+        .map(|node| node.fact.as_str())
         .collect();
     assert_eq!(
-        conclusions,
-        vec!["r(a)", "q(a)", "p(a)"],
-        "parents precede children, each conclusion once"
+        facts,
+        ["p(a)", "q(a)", "r(a)"],
+        "premises come first, each fact once"
     );
-    assert!(
-        list.inferences[2].rule.is_none(),
-        "asserted facts carry no rule"
-    );
+    assert_eq!(response.facts[0].node, Some(2));
+    assert_eq!(response.rules.len(), 2, "each rule is listed once");
 }
 
 #[test]
-fn a_tree_expands_each_derived_fact_once() {
+fn a_fact_several_derivations_use_is_one_node() {
     let mut engine = run("
         e(1) .
         p(?x) :- e(?x) .
@@ -493,34 +501,21 @@ fn a_tree_expands_each_derived_fact_once() {
         s(?x) :- q(?x), r(?x) .
     ");
     let response = trace(&mut engine, "s(1) .");
-    let tree = response.facts[0].tree.as_ref().expect("s(1) is derived");
-    check(&mut engine, tree);
-    let TraceNode::Derived { premises, .. } = tree else {
-        panic!("s(1) is derived");
-    };
-    let [
-        TraceNode::Derived { premises: q, .. },
-        TraceNode::Derived { premises: r, .. },
-    ] = premises.as_slice()
-    else {
-        panic!("q(1) and r(1) are derived");
-    };
-    assert!(
-        matches!(&q[0], TraceNode::Derived { .. }),
-        "p(1) expands under q(1)"
-    );
-    assert!(
-        matches!(&r[0], TraceNode::Repeated { fact } if fact.to_string() == "p(1)"),
-        "p(1) repeats under r(1)"
-    );
+    check(&mut engine, &response);
+    let proof = response.proof(0).expect("s(1) is derived");
+    let [q, r]: [Proof<'_>; 2] = proof
+        .premises()
+        .collect::<Vec<_>>()
+        .try_into()
+        .expect("two premises");
+    let p_under_q = q.premises().next().expect("p(1) under q(1)");
+    let p_under_r = r.premises().next().expect("p(1) under r(1)");
+    assert_eq!(p_under_q.id(), p_under_r.id(), "p(1) is one node");
     assert!(response.ascii().contains("p(1) (shown above)"));
-    let conclusions: Vec<String> = response
-        .inferences()
-        .inferences
-        .into_iter()
-        .map(|inference| inference.conclusion)
-        .collect();
-    assert_eq!(conclusions, ["s(1)", "q(1)", "p(1)", "e(1)", "r(1)"]);
+    assert_eq!(
+        response.inference_lines(),
+        "p(1) :- e(1) .\nq(1) :- p(1) .\nr(1) :- p(1) .\ns(1) :- q(1), r(1) .\n"
+    );
 }
 
 #[test]
@@ -533,8 +528,8 @@ fn a_proof_sharing_its_premises_stays_as_large_as_its_facts() {
         d(?i + 1) :- d(?i), f(?i), ?i < 20 .
     ");
     let response = trace(&mut engine, "d(20) .");
-    let tree = response.facts[0].tree.as_ref().expect("d(20) is derived");
-    check(&mut engine, tree);
+    assert!(response.proof(0).is_some(), "d(20) is derived");
+    check(&mut engine, &response);
     let size = serde_json::to_string(&response)
         .expect("the response serializes")
         .len();
@@ -566,11 +561,8 @@ fn recursion_over_a_cyclic_graph_traces_in_polynomial_time() {
         reach(?x, ?z) :- reach(?x, ?y), edge(?y, ?z) .
     ");
     let response = trace(&mut engine, "reach(n29, n14) .");
-    let tree = response.facts[0]
-        .tree
-        .as_ref()
-        .expect("reach(n29, n14) is derived");
-    check(&mut engine, tree);
+    assert!(response.proof(0).is_some(), "reach(n29, n14) is derived");
+    check(&mut engine, &response);
 }
 
 #[test]
@@ -578,10 +570,12 @@ fn responses_serialize_to_one_json_format() {
     let mut engine = run("edge(a, b) . reach(?x, ?y) :- edge(?x, ?y) .");
     let response = trace(&mut engine, "reach(a, b) .");
     let json = serde_json::to_string(&response).expect("the response serializes");
-    assert!(json.contains("\"version\":1"), "{json}");
-    assert!(json.contains("\"kind\":\"derived\""), "{json}");
+    assert!(
+        json.starts_with(r#"{"version":1,"facts":[{"fact":"reach(a, b)","node":1}],"nodes":["#),
+        "{json}"
+    );
     let back: TraceResponse = serde_json::from_str(&json).expect("the response round-trips");
-    assert_eq!(back.facts.len(), 1);
+    assert_eq!(back, response);
 }
 
 /// A trace names facts by their written columns.
@@ -604,15 +598,11 @@ big(?x) :- p(?x, ?label, ?n), ?n > 5 .
     engine.load(program).expect("the program loads");
     engine.reason().expect("reasoning reaches the fixpoint");
     let response = trace(&mut engine, "big(\"a\") .");
-    assert!(response.facts[0].holds);
-    let tree = response.facts[0].tree.as_ref().expect("a proof tree");
-    check(&mut engine, tree);
-    let TraceNode::Derived { premises, .. } = tree else {
-        panic!("a derived fact: {tree:?}");
-    };
+    check(&mut engine, &response);
+    let proof = response.proof(0).expect("the fact holds");
     assert_eq!(
-        premises[0].fact().to_string(),
-        "p(\"a\", \"label\", 7)",
+        proof.premises().next().map(|premise| premise.fact()),
+        Some("p(\"a\", \"label\", 7)"),
         "the leaf is the imported fact as written"
     );
     assert_eq!(engine.count("p").expect("the import stands"), 2);
@@ -643,17 +633,16 @@ big(?x) :- p(?x, ?label, ?n), ?n > 5 .
     engine.load(program).expect("the program loads");
     engine.reason().expect("reasoning reaches the fixpoint");
     let response = trace(&mut engine, "big(\"a\") .");
-    let TraceNode::Derived {
-        premises,
-        assignment,
-        ..
-    } = response.facts[0].tree.as_ref().expect("a proof tree")
-    else {
-        panic!("a derived fact gets a rule node");
-    };
-    assert_eq!(premises[0].fact().to_string(), "p(\"a\", ?label, 7)");
+    let proof = response.proof(0).expect("the fact holds");
+    assert_eq!(
+        proof.premises().next().map(|premise| premise.fact()),
+        Some("p(\"a\", ?label, 7)")
+    );
     assert!(
-        assignment
+        proof
+            .derivation()
+            .expect("a derived fact")
+            .assignment
             .iter()
             .all(|binding| binding.variable != "?label"),
         "the run never had the label"
@@ -682,9 +671,9 @@ fn stored_rows_trace_page_by_page() {
             break;
         }
         for fact in &response.facts {
-            assert!(fact.holds, "a stored row holds: {fact:?}");
-            check(&mut engine, fact.tree.as_ref().expect("a proof tree"));
+            assert!(fact.node.is_some(), "a stored row holds: {fact:?}");
         }
+        check(&mut engine, &response);
         traced += response.facts.len();
         start += response.facts.len();
     }

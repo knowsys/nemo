@@ -10,6 +10,7 @@ use wasm_bindgen_futures::future_to_promise;
 use nemo::{
     diagnostics::render::SourceTexts,
     engine::{PredicateCursor, remote::Failure},
+    trace::TraceResponse,
     values::{DataValue, TypeSyntax},
 };
 
@@ -142,6 +143,35 @@ fn protocol_value(value: &impl Serialize) -> Result<JsValue, JsValue> {
     value
         .serialize(&serde_wasm_bindgen::Serializer::json_compatible())
         .map_err(|error| js_sys::Error::new(&error.to_string()).into())
+}
+
+/// Replaces the ids in a trace response's JavaScript value by what they name:
+/// a node's rule and premises, and a traced fact's node.
+fn linked(response: &TraceResponse, value: &JsValue) -> Result<(), JsValue> {
+    let nodes: Array = Reflect::get(value, &"nodes".into())?.into();
+    let rules: Array = Reflect::get(value, &"rules".into())?.into();
+    let at = |list: &Array, id: usize| {
+        list.get(u32::try_from(id).expect("a response holds fewer than 2^32 nodes and rules"))
+    };
+    for (node, linked) in response.nodes.iter().zip(nodes.iter()) {
+        let Some(derivation) = &node.derivation else {
+            continue;
+        };
+        Reflect::set(&linked, &"rule".into(), &at(&rules, derivation.rule))?;
+        let premises: Array = derivation
+            .premises
+            .iter()
+            .map(|&premise| at(&nodes, premise))
+            .collect();
+        Reflect::set(&linked, &"premises".into(), &premises)?;
+    }
+    let facts: Array = Reflect::get(value, &"facts".into())?.into();
+    for (traced, linked) in response.facts.iter().zip(facts.iter()) {
+        if let Some(node) = traced.node {
+            Reflect::set(&linked, &"node".into(), &at(&nodes, node))?;
+        }
+    }
+    Ok(())
 }
 
 /// Returns a protocol query from plain JavaScript data, through its JSON form.
@@ -441,7 +471,9 @@ impl NemoEngine {
 
     /// Traces facts, each written in fact syntax as `reach(a, b)`,
     /// returning the protocol response:
-    /// per fact, whether it holds and, if it does, its proof tree.
+    /// per fact, its node if it holds, and the nodes of the derivations.
+    /// A node's `rule` is the rule's object and its `premises` are the premises' nodes,
+    /// so a derivation walks like a tree, and a fact several derivations use is one object.
     ///
     /// Throws for an engine holding updates `reason()` has not processed.
     pub fn trace(&mut self, facts: Vec<String>) -> Result<JsValue, JsValue> {
@@ -451,7 +483,9 @@ impl NemoEngine {
             .engine
             .trace(&facts)
             .map_err(|diagnostic| inner.throw(diagnostic))?;
-        protocol_value(&response)
+        let value = protocol_value(&response)?;
+        linked(&response, &value)?;
+        Ok(value)
     }
 
     /// Returns the [trace](Self::trace) rendered as ASCII proof trees,

@@ -58,17 +58,17 @@ output is the data's.
 
 ### Tracing
 
-A trace explains why a fact holds after reasoning: a proof tree down to
-the asserted and imported facts.
+A trace explains why a fact holds after reasoning: its derivation down to
+the loaded and imported facts.
 
 | option | meaning |
 |---|---|
 | `--trace <FACTS>` | the facts to trace, `;`-separated, as `--trace "reach(a, b);reach(a, c)"`. |
 | `--trace-input <FILE>` | read facts to trace from a file (`;`-separated); repeatable. |
-| `--trace-all` | trace every fact of every derived predicate, streaming. |
+| `--trace-all` | trace every fact of every derived predicate, streaming: each derived fact once, as the rule instance that derives it, after the lines of its premises. |
 | `--trace-tree <FILE\|JSON>` | answer the explanation view's `treeForTable` query — the facts it selects, their derivation expanded by the engine — read from the file, or given inline as JSON text. It cannot be combined with the other trace flags, which would write the same output. |
 | `--trace-node <FILE\|JSON>` | answer the explanation view's `tableEntriesForTreeNodes` query — the facts of every node of the tree it shapes — given and answered as `--trace-tree`. |
-| `--trace-output <FILE>` | write JSON instead of printing: the deduplicated inference list for `--trace`, one inference per line for `--trace-all`, the response for `--trace-tree` and `--trace-node`. |
+| `--trace-output <FILE>` | write JSON instead of printing: for `--trace` and `--trace-all` the trace response, its derivations as one graph (`facts`, each naming its node; `nodes`, each a fact with its rule, step, assignment and premises by node id, premises first; `rules`, each listed once); for `--trace-tree` and `--trace-node` the query's response. |
 
 Any trace keeps every import whole (see below).
 

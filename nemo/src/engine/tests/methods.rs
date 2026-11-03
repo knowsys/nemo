@@ -270,7 +270,7 @@ fn traces_fail_on_a_store_short_of_the_fixpoint() {
         engine.reason().expect("resuming reaches the fixpoint");
     }
     let response = engine.trace(&[fact]).expect("the fixpoint is traceable");
-    assert!(response.facts[0].holds);
+    assert!(response.proof(0).is_some());
 }
 
 /// A diagnostic naming a predicate a stage introduced names the written

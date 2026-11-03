@@ -9,7 +9,7 @@ use nemo::{
     engine::{Engine, PredicateRole},
     model::{Fact, Identifier, ImportDirective, Literal, Statement, Term},
     pipeline::{Commit, Transformation},
-    trace::{TraceNode, query::TreeForTableQuery},
+    trace::query::TreeForTableQuery,
 };
 use nemo_physical::diagnostics::Diagnostic;
 
@@ -123,10 +123,10 @@ fn an_edit_before_the_load_is_the_program() {
 
     let fact = Fact::parse("out(2) .").expect("the fact parses");
     let response = engine.trace(&[fact]).expect("tracing answers");
-    let TraceNode::Derived { rule, .. } = response.facts[0].tree.as_ref().expect("a proof tree")
-    else {
-        panic!("a derived fact gets a rule node");
-    };
+    let rule = response
+        .proof(0)
+        .and_then(|proof| proof.rule())
+        .expect("a derived fact");
     // The edited program's third statement: its ids are positions in
     // what was loaded.
     assert_eq!(rule.rule, 2);
@@ -178,24 +178,17 @@ fn a_folded_rule_traces_as_written() {
 
     let fact = Fact::parse("p(1) .").expect("the fact parses");
     let response = engine.trace(&[fact]).expect("tracing answers");
-    let TraceNode::Derived {
-        rule,
-        premises,
-        assignment,
-        ..
-    } = response.facts[0].tree.as_ref().expect("a proof tree")
-    else {
-        panic!("a derived fact gets a rule node");
-    };
+    let proof = response.proof(0).expect("the fact holds");
+    let rule = proof.rule().expect("a derived fact");
     assert_eq!(rule.text, "p(?x) :- e(?x, ?y), e(?y, ?z), f(?z) .");
     assert_eq!(rule.rule, 3, "the rule is the fourth written statement");
-    let premises: Vec<String> = premises
-        .iter()
-        .map(|premise| premise.fact().to_string())
-        .collect();
+    let premises: Vec<&str> = proof.premises().map(|premise| premise.fact()).collect();
     assert_eq!(premises, ["e(1, 2)", "e(2, 3)", "f(3)"]);
     // The variable the fold kept to itself comes back from its rule.
-    let bindings: Vec<String> = assignment
+    let bindings: Vec<String> = proof
+        .derivation()
+        .expect("a derived fact")
+        .assignment
         .iter()
         .map(|binding| format!("{}={}", binding.variable, binding.value))
         .collect();

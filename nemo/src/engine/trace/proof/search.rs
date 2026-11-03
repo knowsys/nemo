@@ -27,7 +27,7 @@ use crate::{
             application::{LoggedApplication, scope_columns},
             body::{BodySpace, combined_positions},
             contexts::RunContexts,
-            extensional::{ExtensionalBlock, ExtensionalOrigin},
+            extensional::ExtensionalBlock,
         },
         trace::proof::{Proof, ProofNode, targets},
     },
@@ -164,14 +164,13 @@ impl<'a> ProofSearch<'a> {
             .is_some_and(|added| added.0 < step)
     }
 
-    /// Returns the origin of the table's extensional block holding a revision, if any.
-    fn extensional_origin(&self, table: TableId, revision: Revision) -> Option<ExtensionalOrigin> {
+    /// Returns whether one of the table's extensional blocks holds a revision.
+    fn is_extensional(&self, table: TableId, revision: Revision) -> bool {
         self.extensional
             .get(&table)
             .into_iter()
             .flatten()
-            .find(|extensional| extensional.range.contains(&revision))
-            .map(|extensional| extensional.origin)
+            .any(|extensional| extensional.range.contains(&revision))
     }
 
     /// Returns the candidate applications for a fact added at a derived revision:
@@ -216,11 +215,11 @@ impl<'a> ProofSearch<'a> {
         // stored, an extensional one means a leaf, and a derived one names the application.
         let mut proven = None;
         if let Some(revision) = self.manager.revision_of(table, row) {
-            if let Some(origin) = self.extensional_origin(table, revision) {
+            if self.is_extensional(table, revision) {
                 proven = Some(Rc::new(ProofNode {
                     table,
                     row: row.to_vec(),
-                    proof: Proof::Asserted { origin },
+                    proof: Proof::Asserted,
                 }));
             } else {
                 for (rule, step) in self.candidates(table, revision) {
