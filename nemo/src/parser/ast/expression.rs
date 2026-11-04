@@ -99,6 +99,20 @@ impl<'a> Expression<'a> {
         ))(input)
     }
 
+    /// Return whether this is one of the expressions [Self::parse_complex] produces.
+    pub fn is_complex(&self) -> bool {
+        matches!(
+            self,
+            Self::Aggregation(_)
+                | Self::Operation(_)
+                | Self::Atom(_)
+                | Self::Map(_)
+                | Self::Negation(_)
+                | Self::Tuple(_)
+                | Self::FormatString(_)
+        )
+    }
+
     /// Parse complex expressions, except arithmetic and infix.
     pub fn parse_complex(input: ParserInput<'a>) -> ParserResult<'a, Self> {
         alt((
@@ -167,8 +181,9 @@ impl<'a> ProgramAST<'a> for Expression<'a> {
         context(
             CONTEXT,
             alt((
-                map(Arithmetic::parse, Self::Arithmetic),
-                map(ParenthesizedExpression::parse, Self::Parenthesized),
+                // Also covers operands and parenthesized expressions, so
+                // neither is parsed twice.
+                Arithmetic::parse_sum,
                 Self::parse_complex,
                 Self::parse_basic,
             )),

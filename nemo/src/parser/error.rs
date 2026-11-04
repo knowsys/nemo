@@ -1,6 +1,6 @@
 //! This module defines the error type that is returned when the parser is unsuccessful.
 
-use std::fmt::Display;
+use std::{cmp::Ordering, fmt::Display};
 
 use nom::{
     Parser,
@@ -10,41 +10,185 @@ use nom::{
     combinator::map,
     sequence::{preceded, terminated},
 };
-use nom_supreme::error::{GenericErrorTree, StackContext};
+use smallvec::SmallVec;
 
 use crate::error::rich::RichError;
+
+use crate::syntax::rule;
 
 use super::{
     ParserInput, ParserResult,
     ast::{
         statement::{Statement, StatementKind},
-        token::Token,
+        token::{Token, TokenKind},
     },
     context::ParserContext,
     span::{CharacterPosition, Span},
 };
 
-/// Error tree used by nom parser
-pub type ParserErrorTree<'a> = GenericErrorTree<
-    ParserInput<'a>,
-    &'static str,
-    ParserContext,
-    Box<dyn std::error::Error + Send + Sync + 'static>,
->;
+/// Capacity of [ContextStack] before it spills onto the heap
+const CONTEXT_STACK_CAPACITY: usize = 12;
+
+/// Stack of [ParserContext]s recorded for a failing parser, innermost first
+type ContextStack = SmallVec<[ParserContext; CONTEXT_STACK_CAPACITY]>;
+
+/// Stack of errors that occurred while parsing a nemo program
+#[derive(Debug, Clone)]
+pub struct ParserErrors<'a> {
+    /// Furthest position reached
+    position: Span<'a>,
+    /// Contexts recorded at [Self::position]
+    context: ContextStack,
+}
+
+impl<'a> ParserErrors<'a> {
+    /// Create an error at the given position.
+    pub(crate) fn at(position: Span<'a>) -> Self {
+        Self {
+            position,
+            context: ContextStack::new(),
+        }
+    }
+
+    /// Record an enclosing [ParserContext].
+    pub(crate) fn push_context(&mut self, context: ParserContext) {
+        self.context.push(context);
+    }
+
+    /// Keep whichever of the two errors got further.
+    fn merge(&mut self, other: Self) {
+        match other
+            .position
+            .location_offset()
+            .cmp(&self.position.location_offset())
+        {
+            Ordering::Less => {}
+            Ordering::Greater => *self = other,
+            // Neither alternative explains the failure on its own, so only
+            // the contexts they agree on still describe it.
+            Ordering::Equal => {
+                let agreed = self
+                    .context
+                    .iter()
+                    .zip(&other.context)
+                    .take_while(|(one, other)| one == other)
+                    .count();
+
+                self.context.truncate(agreed);
+            }
+        }
+    }
+
+    /// Returns the position to report this error at.
+    fn reported_position(&self) -> CharacterPosition {
+        let expects_token = matches!(self.context.first(), Some(ParserContext::Token { .. }));
+
+        let before = self.position.text_before();
+        let text = if expects_token {
+            before.trim_end()
+        } else {
+            before
+        };
+
+        let skipped_lines = before[text.len()..].matches('\n').count();
+        let line_start = text.rfind('\n').map_or(0, |index| index + 1);
+
+        CharacterPosition {
+            offset: text.len(),
+            line: self
+                .position
+                .location_line()
+                .saturating_sub(skipped_lines as u32),
+            column: bytecount::num_chars(&text.as_bytes()[line_start..]) as u32 + 1,
+        }
+    }
+
+    /// Returns a suggestion for the mistake that most likely caused this error.
+    fn hint(&self) -> Option<String> {
+        let expected = *self.context.first()?;
+        let rest = self.position.fragment();
+
+        if expected == ParserContext::token(TokenKind::Dot) {
+            for arrow in ["<-", "=>", ":=", "<=", "->"] {
+                if rest.starts_with(arrow) {
+                    return Some(format!(
+                        "rules are written `head {} body`, not `head {arrow} body`",
+                        rule::ARROW
+                    ));
+                }
+            }
+
+            return Some(String::from("every statement must end with `.`"));
+        }
+
+        None
+    }
+
+    /// Convert into the [ParserError]s shown to the user.
+    pub(crate) fn parser_errors(&self) -> Vec<ParserError> {
+        vec![ParserError {
+            position: self.reported_position(),
+            context: self.context.to_vec(),
+            hint: self.hint(),
+        }]
+    }
+}
+
+impl<'a> nom::error::ParseError<ParserInput<'a>> for ParserErrors<'a> {
+    fn from_error_kind(input: ParserInput<'a>, _kind: nom::error::ErrorKind) -> Self {
+        Self::at(input.span)
+    }
+
+    /// nom only calls this from `alt`, which passes the error through unchanged.
+    fn append(_input: ParserInput<'a>, _kind: nom::error::ErrorKind, other: Self) -> Self {
+        other
+    }
+
+    fn from_char(input: ParserInput<'a>, _character: char) -> Self {
+        Self::at(input.span)
+    }
+
+    fn or(mut self, other: Self) -> Self {
+        self.merge(other);
+        self
+    }
+}
 
 /// Error while parsing a nemo program
 #[derive(Clone, Debug)]
 pub struct ParserError {
     /// Position where the error occurred
     pub position: CharacterPosition,
-    /// Parsing stack
+    /// Parsing stack, innermost first
     pub context: Vec<ParserContext>,
+    /// Suggestion for how to fix the error
+    pub hint: Option<String>,
+}
+
+impl ParserError {
+    /// The construct that was being parsed when the error occurred.
+    fn enclosing(&self) -> Option<ParserContext> {
+        self.context
+            .iter()
+            .skip(1)
+            .find(|context| context.names_construct())
+            .copied()
+    }
 }
 
 impl Display for ParserError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // TODO: We only use the first context to generate an error message
-        f.write_fmt(format_args!("expected `{}`", self.context[0].name()))
+        match self.context.first() {
+            Some(ParserContext::Token { kind }) => write!(f, "expected `{}`", kind.name())?,
+            Some(context) => write!(f, "expected {}", context.name())?,
+            None => write!(f, "unexpected input")?,
+        }
+
+        if let Some(enclosing) = self.enclosing() {
+            write!(f, " in {}", enclosing.name())?;
+        }
+
+        Ok(())
     }
 }
 
@@ -62,7 +206,23 @@ impl RichError for ParserError {
     }
 
     fn note(&self) -> Option<String> {
-        None
+        self.hint.clone()
+    }
+}
+
+/// Keep whichever of two failures got further.
+///
+/// Parsers that try an alternative by hand, rather than through `alt`, need this
+/// to report what `alt` would have.
+pub(crate) fn deepest<'a>(
+    one: nom::Err<ParserErrors<'a>>,
+    other: nom::Err<ParserErrors<'a>>,
+) -> nom::Err<ParserErrors<'a>> {
+    match (one, other) {
+        (nom::Err::Error(one), nom::Err::Error(other)) => {
+            nom::Err::Error(nom::error::ParseError::or(one, other))
+        }
+        (one, _) => one,
     }
 }
 
@@ -93,7 +253,7 @@ pub(crate) fn skip_statement(input: ParserInput<'_>) -> ParserResult<'_, Token<'
 }
 
 pub(crate) fn recover<'a>(
-    mut parser: impl Parser<ParserInput<'a>, Statement<'a>, ParserErrorTree<'a>>,
+    mut parser: impl Parser<ParserInput<'a>, Statement<'a>, ParserErrors<'a>>,
 ) -> impl FnMut(ParserInput<'a>) -> ParserResult<'a, Statement<'a>> {
     move |input: ParserInput<'a>| match parser.parse(input.clone()) {
         Ok((rest, statement)) => Ok((rest, statement)),
@@ -114,15 +274,15 @@ pub(crate) fn recover<'a>(
     }
 }
 
-pub(crate) fn translate_error_tree<'a>(error: &nom::Err<ParserErrorTree<'a>>) -> Vec<ParserError> {
+pub(crate) fn translate_error_tree<'a>(error: &nom::Err<ParserErrors<'a>>) -> Vec<ParserError> {
     match error {
         nom::Err::Incomplete(_) => vec![],
-        nom::Err::Error(err) | nom::Err::Failure(err) => _get_deepest_error(err),
+        nom::Err::Error(err) | nom::Err::Failure(err) => err.parser_errors(),
     }
 }
 
 pub(crate) fn report_error<'a>(
-    mut parser: impl Parser<ParserInput<'a>, Statement<'a>, ParserErrorTree<'a>>,
+    mut parser: impl Parser<ParserInput<'a>, Statement<'a>, ParserErrors<'a>>,
 ) -> impl FnMut(ParserInput<'a>) -> ParserResult<'a, Statement<'a>> {
     move |input| match parser.parse(input.clone()) {
         Ok(result) => Ok(result),
@@ -133,168 +293,113 @@ pub(crate) fn report_error<'a>(
             match &e {
                 nom::Err::Incomplete(_) => (),
                 nom::Err::Error(err) | nom::Err::Failure(err) => {
-                    // dbg!(&err);
-                    // let error = _get_deepest_error(&err);
-                    // dbg!(&error);
-                    // let error = match err {
-                    //     GenericErrorTree::Base { location, .. } => ParserError {
-                    //         position: CharacterPosition {
-                    //             offset: location.span.location_offset(),
-                    //             line: location.span.location_line(),
-                    //             column: location.span.get_utf8_column() as u32,
-                    //         },
-                    //         context: vec![],
-                    //     },
-                    //     GenericErrorTree::Stack {
-                    //         base: _base,
-                    //         contexts,
-                    //     } => ParserError {
-                    //         position: CharacterPosition {
-                    //             offset: contexts[0].0.span.location_offset(),
-                    //             line: contexts[0].0.span.location_line(),
-                    //             column: contexts[0].0.span.get_utf8_column() as u32,
-                    //         },
-                    //         context: match contexts[0].1 {
-                    //             StackContext::Kind(_) => todo!(),
-                    //             StackContext::Context(ctx) => {
-                    //                 vec![ctx]
-                    //             }
-                    //         },
-                    //     },
-                    //     GenericErrorTree::Alt(_vec) => {
-                    //         todo!()
-                    //     }
-                    // };
-                    for error in _get_deepest_error(err) {
+                    for error in err.parser_errors() {
                         input.state.report_error(error);
                     }
-                    // let (_deepest_pos, errors) = get_deepest_errors(err);
-                    // for error in errors {
-                    //     input.state.report_error(error);
-                    // }
                 }
             };
             Err(e)
-        }
-    }
-}
-
-/// Function to translate an [ParserErrorTree] returned by the nom parser
-/// into a [ParserError] that can be displayed to the user.
-pub(crate) fn _transform_error_tree<'a, Output>(
-    mut parser: impl Parser<ParserInput<'a>, Output, ParserErrorTree<'a>>,
-) -> impl FnMut(ParserInput<'a>) -> ParserResult<'a, Output> {
-    move |input| match parser.parse(input.clone()) {
-        Ok(result) => Ok(result),
-        Err(e) => {
-            if input.span.fragment().is_empty() {
-                return Err(e);
-            };
-            match &e {
-                nom::Err::Incomplete(_) => (),
-                nom::Err::Error(err) | nom::Err::Failure(err) => {
-                    let error = _get_deepest_error(err);
-                    dbg!(error);
-                    todo!()
-                    // let (_deepest_pos, errors) = _get_deepest_errors(err);
-                    // for error in errors {
-                    //     input.state.report_error(error);
-                    // }
-                }
-            };
-            Err(e)
-        }
-    }
-}
-
-fn _context_strs(
-    contexts: &[(ParserInput<'_>, StackContext<ParserContext>)],
-) -> Vec<ParserContext> {
-    contexts
-        .iter()
-        .map(|(_, c)| match c {
-            StackContext::Kind(_) => todo!(),
-            StackContext::Context(c) => *c,
-        })
-        .collect()
-}
-
-fn _get_deepest_error<'a>(e: &'a ParserErrorTree<'a>) -> Vec<ParserError> {
-    match e {
-        ParserErrorTree::Base { location, .. } => {
-            let span = location.span;
-            vec![ParserError {
-                position: CharacterPosition {
-                    offset: span.location_offset(),
-                    line: span.location_line(),
-                    column: span.get_utf8_column() as u32,
-                },
-                context: vec![],
-            }]
-        }
-        ParserErrorTree::Stack { base, contexts } => {
-            let mut errors = _get_deepest_error(base);
-            if errors.len() == 1 {
-                let error = errors.get_mut(0).expect(
-                    "get deepest error called on base should return a vec with one element",
-                );
-                let mut context = vec![];
-                context.append(&mut error.context);
-                context.append(
-                    &mut contexts
-                        .iter()
-                        .map(|(_, stack_context)| match stack_context {
-                            StackContext::Kind(_) => todo!("unclear when NomErrorKind will occur"),
-                            StackContext::Context(cxt) => *cxt,
-                        })
-                        .collect(),
-                );
-                vec![ParserError {
-                    position: error.position,
-                    context,
-                }]
-            } else {
-                vec![ParserError {
-                    position: errors[0].position,
-                    context: contexts
-                        .iter()
-                        .map(|(_, stack_context)| match stack_context {
-                            StackContext::Kind(_) => todo!("unclear when NomErrorKind will occur"),
-                            StackContext::Context(cxt) => *cxt,
-                        })
-                        .collect(),
-                }]
-            }
-        }
-        ParserErrorTree::Alt(vec) => {
-            let mut farthest_pos = CharacterPosition::default();
-            let mut farthest_errors = Vec::new();
-            for error in vec {
-                let errors = _get_deepest_error(error);
-                for inner_error in errors {
-                    match inner_error.position.cmp(&farthest_pos) {
-                        std::cmp::Ordering::Equal => farthest_errors.push(inner_error),
-                        std::cmp::Ordering::Greater => {
-                            farthest_pos = inner_error.position;
-                            farthest_errors.clear();
-                            farthest_errors.push(inner_error);
-                        }
-                        std::cmp::Ordering::Less => {}
-                    }
-                }
-            }
-            farthest_errors
-            // ParserError {
-            //     position: farthest_pos,
-            //     context: vec![],
-            // }
         }
     }
 }
 
 #[cfg(test)]
 mod test {
-    use crate::parser::{ParserState, error::skip_statement, input::ParserInput};
+    use crate::{
+        error::rich::RichError,
+        parser::{Parser, ParserState, error::skip_statement, input::ParserInput},
+    };
+
+    /// Parse `program` and return the errors it reports.
+    fn reported(program: &str) -> Vec<(u32, u32, String, Option<String>)> {
+        match Parser::initialize(program).parse() {
+            Ok(_) => Vec::new(),
+            Err((_, report)) => report
+                .errors()
+                .iter()
+                .map(|error| {
+                    (
+                        error.position.line,
+                        error.position.column,
+                        error.message(),
+                        error.note(),
+                    )
+                })
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn reported_errors() {
+        // A missing `.` is reported at the end of the statement that lacks it
+        assert_eq!(
+            reported("a(1).\nb(?x) :- a(?x)\nc(?y) :- b(?y).\n"),
+            vec![(
+                2,
+                15,
+                String::from("expected `.`"),
+                Some(String::from("every statement must end with `.`"))
+            )]
+        );
+
+        assert_eq!(
+            reported("p(1).\nq(?x) <- p(?x).\n"),
+            vec![(
+                2,
+                6,
+                String::from("expected `.`"),
+                Some(String::from(
+                    "rules are written `head :- body`, not `head <- body`"
+                ))
+            )]
+        );
+
+        for program in ["r(1, .\n", "a(1,\n"] {
+            assert_eq!(
+                reported(program),
+                vec![(1, 4, String::from("expected `)` in atom"), None)]
+            );
+        }
+
+        assert_eq!(
+            reported("@declare oops .\ns(1).\n"),
+            vec![(
+                1,
+                14,
+                String::from("expected `(` in declare directive"),
+                None
+            )]
+        );
+
+        for program in ["a(1),.\n", "a(1), b(2).\n"] {
+            assert_eq!(
+                reported(program),
+                vec![(
+                    1,
+                    5,
+                    String::from("expected `.`"),
+                    Some(String::from("every statement must end with `.`"))
+                )]
+            );
+        }
+
+        assert_eq!(
+            reported("!!!\np(1).\n"),
+            vec![(1, 2, String::from("expected letter or digit in name"), None)]
+        );
+
+        assert_eq!(
+            reported(":- b(?x).\n"),
+            vec![(1, 1, String::from("expected fact, rule or directive"), None)]
+        );
+
+        for program in ["a :- ?x.\n", "a :- 1 + 2.\n"] {
+            assert_eq!(
+                reported(program),
+                vec![(1, 3, String::from("expected expression"), None)]
+            );
+        }
+    }
 
     #[test]
     fn skip_to_statement_end() {

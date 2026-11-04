@@ -1,20 +1,29 @@
 //! This module defines [OperationTag].
 
-use nom::bytes::complete::tag_no_case;
-use nom_supreme::error::{BaseErrorKind, Expectation};
+use std::sync::LazyLock;
+
 use strum::IntoEnumIterator;
 
 use crate::{
     parser::{
         ParserResult,
-        ast::ProgramAST,
+        ast::{
+            ProgramAST,
+            tag::{KeywordTable, parse_keyword},
+        },
         context::{ParserContext, context},
-        error::ParserErrorTree,
         input::ParserInput,
         span::Span,
     },
     rule_model::components::term::operation::operation_kind::OperationKind,
 };
+
+/// All [OperationKind]s
+static OPERATIONS: LazyLock<KeywordTable<OperationKind>> = LazyLock::new(|| {
+    KeywordTable::new_ignore_ascii_case(
+        OperationKind::iter().map(|operation| (operation.name(), operation)),
+    )
+});
 
 /// Tags that are used to identify operations
 #[derive(Debug)]
@@ -48,20 +57,7 @@ impl<'a> ProgramAST<'a> for OperationTag<'a> {
     where
         Self: Sized + 'a,
     {
-        let keyword_parser = |input: ParserInput<'a>| {
-            for operation in OperationKind::iter() {
-                let result = tag_no_case::<&str, ParserInput<'_>, ParserErrorTree>(
-                    operation.name(),
-                )(input.clone());
-                if let Ok((rest, _matched)) = result {
-                    return Ok((rest, operation));
-                }
-            }
-            Err(nom::Err::Error(ParserErrorTree::Base {
-                location: input,
-                kind: BaseErrorKind::Expected(Expectation::Tag("operation name")),
-            }))
-        };
+        let keyword_parser = |input: ParserInput<'a>| parse_keyword(input, &OPERATIONS);
 
         let input_span = input.span;
 
@@ -102,16 +98,31 @@ mod test {
             ("sum", OperationKind::NumericSum),
             ("STRLEN", OperationKind::StringLength),
             ("IsNumeric", OperationKind::CheckIsNumeric),
+            ("STR", OperationKind::LexicalValue),
+            ("NUMGREATER", OperationKind::NumericGreaterthan),
+            ("NUMGREATEREQ", OperationKind::NumericGreaterthaneq),
         ];
 
         for (input, expected) in test {
             let parser_input = ParserInput::new(input, ParserState::default());
             let result = all_consuming(OperationTag::parse)(parser_input);
 
-            assert!(result.is_ok());
+            assert!(result.is_ok(), "`{input}` should parse as an operation tag");
 
             let result = result.unwrap();
             assert_eq!(expected, result.1.kind);
+        }
+    }
+
+    #[test]
+    fn reject_names_that_merely_start_with_an_operation() {
+        for input in ["SUMX", "STRX", "STRLENGTH", "sum_", "count2"] {
+            let parser_input = ParserInput::new(input, ParserState::default());
+
+            assert!(
+                all_consuming(OperationTag::parse)(parser_input).is_err(),
+                "`{input}` should not parse as an operation tag"
+            );
         }
     }
 }

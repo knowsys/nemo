@@ -9,7 +9,7 @@ pub mod span;
 use std::{cell::RefCell, fmt::Display, rc::Rc};
 
 use ast::{ProgramAST, program::Program};
-use error::{ParserError, ParserErrorTree};
+use error::{ParserError, ParserErrors};
 use input::ParserInput;
 
 use nom::IResult;
@@ -34,7 +34,7 @@ impl ParserState {
 }
 
 /// Output of a nom parser function
-pub type ParserResult<'a, Output> = IResult<ParserInput<'a>, Output, ParserErrorTree<'a>>;
+pub type ParserResult<'a, Output> = IResult<ParserInput<'a>, Output, ParserErrors<'a>>;
 
 /// Parser for the nemo rule language
 #[derive(Debug)]
