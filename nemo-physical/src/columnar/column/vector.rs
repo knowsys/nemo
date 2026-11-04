@@ -96,7 +96,7 @@ where
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let pos = self.pos.map_or_else(|| self.interval.start, |pos| pos + 1);
+        let pos = self.pos.map_or(self.interval.start, |pos| pos + 1);
         self.pos = Some(pos);
         (pos < self.interval.end).then(|| self.column.get(pos))
     }
