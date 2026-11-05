@@ -14,7 +14,7 @@ pub struct PlanResults {
     ///
     /// Every erroring row was dropped.
     /// The counts are per evaluation, not per row:
-    /// a value evaluated again in another combination of blocks, or in another cell, counts again.
+    /// a value evaluated again in another join, or in another cell, counts again.
     /// So they report the kinds of errors and their magnitude, not exact row counts.
     pub errors: ErrorCounts,
     /// The wall-clock time of the execution, by phase.
@@ -65,17 +65,9 @@ impl PhaseTimings {
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct WorkCounts {
     /// The joins executed, one per member of a unit,
-    /// including those an empty input ends before any combination runs.
+    /// including those over an input without rows.
     pub joins: u64,
-    /// The combinations run across all joins,
-    /// each a join over one block of each joined input.
-    pub combinations: u64,
-    /// The combinations that rebound the join of the previous combination of their member
-    /// instead of building their own.
-    pub rebound: u64,
     /// The blocks collected across all joins, joined and subtracted alike.
-    ///
-    /// Only the joined ones multiply into the combinations.
     pub blocks: u64,
     /// The rows collected for materializing nodes, before the builds drop the repeats.
     pub rows: u64,
@@ -98,8 +90,6 @@ impl WorkCounts {
     /// The largest buffer becomes the larger of the two.
     pub fn absorb(&mut self, other: &WorkCounts) {
         self.joins += other.joins;
-        self.combinations += other.combinations;
-        self.rebound += other.rebound;
         self.blocks += other.blocks;
         self.rows += other.rows;
         self.arrangements += other.arrangements;

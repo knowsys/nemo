@@ -230,8 +230,6 @@ mod tests {
                 stored_orders: 22,
                 counts: WorkCounts {
                     joins: 31,
-                    combinations: 32,
-                    rebound: 33,
                     blocks: 34,
                     rows: 35,
                     arrangements: 20,
@@ -253,7 +251,7 @@ mod tests {
              \"loaded\":5,\"derived\":6,\"applications\":7,\"memory\":8,\
              \"phases\":{\"order\":11,\"join\":12,\"setup\":13,\"merge\":14,\"build\":15,\
              \"encode\":16,\"glue\":32,\"plan\":50,\"store\":17,\"consolidate\":18},\
-             \"counts\":{\"joins\":31,\"combinations\":32,\"rebound\":33,\"blocks\":34,\
+             \"counts\":{\"joins\":31,\"blocks\":34,\
              \"rows\":35,\"arrangements\":20,\"arrangedRows\":21,\"consolidated\":19,\
              \"storedOrders\":22,\"buffer\":36},\
              \"errors\":[{\"kind\":\"division by zero\",\"count\":2}],\

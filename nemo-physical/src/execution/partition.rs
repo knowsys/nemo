@@ -1,6 +1,6 @@
 //! Partitioning: splitting a large join into cells that run in parallel.
 //!
-//! A cell joins the same tries as the whole join,
+//! A cell joins the same inputs as the whole join,
 //! with some of the leading layers clipped to a range of values.
 //! Each cell runs on the worker pool, in its worker's arena,
 //! and its rows form a run of their own.
@@ -61,7 +61,7 @@ struct CellOutcome<T> {
 }
 
 impl Cells {
-    /// Splits the join of a shape over the given tries into cells,
+    /// Splits the join of a shape over the blocks of the given inputs into cells,
     /// or returns `None` if it is too little work for the pool or has no layer to split.
     ///
     /// The number of cells follows the [work estimate](estimated_work).
@@ -71,16 +71,16 @@ impl Cells {
     /// Only the emitted layers split, so that the cells produce disjoint rows, each once,
     /// and none bound to a constant.
     ///
-    /// The boundary values come from splitting the longest column intersected at a layer
+    /// The boundary values come from splitting the longest block column intersected at a layer
     /// at equal positions.
     /// Each cell's join clips its cursors to its ranges,
     /// so the cells partition every cursor without copying.
-    pub(crate) fn partition(shape: &JoinShape, tries: &[&Trie]) -> Option<Self> {
-        let tasks = Tasks::cut(estimated_work(shape, tries), usize::MAX);
+    pub(crate) fn partition(shape: &JoinShape, inputs: &[&[&Trie]]) -> Option<Self> {
+        let tasks = Tasks::cut(estimated_work(shape, inputs), usize::MAX);
         if tasks.count() <= 1 || shape.emitted == 0 {
             return None;
         }
-        let splits = split_layers(shape, tries, tasks.count());
+        let splits = split_layers(shape, inputs, tasks.count());
         if splits.is_empty() {
             return None;
         }
@@ -115,11 +115,11 @@ impl Cells {
     pub(crate) fn run<T: Send>(
         &self,
         template: JoinTemplate<'_>,
-        tries: &[&Trie],
+        inputs: &[&[&Trie]],
         run: impl Fn(&mut TrieJoin<'_>) -> T + Sync,
     ) -> (Vec<T>, ErrorCounts) {
         let outcomes = parallel::map_tasks(self.tasks, |cell| {
-            with_cell_join(template, tries, &self.cells[cell], &run)
+            with_cell_join(template, inputs, &self.cells[cell], &run)
         });
 
         let mut errors = ErrorCounts::default();
@@ -146,7 +146,7 @@ thread_local! {
 /// and returns the outcome of running it through `run`.
 fn with_cell_join<T>(
     template: JoinTemplate<'_>,
-    tries: &[&Trie],
+    inputs: &[&[&Trie]],
     cell: &Cell,
     run: impl FnOnce(&mut TrieJoin<'_>) -> T,
 ) -> CellOutcome<T> {
@@ -154,7 +154,7 @@ fn with_cell_join<T>(
         let mut arena = arena.borrow_mut();
         arena.reset();
 
-        let mut join = template.build(tries, &arena);
+        let mut join = template.build(inputs, &arena);
         for clip in cell {
             join.clip_layer(clip.layer, clip.low, clip.high);
         }
@@ -168,12 +168,15 @@ fn with_cell_join<T>(
 }
 
 /// Returns an estimate of a join's descent work, in cursor value visits,
-/// from the column lengths of its tries alone.
+/// from the column lengths of its inputs' blocks alone.
 ///
-/// Per emitted layer, the intersection of `s` cursors with average block sizes `N`
+/// Per emitted layer, the intersection of `s` cursors with average node sizes `N`
 /// costs about `s · min N · log2(1 + max N / min N)` per binding of the layers above,
 /// galloping the smaller cursor through the larger,
 /// and yields about `min N` bindings for the layer below.
+/// An input stored in several blocks counts one cursor per nonempty block,
+/// since its union moves each of them and the join drops the empty ones,
+/// and its column counts with the values of every block.
 /// An existence layer beyond the emitted ones stops at its first match,
 /// and a bound layer looks up its one value:
 /// one gallop per cursor either way, and no multiplication of bindings.
@@ -183,7 +186,7 @@ fn with_cell_join<T>(
 /// not bindings multiplying through markers the input lacks,
 /// but it keeps a join of a small block against large tables,
 /// done in microseconds, from ever looking like large work.
-fn estimated_work(shape: &JoinShape, tries: &[&Trie]) -> usize {
+fn estimated_work(shape: &JoinShape, inputs: &[&[&Trie]]) -> usize {
     /// Returns the bits of a value, at least one: the integer stand-in for the logarithm.
     ///
     /// The estimate runs once per join that might split,
@@ -193,39 +196,45 @@ fn estimated_work(shape: &JoinShape, tries: &[&Trie]) -> usize {
         usize::try_from(value.max(1).ilog2()).expect("bit counts are small") + 1
     }
 
+    /// Returns the number of values in a column of an input, across its blocks.
+    fn column_length(blocks: &[&Trie], column: usize) -> usize {
+        blocks.iter().map(|trie| trie.column(column).len()).sum()
+    }
+
     let mut bindings = 1usize;
     let mut work = 0usize;
     for (index, layer) in shape.layers.iter().enumerate() {
         let mut smallest = usize::MAX;
         let mut largest = 0;
         let mut cap = usize::MAX;
+        let mut cursors = 0usize;
         for position in layer {
-            let trie = tries[position.input];
-            let length = trie.column(position.column).len();
+            let blocks = inputs[position.input];
+            let length = column_length(blocks, position.column);
             if length == 0 {
                 return 0;
             }
-            let parents = if position.column == 0 {
-                1
-            } else {
-                trie.column(position.column - 1).len().max(1)
+            // The nodes the column hangs below: the values of the column before it.
+            let parents = match position.column {
+                0 => 1,
+                column => column_length(blocks, column - 1).max(1),
             };
             let average = length.div_ceil(parents);
             smallest = smallest.min(average);
             largest = largest.max(average);
             cap = cap.min(length);
+            cursors += blocks.iter().filter(|trie| !trie.is_empty()).count();
         }
 
         let bound = shape.bound_layers.iter().any(|bound| bound.layer == index);
         if index < shape.emitted && !bound {
-            let cost = layer
-                .len()
+            let cost = cursors
                 .saturating_mul(smallest)
                 .saturating_mul(bits(largest / smallest));
             work = work.saturating_add(bindings.saturating_mul(cost));
             bindings = bindings.saturating_mul(smallest).min(cap);
         } else {
-            let cost = layer.len().saturating_mul(bits(largest));
+            let cost = cursors.saturating_mul(bits(largest));
             work = work.saturating_add(bindings.saturating_mul(cost));
         }
     }
@@ -251,7 +260,7 @@ fn largest_share(domain: usize, cap: usize) -> usize {
 /// each with its strictly increasing boundary values; see [Cells::partition] for the policy.
 fn split_layers(
     shape: &JoinShape,
-    tries: &[&Trie],
+    inputs: &[&[&Trie]],
     target: usize,
 ) -> Vec<(usize, Vec<StorageValue>)> {
     let mut splits = Vec::new();
@@ -268,7 +277,11 @@ fn split_layers(
 
         let Some(longest) = positions
             .iter()
-            .map(|position| tries[position.input].column(position.column))
+            .flat_map(|position| {
+                inputs[position.input]
+                    .iter()
+                    .map(|trie| trie.column(position.column))
+            })
             .max_by_key(ColumnView::len)
         else {
             break;
@@ -370,7 +383,7 @@ mod tests {
         let right = int_trie(2, &(0..3000).map(|b| [b, b + 1]).collect::<Vec<_>>());
         let layers = chain();
         let shape = shape(&layers);
-        let tries = [&left, &right];
+        let tries: [&[&Trie]; 2] = [&[&left], &[&right]];
 
         let splits = split_layers(&shape, &tries, 16);
         assert_eq!(splits.len(), 1, "three values cannot be split");
@@ -385,7 +398,7 @@ mod tests {
 
         // A first layer of many values takes every share itself.
         let long = int_trie(2, &(0..10_000).map(|a| [a, a]).collect::<Vec<_>>());
-        let splits = split_layers(&shape, &[&long, &right], 16);
+        let splits = split_layers(&shape, &[&[&long], &[&right]], 16);
         assert_eq!(splits.len(), 1);
         assert_eq!(splits[0].0, 0);
         assert_eq!(splits[0].1.len(), 15);
@@ -396,7 +409,7 @@ mod tests {
             ..shape
         };
         assert!(split_layers(&first_only, &tries, 16).is_empty());
-        assert!(estimated_work(&shape, &[&long, &right]) > 0);
+        assert!(estimated_work(&shape, &[&[&long], &[&right]]) > 0);
     }
 
     #[test]
@@ -412,7 +425,7 @@ mod tests {
             ..shape(&layers)
         };
 
-        let splits = split_layers(&shape, &[&left, &right], 16);
+        let splits = split_layers(&shape, &[&[&left], &[&right]], 16);
         assert_eq!(splits.len(), 1);
         assert_eq!(splits[0].0, 1);
     }
@@ -423,14 +436,14 @@ mod tests {
         let shape = shape(&layers);
         let small = int_trie(2, &[[1, 2], [2, 3]]);
         let large = int_trie(2, &(0..5000).map(|a| [a, a + 1]).collect::<Vec<_>>());
-        let tiny = estimated_work(&shape, &[&small, &large]);
-        let big = estimated_work(&shape, &[&large, &large]);
+        let tiny = estimated_work(&shape, &[&[&small], &[&large]]);
+        let big = estimated_work(&shape, &[&[&large], &[&large]]);
         assert!(
             tiny < big,
             "a join of two rows against a large table is little work"
         );
         assert!(tiny < Tuning::get().parallel_work);
         let empty = Trie::empty(2);
-        assert_eq!(estimated_work(&shape, &[&empty, &large]), 0);
+        assert_eq!(estimated_work(&shape, &[&[&empty], &[&large]]), 0);
     }
 }

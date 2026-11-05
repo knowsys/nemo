@@ -756,7 +756,7 @@ impl Engine {
     /// and the blocks the iteration added may merge freely.
     ///
     /// The two-level policy keeps every growing table about two blocks wide,
-    /// since a join's cost per application grows with the product of its inputs' block counts.
+    /// since a join reads every block of its inputs, each through a cursor of its own.
     fn consolidate(&mut self, program: &CompiledProgram, iteration_start: u64) {
         let begun = Stopwatch::start();
         let mut walls = Self::exact_walls(program);

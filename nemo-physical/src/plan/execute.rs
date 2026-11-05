@@ -8,11 +8,11 @@
 //!
 //! A unit or an aggregation collects its rows as sorted runs
 //! and builds one trie from them for each column order its consumers read.
-//! The joins of a unit run once per combination of their inputs' blocks;
-//! a combination too large for one thread is split into cells that run on the worker pool.
+//! Each join of a unit reads every block of its inputs;
+//! a join too large for one thread is split into cells that run on the worker pool.
 
 mod aggregate;
-mod combination;
+mod blocks;
 mod results;
 mod runs;
 mod unit;

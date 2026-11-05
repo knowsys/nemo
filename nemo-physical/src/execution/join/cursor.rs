@@ -11,7 +11,7 @@
 //! The clip narrows every block the cursor enters, once per block,
 //! so moving through the block never checks it.
 
-use std::{cmp::Ordering, ops::Range};
+use std::{cmp::Ordering, fmt::Debug, ops::Range};
 
 use crate::{
     storage::{StorageValue, Tag},
@@ -20,10 +20,7 @@ use crate::{
 
 /// A width of payloads, `u32` or `u64`,
 /// over which the payload cursors are monomorphized.
-pub(crate) trait Payload: Copy + Ord {
-    /// Whether this is the 32-bit width.
-    const IS_U32: bool;
-
+pub(crate) trait Payload: Copy + Ord + Debug {
     /// Returns a payload at this width,
     /// or `None` if it exceeds the width, and thus every payload stored at it.
     fn narrow(payload: u64) -> Option<Self>;
@@ -37,8 +34,6 @@ pub(crate) trait Payload: Copy + Ord {
 }
 
 impl Payload for u32 {
-    const IS_U32: bool = true;
-
     fn narrow(payload: u64) -> Option<Self> {
         u32::try_from(payload).ok()
     }
@@ -56,8 +51,6 @@ impl Payload for u32 {
 }
 
 impl Payload for u64 {
-    const IS_U32: bool = false;
-
     fn narrow(payload: u64) -> Option<Self> {
         Some(payload)
     }
@@ -88,7 +81,7 @@ pub(crate) struct Clip<V> {
 /// A cursor over a range of a sorted trie column.
 pub(crate) trait SeekCursor {
     /// The values the cursor reads, ordered like the column.
-    type Value: Copy + Ord;
+    type Value: Copy + Ord + Debug;
 
     /// Restricts the cursor to a block, narrowed to the clip if there is one,
     /// and rewinds it; the range may turn out empty.
@@ -114,11 +107,13 @@ pub(crate) trait SeekCursor {
     /// Returns the position of the cursor in the column.
     fn position(&self) -> usize;
 
-    /// Steps to the next value and returns it, or returns `None` at the end of the range.
+    /// Steps to the next value and returns it,
+    /// or returns `None` at the end of the range, which leaves the cursor without a current value.
     fn next(&mut self) -> Option<Self::Value>;
 
     /// Moves forward to the first value at or above `target` and returns it,
-    /// or returns `None` if the rest of the range holds no such value.
+    /// or returns `None` if the rest of the range holds no such value,
+    /// which leaves the cursor without a current value.
     fn seek(&mut self, target: Self::Value) -> Option<Self::Value>;
 }
 
@@ -209,6 +204,7 @@ impl<P: Payload> SeekCursor for PayloadCursor<'_, P> {
     fn next(&mut self) -> Option<P> {
         let next = self.position + 1;
         if next >= self.interval.end {
+            self.position = self.interval.end;
             return None;
         }
 
@@ -223,7 +219,10 @@ impl<P: Payload> SeekCursor for PayloadCursor<'_, P> {
             return None;
         }
 
-        let position = gallop(self.values, self.position, self.interval.end, target)?;
+        let Some(position) = gallop(self.values, self.position, self.interval.end, target) else {
+            self.position = self.interval.end;
+            return None;
+        };
         self.position = position;
 
         Some(self.values[position])
@@ -304,18 +303,29 @@ impl<'a> TaggedCursor<'a> {
             // Every value in this column exceeds the target.
             Ordering::Greater => return Some(self.entry(self.position)),
             // Every value in this column is below the target.
-            Ordering::Less => return None,
+            Ordering::Less => return self.exhaust(),
             Ordering::Equal => {}
         }
 
-        let narrowed = P::narrow(target.payload)?;
-        let position = gallop(values, self.position, self.interval.end, narrowed)?;
+        // A payload beyond the width lies above every value of the column.
+        let found = P::narrow(target.payload)
+            .and_then(|narrowed| gallop(values, self.position, self.interval.end, narrowed));
+        let Some(position) = found else {
+            return self.exhaust();
+        };
         self.position = position;
 
         Some(StorageValue {
             tag: self.tag,
             payload: values[position].widen(),
         })
+    }
+
+    /// Moves the cursor to the end of its range, and returns `None`, as a step past it does.
+    #[inline]
+    fn exhaust(&mut self) -> Option<StorageValue> {
+        self.position = self.interval.end;
+        None
     }
 }
 
@@ -358,7 +368,7 @@ impl SeekCursor for TaggedCursor<'_> {
     fn next(&mut self) -> Option<StorageValue> {
         let next = self.position + 1;
         if next >= self.interval.end {
-            return None;
+            return self.exhaust();
         }
         self.position = next;
         Some(self.entry(next))
@@ -380,7 +390,9 @@ impl SeekCursor for TaggedCursor<'_> {
                     payload: values[index],
                 };
 
-                let position = gallop_by(self.position, end, target, entry)?;
+                let Some(position) = gallop_by(self.position, end, target, entry) else {
+                    return self.exhaust();
+                };
                 self.position = position;
 
                 Some(entry(position))
@@ -570,6 +582,34 @@ mod tests {
         assert_eq!(cursor.seek(4), Some(5));
         assert_eq!(cursor.next(), Some(7));
         assert_eq!(cursor.seek(10), None);
+    }
+
+    #[test]
+    fn running_past_the_range_exhausts_the_cursor() {
+        let data: [u32; 3] = [1, 3, 5];
+        let mut cursor = PayloadCursor::new(&data);
+        cursor.set_range(1..3);
+        assert_eq!(cursor.next(), Some(5));
+        assert_eq!(cursor.next(), None);
+        assert!(!cursor.has_current());
+        cursor.rewind();
+        assert_eq!(cursor.seek(6), None);
+        assert!(!cursor.has_current());
+
+        // Terms sort below integers, and a 64-bit column holds no larger term.
+        let mut tagged = u64_cursor(&[1, 3, 5]);
+        assert_eq!(tagged.seek(StorageValue::integer(0)), None);
+        assert!(!tagged.has_current());
+        tagged.rewind();
+        assert_eq!(tagged.seek(StorageValue::term(9)), None);
+        assert!(!tagged.has_current());
+        tagged.rewind();
+        assert_eq!(
+            tagged.seek(StorageValue::term(5)),
+            Some(StorageValue::term(5))
+        );
+        assert_eq!(tagged.next(), None);
+        assert!(!tagged.has_current());
     }
 
     #[test]

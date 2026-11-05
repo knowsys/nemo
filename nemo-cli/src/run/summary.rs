@@ -143,8 +143,6 @@ impl Run<'_> {
         eprintln!();
         for (work, count) in [
             ("joins", timings.counts.joins),
-            ("combinations", timings.counts.combinations),
-            ("rebound", timings.counts.rebound),
             ("blocks", timings.counts.blocks),
             ("rows", timings.counts.rows),
             ("arrangements", timings.counts.arrangements),

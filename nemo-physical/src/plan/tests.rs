@@ -388,7 +388,7 @@ fn partitioned_nullary_joins_emit_one_row() {
 }
 
 #[test]
-fn joins_distribute_over_blocks() {
+fn joins_read_every_block() {
     // The chain join over a table split into three subtables (with a
     // repeated row) must match the join over the same rows stored as
     // one block.
@@ -413,6 +413,28 @@ fn joins_distribute_over_blocks() {
     }
     assert_eq!(results[0], results[1]);
     assert!(!results[0].is_empty());
+}
+
+#[test]
+fn a_join_reads_many_inputs_of_several_blocks_at_once() {
+    // Twenty atoms over a table of two blocks:
+    // one join reading both blocks of every input, where one join per choice of blocks
+    // would run 2^20 of them.
+    let mut manager = TableManager::new();
+    let data = add_table(&mut manager, 2, &[&[&[1, 2]], &[&[2, 1]]]);
+    let mut dictionary = Dictionary::new();
+
+    let mut plan = OperationPlan::new();
+    let [x, y] = plan.markers();
+    let loads = (0..20)
+        .map(|_| plan.load(data, all(), vec![x, y]))
+        .collect();
+    let joined = plan.join(loads, vec![x, y]);
+    plan.output(joined);
+
+    let results = plan.execute(&mut manager, &mut dictionary, EvaluationContext::now());
+    assert_eq!(int_rows(&results.outputs[0]), vec![vec![1, 2], vec![2, 1]]);
+    assert_eq!((results.counts.joins, results.counts.blocks), (1, 40));
 }
 
 #[test]
@@ -953,9 +975,8 @@ fn computed_errors_drop_rows_and_count() {
 }
 
 #[test]
-fn computed_constants_distribute_over_blocks() {
-    // A constant column over a two-block table: rows recurring
-    // across the combinations still collapse.
+fn computed_constants_over_several_blocks() {
+    // A constant column over a two-block table: a row both blocks hold is read once.
     let mut manager = TableManager::new();
     let data = add_table(&mut manager, 1, &[&[&[1], &[2]], &[&[2], &[3]]]);
     let mut dictionary = Dictionary::new();

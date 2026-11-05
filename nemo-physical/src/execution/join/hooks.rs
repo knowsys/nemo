@@ -232,7 +232,7 @@ pub(super) enum Bind {
 ///
 /// The driver is generic over the hooks,
 /// so a join without hooks runs with [NoHooks] and its checks vanish.
-pub(super) trait Hooks<'a, V> {
+pub(super) trait Hooks<V> {
     /// Returns whether the hooks at a layer admit a value found there;
     /// the row holds the value at that layer.
     fn admit(&mut self, layer: usize, value: V, row: &[V]) -> bool;
@@ -242,17 +242,13 @@ pub(super) trait Hooks<'a, V> {
 
     /// Returns what the binder of a layer dictates, consuming its value.
     fn bind(&mut self, layer: usize, row: &[V]) -> Bind;
-
-    /// Restarts the hooks for a fresh run of the same shape over other tries;
-    /// the integer forms follow the tags of the new columns.
-    fn rebind(&mut self, shape: &JoinShape<'a>, tries: &[&'a Trie]);
 }
 
 /// The hooks of a join without subtracted inputs, filters or bound layers: none.
 #[derive(Debug)]
 pub(super) struct NoHooks;
 
-impl<'a, V> Hooks<'a, V> for NoHooks {
+impl<V> Hooks<V> for NoHooks {
     #[inline]
     fn admit(&mut self, _layer: usize, _value: V, _row: &[V]) -> bool {
         true
@@ -265,9 +261,6 @@ impl<'a, V> Hooks<'a, V> for NoHooks {
     fn bind(&mut self, _layer: usize, _row: &[V]) -> Bind {
         Bind::Free
     }
-
-    #[inline]
-    fn rebind(&mut self, _shape: &JoinShape<'a>, _tries: &[&'a Trie]) {}
 }
 
 /// The hooks of a join with subtracted inputs, filters or bound layers.
@@ -296,7 +289,7 @@ pub(super) struct FullHooks<'a> {
     errors: ErrorCounts,
 }
 
-impl<'a> Hooks<'a, StorageValue> for FullHooks<'a> {
+impl Hooks<StorageValue> for FullHooks<'_> {
     fn admit(&mut self, layer: usize, value: StorageValue, row: &[StorageValue]) -> bool {
         if self.blocked(layer, value) {
             return false;
@@ -353,43 +346,17 @@ impl<'a> Hooks<'a, StorageValue> for FullHooks<'a> {
             }
         }
     }
-
-    fn rebind(&mut self, shape: &JoinShape<'a>, tries: &[&'a Trie]) {
-        for subtraction in &mut self.subtractions {
-            for (index, column) in subtraction.columns.iter_mut().enumerate() {
-                column.armed = index == 0;
-                column.cursor.rewind();
-            }
-        }
-        for binder in &mut self.binders {
-            binder.pending = false;
-        }
-        self.errors = ErrorCounts::default();
-
-        for (state, filter) in self.filters.iter_mut().zip(shape.filters) {
-            if let FilterState::Program(state) = state {
-                state.integer =
-                    integer_form(shape, tries, &filter.inputs, filter.program.integer());
-            }
-        }
-        for (binder, bound) in self.binders.iter_mut().zip(shape.bound_layers) {
-            if let (BinderValue::Computed(state), BoundValue::Computed { inputs, program }) =
-                (&mut binder.value, &bound.value)
-            {
-                state.integer = integer_form(shape, tries, inputs, program.integer());
-            }
-        }
-    }
 }
 
 impl<'a> FullHooks<'a> {
-    /// Returns the hooks of a shape over the tries it joins, indexed as the shape indexes them,
+    /// Returns the hooks of a shape over the blocks of the inputs it joins,
+    /// indexed as the shape indexes the inputs,
     /// or `None` for a shape without hooks.
     ///
     /// The programs decode their inputs through the dictionary and evaluate in the context.
     pub(super) fn build(
         shape: &JoinShape<'a>,
-        tries: &[&'a Trie],
+        inputs: &[&[&'a Trie]],
         subtracted: &[&'a Trie],
         dictionary: Option<&'a Dictionary>,
         context: EvaluationContext,
@@ -401,8 +368,8 @@ impl<'a> FullHooks<'a> {
         }
 
         let (subtractions, subtracted_at_layer) = subtractions(shape, subtracted, bump);
-        let (filters, filters_at_layer) = filter_hooks(shape, tries, dictionary, bump);
-        let (binders, binder_at_layer) = binder_hooks(shape, tries, dictionary, bump);
+        let (filters, filters_at_layer) = filter_hooks(shape, inputs, dictionary, bump);
+        let (binders, binder_at_layer) = binder_hooks(shape, inputs, dictionary, bump);
 
         Some(Self {
             subtractions,
@@ -545,7 +512,7 @@ fn subtractions<'a>(
 /// The constants of the identity forms are looked up in the dictionary here, once.
 fn filter_hooks<'a>(
     shape: &JoinShape<'a>,
-    tries: &[&'a Trie],
+    inputs: &[&[&'a Trie]],
     dictionary: Option<&'a Dictionary>,
     bump: &'a Bump,
 ) -> (
@@ -570,7 +537,7 @@ fn filter_hooks<'a>(
                 FilterState::Identity(IdentityFilter::new(condition, &filter.inputs, dictionary))
             }
             None => {
-                let integer = integer_form(shape, tries, &filter.inputs, filter.program.integer());
+                let integer = integer_form(shape, inputs, &filter.inputs, filter.program.integer());
                 FilterState::Program(ProgramState::new(
                     filter.program.generic(),
                     &filter.inputs,
@@ -590,7 +557,7 @@ fn filter_hooks<'a>(
 /// The constants are looked up in the dictionary here, once.
 fn binder_hooks<'a>(
     shape: &JoinShape<'a>,
-    tries: &[&'a Trie],
+    inputs: &[&[&'a Trie]],
     dictionary: Option<&'a Dictionary>,
     bump: &'a Bump,
 ) -> (BumpVec<'a, BinderState<'a>>, BumpVec<'a, Option<usize>>) {
@@ -606,9 +573,12 @@ fn binder_hooks<'a>(
                 let dictionary = dictionary.expect("joins with binders carry a dictionary");
                 BinderValue::Constant(dictionary.probe(constant.as_ref()))
             }
-            BoundValue::Computed { inputs, program } => {
-                let integer = integer_form(shape, tries, inputs, program.integer());
-                BinderValue::Computed(ProgramState::new(program.generic(), inputs, integer, bump))
+            BoundValue::Computed {
+                inputs: layers,
+                program,
+            } => {
+                let integer = integer_form(shape, inputs, layers, program.integer());
+                BinderValue::Computed(ProgramState::new(program.generic(), layers, integer, bump))
             }
         };
         binders.push(BinderState {
@@ -620,25 +590,25 @@ fn binder_hooks<'a>(
     (binders, binder_at_layer)
 }
 
-/// Returns a program's integer form if the tries allow it:
-/// if every column intersected at a layer the program reads holds integers only.
+/// Returns a program's integer form if the inputs allow it:
+/// if every column intersected at a layer the program reads holds integers only,
+/// in every block of its input.
 fn integer_form<'a>(
     shape: &JoinShape<'a>,
-    tries: &[&'a Trie],
-    inputs: &[usize],
+    inputs: &[&[&'a Trie]],
+    layers: &[usize],
     integer: Option<&'a IntegerProgram>,
 ) -> Option<&'a IntegerProgram> {
     let integers_only = |layer: usize| {
         shape.layers[layer].iter().all(|input_column| {
-            tries[input_column.input]
-                .column(input_column.column)
-                .uniform_tag()
-                == Some(Tag::Int)
+            inputs[input_column.input]
+                .iter()
+                .all(|trie| trie.column(input_column.column).uniform_tag() == Some(Tag::Int))
         })
     };
 
     let integer = integer?;
-    inputs
+    layers
         .iter()
         .all(|&layer| integers_only(layer))
         .then_some(integer)

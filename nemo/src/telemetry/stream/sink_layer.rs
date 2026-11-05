@@ -125,8 +125,6 @@ mod tests {
                 },
                 counts: WorkCounts {
                     joins: 1,
-                    combinations: 2,
-                    rebound: 3,
                     blocks: 4,
                     rows: 5,
                     arrangements: 7,

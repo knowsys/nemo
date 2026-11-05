@@ -117,8 +117,8 @@ mod tests {
 
     #[test]
     fn pieces_group_into_the_fewest_chains() {
-        // The pieces of two combinations, interleaved as emitted: each
-        // combination's pieces chain, the combinations overlap.
+        // The pieces of two joins, interleaved as emitted: each
+        // join's pieces chain, the joins overlap.
         let buffers = [
             buffer(&[1, 2]),
             buffer(&[3, 4]),

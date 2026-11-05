@@ -27,9 +27,9 @@ use crate::{
 /// A column of one of a join's inputs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct InputColumn {
-    /// The index of the input's trie among the tries the join is given.
+    /// The index of the input among the inputs the join is given.
     pub(crate) input: usize,
-    /// The column within the input's trie.
+    /// The column within the input's tries.
     pub(crate) column: usize,
 }
 
@@ -295,18 +295,18 @@ impl JoinShape<'_> {
     }
 
     /// Checks that the shape fits what a join over it is given:
-    /// the tries of its inputs, one trie per subtracted input,
+    /// the blocks of its inputs, one trie per subtracted input,
     /// and the dictionary, if filters or bound layers decode values through it.
     ///
     /// Returns the first mismatch, as a message:
     /// like a malformed shape, it is a bug of the code that built the join.
     pub(crate) fn validate_fit(
         &self,
-        tries: &[&Trie],
+        inputs: &[&[&Trie]],
         subtracted: &[&Trie],
         dictionary: Option<&Dictionary>,
     ) -> Result<(), &'static str> {
-        self.validate_input_fit(tries)?;
+        self.validate_input_fit(inputs)?;
 
         if subtracted.len() != self.subtracted.len() {
             return Err("the join must be given one trie per subtracted input of the shape");
@@ -330,16 +330,19 @@ impl JoinShape<'_> {
         Ok(())
     }
 
-    /// Checks that the input columns fit the tries of the inputs:
-    /// each names an input that is given, and a column its trie has.
-    pub(crate) fn validate_input_fit(&self, tries: &[&Trie]) -> Result<(), &'static str> {
+    /// Checks that the input columns fit the blocks of the inputs:
+    /// each names an input that is given, and a column each of its tries has.
+    fn validate_input_fit(&self, inputs: &[&[&Trie]]) -> Result<(), &'static str> {
         for input_column in self.layers.iter().flatten() {
-            let Some(trie) = tries.get(input_column.input) else {
+            let Some(blocks) = inputs.get(input_column.input) else {
                 return Err("the shape references an input the join was not given");
             };
 
-            if input_column.column >= trie.arity() {
-                return Err("the shape maps more columns than the input's trie has");
+            if blocks
+                .iter()
+                .any(|trie| input_column.column >= trie.arity())
+            {
+                return Err("the shape maps more columns than the input's tries have");
             }
         }
         Ok(())

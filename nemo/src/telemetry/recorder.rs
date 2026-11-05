@@ -286,8 +286,6 @@ mod tests {
         };
         let counts = WorkCounts {
             joins: 1,
-            combinations: 2,
-            rebound: 3,
             blocks: 4,
             rows: 5,
             arrangements: 7,
@@ -376,7 +374,7 @@ mod tests {
              \"iterations\":[[8,0,7,12,640]],\
              \"phases\":{\"order\":2,\"join\":4,\"setup\":6,\"merge\":8,\"build\":10,\
              \"encode\":12,\"total\":42},\
-             \"counts\":{\"joins\":2,\"combinations\":4,\"rebound\":6,\"blocks\":8,\"rows\":10,\
+             \"counts\":{\"joins\":2,\"blocks\":8,\"rows\":10,\
              \"arrangements\":14,\"arrangedRows\":16,\"buffer\":6}}"
         );
     }

@@ -55,21 +55,8 @@ impl Execution<'_> {
     }
 
     /// Returns the groups an aggregating sink computes in one pass over the blocks, encoded.
-    ///
-    /// The blocks are united into one relation if there are several.
     fn scan(blocks: &[&Trie], scan: &ScanLayout, context: &mut StepContext<'_>) -> SortedRowBuffer {
         let arity = scan.layers.len();
-        let united = match blocks.len() {
-            1 => None,
-            0 => Some(Trie::empty(arity)),
-            _ => {
-                let begun = Stopwatch::start();
-                let merged = Trie::merge(blocks);
-                context.accounting.timings.merge += begun.nanos();
-                Some(merged)
-            }
-        };
-        let relation = united.as_ref().unwrap_or_else(|| blocks[0]);
 
         let begun = Stopwatch::start();
         let shared: &Dictionary = context.dictionary;
@@ -90,7 +77,7 @@ impl Execution<'_> {
         };
         let mut join = TrieJoin::new(
             shape,
-            &[relation],
+            &[blocks],
             &[],
             Some(shared),
             context.evaluation,

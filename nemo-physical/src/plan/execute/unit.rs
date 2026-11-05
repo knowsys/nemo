@@ -3,14 +3,12 @@
 use crate::{
     dictionary::Dictionary,
     execution::{
-        Cells, JoinShape, JoinTemplate, PendingRows, ProjectingSink, ProjectionScratch,
+        Cells, JoinArena, JoinShape, JoinTemplate, PendingRows, ProjectingSink, ProjectionScratch,
         RowEvaluator, RowSink, RowStageShape, SubtractedShape, TrieJoin,
     },
     plan::{
         execute::{
-            Execution, Materialized, StepContext,
-            combination::{JoinBlocks, SequentialJoin},
-            results::Accounting,
+            Execution, Materialized, StepContext, blocks::JoinBlocks, results::Accounting,
             runs::Runs,
         },
         layout::{Delivery, MemberLayout, UnitLayout},
@@ -22,7 +20,7 @@ use crate::{
 impl Execution<'_> {
     /// Materializes a unit.
     ///
-    /// Each member's join runs once per combination of its inputs' blocks, all into one set of runs.
+    /// Each member's join reads every block of its inputs, and all fill one set of runs.
     /// Computed values are added to the dictionary once every member has run.
     pub(super) fn unit(&self, unit: &UnitLayout, context: &mut StepContext<'_>) -> Materialized {
         let materialization = self.plan_layout.materializations[unit.top.index()]
@@ -90,8 +88,8 @@ impl<'a> UnitRows<'a> {
         }
     }
 
-    /// Runs a member's join once per combination of its inputs' blocks,
-    /// in cells if a combination is large enough, and takes its rows as the member's delivery says.
+    /// Runs a member's join over the blocks of its inputs,
+    /// in cells if it is large enough, and takes its rows as the member's delivery says.
     ///
     /// Each block of a subtracted relation is subtracted on its own,
     /// so a row matching any of them is dropped, as matching the union of the blocks drops it.
@@ -102,6 +100,7 @@ impl<'a> UnitRows<'a> {
         context: &mut StepContext<'_>,
     ) {
         let dictionary: &Dictionary = context.dictionary;
+        let arena = context.arena;
         let accounting = &mut context.accounting;
         accounting.counts.joins += 1;
         accounting.counts.blocks += blocks.count() as u64;
@@ -136,32 +135,19 @@ impl<'a> UnitRows<'a> {
             dictionary,
             evaluation: context.evaluation,
         };
-        let mut sequential = SequentialJoin::new(template, context.arena);
-        let mut scratch = None;
 
-        for tries in blocks.combinations() {
-            match Cells::partition(&shape, &tries) {
-                Some(cells) => {
-                    self.run_cells(&cells, &tries, &member.delivery, template, accounting);
-                }
-                None => self.run_sequentially(
-                    &mut sequential,
-                    &tries,
-                    &member.delivery,
-                    template,
-                    &mut scratch,
-                    accounting,
-                ),
-            }
-            accounting.counts.combinations += 1;
+        let inputs = blocks.input_slices();
+        match Cells::partition(&shape, &inputs) {
+            Some(cells) => self.run_cells(&cells, &inputs, &member.delivery, template, accounting),
+            None => self.run_sequentially(&inputs, &member.delivery, template, arena, accounting),
         }
     }
 
-    /// Runs the join of one combination in cells and takes their rows as the delivery says.
+    /// Runs a member's join in cells and takes their rows as the delivery says.
     fn run_cells<'j>(
         &mut self,
         cells: &Cells,
-        tries: &[&'j Trie],
+        inputs: &[&[&'j Trie]],
         delivery: &'a Delivery,
         template: JoinTemplate<'j>,
         accounting: &mut Accounting,
@@ -174,12 +160,12 @@ impl<'a> UnitRows<'a> {
                     join.drain(&mut buffer);
                     buffer.assume_sorted()
                 };
-                let rows = in_cells(cells, template, tries, drain, accounting);
+                let rows = in_cells(cells, template, inputs, drain, accounting);
                 self.push_cells(rows, accounting);
             }
             Delivery::RowStage(stage) => {
                 let collect = |join: &mut TrieJoin<'_>| evaluated(stage, join, &template);
-                let collected = in_cells(cells, template, tries, collect, accounting);
+                let collected = in_cells(cells, template, inputs, collect, accounting);
                 self.pending
                     .extend(collected.into_iter().map(|rows| (stage, rows)));
             }
@@ -202,13 +188,13 @@ impl<'a> UnitRows<'a> {
                         buffer.assume_sorted()
                     }
                 };
-                let rows = in_cells(cells, template, tries, drain, accounting);
+                let rows = in_cells(cells, template, inputs, drain, accounting);
                 self.push_cells(rows, accounting);
             }
         }
     }
 
-    /// Adds the sorted rows of the cells of a combination to the runs,
+    /// Adds the sorted rows of the cells of a join to the runs,
     /// each a run of its own, in cell order.
     fn push_cells(&mut self, cells: Vec<SortedRowBuffer>, accounting: &mut Accounting) {
         for rows in cells {
@@ -217,34 +203,33 @@ impl<'a> UnitRows<'a> {
         }
     }
 
-    /// Runs the join of one combination sequentially and takes its rows as the delivery says.
-    ///
-    /// The scratch of a projection is created on its first use and kept across the combinations.
+    /// Runs a member's join sequentially, built in the arena,
+    /// and takes its rows as the delivery says.
     fn run_sequentially<'j>(
         &mut self,
-        sequential: &mut SequentialJoin<'j>,
-        tries: &[&'j Trie],
+        inputs: &[&[&'j Trie]],
         delivery: &'a Delivery,
         template: JoinTemplate<'j>,
-        scratch: &mut Option<ProjectionScratch>,
+        arena: &'j JoinArena,
         accounting: &mut Accounting,
     ) {
         match delivery {
             Delivery::Direct => {
-                sequential.run(tries, accounting, |join| {
+                sequentially(template, inputs, arena, accounting, |join| {
                     join.drain(self.runs.begin_segment());
                 });
             }
             Delivery::RowStage(stage) => {
-                let rows =
-                    sequential.run(tries, accounting, |join| evaluated(stage, join, &template));
+                let rows = sequentially(template, inputs, arena, accounting, |join| {
+                    evaluated(stage, join, &template)
+                });
                 self.pending.push((stage, rows));
             }
             Delivery::Sink(projection) => {
-                let scratch = scratch.get_or_insert_with(|| ProjectionScratch::new(projection));
-                sequential.run(tries, accounting, |join| {
+                let mut scratch = ProjectionScratch::new(projection);
+                sequentially(template, inputs, arena, accounting, |join| {
                     let out = self.runs.begin_segment();
-                    join.drain(&mut ProjectingSink::new(projection, scratch, out));
+                    join.drain(&mut ProjectingSink::new(projection, &mut scratch, out));
                 });
 
                 // The segment of an identity projection arrives sorted.
@@ -296,22 +281,42 @@ impl<'a> UnitRows<'a> {
     }
 }
 
-/// Runs the cells of a combination, each through `run` on its join,
+/// Runs the cells of a join, each through `run` on its join,
 /// accounts for their time and evaluation errors,
 /// and returns what each cell delivered, in cell order.
 fn in_cells<T: Send>(
     cells: &Cells,
     template: JoinTemplate<'_>,
-    tries: &[&Trie],
+    inputs: &[&[&Trie]],
     run: impl Fn(&mut TrieJoin<'_>) -> T + Sync,
     accounting: &mut Accounting,
 ) -> Vec<T> {
     let begun = Stopwatch::start();
-    let (delivered, errors) = cells.run(template, tries, run);
+    let (delivered, errors) = cells.run(template, inputs, run);
     accounting.timings.join += begun.nanos();
     accounting.errors.absorb(&errors);
 
     delivered
+}
+
+/// Builds a join in the arena, runs it through `drain`,
+/// and accounts for its time, its setup included, and its evaluation errors.
+fn sequentially<'j, T>(
+    template: JoinTemplate<'j>,
+    inputs: &[&[&'j Trie]],
+    arena: &'j JoinArena,
+    accounting: &mut Accounting,
+    drain: impl FnOnce(&mut TrieJoin<'j>) -> T,
+) -> T {
+    let begun = Stopwatch::start();
+    let mut join = template.build(inputs, arena);
+    accounting.timings.setup += begun.nanos();
+
+    let drained = drain(&mut join);
+    accounting.timings.join += begun.nanos();
+    accounting.errors.absorb(&join.evaluation_errors());
+
+    drained
 }
 
 /// Drains a join through a row stage, and returns the rows it kept.

@@ -165,7 +165,7 @@ function phases(doc) {
   const entries = Object.entries(source).filter(([name]) => name !== "total" && name !== "setup");
   if ("total" in source) {
     // What plan execution spent outside the named phases (block lookup,
-    // combination enumeration, projections, result assembly).
+    // projections, result assembly).
     // The run facts already carry it as `glue`.
     const named = PHASES_NAMED.reduce((sum, name) => sum + (source[name] || 0), 0);
     entries.push(["glue", Math.max(0, source.total - named)]);

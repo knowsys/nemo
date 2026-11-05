@@ -3,7 +3,7 @@
 //!
 //! The driver fills a row with one value per layer, outermost first.
 //! At the current layer it finds the next value the hooks admit,
-//! restricts the deeper cursors to the blocks below that value, and descends.
+//! restricts the deeper cursors to the nodes below that value, and descends.
 //! When a layer is exhausted, it returns to the layer above.
 //! A row is complete once the deepest layer has a value;
 //! the driver then resumes at the deepest emitted layer,
@@ -13,7 +13,6 @@ use bumpalo::{Bump, collections::Vec as BumpVec};
 
 use crate::{
     execution::{
-        JoinShape,
         join::{
             hooks::{Bind, Hooks},
             intersection::JoinLayer,
@@ -21,17 +20,17 @@ use crate::{
         sink::RowSink,
     },
     storage::StorageValue,
-    trie::{Intervals, Trie},
+    trie::Intervals,
 };
 
 /// A link from a cursor to the cursor over the next column of its input, at a deeper layer.
 ///
-/// The position of a match indexes the intervals of the next column,
-/// which give the block the next cursor is restricted to.
+/// In each block of the input, the position of a match indexes the intervals of the next column,
+/// which give the range that block's next cursor is restricted to.
 #[derive(Debug, Clone, Copy)]
 pub(super) struct NextLink<'a> {
-    /// The intervals of the input's next column.
-    pub(super) intervals: &'a Intervals,
+    /// The intervals of the input's next column, one per block of the input, in block order.
+    pub(super) intervals: &'a [&'a Intervals],
     /// The layer intersecting the next column.
     pub(super) layer: usize,
     /// The index of the next column's cursor within its layer.
@@ -67,7 +66,7 @@ pub(super) struct Driver<'a, L: JoinLayer<'a>, H> {
     exhausted: bool,
 }
 
-impl<'a, L: JoinLayer<'a>, H: Hooks<'a, L::Value>> Driver<'a, L, H> {
+impl<'a, L: JoinLayer<'a>, H: Hooks<L::Value>> Driver<'a, L, H> {
     /// Creates the driver over the given layers.
     ///
     /// `filler` is any value; it fills the row until the layers write it.
@@ -99,50 +98,6 @@ impl<'a, L: JoinLayer<'a>, H: Hooks<'a, L::Value>> Driver<'a, L, H> {
         // The run is the one descent into the first layer.
         driver.hooks.enter_layer(0);
         driver
-    }
-
-    /// Rebinds the driver to other tries of the same shape for a fresh run,
-    /// and returns whether that succeeded.
-    ///
-    /// The layers take the tries' columns and the links their intervals;
-    /// the hooks and the descent restart.
-    /// If some layer's columns need a layer of another kind,
-    /// the driver is unusable and must be built anew.
-    pub(super) fn rebind(
-        &mut self,
-        shape: &JoinShape<'a>,
-        tries: &[&'a Trie],
-        bump: &'a Bump,
-    ) -> bool {
-        let mut views = BumpVec::new_in(bump);
-        for (layer, columns) in shape.layers.iter().enumerate() {
-            views.clear();
-            views.extend(
-                columns
-                    .iter()
-                    .map(|input_column| tries[input_column.input].column(input_column.column)),
-            );
-
-            if !self.layers[layer].rebind(&views) {
-                return false;
-            }
-
-            for (cursor, link) in self.links[layer].iter_mut().enumerate() {
-                if let Some(link) = link {
-                    let input_column = columns[cursor];
-                    link.intervals = tries[input_column.input].intervals(input_column.column + 1);
-                }
-            }
-        }
-
-        self.hooks.rebind(shape, tries);
-        self.hooks.enter_layer(0);
-        self.current_layer = 0;
-        self.pending_changed = usize::MAX;
-        self.changed = 0;
-        self.exhausted = false;
-
-        true
     }
 
     /// Clips every cursor of a layer to a range of values;
@@ -246,16 +201,26 @@ impl<'a, L: JoinLayer<'a>, H: Hooks<'a, L::Value>> Driver<'a, L, H> {
     }
 
     /// Restricts the cursors linked from a layer's cursors
-    /// to the blocks below the positions where the layer found its value.
+    /// to the nodes below the positions where the layer found its value.
+    ///
+    /// Of an input stored in several blocks, only the blocks holding the value get ranges,
+    /// and the others sit out the subtree.
     #[inline]
     fn propagate_ranges(&mut self, layer: usize) {
+        // Links lead to strictly deeper layers.
+        let (shallower, deeper) = self.layers.split_at_mut(layer + 1);
+        let found = &shallower[layer];
+
         for (cursor, link) in self.links[layer].iter().enumerate() {
             let Some(link) = link else {
                 continue;
             };
 
-            let position = self.layers[layer].position(cursor);
-            self.layers[link.layer].set_range(link.cursor, link.intervals.children(position));
+            let next = &mut deeper[link.layer - layer - 1];
+            next.clear_ranges(link.cursor);
+            found.for_each_match(cursor, |block, position| {
+                next.set_range(link.cursor, block, link.intervals[block].children(position));
+            });
         }
     }
 

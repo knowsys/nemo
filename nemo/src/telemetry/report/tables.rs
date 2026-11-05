@@ -65,7 +65,7 @@ impl PhaseTable {
     }
 
     /// Returns what plan execution spent in no named phase: block lookup,
-    /// combination enumeration, projections, result assembly.
+    /// projections, result assembly.
     fn glue(timings: &PhaseTimings) -> u64 {
         timings.total.saturating_sub(
             timings.order + timings.join + timings.merge + timings.build + timings.encode,
@@ -106,8 +106,6 @@ impl WorkTable {
     fn counted(counts: &WorkCounts) -> Vec<NamedCount> {
         vec![
             ("joins", counts.joins),
-            ("combinations", counts.combinations),
-            ("rebound", counts.rebound),
             ("blocks", counts.blocks),
             ("rows", counts.rows),
             ("arrangements", counts.arrangements),
@@ -145,8 +143,6 @@ mod tests {
             stored_orders: 22,
             counts: WorkCounts {
                 joins: 31,
-                combinations: 32,
-                rebound: 33,
                 blocks: 34,
                 rows: 35,
                 arrangements: 20,
@@ -192,8 +188,6 @@ mod tests {
             execution.rows(),
             [
                 ("joins", 31),
-                ("combinations", 32),
-                ("rebound", 33),
                 ("blocks", 34),
                 ("rows", 35),
                 ("arrangements", 20),
@@ -202,9 +196,9 @@ mod tests {
             ]
         );
         let run = WorkTable::of_run(&timings());
-        assert_eq!(run.rows()[..7], execution.rows()[..7]);
+        assert_eq!(run.rows()[..5], execution.rows()[..5]);
         assert_eq!(
-            run.rows()[7..],
+            run.rows()[5..],
             [("consolidated", 19), ("storedOrders", 22), ("buffer", 36),]
         );
     }

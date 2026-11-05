@@ -14,7 +14,8 @@ use crate::{
     value::{DataValue, ErrorCounts, EvaluationError, number::decimal},
 };
 
-/// Returns the join of a shape over the given tries, which the shape must fit.
+/// Returns the join of a shape over the given tries, each the only block of its input,
+/// which the shape must fit.
 fn join<'a>(
     shape: &'a OwnedJoinShape,
     tries: &[&'a Trie],
@@ -22,14 +23,30 @@ fn join<'a>(
     dictionary: Option<&'a Dictionary>,
     arena: &'a JoinArena,
 ) -> TrieJoin<'a> {
+    join_blocks(shape, &one_block_each(tries), subtracted, dictionary, arena)
+}
+
+/// Returns the join of a shape over the blocks of the given inputs, which the shape must fit.
+fn join_blocks<'a>(
+    shape: &'a OwnedJoinShape,
+    inputs: &[&[&'a Trie]],
+    subtracted: &[&'a Trie],
+    dictionary: Option<&'a Dictionary>,
+    arena: &'a JoinArena,
+) -> TrieJoin<'a> {
     TrieJoin::new(
         shape.view(),
-        tries,
+        inputs,
         subtracted,
         dictionary,
         EvaluationContext::now(),
         arena,
     )
+}
+
+/// Returns the given tries as inputs of one block each.
+fn one_block_each<'t, 'a>(tries: &'t [&'a Trie]) -> Vec<&'t [&'a Trie]> {
+    tries.iter().map(std::slice::from_ref).collect()
 }
 
 /// Returns the chain shape R(a, b) ⋈ S(b, c), emitting the given number of layers.
@@ -141,41 +158,128 @@ fn triangle_joins_find_every_triangle() {
 }
 
 #[test]
-fn rebinding_matches_building_and_refuses_other_kinds() {
+fn inputs_without_rows_leave_no_rows() {
     let arena = JoinArena::new();
-    // The chain R(a, b) ⋈ S(b, c), rebound between pairs of blocks.
-    let shape = chain_shape(3, vec![]);
-    let terms = |pairs: &[(u64, u64)]| {
-        trie(
-            2,
-            &pairs
-                .iter()
-                .map(|&(a, b)| vec![StorageValue::term(a), StorageValue::term(b)])
-                .collect::<Vec<_>>(),
-        )
-    };
-    let (r1, s1) = (terms(&[(1, 2), (2, 3)]), terms(&[(2, 5), (3, 6), (3, 7)]));
-    let (r2, s2) = (terms(&[(4, 7), (5, 7)]), terms(&[(7, 8), (7, 9)]));
-
-    let mut rebound = join(&shape, &[&r1, &s1], &[], None, &arena);
-    assert_eq!(collect(&mut rebound).len(), 3);
-    assert!(rebound.rebind(&shape.view(), &[&r2, &s2], &arena));
-    let rows = collect(&mut rebound);
-    let mut fresh = join(&shape, &[&r2, &s2], &[], None, &arena);
-    assert_eq!(rows, collect(&mut fresh));
-    assert_eq!(rows.len(), 4);
-    // Rebinding back works too, and a rebound join drains fully.
-    assert!(rebound.rebind(&shape.view(), &[&r1, &s1], &arena));
-    assert_eq!(collect(&mut rebound).len(), 3);
-
-    // A block of another layout needs another kind of layer: a 64-bit
-    // term column against the 32-bit core, or an empty block.
-    let terms64 = terms(&[(u64::from(u32::MAX) + 1, 2)]);
+    let left = int_trie(2, &[&[1, 2]]);
+    let right = int_trie(2, &[&[2, 7]]);
     let empty = Trie::empty(2);
-    let mut join32 = join(&shape, &[&r1, &s1], &[], None, &arena);
-    assert!(!join32.rebind(&shape.view(), &[&terms64, &s1], &arena));
-    let mut join32 = join(&shape, &[&r1, &s1], &[], None, &arena);
-    assert!(!join32.rebind(&shape.view(), &[&empty, &s1], &arena));
+    let shape = chain_shape(3, vec![]);
+
+    // Empty blocks add nothing to an input with rows.
+    let mut padded = join_blocks(
+        &shape,
+        &[&[&empty, &left], &[&right, &empty]],
+        &[],
+        None,
+        &arena,
+    );
+    assert_eq!(collect(&mut padded), storage_rows(&[&[1, 2, 7]]));
+    // An input of no blocks, or of empty ones, has no rows.
+    let mut blockless = join_blocks(&shape, &[&[&left], &[]], &[], None, &arena);
+    assert!(collect(&mut blockless).is_empty());
+    let mut emptied = join_blocks(&shape, &[&[&left], &[&empty, &empty]], &[], None, &arena);
+    assert!(collect(&mut emptied).is_empty());
+}
+
+/// Splits rows into one to three blocks at random, putting some rows into two of them,
+/// and returns the tries of the blocks.
+fn random_blocks(rng: &mut StdRng, arity: usize, rows: &[Vec<StorageValue>]) -> Vec<Trie> {
+    let count = rng.gen_range(1..=3);
+    let mut blocks = vec![Vec::new(); count];
+    for row in rows {
+        blocks[rng.gen_range(0..count)].push(row.clone());
+        if rng.gen_ratio(1, 4) {
+            blocks[rng.gen_range(0..count)].push(row.clone());
+        }
+    }
+
+    blocks.iter().map(|rows| trie(arity, rows)).collect()
+}
+
+#[test]
+fn joins_over_blocks_match_joins_over_their_union() {
+    // Each input split into blocks at random, against the same input in one trie,
+    // across data that exercises all three join cores,
+    // and with every hook that reads the inputs' columns.
+    let mut rng = StdRng::seed_from_u64(37);
+    let dictionary = Dictionary::new();
+    for round in 0..300 {
+        let mode = (round % 3) as u8;
+        let left_rows = random_rows(&mut rng, 2, mode);
+        let right_rows = random_rows(&mut rng, 2, mode);
+        let (left, right) = (trie(2, &left_rows), trie(2, &right_rows));
+        let minus = trie(2, &random_rows(&mut rng, 2, mode));
+        let left_blocks = random_blocks(&mut rng, 2, &left_rows);
+        let right_blocks = random_blocks(&mut rng, 2, &right_rows);
+        let left_parts: Vec<&Trie> = left_blocks.iter().collect();
+        let right_parts: Vec<&Trie> = right_blocks.iter().collect();
+
+        let subtraction = vec![SubtractedShape { layers: vec![0, 2] }];
+        let mut shapes = vec![
+            chain_shape(3, vec![]),
+            chain_shape(2, vec![]),
+            chain_shape(1, vec![]),
+            chain_shape(3, subtraction),
+        ];
+        // Programs over integers only, which every value of the third mode is.
+        if mode == 2 {
+            let condition = hook(
+                vec![2, 0],
+                vec![OpCode::Input(0), OpCode::Input(1), OpCode::Less],
+                vec![],
+            );
+            shapes.push(chain_shape_with(3, vec![], vec![condition]));
+            let bound = BoundLayerShape::constant(1, DataValue::integer(1));
+            shapes.push(
+                chain_shape(3, vec![])
+                    .with_bound_layers(vec![bound])
+                    .expect("well-formed"),
+            );
+        }
+
+        for shape in &shapes {
+            let anti = if shape.view().subtracted.is_empty() {
+                vec![]
+            } else {
+                vec![&minus]
+            };
+            let arena = JoinArena::new();
+            let mut whole = join(shape, &[&left, &right], &anti, Some(&dictionary), &arena);
+            let expected = collect(&mut whole);
+            let inputs: [&[&Trie]; 2] = [&left_parts, &right_parts];
+            let mut split = join_blocks(shape, &inputs, &anti, Some(&dictionary), &arena);
+            assert_eq!(collect(&mut split), expected, "round {round}, {shape:?}");
+            if mode == 2 {
+                check_cells(shape, &inputs, &anti, Some(&dictionary), &expected);
+            }
+        }
+    }
+}
+
+#[test]
+fn triangles_over_blocks_match_triangles_over_their_union() {
+    // The triangle reads its input three times, linking layer 0 to layer 2 for the third:
+    // a descent that skips a layer must restrict every block.
+    let mut rng = StdRng::seed_from_u64(41);
+    let shape = triangle_shape();
+    for round in 0..200 {
+        let edges: Vec<Vec<StorageValue>> = (0..rng.gen_range(0..30))
+            .map(|_| {
+                vec![
+                    StorageValue::term(rng.gen_range(0..6)),
+                    StorageValue::term(rng.gen_range(0..6)),
+                ]
+            })
+            .collect();
+        let whole = trie(2, &edges);
+        let blocks = random_blocks(&mut rng, 2, &edges);
+        let parts: Vec<&Trie> = blocks.iter().collect();
+
+        let arena = JoinArena::new();
+        let mut expected = join(&shape, &[&whole, &whole, &whole], &[], None, &arena);
+        let mut split = join_blocks(&shape, &[&parts, &parts, &parts], &[], None, &arena);
+        assert_eq!(collect(&mut split), collect(&mut expected), "round {round}");
+    }
 }
 
 #[test]
@@ -284,7 +388,10 @@ fn drained_buffers_are_sorted_and_build_tries_directly() {
 fn shapes_must_fit_the_tries() {
     let unary = int_trie(1, &[&[1]]);
     let misfit = |shape: &OwnedJoinShape, tries: &[&Trie], subtracted: &[&Trie]| {
-        shape.view().validate_fit(tries, subtracted, None).is_err()
+        shape
+            .view()
+            .validate_fit(&one_block_each(tries), subtracted, None)
+            .is_err()
     };
 
     // The chain shape needs two binary tries; building the join refuses a misfit.
@@ -295,7 +402,7 @@ fn shapes_must_fit_the_tries() {
     assert_panics("more columns", || {
         TrieJoin::new(
             shape.view(),
-            &[&unary],
+            &[&[&unary]],
             &[],
             None,
             EvaluationContext::now(),
@@ -390,7 +497,7 @@ fn random_joins_match_brute_force() {
 /// and that together they are the unpartitioned result.
 fn check_cells(
     shape: &OwnedJoinShape,
-    tries: &[&Trie],
+    inputs: &[&[&Trie]],
     subtracted: &[&Trie],
     dictionary: Option<&Dictionary>,
     expected: &[Vec<StorageValue>],
@@ -409,7 +516,7 @@ fn check_cells(
     let mut all: Vec<Vec<StorageValue>> = Vec::new();
     for &(low0, high0) in &first {
         for &(low1, high1) in &second {
-            let mut join = join(shape, tries, subtracted, dictionary, &arena);
+            let mut join = join_blocks(shape, inputs, subtracted, dictionary, &arena);
             join.clip_layer(0, low0, high0);
             if shape.view().emitted > 1 {
                 join.clip_layer(1, low1, high1);
@@ -468,7 +575,7 @@ fn cells_partition_the_join() {
             let expected = collect(&mut unpartitioned);
             check_cells(
                 &shape,
-                &[&left, &right],
+                &[&[&left], &[&right]],
                 &anti,
                 Some(&dictionary),
                 &expected,
@@ -529,7 +636,13 @@ fn cells_partition_bound_layers_of_u32_joins() {
         expected,
         storage_rows(&[&[1, 2, 2], &[1, 3, 2], &[2, 3, 3], &[2, 5, 3]])
     );
-    check_cells(&shape, &[&left, &right], &[], Some(&dictionary), &expected);
+    check_cells(
+        &shape,
+        &[&[&left], &[&right]],
+        &[],
+        Some(&dictionary),
+        &expected,
+    );
 }
 
 #[test]
@@ -540,13 +653,13 @@ fn split_joins_deliver_the_sequential_rows() {
         .expect("the shape is well-formed");
     let small = int_trie(1, &[[1], [2]]);
     assert!(
-        Cells::partition(&shape.view(), &[&small]).is_none(),
+        Cells::partition(&shape.view(), &[&[&small]]).is_none(),
         "little work runs whole"
     );
 
     let relation = int_trie(1, &(0..CELL_ROWS).map(|value| [value]).collect::<Vec<_>>());
-    let tries = [&relation];
-    let Some(cells) = Cells::partition(&shape.view(), &tries) else {
+    let inputs: [&[&Trie]; 1] = [&[&relation]];
+    let Some(cells) = Cells::partition(&shape.view(), &inputs) else {
         assert_eq!(
             Workers::get().threads(),
             1,
@@ -561,12 +674,12 @@ fn split_joins_deliver_the_sequential_rows() {
         dictionary: &dictionary,
         evaluation: EvaluationContext::now(),
     };
-    let (delivered, errors) = cells.run(template, &tries, collect);
+    let (delivered, errors) = cells.run(template, &inputs, collect);
     assert!(delivered.len() > 1);
     assert!(errors.is_empty());
 
     let arena = JoinArena::new();
-    let mut whole = join(&shape, &tries, &[], None, &arena);
+    let mut whole = join_blocks(&shape, &inputs, &[], None, &arena);
     assert_eq!(delivered.concat(), collect(&mut whole));
 }
 
@@ -764,7 +877,13 @@ fn constant_bound_layers_agree_with_identity_filters() {
                         expected,
                         "round {round}, layer {layer}, emitted {emitted}"
                     );
-                    check_cells(&bound, &tries, &[], Some(&dictionary), &expected);
+                    check_cells(
+                        &bound,
+                        &one_block_each(&tries),
+                        &[],
+                        Some(&dictionary),
+                        &expected,
+                    );
                 }
             }
         }
@@ -849,7 +968,7 @@ fn filters_require_a_dictionary() {
     assert_panics("needs the dictionary", || {
         TrieJoin::new(
             shape.view(),
-            &[&relation],
+            &[&[&relation]],
             &[],
             None,
             EvaluationContext::now(),

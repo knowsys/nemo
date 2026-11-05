@@ -1,19 +1,23 @@
 //! The join: a leapfrog trie join over immutable tries.
 //!
-//! [TrieJoin] is built over a [shape](JoinShape) and the tries it joins,
+//! [TrieJoin] is built over a [shape](JoinShape) and the inputs it joins,
+//! each stored in one or several tries, its blocks,
 //! and yields the result rows in storage order.
 //! Beneath it, the [driver] descends through the layers.
-//! Each layer is an [intersection] of [cursors](cursor) over the input columns,
+//! Each layer is an [intersection] of [cursors](input) over the input columns,
+//! each the [cursor] over the column of a block or the [union] of those of several,
 //! the [hooks] decide whether a value found at a layer stands,
 //! and the working state comes from an [arena](JoinArena).
-//! A [template](JoinTemplate) builds the joins of one shape over different tries.
+//! A [template](JoinTemplate) builds the joins of one shape over different inputs.
 
 mod arena;
 mod cursor;
 mod driver;
 mod hooks;
+mod input;
 mod intersection;
 mod template;
+mod union;
 
 pub use self::arena::JoinArena;
 pub(crate) use self::template::JoinTemplate;
@@ -76,6 +80,9 @@ macro_rules! dispatch {
 /// with the shallowest layer that changed since the previous row.
 /// It hands them to a [sink](RowSink) through [drain](Self::drain).
 ///
+/// Each input of the join is stored in one or several tries, its blocks,
+/// and the join reads the union of their rows.
+///
 /// The hooks of a join are its subtracted inputs, its filters and its bound layers.
 /// The join selects its core once, when it is built,
 /// so that the loop over the rows does not dispatch:
@@ -91,7 +98,7 @@ pub(crate) struct TrieJoin<'a> {
 
 impl<'a> TrieJoin<'a> {
     /// Creates the join of a shape,
-    /// over the tries of its inputs, which the shape's input columns index,
+    /// over the blocks of each of its inputs, which the shape's input columns index,
     /// and one trie per subtracted input of the shape, in the same order.
     ///
     /// A shape with filters or bound layers decodes values through the dictionary,
@@ -99,11 +106,11 @@ impl<'a> TrieJoin<'a> {
     ///
     /// # Panics
     ///
-    /// Panics if the shape is malformed, does not fit the tries,
+    /// Panics if the shape is malformed, does not fit the inputs,
     /// or needs a dictionary and is given none.
     pub(crate) fn new(
         shape: JoinShape<'a>,
-        tries: &[&'a Trie],
+        inputs: &[&[&'a Trie]],
         subtracted: &[&'a Trie],
         dictionary: Option<&'a Dictionary>,
         context: EvaluationContext,
@@ -112,39 +119,54 @@ impl<'a> TrieJoin<'a> {
         if let Err(violation) = shape.validate() {
             panic!("{violation}");
         }
-        if let Err(mismatch) = shape.validate_fit(tries, subtracted, dictionary) {
+        if let Err(mismatch) = shape.validate_fit(inputs, subtracted, dictionary) {
             panic!("{mismatch}");
         }
 
-        Self::with_trusted_shape(shape, tries, subtracted, dictionary, context, arena)
+        Self::with_trusted_shape(shape, inputs, subtracted, dictionary, context, arena)
     }
 
     /// Creates the join of a shape taken to be valid
-    /// and to fit the tries and the dictionary it is given; see [new](Self::new).
+    /// and to fit the inputs and the dictionary it is given; see [new](Self::new).
     ///
     /// Only debug builds check the fit.
     pub(crate) fn with_trusted_shape(
         shape: JoinShape<'a>,
-        tries: &[&'a Trie],
+        inputs: &[&[&'a Trie]],
         subtracted: &[&'a Trie],
         dictionary: Option<&'a Dictionary>,
         context: EvaluationContext,
         arena: &'a JoinArena,
     ) -> Self {
         debug_assert!(
-            shape.validate_fit(tries, subtracted, dictionary).is_ok(),
+            shape.validate_fit(inputs, subtracted, dictionary).is_ok(),
             "a trusted shape fits what the join is given"
         );
 
         let bump = arena.bump();
-        let occurrences = column_occurrences(&shape, tries, bump);
-        let (layers, links) = build_layers(&shape, tries, &occurrences, bump);
+        // Empty blocks add no rows, and an input without rows leaves the join without rows.
+        let inputs = BumpVec::from_iter_in(
+            inputs.iter().map(|blocks| {
+                BumpVec::from_iter_in(
+                    blocks.iter().copied().filter(|block| !block.is_empty()),
+                    bump,
+                )
+                .into_bump_slice()
+            }),
+            bump,
+        );
+        if inputs.iter().any(|blocks| blocks.is_empty()) {
+            return Self { core: Core::Empty };
+        }
+
+        let occurrences = column_occurrences(&shape, inputs.len(), bump);
+        let (layers, links) = build_layers(&shape, &inputs, &occurrences, bump);
 
         if layers.iter().any(AnyLayer::is_empty) {
             return Self { core: Core::Empty };
         }
 
-        let hooks = FullHooks::build(&shape, tries, subtracted, dictionary, context, bump);
+        let hooks = FullHooks::build(&shape, &inputs, subtracted, dictionary, context, bump);
 
         Self {
             core: select_core(layers, links, hooks, shape.emitted, bump),
@@ -165,29 +187,6 @@ impl<'a> TrieJoin<'a> {
         high: Option<StorageValue>,
     ) {
         dispatch!(&mut self.core, core => core.clip_layer(layer, low, high), ())
-    }
-
-    /// Rebinds the join to other tries of the same shape for a fresh run,
-    /// and returns whether that succeeded.
-    ///
-    /// The tries are indexed like those the join was built over,
-    /// and the subtracted inputs stay.
-    /// The join keeps its working state instead of building it anew.
-    /// Rebinding fails if a layer needs another core, or is empty.
-    /// The join is then unusable and must be built anew.
-    pub(crate) fn rebind(
-        &mut self,
-        shape: &JoinShape<'a>,
-        tries: &[&'a Trie],
-        arena: &'a JoinArena,
-    ) -> bool {
-        debug_assert!(
-            shape.validate_input_fit(tries).is_ok(),
-            "rebound tries fit the shape"
-        );
-
-        let bump = arena.bump();
-        dispatch!(&mut self.core, core => core.rebind(shape, tries, bump), false)
     }
 
     /// Returns the evaluation errors counted so far, by kind.
@@ -230,10 +229,10 @@ impl<'a> TrieJoin<'a> {
 /// the layer, and the index of the column's cursor there.
 fn column_occurrences<'a>(
     shape: &JoinShape<'a>,
-    tries: &[&'a Trie],
+    inputs: usize,
     bump: &'a Bump,
 ) -> BumpVec<'a, BumpVec<'a, (usize, usize)>> {
-    let mut occurrences = BumpVec::from_iter_in(tries.iter().map(|_| BumpVec::new_in(bump)), bump);
+    let mut occurrences = BumpVec::from_iter_in((0..inputs).map(|_| BumpVec::new_in(bump)), bump);
     for (layer_index, layer) in shape.layers.iter().enumerate() {
         for (cursor, input_column) in layer.iter().enumerate() {
             let slots = &mut occurrences[input_column.input];
@@ -253,10 +252,10 @@ fn column_occurrences<'a>(
 ///
 /// Per layer and cursor, it also builds the link to the cursor over the input's next column,
 /// if that column is mapped.
-/// When the layer finds a value, the link restricts that cursor to the block below it.
+/// When the layer finds a value, the link restricts that cursor to the nodes below it.
 fn build_layers<'a>(
     shape: &JoinShape<'a>,
-    tries: &[&'a Trie],
+    inputs: &[&'a [&'a Trie]],
     occurrences: &[BumpVec<'a, (usize, usize)>],
     bump: &'a Bump,
 ) -> (
@@ -266,24 +265,29 @@ fn build_layers<'a>(
     let depth = shape.layers.len();
     let mut layers = BumpVec::with_capacity_in(depth, bump);
     let mut links = BumpVec::with_capacity_in(depth, bump);
-    // One buffer of column views serves every layer.
-    let mut views = BumpVec::new_in(bump);
+    // One buffer of input columns serves every layer.
+    let mut columns = BumpVec::new_in(bump);
 
     for layer in shape.layers {
-        views.clear();
-        views.extend(
-            layer
-                .iter()
-                .map(|input_column| tries[input_column.input].column(input_column.column)),
-        );
-        layers.push(AnyLayer::build(&views, bump));
+        columns.clear();
+        columns.extend(layer.iter().map(|input_column| {
+            let blocks = inputs[input_column.input].iter();
+            BumpVec::from_iter_in(blocks.map(|trie| trie.column(input_column.column)), bump)
+                .into_bump_slice()
+        }));
+        layers.push(AnyLayer::build(&columns, bump));
 
         let layer_links = BumpVec::from_iter_in(
             layer.iter().map(|input_column| {
                 let (layer, cursor) =
                     *occurrences[input_column.input].get(input_column.column + 1)?;
+                let blocks = inputs[input_column.input].iter();
                 Some(NextLink {
-                    intervals: tries[input_column.input].intervals(input_column.column + 1),
+                    intervals: BumpVec::from_iter_in(
+                        blocks.map(|trie| trie.intervals(input_column.column + 1)),
+                        bump,
+                    )
+                    .into_bump_slice(),
                     layer,
                     cursor,
                 })

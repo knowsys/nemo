@@ -1,4 +1,4 @@
-//! Join templates: what the joins of one shape over different tries share.
+//! Join templates: what the joins of one shape over different inputs share.
 
 use crate::{
     dictionary::Dictionary,
@@ -7,8 +7,8 @@ use crate::{
     trie::Trie,
 };
 
-/// What the joins of one shape share across the tries they join:
-/// everything but the joined tries.
+/// What the joins of one shape share across the inputs they join:
+/// everything but the joined blocks.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct JoinTemplate<'a> {
     /// The shape of the joins, taken to be valid; see [TrieJoin::with_trusted_shape].
@@ -22,11 +22,11 @@ pub(crate) struct JoinTemplate<'a> {
 }
 
 impl<'a> JoinTemplate<'a> {
-    /// Builds the join over the given tries in an arena.
-    pub(crate) fn build(&self, tries: &[&'a Trie], arena: &'a JoinArena) -> TrieJoin<'a> {
+    /// Builds the join over the blocks of the given inputs in an arena.
+    pub(crate) fn build(&self, inputs: &[&[&'a Trie]], arena: &'a JoinArena) -> TrieJoin<'a> {
         TrieJoin::with_trusted_shape(
             self.shape,
-            tries,
+            inputs,
             self.subtracted,
             Some(self.dictionary),
             self.evaluation,

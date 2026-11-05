@@ -13,7 +13,7 @@ pub const TARGET: &str = "nemo::telemetry";
 
 /// The most numeric fields one event carries (a rule application's).
 #[cfg(feature = "subscriber")]
-const SLOTS: usize = 20;
+const SLOTS: usize = 18;
 
 /// Emits an event on the `tracing` stream at trace level.
 ///
@@ -74,8 +74,6 @@ pub(crate) fn emit(event: &EngineEvent) {
             encode = execution.encode,
             total = execution.total,
             joins = counts.joins,
-            combinations = counts.combinations,
-            rebound = counts.rebound,
             blocks = counts.blocks,
             rows = counts.rows,
             arrangements = counts.arrangements,
@@ -239,7 +237,7 @@ impl FieldCollector {
                 }
             }
             EventKind::RuleApplied => {
-                expects(20)?;
+                expects(18)?;
                 EngineEvent::RuleApplied {
                     rule: count(n[0])?,
                     step: n[1],
@@ -257,13 +255,11 @@ impl FieldCollector {
                     },
                     counts: nemo_physical::plan::WorkCounts {
                         joins: n[12],
-                        combinations: n[13],
-                        rebound: n[14],
-                        blocks: n[15],
-                        rows: n[16],
-                        arrangements: n[17],
-                        arranged_rows: n[18],
-                        buffer_bytes: n[19],
+                        blocks: n[13],
+                        rows: n[14],
+                        arrangements: n[15],
+                        arranged_rows: n[16],
+                        buffer_bytes: n[17],
                     },
                 }
             }
