@@ -7,7 +7,7 @@ use std::{
     ops::{Add, Div, Mul, Neg, Sub},
 };
 
-use crate::value::number::lexical::Lexical;
+use crate::value::number::lexical::{Lexical, scientific, write_float};
 
 /// An [`xsd:float`](https://www.w3.org/TR/xmlschema11-2/#float) value:
 /// a single-precision IEEE number in which all NaNs are one value.
@@ -212,15 +212,30 @@ impl fmt::Debug for Float {
     }
 }
 
+impl Float {
+    /// Returns XSD's canonical lexical form of the value, as `2.5E0` or `1.0E3`,
+    /// or `INF`, `-INF` and `NaN`: the form a store keeping lexical forms as written most
+    /// likely holds, which [Display](fmt::Display), writing the value as XPath does, is not.
+    pub fn canonical_lexical(self) -> String {
+        if self.0.is_finite() {
+            scientific(self.0)
+        } else {
+            self.to_string()
+        }
+    }
+}
+
 impl fmt::Display for Float {
-    /// Writes the `xsd:float` lexical form:
-    /// the shortest digits that read back as the value,
-    /// or `INF`, `-INF` and `NaN`.
+    /// Writes the `xsd:float` lexical form XPath casts the value to a string as
+    /// (XPath and XQuery Functions and Operators, casting to `xs:string`):
+    /// plain shortest digits for magnitudes from `0.000001` to below
+    /// `1000000` (`5.5`, `1000`, `0`), XSD's canonical scientific form otherwise
+    /// (`1.0E100`), or `INF`, `-INF` and `NaN`.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.0.is_nan() {
             f.write_str("NaN")
         } else if self.0.is_finite() {
-            write!(f, "{}", self.0)
+            write_float(f, self.0)
         } else if self.0.is_sign_positive() {
             f.write_str("INF")
         } else {
@@ -234,6 +249,8 @@ mod tests {
     use super::*;
 
     use std::hash::{BuildHasher, RandomState};
+
+    use crate::value::{NumberRef, ValueRef};
 
     #[test]
     fn keys_order_the_xsd_value_space() {
@@ -292,10 +309,19 @@ mod tests {
         assert_eq!(Float::new(f32::INFINITY).to_string(), "INF");
         assert_eq!(Float::new(f32::NEG_INFINITY).to_string(), "-INF");
         assert_eq!(Float::new(f32::NAN).to_string(), "NaN");
+        // As XPath casts a float to a string, with the shortest digits of the float,
+        // not of the double it widens to.
         assert_eq!(Float::new(2.5).to_string(), "2.5");
         assert_eq!(Float::new(0.1).to_string(), "0.1");
+        assert_eq!(Float::new(3.0e38).to_string(), "3.0E38");
+        assert_eq!(Float::new(0.1).canonical_lexical(), "1.0E-1");
 
-        for value in [f32::INFINITY, f32::NEG_INFINITY, f32::NAN, 2.5, -0.0] {
+        // Term syntax writes the same digits before its suffix.
+        let term = |value: f32| ValueRef::Number(NumberRef::Float(Float::new(value))).to_string();
+        assert_eq!(term(2.5), "2.5f");
+        assert_eq!(term(0.1), "0.1f");
+
+        for value in [f32::INFINITY, f32::NEG_INFINITY, f32::NAN, 2.5, -0.0, 0.1] {
             let value = Float::new(value);
             assert_eq!(Float::from_lexical(&value.to_string()), Some(value));
         }

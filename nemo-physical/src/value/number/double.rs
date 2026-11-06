@@ -7,7 +7,7 @@ use std::{
     ops::{Add, Div, Mul, Neg, Sub},
 };
 
-use crate::value::number::lexical::Lexical;
+use crate::value::number::lexical::{Lexical, scientific, write_float};
 
 /// An [`xsd:double`](https://www.w3.org/TR/xmlschema11-2/#double) value:
 /// a double-precision IEEE number in which all NaNs are one value.
@@ -196,15 +196,30 @@ impl fmt::Debug for Double {
     }
 }
 
+impl Double {
+    /// Returns XSD's canonical lexical form of the value, as `2.5E0` or `1.0E3`,
+    /// or `INF`, `-INF` and `NaN`: the form a store keeping lexical forms as written most
+    /// likely holds, which [Display](fmt::Display), writing the value as XPath does, is not.
+    pub fn canonical_lexical(self) -> String {
+        if self.0.is_finite() {
+            scientific(self.0)
+        } else {
+            self.to_string()
+        }
+    }
+}
+
 impl fmt::Display for Double {
-    /// Writes the `xsd:double` lexical form:
-    /// the shortest digits that read back as the value,
-    /// or `INF`, `-INF` and `NaN`.
+    /// Writes the `xsd:double` lexical form XPath casts the value to a string as
+    /// (XPath and XQuery Functions and Operators, casting to `xs:string`):
+    /// plain shortest digits for magnitudes from `0.000001` to below
+    /// `1000000` (`5.5`, `1000`, `0`), XSD's canonical scientific form otherwise
+    /// (`1.0E100`), or `INF`, `-INF` and `NaN`.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.0.is_nan() {
             f.write_str("NaN")
         } else if self.0.is_finite() {
-            write!(f, "{}", self.0)
+            write_float(f, self.0)
         } else if self.0.is_sign_positive() {
             f.write_str("INF")
         } else {
@@ -218,6 +233,8 @@ mod tests {
     use super::*;
 
     use std::hash::{BuildHasher, RandomState};
+
+    use crate::value::{NumberRef, ValueRef};
 
     #[test]
     fn keys_order_the_xsd_value_space() {
@@ -276,13 +293,42 @@ mod tests {
         assert_eq!(Double::new(f64::INFINITY).to_string(), "INF");
         assert_eq!(Double::new(f64::NEG_INFINITY).to_string(), "-INF");
         assert_eq!(Double::new(f64::NAN).to_string(), "NaN");
+        // As XPath casts a double to a string: plain digits within a middle range of
+        // magnitudes, the canonical scientific form outside it.
         assert_eq!(Double::new(2.5).to_string(), "2.5");
-        assert_eq!(
-            Double::new(1e100).to_string(),
-            format!("1{}", "0".repeat(100))
-        );
+        assert_eq!(Double::new(2.0).to_string(), "2");
+        assert_eq!(Double::new(1000.0).to_string(), "1000");
+        assert_eq!(Double::new(-0.1).to_string(), "-0.1");
+        assert_eq!(Double::new(0.0).to_string(), "0");
+        assert_eq!(Double::new(-0.0).to_string(), "-0");
+        assert_eq!(Double::new(0.000001).to_string(), "0.000001");
+        assert_eq!(Double::new(0.0000009).to_string(), "9.0E-7");
+        assert_eq!(Double::new(999999.5).to_string(), "999999.5");
+        assert_eq!(Double::new(1e6).to_string(), "1.0E6");
+        assert_eq!(Double::new(1e100).to_string(), "1.0E100");
+        assert_eq!(Double::new(1.25e-300).to_string(), "1.25E-300");
 
-        for value in [f64::INFINITY, f64::NEG_INFINITY, f64::NAN, 2.5, -0.0] {
+        // XSD's canonical form: one digit before the point, at least one after, an exponent.
+        assert_eq!(Double::new(2.5).canonical_lexical(), "2.5E0");
+        assert_eq!(Double::new(1000.0).canonical_lexical(), "1.0E3");
+        assert_eq!(Double::new(0.0).canonical_lexical(), "0.0E0");
+        assert_eq!(Double::new(f64::NAN).canonical_lexical(), "NaN");
+
+        // Term syntax writes the same digits before its suffix.
+        let term = |value: f64| ValueRef::Number(NumberRef::Double(Double::new(value))).to_string();
+        assert_eq!(term(2.5), "2.5d");
+        assert_eq!(term(2.0), "2d");
+        assert_eq!(term(1e100), "1.0E100d");
+
+        for value in [
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+            f64::NAN,
+            2.5,
+            -0.0,
+            1e100,
+            -0.1,
+        ] {
             let value = Double::new(value);
             assert_eq!(Double::from_lexical(&value.to_string()), Some(value));
         }
