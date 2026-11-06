@@ -1,24 +1,115 @@
 //! Pushed conditions as SPARQL expressions:
 //! the row condition the filter pass decided for a SPARQL-fed predicate,
 //! translated for the endpoint to apply,
-//! if every operator in it has a SPARQL meaning that excludes the same rows.
+//! if every operator in it has a SPARQL meaning that excludes no row the condition keeps.
+//!
+//! The local filter applies to the delivered rows as well, so an expression may keep more:
+//! wherever Nemo keeps a row, the expression must hold, neither false nor an error.
+//!
+//! An identity of a column with a constant at the top of the condition goes out as a `VALUES`
+//! block ([sparql_values](Translator::sparql_values)), as bindings do: the constant's terms
+//! ([ground_terms](SparqlQuery::ground_terms)), which the endpoint matches as terms,
+//! fast on every store measured.
+//! Elsewhere an identity becomes SPARQL's `=`, never `sameTerm`, which QLever does not
+//! implement. In a positive position `=` holds wherever Nemo's identity does, and finds
+//! every spelling of a number, boolean or dateTime, except at a NaN, which is never `=` to
+//! itself. Under a negation, though, `=` holds for more (the double `3.0E0` is `=` to the
+//! integer 3, a different value to Nemo) and fails on literals it cannot compare, so an
+//! identity there goes out only with an IRI, where `=` is the identity and never fails.
+//!
+//! Where Nemo's operator reads a value differently from its term regardless of the data,
+//! the translation follows Nemo: it reads language tags in lower case.
+//! Where Nemo and stores, or stores among themselves, read a number differently,
+//! the expression keeps the rows for the local filter:
+//! Nemo reads Wikidata's `"3.0"^^xsd:decimal`, and `"03"^^xsd:int`, as the integer 3, whose
+//! `STR` is `"3"` and whose `DATATYPE` is `xsd:integer`, and the lexical form of a double is
+//! the one stored for
+//! some stores (`"2.5E0"`) and the store's own writing of the number for others
+//! (Oxigraph writes `"2.5"`).
 
 use nemo_io::sparql::{
-    SparqlQuery,
+    SparqlQuery, ValuesBlock,
     spargebra::{
         algebra::{Expression, Function},
         term::{GroundTerm, Literal, NamedNode, Variable},
     },
 };
+use nemo_physical::value::DataValue;
 
 use crate::{
     engine::compile::translation::Translator,
     model::{Operation, Operator, Term, TermKind, VariableKind},
 };
 
+/// Where a subexpression sits: what the expression around it needs of it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Polarity {
+    /// Under an even number of negations: it must hold wherever Nemo's holds.
+    Positive,
+    /// Under an odd number of negations: it must be false wherever Nemo's is,
+    /// never an error.
+    Negative,
+    /// Inside another operator's argument: it must be exact.
+    Both,
+}
+
+impl Polarity {
+    /// Returns the polarity under a negation.
+    fn flip(self) -> Self {
+        match self {
+            Self::Positive => Self::Negative,
+            Self::Negative => Self::Positive,
+            Self::Both => Self::Both,
+        }
+    }
+}
+
 impl Translator<'_> {
+    /// Returns a condition that is the identity of a delivered column with a constant,
+    /// at the top of a conjunct, as a `VALUES` block over the column's projected variable,
+    /// or `None` for any other condition.
+    ///
+    /// The block binds the column to the constant's terms, as bindings do
+    /// ([with_values](SparqlQuery::with_values)).
+    /// `delivered`, one flag per projected variable, maps delivered columns to them.
+    pub(super) fn sparql_values(
+        &self,
+        condition: &Operation,
+        delivered: &[bool],
+    ) -> Option<ValuesBlock> {
+        if condition.operator != Operator::Equal {
+            return None;
+        }
+        let [left, right] = condition.arguments.as_slice() else {
+            return None;
+        };
+        let (column, constant) = match (column_number(left), column_number(right)) {
+            (Some(column), None) => (column, right),
+            (None, Some(column)) => (column, left),
+            _ => return None,
+        };
+        let value = self.ground_value(constant)?;
+        if SparqlQuery::ground_terms(&value).is_empty() {
+            return None;
+        }
+        let (position, _) = delivered
+            .iter()
+            .enumerate()
+            .filter(|(_, delivered)| **delivered)
+            .nth(column)?;
+        Some(ValuesBlock {
+            positions: vec![position],
+            rows: vec![vec![value]],
+        })
+    }
+
     /// Returns the condition as a SPARQL expression over the query's projected variables,
     /// or `None` if some part of it has no SPARQL form (then only the local filter applies).
+    ///
+    /// A condition reading the lexical form or the datatype of a value (`STR`, `DATATYPE`)
+    /// also keeps the rows where that value is a number, which Nemo reads by value:
+    /// `"03"^^xsd:int` and `"3.0"^^xsd:decimal` are the integer 3, an `xsd:integer`
+    /// written `"3"`, and stores write doubles differently.
     ///
     /// The variable `column N` refers to delivered column `N`.
     /// `delivered`, one flag per projected variable, maps it back to its projected variable.
@@ -35,19 +126,34 @@ impl Translator<'_> {
             .filter(|(_, delivered)| **delivered)
             .map(|(variable, _)| variable)
             .collect();
-        self.sparql_expression(condition, &delivered)
+        let mut written = Vec::new();
+        let expression =
+            self.sparql_expression(condition, &delivered, &mut written, Polarity::Positive)?;
+        Some(written.into_iter().fold(expression, |expression, value| {
+            let numeric = Expression::FunctionCall(Function::IsNumeric, vec![value]);
+            Expression::Or(Box::new(expression), Box::new(numeric))
+        }))
     }
 
-    /// Returns an operation as an expression.
+    /// Returns an operation in the given position as an expression,
+    /// adding to `written` the arguments whose lexical form or datatype it reads (see
+    /// [sparql_condition](Self::sparql_condition)).
     fn sparql_expression(
         &self,
         operation: &Operation,
         delivered: &[&String],
+        written: &mut Vec<Expression>,
+        polarity: Polarity,
     ) -> Option<Expression> {
+        let inner = match operation.operator {
+            Operator::And | Operator::Or => polarity,
+            Operator::Not => polarity.flip(),
+            _ => Polarity::Both,
+        };
         let arguments: Vec<Expression> = operation
             .arguments
             .iter()
-            .map(|argument| self.sparql_argument(argument, delivered))
+            .map(|argument| self.sparql_argument(argument, delivered, written, inner))
             .collect::<Option<_>>()?;
         let binary = |build: fn(Box<Expression>, Box<Expression>) -> Expression,
                       arguments: Vec<Expression>| {
@@ -58,10 +164,23 @@ impl Translator<'_> {
             (arguments.len() == arity).then_some(Expression::FunctionCall(function, arguments))
         };
         match operation.operator {
-            // Term identity and value equality both exist in SPARQL.
-            Operator::Equal => binary(Expression::SameTerm, arguments),
+            // Nemo's identity as SPARQL's `=`: with an IRI anywhere, with another constant
+            // only where `=` may hold for more (see the module documentation).
+            Operator::Equal => {
+                let [left, right] = <[Expression; 2]>::try_from(arguments).ok()?;
+                let exact = is_iri(&left) || is_iri(&right);
+                let covering = polarity == Polarity::Positive
+                    && (is_constant(&left) || is_constant(&right))
+                    && !is_nan(&left)
+                    && !is_nan(&right);
+                (exact || covering).then(|| Expression::Equal(Box::new(left), Box::new(right)))
+            }
+            // A negated identity, which only an IRI makes exact.
             Operator::Unequal => {
-                binary(Expression::SameTerm, arguments).map(|same| Expression::Not(Box::new(same)))
+                let [left, right] = <[Expression; 2]>::try_from(arguments).ok()?;
+                (is_iri(&left) || is_iri(&right)).then(|| {
+                    Expression::Not(Box::new(Expression::Equal(Box::new(left), Box::new(right))))
+                })
             }
             Operator::ValueEqual => binary(Expression::Equal, arguments),
             Operator::ValueUnequal => {
@@ -85,13 +204,33 @@ impl Translator<'_> {
                 let [inner] = <[Expression; 1]>::try_from(arguments).ok()?;
                 Some(Expression::UnaryMinus(Box::new(inner)))
             }
-            Operator::Str => call(Function::Str, 1, arguments),
-            Operator::Lang => call(Function::Lang, 1, arguments),
+            Operator::Str => {
+                written.extend(arguments.first().cloned());
+                call(Function::Str, 1, arguments)
+            }
+            // Nemo reads language tags in lower case.
+            Operator::Lang => call(Function::Lang, 1, arguments)
+                .map(|tag| Expression::FunctionCall(Function::LCase, vec![tag])),
             Operator::LangMatches => call(Function::LangMatches, 2, arguments),
-            Operator::Datatype => call(Function::Datatype, 1, arguments),
+            Operator::Datatype => {
+                written.extend(arguments.first().cloned());
+                call(Function::Datatype, 1, arguments)
+            }
             Operator::IsIri => call(Function::IsIri, 1, arguments),
             Operator::IsNumeric => call(Function::IsNumeric, 1, arguments),
-            Operator::IsNull => call(Function::IsBlank, 1, arguments),
+            // An unbound value is a null to Nemo, but `isBlank` fails on it.
+            Operator::IsNull => match <[Expression; 1]>::try_from(arguments).ok()? {
+                [Expression::Variable(variable)] => Some(Expression::Or(
+                    Box::new(Expression::Not(Box::new(Expression::Bound(
+                        variable.clone(),
+                    )))),
+                    Box::new(Expression::FunctionCall(
+                        Function::IsBlank,
+                        vec![Expression::Variable(variable)],
+                    )),
+                )),
+                [value] => Some(Expression::FunctionCall(Function::IsBlank, vec![value])),
+            },
             // A type test of literals is a test of their datatype,
             // guarded so that it is false rather than an error on other terms.
             Operator::IsString => datatype_test(arguments, &["string"]),
@@ -141,25 +280,65 @@ impl Translator<'_> {
 
     /// Returns an argument term as an expression: a column pseudo-variable, a
     /// nested operation, or a ground term.
-    fn sparql_argument(&self, term: &Term, delivered: &[&String]) -> Option<Expression> {
+    fn sparql_argument(
+        &self,
+        term: &Term,
+        delivered: &[&String],
+        written: &mut Vec<Expression>,
+        polarity: Polarity,
+    ) -> Option<Expression> {
+        if let Some(position) = column_number(term) {
+            let name = delivered.get(position)?;
+            return Variable::new(name.as_str()).ok().map(Expression::Variable);
+        }
         match &term.kind {
-            TermKind::Variable(variable) if variable.kind == VariableKind::Universal => {
-                let position: usize = variable.name.strip_prefix("column ")?.parse().ok()?;
-                let name = delivered.get(position)?;
-                Variable::new(name.as_str()).ok().map(Expression::Variable)
+            TermKind::Operation(operation) => {
+                self.sparql_expression(operation, delivered, written, polarity)
             }
-            TermKind::Variable(variable) if variable.kind == VariableKind::Global => {
-                let value = self.global(&variable.name, term.span).ok()?;
-                term_expression(SparqlQuery::ground_term(&value)?)
-            }
-            TermKind::Variable(_) | TermKind::Aggregate(_) => None,
-            TermKind::Operation(operation) => self.sparql_expression(operation, delivered),
-            _ => {
-                let value = self.evaluate(term).ok()?;
-                term_expression(SparqlQuery::ground_term(&value)?)
-            }
+            _ => term_expression(SparqlQuery::ground_term(&self.ground_value(term)?)?),
         }
     }
+
+    /// Returns the value of a ground argument, a constant or a parameter,
+    /// or `None` for any other.
+    fn ground_value(&self, term: &Term) -> Option<DataValue> {
+        match &term.kind {
+            TermKind::Variable(variable) if variable.kind == VariableKind::Global => {
+                self.global(&variable.name, term.span).ok()
+            }
+            TermKind::Variable(_) | TermKind::Aggregate(_) | TermKind::Operation(_) => None,
+            _ => self.evaluate(term).ok(),
+        }
+    }
+}
+
+/// Returns the number of the delivered column a pseudo-variable `column N` refers to,
+/// or `None` for any other term.
+fn column_number(term: &Term) -> Option<usize> {
+    match &term.kind {
+        TermKind::Variable(variable) if variable.kind == VariableKind::Universal => {
+            variable.name.strip_prefix("column ")?.parse().ok()
+        }
+        _ => None,
+    }
+}
+
+/// Returns whether an expression is an IRI constant.
+fn is_iri(expression: &Expression) -> bool {
+    matches!(expression, Expression::NamedNode(_))
+}
+
+/// Returns whether an expression is a constant.
+fn is_constant(expression: &Expression) -> bool {
+    matches!(
+        expression,
+        Expression::NamedNode(_) | Expression::Literal(_)
+    )
+}
+
+/// Returns whether an expression is a NaN constant, which SPARQL's `=` never holds for.
+fn is_nan(expression: &Expression) -> bool {
+    matches!(expression, Expression::Literal(literal) if literal.value() == "NaN")
 }
 
 /// Returns a ground term as an expression.
@@ -173,10 +352,11 @@ fn term_expression(term: GroundTerm) -> Option<Expression> {
 }
 
 /// Returns the test that a literal has one of the given XSD datatypes, by their local names:
-/// `isLiteral(x) && (sameTerm(datatype(x), xsd:t) || …)`.
+/// `isLiteral(x) && (datatype(x) = xsd:t || …)`.
 ///
 /// The literal test comes first, so that the test is false on an IRI or a blank node
 /// rather than an error, as the local type test is.
+/// `=` of two IRIs is their identity, and never an error, so the test is exact in any position.
 fn datatype_test(arguments: Vec<Expression>, datatypes: &[&str]) -> Option<Expression> {
     let [value] = <[Expression; 1]>::try_from(arguments).ok()?;
     let datatype = Expression::FunctionCall(Function::Datatype, vec![value.clone()]);
@@ -184,7 +364,7 @@ fn datatype_test(arguments: Vec<Expression>, datatypes: &[&str]) -> Option<Expre
         .iter()
         .map(|name| {
             let iri = format!("http://www.w3.org/2001/XMLSchema#{name}");
-            Expression::SameTerm(
+            Expression::Equal(
                 Box::new(datatype.clone()),
                 Box::new(Expression::NamedNode(NamedNode::new_unchecked(iri))),
             )

@@ -1,7 +1,25 @@
 //! SPARQL queries: validation, shapes, bindings and filters joined in,
 //! ground terms, and reading TSV responses.
 
+use nemo_physical::value::ValueRef;
+
 use super::*;
+
+/// Reads a response as a read of its own, without bindings, delivering every column.
+fn read_response(body: &str, arity: usize, dictionary: &mut Dictionary) -> Loaded {
+    let mut blanks = BlankNodes::open(None, "response", dictionary);
+    let loaded = read_tsv(
+        body.as_bytes(),
+        arity,
+        &RowSelection::default(),
+        &[],
+        &mut blanks,
+        dictionary,
+        EvaluationContext::now(),
+    );
+    blanks.close(dictionary);
+    loaded.expect("the response reads")
+}
 
 #[test]
 fn queries_validate_and_count_their_projection() {
@@ -113,9 +131,7 @@ fn bound_variables_are_required_below_the_values_join() {
     .expect("parses");
     let text = query.with_values(&[ValuesBlock {
         positions: vec![1],
-        rows: vec![vec![GroundTerm::NamedNode(
-            spargebra::term::NamedNode::new("urn:p").expect("an IRI"),
-        )]],
+        rows: vec![vec![DataValue::iri("urn:p")]],
     }]);
     let guard = text.find("FILTER(BOUND(?p))").expect("the guard is there");
     let values = text.find("VALUES").expect("the block is there");
@@ -126,8 +142,79 @@ fn bound_variables_are_required_below_the_values_join() {
 }
 
 #[test]
+fn queries_tell_whether_a_solution_may_leave_a_variable_unbound() {
+    let leaves = |text: &str| {
+        SparqlQuery::parse(text, None, [])
+            .expect("parses")
+            .may_leave_unbound()
+    };
+    assert!(!leaves("SELECT ?s ?o WHERE { ?s <urn:p> ?o }"));
+    assert!(!leaves(
+        "SELECT ?s WHERE { ?s <urn:p> ?o OPTIONAL { ?s <urn:q> ?r } }"
+    ));
+    assert!(leaves(
+        "SELECT ?s ?r WHERE { ?s <urn:p> ?o OPTIONAL { ?s <urn:q> ?r } }"
+    ));
+    assert!(leaves(
+        "SELECT ?s WHERE { { ?s <urn:p> ?o } UNION { ?t <urn:q> ?o } }"
+    ));
+    // A filter requiring the variable bound keeps only the solutions binding it.
+    assert!(!leaves(
+        "SELECT ?s ?r WHERE { ?s <urn:p> ?o OPTIONAL { ?s <urn:q> ?r } FILTER(BOUND(?r)) }"
+    ));
+    // A computed value counts as possibly unbound.
+    assert!(leaves(
+        "SELECT ?s (COUNT(?o) AS ?n) WHERE { ?s <urn:p> ?o } GROUP BY ?s"
+    ));
+    // A variable the query never binds is for its bindings to bind.
+    assert!(!leaves("SELECT ?s ?label WHERE { ?s <urn:p> <urn:o> }"));
+}
+
+#[test]
+fn groupings_and_subqueries_are_computed_in_full() {
+    let in_full = |text: &str| {
+        SparqlQuery::parse(text, None, [])
+            .expect("parses")
+            .computes_in_full()
+    };
+    assert!(!in_full(
+        "SELECT DISTINCT ?s WHERE { ?s <urn:p> ?o } ORDER BY ?s"
+    ));
+    assert!(!in_full(
+        "SELECT ?s ?r WHERE { ?s <urn:p> ?o OPTIONAL { ?s <urn:q> ?r } }"
+    ));
+    assert!(in_full(
+        "SELECT ?s (COUNT(?o) AS ?n) WHERE { ?s <urn:p> ?o } GROUP BY ?s"
+    ));
+    assert!(in_full("SELECT (COUNT(*) AS ?n) WHERE { ?s <urn:p> ?o }"));
+    assert!(in_full(
+        "SELECT ?s WHERE { ?s <urn:p> ?o { SELECT ?o WHERE { ?o <urn:q> ?r } LIMIT 3 } }"
+    ));
+}
+
+#[test]
+fn a_filter_above_the_values_does_not_guard_them() {
+    // The query's own filter sees ?p as the block binds it, so a solution without a parent
+    // would join the block and pass; the guard must sit below the block.
+    let query = SparqlQuery::parse(
+        "SELECT ?c ?p WHERE { ?c a <urn:C> OPTIONAL { ?c <urn:parent> ?p } FILTER(BOUND(?p)) }",
+        None,
+        [],
+    )
+    .expect("parses");
+    assert!(!query.may_leave_unbound());
+    let text = query.with_values(&[ValuesBlock {
+        positions: vec![1],
+        rows: vec![vec![DataValue::iri("urn:p")]],
+    }]);
+    assert_eq!(text.matches("BOUND(?p)").count(), 2, "{text}");
+    let guard = text.find("BOUND(?p)").expect("a guard");
+    assert!(guard < text.find("VALUES").expect("a block"), "{text}");
+}
+
+#[test]
 fn values_join_in_under_the_projection() {
-    let term = |iri: &str| GroundTerm::NamedNode(spargebra::term::NamedNode::new_unchecked(iri));
+    let term = DataValue::iri;
     let query = SparqlQuery::parse(
         "SELECT DISTINCT ?a ?c WHERE { ?a <urn:p> ?c } ORDER BY ?c",
         None,
@@ -154,7 +241,7 @@ fn values_join_in_under_the_projection() {
 
 #[test]
 fn values_land_inside_the_filters_so_absences_see_them() {
-    let term = |iri: &str| GroundTerm::NamedNode(spargebra::term::NamedNode::new_unchecked(iri));
+    let term = DataValue::iri;
     let query = SparqlQuery::parse(
         "SELECT ?s ?i WHERE { ?s <urn:p> ?o . FILTER NOT EXISTS { ?o ?i ?s } }",
         None,
@@ -182,10 +269,7 @@ fn values_on_an_aggregate_result_land_above_the_group() {
         [],
     )
     .expect("valid");
-    let literal = GroundTerm::Literal(spargebra::term::Literal::new_typed_literal(
-        "2",
-        spargebra::term::NamedNode::new_unchecked("http://www.w3.org/2001/XMLSchema#integer"),
-    ));
+    let literal = DataValue::integer(2);
     let bound = query.with_values(&[ValuesBlock {
         positions: vec![1],
         rows: vec![vec![literal]],
@@ -193,6 +277,10 @@ fn values_on_an_aggregate_result_land_above_the_group() {
     // The block sits where ?n exists: outside the grouping, which
     // the rendering keeps whole as a subquery.
     assert!(bound.contains("VALUES ( ?n )"), "{bound}");
+    assert!(
+        bound.contains("\"2\"^^<http://www.w3.org/2001/XMLSchema#integer>"),
+        "{bound}"
+    );
     let reparsed = SparqlQuery::parse(&bound, None, []).expect("parses");
     assert_eq!(reparsed.variables(), ["a", "n"]);
     assert_eq!(reparsed.shape(), QueryShape::Complex);
@@ -215,9 +303,7 @@ fn filters_push_under_the_projection() {
             spargebra::algebra::Function::Lang,
             vec![Expression::Variable(Variable::new_unchecked("l"))],
         )),
-        Box::new(Expression::Literal(
-            spargebra::term::Literal::new_simple_literal("en"),
-        )),
+        Box::new(Expression::Literal(Literal::new_simple_literal("en"))),
     );
     let filtered = query.with_filter(condition);
     assert!(filtered.text().contains("FILTER"), "{}", filtered.text());
@@ -248,8 +334,67 @@ fn ground_terms_render_values_in_their_lexical_forms() {
         render(DataValue::boolean(true)).as_deref(),
         Some("\"true\"^^<http://www.w3.org/2001/XMLSchema#boolean>")
     );
+    // An integer is an `xsd:integer`, whatever datatype it was read from.
+    let int = DataValue::typed_literal("http://www.w3.org/2001/XMLSchema#int", "03");
+    assert_eq!(
+        render(int.expect("an int")).as_deref(),
+        Some("\"3\"^^<http://www.w3.org/2001/XMLSchema#integer>")
+    );
+    // Doubles and floats in XSD's canonical form, the special values as Nemo writes them.
+    let double = |value: f64| render(DataValue::double(value));
+    let xsd_double = |lexical: &str| {
+        Some(format!(
+            "\"{lexical}\"^^<http://www.w3.org/2001/XMLSchema#double>"
+        ))
+    };
+    assert_eq!(double(2.5), xsd_double("2.5E0"));
+    assert_eq!(double(1000.0), xsd_double("1.0E3"));
+    assert_eq!(double(-0.1), xsd_double("-1.0E-1"));
+    assert_eq!(double(0.0), xsd_double("0.0E0"));
+    assert_eq!(double(f64::NAN), xsd_double("NaN"));
+    assert_eq!(double(f64::NEG_INFINITY), xsd_double("-INF"));
+    assert_eq!(
+        render(DataValue::float(0.5)).as_deref(),
+        Some("\"5.0E-1\"^^<http://www.w3.org/2001/XMLSchema#float>")
+    );
     // A query cannot ask an endpoint about a null.
     assert_eq!(render(DataValue::null(7)), None);
+}
+
+#[test]
+fn an_integer_goes_out_as_an_integer_and_as_a_decimal() {
+    let terms = |value: DataValue| -> Vec<String> {
+        SparqlQuery::ground_terms(&value)
+            .iter()
+            .map(ToString::to_string)
+            .collect()
+    };
+    assert_eq!(
+        terms(DataValue::integer(3)),
+        [
+            "\"3\"^^<http://www.w3.org/2001/XMLSchema#integer>",
+            "\"3.0\"^^<http://www.w3.org/2001/XMLSchema#decimal>"
+        ]
+    );
+    assert_eq!(
+        terms(DataValue::integer(-12)),
+        [
+            "\"-12\"^^<http://www.w3.org/2001/XMLSchema#integer>",
+            "\"-12.0\"^^<http://www.w3.org/2001/XMLSchema#decimal>"
+        ]
+    );
+    // Every other value goes out as its one term.
+    assert_eq!(
+        terms(DataValue::decimal(15, -1).expect("representable")),
+        ["\"1.5\"^^<http://www.w3.org/2001/XMLSchema#decimal>"]
+    );
+    assert_eq!(
+        terms(DataValue::double(3.0)),
+        ["\"3.0E0\"^^<http://www.w3.org/2001/XMLSchema#double>"]
+    );
+    assert_eq!(terms(DataValue::string("3")), ["\"3\""]);
+    assert_eq!(terms(DataValue::iri("urn:a")), ["<urn:a>"]);
+    assert!(terms(DataValue::null(1)).is_empty());
 }
 
 #[test]
@@ -260,14 +405,7 @@ fn tsv_cells_parse_as_turtle_terms() {
         _:b0\t\"7\"^^<http://www.w3.org/2001/XMLSchema#integer>\t1e3\n\
         true\t\"tab\\there\"\t\n";
     let mut dictionary = Dictionary::new();
-    let loaded = read_tsv(
-        body.as_bytes(),
-        3,
-        &RowSelection::default(),
-        &mut dictionary,
-        EvaluationContext::now(),
-    )
-    .expect("the response reads");
+    let loaded = read_response(body, 3, &mut dictionary);
     assert_eq!((loaded.rows.len(), loaded.malformed), (4, 0));
     let row = |index: usize| -> Vec<DataValue> {
         loaded
@@ -302,8 +440,21 @@ fn tsv_cells_parse_as_turtle_terms() {
     // The unbound cell minted a null distinct from the labeled one.
     assert!(matches!(
         row(3)[2].as_ref(),
-        nemo_physical::value::ValueRef::Null(id) if row(1)[0].as_ref() != nemo_physical::value::ValueRef::Null(id)
+        ValueRef::Null(id) if row(1)[0].as_ref() != ValueRef::Null(id)
     ));
+}
+
+/// In a response of one column, a solution whose variable is unbound is an empty line,
+/// and a row of its own; in a wider response, an empty line is no solution.
+#[test]
+fn an_unbound_solution_of_one_column_is_an_empty_line() {
+    let read = |body: &str, arity: usize| read_response(body, arity, &mut Dictionary::new());
+    let loaded = read("?c\n\n\"c2\"\r\n\n", 1);
+    assert_eq!((loaded.rows.len(), loaded.malformed), (3, 0));
+    let loaded = read("?c\n", 1);
+    assert_eq!(loaded.rows.len(), 0, "a header alone holds no solution");
+    let loaded = read("?a\t?b\n<http://e/a>\t1\n\n<http://e/b>\t2\n", 2);
+    assert_eq!((loaded.rows.len(), loaded.malformed), (2, 0));
 }
 
 #[test]
@@ -326,6 +477,66 @@ fn a_cut_off_response_is_an_error() {
 }
 
 #[test]
+fn a_response_ending_partway_through_a_row_is_cut_off() {
+    // A connection closing early leaves an unterminated, broken last line.
+    for cut in [
+        "?x\t?y\n<http://e/a>\t<http://e/b>\n<http://e/c>\t<http://e/d",
+        "?x\t?y\n<http://e/a>\t\"half a lit",
+        "?x\t?y\n<http://e/a>\t\"a\"^^<http://www.w3.org/2001/XMLSchema#str",
+        "?x\t?y\n<http://e/a>\t<http://e/b>\n<http://e/c>",
+        "?x\t?y\n<http://e/a>\t<http://e/b>\n<http://e/c>\t_:",
+    ] {
+        let problem = check_complete("http://e/sparql", cut.as_bytes()).expect_err(cut);
+        assert_eq!(problem.code(), crate::codes::SPARQL_RESPONSE_CUT, "{cut}");
+        assert!(SparqlReader::is_cut_off(cut.as_bytes()), "{cut}");
+    }
+    // A whole last row needs no line end, nor does a header alone.
+    for whole in [
+        "?x\t?y\n<http://e/a>\t<http://e/b>",
+        "?x\t?y\n<http://e/a>\t\"a\"@en",
+        "?x\t?y\n<http://e/a>\t12",
+        "?x\t?y\n<http://e/a>\t\r\n",
+        "?x\t?y\n",
+        "?x\t?y",
+    ] {
+        assert!(
+            check_complete("http://e/sparql", whole.as_bytes()).is_ok(),
+            "{whole}"
+        );
+    }
+}
+
+/// A last row without a line end is whole if its cells are whole terms by their syntax,
+/// even if a datatype rejects a lexical form, which then reads as one malformed row.
+#[test]
+fn a_whole_last_row_is_told_by_its_syntax() {
+    let whole = [
+        "?a\t?b\n<urn:a>\t\"2020-13-45\"^^<http://www.w3.org/2001/XMLSchema#date>",
+        "?a\t?b\n<urn:a>\t\"say \\\"hi\\\"\"@en-gb",
+        "?a\t?b\n_:b0\t42",
+        "?a\t?b\n<urn:a>\t",
+    ];
+    for body in whole {
+        assert!(
+            check_complete("http://e/sparql", body.as_bytes()).is_ok(),
+            "{body}"
+        );
+    }
+    let cut = [
+        "?a\t?b\n<urn:a>\t<urn:b",
+        "?a\t?b\n<urn:a>\t\"unfinish",
+        "?a\t?b\n<urn:a>\t\"typed\"^^<http://www.w3.org/2001/XML",
+        "?a\t?b\n<urn:a>",
+    ];
+    for body in cut {
+        assert!(
+            check_complete("http://e/sparql", body.as_bytes()).is_err(),
+            "{body}"
+        );
+    }
+}
+
+#[test]
 fn solution_rows_may_contain_the_markers() {
     // The words inside a term are data, not a trace.
     let body = "?x\t?l\n<http://example.org/x>\t\"see QueryTimeoutException in the docs\"\n\
@@ -339,15 +550,145 @@ fn solution_rows_may_contain_the_markers() {
 #[test]
 fn a_cell_that_is_no_term_makes_the_row_malformed() {
     let body = "?x\nnot a term\n<http://example.org/ok>\n";
-    let mut dictionary = Dictionary::new();
-    let loaded = read_tsv(
-        body.as_bytes(),
-        1,
-        &RowSelection::default(),
-        &mut dictionary,
-        EvaluationContext::now(),
-    )
-    .expect("reads");
+    let loaded = read_response(body, 1, &mut Dictionary::new());
     assert_eq!((loaded.rows.len(), loaded.malformed), (1, 1));
     assert_eq!(loaded.first_malformed, Some(2));
+}
+
+#[test]
+fn a_row_goes_out_as_the_combinations_of_its_terms() {
+    let query = SparqlQuery::parse(
+        "SELECT ?s ?v ?b WHERE { ?s <urn:p> ?v ; <urn:b> ?b }",
+        None,
+        [],
+    )
+    .expect("valid");
+    let text = query.with_values(&[ValuesBlock {
+        positions: vec![0, 1, 2],
+        rows: vec![
+            vec![
+                DataValue::iri("urn:a"),
+                DataValue::integer(3),
+                DataValue::boolean(true),
+            ],
+            // A null has no term, so its row is left out.
+            vec![
+                DataValue::null(1),
+                DataValue::integer(4),
+                DataValue::boolean(false),
+            ],
+        ],
+    }]);
+    // The integer goes out as an integer and as a decimal, so its row as two rows.
+    assert!(text.contains("VALUES ( ?s ?v ?b )"), "{text}");
+    assert_eq!(text.matches("( <urn:a> ").count(), 2, "{text}");
+    assert!(
+        text.contains("\"3\"^^<http://www.w3.org/2001/XMLSchema#integer>"),
+        "{text}"
+    );
+    assert!(
+        text.contains("\"3.0\"^^<http://www.w3.org/2001/XMLSchema#decimal>"),
+        "{text}"
+    );
+    assert!(!text.contains("\"4\""), "{text}");
+    assert!(!text.contains("FILTER"), "{text}");
+    SparqlQuery::parse(&text, None, []).expect("the query parses");
+}
+
+#[test]
+fn responses_sharing_a_scope_agree_on_blank_nodes() {
+    let body = "?s\t?o\n_:b0\t<urn:x>\n";
+    let read = |reader: &SparqlReader, dictionary: &mut Dictionary| {
+        let loaded = reader
+            .read(
+                "http://e/sparql",
+                body.as_bytes(),
+                dictionary,
+                EvaluationContext::now(),
+            )
+            .expect("the response reads");
+        dictionary
+            .decode(loaded.rows.row(0)[0])
+            .expect("decodes")
+            .to_owned()
+    };
+    let mut dictionary = Dictionary::new();
+    // Per response, as SPARQL promises: two responses, two nulls.
+    let own = SparqlReader::new(2, RowSelection::default());
+    assert_ne!(read(&own, &mut dictionary), read(&own, &mut dictionary));
+    // In the endpoint's scope, one label names one null in every response,
+    // which reports the endpoint as its source.
+    let scope = dictionary.label_scope(&blank_node_scope("http://e/sparql"));
+    let shared = SparqlReader::new(2, RowSelection::default()).with_blank_node_scope(scope);
+    let first = read(&shared, &mut dictionary);
+    assert_eq!(read(&shared, &mut dictionary), first);
+    let ValueRef::Null(id) = first.as_ref() else {
+        panic!("a blank node is a null: {first}");
+    };
+    assert!(is_endpoint_blank_node(&dictionary, id));
+    let fresh = dictionary.fresh_null();
+    assert!(!is_endpoint_blank_node(&dictionary, fresh));
+}
+
+#[test]
+fn a_reader_told_the_bindings_keeps_the_solutions_that_match_them() {
+    let block = ValuesBlock {
+        positions: vec![1],
+        rows: vec![vec![DataValue::integer(3)], vec![DataValue::double(2.5)]],
+    };
+    // The second column is not delivered, but the bindings still decide.
+    let selection = RowSelection {
+        columns: Some(vec![true, false]),
+        filter: None,
+    };
+    let reader = SparqlReader::new(2, selection).with_bindings(std::slice::from_ref(&block));
+    let body = [
+        "?s\t?v",
+        "<urn:a>\t\"3.0\"^^<http://www.w3.org/2001/XMLSchema#decimal>",
+        "<urn:b>\t\"03\"^^<http://www.w3.org/2001/XMLSchema#int>",
+        "<urn:c>\t2.5e0",
+        "<urn:d>\t\"3.0e0\"^^<http://www.w3.org/2001/XMLSchema#double>",
+        "<urn:e>\t",
+        "<urn:f>\t_:x",
+        "",
+    ]
+    .join("\n");
+    let mut dictionary = Dictionary::new();
+    let loaded = reader
+        .read(
+            "http://e/sparql",
+            body.as_bytes(),
+            &mut dictionary,
+            EvaluationContext::now(),
+        )
+        .expect("the response reads");
+    // Integer 3 for the first two, double 2.5 for the third, however the endpoint matched
+    // them; the double 3 is a different value to Nemo, and the last two match nothing.
+    assert_eq!((loaded.rows.len(), loaded.malformed), (3, 0));
+}
+
+/// A bound cell that is not a term makes its row malformed, counted as such,
+/// while an unbound value or a blank node in a bound column simply matches no binding.
+#[test]
+fn a_malformed_bound_cell_is_counted() {
+    let block = ValuesBlock {
+        positions: vec![1],
+        rows: vec![vec![DataValue::integer(3)]],
+    };
+    let selection = RowSelection {
+        columns: Some(vec![true, false]),
+        filter: None,
+    };
+    let reader = SparqlReader::new(2, selection).with_bindings(std::slice::from_ref(&block));
+    let body = "?s\t?v\n<urn:a>\t3\n<urn:b>\tnot a term\n<urn:c>\t\n<urn:d>\t_:x\n";
+    let loaded = reader
+        .read(
+            "http://e/sparql",
+            body.as_bytes(),
+            &mut Dictionary::new(),
+            EvaluationContext::now(),
+        )
+        .expect("the response reads");
+    assert_eq!((loaded.rows.len(), loaded.malformed), (1, 1));
+    assert_eq!(loaded.first_malformed, Some(3));
 }

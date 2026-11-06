@@ -8,7 +8,10 @@ use nemo_io::{
     load::Reader,
     rdf::{RdfOptions, RdfReader},
 };
-use nemo_physical::value::{DomainSet, Type, ValueDomain};
+use nemo_physical::{
+    dictionary::LabelScope,
+    value::{DomainSet, Type, ValueDomain},
+};
 
 use crate::{
     diagnostics::AboutResource,
@@ -31,6 +34,21 @@ fn column_types(arity: usize) -> Vec<Type> {
 }
 
 impl<'a> Translator<'a> {
+    /// Returns the label scope of a resource's blank nodes in this translation,
+    /// opened on first use: every import of the resource in one loading call reads the same
+    /// document, so they agree on its blank nodes,
+    /// while the next call reads the resource anew, which may have changed.
+    fn document_scope(&mut self, resource: &str) -> LabelScope {
+        if let Some(scope) = self.documents.get(resource) {
+            return *scope;
+        }
+        let scope = self
+            .dictionary
+            .fresh_label_scope(&format!("document {resource}"));
+        self.documents.insert(resource.to_owned(), scope);
+        scope
+    }
+
     /// Executes one RDF import (see [execute_imports](Self::execute_imports)).
     pub(super) fn rdf_import(
         &mut self,
@@ -66,11 +84,12 @@ impl<'a> Translator<'a> {
             return Ok(());
         }
         let compression = options.compression;
+        let reader = RdfReader::new(options).with_blank_node_scope(self.document_scope(&resource));
         let loaded = match self.source_stream(&resource, compression, fetched) {
-            Some(source) => RdfReader::new(options)
+            Some(source) => reader
                 .read(source, self.dictionary, self.context)
                 .map_err(|diagnostic| diagnostic.with_resource(resource.clone())),
-            None => RdfReader::new(options).read_path(
+            None => reader.read_path(
                 self.resource_path(import.span, &resource),
                 self.dictionary,
                 self.context,

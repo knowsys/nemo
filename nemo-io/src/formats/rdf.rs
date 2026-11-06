@@ -6,7 +6,7 @@ use oxrdfio::{RdfFormat, RdfParser, RdfSerializer};
 
 use nemo_physical::{
     diagnostics::Diagnostic,
-    dictionary::Dictionary,
+    dictionary::{Dictionary, LabelScope},
     function::EvaluationContext,
     storage::StorageValue,
     value::{DataValue, IriRef, ValueRef},
@@ -117,12 +117,27 @@ impl RdfOptions {
 pub struct RdfReader {
     /// The resource shape.
     options: RdfOptions,
+    /// The scope blank node labels name nulls in, or `None` for a scope of each read's own.
+    blank_nodes: Option<LabelScope>,
 }
 
 impl RdfReader {
     /// Creates a reader for resources of the given shape.
+    ///
+    /// Each read's blank node labels name nulls of its own,
+    /// unless [with_blank_node_scope](Self::with_blank_node_scope) gives a shared scope.
     pub fn new(options: RdfOptions) -> Self {
-        Self { options }
+        Self {
+            options,
+            blank_nodes: None,
+        }
+    }
+
+    /// Returns the reader naming blank nodes in the given open label scope,
+    /// so that reads sharing it, such as two imports of one document, agree on them.
+    pub fn with_blank_node_scope(mut self, scope: LabelScope) -> Self {
+        self.blank_nodes = Some(scope);
+        self
     }
 
     /// Returns the parser for the variant,
@@ -166,7 +181,33 @@ impl Reader for RdfReader {
         context: EvaluationContext,
     ) -> Result<Loaded, Diagnostic> {
         let parser = self.parser()?;
-        let mut statements = Statements::new(&self.options, context);
+        let blanks = BlankNodes::open(self.blank_nodes, "document", dictionary);
+        let mut statements = Statements::new(&self.options, blanks, context);
+        let read = self.read_statements(parser, source, &mut statements, dictionary);
+        statements.blanks.close(dictionary);
+        read?;
+
+        let loaded = statements.loaded;
+        tracing::debug!(
+            rows = loaded.rows.len(),
+            malformed = loaded.malformed,
+            excluded = loaded.excluded,
+            errors = ?loaded.errors,
+            "read an RDF source"
+        );
+        Ok(loaded)
+    }
+}
+
+impl RdfReader {
+    /// Reads the statements of a resource into `statements`.
+    fn read_statements(
+        &self,
+        parser: RdfParser,
+        source: impl Read,
+        statements: &mut Statements<'_>,
+        dictionary: &mut Dictionary,
+    ) -> Result<(), Diagnostic> {
         let limit = self.options.limit.unwrap_or(u64::MAX);
         let unreadable = |error: std::io::Error| {
             IoError::StreamUnreadable {
@@ -216,16 +257,7 @@ impl Reader for RdfReader {
                 }
             }
         }
-
-        let loaded = statements.loaded;
-        tracing::debug!(
-            rows = loaded.rows.len(),
-            malformed = loaded.malformed,
-            excluded = loaded.excluded,
-            errors = ?loaded.errors,
-            "read an RDF source"
-        );
-        Ok(loaded)
+        Ok(())
     }
 }
 
@@ -247,13 +279,13 @@ struct Statements<'a> {
 
 impl<'a> Statements<'a> {
     /// Creates the empty rows of a read of the given shape,
-    /// whose condition evaluates in `context`.
-    fn new(options: &'a RdfOptions, context: EvaluationContext) -> Self {
+    /// naming blank nodes in `blanks`, whose condition evaluates in `context`.
+    fn new(options: &'a RdfOptions, blanks: BlankNodes, context: EvaluationContext) -> Self {
         let arity = options.variant.arity();
         Self {
             options,
             loaded: Loaded::new(options.selection.arity(arity), context),
-            blanks: BlankNodes::default(),
+            blanks,
             terms: Vec::with_capacity(arity),
             kept: Vec::with_capacity(arity),
             row: Vec::with_capacity(arity),

@@ -14,6 +14,12 @@
 //! A solution row is also fetched once, which keeps the nulls created for its blank nodes stable.
 //! Each atom's rows are sent as one `VALUES` block per request, in pages,
 //! and the solutions are deduplicated against the head table and stored as derived rows.
+//! Each value goes out as its canonical terms (an integer also as a decimal),
+//! which the endpoint matches as terms,
+//! and only the solutions matching a row of each block as Nemo compares values are kept
+//! (the policy is the [rewrite stage's](crate::engine::transform::sparql_rewrite)).
+//! A binding row holding a null fetches nothing, since no query can name a blank node;
+//! rows holding an endpoint's blank node are counted and reported.
 //!
 //! The engine does not send the requests itself.
 //! An application whose requests have no responses yet waits as a [PendingFetch],
@@ -24,7 +30,7 @@ use std::{collections::HashSet, ops::Range};
 
 use nemo_io::{
     remote::Request,
-    sparql::{self, ValuesBlock, spargebra::term::GroundTerm},
+    sparql::{self, ValuesBlock},
 };
 use nemo_physical::{
     diagnostics::Diagnostic,
@@ -34,7 +40,7 @@ use nemo_physical::{
     plan::{Marker, OperationPlan},
     storage::StorageValue,
     trie::{RowBuffer, Trie},
-    value::ErrorCounts,
+    value::{DataValue, ErrorCounts, ValueRef},
 };
 
 use crate::{
@@ -58,6 +64,9 @@ const QUERY_CHAR_LIMIT: usize = 500_000;
 /// halved.
 type ValuesBlocks = Vec<ValuesBlock>;
 
+/// Per binding atom, its rows of bound values, as a family of requests carries them.
+type BindingRows = Vec<Vec<Vec<DataValue>>>;
+
 /// What one fetch application did beyond deriving rows.
 #[derive(Debug, Default, Clone)]
 pub(super) struct Fetched {
@@ -79,6 +88,9 @@ pub(super) struct Fetched {
     pub(super) unasked: u64,
     /// Why the first failed request failed.
     pub(super) first_failure: Option<String>,
+    /// New binding rows left out because they hold a blank node an endpoint returned,
+    /// which no query can name.
+    pub(super) blank_bindings: u64,
 }
 
 /// A fetch application waiting for the responses to its requests:
@@ -94,6 +106,8 @@ pub(in crate::engine) struct PendingFetch {
     pub(in crate::engine) slots: RequestSlots<ValuesBlocks>,
     /// Requests made so far, the halves of split ones included.
     made: u64,
+    /// New binding rows left out for holding an endpoint's blank node.
+    blank_bindings: u64,
 }
 
 /// How a fetch application ended: applied, or suspended until its requests have responses.
@@ -140,15 +154,21 @@ pub(super) fn apply(
             pending
         }
         None => {
-            let requests = requests(rule, fetch, step, manager, dictionary, context)?;
+            let (requests, blank_bindings) =
+                requests(rule, fetch, step, manager, dictionary, context)?;
             if requests.is_empty() {
-                return Ok(FetchOutcome::Applied(Box::default(), Fetched::default()));
+                let fetched = Fetched {
+                    blank_bindings,
+                    ..Fetched::default()
+                };
+                return Ok(FetchOutcome::Applied(Box::default(), fetched));
             }
             let mut pending = PendingFetch {
                 rule: index,
                 step,
                 slots: RequestSlots::default(),
                 made: 0,
+                blank_bindings,
             };
             for (request, blocks) in requests {
                 pending.slots.push(request, blocks, ids);
@@ -251,6 +271,8 @@ impl PendingFetch {
 /// the atoms before it reading their rows as of that application,
 /// and the atoms after it reading their rows as of now.
 /// A family with an empty input sends no request.
+///
+/// Also returns how many new binding rows were left out for holding an endpoint's blank node.
 fn requests(
     rule: &CompiledRule,
     fetch: &CompiledFetch,
@@ -258,11 +280,12 @@ fn requests(
     manager: &mut TableManager,
     dictionary: &mut Dictionary,
     context: EvaluationContext,
-) -> Result<Vec<(Request, ValuesBlocks)>, Diagnostic> {
+) -> Result<(Vec<(Request, ValuesBlocks)>, u64), Diagnostic> {
     let last = Revision(rule.last_applied);
     let now = Revision(step);
     let count = rule.body.len();
     let mut requests = Vec::new();
+    let mut blank_bindings = 0;
     for pivot in 0..count {
         let ranges: Vec<Range<Revision>> = (0..count)
             .map(|position| match position.cmp(&pivot) {
@@ -281,13 +304,15 @@ fn requests(
         if empty {
             continue;
         }
-        let rows = binding_rows(rule, fetch, &ranges, pivot, manager, dictionary, context)?;
+        let (rows, blank) =
+            binding_rows(rule, fetch, &ranges, pivot, manager, dictionary, context)?;
+        blank_bindings += blank;
         if rows.iter().any(Vec::is_empty) {
             continue;
         }
         requests.extend(paged_requests(fetch, &rows));
     }
-    Ok(requests)
+    Ok((requests, blank_bindings))
 }
 
 /// Returns the solution rows of every response,
@@ -307,10 +332,16 @@ fn solutions(
     let mut buffer = RowBuffer::new(arity);
     let mut fetched = Fetched {
         requests: pending.made,
+        blank_bindings: pending.blank_bindings,
         ..Fetched::default()
     };
-    let reader = sparql::SparqlReader::new(written, fetch.selection.clone());
+    let blank_nodes = dictionary.label_scope(&sparql::blank_node_scope(&fetch.endpoint));
     for slot in pending.slots.0 {
+        // The endpoint may match a binding more loosely than Nemo compares values,
+        // so the reader keeps only the solutions that match one.
+        let reader = sparql::SparqlReader::new(written, fetch.selection.clone())
+            .with_bindings(&slot.key)
+            .with_blank_node_scope(blank_nodes);
         let response = slot
             .response
             .expect("a fetch reads the responses once every request has one");
@@ -411,14 +442,16 @@ fn atom_rows(
 }
 
 /// Returns, per binding atom, the distinct rows of its bound columns within its revision range,
-/// as ground terms.
+/// as values that have ground terms.
 ///
 /// A row holding a null in a bound column is left out,
-/// since a blank node cannot be sent as a SPARQL term.
+/// since no SPARQL query can name a blank node.
 /// The pivot atom reads its delta,
 /// and a key of it that already existed before the delta is left out too,
-/// since an earlier application queried it already,
-/// and querying it again would create new nulls for the blank nodes in its solutions.
+/// since an earlier application queried it already.
+///
+/// Also returns how many of the pivot's new keys were left out for holding a blank node an
+/// endpoint returned; across a run, each key is new to one application only.
 fn binding_rows(
     rule: &CompiledRule,
     fetch: &CompiledFetch,
@@ -427,7 +460,7 @@ fn binding_rows(
     manager: &mut TableManager,
     dictionary: &mut Dictionary,
     context: EvaluationContext,
-) -> Result<Vec<Vec<Vec<GroundTerm>>>, Diagnostic> {
+) -> Result<(BindingRows, u64), Diagnostic> {
     let mut plan = OperationPlan::new();
     let space = BodySpace::new(&mut plan, rule);
     let mut outputs = Vec::with_capacity(rule.body.len());
@@ -447,6 +480,7 @@ fn binding_rows(
     let mut results = plan.execute(manager, dictionary, context);
 
     let mut per_atom = Vec::with_capacity(rule.body.len());
+    let mut blank = 0;
     for (index, columns) in fetch.atoms.iter().enumerate() {
         let bound: Vec<usize> = columns
             .iter()
@@ -469,21 +503,28 @@ fn binding_rows(
             if !seen.insert(key.clone()) {
                 return;
             }
-            let mut terms = Vec::with_capacity(key.len());
+            let mut values = Vec::with_capacity(key.len());
             for value in key {
                 let decoded = dictionary
                     .decode(value)
-                    .expect("stored values decode against their dictionary");
-                let Some(term) = sparql::SparqlQuery::ground_term(&decoded.to_owned()) else {
+                    .expect("stored values decode against their dictionary")
+                    .to_owned();
+                if sparql::SparqlQuery::ground_term(&decoded).is_none() {
+                    if index == pivot
+                        && let ValueRef::Null(id) = decoded.as_ref()
+                        && sparql::is_endpoint_blank_node(dictionary, id)
+                    {
+                        blank += 1;
+                    }
                     return;
-                };
-                terms.push(term);
+                }
+                values.push(decoded);
             }
-            rows.push(terms);
+            rows.push(values);
         });
         per_atom.push(rows);
     }
-    Ok(per_atom)
+    Ok((per_atom, blank))
 }
 
 /// Returns the requests querying one family of bindings:
@@ -493,7 +534,7 @@ fn binding_rows(
 /// If a rendered query is too long, the widest page is halved and the requests are built again.
 fn paged_requests(
     fetch: &CompiledFetch,
-    rows: &[Vec<Vec<GroundTerm>>],
+    rows: &[Vec<Vec<DataValue>>],
 ) -> Vec<(Request, ValuesBlocks)> {
     let count = rows.len();
     let positions: Vec<Vec<usize>> = fetch
@@ -511,7 +552,7 @@ fn paged_requests(
         .collect();
     let mut pages = vec![fetch.page_size.max(1); count];
     loop {
-        let chunks: Vec<Vec<&[Vec<GroundTerm>]>> = rows
+        let chunks: Vec<Vec<&[Vec<DataValue>]>> = rows
             .iter()
             .zip(&pages)
             .map(|(rows, &page)| rows.chunks(page).collect())

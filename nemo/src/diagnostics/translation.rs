@@ -434,9 +434,10 @@ diagnostic_kinds! {
                hint "split the expression into several conditions or assignments";
         ImportFailed { resource: String, reason: String }
             => IMPORT_FAILED = 333, warning,
-               "could not fetch `{resource}`, so its import is empty: {reason}",
+               "no result from `{resource}`, so its import is empty: {reason}",
                explain "An import marked `on_error = warn` could not fetch its remote \
-                        resource. The run continues without its rows.";
+                        resource, or the endpoint returned only part of the result. The run \
+                        continues without its rows.";
         OnErrorNotRemote
             => ON_ERROR_NOT_REMOTE = 334, error,
                "`on_error` is only allowed for remote resources",
@@ -450,6 +451,18 @@ diagnostic_kinds! {
                         responses to the other requests are stored, but the bindings sent \
                         with the failed requests are not asked again, so the import is \
                         incomplete.";
+        BlankNodeBindings { count: Count, resource: String }
+            => BLANK_NODE_BINDINGS = 338, warning,
+               "{count} binding row{count:#} with a blank node from `{resource}` fetched \
+                nothing, since no query can ask for a blank node",
+               explain "A bound import sends its binding rows to the endpoint as terms. A \
+                        blank node the endpoint returned earlier has no term a SPARQL query \
+                        can name, so the rows holding one are left out, and what the \
+                        endpoint holds for them is never fetched. This happens when rules \
+                        follow blank nodes, as along an RDF list, through an import the \
+                        `sparql` stage bound.",
+               hint "fetch the data these rules follow with one query that walks the blank \
+                     nodes itself, as with a property path";
         ConflictingBase
             => CONFLICTING_BASE = 336, error, "`@base` is declared again with a different IRI",
                explain "Two `@base` directives of one program have different IRIs. Relative \

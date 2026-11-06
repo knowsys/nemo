@@ -19,7 +19,7 @@ use crate::{
 /// The parts derived from statements (prefixes, base, parameters, declarations, `@type`
 /// definitions and their types, inputs) are rebuilt from the full statement list on every translation,
 /// and [clear_statement_state](Self::clear_statement_state) empties them beforehand.
-/// The other parts (seeds, open, plan, blanks, scratch) describe what the tables already store,
+/// The other parts (seeds, open, plan, scratch) describe what the tables already store,
 /// which skipped facts and unread imports cannot derive again, so they persist.
 #[derive(Debug, Default, Clone)]
 pub(crate) struct TranslationState {
@@ -43,8 +43,6 @@ pub(crate) struct TranslationState {
     pub(crate) inputs: HashSet<String>,
     /// What the loaders of import-fed predicates left out.
     pub(crate) plan: ImportPlan,
-    /// The program's blank nodes: per label, the null it stands for.
-    pub(crate) blanks: HashMap<String, u64>,
     /// Per bound import's predicate, the scratch table its fetches deduplicate through,
     /// registered once and reused across translations.
     pub(crate) scratch: HashMap<String, TableId>,

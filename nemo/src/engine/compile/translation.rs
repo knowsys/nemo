@@ -24,7 +24,7 @@ use std::{
 use nemo_io::file_format::FileFormat;
 use nemo_physical::{
     diagnostics::{Diagnostic, Severity},
-    dictionary::Dictionary,
+    dictionary::{Dictionary, LabelScope},
     function::{EvaluationContext, StackProgram},
     management::{TableId, TableManager},
     trie::RowBuffer,
@@ -147,6 +147,10 @@ impl<'a> Purpose<'a> {
 ///
 /// It is remapped into the aggregation's output space.
 const AGGREGATE_RESULT: usize = usize::MAX;
+
+/// The name of the label scope in which a program's blank nodes are nulls:
+/// `_:a` names one null in every statement and revision of the program.
+const PROGRAM_BLANK_NODES: &str = "program";
 
 /// Returns a diagnostic for an unsupported feature, labeled if a span is given.
 fn unsupported(what: &str, span: Option<Span>) -> Diagnostic {
@@ -296,9 +300,13 @@ pub(crate) struct Translator<'a> {
     inputs: HashSet<String>,
     /// What the loaders of import-fed predicates leave out (see [ImportPlan]).
     pub(super) plan: ImportPlan,
-    /// The program's blank nodes: per label, the null it stands for,
+    /// The label scope of the program's blank nodes, in which each label names one null,
     /// created before any term is evaluated and kept across translations.
-    blanks: HashMap<String, u64>,
+    program_blanks: LabelScope,
+    /// Per resource an RDF import reads, the label scope of its blank nodes:
+    /// imports of one resource within one translation agree on them,
+    /// and the scopes close when the translation [finishes](Self::finish).
+    documents: HashMap<String, LabelScope>,
     /// Per predicate of an import with a `where` clause, the scratch table of its fetches.
     scratch: HashMap<String, TableId>,
     /// The fetch rules of imports with a `where` clause, compiled when the
@@ -339,6 +347,7 @@ impl<'a> Translator<'a> {
         state: TranslationState,
         preloaded: Vec<bool>,
     ) -> Self {
+        let program_blanks = stores.dictionary.label_scope(PROGRAM_BLANK_NODES);
         Self {
             manager: stores.manager,
             dictionary: stores.dictionary,
@@ -361,7 +370,8 @@ impl<'a> Translator<'a> {
             open: state.open,
             inputs: state.inputs,
             plan: state.plan,
-            blanks: state.blanks,
+            program_blanks,
+            documents: HashMap::new(),
             scratch: state.scratch,
             fetch_rules: Vec::new(),
             telemetry: setup.telemetry,
@@ -746,10 +756,11 @@ impl<'a> Translator<'a> {
         // A label the program never mentioned has no stored null.
         let mut labels = Vec::new();
         terms::collect_blank_nodes(fact, &mut labels);
-        if let Some(label) = labels
-            .into_iter()
-            .find(|label| !self.blanks.contains_key(*label))
-        {
+        if let Some(label) = labels.into_iter().find(|label| {
+            self.dictionary
+                .find_labeled_null(self.program_blanks, label)
+                .is_none()
+        }) {
             return Err(TraceError::UnknownBlankNode {
                 label: label.to_owned(),
             }
@@ -768,6 +779,9 @@ impl<'a> Translator<'a> {
     ///
     /// The dissolution is infallible, so the caller recovers its state on the error path too.
     pub(crate) fn finish(self) -> (TranslationState, HashMap<TableId, RowBuffer>) {
+        for scope in self.documents.values() {
+            self.dictionary.close_label_scope(*scope);
+        }
         (
             TranslationState {
                 base_iri: self.base_iri,
@@ -780,7 +794,6 @@ impl<'a> Translator<'a> {
                 open: self.open,
                 inputs: self.inputs,
                 plan: self.plan,
-                blanks: self.blanks,
                 scratch: self.scratch,
             },
             self.facts,
@@ -891,10 +904,7 @@ impl<'a> Translator<'a> {
             terms::collect_blank_nodes(statement, &mut labels);
         }
         for label in labels {
-            if !self.blanks.contains_key(label) {
-                let id = self.dictionary.fresh_null();
-                self.blanks.insert(label.to_owned(), id);
-            }
+            self.dictionary.labeled_null(self.program_blanks, label);
         }
     }
 

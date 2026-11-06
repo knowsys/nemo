@@ -24,8 +24,9 @@ pub(super) struct RemoteAtom {
     pub(super) bindings: Vec<Binding>,
     /// The universal variables the atom mentions, in order.
     pub(super) variables: Vec<String>,
-    /// Whether the atom's arguments are distinct variables only,
-    /// in which case rewriting it alone would fetch the same rows as the candidate import.
+    /// Whether the atom's arguments are distinct variables only, anonymous ones included,
+    /// in which case it reads the candidate import's one fetch, whose unread columns the
+    /// import plan prunes, rather than a fetch of its own.
     pub(super) plain: bool,
     /// Whether the rule reads the atom negatively.
     pub(super) negated: bool,
@@ -289,7 +290,6 @@ impl RewriteContext {
                         Binding::Variable(variable.name.clone())
                     }
                     TermKind::Variable(variable) if variable.kind == VariableKind::Anonymous => {
-                        plain = false;
                         Binding::Variable(private_name(rule_variables, "anonymous", &mut anonymous))
                     }
                     TermKind::Operation(_) if !negated && !term.is_ground() => {
@@ -305,7 +305,7 @@ impl RewriteContext {
                     }
                     other => {
                         plain = false;
-                        Binding::Constant(self.ground_term(other)?)
+                        Binding::Constant(self.ground_terms(other)?)
                     }
                 };
                 bindings.push(binding);

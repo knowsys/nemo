@@ -3,10 +3,13 @@
 
 use std::collections::HashSet;
 
+use nemo_physical::value::DataValue;
 use spargebra::{
     algebra::{AggregateExpression, AggregateFunction, Expression, Function, GraphPattern},
     term::{GroundTerm, NamedNodePattern, TermPattern, Variable},
 };
+
+use super::SparqlQuery;
 
 /// What may be pushed into a query, decided from its algebra.
 ///
@@ -110,6 +113,23 @@ pub(super) fn strip_modifiers(pattern: &GraphPattern) -> &GraphPattern {
     }
 }
 
+/// Returns whether a `SELECT` query's pattern groups or holds a subquery
+/// under its outermost projection.
+pub(super) fn computes_in_full(pattern: &GraphPattern) -> bool {
+    let inner = match strip_modifiers(pattern) {
+        GraphPattern::Project { inner, .. } => inner,
+        other => other,
+    };
+    let mut found = false;
+    visit_patterns(inner, &mut |node| {
+        found |= matches!(
+            node,
+            GraphPattern::Project { .. } | GraphPattern::Group { .. }
+        );
+    });
+    found
+}
+
 /// Returns whether a pattern holds, anywhere inside,
 /// a projection or an aggregation (a subquery or a grouping),
 /// or a part whose variables only some solutions bind (an `OPTIONAL`, a `UNION`, a `MINUS`).
@@ -189,30 +209,53 @@ pub(super) fn under_projection(
     }
 }
 
-/// One `VALUES` block: rows of ground terms over some of a query's
-/// projected columns.
+/// One `VALUES` block: rows of values over some of a query's projected columns.
+///
+/// Each value goes out as its [ground terms](SparqlQuery::ground_terms),
+/// which the endpoint matches by its own notion of equal terms;
+/// a [SparqlReader](super::SparqlReader) told the block keeps only the solutions that match
+/// a row as Nemo compares values.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ValuesBlock {
     /// The projected columns the rows bind, by position.
     pub positions: Vec<usize>,
-    /// The rows, one term per position.
-    pub rows: Vec<Vec<GroundTerm>>,
+    /// The rows, one value per position.
+    pub rows: Vec<Vec<DataValue>>,
 }
 
 impl ValuesBlock {
-    /// Returns the block as a pattern over the query's projected variables.
+    /// Returns the block as a pattern over the query's projected variables:
+    /// per row, one row for each combination of its values' ground terms,
+    /// one row for a row without integers, and `2^k` rows for a row with `k` integers.
+    /// Join columns rarely hold integers, and a rendered query too long is split anyway.
+    ///
+    /// A row with a value that has no ground term, such as a null, is left out.
     pub(super) fn pattern(&self, variables: &[String]) -> GraphPattern {
+        let mut bindings: Vec<Vec<Option<GroundTerm>>> = Vec::new();
+        for row in &self.rows {
+            let mut combinations: Vec<Vec<Option<GroundTerm>>> = vec![Vec::new()];
+            for value in row {
+                let terms = SparqlQuery::ground_terms(value);
+                combinations = combinations
+                    .into_iter()
+                    .flat_map(|prefix| {
+                        terms.iter().map(move |term| {
+                            let mut combination = prefix.clone();
+                            combination.push(Some(term.clone()));
+                            combination
+                        })
+                    })
+                    .collect();
+            }
+            bindings.extend(combinations);
+        }
         GraphPattern::Values {
             variables: self
                 .positions
                 .iter()
                 .map(|&position| Variable::new_unchecked(variables[position].as_str()))
                 .collect(),
-            bindings: self
-                .rows
-                .iter()
-                .map(|row| row.iter().cloned().map(Some).collect())
-                .collect(),
+            bindings,
         }
     }
 }
@@ -296,6 +339,40 @@ pub(super) fn always_bound(pattern: &GraphPattern) -> HashSet<String> {
         | GraphPattern::Reduced { inner }
         | GraphPattern::Slice { inner, .. }
         | GraphPattern::Service { inner, .. } => always_bound(inner),
+    }
+}
+
+/// Returns the variables every solution of a query's result binds:
+/// those its pattern always binds, and those the filters at its top require bound.
+///
+/// Only the result has these filters applied: a block joined in under them, as
+/// [under_projection] places one, still meets solutions that leave such a variable unbound.
+pub(super) fn bound_in_results(pattern: &GraphPattern) -> HashSet<String> {
+    match pattern {
+        GraphPattern::Project { inner, .. }
+        | GraphPattern::Distinct { inner }
+        | GraphPattern::Reduced { inner }
+        | GraphPattern::OrderBy { inner, .. } => bound_in_results(inner),
+        GraphPattern::Filter { inner, expr } => {
+            let mut bound = bound_in_results(inner);
+            bound.extend(required_bound(expr));
+            bound
+        }
+        other => always_bound(other),
+    }
+}
+
+/// Returns the variables a filter condition requires bound:
+/// those of its `BOUND` conjuncts.
+fn required_bound(expression: &Expression) -> Vec<String> {
+    match expression {
+        Expression::Bound(variable) => vec![variable.as_str().to_owned()],
+        Expression::And(left, right) => {
+            let mut bound = required_bound(left);
+            bound.extend(required_bound(right));
+            bound
+        }
+        _ => Vec::new(),
     }
 }
 

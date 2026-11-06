@@ -44,6 +44,12 @@ tracing-subscriber = { version = "0.3", optional = true, default-features = fals
 [dev-dependencies]
 # The testcase corpus registers one test per program.
 libtest-mimic = "0.8"
+# An in-memory SPARQL endpoint, which the differential tests of the rewrite stage query:
+# the data (oxrdf, oxttl), the evaluator, and its TSV results.
+oxrdf = "0.3"
+oxttl = "0.2"
+spareval = "0.2"
+sparesults = "0.3"
 [[test]]
 name = "testcases"
 harness = false

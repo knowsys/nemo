@@ -35,8 +35,9 @@ use crate::formats::sparql::{QueryShape, SparqlQuery, algebra};
 pub enum Binding {
     /// Another variable, by name.
     Variable(String),
-    /// A constant.
-    Constant(GroundTerm),
+    /// A constant, as the terms an endpoint may hold it as, any of which matches
+    /// ([ground_terms](SparqlQuery::ground_terms)): usually one.
+    Constant(Vec<GroundTerm>),
 }
 
 /// What a query variable becomes under an instantiation.
@@ -146,17 +147,22 @@ impl SparqlQuery {
     }
 }
 
-/// Returns a pattern joined with one single-row `VALUES` block per constant,
-/// each binding the variable that stands for it.
-fn join_values(pattern: GraphPattern, values: Vec<(String, Variable, GroundTerm)>) -> GraphPattern {
+/// Returns a pattern joined with one `VALUES` block per constant,
+/// each binding the variable that stands for it to the constant's terms, a row each.
+fn join_values(
+    pattern: GraphPattern,
+    values: Vec<(String, Variable, Vec<GroundTerm>)>,
+) -> GraphPattern {
     values
         .into_iter()
-        .fold(pattern, |pattern, (_, variable, term)| GraphPattern::Join {
-            left: Box::new(pattern),
-            right: Box::new(GraphPattern::Values {
-                variables: vec![variable],
-                bindings: vec![vec![Some(term)]],
-            }),
+        .fold(pattern, |pattern, (_, variable, terms)| {
+            GraphPattern::Join {
+                left: Box::new(pattern),
+                right: Box::new(GraphPattern::Values {
+                    variables: vec![variable],
+                    bindings: terms.into_iter().map(|term| vec![Some(term)]).collect(),
+                }),
+            }
         })
 }
 
@@ -279,8 +285,8 @@ impl Instance<'_> {
 struct Rebinding {
     /// Per projected variable, what replaces it.
     replacements: HashMap<String, Replacement>,
-    /// The constants bound by a single-row `VALUES` block outside.
-    values: Vec<(String, Variable, GroundTerm)>,
+    /// The constants bound by a `VALUES` block outside, to their terms.
+    values: Vec<(String, Variable, Vec<GroundTerm>)>,
     /// The variables a solution must bind to count.
     required: Vec<Variable>,
 }
@@ -289,7 +295,9 @@ struct Rebinding {
 ///
 /// If a constant cannot replace the variable,
 /// because the pattern defines it or a literal would sit in a predicate or graph position,
-/// the instance keeps a variable and binds it by a single-row `VALUES` block outside.
+/// or because the constant has more than one term,
+/// the instance keeps a variable and binds it by a `VALUES` block outside,
+/// a row per term.
 /// A subquery always does, and so does a query keeping its names,
 /// since a service may refer to a variable its pattern does not mention.
 /// A constant bound that way must not meet a solution that leaves its variable unbound,
@@ -324,24 +332,27 @@ fn rebinding(
                 }
                 Replacement::Variable(target)
             }
-            Binding::Constant(term) => {
-                let literal_in_node_position =
-                    matches!(term, GroundTerm::Literal(_)) && node_positions.contains(name);
-                if *shape == QueryShape::Complex
-                    || instance.keeps_names
-                    || defined.contains(name)
-                    || literal_in_node_position
-                {
-                    let fresh = instance.private(name);
-                    if unassured(name) {
-                        rebinding.required.push(fresh.clone());
+            Binding::Constant(terms) => {
+                let literal_in_node_position = node_positions.contains(name)
+                    && terms
+                        .iter()
+                        .any(|term| matches!(term, GroundTerm::Literal(_)));
+                let substitutable = *shape != QueryShape::Complex
+                    && !instance.keeps_names
+                    && !defined.contains(name)
+                    && !literal_in_node_position;
+                match terms.as_slice() {
+                    [term] if substitutable => Replacement::Term(term.clone()),
+                    _ => {
+                        let fresh = instance.private(name);
+                        if unassured(name) {
+                            rebinding.required.push(fresh.clone());
+                        }
+                        rebinding
+                            .values
+                            .push((name.clone(), fresh.clone(), terms.clone()));
+                        Replacement::Variable(fresh)
                     }
-                    rebinding
-                        .values
-                        .push((name.clone(), fresh.clone(), term.clone()));
-                    Replacement::Variable(fresh)
-                } else {
-                    Replacement::Term(term.clone())
                 }
             }
         };
@@ -624,9 +635,9 @@ mod tests {
 
     /// A named-node constant.
     fn iri(iri: &str) -> Binding {
-        Binding::Constant(GroundTerm::NamedNode(
+        Binding::Constant(vec![GroundTerm::NamedNode(
             spargebra::term::NamedNode::new_unchecked(iri),
-        ))
+        )])
     }
 
     /// Creates a binding to another variable.
@@ -716,14 +727,14 @@ mod tests {
             [],
         )
         .expect("valid");
-        let literal = Binding::Constant(GroundTerm::Literal(
+        let literal = Binding::Constant(vec![GroundTerm::Literal(
             spargebra::term::Literal::new_typed_literal(
                 "3",
                 spargebra::term::NamedNode::new_unchecked(
                     "http://www.w3.org/2001/XMLSchema#integer",
                 ),
             ),
-        ));
+        )]);
         let instance = query
             .instantiate(&[var("x"), literal], "1", &HashSet::new(), &HashSet::new())
             .expect("instantiates");
@@ -740,9 +751,9 @@ mod tests {
 
     #[test]
     fn a_literal_predicate_is_bound_through_values() {
-        let literal = Binding::Constant(GroundTerm::Literal(
+        let literal = Binding::Constant(vec![GroundTerm::Literal(
             spargebra::term::Literal::new_simple_literal("p"),
-        ));
+        )]);
         let instance = triples()
             .instantiate(
                 &[var("s"), literal, var("o")],

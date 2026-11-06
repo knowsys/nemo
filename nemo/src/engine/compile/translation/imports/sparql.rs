@@ -31,11 +31,13 @@ pub(super) struct SparqlImportSpec {
     pub(super) endpoint: String,
     /// The validated query to send, with any pushed condition added.
     pub(super) query: nemo_io::sparql::SparqlQuery,
-    /// The query text as the directive writes it, without any pushed condition.
+    /// The query text as the directive writes it, without any pushed condition,
+    /// preceded by a `BASE` clause if a base IRI applies to it.
     ///
     /// The import's resource is named after it,
     /// so that solutions added through `add_resource` and the load reading them agree on the
-    /// name.
+    /// name. The parsed query cannot name it: parsing names some variables and blank nodes
+    /// at random.
     pub(super) written_query: String,
     /// Request headers, applied to the fetch.
     pub(super) headers: Vec<(String, String)>,
@@ -134,7 +136,11 @@ impl<'a> Translator<'a> {
         let bytes = fetched
             .or_else(|| self.resources.get(&spec.resource()).cloned())
             .expect("the prefetch fetched or diagnosed every SPARQL import");
+        let blank_nodes = self
+            .dictionary
+            .label_scope(&nemo_io::sparql::blank_node_scope(&spec.endpoint));
         let loaded = nemo_io::sparql::SparqlReader::new(source_width, selection)
+            .with_blank_node_scope(blank_nodes)
             .read(&spec.endpoint, &bytes, self.dictionary, self.context)
             .map_err(ImportFailure::Reading)?;
         self.absorb(table, spec.layout.delivered(), loaded, &spec.endpoint);
@@ -196,7 +202,10 @@ impl<'a> Translator<'a> {
             options.formats_span.or(import.span),
         )?;
         let layout = self.plan.layout(&import.predicate, kept);
-        let written_query = query.text().to_owned();
+        let written_query = match options.base.as_deref().or(self.base_iri.as_deref()) {
+            Some(base) => format!("BASE <{base}>\n{text}"),
+            None => text,
+        };
         let condition = self
             .import_condition(import, &layout)?
             .map(|(condition, _)| condition);
@@ -305,6 +314,7 @@ impl<'a> Translator<'a> {
     /// the conditions of its `where` clause and the one the filter pass pushed.
     ///
     /// The endpoint applies each conjunct of the condition that has a SPARQL form,
+    /// an identity of a column with a constant as a `VALUES` block, any other as a filter,
     /// and the local filter applies all of it regardless.
     /// The condition refers to delivered columns,
     /// which the layout maps back to the projection's positions.
@@ -323,15 +333,27 @@ impl<'a> Translator<'a> {
         let delivered = layout.delivered_columns();
         let mut conjuncts = Vec::new();
         condition.conjuncts(&mut conjuncts);
-        let expression = conjuncts
-            .into_iter()
-            .filter_map(|conjunct| self.sparql_condition(conjunct, query.variables(), &delivered))
-            .reduce(|left, right| {
-                nemo_io::sparql::spargebra::algebra::Expression::And(
-                    Box::new(left),
-                    Box::new(right),
-                )
-            });
+        // An identity of a column with a constant joins in as a `VALUES` block,
+        // every other conjunct with a SPARQL form as a filter.
+        let mut blocks = Vec::new();
+        let mut expressions = Vec::new();
+        for conjunct in conjuncts {
+            if let Some(block) = self.sparql_values(conjunct, &delivered) {
+                blocks.push(block);
+            } else if let Some(expression) =
+                self.sparql_condition(conjunct, query.variables(), &delivered)
+            {
+                expressions.push(expression);
+            }
+        }
+        let query = if blocks.is_empty() {
+            query
+        } else {
+            query.restricted(&blocks)
+        };
+        let expression = expressions.into_iter().reduce(|left, right| {
+            nemo_io::sparql::spargebra::algebra::Expression::And(Box::new(left), Box::new(right))
+        });
         match expression {
             Some(expression) => query.with_filter(expression),
             None => query,

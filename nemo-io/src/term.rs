@@ -7,10 +7,10 @@
 //! each reader decides for itself,
 //! and each reads a quoted literal in its own [literal syntax](LiteralSyntax).
 
-use std::{borrow::Cow, collections::HashMap};
+use std::borrow::Cow;
 
 use nemo_physical::{
-    dictionary::Dictionary,
+    dictionary::{Dictionary, LabelScope},
     value::{DataValue, Escape, Iri},
 };
 
@@ -121,24 +121,47 @@ fn unescape(raw: &str, syntax: LiteralSyntax) -> Option<String> {
     Some(resolved)
 }
 
-/// The blank node labels of one read, each naming one fresh null.
+/// The blank node labels of one read: the [label scope](LabelScope) in which each names a null.
 ///
-/// Their scope is the document:
-/// a label names the same null across TriG graph blocks and across a response's rows.
-#[derive(Debug, Default)]
+/// A read given a scope names nulls in it, shared with the other reads given it,
+/// such as every response of one SPARQL endpoint.
+/// Otherwise the read opens a scope of its own, the document:
+/// a label names the same null across TriG graph blocks and across a response's rows,
+/// and the scope closes when the read ends.
+#[derive(Debug)]
 pub(crate) struct BlankNodes {
-    /// The null each label seen so far names.
-    labels: HashMap<String, u64>,
+    /// The scope the labels name nulls in.
+    scope: LabelScope,
+    /// Whether the read opened the scope, and closes it.
+    owned: bool,
 }
 
 impl BlankNodes {
+    /// Returns the blank nodes of a read, in the given scope,
+    /// or in a fresh one under the given name if there is none.
+    pub(crate) fn open(given: Option<LabelScope>, name: &str, dictionary: &mut Dictionary) -> Self {
+        match given {
+            Some(scope) => Self {
+                scope,
+                owned: false,
+            },
+            None => Self {
+                scope: dictionary.fresh_label_scope(name),
+                owned: true,
+            },
+        }
+    }
+
     /// Returns the null a label names, minted on first sight.
     pub(crate) fn null(&mut self, label: &str, dictionary: &mut Dictionary) -> DataValue {
-        let id = self
-            .labels
-            .entry(label.to_owned())
-            .or_insert_with(|| dictionary.fresh_null());
-        DataValue::null(*id)
+        DataValue::null(dictionary.labeled_null(self.scope, label))
+    }
+
+    /// Ends the read, closing the scope if the read opened it.
+    pub(crate) fn close(&self, dictionary: &mut Dictionary) {
+        if self.owned {
+            dictionary.close_label_scope(self.scope);
+        }
     }
 }
 
@@ -202,9 +225,20 @@ mod tests {
     #[test]
     fn labels_name_one_null_each() {
         let mut dictionary = Dictionary::new();
-        let mut blanks = BlankNodes::default();
+        let mut blanks = BlankNodes::open(None, "document", &mut dictionary);
         let first = blanks.null("a", &mut dictionary);
         assert_eq!(blanks.null("a", &mut dictionary), first);
         assert_ne!(blanks.null("b", &mut dictionary), first);
+        blanks.close(&mut dictionary);
+
+        // Another read names its own nulls, unless both share a scope.
+        let mut other = BlankNodes::open(None, "document", &mut dictionary);
+        assert_ne!(other.null("a", &mut dictionary), first);
+        let shared = dictionary.label_scope("endpoint");
+        let mut one = BlankNodes::open(Some(shared), "document", &mut dictionary);
+        let mut two = BlankNodes::open(Some(shared), "document", &mut dictionary);
+        let null = one.null("a", &mut dictionary);
+        one.close(&mut dictionary);
+        assert_eq!(two.null("a", &mut dictionary), null);
     }
 }

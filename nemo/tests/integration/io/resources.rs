@@ -145,3 +145,34 @@ fn the_import_directory_moves_the_programs_imports_but_not_a_modules() {
         vec![vec![DataValue::integer(3)], vec![DataValue::integer(4)]]
     );
 }
+
+/// Two imports of one document within a load read the same blank nodes,
+/// while two documents never share one, whatever their labels.
+#[test]
+fn imports_of_one_document_agree_on_its_blank_nodes() {
+    let mut engine = Engine::new();
+    engine.add_resource(
+        "https://example.org/graph.nt",
+        "<urn:a> <urn:p> _:b .\n_:b <urn:q> <urn:c> .\n"
+            .as_bytes()
+            .to_vec(),
+    );
+    engine.add_resource(
+        "https://example.org/other.nt",
+        "_:b <urn:q> <urn:d> .\n".as_bytes().to_vec(),
+    );
+    super::load_into(
+        &mut engine,
+        r#"
+@import first from ntriples { resource = "https://example.org/graph.nt" } .
+@import second from ntriples { resource = "https://example.org/graph.nt" } .
+@import other from ntriples { resource = "https://example.org/other.nt" } .
+joined(?a, ?c) :- first(?a, <urn:p>, ?b), second(?b, <urn:q>, ?c) .
+joined(?a, ?c) :- first(?a, <urn:p>, ?b), other(?b, <urn:q>, ?c) .
+"#,
+    );
+    assert_eq!(
+        engine.rows("joined").expect("derived"),
+        vec![vec![DataValue::iri("urn:a"), DataValue::iri("urn:c")]]
+    );
+}

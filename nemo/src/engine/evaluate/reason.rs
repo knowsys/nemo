@@ -130,6 +130,8 @@ pub(in crate::engine) struct FetchTally {
     first: Option<String>,
     /// Rows in the responses that were not valid solutions.
     malformed: u64,
+    /// Binding rows left out for holding a blank node an endpoint returned.
+    blank_bindings: u64,
 }
 
 /// How a rule application ended.
@@ -222,7 +224,7 @@ impl Engine {
                 }
                 FetchOutcome::Applied(applied, fetched) => (*applied, fetched),
             };
-            if fetched.requests > 0 || fetched.malformed > 0 {
+            if fetched.requests > 0 || fetched.malformed > 0 || fetched.blank_bindings > 0 {
                 self.tally_fetch(index, fetch, &fetched);
             }
             if fetched.requests > 0 {
@@ -269,9 +271,11 @@ impl Engine {
                 unasked: 0,
                 first: None,
                 malformed: 0,
+                blank_bindings: 0,
             });
         tally.sent += fetched.requests;
         tally.malformed += fetched.malformed;
+        tally.blank_bindings += fetched.blank_bindings;
         tally.failed += fetched.failed;
         tally.unasked = tally.unasked.saturating_add(fetched.unasked);
         if tally.first.is_none() {
@@ -279,8 +283,9 @@ impl Engine {
         }
     }
 
-    /// Reports the malformed rows and the failed requests that fetches skipped during the
-    /// run, one warning of each kind per import, and resets the tallies.
+    /// Reports the malformed rows, the blank-node bindings and the failed requests that
+    /// fetches skipped during the run, one warning of each kind per import,
+    /// and resets the tallies.
     fn report_fetch_tallies(&mut self) {
         let mut tallies: Vec<(usize, FetchTally)> = std::mem::take(&mut self.fetch_tallies)
             .into_iter()
@@ -292,6 +297,17 @@ impl Engine {
                 self.pipeline.report(
                     TranslationError::MalformedRows {
                         count: tally.malformed.into(),
+                        resource: tally.endpoint.clone(),
+                    }
+                    .at(tally.span)
+                    .with_resource(tally.endpoint.clone())
+                    .with_predicate(tally.predicate.clone()),
+                );
+            }
+            if tally.blank_bindings > 0 {
+                self.pipeline.report(
+                    TranslationError::BlankNodeBindings {
+                        count: tally.blank_bindings.into(),
                         resource: tally.endpoint.clone(),
                     }
                     .at(tally.span)

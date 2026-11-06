@@ -35,6 +35,56 @@
 //! are left alone, as are atoms whose rewrite would not reduce what they fetch:
 //! one atom of distinct variables sharing nothing with the local atoms.
 //!
+//! # What the rewrite assumes of an endpoint
+//!
+//! A rewritten program derives what the program as written derives under a few assumptions
+//! about the endpoint. Nemo assumes what common stores do, documents it here,
+//! and checks where checking is cheap and precise.
+//!
+//! - **Values are held in their canonical terms.** Nemo compares values, an endpoint terms.
+//!   Nemo reads `"3.0"^^xsd:decimal`, `"03"^^xsd:int` and `3` as one integer and writes it
+//!   in the canonical form of its datatype, `"3"^^xsd:integer`
+//!   ([ground_terms](nemo_io::sparql::SparqlQuery::ground_terms)).
+//!   Stores keep datatypes apart (Blazegraph, Jena, AllegroGraph) and many canonicalise the
+//!   lexical form within one, so the datatype matters.
+//!   An integer also goes out as `"3.0"^^xsd:decimal`, the one form that finds Wikidata's
+//!   quantities on both its Blazegraph and its QLever service.
+//!   Every comparison the rewrite hands to the endpoint is the endpoint's:
+//!   a constant in a pattern, a binding in a `VALUES` block, a pushed condition,
+//!   a negated atom, and a join between merged atoms.
+//!   A value the endpoint holds in another datatype or form is not found there,
+//!   so the rewritten program may miss rows the program as written reads,
+//!   and through a negated atom keep rows it excludes.
+//!   A store comparing more loosely than Nemo, as Virtuoso finds the double `3.0E0` for the
+//!   integer 3, may add rows through a constant or a join between merged atoms.
+//!   A bound import never holds a solution its bindings do not justify: it keeps only the
+//!   solutions that match them as Nemo compares values
+//!   ([SparqlReader::with_bindings](nemo_io::sparql::SparqlReader::with_bindings)).
+//!   All of this needs a store holding one value in different forms;
+//!   values the store holds one way, and IRIs, compare the same in both.
+//! - **A blank node keeps its label.** The rewrite splits an import into several queries,
+//!   and one blank node must be one null in all of them.
+//!   A label names the same null in every response from an endpoint
+//!   ([Dictionary::labeled_null](nemo_physical::dictionary::Dictionary::labeled_null)),
+//!   as stores labelling nodes by their internal ids give them
+//!   (Jena's TSV results, Virtuoso, Oxigraph, QLever),
+//!   though SPARQL only promises a label within one result.
+//!   On a store labelling each result anew, blank nodes of different responses may meet
+//!   wrongly, and those of one node fail to.
+//!   No query can name a blank node, so a binding row holding one fetches nothing,
+//!   which reasoning reports.
+//! - **An unbound value is no value.** Each unbound cell is a null of its own,
+//!   which no other fetch can meet,
+//!   so a query that may leave a projected variable unbound is not rewritten.
+//! - **A result is one fixed set.** A query whose result depends on how it is asked
+//!   (`LIMIT`, `OFFSET`, `SAMPLE`, `RAND()`, `NOW()`, `UUID()`, `STRUUID()`, `BNODE()`)
+//!   is never restricted or merged.
+//!   A grouping or a subquery is never bound either, since the endpoint would compute it in
+//!   full for every page of bindings.
+//! - **A response is complete.** A response the endpoint cut short, by its trace, a last row
+//!   cut off, or the status and headers a store sends with a partial result,
+//!   fails its import (see [nemo_io::sparql]).
+//!
 //! The stage surveys the program into a [RewriteContext],
 //! rewrites each [rule] over the [components] of its body,
 //! and emits the [statements] replacing it.
@@ -416,6 +466,65 @@ mod tests {
         ));
         assert!(!text.contains("@import t from sparql"), "{text}");
         assert!(text.contains("where t_bindings1(?c) ."), "{text}");
+    }
+
+    #[test]
+    fn an_atom_leaving_columns_anonymous_reads_the_import_as_written() {
+        let text = rewrite(&format!(
+            "{TRIPLES}subject(?s) :- t(?s, _, _) .\ncopy(?s, ?p, ?o) :- t(?s, ?p, ?o) .\n@output subject, copy .\n"
+        ));
+        assert!(text.contains("@import t from sparql"), "{text}");
+        assert!(text.contains("subject(?s) :- t(?s, _, _) ."), "{text}");
+        assert!(!text.contains("_query"), "one fetch for both: {text}");
+    }
+
+    #[test]
+    fn a_query_that_may_leave_a_variable_unbound_stays_one_import() {
+        // Rewritten, each reader would see its own null for the same unbound ?c,
+        // and a fetch bound on ?c would lose the solutions without one.
+        let source = "@import solutions from sparql { endpoint = <https://e/sparql>, query = \"SELECT ?h ?c WHERE { ?h <urn:p> ?x OPTIONAL { ?h <urn:q> ?c } }\" } .\n\
+             shown(<urn:c>) .\n\
+             seen(?c) :- solutions(_, ?c) .\n\
+             joined(?h) :- shown(?c), solutions(?h, ?c) .\n\
+             fixed(?c) :- solutions(<urn:h>, ?c) .\n\
+             @output seen, joined, fixed .\n";
+        let text = rewrite(source);
+        assert!(text.contains("@import solutions from sparql"), "{text}");
+        assert!(
+            text.contains("joined(?h) :- shown(?c), solutions(?h, ?c) ."),
+            "{text}"
+        );
+        assert!(
+            text.contains("fixed(?c) :- solutions(<urn:h>, ?c) ."),
+            "{text}"
+        );
+        assert!(!text.contains("_bindings"), "{text}");
+    }
+
+    #[test]
+    fn a_query_requiring_its_optional_variable_is_rewritten() {
+        let source = "@import solutions from sparql { endpoint = <https://e/sparql>, query = \"SELECT ?h ?c WHERE { ?h <urn:p> ?x OPTIONAL { ?h <urn:q> ?c } FILTER(BOUND(?c)) }\" } .\n\
+             shown(<urn:c>) .\n\
+             joined(?h) :- shown(?c), solutions(?h, ?c) .\n\
+             @output joined .\n";
+        let text = rewrite(source);
+        assert!(text.contains("where solutions_bindings1(?c) ."), "{text}");
+    }
+
+    #[test]
+    fn an_aggregating_query_is_never_bound() {
+        // Bound, the endpoint would count every class again for each page of bindings.
+        let source = "@import sizes from sparql { endpoint = <https://e/sparql>, query = \"SELECT ?c (COUNT(?s) AS ?n) WHERE { ?s a ?c } GROUP BY ?c\" } .\n\
+             class(<urn:c>) .\n\
+             size(?c, ?n) :- class(?c), sizes(?c, ?n) .\n\
+             @output size .\n";
+        let text = rewrite(source);
+        assert!(text.contains("@import sizes from sparql"), "{text}");
+        assert!(
+            text.contains("size(?c, ?n) :- class(?c), sizes(?c, ?n) ."),
+            "{text}"
+        );
+        assert!(!text.contains("_bindings"), "{text}");
     }
 
     #[test]

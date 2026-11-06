@@ -132,11 +132,13 @@ business(?id, ?org) :- org(?org), triple(?id, <urn:name>, STRLANG(?org, "en")) .
 #[test]
 fn pushed_conditions_reach_the_endpoint_as_filters() {
     let fetcher = Responder::endpoint(|text| {
-        // Nemo's `=` is term identity: `sameTerm` in SPARQL.
+        // Nemo's `=` with a string is term identity, which SPARQL's `=` holds for too
+        // (QLever has no `sameTerm`). Nemo reads language tags in lower case.
         assert!(
-            text.contains("FILTER(sameTerm(LANG(?l), \"en\"))"),
+            text.contains("FILTER((LCASE(LANG(?l)) = \"en\"))"),
             "{text}"
         );
+        assert!(!text.contains("sameTerm"), "{text}");
         let mut body = String::from("?c\t?l\n");
         for iri in values_blocks(text).into_iter().flatten() {
             body.push_str(&format!("<{iri}>\t\"label of {iri}\"@en\n"));

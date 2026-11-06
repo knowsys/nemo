@@ -337,9 +337,9 @@ impl<'a> Translator<'a> {
             }
             TermKind::Variable(_) => Err(TranslationError::NotGround.at(term.span)),
             TermKind::BlankNode(label) => {
-                let id = *self
-                    .blanks
-                    .get(label)
+                let id = self
+                    .dictionary
+                    .find_labeled_null(self.program_blanks, label)
                     .expect("blank node labels get their nulls before their terms translate");
                 Ok(DataValue::null(id))
             }

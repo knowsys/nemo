@@ -154,9 +154,17 @@ impl<'a, 'c> RuleRewriter<'a, 'c> {
         for component in self.context.components(&remote, &groups) {
             let atoms = component.atoms(&remote);
             let variables = component.variables(&remote);
-            let overlapping = self
+            let mut overlapping = self
                 .context
                 .overlapping(&groups, &component, &variables, self.rule);
+            // A query that groups or nests a subquery would compute it in full again
+            // for each page of bindings, so it stays unbound.
+            if atoms
+                .iter()
+                .any(|atom| self.context.candidate(atom).query.computes_in_full())
+            {
+                overlapping.clear();
+            }
             // A plain atom sharing no variable with a local group would
             // fetch the same rows as the candidate import, so it stays.
             if component.plain(&remote) && overlapping.is_empty() {

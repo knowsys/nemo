@@ -4,10 +4,12 @@
 //! One module per subject, sharing the programs and responders below.
 
 mod bindings;
+mod differential;
 mod programs;
 mod queries;
 mod requests;
 mod tracing;
+mod unbound;
 
 use nemo::engine::Engine;
 

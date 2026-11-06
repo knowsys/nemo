@@ -224,7 +224,15 @@ impl<'a> RewriteContextBuilder<'a> {
     ///
     /// A candidate is a plain `sparql` import that is the only statement defining its predicate,
     /// whose predicate only rule bodies read,
-    /// and whose query is a string that parses and can be restricted.
+    /// and whose query is a string that parses, can be restricted,
+    /// and binds every projected variable in every solution.
+    ///
+    /// An unbound value becomes a fresh null in each fetch that delivers it, so a query that
+    /// may leave one stays one import, fetched once: rewritten into several fetches, its rules
+    /// would see different nulls for the same solution, and a bound fetch would lose the
+    /// solutions whose bound variables are unbound.
+    /// A blank node, unlike an unbound value, has a label, which names one null in every
+    /// response of the endpoint, so the fetches of a rewritten import agree on it.
     fn finish(self) -> RewriteContext {
         let mut candidates = HashMap::new();
         for (name, directives) in self.imports {
@@ -240,7 +248,7 @@ impl<'a> RewriteContextBuilder<'a> {
             let Some(query) = query_of(directive, &self.scope) else {
                 continue;
             };
-            if matches!(query.shape(), QueryShape::Opaque(_)) {
+            if matches!(query.shape(), QueryShape::Opaque(_)) || query.may_leave_unbound() {
                 continue;
             }
             candidates.insert(
