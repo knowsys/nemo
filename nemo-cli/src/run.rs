@@ -24,7 +24,6 @@ use std::{
 
 use nemo::{
     diagnostics::render::{Renderer, SourceTexts},
-    driver::HttpDriver,
     engine::{Engine, ExportSpec},
     model::{FileId, Program},
     telemetry::{Recorder, TracingSink},
@@ -279,7 +278,7 @@ impl<'a> Run<'a> {
     }
 
     /// Links and loads the program:
-    /// its modules, its imports (remote ones fetched by the driver), and its facts.
+    /// its modules, its imports (remote ones fetched by the engine's HTTP client), and its facts.
     ///
     /// What the engine reports is shown as the stage ends,
     /// so a stage that fails does not bury the warnings before it.
@@ -291,9 +290,7 @@ impl<'a> Run<'a> {
         recorder: Option<&Recorder>,
     ) -> Result<(), Diagnostic> {
         let start = Instant::now();
-        let loaded = engine
-            .link(program)
-            .and_then(|linked| HttpDriver::new().drive(engine, |engine| engine.load(linked)));
+        let loaded = engine.link(program).and_then(|linked| engine.load(linked));
         times.load = start.elapsed();
         // Linking is what reads a program's modules, so the sources it
         // registered are taken in before anything is shown against them.
@@ -306,11 +303,11 @@ impl<'a> Run<'a> {
         Ok(())
     }
 
-    /// Reasons to the fixpoint, the bound imports' requests fetched by the driver,
+    /// Reasons to the fixpoint, the bound imports' requests fetched by the engine's HTTP client,
     /// showing what the engine reports and the rows it dropped on the way.
     fn reason(&self, engine: &mut Engine, times: &mut Times) -> Result<(), Diagnostic> {
         let start = Instant::now();
-        let reasoned = HttpDriver::new().drive(engine, Engine::reason);
+        let reasoned = engine.reason();
         times.reason = start.elapsed();
         self.reports(engine);
         self.attrition(engine);

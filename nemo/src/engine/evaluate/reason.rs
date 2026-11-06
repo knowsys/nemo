@@ -7,7 +7,7 @@
 //! A run suspends if a bound SPARQL import needs data from the network,
 //! and resumes at the application it was suspended in.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use nemo_physical::{
     diagnostics::Diagnostic,
@@ -73,6 +73,22 @@ impl SuspendedReasoning {
     pub(in crate::engine) fn pending(&self) -> Vec<PendingRequest> {
         #[cfg(feature = "sparql")]
         return self.fetch.slots.pending().collect();
+        #[cfg(not(feature = "sparql"))]
+        match *self.fetch {}
+    }
+
+    /// Returns whether some request waits for its response.
+    pub(in crate::engine) fn has_pending(&self) -> bool {
+        #[cfg(feature = "sparql")]
+        return self.fetch.slots.has_pending();
+        #[cfg(not(feature = "sparql"))]
+        match *self.fetch {}
+    }
+
+    /// Returns the ids of the requests waiting for their responses.
+    pub(in crate::engine) fn waiting_ids(&self) -> HashSet<u64> {
+        #[cfg(feature = "sparql")]
+        return self.fetch.slots.waiting_ids().collect();
         #[cfg(not(feature = "sparql"))]
         match *self.fetch {}
     }
@@ -304,19 +320,29 @@ impl Engine {
         debug_assert!(tallies.is_empty(), "only a fetch tallies");
     }
 
+    /// Ends a run discarded while it waited, as a cancellation ends one:
+    /// reports what its fetches skipped, against the written program.
+    pub(in crate::engine) fn end_discarded_run(&mut self) {
+        let already = self.pipeline.reports().len();
+        self.report_fetch_tallies();
+        if let Some(written) = &self.written {
+            self.pipeline
+                .map_reports(already, |report| written.present(report));
+        }
+    }
+
     /// Reasons to the fixpoint (see [reason](Self::reason)).
     pub(in crate::engine) fn reason_to_fixpoint(&mut self) -> Result<(), Diagnostic> {
         let Some(mut program) = self.program.take() else {
             return Err(EngineError::NoProgram.diagnostic());
         };
-        // A suspended reasoning run resumes where it was suspended. Any
-        // other suspended method (a loading method waiting for data from
-        // the network) is abandoned.
+        // A waiting reasoning run resumes where it waits. A waiting
+        // loading method refused the run before it got here.
         let resumed = match self.suspension.take() {
             Some(Suspension::Reason(suspended)) => Some(suspended),
             other => {
+                debug_assert!(other.is_none(), "a waiting loading method refuses a run");
                 self.suspension = other;
-                self.abandon();
                 None
             }
         };
@@ -382,7 +408,9 @@ impl Engine {
         context: EvaluationContext,
         resumed: Option<SuspendedReasoning>,
     ) -> Result<RunEnd, Diagnostic> {
-        self.cancel.clear();
+        // The token is cleared where a caller starts or resumes a run, not here:
+        // one `reason()` resumes its run after every fetch, and a cancellation arriving
+        // in between must stop it.
         tracing::info!(strata = strata.len(), step = self.step, "reasoning");
         let finished = Self::finished_tables(program, strata);
         let first = resumed.as_ref().map_or(0, |suspended| suspended.stratum);

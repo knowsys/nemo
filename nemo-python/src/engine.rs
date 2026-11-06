@@ -13,7 +13,6 @@ use pyo3::{
 
 use nemo::{
     diagnostics::render::SourceTexts,
-    driver::HttpDriver,
     engine::PredicateCursor,
     trace::TraceResponse,
     values::{DataValue, TypeSyntax},
@@ -91,9 +90,7 @@ impl Engine {
         let text = program.text.clone();
         let engine = &mut inner.engine;
         let outcome = self.interruptible(py, || {
-            engine.ingest(name, text, |engine, model| {
-                HttpDriver::new().drive(engine, |engine| call(engine, model))
-            })
+            engine.ingest(name, text, |engine, model| call(engine, model))
         })?;
         // Linking reads the program's modules, so their sources are
         // taken in before its outcome is reported against them.
@@ -293,9 +290,7 @@ impl Engine {
     fn reason(&self, py: Python<'_>) -> PyResult<()> {
         let mut inner = self.lock()?;
         let engine = &mut inner.engine;
-        let outcome = self.interruptible(py, || {
-            HttpDriver::new().drive(engine, nemo::engine::Engine::reason)
-        })?;
+        let outcome = self.interruptible(py, || engine.reason())?;
         outcome.map_err(|diagnostic| inner.raise(py, diagnostic))
     }
 
@@ -306,6 +301,15 @@ impl Engine {
     /// since a token cancels the call that is running, not a future one.
     fn cancel(&self) {
         self.token.cancel();
+    }
+
+    /// Discards a run left waiting for data from the network, returning whether one waited.
+    ///
+    /// A run cancelled while it waits for a fetch keeps waiting, for `reason()` to continue.
+    /// Until then, `load`, `extend`, `reload` and `import_rows` refuse (N0493);
+    /// discarding it stops the run as a cancellation between rules does.
+    fn discard_pending(&self) -> PyResult<bool> {
+        Ok(self.lock()?.engine.discard_pending())
     }
 
     /// Traces facts, one fact string like `"reach(a, b)"` or a list of them,

@@ -319,8 +319,19 @@ fn thrown_code(thrown: &JsValue) -> Option<String> {
         .as_string()
 }
 
+/// An answer for `resume`, to the request listed as `entry`.
+fn answer(entry: &JsValue, fields: &[(&str, JsValue)]) -> JsValue {
+    let answer = js_sys::Object::new();
+    let id = Reflect::get(entry, &JsValue::from_str("id")).expect("an id");
+    Reflect::set(&answer, &JsValue::from_str("id"), &id).expect("settable");
+    for (name, value) in fields {
+        Reflect::set(&answer, &JsValue::from_str(name), value).expect("settable");
+    }
+    answer.into()
+}
+
 #[wasm_bindgen_test]
-fn remote_imports_suspend_the_load_until_the_caller_responds() {
+fn remote_imports_wait_until_the_caller_answers() {
     let mut engine = NemoEngine::new();
     let program = NemoProgram::parse(
         String::from(
@@ -329,11 +340,14 @@ fn remote_imports_suspend_the_load_until_the_caller_responds() {
         ),
         None,
     );
-    // Nothing fetches in a wasm build: the load suspends.
-    let suspended = engine.load(&program).expect_err("the load suspends");
-    assert_eq!(thrown_code(&suspended).as_deref(), Some("N0491"));
-    let requests = engine.pending_requests().expect("the requests list");
+    // A wasm build has no client: the synchronous load throws and changes nothing.
+    let thrown = engine.load(&program).expect_err("nothing fetches");
+    assert_eq!(thrown_code(&thrown).as_deref(), Some("N0491"));
+    assert_eq!(engine.pending_requests().expect("the list").length(), 0);
+
+    let requests: Array = engine.start_load(&program).expect("the load waits").into();
     assert_eq!(requests.length(), 1);
+    assert_eq!(engine.pending_requests().expect("the list").length(), 1);
     let entry = requests.get(0);
     let field = |name: &str| Reflect::get(&entry, &JsValue::from_str(name)).expect("the field");
     assert_eq!(
@@ -348,14 +362,14 @@ fn remote_imports_suspend_the_load_until_the_caller_responds() {
     assert_eq!(header.get(1).as_string().as_deref(), Some("Bearer t"));
     assert!(field("form").is_null());
 
-    let id = u64::try_from(field("id")).expect("the id is a BigInt");
-    assert!(
-        engine
-            .respond(id, &JsValue::from_str("a,1\nb,2\n"))
-            .expect("the body is taken")
-    );
+    assert!(u64::try_from(field("id")).is_ok(), "the id is a BigInt");
+    let answers = Array::of1(&answer(
+        &entry,
+        &[("body", JsValue::from_str("a,1\nb,2\n"))],
+    ));
+    let done = engine.resume(&answers).expect("the load completes");
+    assert!(done.is_null(), "nothing waits any more");
     assert_eq!(engine.pending_requests().expect("the list").length(), 0);
-    engine.resume().expect("the load completes");
     engine.reason().expect("reasoning reaches the fixpoint");
     assert_eq!(engine.count("q").expect("registered"), 2);
 }
@@ -370,18 +384,45 @@ fn a_failed_response_fails_the_load() {
         ),
         None,
     );
-    engine.load(&program).expect_err("the load suspends");
-    let entry = engine.pending_requests().expect("the list").get(0);
-    let id = u64::try_from(Reflect::get(&entry, &JsValue::from_str("id")).expect("an id"))
-        .expect("the id is a BigInt");
-    assert!(
-        engine
-            .respond_failure(id, Some(404), String::from("Not Found"))
-            .expect("not busy")
-    );
-    let failed = engine.resume().expect_err("the import fails");
+    let requests: Array = engine.start_load(&program).expect("the load waits").into();
+    let entry = requests.get(0);
+    let answers = Array::of1(&answer(
+        &entry,
+        &[
+            ("status", JsValue::from(404)),
+            ("message", JsValue::from_str("Not Found")),
+        ],
+    ));
+    let failed = engine.resume(&answers).expect_err("the import fails");
     assert_eq!(thrown_code(&failed).as_deref(), Some("N0111"));
     assert_eq!(engine.pending_requests().expect("the list").length(), 0);
+}
+
+#[wasm_bindgen_test]
+fn a_status_that_is_no_http_status_is_refused() {
+    let mut engine = NemoEngine::new();
+    let program = NemoProgram::parse(
+        String::from(
+            "@import p from csv { resource = \"https://example.org/data.csv\" } . \
+             q(?x) :- p(?x, ?y) .",
+        ),
+        None,
+    );
+    let requests: Array = engine.start_load(&program).expect("the load waits").into();
+    let entry = requests.get(0);
+    for status in [
+        JsValue::from(70000),
+        JsValue::from(-1),
+        JsValue::from_str("404"),
+    ] {
+        let answers = Array::of1(&answer(
+            &entry,
+            &[("status", status), ("message", JsValue::from_str("odd"))],
+        ));
+        engine.resume(&answers).expect_err("the answer is refused");
+        // Nothing was taken: the request still waits.
+        assert_eq!(engine.pending_requests().expect("the list").length(), 1);
+    }
 }
 
 #[wasm_bindgen_test]

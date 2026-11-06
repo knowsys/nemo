@@ -80,7 +80,6 @@ fn expect_linked(program: &Program) -> Result<(), Diagnostic> {
 impl Engine {
     /// Runs the pipeline stages over a first program and loads it.
     pub(in crate::engine) fn load_program(&mut self, program: Program) -> Result<(), Diagnostic> {
-        self.abandon();
         if self.program.is_some() {
             return Err(EngineError::AlreadyLoaded.diagnostic().with_hint(
                 "use `extend()` to add to the loaded program, or `reload()` to replace it",
@@ -114,13 +113,19 @@ impl Engine {
 
     /// Translates a staged first program and stores its data.
     ///
-    /// If remote resources are missing, it undoes the translation and suspends (N0491).
+    /// The translation is prepared first, which registers and stores nothing.
+    /// If it needs remote resources not fetched yet, the load waits for them (N0491),
+    /// keeping the prepared translation state, and commits from it once every response is in.
     /// The reports from `already` on are rewritten to refer to the written program.
     pub(super) fn load_staged(
         &mut self,
         mut load: SuspendedLoad,
         already: usize,
     ) -> Result<(), Diagnostic> {
+        load.take_responses();
+        if load.slots.has_pending() {
+            return Err(self.suspend(Suspension::Load(load)));
+        }
         let revision = load.staged.revision;
         let written = WrittenProgram::new(&self.pipeline, load.staged.written, revision);
         let (ids, statements): (Vec<_>, Vec<_>) = self
@@ -129,32 +134,51 @@ impl Engine {
             .map(|(id, statement)| (id, statement.clone()))
             .unzip();
 
-        let translated = self.pipeline.reports().len();
-        let saved_predicates = self.predicates.clone();
-        let responses = load.responses();
         let stages = self.rewriting_stages(&load.staged);
         let instant = self.loading_instant();
         let (stores, mut setup) = self.translation_parts(Purpose::of_load(&stages), instant);
         setup.written = Some(&written);
-        setup.responses = Some(&responses);
+        let prepared = load.prepared.take();
+        let resumed = prepared.is_some();
         let mut translator =
-            translation::Translator::new(stores, setup, TranslationState::default(), Vec::new());
-        let outcome = translator.program(&statements, &ids);
-        let requests = translator.take_requests();
+            translation::Translator::new(stores, setup, prepared.unwrap_or_default(), Vec::new());
+        let requests = if resumed {
+            Ok(Vec::new())
+        } else {
+            translator
+                .prepare(&statements, &ids)
+                .map(|requests| load.missing(requests))
+        };
+        let outcome = match &requests {
+            Ok(missing) if missing.is_empty() => {
+                Some(translator.commit(&statements, &ids, std::mem::take(&mut load.fetched)))
+            }
+            _ => None,
+        };
         let (state, facts) = translator.finish();
-        self.translation = state;
-        if !requests.is_empty() {
-            self.forget_registrations(&saved_predicates, &TranslationState::default());
-            self.translation = TranslationState::default();
-            self.pipeline.withdraw_reports(translated);
-            self.pipeline
-                .present_reports(already, |report| written.present(report));
-            load.ask(requests, &mut self.request_ids);
-            return Err(self.suspend(Suspension::Load(load)));
+        match requests {
+            Ok(missing) if !missing.is_empty() => {
+                // The preparation registered and stored nothing: the load waits with its state.
+                self.pipeline
+                    .present_reports(already, |report| written.present(report));
+                load.prepared = Some(state);
+                load.wait_for(missing, &mut self.request_ids);
+                return Err(self.suspend(Suspension::Load(load)));
+            }
+            Ok(_) => {}
+            Err(problem) => {
+                self.translation = state;
+                self.pipeline
+                    .present_reports(already, |report| written.present(report));
+                return Err(written.present(problem));
+            }
         }
+        self.translation = state;
         self.pipeline
             .present_reports(already, |report| written.present(report));
-        let compiled = outcome.map_err(|problem| written.present(problem))?;
+        let compiled = outcome
+            .expect("a prepared load with every resource fetched commits")
+            .map_err(|problem| written.present(problem))?;
 
         for (table, rows) in facts {
             #[cfg(debug_assertions)]
@@ -348,7 +372,6 @@ impl Engine {
 
     /// Runs the pipeline stages over an extension and loads it.
     pub(in crate::engine) fn extend_program(&mut self, program: Program) -> Result<(), Diagnostic> {
-        self.abandon();
         tracing::info!(
             statements = program.statements.len(),
             "extending the program"
@@ -393,14 +416,20 @@ impl Engine {
 
     /// Translates a staged extension and stores its data.
     ///
-    /// If remote resources are missing, it undoes the translation and suspends (N0491).
+    /// The translation is prepared first, which registers and stores nothing,
+    /// so the loaded program stays as it is while the extension waits (N0491) for remote
+    /// resources not fetched yet. It commits from the prepared translation state once every
+    /// response is in.
     /// The reports from `already` on are rewritten to refer to the written program.
     pub(super) fn extend_staged(
         &mut self,
         mut load: SuspendedLoad,
         already: usize,
     ) -> Result<(), Diagnostic> {
-        let old = self.program.take().expect("an extension extends a program");
+        load.take_responses();
+        if load.slots.has_pending() {
+            return Err(self.suspend(Suspension::Load(load)));
+        }
         let held = self.revision.expect("a loaded program has a revision");
         let merged = load.staged.revision;
         let written = WrittenProgram::new(&self.pipeline, load.staged.written, merged);
@@ -411,46 +440,64 @@ impl Engine {
             .unzip();
         let mut preloaded = vec![true; self.pipeline.statements(held).count()];
         preloaded.resize(statements.len(), false);
+        let stages = self.rewriting_stages(&load.staged);
 
         // The state derived from statements is rebuilt from the full list.
         // The state derived from data keeps what skipped facts and unread
         // imports cannot derive again.
-        let translated = self.pipeline.reports().len();
+        let state = match load.prepared.take() {
+            Some(state) => state,
+            None => {
+                let mut state = self.translation.clone();
+                state.clear_statement_state();
+                let instant = self.loading_instant();
+                let (stores, mut setup) =
+                    self.translation_parts(Purpose::of_load(&stages), instant);
+                setup.written = Some(&written);
+                let mut translator =
+                    translation::Translator::new(stores, setup, state, preloaded.clone());
+                let requests = translator.prepare(&statements, &ids);
+                let (state, _) = translator.finish();
+                let missing = match requests {
+                    Ok(requests) => load.missing(requests),
+                    Err(problem) => {
+                        self.pipeline
+                            .present_reports(already, |report| written.present(report));
+                        return Err(written.present(problem));
+                    }
+                };
+                if !missing.is_empty() {
+                    self.pipeline
+                        .present_reports(already, |report| written.present(report));
+                    load.prepared = Some(state);
+                    load.wait_for(missing, &mut self.request_ids);
+                    return Err(self.suspend(Suspension::Load(load)));
+                }
+                state
+            }
+        };
+
+        let old = self.program.take().expect("an extension extends a program");
         let saved = self.translation.clone();
         let saved_predicates = self.predicates.clone();
-        let mut state = std::mem::take(&mut self.translation);
-        state.clear_statement_state();
-        let responses = load.responses();
-        let stages = self.rewriting_stages(&load.staged);
         let instant = self.loading_instant();
         let (stores, mut setup) = self.translation_parts(Purpose::of_load(&stages), instant);
         setup.written = Some(&written);
-        setup.responses = Some(&responses);
         setup.previous_types = Some(&old.column_types);
         let mut translator = translation::Translator::new(stores, setup, state, preloaded);
-        let outcome = translator.program(&statements, &ids);
-        let requests = translator.take_requests();
+        let outcome = translator.commit(&statements, &ids, std::mem::take(&mut load.fetched));
         let (state, facts) = translator.finish();
         self.translation = state;
-        let suspended = !requests.is_empty();
         let mut compiled = match outcome {
-            Ok(compiled) if !suspended => compiled,
-            outcome => {
+            Ok(compiled) => compiled,
+            Err(problem) => {
                 // Undo the registrations of this translation and restore
                 // the previous state.
                 self.forget_registrations(&saved_predicates, &saved);
                 self.translation = saved;
                 self.program = Some(old);
-                if suspended {
-                    self.pipeline.withdraw_reports(translated);
-                }
                 self.pipeline
                     .present_reports(already, |report| written.present(report));
-                if suspended {
-                    load.ask(requests, &mut self.request_ids);
-                    return Err(self.suspend(Suspension::Load(load)));
-                }
-                let problem = outcome.expect_err("a translation that was not suspended failed");
                 return Err(written.present(problem));
             }
         };
@@ -574,7 +621,6 @@ impl Engine {
         predicate: &str,
         rows: impl IntoIterator<Item = Vec<DataValue>>,
     ) -> Result<(), Diagnostic> {
-        self.abandon();
         if self.program.is_none() {
             for row in rows {
                 self.unloaded_rows.push(Statement::Fact(Fact::new(

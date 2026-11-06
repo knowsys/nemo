@@ -30,28 +30,38 @@ remote data is asynchronous.
 
 ## Remote imports
 
-The engine never fetches. A method that needs data from the network
-(`load`, `extend` or `reload` with remote imports, `reason` with a
-bound SPARQL import) suspends: it throws code N0491 and keeps its state.
+The synchronous methods do not fetch. A method that needs data from
+the network (`load`, `extend` or `reload` with remote imports, `reason`
+with a bound SPARQL import) throws code N0491 and changes nothing.
 
 The async methods `loadAsync`, `extendAsync`, `reloadAsync` and
-`reasonAsync` do the rest: they send the requests through the global
+`reasonAsync` fetch it: they send the requests through the global
 `fetch` (a window's, a worker's, or Node's), at most five at a time,
 send a request again if the server asks to wait (429, 503) or is
-overloaded (502, 504), up to five times, pass the responses to the
-engine, and resume the method until it completes. They resolve when it
-does, and reject with what the method throws otherwise. While requests
-are out, the engine still serves reads (`count`, `rows`, cursors), and
-the methods that would abandon the suspended one throw.
+overloaded (502, 504), up to five times, and pass the responses to the
+engine until the method completes. They resolve when it does, and
+reject with what the method throws otherwise. While requests are out,
+the engine still serves reads (`count`, `rows`, cursors), and the
+methods that would change it throw.
 
-To fetch another way, through a proxy or with credentials, handle the
-suspension directly: `pendingRequests()` lists the requests (`id`,
-`url`, `method`, `headers`, `accept`, `parameters`, `form`). Respond to
-each with `respond(id, bytes)` or `respondFailure(id, status, message)`
-and call `resume()`, which may suspend again. A failure is final, so
-retry before responding. A 413, or a response the endpoint cut off
-partway, makes the engine split a bound import's request if it can. A resource registered with `addResource` is read
-without suspending.
+To fetch another way, through a proxy or with credentials, call the
+method's `start` form (`startLoad`, `startExtend`, `startReload`,
+`startReason`). It returns `null` once done, or the requests it waits
+for (`id`, `url`, `method`, `headers`, `accept`, `parameters`, `form`),
+which `pendingRequests()` also lists. Fetch them and pass the answers to
+`resume([{id, body}, …])`, a failed one as `{id, status, message}`; it
+returns what the method waits for next, or `null`. A failure is final,
+so retry before answering. A 413, or a response the endpoint cut off
+partway, makes the engine split a bound import's request if it can.
+So does a successful response holding only part of the result, which
+Virtuoso marks with status 206 or the headers `X-SQL-State` and
+`X-SPARQL-MaxRows`: answer it as `{id, status, message, partial: true}`
+rather than with its body, so that no partial result is imported. The
+built-in fetch does this itself; in a browser, Virtuoso's headers are
+visible only if the endpoint exposes them to scripts (CORS).
+While a method waits, the methods that would change the program or the
+data throw code N0493, until it completes or `discardPending()` drops
+it. A resource registered with `addResource` is read without a request.
 
 ## The explanation viewer
 

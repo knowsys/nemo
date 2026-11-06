@@ -9,7 +9,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::stream::remote::{Failure, Request, Retry};
+use crate::stream::remote::{Client, Failure, Request, Response, Retry};
 
 /// The client of builds with the `http` feature: `reqwest`'s blocking client.
 ///
@@ -133,6 +133,16 @@ impl BlockingClient {
     }
 }
 
+impl Client for BlockingClient {
+    fn fetch_all(
+        &self,
+        requests: &[Request],
+        cancelled: &dyn Fn() -> bool,
+    ) -> Option<Vec<Response>> {
+        BlockingClient::fetch_all(self, requests, cancelled)
+    }
+}
+
 /// Returns the client of one call, whose connections pool across the call's requests.
 fn client() -> Result<reqwest::blocking::Client, Failure> {
     reqwest::blocking::Client::builder()
@@ -231,6 +241,15 @@ fn send(
             excerpt
         };
         return Err((Failure::response(status.as_u16(), message), retry_after));
+    }
+    let partial = super::partial_response(status.as_u16(), |name| {
+        response
+            .headers()
+            .get(name)
+            .and_then(|value| value.to_str().ok())
+    });
+    if let Some(reason) = partial {
+        return Err((Failure::partial(status.as_u16(), reason), None));
     }
     let bytes = response
         .bytes()

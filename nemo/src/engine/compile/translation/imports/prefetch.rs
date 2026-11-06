@@ -1,8 +1,10 @@
-//! Prefetching for the imports of one translation.
+//! The remote resources of a translation's imports.
 //!
-//! Before any import reads, the HTTP requests of the remote resources are collected
-//! and matched with the responses passed to `respond`.
-//! If a request has no response yet, the translation suspends.
+//! A translation is [prepared](Translator::prepare) before anything reads,
+//! which lists the requests of the remote resources its imports need.
+//! The engine fetches them, or waits until they are passed in,
+//! and the translation [commits](Translator::commit) with the responses,
+//! each found by the position of its import's directive, never by its resource name.
 
 use std::sync::Arc;
 
@@ -13,25 +15,65 @@ use crate::{
     diagnostics::{AboutResource, EngineError, TranslationError},
     engine::{
         compile::translation::{Translator, imports::PendingImport, options::on_error},
-        remote::ResourceRequest,
+        remote::{Failure, FetchedResource, ResourceRequest},
     },
-    model::{Identifier, OnError, TermKind},
+    model::{Directive, Identifier, OnError, Statement, TermKind},
+    pipeline::StatementId,
 };
 
 impl<'a> Translator<'a> {
+    /// Returns the requests of the remote resources the program's imports read,
+    /// in statement order, each tagged with the position of its directive.
+    ///
+    /// An import needs no request if its data is already stored,
+    /// if its resource is registered through `add_resource`,
+    /// or if it fetches during reasoning (an import with a `where` clause).
+    /// A translation that reads no data needs none.
+    pub(in crate::engine::compile::translation) fn remote_requests(
+        &mut self,
+        statements: &[Statement],
+        ids: &[StatementId],
+    ) -> Result<Vec<ResourceRequest>, Diagnostic> {
+        let mut requests = Vec::new();
+        if !self.purpose.reads() {
+            return Ok(requests);
+        }
+        for (index, statement) in statements.iter().enumerate() {
+            let Statement::Directive(Directive::Import(directive)) = statement else {
+                continue;
+            };
+            // What a failed fetch does is validated before anything is fetched.
+            let request = self.pending_import(directive, index, 0).and_then(|import| {
+                if import.preloaded {
+                    return Ok(None);
+                }
+                let request = self.import_request(&import)?;
+                import_on_error(&import)?;
+                Ok(request)
+            });
+            match request {
+                Ok(Some(request)) => requests.push(request),
+                Ok(None) => {}
+                Err(problem) => {
+                    let problem = self.pipeline.label_instances(problem, ids[index]);
+                    self.recover(problem)?;
+                }
+            }
+        }
+        Ok(requests)
+    }
+
     /// Returns the bytes of the remote resources of this translation's imports,
-    /// from the responses passed to `respond` after an earlier translation suspended.
+    /// from what was fetched for them, by the position of their directives.
     ///
     /// The result has one entry per import,
     /// `None` if nothing was (or needed to be) fetched.
     /// Standard input is read here too, once.
     ///
-    /// - A request without a response suspends the translation before any import reads:
-    ///   the request is recorded (see [take_requests](Self::take_requests))
-    ///   and N0491 is returned.
-    /// - A failed request fails its import,
+    /// - A failed fetch fails its import,
     ///   or, under `on_error = warn`, leaves the import reading nothing, with a warning.
-    /// - A check sends no requests.
+    /// - A remote resource the translation was not prepared with is N0491.
+    /// - A check reads nothing.
     pub(super) fn prefetch(
         &mut self,
         imports: &mut [PendingImport],
@@ -42,17 +84,36 @@ impl<'a> Translator<'a> {
             return Ok(fetched);
         }
 
-        let ImportRequests { remote, piped } = self.collect_requests(imports)?;
-        let waiting = self.take_responses(imports, remote, &mut fetched)?;
-        // The translation suspends before anything reads, standard input
-        // included, which the resumed translation could not read again.
-        if !waiting.is_empty() {
-            let first = waiting[0].request.url.clone();
-            let count = waiting.len();
-            self.requests = waiting;
+        let mut piped = Vec::new();
+        let mut missing: Vec<ResourceRequest> = Vec::new();
+        for (index, import) in imports.iter_mut().enumerate() {
+            if import.preloaded {
+                continue;
+            }
+            match self.resource_name(import) {
+                Ok(Some(resource)) if resource.is_empty() => piped.push(index),
+                Ok(_) => {}
+                Err(problem) => self.recover(problem)?,
+            }
+            if let Some(FetchedResource { request, response }) =
+                self.fetched.remove(&import.statement)
+            {
+                fetched[index] = match response {
+                    Ok(bytes) => Some(bytes),
+                    Err(failure) => self.failed_fetch(import, &request, &failure)?,
+                };
+                continue;
+            }
+            match self.import_request(import) {
+                Ok(Some(request)) => missing.push(request),
+                Ok(None) => {}
+                Err(problem) => self.recover(problem)?,
+            }
+        }
+        if let Some(first) = missing.first() {
             return Err(EngineError::AwaitingRemote {
-                count: count.into(),
-                first,
+                count: missing.len().into(),
+                first: first.request.url.clone(),
             }
             .diagnostic());
         }
@@ -68,81 +129,33 @@ impl<'a> Translator<'a> {
         Ok(fetched)
     }
 
-    /// Returns the requests the imports of this translation need, by import with its failure
-    /// behavior, and the imports reading standard input.
-    fn collect_requests(
+    /// Handles the failed fetch of an import's remote resource:
+    /// it fails the import, or, under `on_error = warn`, leaves the import reading nothing,
+    /// with a warning, returning the empty bytes it then reads.
+    fn failed_fetch(
         &mut self,
-        imports: &[PendingImport],
-    ) -> Result<ImportRequests, Diagnostic> {
-        let mut remote: Vec<(usize, ResourceRequest, OnError)> = Vec::new();
-        let mut piped: Vec<usize> = Vec::new();
-        for (index, import) in imports.iter().enumerate() {
-            if import.preloaded {
-                continue;
-            }
-            match self.resource_name(import) {
-                Ok(Some(resource)) if resource.is_empty() => piped.push(index),
-                Ok(_) => {}
-                Err(problem) => self.recover(problem)?,
-            }
-            // A remote import's options are evaluated before the
-            // translation can suspend for its request.
-            match self
-                .import_request(import)
-                .and_then(|request| Ok((request, import_on_error(import)?)))
-            {
-                Ok((Some(request), on_error)) => remote.push((index, request, on_error)),
-                Ok((None, _)) => {}
-                Err(problem) => self.recover(problem)?,
-            }
+        import: &mut PendingImport,
+        request: &ResourceRequest,
+        failure: &Failure,
+    ) -> Result<Option<Arc<[u8]>>, Diagnostic> {
+        let mut problem = failure.diagnostic(&request.request.url);
+        if let Some(span) = import.span {
+            problem = problem.with_label(span, "requested by this import");
         }
-        Ok(ImportRequests { remote, piped })
-    }
-
-    /// Takes the responses passed to `respond` for the imports' requests into `fetched`,
-    /// returning the requests still without a response.
-    ///
-    /// A failed request fails its import,
-    /// or, under `on_error = warn`, leaves the import reading nothing, with a warning.
-    fn take_responses(
-        &mut self,
-        imports: &mut [PendingImport],
-        remote: Vec<(usize, ResourceRequest, OnError)>,
-        fetched: &mut [Option<Arc<[u8]>>],
-    ) -> Result<Vec<ResourceRequest>, Diagnostic> {
-        let mut waiting = Vec::new();
-        for (index, request, on_error) in remote {
-            match self
-                .responses
-                .and_then(|responses| responses.get(&request.resource))
-            {
-                None => waiting.push(request),
-                Some(Ok(bytes)) => fetched[index] = Some(Arc::clone(bytes)),
-                Some(Err(failure)) => {
-                    let import = &mut imports[index];
-                    let mut problem = failure.diagnostic(&request.request.url);
-                    if let Some(span) = import.span {
-                        problem = problem.with_label(span, "requested by this import");
-                    }
-                    if on_error == OnError::Fail {
-                        return Err(problem);
-                    }
-                    self.pipeline.report(
-                        TranslationError::ImportFailed {
-                            resource: request.resource.clone(),
-                            reason: failure.to_string(),
-                        }
-                        .at(import.span)
-                        .with_resource(request.resource),
-                    );
-                    // Marked preloaded: it registers its table and reads
-                    // nothing.
-                    import.preloaded = true;
-                    fetched[index] = Some(Arc::from([]));
-                }
-            }
+        if import_on_error(import)? == OnError::Fail {
+            return Err(problem);
         }
-        Ok(waiting)
+        self.pipeline.report(
+            TranslationError::ImportFailed {
+                resource: request.resource.clone(),
+                reason: failure.to_string(),
+            }
+            .at(import.span)
+            .with_resource(request.resource.clone()),
+        );
+        // Marked preloaded: it registers its table and reads nothing.
+        import.preloaded = true;
+        Ok(Some(Arc::from([])))
     }
 
     /// Returns the request one import needs, or `None` for a local (or registered) source.
@@ -168,6 +181,7 @@ impl<'a> Translator<'a> {
                     return Ok(None);
                 }
                 return Ok(Some(ResourceRequest {
+                    statement: import.statement,
                     resource,
                     request: spec.request(),
                 }));
@@ -187,7 +201,11 @@ impl<'a> Translator<'a> {
                 request.headers = self.header_option(value, &bindings)?;
             }
         }
-        Ok(Some(ResourceRequest { resource, request }))
+        Ok(Some(ResourceRequest {
+            statement: import.statement,
+            resource,
+            request,
+        }))
     }
 
     /// Returns the remote, unregistered resource of an import, if it has one.
@@ -232,14 +250,6 @@ fn import_on_error(import: &PendingImport) -> Result<OnError, Diagnostic> {
         .iter()
         .find(|(key, _)| matches!(&key.kind, TermKind::Constant(Identifier::Bare(name)) if name == "on_error"))
         .map_or(Ok(OnError::Fail), |(_, value)| on_error(value))
-}
-
-/// The requests the imports of one translation need, and the imports reading standard input.
-struct ImportRequests {
-    /// Per import with a remote resource, its index, its request, and what a failed fetch does.
-    remote: Vec<(usize, ResourceRequest, OnError)>,
-    /// The indices of the imports reading standard input.
-    piped: Vec<usize>,
 }
 
 /// Returns the bytes of standard input, read to its end.

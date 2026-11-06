@@ -5,8 +5,9 @@ It implements the Nemo language (parser, rule model, program transformations), r
 (normalization, planning, semi-naive execution), and tracing, on top of the database layer
 [nemo-physical](../nemo-physical/README.md) and the format adapters [nemo-io](../nemo-io/README.md).
 
-The engine does no network IO itself: a method that needs remote data suspends and lists the
-requests it needs. With the `http` feature, the `driver` module performs them.
+A method that needs remote data sends its requests through the engine's client: the HTTP client
+of the `http` feature by default, or one set with `set_client`. The `start_*` methods send
+nothing; they return the requests, and `resume` takes the responses.
 
 Two runnable examples show the API:
 

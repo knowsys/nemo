@@ -24,7 +24,7 @@ use crate::{
         },
         evaluate::extensional::{ExtensionalBlock, ExtensionalOrigin},
         registered::Registered,
-        remote::{LoadKind, RemoteResponse, ResourceRequest, SuspendedLoad, Suspension},
+        remote::{LoadKind, ResourceRequest, SuspendedLoad, Suspension},
         written::WrittenProgram,
     },
     model::{Directive, Identifier, Program, Statement},
@@ -38,13 +38,13 @@ struct RebuildScope {
     predicates: HashSet<String>,
 }
 
-/// How a reload's translation ended: done, or suspended for the remote
+/// How a reload's translation ended: done, or prepared and waiting for the remote
 /// resources it needs.
 enum Translated<T> {
     /// Translated.
     Done(T),
-    /// Undone and suspended for these requests.
-    Suspended(Vec<ResourceRequest>),
+    /// Prepared, with the engine as it was, and waiting for these requests.
+    Waiting(Vec<ResourceRequest>),
 }
 
 /// What a reload's translation leaves to apply:
@@ -113,7 +113,6 @@ fn preloaded(
 impl Engine {
     /// Runs the pipeline stages over a replacement program and rebuilds the stored data for it.
     pub(in crate::engine) fn reload_program(&mut self, program: Program) -> Result<(), Diagnostic> {
-        self.abandon();
         tracing::info!(
             statements = program.statements.len(),
             "reloading the program"
@@ -171,13 +170,20 @@ impl Engine {
 
     /// Translates a staged replacement and rebuilds the stored data.
     ///
-    /// If remote resources are missing, it undoes the translation and suspends (N0491).
+    /// The translation is prepared first, which registers and stores nothing.
+    /// If it needs remote resources not fetched yet, the reload waits for them (N0491)
+    /// with the loaded program as it was, and commits from the prepared translation state
+    /// once every response is in.
     /// The reports from `already` on are rewritten to refer to the written program.
     pub(in crate::engine) fn reload_staged(
         &mut self,
         mut load: SuspendedLoad,
         already: usize,
     ) -> Result<(), Diagnostic> {
+        load.take_responses();
+        if load.slots.has_pending() {
+            return Err(self.suspend(Suspension::Load(load)));
+        }
         let old = self.program.take().expect("a reload replaces a program");
         let held = self.revision.expect("a loaded program has a revision");
         let staged = load.staged;
@@ -190,12 +196,10 @@ impl Engine {
             .map(|(id, statement)| (id, statement.clone()))
             .unzip();
         let rebuild = self.rebuild_by_diff(&old_statements, &new_statements);
-        let translated = self.pipeline.reports().len();
-        let responses = load.responses();
         let previous = &old.column_types;
         let stages = self.rewriting_stages(&staged);
         let retranslated = self.reload_translation(
-            &responses,
+            &mut load,
             &written,
             &new_ids,
             &new_statements,
@@ -203,16 +207,13 @@ impl Engine {
             previous,
             &stages,
         );
-        if matches!(retranslated, Ok(Translated::Suspended(_))) {
-            self.pipeline.withdraw_reports(translated);
-        }
         self.pipeline
             .present_reports(already, |report| written.present(report));
         let retranslated = match retranslated {
             Ok(Translated::Done(retranslated)) => retranslated,
-            Ok(Translated::Suspended(requests)) => {
+            Ok(Translated::Waiting(missing)) => {
                 self.program = Some(old);
-                load.ask(requests, &mut self.request_ids);
+                load.wait_for(missing, &mut self.request_ids);
                 return Err(self.suspend(Suspension::Load(load)));
             }
             Err(problem) => {
@@ -312,14 +313,16 @@ impl Engine {
     /// The translation then fails with N0316 for it,
     /// and is repeated with that predicate rebuilt as well.
     /// A failed translation restores the previous state,
-    /// and so does one that suspends for the remote resources it needs.
-    /// Remote resources are read from the responses given so far.
+    /// and so does a prepared one that waits for the remote resources it needs:
+    /// the load then keeps the prepared translation state and the predicates rebuilt so far,
+    /// and the next call commits from them.
+    /// Remote resources are read from those the load fetched, which a repetition reads again.
     /// `previous` holds the column types the replaced program was analyzed with,
     /// and `stages` the pipeline stages that made the program.
     #[expect(clippy::too_many_arguments, reason = "the parts of one reload")]
     fn reload_translation(
         &mut self,
-        responses: &HashMap<String, RemoteResponse>,
+        load: &mut SuspendedLoad,
         written: &WrittenProgram,
         new_ids: &[crate::pipeline::StatementId],
         new_statements: &[Statement],
@@ -327,7 +330,7 @@ impl Engine {
         previous: &HashMap<TableId, Vec<Type>>,
         stages: &[&'static str],
     ) -> Result<Translated<Retranslated>, Diagnostic> {
-        let mut unstable: HashSet<String> = HashSet::new();
+        let mut unstable: HashSet<String> = std::mem::take(&mut load.unstable);
         loop {
             let rebuilt = self.rebuilt_predicates(rebuild, &unstable);
 
@@ -337,21 +340,57 @@ impl Engine {
             let saved_extensional = self.extensional.clone();
             let replaced = self.unregister(&rebuilt);
             let preloaded = preloaded(new_statements, &saved_state, &self.predicates);
-
-            let mut state = std::mem::take(&mut self.translation);
-            state.clear_statement_state();
             let instant = self.loading_instant();
+
+            let state = match load.prepared.take() {
+                Some(state) => state,
+                None => {
+                    let mut state = self.translation.clone();
+                    state.clear_statement_state();
+                    let (stores, mut setup) =
+                        self.translation_parts(Purpose::of_load(stages), instant);
+                    setup.written = Some(written);
+                    setup.previous_types = Some(previous);
+                    let mut translator =
+                        translation::Translator::new(stores, setup, state, preloaded.clone());
+                    let requests = translator.prepare(new_statements, new_ids);
+                    let (state, _) = translator.finish();
+                    match requests.map(|requests| load.missing(requests)) {
+                        Ok(missing) if missing.is_empty() => state,
+                        outcome => {
+                            // Nothing was registered or stored, but the rebuilt
+                            // predicates were unregistered.
+                            self.forget_registrations(&saved_predicates, &saved_state);
+                            self.translation = saved_state;
+                            self.extensional = saved_extensional;
+                            match outcome {
+                                Ok(missing) => {
+                                    load.prepared = Some(state);
+                                    load.unstable = unstable;
+                                    return Ok(Translated::Waiting(missing));
+                                }
+                                Err(problem) => {
+                                    if Self::unstable_import(&problem, &mut unstable) {
+                                        continue;
+                                    }
+                                    return Err(problem);
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+
             let (stores, mut setup) = self.translation_parts(Purpose::of_load(stages), instant);
             setup.written = Some(written);
-            setup.responses = Some(responses);
             setup.previous_types = Some(previous);
             let mut translator = translation::Translator::new(stores, setup, state, preloaded);
-            let outcome = translator.program(new_statements, new_ids);
-            let requests = translator.take_requests();
+            // A repetition reads the fetched resources again.
+            let outcome = translator.commit(new_statements, new_ids, load.fetched.clone());
             let (state, facts) = translator.finish();
             self.translation = state;
             match outcome {
-                Ok(compiled) if requests.is_empty() => {
+                Ok(compiled) => {
                     return Ok(Translated::Done(Retranslated {
                         compiled,
                         facts,
@@ -359,26 +398,29 @@ impl Engine {
                         extensional: saved_extensional,
                     }));
                 }
-                outcome => {
+                Err(problem) => {
                     // Undo the registrations of this translation and
                     // restore the previous state.
                     self.forget_registrations(&saved_predicates, &saved_state);
                     self.translation = saved_state;
                     self.extensional = saved_extensional;
-                    if !requests.is_empty() {
-                        return Ok(Translated::Suspended(requests));
-                    }
-                    let problem = outcome.expect_err("a translation that was not suspended failed");
-                    if problem.code() == codes::PRUNING_INSTABILITY
-                        && let Some(name) = problem.predicate()
-                        && unstable.insert(name.to_owned())
-                    {
+                    if Self::unstable_import(&problem, &mut unstable) {
                         continue;
                     }
                     return Err(problem);
                 }
             }
         }
+    }
+
+    /// Returns whether a reload's translation failed because a stored import no longer covers
+    /// what the new rules read (N0316), for a predicate not rebuilt yet,
+    /// adding it to those to rebuild.
+    fn unstable_import(problem: &Diagnostic, unstable: &mut HashSet<String>) -> bool {
+        problem.code() == codes::PRUNING_INSTABILITY
+            && problem
+                .predicate()
+                .is_some_and(|name| unstable.insert(name.to_owned()))
     }
 
     /// Returns the registered predicates a reload rebuilds:

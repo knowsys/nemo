@@ -9,7 +9,10 @@ use wasm_bindgen_futures::future_to_promise;
 
 use nemo::{
     diagnostics::render::SourceTexts,
-    engine::{PredicateCursor, remote::Failure},
+    engine::{
+        PredicateCursor,
+        remote::{Failure, PendingRequest, Progress, RequestId, Response},
+    },
     trace::TraceResponse,
     values::{DataValue, TypeSyntax},
 };
@@ -50,16 +53,50 @@ impl Inner {
 
     /// Carries a program through one of the loading methods, and throws
     /// the errors it reports.
-    fn ingest(&mut self, name: &str, text: String, kind: LoadKind) -> Result<(), JsValue> {
-        let outcome = self.engine.ingest(name, text, |engine, model| match kind {
-            LoadKind::Load => engine.load(model),
-            LoadKind::Extend => engine.extend(model),
-            LoadKind::Reload => engine.reload(model),
+    ///
+    /// Stepwise, the method sends no request and returns what it waits for.
+    /// Otherwise it completes, and throws N0491 if it needs data from the network,
+    /// since the browser engine has no client of its own.
+    fn ingest(
+        &mut self,
+        name: &str,
+        text: String,
+        kind: LoadKind,
+        stepwise: bool,
+    ) -> Result<Progress, JsValue> {
+        let mut progress = Progress::Done;
+        let outcome = self.engine.ingest(name, text, |engine, model| {
+            if stepwise {
+                progress = match kind {
+                    LoadKind::Load => engine.start_load(model),
+                    LoadKind::Extend => engine.start_extend(model),
+                    LoadKind::Reload => engine.start_reload(model),
+                }?;
+                return Ok(());
+            }
+            match kind {
+                LoadKind::Load => engine.load(model),
+                LoadKind::Extend => engine.extend(model),
+                LoadKind::Reload => engine.reload(model),
+            }
+            .map_err(with_async_hint)
         });
         // Linking reads the program's modules, so their sources are
         // taken in before its outcome is reported against them.
         self.sources.absorb(self.engine.sources());
-        outcome.map_err(|diagnostics| diagnostics::throw(diagnostics, &self.sources))
+        outcome
+            .map(|()| progress)
+            .map_err(|diagnostics| diagnostics::throw(diagnostics, &self.sources))
+    }
+}
+
+/// Adds to the error of a synchronous method that needed data from the network
+/// the hint to call its async form, which fetches it.
+fn with_async_hint(problem: nemo::diagnostics::Diagnostic) -> nemo::diagnostics::Diagnostic {
+    if problem.code() == nemo::codes::AWAITING_REMOTE {
+        problem.with_hint("call the method's async form, such as `loadAsync`, which fetches it")
+    } else {
+        problem
     }
 }
 
@@ -67,8 +104,8 @@ impl Inner {
 /// load it, reason to the fixpoint, read the results back.
 ///
 /// The methods are synchronous, so run them in a worker.
-/// A method that needs data from the network suspends,
-/// and its async form fetches the data and resumes it.
+/// A method that needs data from the network has an async form, which fetches the data,
+/// and a `start*` form, which returns the requests for the caller to answer through `resume`.
 /// A method that may change the engine throws while an async method waits for responses.
 /// Errors are thrown as an `Error` whose `diagnostics` carry the structured entries.
 #[wasm_bindgen]
@@ -88,8 +125,7 @@ impl NemoEngine {
 
     /// Returns the engine and its sources, for a call that may change them.
     ///
-    /// The call fails while an async method waits for responses, since it would abandon that
-    /// method.
+    /// The call fails while an async method waits for responses, which only it may answer.
     fn state_mut(&self) -> Result<std::cell::RefMut<'_, Inner>, JsValue> {
         let inner = self.inner.borrow_mut();
         if inner.driving {
@@ -112,11 +148,11 @@ impl NemoEngine {
             .collect()
     }
 
-    /// Starts an async method: the method, then the requests it suspends for
-    /// fetched and responded to, settling when it completes.
+    /// Starts an async method: a step of the method, then the requests it waits for
+    /// fetched and answered, settling when it completes.
     fn drive(
         &self,
-        call: impl FnOnce(&mut Inner) -> Result<(), JsValue> + 'static,
+        call: impl FnOnce(&mut Inner) -> Result<Progress, JsValue> + 'static,
     ) -> Result<Promise, JsValue> {
         self.state_mut()?.driving = true;
         let inner = Rc::clone(&self.inner);
@@ -124,6 +160,125 @@ impl NemoEngine {
             fetch::drive(inner, call).await.map(|()| JsValue::UNDEFINED)
         }))
     }
+}
+
+/// Returns what a step of a method returns to JavaScript:
+/// `null` if the method is done, else the requests it waits for, as `pendingRequests` lists them.
+fn progress_js(progress: Progress) -> Result<JsValue, JsValue> {
+    match progress {
+        Progress::Done => Ok(JsValue::NULL),
+        Progress::Waiting(pending) => requests_js(&pending).map(JsValue::from),
+    }
+}
+
+/// Returns requests as plain objects:
+/// `{id, url, method, headers: [[name, value]…], accept, parameters: [[name, value]…],
+/// form: [[name, value]…] | null}`, the id a `BigInt`.
+fn requests_js(pending: &[PendingRequest]) -> Result<Array, JsValue> {
+    let pairs = |pairs: &[(String, String)]| -> Array {
+        pairs
+            .iter()
+            .map(|(name, value)| {
+                JsValue::from(Array::of2(
+                    &JsValue::from_str(name),
+                    &JsValue::from_str(value),
+                ))
+            })
+            .collect()
+    };
+    pending
+        .iter()
+        .map(|pending| {
+            let object = Object::new();
+            let request = &pending.request;
+            let fields: [(&str, JsValue); 7] = [
+                ("id", JsValue::from(pending.id.value())),
+                ("url", JsValue::from_str(&request.url)),
+                ("method", JsValue::from_str(request.method())),
+                ("headers", pairs(&request.headers).into()),
+                (
+                    "accept",
+                    request.accept.map_or(JsValue::NULL, JsValue::from_str),
+                ),
+                ("parameters", pairs(&request.parameters).into()),
+                (
+                    "form",
+                    request
+                        .form
+                        .as_deref()
+                        .map_or(JsValue::NULL, |form| pairs(form).into()),
+                ),
+            ];
+            for (name, value) in fields {
+                Reflect::set(&object, &JsValue::from_str(name), &value)?;
+            }
+            Ok(JsValue::from(object))
+        })
+        .collect()
+}
+
+/// Returns the answers `resume` takes, from plain objects:
+/// `{id, body}` for a response, its body a `Uint8Array` or a string,
+/// and `{id, status, message}` for a failure, `status` left out if no response came.
+/// A failure with `partial: true` is a response holding only part of the result
+/// ([partial_response](nemo::engine::remote::partial_response) tells one),
+/// which a bound import splits into smaller requests.
+fn answers_of(answers: &JsValue) -> Result<Vec<(RequestId, Response)>, JsValue> {
+    let invalid = |what: &str| -> JsValue {
+        js_sys::Error::new(&format!(
+            "`resume` takes an array of `{{id, body}}` or `{{id, status, message}}`: {what}"
+        ))
+        .into()
+    };
+    let answers: Array = answers
+        .clone()
+        .dyn_into()
+        .map_err(|_| invalid("not an array"))?;
+    answers
+        .iter()
+        .map(|answer| {
+            let id = Reflect::get(&answer, &"id".into())?;
+            let id = if id.is_bigint() {
+                u64::try_from(id).map_err(|_| invalid("an id out of range"))?
+            } else {
+                match id.as_f64() {
+                    // The ids the engine hands out are far below 2^53, exact as numbers.
+                    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                    Some(number) if number >= 0.0 && number.fract() == 0.0 => number as u64,
+                    _ => return Err(invalid("an answer without an id")),
+                }
+            };
+            let body = Reflect::get(&answer, &"body".into())?;
+            let response = if body.is_undefined() {
+                let message = Reflect::get(&answer, &"message".into())?
+                    .as_string()
+                    .ok_or_else(|| invalid("an answer without a body or a message"))?;
+                let status = Reflect::get(&answer, &"status".into())?;
+                Err(if status.is_undefined() || status.is_null() {
+                    Failure::transport(message)
+                } else {
+                    match status.as_f64() {
+                        // Checked to be an HTTP status, so it fits.
+                        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                        Some(number)
+                            if (100.0..=599.0).contains(&number) && number.fract() == 0.0 =>
+                        {
+                            let partial = Reflect::get(&answer, &"partial".into())?.is_truthy();
+                            if partial {
+                                Failure::partial(number as u16, message)
+                            } else {
+                                Failure::response(number as u16, message)
+                            }
+                        }
+                        _ => return Err(invalid("a status that is not an HTTP status number")),
+                    }
+                })
+            } else {
+                Ok(bytes_of(&body, "resume")?.into())
+            };
+            Ok((RequestId::from(id), response))
+        })
+        .collect()
 }
 
 /// Returns the bytes a `Uint8Array` or a string holds,
@@ -259,114 +414,75 @@ impl NemoEngine {
         Ok(())
     }
 
-    /// Returns the requests of the suspended method that have no response yet,
-    /// empty if no method is suspended.
+    /// Returns the requests of the waiting method that have no response yet,
+    /// empty if no method waits.
     ///
-    /// The engine never fetches.
-    /// A method that needs data from the network
-    /// (`load`, `extend` or `reload` with remote imports, `reason` with a bound import)
-    /// suspends: it throws code N0491 and lists the requests here.
-    /// Fetch each, respond to it with `respond` or `respondFailure`, and call `resume`,
-    /// which may suspend again.
-    /// The async methods, such as `loadAsync`, do all of this themselves.
+    /// The async methods, such as `loadAsync`, fetch the data a method needs from the
+    /// network themselves. To fetch it another way, through a proxy or with credentials,
+    /// call the method's `start*` form, such as `startLoad`, which returns the requests it
+    /// waits for (or `null` once done), fetch each, and pass the answers to `resume`,
+    /// which returns what the method waits for next.
     /// Entries are plain objects:
     /// `{id, url, method, headers: [[name, value]…], accept, parameters: [[name, value]…],
     /// form: [[name, value]…] | null}`, the id a `BigInt`.
     #[wasm_bindgen(js_name = "pendingRequests")]
     pub fn pending_requests(&self) -> Result<Array, JsValue> {
-        let pairs = |pairs: &[(String, String)]| -> Array {
-            pairs
-                .iter()
-                .map(|(name, value)| {
-                    JsValue::from(Array::of2(
-                        &JsValue::from_str(name),
-                        &JsValue::from_str(value),
-                    ))
-                })
-                .collect()
-        };
-        self.state()
-            .engine
-            .pending()
-            .iter()
-            .map(|pending| {
-                let object = Object::new();
-                let request = &pending.request;
-                let fields: [(&str, JsValue); 7] = [
-                    ("id", JsValue::from(pending.id)),
-                    ("url", JsValue::from_str(&request.url)),
-                    ("method", JsValue::from_str(request.method())),
-                    ("headers", pairs(&request.headers).into()),
-                    (
-                        "accept",
-                        request.accept.map_or(JsValue::NULL, JsValue::from_str),
-                    ),
-                    ("parameters", pairs(&request.parameters).into()),
-                    (
-                        "form",
-                        request
-                            .form
-                            .as_deref()
-                            .map_or(JsValue::NULL, |form| pairs(form).into()),
-                    ),
-                ];
-                for (name, value) in fields {
-                    Reflect::set(&object, &JsValue::from_str(name), &value)?;
-                }
-                Ok(JsValue::from(object))
-            })
-            .collect()
+        requests_js(&self.state().engine.pending())
     }
 
-    /// Responds to a pending request with the response body, a `Uint8Array` or a string,
-    /// returning whether a request waited under the id.
-    pub fn respond(&mut self, id: u64, body: &JsValue) -> Result<bool, JsValue> {
-        let bytes = bytes_of(body, "respond")?;
-        Ok(self.state_mut()?.engine.respond(id, Ok(bytes.into())))
-    }
-
-    /// Responds to a pending request with why it got no body:
-    /// the response status, if one came, and a message.
-    /// Returns whether a request waited under the id.
+    /// Continues the waiting method with answers to its requests:
+    /// an array of `{id, body}`, the body a `Uint8Array` or a string,
+    /// or `{id, status, message}` for a request that got no body,
+    /// `status` left out if no response came.
     ///
-    /// A failure is final, so retry before responding.
+    /// Returns `null` once the method is done, or the requests it waits for, as `startLoad`
+    /// does: those not answered yet, or new ones.
+    /// A failure is final, so retry before answering.
     /// A request too large for the server (413, 414) is sent again in smaller pieces
-    /// if the engine can split it, as is one whose response `respond` passed in cut off.
-    #[wasm_bindgen(js_name = "respondFailure")]
-    pub fn respond_failure(
-        &mut self,
-        id: u64,
-        status: Option<u16>,
-        message: String,
-    ) -> Result<bool, JsValue> {
-        let failure = match status {
-            Some(status) => Failure::response(status, message),
-            None => Failure::transport(message),
-        };
-        Ok(self.state_mut()?.engine.respond(id, Err(failure)))
+    /// if the engine can split it, as is one whose response the server cut off.
+    /// Throws code N0494 for an id no request waits under, taking no answer,
+    /// and as the method it continues does otherwise.
+    pub fn resume(&mut self, answers: &JsValue) -> Result<JsValue, JsValue> {
+        let answers = answers_of(answers)?;
+        let mut inner = self.state_mut()?;
+        let progress = inner
+            .engine
+            .resume(answers)
+            .map_err(|diagnostic| inner.throw(diagnostic))?;
+        progress_js(progress)
     }
 
-    /// Resumes the suspended method with the responses given,
-    /// and does nothing if no method is suspended.
+    /// Discards the waiting method, returning whether one waited.
     ///
-    /// Throws as the method it resumes does,
-    /// with code N0491 again if requests remain or new ones arise.
-    pub fn resume(&mut self) -> Result<(), JsValue> {
-        let mut inner = self.state_mut()?;
-        inner
-            .engine
-            .resume()
-            .map_err(|diagnostic| inner.throw(diagnostic))
+    /// A waiting load, extension or reload has changed nothing,
+    /// and a waiting `reason` stops as after a cancellation.
+    #[wasm_bindgen(js_name = "discardPending")]
+    pub fn discard_pending(&mut self) -> Result<bool, JsValue> {
+        Ok(self.state_mut()?.engine.discard_pending())
     }
 
     /// Loads a program: facts become stored rows, imports read their resources, rules compile.
     ///
     /// Throws for a program that does not load,
-    /// with code N0491 if it suspends for data from the network (see `pendingRequests`).
+    /// with code N0491 if it needs data from the network: `loadAsync` fetches it,
+    /// and `startLoad` lets the caller fetch it.
     pub fn load(&mut self, program: &NemoProgram) -> Result<(), JsValue> {
         let text = program.text.clone();
         self.state_mut()?
-            .ingest(&program.name, text, LoadKind::Load)
+            .ingest(&program.name, text, LoadKind::Load, false)
+            .map(drop)
+    }
+
+    /// Loads a program as `load` does, but sends no request:
+    /// returns `null` once loaded, or the requests the load waits for, as `pendingRequests`
+    /// lists them, having stored nothing. `resume` takes the answers.
+    #[wasm_bindgen(js_name = "startLoad")]
+    pub fn start_load(&mut self, program: &NemoProgram) -> Result<JsValue, JsValue> {
+        let text = program.text.clone();
+        let progress = self
+            .state_mut()?
+            .ingest(&program.name, text, LoadKind::Load, true)?;
+        progress_js(progress)
     }
 
     /// Loads a program as `load` does, its remote resources fetched with the global `fetch`.
@@ -379,7 +495,7 @@ impl NemoEngine {
     #[wasm_bindgen(js_name = "loadAsync")]
     pub fn load_async(&self, program: &NemoProgram) -> Result<Promise, JsValue> {
         let (name, text) = (program.name.clone(), program.text.clone());
-        self.drive(move |inner| inner.ingest(&name, text, LoadKind::Load))
+        self.drive(move |inner| inner.ingest(&name, text, LoadKind::Load, true))
     }
 
     /// Extends the loaded program:
@@ -392,7 +508,20 @@ impl NemoEngine {
     pub fn extend(&mut self, program: &NemoProgram) -> Result<(), JsValue> {
         let text = program.text.clone();
         self.state_mut()?
-            .ingest(&program.name, text, LoadKind::Extend)
+            .ingest(&program.name, text, LoadKind::Extend, false)
+            .map(drop)
+    }
+
+    /// Extends the loaded program as `extend` does, but sends no request,
+    /// returning what it waits for as `startLoad` does, the loaded program unchanged until
+    /// it completes.
+    #[wasm_bindgen(js_name = "startExtend")]
+    pub fn start_extend(&mut self, program: &NemoProgram) -> Result<JsValue, JsValue> {
+        let text = program.text.clone();
+        let progress = self
+            .state_mut()?
+            .ingest(&program.name, text, LoadKind::Extend, true)?;
+        progress_js(progress)
     }
 
     /// Extends the loaded program as `extend` does,
@@ -400,7 +529,7 @@ impl NemoEngine {
     #[wasm_bindgen(js_name = "extendAsync")]
     pub fn extend_async(&self, program: &NemoProgram) -> Result<Promise, JsValue> {
         let (name, text) = (program.name.clone(), program.text.clone());
-        self.drive(move |inner| inner.ingest(&name, text, LoadKind::Extend))
+        self.drive(move |inner| inner.ingest(&name, text, LoadKind::Extend, true))
     }
 
     /// Replaces the program:
@@ -412,7 +541,20 @@ impl NemoEngine {
     pub fn reload(&mut self, program: &NemoProgram) -> Result<(), JsValue> {
         let text = program.text.clone();
         self.state_mut()?
-            .ingest(&program.name, text, LoadKind::Reload)
+            .ingest(&program.name, text, LoadKind::Reload, false)
+            .map(drop)
+    }
+
+    /// Replaces the program as `reload` does, but sends no request,
+    /// returning what it waits for as `startLoad` does, the loaded program unchanged until
+    /// it completes.
+    #[wasm_bindgen(js_name = "startReload")]
+    pub fn start_reload(&mut self, program: &NemoProgram) -> Result<JsValue, JsValue> {
+        let text = program.text.clone();
+        let progress = self
+            .state_mut()?
+            .ingest(&program.name, text, LoadKind::Reload, true)?;
+        progress_js(progress)
     }
 
     /// Replaces the program as `reload` does,
@@ -420,7 +562,7 @@ impl NemoEngine {
     #[wasm_bindgen(js_name = "reloadAsync")]
     pub fn reload_async(&self, program: &NemoProgram) -> Result<Promise, JsValue> {
         let (name, text) = (program.name.clone(), program.text.clone());
-        self.drive(move |inner| inner.ingest(&name, text, LoadKind::Reload))
+        self.drive(move |inner| inner.ingest(&name, text, LoadKind::Reload, true))
     }
 
     /// Checks a program without loading it:
@@ -445,14 +587,27 @@ impl NemoEngine {
     /// Runs semi-naive evaluation to the fixpoint.
     ///
     /// The call is synchronous and returns when the fixpoint is reached, so run it in a worker.
-    /// If a bound import needs data from the network, it suspends with code N0491
-    /// (see `pendingRequests`).
+    /// If a bound import needs data from the network, it throws code N0491:
+    /// `reasonAsync` fetches the data, and `startReason` lets the caller fetch it.
     pub fn reason(&mut self) -> Result<(), JsValue> {
         let mut inner = self.state_mut()?;
         inner
             .engine
             .reason()
-            .map_err(|diagnostic| inner.throw(diagnostic))
+            .map_err(|diagnostic| inner.throw(with_async_hint(diagnostic)))
+    }
+
+    /// Runs semi-naive evaluation as `reason` does, but sends no request:
+    /// returns `null` at the fixpoint, or the requests of the bound import whose fetch the run
+    /// waits in, as `startLoad` does. `resume` takes the answers and continues the run there.
+    #[wasm_bindgen(js_name = "startReason")]
+    pub fn start_reason(&mut self) -> Result<JsValue, JsValue> {
+        let mut inner = self.state_mut()?;
+        let progress = inner
+            .engine
+            .start_reason()
+            .map_err(|diagnostic| inner.throw(diagnostic))?;
+        progress_js(progress)
     }
 
     /// Runs semi-naive evaluation as `reason` does,
@@ -464,7 +619,7 @@ impl NemoEngine {
         self.drive(|inner| {
             inner
                 .engine
-                .reason()
+                .start_reason()
                 .map_err(|diagnostic| inner.throw(diagnostic))
         })
     }

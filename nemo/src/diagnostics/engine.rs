@@ -74,20 +74,37 @@ diagnostic_kinds! {
                hint "call `Engine::link` on the program first";
         AwaitingRemote { count: Count, first: String }
             => AWAITING_REMOTE = 491, error,
-               "suspended to wait for {count} remote request{count:#}, one of them to \
-                `{first}`",
-               explain "The method needs data from the network, which the engine does not \
-                        fetch itself. It suspended where it needs the data, and the stored \
-                        data is consistent. `pending()` lists the requests, `respond()` \
-                        passes in each response, and `resume()` continues the method.",
-               hint "use `nemo::driver::HttpDriver` to perform the requests over HTTP, or pass \
-                     each response to `respond()` and call `resume()`";
+               "the method needs {count} remote request{count:#}, one of them to `{first}`, \
+                but the engine has no client to send them",
+               explain "The method needs data from the network. The engine sends such \
+                        requests through its client, which a build with the `http` feature \
+                        has unless `set_client(None)` removed it. Without a client, the \
+                        method changes nothing. The `start_*` methods send no request: they \
+                        return the requests, and `resume()` takes the responses.",
+               hint "set a client with `set_client`, or call the `start_*` method and answer \
+                     its requests with `resume()`";
         WaitCancelled
             => WAIT_CANCELLED = 492, error, "the wait for remote responses was cancelled",
-               explain "The engine's cancel token stopped `HttpDriver::drive` while it waited \
-                        for the responses to the remote requests of a suspended method. The \
-                        method stays suspended, and its requests stay pending.",
-               hint "call `drive` again to send the pending requests";
+               explain "The engine's cancel token stopped a method while its client waited \
+                        for the responses to its remote requests. A load, extension or reload \
+                        changes nothing. A reasoning run keeps waiting, with the tables \
+                        consistent, and the next `reason()` continues it.",
+               hint "call the method again";
+        Waiting { method: String, count: Count }
+            => WAITING = 493, error,
+               "{method} waits for {count} remote request{count:#}",
+               explain "A method that needs data from the network waits for the responses to \
+                        its requests, which `pending()` lists. Until it is resumed or \
+                        discarded, the methods that would change the program or the stored \
+                        data refuse, rather than drop what it has done.",
+               hint "answer the requests with `resume()`, or call `discard_pending()`";
+        UnknownRequest { id: u64 }
+            => UNKNOWN_REQUEST = 494, error, "no request waits under id {id}",
+               explain "`resume()` was given a response under an id that no request of the \
+                        waiting method has: the request was answered already, possibly \
+                        earlier in the same call, or another method gave out the id. No \
+                        response was taken.",
+               hint "answer each id that `pending()` lists once";
         NotStoredWhole { predicate: String, missing: String }
             => NOT_STORED_WHOLE = 489, error,
                "`{predicate}` is not stored whole: {missing}",

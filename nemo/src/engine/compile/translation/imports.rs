@@ -63,6 +63,9 @@ pub(super) struct PendingImport {
     pub(super) conditions: Vec<Operation>,
     /// The directive's source position.
     pub(super) span: Option<Span>,
+    /// The position of the directive among the translated statements,
+    /// under which its remote resource, if it reads one, is fetched.
+    pub(super) statement: usize,
     /// Whether the import's data is already stored: its options are validated
     /// and the predicate registers, but nothing is read.
     pub(super) preloaded: bool,

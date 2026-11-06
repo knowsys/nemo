@@ -1,17 +1,17 @@
 //! What the tests share: programs parsed from source, engines reasoned
-//! to their fixpoint, a predicate's rows as text, a responder to
-//! the requests an engine suspends for, and temporary directories.
+//! to their fixpoint, a predicate's rows as text, a client answering
+//! an engine's requests, and temporary directories.
 
 mod temp_directory;
 
 pub(crate) use temp_directory::TempDirectory;
 
-use std::{cell::RefCell, sync::Arc};
+use std::sync::{Arc, Mutex};
 
 use nemo::{
     engine::{
         Engine, PredicateRole,
-        remote::{Failure, Request},
+        remote::{Client, Failure, Progress, Request, Response},
     },
     model::{FileId, Program},
 };
@@ -65,24 +65,53 @@ pub(crate) fn rows(engine: &mut Engine, predicate: &str) -> Vec<String> {
 }
 
 /// What a responder returns for a request: the body, or why there is none.
-type Response = dyn Fn(&Request) -> Result<String, Failure>;
+type Answer = dyn Fn(&Request) -> Result<String, Failure> + Send + Sync;
 
-/// A make-believe remote side: the responses to the requests a suspended engine waits for,
-/// remembering every request it responded to.
-pub(crate) struct Responder {
+/// A make-believe remote side: a client answering an engine's requests,
+/// remembering every request it answered.
+///
+/// Clones share what they remember.
+#[derive(Clone)]
+pub(crate) struct Responder(Arc<ResponderState>);
+
+/// What the clones of a responder share.
+struct ResponderState {
     /// The response to a request.
-    respond: Box<Response>,
-    /// Every request responded to, in order.
-    seen: RefCell<Vec<Request>>,
+    respond: Box<Answer>,
+    /// Every request answered, in order.
+    seen: Mutex<Vec<Request>>,
+}
+
+impl Client for Responder {
+    fn fetch_all(&self, requests: &[Request], _: &dyn Fn() -> bool) -> Option<Vec<Response>> {
+        Some(
+            requests
+                .iter()
+                .map(|request| self.answer(request))
+                .collect(),
+        )
+    }
 }
 
 impl Responder {
     /// Creates a responder returning the given function's result for each request.
-    pub(crate) fn new(respond: impl Fn(&Request) -> Result<String, Failure> + 'static) -> Self {
-        Self {
+    pub(crate) fn new(
+        respond: impl Fn(&Request) -> Result<String, Failure> + Send + Sync + 'static,
+    ) -> Self {
+        Self(Arc::new(ResponderState {
             respond: Box::new(respond),
-            seen: RefCell::new(Vec::new()),
-        }
+            seen: Mutex::new(Vec::new()),
+        }))
+    }
+
+    /// Answers one request, remembering it.
+    pub(crate) fn answer(&self, request: &Request) -> Response {
+        self.0
+            .seen
+            .lock()
+            .expect("no test panics holding the lock")
+            .push(request.clone());
+        (self.0.respond)(request).map(|body| Arc::from(body.as_bytes()))
     }
 
     /// Creates a responder returning a URL's body for that URL, and a 404 for any other URL.
@@ -102,7 +131,7 @@ impl Responder {
 
     /// Creates a SPARQL endpoint responding to each query text with the given function.
     #[cfg(feature = "sparql")]
-    pub(crate) fn endpoint(respond: impl Fn(&str) -> String + 'static) -> Self {
+    pub(crate) fn endpoint(respond: impl Fn(&str) -> String + Send + Sync + 'static) -> Self {
         Self::new(move |request| Ok(respond(&query_text(request))))
     }
 
@@ -110,43 +139,54 @@ impl Responder {
     /// failures included.
     #[cfg(feature = "sparql")]
     pub(crate) fn failing_endpoint(
-        respond: impl Fn(&str) -> Result<String, Failure> + 'static,
+        respond: impl Fn(&str) -> Result<String, Failure> + Send + Sync + 'static,
     ) -> Self {
         Self::new(move |request| respond(&query_text(request)))
     }
 
-    /// Calls an engine method, responding to the requests it suspends for and resuming it,
-    /// until it completes or fails.
+    /// Answers the requests a step of an engine method waits for, and those it waits for
+    /// next, through `resume`, until the method completes or fails.
+    pub(crate) fn complete(
+        &self,
+        engine: &mut Engine,
+        mut progress: Progress,
+    ) -> Result<(), Diagnostic> {
+        while let Progress::Waiting(pending) = progress {
+            let answers: Vec<_> = pending
+                .iter()
+                .map(|pending| (pending.id, self.answer(&pending.request)))
+                .collect();
+            progress = engine.resume(answers)?;
+        }
+        Ok(())
+    }
+
+    /// Calls an engine method with this responder as the engine's client,
+    /// and gives the engine its own client back afterwards.
     pub(crate) fn drive(
         &self,
         engine: &mut Engine,
         call: impl FnOnce(&mut Engine) -> Result<(), Diagnostic>,
     ) -> Result<(), Diagnostic> {
-        let mut outcome = call(engine);
-        loop {
-            let pending = engine.pending();
-            if pending.is_empty() {
-                return outcome;
-            }
-            for request in pending {
-                let response =
-                    (self.respond)(&request.request).map(|body| Arc::from(body.as_bytes()));
-                self.seen.borrow_mut().push(request.request);
-                assert!(engine.respond(request.id, response), "the request waits");
-            }
-            outcome = engine.resume();
-        }
+        let own = engine.set_client(Some(Box::new(self.clone())));
+        let outcome = call(engine);
+        engine.set_client(own);
+        outcome
     }
 
-    /// Returns the requests responded to so far, in order.
+    /// Returns the requests answered so far, in order.
     pub(crate) fn seen(&self) -> Vec<Request> {
-        self.seen.borrow().clone()
+        self.0
+            .seen
+            .lock()
+            .expect("no test panics holding the lock")
+            .clone()
     }
 
-    /// Returns the query texts of the requests responded to so far, in order.
+    /// Returns the query texts of the requests answered so far, in order.
     #[cfg(feature = "sparql")]
     pub(crate) fn queries(&self) -> Vec<String> {
-        self.seen.borrow().iter().map(query_text).collect()
+        self.seen().iter().map(query_text).collect()
     }
 }
 

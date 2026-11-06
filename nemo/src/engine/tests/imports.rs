@@ -750,8 +750,8 @@ fn directive_options_are_refused_rather_than_ignored() {
 #[test]
 fn request_headers_are_sent_as_written_or_refused() {
     let mut engine = Engine::new();
-    let problem = engine
-        .load(parse(
+    let progress = engine
+        .start_load(parse(
             "@base <http://example.org/> .
 @import p from csv {
     resource = \"http://example.org/p.csv\",
@@ -759,9 +759,11 @@ fn request_headers_are_sent_as_written_or_refused() {
 } .
 ",
         ))
-        .expect_err("the import waits for its resource");
-    assert_eq!(problem.code(), codes::AWAITING_REMOTE, "{problem:?}");
-    let pending = engine.pending();
+        .unwrap_or_else(|problem| panic!("{problem:?}"));
+    let Progress::Waiting(pending) = progress else {
+        panic!("the import waits for its resource");
+    };
+    assert_eq!(engine.pending(), pending);
     assert_eq!(pending.len(), 1, "{pending:?}");
     assert!(
         pending[0]

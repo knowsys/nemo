@@ -10,11 +10,11 @@ readme = "README.md"
 repository.workspace = true
 
 [features]
-# The driver: performs the HTTP requests of suspended engine methods
-# (remote http/https resources), with retries.
+# The HTTP client, every engine's default client: sends the requests of
+# remote data (http/https resources), with retries.
 http = ["nemo-io/http"]
-# SPARQL endpoint imports: validation and requests. The `http` driver
-# performs the requests, or the responses are passed in through `respond`.
+# SPARQL endpoint imports: validation and requests. The engine's client
+# sends the requests, or the caller answers them through `resume`.
 sparql = ["nemo-io/sparql"]
 # Parquet import and export.
 parquet = ["nemo-io/parquet"]

@@ -16,8 +16,8 @@ use std::sync::{
 /// Each call that checks the token clears it as it starts,
 /// so a token cancels the call that is running, not future ones.
 ///
-/// With the `http` feature, `nemo::driver::HttpDriver` also stops waiting for HTTP responses
-/// when the token is cancelled.
+/// The methods that send requests through the engine's [client](crate::engine::remote::Client)
+/// pass it the token, and stop waiting for responses when it is cancelled.
 #[derive(Debug, Clone, Default)]
 pub struct CancelToken(Arc<AtomicBool>);
 

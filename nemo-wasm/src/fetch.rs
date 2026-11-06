@@ -1,9 +1,9 @@
-//! Fetching the data a suspended engine method needs from the network.
+//! Fetching the data a waiting engine method needs from the network.
 //!
-//! If a method suspends,
+//! If a step of a method waits,
 //! its requests go out through the global `fetch` (a window's, a worker's, or Node's),
 //! the failures the retry schedule allows are sent again,
-//! and the responses are passed to `respond` and the method resumed until it completes.
+//! and the responses are passed to `resume`, until the method completes.
 //!
 //! No borrow of the engine is held while a request is out,
 //! so the engine still serves reads in the meantime.
@@ -15,7 +15,9 @@ use js_sys::{Array, Function, Object, Promise, Reflect, Uint8Array};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 
-use nemo::engine::remote::{Failure, PendingRequest, Request, Retry};
+use nemo::engine::remote::{
+    Failure, PARTIAL_RESPONSE_HEADERS, Progress, Request, Retry, partial_response,
+};
 
 use crate::engine::Inner;
 
@@ -36,39 +38,46 @@ enum Sent {
         /// The `Retry-After` header, if the response has one.
         retry_after: Option<String>,
     },
+    /// A successful response holding only part of the result, as its status or headers say
+    /// ([partial_response]): its status and the reason.
+    Partial {
+        /// The response status.
+        status: u16,
+        /// Why the result is partial.
+        reason: String,
+    },
     /// No response came, for the reason `fetch` gives.
     Lost(String),
 }
 
-/// Calls a method on the engine, then responds to the requests it suspends for and resumes it
-/// until it completes or fails, returning what it ends with.
+/// Calls a step of a method on the engine, then fetches the requests it waits for and passes
+/// the responses to `resume`, until the method completes or fails, returning what it ends with.
 ///
 /// It clears the engine's busy mark, set before the call, as it ends.
 pub(crate) async fn drive(
     inner: Rc<RefCell<Inner>>,
-    call: impl FnOnce(&mut Inner) -> Result<(), JsValue>,
+    call: impl FnOnce(&mut Inner) -> Result<Progress, JsValue>,
 ) -> Result<(), JsValue> {
     let retry = Retry::default();
-    let mut outcome = call(&mut inner.borrow_mut());
+    let mut progress = call(&mut inner.borrow_mut());
     loop {
-        // A method that completed or failed leaves nothing pending.
-        let pending: Vec<PendingRequest> = inner.borrow().engine.pending();
-        if pending.is_empty() {
-            inner.borrow_mut().driving = false;
-            return outcome;
-        }
+        let pending = match progress {
+            Ok(Progress::Waiting(pending)) => pending,
+            done => {
+                inner.borrow_mut().driving = false;
+                return done.map(drop);
+            }
+        };
         let responses: Vec<Result<Arc<[u8]>, Failure>> = stream::iter(&pending)
             .map(|pending| fetch_retrying(&pending.request, &retry))
             .buffered(IN_FLIGHT)
             .collect()
             .await;
         let mut inner = inner.borrow_mut();
-        for (pending, response) in pending.iter().zip(responses) {
-            inner.engine.respond(pending.id, response);
-        }
-        outcome = inner
+        let answers = pending.iter().map(|pending| pending.id).zip(responses);
+        progress = inner
             .engine
-            .resume()
+            .resume(answers)
             .map_err(|diagnostic| inner.throw(diagnostic));
     }
 }
@@ -81,6 +90,7 @@ async fn fetch_retrying(request: &Request, retry: &Retry) -> Result<Arc<[u8]>, F
         match send(request).await {
             Sent::Body(bytes) => return Ok(bytes.into()),
             Sent::Lost(message) => return Err(Failure::transport(message)),
+            Sent::Partial { status, reason } => return Err(Failure::partial(status, reason)),
             Sent::ErrorStatus {
                 status,
                 message,
@@ -139,20 +149,40 @@ async fn try_send(request: &Request) -> Result<Sent, JsValue> {
     let status = Reflect::get(&response, &"status".into())?
         .as_f64()
         .unwrap_or(0.0);
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let code = status as u16;
+    let headers = Reflect::get(&response, &"headers".into())?;
     if Reflect::get(&response, &"ok".into())?.is_truthy() {
+        // A browser shows a cross-origin response's own headers only if the server exposes
+        // them, so there a partial result may show by its status alone.
+        let mut shown: Vec<(&str, String)> = Vec::new();
+        for name in PARTIAL_RESPONSE_HEADERS {
+            if let Some(value) = call_method(&headers, "get", &[name.into()])?.as_string() {
+                shown.push((name, value));
+            }
+        }
+        let partial = partial_response(code, |name| {
+            shown
+                .iter()
+                .find(|(shown, _)| shown.eq_ignore_ascii_case(name))
+                .map(|(_, value)| value.as_str())
+        });
+        if let Some(reason) = partial {
+            return Ok(Sent::Partial {
+                status: code,
+                reason,
+            });
+        }
         let buffer = settled(call_method(&response, "arrayBuffer", &[])?).await?;
         return Ok(Sent::Body(Uint8Array::new(&buffer).to_vec()));
     }
-    let headers = Reflect::get(&response, &"headers".into())?;
     let retry_after = call_method(&headers, "get", &["Retry-After".into()])?.as_string();
     let message = settled(call_method(&response, "text", &[])?)
         .await?
         .as_string()
         .unwrap_or_default();
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-    let status = status as u16;
     Ok(Sent::ErrorStatus {
-        status,
+        status: code,
         message,
         retry_after,
     })

@@ -66,8 +66,11 @@ reports through `program.diagnostics`.
   `engine.retain_imports()` before `load` to keep every import whole.
 - Remote imports (HTTP and SPARQL) are fetched by `load` and `reason`,
   which retry rate limits (429) and overloaded servers (502/503/504);
-  Ctrl-C cancels a call while it waits. A resource registered with
-  `add_resource` is read in place of the network.
+  Ctrl-C cancels a call while it waits. A cancelled load changes nothing;
+  a cancelled run keeps waiting, and `reason()` continues it, or
+  `engine.discard_pending()` drops it so that `load` and the others work
+  again. A resource registered with `add_resource` is read in place of the
+  network.
 - `engine.rows` / `engine.cursor` — typed values; `engine.export(dir)` —
   the program's own export directives.
 - `engine.arrow_stream` — the Arrow C stream interface

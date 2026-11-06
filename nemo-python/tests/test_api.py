@@ -334,6 +334,65 @@ def test_reload_replaces_the_program():
     assert engine.count("ancestor") == 2
 
 
+def test_a_run_cancelled_while_waiting_continues_or_is_discarded():
+    import http.server
+    import threading
+
+    release = threading.Event()
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def answer(self):
+            self.rfile.read(int(self.headers.get("Content-Length", 0)))
+            release.wait(10)
+            body = b"?c\t?p\n<urn:a>\t<urn:b>\n"
+            self.send_response(200)
+            self.send_header("Content-Type", "text/tab-separated-values")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        do_GET = do_POST = answer
+
+        def log_message(self, *args):
+            pass
+
+    httpd = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    endpoint = f"http://127.0.0.1:{httpd.server_address[1]}/sparql"
+    program = nmo.Program.parse(
+        f'@import parent(?c, ?p) from sparql {{ endpoint = <{endpoint}>, '
+        f'query = "SELECT ?c ?p WHERE {{ ?c <urn:parent> ?p }}" }} where anc(?c) . '
+        "anc(<urn:a>) . anc(?p) :- parent(?c, ?p) ."
+    )
+
+    def cancelled_while_waiting():
+        engine = nmo.Engine()
+        engine.load(program)
+        threading.Timer(0.2, engine.cancel).start()
+        with pytest.raises(nmo.DiagnosticsError) as raised:
+            engine.reason()
+        assert raised.value.diagnostics[0].code == "N0492"
+        with pytest.raises(nmo.DiagnosticsError) as refused:
+            engine.load(program)
+        assert refused.value.diagnostics[0].code == "N0493"
+        return engine
+
+    try:
+        discarded = cancelled_while_waiting()
+        assert discarded.discard_pending()
+        assert not discarded.discard_pending()
+        discarded.reload(nmo.Program.parse("anc(<urn:x>) ."))
+        assert discarded.count("anc") == 1
+
+        continued = cancelled_while_waiting()
+        release.set()
+        continued.reason()
+        assert continued.count("anc") == 2
+    finally:
+        release.set()
+        httpd.shutdown()
+
+
 def test_cancel_from_another_thread():
     import threading
 

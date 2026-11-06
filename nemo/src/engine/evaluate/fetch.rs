@@ -15,10 +15,10 @@
 //! Each atom's rows are sent as one `VALUES` block per request, in pages,
 //! and the solutions are deduplicated against the head table and stored as derived rows.
 //!
-//! The engine does not send the requests.
-//! An application whose requests have no responses yet suspends as a [PendingFetch],
+//! The engine does not send the requests itself.
+//! An application whose requests have no responses yet waits as a [PendingFetch],
 //! and completes once the responses have been passed to
-//! [respond](crate::engine::Engine::respond).
+//! [resume](crate::engine::Engine::resume), by the caller or by the engine's client.
 
 use std::{collections::HashSet, ops::Range};
 
@@ -202,14 +202,16 @@ impl PendingFetch {
     /// Replaces every request the endpoint could not answer whole by two requests,
     /// each with one half of its widest `VALUES` block:
     /// one it found too large (413, 414),
-    /// and one whose response it cut off partway, typically at its time limit.
+    /// one whose response it cut off partway, typically at its time limit,
+    /// and one it answered in part, saying so in its status or headers
+    /// ([partial_response](nemo_io::remote::partial_response)).
     ///
     /// A request whose blocks are single rows keeps its response.
     fn split_too_large(&mut self, fetch: &CompiledFetch, ids: &mut u64) {
         let slots = std::mem::take(&mut self.slots.0);
         for slot in slots {
             let too_large = match &slot.response {
-                Some(Err(failure)) => failure.too_large(),
+                Some(Err(failure)) => failure.smaller_may_succeed(),
                 Some(Ok(body)) => sparql::SparqlReader::is_cut_off(body),
                 None => false,
             };

@@ -47,10 +47,13 @@ use crate::{
         },
         compile::types,
         registered::Registered,
-        remote::{RemoteResponse, ResourceRequest},
+        remote::{FetchedResource, ResourceRequest},
         written::WrittenProgram,
     },
-    model::{Directive, Fact, Identifier, Operation, Span, Statement, TypeExpression, Walk},
+    model::{
+        Directive, Fact, Identifier, ImportDirective, Operation, Span, Statement, TypeExpression,
+        Walk,
+    },
     pipeline::{NameScope, Pipeline, StatementId},
     telemetry::SinkSlot,
 };
@@ -80,9 +83,6 @@ pub(crate) struct TranslationSetup<'a> {
     ///
     /// A resource name found here reads its bytes instead of the filesystem.
     pub(crate) resources: &'a HashMap<String, Arc<[u8]>>,
-    /// The responses passed to `respond` for the remote requests of an earlier,
-    /// suspended translation, by resource name, or `None` if there are none.
-    pub(crate) responses: Option<&'a HashMap<String, RemoteResponse>>,
     /// The slot of the installed telemetry sink, to which imports report their loads.
     pub(crate) telemetry: &'a SinkSlot,
     /// The optimization passes.
@@ -307,8 +307,9 @@ pub(crate) struct Translator<'a> {
     fetch_rules: Vec<(usize, CompiledRule, Vec<Option<String>>)>,
     /// The slot of the installed telemetry sink, to which imports report their loads.
     telemetry: &'a SinkSlot,
-    /// The responses passed to `respond`, by resource name.
-    responses: Option<&'a HashMap<String, RemoteResponse>>,
+    /// The remote resources fetched for the imports, by the position of the import's directive
+    /// among the statements, which [commit](Self::commit) reads.
+    fetched: HashMap<usize, FetchedResource>,
     /// The optimization passes.
     passes: &'a OptimizationPasses,
     /// What the translation is for.
@@ -319,9 +320,6 @@ pub(crate) struct Translator<'a> {
     previous_types: Option<&'a HashMap<TableId, Vec<Type>>>,
     /// The context ground expressions evaluate in: the instant of their `NOW()`.
     context: EvaluationContext,
-    /// The remote requests found without a response while the imports ran,
-    /// which suspend the translation.
-    requests: Vec<ResourceRequest>,
     /// Per statement, whether its data is already in the tables, or empty for a first load.
     ///
     /// A preloaded fact contributes no rows and a preloaded import reads nothing,
@@ -367,21 +365,14 @@ impl<'a> Translator<'a> {
             scratch: state.scratch,
             fetch_rules: Vec::new(),
             telemetry: setup.telemetry,
-            responses: setup.responses,
+            fetched: HashMap::new(),
             passes: setup.passes,
             purpose: setup.purpose,
             written: setup.written,
             previous_types: setup.previous_types,
             context: setup.context,
-            requests: Vec::new(),
             preloaded,
         }
-    }
-
-    /// Returns the remote requests the translation suspended for,
-    /// empty if it did not suspend.
-    pub(crate) fn take_requests(&mut self) -> Vec<ResourceRequest> {
-        std::mem::take(&mut self.requests)
     }
 
     /// Returns whether a statement's data is already stored.
@@ -429,13 +420,33 @@ impl<'a> Translator<'a> {
         }
     }
 
-    /// Translates the statements of a program: facts become rows (to be
-    /// loaded by the caller), rules compile, directives configure.
+    /// Translates the statements of a program whose imports read no remote resource:
+    /// facts become rows (to be loaded by the caller), rules compile, directives configure.
+    ///
+    /// A program whose imports do read one is translated in two steps instead,
+    /// [prepare](Self::prepare) and [commit](Self::commit), with the fetching in between.
     pub(crate) fn program(
         &mut self,
         statements: &[Statement],
         ids: &[StatementId],
     ) -> Result<CompiledProgram, Diagnostic> {
+        self.prepare(statements, ids)?;
+        self.commit(statements, ids, HashMap::new())
+    }
+
+    /// Prepares the translation of a program: blank nodes, names, parameters,
+    /// declarations and the import plan, and returns the requests of the remote resources
+    /// its imports read, each tagged with the position of its directive.
+    ///
+    /// Nothing is registered, read, or stored, so a load can wait for the responses and
+    /// [commit](Self::commit) from the translation state this leaves
+    /// ([finish](Self::finish) takes it out) without preparing again.
+    /// A translation that reads no data needs no remote resource.
+    pub(crate) fn prepare(
+        &mut self,
+        statements: &[Statement],
+        ids: &[StatementId],
+    ) -> Result<Vec<ResourceRequest>, Diagnostic> {
         assert_eq!(
             statements.len(),
             ids.len(),
@@ -447,6 +458,19 @@ impl<'a> Translator<'a> {
         self.namespace(statements)?;
         self.declaration_directives(statements)?;
         self.plan_imports(statements)?;
+        self.remote_requests(statements, ids)
+    }
+
+    /// Completes a [prepared](Self::prepare) translation:
+    /// facts become rows (to be loaded by the caller), rules compile, directives configure,
+    /// and imports read, a remote one from what `fetched` holds for its directive's position.
+    pub(crate) fn commit(
+        &mut self,
+        statements: &[Statement],
+        ids: &[StatementId],
+        fetched: HashMap<usize, FetchedResource>,
+    ) -> Result<CompiledProgram, Diagnostic> {
+        self.fetched = fetched;
         let compiled = self.translate_statements(statements, ids)?;
         // Imports run last, when every predicate's arity is known.
         self.execute_imports()?;
@@ -606,7 +630,7 @@ impl<'a> Translator<'a> {
                             import.span,
                         );
                     }
-                    self.directive(directive, self.is_preloaded(index), compiled.rules.len())
+                    self.directive(directive, index, compiled.rules.len())
                 }
             };
             // What the statement's translation reported is about it: in a
@@ -763,14 +787,15 @@ impl<'a> Translator<'a> {
         )
     }
 
-    /// Handles one directive, reporting an unsupported one rather than failing.
+    /// Handles one directive, the statement at `index`, reporting an unsupported one rather
+    /// than failing.
     ///
     /// `rule_count` is the number of rules compiled so far, a bound import's placeholder
     /// included.
     fn directive(
         &mut self,
         directive: &Directive,
-        preloaded: bool,
+        index: usize,
         rule_count: usize,
     ) -> Result<(), Diagnostic> {
         match directive {
@@ -785,35 +810,10 @@ impl<'a> Translator<'a> {
                 Ok(())
             }
             Directive::Import(import) => {
-                let predicate = self.resolve(&import.predicate, import.span)?;
-                // The format is a keyword, not a name, so the base does
-                // not apply.
-                let Identifier::Bare(name) = &import.format else {
-                    return Err(TranslationError::UnknownFormat {
-                        name: import.format.to_string(),
-                    }
-                    .at(import.span));
-                };
-                let Some(format) = FileFormat::from_name(name) else {
-                    return Err(
-                        TranslationError::UnknownFormat { name: name.clone() }.at(import.span)
-                    );
-                };
-                self.imports.push(PendingImport {
-                    predicate,
-                    variables: import.variables.clone(),
-                    format,
-                    options: import.options.clone(),
-                    guards: import.guards.clone(),
-                    bindings: import.bindings.clone(),
-                    conditions: import.conditions.clone(),
-                    span: import.span,
-                    preloaded,
-                    // The rule index of the fetch rule of an import with a
-                    // `where` clause: the placeholder pushed just before
-                    // this call.
-                    rule_index: rule_count.saturating_sub(1),
-                });
+                // The rule index of the fetch rule of an import with a
+                // `where` clause: the placeholder pushed just before this call.
+                let pending = self.pending_import(import, index, rule_count.saturating_sub(1))?;
+                self.imports.push(pending);
                 Ok(())
             }
             // Declarations, `@type` definitions, and inputs were read
@@ -844,6 +844,43 @@ impl<'a> Translator<'a> {
                 Ok(())
             }
         }
+    }
+
+    /// Returns the import an import directive, the statement at `index`, describes:
+    /// its predicate resolved and its format known, to be executed once every arity is known.
+    ///
+    /// `rule_index` is the rule index reserved for the fetch rule of an import with a
+    /// `where` clause.
+    fn pending_import(
+        &self,
+        import: &ImportDirective,
+        index: usize,
+        rule_index: usize,
+    ) -> Result<PendingImport, Diagnostic> {
+        let predicate = self.resolve(&import.predicate, import.span)?;
+        // The format is a keyword, not a name, so the base does not apply.
+        let Identifier::Bare(name) = &import.format else {
+            return Err(TranslationError::UnknownFormat {
+                name: import.format.to_string(),
+            }
+            .at(import.span));
+        };
+        let Some(format) = FileFormat::from_name(name) else {
+            return Err(TranslationError::UnknownFormat { name: name.clone() }.at(import.span));
+        };
+        Ok(PendingImport {
+            predicate,
+            variables: import.variables.clone(),
+            format,
+            options: import.options.clone(),
+            guards: import.guards.clone(),
+            bindings: import.bindings.clone(),
+            conditions: import.conditions.clone(),
+            span: import.span,
+            statement: index,
+            preloaded: self.is_preloaded(index),
+            rule_index,
+        })
     }
 
     /// Creates a null for every blank-node label the statements mention
@@ -1057,7 +1094,6 @@ impl Engine {
             TranslationSetup {
                 import_directory: self.import_directory.as_deref(),
                 resources: &self.resources,
-                responses: None,
                 telemetry: &self.telemetry,
                 passes: &self.passes,
                 purpose,

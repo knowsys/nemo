@@ -1,10 +1,10 @@
-//! Remote imports the HTTP driver fetches from a listener on a loopback port: CSV and SPARQL
+//! Remote imports the HTTP client fetches from a listener on a loopback port: CSV and SPARQL
 //! imports, failed fetches, registered bytes, retries, and cancellation.
 
 use std::sync::Arc;
 
 use nemo::{
-    engine::Engine,
+    engine::{Engine, remote::Progress},
     model::{FileId, Program},
 };
 use nemo_physical::value::DataValue;
@@ -122,9 +122,7 @@ fn a_failed_fetch_is_an_error() {
     let source = format!(r#"@import p from csv {{ resource = "{base}/missing.csv" }} ."#);
     let (program, diagnostics) = Program::parse(&source, FileId::new(0));
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
-    let problem = nemo::driver::HttpDriver::new()
-        .drive(&mut Engine::new(), |engine| engine.load(program))
-        .expect_err("the fetch failed");
+    let problem = Engine::new().load(program).expect_err("the fetch failed");
     assert_eq!(problem.code(), nemo::codes::UNFETCHABLE, "{problem:?}");
     assert!(
         problem
@@ -301,17 +299,22 @@ fn sparql_import_conditions_reach_the_endpoint() {
     );
 }
 
-/// The driver retries an overloaded server and a rate limit before it
+/// The HTTP client retries an overloaded server and a rate limit before it
 /// answers, and a request that still fails is the load's error.
 #[test]
-fn the_driver_retries_overload_and_rate_limits() {
-    use nemo::{driver::HttpDriver, engine::remote::Retry};
+fn the_client_retries_overload_and_rate_limits() {
+    use nemo::engine::remote::{BlockingClient, Retry};
 
-    let fast = HttpDriver::with_retry(Retry {
+    let retry = Retry {
         retries: 3,
         backoff: std::time::Duration::from_millis(10),
         longest_wait: std::time::Duration::from_secs(1),
-    });
+    };
+    let fast = || {
+        let mut engine = Engine::new();
+        engine.set_client(Some(Box::new(BlockingClient::new(retry))));
+        engine
+    };
     let response = |status: &str, headers: &str, body: &str| {
         format!(
             "HTTP/1.1 {status}\r\n{headers}Content-Length: {}\r\nConnection: close\r\n\r\n{body}",
@@ -324,8 +327,9 @@ fn the_driver_retries_overload_and_rate_limits() {
         response("200 OK", "", "1\n2\n"),
     ]);
     let source = format!(r#"@import p from csv {{ resource = "{base}/data.csv" }} ."#);
-    let mut engine = Engine::new();
-    fast.drive(&mut engine, |engine| engine.load(parse(&source)))
+    let mut engine = fast();
+    engine
+        .load(parse(&source))
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     assert_eq!(requests.try_iter().count(), 3, "two retries, then the body");
     let mut rows = engine.rows("p").expect("the predicate loaded");
@@ -337,8 +341,8 @@ fn the_driver_retries_overload_and_rate_limits() {
 
     let (base, requests) = serve_responses(vec![response("502 Bad Gateway", "", "down"); 4]);
     let source = format!(r#"@import p from csv {{ resource = "{base}/data.csv" }} ."#);
-    let problem = fast
-        .drive(&mut Engine::new(), |engine| engine.load(parse(&source)))
+    let problem = fast()
+        .load(parse(&source))
         .expect_err("the server stays down");
     assert_eq!(problem.code(), nemo::codes::UNFETCHABLE, "{problem:?}");
     assert!(
@@ -354,10 +358,92 @@ fn the_driver_retries_overload_and_rate_limits() {
     );
 }
 
-/// A cancelled drive stops waiting and leaves the method suspended, and a
-/// later drive sends the requests again.
+/// A response the endpoint says holds only part of the result, by Virtuoso's status 206 or its
+/// headers, fails the import rather than importing the part, or leaves it empty with a warning
+/// under `on_error = warn`.
+#[cfg(all(feature = "sparql", feature = "http"))]
 #[test]
-fn a_cancelled_drive_leaves_the_method_suspended() {
+fn a_partial_result_fails_its_import() {
+    let partial = |status: &str, headers: &str| {
+        let body = "?a\n<http://example.org/x>\n";
+        format!(
+            "HTTP/1.1 {status}\r\n{headers}Content-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
+    };
+    let import = |base: &str, warn: bool| {
+        let on_error = if warn { ", on_error = warn" } else { "" };
+        parse(&format!(
+            r#"@import q from sparql {{ endpoint = "{base}/sparql",
+    query = "SELECT ?a WHERE {{ ?a <http://example.org/p> ?b }}"{on_error} }} ."#
+        ))
+    };
+    for response in [
+        partial("200 OK", "X-SPARQL-MaxRows: 1\r\n"),
+        partial(
+            "200 OK",
+            "X-SQL-State: S1TAT\r\nX-SQL-Message: RC...: Returning incomplete results\r\n",
+        ),
+        partial("206 Partial Content", ""),
+    ] {
+        let (base, _requests) = serve_responses(vec![response.clone()]);
+        let problem = Engine::new()
+            .load(import(&base, false))
+            .expect_err("a partial result is no result");
+        assert_eq!(problem.code(), nemo::codes::PARTIAL_RESULT, "{problem:?}");
+        assert!(
+            problem
+                .field("url")
+                .is_some_and(|url| url.ends_with("/sparql")),
+            "{problem:?}"
+        );
+
+        let (base, _requests) = serve_responses(vec![response]);
+        let mut engine = Engine::new();
+        engine
+            .load(import(&base, true))
+            .unwrap_or_else(|problem| panic!("{problem:?}"));
+        assert_eq!(engine.count("q").expect("registered"), 0);
+        assert!(
+            engine
+                .reports()
+                .iter()
+                .any(|report| report.code() == nemo::codes::IMPORT_FAILED),
+            "{:?}",
+            engine.reports()
+        );
+    }
+}
+
+/// Two imports of one document fetch it once, and so read the same blank nodes.
+#[test]
+fn imports_of_one_document_fetch_it_once() {
+    let (base, requests) = serve(
+        "<urn:a> <urn:p> _:b .\n_:b <urn:q> <urn:c> .\n",
+        "200 OK",
+        2,
+    );
+    let mut engine = run(&format!(
+        r#"@import first from ntriples {{ resource = "{base}/graph.nt" }} .
+@import second from ntriples {{ resource = "{base}/graph.nt" }} .
+joined(?a, ?c) :- first(?a, <urn:p>, ?b), second(?b, <urn:q>, ?c) .
+"#
+    ));
+    assert_eq!(
+        requests.try_iter().count(),
+        1,
+        "one request for both imports"
+    );
+    assert_eq!(
+        engine.rows("joined").expect("derived"),
+        vec![vec![DataValue::iri("urn:a"), DataValue::iri("urn:c")]]
+    );
+}
+
+/// A load cancelled while its client waits stops waiting and changes nothing,
+/// and a later load fetches again.
+#[test]
+fn a_load_cancelled_while_waiting_changes_nothing() {
     // A server that accepts and never answers, then one that does.
     let silent = std::net::TcpListener::bind("127.0.0.1:0").expect("a loopback port");
     let url = format!(
@@ -372,19 +458,25 @@ fn a_cancelled_drive_leaves_the_method_suspended() {
         token.cancel();
     });
     let started = std::time::Instant::now();
-    let problem = nemo::driver::HttpDriver::new()
-        .drive(&mut engine, |engine| engine.load(parse(&source)))
-        .expect_err("the drive is cancelled");
+    let problem = engine
+        .load(parse(&source))
+        .expect_err("the load is cancelled");
     canceller.join().unwrap();
     assert_eq!(problem.code(), nemo::codes::WAIT_CANCELLED, "{problem:?}");
     assert!(started.elapsed() < std::time::Duration::from_secs(10));
-    assert_eq!(engine.pending().len(), 1, "the load stays suspended");
+    assert!(engine.pending().is_empty(), "nothing waits");
+    assert!(!engine.has_program(), "nothing was loaded");
 
-    let request = engine.pending().remove(0);
-    engine.respond(request.id, Ok(Arc::from(&b"5\n"[..])));
-    engine
-        .resume()
+    let Progress::Waiting(pending) = engine
+        .start_load(parse(&source))
+        .unwrap_or_else(|problem| panic!("{problem:?}"))
+    else {
+        panic!("the load needs its resource");
+    };
+    let progress = engine
+        .resume([(pending[0].id, Ok(Arc::from(&b"5\n"[..])))])
         .unwrap_or_else(|problem| panic!("{problem:?}"));
+    assert_eq!(progress, Progress::Done);
     assert_eq!(
         engine.rows("p").expect("the predicate loaded"),
         vec![vec![DataValue::integer(5)]]

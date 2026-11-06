@@ -70,6 +70,17 @@ diagnostic_kinds! {
                explain "A remote resource could not be fetched, either because no \
                         connection could be made or because the server responded with \
                         an error status.";
+        PartialResult { url: String, reason: String }
+            => PARTIAL_RESULT = 113, error,
+               "`{url}` returned only part of the result: {reason}",
+               explain "The endpoint answered, but said in its status or headers that the \
+                        answer holds only part of the result: it stopped at its time limit, \
+                        or at the most rows it returns, as Virtuoso does behind DBpedia. \
+                        None of the rows are kept, since they are not the result. A bound \
+                        import's request is sent again in halves first, so the error \
+                        remains where a single binding still asks for too much.",
+               hint "narrow the query, or give the import a `where` clause so that each \
+                     request asks for less";
         SparqlResponseCut { endpoint: String, reason: String }
             => SPARQL_RESPONSE_CUT = 112, error,
                "`{endpoint}` cut off its response: {reason}",

@@ -1,8 +1,16 @@
-//! The requests of a run: suspending and resuming, halving requests that are too large or cut
-//! off, failures under `on_error = warn`, and the same run driven over HTTP.
+//! The requests of a run: waiting and resuming, halving requests that are too large or cut
+//! off, failures under `on_error = warn`, and the same run over HTTP.
+
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 
 use nemo::{
-    engine::{Engine, remote::Failure},
+    engine::{
+        CancelToken, Engine,
+        remote::{Client, Failure, Progress, Request, Response},
+    },
     model::Fact,
 };
 use nemo_physical::value::DataValue;
@@ -10,6 +18,126 @@ use nemo_physical::value::DataValue;
 use crate::common::{Responder, parse_into, query_text};
 
 use super::{ANCESTORS, parent_of, parents, values_blocks};
+
+/// A client whose first wait is cancelled, as Ctrl-C cancels one, and which answers through
+/// a responder afterwards.
+struct CancelledOnce {
+    /// The token of the engine the client serves.
+    token: CancelToken,
+    /// Whether the first wait happened.
+    cancelled: AtomicBool,
+    /// The answers after it.
+    responder: Responder,
+}
+
+impl Client for CancelledOnce {
+    fn fetch_all(
+        &self,
+        requests: &[Request],
+        cancelled: &dyn Fn() -> bool,
+    ) -> Option<Vec<Response>> {
+        if !self.cancelled.swap(true, Ordering::Relaxed) {
+            self.token.cancel();
+            assert!(cancelled(), "the engine passes its token");
+        }
+        // As the HTTP client, give up at once on a cancelled token.
+        if cancelled() {
+            return None;
+        }
+        self.responder.fetch_all(requests, cancelled)
+    }
+}
+
+#[test]
+fn a_run_cancelled_while_waiting_continues_with_reason() {
+    let mut engine = Engine::new();
+    let program = parse_into(&mut engine, ANCESTORS);
+    engine
+        .load(program)
+        .unwrap_or_else(|problem| panic!("{problem:?}"));
+    let responder = parents();
+    engine.set_client(Some(Box::new(CancelledOnce {
+        token: engine.cancel_token(),
+        cancelled: AtomicBool::new(false),
+        responder: responder.clone(),
+    })));
+    let problem = engine.reason().expect_err("the wait is cancelled");
+    assert_eq!(problem.code(), nemo::codes::WAIT_CANCELLED, "{problem:?}");
+    assert_eq!(engine.pending().len(), 1, "the run waits");
+
+    // The next call clears the token it inherits, and continues the run.
+    engine
+        .reason()
+        .unwrap_or_else(|problem| panic!("{problem:?}"));
+    assert!(engine.pending().is_empty());
+    assert_eq!(engine.count("anc").expect("derived"), 4);
+    assert_eq!(responder.queries().len(), 4, "each binding asked once");
+}
+
+#[test]
+fn a_discarded_run_reports_the_requests_it_skipped() {
+    // Two imports bound by the ancestors: the parents fail under `on_error = warn`, so only
+    // the mothers derive new ancestors and keep the run fetching.
+    let source = r#"
+@import parent(?c, ?p) from sparql {
+    endpoint = <http://example.org/parents>, on_error = warn,
+    query = "SELECT ?c ?p WHERE { ?c <urn:parent> ?p }"
+} where anc(?c) .
+@import mother(?c, ?m) from sparql {
+    endpoint = <http://example.org/mothers>,
+    query = "SELECT ?c ?m WHERE { ?c <urn:mother> ?m }"
+} where anc(?c) .
+anc(<urn:a>) .
+anc(?p) :- parent(?c, ?p) .
+anc(?m) :- mother(?c, ?m) .
+@output anc .
+"#;
+    let failed_requests = |engine: &Engine| {
+        engine
+            .reports()
+            .iter()
+            .filter(|report| report.code() == nemo::codes::REQUESTS_FAILED)
+            .count()
+    };
+    let mut engine = Engine::new();
+    let program = parse_into(&mut engine, source);
+    engine
+        .load(program)
+        .unwrap_or_else(|problem| panic!("{problem:?}"));
+    let mut progress = engine
+        .start_reason()
+        .unwrap_or_else(|problem| panic!("{problem:?}"));
+    // Answer until the mothers of `urn:m` are asked for, by which time a parent request failed.
+    loop {
+        let Progress::Waiting(pending) = progress else {
+            panic!("the mothers keep the run fetching");
+        };
+        let asks_for_m = pending.iter().any(|pending| {
+            pending.request.url.contains("mothers")
+                && values_blocks(&query_text(&pending.request)).concat() == ["urn:m"]
+        });
+        if asks_for_m {
+            break;
+        }
+        let answers: Vec<_> = pending
+            .iter()
+            .map(|pending| {
+                let response: Response = if pending.request.url.contains("parents") {
+                    Err(Failure::response(503, "Service Unavailable"))
+                } else {
+                    Ok(Arc::from(&b"?c\t?m\n<urn:a>\t<urn:m>\n"[..]))
+                };
+                (pending.id, response)
+            })
+            .collect();
+        progress = engine
+            .resume(answers)
+            .unwrap_or_else(|problem| panic!("{problem:?}"));
+    }
+    assert_eq!(failed_requests(&engine), 0, "a run reports when it ends");
+    assert!(engine.discard_pending());
+    assert_eq!(failed_requests(&engine), 1, "{:?}", engine.reports());
+}
 
 /// The ancestry endpoint behind an HTTP server: roots for a query
 /// without bindings, parents for the bindings of one.
@@ -97,24 +225,24 @@ fn serve_endpoint(respond: fn(&str) -> String) -> String {
     format!("http://{address}/sparql")
 }
 
-/// A reasoning run suspends in the fetch application for its responses: the
-/// store reads as it is, a trace fails, `reason()` lists the same
-/// requests again, and the responses continue the run where it was suspended.
+/// A reasoning run waits in the fetch application for its responses: the
+/// store reads as it is, a trace fails, `start_reason()` lists the same
+/// requests again, and the responses continue the run where it waits.
 #[test]
-fn a_suspended_run_continues_at_its_application() {
+fn a_waiting_run_continues_at_its_application() {
     let mut engine = Engine::new();
     let program = parse_into(&mut engine, ANCESTORS);
     engine
         .load(program)
         .unwrap_or_else(|problem| panic!("{problem:?}"));
-    let suspended = engine.reason().expect_err("the fetch suspends the run");
-    assert_eq!(
-        suspended.code(),
-        nemo::codes::AWAITING_REMOTE,
-        "{suspended:?}"
-    );
-    let pending = engine.pending();
+    let progress = engine
+        .start_reason()
+        .unwrap_or_else(|problem| panic!("{problem:?}"));
+    let Progress::Waiting(pending) = progress.clone() else {
+        panic!("the fetch waits");
+    };
     assert_eq!(pending.len(), 1, "{pending:?}");
+    assert_eq!(engine.pending(), pending);
     assert_eq!(
         values_blocks(&query_text(&pending[0].request)),
         vec![vec!["urn:a".to_owned()]]
@@ -125,35 +253,50 @@ fn a_suspended_run_continues_at_its_application() {
     let refused = engine.trace(&[fact]).expect_err("the run is unfinished");
     assert_eq!(refused.code(), nemo::codes::UNFINISHED, "{refused:?}");
 
-    engine.reason().expect_err("still waiting");
-    assert_eq!(engine.pending(), pending, "the same requests, the same ids");
+    assert_eq!(
+        engine
+            .start_reason()
+            .unwrap_or_else(|problem| panic!("{problem:?}")),
+        progress,
+        "the same requests, the same ids"
+    );
 
     let endpoint = parents();
     endpoint
-        .drive(&mut engine, Engine::resume)
+        .complete(&mut engine, progress)
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     assert_eq!(engine.count("anc").expect("derived"), 4);
     assert_eq!(
         endpoint.queries().len(),
         4,
-        "the suspended request was sent once, then each new binding"
+        "the waiting request was sent once, then each new binding"
     );
 }
 
-/// A change to the store abandons a suspended run: nothing advanced, so
-/// the next run requests the application's window again.
+/// A change to the store is refused while a run waits, and goes through once the run is
+/// discarded: nothing advanced, so the next run requests the application's window again.
 #[test]
-fn a_change_abandons_a_suspended_run() {
+fn a_change_waits_for_a_waiting_run() {
     let mut engine = Engine::new();
     let program = parse_into(&mut engine, ANCESTORS);
     engine
         .load(program)
         .unwrap_or_else(|problem| panic!("{problem:?}"));
-    engine.reason().expect_err("the fetch suspends the run");
+    let progress = engine
+        .start_reason()
+        .unwrap_or_else(|problem| panic!("{problem:?}"));
+    assert!(matches!(progress, Progress::Waiting(_)), "{progress:?}");
+    let refused = engine
+        .import_rows("anc", vec![vec![DataValue::iri("urn:x")]])
+        .expect_err("a run waits");
+    assert_eq!(refused.code(), nemo::codes::WAITING, "{refused:?}");
+    assert_eq!(engine.count("anc").expect("readable"), 1, "nothing changed");
+
+    assert!(engine.discard_pending());
+    assert!(engine.pending().is_empty(), "the waiting run is gone");
     engine
         .import_rows("anc", vec![vec![DataValue::iri("urn:x")]])
         .unwrap_or_else(|problem| panic!("{problem:?}"));
-    assert!(engine.pending().is_empty(), "the suspended run is gone");
 
     let endpoint = parents();
     endpoint
@@ -166,6 +309,76 @@ fn a_change_abandons_a_suspended_run() {
         vec![vec!["urn:a".to_owned(), "urn:x".to_owned()]],
         "the window was asked again, the new row with it"
     );
+}
+
+/// A client answering no request at all.
+struct Silent;
+
+impl Client for Silent {
+    fn fetch_all(
+        &self,
+        _requests: &[Request],
+        _cancelled: &dyn Fn() -> bool,
+    ) -> Option<Vec<Response>> {
+        Some(Vec::new())
+    }
+}
+
+/// A client giving fewer responses than requests fails the requests left over,
+/// rather than having them sent again forever.
+#[test]
+fn a_client_giving_too_few_responses_fails_the_rest() {
+    let mut engine = Engine::new();
+    engine.set_client(Some(Box::new(Silent)));
+    let program = parse_into(
+        &mut engine,
+        r#"@import q from sparql { endpoint = <http://example.org/sparql>, query = "SELECT ?x WHERE { ?x <urn:p> ?y }" } ."#,
+    );
+    let problem = engine.load(program).expect_err("no response came");
+    assert_eq!(problem.code(), nemo::codes::UNFETCHABLE, "{problem:?}");
+    assert!(
+        problem
+            .field("reason")
+            .is_some_and(|reason| reason.contains("no response")),
+        "{problem:?}"
+    );
+}
+
+/// A request the endpoint answers only in part, as Virtuoso does at its row limit, splits its
+/// `VALUES` block in halves like one it finds too large.
+#[test]
+fn partially_answered_requests_split_until_they_are_whole() {
+    let endpoint = Responder::failing_endpoint(|text| {
+        let blocks = values_blocks(text);
+        if blocks[0].len() > 1 {
+            return Err(Failure::partial(200, "it returns at most 1 rows"));
+        }
+        Ok(format!("?x\t?y\n<{}>\t<urn:seen>\n", blocks[0][0]))
+    });
+    let mut engine = Engine::new();
+    let program = parse_into(
+        &mut engine,
+        r#"
+@import seen(?x, ?y) from sparql {
+    endpoint = <http://example.org/sparql>,
+    query = "SELECT ?x ?y WHERE { ?x <urn:p> ?y }"
+} where item(?x) .
+item(<urn:1>) . item(<urn:2>) .
+"#,
+    );
+    endpoint
+        .drive(&mut engine, |engine| engine.load(program))
+        .unwrap_or_else(|problem| panic!("{problem:?}"));
+    endpoint
+        .drive(&mut engine, Engine::reason)
+        .unwrap_or_else(|problem| panic!("{problem:?}"));
+    assert_eq!(engine.count("seen").expect("fetched"), 2);
+    let sizes: Vec<usize> = endpoint
+        .queries()
+        .iter()
+        .map(|text| values_blocks(text)[0].len())
+        .collect();
+    assert_eq!(sizes, vec![2, 1, 1], "halved");
 }
 
 /// A request the endpoint finds too large splits its `VALUES` block in halves until each fits,
@@ -277,6 +490,49 @@ item(<urn:1>) . item(<urn:2>) . item(<urn:3>) .
     );
 }
 
+#[test]
+fn responses_ending_partway_through_a_row_split_until_they_fit() {
+    // As a connection closing early leaves a response: a success that stops
+    // in the middle of a row, here for every request of more than one binding.
+    let endpoint = Responder::endpoint(|text| {
+        let blocks = values_blocks(text);
+        let rows: String = blocks[0]
+            .iter()
+            .map(|iri| format!("<{iri}>\t<urn:seen>\n"))
+            .collect();
+        if blocks[0].len() > 1 {
+            return format!("?x\t?y\n{}", &rows[..rows.len() / 2 + 3]);
+        }
+        format!("?x\t?y\n{rows}")
+    });
+    let mut engine = Engine::new();
+    let program = parse_into(
+        &mut engine,
+        r#"
+@import seen(?x, ?y) from sparql {
+    endpoint = <http://example.org/sparql>,
+    query = "SELECT ?x ?y WHERE { ?x <urn:p> ?y }"
+} where item(?x) .
+item(<urn:1>) . item(<urn:2>) . item(<urn:3>) . item(<urn:4>) .
+"#,
+    );
+    endpoint
+        .drive(&mut engine, |engine| engine.load(program))
+        .unwrap_or_else(|problem| panic!("{problem:?}"));
+    endpoint
+        .drive(&mut engine, Engine::reason)
+        .unwrap_or_else(|problem| panic!("{problem:?}"));
+    // Every binding's row, none lost to a cut.
+    assert_eq!(engine.count("seen").expect("fetched"), 4);
+    assert!(
+        endpoint
+            .queries()
+            .iter()
+            .any(|text| values_blocks(text)[0].len() == 1),
+        "the cut requests were halved"
+    );
+}
+
 /// Under `on_error = warn`, a bound import keeps the solutions of the
 /// requests that succeeded, never asks a failed request's bindings
 /// again, and warns once with the counts.
@@ -373,12 +629,12 @@ r(?x, ?z) :- item(?x), t(?x, ?y), u(?y, ?z) .
     assert!(queries("on_error = warn,") > 1, "the behaviors keep apart");
 }
 
-/// A run whose responses are passed to `respond` by the test ends with the same store as a run
-/// the driver runs over HTTP, for load-time imports, bound imports, and the `sparql` stage's
+/// A run whose responses the test passes to `resume` ends with the same store as a run whose
+/// client fetches over HTTP, for load-time imports, bound imports, and the `sparql` stage's
 /// rewrites alike.
 #[cfg(feature = "http")]
 #[test]
-fn a_run_with_suspensions_ends_as_a_driven_run() {
+fn a_stepwise_run_ends_as_a_run_over_http() {
     let endpoint_url = serve_endpoint(ancestry);
     let source = format!(
         r#"
@@ -406,22 +662,28 @@ desc(?c) :- anc(?p), triple(?c, <urn:parent>, ?p) .
 
     let mut driven = Engine::new();
     let program = parse_into(&mut driven, &source);
-    let driver = nemo::driver::HttpDriver::new();
-    driver
-        .drive(&mut driven, |engine| engine.load(program))
+    driven
+        .load(program)
         .unwrap_or_else(|problem| panic!("{problem:?}"));
-    driver
-        .drive(&mut driven, Engine::reason)
+    driven
+        .reason()
         .unwrap_or_else(|problem| panic!("{problem:?}"));
 
     let mut suspended = Engine::new();
+    suspended.set_client(None);
     let program = parse_into(&mut suspended, &source);
     let responder = Responder::endpoint(ancestry);
-    responder
-        .drive(&mut suspended, |engine| engine.load(program))
+    let progress = suspended
+        .start_load(program)
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     responder
-        .drive(&mut suspended, Engine::reason)
+        .complete(&mut suspended, progress)
+        .unwrap_or_else(|problem| panic!("{problem:?}"));
+    let progress = suspended
+        .start_reason()
+        .unwrap_or_else(|problem| panic!("{problem:?}"));
+    responder
+        .complete(&mut suspended, progress)
         .unwrap_or_else(|problem| panic!("{problem:?}"));
 
     let expected = store(&mut suspended);
