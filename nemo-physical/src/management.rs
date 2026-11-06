@@ -249,13 +249,13 @@ impl TableManager {
 
     /// Appends the tries of [tries](Self::tries) to a list, panicking as it does.
     ///
-    /// A reader that gathers the tries of several tables thus allocates one list.
+    /// A reader that gathers the tries of several tables thus fills one list.
     pub(crate) fn tries_into<'s>(
         &'s self,
         table: TableId,
         range: Range<Revision>,
         order: &ColumnOrder,
-        into: &mut Vec<&'s Trie>,
+        into: &mut impl Extend<&'s Trie>,
     ) {
         self.table(table).tries_into(range, order, into);
     }

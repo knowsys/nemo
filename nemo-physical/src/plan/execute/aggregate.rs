@@ -1,6 +1,8 @@
 //! Aggregations: materializing an aggregation node,
 //! by counting its input's rows or in one pass over them.
 
+use bumpalo::collections::Vec as BumpVec;
+
 use crate::{
     dictionary::Dictionary,
     execution::{AggregationShape, Aggregator, JoinShape, TrieJoin},
@@ -20,7 +22,8 @@ impl Execution<'_> {
         aggregate: &AggregateLayout,
         context: &mut StepContext<'_>,
     ) -> Materialized {
-        let mut blocks = Vec::new();
+        let arena = context.arena;
+        let mut blocks = BumpVec::new_in(arena.bump());
         self.blocks(aggregate.input, &mut blocks);
 
         let rows = match &aggregate.pass {

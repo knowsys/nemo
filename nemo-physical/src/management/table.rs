@@ -126,14 +126,13 @@ impl Table {
         &'s self,
         range: Range<Revision>,
         order: &ColumnOrder,
-        into: &mut Vec<&'s Trie>,
+        into: &mut impl Extend<&'s Trie>,
     ) {
-        for subtable in &self.subtables[self.within(&range)] {
-            let Some(trie) = subtable.trie(order) else {
-                panic!("the order of a read must be ensured before the read");
-            };
-            into.push(trie);
-        }
+        into.extend(self.subtables[self.within(&range)].iter().map(|subtable| {
+            subtable
+                .trie(order)
+                .expect("the order of a read must be ensured before the read")
+        }));
     }
 
     /// Returns the number of rows the subtables within a range hold.

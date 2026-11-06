@@ -1,5 +1,7 @@
 //! Units: running the joins of a unit's members and materializing the unit's rows.
 
+use bumpalo::{Bump, collections::Vec as BumpVec};
+
 use crate::{
     dictionary::Dictionary,
     execution::{
@@ -27,38 +29,50 @@ impl Execution<'_> {
             .as_ref()
             .expect("units materialize their tops");
         let mut rows = UnitRows::new(materialization.produced.len());
+        let arena = context.arena;
         for member in &unit.members {
-            let blocks = self.member_blocks(member);
-            rows.run_member(member, &blocks, context);
+            let blocks = self.member_blocks(member, arena.bump());
+            rows.run_member(member, blocks, context);
         }
         let runs = rows.finish(context);
 
         self.materialize(unit.top, runs, &mut context.accounting)
     }
 
-    /// Returns the blocks a member's join reads: those of its inputs and of its subtracted relations.
-    fn member_blocks(&self, member: &MemberLayout) -> JoinBlocks<'_> {
-        let mut inputs = Vec::with_capacity(member.inputs.len());
-        for &required in &member.inputs {
-            let mut blocks = Vec::new();
-            self.blocks(required, &mut blocks);
-            inputs.push(blocks);
-        }
+    /// Returns the blocks a member's join reads: those of its inputs and of its subtracted relations,
+    /// gathered in the given arena.
+    fn member_blocks<'j>(&'j self, member: &'j MemberLayout, bump: &'j Bump) -> JoinBlocks<'j> {
+        let inputs = BumpVec::from_iter_in(
+            member.inputs.iter().map(|&required| {
+                let mut blocks = BumpVec::new_in(bump);
+                self.blocks(required, &mut blocks);
+                blocks.into_bump_slice()
+            }),
+            bump,
+        );
 
-        let mut subtracted = Vec::new();
-        let mut subtracted_shapes = Vec::new();
+        // The blocks of every relation first, then their shapes in one allocation,
+        // so that neither list moves when the other grows.
+        let mut ends = BumpVec::with_capacity_in(member.subtracted.len(), bump);
+        let mut subtracted = BumpVec::new_in(bump);
         for relation in &member.subtracted {
-            let first = subtracted.len();
             self.blocks(relation.order, &mut subtracted);
-            subtracted_shapes.extend((first..subtracted.len()).map(|_| SubtractedShape {
-                layers: relation.layers.clone(),
-            }));
+            ends.push(subtracted.len());
+        }
+        let mut subtracted_shapes = BumpVec::with_capacity_in(subtracted.len(), bump);
+        let mut first = 0;
+        for (relation, &end) in member.subtracted.iter().zip(&ends) {
+            let shape = SubtractedShape {
+                layers: &relation.layers,
+            };
+            subtracted_shapes.extend(std::iter::repeat_n(shape, end - first));
+            first = end;
         }
 
         JoinBlocks {
-            inputs,
-            subtracted,
-            subtracted_shapes,
+            inputs: inputs.into_bump_slice(),
+            subtracted: subtracted.into_bump_slice(),
+            subtracted_shapes: subtracted_shapes.into_bump_slice(),
         }
     }
 }
@@ -96,7 +110,7 @@ impl<'a> UnitRows<'a> {
     fn run_member(
         &mut self,
         member: &'a MemberLayout,
-        blocks: &JoinBlocks<'_>,
+        blocks: JoinBlocks<'_>,
         context: &mut StepContext<'_>,
     ) {
         let dictionary: &Dictionary = context.dictionary;
@@ -125,21 +139,21 @@ impl<'a> UnitRows<'a> {
         let shape = JoinShape {
             layers: &member.layers,
             emitted: member.emitted,
-            subtracted: &blocks.subtracted_shapes,
+            subtracted: blocks.subtracted_shapes,
             filters: &member.filters,
             bound_layers: &member.bound_layers,
         };
         let template = JoinTemplate {
             shape,
-            subtracted: &blocks.subtracted,
+            subtracted: blocks.subtracted,
             dictionary,
             evaluation: context.evaluation,
         };
 
-        let inputs = blocks.input_slices();
-        match Cells::partition(&shape, &inputs) {
-            Some(cells) => self.run_cells(&cells, &inputs, &member.delivery, template, accounting),
-            None => self.run_sequentially(&inputs, &member.delivery, template, arena, accounting),
+        let inputs = blocks.inputs;
+        match Cells::partition(&shape, inputs) {
+            Some(cells) => self.run_cells(&cells, inputs, &member.delivery, template, accounting),
+            None => self.run_sequentially(inputs, &member.delivery, template, arena, accounting),
         }
     }
 

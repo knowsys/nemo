@@ -50,14 +50,14 @@ fn one_block_each<'t, 'a>(tries: &'t [&'a Trie]) -> Vec<&'t [&'a Trie]> {
 }
 
 /// Returns the chain shape R(a, b) ⋈ S(b, c), emitting the given number of layers.
-fn chain_shape(emitted: usize, subtracted: Vec<SubtractedShape>) -> OwnedJoinShape {
+fn chain_shape(emitted: usize, subtracted: Vec<SubtractedShape<'static>>) -> OwnedJoinShape {
     chain_shape_with(emitted, subtracted, vec![])
 }
 
 /// Returns the chain shape with filters.
 fn chain_shape_with(
     emitted: usize,
-    subtracted: Vec<SubtractedShape>,
+    subtracted: Vec<SubtractedShape<'static>>,
     filters: Vec<FilterShape>,
 ) -> OwnedJoinShape {
     OwnedJoinShape::new(
@@ -214,7 +214,7 @@ fn joins_over_blocks_match_joins_over_their_union() {
         let left_parts: Vec<&Trie> = left_blocks.iter().collect();
         let right_parts: Vec<&Trie> = right_blocks.iter().collect();
 
-        let subtraction = vec![SubtractedShape { layers: vec![0, 2] }];
+        let subtraction = vec![SubtractedShape { layers: &[0, 2] }];
         let mut shapes = vec![
             chain_shape(3, vec![]),
             chain_shape(2, vec![]),
@@ -345,7 +345,7 @@ fn subtracted_inputs_block_matching_rows() {
     let shape = OwnedJoinShape::new(
         vec![vec![at(0, 0)], vec![at(0, 1)]],
         2,
-        vec![SubtractedShape { layers: vec![1] }],
+        vec![SubtractedShape { layers: &[1] }],
         vec![],
     )
     .expect("the shape is well-formed");
@@ -362,7 +362,7 @@ fn subtracted_inputs_follow_across_gaps() {
     let left = int_trie(2, &[&[1, 2], &[2, 2]]);
     let right = int_trie(2, &[&[2, 7], &[2, 8]]);
     let minus = int_trie(2, &[&[1, 7], &[2, 8]]);
-    let shape = chain_shape(3, vec![SubtractedShape { layers: vec![0, 2] }]);
+    let shape = chain_shape(3, vec![SubtractedShape { layers: &[0, 2] }]);
 
     let mut join = join(&shape, &[&left, &right], &[&minus], None, &arena);
     assert_eq!(collect(&mut join), storage_rows(&[&[1, 2, 8], &[2, 2, 7]]));
@@ -412,7 +412,7 @@ fn shapes_must_fit_the_tries() {
 
     // A join needs one subtracted trie per subtracted input,
     // each with at least the columns its input maps.
-    let with_subtraction = chain_shape(3, vec![SubtractedShape { layers: vec![0, 2] }]);
+    let with_subtraction = chain_shape(3, vec![SubtractedShape { layers: &[0, 2] }]);
     let binary = int_trie(2, &[&[1, 2]]);
     assert!(misfit(&with_subtraction, &[&binary, &binary], &[]));
     assert!(misfit(&with_subtraction, &[&binary, &binary], &[&unary]));
@@ -456,7 +456,7 @@ fn random_joins_match_brute_force() {
         let right = trie(2, &right_rows);
         let minus = trie(2, &minus_rows);
 
-        let subtraction = vec![SubtractedShape { layers: vec![0, 2] }];
+        let subtraction = vec![SubtractedShape { layers: &[0, 2] }];
         for (emitted, subtracted) in [(3, vec![]), (2, vec![]), (3, subtraction.clone())] {
             let with_minus = !subtracted.is_empty();
             let anti = if with_minus { vec![&minus] } else { vec![] };
@@ -550,7 +550,7 @@ fn cells_partition_the_join() {
         let left = trie(2, &left_rows);
         let right = trie(2, &right_rows);
         let minus = trie(2, &minus_rows);
-        let subtraction = vec![SubtractedShape { layers: vec![0, 2] }];
+        let subtraction = vec![SubtractedShape { layers: &[0, 2] }];
         let condition = hook(
             vec![2, 0],
             vec![OpCode::Input(0), OpCode::Input(1), OpCode::Less],

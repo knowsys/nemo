@@ -2,25 +2,20 @@
 
 use crate::{execution::SubtractedShape, trie::Trie};
 
-/// The blocks a member's join reads.
-#[derive(Debug)]
+/// The blocks a member's join reads, gathered in the join arena.
+#[derive(Debug, Clone, Copy)]
 pub(super) struct JoinBlocks<'a> {
     /// Per joined input, its blocks.
-    pub(super) inputs: Vec<Vec<&'a Trie>>,
+    pub(super) inputs: &'a [&'a [&'a Trie]],
     /// The subtracted blocks, each subtracted on its own.
-    pub(super) subtracted: Vec<&'a Trie>,
+    pub(super) subtracted: &'a [&'a Trie],
     /// Per subtracted block, its shape.
-    pub(super) subtracted_shapes: Vec<SubtractedShape>,
+    pub(super) subtracted_shapes: &'a [SubtractedShape<'a>],
 }
 
-impl<'a> JoinBlocks<'a> {
+impl JoinBlocks<'_> {
     /// Returns the number of blocks, joined and subtracted.
     pub(super) fn count(&self) -> usize {
-        self.inputs.iter().map(Vec::len).sum::<usize>() + self.subtracted.len()
-    }
-
-    /// Returns the blocks of each joined input, as a join takes them.
-    pub(super) fn input_slices(&self) -> Vec<&[&'a Trie]> {
-        self.inputs.iter().map(Vec::as_slice).collect()
+        self.inputs.iter().map(|blocks| blocks.len()).sum::<usize>() + self.subtracted.len()
     }
 }

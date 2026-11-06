@@ -186,7 +186,7 @@ impl<'a> Execution<'a> {
 
     /// Collects the blocks of a node in one of its required orders,
     /// from the sources the layout resolved.
-    fn blocks<'s>(&'s self, required: RequiredOrder, into: &mut Vec<&'s Trie>) {
+    fn blocks<'s>(&'s self, required: RequiredOrder, into: &mut impl Extend<&'s Trie>) {
         for source in &self.plan_layout.sources[required.node.index()][required.index] {
             match source {
                 BlockSource::Load { node, table, order } => {
@@ -199,7 +199,7 @@ impl<'a> Execution<'a> {
                     let materialized = self.results[node.index()]
                         .as_ref()
                         .expect("nodes are computed before they are consumed");
-                    into.push(&materialized.tries[*trie]);
+                    into.extend(std::iter::once(&materialized.tries[*trie]));
                 }
             }
         }

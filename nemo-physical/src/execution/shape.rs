@@ -41,12 +41,12 @@ pub(crate) struct InputColumn {
 /// These are the first columns of the subtracted trie, each compared with one layer.
 /// Any further columns are not compared,
 /// so the join subtracts the trie's projection onto the compared columns.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct SubtractedShape {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct SubtractedShape<'a> {
     /// The layer of each compared column:
     /// column `i` of the subtracted trie is compared with layer `layers[i]`.
     /// The layers strictly increase, since the join follows the trie along its descent.
-    pub(crate) layers: Vec<usize>,
+    pub(crate) layers: &'a [usize],
 }
 
 /// A filter of a join: a condition over the values of some layers.
@@ -148,7 +148,7 @@ pub(crate) struct JoinShape<'a> {
     /// The number of leading layers whose values form the result rows.
     pub(crate) emitted: usize,
     /// The subtracted inputs, one per subtracted trie the join is given, in the same order.
-    pub(crate) subtracted: &'a [SubtractedShape],
+    pub(crate) subtracted: &'a [SubtractedShape<'a>],
     /// The filters.
     pub(crate) filters: &'a [FilterShape],
     /// The bound layers.
@@ -601,7 +601,7 @@ pub(crate) struct OwnedJoinShape {
     /// The number of leading layers whose values form the result rows.
     emitted: usize,
     /// The subtracted inputs, one per subtracted trie the join is given, in the same order.
-    subtracted: Vec<SubtractedShape>,
+    subtracted: Vec<SubtractedShape<'static>>,
     /// The filters.
     filters: Vec<FilterShape>,
     /// The bound layers.
@@ -616,7 +616,7 @@ impl OwnedJoinShape {
     pub(crate) fn new(
         layers: Vec<Vec<InputColumn>>,
         emitted: usize,
-        subtracted: Vec<SubtractedShape>,
+        subtracted: Vec<SubtractedShape<'static>>,
         filters: Vec<FilterShape>,
     ) -> Result<Self, &'static str> {
         let shape = Self {
@@ -666,7 +666,7 @@ mod tests {
         let shape = OwnedJoinShape::new(
             vec![vec![at(0, 0)], vec![at(0, 1), at(1, 0)], vec![at(1, 1)]],
             3,
-            vec![SubtractedShape { layers: vec![0, 2] }],
+            vec![SubtractedShape { layers: &[0, 2] }],
             vec![],
         );
         assert!(shape.is_ok());
@@ -689,7 +689,7 @@ mod tests {
             OwnedJoinShape::new(
                 vec![vec![at(0, 0)], vec![at(0, 1)]],
                 2,
-                vec![SubtractedShape { layers: vec![1, 0] }],
+                vec![SubtractedShape { layers: &[1, 0] }],
                 vec![],
             )
             .is_err()
@@ -699,7 +699,7 @@ mod tests {
             OwnedJoinShape::new(
                 vec![vec![at(0, 0)]],
                 1,
-                vec![SubtractedShape { layers: vec![1] }],
+                vec![SubtractedShape { layers: &[1] }],
                 vec![],
             )
             .is_err()
