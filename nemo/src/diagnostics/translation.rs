@@ -463,6 +463,15 @@ diagnostic_kinds! {
                         `sparql` stage bound.",
                hint "fetch the data these rules follow with one query that walks the blank \
                      nodes itself, as with a property path";
+        NeverBoundVariable { variable: String }
+            => NEVER_BOUND_VARIABLE = 339, warning,
+               "`?{variable}` is projected, but no pattern of the query binds it",
+               explain "A SPARQL import's query projects a variable that none of its patterns \
+                        binds, so every solution leaves it unbound and the import reads a null \
+                        for it. A query calling a service is not warned about, since the \
+                        service may bind such a variable, as a label service binds the \
+                        labels of the items it is asked about.",
+               hint "bind the variable in a pattern of the query, or check its spelling";
         ConflictingBase
             => CONFLICTING_BASE = 336, error, "`@base` is declared again with a different IRI",
                explain "Two `@base` directives of one program have different IRIs. Relative \

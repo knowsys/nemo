@@ -319,7 +319,8 @@ impl TableManager {
     ///
     /// # Panics
     ///
-    /// Panics if the table is unknown or dropped. See [TableManager].
+    /// Panics if the table is unknown or dropped (see [TableManager]),
+    /// or if the row does not match the table's arity.
     pub fn revision_of(&self, table: TableId, row: &[StorageValue]) -> Option<Revision> {
         self.table(table).revision_of(row)
     }
@@ -591,6 +592,22 @@ mod tests {
         assert_eq!(manager.blocks(table), vec![Revision(2)..Revision(5)]);
         for (row, revision) in expected {
             assert_eq!(revision_of(&manager, row), revision);
+        }
+    }
+
+    #[test]
+    fn a_looked_up_row_needs_the_tables_arity() {
+        let mut manager = TableManager::new();
+        let table = manager.register("edge", 2);
+        manager.add_rows(
+            table,
+            Revision(1),
+            ColumnOrder::identity(2),
+            int_buffer(2, &[&[1, 2]]),
+        );
+        for row in [&[1][..], &[1, 2, 3]] {
+            let row: Vec<StorageValue> = row.iter().copied().map(StorageValue::integer).collect();
+            assert_panics("arity", || manager.revision_of(table, &row));
         }
     }
 

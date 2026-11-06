@@ -127,7 +127,7 @@ impl Engine {
         if !self.rewriting_stages(&staged).is_empty() {
             self.translate_written_reload(&staged)?;
         }
-        let load = SuspendedLoad::new(LoadKind::Reload, staged);
+        let load = SuspendedLoad::new(LoadKind::Reload, staged, already);
         self.reload_staged(load, already)
     }
 

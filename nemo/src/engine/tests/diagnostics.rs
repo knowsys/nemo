@@ -222,6 +222,24 @@ fn a_named_argument_and_a_prefixed_name_point_to_each_other() {
         1,
         "a label that is no prefix: {problem:?}"
     );
+    // The prefixed name keeps the local name as written in the source, not the number's value.
+    let mut engine = Engine::new();
+    let file = engine
+        .add_source(
+            "program",
+            "@prefix wd: <http://www.wikidata.org/entity/> . in(wd: 007) .",
+        )
+        .expect("the source registers");
+    let (program, diagnostics) = engine.parse_source(file);
+    assert!(diagnostics.is_empty(), "{diagnostics:?}");
+    let problem = engine.load(program).expect_err("the program is refused");
+    assert!(
+        problem
+            .hints()
+            .iter()
+            .any(|given| given.contains("`wd:007`")),
+        "{problem:?}"
+    );
 
     // Without the space, a named argument reads as a prefixed name,
     // and the undeclared prefix names the space.

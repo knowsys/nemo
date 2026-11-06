@@ -14,6 +14,12 @@ impl Pipeline {
         self.reports.push(diagnostic);
     }
 
+    /// Drops the reports from index `from` on,
+    /// those of a loading call that was suspended for data from the network and discarded.
+    pub(crate) fn withdraw_reports(&mut self, from: usize) {
+        self.reports.truncate(from);
+    }
+
     /// Returns a diagnostic about a statement version labeled with the `@use` directives that
     /// instantiated it, if a module instance holds it.
     ///

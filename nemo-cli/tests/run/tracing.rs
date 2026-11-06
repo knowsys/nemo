@@ -111,6 +111,31 @@ fn tracing_every_derived_fact_streams_one_inference_per_fact() {
 }
 
 #[test]
+fn a_trace_that_fails_leaves_no_trace_file() {
+    let directory = workspace("trace-all-failed");
+    write(&directory, "program.rls", ROLES);
+
+    let outcome = run(
+        &directory,
+        &[
+            "program.rls",
+            "-e",
+            "none",
+            "--trace-all",
+            "--trace",
+            "unknown(1)",
+            "--trace-output",
+            "trace.json",
+        ],
+    );
+    assert_eq!(outcome.status, Some(1), "{}", outcome.stderr);
+    assert!(
+        !directory.join("trace.json").exists(),
+        "no unfinished response is left behind"
+    );
+}
+
+#[test]
 fn trace_input_files_add_up() {
     let directory = workspace("trace-inputs");
     write(&directory, "program.rls", ROLES);

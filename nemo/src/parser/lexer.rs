@@ -6,7 +6,10 @@ mod token;
 
 pub(super) use self::token::{FStringPart, Token, TokenKind};
 
-use nemo_physical::{diagnostics::Diagnostic, value::NameKind};
+use nemo_physical::{
+    diagnostics::Diagnostic,
+    value::{Iri, NameKind},
+};
 
 use crate::{
     diagnostics::ParseError,
@@ -338,6 +341,9 @@ impl Lexer<'_> {
 
     /// Distinguishes an IRI from a less-than: `<` opens an IRI when a
     /// closing `>` appears before any whitespace.
+    ///
+    /// An IRI that spells the character U+0000, as written or as a character escape,
+    /// is refused.
     fn less_or_iri(&mut self, start: usize) {
         let rest = &self.bytes[start + 1..];
         let closes = rest
@@ -348,7 +354,12 @@ impl Lexer<'_> {
         match closes {
             Some(length) => {
                 self.position = start + 1 + length + 1;
-                self.push(TokenKind::Iri, start);
+                let written = &self.source[start + 1..start + 1 + length];
+                if Iri::unescape(written).contains('\u{0}') {
+                    self.error(start, ParseError::NulInIri);
+                } else {
+                    self.push(TokenKind::Iri, start);
+                }
             }
             None => {
                 self.position += 1;

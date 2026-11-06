@@ -119,5 +119,10 @@ diagnostic_kinds! {
                explain "The `where` clause of an import holds binding atoms and conditions \
                         over the import's columns. A negated atom would ask for the rows \
                         that something does not bind, which no import can fetch.";
+        NulInIri
+            => NUL_IN_IRI = 234, error, "an IRI cannot contain the character `U+0000`",
+               explain "An IRI written between angle brackets contains the character U+0000, \
+                        as written or as the character escape `\\u0000`. No IRI contains it.",
+               hint "percent-encode it as `%00`";
     }
 }

@@ -502,7 +502,7 @@ impl RuleCompiler<'_, '_> {
 
     /// Checks an aggregate head's functions against its group.
     ///
-    /// No aggregate may aggregate a group column.
+    /// No aggregate may aggregate a group variable written in the rule.
     /// `#count()` counts contributions, which the body variables tell apart,
     /// so it needs a body with variables.
     fn check_aggregate(
@@ -512,16 +512,14 @@ impl RuleCompiler<'_, '_> {
         span: Option<Span>,
     ) -> Result<(), Diagnostic> {
         for function in functions {
-            if let Some(&column) = function
+            if let Some(variable) = function
                 .input
                 .iter()
                 .chain(&function.value)
-                .find(|column| group.contains(column))
+                .filter(|column| group.contains(column))
+                .find_map(|&column| self.written_name(column))
             {
-                return Err(TranslationError::AggregatedGroupColumn {
-                    variable: self.column_name(column),
-                }
-                .at(span));
+                return Err(TranslationError::AggregatedGroupColumn { variable }.at(span));
             }
         }
         if functions.iter().any(|function| function.input.is_none()) && self.variables == 0 {
@@ -557,17 +555,14 @@ impl RuleCompiler<'_, '_> {
         }
     }
 
-    /// Returns the source name of a rule column that a named variable binds.
-    ///
-    /// # Panics
-    ///
-    /// Panics if no variable written in the rule binds the column.
-    fn column_name(&self, column: usize) -> String {
+    /// Returns the name of the variable written in the rule that binds a column,
+    /// or `None` if only a hidden variable binds it,
+    /// as a check binds a parameter without a value.
+    fn written_name(&self, column: usize) -> Option<String> {
         self.names
             .iter()
             .find(|(name, id)| **id == column && !name.starts_with('\u{0}'))
             .map(|(name, _)| name.clone())
-            .expect("a column both aggregated and grouped is a variable of the rule")
     }
 
     /// Compiles the parts of an aggregate expression: the function, the

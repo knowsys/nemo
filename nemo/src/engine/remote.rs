@@ -196,20 +196,29 @@ pub(super) struct SuspendedLoad {
     /// The imports asking for the same request as one waiting in a slot,
     /// which take its response once it comes.
     pub(super) sharing: Vec<ResourceRequest>,
+    /// Whether the loading call chose the instant the next run evaluates at,
+    /// a choice undone if the call fails or is discarded.
+    pub(super) chose_instant: bool,
+    /// The index of the first report the loading call made,
+    /// from which its reports are withdrawn if it is discarded.
+    pub(super) reports_from: usize,
 }
 
 impl SuspendedLoad {
-    /// Creates the state of a loading method, before any request.
-    pub(super) fn new(kind: LoadKind, staged: Staged) -> Self {
+    /// Creates the state of a loading method, before any request,
+    /// whose reports begin at index `reports_from`.
+    pub(super) fn new(kind: LoadKind, staged: Staged, reports_from: usize) -> Self {
         Self {
             kind,
             staged,
+            reports_from,
             imported_rows: 0,
             prepared: None,
             unstable: HashSet::new(),
             fetched: HashMap::new(),
             slots: RequestSlots::default(),
             sharing: Vec::new(),
+            chose_instant: false,
         }
     }
 
@@ -482,12 +491,15 @@ impl Engine {
         match self.suspension.take() {
             None => Ok(()),
             Some(Suspension::Load(load)) => {
+                let chose = load.chose_instant;
                 let already = self.pipeline.reports().len();
-                match load.kind {
+                let outcome = match load.kind {
                     LoadKind::Load => self.load_staged(load, already),
                     LoadKind::Extend => self.extend_staged(load, already),
                     LoadKind::Reload => self.reload_staged(load, already),
-                }
+                };
+                self.settle_instant(chose, &outcome);
+                outcome
             }
             Some(suspension @ Suspension::Reason(_)) => {
                 self.suspension = Some(suspension);
@@ -499,8 +511,9 @@ impl Engine {
     /// Discards the waiting method, if any, dropping its requests and their responses.
     ///
     /// A waiting first load gives the rows added through `import_rows` before it back to
-    /// the engine. A waiting run ends as a cancelled one does, reporting what its fetches
-    /// skipped.
+    /// the engine, and a suspended loading call withdraws its reports and undoes its choice of
+    /// the instant.
+    /// A waiting run ends as a cancelled one does, reporting what its fetches skipped.
     pub(super) fn abandon(&mut self) {
         let load = match self.suspension.take() {
             Some(Suspension::Load(load)) => load,
@@ -510,6 +523,10 @@ impl Engine {
             }
             None => return,
         };
+        if load.chose_instant {
+            self.instant = None;
+        }
+        self.pipeline.withdraw_reports(load.reports_from);
         if load.imported_rows > 0 {
             let statements: Vec<Statement> = self
                 .pipeline

@@ -756,3 +756,25 @@ fn escapes_decode_as_turtle_reads_them_except_a_word_boundary() {
     );
     assert_eq!(iri.to_string(), "<http://e.org/café>");
 }
+
+#[test]
+fn an_iri_cannot_spell_the_character_u0000() {
+    for source in [
+        "<\\u0000unit>(5) .",
+        "<a\\U00000000b>(5) .",
+        "@prefix p: <\\u0000> .",
+        "<a\u{0}b>(5) .",
+    ] {
+        let (_, diagnostics) = Program::parse(source, FileId::new(0));
+        assert_eq!(diagnostics.len(), 1, "{source:?}: {diagnostics:?}");
+        assert_eq!(
+            diagnostics[0].code(),
+            crate::codes::NUL_IN_IRI,
+            "{source:?}"
+        );
+    }
+
+    // Other control characters stay, so that every IRI term syntax writes reads back.
+    let (_, diagnostics) = Program::parse("<a\\u0009b\\u007Fc\u{85}d>(5) .", FileId::new(0));
+    assert!(diagnostics.is_empty(), "{diagnostics:?}");
+}

@@ -16,6 +16,8 @@ use std::sync::Arc;
 #[cfg(feature = "sparql")]
 use nemo_physical::diagnostics::Diagnostic;
 
+#[cfg(feature = "sparql")]
+use crate::diagnostics::{AboutPredicate, AboutResource};
 use crate::{
     diagnostics::TranslationError,
     engine::compile::translation::{
@@ -114,6 +116,18 @@ impl<'a> Translator<'a> {
         use nemo_physical::value::Type;
 
         let spec = self.sparql_import_spec(import)?;
+        if !spec.query.keeps_names() {
+            for variable in spec.query.never_bound_variables() {
+                self.warn(
+                    TranslationError::NeverBoundVariable {
+                        variable: variable.to_owned(),
+                    }
+                    .at(import.span)
+                    .with_resource(spec.endpoint.clone())
+                    .with_predicate(import.predicate.clone()),
+                );
+            }
+        }
         let source_width = spec.layout.source_width();
         // The selection checks that the columns named after the predicate
         // align with the query's projection, bound or not.

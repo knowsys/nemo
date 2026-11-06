@@ -154,9 +154,12 @@ pub struct Engine {
     /// An explanation re-executes a run's applications in the run's context.
     /// Cleared with the application log.
     contexts: evaluate::contexts::RunContexts,
-    /// The instant of what the loading methods translated since the last reasoning run began:
-    /// the `NOW()` of its facts and option values, and of the next run.
-    /// `None` if nothing was translated since.
+    /// The instant chosen by the first loading call since the last reasoning run began,
+    /// at which the loading calls evaluate the `NOW()` of facts and option values,
+    /// and the next run evaluates its own.
+    ///
+    /// `None` if no loading call chose one since, or if the call that chose it failed or was
+    /// discarded.
     instant: Option<EvaluationContext>,
     /// The plan skeletons of the compiled program's rules.
     skeletons: evaluate::application::PlanSkeletons,
@@ -411,7 +414,7 @@ impl Engine {
     /// Returns what [load](Self::load) returns, except N0491 and N0492.
     pub fn start_load(&mut self, program: Program) -> Result<Progress, Diagnostic> {
         self.refuse_while_waiting()?;
-        let outcome = self.load_program(program);
+        let outcome = self.choosing_instant(|engine| engine.load_program(program));
         self.progress(outcome)
     }
 
@@ -455,7 +458,7 @@ impl Engine {
     /// Returns what [extend](Self::extend) returns, except N0491 and N0492.
     pub fn start_extend(&mut self, program: Program) -> Result<Progress, Diagnostic> {
         self.refuse_while_waiting()?;
-        let outcome = self.extend_program(program);
+        let outcome = self.choosing_instant(|engine| engine.extend_program(program));
         self.progress(outcome)
     }
 
@@ -500,7 +503,7 @@ impl Engine {
     /// Returns what [reload](Self::reload) returns, except N0491 and N0492.
     pub fn start_reload(&mut self, program: Program) -> Result<Progress, Diagnostic> {
         self.refuse_while_waiting()?;
-        let outcome = self.reload_program(program);
+        let outcome = self.choosing_instant(|engine| engine.reload_program(program));
         self.progress(outcome)
     }
 
@@ -582,7 +585,7 @@ impl Engine {
         rows: impl IntoIterator<Item = Vec<DataValue>>,
     ) -> Result<(), Diagnostic> {
         self.refuse_while_waiting()?;
-        self.admit_rows(predicate, rows)
+        self.choosing_instant(|engine| engine.admit_rows(predicate, rows))
     }
 
     /// Sets the client the plain methods ([load](Self::load), [extend](Self::extend),
@@ -657,8 +660,8 @@ impl Engine {
     /// The run is one evaluation [context](EvaluationContext):
     /// every `NOW()` it evaluates reads the same instant, the one the facts loaded for it
     /// were evaluated at.
-    /// That is the instant of the first loading method since the last run,
-    /// or, if there was none, the instant the run began at.
+    /// That is the instant of the first successful call of `load`, `extend`, `reload` or
+    /// `import_rows` since the last run, or, if there was none, the instant the run began at.
     /// The fetches of bound imports (imports with a `where` clause) go through the engine's
     /// [client](Self::set_client).
     /// A run that waits for data from the network, after its client was cancelled, continues.

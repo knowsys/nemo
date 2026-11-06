@@ -47,7 +47,7 @@ use crate::{
         },
         compile::types,
         registered::Registered,
-        remote::{FetchedResource, ResourceRequest},
+        remote::{FetchedResource, ResourceRequest, Suspension},
         written::WrittenProgram,
     },
     model::{
@@ -1027,10 +1027,44 @@ impl ScratchStores {
 }
 
 impl Engine {
-    /// Returns the instant a loading method translates at:
-    /// the one chosen since the last reasoning run began, or now, which the next run then shares.
+    /// Returns the instant a loading call translates at, choosing the current one
+    /// if no loading call chose one since the last reasoning run began.
+    ///
+    /// The next run evaluates at the same instant.
     pub(in crate::engine) fn loading_instant(&mut self) -> EvaluationContext {
         *self.instant.get_or_insert_with(EvaluationContext::now)
+    }
+
+    /// Runs a loading call and settles its choice of the instant by how it ended
+    /// (see [settle_instant](Self::settle_instant)).
+    pub(in crate::engine) fn choosing_instant(
+        &mut self,
+        call: impl FnOnce(&mut Self) -> Result<(), Diagnostic>,
+    ) -> Result<(), Diagnostic> {
+        let chose = self.instant.is_none();
+        let outcome = call(self);
+        self.settle_instant(chose, &outcome);
+        outcome
+    }
+
+    /// Settles a loading call's choice of the instant by how the call ended.
+    ///
+    /// `chose` tells whether the call chose the instant.
+    /// A call suspended for data from the network keeps the choice until it is resumed
+    /// or discarded.
+    /// A call that failed undoes it, so that the next loading call chooses anew.
+    pub(in crate::engine) fn settle_instant(
+        &mut self,
+        chose: bool,
+        outcome: &Result<(), Diagnostic>,
+    ) {
+        if !chose || outcome.is_ok() {
+            return;
+        }
+        match &mut self.suspension {
+            Some(Suspension::Load(load)) => load.chose_instant = true,
+            _ => self.instant = None,
+        }
     }
 
     /// Returns the stores and setup one translation runs with,

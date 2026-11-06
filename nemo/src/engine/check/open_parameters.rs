@@ -15,8 +15,9 @@
 //!   which an extra body atom over that predicate binds.
 //! - A fact reading the parameter becomes such a rule.
 //! - An import reading the parameter becomes an untyped `@input` of its predicate,
-//!   since what the import would read is unknown,
-//!   and an export reading it is left out.
+//!   since what the import would read is unknown.
+//!   The other imports into that predicate are left out, as the input already holds any value.
+//! - An export reading the parameter is left out.
 //!
 //! A parameter whose value reads a parameter without a value has none either.
 //! A parameter declared twice is left as written, for translation to refuse.
@@ -49,11 +50,32 @@ pub(in crate::engine) fn open_parameters(
     if unvalued.is_empty() {
         return (statements, ids);
     }
+    let opened = opened_predicates(&statements, &unvalued);
+    let mut inputs = HashSet::new();
     statements
         .into_iter()
         .zip(ids)
-        .filter_map(|(statement, id)| Some((open_statement(statement, &unvalued)?, id)))
+        .filter_map(|(statement, id)| {
+            Some((
+                open_statement(statement, &unvalued, &opened, &mut inputs)?,
+                id,
+            ))
+        })
         .unzip()
+}
+
+/// Returns the predicates of the imports reading a parameter without a value,
+/// which the check reads as inputs.
+fn opened_predicates(statements: &[Statement], unvalued: &HashSet<String>) -> HashSet<Identifier> {
+    statements
+        .iter()
+        .filter_map(|statement| match statement {
+            Statement::Directive(Directive::Import(import)) if reads(statement, unvalued) => {
+                Some(import.predicate.clone())
+            }
+            _ => None,
+        })
+        .collect()
 }
 
 /// Returns the names of the parameters without a value:
@@ -112,8 +134,24 @@ fn global(term: &Term) -> Option<&str> {
 }
 
 /// Returns a statement as the check reads it, or `None` if the check leaves it out.
-fn open_statement(statement: Statement, unvalued: &HashSet<String>) -> Option<Statement> {
+///
+/// `opened` are the predicates the check reads as inputs (see [opened_predicates]),
+/// and `inputs` those given their `@input` so far.
+fn open_statement(
+    statement: Statement,
+    unvalued: &HashSet<String>,
+    opened: &HashSet<Identifier>,
+    inputs: &mut HashSet<Identifier>,
+) -> Option<Statement> {
     match statement {
+        Statement::Directive(Directive::Import(import)) if opened.contains(&import.predicate) => {
+            let first = inputs.insert(import.predicate.clone());
+            first.then_some(Statement::Directive(Directive::Input(InputDirective {
+                predicate: import.predicate,
+                columns: None,
+                span: import.span,
+            })))
+        }
         Statement::Directive(Directive::Parameter(parameter))
             if unvalued.contains(&parameter.variable.name) =>
         {
@@ -143,13 +181,6 @@ fn open_statement(statement: Statement, unvalued: &HashSet<String>) -> Option<St
                 span: fact.span,
             };
             Some(Statement::Rule(open_rule(rule, unvalued)))
-        }
-        Statement::Directive(Directive::Import(import)) => {
-            Some(Statement::Directive(Directive::Input(InputDirective {
-                predicate: import.predicate,
-                columns: None,
-                span: import.span,
-            })))
         }
         Statement::Directive(Directive::Export(_)) => None,
         // A `@use` or an `@define` reading the parameter is left to translation.

@@ -413,3 +413,72 @@ fn a_run_evaluates_at_the_instant_its_facts_were_loaded_at() {
         "each run has its own instant"
     );
 }
+
+/// A loading call that fails, or waits and is discarded, leaves the choice of the instant
+/// to the next loading call, while a failed call after a successful one keeps that one's.
+#[test]
+fn only_a_successful_loading_call_chooses_the_instant() {
+    let missing = || parse("@import p from csv { resource = \"no-such-file.csv\" } .");
+    let mut engine = Engine::new();
+    assert!(engine.load(missing()).is_err(), "the resource is missing");
+    assert!(engine.instant.is_none(), "a failed load chooses no instant");
+
+    let progress = engine
+        .start_load(parse(
+            "@import p from csv { resource = \"http://example.org/p.csv\" } .",
+        ))
+        .unwrap_or_else(|problem| panic!("{problem:?}"));
+    assert!(
+        matches!(progress, Progress::Waiting(_)),
+        "the import waits for its resource"
+    );
+    assert!(engine.instant.is_some(), "a waiting load keeps its choice");
+    assert!(engine.discard_pending());
+    assert!(
+        engine.instant.is_none(),
+        "a discarded load chooses no instant"
+    );
+
+    engine
+        .load(parse("p(1) ."))
+        .unwrap_or_else(|problem| panic!("{problem:?}"));
+    let chosen = engine.instant;
+    assert!(chosen.is_some(), "a successful load chooses the instant");
+    assert!(engine.extend(missing()).is_err(), "the resource is missing");
+    assert_eq!(
+        engine.instant, chosen,
+        "a failed extension keeps the load's instant"
+    );
+}
+
+/// A discarded waiting load withdraws what it reported, so loading again reports it once.
+#[test]
+fn a_discarded_load_withdraws_its_reports() {
+    let program = || {
+        parse(
+            "@input given .
+             @import p from csv { resource = \"http://example.org/p.csv\" } .",
+        )
+    };
+    let unsupplied = |engine: &Engine| {
+        engine
+            .reports()
+            .iter()
+            .filter(|report| report.code() == codes::INPUT_UNSUPPLIED)
+            .count()
+    };
+    let mut engine = Engine::new();
+    let progress = engine
+        .start_load(program())
+        .unwrap_or_else(|problem| panic!("{problem:?}"));
+    assert!(matches!(progress, Progress::Waiting(_)), "the import waits");
+    assert_eq!(unsupplied(&engine), 1, "{:?}", engine.reports());
+    assert!(engine.discard_pending());
+    assert_eq!(unsupplied(&engine), 0, "{:?}", engine.reports());
+
+    let progress = engine
+        .start_load(program())
+        .unwrap_or_else(|problem| panic!("{problem:?}"));
+    assert!(matches!(progress, Progress::Waiting(_)), "the import waits");
+    assert_eq!(unsupplied(&engine), 1, "{:?}", engine.reports());
+}

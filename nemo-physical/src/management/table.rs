@@ -148,7 +148,13 @@ impl Table {
     /// Returns the earliest revision the row was added at, if the table holds it.
     ///
     /// The row's columns are in the order the table's batches arrive in.
+    /// Panics if the row does not match the table's arity.
     pub(super) fn revision_of(&self, row: &[StorageValue]) -> Option<Revision> {
+        assert_eq!(
+            row.len(),
+            self.arity,
+            "a looked-up row must match the table's arity"
+        );
         self.subtables
             .iter()
             .find_map(|subtable| subtable.revision_of(row))

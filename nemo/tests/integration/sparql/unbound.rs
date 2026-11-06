@@ -110,3 +110,32 @@ wanted(3) .
     assert_eq!(fetcher.queries().len(), 1);
     assert_eq!(rows(&mut engine, "q"), ["<urn:a>,3", "<urn:c>,3"]);
 }
+
+#[test]
+fn a_variable_no_pattern_binds_keeps_the_query_as_written_and_warns() {
+    // As written, `t` reads a null for `?x`, which `c` does not hold, so `b` stays empty.
+    // Bound by `c`, the endpoint would bind `?x` to `<urn:v>`, so the query is not rewritten.
+    let (mut engine, fetcher) = run_against(
+        r#"
+@import t from sparql {
+    endpoint = <http://example.org/sparql>,
+    query = "SELECT ?s ?x WHERE { ?s <urn:p> <urn:o> }"
+} .
+c(<urn:v>) .
+b(?s, ?x) :- c(?x), t(?s, ?x) .
+@output b .
+"#,
+        "?s\t?x\n<urn:s>\t\n",
+    );
+    let queries = fetcher.queries();
+    assert_eq!(queries.len(), 1, "{queries:?}");
+    assert!(!queries[0].contains("VALUES"), "{queries:?}");
+    assert!(rows(&mut engine, "b").is_empty());
+    let warned: Vec<_> = engine
+        .reports()
+        .iter()
+        .filter(|report| report.code() == nemo::codes::NEVER_BOUND_VARIABLE)
+        .collect();
+    assert_eq!(warned.len(), 1, "{warned:?}");
+    assert_eq!(warned[0].field("variable"), Some("x"), "{warned:?}");
+}

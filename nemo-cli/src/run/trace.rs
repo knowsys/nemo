@@ -147,6 +147,18 @@ impl<'a> TraceStream<'a> {
         Ok(())
     }
 
+    /// Ends the stream of a trace that failed:
+    /// the file, holding an unfinished response, is removed.
+    fn abandon(self) {
+        let Self { path, out, .. } = self;
+        // The file closes before it is removed.
+        drop(out);
+        if let Some(path) = path {
+            // The failure of the trace is what the run reports, not this one.
+            std::fs::remove_file(path).ok();
+        }
+    }
+
     /// Returns what a failed write amounts to:
     /// the file could not be written,
     /// or the standard output failed, closed if the reader left.
@@ -256,7 +268,13 @@ impl Run<'_> {
         if stream.closed {
             return Ok(());
         }
-        stream.finish(named?)
+        match named {
+            Ok(named) => stream.finish(named),
+            Err(problem) => {
+                stream.abandon();
+                Err(problem)
+            }
+        }
     }
 
     /// Writes a query's response, as JSON, to the standard output or

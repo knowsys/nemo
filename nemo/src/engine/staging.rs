@@ -106,7 +106,7 @@ impl Engine {
                 Purpose::Validate,
             )?;
         }
-        let mut load = SuspendedLoad::new(LoadKind::Load, staged);
+        let mut load = SuspendedLoad::new(LoadKind::Load, staged, already);
         load.imported_rows = imported_rows;
         self.load_staged(load, already)
     }
@@ -387,7 +387,7 @@ impl Engine {
         if !self.rewriting_stages(&staged).is_empty() {
             self.translate_written_extension(&staged)?;
         }
-        let load = SuspendedLoad::new(LoadKind::Extend, staged);
+        let load = SuspendedLoad::new(LoadKind::Extend, staged, already);
         self.extend_staged(load, already)
     }
 

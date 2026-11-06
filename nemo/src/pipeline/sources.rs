@@ -132,6 +132,14 @@ impl Pipeline {
         })
     }
 
+    /// Returns the source text a span covers,
+    /// or `None` if its file is not registered or the span lies outside its text.
+    pub(crate) fn span_text(&self, span: Span) -> Option<&str> {
+        self.source(span.file)?
+            .text
+            .get(span.start as usize..span.end as usize)
+    }
+
     /// Returns the registered source a file id addresses.
     fn source(&self, file: FileId) -> Option<&SourceFile> {
         self.files.get(file.index() as usize)

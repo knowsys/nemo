@@ -306,19 +306,35 @@ impl SparqlQuery {
         algebra::computes_in_full(self.pattern())
     }
 
-    /// Returns whether the query binds one of its projected variables in some solutions but not
-    /// in others, as an `OPTIONAL` that does not match leaves it unbound,
-    /// or a computed value that fails.
+    /// Returns whether the query may leave one of its projected variables unbound:
+    /// a variable it binds in some solutions but not in others,
+    /// as an `OPTIONAL` that does not match leaves it unbound, or a computed value that fails,
+    /// or a variable no pattern binds.
     ///
-    /// A variable the query never binds does not count: the bindings it is asked with bind it,
-    /// as for a query calling a label service.
+    /// In a query calling a service, a variable no pattern binds does not count:
+    /// the service may bind it, as a label service binds the label variables of the items
+    /// the query is asked with.
     /// The answer is conservative: a variable the query computes counts as sometimes unbound.
     pub fn may_leave_unbound(&self) -> bool {
         let always = algebra::bound_in_results(self.pattern());
         let maybe = algebra::possibly_bound(self.pattern());
+        let service = self.keeps_names();
         self.variables
             .iter()
-            .any(|variable| maybe.contains(variable) && !always.contains(variable))
+            .any(|variable| !always.contains(variable) && (maybe.contains(variable) || !service))
+    }
+
+    /// Returns the projected variables that no pattern of the query binds, in projection order.
+    ///
+    /// Outside a service, nothing binds such a variable, so every solution leaves it unbound.
+    pub fn never_bound_variables(&self) -> Vec<&str> {
+        let always = algebra::bound_in_results(self.pattern());
+        let maybe = algebra::possibly_bound(self.pattern());
+        self.variables
+            .iter()
+            .filter(|variable| !always.contains(*variable) && !maybe.contains(*variable))
+            .map(String::as_str)
+            .collect()
     }
 
     /// Returns the request fetching this query's solutions from an endpoint.

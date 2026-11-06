@@ -687,8 +687,13 @@ impl<'a> Translator<'a> {
         terms: &[Term],
     ) -> Diagnostic {
         let mistaken = labels.iter().zip(terms).find_map(|(label, term)| {
+            // The local name is the term as written: a number's value writes in another
+            // form, `7` for `007`, which names another IRI.
             let local = match &term.kind {
-                TermKind::Number(_) | TermKind::Constant(Identifier::Bare(_)) => term.to_string(),
+                TermKind::Number(_) | TermKind::Constant(Identifier::Bare(_)) => term
+                    .span
+                    .and_then(|span| self.pipeline.span_text(span))
+                    .map_or_else(|| term.to_string(), str::to_owned),
                 _ => return None,
             };
             (self.prefixes.contains_key(label) && NameKind::Local.admits(&local))

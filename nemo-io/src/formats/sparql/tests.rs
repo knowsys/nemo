@@ -166,8 +166,30 @@ fn queries_tell_whether_a_solution_may_leave_a_variable_unbound() {
     assert!(leaves(
         "SELECT ?s (COUNT(?o) AS ?n) WHERE { ?s <urn:p> ?o } GROUP BY ?s"
     ));
-    // A variable the query never binds is for its bindings to bind.
-    assert!(!leaves("SELECT ?s ?label WHERE { ?s <urn:p> <urn:o> }"));
+    // A variable no pattern binds is unbound in every solution,
+    // unless the query calls a service, which may bind it.
+    assert!(leaves("SELECT ?s ?label WHERE { ?s <urn:p> <urn:o> }"));
+    assert!(!leaves(
+        "SELECT ?s ?sLabel WHERE { ?s <urn:p> <urn:o> SERVICE <urn:label> { <urn:a> <urn:b> 'en' } }"
+    ));
+}
+
+#[test]
+fn queries_list_the_projected_variables_no_pattern_binds() {
+    let never = |text: &str| {
+        SparqlQuery::parse(text, None, [])
+            .expect("parses")
+            .never_bound_variables()
+            .into_iter()
+            .map(String::from)
+            .collect::<Vec<_>>()
+    };
+    assert!(never("SELECT ?s ?o WHERE { ?s <urn:p> ?o }").is_empty());
+    assert!(never("SELECT ?s ?r WHERE { ?s <urn:p> ?o OPTIONAL { ?s <urn:q> ?r } }").is_empty());
+    assert_eq!(
+        never("SELECT ?s ?x ?y WHERE { ?s <urn:p> <urn:o> }"),
+        ["x", "y"]
+    );
 }
 
 #[test]

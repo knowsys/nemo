@@ -106,6 +106,36 @@ fn a_parameter_without_a_value_reads_as_any_value_of_its_type() {
 }
 
 #[test]
+fn an_import_reading_a_parameter_without_a_value_opens_its_predicate() {
+    // A load given `$dir` reads both resources into `data`. The check reads `data` as
+    // holding any value instead, so the second import does not import into an input.
+    let problems = check(
+        r#"
+        @parameter $dir: string .
+        @import data from csv { resource = f"{$dir}/a.csv" } .
+        @import data from csv { resource = "b.csv" } .
+        seen(?x) :- data(?x) .
+        @output seen .
+    "#,
+    );
+    assert!(problems.is_empty(), "{problems:?}");
+}
+
+#[test]
+fn a_parameter_without_a_value_may_be_grouped_and_aggregated() {
+    // A load given `$k` groups by that constant and sums it, which it accepts.
+    let problems = check(
+        "
+        @parameter $k: int .
+        p(1) .
+        r($k, #sum($k)) :- p(?x) .
+        @output r .
+    ",
+    );
+    assert!(problems.is_empty(), "{problems:?}");
+}
+
+#[test]
 fn a_parameters_declared_type_types_the_rules_reading_it() {
     // No string is a number, so the rule never fires, whatever value
     // the parameter is given.

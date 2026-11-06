@@ -76,6 +76,11 @@
 //! - **An unbound value is no value.** Each unbound cell is a null of its own,
 //!   which no other fetch can meet,
 //!   so a query that may leave a projected variable unbound is not rewritten.
+//!   A variable no pattern of the query binds counts as well,
+//!   except in a query calling a service, which may bind it.
+//!   There the variable takes only the values the rule's bindings give it,
+//!   as a label service labels only the items it is asked about,
+//!   which the query as written, asked without bindings, would not.
 //! - **A result is one fixed set.** A query whose result depends on how it is asked
 //!   (`LIMIT`, `OFFSET`, `SAMPLE`, `RAND()`, `NOW()`, `UUID()`, `STRUUID()`, `BNODE()`)
 //!   is never restricted or merged.
