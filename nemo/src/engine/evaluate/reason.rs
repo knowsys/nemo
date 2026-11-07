@@ -48,7 +48,7 @@ use crate::{
 #[derive(Debug)]
 pub(in crate::engine) enum PendingFetch {}
 
-/// A reasoning run suspended while a fetch waits for responses:
+/// A reasoning run suspended until the requests of a fetch have responses:
 /// the suspended fetch, and the position from which the run resumes.
 #[derive(Debug)]
 pub(in crate::engine) struct SuspendedReasoning {
@@ -69,7 +69,7 @@ pub(in crate::engine) struct SuspendedReasoning {
 }
 
 impl SuspendedReasoning {
-    /// Returns the requests waiting for their responses.
+    /// Returns the requests without a response yet.
     pub(in crate::engine) fn pending(&self) -> Vec<PendingRequest> {
         #[cfg(feature = "sparql")]
         return self.fetch.slots.pending().collect();
@@ -77,7 +77,7 @@ impl SuspendedReasoning {
         match *self.fetch {}
     }
 
-    /// Returns whether some request waits for its response.
+    /// Returns whether some request has no response yet.
     pub(in crate::engine) fn has_pending(&self) -> bool {
         #[cfg(feature = "sparql")]
         return self.fetch.slots.has_pending();
@@ -85,16 +85,16 @@ impl SuspendedReasoning {
         match *self.fetch {}
     }
 
-    /// Returns the ids of the requests waiting for their responses.
-    pub(in crate::engine) fn waiting_ids(&self) -> HashSet<u64> {
+    /// Returns the ids of the requests without a response yet.
+    pub(in crate::engine) fn pending_ids(&self) -> HashSet<u64> {
         #[cfg(feature = "sparql")]
-        return self.fetch.slots.waiting_ids().collect();
+        return self.fetch.slots.pending_ids().collect();
         #[cfg(not(feature = "sparql"))]
         match *self.fetch {}
     }
 
     /// Records the response to the request with the given id,
-    /// returning whether such a request was waiting.
+    /// returning whether such a request was pending.
     pub(in crate::engine) fn respond(&mut self, id: u64, response: RemoteResponse) -> bool {
         #[cfg(feature = "sparql")]
         return self.fetch.slots.respond(id, response);
@@ -141,7 +141,7 @@ pub(in crate::engine) struct FetchTally {
 enum ApplicationResult {
     /// Applied, with its result.
     Applied(Applied),
-    /// Suspended, waiting for the responses to its requests.
+    /// Suspended until its requests have responses.
     #[cfg_attr(not(feature = "sparql"), expect(dead_code))]
     Suspended(Box<PendingFetch>),
 }
@@ -150,7 +150,7 @@ enum ApplicationResult {
 enum StoreOutcome {
     /// It stored this many rows.
     Stored(usize),
-    /// It is suspended, waiting for the responses to its requests.
+    /// It is suspended until its requests have responses.
     Suspended(Box<PendingFetch>),
 }
 
@@ -173,7 +173,7 @@ enum RunEnd {
     Fixpoint,
     /// Cancelled before it.
     Cancelled,
-    /// Suspended while a fetch waits for responses.
+    /// Suspended until the requests of a fetch have responses.
     Suspended(SuspendedReasoning),
 }
 
@@ -196,7 +196,7 @@ impl Engine {
     /// a join for an ordinary rule, a fetch from the endpoint for a bound import's rule.
     ///
     /// A fetch suspends until its requests have responses,
-    /// and continues from the suspended fetch passed in `waiting`.
+    /// and continues from the suspended fetch passed in `suspended`.
     fn apply_rule(
         &mut self,
         rule: &mut CompiledRule,
@@ -204,7 +204,7 @@ impl Engine {
         step: u64,
         context: EvaluationContext,
         observe: bool,
-        waiting: Option<Box<PendingFetch>>,
+        suspended: Option<Box<PendingFetch>>,
     ) -> Result<ApplicationResult, Diagnostic> {
         #[cfg(feature = "sparql")]
         if let Some(fetch) = &rule.fetch {
@@ -215,7 +215,7 @@ impl Engine {
                 &mut self.manager,
                 &mut self.dictionary,
                 context,
-                waiting.map(|waiting| *waiting),
+                suspended.map(|suspended| *suspended),
                 &mut self.request_ids,
             )?;
             let (applied, fetched) = match outcome {
@@ -238,11 +238,11 @@ impl Engine {
             return Ok(ApplicationResult::Applied(applied));
         }
         #[cfg(not(feature = "sparql"))]
-        if let Some(waiting) = waiting {
-            match *waiting {}
+        if let Some(suspended) = suspended {
+            match *suspended {}
         }
         #[cfg(feature = "sparql")]
-        debug_assert!(waiting.is_none(), "only a fetch waits");
+        debug_assert!(suspended.is_none(), "only a fetch is suspended");
         let skeleton = self.skeletons.of(index, rule);
         Ok(ApplicationResult::Applied(application::apply(
             rule,
@@ -336,7 +336,7 @@ impl Engine {
         debug_assert!(tallies.is_empty(), "only a fetch tallies");
     }
 
-    /// Ends a run discarded while it waited, as a cancellation ends one:
+    /// Ends a run discarded while it was suspended, as a cancellation ends one:
     /// reports what its fetches skipped, against the written program.
     pub(in crate::engine) fn end_discarded_run(&mut self) {
         let already = self.pipeline.reports().len();
@@ -352,12 +352,12 @@ impl Engine {
         let Some(mut program) = self.program.take() else {
             return Err(EngineError::NoProgram.diagnostic());
         };
-        // A waiting reasoning run resumes where it waits. A waiting
+        // A suspended reasoning run resumes where it was suspended. A suspended
         // loading method refused the run before it got here.
         let resumed = match self.suspension.take() {
             Some(Suspension::Reason(suspended)) => Some(suspended),
             other => {
-                debug_assert!(other.is_none(), "a waiting loading method refuses a run");
+                debug_assert!(other.is_none(), "a suspended loading method refuses a run");
                 self.suspension = other;
                 None
             }
@@ -461,14 +461,14 @@ impl Engine {
 
             // Iterate until an iteration stores no new rows.
             loop {
-                let (next, iteration_start, before, waiting) = match entry.take() {
+                let (next, iteration_start, before, suspended) = match entry.take() {
                     Some((next, iteration_start, before, fetch)) => {
                         (next, iteration_start, before, Some(fetch))
                     }
                     None => (0, self.step, 0, None),
                 };
                 let (stored, halt) =
-                    self.run_iteration(program, &active, next, context, waiting)?;
+                    self.run_iteration(program, &active, next, context, suspended)?;
                 self.derived += stored;
                 let derived = before + stored;
                 match halt {
@@ -566,7 +566,7 @@ impl Engine {
 
     /// Runs one iteration over a stratum's active rules from the given position on.
     ///
-    /// The first application continues the suspended fetch in `waiting`, if given.
+    /// The first application continues the suspended fetch in `suspended`, if given.
     /// Returns the rows the iteration stored, and why it ended early, if it did.
     fn run_iteration(
         &mut self,
@@ -574,7 +574,7 @@ impl Engine {
         active: &[usize],
         from: usize,
         context: EvaluationContext,
-        mut waiting: Option<Box<PendingFetch>>,
+        mut suspended: Option<Box<PendingFetch>>,
     ) -> Result<(usize, Option<IterationHalt>), Diagnostic> {
         let mut stored = 0usize;
         for (position, &index) in active.iter().enumerate().skip(from) {
@@ -582,7 +582,7 @@ impl Engine {
                 return Ok((stored, Some(IterationHalt::Cancelled)));
             }
             let rule = &mut program.rules[index];
-            match self.apply_and_store(rule, index, context, waiting.take())? {
+            match self.apply_and_store(rule, index, context, suspended.take())? {
                 StoreOutcome::Stored(rows) => stored += rows,
                 StoreOutcome::Suspended(fetch) => {
                     let halt = IterationHalt::Suspended {
@@ -610,7 +610,7 @@ impl Engine {
 
     /// Applies one rule at the current step and stores what it derived,
     /// returning the number of rows stored,
-    /// or the suspended application waiting for the responses to its requests,
+    /// or the suspended application whose requests need responses,
     /// which does not advance the step.
     ///
     /// A body without new rows since the rule's last application derives nothing,
@@ -620,9 +620,9 @@ impl Engine {
         rule: &mut CompiledRule,
         index: usize,
         context: EvaluationContext,
-        waiting: Option<Box<PendingFetch>>,
+        suspended: Option<Box<PendingFetch>>,
     ) -> Result<StoreOutcome, Diagnostic> {
-        if waiting.is_none() && !self.has_fresh_input(rule) {
+        if suspended.is_none() && !self.has_fresh_input(rule) {
             rule.last_applied = self.step;
             return Ok(StoreOutcome::Stored(0));
         }
@@ -636,9 +636,9 @@ impl Engine {
             timings,
             counts,
             observations,
-        } = match self.apply_rule(rule, index, step, context, observe, waiting)? {
+        } = match self.apply_rule(rule, index, step, context, observe, suspended)? {
             ApplicationResult::Applied(applied) => applied,
-            ApplicationResult::Suspended(waiting) => return Ok(StoreOutcome::Suspended(waiting)),
+            ApplicationResult::Suspended(fetch) => return Ok(StoreOutcome::Suspended(fetch)),
         };
         self.step += 1;
         self.applied += 1;

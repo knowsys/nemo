@@ -5,7 +5,7 @@ use nemo::engine::Engine;
 
 use crate::common::{Responder, parse_into, rows};
 
-/// Loads and reasons a program, answering its requests with a fixed result.
+/// Loads and reasons a program, responding to its requests with a fixed result.
 fn run_against(source: &str, result: &'static str) -> (Engine, Responder) {
     let fetcher = Responder::endpoint(move |_| result.to_owned());
     let mut engine = Engine::new();
@@ -95,7 +95,7 @@ kind("none", "none") :- comments(?c), ISNULL(?c) .
 #[test]
 fn solutions_an_endpoint_folds_into_a_binding_are_left_out() {
     // An endpoint folding numbers of every type together, as QLever does with the literals of a
-    // query, answers the binding 3 with a double too, which Nemo tells apart from the integer.
+    // query, responds to the binding 3 with a double too, which Nemo tells apart from the integer.
     let (mut engine, fetcher) = run_against(
         r#"
 @import q(?x, ?v) from sparql {

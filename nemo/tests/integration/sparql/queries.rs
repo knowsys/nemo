@@ -80,7 +80,7 @@ fn a_computed_argument_reaches_the_endpoint_as_a_binding() {
         // The import is bound by the computed value, not fetched whole.
         assert!(text.contains("\"Shell\"@en"), "{text}");
         let mut body = projection(text).join("\t");
-        // The endpoint answers more than it was asked: the rule compares
+        // The endpoint returns more than it was asked for: the rule compares
         // the column with the argument as written.
         body.push_str("\n<urn:shell>\t\"Shell\"@en\n<urn:other>\t\"Other\"@en\n");
         body

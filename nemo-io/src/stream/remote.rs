@@ -69,7 +69,7 @@ impl Request {
 /// the response's status if a response came, and what the transport or the response said.
 ///
 /// A failure is final, so a request is retried before its failure is reported.
-/// Only a request too large for the server, or one it answered only in part,
+/// Only a request too large for the server, or one it responded to only in part,
 /// is sent again, in smaller pieces, if it can be split.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Failure {
@@ -120,7 +120,7 @@ impl Failure {
 
     /// Returns whether a smaller request may succeed:
     /// the server found the request [too large](Self::too_large),
-    /// or answered it only in part, stopped by its time or row limit.
+    /// or responded to it only in part, stopped by its time or row limit.
     pub fn smaller_may_succeed(&self) -> bool {
         self.too_large() || self.partial
     }
@@ -175,9 +175,9 @@ pub const PARTIAL_RESPONSE_HEADERS: [&str; 3] =
 /// headers say so, or `None` for a whole one.
 ///
 /// SPARQL defines no way to say so, and a store that stops at its time or row limit
-/// answers with what it has. Virtuoso, behind DBpedia and many other endpoints, says it:
+/// responds with what it has. Virtuoso, behind DBpedia and many other endpoints, says it:
 /// - status 206 for an "anytime" result cut at its time limit,
-///   or `X-SQL-State` (with `X-SQL-Message`) where it answers 200;
+///   or `X-SQL-State` (with `X-SQL-Message`) where it responds with 200;
 /// - `X-SPARQL-MaxRows` for a result that reached its row limit (`ResultSetMaxRows`,
 ///   10 000 rows at DBpedia), which it cuts without an error.
 ///
@@ -201,7 +201,7 @@ pub fn partial_response<'a>(
 /// What sends the requests of a method that needs data from the network.
 ///
 /// The `BlockingClient` behind the `http` feature sends them over HTTP.
-/// Another client can answer them from a cache or from fixtures,
+/// Another client can respond to them from a cache or from fixtures,
 /// or send them through a proxy or with credentials.
 pub trait Client {
     /// Sends several requests, and returns one response per request, in order.

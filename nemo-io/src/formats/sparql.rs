@@ -175,10 +175,9 @@ impl SparqlQuery {
     /// Returns an `xsd:integer` literal as the `xsd:decimal` with one zero after the point,
     /// `"3"` as `"3.0"^^xsd:decimal`, or `None` for any other literal.
     ///
-    /// Stores keep datatypes apart, and Wikidata holds every quantity as a decimal:
-    /// neither its Blazegraph nor its QLever service finds a population of 3 through
-    /// `"3"^^xsd:integer`, and QLever finds it only as `"3.0"`, not `"3"^^xsd:decimal`.
-    /// A store comparing numbers by value, as Virtuoso does, finds either.
+    /// Stores keep datatypes apart, and some hold every quantity as a decimal, as Wikidata
+    /// does, which an integer in its own datatype does not find.
+    /// The decimal is written as such a store writes an integral quantity, `"3.0"`.
     pub fn integer_as_decimal(literal: &Literal) -> Option<Literal> {
         (literal.datatype().as_str() == INTEGER).then(|| {
             Literal::new_typed_literal(
@@ -314,7 +313,7 @@ impl SparqlQuery {
     /// In a query calling a service, a variable no pattern binds does not count:
     /// the service may bind it, as a label service binds the label variables of the items
     /// the query is asked with.
-    /// The answer is conservative: a variable the query computes counts as sometimes unbound.
+    /// The result is conservative: a variable the query computes counts as sometimes unbound.
     pub fn may_leave_unbound(&self) -> bool {
         let always = algebra::bound_in_results(self.pattern());
         let maybe = algebra::possibly_bound(self.pattern());
@@ -360,8 +359,8 @@ impl SparqlQuery {
     /// A value the endpoint holds in another datatype or form, such as `"3"^^xsd:int` for the
     /// integer 3, is not found.
     /// An endpoint matching more loosely than Nemo, as QLever finds a double for an integer,
-    /// delivers solutions Nemo would not match;
-    /// a reader told the blocks ([SparqlReader::with_bindings]) leaves those out.
+    /// delivers solutions Nemo would not match.
+    /// A reader told the blocks ([SparqlReader::with_bindings]) leaves those out.
     /// A row holding a value without a ground term, such as a null, is left out of its block.
     ///
     /// # Panics

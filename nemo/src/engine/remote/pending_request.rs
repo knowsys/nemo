@@ -1,9 +1,9 @@
-//! The requests a waiting method needs answered, as the engine lists them,
+//! The requests a suspended method needs responses to, as the engine lists them,
 //! and how a step of such a method ends.
 
 use nemo_io::remote::Request;
 
-/// The id of a request a waiting method needs answered,
+/// The id of a request a suspended method needs a response to,
 /// under which [resume](crate::engine::Engine::resume) takes its response.
 ///
 /// Ids are unique within an engine.
@@ -30,7 +30,7 @@ impl std::fmt::Display for RequestId {
     }
 }
 
-/// A request a waiting method needs answered.
+/// A request a suspended method needs a response to.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PendingRequest {
     /// The id to pass the response to [resume](crate::engine::Engine::resume) under.
@@ -40,15 +40,15 @@ pub struct PendingRequest {
 }
 
 /// How a step of a method that may need data from the network ended:
-/// the method is done, or it waits for the responses to these requests.
+/// the method is done, or it is suspended until these requests have responses.
 ///
 /// The `start_*` methods of the [Engine](crate::engine::Engine) return it,
 /// and so does [resume](crate::engine::Engine::resume).
-#[must_use = "a waiting method continues only once its requests are answered with `resume`"]
+#[must_use = "a suspended method continues only once `resume` has the responses to its requests"]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Progress {
     /// The method completed.
     Done,
-    /// The method waits for the responses to these requests.
-    Waiting(Vec<PendingRequest>),
+    /// The method is suspended until these requests have responses.
+    Suspended(Vec<PendingRequest>),
 }

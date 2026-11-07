@@ -341,7 +341,7 @@ def test_a_run_cancelled_while_waiting_continues_or_is_discarded():
     release = threading.Event()
 
     class Handler(http.server.BaseHTTPRequestHandler):
-        def answer(self):
+        def respond(self):
             self.rfile.read(int(self.headers.get("Content-Length", 0)))
             release.wait(10)
             body = b"?c\t?p\n<urn:a>\t<urn:b>\n"
@@ -351,7 +351,7 @@ def test_a_run_cancelled_while_waiting_continues_or_is_discarded():
             self.end_headers()
             self.wfile.write(body)
 
-        do_GET = do_POST = answer
+        do_GET = do_POST = respond
 
         def log_message(self, *args):
             pass

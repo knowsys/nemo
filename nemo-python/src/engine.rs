@@ -303,11 +303,12 @@ impl Engine {
         self.token.cancel();
     }
 
-    /// Discards a run left waiting for data from the network, returning whether one waited.
+    /// Discards a run left suspended for data from the network, returning whether there was
+    /// one.
     ///
-    /// A run cancelled while it waits for a fetch keeps waiting, for `reason()` to continue.
-    /// Until then, `load`, `extend`, `reload` and `import_rows` refuse (N0493);
-    /// discarding it stops the run as a cancellation between rules does.
+    /// A run cancelled while its client waits for a fetch stays suspended, for `reason()` to
+    /// continue. Until then, `load`, `extend`, `reload` and `import_rows` are refused (N0493),
+    /// and discarding it stops the run as a cancellation between rules does.
     fn discard_pending(&self) -> PyResult<bool> {
         Ok(self.lock()?.engine.discard_pending())
     }

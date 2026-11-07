@@ -760,8 +760,8 @@ fn request_headers_are_sent_as_written_or_refused() {
 ",
         ))
         .unwrap_or_else(|problem| panic!("{problem:?}"));
-    let Progress::Waiting(pending) = progress else {
-        panic!("the import waits for its resource");
+    let Progress::Suspended(pending) = progress else {
+        panic!("the import is suspended for its resource");
     };
     assert_eq!(engine.pending(), pending);
     assert_eq!(pending.len(), 1, "{pending:?}");

@@ -114,7 +114,7 @@ impl Engine {
     /// Translates a staged first program and stores its data.
     ///
     /// The translation is prepared first, which registers and stores nothing.
-    /// If it needs remote resources not fetched yet, the load waits for them (N0491),
+    /// If it needs remote resources not fetched yet, the load is suspended for them (N0491),
     /// keeping the prepared translation state, and commits from it once every response is in.
     /// The reports from `already` on are rewritten to refer to the written program.
     pub(super) fn load_staged(
@@ -158,11 +158,12 @@ impl Engine {
         let (state, facts) = translator.finish();
         match requests {
             Ok(missing) if !missing.is_empty() => {
-                // The preparation registered and stored nothing: the load waits with its state.
+                // The preparation registered and stored nothing: the load is suspended with its
+                // state.
                 self.pipeline
                     .present_reports(already, |report| written.present(report));
                 load.prepared = Some(state);
-                load.wait_for(missing, &mut self.request_ids);
+                load.add_requests(missing, &mut self.request_ids);
                 return Err(self.suspend(Suspension::Load(load)));
             }
             Ok(_) => {}
@@ -417,8 +418,8 @@ impl Engine {
     /// Translates a staged extension and stores its data.
     ///
     /// The translation is prepared first, which registers and stores nothing,
-    /// so the loaded program stays as it is while the extension waits (N0491) for remote
-    /// resources not fetched yet. It commits from the prepared translation state once every
+    /// so the loaded program stays as it is while the extension is suspended (N0491) for
+    /// remote resources not fetched yet. It commits from the prepared translation state once every
     /// response is in.
     /// The reports from `already` on are rewritten to refer to the written program.
     pub(super) fn extend_staged(
@@ -470,7 +471,7 @@ impl Engine {
                     self.pipeline
                         .present_reports(already, |report| written.present(report));
                     load.prepared = Some(state);
-                    load.wait_for(missing, &mut self.request_ids);
+                    load.add_requests(missing, &mut self.request_ids);
                     return Err(self.suspend(Suspension::Load(load)));
                 }
                 state

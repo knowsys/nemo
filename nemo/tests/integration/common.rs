@@ -1,5 +1,5 @@
 //! What the tests share: programs parsed from source, engines reasoned
-//! to their fixpoint, a predicate's rows as text, a client answering
+//! to their fixpoint, a predicate's rows as text, a client responding to
 //! an engine's requests, and temporary directories.
 
 mod temp_directory;
@@ -65,10 +65,10 @@ pub(crate) fn rows(engine: &mut Engine, predicate: &str) -> Vec<String> {
 }
 
 /// What a responder returns for a request: the body, or why there is none.
-type Answer = dyn Fn(&Request) -> Result<String, Failure> + Send + Sync;
+type RespondFn = dyn Fn(&Request) -> Result<String, Failure> + Send + Sync;
 
-/// A make-believe remote side: a client answering an engine's requests,
-/// remembering every request it answered.
+/// A make-believe remote side: a client responding to an engine's requests,
+/// remembering every request it responded to.
 ///
 /// Clones share what they remember.
 #[derive(Clone)]
@@ -77,8 +77,8 @@ pub(crate) struct Responder(Arc<ResponderState>);
 /// What the clones of a responder share.
 struct ResponderState {
     /// The response to a request.
-    respond: Box<Answer>,
-    /// Every request answered, in order.
+    respond: Box<RespondFn>,
+    /// Every request responded to, in order.
     seen: Mutex<Vec<Request>>,
 }
 
@@ -87,7 +87,7 @@ impl Client for Responder {
         Some(
             requests
                 .iter()
-                .map(|request| self.answer(request))
+                .map(|request| self.respond_to(request))
                 .collect(),
         )
     }
@@ -104,8 +104,8 @@ impl Responder {
         }))
     }
 
-    /// Answers one request, remembering it.
-    pub(crate) fn answer(&self, request: &Request) -> Response {
+    /// Responds to one request, remembering it.
+    pub(crate) fn respond_to(&self, request: &Request) -> Response {
         self.0
             .seen
             .lock()
@@ -144,19 +144,19 @@ impl Responder {
         Self::new(move |request| respond(&query_text(request)))
     }
 
-    /// Answers the requests a step of an engine method waits for, and those it waits for
-    /// next, through `resume`, until the method completes or fails.
+    /// Responds to the requests of a suspended engine method, and to those it is suspended
+    /// for next, through `resume`, until the method completes or fails.
     pub(crate) fn complete(
         &self,
         engine: &mut Engine,
         mut progress: Progress,
     ) -> Result<(), Diagnostic> {
-        while let Progress::Waiting(pending) = progress {
-            let answers: Vec<_> = pending
+        while let Progress::Suspended(pending) = progress {
+            let responses: Vec<_> = pending
                 .iter()
-                .map(|pending| (pending.id, self.answer(&pending.request)))
+                .map(|pending| (pending.id, self.respond_to(&pending.request)))
                 .collect();
-            progress = engine.resume(answers)?;
+            progress = engine.resume(responses)?;
         }
         Ok(())
     }
@@ -174,7 +174,7 @@ impl Responder {
         outcome
     }
 
-    /// Returns the requests answered so far, in order.
+    /// Returns the requests responded to so far, in order.
     pub(crate) fn seen(&self) -> Vec<Request> {
         self.0
             .seen
@@ -183,7 +183,7 @@ impl Responder {
             .clone()
     }
 
-    /// Returns the query texts of the requests answered so far, in order.
+    /// Returns the query texts of the requests responded to so far, in order.
     #[cfg(feature = "sparql")]
     pub(crate) fn queries(&self) -> Vec<String> {
         self.seen().iter().map(query_text).collect()

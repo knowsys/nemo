@@ -414,7 +414,7 @@ fn a_run_evaluates_at_the_instant_its_facts_were_loaded_at() {
     );
 }
 
-/// A loading call that fails, or waits and is discarded, leaves the choice of the instant
+/// A loading call that fails, or is suspended and discarded, leaves the choice of the instant
 /// to the next loading call, while a failed call after a successful one keeps that one's.
 #[test]
 fn only_a_successful_loading_call_chooses_the_instant() {
@@ -429,10 +429,13 @@ fn only_a_successful_loading_call_chooses_the_instant() {
         ))
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     assert!(
-        matches!(progress, Progress::Waiting(_)),
-        "the import waits for its resource"
+        matches!(progress, Progress::Suspended(_)),
+        "the import is suspended for its resource"
     );
-    assert!(engine.instant.is_some(), "a waiting load keeps its choice");
+    assert!(
+        engine.instant.is_some(),
+        "a suspended load keeps its choice"
+    );
     assert!(engine.discard_pending());
     assert!(
         engine.instant.is_none(),
@@ -451,7 +454,7 @@ fn only_a_successful_loading_call_chooses_the_instant() {
     );
 }
 
-/// A discarded waiting load withdraws what it reported, so loading again reports it once.
+/// A discarded suspended load withdraws what it reported, so loading again reports it once.
 #[test]
 fn a_discarded_load_withdraws_its_reports() {
     let program = || {
@@ -471,7 +474,10 @@ fn a_discarded_load_withdraws_its_reports() {
     let progress = engine
         .start_load(program())
         .unwrap_or_else(|problem| panic!("{problem:?}"));
-    assert!(matches!(progress, Progress::Waiting(_)), "the import waits");
+    assert!(
+        matches!(progress, Progress::Suspended(_)),
+        "the import is suspended"
+    );
     assert_eq!(unsupplied(&engine), 1, "{:?}", engine.reports());
     assert!(engine.discard_pending());
     assert_eq!(unsupplied(&engine), 0, "{:?}", engine.reports());
@@ -479,6 +485,9 @@ fn a_discarded_load_withdraws_its_reports() {
     let progress = engine
         .start_load(program())
         .unwrap_or_else(|problem| panic!("{problem:?}"));
-    assert!(matches!(progress, Progress::Waiting(_)), "the import waits");
+    assert!(
+        matches!(progress, Progress::Suspended(_)),
+        "the import is suspended"
+    );
     assert_eq!(unsupplied(&engine), 1, "{:?}", engine.reports());
 }

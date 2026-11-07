@@ -1,5 +1,5 @@
 //! Resources beyond the program's text: remote imports over HTTP and SPARQL, a load that
-//! waits for its remote data, RDF and Parquet serializations, and the options and
+//! is suspended for its remote data, RDF and Parquet serializations, and the options and
 //! directories that resolve an import's resource.
 
 mod exports;
@@ -8,7 +8,7 @@ mod http;
 #[cfg(feature = "parquet")]
 mod parquet;
 mod resources;
-mod waiting;
+mod suspended;
 
 use nemo::engine::Engine;
 

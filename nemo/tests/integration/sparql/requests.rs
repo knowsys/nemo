@@ -1,4 +1,4 @@
-//! The requests of a run: waiting and resuming, halving requests that are too large or cut
+//! The requests of a run: suspending and resuming, halving requests that are too large or cut
 //! off, failures under `on_error = warn`, and the same run over HTTP.
 
 use std::sync::{
@@ -19,14 +19,14 @@ use crate::common::{Responder, parse_into, query_text};
 
 use super::{ANCESTORS, parent_of, parents, values_blocks};
 
-/// A client whose first wait is cancelled, as Ctrl-C cancels one, and which answers through
+/// A client whose first wait is cancelled, as Ctrl-C cancels one, and which responds through
 /// a responder afterwards.
 struct CancelledOnce {
     /// The token of the engine the client serves.
     token: CancelToken,
     /// Whether the first wait happened.
     cancelled: AtomicBool,
-    /// The answers after it.
+    /// The responses after it.
     responder: Responder,
 }
 
@@ -49,7 +49,7 @@ impl Client for CancelledOnce {
 }
 
 #[test]
-fn a_run_cancelled_while_waiting_continues_with_reason() {
+fn a_run_cancelled_while_its_client_waits_continues_with_reason() {
     let mut engine = Engine::new();
     let program = parse_into(&mut engine, ANCESTORS);
     engine
@@ -63,7 +63,7 @@ fn a_run_cancelled_while_waiting_continues_with_reason() {
     })));
     let problem = engine.reason().expect_err("the wait is cancelled");
     assert_eq!(problem.code(), nemo::codes::WAIT_CANCELLED, "{problem:?}");
-    assert_eq!(engine.pending().len(), 1, "the run waits");
+    assert_eq!(engine.pending().len(), 1, "the run is suspended");
 
     // The next call clears the token it inherits, and continues the run.
     engine
@@ -107,9 +107,9 @@ anc(?m) :- mother(?c, ?m) .
     let mut progress = engine
         .start_reason()
         .unwrap_or_else(|problem| panic!("{problem:?}"));
-    // Answer until the mothers of `urn:m` are asked for, by which time a parent request failed.
+    // Respond until the mothers of `urn:m` are asked for, by which time a parent request failed.
     loop {
-        let Progress::Waiting(pending) = progress else {
+        let Progress::Suspended(pending) = progress else {
             panic!("the mothers keep the run fetching");
         };
         let asks_for_m = pending.iter().any(|pending| {
@@ -119,7 +119,7 @@ anc(?m) :- mother(?c, ?m) .
         if asks_for_m {
             break;
         }
-        let answers: Vec<_> = pending
+        let responses: Vec<_> = pending
             .iter()
             .map(|pending| {
                 let response: Response = if pending.request.url.contains("parents") {
@@ -131,7 +131,7 @@ anc(?m) :- mother(?c, ?m) .
             })
             .collect();
         progress = engine
-            .resume(answers)
+            .resume(responses)
             .unwrap_or_else(|problem| panic!("{problem:?}"));
     }
     assert_eq!(failed_requests(&engine), 0, "a run reports when it ends");
@@ -225,11 +225,11 @@ fn serve_endpoint(respond: fn(&str) -> String) -> String {
     format!("http://{address}/sparql")
 }
 
-/// A reasoning run waits in the fetch application for its responses: the
-/// store reads as it is, a trace fails, `start_reason()` lists the same
-/// requests again, and the responses continue the run where it waits.
+/// A reasoning run is suspended in the fetch application for its responses:
+/// the store reads as it is, a trace fails, `start_reason()` lists the same
+/// requests again, and the responses continue the run where it was suspended.
 #[test]
-fn a_waiting_run_continues_at_its_application() {
+fn a_suspended_run_continues_at_its_application() {
     let mut engine = Engine::new();
     let program = parse_into(&mut engine, ANCESTORS);
     engine
@@ -238,8 +238,8 @@ fn a_waiting_run_continues_at_its_application() {
     let progress = engine
         .start_reason()
         .unwrap_or_else(|problem| panic!("{problem:?}"));
-    let Progress::Waiting(pending) = progress.clone() else {
-        panic!("the fetch waits");
+    let Progress::Suspended(pending) = progress.clone() else {
+        panic!("the fetch is suspended");
     };
     assert_eq!(pending.len(), 1, "{pending:?}");
     assert_eq!(engine.pending(), pending);
@@ -269,14 +269,14 @@ fn a_waiting_run_continues_at_its_application() {
     assert_eq!(
         endpoint.queries().len(),
         4,
-        "the waiting request was sent once, then each new binding"
+        "the pending request was sent once, then each new binding"
     );
 }
 
-/// A change to the store is refused while a run waits, and goes through once the run is
+/// A change to the store is refused while a run is suspended, and goes through once the run is
 /// discarded: nothing advanced, so the next run requests the application's window again.
 #[test]
-fn a_change_waits_for_a_waiting_run() {
+fn a_change_is_refused_while_a_run_is_suspended() {
     let mut engine = Engine::new();
     let program = parse_into(&mut engine, ANCESTORS);
     engine
@@ -285,15 +285,17 @@ fn a_change_waits_for_a_waiting_run() {
     let progress = engine
         .start_reason()
         .unwrap_or_else(|problem| panic!("{problem:?}"));
-    assert!(matches!(progress, Progress::Waiting(_)), "{progress:?}");
+    assert!(matches!(progress, Progress::Suspended(_)), "{progress:?}");
     let refused = engine
         .import_rows("anc", vec![vec![DataValue::iri("urn:x")]])
-        .expect_err("a run waits");
-    assert_eq!(refused.code(), nemo::codes::WAITING, "{refused:?}");
+        .expect_err("a run is suspended");
+    assert_eq!(refused.code(), nemo::codes::METHOD_SUSPENDED, "{refused:?}");
+    assert_eq!(refused.field("refused"), Some("import_rows"), "{refused:?}");
+    assert_eq!(refused.field("suspended"), Some("reason"), "{refused:?}");
     assert_eq!(engine.count("anc").expect("readable"), 1, "nothing changed");
 
     assert!(engine.discard_pending());
-    assert!(engine.pending().is_empty(), "the waiting run is gone");
+    assert!(engine.pending().is_empty(), "the suspended run is gone");
     engine
         .import_rows("anc", vec![vec![DataValue::iri("urn:x")]])
         .unwrap_or_else(|problem| panic!("{problem:?}"));
@@ -311,7 +313,7 @@ fn a_change_waits_for_a_waiting_run() {
     );
 }
 
-/// A client answering no request at all.
+/// A client responding to no request at all.
 struct Silent;
 
 impl Client for Silent {
@@ -344,10 +346,10 @@ fn a_client_giving_too_few_responses_fails_the_rest() {
     );
 }
 
-/// A request the endpoint answers only in part, as Virtuoso does at its row limit, splits its
-/// `VALUES` block in halves like one it finds too large.
+/// A request the endpoint responds to only in part, as Virtuoso does at its row limit, splits
+/// its `VALUES` block in halves like one it finds too large.
 #[test]
-fn partially_answered_requests_split_until_they_are_whole() {
+fn requests_with_partial_responses_split_until_they_are_whole() {
     let endpoint = Responder::failing_endpoint(|text| {
         let blocks = values_blocks(text);
         if blocks[0].len() > 1 {

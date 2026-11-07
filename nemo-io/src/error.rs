@@ -73,8 +73,8 @@ diagnostic_kinds! {
         PartialResult { url: String, reason: String }
             => PARTIAL_RESULT = 113, error,
                "`{url}` returned only part of the result: {reason}",
-               explain "The endpoint answered, but said in its status or headers that the \
-                        answer holds only part of the result: it stopped at its time limit, \
+               explain "The endpoint responded, but said in its status or headers that the \
+                        response holds only part of the result: it stopped at its time limit, \
                         or at the most rows it returns, as Virtuoso does behind DBpedia. \
                         None of the rows are kept, since they are not the result. A bound \
                         import's request is sent again in halves first, so the error \

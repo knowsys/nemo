@@ -14,7 +14,7 @@ repository.workspace = true
 # remote data (http/https resources), with retries.
 http = ["nemo-io/http"]
 # SPARQL endpoint imports: validation and requests. The engine's client
-# sends the requests, or the caller answers them through `resume`.
+# sends the requests, or `resume` takes the responses to them.
 sparql = ["nemo-io/sparql"]
 # Parquet import and export.
 parquet = ["nemo-io/parquet"]

@@ -46,22 +46,24 @@ methods that would change it throw.
 
 To fetch another way, through a proxy or with credentials, call the
 method's `start` form (`startLoad`, `startExtend`, `startReload`,
-`startReason`). It returns `null` once done, or the requests it waits
-for (`id`, `url`, `method`, `headers`, `accept`, `parameters`, `form`),
-which `pendingRequests()` also lists. Fetch them and pass the answers to
-`resume([{id, body}, …])`, a failed one as `{id, status, message}`; it
-returns what the method waits for next, or `null`. A failure is final,
-so retry before answering. A 413, or a response the endpoint cut off
-partway, makes the engine split a bound import's request if it can.
-So does a successful response holding only part of the result, which
-Virtuoso marks with status 206 or the headers `X-SQL-State` and
-`X-SPARQL-MaxRows`: answer it as `{id, status, message, partial: true}`
-rather than with its body, so that no partial result is imported. The
-built-in fetch does this itself; in a browser, Virtuoso's headers are
-visible only if the endpoint exposes them to scripts (CORS).
-While a method waits, the methods that would change the program or the
-data throw code N0493, until it completes or `discardPending()` drops
-it. A resource registered with `addResource` is read without a request.
+`startReason`). It returns `null` once done, or the requests the method
+is suspended for (`id`, `url`, `method`, `headers`, `accept`,
+`parameters`, `form`), which `pendingRequests()` also lists. Fetch them
+and pass the responses to `resume([{id, body}, …])`, a failed one as
+`{id, status, message}`. It returns the requests the method is suspended
+for next, or `null`, and throws for an id that `pendingRequests()` does
+not list. A failure is final, so retry before passing it in. A 413, or a
+response the endpoint cut off partway, makes the engine split a bound
+import's request if it can. So does a successful response holding only
+part of the result, which Virtuoso marks with status 206 or the headers
+`X-SQL-State` and `X-SPARQL-MaxRows`: pass it as
+`{id, status, message, partial: true}` rather than with its body, so
+that no partial result is imported. The built-in fetch does this itself.
+In a browser, Virtuoso's headers are visible only if the endpoint
+exposes them to scripts (CORS).
+While a method is suspended, the methods that would change the program
+or the data throw code N0493, until it completes or `discardPending()`
+drops it. A resource registered with `addResource` is read without a request.
 
 ## The explanation viewer
 

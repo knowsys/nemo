@@ -38,13 +38,13 @@ struct RebuildScope {
     predicates: HashSet<String>,
 }
 
-/// How a reload's translation ended: done, or prepared and waiting for the remote
-/// resources it needs.
+/// How a reload's translation ended: done, or prepared and in need of the remote
+/// resources these requests fetch.
 enum Translated<T> {
     /// Translated.
     Done(T),
-    /// Prepared, with the engine as it was, and waiting for these requests.
-    Waiting(Vec<ResourceRequest>),
+    /// Prepared, with the engine as it was, and in need of these requests.
+    Missing(Vec<ResourceRequest>),
 }
 
 /// What a reload's translation leaves to apply:
@@ -171,7 +171,7 @@ impl Engine {
     /// Translates a staged replacement and rebuilds the stored data.
     ///
     /// The translation is prepared first, which registers and stores nothing.
-    /// If it needs remote resources not fetched yet, the reload waits for them (N0491)
+    /// If it needs remote resources not fetched yet, the reload is suspended for them (N0491)
     /// with the loaded program as it was, and commits from the prepared translation state
     /// once every response is in.
     /// The reports from `already` on are rewritten to refer to the written program.
@@ -211,9 +211,9 @@ impl Engine {
             .present_reports(already, |report| written.present(report));
         let retranslated = match retranslated {
             Ok(Translated::Done(retranslated)) => retranslated,
-            Ok(Translated::Waiting(missing)) => {
+            Ok(Translated::Missing(missing)) => {
                 self.program = Some(old);
-                load.wait_for(missing, &mut self.request_ids);
+                load.add_requests(missing, &mut self.request_ids);
                 return Err(self.suspend(Suspension::Load(load)));
             }
             Err(problem) => {
@@ -313,7 +313,7 @@ impl Engine {
     /// The translation then fails with N0316 for it,
     /// and is repeated with that predicate rebuilt as well.
     /// A failed translation restores the previous state,
-    /// and so does a prepared one that waits for the remote resources it needs:
+    /// and so does a prepared one that needs remote resources not fetched yet:
     /// the load then keeps the prepared translation state and the predicates rebuilt so far,
     /// and the next call commits from them.
     /// Remote resources are read from those the load fetched, which a repetition reads again.
@@ -367,7 +367,7 @@ impl Engine {
                                 Ok(missing) => {
                                     load.prepared = Some(state);
                                     load.unstable = unstable;
-                                    return Ok(Translated::Waiting(missing));
+                                    return Ok(Translated::Missing(missing));
                                 }
                                 Err(problem) => {
                                     if Self::unstable_import(&problem, &mut unstable) {

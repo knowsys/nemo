@@ -448,7 +448,7 @@ impl<'a> Translator<'a> {
     /// declarations and the import plan, and returns the requests of the remote resources
     /// its imports read, each tagged with the position of its directive.
     ///
-    /// Nothing is registered, read, or stored, so a load can wait for the responses and
+    /// Nothing is registered, read, or stored, so a load can be suspended for the responses and
     /// [commit](Self::commit) from the translation state this leaves
     /// ([finish](Self::finish) takes it out) without preparing again.
     /// A translation that reads no data needs no remote resource.

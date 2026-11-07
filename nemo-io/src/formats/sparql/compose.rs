@@ -541,7 +541,8 @@ fn rename_pattern(pattern: &mut GraphPattern, map: &mut impl FnMut(&Variable) ->
 
 /// Renames a variable that must stay a variable.
 ///
-/// [instantiate]'s check rules out a term replacement here, so such a replacement keeps the name.
+/// [instantiate](SparqlQuery::instantiate)'s check rules out a term replacement here,
+/// so such a replacement keeps the name.
 fn rename_variable(variable: &mut Variable, map: &mut impl FnMut(&Variable) -> Replacement) {
     if let Replacement::Variable(renamed) = map(variable) {
         *variable = renamed;

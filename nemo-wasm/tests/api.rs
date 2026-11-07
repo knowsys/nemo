@@ -319,19 +319,19 @@ fn thrown_code(thrown: &JsValue) -> Option<String> {
         .as_string()
 }
 
-/// An answer for `resume`, to the request listed as `entry`.
-fn answer(entry: &JsValue, fields: &[(&str, JsValue)]) -> JsValue {
-    let answer = js_sys::Object::new();
+/// A response for `resume`, to the request listed as `entry`.
+fn response_to(entry: &JsValue, fields: &[(&str, JsValue)]) -> JsValue {
+    let response = js_sys::Object::new();
     let id = Reflect::get(entry, &JsValue::from_str("id")).expect("an id");
-    Reflect::set(&answer, &JsValue::from_str("id"), &id).expect("settable");
+    Reflect::set(&response, &JsValue::from_str("id"), &id).expect("settable");
     for (name, value) in fields {
-        Reflect::set(&answer, &JsValue::from_str(name), value).expect("settable");
+        Reflect::set(&response, &JsValue::from_str(name), value).expect("settable");
     }
-    answer.into()
+    response.into()
 }
 
 #[wasm_bindgen_test]
-fn remote_imports_wait_until_the_caller_answers() {
+fn a_started_load_is_suspended_until_resume_has_the_responses() {
     let mut engine = NemoEngine::new();
     let program = NemoProgram::parse(
         String::from(
@@ -345,7 +345,10 @@ fn remote_imports_wait_until_the_caller_answers() {
     assert_eq!(thrown_code(&thrown).as_deref(), Some("N0491"));
     assert_eq!(engine.pending_requests().expect("the list").length(), 0);
 
-    let requests: Array = engine.start_load(&program).expect("the load waits").into();
+    let requests: Array = engine
+        .start_load(&program)
+        .expect("the load is suspended")
+        .into();
     assert_eq!(requests.length(), 1);
     assert_eq!(engine.pending_requests().expect("the list").length(), 1);
     let entry = requests.get(0);
@@ -363,12 +366,12 @@ fn remote_imports_wait_until_the_caller_answers() {
     assert!(field("form").is_null());
 
     assert!(u64::try_from(field("id")).is_ok(), "the id is a BigInt");
-    let answers = Array::of1(&answer(
+    let responses = Array::of1(&response_to(
         &entry,
         &[("body", JsValue::from_str("a,1\nb,2\n"))],
     ));
-    let done = engine.resume(&answers).expect("the load completes");
-    assert!(done.is_null(), "nothing waits any more");
+    let done = engine.resume(&responses).expect("the load completes");
+    assert!(done.is_null(), "nothing is suspended any more");
     assert_eq!(engine.pending_requests().expect("the list").length(), 0);
     engine.reason().expect("reasoning reaches the fixpoint");
     assert_eq!(engine.count("q").expect("registered"), 2);
@@ -384,16 +387,19 @@ fn a_failed_response_fails_the_load() {
         ),
         None,
     );
-    let requests: Array = engine.start_load(&program).expect("the load waits").into();
+    let requests: Array = engine
+        .start_load(&program)
+        .expect("the load is suspended")
+        .into();
     let entry = requests.get(0);
-    let answers = Array::of1(&answer(
+    let responses = Array::of1(&response_to(
         &entry,
         &[
             ("status", JsValue::from(404)),
             ("message", JsValue::from_str("Not Found")),
         ],
     ));
-    let failed = engine.resume(&answers).expect_err("the import fails");
+    let failed = engine.resume(&responses).expect_err("the import fails");
     assert_eq!(thrown_code(&failed).as_deref(), Some("N0111"));
     assert_eq!(engine.pending_requests().expect("the list").length(), 0);
 }
@@ -408,19 +414,57 @@ fn a_status_that_is_no_http_status_is_refused() {
         ),
         None,
     );
-    let requests: Array = engine.start_load(&program).expect("the load waits").into();
+    let requests: Array = engine
+        .start_load(&program)
+        .expect("the load is suspended")
+        .into();
     let entry = requests.get(0);
     for status in [
         JsValue::from(70000),
         JsValue::from(-1),
         JsValue::from_str("404"),
     ] {
-        let answers = Array::of1(&answer(
+        let responses = Array::of1(&response_to(
             &entry,
             &[("status", status), ("message", JsValue::from_str("odd"))],
         ));
-        engine.resume(&answers).expect_err("the answer is refused");
-        // Nothing was taken: the request still waits.
+        engine
+            .resume(&responses)
+            .expect_err("the response is refused");
+        // Nothing was taken: the request is still pending.
+        assert_eq!(engine.pending_requests().expect("the list").length(), 1);
+    }
+}
+
+#[wasm_bindgen_test]
+fn resume_throws_for_ids_the_pending_requests_do_not_list() {
+    let mut engine = NemoEngine::new();
+    let program = NemoProgram::parse(
+        String::from(
+            "@import p from csv { resource = \"https://example.org/data.csv\" } . \
+             q(?x) :- p(?x, ?y) .",
+        ),
+        None,
+    );
+    let requests: Array = engine
+        .start_load(&program)
+        .expect("the load is suspended")
+        .into();
+    let body = [("body", JsValue::from_str("a,1\n"))];
+    let listed = response_to(&requests.get(0), &body);
+    let unlisted = js_sys::Object::new();
+    Reflect::set(
+        &unlisted,
+        &JsValue::from_str("id"),
+        &JsValue::from(1_000_000),
+    )
+    .expect("settable");
+    let unlisted = response_to(&unlisted, &body);
+    for responses in [Array::of1(&unlisted), Array::of2(&listed, &listed)] {
+        engine
+            .resume(&responses)
+            .expect_err("the ids do not match the pending requests");
+        // Nothing was taken: the request is still pending.
         assert_eq!(engine.pending_requests().expect("the list").length(), 1);
     }
 }

@@ -1,5 +1,5 @@
 //! Remote data: the requests of engine methods that need data from the network,
-//! the client that sends them, and the methods that wait for their responses.
+//! the client that sends them, and the methods suspended until their responses come.
 //!
 //! A method needs data from the network at one point:
 //! - a loading method (`load`, `extend`, `reload`) for its remote imports,
@@ -8,14 +8,14 @@
 //!   clause, at the rule application that fetches.
 //!
 //! [load](Engine::load) and the other plain methods send the requests through the engine's
-//! [Client] (see [set_client](Engine::set_client)) and complete.
+//! [Client] (see [set_client](Engine::set_client)), wait for the responses, and complete.
 //! The `start_*` methods, such as [start_load](Engine::start_load), send nothing:
-//! they return [Progress::Waiting] with the requests, each under a [RequestId],
-//! and [resume](Engine::resume) takes the responses under these ids and continues the method
-//! where it waits.
-//! The engine holds at most one waiting method.
-//! While one waits, the methods that would change the program or the stored data refuse
-//! (N0493) until it is resumed or [discarded](Engine::discard_pending).
+//! they return [Progress::Suspended] with the requests, each under a [RequestId],
+//! and the method is suspended until [resume](Engine::resume) has the responses under these
+//! ids and continues it.
+//! The engine holds at most one suspended method.
+//! While it is suspended, the methods that would change the program or the stored data are
+//! refused (N0493) until it is completed or [discarded](Engine::discard_pending).
 //!
 //! The types of a request and its outcome are re-exported here:
 //! the [Request] itself, its [Response], the [Failure] that prevents one,
@@ -112,20 +112,20 @@ impl<K> RequestSlots<K> {
         });
     }
 
-    /// Returns whether some request waits for its response.
+    /// Returns whether some request has no response yet.
     pub(super) fn has_pending(&self) -> bool {
         self.0.iter().any(|slot| slot.response.is_none())
     }
 
-    /// Returns the ids of the requests waiting for their responses.
-    pub(super) fn waiting_ids(&self) -> impl Iterator<Item = u64> + '_ {
+    /// Returns the ids of the requests without a response yet.
+    pub(super) fn pending_ids(&self) -> impl Iterator<Item = u64> + '_ {
         self.0
             .iter()
             .filter(|slot| slot.response.is_none())
             .map(|slot| slot.id)
     }
 
-    /// Returns the requests waiting for their responses.
+    /// Returns the requests without a response yet.
     pub(super) fn pending(&self) -> impl Iterator<Item = PendingRequest> + '_ {
         self.0
             .iter()
@@ -165,10 +165,10 @@ pub(super) enum LoadKind {
 }
 
 /// The state of a loading method after the pipeline stages ran:
-/// its prepared translation, and the remote resources it fetched and still waits for.
+/// its prepared translation, and the remote resources it fetched and still needs.
 ///
 /// A loading method prepares its translation, which registers and stores nothing,
-/// and waits as this for the remote resources the preparation listed.
+/// and is suspended as this until the remote resources the preparation listed come.
 /// Once every response is in, it commits from the prepared translation state,
 /// passing each response to the import that asked for it.
 #[derive(Debug)]
@@ -181,9 +181,9 @@ pub(super) struct SuspendedLoad {
     /// which the load took into its program.
     ///
     /// They are the last statements of its written revision,
-    /// and go back to the engine if the waiting call is discarded.
+    /// and go back to the engine if the suspended call is discarded.
     pub(super) imported_rows: usize,
-    /// The translation state the preparation left, once the load waited for data,
+    /// The translation state the preparation left, once the load was suspended for data,
     /// from which it commits without preparing again.
     pub(super) prepared: Option<TranslationState>,
     /// For a reload, the predicates it rebuilds because a stored import no longer covers what
@@ -191,9 +191,9 @@ pub(super) struct SuspendedLoad {
     pub(super) unstable: HashSet<String>,
     /// The remote resources fetched so far, by the position of the import that reads each.
     pub(super) fetched: HashMap<usize, FetchedResource>,
-    /// The requests still waiting for their responses.
+    /// The requests sent, with their responses once given.
     pub(super) slots: RequestSlots<ResourceRequest>,
-    /// The imports asking for the same request as one waiting in a slot,
+    /// The imports asking for the same request as one in a slot,
     /// which take its response once it comes.
     pub(super) sharing: Vec<ResourceRequest>,
     /// Whether the loading call chose the instant the next run evaluates at,
@@ -230,12 +230,12 @@ impl SuspendedLoad {
             .collect()
     }
 
-    /// Waits for the given requests, under fresh ids.
+    /// Adds the given requests under fresh ids.
     ///
     /// A request is sent once: an import asking for the same request (URL, form and headers)
-    /// as one fetched or waiting takes that one's response,
+    /// as one fetched or pending takes that one's response,
     /// so that imports of one document read the same bytes.
-    pub(super) fn wait_for(&mut self, requests: Vec<ResourceRequest>, ids: &mut u64) {
+    pub(super) fn add_requests(&mut self, requests: Vec<ResourceRequest>, ids: &mut u64) {
         for request in requests {
             if let Some(response) = self.response_to(&request) {
                 self.fetched
@@ -262,7 +262,7 @@ impl SuspendedLoad {
     }
 
     /// Moves the responses given so far to the fetched resources,
-    /// keeping the requests still without a response waiting.
+    /// keeping the requests still without a response pending.
     pub(super) fn take_responses(&mut self) {
         let slots = std::mem::take(&mut self.slots.0);
         for slot in slots {
@@ -291,19 +291,19 @@ impl SuspendedLoad {
     }
 }
 
-/// A method waiting for data from the network.
+/// A method suspended for data from the network.
 // An engine holds at most one, so the size difference costs nothing worth a box.
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
 pub(in crate::engine) enum Suspension {
-    /// A loading method, its translation prepared, waiting with its staged program.
+    /// A loading method, its translation prepared, suspended with its staged program.
     Load(SuspendedLoad),
-    /// A reasoning run, waiting in the application of a fetch rule.
+    /// A reasoning run, suspended in the application of a fetch rule.
     Reason(SuspendedReasoning),
 }
 
 impl Suspension {
-    /// Returns the requests waiting for their responses.
+    /// Returns the requests without a response yet.
     pub(in crate::engine) fn pending(&self) -> Vec<PendingRequest> {
         match self {
             Suspension::Load(load) => load.slots.pending().collect(),
@@ -311,11 +311,23 @@ impl Suspension {
         }
     }
 
-    /// Returns the ids of the requests waiting for their responses.
-    pub(in crate::engine) fn waiting_ids(&self) -> HashSet<u64> {
+    /// Returns the ids of the requests without a response yet.
+    pub(in crate::engine) fn pending_ids(&self) -> HashSet<u64> {
         match self {
-            Suspension::Load(load) => load.slots.waiting_ids().collect(),
-            Suspension::Reason(reasoning) => reasoning.waiting_ids(),
+            Suspension::Load(load) => load.slots.pending_ids().collect(),
+            Suspension::Reason(reasoning) => reasoning.pending_ids(),
+        }
+    }
+
+    /// Returns the name of the suspended method.
+    fn method(&self) -> &'static str {
+        match self {
+            Suspension::Load(load) => match load.kind {
+                LoadKind::Load => "load",
+                LoadKind::Extend => "extend",
+                LoadKind::Reload => "reload",
+            },
+            Suspension::Reason(_) => "reason",
         }
     }
 
@@ -328,7 +340,7 @@ impl Suspension {
         }
     }
 
-    /// Returns whether some request waits for its response.
+    /// Returns whether some request has no response yet.
     pub(in crate::engine) fn has_pending(&self) -> bool {
         match self {
             Suspension::Load(load) => load.slots.has_pending(),
@@ -361,85 +373,88 @@ impl std::fmt::Debug for ClientSlot {
 }
 
 impl Engine {
-    /// Refuses a method that would change the program or the stored data
-    /// while another method waits for data from the network (N0493).
-    pub(super) fn refuse_while_waiting(&self) -> Result<(), Diagnostic> {
+    /// Refuses the given method, which would change the program or the stored data,
+    /// while another method is suspended for data from the network (N0493).
+    pub(super) fn refuse_while_suspended(&self, refused: &str) -> Result<(), Diagnostic> {
         let Some(suspension) = &self.suspension else {
             return Ok(());
         };
-        let method = match suspension {
-            Suspension::Load(load) => match load.kind {
-                LoadKind::Load => "a load",
-                LoadKind::Extend => "an extension",
-                LoadKind::Reload => "a reload",
-            },
-            Suspension::Reason(_) => "a reasoning run",
-        };
-        Err(EngineError::Waiting {
-            method: method.to_owned(),
-            count: suspension.waiting_ids().len().into(),
+        Err(EngineError::MethodSuspended {
+            refused: refused.to_owned(),
+            suspended: suspension.method().to_owned(),
+            count: suspension.pending_ids().len().into(),
         }
         .diagnostic())
     }
 
     /// Returns how a step of a method ended:
-    /// done, waiting for the requests of the method it left waiting, or failed.
+    /// done, suspended with the requests of the method it suspended, or failed.
     pub(super) fn progress(&self, outcome: Result<(), Diagnostic>) -> Result<Progress, Diagnostic> {
         match outcome {
             Ok(()) => Ok(Progress::Done),
             Err(problem)
                 if problem.code() == codes::AWAITING_REMOTE && self.suspension.is_some() =>
             {
-                Ok(Progress::Waiting(self.pending()))
+                Ok(Progress::Suspended(self.pending()))
             }
             Err(problem) => Err(problem),
         }
     }
 
-    /// Passes the responses to the waiting method and continues it,
-    /// once every request it waits for has its response.
+    /// Passes the responses to the suspended method and continues it,
+    /// once every request it sent has its response.
     ///
-    /// Fails with N0494 for an id no request waits under, or one answered twice,
-    /// before taking any response.
-    pub(super) fn answer(
+    /// # Panics
+    ///
+    /// Panics if a response is given under an id that [pending](Engine::pending) does not
+    /// list, or two responses under one id.
+    pub(super) fn pass_responses(
         &mut self,
-        answers: impl IntoIterator<Item = (RequestId, Response)>,
+        responses: impl IntoIterator<Item = (RequestId, Response)>,
     ) -> Result<Progress, Diagnostic> {
-        let answers: Vec<(RequestId, Response)> = answers.into_iter().collect();
-        let mut waiting = self
+        let responses: Vec<(RequestId, Response)> = responses.into_iter().collect();
+        let pending = self
             .suspension
             .as_ref()
-            .map_or_else(HashSet::new, Suspension::waiting_ids);
-        if let Some((id, _)) = answers.iter().find(|(id, _)| !waiting.remove(&id.0)) {
-            return Err(EngineError::UnknownRequest { id: id.0 }.diagnostic());
+            .map_or_else(HashSet::new, Suspension::pending_ids);
+        let mut given = HashSet::new();
+        for (id, _) in &responses {
+            assert!(
+                given.insert(id.0),
+                "`resume` was given two responses under the id {id}"
+            );
+            assert!(
+                pending.contains(&id.0),
+                "`resume` was given a response under the id {id}, which `pending()` does not list"
+            );
         }
         let Some(suspension) = self.suspension.as_mut() else {
             return Ok(Progress::Done);
         };
-        for (id, response) in answers {
+        for (id, response) in responses {
             suspension.respond(id.0, response);
         }
         if suspension.has_pending() {
-            return Ok(Progress::Waiting(self.pending()));
+            return Ok(Progress::Suspended(self.pending()));
         }
         let outcome = self.resume_suspended();
         self.progress(outcome)
     }
 
-    /// Completes a method by sending the requests it waits for through the engine's client,
-    /// until it is done.
+    /// Completes a method by sending the requests it is suspended for through the engine's
+    /// client, until it is done.
     ///
-    /// Without a client, the waiting method is discarded, and this fails with N0491.
-    /// If the engine's cancel token stops the wait, this fails with N0492:
-    /// a waiting loading method is discarded, having changed nothing,
-    /// and a waiting reasoning run keeps waiting, for the next `reason()` to continue.
+    /// Without a client, the suspended method is discarded, and this fails with N0491.
+    /// If the engine's cancel token stops the wait for the client, this fails with N0492:
+    /// a suspended loading method is discarded, having changed nothing,
+    /// and a suspended reasoning run stays suspended, for the next `reason()` to continue.
     pub(super) fn complete(
         &mut self,
         progress: Result<Progress, Diagnostic>,
     ) -> Result<(), Diagnostic> {
         let mut progress = progress?;
         loop {
-            let Progress::Waiting(pending) = progress else {
+            let Progress::Suspended(pending) = progress else {
                 return Ok(());
             };
             let (ids, requests): (Vec<RequestId>, Vec<Request>) = pending
@@ -471,7 +486,7 @@ impl Engine {
             // A client giving fewer responses than requests fails the rest,
             // rather than leaving them to be sent again forever.
             let mut responses = responses.into_iter();
-            let answers: Vec<(RequestId, Response)> = ids
+            let responses: Vec<(RequestId, Response)> = ids
                 .into_iter()
                 .map(|id| {
                     let response = responses.next().unwrap_or_else(|| {
@@ -482,11 +497,11 @@ impl Engine {
                     (id, response)
                 })
                 .collect();
-            progress = self.answer(answers)?;
+            progress = self.pass_responses(responses)?;
         }
     }
 
-    /// Continues the waiting method with the responses given.
+    /// Continues the suspended method with the responses given.
     pub(in crate::engine) fn resume_suspended(&mut self) -> Result<(), Diagnostic> {
         match self.suspension.take() {
             None => Ok(()),
@@ -508,12 +523,12 @@ impl Engine {
         }
     }
 
-    /// Discards the waiting method, if any, dropping its requests and their responses.
+    /// Discards the suspended method, if any, dropping its requests and their responses.
     ///
-    /// A waiting first load gives the rows added through `import_rows` before it back to
+    /// A suspended first load gives the rows added through `import_rows` before it back to
     /// the engine, and a suspended loading call withdraws its reports and undoes its choice of
     /// the instant.
-    /// A waiting run ends as a cancelled one does, reporting what its fetches skipped.
+    /// A suspended run ends as a cancelled one does, reporting what its fetches skipped.
     pub(super) fn abandon(&mut self) {
         let load = match self.suspension.take() {
             Some(Suspension::Load(load)) => load,
@@ -539,8 +554,8 @@ impl Engine {
         }
     }
 
-    /// Records a waiting method, returning the diagnostic (N0491) its step ends with,
-    /// which [progress](Self::progress) turns into [Progress::Waiting].
+    /// Records a suspended method, returning the diagnostic (N0491) its step ends with,
+    /// which [progress](Self::progress) turns into [Progress::Suspended].
     pub(super) fn suspend(&mut self, suspension: Suspension) -> Diagnostic {
         let pending = suspension.pending();
         self.suspension = Some(suspension);

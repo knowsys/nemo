@@ -201,7 +201,7 @@ pub struct Engine {
     cancel: CancelToken,
     /// Where telemetry events go, nowhere until a sink is [installed](Self::set_telemetry).
     telemetry: SinkSlot,
-    /// The method waiting for data from the network, if any (see [pending](Self::pending)).
+    /// The method suspended for data from the network, if any (see [pending](Self::pending)).
     suspension: Option<Suspension>,
     /// The client the plain methods send the requests of remote data through
     /// (see [set_client](Self::set_client)).
@@ -388,10 +388,11 @@ impl Engine {
     ///
     /// Returns N0481 if the engine already holds a program (see [has_program](Self::has_program)),
     /// N0490 for a program that is not linked,
-    /// and N0493 if another method waits for data from the network (see [pending](Self::pending)).
+    /// and N0493 if another method is suspended for data from the network
+    /// (see [pending](Self::pending)).
     /// Returns N0491 if its imports need data from the network but the engine has no client,
-    /// and N0492 if the [cancel token](Self::cancel_token) stops the wait for it;
-    /// the load then changes nothing.
+    /// and N0492 if the [cancel token](Self::cancel_token) stops the wait for it.
+    /// The load then changes nothing.
     /// Returns the first problem of the program or its data otherwise.
     ///
     /// # Panics
@@ -406,14 +407,14 @@ impl Engine {
 
     /// Loads a program as [load](Self::load) does, but sends no request:
     /// if its imports need data from the network, it returns their requests
-    /// ([Progress::Waiting]) having registered and stored nothing,
+    /// ([Progress::Suspended]) having registered and stored nothing,
     /// and [resume](Self::resume) continues the load with the responses.
     ///
     /// # Errors
     ///
     /// Returns what [load](Self::load) returns, except N0491 and N0492.
     pub fn start_load(&mut self, program: Program) -> Result<Progress, Diagnostic> {
-        self.refuse_while_waiting()?;
+        self.refuse_while_suspended("load")?;
         let outcome = self.choosing_instant(|engine| engine.load_program(program));
         self.progress(outcome)
     }
@@ -431,7 +432,7 @@ impl Engine {
     /// # Errors
     ///
     /// Returns N0482 if no program is loaded,
-    /// and N0493 if another method waits for data from the network.
+    /// and N0493 if another method is suspended for data from the network.
     /// Returns an error for an extension that would change what loaded statements mean:
     /// declaring `@base`, rebinding a prefix, or redefining a parameter.
     /// Use [reload](Self::reload) for these.
@@ -450,14 +451,14 @@ impl Engine {
 
     /// Extends the loaded program as [extend](Self::extend) does, but sends no request:
     /// if the extension's imports need data from the network, it returns their requests
-    /// ([Progress::Waiting]) with the loaded program unchanged,
+    /// ([Progress::Suspended]) with the loaded program unchanged,
     /// and [resume](Self::resume) continues the extension with the responses.
     ///
     /// # Errors
     ///
     /// Returns what [extend](Self::extend) returns, except N0491 and N0492.
     pub fn start_extend(&mut self, program: Program) -> Result<Progress, Diagnostic> {
-        self.refuse_while_waiting()?;
+        self.refuse_while_suspended("extend")?;
         let outcome = self.choosing_instant(|engine| engine.extend_program(program));
         self.progress(outcome)
     }
@@ -479,7 +480,7 @@ impl Engine {
     /// # Errors
     ///
     /// Returns N0482 if no program is loaded, N0490 for a program that is not linked,
-    /// and N0493 if another method waits for data from the network.
+    /// and N0493 if another method is suspended for data from the network.
     /// Returns N0491 or N0492 as [load](Self::load) does, the loaded program unchanged.
     /// Returns the first problem of the program or its data otherwise.
     ///
@@ -495,14 +496,14 @@ impl Engine {
 
     /// Replaces the program as [reload](Self::reload) does, but sends no request:
     /// if its changed imports need data from the network, it returns their requests
-    /// ([Progress::Waiting]) with the loaded program unchanged,
+    /// ([Progress::Suspended]) with the loaded program unchanged,
     /// and [resume](Self::resume) continues the reload with the responses.
     ///
     /// # Errors
     ///
     /// Returns what [reload](Self::reload) returns, except N0491 and N0492.
     pub fn start_reload(&mut self, program: Program) -> Result<Progress, Diagnostic> {
-        self.refuse_while_waiting()?;
+        self.refuse_while_suspended("reload")?;
         let outcome = self.choosing_instant(|engine| engine.reload_program(program));
         self.progress(outcome)
     }
@@ -579,12 +580,13 @@ impl Engine {
     /// since only [extend](Self::extend) introduces new ones.
     /// Returns N0487 for a row holding a null, since nulls are only created by reasoning,
     /// and an error for a row of the wrong width or outside the predicate's declaration.
+    /// Returns N0493 if a method is suspended for data from the network.
     pub fn import_rows(
         &mut self,
         predicate: &str,
         rows: impl IntoIterator<Item = Vec<DataValue>>,
     ) -> Result<(), Diagnostic> {
-        self.refuse_while_waiting()?;
+        self.refuse_while_suspended("import_rows")?;
         self.choosing_instant(|engine| engine.admit_rows(predicate, rows))
     }
 
@@ -594,7 +596,7 @@ impl Engine {
     ///
     /// A new engine has the HTTP client of the `http` feature, if built with it, and none
     /// otherwise. Without a client, a plain method that needs data from the network fails
-    /// (N0491); the `start_*` methods return the requests for the caller to answer instead.
+    /// (N0491), and the `start_*` methods return the requests, whose responses `resume` takes.
     ///
     /// Returns the client set before, so that a caller can put it back.
     pub fn set_client(
@@ -604,54 +606,59 @@ impl Engine {
         std::mem::replace(&mut self.client, ClientSlot(client)).0
     }
 
-    /// Returns the requests the waiting method needs answered,
-    /// or none if no method waits.
+    /// Returns the requests the suspended method needs responses to,
+    /// or none if no method is suspended.
     ///
-    /// A method waits after a `start_*` method or [resume](Self::resume) returned
-    /// [Progress::Waiting], and also after a plain method's client was cancelled
-    /// while a reasoning run waited.
+    /// A method is suspended after a `start_*` method or [resume](Self::resume) returned
+    /// [Progress::Suspended], and a reasoning run also after the
+    /// [cancel token](Self::cancel_token) stopped [reason](Self::reason) while its client
+    /// waited for a fetch.
     pub fn pending(&self) -> Vec<PendingRequest> {
         self.suspension
             .as_ref()
             .map_or_else(Vec::new, Suspension::pending)
     }
 
-    /// Continues the waiting method with responses to its requests:
+    /// Continues the suspended method with responses to its requests:
     /// for each, the id it was listed under and its body, or the failure that prevented one.
     ///
-    /// Once every request it waits for has a response, the method continues where it waits:
-    /// a loading method commits its prepared translation,
+    /// Once every request it sent has a response, the method continues where it was
+    /// suspended: a loading method commits its prepared translation,
     /// and a reasoning run continues at the application that fetched.
-    /// It may then wait again, for new requests.
-    /// Until then, it keeps waiting for the rest, which the result lists.
+    /// It may then be suspended again, for new requests.
+    /// Until then, it stays suspended for the rest, which the result lists.
     /// A failure is final, so retry before passing it in.
     /// A request too large for the server (status 413 or 414),
     /// or one whose response the server cut off partway, typically at its time limit,
     /// is sent again in smaller pieces if the engine can split it.
-    /// With no method waiting and no response given, this does nothing.
+    /// With no method suspended and no response given, this does nothing.
     ///
     /// # Errors
     ///
-    /// Returns N0494 for an id no request waits under, before taking any response,
-    /// and what the continued method returns otherwise.
+    /// Returns what the continued method returns.
+    ///
+    /// # Panics
+    ///
+    /// Panics if a response is given under an id that [pending](Self::pending) does not list,
+    /// or two responses under one id.
     pub fn resume(
         &mut self,
-        answers: impl IntoIterator<Item = (RequestId, Response)>,
+        responses: impl IntoIterator<Item = (RequestId, Response)>,
     ) -> Result<Progress, Diagnostic> {
         self.cancel.clear();
-        self.answer(answers)
+        self.pass_responses(responses)
     }
 
-    /// Discards the waiting method, if one waits, returning whether one did.
+    /// Discards the suspended method, if there is one, returning whether there was.
     ///
-    /// A waiting loading method has changed nothing, so the engine is as before it.
-    /// A waiting reasoning run stops with the tables consistent, as after a cancellation,
+    /// A suspended loading method has changed nothing, so the engine is as before it.
+    /// A suspended reasoning run stops with the tables consistent, as after a cancellation,
     /// reporting the requests its fetches skipped so far,
     /// and the next [reason](Self::reason) continues toward the fixpoint.
     pub fn discard_pending(&mut self) -> bool {
-        let waiting = self.suspension.is_some();
+        let suspended = self.suspension.is_some();
         self.abandon();
-        waiting
+        suspended
     }
 
     /// Runs semi-naive evaluation to the fixpoint, stratum by stratum.
@@ -664,17 +671,18 @@ impl Engine {
     /// `import_rows` since the last run, or, if there was none, the instant the run began at.
     /// The fetches of bound imports (imports with a `where` clause) go through the engine's
     /// [client](Self::set_client).
-    /// A run that waits for data from the network, after its client was cancelled, continues.
+    /// A run left suspended for data from the network, after the cancel token stopped its
+    /// client, continues.
     ///
     /// # Errors
     ///
     /// Returns N0482 if no program is loaded,
-    /// and N0493 if a loading method waits for data from the network.
+    /// and N0493 if a loading method is suspended for data from the network.
     /// Returns N0207 if the run's [cancel token](Self::cancel_token) is cancelled,
     /// which the run checks between rule applications.
     /// The run stops there with the tables consistent and its progress recorded,
     /// and a further `reason()` continues toward the fixpoint.
-    /// Returns N0492 if the token stops the wait for a fetch; the run then waits,
+    /// Returns N0492 if the token stops the wait for a fetch. The run then stays suspended,
     /// and a further `reason()` continues it.
     /// Returns N0491 if a bound import needs data from the network but the engine has no
     /// client; the run then stops as after a cancellation.
@@ -686,9 +694,9 @@ impl Engine {
     }
 
     /// Reasons as [reason](Self::reason) does, but sends no request:
-    /// if a bound import fetches, it returns the requests ([Progress::Waiting]),
+    /// if a bound import fetches, it returns the requests ([Progress::Suspended]),
     /// and [resume](Self::resume) continues the run at that application with the responses.
-    /// A run that waits returns its requests again.
+    /// A suspended run returns its requests again.
     ///
     /// # Errors
     ///
@@ -696,15 +704,17 @@ impl Engine {
     pub fn start_reason(&mut self) -> Result<Progress, Diagnostic> {
         self.cancel.clear();
         match &self.suspension {
-            Some(Suspension::Load(_)) => self.refuse_while_waiting()?,
-            Some(waiting) if waiting.has_pending() => return Ok(Progress::Waiting(self.pending())),
+            Some(Suspension::Load(_)) => self.refuse_while_suspended("reason")?,
+            Some(suspended) if suspended.has_pending() => {
+                return Ok(Progress::Suspended(self.pending()));
+            }
             _ => {}
         }
         let outcome = self.reason_step();
         self.progress(outcome)
     }
 
-    /// Runs the reasoning to the fixpoint, or until it waits for data from the network,
+    /// Runs the reasoning to the fixpoint, or until it is suspended for data from the network,
     /// presenting its reports against the written program.
     pub(in crate::engine) fn reason_step(&mut self) -> Result<(), Diagnostic> {
         let already = self.pipeline.reports().len();

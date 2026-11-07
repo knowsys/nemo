@@ -81,30 +81,25 @@ diagnostic_kinds! {
                         has unless `set_client(None)` removed it. Without a client, the \
                         method changes nothing. The `start_*` methods send no request: they \
                         return the requests, and `resume()` takes the responses.",
-               hint "set a client with `set_client`, or call the `start_*` method and answer \
-                     its requests with `resume()`";
+               hint "set a client with `set_client`, or call the `start_*` method and pass \
+                     the responses to its requests to `resume()`";
         WaitCancelled
             => WAIT_CANCELLED = 492, error, "the wait for remote responses was cancelled",
                explain "The engine's cancel token stopped a method while its client waited \
                         for the responses to its remote requests. A load, extension or reload \
-                        changes nothing. A reasoning run keeps waiting, with the tables \
+                        changes nothing. A reasoning run stays suspended, with the tables \
                         consistent, and the next `reason()` continues it.",
                hint "call the method again";
-        Waiting { method: String, count: Count }
-            => WAITING = 493, error,
-               "{method} waits for {count} remote request{count:#}",
-               explain "A method that needs data from the network waits for the responses to \
-                        its requests, which `pending()` lists. Until it is resumed or \
-                        discarded, the methods that would change the program or the stored \
-                        data refuse, rather than drop what it has done.",
-               hint "answer the requests with `resume()`, or call `discard_pending()`";
-        UnknownRequest { id: u64 }
-            => UNKNOWN_REQUEST = 494, error, "no request waits under id {id}",
-               explain "`resume()` was given a response under an id that no request of the \
-                        waiting method has: the request was answered already, possibly \
-                        earlier in the same call, or another method gave out the id. No \
-                        response was taken.",
-               hint "answer each id that `pending()` lists once";
+        MethodSuspended { refused: String, suspended: String, count: Count }
+            => METHOD_SUSPENDED = 493, error,
+               "`{refused}` is refused while `{suspended}` is suspended for {count} remote \
+                request{count:#}",
+               explain "A method that needs data from the network is suspended from the moment \
+                        it returns its requests, which `pending()` lists, until `resume()` \
+                        completes it or `discard_pending()` discards it. Meanwhile, the methods \
+                        that would change the program or the stored data are refused, rather \
+                        than drop what the suspended method has done.",
+               hint "pass the responses to `resume()`, or call `discard_pending()`";
         NotStoredWhole { predicate: String, missing: String }
             => NOT_STORED_WHOLE = 489, error,
                "`{predicate}` is not stored whole: {missing}",

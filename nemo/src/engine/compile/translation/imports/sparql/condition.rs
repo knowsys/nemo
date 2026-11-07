@@ -9,7 +9,7 @@
 //! An identity of a column with a constant at the top of the condition goes out as a `VALUES`
 //! block ([sparql_values](Translator::sparql_values)), as bindings do: the constant's terms
 //! ([ground_terms](SparqlQuery::ground_terms)), which the endpoint matches as terms,
-//! fast on every store measured.
+//! through its indexes.
 //! Elsewhere an identity becomes SPARQL's `=`, never `sameTerm`, which QLever does not
 //! implement. In a positive position `=` holds wherever Nemo's identity does, and finds
 //! every spelling of a number, boolean or dateTime, except at a NaN, which is never `=` to
@@ -23,9 +23,8 @@
 //! the expression keeps the rows for the local filter:
 //! Nemo reads Wikidata's `"3.0"^^xsd:decimal`, and `"03"^^xsd:int`, as the integer 3, whose
 //! `STR` is `"3"` and whose `DATATYPE` is `xsd:integer`, and the lexical form of a double is
-//! the one stored for
-//! some stores (`"2.5E0"`) and the store's own writing of the number for others
-//! (Oxigraph writes `"2.5"`).
+//! the one stored for some stores (`"2.5E0"`) and the store's own writing of the number for
+//! others (Oxigraph writes `"2.5"`).
 
 use nemo_io::sparql::{
     SparqlQuery, ValuesBlock,

@@ -13,7 +13,7 @@ use crate::common::parse;
 
 use super::{load_into, run};
 
-/// A one-shot HTTP server on a loopback port: answers `responses` many
+/// A one-shot HTTP server on a loopback port: responds to `responses` many
 /// requests with the given body, sending each request's full text back
 /// through the channel.
 fn serve(
@@ -28,7 +28,7 @@ fn serve(
     serve_responses(vec![response; responses])
 }
 
-/// An HTTP server on a loopback port answering one request after the
+/// An HTTP server on a loopback port responding to one request after the
 /// other with the given raw responses, sending each request's full
 /// text back through the channel.
 fn serve_responses(responses: Vec<String>) -> (String, std::sync::mpsc::Receiver<String>) {
@@ -300,7 +300,7 @@ fn sparql_import_conditions_reach_the_endpoint() {
 }
 
 /// The HTTP client retries an overloaded server and a rate limit before it
-/// answers, and a request that still fails is the load's error.
+/// returns, and a request that still fails is the load's error.
 #[test]
 fn the_client_retries_overload_and_rate_limits() {
     use nemo::engine::remote::{BlockingClient, Retry};
@@ -444,7 +444,7 @@ joined(?a, ?c) :- first(?a, <urn:p>, ?b), second(?b, <urn:q>, ?c) .
 /// and a later load fetches again.
 #[test]
 fn a_load_cancelled_while_waiting_changes_nothing() {
-    // A server that accepts and never answers, then one that does.
+    // A server that accepts and never responds, then one that does.
     let silent = std::net::TcpListener::bind("127.0.0.1:0").expect("a loopback port");
     let url = format!(
         "http://{}/data.csv",
@@ -464,10 +464,10 @@ fn a_load_cancelled_while_waiting_changes_nothing() {
     canceller.join().unwrap();
     assert_eq!(problem.code(), nemo::codes::WAIT_CANCELLED, "{problem:?}");
     assert!(started.elapsed() < std::time::Duration::from_secs(10));
-    assert!(engine.pending().is_empty(), "nothing waits");
+    assert!(engine.pending().is_empty(), "nothing is suspended");
     assert!(!engine.has_program(), "nothing was loaded");
 
-    let Progress::Waiting(pending) = engine
+    let Progress::Suspended(pending) = engine
         .start_load(parse(&source))
         .unwrap_or_else(|problem| panic!("{problem:?}"))
     else {

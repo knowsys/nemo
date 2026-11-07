@@ -1,6 +1,6 @@
-//! Fetching the data a waiting engine method needs from the network.
+//! Fetching the data a suspended engine method needs from the network.
 //!
-//! If a step of a method waits,
+//! If a step of a method is suspended,
 //! its requests go out through the global `fetch` (a window's, a worker's, or Node's),
 //! the failures the retry schedule allows are sent again,
 //! and the responses are passed to `resume`, until the method completes.
@@ -50,8 +50,9 @@ enum Sent {
     Lost(String),
 }
 
-/// Calls a step of a method on the engine, then fetches the requests it waits for and passes
-/// the responses to `resume`, until the method completes or fails, returning what it ends with.
+/// Calls a step of a method on the engine, then fetches the requests it is suspended for and
+/// passes the responses to `resume`, until the method completes or fails, returning what it
+/// ends with.
 ///
 /// It clears the engine's busy mark, set before the call, as it ends.
 pub(crate) async fn drive(
@@ -62,7 +63,7 @@ pub(crate) async fn drive(
     let mut progress = call(&mut inner.borrow_mut());
     loop {
         let pending = match progress {
-            Ok(Progress::Waiting(pending)) => pending,
+            Ok(Progress::Suspended(pending)) => pending,
             done => {
                 inner.borrow_mut().driving = false;
                 return done.map(drop);
@@ -74,10 +75,10 @@ pub(crate) async fn drive(
             .collect()
             .await;
         let mut inner = inner.borrow_mut();
-        let answers = pending.iter().map(|pending| pending.id).zip(responses);
+        let responses = pending.iter().map(|pending| pending.id).zip(responses);
         progress = inner
             .engine
-            .resume(answers)
+            .resume(responses)
             .map_err(|diagnostic| inner.throw(diagnostic));
     }
 }

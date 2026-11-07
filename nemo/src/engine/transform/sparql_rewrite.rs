@@ -47,15 +47,15 @@
 //!   ([ground_terms](nemo_io::sparql::SparqlQuery::ground_terms)).
 //!   Stores keep datatypes apart (Blazegraph, Jena, AllegroGraph) and many canonicalise the
 //!   lexical form within one, so the datatype matters.
-//!   An integer also goes out as `"3.0"^^xsd:decimal`, the one form that finds Wikidata's
-//!   quantities on both its Blazegraph and its QLever service.
+//!   An integer also goes out as `"3.0"^^xsd:decimal`, since stores such as Wikidata's hold
+//!   every quantity as a decimal.
 //!   Every comparison the rewrite hands to the endpoint is the endpoint's:
 //!   a constant in a pattern, a binding in a `VALUES` block, a pushed condition,
 //!   a negated atom, and a join between merged atoms.
 //!   A value the endpoint holds in another datatype or form is not found there,
 //!   so the rewritten program may miss rows the program as written reads,
 //!   and through a negated atom keep rows it excludes.
-//!   A store comparing more loosely than Nemo, as Virtuoso finds the double `3.0E0` for the
+//!   A store comparing more loosely than Nemo, as QLever finds the double `3.0E0` for the
 //!   integer 3, may add rows through a constant or a join between merged atoms.
 //!   A bound import never holds a solution its bindings do not justify: it keeps only the
 //!   solutions that match them as Nemo compares values

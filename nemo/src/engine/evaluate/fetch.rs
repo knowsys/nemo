@@ -22,9 +22,9 @@
 //! rows holding an endpoint's blank node are counted and reported.
 //!
 //! The engine does not send the requests itself.
-//! An application whose requests have no responses yet waits as a [PendingFetch],
-//! and completes once the responses have been passed to
-//! [resume](crate::engine::Engine::resume), by the caller or by the engine's client.
+//! An application whose requests have no responses yet is suspended as a [PendingFetch],
+//! and completes once the responses have been passed in,
+//! through [resume](crate::engine::Engine::resume) or by the engine's client.
 
 use std::{collections::HashSet, ops::Range};
 
@@ -93,7 +93,7 @@ pub(super) struct Fetched {
     pub(super) blank_bindings: u64,
 }
 
-/// A fetch application waiting for the responses to its requests:
+/// A fetch application suspended until its requests have responses:
 /// the rule, the step of the application,
 /// and the requests, each with the `VALUES` blocks it carries.
 #[derive(Debug)]
@@ -115,7 +115,7 @@ pub(in crate::engine) struct PendingFetch {
 pub(super) enum FetchOutcome {
     /// Applied, with what it derived and what it did.
     Applied(Box<Applied>, Fetched),
-    /// Suspended, waiting for the responses to these requests.
+    /// Suspended until these requests have responses.
     Suspended(PendingFetch),
 }
 
@@ -178,7 +178,7 @@ pub(super) fn apply(
                 endpoint = fetch.endpoint,
                 requests = pending.made,
                 step,
-                "fetch application waits for its responses"
+                "fetch application suspended for its responses"
             );
             pending
         }
