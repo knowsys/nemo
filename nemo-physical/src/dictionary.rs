@@ -2,11 +2,16 @@
 //!
 //! A value whose payload encoding cannot be stored in a trie directly
 //! is represented by an entry in one of the stores.
-//! A store numbers its entries densely in insertion order; that number is the entry's *index*.
+//! A store numbers its entries densely in insertion order, and that number is the entry's
+//! *index*.
 //! Usually the [tag](Tag) of the storage value identifies the store and the payload is the index.
 //! The *terms*, which are IRIs, strings, language-tagged strings, other literals and nulls,
 //! share the one [Term](Tag::Term) tag instead, since they meet in the same columns of real data.
 //! Their payload is a *term id*, which packs the term's *lane*, the kind of term, with its index.
+//!
+//! A null is minted [fresh](Dictionary::fresh_null), distinct from every other value,
+//! or by a [label](Dictionary::labeled_null) within a [LabelScope]:
+//! within one open scope, a label names one null.
 //!
 //! Two levels sit beneath the [Dictionary]:
 //! the domain stores, which know how each kind of value splits into stored bytes,
@@ -358,11 +363,12 @@ impl Dictionary {
         TermId::compose(TermLane::Null, index).raw()
     }
 
-    /// Returns the open label scope with the given name, opened if no open scope has it.
+    /// Returns the open shared label scope with the given name,
+    /// opened if no open shared scope has it.
     ///
-    /// Within a scope a label names one null, the way a blank node's label names one node
-    /// within its source: all calls naming a scope share it until it is
-    /// [closed](Self::close_label_scope).
+    /// Within a scope a label names one null:
+    /// all calls naming a shared scope share it until it is [closed](Self::close_label_scope).
+    /// A [fresh](Self::fresh_label_scope) scope of the same name is never returned.
     ///
     /// # Example
     ///
@@ -370,25 +376,25 @@ impl Dictionary {
     /// use nemo_physical::dictionary::Dictionary;
     ///
     /// let mut dictionary = Dictionary::new();
-    /// let endpoint = dictionary.label_scope("https://example.org/sparql");
-    /// let first = dictionary.labeled_null(endpoint, "b0");
+    /// let shared = dictionary.label_scope("source");
+    /// let first = dictionary.labeled_null(shared, "b0");
     ///
     /// // The same label in the same scope names the same null.
-    /// let again = dictionary.label_scope("https://example.org/sparql");
+    /// let again = dictionary.label_scope("source");
     /// assert_eq!(dictionary.labeled_null(again, "b0"), first);
     ///
     /// // Another scope's label names another null, which reports its scope.
-    /// let other = dictionary.fresh_label_scope("https://example.org/sparql");
+    /// let other = dictionary.fresh_label_scope("source");
     /// assert_ne!(dictionary.labeled_null(other, "b0"), first);
-    /// assert_eq!(dictionary.null_scope(first), Some("https://example.org/sparql"));
+    /// assert_eq!(dictionary.null_scope(first), Some("source"));
     ///
     /// // A closed scope forgets its labels: the scope opened next under its name
     /// // mints anew, and the old null stays a value.
-    /// dictionary.close_label_scope(endpoint);
-    /// let reopened = dictionary.label_scope("https://example.org/sparql");
+    /// dictionary.close_label_scope(shared);
+    /// let reopened = dictionary.label_scope("source");
     /// assert_ne!(dictionary.labeled_null(reopened, "b0"), first);
     ///
-    /// // A null minted fresh, as an existential rule mints one, has no scope.
+    /// // A null minted fresh, without a label, has no scope.
     /// let fresh = dictionary.fresh_null();
     /// assert_eq!(dictionary.null_scope(fresh), None);
     /// ```
@@ -396,10 +402,10 @@ impl Dictionary {
         self.null_labels.shared(name)
     }
 
-    /// Opens a label scope that no other call returns, such as for one document.
+    /// Opens a label scope that no other call returns.
     ///
     /// The name only reports which scope minted a null ([null_scope](Self::null_scope)).
-    /// Whoever opens it [closes](Self::close_label_scope) it.
+    /// The scope stays open until it is [closed](Self::close_label_scope).
     pub fn fresh_label_scope(&mut self, name: &str) -> LabelScope {
         self.null_labels.fresh(name)
     }

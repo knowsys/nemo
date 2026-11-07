@@ -36,7 +36,7 @@ pub enum EvaluationError {
     /// alone or together with the other operands:
     /// a string that is not a lexical form of a cast's target type,
     /// an invalid pattern, flag or language tag, a NaN factor,
-    /// a timezone out of range, a map key given twice, an empty separator.
+    /// a timezone out of range, a map key given twice, an empty separator to split a string at.
     Malformed,
     /// A value lacks the component that was asked for:
     /// an index out of range, a key the map does not hold,

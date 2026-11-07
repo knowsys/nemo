@@ -46,7 +46,7 @@ pub struct Loaded {
     /// This is what a limit counts, so a condition never changes which rows a limited resource
     /// yields.
     pub(crate) well_formed: u64,
-    /// The context the selection's condition evaluates in, the caller's.
+    /// The context the selection's condition evaluates in, which the read was given.
     context: EvaluationContext,
 }
 

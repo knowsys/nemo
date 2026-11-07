@@ -1,18 +1,22 @@
 //! The labels of nulls: the scopes within which a label names one null.
 //!
-//! A blank node's label names a node within some scope: a program, an RDF document,
-//! a SPARQL endpoint. Within one open scope a label names one null;
-//! a closed scope forgets its labels, and its nulls stay values like any other.
+//! Within one open scope a label names one null.
+//! A closed scope forgets its labels, and its nulls stay values like any other.
+//! A shared scope is found by its name while it is open,
+//! and a fresh scope only through the [LabelScope] that opened it.
 //! Every null remembers the name of the scope that minted it by a label, if one did,
 //! kept per run of consecutively minted nulls rather than per null.
 //!
 //! A closed scope keeps only its number and the number of its name, which every scope of that
-//! name shares, so the many scopes of a long run, one per response, cost little.
+//! name shares, so that many short-lived scopes cost little.
 
 use std::collections::HashMap;
 
 /// A scope of null labels, as [Dictionary::label_scope](super::Dictionary::label_scope)
 /// and [Dictionary::fresh_label_scope](super::Dictionary::fresh_label_scope) open it.
+///
+/// A scope belongs to the dictionary that opened it.
+/// Another dictionary may panic on it, or read it as one of its own scopes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct LabelScope(u32);
 

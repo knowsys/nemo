@@ -1,8 +1,8 @@
 //! The layers of a join: leapfrog intersections of cursors.
 //!
 //! A layer intersects the input columns mapped to it.
-//! Each column is read by a cursor restricted to the block
-//! below the values bound at the shallower layers,
+//! Each column is read by a cursor restricted to the children of the node
+//! that the values bound at the shallower layers lead to,
 //! and the layer's values are those in the range of every cursor.
 //! The column of an input stored in several blocks is read by the union of the blocks' cursors.
 
@@ -74,7 +74,7 @@ impl<'a, C: SeekCursor> Intersection<'a, C> {
         self.fresh = true;
     }
 
-    /// Clips a cursor to a range of values, for every block it enters,
+    /// Clips a cursor to a range of values, for every range of children it enters,
     /// and marks the intersection for a restart.
     pub(crate) fn clip(&mut self, cursor: usize, clip: Clip<C::Value>) {
         self.cursors[cursor].clip(clip);
@@ -120,8 +120,8 @@ impl<'a, C: SeekCursor> Intersection<'a, C> {
     pub(crate) fn advance(&mut self) -> Option<C::Value> {
         let count = self.cursors.len();
         let mut current = if self.restart() {
-            // Only a clipped block can be empty;
-            // the seeks below catch an empty range in every other cursor.
+            // Only a clipped range of children can be empty.
+            // The seeks below catch an empty range in every other cursor.
             if !self.cursors[0].has_current() {
                 return None;
             }

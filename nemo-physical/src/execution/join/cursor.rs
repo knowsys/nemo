@@ -1,6 +1,6 @@
 //! The cursors: readers moving forward through a range of one trie column.
 //!
-//! A cursor is restricted to a range of its column, usually one block,
+//! A cursor is restricted to a range of its column, usually the children of one node,
 //! and moves forward through it.
 //! Its [seek](SeekCursor::seek) gallops to the first value at or above a target,
 //! the step the leapfrog intersection is built from.
@@ -8,8 +8,8 @@
 //! - A [TaggedCursor] compares full values, tag and payload, over a column of any layout.
 //!
 //! A cursor can be [clipped](SeekCursor::clip) to a range of values.
-//! The clip narrows every block the cursor enters, once per block,
-//! so moving through the block never checks it.
+//! The clip narrows every range of children the cursor enters, once per range,
+//! so moving through the range never checks it.
 
 use std::{cmp::Ordering, fmt::Debug, ops::Range};
 
@@ -83,15 +83,15 @@ pub(crate) trait SeekCursor {
     /// The values the cursor reads, ordered like the column.
     type Value: Copy + Ord + Debug;
 
-    /// Restricts the cursor to a block, narrowed to the clip if there is one,
-    /// and rewinds it; the range may turn out empty.
+    /// Restricts the cursor to a range of children, narrowed to the clip if there is one,
+    /// and rewinds it. The narrowed range may be empty.
     fn set_range(&mut self, range: Range<usize>);
 
     /// Clips the cursor to a range of values,
-    /// narrowing its current range and every block it enters from now on.
+    /// narrowing its current range and every range of children it enters from now on.
     ///
-    /// The current range must be one sorted block,
-    /// as the whole column is for the first column of a trie.
+    /// The current range must be sorted, as the children of one node are,
+    /// and as the whole column is for the first column of a trie.
     fn clip(&mut self, clip: Clip<Self::Value>);
 
     /// Rewinds the cursor to the start of its range.
@@ -145,16 +145,16 @@ impl<'a, P: Payload> PayloadCursor<'a, P> {
         }
     }
 
-    /// Returns the block narrowed to the clip.
+    /// Returns the range narrowed to the clip.
     fn clipped(&self, mut range: Range<usize>) -> Range<usize> {
         if let Some(clip) = self.clip {
-            let block = &self.values[range.clone()];
+            let children = &self.values[range.clone()];
 
-            let end = clip.high.map_or(block.len(), |high| {
-                block.partition_point(|&stored| stored < high)
+            let end = clip.high.map_or(children.len(), |high| {
+                children.partition_point(|&stored| stored < high)
             });
             let start = clip.low.map_or(0, |low| {
-                block[..end].partition_point(|&stored| stored < low)
+                children[..end].partition_point(|&stored| stored < low)
             });
 
             range = range.start + start..range.start + end;
@@ -278,7 +278,7 @@ impl<'a> TaggedCursor<'a> {
         }
     }
 
-    /// Returns the block narrowed to the clip.
+    /// Returns the range narrowed to the clip.
     fn clipped(&self, mut range: Range<usize>) -> Range<usize> {
         if let Some(clip) = self.clip {
             let end = clip.high.map_or(range.end, |high| {
@@ -622,8 +622,8 @@ mod tests {
     }
 
     #[test]
-    fn clips_narrow_every_block_entered() {
-        // Two blocks of a deeper column; the clip narrows each block
+    fn clips_narrow_every_range_of_children_entered() {
+        // Two ranges of children in a deeper column. The clip narrows each range
         // entered to the values in [3, 7).
         let data: [u32; 8] = [1, 3, 5, 7, 2, 4, 6, 8];
         let mut cursor = PayloadCursor::new(&data);
@@ -639,7 +639,7 @@ mod tests {
         assert_eq!(cursor.current_value(), 4);
         assert_eq!(cursor.next(), Some(6));
         assert_eq!(cursor.next(), None);
-        // A block with nothing in range is empty.
+        // A range with nothing in the clip is empty.
         cursor.set_range(3..4);
         assert!(!cursor.has_current());
         assert_eq!(cursor.seek(1), None);

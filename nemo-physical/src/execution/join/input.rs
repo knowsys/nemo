@@ -58,7 +58,7 @@ impl<'a, C: SeekCursor> InputCursor<'a, C> {
         }
     }
 
-    /// Clips the cursor to a range of values, for every block it enters.
+    /// Clips the cursor to a range of values, for every range of children it enters.
     pub(crate) fn clip(&mut self, clip: Clip<C::Value>) {
         match self {
             InputCursor::Block(cursor) => cursor.clip(clip),

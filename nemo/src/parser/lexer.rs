@@ -179,8 +179,8 @@ impl Lexer<'_> {
 
     /// Lexes what `:` opens: `::`, `:-`, or the colon itself.
     ///
-    /// A colon that touches a name before it separates a prefix from a local name,
-    /// and so does a colon after no name at all, the empty prefix's, as in `:a`.
+    /// A colon separates a prefix from a local name if it touches the name before it,
+    /// or if no name comes before it, as the empty prefix's does in `:a`.
     /// A local name directly after such a colon is lexed as one, as in `wd:42` or `ex:v1.2`.
     /// A colon after a name and a space, as in `age :30`, separates a named argument's label
     /// from its value instead.

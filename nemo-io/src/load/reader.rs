@@ -13,8 +13,8 @@ use crate::{
 /// A reader of one format: rows from a byte stream, interned into a dictionary.
 ///
 /// A format's reader reads a stream, and the trait reads a file the same way.
-/// The condition of the reader's selection evaluates in the context the caller passes,
-/// so its `NOW()` is the caller's instant.
+/// The condition of the reader's selection evaluates in the context the read is given,
+/// so its `NOW()` is that context's instant.
 pub trait Reader {
     /// Returns the compression the reader expects of a file.
     fn compression(&self) -> Compression;

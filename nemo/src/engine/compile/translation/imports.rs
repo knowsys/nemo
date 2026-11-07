@@ -163,8 +163,8 @@ impl<'a> Translator<'a> {
     /// Other formats load one by one.
     pub(super) fn execute_imports(&mut self) -> Result<(), Diagnostic> {
         let mut imports = std::mem::take(&mut self.imports);
-        // Remote resources are fetched first, all together, or the
-        // translation suspends for them before anything reads.
+        // The remote resources were fetched before the translation committed,
+        // and their bytes are taken first, before anything reads.
         let fetched = self.prefetch(&mut imports)?;
         let mut batch = Vec::new();
         for (import, fetched) in imports.iter().zip(fetched) {

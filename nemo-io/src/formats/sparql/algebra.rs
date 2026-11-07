@@ -212,8 +212,8 @@ pub(super) fn under_projection(
 /// One `VALUES` block: rows of values over some of a query's projected columns.
 ///
 /// Each value goes out as its [ground terms](SparqlQuery::ground_terms),
-/// which the endpoint matches by its own notion of equal terms;
-/// a [SparqlReader](super::SparqlReader) told the block keeps only the solutions that match
+/// which the endpoint matches by its own notion of equal terms.
+/// A [SparqlReader](super::SparqlReader) told the block keeps only the solutions that match
 /// a row as Nemo compares values.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ValuesBlock {
@@ -227,7 +227,7 @@ impl ValuesBlock {
     /// Returns the block as a pattern over the query's projected variables:
     /// per row, one row for each combination of its values' ground terms,
     /// one row for a row without integers, and `2^k` rows for a row with `k` integers.
-    /// Join columns rarely hold integers, and a rendered query too long is split anyway.
+    /// A rendered query too long for the endpoint is split like any other.
     ///
     /// A row with a value that has no ground term, such as a null, is left out.
     pub(super) fn pattern(&self, variables: &[String]) -> GraphPattern {

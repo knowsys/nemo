@@ -1,5 +1,5 @@
-//! Remote resources: requests as plain data, their failures,
-//! and a blocking client that sends them.
+//! Remote resources: requests as plain data, their responses and failures,
+//! the [Client] that sends them, and a blocking client.
 //!
 //! Readers do not fetch.
 //! A remote resource is described by a [request](Request),
@@ -203,10 +203,42 @@ pub fn partial_response<'a>(
 /// The `BlockingClient` behind the `http` feature sends them over HTTP.
 /// Another client can respond to them from a cache or from fixtures,
 /// or send them through a proxy or with credentials.
+///
+/// # Example
+///
+/// A client responding from fixtures:
+///
+/// ```
+/// use std::sync::Arc;
+///
+/// use nemo_io::remote::{Client, Failure, Request, Response};
+///
+/// struct Fixtures;
+///
+/// impl Client for Fixtures {
+///     fn fetch_all(&self, requests: &[Request], _: &dyn Fn() -> bool) -> Option<Vec<Response>> {
+///         let respond = |request: &Request| match request.url.as_str() {
+///             "https://example.org/p.csv" => Ok(Arc::from(&b"1\n"[..])),
+///             _ => Err(Failure::response(404, "no fixture")),
+///         };
+///         Some(requests.iter().map(respond).collect())
+///     }
+/// }
+///
+/// let requests = [
+///     Request::get("https://example.org/p.csv"),
+///     Request::get("https://example.org/q.csv"),
+/// ];
+/// let responses = Fixtures.fetch_all(&requests, &|| false).expect("nothing cancels");
+/// assert_eq!(responses[0].as_deref().ok(), Some(&b"1\n"[..]));
+/// assert!(responses[1].is_err());
+/// ```
 pub trait Client {
     /// Sends several requests, and returns one response per request, in order.
     ///
     /// Returns `None` if `cancelled` turned true before every response came.
+    /// The engine fails each request the result has no response for,
+    /// and ignores the responses beyond the last request.
     fn fetch_all(
         &self,
         requests: &[Request],

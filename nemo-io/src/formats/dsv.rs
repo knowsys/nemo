@@ -700,13 +700,14 @@ mod tests {
     }
 
     #[test]
-    fn a_condition_reads_the_callers_instant() {
+    fn a_condition_reads_the_instant_of_the_context_given() {
         use nemo_physical::{
             function::{OpCode, StackProgram},
             value::{DateTime, TimezoneOffset},
         };
 
-        // The row keeps 1970, the year of `NOW()` only at the epoch.
+        // The condition keeps a row equal to the year of `NOW()`, which is 1970 only in a
+        // context at the epoch.
         let mut options = DsvOptions::csv(vec![ValueFormat::Integer]);
         options.filter = Some(RowFilter::new(
             vec![0],

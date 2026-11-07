@@ -1,6 +1,8 @@
 //! The execution of database operations over tries: joins, and the consumers of their rows.
 //!
-//! A join combines inputs, each a trie, and chooses one value per layer.
+//! A join combines inputs and chooses one value per layer.
+//! An input is stored in one trie or several, and the tries it is stored in are its *blocks*,
+//! whose rows together make up the input.
 //! The values of a layer are those that every input column mapped to it holds
 //! below the values bound at the shallower layers.
 //! The leading layers are emitted as the join's rows.

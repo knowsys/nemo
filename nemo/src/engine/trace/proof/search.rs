@@ -118,7 +118,8 @@ impl<'a> ProofSearch<'a> {
         })
     }
 
-    /// Returns a proof of the fact given by its values, or `None` if it is not stored.
+    /// Returns a proof of the fact given by its values,
+    /// or `None` if it is not stored or no candidate application derives it.
     ///
     /// A fact with a value the dictionary cannot encode is not stored either.
     pub(super) fn prove(
@@ -205,7 +206,8 @@ impl<'a> ProofSearch<'a> {
             .collect()
     }
 
-    /// Searches a proof for the fact, or `None` if it is not stored.
+    /// Returns a proof of the fact, remembered for later searches,
+    /// or `None` if it is not stored or no candidate application derives it.
     pub(super) fn search(
         &mut self,
         table: TableId,

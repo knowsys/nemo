@@ -417,9 +417,8 @@ fn joins_read_every_block() {
 
 #[test]
 fn a_join_reads_many_inputs_of_several_blocks_at_once() {
-    // Twenty atoms over a table of two blocks:
-    // one join reading both blocks of every input, where one join per choice of blocks
-    // would run 2^20 of them.
+    // Twenty atoms over a table of two blocks, which one join reads, both blocks of every
+    // input.
     let mut manager = TableManager::new();
     let data = add_table(&mut manager, 2, &[&[&[1, 2]], &[&[2, 1]]]);
     let mut dictionary = Dictionary::new();

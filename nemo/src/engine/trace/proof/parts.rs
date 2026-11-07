@@ -11,8 +11,10 @@ use crate::{
 
 /// The rows traced per batch.
 ///
-/// A batch's nodes are converted to the protocol together, so a batch bounds what the response
-/// holds besides the proofs; the proofs are kept until the trace ends.
+/// The search writes the store (arrangements, computed values) while the lifting reads it,
+/// so each batch is searched first and lifted afterwards.
+/// A batch's nodes are converted to the protocol together, so a batch also bounds what the
+/// response holds besides the proofs, which are kept until the trace ends.
 const BATCH: usize = 1 << 10;
 
 impl Engine {

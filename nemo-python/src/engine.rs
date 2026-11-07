@@ -161,6 +161,8 @@ impl Engine {
     /// After it, they land as deltas and the next `reason()` continues to the new fixpoint,
     /// and the predicate must be one the program uses (`extend` introduces new ones).
     /// Values convert per the module's conversion table.
+    /// Raises `DiagnosticsError` with code N0493 while a run is left suspended
+    /// (see `discard_pending`).
     fn import_rows(
         &self,
         py: Python<'_>,
@@ -239,7 +241,8 @@ impl Engine {
     ///
     /// Relative resources resolve beside the program's file
     /// (see `set_import_directory`), and remote ones are fetched, with retries.
-    /// Raises `DiagnosticsError` if the program does not parse or load.
+    /// Raises `DiagnosticsError` if the program does not parse or load,
+    /// and with code N0493 while a run is left suspended (see `discard_pending`).
     /// Ctrl-C cancels it.
     fn load(&self, py: Python<'_>, program: &Program) -> PyResult<()> {
         self.ingest(py, program, |engine, model| engine.load(model))
@@ -252,6 +255,7 @@ impl Engine {
     /// An extension cannot change what loaded statements mean:
     /// `@base`, prefix rebinding, and parameter redefinition raise `DiagnosticsError`,
     /// since they need a `reload`.
+    /// It raises with code N0493 while a run is left suspended (see `discard_pending`).
     fn extend(&self, py: Python<'_>, program: &Program) -> PyResult<()> {
         self.ingest(py, program, |engine, model| engine.extend(model))
     }
@@ -262,6 +266,8 @@ impl Engine {
     ///
     /// Unchanged predicates keep their data, and unchanged imports are not read again.
     /// Rows imported into a predicate whose definition changed are dropped, with a report.
+    /// Raises `DiagnosticsError` with code N0493 while a run is left suspended
+    /// (see `discard_pending`).
     fn reload(&self, py: Python<'_>, program: &Program) -> PyResult<()> {
         self.ingest(py, program, |engine, model| engine.reload(model))
     }
@@ -633,8 +639,6 @@ fn from_python<T: serde::de::DeserializeOwned>(
         .map_err(|error| NemoError::new_err(format!("invalid query: {error}")))
 }
 
-/// Returns a protocol value as Python objects, through its JSON form,
-/// with the protocol's keys unchanged.
 /// Replaces the ids in a trace response's Python value by what they name:
 /// a node's rule and premises, and a traced fact's node.
 fn linked(py: Python<'_>, response: &TraceResponse, value: &Bound<'_, PyAny>) -> PyResult<()> {
@@ -664,6 +668,8 @@ fn linked(py: Python<'_>, response: &TraceResponse, value: &Bound<'_, PyAny>) ->
     Ok(())
 }
 
+/// Returns a protocol value as Python objects, through its JSON form,
+/// with the protocol's keys unchanged.
 fn into_python<T: serde::Serialize>(py: Python<'_>, value: &T) -> PyResult<Py<PyAny>> {
     let json =
         serde_json::to_string(value).map_err(|error| NemoError::new_err(error.to_string()))?;

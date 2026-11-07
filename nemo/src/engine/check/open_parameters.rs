@@ -22,7 +22,8 @@
 //! A parameter whose value reads a parameter without a value has none either.
 //! A parameter declared twice is left as written, for translation to refuse.
 //! The hidden names begin with a NUL byte, which no program can write,
-//! so diagnostics and the inferred types leave them out.
+//! and the places that name a program's variables and predicates leave them out:
+//! the compiler's `source_names` and `written_name`, and `InferredTypes::of_check`.
 //! The rewritten statements keep their ids, and their terms their source positions,
 //! so diagnostics point at the program as written.
 
@@ -183,7 +184,8 @@ fn open_statement(
             Some(Statement::Rule(open_rule(rule, unvalued)))
         }
         Statement::Directive(Directive::Export(_)) => None,
-        // A `@use` or an `@define` reading the parameter is left to translation.
+        // What else reads the parameter is an `@define`, kept for translation to ignore
+        // with a warning, as a load does. Linking expanded every `@use`.
         statement => Some(statement),
     }
 }
@@ -216,12 +218,18 @@ fn open_rule(mut rule: Rule, unvalued: &HashSet<String>) -> Rule {
     rule
 }
 
-/// Returns the hidden predicate a parameter without a value reads as.
+/// Returns the hidden predicate a parameter without a value reads as, `\0$name`.
+///
+/// The NUL byte hides it, and the `$` keeps it apart from the compiler's hidden names,
+/// such as `\0unit` from a parameter named `unit`.
 fn hidden_predicate(name: &str) -> Identifier {
     Identifier::Iri(format!("\u{0}${name}"))
 }
 
-/// Returns the hidden variable a rule reads a parameter without a value as.
+/// Returns the hidden variable a rule reads a parameter without a value as, `\0$name`.
+///
+/// The NUL byte hides it, and the `$` keeps it apart from the compiler's hidden variables,
+/// such as `\0expression0` from a parameter named `expression0`.
 fn hidden_variable(name: &str) -> Term {
     Term::new(TermKind::Variable(Variable::universal(format!(
         "\u{0}${name}"

@@ -295,8 +295,8 @@ impl<'a> IriRef<'a> {
     }
 
     /// Returns the IRI in angle brackets, as term syntax writes it so that it reads back:
-    /// a `>`, whitespace or another control character as a character escape `\u…`,
-    /// and a `\` that would start one as `\u005C`.
+    /// a `>`, a space or an ASCII control character, `DEL` included, as a character escape
+    /// `\u…`, and a `\` that would start one as `\u005C`.
     ///
     /// # Example
     ///

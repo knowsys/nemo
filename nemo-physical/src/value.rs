@@ -19,6 +19,11 @@
 //! is [value_eq](ValueRef::value_eq) and [value_cmp](ValueRef::value_cmp).
 //!
 //! A [Type] bounds the values a place can hold by a set of domains.
+//!
+//! Values print in *term syntax*, the notation of values in Nemo's programs and results
+//! ([Display](std::fmt::Display) of [DataValue] and [ValueRef]).
+//! [NameKind] tells the names term syntax writes without quotes or brackets,
+//! and [Escape] reads its escape sequences.
 
 pub(crate) mod datatype;
 mod domain;

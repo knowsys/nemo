@@ -175,8 +175,8 @@ fn with_cell_join<T>(
 /// galloping the smaller cursor through the larger,
 /// and yields about `min N` bindings for the layer below.
 /// An input stored in several blocks counts one cursor per nonempty block,
-/// since its union moves each of them and the join drops the empty ones,
-/// and its column counts with the values of every block.
+/// since its union moves each of them and the join drops the empty ones.
+/// Its column counts with the values of every block.
 /// An existence layer beyond the emitted ones stops at its first match,
 /// and a bound layer looks up its one value:
 /// one gallop per cursor either way, and no multiplication of bindings.
@@ -291,7 +291,7 @@ fn split_layers(
             continue;
         }
 
-        // Below the first layer, a column is sorted only within each block of its parent,
+        // Below the first layer, a column is sorted only within the children of each node,
         // so the samples come out of order.
         let mut boundaries: Vec<StorageValue> = (1..share)
             .map(|bucket| longest.get(bucket * longest.len() / share))

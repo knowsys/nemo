@@ -170,9 +170,6 @@ impl Trie {
     /// and a merged row takes the value of the earliest source holding it.
     ///
     /// Returns the values in the merged trie's row order.
-    ///
-    /// # Panics
-    ///
     /// Panics as [merge](Self::merge) does.
     pub(crate) fn merge_carrying<T: Send>(
         sources: &[&Trie],

@@ -8,9 +8,9 @@
 /// The kinds differ in what may start a name and in what may join two parts of one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NameKind {
-    /// A name after a marker character, as in `?x`, `$limit`, `#sum` or `@use`.
+    /// A name after a marker character, which a language using term syntax gives meaning to.
     ///
-    /// Nothing joins two parts, so `?x-1` subtracts.
+    /// Nothing joins two parts, so the name at the start of `x-1` is `x`.
     Marked,
     /// A name without a marker, as `alice` or `my-lib`: a `-` joins two parts.
     Bare,
@@ -70,7 +70,7 @@ impl NameKind {
     /// Returns whether a character continues a name of any kind:
     /// a letter, a digit, `_`, `%`, or a mark of Turtle's names.
     ///
-    /// A `%` continues a name as written; it is no escape.
+    /// A `%` continues a name as written, not as the start of an escape.
     pub fn continues(character: char) -> bool {
         is_letter(character)
             || character.is_ascii_digit()

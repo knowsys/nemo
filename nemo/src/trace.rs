@@ -10,6 +10,8 @@
 //! [Engine::trace](crate::engine::Engine::trace) finds a derivation for each requested fact
 //! by a grounded backward search over the compiled program,
 //! and translates it back onto the written program.
+//! [Engine::trace_predicates](crate::engine::Engine::trace_predicates) does so for every row
+//! of some predicates, handing the response out in [parts](TracePart).
 //!
 //! The derivations of one response form a graph, a [TraceResponse]:
 //! every fact is one node, a premise of several derivations included,
@@ -24,7 +26,7 @@
 //! The types here are the response format of [trace](crate::engine::Engine::trace),
 //! used by the command line and the Python and WebAssembly bindings.
 //! They are serde-derived and camelCase on the wire,
-//! and every response carries a [version](VERSION) field.
+//! and every [TraceResponse] carries a [version](VERSION) field, while its parts carry none.
 //! Facts and terms are written in canonical term syntax, which parses back,
 //! except for nulls, which are written `_:id`.
 //! The derivation-structure queries of nemo-web's explanation viewer use that viewer's own

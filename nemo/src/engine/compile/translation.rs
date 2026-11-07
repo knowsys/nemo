@@ -431,7 +431,7 @@ impl<'a> Translator<'a> {
     }
 
     /// Translates the statements of a program whose imports read no remote resource:
-    /// facts become rows (to be loaded by the caller), rules compile, directives configure.
+    /// facts become the rows it returns for storing, rules compile, directives configure.
     ///
     /// A program whose imports do read one is translated in two steps instead,
     /// [prepare](Self::prepare) and [commit](Self::commit), with the fetching in between.
@@ -472,7 +472,7 @@ impl<'a> Translator<'a> {
     }
 
     /// Completes a [prepared](Self::prepare) translation:
-    /// facts become rows (to be loaded by the caller), rules compile, directives configure,
+    /// facts become the rows it returns for storing, rules compile, directives configure,
     /// and imports read, a remote one from what `fetched` holds for its directive's position.
     pub(crate) fn commit(
         &mut self,
@@ -1068,8 +1068,9 @@ impl Engine {
     }
 
     /// Returns the stores and setup one translation runs with,
-    /// its ground expressions evaluated in the given context,
     /// borrowed separately so that the translation writes the stores while reading the rest.
+    ///
+    /// The translation evaluates its ground expressions in the given context.
     pub(in crate::engine) fn translation_parts<'a>(
         &'a mut self,
         purpose: Purpose<'a>,

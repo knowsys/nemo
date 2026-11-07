@@ -1,10 +1,10 @@
 //! Escape sequences of term syntax.
 
 /// An escape sequence of term syntax, read after its backslash:
-/// the character it stands for, and its length.
+/// the character it encodes, and its length.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Escape {
-    /// The character the escape stands for.
+    /// The character the escape encodes.
     pub character: char,
     /// The length in bytes of the escape after its backslash.
     pub length: usize,

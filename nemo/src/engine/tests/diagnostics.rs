@@ -220,7 +220,7 @@ fn a_named_argument_and_a_prefixed_name_point_to_each_other() {
     assert_eq!(
         problem.hints().len(),
         1,
-        "a label that is no prefix: {problem:?}"
+        "a label that is not a prefix: {problem:?}"
     );
     // The prefixed name keeps the local name as written in the source, not the number's value.
     let mut engine = Engine::new();

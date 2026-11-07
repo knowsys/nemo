@@ -47,7 +47,7 @@ impl LiteralSyntax {
 /// Returns the IRI a cell spells between angle brackets, its character escapes decoded,
 /// or `None` for a cell without them.
 ///
-/// The IRI may be no [valid](Iri::is_valid) one.
+/// The IRI need not be [valid](Iri::is_valid).
 pub(crate) fn iri(cell: &str) -> Option<Cow<'_, str>> {
     cell.strip_prefix('<')
         .and_then(|rest| rest.strip_suffix('>'))

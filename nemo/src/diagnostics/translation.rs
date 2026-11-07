@@ -28,8 +28,8 @@ diagnostic_kinds! {
         UndeclaredPrefix { prefix: String }
             => UNDECLARED_PREFIX = 251, error, "use of undeclared prefix `{prefix}:`",
                explain "A prefixed name uses a prefix that no `@prefix` directive \
-                        declares. A name, a `:` and what follows read as a prefixed name \
-                        when they touch, as in `wd:42`; with a space after the `:`, as in \
+                        declares. A name, a `:` and what follows read as a prefixed name if \
+                        they touch, as in `wd:42`. With a space after the `:`, as in \
                         `age: 30`, they are a named argument.",
                hint "declare the prefix with `@prefix`, or write a space after the `:` for a \
                      named argument";
@@ -434,7 +434,7 @@ diagnostic_kinds! {
                hint "split the expression into several conditions or assignments";
         ImportFailed { resource: String, reason: String }
             => IMPORT_FAILED = 333, warning,
-               "no result from `{resource}`, so its import is empty: {reason}",
+               "could not fetch all of `{resource}`, so its import is empty: {reason}",
                explain "An import marked `on_error = warn` could not fetch its remote \
                         resource, or the endpoint returned only part of the result. The run \
                         continues without its rows.";
@@ -446,7 +446,7 @@ diagnostic_kinds! {
         RequestsFailed { failed: Count, sent: Count, resource: String, unasked: Count }
             => REQUESTS_FAILED = 335, warning,
                "{failed} of {sent} request{sent:#} to `{resource}` failed, leaving {unasked} \
-                binding row{unasked:#} unanswered",
+                binding row{unasked:#} unasked",
                explain "Requests of a bound import marked `on_error = warn` failed. The \
                         responses to the other requests are stored, but the bindings sent \
                         with the failed requests are not asked again, so the import is \
@@ -454,13 +454,14 @@ diagnostic_kinds! {
         BlankNodeBindings { count: Count, resource: String }
             => BLANK_NODE_BINDINGS = 338, warning,
                "{count} binding row{count:#} with a blank node from `{resource}` fetched \
-                nothing, since no query can ask for a blank node",
+                nothing",
                explain "A bound import sends its binding rows to the endpoint as terms. A \
                         blank node the endpoint returned earlier has no term a SPARQL query \
                         can name, so the rows holding one are left out, and what the \
                         endpoint holds for them is never fetched. This happens when rules \
                         follow blank nodes, as along an RDF list, through an import the \
                         `sparql` stage bound.",
+               note "no query can ask for a blank node",
                hint "fetch the data these rules follow with one query that walks the blank \
                      nodes itself, as with a property path";
         NeverBoundVariable { variable: String }

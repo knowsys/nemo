@@ -37,9 +37,11 @@ pub(crate) fn datatype(value: ValueRef<'_>) -> StackValue<'static> {
 /// Returns the lexical form of a value as a plain string,
 /// SPARQL's [`STR`](https://www.w3.org/TR/sparql12-query/#func-str).
 ///
-/// A language string yields its text, every other literal its canonical lexical,
-/// a double or a float as XPath casts it to a string (`"5.5"`, `"1.0E100"`),
-/// an IRI its text.
+/// - a language string yields its text,
+/// - a double or a float the form XPath casts it to a string as (`"5.5"`, `"1.0E100"`),
+/// - every other literal its canonical lexical form,
+/// - an IRI its text.
+///
 /// Nulls and structures have none.
 pub(crate) fn lexical(value: ValueRef<'_>) -> StackValue<'static> {
     let text = match value {

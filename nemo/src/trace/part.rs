@@ -11,6 +11,8 @@ use crate::trace::{TraceNode, WrittenRule};
 /// Ids continue from part to part: a part's first node has the id after the last node of the
 /// parts before, and so do its rules.
 /// A node names premises and a rule of its own part or of an earlier one.
+///
+/// [trace_predicates](crate::engine::Engine::trace_predicates) shows an example.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TracePart {

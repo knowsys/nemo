@@ -198,8 +198,9 @@ impl fmt::Debug for Double {
 
 impl Double {
     /// Returns XSD's canonical lexical form of the value, as `2.5E0` or `1.0E3`,
-    /// or `INF`, `-INF` and `NaN`: the form a store keeping lexical forms as written most
-    /// likely holds, which [Display](fmt::Display), writing the value as XPath does, is not.
+    /// or `INF`, `-INF` and `NaN`.
+    ///
+    /// [Display](fmt::Display) writes the value as XPath does instead.
     pub fn canonical_lexical(self) -> String {
         if self.0.is_finite() {
             scientific(self.0)
@@ -212,9 +213,10 @@ impl Double {
 impl fmt::Display for Double {
     /// Writes the `xsd:double` lexical form XPath casts the value to a string as
     /// (XPath and XQuery Functions and Operators, casting to `xs:string`):
-    /// plain shortest digits for magnitudes from `0.000001` to below
-    /// `1000000` (`5.5`, `1000`, `0`), XSD's canonical scientific form otherwise
-    /// (`1.0E100`), or `INF`, `-INF` and `NaN`.
+    /// - plain shortest digits for magnitudes from `0.000001` to below `1000000`,
+    ///   as `5.5` or `1000`, and for zero, as `0` or `-0`,
+    /// - XSD's canonical scientific form for other magnitudes, as `1.0E100`,
+    /// - `INF`, `-INF` and `NaN` for the special values.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.0.is_nan() {
             f.write_str("NaN")

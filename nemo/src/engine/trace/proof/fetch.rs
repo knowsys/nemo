@@ -93,7 +93,7 @@ impl ProofSearch<'_> {
 
     /// Returns the binding row of one atom behind the fact:
     /// the bound columns from the fact, the constants as stored,
-    /// and the free columns from any stored row agreeing with them.
+    /// and the free columns from a row added before the step that agrees with them.
     ///
     /// Returns `None` if no row added before the step agrees,
     /// or if a constant of the atom is not in the dictionary.

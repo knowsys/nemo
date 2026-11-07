@@ -17,6 +17,20 @@ use crate::stream::remote::{Client, Failure, Request, Response, Retry};
 /// The requests of one call overlap on a bounded pool of threads over one pooled connection
 /// client, and each failed request is retried on the [Retry] schedule before its failure is
 /// returned.
+///
+/// # Example
+///
+/// ```no_run
+/// use nemo_io::remote::{BlockingClient, Request, Retry};
+///
+/// let client = BlockingClient::new(Retry::default());
+/// let responses = client
+///     .fetch_all(&[Request::get("https://example.org/data.csv")], &|| false)
+///     .expect("nothing cancels");
+/// if let Ok(body) = &responses[0] {
+///     println!("{} bytes", body.len());
+/// }
+/// ```
 #[derive(Debug, Default, Clone, Copy)]
 pub struct BlockingClient {
     /// When failed requests are sent again.
@@ -179,7 +193,7 @@ fn fetch_retrying(
             status = failure.status,
             attempt,
             wait_seconds = delay.as_secs_f64(),
-            "retrying a remote request after a wait"
+            "waiting before retrying a remote request"
         );
         if !wait(delay, abandoned) {
             return Err(failure);

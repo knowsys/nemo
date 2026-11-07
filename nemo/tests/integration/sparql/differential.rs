@@ -3,7 +3,7 @@
 //! stage makes it, and both runs must derive the same facts.
 //!
 //! The endpoint keeps terms as written and labels each blank node the same in every response,
-//! as the rewrite assumes of a store (see the `sparql_rewrite` stage).
+//! as the rewrite assumes of a store (see the `sparql` stage).
 //! Its data holds values in Nemo's canonical terms, except under `ex:odd`,
 //! whose other spellings a binding or a constant misses by design,
 //! and under `ex:quantity`, which holds integers as decimals, as Wikidata does.

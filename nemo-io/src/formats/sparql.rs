@@ -569,7 +569,8 @@ impl SparqlReader {
 /// An endpoint that hits its own time limit partway responds with `200`
 /// and appends the exception to the rows it managed,
 /// as Blazegraph does behind the Wikidata query service.
-/// That would read as a few malformed rows after a silently partial result.
+/// A connection closed early leaves the last row unfinished.
+/// Either would read as a few malformed rows after a silently partial result.
 /// Only the lines after the last solution row, a trace if there is one,
 /// are searched for the known markers,
 /// since a row's cells may contain them too.
@@ -585,12 +586,12 @@ fn check_complete(endpoint: &str, body: &[u8]) -> Result<(), Diagnostic> {
     }
 }
 
-/// Returns the start of the line saying why a response was cut off, if it was
-/// (see [check_complete]).
+/// Returns why a response was cut off, if it was (see [check_complete]):
+/// the start of the line saying so after the last row,
+/// or that the response ends partway through a row.
 ///
-/// A response is also cut off if it ends partway through a row,
-/// as one does whose connection closed early without a word:
-/// its last line is unterminated, and not a whole row.
+/// A response ends partway through a row if its last line is unterminated and not a whole
+/// row, as when its connection closed early without a word.
 /// A whole last row needs no line end.
 fn cut_off(body: &[u8]) -> Option<String> {
     const MARKERS: [&str; 3] = [

@@ -250,8 +250,8 @@ pub enum OpCode {
     HasKey,
     /// Pops a tuple of plain strings and a separator and pushes the strings joined by it.
     JoinStrings,
-    /// Pops a plain string and a separator and pushes the tuple of the parts between the
-    /// separator's occurrences.
+    /// Pops a plain string and a separator and pushes the tuple of the parts the separator's
+    /// occurrences cut the string into, the parts before the first and after the last included.
     SplitString,
 
     /// Pops a dateTime, date or duration and pushes its year, or its whole years.

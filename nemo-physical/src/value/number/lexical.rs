@@ -4,8 +4,8 @@ use std::{fmt, num::ParseFloatError, str::FromStr};
 
 use crate::value::number::decimal::workspace;
 
-/// Returns a finite floating-point number in XSD's canonical form for `xsd:double` and
-/// `xsd:float`: one digit before the point, at least one after, and an exponent,
+/// Returns the text of a finite floating-point number in XSD's canonical form for `xsd:double`
+/// and `xsd:float`: one digit before the point, at least one after, and an exponent,
 /// as `2.5E0`, `1.0E3`, `-1.0E-1` or `0.0E0`.
 ///
 /// The digits are the shortest that read back as the value in its own precision,
@@ -20,11 +20,10 @@ pub(crate) fn scientific(value: impl fmt::UpperExp) -> String {
     }
 }
 
-/// Writes a finite floating-point number as XPath casts it to a string,
-/// and as SPARQL stores write the numbers they compute:
-/// in plain digits if its magnitude is at least `0.000001` and below `1000000`,
-/// as `5.5`, `1000` or `0.001`, and zero as `0` or `-0`;
-/// in XSD's [canonical scientific form](scientific) otherwise, as `1.0E100`.
+/// Writes a finite floating-point number as XPath casts it to a string:
+/// - in plain digits if its magnitude is at least `0.000001` and below `1000000`,
+///   as `5.5`, `1000` or `0.001`, and zero as `0` or `-0`,
+/// - in XSD's [canonical scientific form](scientific) otherwise, as `1.0E100`.
 ///
 /// The digits are the shortest that read back as the value in its own precision.
 pub(crate) fn write_float(

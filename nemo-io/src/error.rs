@@ -84,11 +84,12 @@ diagnostic_kinds! {
         SparqlResponseCut { endpoint: String, reason: String }
             => SPARQL_RESPONSE_CUT = 112, error,
                "`{endpoint}` cut off its response: {reason}",
-               explain "A SPARQL endpoint stopped partway through its response and \
-                        appended an error message, typically a timeout. The rows before \
-                        the message are not the complete result, so none of them are \
-                        kept. A bound import's request is sent again in halves first, \
-                        so the error remains where a single binding is cut off.",
+               explain "A SPARQL endpoint stopped partway through its response: it \
+                        appended an error message, typically a timeout, or the response \
+                        ends partway through a row. The rows before are not the complete \
+                        result, so none of them are kept. A bound import's request is sent \
+                        again in halves first, so the error remains where a single binding \
+                        is cut off.",
                hint "narrow the query";
     }
 }

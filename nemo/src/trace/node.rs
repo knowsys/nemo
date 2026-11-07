@@ -23,6 +23,8 @@ pub struct TraceNode {
 impl TraceNode {
     /// Returns the instantiated rule that derives the fact as one line,
     /// given the facts of its premises, or the fact alone if no rule derives it.
+    ///
+    /// [trace_predicates](crate::engine::Engine::trace_predicates) shows an example.
     pub fn inference<'a>(&self, premises: impl IntoIterator<Item = &'a str>) -> String {
         let Some(derivation) = &self.derivation else {
             return self.fact.clone();
@@ -59,8 +61,8 @@ pub struct Derivation {
     /// The variable assignment of the rule instance, for the source-named variables.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub assignment: Vec<VariableBinding>,
-    /// The positive premises, by node id, one per positive body literal of the rule;
-    /// none for an aggregate summarized without a witness.
+    /// The positive premises, by node id, one per positive body literal of the rule,
+    /// or none for an aggregate summarized without a witness.
     pub premises: Vec<usize>,
     /// The negated premises: patterns that hold by *absence* in the saturated lower stratum,
     /// in term syntax (`_` marks columns private to the negation).

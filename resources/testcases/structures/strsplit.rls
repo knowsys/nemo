@@ -1,6 +1,6 @@
-% Regression test for https://github.com/knowsys/nemo/issues/768:
-% STRSPLIT splits a string at a separator into a tuple of strings,
-% which STRJOIN joins back.
+% STRSPLIT, which https://github.com/knowsys/nemo/issues/768 asked for,
+% splits a string at a separator into a tuple of strings, which STRJOIN
+% joins back.
 
 text("a,b,c") .
 text("solo") .

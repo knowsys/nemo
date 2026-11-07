@@ -9,8 +9,6 @@
 //!
 //! The premises of a witness were all added before the fact,
 //! so the search never meets a cycle and remembers every outcome.
-//! Any tree the search returns is a valid proof,
-//! and the true derivation is always in the search space.
 //!
 //! The submodules:
 //!

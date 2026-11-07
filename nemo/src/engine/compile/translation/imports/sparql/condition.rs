@@ -1,30 +1,34 @@
 //! Pushed conditions as SPARQL expressions:
 //! the row condition the filter pass decided for a SPARQL-fed predicate,
 //! translated for the endpoint to apply,
-//! if every operator in it has a SPARQL meaning that excludes no row the condition keeps.
+//! if every operator in it has a SPARQL meaning that excludes no row the condition keeps,
+//! under the assumptions the rewrite makes of an endpoint
+//! (see [sparql_rewrite](crate::engine::transform::sparql_rewrite)).
 //!
 //! The local filter applies to the delivered rows as well, so an expression may keep more:
 //! wherever Nemo keeps a row, the expression must hold, neither false nor an error.
 //!
-//! An identity of a column with a constant at the top of the condition goes out as a `VALUES`
-//! block ([sparql_values](Translator::sparql_values)), as bindings do: the constant's terms
-//! ([ground_terms](SparqlQuery::ground_terms)), which the endpoint matches as terms,
-//! through its indexes.
-//! Elsewhere an identity becomes SPARQL's `=`, never `sameTerm`, which QLever does not
-//! implement. In a positive position `=` holds wherever Nemo's identity does, and finds
-//! every spelling of a number, boolean or dateTime, except at a NaN, which is never `=` to
-//! itself. Under a negation, though, `=` holds for more (the double `3.0E0` is `=` to the
-//! integer 3, a different value to Nemo) and fails on literals it cannot compare, so an
-//! identity there goes out only with an IRI, where `=` is the identity and never fails.
+//! An identity goes out in one of three forms:
+//! - With a constant at the top of the condition, as a `VALUES` block
+//!   ([sparql_values](Translator::sparql_values)), as bindings do: the constant's terms
+//!   ([ground_terms](SparqlQuery::ground_terms)), which the endpoint matches as terms,
+//!   through its indexes.
+//! - Elsewhere in a positive position, as SPARQL's `=`, never `sameTerm`, which QLever does not
+//!   implement. There `=` holds wherever Nemo's identity does, and finds every spelling of a
+//!   number, boolean or dateTime, except at a NaN, which is never `=` to itself.
+//! - Under a negation, only with an IRI, where `=` is the identity and never fails.
+//!   With a literal, `=` would hold for more (the double `3.0E0` is `=` to the integer 3, a
+//!   different value to Nemo) and fail on literals it cannot compare.
 //!
-//! Where Nemo's operator reads a value differently from its term regardless of the data,
-//! the translation follows Nemo: it reads language tags in lower case.
-//! Where Nemo and stores, or stores among themselves, read a number differently,
-//! the expression keeps the rows for the local filter:
-//! Nemo reads Wikidata's `"3.0"^^xsd:decimal`, and `"03"^^xsd:int`, as the integer 3, whose
-//! `STR` is `"3"` and whose `DATATYPE` is `xsd:integer`, and the lexical form of a double is
-//! the one stored for some stores (`"2.5E0"`) and the store's own writing of the number for
-//! others (Oxigraph writes `"2.5"`).
+//! Where Nemo reads a value differently from its term:
+//! - Regardless of the data, the translation follows Nemo: it reads language tags in lower
+//!   case.
+//! - For a number, which Nemo and stores, or stores among themselves, read differently,
+//!   the expression keeps the rows for the local filter.
+//!   Nemo reads Wikidata's `"3.0"^^xsd:decimal`, and `"03"^^xsd:int`, as the integer 3, whose
+//!   `STR` is `"3"` and whose `DATATYPE` is `xsd:integer`, and the lexical form of a double is
+//!   the one stored for some stores (`"2.5E0"`) and the store's own writing of the number for
+//!   others (Oxigraph writes `"2.5"`).
 
 use nemo_io::sparql::{
     SparqlQuery, ValuesBlock,
@@ -106,9 +110,7 @@ impl Translator<'_> {
     /// or `None` if some part of it has no SPARQL form (then only the local filter applies).
     ///
     /// A condition reading the lexical form or the datatype of a value (`STR`, `DATATYPE`)
-    /// also keeps the rows where that value is a number, which Nemo reads by value:
-    /// `"03"^^xsd:int` and `"3.0"^^xsd:decimal` are the integer 3, an `xsd:integer`
-    /// written `"3"`, and stores write doubles differently.
+    /// also keeps the rows where that value is a number (see the module documentation).
     ///
     /// The variable `column N` refers to delivered column `N`.
     /// `delivered`, one flag per projected variable, maps it back to its projected variable.

@@ -1,4 +1,4 @@
-test1(1) .
+digitFirst(1) .
 
 isRoot(<http://example.com/clustering/>) .
 

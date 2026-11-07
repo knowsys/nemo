@@ -424,7 +424,7 @@ impl Engine {
         context: EvaluationContext,
         resumed: Option<SuspendedReasoning>,
     ) -> Result<RunEnd, Diagnostic> {
-        // The token is cleared where a caller starts or resumes a run, not here:
+        // The token is cleared where a public method starts or resumes a run, not here:
         // one `reason()` resumes its run after every fetch, and a cancellation arriving
         // in between must stop it.
         tracing::info!(strata = strata.len(), step = self.step, "reasoning");
@@ -755,8 +755,9 @@ impl Engine {
     /// so at most the rows of one iteration are derived again,
     /// and the blocks the iteration added may merge freely.
     ///
-    /// The two-level policy keeps every growing table about two blocks wide,
-    /// since a join reads every block of its inputs, each through a cursor of its own.
+    /// The two-level policy keeps every growing table at most two blocks wide between walls,
+    /// since a join reads every block of its inputs, each through a cursor of its own,
+    /// at the price of merges that rewrite more rows than doubling ones do.
     fn consolidate(&mut self, program: &CompiledProgram, iteration_start: u64) {
         let begun = Stopwatch::start();
         let mut walls = Self::exact_walls(program);

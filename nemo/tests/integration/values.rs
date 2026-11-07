@@ -176,7 +176,7 @@ fn structured_values_round_trip() {
         DataValue::integer(1),
         tuple(vec![DataValue::integer(2), DataValue::integer(3)]),
     ]));
-    // A label that is no bare name keeps its angle brackets.
+    // A label that is not a bare name keeps its angle brackets.
     for label in ["http://example.org/point", "", "_", "true", "1abc"] {
         round_trips(DataValue::tuple(TupleValue::labeled(
             label,

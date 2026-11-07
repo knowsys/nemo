@@ -136,7 +136,7 @@ impl<'a, C: SeekCursor> UnionCursor<'a, C> {
         self.move_blocks(|value| value < target, |cursor| cursor.seek(target))
     }
 
-    /// Moves each entered block cursor whose value `stale` rejects by `step`,
+    /// Moves each entered block cursor whose value is `stale` by `step`,
     /// and stands the union at the smallest value the entered block cursors then stand at.
     #[inline]
     fn move_blocks(

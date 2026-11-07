@@ -7,12 +7,17 @@
 //! - [reason](Engine::reason) for the fetches of a bound import, an import with a `where`
 //!   clause, at the rule application that fetches.
 //!
-//! [load](Engine::load) and the other plain methods send the requests through the engine's
-//! [Client] (see [set_client](Engine::set_client)), wait for the responses, and complete.
+//! The *plain* methods, [load](Engine::load), [extend](Engine::extend),
+//! [reload](Engine::reload) and [reason](Engine::reason), send the requests through the
+//! engine's [Client] (see [set_client](Engine::set_client)), wait for the responses, and
+//! complete.
 //! The `start_*` methods, such as [start_load](Engine::start_load), send nothing:
 //! they return [Progress::Suspended] with the requests, each under a [RequestId],
 //! and the method is suspended until [resume](Engine::resume) has the responses under these
 //! ids and continues it.
+//! A call that runs a method until it completes, fails, or is suspended again is a *step* of
+//! the method: the `start_*` method takes the first step, and `resume` the next one once
+//! every request has its response.
 //! The engine holds at most one suspended method.
 //! While it is suspended, the methods that would change the program or the stored data are
 //! refused (N0493) until it is completed or [discarded](Engine::discard_pending).

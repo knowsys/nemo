@@ -114,7 +114,7 @@ fn check_node(engine: &mut Engine, proof: Proof<'_>) {
             .head
             .iter()
             .any(|atom| instance_of(atom, proof.fact(), &values)),
-        "{} is no instance of a head of {}",
+        "{} is not an instance of a head of {}",
         proof.fact(),
         rule.text
     );
@@ -150,7 +150,7 @@ fn check_node(engine: &mut Engine, proof: Proof<'_>) {
         );
         assert!(
             instance_of(atom, premise.fact(), &values),
-            "{} is no instance of `{atom}` in {}",
+            "{} is not an instance of `{atom}` in {}",
             premise.fact(),
             rule.text
         );
@@ -159,7 +159,7 @@ fn check_node(engine: &mut Engine, proof: Proof<'_>) {
     for (absence, atom) in derivation.absences.iter().zip(&negatives) {
         assert!(
             instance_of(atom, absence, &values),
-            "{absence} is no instance of `~{atom}` in {}",
+            "{absence} is not an instance of `~{atom}` in {}",
             rule.text
         );
     }
@@ -548,8 +548,8 @@ fn a_proof_sharing_its_premises_stays_as_large_as_its_facts() {
 
 #[test]
 fn recursion_over_a_cyclic_graph_traces_in_polynomial_time() {
-    // A random graph whose reachability facts share their blocks with their premises,
-    // so the search meets many cycles; backtracking around them takes exponential time.
+    // A random graph of many cycles, whose reachability facts share their blocks with their
+    // premises. Each fact is proven from facts added before it, so the cycles cost nothing.
     let mut engine = run("
         edge(n0, n12) . edge(n0, n39) . edge(n1, n34) . edge(n2, n0) . edge(n2, n37) .
         edge(n3, n11) . edge(n5, n27) . edge(n5, n32) . edge(n5, n38) . edge(n6, n12) .

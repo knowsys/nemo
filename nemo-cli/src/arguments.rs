@@ -127,7 +127,7 @@ pub struct Arguments {
     /// Trace every fact of every derived predicate. Each fact is printed
     /// once, after its premises: a derived fact as the rule instance that
     /// derives it, a loaded one as a fact statement. Written to
-    /// `--trace-output`, the trace is one trace document.
+    /// `--trace-output`, the trace is one trace response.
     #[arg(long, alias = "trace-all-idb-facts")]
     pub trace_all: bool,
 
@@ -151,8 +151,9 @@ pub struct Arguments {
     )]
     pub trace_node: Option<String>,
 
-    /// Write the trace as JSON (the derivations as one graph of facts) to
-    /// this file instead of printing it.
+    /// Write the response as JSON to this file instead of printing it:
+    /// for `--trace` and `--trace-all` the derivations as one graph of
+    /// facts, for `--trace-tree` and `--trace-node` the query's response.
     #[arg(long, value_name = "FILE")]
     pub trace_output: Option<PathBuf>,
 

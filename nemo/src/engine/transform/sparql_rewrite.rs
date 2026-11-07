@@ -60,8 +60,9 @@
 //!   A bound import never holds a solution its bindings do not justify: it keeps only the
 //!   solutions that match them as Nemo compares values
 //!   ([SparqlReader::with_bindings](nemo_io::sparql::SparqlReader::with_bindings)).
-//!   All of this needs a store holding one value in different forms;
-//!   values the store holds one way, and IRIs, compare the same in both.
+//!   All of this needs a store holding one value in several forms.
+//!   Where a store holds each value in one form, and for IRIs, Nemo and the endpoint compare
+//!   alike.
 //! - **A blank node keeps its label.** The rewrite splits an import into several queries,
 //!   and one blank node must be one null in all of them.
 //!   A label names the same null in every response from an endpoint
@@ -69,8 +70,9 @@
 //!   as stores labelling nodes by their internal ids give them
 //!   (Jena's TSV results, Virtuoso, Oxigraph, QLever),
 //!   though SPARQL only promises a label within one result.
-//!   On a store labelling each result anew, blank nodes of different responses may meet
-//!   wrongly, and those of one node fail to.
+//!   On a store that labels each result anew, two blank nodes of different responses may
+//!   share a label and become one null, and one blank node may come under two labels and
+//!   become two.
 //!   No query can name a blank node, so a binding row holding one fetches nothing,
 //!   which reasoning reports.
 //! - **An unbound value is no value.** Each unbound cell is a null of its own,

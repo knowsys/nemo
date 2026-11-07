@@ -483,6 +483,7 @@ impl NemoEngine {
     ///
     /// A suspended load, extension or reload has changed nothing,
     /// and a suspended `reason` stops as after a cancellation.
+    /// Throws while an async method waits for responses.
     #[wasm_bindgen(js_name = "discardPending")]
     pub fn discard_pending(&mut self) -> Result<bool, JsValue> {
         Ok(self.state_mut()?.engine.discard_pending())
@@ -503,6 +504,7 @@ impl NemoEngine {
     /// Loads a program as `load` does, but sends no request:
     /// returns `null` once loaded, or the requests the load is suspended for, as
     /// `pendingRequests` lists them, having stored nothing. `resume` takes the responses.
+    /// Throws code N0493 while another method is suspended.
     #[wasm_bindgen(js_name = "startLoad")]
     pub fn start_load(&mut self, program: &NemoProgram) -> Result<JsValue, JsValue> {
         let text = program.text.clone();
@@ -542,6 +544,7 @@ impl NemoEngine {
     /// Extends the loaded program as `extend` does, but sends no request,
     /// returning the requests it is suspended for as `startLoad` does, the loaded program
     /// unchanged until it completes.
+    /// Throws code N0493 while another method is suspended.
     #[wasm_bindgen(js_name = "startExtend")]
     pub fn start_extend(&mut self, program: &NemoProgram) -> Result<JsValue, JsValue> {
         let text = program.text.clone();
@@ -575,6 +578,7 @@ impl NemoEngine {
     /// Replaces the program as `reload` does, but sends no request,
     /// returning the requests it is suspended for as `startLoad` does, the loaded program
     /// unchanged until it completes.
+    /// Throws code N0493 while another method is suspended.
     #[wasm_bindgen(js_name = "startReload")]
     pub fn start_reload(&mut self, program: &NemoProgram) -> Result<JsValue, JsValue> {
         let text = program.text.clone();
@@ -628,6 +632,7 @@ impl NemoEngine {
     /// returns `null` at the fixpoint, or the requests of the bound import whose fetch the run
     /// is suspended in, as `startLoad` does. `resume` takes the responses and continues the run
     /// there.
+    /// Throws code N0493 while a load, extension or reload is suspended.
     #[wasm_bindgen(js_name = "startReason")]
     pub fn start_reason(&mut self) -> Result<JsValue, JsValue> {
         let mut inner = self.state_mut()?;

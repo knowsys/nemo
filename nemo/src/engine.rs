@@ -383,6 +383,8 @@ impl Engine {
     ///
     /// Remote imports are fetched through the engine's [client](Self::set_client)
     /// before anything is registered or stored.
+    /// Facts and option values evaluate `NOW()` at the instant the next run evaluates at
+    /// (see [reason](Self::reason)).
     ///
     /// # Errors
     ///
@@ -413,6 +415,10 @@ impl Engine {
     /// # Errors
     ///
     /// Returns what [load](Self::load) returns, except N0491 and N0492.
+    ///
+    /// # Panics
+    ///
+    /// Panics as [load](Self::load) does.
     pub fn start_load(&mut self, program: Program) -> Result<Progress, Diagnostic> {
         self.refuse_while_suspended("load")?;
         let outcome = self.choosing_instant(|engine| engine.load_program(program));
@@ -425,7 +431,8 @@ impl Engine {
     ///
     /// Every table is kept, and every unchanged rule continues semi-naive evaluation where it
     /// left off.
-    /// The next [reason](Self::reason) continues to the new fixpoint.
+    /// The next [reason](Self::reason) continues to the new fixpoint,
+    /// at the instant the extension's facts and option values evaluate `NOW()` at.
     /// If a new statement adds facts to a predicate that is negated or aggregated,
     /// the derived facts that depend on it are dropped and derived again.
     ///
@@ -457,6 +464,10 @@ impl Engine {
     /// # Errors
     ///
     /// Returns what [extend](Self::extend) returns, except N0491 and N0492.
+    ///
+    /// # Panics
+    ///
+    /// Panics as [extend](Self::extend) does.
     pub fn start_extend(&mut self, program: Program) -> Result<Progress, Diagnostic> {
         self.refuse_while_suspended("extend")?;
         let outcome = self.choosing_instant(|engine| engine.extend_program(program));
@@ -466,7 +477,8 @@ impl Engine {
     /// Replaces the program, which is how statements are retracted.
     ///
     /// Every derived row is dropped, every rule starts over,
-    /// and the next [reason](Self::reason) derives everything again from the input facts.
+    /// and the next [reason](Self::reason) derives everything again from the input facts,
+    /// at the instant the program's facts and option values evaluate `NOW()` at.
     ///
     /// The dictionary, the registered sources and resources are kept,
     /// and so are the loaded data of every predicate whose defining statements
@@ -502,6 +514,10 @@ impl Engine {
     /// # Errors
     ///
     /// Returns what [reload](Self::reload) returns, except N0491 and N0492.
+    ///
+    /// # Panics
+    ///
+    /// Panics as [reload](Self::reload) does.
     pub fn start_reload(&mut self, program: Program) -> Result<Progress, Diagnostic> {
         self.refuse_while_suspended("reload")?;
         let outcome = self.choosing_instant(|engine| engine.reload_program(program));
@@ -511,7 +527,7 @@ impl Engine {
     /// Checks a program without loading it:
     /// parameters resolve, directives validate, rules compile, and the whole program
     /// stratifies, but no imported data is read and no facts are stored.
-    /// A parameter without a value, which a run needs supplied, is read as any value of its
+    /// A parameter without a value, whose value a load needs, is read as any value of its
     /// declared type, as an `@input` predicate holds any rows its declaration allows.
     ///
     /// Unlike [load](Self::load), a check collects problems rather than ending at the first,
@@ -598,7 +614,7 @@ impl Engine {
     /// otherwise. Without a client, a plain method that needs data from the network fails
     /// (N0491), and the `start_*` methods return the requests, whose responses `resume` takes.
     ///
-    /// Returns the client set before, so that a caller can put it back.
+    /// Returns the client set before, which can be set again later.
     pub fn set_client(
         &mut self,
         client: Option<Box<dyn Client + Send>>,
@@ -640,7 +656,7 @@ impl Engine {
     /// # Panics
     ///
     /// Panics if a response is given under an id that [pending](Self::pending) does not list,
-    /// or two responses under one id.
+    /// or two responses under one id, and as the continued method does.
     pub fn resume(
         &mut self,
         responses: impl IntoIterator<Item = (RequestId, Response)>,
@@ -685,7 +701,7 @@ impl Engine {
     /// Returns N0492 if the token stops the wait for a fetch. The run then stays suspended,
     /// and a further `reason()` continues it.
     /// Returns N0491 if a bound import needs data from the network but the engine has no
-    /// client; the run then stops as after a cancellation.
+    /// client. The run then stops as after a cancellation.
     /// Returns the first failure of a rule application otherwise.
     pub fn reason(&mut self) -> Result<(), Diagnostic> {
         self.cancel.clear();
@@ -952,6 +968,40 @@ impl Engine {
     /// Returns what [trace](Self::trace) returns for the facts,
     /// what [cursor](Self::cursor) returns for a predicate,
     /// and the first error of the sink, which ends the tracing.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use nemo::{
+    ///     engine::Engine,
+    ///     model::{FileId, Program},
+    /// };
+    ///
+    /// let (program, _) = Program::parse(
+    ///     "edge(1, 2) . reach(?x, ?y) :- edge(?x, ?y) .",
+    ///     FileId::new(0),
+    /// );
+    /// let mut engine = Engine::new();
+    /// engine.load(program)?;
+    /// engine.reason()?;
+    ///
+    /// let mut parts = Vec::new();
+    /// engine.trace_predicates(&["reach".to_owned()], &[], |part| {
+    ///     parts.push(part);
+    ///     Ok(())
+    /// })?;
+    ///
+    /// // Node ids continue across the parts.
+    /// let nodes: Vec<_> = parts.iter().flat_map(|part| &part.nodes).collect();
+    /// let node = nodes
+    ///     .iter()
+    ///     .find(|node| node.fact == "reach(1, 2)")
+    ///     .expect("the row is traced");
+    /// let derivation = node.derivation.as_ref().expect("a rule derives the fact");
+    /// let premises = derivation.premises.iter().map(|&premise| nodes[premise].fact.as_str());
+    /// assert_eq!(node.inference(premises), "reach(1, 2) :- edge(1, 2) .");
+    /// # Ok::<(), nemo::diagnostics::Diagnostic>(())
+    /// ```
     pub fn trace_predicates(
         &mut self,
         predicates: &[String],

@@ -4,7 +4,7 @@
 //! which lists the requests of the remote resources its imports need.
 //! The engine fetches them, or the load is suspended until they are passed in,
 //! and the translation [commits](Translator::commit) with the responses,
-//! each found by the position of its import's directive, never by its resource name.
+//! each found by the position of its import's directive.
 
 use std::sync::Arc;
 

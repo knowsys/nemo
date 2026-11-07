@@ -1,13 +1,15 @@
 //! The join: a leapfrog trie join over immutable tries.
 //!
-//! [TrieJoin] is built over a [shape](JoinShape) and the inputs it joins,
-//! each stored in one or several tries, its blocks,
+//! [TrieJoin] is built over a [shape](JoinShape) and the blocks of the inputs it joins,
 //! and yields the result rows in storage order.
-//! Beneath it, the [driver] descends through the layers.
-//! Each layer is an [intersection] of [cursors](input) over the input columns,
-//! each the [cursor] over the column of a block or the [union] of those of several,
-//! the [hooks] decide whether a value found at a layer stands,
-//! and the working state comes from an [arena](JoinArena).
+//! Beneath it:
+//! - the [driver] descends through the layers,
+//! - each layer is an [intersection] of [cursors](input) over the input columns,
+//! - the cursor over an input column is the [cursor] over the column of its one block,
+//!   or the [union] of the cursors over the column of each of its blocks,
+//! - the [hooks] decide whether a value found at a layer stands,
+//! - the working state comes from an [arena](JoinArena).
+//!
 //! A [template](JoinTemplate) builds the joins of one shape over different inputs.
 
 mod arena;
@@ -178,7 +180,7 @@ impl<'a> TrieJoin<'a> {
     ///
     /// Joins clipped to disjoint ranges yield disjoint parts of the result,
     /// which is how a join is partitioned across workers.
-    /// The clip applies to every block the layer enters,
+    /// The clip applies to every range of children the layer enters,
     /// and must precede the drain.
     pub(crate) fn clip_layer(
         &mut self,

@@ -74,8 +74,8 @@ diagnostic_kinds! {
                hint "call `Engine::link` on the program first";
         AwaitingRemote { count: Count, first: String }
             => AWAITING_REMOTE = 491, error,
-               "the method needs {count} remote request{count:#}, one of them to `{first}`, \
-                but the engine has no client to send them",
+               "the engine has no client to send {count} remote request{count:#}, one of them \
+                to `{first}`",
                explain "The method needs data from the network. The engine sends such \
                         requests through its client, which a build with the `http` feature \
                         has unless `set_client(None)` removed it. Without a client, the \

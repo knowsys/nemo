@@ -9,7 +9,7 @@
 
 in(1, wd:42, 2) .
 in(2, wd:Q42, 3) .
-test1(?x) :- in(?x, wd:42, _) .
+digitFirst(?x) :- in(?x, wd:42, _) .
 
 root(base:) .
 isRoot(?r) :- root(?r), ?r = <http://example.com/clustering/> .
@@ -18,13 +18,13 @@ isRoot(?r) :- root(?r), ?r = <http://example.com/clustering/> .
 person(id: wd:7, age: 30) .
 adult(?p) :- person(id: ?p, age: ?a), ?a >= 18 .
 
-% A dot joins two parts of a local name; at its end, it ends the statement.
+% A dot joins two parts of a local name.
 @prefix fhir: <http://hl7.org/fhir/> .
 field(fhir:Observation.status, ex:v1.2) .
 field(fhir:Patient.name, wd:4.2) .
 named(?f) :- field(?f, _) .
 
-% A character escape in an IRI stands for its character.
+% A character escape in an IRI reads as the character it encodes.
 escaped(<http://example.com/caf\u00E9>) .
 
-@output test1, isRoot, adult, named, escaped .
+@output digitFirst, isRoot, adult, named, escaped .
