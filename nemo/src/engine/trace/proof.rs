@@ -18,7 +18,7 @@
 //! - [response] converts it to the [crate::trace] protocol types.
 //! - [parts] traces every row of predicates, handing the response out in parts.
 //!
-//! A [Trace] keeps what its batches of facts have in common,
+//! A [BatchedTrace] keeps what its batches of facts have in common,
 //! so that they add up to one response in which each fact is proven and listed once.
 
 #[cfg(feature = "sparql")]
@@ -52,14 +52,14 @@ struct ProofNode {
     /// The fact's encoded row.
     row: Vec<StorageValue>,
     /// The explanation.
-    proof: Proof,
+    proof: Explanation,
 }
 
 /// How a fact holds.
 #[derive(Debug)]
-enum Proof {
+enum Explanation {
     /// The fact was loaded, not derived.
-    Asserted,
+    Loaded,
     /// The fact follows from the premises by a rule instance.
     Derived {
         /// The rule's index.
@@ -87,16 +87,16 @@ enum Proof {
 ///
 /// The batches add up to one response, in which each fact is proven and listed once.
 #[derive(Debug, Default)]
-struct Trace {
+struct BatchedTrace {
     /// The outcome of every fact the search met.
-    proven: search::Proven,
+    outcomes: search::Outcomes,
     /// The facts lifted, with their nodes.
     graph: LiftedGraph,
     /// The position of each rule listed, by its statement.
-    rules: HashMap<StatementId, usize>,
+    listed: HashMap<StatementId, usize>,
 }
 
-impl Trace {
+impl BatchedTrace {
     /// Traces a batch of facts, given by table and decoded values:
     /// returns the nodes and rules the batch adds to the response, and each fact with its node.
     fn batch(
@@ -106,7 +106,7 @@ impl Trace {
     ) -> Result<(TracePart, Vec<TracedFact>), Diagnostic> {
         let mut proofs: Vec<Option<Rc<ProofNode>>> = Vec::with_capacity(facts.len());
         {
-            let mut search = search::ProofSearch::over(engine, &mut self.proven)?;
+            let mut search = search::ProofSearch::over(engine, &mut self.outcomes)?;
             for (table, values) in facts {
                 proofs.push(search.prove(*table, values)?);
             }
@@ -126,7 +126,7 @@ impl Trace {
         let canonical_constants = engine.render_constants(self.graph.constants());
 
         let responder = Responder::new(engine, canonical_constants);
-        let part = responder.part(&mut self.graph, &mut self.rules);
+        let part = responder.part(&mut self.graph, &mut self.listed);
         Ok((part, responder.traced(facts, &roots)))
     }
 }
@@ -137,7 +137,7 @@ pub(crate) fn run(
     engine: &mut Engine,
     facts: Vec<(TableId, Vec<DataValue>)>,
 ) -> Result<TraceResponse, Diagnostic> {
-    let (part, facts) = Trace::default().batch(engine, &facts)?;
+    let (part, facts) = BatchedTrace::default().batch(engine, &facts)?;
     Ok(TraceResponse {
         version: VERSION,
         facts,

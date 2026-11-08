@@ -17,12 +17,12 @@ fn bound_imports_follow_their_bindings_to_the_fixpoint() {
     let mut engine = Engine::new();
     let program = parse_into(&mut engine, ANCESTORS);
     fetcher
-        .drive(&mut engine, |engine| engine.load(program))
+        .serve(&mut engine, |engine| engine.load(program))
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     // Nothing was asked at load: a bound import is a rule.
     assert!(fetcher.queries().is_empty());
     fetcher
-        .drive(&mut engine, Engine::reason)
+        .serve(&mut engine, Engine::reason)
         .unwrap_or_else(|problem| panic!("{problem:?}"));
 
     let mut ancestors = engine.rows("anc").expect("derived");
@@ -95,10 +95,10 @@ fn bound_imports_hold_any_term() {
         ),
     );
     fetcher
-        .drive(&mut engine, |engine| engine.load(program))
+        .serve(&mut engine, |engine| engine.load(program))
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     fetcher
-        .drive(&mut engine, Engine::reason)
+        .serve(&mut engine, Engine::reason)
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     assert_eq!(engine.rows("parent").expect("fetched").len(), 6);
     assert_eq!(engine.rows("anc").expect("derived").len(), 4);
@@ -122,10 +122,10 @@ fn malformed_solutions_of_a_bound_import_are_reported_once() {
     let mut engine = Engine::new();
     let program = parse_into(&mut engine, ANCESTORS);
     fetcher
-        .drive(&mut engine, |engine| engine.load(program))
+        .serve(&mut engine, |engine| engine.load(program))
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     fetcher
-        .drive(&mut engine, Engine::reason)
+        .serve(&mut engine, Engine::reason)
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     assert_eq!(engine.rows("anc").expect("derived").len(), 4);
     let malformed: Vec<_> = engine
@@ -165,10 +165,10 @@ right(<urn:3>, 0) . right(<urn:4>, 0) . right(<urn:4>, 1) .
 "#,
     );
     fetcher
-        .drive(&mut engine, |engine| engine.load(program))
+        .serve(&mut engine, |engine| engine.load(program))
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     fetcher
-        .drive(&mut engine, Engine::reason)
+        .serve(&mut engine, Engine::reason)
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     assert_eq!(engine.rows("pair").expect("fetched").len(), 4);
     // A page of one binding row per atom: one request per combination
@@ -268,10 +268,10 @@ fn the_rewrite_stage_binds_generic_imports_before_reasoning() {
     let mut engine = Engine::new();
     let program = parse_into(&mut engine, ANCESTORS_GENERIC);
     fetcher
-        .drive(&mut engine, |engine| engine.load(program))
+        .serve(&mut engine, |engine| engine.load(program))
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     fetcher
-        .drive(&mut engine, Engine::reason)
+        .serve(&mut engine, Engine::reason)
         .unwrap_or_else(|problem| panic!("{problem:?}"));
 
     let mut ancestors = engine.rows("anc").expect("derived");

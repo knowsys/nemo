@@ -96,10 +96,10 @@ fn generic_ancestors() -> Engine {
     let endpoint = parents_generic();
     let program = parse_into(&mut engine, ANCESTORS_GENERIC);
     endpoint
-        .drive(&mut engine, |engine| engine.load(program))
+        .serve(&mut engine, |engine| engine.load(program))
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     endpoint
-        .drive(&mut engine, Engine::reason)
+        .serve(&mut engine, Engine::reason)
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     engine
 }

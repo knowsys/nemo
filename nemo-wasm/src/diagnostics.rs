@@ -64,6 +64,24 @@ pub(crate) fn resolve(
     }
 }
 
+/// Returns a diagnostic with the hints of the browser engine,
+/// where the engine's hints name calls the browser engine lacks or spells differently.
+fn with_browser_hints(diagnostic: nemo::diagnostics::Diagnostic) -> nemo::diagnostics::Diagnostic {
+    let code = diagnostic.code();
+    if code == nemo::codes::NO_CLIENT {
+        diagnostic.without_hints().with_hint(
+            "call the method's async form, such as `loadAsync`, which fetches the data, \
+             or its `start` form, such as `startLoad`, and pass the responses to `resume`",
+        )
+    } else if code == nemo::codes::METHOD_SUSPENDED {
+        diagnostic
+            .without_hints()
+            .with_hint("pass the responses to `resume`, or call `discardPending`")
+    } else {
+        diagnostic
+    }
+}
+
 /// Returns the JavaScript form of a list of diagnostics.
 pub(crate) fn to_js(diagnostics: &[Diagnostic]) -> JsValue {
     serde_wasm_bindgen::to_value(diagnostics).expect("plain data serializes")
@@ -71,13 +89,16 @@ pub(crate) fn to_js(diagnostics: &[Diagnostic]) -> JsValue {
 
 /// Returns a thrown `Error` whose message is the rendering and whose
 /// `diagnostics` property carries the structured entries.
+///
+/// The hints that name calls of the engine the browser engine lacks or spells differently
+/// are replaced by the browser engine's own.
 pub(crate) fn throw(
     diagnostics: Vec<nemo::diagnostics::Diagnostic>,
     sources: &SourceTexts,
 ) -> JsValue {
     let resolved: Vec<Diagnostic> = diagnostics
-        .iter()
-        .map(|diagnostic| resolve(diagnostic, sources))
+        .into_iter()
+        .map(|diagnostic| resolve(&with_browser_hints(diagnostic), sources))
         .collect();
     let message = resolved
         .iter()

@@ -234,7 +234,7 @@ mod tests {
         // Another read names its own nulls, unless both share a scope.
         let mut other = BlankNodes::open(None, "document", &mut dictionary);
         assert_ne!(other.null("a", &mut dictionary), first);
-        let shared = dictionary.label_scope("endpoint");
+        let shared = dictionary.shared_label_scope("endpoint");
         let mut one = BlankNodes::open(Some(shared), "document", &mut dictionary);
         let mut two = BlankNodes::open(Some(shared), "document", &mut dictionary);
         let null = one.null("a", &mut dictionary);

@@ -23,11 +23,11 @@ pub(crate) enum InputCursor<'a, C: SeekCursor> {
 
 impl<'a, C: SeekCursor> InputCursor<'a, C> {
     /// Creates the cursor over the given block cursors, one per block of the input, in block order.
-    pub(crate) fn new(mut blocks: impl ExactSizeIterator<Item = C>, bump: &'a Bump) -> Self {
-        if blocks.len() == 1 {
-            InputCursor::Block(blocks.next().expect("one block is there"))
+    pub(crate) fn new(mut cursors: impl ExactSizeIterator<Item = C>, bump: &'a Bump) -> Self {
+        if cursors.len() == 1 {
+            InputCursor::Block(cursors.next().expect("one block is there"))
         } else {
-            InputCursor::Union(UnionCursor::new(BumpVec::from_iter_in(blocks, bump), bump))
+            InputCursor::Union(UnionCursor::new(BumpVec::from_iter_in(cursors, bump), bump))
         }
     }
 

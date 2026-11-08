@@ -106,7 +106,7 @@ fn a_parameter_without_a_value_reads_as_any_value_of_its_type() {
 }
 
 #[test]
-fn an_import_reading_a_parameter_without_a_value_opens_its_predicate() {
+fn an_import_reading_a_parameter_without_a_value_makes_its_predicate_an_input() {
     // A load given `$dir` reads both resources into `data`. The check reads `data` as
     // holding any value instead, so the second import does not import into an input.
     let problems = check(

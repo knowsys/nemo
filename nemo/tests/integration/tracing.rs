@@ -37,7 +37,7 @@ fn stored(engine: &mut Engine, predicate: &str) -> Vec<Vec<String>> {
 }
 
 /// Splits a fact in term syntax into its predicate and its terms.
-fn parts(fact: &str) -> (String, Vec<String>) {
+fn split_fact(fact: &str) -> (String, Vec<String>) {
     let open = if fact.starts_with('<') {
         fact.find('>').expect("a closed predicate") + 1
     } else {
@@ -83,13 +83,13 @@ fn check(engine: &mut Engine, response: &TraceResponse) {
         }
     }
     for id in 0..response.nodes.len() {
-        check_node(engine, response.node(id));
+        check_node(engine, response.node_proof(id));
     }
 }
 
 /// Checks one node of a response, as [check] describes.
 fn check_node(engine: &mut Engine, proof: Proof<'_>) {
-    let (predicate, terms) = parts(proof.fact());
+    let (predicate, terms) = split_fact(proof.fact());
     let rows = stored(engine, &predicate);
     assert!(
         rows.contains(&terms),
@@ -170,7 +170,7 @@ fn check_node(engine: &mut Engine, proof: Proof<'_>) {
 /// takes its value. Named arguments and constants are left to the
 /// engine.
 fn instance_of(atom: &Atom, fact: &str, values: &HashMap<String, String>) -> bool {
-    let (predicate, terms) = parts(fact);
+    let (predicate, terms) = split_fact(fact);
     let written = atom.predicate.to_string();
     if written.trim_start_matches('<').trim_end_matches('>') != predicate {
         return false;
@@ -355,7 +355,7 @@ fn existential_derivations_trace_through_their_nulls() {
     let proof = response.proof(0).expect("the fact holds");
     let created = proof.premises().next().expect("a premise");
     assert!(
-        parts(created.fact()).1[1].starts_with("_:"),
+        split_fact(created.fact()).1[1].starts_with("_:"),
         "the null renders as data syntax: {}",
         created.fact()
     );
@@ -513,7 +513,7 @@ fn a_fact_several_derivations_use_is_one_node() {
     assert_eq!(p_under_q.id(), p_under_r.id(), "p(1) is one node");
     assert!(response.ascii().contains("p(1) (shown above)"));
     let inferences: Vec<String> = (0..response.nodes.len())
-        .map(|id| response.node(id))
+        .map(|id| response.node_proof(id))
         .filter(|proof| proof.rule().is_some())
         .map(|proof| proof.to_string())
         .collect();

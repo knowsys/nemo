@@ -124,7 +124,7 @@ impl<'a> Window<'a> {
     ) -> Self {
         let mut ranges = Vec::with_capacity(sources.len());
         let mut values = vec![0usize; arity];
-        for (position, source) in sources.iter().enumerate() {
+        for (index, source) in sources.iter().enumerate() {
             let first = source.column(0);
             let start = low.map_or(0, |low| first.lower_bound(low));
             let end = high.map_or(first.len(), |high| first.lower_bound(high));
@@ -139,7 +139,7 @@ impl<'a> Window<'a> {
                 range = intervals.get(range.start)..intervals.get(range.end);
                 *count += range.len();
             }
-            ranges.push(RowRange::between(source, range, position));
+            ranges.push(RowRange::between(source, range, index));
         }
         Self { ranges, values }
     }

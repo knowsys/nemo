@@ -55,10 +55,10 @@ named(?item, ?name) :- item(?item), wdLabel(?item, ?name) .
 "#,
     );
     fetcher
-        .drive(&mut engine, |engine| engine.load(program))
+        .serve(&mut engine, |engine| engine.load(program))
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     fetcher
-        .drive(&mut engine, Engine::reason)
+        .serve(&mut engine, Engine::reason)
         .unwrap_or_else(|problem| panic!("{problem:?}"));
 
     let mut named: Vec<String> = engine
@@ -99,10 +99,10 @@ business(?id, ?org) :- org(?org), triple(?id, <urn:name>, STRLANG(?org, "en")) .
 "#,
     );
     fetcher
-        .drive(&mut engine, |engine| engine.load(program))
+        .serve(&mut engine, |engine| engine.load(program))
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     fetcher
-        .drive(&mut engine, Engine::reason)
+        .serve(&mut engine, Engine::reason)
         .unwrap_or_else(|problem| panic!("{problem:?}"));
 
     assert_eq!(
@@ -162,10 +162,10 @@ caption(?c, ?l) :- thing(?c), triple(?c, <urn:label>, ?l), LANG(?l) = "en" .
 "#,
     );
     fetcher
-        .drive(&mut engine, |engine| engine.load(program))
+        .serve(&mut engine, |engine| engine.load(program))
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     fetcher
-        .drive(&mut engine, Engine::reason)
+        .serve(&mut engine, Engine::reason)
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     let labels = engine.rows("caption").expect("derived");
     assert_eq!(labels.len(), 2, "{labels:?}");
@@ -199,7 +199,7 @@ fn type_tests_reach_the_endpoint_as_datatype_tests() {
 "#,
     );
     fetcher
-        .drive(&mut engine, |engine| engine.load(program))
+        .serve(&mut engine, |engine| engine.load(program))
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     assert_eq!(
         engine.rows("t").expect("loaded"),
@@ -234,10 +234,10 @@ fn pushed_conditions_name_delivered_columns_past_pruned_ones() {
         "#,
     );
     fetcher
-        .drive(&mut engine, |engine| engine.load(program))
+        .serve(&mut engine, |engine| engine.load(program))
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     fetcher
-        .drive(&mut engine, Engine::reason)
+        .serve(&mut engine, Engine::reason)
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     let seen = fetcher.queries();
     assert_eq!(seen.len(), 1, "{seen:?}");
@@ -281,10 +281,10 @@ fn imports_read_by_binding_atoms_are_kept() {
         "#,
     );
     fetcher
-        .drive(&mut engine, |engine| engine.load(program))
+        .serve(&mut engine, |engine| engine.load(program))
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     fetcher
-        .drive(&mut engine, Engine::reason)
+        .serve(&mut engine, Engine::reason)
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     assert_eq!(engine.count("h").expect("derived"), 1);
     assert_eq!(engine.count("q").expect("derived"), 1);
@@ -314,10 +314,10 @@ fn repeated_binding_variables_are_asked_once() {
         "#,
     );
     fetcher
-        .drive(&mut engine, |engine| engine.load(program))
+        .serve(&mut engine, |engine| engine.load(program))
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     fetcher
-        .drive(&mut engine, Engine::reason)
+        .serve(&mut engine, Engine::reason)
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     let seen = fetcher.queries();
     assert_eq!(seen.len(), 1, "{seen:?}");
@@ -353,17 +353,17 @@ fn known_binding_keys_are_not_asked_again() {
         "#,
     );
     fetcher
-        .drive(&mut engine, |engine| engine.load(program))
+        .serve(&mut engine, |engine| engine.load(program))
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     fetcher
-        .drive(&mut engine, Engine::reason)
+        .serve(&mut engine, Engine::reason)
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     assert_eq!(engine.count("q").expect("derived"), 1);
     engine
         .import_rows("b", [vec![DataValue::iri("urn:a"), DataValue::integer(2)]])
         .expect("the row lands");
     fetcher
-        .drive(&mut engine, Engine::reason)
+        .serve(&mut engine, Engine::reason)
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     assert_eq!(fetcher.queries().len(), 1, "the key was asked once");
     assert_eq!(engine.count("q").expect("derived"), 1);

@@ -16,7 +16,7 @@ use crate::{
     diagnostics::EngineError,
     engine::{
         CheckReport, Engine, InferredTypes,
-        check::open_parameters,
+        check::rewrite_unvalued,
         compile::compiled::CompiledProgram,
         compile::translation::{self, Purpose, TranslationState},
         compile::types,
@@ -135,8 +135,8 @@ impl Engine {
             .unzip();
 
         let stages = self.rewriting_stages(&load.staged);
-        let instant = self.loading_instant();
-        let (stores, mut setup) = self.translation_parts(Purpose::of_load(&stages), instant);
+        let context = self.loading_context();
+        let (stores, mut setup) = self.translation_parts(Purpose::of_load(&stages), context);
         setup.written = Some(&written);
         let prepared = load.prepared.take();
         let resumed = prepared.is_some();
@@ -251,7 +251,7 @@ impl Engine {
     /// The analysis of the program, and its strata, are proved over these statements.
     /// The pipeline stages rewrite the program afterwards,
     /// and the translation of what they made then reports only what reading finds.
-    /// A check reads the parameters without a value as inputs (see [open_parameters]).
+    /// A check reads the parameters without a value as inputs (see [rewrite_unvalued]).
     ///
     /// Returns the compiled program and the predicates registered for it.
     pub(super) fn translate_written(
@@ -268,7 +268,7 @@ impl Engine {
             .map(|(id, statement)| (id, statement.clone()))
             .unzip();
         let (statements, ids) = if purpose == Purpose::Check {
-            open_parameters(statements, ids)
+            rewrite_unvalued(statements, ids)
         } else {
             (statements, ids)
         };
@@ -451,9 +451,9 @@ impl Engine {
             None => {
                 let mut state = self.translation.clone();
                 state.clear_statement_state();
-                let instant = self.loading_instant();
+                let context = self.loading_context();
                 let (stores, mut setup) =
-                    self.translation_parts(Purpose::of_load(&stages), instant);
+                    self.translation_parts(Purpose::of_load(&stages), context);
                 setup.written = Some(&written);
                 let mut translator =
                     translation::Translator::new(stores, setup, state, preloaded.clone());
@@ -481,8 +481,8 @@ impl Engine {
         let old = self.program.take().expect("an extension extends a program");
         let saved = self.translation.clone();
         let saved_predicates = self.predicates.clone();
-        let instant = self.loading_instant();
-        let (stores, mut setup) = self.translation_parts(Purpose::of_load(&stages), instant);
+        let context = self.loading_context();
+        let (stores, mut setup) = self.translation_parts(Purpose::of_load(&stages), context);
         setup.written = Some(&written);
         setup.previous_types = Some(&old.column_types);
         let mut translator = translation::Translator::new(stores, setup, state, preloaded);
@@ -640,8 +640,8 @@ impl Engine {
         // translation state. A refused call leaves the seeds as they were.
         let seeds_before = self.translation.seeds.get(&table).cloned();
         let state = std::mem::take(&mut self.translation);
-        let instant = self.loading_instant();
-        let (stores, setup) = self.translation_parts(Purpose::Load, instant);
+        let context = self.loading_context();
+        let (stores, setup) = self.translation_parts(Purpose::Load, context);
         let mut translator = translation::Translator::new(stores, setup, state, Vec::new());
         let mut outcome = Ok(());
         for row in rows {

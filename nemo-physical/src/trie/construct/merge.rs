@@ -47,7 +47,7 @@ pub(super) fn merge<S: RowSource>(
         .into_iter()
         .enumerate()
         .filter(|(_, source)| source.has_row())
-        .map(|(position, source)| Reverse(ByFront(position, source)))
+        .map(|(index, source)| Reverse(ByFront(index, source)))
         .collect();
 
     let mut distinct = Distinct::copied(arity);
@@ -64,7 +64,7 @@ pub(super) fn merge<S: RowSource>(
     }
 }
 
-/// A source with its position in the list, ordered by its front row and then the position,
+/// A source with its index among the sources, ordered by its front row and then the index,
 /// for the heap of a [merge]; only sources that have a row are compared.
 struct ByFront<S>(usize, S);
 
@@ -95,7 +95,7 @@ impl<S: RowSource> Ord for ByFront<S> {
 mod tests {
     use super::*;
 
-    /// A run of integer rows of arity 2, read as a source, with a name.
+    /// A run of integer rows of arity 2, read as a source, with its index among the sources.
     struct Rows(Vec<[StorageValue; 2]>, usize, usize);
 
     impl RowSource for Rows {
@@ -112,14 +112,14 @@ mod tests {
         }
     }
 
-    /// A source of the given rows, under the given name.
-    fn rows(name: usize, rows: &[[i64; 2]]) -> Rows {
+    /// A source of the given rows, with the given index among the sources.
+    fn rows(index: usize, rows: &[[i64; 2]]) -> Rows {
         Rows(
             rows.iter()
                 .map(|row| row.map(StorageValue::integer))
                 .collect(),
             0,
-            name,
+            index,
         )
     }
 
@@ -145,10 +145,10 @@ mod tests {
             (0, [3, 3], RowChange::At(0)),
         ];
         assert_eq!(merged.len(), expected.len());
-        for ((position, row, change), (expected_position, expected_row, expected_change)) in
+        for ((index, row, change), (expected_index, expected_row, expected_change)) in
             merged.iter().zip(&expected)
         {
-            assert_eq!(position, expected_position);
+            assert_eq!(index, expected_index);
             assert_eq!(row, &expected_row.map(StorageValue::integer));
             assert_eq!(change, expected_change);
         }

@@ -11,10 +11,10 @@ fn run_against(source: &str, result: &'static str) -> (Engine, Responder) {
     let mut engine = Engine::new();
     let program = parse_into(&mut engine, source);
     fetcher
-        .drive(&mut engine, |engine| engine.load(program))
+        .serve(&mut engine, |engine| engine.load(program))
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     fetcher
-        .drive(&mut engine, Engine::reason)
+        .serve(&mut engine, Engine::reason)
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     (engine, fetcher)
 }

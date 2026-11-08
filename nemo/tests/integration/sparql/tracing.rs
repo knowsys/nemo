@@ -62,10 +62,10 @@ fn fetched_facts_trace_to_their_bindings() {
     engine.retain_imports();
     let program = parse_into(&mut engine, ANCESTORS);
     endpoint
-        .drive(&mut engine, |engine| engine.load(program))
+        .serve(&mut engine, |engine| engine.load(program))
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     endpoint
-        .drive(&mut engine, Engine::reason)
+        .serve(&mut engine, Engine::reason)
         .unwrap_or_else(|problem| panic!("{problem:?}"));
 
     let fact = Fact::parse("parent(<urn:b>, <urn:c>) .").expect("parses");
@@ -105,10 +105,10 @@ fn rewritten_rules_trace_as_written() {
     let endpoint = parents_generic();
     let program = parse_into(&mut engine, ANCESTORS_GENERIC);
     endpoint
-        .drive(&mut engine, |engine| engine.load(program))
+        .serve(&mut engine, |engine| engine.load(program))
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     endpoint
-        .drive(&mut engine, Engine::reason)
+        .serve(&mut engine, Engine::reason)
         .unwrap_or_else(|problem| panic!("{problem:?}"));
 
     let fact = Fact::parse("anc(<urn:c>) .").expect("parses");
@@ -159,10 +159,10 @@ next(?e, ?n) :- event(?e), triple(?e, <urn:p1>, ?stmt), triple(?stmt, <urn:p2>, 
 "#,
     );
     endpoint
-        .drive(&mut engine, |engine| engine.load(program))
+        .serve(&mut engine, |engine| engine.load(program))
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     endpoint
-        .drive(&mut engine, Engine::reason)
+        .serve(&mut engine, Engine::reason)
         .unwrap_or_else(|problem| panic!("{problem:?}"));
 
     let fact = Fact::parse("next(<urn:e>, <urn:n>) .").expect("parses");
@@ -210,10 +210,10 @@ event(?e) :- triple(?e, <urn:type>, <urn:Event>) .
 "#,
     );
     endpoint
-        .drive(&mut engine, |engine| engine.load(program))
+        .serve(&mut engine, |engine| engine.load(program))
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     endpoint
-        .drive(&mut engine, Engine::reason)
+        .serve(&mut engine, Engine::reason)
         .unwrap_or_else(|problem| panic!("{problem:?}"));
 
     let fact = Fact::parse("event(<urn:x>) .").expect("parses");
@@ -241,10 +241,10 @@ fn predicates_a_stage_introduced_cannot_be_traced() {
     let endpoint = parents_generic();
     let program = parse_into(&mut engine, ANCESTORS_GENERIC);
     endpoint
-        .drive(&mut engine, |engine| engine.load(program))
+        .serve(&mut engine, |engine| engine.load(program))
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     endpoint
-        .drive(&mut engine, Engine::reason)
+        .serve(&mut engine, Engine::reason)
         .unwrap_or_else(|problem| panic!("{problem:?}"));
 
     let fact = Fact::parse("triple_query1(<urn:a>, <urn:b>) .").expect("parses");

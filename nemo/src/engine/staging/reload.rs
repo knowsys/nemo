@@ -340,7 +340,7 @@ impl Engine {
             let saved_extensional = self.extensional.clone();
             let replaced = self.unregister(&rebuilt);
             let preloaded = preloaded(new_statements, &saved_state, &self.predicates);
-            let instant = self.loading_instant();
+            let context = self.loading_context();
 
             let state = match load.prepared.take() {
                 Some(state) => state,
@@ -348,7 +348,7 @@ impl Engine {
                     let mut state = self.translation.clone();
                     state.clear_statement_state();
                     let (stores, mut setup) =
-                        self.translation_parts(Purpose::of_load(stages), instant);
+                        self.translation_parts(Purpose::of_load(stages), context);
                     setup.written = Some(written);
                     setup.previous_types = Some(previous);
                     let mut translator =
@@ -381,7 +381,7 @@ impl Engine {
                 }
             };
 
-            let (stores, mut setup) = self.translation_parts(Purpose::of_load(stages), instant);
+            let (stores, mut setup) = self.translation_parts(Purpose::of_load(stages), context);
             setup.written = Some(written);
             setup.previous_types = Some(previous);
             let mut translator = translation::Translator::new(stores, setup, state, preloaded);

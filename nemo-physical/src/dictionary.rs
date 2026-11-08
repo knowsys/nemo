@@ -376,35 +376,35 @@ impl Dictionary {
     /// use nemo_physical::dictionary::Dictionary;
     ///
     /// let mut dictionary = Dictionary::new();
-    /// let shared = dictionary.label_scope("source");
+    /// let shared = dictionary.shared_label_scope("source");
     /// let first = dictionary.labeled_null(shared, "b0");
     ///
     /// // The same label in the same scope names the same null.
-    /// let again = dictionary.label_scope("source");
+    /// let again = dictionary.shared_label_scope("source");
     /// assert_eq!(dictionary.labeled_null(again, "b0"), first);
     ///
     /// // Another scope's label names another null, which reports its scope.
     /// let other = dictionary.fresh_label_scope("source");
     /// assert_ne!(dictionary.labeled_null(other, "b0"), first);
-    /// assert_eq!(dictionary.null_scope(first), Some("source"));
+    /// assert_eq!(dictionary.null_scope_name(first), Some("source"));
     ///
     /// // A closed scope forgets its labels: the scope opened next under its name
     /// // mints anew, and the old null stays a value.
     /// dictionary.close_label_scope(shared);
-    /// let reopened = dictionary.label_scope("source");
+    /// let reopened = dictionary.shared_label_scope("source");
     /// assert_ne!(dictionary.labeled_null(reopened, "b0"), first);
     ///
     /// // A null minted fresh, without a label, has no scope.
     /// let fresh = dictionary.fresh_null();
-    /// assert_eq!(dictionary.null_scope(fresh), None);
+    /// assert_eq!(dictionary.null_scope_name(fresh), None);
     /// ```
-    pub fn label_scope(&mut self, name: &str) -> LabelScope {
+    pub fn shared_label_scope(&mut self, name: &str) -> LabelScope {
         self.null_labels.shared(name)
     }
 
     /// Opens a label scope that no other call returns.
     ///
-    /// The name only reports which scope minted a null ([null_scope](Self::null_scope)).
+    /// The name only reports which scope minted a null ([null_scope_name](Self::null_scope_name)).
     /// The scope stays open until it is [closed](Self::close_label_scope).
     pub fn fresh_label_scope(&mut self, name: &str) -> LabelScope {
         self.null_labels.fresh(name)
@@ -442,7 +442,7 @@ impl Dictionary {
 
     /// Returns the name of the scope in which a label named the null of the given id,
     /// open or closed, or `None` for a null minted fresh and for any other id.
-    pub fn null_scope(&self, id: u64) -> Option<&str> {
+    pub fn null_scope_name(&self, id: u64) -> Option<&str> {
         match TermId::from_raw(id).decompose() {
             Some((TermLane::Null, index)) if index < self.nulls => self.null_labels.scope_of(index),
             _ => None,
@@ -869,7 +869,7 @@ mod tests {
     fn labels_name_one_null_per_open_scope() {
         let mut dictionary = Dictionary::new();
         let existential = dictionary.fresh_null();
-        let program = dictionary.label_scope("program");
+        let program = dictionary.shared_label_scope("program");
         let a = dictionary.labeled_null(program, "a");
         assert_eq!(dictionary.labeled_null(program, "a"), a);
         assert_eq!(dictionary.find_labeled_null(program, "a"), Some(a));
@@ -884,27 +884,27 @@ mod tests {
         assert_ne!(in_first, in_second);
         assert_ne!(in_first, a);
         // A shared scope is found by its name until it closes.
-        assert_eq!(dictionary.label_scope("program"), program);
+        assert_eq!(dictionary.shared_label_scope("program"), program);
 
         // Every null reports the scope that minted it by a label, after it closed too,
         // interleaved with fresh nulls.
         let later = dictionary.fresh_null();
         dictionary.close_label_scope(first);
         dictionary.close_label_scope(second);
-        assert_eq!(dictionary.null_scope(existential), None);
-        assert_eq!(dictionary.null_scope(a), Some("program"));
-        assert_eq!(dictionary.null_scope(in_first), Some("data.ttl"));
-        assert_eq!(dictionary.null_scope(in_second), Some("data.ttl"));
-        assert_eq!(dictionary.null_scope(later), None);
+        assert_eq!(dictionary.null_scope_name(existential), None);
+        assert_eq!(dictionary.null_scope_name(a), Some("program"));
+        assert_eq!(dictionary.null_scope_name(in_first), Some("data.ttl"));
+        assert_eq!(dictionary.null_scope_name(in_second), Some("data.ttl"));
+        assert_eq!(dictionary.null_scope_name(later), None);
         assert_eq!(
-            dictionary.null_scope(TermId::compose(TermLane::Null, 99).raw()),
+            dictionary.null_scope_name(TermId::compose(TermLane::Null, 99).raw()),
             None
         );
 
         // Closing the fresh scopes left the shared one open.
         assert_eq!(dictionary.labeled_null(program, "a"), a);
         dictionary.close_label_scope(program);
-        let reopened = dictionary.label_scope("program");
+        let reopened = dictionary.shared_label_scope("program");
         assert_ne!(reopened, program);
         assert_ne!(dictionary.labeled_null(reopened, "a"), a);
 
@@ -1067,7 +1067,7 @@ mod tests {
         for value in &values {
             dictionary.encode(value.as_ref()).expect("fits");
         }
-        let scope = dictionary.label_scope("document");
+        let scope = dictionary.shared_label_scope("document");
         dictionary.labeled_null(scope, "b0");
 
         // Destructured whole, so that a new store cannot go unchecked.

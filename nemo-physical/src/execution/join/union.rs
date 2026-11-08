@@ -20,22 +20,22 @@ use crate::execution::join::cursor::{Clip, SeekCursor};
 #[derive(Debug)]
 pub(crate) struct UnionCursor<'a, C: SeekCursor> {
     /// The cursors over the column of each block, in block order.
-    blocks: BumpVec<'a, C>,
+    cursors: BumpVec<'a, C>,
     /// The blocks the union reads: those given a range since the ranges were last cleared,
     /// or every block before the first clear.
-    entered: BumpVec<'a, usize>,
-    /// The value the union stands at, the smallest one among the entered block cursors;
-    /// `None` once every one of them is exhausted.
+    reading: BumpVec<'a, usize>,
+    /// The value the union stands at, the smallest one among the cursors of the blocks it
+    /// reads, or `None` once every one of them is exhausted.
     current: Option<C::Value>,
 }
 
 impl<'a, C: SeekCursor> UnionCursor<'a, C> {
     /// Creates the union of the given block cursors, reading every block,
     /// and standing at their smallest value.
-    pub(crate) fn new(blocks: BumpVec<'a, C>, bump: &'a Bump) -> Self {
+    pub(crate) fn new(cursors: BumpVec<'a, C>, bump: &'a Bump) -> Self {
         let mut union = Self {
-            entered: BumpVec::from_iter_in(0..blocks.len(), bump),
-            blocks,
+            reading: BumpVec::from_iter_in(0..cursors.len(), bump),
+            cursors,
             current: None,
         };
         union.settle();
@@ -46,41 +46,41 @@ impl<'a, C: SeekCursor> UnionCursor<'a, C> {
     /// until [set_range](Self::set_range) gives it a range again.
     #[inline]
     pub(crate) fn clear_ranges(&mut self) {
-        self.entered.clear();
+        self.reading.clear();
     }
 
-    /// Restricts the cursor of one block to a range, and enters the block into the union;
-    /// the union takes the change into account at its next [rewind](Self::rewind).
+    /// Restricts the cursor of one block to a range, and adds the block to those the union
+    /// reads. The union takes the change into account at its next [rewind](Self::rewind).
     ///
-    /// A block is entered at most once between two clears.
+    /// A block is added at most once between two clears.
     #[inline]
     pub(crate) fn set_range(&mut self, block: usize, range: Range<usize>) {
         debug_assert!(
-            !self.entered.contains(&block),
-            "a block is entered once per descent"
+            !self.reading.contains(&block),
+            "a block is added once per descent"
         );
-        self.blocks[block].set_range(range);
-        self.entered.push(block);
+        self.cursors[block].set_range(range);
+        self.reading.push(block);
     }
 
     /// Clips every block cursor to a range of values.
     pub(crate) fn clip(&mut self, clip: Clip<C::Value>) {
-        for cursor in &mut self.blocks {
+        for cursor in &mut self.cursors {
             cursor.clip(clip);
         }
         self.settle();
     }
 
-    /// Rewinds the cursor of every entered block to the start of its range.
+    /// Rewinds the cursor of every block the union reads to the start of its range.
     #[inline]
     pub(crate) fn rewind(&mut self) {
-        for &block in &self.entered {
-            self.blocks[block].rewind();
+        for &block in &self.reading {
+            self.cursors[block].rewind();
         }
         self.settle();
     }
 
-    /// Returns whether some entered block cursor still points at a value.
+    /// Returns whether the cursor of some block the union reads still points at a value.
     #[inline]
     pub(crate) fn has_current(&self) -> bool {
         self.current.is_some()
@@ -94,15 +94,15 @@ impl<'a, C: SeekCursor> UnionCursor<'a, C> {
             .expect("the union is read only while it has a current value")
     }
 
-    /// Calls `found` with each entered block whose cursor stands at the union's value,
-    /// and that cursor's position in the block's column, in the order the blocks were entered.
+    /// Calls `found` with each block the union reads whose cursor stands at the union's value,
+    /// and that cursor's position in the block's column, in the order the blocks were added.
     #[inline]
     pub(crate) fn for_each_match(&self, mut found: impl FnMut(usize, usize)) {
         let Some(current) = self.current else {
             return;
         };
-        for &block in &self.entered {
-            let cursor = &self.blocks[block];
+        for &block in &self.reading {
+            let cursor = &self.cursors[block];
             if cursor.has_current() && cursor.current_value() == current {
                 found(block, cursor.position());
             }
@@ -110,34 +110,34 @@ impl<'a, C: SeekCursor> UnionCursor<'a, C> {
     }
 
     /// Steps past the union's value and returns the next one,
-    /// or returns `None` once every entered block cursor is exhausted.
+    /// or returns `None` once the cursor of every block the union reads is exhausted.
     #[inline]
     pub(crate) fn next(&mut self) -> Option<C::Value> {
         let current = self.current?;
-        if let [block] = *self.entered {
-            self.current = self.blocks[block].next();
+        if let [block] = *self.reading {
+            self.current = self.cursors[block].next();
             return self.current;
         }
         self.move_blocks(|value| value == current, SeekCursor::next)
     }
 
     /// Moves forward to the first value at or above `target` and returns it,
-    /// or returns `None` if no entered block holds such a value.
+    /// or returns `None` if no block the union reads holds such a value.
     #[inline]
     pub(crate) fn seek(&mut self, target: C::Value) -> Option<C::Value> {
         let current = self.current?;
         if current >= target {
             return Some(current);
         }
-        if let [block] = *self.entered {
-            self.current = self.blocks[block].seek(target);
+        if let [block] = *self.reading {
+            self.current = self.cursors[block].seek(target);
             return self.current;
         }
         self.move_blocks(|value| value < target, |cursor| cursor.seek(target))
     }
 
-    /// Moves each entered block cursor whose value is `stale` by `step`,
-    /// and stands the union at the smallest value the entered block cursors then stand at.
+    /// Moves the cursor of each block the union reads whose value is `stale` by `step`,
+    /// and stands the union at the smallest value those cursors then stand at.
     #[inline]
     fn move_blocks(
         &mut self,
@@ -145,8 +145,8 @@ impl<'a, C: SeekCursor> UnionCursor<'a, C> {
         mut step: impl FnMut(&mut C) -> Option<C::Value>,
     ) -> Option<C::Value> {
         let mut smallest: Option<C::Value> = None;
-        for &block in &self.entered {
-            let cursor = &mut self.blocks[block];
+        for &block in &self.reading {
+            let cursor = &mut self.cursors[block];
             if !cursor.has_current() {
                 continue;
             }
@@ -166,13 +166,13 @@ impl<'a, C: SeekCursor> UnionCursor<'a, C> {
         smallest
     }
 
-    /// Stands the union at the smallest value among the entered block cursors.
+    /// Stands the union at the smallest value among the cursors of the blocks it reads.
     #[inline]
     fn settle(&mut self) {
         self.current = self
-            .entered
+            .reading
             .iter()
-            .map(|&block| &self.blocks[block])
+            .map(|&block| &self.cursors[block])
             .filter(|cursor| cursor.has_current())
             .map(SeekCursor::current_value)
             .min();
@@ -239,7 +239,7 @@ mod tests {
     }
 
     #[test]
-    fn only_entered_blocks_are_read() {
+    fn only_the_blocks_given_ranges_are_read() {
         let bump = Bump::new();
         let mut cursor = union(&bump, &[&[1, 3, 5, 7], &[2, 3, 8], &[4, 6]]);
         cursor.clear_ranges();
@@ -248,7 +248,7 @@ mod tests {
         cursor.rewind();
         assert_eq!(values(&mut cursor), [3, 4, 5, 6]);
 
-        // A single entered block is read alone, seeks included.
+        // A union reading a single block moves its cursor alone, seeks included.
         cursor.clear_ranges();
         cursor.set_range(1, 1..3);
         cursor.rewind();
@@ -257,7 +257,7 @@ mod tests {
         assert_eq!(cursor.next(), None);
         assert!(!cursor.has_current());
 
-        // Rewinding restores the entered blocks, and no others.
+        // Rewinding reads the blocks given ranges, and no others.
         cursor.rewind();
         assert_eq!(values(&mut cursor), [3, 8]);
 

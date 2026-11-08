@@ -214,7 +214,7 @@ impl Trie {
     }
 
     /// Returns the index of the row in storage order, or `None` if the trie does not hold it.
-    pub(crate) fn position(&self, row: &[StorageValue]) -> Option<usize> {
+    pub(crate) fn index_of(&self, row: &[StorageValue]) -> Option<usize> {
         debug_assert_eq!(row.len(), self.arity, "the row matches the trie's arity");
         if self.arity == 0 {
             return (!self.is_empty()).then_some(0);

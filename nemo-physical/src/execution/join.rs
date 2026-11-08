@@ -231,10 +231,11 @@ impl<'a> TrieJoin<'a> {
 /// the layer, and the index of the column's cursor there.
 fn column_occurrences<'a>(
     shape: &JoinShape<'a>,
-    inputs: usize,
+    input_count: usize,
     bump: &'a Bump,
 ) -> BumpVec<'a, BumpVec<'a, (usize, usize)>> {
-    let mut occurrences = BumpVec::from_iter_in((0..inputs).map(|_| BumpVec::new_in(bump)), bump);
+    let mut occurrences =
+        BumpVec::from_iter_in((0..input_count).map(|_| BumpVec::new_in(bump)), bump);
     for (layer_index, layer) in shape.layers.iter().enumerate() {
         for (cursor, input_column) in layer.iter().enumerate() {
             let slots = &mut occurrences[input_column.input];

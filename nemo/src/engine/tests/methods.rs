@@ -421,7 +421,10 @@ fn only_a_successful_loading_call_chooses_the_instant() {
     let missing = || parse("@import p from csv { resource = \"no-such-file.csv\" } .");
     let mut engine = Engine::new();
     assert!(engine.load(missing()).is_err(), "the resource is missing");
-    assert!(engine.instant.is_none(), "a failed load chooses no instant");
+    assert!(
+        engine.next_context.is_none(),
+        "a failed load chooses no instant"
+    );
 
     let progress = engine
         .start_load(parse(
@@ -433,23 +436,23 @@ fn only_a_successful_loading_call_chooses_the_instant() {
         "the import is suspended for its resource"
     );
     assert!(
-        engine.instant.is_some(),
+        engine.next_context.is_some(),
         "a suspended load keeps its choice"
     );
     assert!(engine.discard_pending());
     assert!(
-        engine.instant.is_none(),
+        engine.next_context.is_none(),
         "a discarded load chooses no instant"
     );
 
     engine
         .load(parse("p(1) ."))
         .unwrap_or_else(|problem| panic!("{problem:?}"));
-    let chosen = engine.instant;
+    let chosen = engine.next_context;
     assert!(chosen.is_some(), "a successful load chooses the instant");
     assert!(engine.extend(missing()).is_err(), "the resource is missing");
     assert_eq!(
-        engine.instant, chosen,
+        engine.next_context, chosen,
         "a failed extension keeps the load's instant"
     );
 }

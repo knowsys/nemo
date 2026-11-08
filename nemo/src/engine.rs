@@ -154,13 +154,13 @@ pub struct Engine {
     /// An explanation re-executes a run's applications in the run's context.
     /// Cleared with the application log.
     contexts: evaluate::contexts::RunContexts,
-    /// The instant chosen by the first loading call since the last reasoning run began,
-    /// at which the loading calls evaluate the `NOW()` of facts and option values,
-    /// and the next run evaluates its own.
+    /// The context chosen by the first loading call since the last reasoning run began,
+    /// whose instant the loading calls evaluate the `NOW()` of facts and option values at,
+    /// and the next run its own.
     ///
     /// `None` if no loading call chose one since, or if the call that chose it failed or was
     /// discarded.
-    instant: Option<EvaluationContext>,
+    next_context: Option<EvaluationContext>,
     /// The plan skeletons of the compiled program's rules.
     skeletons: evaluate::application::PlanSkeletons,
     /// The directory relative import resources resolve against, if one is set.
@@ -421,7 +421,7 @@ impl Engine {
     /// Panics as [load](Self::load) does.
     pub fn start_load(&mut self, program: Program) -> Result<Progress, Diagnostic> {
         self.refuse_while_suspended("load")?;
-        let outcome = self.choosing_instant(|engine| engine.load_program(program));
+        let outcome = self.choosing_context(|engine| engine.load_program(program));
         self.progress(outcome)
     }
 
@@ -470,7 +470,7 @@ impl Engine {
     /// Panics as [extend](Self::extend) does.
     pub fn start_extend(&mut self, program: Program) -> Result<Progress, Diagnostic> {
         self.refuse_while_suspended("extend")?;
-        let outcome = self.choosing_instant(|engine| engine.extend_program(program));
+        let outcome = self.choosing_context(|engine| engine.extend_program(program));
         self.progress(outcome)
     }
 
@@ -520,7 +520,7 @@ impl Engine {
     /// Panics as [reload](Self::reload) does.
     pub fn start_reload(&mut self, program: Program) -> Result<Progress, Diagnostic> {
         self.refuse_while_suspended("reload")?;
-        let outcome = self.choosing_instant(|engine| engine.reload_program(program));
+        let outcome = self.choosing_context(|engine| engine.reload_program(program));
         self.progress(outcome)
     }
 
@@ -603,7 +603,7 @@ impl Engine {
         rows: impl IntoIterator<Item = Vec<DataValue>>,
     ) -> Result<(), Diagnostic> {
         self.refuse_while_suspended("import_rows")?;
-        self.choosing_instant(|engine| engine.admit_rows(predicate, rows))
+        self.choosing_context(|engine| engine.admit_rows(predicate, rows))
     }
 
     /// Sets the client the plain methods ([load](Self::load), [extend](Self::extend),

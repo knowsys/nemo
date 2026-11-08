@@ -78,7 +78,7 @@ pub fn blank_node_scope(endpoint: &str) -> String {
 /// rather than one a rule or another source made.
 pub fn is_endpoint_blank_node(dictionary: &Dictionary, id: u64) -> bool {
     dictionary
-        .null_scope(id)
+        .null_scope_name(id)
         .is_some_and(|scope| scope.starts_with(BLANK_NODE_SCOPE))
 }
 

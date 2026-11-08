@@ -72,8 +72,8 @@ diagnostic_kinds! {
                         checked before it was linked. Linking instantiates the modules it \
                         uses.",
                hint "call `Engine::link` on the program first";
-        AwaitingRemote { count: Count, first: String }
-            => AWAITING_REMOTE = 491, error,
+        NoClient { count: Count, first: String }
+            => NO_CLIENT = 491, error,
                "the engine has no client to send {count} remote request{count:#}, one of them \
                 to `{first}`",
                explain "The method needs data from the network. The engine sends such \

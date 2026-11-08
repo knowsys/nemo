@@ -640,7 +640,7 @@ fn responses_sharing_a_scope_agree_on_blank_nodes() {
     assert_ne!(read(&own, &mut dictionary), read(&own, &mut dictionary));
     // In the endpoint's scope, one label names one null in every response,
     // which reports the endpoint as its source.
-    let scope = dictionary.label_scope(&blank_node_scope("http://e/sparql"));
+    let scope = dictionary.shared_label_scope(&blank_node_scope("http://e/sparql"));
     let shared = SparqlReader::new(2, RowSelection::default()).with_blank_node_scope(scope);
     let first = read(&shared, &mut dictionary);
     assert_eq!(read(&shared, &mut dictionary), first);

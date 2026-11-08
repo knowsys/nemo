@@ -163,7 +163,7 @@ impl Responder {
 
     /// Calls an engine method with this responder as the engine's client,
     /// and gives the engine its own client back afterwards.
-    pub(crate) fn drive(
+    pub(crate) fn serve(
         &self,
         engine: &mut Engine,
         call: impl FnOnce(&mut Engine) -> Result<(), Diagnostic>,

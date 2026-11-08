@@ -366,7 +366,10 @@ impl Engine {
         // A new run evaluates at the instant its facts were loaded at, if any were.
         let context = match &resumed {
             Some(suspended) => suspended.context,
-            None => self.instant.take().unwrap_or_else(EvaluationContext::now),
+            None => self
+                .next_context
+                .take()
+                .unwrap_or_else(EvaluationContext::now),
         };
         // New input facts first invalidate the derived facts that depend
         // on them through negation or aggregation (see `recover`). The

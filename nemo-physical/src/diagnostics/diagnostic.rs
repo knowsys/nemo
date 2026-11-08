@@ -166,6 +166,12 @@ impl Diagnostic {
         self
     }
 
+    /// Removes the hints, for a layer above that gives hints of its own.
+    pub fn without_hints(mut self) -> Self {
+        self.0.hints.clear();
+        self
+    }
+
     /// Rewrites every text the diagnostic shows: its message, its labels'
     /// messages, its field values, its notes, and its hints.
     ///
@@ -277,5 +283,15 @@ mod tests {
         assert_eq!(diagnostic.field("predicate"), Some("b"));
         assert_eq!(diagnostic.notes(), ["bbout `b`"]);
         assert_eq!(diagnostic.hints(), ["renbme `b`"]);
+    }
+
+    #[test]
+    fn a_layer_above_replaces_the_hints() {
+        let diagnostic = Diagnostic::error(Code::new(1), "refused")
+            .with_hint("call `resume()`")
+            .with_hint("call `discard_pending()`")
+            .without_hints()
+            .with_hint("call `discardPending`");
+        assert_eq!(diagnostic.hints(), ["call `discardPending`"]);
     }
 }

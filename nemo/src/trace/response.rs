@@ -70,7 +70,7 @@ impl TraceResponse {
     ///
     /// Panics if no fact was requested at that position.
     pub fn proof(&self, fact: usize) -> Option<Proof<'_>> {
-        self.facts[fact].node.map(|id| self.node(id))
+        self.facts[fact].node.map(|id| self.node_proof(id))
     }
 
     /// Returns the node with the given id, to walk its derivation.
@@ -78,7 +78,7 @@ impl TraceResponse {
     /// # Panics
     ///
     /// Panics if the response holds no node with that id.
-    pub fn node(&self, id: usize) -> Proof<'_> {
+    pub fn node_proof(&self, id: usize) -> Proof<'_> {
         assert!(id < self.nodes.len(), "the response holds no node {id}");
         Proof::new(self, id)
     }

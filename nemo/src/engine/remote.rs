@@ -201,9 +201,9 @@ pub(super) struct SuspendedLoad {
     /// The imports asking for the same request as one in a slot,
     /// which take its response once it comes.
     pub(super) sharing: Vec<ResourceRequest>,
-    /// Whether the loading call chose the instant the next run evaluates at,
+    /// Whether the loading call chose the context the next run evaluates in,
     /// a choice undone if the call fails or is discarded.
-    pub(super) chose_instant: bool,
+    pub(super) chose_context: bool,
     /// The index of the first report the loading call made,
     /// from which its reports are withdrawn if it is discarded.
     pub(super) reports_from: usize,
@@ -223,7 +223,7 @@ impl SuspendedLoad {
             fetched: HashMap::new(),
             slots: RequestSlots::default(),
             sharing: Vec::new(),
-            chose_instant: false,
+            chose_context: false,
         }
     }
 
@@ -397,9 +397,7 @@ impl Engine {
     pub(super) fn progress(&self, outcome: Result<(), Diagnostic>) -> Result<Progress, Diagnostic> {
         match outcome {
             Ok(()) => Ok(Progress::Done),
-            Err(problem)
-                if problem.code() == codes::AWAITING_REMOTE && self.suspension.is_some() =>
-            {
+            Err(problem) if problem.code() == codes::NO_CLIENT && self.suspension.is_some() => {
                 Ok(Progress::Suspended(self.pending()))
             }
             Err(problem) => Err(problem),
@@ -470,7 +468,7 @@ impl Engine {
             let responses = match &self.client.0 {
                 Some(client) => client.fetch_all(&requests, &|| token.is_cancelled()),
                 None => {
-                    let problem = EngineError::AwaitingRemote {
+                    let problem = EngineError::NoClient {
                         count: requests.len().into(),
                         first: requests
                             .first()
@@ -511,14 +509,14 @@ impl Engine {
         match self.suspension.take() {
             None => Ok(()),
             Some(Suspension::Load(load)) => {
-                let chose = load.chose_instant;
+                let chose = load.chose_context;
                 let already = self.pipeline.reports().len();
                 let outcome = match load.kind {
                     LoadKind::Load => self.load_staged(load, already),
                     LoadKind::Extend => self.extend_staged(load, already),
                     LoadKind::Reload => self.reload_staged(load, already),
                 };
-                self.settle_instant(chose, &outcome);
+                self.settle_context(chose, &outcome);
                 outcome
             }
             Some(suspension @ Suspension::Reason(_)) => {
@@ -532,7 +530,7 @@ impl Engine {
     ///
     /// A suspended first load gives the rows added through `import_rows` before it back to
     /// the engine, and a suspended loading call withdraws its reports and undoes its choice of
-    /// the instant.
+    /// the context.
     /// A suspended run ends as a cancelled one does, reporting what its fetches skipped.
     pub(super) fn abandon(&mut self) {
         let load = match self.suspension.take() {
@@ -543,8 +541,8 @@ impl Engine {
             }
             None => return,
         };
-        if load.chose_instant {
-            self.instant = None;
+        if load.chose_context {
+            self.next_context = None;
         }
         self.pipeline.withdraw_reports(load.reports_from);
         if load.imported_rows > 0 {
@@ -568,7 +566,7 @@ impl Engine {
             .first()
             .map(|request| request.request.url.clone())
             .unwrap_or_default();
-        EngineError::AwaitingRemote {
+        EngineError::NoClient {
             count: pending.len().into(),
             first,
         }

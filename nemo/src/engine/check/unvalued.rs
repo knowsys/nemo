@@ -43,7 +43,7 @@ use crate::{
 ///
 /// `ids` are the statements' ids, in the same order;
 /// the ids returned are aligned with the statements returned.
-pub(in crate::engine) fn open_parameters(
+pub(in crate::engine) fn rewrite_unvalued(
     statements: Vec<Statement>,
     ids: Vec<StatementId>,
 ) -> (Vec<Statement>, Vec<StatementId>) {
@@ -51,14 +51,14 @@ pub(in crate::engine) fn open_parameters(
     if unvalued.is_empty() {
         return (statements, ids);
     }
-    let opened = opened_predicates(&statements, &unvalued);
-    let mut inputs = HashSet::new();
+    let as_inputs = input_predicates(&statements, &unvalued);
+    let mut given = HashSet::new();
     statements
         .into_iter()
         .zip(ids)
         .filter_map(|(statement, id)| {
             Some((
-                open_statement(statement, &unvalued, &opened, &mut inputs)?,
+                rewrite_statement(statement, &unvalued, &as_inputs, &mut given)?,
                 id,
             ))
         })
@@ -67,7 +67,7 @@ pub(in crate::engine) fn open_parameters(
 
 /// Returns the predicates of the imports reading a parameter without a value,
 /// which the check reads as inputs.
-fn opened_predicates(statements: &[Statement], unvalued: &HashSet<String>) -> HashSet<Identifier> {
+fn input_predicates(statements: &[Statement], unvalued: &HashSet<String>) -> HashSet<Identifier> {
     statements
         .iter()
         .filter_map(|statement| match statement {
@@ -136,17 +136,19 @@ fn global(term: &Term) -> Option<&str> {
 
 /// Returns a statement as the check reads it, or `None` if the check leaves it out.
 ///
-/// `opened` are the predicates the check reads as inputs (see [opened_predicates]),
-/// and `inputs` those given their `@input` so far.
-fn open_statement(
+/// `as_inputs` are the predicates the check reads as inputs (see [input_predicates]),
+/// and `given` those given their `@input` so far.
+fn rewrite_statement(
     statement: Statement,
     unvalued: &HashSet<String>,
-    opened: &HashSet<Identifier>,
-    inputs: &mut HashSet<Identifier>,
+    as_inputs: &HashSet<Identifier>,
+    given: &mut HashSet<Identifier>,
 ) -> Option<Statement> {
     match statement {
-        Statement::Directive(Directive::Import(import)) if opened.contains(&import.predicate) => {
-            let first = inputs.insert(import.predicate.clone());
+        Statement::Directive(Directive::Import(import))
+            if as_inputs.contains(&import.predicate) =>
+        {
+            let first = given.insert(import.predicate.clone());
             first.then_some(Statement::Directive(Directive::Input(InputDirective {
                 predicate: import.predicate,
                 columns: None,
@@ -168,7 +170,7 @@ fn open_statement(
             })))
         }
         statement if !reads(&statement, unvalued) => Some(statement),
-        Statement::Rule(rule) => Some(Statement::Rule(open_rule(rule, unvalued))),
+        Statement::Rule(rule) => Some(Statement::Rule(rewrite_rule(rule, unvalued))),
         Statement::Fact(fact) => {
             let rule = Rule {
                 attributes: Vec::new(),
@@ -181,7 +183,7 @@ fn open_statement(
                 body: Vec::new(),
                 span: fact.span,
             };
-            Some(Statement::Rule(open_rule(rule, unvalued)))
+            Some(Statement::Rule(rewrite_rule(rule, unvalued)))
         }
         Statement::Directive(Directive::Export(_)) => None,
         // What else reads the parameter is an `@define`, kept for translation to ignore
@@ -192,7 +194,7 @@ fn open_statement(
 
 /// Returns a rule reading hidden variables in place of the parameters without a value,
 /// each bound by an extra body atom over the parameter's hidden predicate.
-fn open_rule(mut rule: Rule, unvalued: &HashSet<String>) -> Rule {
+fn rewrite_rule(mut rule: Rule, unvalued: &HashSet<String>) -> Rule {
     let mut read: Vec<String> = Vec::new();
     rule.walk(&mut |term| {
         if let Some(name) = global(term)

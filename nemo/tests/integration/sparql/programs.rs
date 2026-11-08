@@ -47,10 +47,10 @@ fn reloads_replace_a_bound_imports_scratch_with_its_width() {
     let mut engine = Engine::new();
     let program = parse_into(&mut engine, wide);
     fetcher
-        .drive(&mut engine, |engine| engine.load(program))
+        .serve(&mut engine, |engine| engine.load(program))
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     fetcher
-        .drive(&mut engine, Engine::reason)
+        .serve(&mut engine, Engine::reason)
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     assert_eq!(
         engine.rows("r").expect("derived"),
@@ -58,10 +58,10 @@ fn reloads_replace_a_bound_imports_scratch_with_its_width() {
     );
     let program = parse_into(&mut engine, narrow);
     fetcher
-        .drive(&mut engine, |engine| engine.reload(program))
+        .serve(&mut engine, |engine| engine.reload(program))
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     fetcher
-        .drive(&mut engine, Engine::reason)
+        .serve(&mut engine, Engine::reason)
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     assert_eq!(
         engine.rows("r").expect("derived"),
@@ -90,10 +90,10 @@ fn negated_remote_atoms_do_not_close_a_negative_cycle() {
         "#,
     );
     fetcher
-        .drive(&mut engine, |engine| engine.load(program))
+        .serve(&mut engine, |engine| engine.load(program))
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     fetcher
-        .drive(&mut engine, Engine::reason)
+        .serve(&mut engine, Engine::reason)
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     assert_eq!(engine.count("reach").expect("derived"), 3);
 }
@@ -154,20 +154,20 @@ fn extensions_rewrite_in_the_scope_of_the_loaded_program() {
         "#,
     );
     fetcher
-        .drive(&mut engine, |engine| engine.load(program))
+        .serve(&mut engine, |engine| engine.load(program))
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     fetcher
-        .drive(&mut engine, Engine::reason)
+        .serve(&mut engine, Engine::reason)
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     let extension = parse_into(
         &mut engine,
         "other(?o) :- t(<urn:b>, <urn:p>, ?o) . @output other .",
     );
     fetcher
-        .drive(&mut engine, |engine| engine.extend(extension))
+        .serve(&mut engine, |engine| engine.extend(extension))
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     fetcher
-        .drive(&mut engine, Engine::reason)
+        .serve(&mut engine, Engine::reason)
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     assert_eq!(
         engine.rows("next").expect("derived"),
@@ -188,10 +188,10 @@ fn a_failed_fetch_keeps_the_program() {
     let mut engine = Engine::new();
     let program = parse_into(&mut engine, ANCESTORS);
     refusing
-        .drive(&mut engine, |engine| engine.load(program))
+        .serve(&mut engine, |engine| engine.load(program))
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     let problem = refusing
-        .drive(&mut engine, Engine::reason)
+        .serve(&mut engine, Engine::reason)
         .expect_err("the fetch fails");
     assert_eq!(problem.code(), nemo::codes::UNFETCHABLE, "{problem:?}");
     assert!(
@@ -209,11 +209,11 @@ fn a_failed_fetch_keeps_the_program() {
         "the program is still loaded"
     );
     let again = refusing
-        .drive(&mut engine, Engine::reason)
+        .serve(&mut engine, Engine::reason)
         .expect_err("the fetch fails again");
     assert_eq!(again.code(), nemo::codes::UNFETCHABLE, "{again:?}");
     parents()
-        .drive(&mut engine, Engine::reason)
+        .serve(&mut engine, Engine::reason)
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     assert_eq!(engine.count("anc").expect("derived"), 4);
 }
@@ -235,7 +235,7 @@ dead(?x, ?y) :- word(?x), value(?x), triple(?x, <urn:parent>, ?y) .
 "#,
     );
     endpoint
-        .drive(&mut engine, |engine| engine.load(program))
+        .serve(&mut engine, |engine| engine.load(program))
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     let warnings: Vec<_> = engine
         .reports()
@@ -292,10 +292,10 @@ kind(?t) :- event(_, ?t) .
 "#,
     );
     endpoint
-        .drive(&mut engine, |engine| engine.load(program))
+        .serve(&mut engine, |engine| engine.load(program))
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     endpoint
-        .drive(&mut engine, Engine::reason)
+        .serve(&mut engine, Engine::reason)
         .unwrap_or_else(|problem| panic!("{problem:?}"));
 
     // `kind` reads one column of `event`, and the import standing for

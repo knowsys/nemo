@@ -35,7 +35,7 @@ use crate::{
         Engine,
         compile::{compiled::CompiledProgram, translation::TranslationState},
         evaluate::body::combined_positions,
-        trace::proof::{Proof, ProofNode},
+        trace::proof::{Explanation, ProofNode},
     },
     model::{
         Atom, Directive, ImportDirective, Literal, Rule, Statement, Substitution, Term, TermKind,
@@ -253,16 +253,16 @@ impl<'a> Lifter<'a> {
         let predicate = self.manager.name(node.table).to_owned();
         let terms = self.widen(&predicate, self.cells(&node.row), at);
         let lifted = match &node.proof {
-            Proof::Asserted if !self.replacing.contains_key(&predicate) => LiftedNode {
+            Explanation::Loaded if !self.replacing.contains_key(&predicate) => LiftedNode {
                 predicate,
                 terms,
                 proof: LiftedProof::Leaf,
             },
-            Proof::Asserted => {
+            Explanation::Loaded => {
                 let derivation = self.replacing_derivation(self.replacing[&predicate], &terms, 0);
                 self.finish(self.climb(derivation), predicate, terms, graph)
             }
-            Proof::Derived { .. } => {
+            Explanation::Derived { .. } => {
                 let derivation = self.derivation(node, &terms);
                 self.finish(self.climb(derivation), predicate, terms, graph)
             }
@@ -312,7 +312,7 @@ impl<'a> Lifter<'a> {
     /// Returns the derivation of a derived proof node, at its statement of the
     /// compiled program.
     fn derivation(&self, node: &ProofNode, terms: &[LiftedCell]) -> StageDerivation {
-        let Proof::Derived {
+        let Explanation::Derived {
             rule: index,
             step,
             witness,
@@ -488,7 +488,7 @@ impl<'a> Lifter<'a> {
         let Some(Premise::Node(node)) = &derivation.premises[position] else {
             return None;
         };
-        if !matches!(node.proof, Proof::Derived { .. }) {
+        if !matches!(node.proof, Explanation::Derived { .. }) {
             return None;
         }
         let terms = self.cells(&node.row);

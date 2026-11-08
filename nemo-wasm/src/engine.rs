@@ -58,7 +58,8 @@ impl Inner {
     /// Carries a program through one of the loading methods, and throws
     /// the errors it reports.
     ///
-    /// Stepwise, the method sends no request and returns the requests it is suspended for.
+    /// In its start form, the method sends no request and returns the requests it is suspended
+    /// for.
     /// Otherwise it completes, and throws N0491 if it needs data from the network,
     /// since the browser engine has no client of its own.
     fn ingest(
@@ -66,11 +67,11 @@ impl Inner {
         name: &str,
         text: String,
         kind: LoadKind,
-        stepwise: bool,
+        start_form: bool,
     ) -> Result<Progress, JsValue> {
         let mut progress = Progress::Done;
         let outcome = self.engine.ingest(name, text, |engine, model| {
-            if stepwise {
+            if start_form {
                 progress = match kind {
                     LoadKind::Load => engine.start_load(model),
                     LoadKind::Extend => engine.start_extend(model),
@@ -83,7 +84,6 @@ impl Inner {
                 LoadKind::Extend => engine.extend(model),
                 LoadKind::Reload => engine.reload(model),
             }
-            .map_err(with_async_hint)
         });
         // Linking reads the program's modules, so their sources are
         // taken in before its outcome is reported against them.
@@ -91,16 +91,6 @@ impl Inner {
         outcome
             .map(|()| progress)
             .map_err(|diagnostics| diagnostics::throw(diagnostics, &self.sources))
-    }
-}
-
-/// Adds to the error of a synchronous method that needed data from the network
-/// the hint to call its async form, which fetches it.
-fn with_async_hint(problem: nemo::diagnostics::Diagnostic) -> nemo::diagnostics::Diagnostic {
-    if problem.code() == nemo::codes::AWAITING_REMOTE {
-        problem.with_hint("call the method's async form, such as `loadAsync`, which fetches it")
-    } else {
-        problem
     }
 }
 
@@ -625,7 +615,7 @@ impl NemoEngine {
         inner
             .engine
             .reason()
-            .map_err(|diagnostic| inner.throw(with_async_hint(diagnostic)))
+            .map_err(|diagnostic| inner.throw(diagnostic))
     }
 
     /// Runs semi-naive evaluation as `reason` does, but sends no request:

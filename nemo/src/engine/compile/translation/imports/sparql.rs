@@ -152,7 +152,7 @@ impl<'a> Translator<'a> {
             .expect("the prefetch fetched or diagnosed every SPARQL import");
         let blank_nodes = self
             .dictionary
-            .label_scope(&nemo_io::sparql::blank_node_scope(&spec.endpoint));
+            .shared_label_scope(&nemo_io::sparql::blank_node_scope(&spec.endpoint));
         let loaded = nemo_io::sparql::SparqlReader::new(source_width, selection)
             .with_blank_node_scope(blank_nodes)
             .read(&spec.endpoint, &bytes, self.dictionary, self.context)

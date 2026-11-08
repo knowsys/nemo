@@ -14,29 +14,29 @@ pub(super) struct RowRange<'a> {
     cursor: RowCursor<'a>,
     /// The exclusive end index.
     end: usize,
-    /// The position of the trie in the list of tries merged.
-    source: usize,
+    /// The index of the trie among the tries merged.
+    source_index: usize,
 }
 
 impl<'a> RowRange<'a> {
-    /// Creates the range of every row of the trie at the given position of a merge.
-    pub(super) fn all(trie: &'a Trie, source: usize) -> Self {
-        Self::between(trie, 0..trie.row_count(), source)
+    /// Creates the range of every row of the trie at the given index among the tries merged.
+    pub(super) fn all(trie: &'a Trie, source_index: usize) -> Self {
+        Self::between(trie, 0..trie.row_count(), source_index)
     }
 
     /// Creates the range of the rows with indices in the given range
-    /// of the trie at the given position of a merge.
-    pub(super) fn between(trie: &'a Trie, range: Range<usize>, source: usize) -> Self {
+    /// of the trie at the given index among the tries merged.
+    pub(super) fn between(trie: &'a Trie, range: Range<usize>, source_index: usize) -> Self {
         Self {
             cursor: RowCursor::new(trie, range.start),
             end: range.end,
-            source,
+            source_index,
         }
     }
 
-    /// Returns the position of the trie in the list of tries merged.
-    pub(super) fn source(&self) -> usize {
-        self.source
+    /// Returns the index of the trie among the tries merged.
+    pub(super) fn source_index(&self) -> usize {
+        self.source_index
     }
 
     /// Returns the index of the current row in the trie;

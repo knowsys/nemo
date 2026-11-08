@@ -52,8 +52,9 @@ enum Polarity {
     /// Under an odd number of negations: it must be false wherever Nemo's is,
     /// never an error.
     Negative,
-    /// Inside another operator's argument: it must be exact.
-    Both,
+    /// Inside another operator's argument: it must hold exactly where Nemo's holds,
+    /// and be false exactly where Nemo's is.
+    Exact,
 }
 
 impl Polarity {
@@ -62,7 +63,7 @@ impl Polarity {
         match self {
             Self::Positive => Self::Negative,
             Self::Negative => Self::Positive,
-            Self::Both => Self::Both,
+            Self::Exact => Self::Exact,
         }
     }
 }
@@ -127,34 +128,42 @@ impl Translator<'_> {
             .filter(|(_, delivered)| **delivered)
             .map(|(variable, _)| variable)
             .collect();
-        let mut written = Vec::new();
-        let expression =
-            self.sparql_expression(condition, &delivered, &mut written, Polarity::Positive)?;
-        Some(written.into_iter().fold(expression, |expression, value| {
-            let numeric = Expression::FunctionCall(Function::IsNumeric, vec![value]);
-            Expression::Or(Box::new(expression), Box::new(numeric))
-        }))
+        let mut lexical_reads = Vec::new();
+        let expression = self.sparql_expression(
+            condition,
+            &delivered,
+            &mut lexical_reads,
+            Polarity::Positive,
+        )?;
+        Some(
+            lexical_reads
+                .into_iter()
+                .fold(expression, |expression, value| {
+                    let numeric = Expression::FunctionCall(Function::IsNumeric, vec![value]);
+                    Expression::Or(Box::new(expression), Box::new(numeric))
+                }),
+        )
     }
 
     /// Returns an operation in the given position as an expression,
-    /// adding to `written` the arguments whose lexical form or datatype it reads (see
+    /// adding to `lexical_reads` the arguments whose lexical form or datatype it reads (see
     /// [sparql_condition](Self::sparql_condition)).
     fn sparql_expression(
         &self,
         operation: &Operation,
         delivered: &[&String],
-        written: &mut Vec<Expression>,
+        lexical_reads: &mut Vec<Expression>,
         polarity: Polarity,
     ) -> Option<Expression> {
         let inner = match operation.operator {
             Operator::And | Operator::Or => polarity,
             Operator::Not => polarity.flip(),
-            _ => Polarity::Both,
+            _ => Polarity::Exact,
         };
         let arguments: Vec<Expression> = operation
             .arguments
             .iter()
-            .map(|argument| self.sparql_argument(argument, delivered, written, inner))
+            .map(|argument| self.sparql_argument(argument, delivered, lexical_reads, inner))
             .collect::<Option<_>>()?;
         let binary = |build: fn(Box<Expression>, Box<Expression>) -> Expression,
                       arguments: Vec<Expression>| {
@@ -206,7 +215,7 @@ impl Translator<'_> {
                 Some(Expression::UnaryMinus(Box::new(inner)))
             }
             Operator::Str => {
-                written.extend(arguments.first().cloned());
+                lexical_reads.extend(arguments.first().cloned());
                 call(Function::Str, 1, arguments)
             }
             // Nemo reads language tags in lower case.
@@ -214,7 +223,7 @@ impl Translator<'_> {
                 .map(|tag| Expression::FunctionCall(Function::LCase, vec![tag])),
             Operator::LangMatches => call(Function::LangMatches, 2, arguments),
             Operator::Datatype => {
-                written.extend(arguments.first().cloned());
+                lexical_reads.extend(arguments.first().cloned());
                 call(Function::Datatype, 1, arguments)
             }
             Operator::IsIri => call(Function::IsIri, 1, arguments),
@@ -285,7 +294,7 @@ impl Translator<'_> {
         &self,
         term: &Term,
         delivered: &[&String],
-        written: &mut Vec<Expression>,
+        lexical_reads: &mut Vec<Expression>,
         polarity: Polarity,
     ) -> Option<Expression> {
         if let Some(position) = column_number(term) {
@@ -294,7 +303,7 @@ impl Translator<'_> {
         }
         match &term.kind {
             TermKind::Operation(operation) => {
-                self.sparql_expression(operation, delivered, written, polarity)
+                self.sparql_expression(operation, delivered, lexical_reads, polarity)
             }
             _ => term_expression(SparqlQuery::ground_term(&self.ground_value(term)?)?),
         }

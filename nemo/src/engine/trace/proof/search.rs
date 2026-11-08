@@ -29,7 +29,7 @@ use crate::{
             contexts::RunContexts,
             extensional::ExtensionalBlock,
         },
-        trace::proof::{Proof, ProofNode, targets},
+        trace::proof::{Explanation, ProofNode, targets},
     },
     model::AggregateKind,
 };
@@ -60,7 +60,7 @@ impl CandidateApplication<'_> {
         Rc::new(ProofNode {
             table: self.table,
             row: self.row.to_vec(),
-            proof: Proof::Derived {
+            proof: Explanation::Derived {
                 rule: self.rule,
                 step: self.step,
                 witness,
@@ -74,7 +74,7 @@ impl CandidateApplication<'_> {
 
 /// The outcome of every fact a search met, by table and row:
 /// its proof, or `None` if it has none.
-pub(super) type Proven = HashMap<(TableId, Vec<StorageValue>), Option<Rc<ProofNode>>>;
+pub(super) type Outcomes = HashMap<(TableId, Vec<StorageValue>), Option<Rc<ProofNode>>>;
 
 /// The proof search over one engine's stores.
 pub(super) struct ProofSearch<'a> {
@@ -95,13 +95,16 @@ pub(super) struct ProofSearch<'a> {
     /// Every stored row's revision lies below it.
     pub(super) now: u64,
     /// The proven and refuted facts, kept beyond the search.
-    proven: &'a mut Proven,
+    outcomes: &'a mut Outcomes,
 }
 
 impl<'a> ProofSearch<'a> {
     /// Returns a search over the engine's stores,
     /// which remembers its outcomes beside those of earlier searches.
-    pub(super) fn over(engine: &'a mut Engine, proven: &'a mut Proven) -> Result<Self, Diagnostic> {
+    pub(super) fn over(
+        engine: &'a mut Engine,
+        outcomes: &'a mut Outcomes,
+    ) -> Result<Self, Diagnostic> {
         let program = engine
             .program
             .as_ref()
@@ -114,7 +117,7 @@ impl<'a> ProofSearch<'a> {
             contexts: &engine.contexts,
             extensional: &engine.extensional,
             now: engine.step.max(1),
-            proven,
+            outcomes,
         })
     }
 
@@ -214,7 +217,7 @@ impl<'a> ProofSearch<'a> {
         row: &[StorageValue],
     ) -> Result<Option<Rc<ProofNode>>, Diagnostic> {
         let key = (table, row.to_vec());
-        if let Some(known) = self.proven.get(&key) {
+        if let Some(known) = self.outcomes.get(&key) {
             return Ok(known.clone());
         }
 
@@ -226,7 +229,7 @@ impl<'a> ProofSearch<'a> {
                 proven = Some(Rc::new(ProofNode {
                     table,
                     row: row.to_vec(),
-                    proof: Proof::Asserted,
+                    proof: Explanation::Loaded,
                 }));
             } else {
                 for (rule, step) in self.candidates(table, revision) {
@@ -244,7 +247,7 @@ impl<'a> ProofSearch<'a> {
             }
         }
 
-        self.proven.insert(key, proven.clone());
+        self.outcomes.insert(key, proven.clone());
         Ok(proven)
     }
 

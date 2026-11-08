@@ -111,7 +111,7 @@ impl<'a> Translator<'a> {
             }
         }
         if let Some(first) = missing.first() {
-            return Err(EngineError::AwaitingRemote {
+            return Err(EngineError::NoClient {
                 count: missing.len().into(),
                 first: first.request.url.clone(),
             }

@@ -630,7 +630,7 @@ impl<'a> Translator<'a> {
                 predicate: predicate.to_string(),
             }
             .at(span);
-            return Err(self.explain_prefix_labels(problem, labels, terms));
+            return Err(self.hint_prefixed_name(problem, labels, terms));
         };
         let mut placed: Vec<Option<Term>> = vec![None; declaration.names.len()];
         for (label, term) in labels.iter().zip(terms) {
@@ -640,7 +640,7 @@ impl<'a> Translator<'a> {
                     column: label.clone(),
                 }
                 .at(term.span.or(span));
-                return Err(self.explain_prefix_labels(problem, labels, terms));
+                return Err(self.hint_prefixed_name(problem, labels, terms));
             };
             if placed[position].is_some() {
                 return Err(TranslationError::ColumnGivenTwice {
@@ -680,7 +680,7 @@ impl<'a> Translator<'a> {
     /// Explains a problem with named arguments where a label is a declared prefix
     /// and its value reads as a local name, as in `wd: 42`,
     /// which a space makes a named argument rather than a prefixed name.
-    fn explain_prefix_labels(
+    fn hint_prefixed_name(
         &self,
         problem: Diagnostic,
         labels: &[String],

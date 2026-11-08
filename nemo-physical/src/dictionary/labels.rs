@@ -12,8 +12,9 @@
 
 use std::collections::HashMap;
 
-/// A scope of null labels, as [Dictionary::label_scope](super::Dictionary::label_scope)
-/// and [Dictionary::fresh_label_scope](super::Dictionary::fresh_label_scope) open it.
+/// A scope of null labels,
+/// as [Dictionary::shared_label_scope](super::Dictionary::shared_label_scope) and
+/// [Dictionary::fresh_label_scope](super::Dictionary::fresh_label_scope) open it.
 ///
 /// A scope belongs to the dictionary that opened it.
 /// Another dictionary may panic on it, or read it as one of its own scopes.
@@ -22,7 +23,7 @@ pub struct LabelScope(u32);
 
 /// One scope: its name, whether it is found by its name, and its labels while it is open.
 #[derive(Debug)]
-struct Scope {
+struct ScopeEntry {
     /// The number of the scope's name, which the nulls it minted report.
     name: u32,
     /// Whether [shared](NullLabels::shared) opened the scope, so that it is found by its name.
@@ -39,7 +40,7 @@ struct Scope {
 #[derive(Debug, Default)]
 pub(super) struct NullLabels {
     /// Every scope opened so far, by its number.
-    scopes: Vec<Scope>,
+    scopes: Vec<ScopeEntry>,
     /// The names of the scopes, by their numbers.
     names: Vec<Box<str>>,
     /// The number of each name.
@@ -54,7 +55,7 @@ pub(super) struct NullLabels {
 impl NullLabels {
     /// Returns the open scope with the given name, opened if no open scope has it.
     pub(super) fn shared(&mut self, name: &str) -> LabelScope {
-        let name = self.name(name);
+        let name = self.intern_name(name);
         if let Some(&number) = self.shared.get(&name) {
             return LabelScope(number);
         }
@@ -65,12 +66,12 @@ impl NullLabels {
 
     /// Opens a scope that no other call returns. The name only reports provenance.
     pub(super) fn fresh(&mut self, name: &str) -> LabelScope {
-        let name = self.name(name);
+        let name = self.intern_name(name);
         self.open(name, false)
     }
 
     /// Returns the number of a name, numbered on first sight.
-    fn name(&mut self, name: &str) -> u32 {
+    fn intern_name(&mut self, name: &str) -> u32 {
         if let Some(&number) = self.numbers.get(name) {
             return number;
         }
@@ -83,7 +84,7 @@ impl NullLabels {
     /// Opens a scope under the number of its name.
     fn open(&mut self, name: u32, shared: bool) -> LabelScope {
         let number = u32::try_from(self.scopes.len()).expect("fewer than 2^32 label scopes");
-        self.scopes.push(Scope {
+        self.scopes.push(ScopeEntry {
             name,
             shared,
             labels: Some(Box::default()),
@@ -159,7 +160,7 @@ impl NullLabels {
             })
             .sum();
         let names: usize = self.names.iter().map(|name| 2 * name.len()).sum();
-        self.scopes.capacity() * size_of::<Scope>()
+        self.scopes.capacity() * size_of::<ScopeEntry>()
             + self.names.capacity() * size_of::<Box<str>>()
             + self.numbers.capacity() * (size_of::<Box<str>>() + size_of::<u32>() + 1)
             + self.shared.capacity() * (2 * size_of::<u32>() + 1)

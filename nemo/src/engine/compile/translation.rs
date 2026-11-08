@@ -347,7 +347,7 @@ impl<'a> Translator<'a> {
         state: TranslationState,
         preloaded: Vec<bool>,
     ) -> Self {
-        let program_blanks = stores.dictionary.label_scope(PROGRAM_BLANK_NODES);
+        let program_blanks = stores.dictionary.shared_label_scope(PROGRAM_BLANK_NODES);
         Self {
             manager: stores.manager,
             dictionary: stores.dictionary,
@@ -1027,33 +1027,33 @@ impl ScratchStores {
 }
 
 impl Engine {
-    /// Returns the instant a loading call translates at, choosing the current one
+    /// Returns the context a loading call translates in, choosing one at the current instant
     /// if no loading call chose one since the last reasoning run began.
     ///
-    /// The next run evaluates at the same instant.
-    pub(in crate::engine) fn loading_instant(&mut self) -> EvaluationContext {
-        *self.instant.get_or_insert_with(EvaluationContext::now)
+    /// The next run evaluates in the same context.
+    pub(in crate::engine) fn loading_context(&mut self) -> EvaluationContext {
+        *self.next_context.get_or_insert_with(EvaluationContext::now)
     }
 
-    /// Runs a loading call and settles its choice of the instant by how it ended
-    /// (see [settle_instant](Self::settle_instant)).
-    pub(in crate::engine) fn choosing_instant(
+    /// Runs a loading call and settles its choice of the context by how it ended
+    /// (see [settle_context](Self::settle_context)).
+    pub(in crate::engine) fn choosing_context(
         &mut self,
         call: impl FnOnce(&mut Self) -> Result<(), Diagnostic>,
     ) -> Result<(), Diagnostic> {
-        let chose = self.instant.is_none();
+        let chose = self.next_context.is_none();
         let outcome = call(self);
-        self.settle_instant(chose, &outcome);
+        self.settle_context(chose, &outcome);
         outcome
     }
 
-    /// Settles a loading call's choice of the instant by how the call ended.
+    /// Settles a loading call's choice of the context by how the call ended.
     ///
-    /// `chose` tells whether the call chose the instant.
+    /// `chose` tells whether the call chose the context.
     /// A call suspended for data from the network keeps the choice until it is resumed
     /// or discarded.
     /// A call that failed undoes it, so that the next loading call chooses anew.
-    pub(in crate::engine) fn settle_instant(
+    pub(in crate::engine) fn settle_context(
         &mut self,
         chose: bool,
         outcome: &Result<(), Diagnostic>,
@@ -1062,8 +1062,8 @@ impl Engine {
             return;
         }
         match &mut self.suspension {
-            Some(Suspension::Load(load)) => load.chose_instant = true,
-            _ => self.instant = None,
+            Some(Suspension::Load(load)) => load.chose_context = true,
+            _ => self.next_context = None,
         }
     }
 
@@ -1102,7 +1102,7 @@ impl Engine {
         purpose: Purpose<'a>,
         scratch: &'a mut ScratchStores,
     ) -> (TranslationStores<'a>, TranslationSetup<'a>) {
-        let context = self.instant.unwrap_or_else(EvaluationContext::now);
+        let context = self.next_context.unwrap_or_else(EvaluationContext::now);
         self.parts(purpose, Some(scratch), context)
     }
 

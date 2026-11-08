@@ -4,7 +4,7 @@
 use nemo_physical::{diagnostics::Diagnostic, management::TableId, value::DataValue};
 
 use crate::{
-    engine::{Engine, trace::proof::Trace},
+    engine::{Engine, trace::proof::BatchedTrace},
     model::Fact,
     trace::{TracePart, TracedFact},
 };
@@ -29,7 +29,7 @@ impl Engine {
     ) -> Result<Vec<TracedFact>, Diagnostic> {
         self.traceable()?;
         let named = self.ground_facts(facts)?;
-        let mut trace = Trace::default();
+        let mut trace = BatchedTrace::default();
         for predicate in predicates {
             let (table, _) = self.whole_predicate(predicate)?;
             let mut cursor = self.cursor(predicate)?;

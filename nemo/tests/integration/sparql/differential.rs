@@ -137,11 +137,11 @@ fn run(source: &str, outputs: &[&str], rewrite: bool, dataset: &Arc<Dataset>) ->
     let program = parse_into(&mut engine, source);
     let stage = if rewrite { "rewritten" } else { "as written" };
     endpoint
-        .drive(&mut engine, |engine| engine.load(program))
+        .serve(&mut engine, |engine| engine.load(program))
         .unwrap_or_else(|problem| panic!("{stage}: the program loads: {problem:?}"));
     let loaded = endpoint.queries().len();
     endpoint
-        .drive(&mut engine, Engine::reason)
+        .serve(&mut engine, Engine::reason)
         .unwrap_or_else(|problem| panic!("{stage}: the run reaches its fixpoint: {problem:?}"));
     let outputs = outputs
         .iter()

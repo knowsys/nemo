@@ -335,7 +335,7 @@ fn solutions(
         blank_bindings: pending.blank_bindings,
         ..Fetched::default()
     };
-    let blank_nodes = dictionary.label_scope(&sparql::blank_node_scope(&fetch.endpoint));
+    let blank_nodes = dictionary.shared_label_scope(&sparql::blank_node_scope(&fetch.endpoint));
     for slot in pending.slots.0 {
         // The endpoint may match a binding more loosely than Nemo compares values,
         // so the reader keeps only the solutions that match one.

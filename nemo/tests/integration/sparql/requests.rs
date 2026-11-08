@@ -302,7 +302,7 @@ fn a_change_is_refused_while_a_run_is_suspended() {
 
     let endpoint = parents();
     endpoint
-        .drive(&mut engine, Engine::reason)
+        .serve(&mut engine, Engine::reason)
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     assert_eq!(engine.count("anc").expect("derived"), 5);
     let first = values_blocks(&endpoint.queries()[0]);
@@ -369,10 +369,10 @@ item(<urn:1>) . item(<urn:2>) .
 "#,
     );
     endpoint
-        .drive(&mut engine, |engine| engine.load(program))
+        .serve(&mut engine, |engine| engine.load(program))
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     endpoint
-        .drive(&mut engine, Engine::reason)
+        .serve(&mut engine, Engine::reason)
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     assert_eq!(engine.count("seen").expect("fetched"), 2);
     let sizes: Vec<usize> = endpoint
@@ -406,10 +406,10 @@ item(<urn:1>) . item(<urn:2>) . item(<urn:3>) .
 "#,
     );
     endpoint
-        .drive(&mut engine, |engine| engine.load(program))
+        .serve(&mut engine, |engine| engine.load(program))
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     endpoint
-        .drive(&mut engine, Engine::reason)
+        .serve(&mut engine, Engine::reason)
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     assert_eq!(engine.count("seen").expect("fetched"), 3);
     let sizes: Vec<usize> = endpoint
@@ -424,10 +424,10 @@ item(<urn:1>) . item(<urn:2>) . item(<urn:3>) .
     let mut engine = Engine::new();
     let program = parse_into(&mut engine, ANCESTORS);
     endpoint
-        .drive(&mut engine, |engine| engine.load(program))
+        .serve(&mut engine, |engine| engine.load(program))
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     let problem = endpoint
-        .drive(&mut engine, Engine::reason)
+        .serve(&mut engine, Engine::reason)
         .expect_err("one binding cannot shrink");
     assert_eq!(problem.code(), nemo::codes::UNFETCHABLE, "{problem:?}");
     assert!(
@@ -461,10 +461,10 @@ item(<urn:1>) . item(<urn:2>) . item(<urn:3>) .
 "#,
     );
     endpoint
-        .drive(&mut engine, |engine| engine.load(program))
+        .serve(&mut engine, |engine| engine.load(program))
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     endpoint
-        .drive(&mut engine, Engine::reason)
+        .serve(&mut engine, Engine::reason)
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     assert_eq!(engine.count("seen").expect("fetched"), 3);
     let sizes: Vec<usize> = endpoint
@@ -480,10 +480,10 @@ item(<urn:1>) . item(<urn:2>) . item(<urn:3>) .
     let mut engine = Engine::new();
     let program = parse_into(&mut engine, ANCESTORS);
     endpoint
-        .drive(&mut engine, |engine| engine.load(program))
+        .serve(&mut engine, |engine| engine.load(program))
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     let problem = endpoint
-        .drive(&mut engine, Engine::reason)
+        .serve(&mut engine, Engine::reason)
         .expect_err("one binding cannot shrink");
     assert_eq!(
         problem.code(),
@@ -519,10 +519,10 @@ item(<urn:1>) . item(<urn:2>) . item(<urn:3>) . item(<urn:4>) .
 "#,
     );
     endpoint
-        .drive(&mut engine, |engine| engine.load(program))
+        .serve(&mut engine, |engine| engine.load(program))
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     endpoint
-        .drive(&mut engine, Engine::reason)
+        .serve(&mut engine, Engine::reason)
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     // Every binding's row, none lost to a cut.
     assert_eq!(engine.count("seen").expect("fetched"), 4);
@@ -565,10 +565,10 @@ fn failed_requests_under_warn_keep_what_arrived() {
         ),
     );
     endpoint
-        .drive(&mut engine, |engine| engine.load(program))
+        .serve(&mut engine, |engine| engine.load(program))
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     endpoint
-        .drive(&mut engine, Engine::reason)
+        .serve(&mut engine, Engine::reason)
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     let mut ancestors = engine.rows("anc").expect("derived");
     ancestors.sort();
@@ -592,7 +592,7 @@ fn failed_requests_under_warn_keep_what_arrived() {
 
     // The failed binding is not asked again.
     endpoint
-        .drive(&mut engine, Engine::reason)
+        .serve(&mut engine, Engine::reason)
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     assert_eq!(endpoint.queries().len(), 2);
 }
@@ -619,10 +619,10 @@ r(?x, ?z) :- item(?x), t(?x, ?y), u(?y, ?z) .
         let mut engine = Engine::new();
         let program = parse_into(&mut engine, &source(second));
         endpoint
-            .drive(&mut engine, |engine| engine.load(program))
+            .serve(&mut engine, |engine| engine.load(program))
             .unwrap_or_else(|problem| panic!("{problem:?}"));
         endpoint
-            .drive(&mut engine, Engine::reason)
+            .serve(&mut engine, Engine::reason)
             .unwrap_or_else(|problem| panic!("{problem:?}"));
         endpoint.queries().len()
     };
@@ -636,7 +636,7 @@ r(?x, ?z) :- item(?x), t(?x, ?y), u(?y, ?z) .
 /// rewrites alike.
 #[cfg(feature = "http")]
 #[test]
-fn a_stepwise_run_ends_as_a_run_over_http() {
+fn a_run_resumed_with_responses_ends_as_a_run_over_http() {
     let endpoint_url = serve_endpoint(ancestry);
     let source = format!(
         r#"
@@ -662,12 +662,12 @@ desc(?c) :- anc(?p), triple(?c, <urn:parent>, ?p) .
         rows
     };
 
-    let mut driven = Engine::new();
-    let program = parse_into(&mut driven, &source);
-    driven
+    let mut over_http = Engine::new();
+    let program = parse_into(&mut over_http, &source);
+    over_http
         .load(program)
         .unwrap_or_else(|problem| panic!("{problem:?}"));
-    driven
+    over_http
         .reason()
         .unwrap_or_else(|problem| panic!("{problem:?}"));
 
@@ -689,7 +689,7 @@ desc(?c) :- anc(?p), triple(?c, <urn:parent>, ?p) .
         .unwrap_or_else(|problem| panic!("{problem:?}"));
 
     let expected = store(&mut suspended);
-    assert_eq!(store(&mut driven), expected);
+    assert_eq!(store(&mut over_http), expected);
     assert_eq!(
         expected[1].1.len(),
         4,

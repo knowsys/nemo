@@ -47,7 +47,7 @@ trait ShardSource: Sync {
     /// Builds the columns, cut into about as many shards as the given tasks:
     /// each shard builds its column pieces on a task, and the pieces concatenate.
     fn build(&self, tasks: Tasks) -> Vec<Column> {
-        let pieces = self.shards(tasks, |low, high| self.build_shard(low, high));
+        let pieces = self.map_shards(tasks, |low, high| self.build_shard(low, high));
         concat_pieces(self.arity(), pieces)
     }
 
@@ -55,7 +55,7 @@ trait ShardSource: Sync {
     /// each on a task, and returns the results in shard order.
     ///
     /// Without bounds there is one shard, unbounded on both sides.
-    fn shards<P: Send>(
+    fn map_shards<P: Send>(
         &self,
         tasks: Tasks,
         build: impl Fn(Option<StorageValue>, Option<StorageValue>) -> P + Sync,
@@ -154,11 +154,11 @@ pub(super) fn from_tries_carrying<T: Send>(
     debug_assert!(arity > 0, "nullary tries hold no columns to build");
 
     let tries = Tries::new(sources);
-    let pieces = tries.shards(tasks_for(sources), |low, high| {
+    let pieces = tries.map_shards(tasks_for(sources), |low, high| {
         let window = tries.window(low, high);
         let mut values = Vec::with_capacity(window.rows());
         let columns = tries.merge_window(window, |range| {
-            values.push(value(range.source(), range.index()))
+            values.push(value(range.source_index(), range.index()))
         });
         (columns, values)
     });
@@ -185,7 +185,7 @@ pub(super) fn count_distinct(sources: &[&Trie]) -> usize {
     let sources = sources
         .iter()
         .enumerate()
-        .map(|(position, source)| RowRange::all(source, position))
+        .map(|(index, source)| RowRange::all(source, index))
         .collect();
 
     let mut count = 0;

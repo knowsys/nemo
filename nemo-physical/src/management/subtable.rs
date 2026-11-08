@@ -119,7 +119,7 @@ impl Subtable {
     ///
     /// The row's columns are in the order the table's batches arrive in.
     pub(super) fn revision_of(&self, row: &[StorageValue]) -> Option<Revision> {
-        let index = self.arrangements[0].trie.position(row)?;
+        let index = self.arrangements[0].trie.index_of(row)?;
         Some(Revision(
             self.range.start.0 + self.revisions.distance(index),
         ))

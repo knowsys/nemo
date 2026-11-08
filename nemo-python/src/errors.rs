@@ -116,16 +116,30 @@ pub(crate) fn resolve(
     }
 }
 
+/// Returns a diagnostic with the module's hints, where the engine's hints name calls the
+/// module lacks: it has no `resume`, so a suspended run continues with `reason()`.
+fn with_python_hints(diagnostic: nemo::diagnostics::Diagnostic) -> nemo::diagnostics::Diagnostic {
+    if diagnostic.code() == nemo::codes::METHOD_SUSPENDED {
+        diagnostic
+            .without_hints()
+            .with_hint("call `reason()` to continue the run, or `discard_pending()` to drop it")
+    } else {
+        diagnostic
+    }
+}
+
 /// Raises the diagnostics of a failed call: their renderings form the
 /// message, and all of them are attached as `diagnostics`.
+///
+/// The hints that name calls of the engine the module lacks are replaced by its own.
 pub(crate) fn raise(
     py: Python<'_>,
     diagnostics: Vec<nemo::diagnostics::Diagnostic>,
     sources: &SourceTexts,
 ) -> PyErr {
     let resolved: Vec<Diagnostic> = diagnostics
-        .iter()
-        .map(|diagnostic| resolve(diagnostic, sources))
+        .into_iter()
+        .map(|diagnostic| resolve(&with_python_hints(diagnostic), sources))
         .collect();
     let message = resolved
         .iter()

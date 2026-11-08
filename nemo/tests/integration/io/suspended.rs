@@ -118,7 +118,7 @@ fn a_load_without_a_client_changes_nothing() {
             r#"@import p from csv { resource = "https://example.org/p.csv" } ."#,
         ))
         .expect_err("nothing sends the request");
-    assert_eq!(problem.code(), nemo::codes::AWAITING_REMOTE, "{problem:?}");
+    assert_eq!(problem.code(), nemo::codes::NO_CLIENT, "{problem:?}");
     assert_eq!(problem.field("first"), Some("https://example.org/p.csv"));
     assert!(engine.pending().is_empty(), "nothing is suspended");
     assert!(!engine.has_program(), "nothing was loaded");
@@ -130,7 +130,7 @@ fn a_failed_response_fails_the_load() {
     let mut engine = Engine::new();
     let program = parse(r#"@import p from csv { resource = "https://example.org/missing.csv" } ."#);
     let problem = Responder::canned(&[])
-        .drive(&mut engine, |engine| engine.load(program))
+        .serve(&mut engine, |engine| engine.load(program))
         .expect_err("no body is canned for this URL");
     assert_eq!(problem.code(), nemo::codes::UNFETCHABLE, "{problem:?}");
     assert_eq!(
@@ -159,7 +159,7 @@ s(?x) :- q(?x, ?y) ."#,
     );
     let canned = Responder::canned(&[("https://example.org/data.csv", "1,one\n")]);
     canned
-        .drive(&mut engine, |engine| engine.load(program))
+        .serve(&mut engine, |engine| engine.load(program))
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     engine
         .reason()
@@ -215,7 +215,7 @@ s(?o) :- q(?s, ?p, ?o) ."#,
     ]);
     engine.set_import_directory(directory);
     canned
-        .drive(&mut engine, |engine| engine.load(program))
+        .serve(&mut engine, |engine| engine.load(program))
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     let seen = canned.seen();
     let asked: Vec<(&str, Option<&str>)> = seen
@@ -339,7 +339,7 @@ c(?x) :- b(?x) ."#,
 c(?x) :- b(?x), a(?x) ."#,
     );
     canned
-        .drive(&mut engine, |engine| engine.reload(reloaded))
+        .serve(&mut engine, |engine| engine.reload(reloaded))
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     engine
         .reason()
@@ -372,7 +372,7 @@ fn a_computed_resource_name_is_requested_once() {
         r#"@import p from csv { resource = f"https://example.org/data.csv?nonce={?n}" }, ?n = STRUUID() ."#,
     );
     canned
-        .drive(&mut engine, |engine| engine.load(program))
+        .serve(&mut engine, |engine| engine.load(program))
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     assert_eq!(canned.seen().len(), 1);
     assert_eq!(
@@ -450,7 +450,7 @@ fn queries_with_fresh_names_are_requested_once() {
             r#"@import q from sparql {{ endpoint = <https://example.org/sparql>, query = "{query}" }} ."#
         ));
         endpoint
-            .drive(&mut engine, |engine| engine.load(program))
+            .serve(&mut engine, |engine| engine.load(program))
             .unwrap_or_else(|problem| panic!("{query}: {problem:?}"));
         assert_eq!(endpoint.seen().len(), 1, "{query}");
         assert_eq!(
@@ -482,7 +482,7 @@ fn the_same_text_under_two_bases_is_two_queries() {
     );
     let mut engine = Engine::new();
     endpoint
-        .drive(&mut engine, |engine| engine.load(program))
+        .serve(&mut engine, |engine| engine.load(program))
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     assert_eq!(endpoint.seen().len(), 2);
     assert_eq!(
