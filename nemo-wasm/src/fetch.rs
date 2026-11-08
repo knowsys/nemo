@@ -1,6 +1,6 @@
 //! Fetching the data a suspended engine method needs from the network.
 //!
-//! If a step of a method is suspended,
+//! If a call of a method suspends it,
 //! its requests go out through the global `fetch` (a window's, a worker's, or Node's),
 //! the failures the retry schedule allows are sent again,
 //! and the responses are passed to `resume`, until the method completes.
@@ -15,9 +15,7 @@ use js_sys::{Array, Function, Object, Promise, Reflect, Uint8Array};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 
-use nemo::engine::remote::{
-    Failure, PARTIAL_RESPONSE_HEADERS, Progress, Request, Retry, partial_response,
-};
+use nemo::engine::remote::{Failure, Progress, Request, Retry};
 
 use crate::engine::Inner;
 
@@ -39,18 +37,13 @@ enum Sent {
         retry_after: Option<String>,
     },
     /// A successful response holding only part of the result, as its status or headers say
-    /// ([partial_response]): its status and the reason.
-    Partial {
-        /// The response status.
-        status: u16,
-        /// Why the result is partial.
-        reason: String,
-    },
+    /// ([Failure::of_partial_response]).
+    Partial(Failure),
     /// No response came, for the reason `fetch` gives.
     Lost(String),
 }
 
-/// Calls a step of a method on the engine, then fetches the requests it is suspended for and
+/// Calls a method on the engine, then fetches the requests it is suspended for and
 /// passes the responses to `resume`, until the method completes or fails, returning what it
 /// ends with.
 ///
@@ -91,7 +84,7 @@ async fn fetch_retrying(request: &Request, retry: &Retry) -> Result<Arc<[u8]>, F
         match send(request).await {
             Sent::Body(bytes) => return Ok(bytes.into()),
             Sent::Lost(message) => return Err(Failure::transport(message)),
-            Sent::Partial { status, reason } => return Err(Failure::partial(status, reason)),
+            Sent::Partial(failure) => return Err(failure),
             Sent::ErrorStatus {
                 status,
                 message,
@@ -157,22 +150,19 @@ async fn try_send(request: &Request) -> Result<Sent, JsValue> {
         // A browser shows a cross-origin response's own headers only if the server exposes
         // them, so there a partial result may show by its status alone.
         let mut shown: Vec<(&str, String)> = Vec::new();
-        for name in PARTIAL_RESPONSE_HEADERS {
+        for name in Failure::PARTIAL_RESPONSE_HEADERS {
             if let Some(value) = call_method(&headers, "get", &[name.into()])?.as_string() {
                 shown.push((name, value));
             }
         }
-        let partial = partial_response(code, |name| {
+        let partial = Failure::of_partial_response(code, |name| {
             shown
                 .iter()
                 .find(|(shown, _)| shown.eq_ignore_ascii_case(name))
                 .map(|(_, value)| value.as_str())
         });
-        if let Some(reason) = partial {
-            return Ok(Sent::Partial {
-                status: code,
-                reason,
-            });
+        if let Some(failure) = partial {
+            return Ok(Sent::Partial(failure));
         }
         let buffer = settled(call_method(&response, "arrayBuffer", &[])?).await?;
         return Ok(Sent::Body(Uint8Array::new(&buffer).to_vec()));

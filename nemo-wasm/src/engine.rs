@@ -142,7 +142,7 @@ impl NemoEngine {
             .collect()
     }
 
-    /// Starts an async method: a step of the method, then the requests it is suspended for
+    /// Starts an async method: its first call, then the requests it is suspended for
     /// fetched and their responses passed on, settling when it completes.
     fn drive(
         &self,
@@ -156,7 +156,7 @@ impl NemoEngine {
     }
 }
 
-/// Returns what a step of a method returns to JavaScript:
+/// Returns what a call of a method returns to JavaScript:
 /// `null` if the method is done, else the requests it is suspended for, as `pendingRequests`
 /// lists them.
 fn progress_js(progress: Progress) -> Result<JsValue, JsValue> {
@@ -216,7 +216,7 @@ fn requests_js(pending: &[PendingRequest]) -> Result<Array, JsValue> {
 /// `{id, body}` for a response, its body a `Uint8Array` or a string,
 /// and `{id, status, message}` for a failure, `status` left out if no response came.
 /// A failure with `partial: true` is a response holding only part of the result
-/// ([partial_response](nemo::engine::remote::partial_response) tells one),
+/// ([Failure::of_partial_response](nemo::engine::remote::Failure::of_partial_response) tells one),
 /// which a bound import splits into smaller requests.
 fn responses_of(responses: &JsValue) -> Result<Vec<(RequestId, Response)>, JsValue> {
     let invalid = |what: &str| -> JsValue {

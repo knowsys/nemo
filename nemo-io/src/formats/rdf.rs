@@ -299,7 +299,7 @@ impl<'a> Statements<'a> {
         statement(
             quad,
             self.options.variant.quads(),
-            &mut self.blanks,
+            &self.blanks,
             dictionary,
             &mut self.terms,
         );
@@ -330,7 +330,7 @@ impl<'a> Statements<'a> {
 fn statement(
     quad: oxrdf::Quad,
     quads: bool,
-    blanks: &mut BlankNodes,
+    blanks: &BlankNodes,
     dictionary: &mut Dictionary,
     terms: &mut Vec<Option<DataValue>>,
 ) {

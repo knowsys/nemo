@@ -15,9 +15,6 @@
 //! they return [Progress::Suspended] with the requests, each under a [RequestId],
 //! and the method is suspended until [resume](Engine::resume) has the responses under these
 //! ids and continues it.
-//! A call that runs a method until it completes, fails, or is suspended again is a *step* of
-//! the method: the `start_*` method takes the first step, and `resume` the next one once
-//! every request has its response.
 //! The engine holds at most one suspended method.
 //! While it is suspended, the methods that would change the program or the stored data are
 //! refused (N0493) until it is completed or [discarded](Engine::discard_pending).
@@ -27,23 +24,21 @@
 //! the [Client] trait, and the [Retry] schedule a failed request is sent again on.
 
 mod pending_request;
+mod progress;
 
-pub use self::pending_request::{PendingRequest, Progress, RequestId};
+pub use self::{
+    pending_request::{PendingRequest, RequestId},
+    progress::Progress,
+};
 #[cfg(feature = "http")]
 pub use nemo_io::remote::BlockingClient;
-pub use nemo_io::remote::{
-    Client, Failure, PARTIAL_RESPONSE_HEADERS, Request, Response, Retry, partial_response,
-};
+pub use nemo_io::remote::{Client, Failure, Request, Response, Retry};
 
-use std::{
-    collections::{HashMap, HashSet},
-    sync::Arc,
-};
+use std::collections::{HashMap, HashSet};
 
 use nemo_physical::diagnostics::Diagnostic;
 
 use crate::{
-    codes,
     diagnostics::EngineError,
     engine::{
         Engine, compile::translation::TranslationState, evaluate::reason::SuspendedReasoning,
@@ -51,9 +46,6 @@ use crate::{
     },
     model::Statement,
 };
-
-/// The response to a request: its body, or the failure that prevented one.
-pub(super) type RemoteResponse = Result<Arc<[u8]>, Failure>;
 
 /// A remote resource a loading method needs: the import that reads it, its name,
 /// and the request that fetches it.
@@ -78,7 +70,7 @@ pub(super) struct FetchedResource {
     /// The request.
     pub(super) request: ResourceRequest,
     /// The response.
-    pub(super) response: RemoteResponse,
+    pub(super) response: Response,
 }
 
 /// One request of a suspended call: its id, the key the call knows it by, and its
@@ -92,7 +84,7 @@ pub(super) struct RequestSlot<K> {
     /// The key the suspended call knows the request by.
     pub(super) key: K,
     /// The response, once given.
-    pub(super) response: Option<RemoteResponse>,
+    pub(super) response: Option<Response>,
 }
 
 /// The requests of a suspended call.
@@ -122,14 +114,6 @@ impl<K> RequestSlots<K> {
         self.0.iter().any(|slot| slot.response.is_none())
     }
 
-    /// Returns the ids of the requests without a response yet.
-    pub(super) fn pending_ids(&self) -> impl Iterator<Item = u64> + '_ {
-        self.0
-            .iter()
-            .filter(|slot| slot.response.is_none())
-            .map(|slot| slot.id)
-    }
-
     /// Returns the requests without a response yet.
     pub(super) fn pending(&self) -> impl Iterator<Item = PendingRequest> + '_ {
         self.0
@@ -141,19 +125,14 @@ impl<K> RequestSlots<K> {
             })
     }
 
-    /// Stores the response to a pending request,
-    /// and returns `false` if no pending request has the id.
-    pub(super) fn respond(&mut self, id: u64, response: RemoteResponse) -> bool {
-        match self
+    /// Stores the response to a pending request, if one has the id.
+    pub(super) fn respond(&mut self, id: u64, response: Response) {
+        if let Some(slot) = self
             .0
             .iter_mut()
             .find(|slot| slot.id == id && slot.response.is_none())
         {
-            Some(slot) => {
-                slot.response = Some(response);
-                true
-            }
-            None => false,
+            slot.response = Some(response);
         }
     }
 }
@@ -259,7 +238,7 @@ impl SuspendedLoad {
     }
 
     /// Returns the response fetched for the same request as the given one, if there is one.
-    fn response_to(&self, request: &ResourceRequest) -> Option<RemoteResponse> {
+    fn response_to(&self, request: &ResourceRequest) -> Option<Response> {
         self.fetched
             .values()
             .find(|fetched| fetched.request.request == request.request)
@@ -316,14 +295,6 @@ impl Suspension {
         }
     }
 
-    /// Returns the ids of the requests without a response yet.
-    pub(in crate::engine) fn pending_ids(&self) -> HashSet<u64> {
-        match self {
-            Suspension::Load(load) => load.slots.pending_ids().collect(),
-            Suspension::Reason(reasoning) => reasoning.pending_ids(),
-        }
-    }
-
     /// Returns the name of the suspended method.
     fn method(&self) -> &'static str {
         match self {
@@ -336,9 +307,8 @@ impl Suspension {
         }
     }
 
-    /// Stores the response to a pending request,
-    /// and returns `false` if no pending request has the id.
-    pub(in crate::engine) fn respond(&mut self, id: u64, response: RemoteResponse) -> bool {
+    /// Stores the response to a pending request, if one has the id.
+    pub(in crate::engine) fn respond(&mut self, id: u64, response: Response) {
         match self {
             Suspension::Load(load) => load.slots.respond(id, response),
             Suspension::Reason(reasoning) => reasoning.respond(id, response),
@@ -387,21 +357,9 @@ impl Engine {
         Err(EngineError::MethodSuspended {
             refused: refused.to_owned(),
             suspended: suspension.method().to_owned(),
-            count: suspension.pending_ids().len().into(),
+            count: suspension.pending().len().into(),
         }
         .diagnostic())
-    }
-
-    /// Returns how a step of a method ended:
-    /// done, suspended with the requests of the method it suspended, or failed.
-    pub(super) fn progress(&self, outcome: Result<(), Diagnostic>) -> Result<Progress, Diagnostic> {
-        match outcome {
-            Ok(()) => Ok(Progress::Done),
-            Err(problem) if problem.code() == codes::NO_CLIENT && self.suspension.is_some() => {
-                Ok(Progress::Suspended(self.pending()))
-            }
-            Err(problem) => Err(problem),
-        }
     }
 
     /// Passes the responses to the suspended method and continues it,
@@ -416,18 +374,21 @@ impl Engine {
         responses: impl IntoIterator<Item = (RequestId, Response)>,
     ) -> Result<Progress, Diagnostic> {
         let responses: Vec<(RequestId, Response)> = responses.into_iter().collect();
-        let pending = self
+        let pending: HashSet<RequestId> = self
             .suspension
             .as_ref()
-            .map_or_else(HashSet::new, Suspension::pending_ids);
+            .map_or_else(Vec::new, Suspension::pending)
+            .into_iter()
+            .map(|pending| pending.id)
+            .collect();
         let mut given = HashSet::new();
         for (id, _) in &responses {
             assert!(
-                given.insert(id.0),
+                given.insert(*id),
                 "`resume` was given two responses under the id {id}"
             );
             assert!(
-                pending.contains(&id.0),
+                pending.contains(id),
                 "`resume` was given a response under the id {id}, which `pending()` does not list"
             );
         }
@@ -440,8 +401,7 @@ impl Engine {
         if suspension.has_pending() {
             return Ok(Progress::Suspended(self.pending()));
         }
-        let outcome = self.resume_suspended();
-        self.progress(outcome)
+        self.resume_suspended()
     }
 
     /// Completes a method by sending the requests it is suspended for through the engine's
@@ -505,9 +465,9 @@ impl Engine {
     }
 
     /// Continues the suspended method with the responses given.
-    pub(in crate::engine) fn resume_suspended(&mut self) -> Result<(), Diagnostic> {
+    pub(in crate::engine) fn resume_suspended(&mut self) -> Result<Progress, Diagnostic> {
         match self.suspension.take() {
-            None => Ok(()),
+            None => Ok(Progress::Done),
             Some(Suspension::Load(load)) => {
                 let chose = load.chose_context;
                 let already = self.pipeline.reports().len();
@@ -521,7 +481,7 @@ impl Engine {
             }
             Some(suspension @ Suspension::Reason(_)) => {
                 self.suspension = Some(suspension);
-                self.reason_step()
+                self.reason_until_suspended()
             }
         }
     }
@@ -557,19 +517,10 @@ impl Engine {
         }
     }
 
-    /// Records a suspended method, returning the diagnostic (N0491) its step ends with,
-    /// which [progress](Self::progress) turns into [Progress::Suspended].
-    pub(super) fn suspend(&mut self, suspension: Suspension) -> Diagnostic {
-        let pending = suspension.pending();
+    /// Records a suspended method, returning the progress of its call:
+    /// the requests it is suspended for.
+    pub(super) fn suspend(&mut self, suspension: Suspension) -> Progress {
         self.suspension = Some(suspension);
-        let first = pending
-            .first()
-            .map(|request| request.request.url.clone())
-            .unwrap_or_default();
-        EngineError::NoClient {
-            count: pending.len().into(),
-            first,
-        }
-        .diagnostic()
+        Progress::Suspended(self.pending())
     }
 }

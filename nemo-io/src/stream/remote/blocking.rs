@@ -21,7 +21,7 @@ use crate::stream::remote::{Client, Failure, Request, Response, Retry};
 /// # Example
 ///
 /// ```no_run
-/// use nemo_io::remote::{BlockingClient, Request, Retry};
+/// use nemo_io::remote::{BlockingClient, Client, Request, Retry};
 ///
 /// let client = BlockingClient::new(Retry::default());
 /// let responses = client
@@ -75,16 +75,15 @@ impl BlockingClient {
         Self { retry }
     }
 
-    /// Sends several requests, and returns one result per request in order:
-    /// the response body or a [Failure].
+    /// Sends several requests, as [Client::fetch_all] does.
     ///
-    /// Returns `None` if `cancelled` turned true before every response came.
-    /// The requests in flight then finish on their own threads, and their responses are dropped.
-    pub fn fetch_all(
+    /// If `cancelled` turns true, the requests in flight finish on their own threads,
+    /// and their responses are dropped.
+    fn send_all(
         &self,
         requests: &[Request],
         cancelled: &dyn Fn() -> bool,
-    ) -> Option<Vec<Result<Arc<[u8]>, Failure>>> {
+    ) -> Option<Vec<Response>> {
         if cancelled() {
             return None;
         }
@@ -153,7 +152,7 @@ impl Client for BlockingClient {
         requests: &[Request],
         cancelled: &dyn Fn() -> bool,
     ) -> Option<Vec<Response>> {
-        BlockingClient::fetch_all(self, requests, cancelled)
+        self.send_all(requests, cancelled)
     }
 }
 
@@ -256,14 +255,14 @@ fn send(
         };
         return Err((Failure::response(status.as_u16(), message), retry_after));
     }
-    let partial = super::partial_response(status.as_u16(), |name| {
+    let partial = Failure::of_partial_response(status.as_u16(), |name| {
         response
             .headers()
             .get(name)
             .and_then(|value| value.to_str().ok())
     });
-    if let Some(reason) = partial {
-        return Err((Failure::partial(status.as_u16(), reason), None));
+    if let Some(failure) = partial {
+        return Err((failure, None));
     }
     let bytes = response
         .bytes()

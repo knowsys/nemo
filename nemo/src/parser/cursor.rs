@@ -260,35 +260,6 @@ impl<'a> Parser<'a> {
         left.end == right.start
     }
 
-    /// Returns whether a token ends the term before it rather than starting one:
-    /// a closing bracket, a `,`, the end of a statement or of the input,
-    /// or an operator that only stands between two terms, such as `=` or `*`.
-    pub(super) fn ends_term(kind: &TokenKind) -> bool {
-        matches!(
-            kind,
-            TokenKind::ParenClose
-                | TokenKind::BracketClose
-                | TokenKind::BraceClose
-                | TokenKind::Comma
-                | TokenKind::Dot
-                | TokenKind::ArrowLeft
-                | TokenKind::ArrowRight
-                | TokenKind::Bar
-                | TokenKind::Equal
-                | TokenKind::Unequal
-                | TokenKind::ValueEqual
-                | TokenKind::ValueUnequal
-                | TokenKind::Less
-                | TokenKind::LessEq
-                | TokenKind::Greater
-                | TokenKind::GreaterEq
-                | TokenKind::Star
-                | TokenKind::Slash
-                | TokenKind::Carets
-                | TokenKind::End
-        )
-    }
-
     /// Returns the span from a start position to the end of the last consumed
     /// token.
     pub(super) fn span_from(&self, start: Span) -> Span {

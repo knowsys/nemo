@@ -224,7 +224,7 @@ impl PendingFetch {
     /// one it found too large (413, 414),
     /// one whose response it cut off partway, typically at its time limit,
     /// and one it answered in part, saying so in its status or headers
-    /// ([partial_response](nemo_io::remote::partial_response)).
+    /// ([Failure::of_partial_response](nemo_io::remote::Failure::of_partial_response)).
     ///
     /// A request whose blocks are single rows keeps its response.
     fn split_too_large(&mut self, fetch: &CompiledFetch, ids: &mut u64) {
@@ -335,13 +335,12 @@ fn solutions(
         blank_bindings: pending.blank_bindings,
         ..Fetched::default()
     };
-    let blank_nodes = dictionary.shared_label_scope(&sparql::blank_node_scope(&fetch.endpoint));
     for slot in pending.slots.0 {
         // The endpoint may match a binding more loosely than Nemo compares values,
         // so the reader keeps only the solutions that match one.
         let reader = sparql::SparqlReader::new(written, fetch.selection.clone())
             .with_bindings(&slot.key)
-            .with_blank_node_scope(blank_nodes);
+            .with_endpoint_blank_nodes();
         let response = slot
             .response
             .expect("a fetch reads the responses once every request has one");
@@ -392,7 +391,7 @@ fn request_for(fetch: &CompiledFetch, blocks: &[ValuesBlock]) -> Request {
 /// Returns the fetch's query with some `VALUES` blocks.
 fn render(fetch: &CompiledFetch, blocks: &[ValuesBlock]) -> String {
     // Translation only binds queries that are not opaque.
-    fetch.query.with_values(blocks)
+    fetch.query.with_values(blocks).text().to_owned()
 }
 
 /// Returns the request sending a rendered query to the fetch's endpoint.
@@ -512,7 +511,7 @@ fn binding_rows(
                 if sparql::SparqlQuery::ground_term(&decoded).is_none() {
                     if index == pivot
                         && let ValueRef::Null(id) = decoded.as_ref()
-                        && sparql::is_endpoint_blank_node(dictionary, id)
+                        && sparql::SparqlReader::is_endpoint_blank_node(dictionary, id)
                     {
                         blank += 1;
                     }

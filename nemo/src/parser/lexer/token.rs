@@ -88,6 +88,37 @@ pub(in crate::parser) enum TokenKind {
     End,
 }
 
+impl TokenKind {
+    /// Returns whether a token of this kind ends the term before it rather than starting one:
+    /// a closing bracket, a `,`, the end of a statement or of the input,
+    /// or an operator that only stands between two terms, such as `=` or `*`.
+    pub(in crate::parser) fn ends_term(&self) -> bool {
+        matches!(
+            self,
+            TokenKind::ParenClose
+                | TokenKind::BracketClose
+                | TokenKind::BraceClose
+                | TokenKind::Comma
+                | TokenKind::Dot
+                | TokenKind::ArrowLeft
+                | TokenKind::ArrowRight
+                | TokenKind::Bar
+                | TokenKind::Equal
+                | TokenKind::Unequal
+                | TokenKind::ValueEqual
+                | TokenKind::ValueUnequal
+                | TokenKind::Less
+                | TokenKind::LessEq
+                | TokenKind::Greater
+                | TokenKind::GreaterEq
+                | TokenKind::Star
+                | TokenKind::Slash
+                | TokenKind::Carets
+                | TokenKind::End
+        )
+    }
+}
+
 /// One piece of a format string.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(in crate::parser) enum FStringPart {

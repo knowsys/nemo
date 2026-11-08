@@ -62,7 +62,7 @@ use nemo_physical::{
     dictionary::Dictionary,
     function::EvaluationContext,
     management::{Revision, TableId, TableManager},
-    value::{DataValue, ErrorCounts, Type, ValueRef},
+    value::{DataValue, ErrorCounts, IriRef, Type, ValueRef},
 };
 
 use crate::{
@@ -421,8 +421,7 @@ impl Engine {
     /// Panics as [load](Self::load) does.
     pub fn start_load(&mut self, program: Program) -> Result<Progress, Diagnostic> {
         self.refuse_while_suspended("load")?;
-        let outcome = self.choosing_context(|engine| engine.load_program(program));
-        self.progress(outcome)
+        self.choosing_context(|engine| engine.load_program(program))
     }
 
     /// Extends the loaded program:
@@ -470,8 +469,7 @@ impl Engine {
     /// Panics as [extend](Self::extend) does.
     pub fn start_extend(&mut self, program: Program) -> Result<Progress, Diagnostic> {
         self.refuse_while_suspended("extend")?;
-        let outcome = self.choosing_context(|engine| engine.extend_program(program));
-        self.progress(outcome)
+        self.choosing_context(|engine| engine.extend_program(program))
     }
 
     /// Replaces the program, which is how statements are retracted.
@@ -520,8 +518,7 @@ impl Engine {
     /// Panics as [reload](Self::reload) does.
     pub fn start_reload(&mut self, program: Program) -> Result<Progress, Diagnostic> {
         self.refuse_while_suspended("reload")?;
-        let outcome = self.choosing_context(|engine| engine.reload_program(program));
-        self.progress(outcome)
+        self.choosing_context(|engine| engine.reload_program(program))
     }
 
     /// Checks a program without loading it:
@@ -603,7 +600,8 @@ impl Engine {
         rows: impl IntoIterator<Item = Vec<DataValue>>,
     ) -> Result<(), Diagnostic> {
         self.refuse_while_suspended("import_rows")?;
-        self.choosing_context(|engine| engine.admit_rows(predicate, rows))
+        self.choosing_context(|engine| engine.admit_rows(predicate, rows).map(|()| Progress::Done))
+            .map(drop)
     }
 
     /// Sets the client the plain methods ([load](Self::load), [extend](Self::extend),
@@ -704,7 +702,6 @@ impl Engine {
     /// client. The run then stops as after a cancellation.
     /// Returns the first failure of a rule application otherwise.
     pub fn reason(&mut self) -> Result<(), Diagnostic> {
-        self.cancel.clear();
         let progress = self.start_reason();
         self.complete(progress)
     }
@@ -726,13 +723,12 @@ impl Engine {
             }
             _ => {}
         }
-        let outcome = self.reason_step();
-        self.progress(outcome)
+        self.reason_until_suspended()
     }
 
     /// Runs the reasoning to the fixpoint, or until it is suspended for data from the network,
     /// presenting its reports against the written program.
-    pub(in crate::engine) fn reason_step(&mut self) -> Result<(), Diagnostic> {
+    pub(in crate::engine) fn reason_until_suspended(&mut self) -> Result<Progress, Diagnostic> {
         let already = self.pipeline.reports().len();
         let outcome = self.reason_to_fixpoint();
         let Some(written) = &self.written else {
@@ -1083,9 +1079,7 @@ impl Engine {
     /// or under a base IRI, as [term_text](Self::term_text) writes values.
     pub fn predicate_text(&self, predicate: &str) -> String {
         if self.translation.base_iri.is_some() {
-            nemo_physical::value::IriRef::new(predicate)
-                .bracketed()
-                .to_string()
+            IriRef::new(predicate).bracketed().to_string()
         } else {
             crate::model::Identifier::bare(predicate).to_string()
         }

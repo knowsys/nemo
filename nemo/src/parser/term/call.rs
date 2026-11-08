@@ -132,7 +132,7 @@ impl Parser<'_> {
             return None;
         }
         let local_name = second.kind == TokenKind::Ident && Self::adjacent(colon.span, second.span);
-        if Self::adjacent(name.span, colon.span) && (local_name || Self::ends_term(&second.kind)) {
+        if Self::adjacent(name.span, colon.span) && (local_name || second.kind.ends_term()) {
             return None;
         }
         let name = self.advance();

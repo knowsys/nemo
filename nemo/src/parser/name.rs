@@ -44,7 +44,7 @@ impl Parser<'_> {
             // In an argument list, `ex: +1` is a named argument before this is reached;
             // anywhere else, a `+` or `-` after the `:` is the operator.
             let second = self.peek_second();
-            if Self::ends_term(second) || matches!(second, TokenKind::Plus | TokenKind::Minus) {
+            if second.ends_term() || matches!(second, TokenKind::Plus | TokenKind::Minus) {
                 self.advance();
                 return Ok(Identifier::Prefixed {
                     prefix: self.text(&first).to_owned(),

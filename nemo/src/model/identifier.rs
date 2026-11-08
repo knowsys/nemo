@@ -6,7 +6,7 @@ pub(crate) use self::renaming::{IdentifierRenaming, IdentifierRole};
 
 use std::fmt::{self, Display, Formatter};
 
-use nemo_physical::value::{IriRef, NameKind};
+use nemo_physical::value::IriRef;
 
 use crate::model::Operator;
 
@@ -50,10 +50,9 @@ impl Display for Identifier {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Identifier::Bare(name) => {
-                // `_`, the booleans and builtin names read as something else before a `(`.
-                let reads_back = NameKind::Bare.admits(name)
-                    && !matches!(name.as_str(), "_" | "true" | "false")
-                    && Operator::from_name(name).is_none();
+                // A builtin name reads as the builtin before a `(`.
+                let reads_back =
+                    IriRef::new(name).writes_bare() && Operator::from_name(name).is_none();
                 if reads_back {
                     f.write_str(name)
                 } else {

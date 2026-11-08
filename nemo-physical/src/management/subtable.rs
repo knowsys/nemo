@@ -66,7 +66,7 @@ impl Subtable {
         );
 
         let arrival = first.arrival_order();
-        assert!(
+        debug_assert!(
             subtables
                 .iter()
                 .all(|subtable| subtable.arrival_order() == arrival),

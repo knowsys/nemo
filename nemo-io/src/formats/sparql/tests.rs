@@ -7,13 +7,13 @@ use super::*;
 
 /// Reads a response as a read of its own, without bindings, delivering every column.
 fn read_response(body: &str, arity: usize, dictionary: &mut Dictionary) -> Loaded {
-    let mut blanks = BlankNodes::open(None, "response", dictionary);
+    let blanks = BlankNodes::open(None, "response", dictionary);
     let loaded = read_tsv(
         body.as_bytes(),
         arity,
         &RowSelection::default(),
         &[],
-        &mut blanks,
+        &blanks,
         dictionary,
         EvaluationContext::now(),
     );
@@ -129,10 +129,13 @@ fn bound_variables_are_required_below_the_values_join() {
         [],
     )
     .expect("parses");
-    let text = query.with_values(&[ValuesBlock {
-        positions: vec![1],
-        rows: vec![vec![DataValue::iri("urn:p")]],
-    }]);
+    let text = query
+        .with_values(&[ValuesBlock {
+            positions: vec![1],
+            rows: vec![vec![DataValue::iri("urn:p")]],
+        }])
+        .text()
+        .to_owned();
     let guard = text.find("FILTER(BOUND(?p))").expect("the guard is there");
     let values = text.find("VALUES").expect("the block is there");
     assert!(guard < values, "the guard sits below the join: {text}");
@@ -225,10 +228,13 @@ fn a_filter_above_the_values_does_not_guard_them() {
     )
     .expect("parses");
     assert!(!query.may_leave_unbound());
-    let text = query.with_values(&[ValuesBlock {
-        positions: vec![1],
-        rows: vec![vec![DataValue::iri("urn:p")]],
-    }]);
+    let text = query
+        .with_values(&[ValuesBlock {
+            positions: vec![1],
+            rows: vec![vec![DataValue::iri("urn:p")]],
+        }])
+        .text()
+        .to_owned();
     assert_eq!(text.matches("BOUND(?p)").count(), 2, "{text}");
     let guard = text.find("BOUND(?p)").expect("a guard");
     assert!(guard < text.find("VALUES").expect("a block"), "{text}");
@@ -243,10 +249,13 @@ fn values_join_in_under_the_projection() {
         [],
     )
     .expect("valid");
-    let bound = query.with_values(&[ValuesBlock {
-        positions: vec![0],
-        rows: vec![vec![term("urn:x")], vec![term("urn:y")]],
-    }]);
+    let bound = query
+        .with_values(&[ValuesBlock {
+            positions: vec![0],
+            rows: vec![vec![term("urn:x")], vec![term("urn:y")]],
+        }])
+        .text()
+        .to_owned();
     assert!(bound.contains("VALUES ( ?a )"), "{bound}");
     assert!(
         bound.contains("<urn:x>") && bound.contains("<urn:y>"),
@@ -270,10 +279,13 @@ fn values_land_inside_the_filters_so_absences_see_them() {
         [],
     )
     .expect("valid");
-    let bound = query.with_values(&[ValuesBlock {
-        positions: vec![1],
-        rows: vec![vec![term("urn:inverse")]],
-    }]);
+    let bound = query
+        .with_values(&[ValuesBlock {
+            positions: vec![1],
+            rows: vec![vec![term("urn:inverse")]],
+        }])
+        .text()
+        .to_owned();
     // The block binds ?i before the absence is decided: it is
     // in the same group, before the FILTER.
     let values = bound.find("VALUES").expect("bound");
@@ -292,10 +304,13 @@ fn values_on_an_aggregate_result_land_above_the_group() {
     )
     .expect("valid");
     let literal = DataValue::integer(2);
-    let bound = query.with_values(&[ValuesBlock {
-        positions: vec![1],
-        rows: vec![vec![literal]],
-    }]);
+    let bound = query
+        .with_values(&[ValuesBlock {
+            positions: vec![1],
+            rows: vec![vec![literal]],
+        }])
+        .text()
+        .to_owned();
     // The block sits where ?n exists: outside the grouping, which
     // the rendering keeps whole as a subquery.
     assert!(bound.contains("VALUES ( ?n )"), "{bound}");
@@ -585,22 +600,25 @@ fn a_row_goes_out_as_the_combinations_of_its_terms() {
         [],
     )
     .expect("valid");
-    let text = query.with_values(&[ValuesBlock {
-        positions: vec![0, 1, 2],
-        rows: vec![
-            vec![
-                DataValue::iri("urn:a"),
-                DataValue::integer(3),
-                DataValue::boolean(true),
+    let text = query
+        .with_values(&[ValuesBlock {
+            positions: vec![0, 1, 2],
+            rows: vec![
+                vec![
+                    DataValue::iri("urn:a"),
+                    DataValue::integer(3),
+                    DataValue::boolean(true),
+                ],
+                // A null has no term, so its row is left out.
+                vec![
+                    DataValue::null(1),
+                    DataValue::integer(4),
+                    DataValue::boolean(false),
+                ],
             ],
-            // A null has no term, so its row is left out.
-            vec![
-                DataValue::null(1),
-                DataValue::integer(4),
-                DataValue::boolean(false),
-            ],
-        ],
-    }]);
+        }])
+        .text()
+        .to_owned();
     // The integer goes out as an integer and as a decimal, so its row as two rows.
     assert!(text.contains("VALUES ( ?s ?v ?b )"), "{text}");
     assert_eq!(text.matches("( <urn:a> ").count(), 2, "{text}");
@@ -640,16 +658,15 @@ fn responses_sharing_a_scope_agree_on_blank_nodes() {
     assert_ne!(read(&own, &mut dictionary), read(&own, &mut dictionary));
     // In the endpoint's scope, one label names one null in every response,
     // which reports the endpoint as its source.
-    let scope = dictionary.shared_label_scope(&blank_node_scope("http://e/sparql"));
-    let shared = SparqlReader::new(2, RowSelection::default()).with_blank_node_scope(scope);
+    let shared = SparqlReader::new(2, RowSelection::default()).with_endpoint_blank_nodes();
     let first = read(&shared, &mut dictionary);
     assert_eq!(read(&shared, &mut dictionary), first);
     let ValueRef::Null(id) = first.as_ref() else {
         panic!("a blank node is a null: {first}");
     };
-    assert!(is_endpoint_blank_node(&dictionary, id));
+    assert!(SparqlReader::is_endpoint_blank_node(&dictionary, id));
     let fresh = dictionary.fresh_null();
-    assert!(!is_endpoint_blank_node(&dictionary, fresh));
+    assert!(!SparqlReader::is_endpoint_blank_node(&dictionary, fresh));
 }
 
 #[test]

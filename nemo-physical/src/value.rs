@@ -51,7 +51,7 @@ pub use literal::{OtherLiteral, OtherLiteralRef};
 pub use name::NameKind;
 pub use number::{Decimal, DecimalRef, Double, Float, Number, NumberRef};
 pub use owned::DataValue;
-pub use reference::{Bracketed, ValueRef};
+pub use reference::ValueRef;
 pub use structure::{MapRef, MapValue, TupleRef, TupleValue};
 pub use temporal::{Date, DateTime, Duration, Time, TimezoneOffset};
 pub use typing::{DomainSet, LabelBound, LabelTypes, MapShape, Shape, TupleShape, Type};

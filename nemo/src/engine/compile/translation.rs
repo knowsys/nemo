@@ -47,7 +47,7 @@ use crate::{
         },
         compile::types,
         registered::Registered,
-        remote::{FetchedResource, ResourceRequest, Suspension},
+        remote::{FetchedResource, Progress, ResourceRequest, Suspension},
         written::WrittenProgram,
     },
     model::{
@@ -1039,8 +1039,8 @@ impl Engine {
     /// (see [settle_context](Self::settle_context)).
     pub(in crate::engine) fn choosing_context(
         &mut self,
-        call: impl FnOnce(&mut Self) -> Result<(), Diagnostic>,
-    ) -> Result<(), Diagnostic> {
+        call: impl FnOnce(&mut Self) -> Result<Progress, Diagnostic>,
+    ) -> Result<Progress, Diagnostic> {
         let chose = self.next_context.is_none();
         let outcome = call(self);
         self.settle_context(chose, &outcome);
@@ -1056,14 +1056,19 @@ impl Engine {
     pub(in crate::engine) fn settle_context(
         &mut self,
         chose: bool,
-        outcome: &Result<(), Diagnostic>,
+        outcome: &Result<Progress, Diagnostic>,
     ) {
-        if !chose || outcome.is_ok() {
+        if !chose {
             return;
         }
-        match &mut self.suspension {
-            Some(Suspension::Load(load)) => load.chose_context = true,
-            _ => self.next_context = None,
+        match outcome {
+            Ok(Progress::Done) => {}
+            Ok(Progress::Suspended(_)) => {
+                if let Some(Suspension::Load(load)) = &mut self.suspension {
+                    load.chose_context = true;
+                }
+            }
+            Err(_) => self.next_context = None,
         }
     }
 

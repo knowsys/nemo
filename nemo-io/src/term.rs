@@ -153,7 +153,7 @@ impl BlankNodes {
     }
 
     /// Returns the null a label names, minted on first sight.
-    pub(crate) fn null(&mut self, label: &str, dictionary: &mut Dictionary) -> DataValue {
+    pub(crate) fn null(&self, label: &str, dictionary: &mut Dictionary) -> DataValue {
         DataValue::null(dictionary.labeled_null(self.scope, label))
     }
 
@@ -225,18 +225,18 @@ mod tests {
     #[test]
     fn labels_name_one_null_each() {
         let mut dictionary = Dictionary::new();
-        let mut blanks = BlankNodes::open(None, "document", &mut dictionary);
+        let blanks = BlankNodes::open(None, "document", &mut dictionary);
         let first = blanks.null("a", &mut dictionary);
         assert_eq!(blanks.null("a", &mut dictionary), first);
         assert_ne!(blanks.null("b", &mut dictionary), first);
         blanks.close(&mut dictionary);
 
         // Another read names its own nulls, unless both share a scope.
-        let mut other = BlankNodes::open(None, "document", &mut dictionary);
+        let other = BlankNodes::open(None, "document", &mut dictionary);
         assert_ne!(other.null("a", &mut dictionary), first);
         let shared = dictionary.shared_label_scope("endpoint");
-        let mut one = BlankNodes::open(Some(shared), "document", &mut dictionary);
-        let mut two = BlankNodes::open(Some(shared), "document", &mut dictionary);
+        let one = BlankNodes::open(Some(shared), "document", &mut dictionary);
+        let two = BlankNodes::open(Some(shared), "document", &mut dictionary);
         let null = one.null("a", &mut dictionary);
         one.close(&mut dictionary);
         assert_eq!(two.null("a", &mut dictionary), null);

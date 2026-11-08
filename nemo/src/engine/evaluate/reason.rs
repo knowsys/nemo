@@ -7,7 +7,7 @@
 //! A run suspends if a bound SPARQL import needs data from the network,
 //! and resumes at the application it was suspended in.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use nemo_physical::{
     diagnostics::Diagnostic,
@@ -27,7 +27,7 @@ use crate::{
             body,
         },
         registered::Registered,
-        remote::{PendingRequest, RemoteResponse, Suspension},
+        remote::{PendingRequest, Progress, Response, Suspension},
     },
     model::Span,
     telemetry::EngineEvent,
@@ -85,17 +85,8 @@ impl SuspendedReasoning {
         match *self.fetch {}
     }
 
-    /// Returns the ids of the requests without a response yet.
-    pub(in crate::engine) fn pending_ids(&self) -> HashSet<u64> {
-        #[cfg(feature = "sparql")]
-        return self.fetch.slots.pending_ids().collect();
-        #[cfg(not(feature = "sparql"))]
-        match *self.fetch {}
-    }
-
-    /// Records the response to the request with the given id,
-    /// returning whether such a request was pending.
-    pub(in crate::engine) fn respond(&mut self, id: u64, response: RemoteResponse) -> bool {
+    /// Records the response to the request with the given id, if such a request is pending.
+    pub(in crate::engine) fn respond(&mut self, id: u64, response: Response) {
         #[cfg(feature = "sparql")]
         return self.fetch.slots.respond(id, response);
         #[cfg(not(feature = "sparql"))]
@@ -135,10 +126,10 @@ pub(in crate::engine) struct FetchTally {
 }
 
 /// How a rule application ended.
-// The result passes once per application, unboxed, since boxing it would allocate for every
+// The outcome passes once per application, unboxed, since boxing it would allocate for every
 // application.
 #[allow(clippy::large_enum_variant)]
-enum ApplicationResult {
+enum ApplicationOutcome {
     /// Applied, with its result.
     Applied(Applied),
     /// Suspended until its requests have responses.
@@ -154,9 +145,11 @@ enum StoreOutcome {
     Suspended(Box<PendingFetch>),
 }
 
-/// Why an iteration ended before its last rule.
-enum IterationHalt {
-    /// The run was cancelled.
+/// How an iteration over a stratum's active rules ended.
+enum IterationOutcome {
+    /// Every rule was applied.
+    Completed,
+    /// The run was cancelled before the iteration's last rule.
     Cancelled,
     /// The application at this position among the active rules is suspended.
     Suspended {
@@ -168,7 +161,7 @@ enum IterationHalt {
 }
 
 /// How the iterations of a run ended.
-enum RunEnd {
+enum RunOutcome {
     /// At the fixpoint.
     Fixpoint,
     /// Cancelled before it.
@@ -205,7 +198,7 @@ impl Engine {
         context: EvaluationContext,
         observe: bool,
         suspended: Option<Box<PendingFetch>>,
-    ) -> Result<ApplicationResult, Diagnostic> {
+    ) -> Result<ApplicationOutcome, Diagnostic> {
         #[cfg(feature = "sparql")]
         if let Some(fetch) = &rule.fetch {
             let outcome = fetch::apply(
@@ -220,7 +213,7 @@ impl Engine {
             )?;
             let (applied, fetched) = match outcome {
                 FetchOutcome::Suspended(pending) => {
-                    return Ok(ApplicationResult::Suspended(Box::new(pending)));
+                    return Ok(ApplicationOutcome::Suspended(Box::new(pending)));
                 }
                 FetchOutcome::Applied(applied, fetched) => (*applied, fetched),
             };
@@ -235,7 +228,7 @@ impl Engine {
                     rows: fetched.rows,
                 });
             }
-            return Ok(ApplicationResult::Applied(applied));
+            return Ok(ApplicationOutcome::Applied(applied));
         }
         #[cfg(not(feature = "sparql"))]
         if let Some(suspended) = suspended {
@@ -244,7 +237,7 @@ impl Engine {
         #[cfg(feature = "sparql")]
         debug_assert!(suspended.is_none(), "only a fetch is suspended");
         let skeleton = self.skeletons.of(index, rule);
-        Ok(ApplicationResult::Applied(application::apply(
+        Ok(ApplicationOutcome::Applied(application::apply(
             rule,
             skeleton,
             step,
@@ -348,7 +341,7 @@ impl Engine {
     }
 
     /// Reasons to the fixpoint (see [reason](Self::reason)).
-    pub(in crate::engine) fn reason_to_fixpoint(&mut self) -> Result<(), Diagnostic> {
+    pub(in crate::engine) fn reason_to_fixpoint(&mut self) -> Result<Progress, Diagnostic> {
         let Some(mut program) = self.program.take() else {
             return Err(EngineError::NoProgram.diagnostic());
         };
@@ -384,8 +377,8 @@ impl Engine {
         program.strata = strata;
         self.program = Some(program);
         let ended = match outcome {
-            Ok(RunEnd::Suspended(suspended)) => {
-                return Err(self.suspend(Suspension::Reason(suspended)));
+            Ok(RunOutcome::Suspended(suspended)) => {
+                return Ok(self.suspend(Suspension::Reason(suspended)));
             }
             Ok(ended) => ended,
             Err(problem) => {
@@ -394,7 +387,7 @@ impl Engine {
             }
         };
         self.report_fetch_tallies();
-        let cancelled = matches!(ended, RunEnd::Cancelled);
+        let cancelled = matches!(ended, RunOutcome::Cancelled);
         if self.telemetry.enabled() {
             self.telemetry.record(&EngineEvent::Finished {
                 fixpoint: !cancelled,
@@ -412,7 +405,7 @@ impl Engine {
             return Err(EngineError::Cancelled.diagnostic());
         }
         self.fixpoint = true;
-        Ok(())
+        Ok(Progress::Done)
     }
 
     /// Runs the strata to the fixpoint: stratum by stratum,
@@ -426,7 +419,7 @@ impl Engine {
         strata: &[Vec<usize>],
         context: EvaluationContext,
         resumed: Option<SuspendedReasoning>,
-    ) -> Result<RunEnd, Diagnostic> {
+    ) -> Result<RunOutcome, Diagnostic> {
         // The token is cleared where a public method starts or resumes a run, not here:
         // one `reason()` resumes its run after every fetch, and a cancellation arriving
         // in between must stop it.
@@ -470,15 +463,15 @@ impl Engine {
                     }
                     None => (0, self.step, 0, None),
                 };
-                let (stored, halt) =
+                let (stored, outcome) =
                     self.run_iteration(program, &active, next, context, suspended)?;
                 self.derived += stored;
                 let derived = before + stored;
-                match halt {
-                    None => {}
-                    Some(IterationHalt::Cancelled) => return Ok(RunEnd::Cancelled),
-                    Some(IterationHalt::Suspended { next, fetch }) => {
-                        return Ok(RunEnd::Suspended(SuspendedReasoning {
+                match outcome {
+                    IterationOutcome::Completed => {}
+                    IterationOutcome::Cancelled => return Ok(RunOutcome::Cancelled),
+                    IterationOutcome::Suspended { next, fetch } => {
+                        return Ok(RunOutcome::Suspended(SuspendedReasoning {
                             stratum: stratum_index,
                             active,
                             next,
@@ -498,7 +491,7 @@ impl Engine {
             }
             self.finish(program, &finished[stratum_index]);
         }
-        Ok(RunEnd::Fixpoint)
+        Ok(RunOutcome::Fixpoint)
     }
 
     /// Returns, per stratum, the tables it leaves final for the later strata:
@@ -570,7 +563,7 @@ impl Engine {
     /// Runs one iteration over a stratum's active rules from the given position on.
     ///
     /// The first application continues the suspended fetch in `suspended`, if given.
-    /// Returns the rows the iteration stored, and why it ended early, if it did.
+    /// Returns the rows the iteration stored, and how it ended.
     fn run_iteration(
         &mut self,
         program: &mut CompiledProgram,
@@ -578,25 +571,25 @@ impl Engine {
         from: usize,
         context: EvaluationContext,
         mut suspended: Option<Box<PendingFetch>>,
-    ) -> Result<(usize, Option<IterationHalt>), Diagnostic> {
+    ) -> Result<(usize, IterationOutcome), Diagnostic> {
         let mut stored = 0usize;
         for (position, &index) in active.iter().enumerate().skip(from) {
             if self.cancel.is_cancelled() {
-                return Ok((stored, Some(IterationHalt::Cancelled)));
+                return Ok((stored, IterationOutcome::Cancelled));
             }
             let rule = &mut program.rules[index];
             match self.apply_and_store(rule, index, context, suspended.take())? {
                 StoreOutcome::Stored(rows) => stored += rows,
                 StoreOutcome::Suspended(fetch) => {
-                    let halt = IterationHalt::Suspended {
+                    let outcome = IterationOutcome::Suspended {
                         next: position,
                         fetch,
                     };
-                    return Ok((stored, Some(halt)));
+                    return Ok((stored, outcome));
                 }
             }
         }
-        Ok((stored, None))
+        Ok((stored, IterationOutcome::Completed))
     }
 
     /// Returns whether a rule's body has new rows since its last application.
@@ -640,8 +633,8 @@ impl Engine {
             counts,
             observations,
         } = match self.apply_rule(rule, index, step, context, observe, suspended)? {
-            ApplicationResult::Applied(applied) => applied,
-            ApplicationResult::Suspended(fetch) => return Ok(StoreOutcome::Suspended(fetch)),
+            ApplicationOutcome::Applied(applied) => applied,
+            ApplicationOutcome::Suspended(fetch) => return Ok(StoreOutcome::Suspended(fetch)),
         };
         self.step += 1;
         self.applied += 1;

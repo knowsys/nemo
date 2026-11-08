@@ -404,9 +404,9 @@ impl fmt::Display for ValueRef<'_> {
     }
 }
 
-/// A value in term syntax with every IRI in angle brackets; see [ValueRef::bracketed].
+/// A value in term syntax with every IRI in angle brackets, as [ValueRef::bracketed] returns it.
 #[derive(Debug, Clone, Copy)]
-pub struct Bracketed<'a>(ValueRef<'a>);
+struct Bracketed<'a>(ValueRef<'a>);
 
 impl fmt::Display for Bracketed<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -419,7 +419,7 @@ impl<'a> ValueRef<'a> {
     /// structure labels and map keys included,
     /// the text a program reads back as written when it declares a base IRI,
     /// under which a bare name is relative to the base.
-    pub fn bracketed(self) -> Bracketed<'a> {
+    pub fn bracketed(self) -> impl fmt::Display + 'a {
         Bracketed(self)
     }
 }

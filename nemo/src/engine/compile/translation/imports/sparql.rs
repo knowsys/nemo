@@ -150,11 +150,8 @@ impl<'a> Translator<'a> {
         let bytes = fetched
             .or_else(|| self.resources.get(&spec.resource()).cloned())
             .expect("the prefetch fetched or diagnosed every SPARQL import");
-        let blank_nodes = self
-            .dictionary
-            .shared_label_scope(&nemo_io::sparql::blank_node_scope(&spec.endpoint));
         let loaded = nemo_io::sparql::SparqlReader::new(source_width, selection)
-            .with_blank_node_scope(blank_nodes)
+            .with_endpoint_blank_nodes()
             .read(&spec.endpoint, &bytes, self.dictionary, self.context)
             .map_err(ImportFailure::Reading)?;
         self.absorb(table, spec.layout.delivered(), loaded, &spec.endpoint);
@@ -363,7 +360,7 @@ impl<'a> Translator<'a> {
         let query = if blocks.is_empty() {
             query
         } else {
-            query.restricted(&blocks)
+            query.with_values(&blocks)
         };
         let expression = expressions.into_iter().reduce(|left, right| {
             nemo_io::sparql::spargebra::algebra::Expression::And(Box::new(left), Box::new(right))

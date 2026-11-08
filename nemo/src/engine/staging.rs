@@ -22,7 +22,7 @@ use crate::{
         compile::types,
         evaluate::extensional::ExtensionalOrigin,
         registered::Registered,
-        remote::{LoadKind, SuspendedLoad, Suspension},
+        remote::{LoadKind, Progress, SuspendedLoad, Suspension},
         written::WrittenProgram,
     },
     model::{Directive, Fact, Identifier, Program, Statement, Term},
@@ -79,7 +79,10 @@ fn expect_linked(program: &Program) -> Result<(), Diagnostic> {
 
 impl Engine {
     /// Runs the pipeline stages over a first program and loads it.
-    pub(in crate::engine) fn load_program(&mut self, program: Program) -> Result<(), Diagnostic> {
+    pub(in crate::engine) fn load_program(
+        &mut self,
+        program: Program,
+    ) -> Result<Progress, Diagnostic> {
         if self.program.is_some() {
             return Err(EngineError::AlreadyLoaded.diagnostic().with_hint(
                 "use `extend()` to add to the loaded program, or `reload()` to replace it",
@@ -121,10 +124,10 @@ impl Engine {
         &mut self,
         mut load: SuspendedLoad,
         already: usize,
-    ) -> Result<(), Diagnostic> {
+    ) -> Result<Progress, Diagnostic> {
         load.take_responses();
         if load.slots.has_pending() {
-            return Err(self.suspend(Suspension::Load(load)));
+            return Ok(self.suspend(Suspension::Load(load)));
         }
         let revision = load.staged.revision;
         let written = WrittenProgram::new(&self.pipeline, load.staged.written, revision);
@@ -164,7 +167,7 @@ impl Engine {
                     .present_reports(already, |report| written.present(report));
                 load.prepared = Some(state);
                 load.add_requests(missing, &mut self.request_ids);
-                return Err(self.suspend(Suspension::Load(load)));
+                return Ok(self.suspend(Suspension::Load(load)));
             }
             Ok(_) => {}
             Err(problem) => {
@@ -209,7 +212,7 @@ impl Engine {
         self.revision = Some(revision);
         self.written = Some(written);
         self.step = 1;
-        Ok(())
+        Ok(Progress::Done)
     }
 
     /// Loads a linked program into the pipeline as the written program,
@@ -268,6 +271,8 @@ impl Engine {
             .map(|(id, statement)| (id, statement.clone()))
             .unzip();
         let (statements, ids) = if purpose == Purpose::Check {
+            // The rewrite may leave statements out, which `preloaded` would no longer match.
+            debug_assert!(preloaded.is_empty(), "a check preloads nothing");
             rewrite_unvalued(statements, ids)
         } else {
             (statements, ids)
@@ -372,7 +377,10 @@ impl Engine {
     }
 
     /// Runs the pipeline stages over an extension and loads it.
-    pub(in crate::engine) fn extend_program(&mut self, program: Program) -> Result<(), Diagnostic> {
+    pub(in crate::engine) fn extend_program(
+        &mut self,
+        program: Program,
+    ) -> Result<Progress, Diagnostic> {
         tracing::info!(
             statements = program.statements.len(),
             "extending the program"
@@ -426,10 +434,10 @@ impl Engine {
         &mut self,
         mut load: SuspendedLoad,
         already: usize,
-    ) -> Result<(), Diagnostic> {
+    ) -> Result<Progress, Diagnostic> {
         load.take_responses();
         if load.slots.has_pending() {
-            return Err(self.suspend(Suspension::Load(load)));
+            return Ok(self.suspend(Suspension::Load(load)));
         }
         let held = self.revision.expect("a loaded program has a revision");
         let merged = load.staged.revision;
@@ -472,7 +480,7 @@ impl Engine {
                         .present_reports(already, |report| written.present(report));
                     load.prepared = Some(state);
                     load.add_requests(missing, &mut self.request_ids);
-                    return Err(self.suspend(Suspension::Load(load)));
+                    return Ok(self.suspend(Suspension::Load(load)));
                 }
                 state
             }
@@ -515,7 +523,7 @@ impl Engine {
         self.revision = Some(merged);
         self.written = Some(written);
         self.fixpoint = false;
-        Ok(())
+        Ok(Progress::Done)
     }
 
     /// Stores an extension's facts and imports as one fresh extensional block.

@@ -24,7 +24,7 @@ use crate::{
         },
         evaluate::extensional::{ExtensionalBlock, ExtensionalOrigin},
         registered::Registered,
-        remote::{LoadKind, ResourceRequest, SuspendedLoad, Suspension},
+        remote::{LoadKind, Progress, ResourceRequest, SuspendedLoad, Suspension},
         written::WrittenProgram,
     },
     model::{Directive, Identifier, Program, Statement},
@@ -40,7 +40,7 @@ struct RebuildScope {
 
 /// How a reload's translation ended: done, or prepared and in need of the remote
 /// resources these requests fetch.
-enum Translated<T> {
+enum TranslationOutcome<T> {
     /// Translated.
     Done(T),
     /// Prepared, with the engine as it was, and in need of these requests.
@@ -112,7 +112,10 @@ fn preloaded(
 
 impl Engine {
     /// Runs the pipeline stages over a replacement program and rebuilds the stored data for it.
-    pub(in crate::engine) fn reload_program(&mut self, program: Program) -> Result<(), Diagnostic> {
+    pub(in crate::engine) fn reload_program(
+        &mut self,
+        program: Program,
+    ) -> Result<Progress, Diagnostic> {
         tracing::info!(
             statements = program.statements.len(),
             "reloading the program"
@@ -179,10 +182,10 @@ impl Engine {
         &mut self,
         mut load: SuspendedLoad,
         already: usize,
-    ) -> Result<(), Diagnostic> {
+    ) -> Result<Progress, Diagnostic> {
         load.take_responses();
         if load.slots.has_pending() {
-            return Err(self.suspend(Suspension::Load(load)));
+            return Ok(self.suspend(Suspension::Load(load)));
         }
         let old = self.program.take().expect("a reload replaces a program");
         let held = self.revision.expect("a loaded program has a revision");
@@ -210,11 +213,11 @@ impl Engine {
         self.pipeline
             .present_reports(already, |report| written.present(report));
         let retranslated = match retranslated {
-            Ok(Translated::Done(retranslated)) => retranslated,
-            Ok(Translated::Missing(missing)) => {
+            Ok(TranslationOutcome::Done(retranslated)) => retranslated,
+            Ok(TranslationOutcome::Missing(missing)) => {
                 self.program = Some(old);
                 load.add_requests(missing, &mut self.request_ids);
-                return Err(self.suspend(Suspension::Load(load)));
+                return Ok(self.suspend(Suspension::Load(load)));
             }
             Err(problem) => {
                 self.program = Some(old);
@@ -232,7 +235,7 @@ impl Engine {
         self.program = Some(retranslated.compiled);
         self.revision = Some(staged.revision);
         self.written = Some(written);
-        Ok(())
+        Ok(Progress::Done)
     }
 
     /// Returns what a reload rebuilds, from the diff of the old and the new statements.
@@ -329,7 +332,7 @@ impl Engine {
         rebuild: &RebuildScope,
         previous: &HashMap<TableId, Vec<Type>>,
         stages: &[&'static str],
-    ) -> Result<Translated<Retranslated>, Diagnostic> {
+    ) -> Result<TranslationOutcome<Retranslated>, Diagnostic> {
         let mut unstable: HashSet<String> = std::mem::take(&mut load.unstable);
         loop {
             let rebuilt = self.rebuilt_predicates(rebuild, &unstable);
@@ -367,7 +370,7 @@ impl Engine {
                                 Ok(missing) => {
                                     load.prepared = Some(state);
                                     load.unstable = unstable;
-                                    return Ok(Translated::Missing(missing));
+                                    return Ok(TranslationOutcome::Missing(missing));
                                 }
                                 Err(problem) => {
                                     if Self::unstable_import(&problem, &mut unstable) {
@@ -391,7 +394,7 @@ impl Engine {
             self.translation = state;
             match outcome {
                 Ok(compiled) => {
-                    return Ok(Translated::Done(Retranslated {
+                    return Ok(TranslationOutcome::Done(Retranslated {
                         compiled,
                         facts,
                         replaced,

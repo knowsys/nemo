@@ -12,7 +12,7 @@ use nemo_io::{file_format::FileFormat, remote::Request};
 use nemo_physical::{diagnostics::Diagnostic, value::ValueRef};
 
 use crate::{
-    diagnostics::{AboutResource, EngineError, TranslationError},
+    diagnostics::{AboutResource, TranslationError},
     engine::{
         compile::translation::{Translator, imports::PendingImport, options::on_error},
         remote::{Failure, FetchedResource, ResourceRequest},
@@ -110,13 +110,10 @@ impl<'a> Translator<'a> {
                 Err(problem) => self.recover(problem)?,
             }
         }
-        if let Some(first) = missing.first() {
-            return Err(EngineError::NoClient {
-                count: missing.len().into(),
-                first: first.request.url.clone(),
-            }
-            .diagnostic());
-        }
+        assert!(
+            missing.is_empty(),
+            "a translation commits with the remote resources it was prepared with"
+        );
 
         // The empty resource is standard input, read once and shared by
         // every import naming it, since it can be read only once.

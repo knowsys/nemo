@@ -78,7 +78,8 @@ pub struct Failure {
     /// The transport's reason, or an excerpt of the response body.
     pub message: String,
     /// Whether a response came but held only part of the result, as its status or headers
-    /// said ([partial_response]): its body is not taken, so no partial result imports.
+    /// said ([of_partial_response](Self::of_partial_response)): its body is not taken,
+    /// so no partial result imports.
     pub partial: bool,
 }
 
@@ -103,13 +104,48 @@ impl Failure {
     }
 
     /// Creates the failure of a successful response that held only part of the result,
-    /// for the reason [partial_response] gives.
+    /// for the given reason.
     pub fn partial(status: u16, reason: impl Into<String>) -> Self {
         Self {
             status: Some(status),
             message: reason.into(),
             partial: true,
         }
+    }
+
+    /// The response headers [of_partial_response](Self::of_partial_response) reads,
+    /// for a client that collects them first.
+    pub const PARTIAL_RESPONSE_HEADERS: [&'static str; 3] =
+        ["X-SQL-State", "X-SQL-Message", "X-SPARQL-MaxRows"];
+
+    /// Returns the failure of a successful response that holds only part of its result,
+    /// if its status or headers say so, or `None` for a whole one.
+    ///
+    /// SPARQL defines no way to say so, and a store that stops at its time or row limit
+    /// responds with what it has. Virtuoso, behind DBpedia and many other endpoints, says it:
+    /// - status 206 for an "anytime" result cut at its time limit,
+    ///   or `X-SQL-State` (with `X-SQL-Message`) where it responds with 200,
+    /// - `X-SPARQL-MaxRows` for a result that reached its row limit (`ResultSetMaxRows`,
+    ///   10 000 rows at DBpedia), which it cuts without an error.
+    ///
+    /// `header` returns a response header's value by its name, regardless of case.
+    /// An HTTP client calls this for every successful response and fails the request with
+    /// the failure it returns, so that no partial result is read as a whole one.
+    pub fn of_partial_response<'a>(
+        status: u16,
+        header: impl Fn(&str) -> Option<&'a str>,
+    ) -> Option<Self> {
+        let reason = if let Some(state) = header("X-SQL-State") {
+            let message = header("X-SQL-Message").unwrap_or_default();
+            format!("it stopped early ({state}: {message})")
+        } else if let Some(rows) = header("X-SPARQL-MaxRows") {
+            format!("it returns at most {rows} rows")
+        } else if status == 206 {
+            String::from("it marked its response partial (status 206)")
+        } else {
+            return None;
+        };
+        Some(Self::partial(status, reason))
     }
 
     /// Returns whether the server found the request too large (413) or its URL too long (414),
@@ -166,37 +202,6 @@ impl std::fmt::Display for Failure {
 
 /// The response to a request: the body's bytes, or the [Failure] that prevented one.
 pub type Response = Result<Arc<[u8]>, Failure>;
-
-/// The response headers [partial_response] reads, for a client that collects them first.
-pub const PARTIAL_RESPONSE_HEADERS: [&str; 3] =
-    ["X-SQL-State", "X-SQL-Message", "X-SPARQL-MaxRows"];
-
-/// Returns why a successful response holds only part of its result, if its status or
-/// headers say so, or `None` for a whole one.
-///
-/// SPARQL defines no way to say so, and a store that stops at its time or row limit
-/// responds with what it has. Virtuoso, behind DBpedia and many other endpoints, says it:
-/// - status 206 for an "anytime" result cut at its time limit,
-///   or `X-SQL-State` (with `X-SQL-Message`) where it responds with 200;
-/// - `X-SPARQL-MaxRows` for a result that reached its row limit (`ResultSetMaxRows`,
-///   10 000 rows at DBpedia), which it cuts without an error.
-///
-/// `header` returns a response header's value by its name, regardless of case.
-/// An HTTP client calls this for every successful response and fails the request with a
-/// [partial](Failure::partial) failure, so that no partial result is read as a whole one.
-pub fn partial_response<'a>(
-    status: u16,
-    header: impl Fn(&str) -> Option<&'a str>,
-) -> Option<String> {
-    if let Some(state) = header("X-SQL-State") {
-        let message = header("X-SQL-Message").unwrap_or_default();
-        return Some(format!("it stopped early ({state}: {message})"));
-    }
-    if let Some(rows) = header("X-SPARQL-MaxRows") {
-        return Some(format!("it returns at most {rows} rows"));
-    }
-    (status == 206).then(|| String::from("it marked its response partial (status 206)"))
-}
 
 /// What sends the requests of a method that needs data from the network.
 ///
@@ -281,19 +286,23 @@ mod tests {
     #[test]
     fn partial_responses_are_told_by_status_and_headers() {
         let none = |_: &str| None;
-        assert_eq!(partial_response(200, none), None);
-        assert!(partial_response(206, none).is_some());
+        assert_eq!(Failure::of_partial_response(200, none), None);
+        assert!(Failure::of_partial_response(206, none).is_some_and(|failure| failure.partial));
         let capped = |name: &str| (name == "X-SPARQL-MaxRows").then_some("10000");
         assert!(
-            partial_response(200, capped).is_some_and(|reason| reason.contains("10000")),
+            Failure::of_partial_response(200, capped)
+                .is_some_and(|failure| failure.message.contains("10000")),
             "{:?}",
-            partial_response(200, capped)
+            Failure::of_partial_response(200, capped)
         );
         let timed_out = |name: &str| match name {
             "X-SQL-State" => Some("S1TAT"),
             "X-SQL-Message" => Some("RC...: Returning incomplete results"),
             _ => None,
         };
-        assert!(partial_response(200, timed_out).is_some_and(|reason| reason.contains("S1TAT")));
+        assert!(
+            Failure::of_partial_response(200, timed_out)
+                .is_some_and(|failure| failure.message.contains("S1TAT"))
+        );
     }
 }

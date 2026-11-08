@@ -15,7 +15,7 @@ use crate::common::{Responder, TempDirectory, parse};
 
 use super::load_into;
 
-/// Returns the requests of a suspended step, panicking if it is done.
+/// Returns the requests a call left its method suspended for, panicking if the method is done.
 fn suspended(progress: Progress) -> Vec<PendingRequest> {
     match progress {
         Progress::Suspended(pending) => pending,

@@ -12,11 +12,12 @@
 //!
 //! A blank node in a response is a null, which its label names in a
 //! [label scope](nemo_physical::dictionary::LabelScope): the endpoint's, shared by all its
-//! responses ([blank_node_scope], [SparqlReader::with_blank_node_scope]),
+//! responses ([SparqlReader::with_endpoint_blank_nodes]),
 //! or, for a reader given none, the response's own.
 //! A response cut short is an error, whether the endpoint says so in its body
 //! ([SparqlReader::read]) or in its status and headers
-//! ([partial_response](crate::remote::partial_response), which the HTTP client checks).
+//! ([Failure::of_partial_response](crate::remote::Failure::of_partial_response),
+//! which the HTTP client checks).
 
 pub mod compose;
 
@@ -27,7 +28,7 @@ use std::collections::HashSet;
 
 use nemo_physical::{
     diagnostics::Diagnostic,
-    dictionary::{Dictionary, LabelScope},
+    dictionary::Dictionary,
     function::EvaluationContext,
     value::{DataValue, NumberRef, ValueRef},
 };
@@ -68,18 +69,9 @@ pub const DEFAULT_QUERY: &str = "SELECT ?s ?p ?o WHERE { ?s ?p ?o }";
 /// The start of the name of every label scope an endpoint's blank nodes are named in.
 const BLANK_NODE_SCOPE: &str = "sparql ";
 
-/// Returns the name of the label scope an endpoint's blank nodes are named in
-/// (see [SparqlReader::with_blank_node_scope]).
-pub fn blank_node_scope(endpoint: &str) -> String {
+/// Returns the name of the label scope an endpoint's blank nodes are named in.
+fn blank_node_scope(endpoint: &str) -> String {
     format!("{BLANK_NODE_SCOPE}{endpoint}")
-}
-
-/// Returns whether a null is a blank node an endpoint returned,
-/// rather than one a rule or another source made.
-pub fn is_endpoint_blank_node(dictionary: &Dictionary, id: u64) -> bool {
-    dictionary
-        .null_scope_name(id)
-        .is_some_and(|scope| scope.starts_with(BLANK_NODE_SCOPE))
 }
 
 /// The longest rendered query that travels as a GET parameter.
@@ -154,8 +146,8 @@ impl SparqlQuery {
 
     /// Returns the terms a value goes out as where an endpoint compares it as a term,
     /// any of which the endpoint may hold it as: its [ground term](Self::ground_term),
-    /// and for an integer also the decimal an endpoint holding quantities as decimals finds
-    /// ([integer_as_decimal](Self::integer_as_decimal)).
+    /// and for an integer also the decimal an endpoint holding quantities as decimals finds,
+    /// `"3.0"^^xsd:decimal` for the integer 3.
     ///
     /// Empty for a value without a ground term.
     pub fn ground_terms(value: &DataValue) -> Vec<GroundTerm> {
@@ -178,7 +170,7 @@ impl SparqlQuery {
     /// Stores keep datatypes apart, and some hold every quantity as a decimal, as Wikidata
     /// does, which an integer in its own datatype does not find.
     /// The decimal is written as such a store writes an integral quantity, `"3.0"`.
-    pub fn integer_as_decimal(literal: &Literal) -> Option<Literal> {
+    fn integer_as_decimal(literal: &Literal) -> Option<Literal> {
         (literal.datatype().as_str() == INTEGER).then(|| {
             Literal::new_typed_literal(
                 format!("{}.0", literal.value()),
@@ -368,17 +360,7 @@ impl SparqlQuery {
     /// Panics for an [opaque](QueryShape::Opaque) query,
     /// since no injection point of such a query is a selection on the whole result.
     /// The [shape](Self::shape) tells.
-    pub fn with_values(&self, blocks: &[ValuesBlock]) -> String {
-        self.restricted(blocks).text
-    }
-
-    /// Returns the query with the bindings joined in, as [with_values](Self::with_values)
-    /// renders it.
-    ///
-    /// # Panics
-    ///
-    /// Panics for an [opaque](QueryShape::Opaque) query.
-    pub fn restricted(&self, blocks: &[ValuesBlock]) -> Self {
+    pub fn with_values(&self, blocks: &[ValuesBlock]) -> Self {
         if let QueryShape::Opaque(reason) = self.shape() {
             panic!("values cannot be joined into an opaque query: {reason}");
         }
@@ -478,33 +460,43 @@ pub struct SparqlReader {
     /// The bindings a solution must match, per `VALUES` block:
     /// the block's columns, by position, and its rows.
     bindings: Vec<(Vec<usize>, HashSet<Vec<DataValue>>)>,
-    /// The scope blank node labels name nulls in, or `None` for a scope of each response's own.
-    blank_nodes: Option<LabelScope>,
+    /// Whether blank node labels name nulls in the endpoint's shared label scope,
+    /// rather than in a scope of each response's own.
+    endpoint_blank_nodes: bool,
 }
 
 impl SparqlReader {
     /// Creates a reader of responses of the given width, delivering the selection.
     ///
     /// Each response's blank node labels name nulls of its own,
-    /// unless [with_blank_node_scope](Self::with_blank_node_scope) gives a shared scope.
+    /// unless [with_endpoint_blank_nodes](Self::with_endpoint_blank_nodes) shares them.
     pub fn new(arity: usize, selection: RowSelection) -> Self {
         Self {
             arity,
             selection,
             bindings: Vec::new(),
-            blank_nodes: None,
+            endpoint_blank_nodes: false,
         }
     }
 
-    /// Returns the reader naming blank nodes in the given open label scope,
-    /// usually the endpoint's ([blank_node_scope]), so that the responses sharing it agree on
-    /// them: a label names the same null in every response.
+    /// Returns the reader naming blank nodes in the endpoint's shared label scope,
+    /// so that the endpoint's responses agree on them: a label names the same null in every
+    /// response.
     ///
     /// SPARQL scopes a label to one result only, but stores labelling nodes by their internal
     /// ids, as in Jena's TSV results, Virtuoso, Oxigraph and QLever, keep it across results.
-    pub fn with_blank_node_scope(mut self, scope: LabelScope) -> Self {
-        self.blank_nodes = Some(scope);
+    pub fn with_endpoint_blank_nodes(mut self) -> Self {
+        self.endpoint_blank_nodes = true;
         self
+    }
+
+    /// Returns whether a null is a blank node an endpoint returned to a reader
+    /// [with_endpoint_blank_nodes](Self::with_endpoint_blank_nodes),
+    /// rather than one a rule or another source made.
+    pub fn is_endpoint_blank_node(dictionary: &Dictionary, id: u64) -> bool {
+        dictionary
+            .null_scope_name(id)
+            .is_some_and(|scope| scope.starts_with(BLANK_NODE_SCOPE))
     }
 
     /// Returns the reader keeping only the solutions that match the bindings the query was
@@ -543,14 +535,17 @@ impl SparqlReader {
         context: EvaluationContext,
     ) -> Result<Loaded, Diagnostic> {
         check_complete(endpoint, body)?;
-        let mut blanks =
-            BlankNodes::open(self.blank_nodes, &blank_node_scope(endpoint), dictionary);
+        let name = blank_node_scope(endpoint);
+        let shared = self
+            .endpoint_blank_nodes
+            .then(|| dictionary.shared_label_scope(&name));
+        let blanks = BlankNodes::open(shared, &name, dictionary);
         let read = read_tsv(
             body,
             self.arity,
             &self.selection,
             &self.bindings,
-            &mut blanks,
+            &blanks,
             dictionary,
             context,
         );
@@ -634,7 +629,7 @@ fn read_tsv(
     arity: usize,
     selection: &RowSelection,
     bindings: &[(Vec<usize>, HashSet<Vec<DataValue>>)],
-    blanks: &mut BlankNodes,
+    blanks: &BlankNodes,
     dictionary: &mut Dictionary,
     context: EvaluationContext,
 ) -> Result<Loaded, Diagnostic> {
@@ -764,7 +759,7 @@ fn is_cell(cell: &str) -> bool {
 ///
 /// Quoted literals read in [Turtle's literal syntax](LiteralSyntax::Turtle),
 /// and nulls are minted as [SparqlReader::read] describes.
-fn term(cell: &str, blanks: &mut BlankNodes, dictionary: &mut Dictionary) -> Option<DataValue> {
+fn term(cell: &str, blanks: &BlankNodes, dictionary: &mut Dictionary) -> Option<DataValue> {
     if cell.is_empty() {
         // Unbound: a fresh null every time, since two unbound cells
         // assert nothing about being equal.
