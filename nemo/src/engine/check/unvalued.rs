@@ -38,39 +38,35 @@ use crate::{
     pipeline::StatementId,
 };
 
-/// Rewrites the statements of a program for its check,
+/// Rewrites the statements of a program for its check, each with its id,
 /// so that its parameters without a value read as inputs (see the module documentation).
-///
-/// `ids` are the statements' ids, in the same order;
-/// the ids returned are aligned with the statements returned.
 pub(in crate::engine) fn rewrite_unvalued(
-    statements: Vec<Statement>,
-    ids: Vec<StatementId>,
-) -> (Vec<Statement>, Vec<StatementId>) {
+    statements: Vec<(StatementId, Statement)>,
+) -> Vec<(StatementId, Statement)> {
     let unvalued = unvalued_parameters(&statements);
     if unvalued.is_empty() {
-        return (statements, ids);
+        return statements;
     }
     let as_inputs = input_predicates(&statements, &unvalued);
     let mut given = HashSet::new();
     statements
         .into_iter()
-        .zip(ids)
-        .filter_map(|(statement, id)| {
-            Some((
-                rewrite_statement(statement, &unvalued, &as_inputs, &mut given)?,
-                id,
-            ))
+        .filter_map(|(id, statement)| {
+            let rewritten = rewrite_statement(statement, &unvalued, &as_inputs, &mut given)?;
+            Some((id, rewritten))
         })
-        .unzip()
+        .collect()
 }
 
 /// Returns the predicates of the imports reading a parameter without a value,
 /// which the check reads as inputs.
-fn input_predicates(statements: &[Statement], unvalued: &HashSet<String>) -> HashSet<Identifier> {
+fn input_predicates(
+    statements: &[(StatementId, Statement)],
+    unvalued: &HashSet<String>,
+) -> HashSet<Identifier> {
     statements
         .iter()
-        .filter_map(|statement| match statement {
+        .filter_map(|(_, statement)| match statement {
             Statement::Directive(Directive::Import(import)) if reads(statement, unvalued) => {
                 Some(import.predicate.clone())
             }
@@ -82,9 +78,9 @@ fn input_predicates(statements: &[Statement], unvalued: &HashSet<String>) -> Has
 /// Returns the names of the parameters without a value:
 /// those declaring none, and those whose value reads one without a value.
 /// A name declared more than once is left out.
-fn unvalued_parameters(statements: &[Statement]) -> HashSet<String> {
+fn unvalued_parameters(statements: &[(StatementId, Statement)]) -> HashSet<String> {
     let mut declared: HashMap<&str, Vec<&ParameterDirective>> = HashMap::new();
-    for statement in statements {
+    for (_, statement) in statements {
         if let Statement::Directive(Directive::Parameter(parameter)) = statement {
             declared
                 .entry(parameter.variable.name.as_str())

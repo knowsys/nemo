@@ -94,9 +94,25 @@ pub(crate) enum LiftedProof {
     },
 }
 
-/// A stored fact as lifted: its table and row,
-/// and the written literal it was widened to if its import drops columns.
-type Lifted = (TableId, Vec<StorageValue>, Option<Vec<Term>>);
+/// A stored fact as lifted, which the graph lifts once.
+#[derive(Debug, PartialEq, Eq, Hash)]
+struct LiftedKey {
+    /// The fact's table.
+    table: TableId,
+    /// The fact's row.
+    row: Vec<StorageValue>,
+    /// The terms of the written literal the fact was widened to, if its import drops columns.
+    widened: Option<Vec<Term>>,
+}
+
+/// A fact queried at an endpoint, which the graph lists once.
+#[derive(Debug, PartialEq, Eq, Hash)]
+struct RemoteKey {
+    /// The fact's predicate.
+    predicate: String,
+    /// The fact's columns.
+    terms: Vec<LiftedCell>,
+}
 
 /// The lifted proofs of one response: one node per fact,
 /// each after the nodes of its premises, which its derivation names by id.
@@ -108,11 +124,11 @@ pub(crate) struct LiftedGraph {
     /// The id of the batch's first node.
     first: usize,
     /// The nodes of the batch, by id from `first` on.
-    pub(crate) nodes: Vec<LiftedNode>,
+    nodes: Vec<LiftedNode>,
     /// The id of each stored fact lifted.
-    lifted: HashMap<Lifted, usize>,
-    /// The id of each fact queried at an endpoint, by predicate and columns.
-    remote: HashMap<(String, Vec<LiftedCell>), usize>,
+    lifted: HashMap<LiftedKey, usize>,
+    /// The id of each fact queried at an endpoint.
+    remote: HashMap<RemoteKey, usize>,
 }
 
 impl LiftedGraph {
@@ -120,6 +136,21 @@ impl LiftedGraph {
     fn push(&mut self, node: LiftedNode) -> usize {
         self.nodes.push(node);
         self.first + self.nodes.len() - 1
+    }
+
+    /// Returns the id of the leaf of a fact queried at an endpoint, added on first sight.
+    fn remote_leaf(&mut self, predicate: String, terms: Vec<LiftedCell>) -> usize {
+        let key = RemoteKey { predicate, terms };
+        if let Some(&id) = self.remote.get(&key) {
+            return id;
+        }
+        let id = self.push(LiftedNode {
+            predicate: key.predicate.clone(),
+            terms: key.terms.clone(),
+            proof: LiftedProof::Leaf,
+        });
+        self.remote.insert(key, id);
+        id
     }
 
     /// Takes out the batch's nodes, so that the next batch's ids follow them.
@@ -245,7 +276,11 @@ impl<'a> Lifter<'a> {
     /// in declaration order.
     fn lift_at(&self, node: &ProofNode, at: Option<&[Term]>, graph: &mut LiftedGraph) -> usize {
         let widened = at.filter(|written| written.len() > node.row.len());
-        let key = (node.table, node.row.clone(), widened.map(<[Term]>::to_vec));
+        let key = LiftedKey {
+            table: node.table,
+            row: node.row.clone(),
+            widened: widened.map(<[Term]>::to_vec),
+        };
         if let Some(&id) = graph.lifted.get(&key) {
             return id;
         }
@@ -548,25 +583,10 @@ impl<'a> Lifter<'a> {
                         Some(Premise::Node(node)) => {
                             premises.push(self.lift_at(node, Some(&written), graph))
                         }
-                        Some(Premise::Remote) => {
-                            let key = (
-                                self.name(atom),
-                                instantiate(&written, &derivation.assignment),
-                            );
-                            let id = match graph.remote.get(&key) {
-                                Some(&id) => id,
-                                None => {
-                                    let id = graph.push(LiftedNode {
-                                        predicate: key.0.clone(),
-                                        terms: key.1.clone(),
-                                        proof: LiftedProof::Leaf,
-                                    });
-                                    graph.remote.insert(key, id);
-                                    id
-                                }
-                            };
-                            premises.push(id);
-                        }
+                        Some(Premise::Remote) => premises.push(graph.remote_leaf(
+                            self.name(atom),
+                            instantiate(&written, &derivation.assignment),
+                        )),
                         None => {}
                     }
                 }

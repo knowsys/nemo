@@ -29,20 +29,10 @@ impl SourceFile {
     /// finding the line in the text's line index.
     fn line_column(&self, span: Span) -> (u32, u32) {
         let text = &*self.text;
-        let lines = self.lines.get_or_init(|| {
-            std::iter::once(0)
-                .chain(text.match_indices('\n').map(|(index, _)| index + 1))
-                .collect()
-        });
-        let start = (span.start as usize).min(text.len());
-        let start = (0..=start)
-            .rev()
-            .find(|&index| text.is_char_boundary(index))
-            .unwrap_or(0);
-        let line = lines.partition_point(|&line_start| line_start <= start);
-        let column = text[lines[line - 1]..start].chars().count() + 1;
-        let saturate = |count: usize| u32::try_from(count).unwrap_or(u32::MAX);
-        (saturate(line), saturate(column))
+        let lines = self
+            .lines
+            .get_or_init(|| Span::line_starts(text).into_boxed_slice());
+        span.line_column_in(text, lines)
     }
 }
 

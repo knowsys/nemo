@@ -62,7 +62,7 @@ struct TraceStream<'a> {
     written: usize,
     /// The fact of every node printed, by id, to name the premises of later ones.
     facts: Vec<String>,
-    /// The rules of the parts so far, for the end of the file's response.
+    /// The rules of the parts so far, for the end of the file's response, if there is a file.
     rules: Vec<WrittenRule>,
     /// Whether the standard output closed under the stream: the reader
     /// has all it wants, so no further part is derived for it.
@@ -122,7 +122,10 @@ impl<'a> TraceStream<'a> {
             }
             self.written += 1;
         }
-        self.rules.extend(part.rules);
+        // Only the file's response lists the rules: printed, each line spells out its rule.
+        if self.path.is_some() {
+            self.rules.extend(part.rules);
+        }
         Ok(())
     }
 

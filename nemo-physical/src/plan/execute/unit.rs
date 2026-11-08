@@ -1,12 +1,10 @@
 //! Units: running the joins of a unit's members and materializing the unit's rows.
 
-use bumpalo::{Bump, collections::Vec as BumpVec};
-
 use crate::{
     dictionary::Dictionary,
     execution::{
         Cells, JoinArena, JoinShape, JoinTemplate, PendingRows, ProjectingSink, ProjectionScratch,
-        RowEvaluator, RowSink, RowStageShape, SubtractedShape, TrieJoin,
+        RowEvaluator, RowSink, RowStageShape, TrieJoin,
     },
     plan::{
         execute::{
@@ -37,43 +35,6 @@ impl Execution<'_> {
         let runs = rows.finish(context);
 
         self.materialize(unit.top, runs, &mut context.accounting)
-    }
-
-    /// Returns the blocks a member's join reads: those of its inputs and of its subtracted relations,
-    /// gathered in the given arena.
-    fn member_blocks<'j>(&'j self, member: &'j MemberLayout, bump: &'j Bump) -> JoinBlocks<'j> {
-        let inputs = BumpVec::from_iter_in(
-            member.inputs.iter().map(|&required| {
-                let mut blocks = BumpVec::new_in(bump);
-                self.blocks(required, &mut blocks);
-                blocks.into_bump_slice()
-            }),
-            bump,
-        );
-
-        // The blocks of every relation first, then their shapes in one allocation,
-        // so that neither list moves when the other grows.
-        let mut ends = BumpVec::with_capacity_in(member.subtracted.len(), bump);
-        let mut subtracted = BumpVec::new_in(bump);
-        for relation in &member.subtracted {
-            self.blocks(relation.order, &mut subtracted);
-            ends.push(subtracted.len());
-        }
-        let mut subtracted_shapes = BumpVec::with_capacity_in(subtracted.len(), bump);
-        let mut first = 0;
-        for (relation, &end) in member.subtracted.iter().zip(&ends) {
-            let shape = SubtractedShape {
-                layers: &relation.layers,
-            };
-            subtracted_shapes.extend(std::iter::repeat_n(shape, end - first));
-            first = end;
-        }
-
-        JoinBlocks {
-            inputs: inputs.into_bump_slice(),
-            subtracted: subtracted.into_bump_slice(),
-            subtracted_shapes: subtracted_shapes.into_bump_slice(),
-        }
     }
 }
 

@@ -48,7 +48,7 @@ trait ShardSource: Sync {
     /// each shard builds its column pieces on a task, and the pieces concatenate.
     fn build(&self, tasks: Tasks) -> Vec<Column> {
         let pieces = self.map_shards(tasks, |low, high| self.build_shard(low, high));
-        concat_pieces(self.arity(), pieces)
+        Column::concat_shards(self.arity(), pieces)
     }
 
     /// Runs a build per shard, cut into about as many shards as the given tasks,
@@ -75,15 +75,6 @@ trait ShardSource: Sync {
             build(low, high)
         })
     }
-}
-
-/// Concatenates the column pieces of consecutive shards; a single shard's are the columns.
-fn concat_pieces(arity: usize, mut pieces: Vec<Vec<Column>>) -> Vec<Column> {
-    if pieces.len() == 1 {
-        return pieces.pop().expect("one shard");
-    }
-
-    Column::concat_shards(arity, pieces)
 }
 
 /// Builds the columns of a trie of the given positive arity from runs.
@@ -172,7 +163,7 @@ pub(super) fn from_tries_carrying<T: Send>(
         }
         carried
     };
-    (concat_pieces(arity, columns), carried)
+    (Column::concat_shards(arity, columns), carried)
 }
 
 /// Returns the number of distinct rows across the given tries,

@@ -46,21 +46,30 @@ pub(super) struct NullLabels {
     /// The number of each name.
     numbers: HashMap<Box<str>, u32>,
     /// The open shared scopes, by the number of their name.
-    shared: HashMap<u32, u32>,
-    /// Per run of consecutively minted nulls, the index of its first null
-    /// and the scope that minted its nulls by label, or `None` for nulls minted fresh.
-    runs: Vec<(u64, Option<u32>)>,
+    shared: HashMap<u32, LabelScope>,
+    /// The runs of consecutively minted nulls, in the order they were minted.
+    runs: Vec<MintRun>,
+}
+
+/// A run of consecutively minted nulls: the index of its first null,
+/// and the scope that minted its nulls by label, or `None` for nulls minted fresh.
+#[derive(Debug, Clone, Copy)]
+struct MintRun {
+    /// The index of the run's first null.
+    first: u64,
+    /// The scope that minted the run's nulls by label, if one did.
+    scope: Option<LabelScope>,
 }
 
 impl NullLabels {
     /// Returns the open scope with the given name, opened if no open scope has it.
     pub(super) fn shared(&mut self, name: &str) -> LabelScope {
         let name = self.intern_name(name);
-        if let Some(&number) = self.shared.get(&name) {
-            return LabelScope(number);
+        if let Some(&scope) = self.shared.get(&name) {
+            return scope;
         }
         let scope = self.open(name, true);
-        self.shared.insert(name, scope.0);
+        self.shared.insert(name, scope);
         scope
     }
 
@@ -132,18 +141,20 @@ impl NullLabels {
 
     /// Records that the null of the given index was minted, by a label of a scope or fresh.
     pub(super) fn minted(&mut self, index: u64, scope: Option<LabelScope>) {
-        let scope = scope.map(|scope| scope.0);
-        if self.runs.last().is_none_or(|&(_, last)| last != scope) {
-            self.runs.push((index, scope));
+        if self.runs.last().is_none_or(|run| run.scope != scope) {
+            self.runs.push(MintRun {
+                first: index,
+                scope,
+            });
         }
     }
 
     /// Returns the name of the scope that minted the null of the given index by a label,
     /// or `None` for a null minted fresh.
     pub(super) fn scope_of(&self, index: u64) -> Option<&str> {
-        let run = self.runs.partition_point(|&(start, _)| start <= index);
-        let (_, scope) = self.runs.get(run.checked_sub(1)?)?;
-        scope.map(|number| &*self.names[self.scopes[number as usize].name as usize])
+        let run = self.runs.partition_point(|run| run.first <= index);
+        let scope = self.runs.get(run.checked_sub(1)?)?.scope?;
+        Some(&*self.names[self.scopes[scope.0 as usize].name as usize])
     }
 
     /// Returns the bytes the scopes, their names and labels and the runs have allocated,
@@ -163,8 +174,8 @@ impl NullLabels {
         self.scopes.capacity() * size_of::<ScopeEntry>()
             + self.names.capacity() * size_of::<Box<str>>()
             + self.numbers.capacity() * (size_of::<Box<str>>() + size_of::<u32>() + 1)
-            + self.shared.capacity() * (2 * size_of::<u32>() + 1)
-            + self.runs.capacity() * size_of::<(u64, Option<u32>)>()
+            + self.shared.capacity() * (size_of::<u32>() + size_of::<LabelScope>() + 1)
+            + self.runs.capacity() * size_of::<MintRun>()
             + names
             + labels
     }

@@ -342,14 +342,16 @@ impl<'a> AnyLayer<'a> {
         match classify(columns) {
             LayerKind::Empty => AnyLayer::Empty,
             LayerKind::Tagged => Self::tagged(columns, bump),
-            LayerKind::Uniform { tag, is_u32: true } => AnyLayer::U32(UniformLayer {
+            LayerKind::Uniform(ColumnLayout { tag, is_u32: true }) => AnyLayer::U32(UniformLayer {
                 intersection: Intersection::new(Self::payload_cursors::<u32>(columns, bump)),
                 tag,
             }),
-            LayerKind::Uniform { tag, is_u32: false } => AnyLayer::U64(UniformLayer {
-                intersection: Intersection::new(Self::payload_cursors::<u64>(columns, bump)),
-                tag,
-            }),
+            LayerKind::Uniform(ColumnLayout { tag, is_u32: false }) => {
+                AnyLayer::U64(UniformLayer {
+                    intersection: Intersection::new(Self::payload_cursors::<u64>(columns, bump)),
+                    tag,
+                })
+            }
         }
     }
 
@@ -494,12 +496,7 @@ enum LayerKind {
     /// Some input column is empty, or the tags of the input columns differ.
     Empty,
     /// The values of every input column share one tag, and the columns share one width.
-    Uniform {
-        /// The tag every value shares.
-        tag: Tag,
-        /// Whether the payloads have 32 bits.
-        is_u32: bool,
-    },
+    Uniform(ColumnLayout),
     /// Any other layout: the leapfrog compares full values.
     Tagged,
 }
@@ -510,7 +507,7 @@ enum LayerKind {
 /// share one tag and one width.
 /// Its blocks may differ even if each is uniform, and the union then holds mixed values.
 fn classify(columns: &[&[ColumnView<'_>]]) -> LayerKind {
-    let mut shared: Option<(Tag, bool)> = None;
+    let mut shared: Option<ColumnLayout> = None;
     let mut same_tag = true;
     let mut same_width = true;
     let mut mixed = false;
@@ -520,15 +517,15 @@ fn classify(columns: &[&[ColumnView<'_>]]) -> LayerKind {
         if stored.peek().is_none() {
             return LayerKind::Empty;
         }
-        let Some((tag, is_u32)) = shared_layout(stored) else {
+        let Some(layout) = shared_layout(stored) else {
             mixed = true;
             continue;
         };
         match shared {
-            None => shared = Some((tag, is_u32)),
-            Some((shared_tag, shared_is_u32)) => {
-                same_tag &= tag == shared_tag;
-                same_width &= is_u32 == shared_is_u32;
+            None => shared = Some(layout),
+            Some(first) => {
+                same_tag &= layout.tag == first.tag;
+                same_width &= layout.is_u32 == first.is_u32;
             }
         }
     }
@@ -536,25 +533,35 @@ fn classify(columns: &[&[ColumnView<'_>]]) -> LayerKind {
     if mixed {
         return LayerKind::Tagged;
     }
-    let (tag, is_u32) = shared.expect("a layer intersects at least one column");
+    let layout = shared.expect("a layer intersects at least one column");
     if !same_tag {
         LayerKind::Empty
     } else if !same_width {
         LayerKind::Tagged
     } else {
-        LayerKind::Uniform { tag, is_u32 }
+        LayerKind::Uniform(layout)
     }
 }
 
-/// Returns the tag and the width, whether 32 bits, that every given column shares,
+/// The layout every value of a column shares: one tag, at one payload width.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct ColumnLayout {
+    /// The tag every value shares.
+    tag: Tag,
+    /// Whether the payloads have 32 bits.
+    is_u32: bool,
+}
+
+/// Returns the layout every given column shares,
 /// or `None` if some column mixes tags or two columns differ.
 fn shared_layout<'c, 'a: 'c>(
     mut columns: impl Iterator<Item = &'c ColumnView<'a>>,
-) -> Option<(Tag, bool)> {
+) -> Option<ColumnLayout> {
     let layout = |column: &ColumnView<'_>| {
-        column
-            .uniform_tag()
-            .map(|tag| (tag, matches!(column, ColumnView::U32 { .. })))
+        column.uniform_tag().map(|tag| ColumnLayout {
+            tag,
+            is_u32: matches!(column, ColumnView::U32 { .. }),
+        })
     };
 
     let first = layout(columns.next()?)?;

@@ -96,14 +96,21 @@ struct BatchedTrace {
     listed: HashMap<StatementId, usize>,
 }
 
+/// What one batch of facts adds to a trace response.
+struct Batch {
+    /// The nodes and rules the batch adds.
+    part: TracePart,
+    /// Each fact of the batch, with its node.
+    facts: Vec<TracedFact>,
+}
+
 impl BatchedTrace {
-    /// Traces a batch of facts, given by table and decoded values:
-    /// returns the nodes and rules the batch adds to the response, and each fact with its node.
+    /// Traces a batch of facts, given by table and decoded values.
     fn batch(
         &mut self,
         engine: &mut Engine,
         facts: &[(TableId, Vec<DataValue>)],
-    ) -> Result<(TracePart, Vec<TracedFact>), Diagnostic> {
+    ) -> Result<Batch, Diagnostic> {
         let mut proofs: Vec<Option<Rc<ProofNode>>> = Vec::with_capacity(facts.len());
         {
             let mut search = search::ProofSearch::over(engine, &mut self.outcomes)?;
@@ -127,7 +134,10 @@ impl BatchedTrace {
 
         let responder = Responder::new(engine, canonical_constants);
         let part = responder.part(&mut self.graph, &mut self.listed);
-        Ok((part, responder.traced(facts, &roots)))
+        Ok(Batch {
+            part,
+            facts: responder.traced(facts, &roots),
+        })
     }
 }
 
@@ -137,7 +147,7 @@ pub(crate) fn run(
     engine: &mut Engine,
     facts: Vec<(TableId, Vec<DataValue>)>,
 ) -> Result<TraceResponse, Diagnostic> {
-    let (part, facts) = BatchedTrace::default().batch(engine, &facts)?;
+    let Batch { part, facts } = BatchedTrace::default().batch(engine, &facts)?;
     Ok(TraceResponse {
         version: VERSION,
         facts,

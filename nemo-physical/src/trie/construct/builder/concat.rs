@@ -10,7 +10,12 @@ impl Column {
     /// Concatenates the columns built for consecutive shards of one trie,
     /// each shard a column vector of the arity, into the trie's columns,
     /// one column per task; see [concat](Self::concat).
-    pub(crate) fn concat_shards(arity: usize, shards: Vec<Vec<Column>>) -> Vec<Column> {
+    /// A single shard's columns are the trie's.
+    pub(crate) fn concat_shards(arity: usize, mut shards: Vec<Vec<Column>>) -> Vec<Column> {
+        if shards.len() == 1 {
+            return shards.pop().expect("one shard");
+        }
+
         let work: usize = shards.iter().flatten().map(Column::len).sum();
         let mut per_column: Vec<Vec<Column>> = (0..arity)
             .map(|_| Vec::with_capacity(shards.len()))

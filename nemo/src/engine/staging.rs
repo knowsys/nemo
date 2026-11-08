@@ -26,7 +26,7 @@ use crate::{
         written::WrittenProgram,
     },
     model::{Directive, Fact, Identifier, Program, Statement, Term},
-    pipeline::{NameScope, RevisionId, Stages},
+    pipeline::{NameScope, RevisionId, Stages, StatementId},
 };
 
 /// A program staged in the pipeline: the written revision, as loaded,
@@ -265,18 +265,19 @@ impl Engine {
         preloaded: Vec<bool>,
         purpose: Purpose<'_>,
     ) -> Result<(CompiledProgram, HashMap<String, Registered>), Diagnostic> {
-        let (ids, statements): (Vec<_>, Vec<_>) = self
+        let statements: Vec<(StatementId, Statement)> = self
             .pipeline
             .statements(written)
             .map(|(id, statement)| (id, statement.clone()))
-            .unzip();
-        let (statements, ids) = if purpose == Purpose::Check {
+            .collect();
+        let statements = if purpose == Purpose::Check {
             // The rewrite may leave statements out, which `preloaded` would no longer match.
             debug_assert!(preloaded.is_empty(), "a check preloads nothing");
-            rewrite_unvalued(statements, ids)
+            rewrite_unvalued(statements)
         } else {
-            (statements, ids)
+            statements
         };
+        let (ids, statements): (Vec<_>, Vec<_>) = statements.into_iter().unzip();
         let mut scratch = self.scratch_stores(predicates);
         let (stores, setup) = self.scratch_translation_parts(purpose, &mut scratch);
         let mut translator = translation::Translator::new(stores, setup, state, preloaded);
@@ -322,7 +323,7 @@ impl Engine {
     fn revive_sparql_imports(&mut self, held: RevisionId, merged: RevisionId) -> RevisionId {
         use std::collections::HashSet;
 
-        use crate::{engine::transform::sparql_rewrite, pipeline::StatementId};
+        use crate::engine::transform::sparql_rewrite;
 
         let root = self.pipeline.lineage(held)[0];
         let live: HashSet<StatementId> = self.pipeline.statements(held).map(|(id, _)| id).collect();

@@ -67,6 +67,22 @@ type ValuesBlocks = Vec<ValuesBlock>;
 /// Per binding atom, its rows of bound values, as a family of requests carries them.
 type BindingRows = Vec<Vec<Vec<DataValue>>>;
 
+/// The requests of one fetch application, each with the `VALUES` blocks it carries.
+struct ApplicationRequests {
+    /// The requests.
+    requests: Vec<(Request, ValuesBlocks)>,
+    /// The new binding rows left out for holding a blank node an endpoint returned.
+    blank_bindings: u64,
+}
+
+/// The rows of bound values of one family of requests.
+struct FamilyBindings {
+    /// Per binding atom, its rows.
+    rows: BindingRows,
+    /// The new keys of the pivot atom left out for holding a blank node an endpoint returned.
+    blank_bindings: u64,
+}
+
 /// What one fetch application did beyond deriving rows.
 #[derive(Debug, Default, Clone)]
 pub(super) struct Fetched {
@@ -154,8 +170,10 @@ pub(super) fn apply(
             pending
         }
         None => {
-            let (requests, blank_bindings) =
-                requests(rule, fetch, step, manager, dictionary, context)?;
+            let ApplicationRequests {
+                requests,
+                blank_bindings,
+            } = requests(rule, fetch, step, manager, dictionary, context)?;
             if requests.is_empty() {
                 let fetched = Fetched {
                     blank_bindings,
@@ -280,7 +298,7 @@ fn requests(
     manager: &mut TableManager,
     dictionary: &mut Dictionary,
     context: EvaluationContext,
-) -> Result<(Vec<(Request, ValuesBlocks)>, u64), Diagnostic> {
+) -> Result<ApplicationRequests, Diagnostic> {
     let last = Revision(rule.last_applied);
     let now = Revision(step);
     let count = rule.body.len();
@@ -304,15 +322,20 @@ fn requests(
         if empty {
             continue;
         }
-        let (rows, blank) =
-            binding_rows(rule, fetch, &ranges, pivot, manager, dictionary, context)?;
+        let FamilyBindings {
+            rows,
+            blank_bindings: blank,
+        } = binding_rows(rule, fetch, &ranges, pivot, manager, dictionary, context)?;
         blank_bindings += blank;
         if rows.iter().any(Vec::is_empty) {
             continue;
         }
         requests.extend(paged_requests(fetch, &rows));
     }
-    Ok((requests, blank_bindings))
+    Ok(ApplicationRequests {
+        requests,
+        blank_bindings,
+    })
 }
 
 /// Returns the solution rows of every response,
@@ -450,7 +473,7 @@ fn atom_rows(
 /// since an earlier application queried it already.
 ///
 /// Also returns how many of the pivot's new keys were left out for holding a blank node an
-/// endpoint returned; across a run, each key is new to one application only.
+/// endpoint returned. Across a run, each key is new to one application only.
 fn binding_rows(
     rule: &CompiledRule,
     fetch: &CompiledFetch,
@@ -459,7 +482,7 @@ fn binding_rows(
     manager: &mut TableManager,
     dictionary: &mut Dictionary,
     context: EvaluationContext,
-) -> Result<(BindingRows, u64), Diagnostic> {
+) -> Result<FamilyBindings, Diagnostic> {
     let mut plan = OperationPlan::new();
     let space = BodySpace::new(&mut plan, rule);
     let mut outputs = Vec::with_capacity(rule.body.len());
@@ -523,7 +546,10 @@ fn binding_rows(
         });
         per_atom.push(rows);
     }
-    Ok((per_atom, blank))
+    Ok(FamilyBindings {
+        rows: per_atom,
+        blank_bindings: blank,
+    })
 }
 
 /// Returns the requests querying one family of bindings:

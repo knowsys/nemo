@@ -449,6 +449,16 @@ impl Request {
     }
 }
 
+/// The rows of one `VALUES` block, as a reader matches solutions against them:
+/// the block's columns, by position, and its rows.
+#[derive(Debug, Clone)]
+struct BoundBlock {
+    /// The projected columns the rows bind, by position.
+    positions: Vec<usize>,
+    /// The rows, one value per position.
+    rows: HashSet<Vec<DataValue>>,
+}
+
 /// The reader of an endpoint's responses, solutions in SPARQL TSV,
 /// read like the other formats' resources.
 #[derive(Debug, Clone)]
@@ -457,9 +467,8 @@ pub struct SparqlReader {
     arity: usize,
     /// The selection over the delivered columns.
     selection: RowSelection,
-    /// The bindings a solution must match, per `VALUES` block:
-    /// the block's columns, by position, and its rows.
-    bindings: Vec<(Vec<usize>, HashSet<Vec<DataValue>>)>,
+    /// The bindings a solution must match, one per `VALUES` block.
+    bindings: Vec<BoundBlock>,
     /// Whether blank node labels name nulls in the endpoint's shared label scope,
     /// rather than in a scope of each response's own.
     endpoint_blank_nodes: bool,
@@ -509,11 +518,9 @@ impl SparqlReader {
     pub fn with_bindings(mut self, blocks: &[ValuesBlock]) -> Self {
         self.bindings = blocks
             .iter()
-            .map(|block| {
-                (
-                    block.positions.clone(),
-                    block.rows.iter().cloned().collect(),
-                )
+            .map(|block| BoundBlock {
+                positions: block.positions.clone(),
+                rows: block.rows.iter().cloned().collect(),
             })
             .collect();
         self
@@ -628,7 +635,7 @@ fn read_tsv(
     body: &[u8],
     arity: usize,
     selection: &RowSelection,
-    bindings: &[(Vec<usize>, HashSet<Vec<DataValue>>)],
+    bindings: &[BoundBlock],
     blanks: &BlankNodes,
     dictionary: &mut Dictionary,
     context: EvaluationContext,
@@ -639,8 +646,8 @@ fn read_tsv(
     let mut values: Vec<Option<DataValue>> = vec![None; arity];
     // The columns a binding reads, whether delivered or not.
     let mut bound = vec![false; arity];
-    for (positions, _) in bindings {
-        for &position in positions {
+    for block in bindings {
+        for &position in &block.positions {
             bound[position] = true;
         }
     }
@@ -719,16 +726,14 @@ fn read_tsv(
 /// the values in its columns form one of its rows.
 ///
 /// Every bound column holds a value: [read_tsv] parsed it.
-fn matches_bindings(
-    values: &[Option<DataValue>],
-    bindings: &[(Vec<usize>, HashSet<Vec<DataValue>>)],
-) -> bool {
-    bindings.iter().all(|(positions, rows)| {
-        let key: Vec<DataValue> = positions
+fn matches_bindings(values: &[Option<DataValue>], bindings: &[BoundBlock]) -> bool {
+    bindings.iter().all(|block| {
+        let key: Vec<DataValue> = block
+            .positions
             .iter()
             .map(|&position| values[position].clone().expect("a bound cell is parsed"))
             .collect();
-        rows.contains(&key)
+        block.rows.contains(&key)
     })
 }
 

@@ -47,12 +47,12 @@ pub(super) fn merge<S: RowSource>(
         .into_iter()
         .enumerate()
         .filter(|(_, source)| source.has_row())
-        .map(|(index, source)| Reverse(ByFront(index, source)))
+        .map(|(index, source)| Reverse(ByFront { index, source }))
         .collect();
 
     let mut distinct = Distinct::copied(arity);
     while let Some(mut top) = heap.peek_mut() {
-        let source = &mut top.0.1;
+        let source = &mut top.0.source;
         if let Some(change) = distinct.pass(source.row()) {
             visit(source, change);
         }
@@ -65,8 +65,13 @@ pub(super) fn merge<S: RowSource>(
 }
 
 /// A source with its index among the sources, ordered by its front row and then the index,
-/// for the heap of a [merge]; only sources that have a row are compared.
-struct ByFront<S>(usize, S);
+/// for the heap of a [merge]. Only sources that have a row are compared.
+struct ByFront<S> {
+    /// The source's index among the sources.
+    index: usize,
+    /// The source.
+    source: S,
+}
 
 impl<S: RowSource> PartialEq for ByFront<S> {
     fn eq(&self, other: &Self) -> bool {
@@ -84,10 +89,10 @@ impl<S: RowSource> PartialOrd for ByFront<S> {
 
 impl<S: RowSource> Ord for ByFront<S> {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.1
+        self.source
             .row()
-            .cmp(other.1.row())
-            .then_with(|| self.0.cmp(&other.0))
+            .cmp(other.source.row())
+            .then_with(|| self.index.cmp(&other.index))
     }
 }
 
@@ -96,31 +101,39 @@ mod tests {
     use super::*;
 
     /// A run of integer rows of arity 2, read as a source, with its index among the sources.
-    struct Rows(Vec<[StorageValue; 2]>, usize, usize);
+    struct Rows {
+        /// The rows.
+        rows: Vec<[StorageValue; 2]>,
+        /// The index of the current row.
+        next: usize,
+        /// The source's index among the sources.
+        index: usize,
+    }
 
     impl RowSource for Rows {
         fn row(&self) -> &[StorageValue] {
-            &self.0[self.1]
+            &self.rows[self.next]
         }
 
         fn has_row(&self) -> bool {
-            self.1 < self.0.len()
+            self.next < self.rows.len()
         }
 
         fn advance(&mut self) {
-            self.1 += 1;
+            self.next += 1;
         }
     }
 
     /// A source of the given rows, with the given index among the sources.
     fn rows(index: usize, rows: &[[i64; 2]]) -> Rows {
-        Rows(
-            rows.iter()
+        Rows {
+            rows: rows
+                .iter()
                 .map(|row| row.map(StorageValue::integer))
                 .collect(),
-            0,
+            next: 0,
             index,
-        )
+        }
     }
 
     #[test]
@@ -133,7 +146,7 @@ mod tests {
         ];
         let mut merged = Vec::new();
         merge(sources, 2, |source, change| {
-            merged.push((source.2, source.row().to_vec(), change))
+            merged.push((source.index, source.row().to_vec(), change))
         });
 
         // A repeat is taken from the earliest source holding it.

@@ -4,7 +4,10 @@
 use nemo_physical::{diagnostics::Diagnostic, management::TableId, value::DataValue};
 
 use crate::{
-    engine::{Engine, trace::proof::BatchedTrace},
+    engine::{
+        Engine,
+        trace::proof::{Batch, BatchedTrace},
+    },
     model::Fact,
     trace::{TracePart, TracedFact},
 };
@@ -40,11 +43,14 @@ impl Engine {
                 if rows.is_empty() {
                     break;
                 }
-                let (part, _) = trace.batch(self, &rows)?;
+                let part = trace.batch(self, &rows)?.part;
                 sink(part)?;
             }
         }
-        let (part, traced) = trace.batch(self, &named)?;
+        let Batch {
+            part,
+            facts: traced,
+        } = trace.batch(self, &named)?;
         sink(part)?;
         Ok(traced)
     }

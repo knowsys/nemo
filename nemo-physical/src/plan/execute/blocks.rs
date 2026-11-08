@@ -1,6 +1,12 @@
 //! The blocks a member's join reads.
 
-use crate::{execution::SubtractedShape, trie::Trie};
+use bumpalo::{Bump, collections::Vec as BumpVec};
+
+use crate::{
+    execution::SubtractedShape,
+    plan::{execute::Execution, layout::MemberLayout},
+    trie::Trie,
+};
 
 /// The blocks a member's join reads, gathered in the join arena.
 #[derive(Debug, Clone, Copy)]
@@ -17,5 +23,48 @@ impl JoinBlocks<'_> {
     /// Returns the number of blocks, joined and subtracted.
     pub(super) fn count(&self) -> usize {
         self.inputs.iter().map(|blocks| blocks.len()).sum::<usize>() + self.subtracted.len()
+    }
+}
+
+impl Execution<'_> {
+    /// Returns the blocks a member's join reads, gathered in the given arena:
+    /// those of its inputs and of its subtracted relations.
+    pub(super) fn member_blocks<'j>(
+        &'j self,
+        member: &'j MemberLayout,
+        bump: &'j Bump,
+    ) -> JoinBlocks<'j> {
+        let inputs = BumpVec::from_iter_in(
+            member.inputs.iter().map(|&required| {
+                let mut blocks = BumpVec::new_in(bump);
+                self.blocks(required, &mut blocks);
+                blocks.into_bump_slice()
+            }),
+            bump,
+        );
+
+        // The blocks of every relation first, then their shapes in one allocation,
+        // so that neither list moves when the other grows.
+        let mut ends = BumpVec::with_capacity_in(member.subtracted.len(), bump);
+        let mut subtracted = BumpVec::new_in(bump);
+        for relation in &member.subtracted {
+            self.blocks(relation.order, &mut subtracted);
+            ends.push(subtracted.len());
+        }
+        let mut subtracted_shapes = BumpVec::with_capacity_in(subtracted.len(), bump);
+        let mut first = 0;
+        for (relation, &end) in member.subtracted.iter().zip(&ends) {
+            let shape = SubtractedShape {
+                layers: &relation.layers,
+            };
+            subtracted_shapes.extend(std::iter::repeat_n(shape, end - first));
+            first = end;
+        }
+
+        JoinBlocks {
+            inputs: inputs.into_bump_slice(),
+            subtracted: subtracted.into_bump_slice(),
+            subtracted_shapes: subtracted_shapes.into_bump_slice(),
+        }
     }
 }
