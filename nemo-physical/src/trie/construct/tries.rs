@@ -43,7 +43,7 @@ impl<'s, 't> Tries<'s, 't> {
         Window::of(self.sources, self.kinds.len(), low, high)
     }
 
-    /// Merges the rows of a window into one column piece per position,
+    /// Merges the rows of a window into one piece per column,
     /// and reports each merged row to `carry` by the range it was taken from,
     /// that of the earliest source holding it.
     pub(super) fn merge_window(

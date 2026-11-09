@@ -7,11 +7,11 @@ use crate::telemetry::{
     report::tables::{NamedCounts, PhaseTable, WorkTable},
 };
 
-/// The facts about a finished run that the engine's event stream does not carry:
+/// The facts about a run that exist only once it is over:
 /// stage wall times, the final sizes, and per-predicate row counts.
 ///
-/// This is the part of the [document](crate::telemetry::ReportDocument)
-/// that exists only once the run is over.
+/// They are the part of the [document](crate::telemetry::ReportDocument)
+/// beside the recorder snapshot.
 /// Times are in nanoseconds and sizes in bytes.
 #[derive(Debug, Clone, Default)]
 pub struct RunFacts {

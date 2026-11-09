@@ -58,7 +58,7 @@ pub struct Derivation {
     /// If the engine kept no record of the application,
     /// this is the step at which the fact was stored.
     pub step: u64,
-    /// The variable assignment of the rule instance, for the source-named variables.
+    /// The variable assignment of the rule instance, for the variables written in the rule.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub assignment: Vec<VariableBinding>,
     /// The positive premises, by node id, one per positive body literal of the rule,

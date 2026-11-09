@@ -18,8 +18,8 @@
 //! which the endpoint matches as terms,
 //! and only the solutions matching a row of each block as Nemo compares values are kept
 //! (the policy is the [rewrite stage's](crate::engine::transform::sparql_rewrite)).
-//! A binding row holding a null fetches nothing, since no query can name a blank node;
-//! rows holding an endpoint's blank node are counted and reported.
+//! A binding row holding a null fetches nothing, since no query can name a blank node.
+//! Rows holding an endpoint's blank node are counted and reported.
 //!
 //! The engine does not send the requests itself.
 //! An application whose requests have no responses yet is suspended as a [PendingFetch],
@@ -241,7 +241,7 @@ impl PendingFetch {
     /// each with one half of its widest `VALUES` block:
     /// one it found too large (413, 414),
     /// one whose response it cut off partway, typically at its time limit,
-    /// and one it answered in part, saying so in its status or headers
+    /// and one it responded to only in part, saying so in its status or headers
     /// ([Failure::of_partial_response](nemo_io::remote::Failure::of_partial_response)).
     ///
     /// A request whose blocks are single rows keeps its response.

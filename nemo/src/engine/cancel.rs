@@ -9,7 +9,7 @@ use std::sync::{
 /// obtained from [cancel_token](crate::engine::Engine::cancel_token).
 ///
 /// [reason](crate::engine::Engine::reason) checks it between rule applications.
-/// A cancelled run stops there with code N0207.
+/// A cancelled run stops there and returns a cancellation error.
 /// The tables stay consistent and every rule's progress is recorded,
 /// so calling `reason()` again continues toward the fixpoint.
 /// An application under way runs to its end first.

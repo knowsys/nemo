@@ -8,9 +8,11 @@ use crate::trace::{Proof, TraceNode, WrittenRule};
 /// the requested facts, and the derivations of those that hold, as one graph.
 ///
 /// Each node is a fact, and its id is its position in [nodes](Self::nodes).
-/// A derived node names its premises by id, and every premise comes before the nodes it supports,
+/// A derived node names its premises by id, and every premise comes before the nodes it
+/// supports,
 /// so a fact several derivations use is a single node.
-/// Rules are listed once, and a derivation names its rule by its position in [rules](Self::rules).
+/// Rules are listed once, and a derivation names its rule by its position in
+/// [rules](Self::rules).
 /// [proof](Self::proof) walks a requested fact's derivation like a tree.
 ///
 /// # Example
@@ -73,7 +75,7 @@ impl TraceResponse {
         self.facts[fact].node.map(|id| self.node_proof(id))
     }
 
-    /// Returns the node with the given id, to walk its derivation.
+    /// Returns the proof of the node with the given id, to walk its derivation.
     ///
     /// # Panics
     ///

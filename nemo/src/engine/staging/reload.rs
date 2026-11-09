@@ -51,8 +51,8 @@ enum TranslationOutcome<T> {
 /// the new program, its fact rows, the tables of the rebuilt predicates,
 /// and the extensional blocks before the translation.
 ///
-/// The rows added through `import_rows` in these blocks are reported when their tables are
-/// dropped.
+/// The rows added through [import_rows](crate::engine::Engine::import_rows) in these blocks
+/// are reported when their tables are dropped.
 struct Retranslated {
     /// The new program.
     compiled: CompiledProgram,
@@ -174,7 +174,7 @@ impl Engine {
     /// Translates a staged replacement and rebuilds the stored data.
     ///
     /// The translation is prepared first, which registers and stores nothing.
-    /// If it needs remote resources not fetched yet, the reload is suspended for them (N0491)
+    /// If it needs remote resources not fetched yet, the reload is suspended for them
     /// with the loaded program as it was, and commits from the prepared translation state
     /// once every response is in.
     /// The reports from `already` on are rewritten to refer to the written program.
@@ -313,7 +313,8 @@ impl Engine {
     /// again.
     ///
     /// A kept import may have been stored without columns or rows that the new rules read.
-    /// The translation then fails with N0316 for it,
+    /// The translation then fails with [PRUNING_INSTABILITY](crate::codes::PRUNING_INSTABILITY)
+    /// for it,
     /// and is repeated with that predicate rebuilt as well.
     /// A failed translation restores the previous state,
     /// and so does a prepared one that needs remote resources not fetched yet:
@@ -417,7 +418,8 @@ impl Engine {
     }
 
     /// Returns whether a reload's translation failed because a stored import no longer covers
-    /// what the new rules read (N0316), for a predicate not rebuilt yet,
+    /// what the new rules read ([PRUNING_INSTABILITY](crate::codes::PRUNING_INSTABILITY)),
+    /// for a predicate not rebuilt yet,
     /// adding it to those to rebuild.
     fn unstable_import(problem: &Diagnostic, unstable: &mut HashSet<String>) -> bool {
         problem.code() == codes::PRUNING_INSTABILITY
@@ -448,8 +450,9 @@ impl Engine {
 
     /// Drops the replaced tables, and returns every kept table to its extensional rows.
     ///
-    /// The rows added through `import_rows` that the replaced tables held
-    /// cannot be reproduced from statements, so dropping them is reported (N0485).
+    /// The rows added through [import_rows](crate::engine::Engine::import_rows) that the
+    /// replaced tables held cannot be reproduced from statements, so dropping them is reported
+    /// with a warning.
     fn replace_store(
         &mut self,
         replaced: Vec<(String, TableId)>,

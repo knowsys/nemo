@@ -1,8 +1,8 @@
 //! The program's predicates as results refer to them.
 //!
 //! The written program names them,
-//! and a method that delivers a predicate's facts fails with N0489 for one the engine does not
-//! store whole.
+//! and a method that delivers a predicate's facts fails for one the engine does not store
+//! whole.
 //!
 //! Every derived predicate is stored whole,
 //! and so is every predicate the program writes out (`@output`, `@export`).
@@ -136,7 +136,8 @@ impl Engine {
 
     /// Returns the facts of the program's predicates, split into the loaded and the derived.
     ///
-    /// A block of extensional rows counts as loaded if it was added through `import_rows`,
+    /// A block of extensional rows counts as loaded if it was added through
+    /// [import_rows](crate::engine::Engine::import_rows),
     /// or if a written fact, import, or `@input` produces facts for the predicate.
     /// Every other row counts as derived,
     /// so the rows of an import that a stage put in place of a written rule count as derived.
@@ -167,7 +168,8 @@ impl Engine {
         (loaded, derived)
     }
 
-    /// Returns whether rows were added to a predicate through `import_rows`.
+    /// Returns whether rows were added to a predicate through
+    /// [import_rows](crate::engine::Engine::import_rows).
     fn holds_imported_rows(&self, predicate: &str) -> bool {
         self.predicates
             .get(predicate)
@@ -263,7 +265,7 @@ impl Engine {
     }
 }
 
-/// Returns the error (N0489) for a predicate the engine does not store whole, naming
+/// Returns the error for a predicate the engine does not store whole, naming
 /// what it leaves out in the program's terms.
 fn not_stored_whole(predicate: &str, extent: StoredExtent) -> Diagnostic {
     let (missing, hint) = match extent {

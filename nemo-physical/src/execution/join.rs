@@ -194,7 +194,7 @@ impl<'a> TrieJoin<'a> {
     /// Returns the evaluation errors counted so far, by kind.
     ///
     /// A filter or bound layer whose program fails on a row drops the row,
-    /// and the caller reports the count.
+    /// and the row is counted here.
     pub(crate) fn evaluation_errors(&self) -> ErrorCounts {
         match &self.core {
             Core::Hooked(core) => core.hooks().errors(),
@@ -255,7 +255,7 @@ fn column_occurrences<'a>(
 ///
 /// Per layer and cursor, it also builds the link to the cursor over the input's next column,
 /// if that column is mapped.
-/// When the layer finds a value, the link restricts that cursor to the nodes below it.
+/// When the layer finds a value, the link restricts that cursor to the value's children.
 fn build_layers<'a>(
     shape: &JoinShape<'a>,
     inputs: &[&'a [&'a Trie]],

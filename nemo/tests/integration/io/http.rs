@@ -299,8 +299,8 @@ fn sparql_import_conditions_reach_the_endpoint() {
     );
 }
 
-/// The HTTP client retries an overloaded server and a rate limit before it
-/// returns, and a request that still fails is the load's error.
+/// The HTTP client retries an overloaded server and a rate limit,
+/// and a request that still fails is the load's error.
 #[test]
 fn the_client_retries_overload_and_rate_limits() {
     use nemo::engine::remote::{BlockingClient, Retry};

@@ -99,7 +99,7 @@ impl Inner {
 ///
 /// The methods are synchronous, so run them in a worker.
 /// A method that needs data from the network has an async form, which fetches the data,
-/// and a `start*` form, which returns the requests, whose responses `resume` takes.
+/// and a `start*` form, which returns the requests instead. `resume` takes their responses.
 /// A method that may change the engine throws while an async method waits for responses.
 /// Errors are thrown as an `Error` whose `diagnostics` carry the structured entries.
 #[wasm_bindgen]
@@ -142,8 +142,8 @@ impl NemoEngine {
             .collect()
     }
 
-    /// Starts an async method: its first call, then the requests it is suspended for
-    /// fetched and their responses passed on, settling when it completes.
+    /// Starts an async method: it calls the method, fetches the requests the method is
+    /// suspended for, passes their responses on, and settles when the method completes.
     fn drive(
         &self,
         call: impl FnOnce(&mut Inner) -> Result<Progress, JsValue> + 'static,
@@ -216,8 +216,8 @@ fn requests_js(pending: &[PendingRequest]) -> Result<Array, JsValue> {
 /// `{id, body}` for a response, its body a `Uint8Array` or a string,
 /// and `{id, status, message}` for a failure, `status` left out if no response came.
 /// A failure with `partial: true` is a response holding only part of the result
-/// ([Failure::of_partial_response](nemo::engine::remote::Failure::of_partial_response) tells one),
-/// which a bound import splits into smaller requests.
+/// (as [Failure::of_partial_response](nemo::engine::remote::Failure::of_partial_response)
+/// tells), which a bound import splits into smaller requests.
 fn responses_of(responses: &JsValue) -> Result<Vec<(RequestId, Response)>, JsValue> {
     let invalid = |what: &str| -> JsValue {
         js_sys::Error::new(&format!(
@@ -456,8 +456,8 @@ impl NemoEngine {
     /// A request too large for the server (413, 414) is sent again in smaller pieces
     /// if the engine can split it, as is one whose response the server cut off.
     /// Throws for a response under an id that `pendingRequests` does not list,
-    /// or for two responses under one id, taking no response,
-    /// and as the method it continues does otherwise.
+    /// or for two responses under one id, taking no response.
+    /// Otherwise it throws what the method it continues throws.
     pub fn resume(&mut self, responses: &JsValue) -> Result<JsValue, JsValue> {
         let responses = responses_of(responses)?;
         let mut inner = self.state_mut()?;

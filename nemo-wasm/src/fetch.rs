@@ -1,6 +1,6 @@
 //! Fetching the data a suspended engine method needs from the network.
 //!
-//! If a call of a method suspends it,
+//! If a method is suspended,
 //! its requests go out through the global `fetch` (a window's, a worker's, or Node's),
 //! the failures the retry schedule allows are sent again,
 //! and the responses are passed to `resume`, until the method completes.

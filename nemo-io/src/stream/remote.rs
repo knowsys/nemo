@@ -242,8 +242,6 @@ pub trait Client {
     /// Sends several requests, and returns one response per request, in order.
     ///
     /// Returns `None` if `cancelled` turned true before every response came.
-    /// The engine fails each request the result has no response for,
-    /// and ignores the responses beyond the last request.
     fn fetch_all(
         &self,
         requests: &[Request],

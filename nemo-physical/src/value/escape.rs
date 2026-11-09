@@ -48,7 +48,7 @@ impl Escape {
     }
 
     /// Reads the character escape `\uXXXX` or `\UXXXXXXXX` at the start of a text,
-    /// the text after its backslash: the one escape of IRIs.
+    /// the text after its backslash: the only escape an IRI has.
     ///
     /// Returns `None` for anything else,
     /// including a `\u` without the hexadecimal digits of a character.
@@ -86,7 +86,7 @@ mod tests {
         assert_eq!(read("b"), None);
         assert_eq!(read(""), None);
 
-        // An IRI knows only the character escapes.
+        // An IRI has only the character escapes.
         assert_eq!(Escape::in_iri("n"), None);
         assert_eq!(
             Escape::in_iri("u003E").map(|escape| escape.character),

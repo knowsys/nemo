@@ -6,7 +6,7 @@ use crate::model::{Identifier, Span, TypeExpression, fmt_list, span_ignoring_eq}
 
 /// An external builtin declaration: `@extern geodistance(any, any) -> double .`.
 ///
-/// The engine ignores the directive when it loads the program, and warns about it (N0250).
+/// The engine ignores the directive when it loads the program, and warns about it.
 #[derive(Debug, Clone)]
 pub struct ExternDirective {
     /// The declared name.

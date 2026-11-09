@@ -221,7 +221,7 @@ fn joins_over_blocks_match_joins_over_their_union() {
             chain_shape(1, vec![]),
             chain_shape(3, subtraction),
         ];
-        // Programs over integers only, which every value of the third mode is.
+        // Programs over integers only: in the third mode, every value is an integer.
         if mode == 2 {
             let condition = hook(
                 vec![2, 0],

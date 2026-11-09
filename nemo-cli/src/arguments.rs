@@ -126,8 +126,8 @@ pub struct Arguments {
 
     /// Trace every fact of every derived predicate. Each fact is printed
     /// once, after its premises: a derived fact as the rule instance that
-    /// derives it, a loaded one as a fact statement. Written to
-    /// `--trace-output`, the trace is one trace response.
+    /// derives it, a loaded one as a fact statement. With `--trace-output`,
+    /// the trace goes into that file as one trace response.
     #[arg(long, alias = "trace-all-idb-facts")]
     pub trace_all: bool,
 
@@ -242,8 +242,8 @@ pub enum Report {
     #[value(alias = "short")]
     Summary,
     /// The stage times, a breakdown of the reasoning time, and the size
-    /// of every predicate. It records no telemetry, so benchmarks use
-    /// it.
+    /// of every predicate. It records no telemetry, which suits
+    /// benchmarks.
     #[value(alias = "time", alias = "mem")]
     Timing,
     /// The timing report plus the rules that took the most time. It

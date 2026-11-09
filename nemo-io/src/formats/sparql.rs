@@ -13,7 +13,7 @@
 //! A blank node in a response is a null, which its label names in a
 //! [label scope](nemo_physical::dictionary::LabelScope): the endpoint's, shared by all its
 //! responses ([SparqlReader::with_endpoint_blank_nodes]),
-//! or, for a reader given none, the response's own.
+//! or, for a reader without it, the response's own.
 //! A response cut short is an error, whether the endpoint says so in its body
 //! ([SparqlReader::read]) or in its status and headers
 //! ([Failure::of_partial_response](crate::remote::Failure::of_partial_response),
@@ -167,9 +167,9 @@ impl SparqlQuery {
     /// Returns an `xsd:integer` literal as the `xsd:decimal` with one zero after the point,
     /// `"3"` as `"3.0"^^xsd:decimal`, or `None` for any other literal.
     ///
-    /// Stores keep datatypes apart, and some hold every quantity as a decimal, as Wikidata
-    /// does, which an integer in its own datatype does not find.
-    /// The decimal is written as such a store writes an integral quantity, `"3.0"`.
+    /// Stores keep datatypes apart, and some, as Wikidata does, hold every quantity as a
+    /// decimal, which a query for the integer does not find.
+    /// The decimal is written as such a store writes an integral quantity: `"3.0"`.
     fn integer_as_decimal(literal: &Literal) -> Option<Literal> {
         (literal.datatype().as_str() == INTEGER).then(|| {
             Literal::new_typed_literal(
@@ -452,7 +452,7 @@ impl Request {
 /// The rows of one `VALUES` block, as a reader matches solutions against them:
 /// the block's columns, by position, and its rows.
 #[derive(Debug, Clone)]
-struct BoundBlock {
+struct ValuesLookup {
     /// The projected columns the rows bind, by position.
     positions: Vec<usize>,
     /// The rows, one value per position.
@@ -468,9 +468,9 @@ pub struct SparqlReader {
     /// The selection over the delivered columns.
     selection: RowSelection,
     /// The bindings a solution must match, one per `VALUES` block.
-    bindings: Vec<BoundBlock>,
+    bindings: Vec<ValuesLookup>,
     /// Whether blank node labels name nulls in the endpoint's shared label scope,
-    /// rather than in a scope of each response's own.
+    /// rather than each response in a scope of its own.
     endpoint_blank_nodes: bool,
 }
 
@@ -501,7 +501,7 @@ impl SparqlReader {
 
     /// Returns whether a null is a blank node an endpoint returned to a reader
     /// [with_endpoint_blank_nodes](Self::with_endpoint_blank_nodes),
-    /// rather than one a rule or another source made.
+    /// rather than one minted otherwise.
     pub fn is_endpoint_blank_node(dictionary: &Dictionary, id: u64) -> bool {
         dictionary
             .null_scope_name(id)
@@ -518,7 +518,7 @@ impl SparqlReader {
     pub fn with_bindings(mut self, blocks: &[ValuesBlock]) -> Self {
         self.bindings = blocks
             .iter()
-            .map(|block| BoundBlock {
+            .map(|block| ValuesLookup {
                 positions: block.positions.clone(),
                 rows: block.rows.iter().cloned().collect(),
             })
@@ -627,15 +627,15 @@ fn cut_off(body: &[u8]) -> Option<String> {
 /// the value exists, but is unknown.
 /// A cell that is not a term makes the row malformed, and is counted,
 /// if its column is delivered or bound.
-/// In a response of one column, an empty line is a solution whose variable is unbound;
-/// in a wider one, it is no solution.
+/// In a response of one column, an empty line is a solution whose variable is unbound.
+/// In a wider one, it is not a solution.
 /// A solution not matching the `bindings` is left out (see [SparqlReader::with_bindings]).
 /// The selection's condition evaluates in `context`.
 fn read_tsv(
     body: &[u8],
     arity: usize,
     selection: &RowSelection,
-    bindings: &[BoundBlock],
+    bindings: &[ValuesLookup],
     blanks: &BlankNodes,
     dictionary: &mut Dictionary,
     context: EvaluationContext,
@@ -726,7 +726,7 @@ fn read_tsv(
 /// the values in its columns form one of its rows.
 ///
 /// Every bound column holds a value: [read_tsv] parsed it.
-fn matches_bindings(values: &[Option<DataValue>], bindings: &[BoundBlock]) -> bool {
+fn matches_bindings(values: &[Option<DataValue>], bindings: &[ValuesLookup]) -> bool {
     bindings.iter().all(|block| {
         let key: Vec<DataValue> = block
             .positions
@@ -787,8 +787,8 @@ fn is_whole_row(line: &str, columns: usize) -> bool {
 /// unbound, a blank node, an IRI closed by `>`, a literal closed by its quote
 /// (with a language tag or a datatype IRI after it), a boolean, or a number.
 ///
-/// A literal whose datatype rejects its lexical form is whole, and reads as a malformed row;
-/// an IRI or a literal that stops before its end is not.
+/// A literal whose datatype rejects its lexical form is whole, and reads as a malformed row.
+/// An IRI or a literal that stops before its end is not.
 fn is_whole_cell(cell: &str) -> bool {
     if let Some(label) = cell.strip_prefix("_:") {
         return !label.is_empty();

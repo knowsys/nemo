@@ -35,8 +35,9 @@ use crate::formats::sparql::{QueryShape, SparqlQuery, algebra};
 pub enum Binding {
     /// Another variable, by name.
     Variable(String),
-    /// A constant, as the terms an endpoint may hold it as, any of which matches
-    /// ([ground_terms](SparqlQuery::ground_terms)): usually one.
+    /// A constant, as the terms an endpoint may hold it as
+    /// ([ground_terms](SparqlQuery::ground_terms)), any of which matches.
+    /// There is usually one.
     Constant(Vec<GroundTerm>),
 }
 
@@ -148,7 +149,7 @@ impl SparqlQuery {
 }
 
 /// Returns a pattern joined with one `VALUES` block per constant,
-/// each binding the variable that stands for it to the constant's terms, a row each.
+/// each binding the variable in the constant's place to the constant's terms, one row per term.
 fn join_values(
     pattern: GraphPattern,
     values: Vec<(String, Variable, Vec<GroundTerm>)>,

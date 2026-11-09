@@ -7,7 +7,7 @@ use crate::model::{Identifier, Span, Term, Variable, fmt_list, span_ignoring_eq}
 /// A derived builtin: `@define hypot(?x, ?y) = SQRT(…) .`.
 ///
 /// The body is a single expression over the parameters and existing builtins.
-/// The engine ignores the directive when it loads the program, and warns about it (N0250).
+/// The engine ignores the directive when it loads the program, and warns about it.
 #[derive(Debug, Clone)]
 pub struct DefineDirective {
     /// The defined name.

@@ -23,8 +23,7 @@
 //! (a variable a query to an endpoint did not return, a column no rule reads),
 //! a fact shows the written term there instead, a variable or `_`.
 //!
-//! The types here are the response format of [trace](crate::engine::Engine::trace),
-//! used by the command line and the Python and WebAssembly bindings.
+//! The types here are the response format of [trace](crate::engine::Engine::trace).
 //! They are serde-derived and camelCase on the wire,
 //! and every [TraceResponse] carries a [version](VERSION) field, while its parts carry none.
 //! Facts and terms are written in canonical term syntax, which parses back,

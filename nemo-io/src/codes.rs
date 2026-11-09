@@ -1,6 +1,6 @@
 //! The diagnostic codes of the IO layer, and the registry of every code it reports.
 //!
-//! There is one constant per kind of `IoError`, in the `N01xx` range.
+//! There is one constant per kind of IO error, in the `N01xx` range.
 
 use std::sync::LazyLock;
 

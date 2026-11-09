@@ -37,7 +37,8 @@ pub struct DsvOptions {
     /// Per column, whether its cells are only checked:
     /// a cell the column's format rejects still makes the row malformed,
     /// but the column is not delivered.
-    /// The columns no rule reads are read so, which keeps the rows independent of what is read.
+    /// The columns a load leaves out are read so,
+    /// which keeps which rows are well-formed independent of what is delivered.
     /// Empty if no column is.
     pub checked_only: Vec<bool>,
     /// Whether `"` quotes fields, or is an ordinary character.

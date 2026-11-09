@@ -482,7 +482,7 @@ fn tsv_cells_parse_as_turtle_terms() {
 }
 
 /// In a response of one column, a solution whose variable is unbound is an empty line,
-/// and a row of its own; in a wider response, an empty line is no solution.
+/// and a row of its own. In a wider response, an empty line is not a solution.
 #[test]
 fn an_unbound_solution_of_one_column_is_an_empty_line() {
     let read = |body: &str, arity: usize| read_response(body, arity, &mut Dictionary::new());
@@ -619,7 +619,7 @@ fn a_row_goes_out_as_the_combinations_of_its_terms() {
         }])
         .text()
         .to_owned();
-    // The integer goes out as an integer and as a decimal, so its row as two rows.
+    // The integer goes out as an integer and as a decimal, so its row goes out as two rows.
     assert!(text.contains("VALUES ( ?s ?v ?b )"), "{text}");
     assert_eq!(text.matches("( <urn:a> ").count(), 2, "{text}");
     assert!(
@@ -702,7 +702,7 @@ fn a_reader_told_the_bindings_keeps_the_solutions_that_match_them() {
         )
         .expect("the response reads");
     // Integer 3 for the first two, double 2.5 for the third, however the endpoint matched
-    // them; the double 3 is a different value to Nemo, and the last two match nothing.
+    // them. The double 3 is a different value to Nemo, and the last two match nothing.
     assert_eq!((loaded.rows.len(), loaded.malformed), (3, 0));
 }
 

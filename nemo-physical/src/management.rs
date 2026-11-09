@@ -233,7 +233,7 @@ impl TableManager {
     }
 
     /// Returns the tries of the subtables within a range, arranged in the given column order,
-    /// in ascending revision order, which the caller reads as a union.
+    /// in ascending revision order, to be read as their union.
     ///
     /// # Panics
     ///
@@ -585,7 +585,7 @@ mod tests {
         }
 
         // A merge keeps them, and a row added twice keeps the earlier revision,
-        // whichever further orders the subtables store.
+        // whatever other orders the subtables store.
         let swapped = ColumnOrder::new(&[1, 0]).expect("a permutation");
         manager.ensure_order(table, Revision(0)..Revision(5), &swapped);
         manager.consolidate_with(table, &[], MergePolicy::Whole);

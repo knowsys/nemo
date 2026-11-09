@@ -5,9 +5,9 @@
 //! There are modules for delimited text, RDF, JSON, Parquet, and the solutions of SPARQL
 //! endpoints.
 //!
-//! Every reader hands each well-formed row to the same routine of the load (`Loaded::take`),
-//! so the declared types, the condition, and the counts of dropped rows mean the same in every
-//! format.
+//! Every reader hands each well-formed row to the same routine of the load,
+//! [take](crate::load::Loaded::take), so the declared types, the condition, and the counts of
+//! dropped rows mean the same in every format.
 
 pub mod dsv;
 pub mod json;

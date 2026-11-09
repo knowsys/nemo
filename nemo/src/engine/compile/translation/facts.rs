@@ -18,7 +18,6 @@ impl<'a> Translator<'a> {
     ///
     /// Every value is checked at its column as written, a pruned one included,
     /// and the delivered ones are stored.
-    /// Rows added through `import_rows` are checked here too.
     pub(crate) fn fact(&mut self, fact: &Fact) -> Result<(), Diagnostic> {
         let positional = self.positional_fact(fact)?;
         let fact = positional.as_ref().unwrap_or(fact);

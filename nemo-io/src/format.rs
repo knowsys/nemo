@@ -34,9 +34,9 @@ pub enum ValueFormat {
     Iri,
     /// An integer, compact or wide.
     Integer,
-    /// A 64-bit floating point number in XSD's lexical form, as the
-    /// `DOUBLE` cast reads it: `INF`, `-INF` and `NaN` included, other
-    /// spellings of them not.
+    /// A 64-bit floating point number in XSD's lexical form, as
+    /// [DataValue::typed_literal] reads an `xsd:double`: `INF`, `-INF` and
+    /// `NaN` included, other spellings of them not.
     Double,
     /// A decimal (integral values canonicalize to integers, oversized
     /// ones to wide numbers).

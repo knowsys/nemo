@@ -83,7 +83,7 @@ impl ParquetReader {
         let file = File::open(path).map_err(|error| IoError::unreadable(path, &error))?;
         let mut builder = ParquetRecordBatchReaderBuilder::try_new(file)
             .map_err(|error| IoError::unreadable(path, error))?;
-        // Every column decides whether a row is well-formed, the ones no rule reads included,
+        // Every column decides whether a row is well-formed, the ones not delivered included,
         // so a column outside the mapping fails the file whatever is read of it.
         if let Some(outside) = builder
             .schema()

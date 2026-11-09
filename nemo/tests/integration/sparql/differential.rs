@@ -181,7 +181,7 @@ fn mask_nulls(row: &str) -> String {
 
 /// How the rewrite stage is expected to fetch a program's data.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Fetch {
+enum ExpectedFetch {
     /// Through a bound import, which reasoning fetches.
     Bound,
     /// Without bindings: every query goes out at load.
@@ -190,7 +190,7 @@ enum Fetch {
 
 /// Runs a program as written and rewritten, and checks that both derive the same facts,
 /// that the program derives something, and that the rewrite fetches as expected.
-fn check(program: &str, outputs: &[&str], fetch: Fetch) {
+fn check(program: &str, outputs: &[&str], fetch: ExpectedFetch) {
     let source = format!("{PRELUDE}{program}");
     let dataset = dataset();
     let written = run(&source, outputs, false, &dataset);
@@ -207,7 +207,7 @@ fn check(program: &str, outputs: &[&str], fetch: Fetch) {
     );
     assert_eq!(
         rewritten.fetched > 0,
-        fetch == Fetch::Bound,
+        fetch == ExpectedFetch::Bound,
         "expected {fetch:?}: {:#?}",
         rewritten.queries
     );
@@ -262,7 +262,7 @@ holder(?x, ?v) :- wanted(?v), t(?x, ex:value, ?v) .
 @output holder .
 "#,
         &["holder"],
-        Fetch::Bound,
+        ExpectedFetch::Bound,
     );
 }
 
@@ -278,7 +278,7 @@ three(?x) :- t(?x, ex:value, 3) .
 @output holder, three .
 "#,
         &["holder", "three"],
-        Fetch::Bound,
+        ExpectedFetch::Bound,
     );
 }
 
@@ -313,7 +313,7 @@ oneDay(?x) :- t(?x, ex:value, "P1D"^^<http://www.w3.org/2001/XMLSchema#dayTimeDu
 "#
         ),
         &["holder", "truth", "oneDay"],
-        Fetch::Bound,
+        ExpectedFetch::Bound,
     );
 }
 
@@ -337,7 +337,7 @@ notThree(?x) :- item(?x), ~t(?x, ex:value, 3) .
 @output notThree .
 "#,
         &["notThree"],
-        Fetch::Bound,
+        ExpectedFetch::Bound,
     );
 }
 
@@ -508,7 +508,7 @@ everything(?x, ?v) :- t(?x, ex:text, ?v) .
 @output holder, everything .
 "#,
         &["holder", "everything"],
-        Fetch::Bound,
+        ExpectedFetch::Bound,
     );
 }
 
@@ -617,7 +617,7 @@ fn a_constant_specialises_the_query() {
     check(
         "person(?x) :- t(?x, rdf:type, ex:Person) .\n@output person .\n",
         &["person"],
-        Fetch::Unbound,
+        ExpectedFetch::Unbound,
     );
 }
 
@@ -631,7 +631,7 @@ aged(?x) :- t(?x, ex:age, 45) .
 @output english, plain, aged .
 "#,
         &["english", "plain", "aged"],
-        Fetch::Unbound,
+        ExpectedFetch::Unbound,
     );
 }
 
@@ -640,7 +640,7 @@ fn a_repeated_variable_specialises_the_query() {
     check(
         "self(?x) :- t(?x, ex:knows, ?x) .\n@output self .\n",
         &["self"],
-        Fetch::Unbound,
+        ExpectedFetch::Unbound,
     );
 }
 
@@ -653,7 +653,7 @@ next(?e, ?n) :- seed(?e), t(?e, ex:p1, ?m), t(?m, ex:p2, ?n) .
 @output next .
 "#,
         &["next"],
-        Fetch::Bound,
+        ExpectedFetch::Bound,
     );
 }
 
@@ -666,7 +666,7 @@ business(?id) :- org(?o), t(?id, ex:name, STRLANG(?o, "en")) .
 @output business .
 "#,
         &["business"],
-        Fetch::Bound,
+        ExpectedFetch::Bound,
     );
 }
 
@@ -679,7 +679,7 @@ business(?id) :- org(?o), ?l = STRLANG(?o, "en"), t(?id, ex:name, ?l) .
 @output business .
 "#,
         &["business"],
-        Fetch::Bound,
+        ExpectedFetch::Bound,
     );
 }
 
@@ -692,7 +692,7 @@ violation(?s, ?o) :- inverse(?p, ?i), t(?s, ?p, ?o), ~t(?o, ?i, ?s) .
 @output violation .
 "#,
         &["violation"],
-        Fetch::Bound,
+        ExpectedFetch::Bound,
     );
 }
 
@@ -706,7 +706,7 @@ reach(?y) :- reach(?x), t(?x, ex:parent, ?y) .
 @output reach .
 "#,
         &["reach"],
-        Fetch::Bound,
+        ExpectedFetch::Bound,
     );
 }
 
@@ -719,7 +719,7 @@ h(?x, ?y) :- p(?x), q(?y), t(?x, ex:knows, ?y) .
 @output h .
 "#,
         &["h"],
-        Fetch::Bound,
+        ExpectedFetch::Bound,
     );
 }
 
@@ -732,7 +732,7 @@ edge(?s, ?p, ?o) :- wanted(?p), t(?s, ?p, ?o) .
 @output edge .
 "#,
         &["edge"],
-        Fetch::Bound,
+        ExpectedFetch::Bound,
     );
 }
 
@@ -745,7 +745,7 @@ old(?x) :- known(?x), t(?x, ex:age, ?a), ?a > 40 .
 @output old .
 "#,
         &["old"],
-        Fetch::Bound,
+        ExpectedFetch::Bound,
     );
 }
 
@@ -762,7 +762,7 @@ parentName(?x, ?n) :- start(?x), t(?x, ex:parent, ?y), names(?y, ?n) .
 @output parentName .
 "#,
         &["parentName"],
-        Fetch::Bound,
+        ExpectedFetch::Bound,
     );
 }
 
@@ -785,7 +785,7 @@ who(?h) :- mail(?e), withEmail(?h, ?e) .
 "#
         ),
         &["who"],
-        Fetch::Bound,
+        ExpectedFetch::Bound,
     );
 }
 
@@ -804,7 +804,7 @@ paired(?h) :- mailOf(?h, ?e), everyone(?h, ?e) .
 @output mailOf, paired .
 "#,
         &["mailOf", "paired"],
-        Fetch::Unbound,
+        ExpectedFetch::Unbound,
     );
 }
 
@@ -821,7 +821,7 @@ contact(?x, ?c) :- known(?x), contacts(?x, ?c) .
 @output contact .
 "#,
         &["contact"],
-        Fetch::Bound,
+        ExpectedFetch::Bound,
     );
 }
 
@@ -838,7 +838,7 @@ contact(?x, ?c) :- known(?x), contacts(?x, ?c) .
 @output contact .
 "#,
         &["contact"],
-        Fetch::Unbound,
+        ExpectedFetch::Unbound,
     );
 }
 
@@ -855,7 +855,7 @@ nextAge(?x, ?n) :- known(?x), next(?x, ?n) .
 @output nextAge .
 "#,
         &["nextAge"],
-        Fetch::Unbound,
+        ExpectedFetch::Unbound,
     );
 }
 
@@ -872,7 +872,7 @@ degree(?x, ?n) :- known(?x), degrees(?x, ?n) .
 @output degree .
 "#,
         &["degree"],
-        Fetch::Unbound,
+        ExpectedFetch::Unbound,
     );
 }
 
@@ -889,7 +889,7 @@ friend(?x, ?y) :- known(?x), knowsPeople(?x, ?y) .
 @output friend .
 "#,
         &["friend"],
-        Fetch::Unbound,
+        ExpectedFetch::Unbound,
     );
 }
 
@@ -906,7 +906,7 @@ parentOf(?x, ?y) :- start(?x), parents(?x, ?y) .
 @output parentOf .
 "#,
         &["parentOf"],
-        Fetch::Bound,
+        ExpectedFetch::Bound,
     );
 }
 
@@ -923,7 +923,7 @@ age(?x, ?a) :- known(?x), ages(?x, ?a) .
 @output age .
 "#,
         &["age"],
-        Fetch::Bound,
+        ExpectedFetch::Bound,
     );
 }
 
@@ -940,7 +940,7 @@ ancestor(?y) :- start(?x), ancestors(?x, ?y) .
 @output ancestor .
 "#,
         &["ancestor"],
-        Fetch::Bound,
+        ExpectedFetch::Bound,
     );
 }
 
@@ -957,7 +957,7 @@ parentOf(?x, ?y) :- start(?x), parents(?x, ?y) .
 @output parentOf .
 "#,
         &["parentOf"],
-        Fetch::Bound,
+        ExpectedFetch::Bound,
     );
 }
 
@@ -973,7 +973,7 @@ restricted(?p) :- restriction(?r), onProperty(?r, ?p) .
 @output restricted .
 "#,
         &["restricted"],
-        Fetch::Unbound,
+        ExpectedFetch::Unbound,
     );
 }
 
@@ -1028,7 +1028,7 @@ notTwelve(?x) :- item(?x), ~t(?x, ex:quantity, 12) .
 @output holder, twelve, notTwelve .
 "#,
         &["holder", "twelve", "notTwelve"],
-        Fetch::Bound,
+        ExpectedFetch::Bound,
     );
 }
 

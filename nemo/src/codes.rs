@@ -2,7 +2,7 @@
 //! and the registry documenting every code an engine can report.
 //!
 //! Codes are stable, public identifiers: tooling and tests match on them,
-//! and documentation references them.
+//! and the `# Errors` sections of the public API name them.
 //! There is one constant per kind, named after it,
 //! with the stage added where two stages have a kind of the same name (`MODULES_TOO_DEEP`).
 //! The numbers group by stage:

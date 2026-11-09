@@ -406,9 +406,9 @@ impl fmt::Display for ValueRef<'_> {
 
 /// A value in term syntax with every IRI in angle brackets, as [ValueRef::bracketed] returns it.
 #[derive(Debug, Clone, Copy)]
-struct Bracketed<'a>(ValueRef<'a>);
+struct BracketedValue<'a>(ValueRef<'a>);
 
-impl fmt::Display for Bracketed<'_> {
+impl fmt::Display for BracketedValue<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.0.write_term(f, false)
     }
@@ -417,10 +417,10 @@ impl fmt::Display for Bracketed<'_> {
 impl<'a> ValueRef<'a> {
     /// Returns the value in term syntax with every IRI in angle brackets,
     /// structure labels and map keys included,
-    /// the text a program reads back as written when it declares a base IRI,
-    /// under which a bare name is relative to the base.
+    /// the form that reads back as the same value under a base IRI,
+    /// which makes a bare name relative to it.
     pub fn bracketed(self) -> impl fmt::Display + 'a {
-        Bracketed(self)
+        BracketedValue(self)
     }
 }
 
@@ -503,7 +503,7 @@ fn shifted(point: ValueRef<'_>, duration: Duration) -> Result<DataValue, Evaluat
 
 /// Writes a string in quoted form,
 /// escaping the quote and the escape character themselves, and the line breaks,
-/// which the parser would read back normalized.
+/// so that the text reads back exactly, line endings included.
 pub(super) fn write_quoted(f: &mut fmt::Formatter<'_>, text: &str) -> fmt::Result {
     f.write_str("\"")?;
     for character in text.chars() {

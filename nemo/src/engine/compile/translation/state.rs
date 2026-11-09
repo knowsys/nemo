@@ -1,5 +1,6 @@
 //! The translation state the engine keeps from one translation to the next
-//! (the initial load, `extend`, `reload`, and `import_rows`).
+//! (the initial load, [extend](crate::engine::Engine::extend),
+//! [reload](crate::engine::Engine::reload), and [import_rows](crate::engine::Engine::import_rows)).
 
 use std::collections::{HashMap, HashSet};
 
@@ -14,7 +15,8 @@ use crate::{
 };
 
 /// The translation state that outlives one translation,
-/// which `extend` and rows added through `import_rows` translate against.
+/// which [extend](crate::engine::Engine::extend) and rows added through
+/// [import_rows](crate::engine::Engine::import_rows) translate against.
 ///
 /// The parts derived from statements (prefixes, base, parameters, declarations, `@type`
 /// definitions and their types, inputs) are rebuilt from the full statement list on every translation,

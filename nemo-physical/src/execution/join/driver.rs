@@ -3,7 +3,7 @@
 //!
 //! The driver fills a row with one value per layer, outermost first.
 //! At the current layer it finds the next value the hooks admit,
-//! restricts the deeper cursors to the nodes below that value, and descends.
+//! restricts the deeper cursors to that value's children, and descends.
 //! When a layer is exhausted, it returns to the layer above.
 //! A row is complete once the deepest layer has a value;
 //! the driver then resumes at the deepest emitted layer,
@@ -201,10 +201,10 @@ impl<'a, L: JoinLayer<'a>, H: Hooks<L::Value>> Driver<'a, L, H> {
     }
 
     /// Restricts the cursors linked from a layer's cursors
-    /// to the nodes below the positions where the layer found its value.
+    /// to the children of the nodes where the layer found its value.
     ///
     /// Of an input stored in several blocks, only the blocks holding the value get ranges,
-    /// and the others sit out the subtree.
+    /// and the others are skipped in the subtree.
     #[inline]
     fn propagate_ranges(&mut self, layer: usize) {
         // Links lead to strictly deeper layers.

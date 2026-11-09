@@ -708,7 +708,7 @@ fn spacing_tells_a_prefixed_name_from_a_named_argument() {
     assert_eq!(fact.labels, Some(vec!["wd".to_owned(), "ex".to_owned()]));
     assert_eq!(fact.to_string(), "in(wd: 42, ex: Q1) .");
 
-    // Among named arguments, a prefixed name is told it lacks its space.
+    // Among named arguments, a prefixed name gets a hint that it lacks its space.
     let (_, diagnostics) = Program::parse("person(name: \"Ann\", age:30) .", FileId::new(0));
     assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
     assert_eq!(diagnostics[0].code(), crate::codes::MIXED_ARGUMENTS);

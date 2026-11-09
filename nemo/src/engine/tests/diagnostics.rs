@@ -242,7 +242,7 @@ fn a_named_argument_and_a_prefixed_name_point_to_each_other() {
     );
 
     // Without the space, a named argument reads as a prefixed name,
-    // and the undeclared prefix names the space.
+    // and the hint of the undeclared prefix mentions the space.
     let problem = refusal("@declare person(age: int) . person(age:30) .");
     assert_eq!(problem.code(), codes::UNDECLARED_PREFIX, "{problem:?}");
     assert!(

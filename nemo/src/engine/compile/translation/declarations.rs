@@ -677,7 +677,7 @@ impl<'a> Translator<'a> {
             .collect()
     }
 
-    /// Explains a problem with named arguments where a label is a declared prefix
+    /// Adds a hint to a problem with named arguments where a label is a declared prefix
     /// and its value reads as a local name, as in `wd: 42`,
     /// which a space makes a named argument rather than a prefixed name.
     fn hint_prefixed_name(
@@ -687,7 +687,7 @@ impl<'a> Translator<'a> {
         terms: &[Term],
     ) -> Diagnostic {
         let mistaken = labels.iter().zip(terms).find_map(|(label, term)| {
-            // The local name is the term as written: a number's value writes in another
+            // The local name is the term as written: a number's value is written in another
             // form, `7` for `007`, which names another IRI.
             let local = match &term.kind {
                 TermKind::Number(_) | TermKind::Constant(Identifier::Bare(_)) => term

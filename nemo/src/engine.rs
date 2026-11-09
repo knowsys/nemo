@@ -12,7 +12,7 @@
 //! The engine covers Datalog with expressions (filters, assignments, head computations),
 //! stratified negation, aggregates, existential rules (the restricted chase),
 //! and global parameters.
-//! Other features are reported as unsupported (N0203).
+//! Other features are reported as unsupported.
 //!
 //! The engine's modules sit in layers:
 //! - `link`: modules instantiated into the program the engine loads,
@@ -154,9 +154,9 @@ pub struct Engine {
     /// An explanation re-executes a run's applications in the run's context.
     /// Cleared with the application log.
     contexts: evaluate::contexts::RunContexts,
-    /// The context chosen by the first loading call since the last reasoning run began,
-    /// whose instant the loading calls evaluate the `NOW()` of facts and option values at,
-    /// and the next run its own.
+    /// The evaluation context chosen by the first loading call since the last reasoning run
+    /// began. The loading calls evaluate the `NOW()` of facts and option values at its instant,
+    /// and the next run evaluates its own `NOW()` there too.
     ///
     /// `None` if no loading call chose one since, or if the call that chose it failed or was
     /// discarded.
@@ -185,7 +185,7 @@ pub struct Engine {
     /// Whether the stored facts are at a fixpoint: the last [reason](Self::reason)
     /// ran to completion and nothing was added since.
     ///
-    /// A cancelled run leaves it false, and tracing then fails with N0510.
+    /// A cancelled run leaves it false.
     fixpoint: bool,
     /// The facts stored by loading: the program's own and its imports'.
     loaded: usize,
@@ -431,7 +431,7 @@ impl Engine {
     /// Every table is kept, and every unchanged rule continues semi-naive evaluation where it
     /// left off.
     /// The next [reason](Self::reason) continues to the new fixpoint,
-    /// at the instant the extension's facts and option values evaluate `NOW()` at.
+    /// evaluating `NOW()` at the instant of the extension's facts and option values.
     /// If a new statement adds facts to a predicate that is negated or aggregated,
     /// the derived facts that depend on it are dropped and derived again.
     ///
@@ -476,7 +476,7 @@ impl Engine {
     ///
     /// Every derived row is dropped, every rule starts over,
     /// and the next [reason](Self::reason) derives everything again from the input facts,
-    /// at the instant the program's facts and option values evaluate `NOW()` at.
+    /// evaluating `NOW()` at the instant of the program's facts and option values.
     ///
     /// The dictionary, the registered sources and resources are kept,
     /// and so are the loaded data of every predicate whose defining statements
@@ -485,7 +485,7 @@ impl Engine {
     /// A changed `@prefix`, `@base`, `@parameter`, or `@type` can change the meaning of any value,
     /// so it rebuilds everything.
     /// Rows added through [import_rows](Self::import_rows) to a *rebuilt* predicate
-    /// cannot be reproduced from statements, so they are dropped with warning N0485.
+    /// cannot be reproduced from statements, so they are dropped, with a warning.
     ///
     /// # Errors
     ///
@@ -524,8 +524,8 @@ impl Engine {
     /// Checks a program without loading it:
     /// parameters resolve, directives validate, rules compile, and the whole program
     /// stratifies, but no imported data is read and no facts are stored.
-    /// A parameter without a value, whose value a load needs, is read as any value of its
-    /// declared type, as an `@input` predicate holds any rows its declaration allows.
+    /// A parameter declared without a value, which a load must be given, is read as any value
+    /// of its declared type, as an `@input` predicate holds any rows its declaration allows.
     ///
     /// Unlike [load](Self::load), a check collects problems rather than ending at the first,
     /// and reports everything it found, warnings included,
@@ -609,8 +609,9 @@ impl Engine {
     /// through, or removes it.
     ///
     /// A new engine has the HTTP client of the `http` feature, if built with it, and none
-    /// otherwise. Without a client, a plain method that needs data from the network fails
-    /// (N0491), and the `start_*` methods return the requests, whose responses `resume` takes.
+    /// otherwise. Without a client, a plain method that needs data from the network fails.
+    /// The `start_*` methods, such as [start_load](Self::start_load), send no request either
+    /// way: they return the requests, and [resume](Self::resume) takes the responses.
     ///
     /// Returns the client set before, which can be set again later.
     pub fn set_client(
@@ -681,12 +682,13 @@ impl Engine {
     /// The run is one evaluation [context](EvaluationContext):
     /// every `NOW()` it evaluates reads the same instant, the one the facts loaded for it
     /// were evaluated at.
-    /// That is the instant of the first successful call of `load`, `extend`, `reload` or
-    /// `import_rows` since the last run, or, if there was none, the instant the run began at.
+    /// That is the instant of the first successful call of [load](Self::load),
+    /// [extend](Self::extend), [reload](Self::reload) or [import_rows](Self::import_rows) since
+    /// the last run, or, if there was none, the instant the run began at.
     /// The fetches of bound imports (imports with a `where` clause) go through the engine's
     /// [client](Self::set_client).
-    /// A run left suspended for data from the network, after the cancel token stopped its
-    /// client, continues.
+    /// A run left suspended for data from the network, after the cancel token stopped the wait
+    /// for its client, continues.
     ///
     /// # Errors
     ///
@@ -771,7 +773,7 @@ impl Engine {
     /// or every predicate rules derive, sorted by name, if it declares neither.
     ///
     /// An output is stored whole,
-    /// so [rows](Self::rows) and [count](Self::count) never fail with N0489 for it.
+    /// so [rows](Self::rows) and [count](Self::count) deliver all of its facts.
     pub fn outputs(&self) -> Vec<String> {
         self.output_names()
     }
@@ -853,7 +855,7 @@ impl Engine {
     /// Returns whether a cursor still reads the rows it was opened on:
     /// no later work changed its predicate's table.
     ///
-    /// [read_chunk](Self::read_chunk) fails with N0206 for a cursor that is not current.
+    /// [read_chunk](Self::read_chunk) refuses a cursor that is not current.
     pub fn is_current(&self, cursor: &PredicateCursor) -> bool {
         // The blocks are compared before the range is read: a merged
         // block would make the cursor's range misaligned.
@@ -1055,8 +1057,8 @@ impl Engine {
 
     /// Returns whether the engine holds a program.
     ///
-    /// [load](Self::load) fails with N0481 if the engine holds one,
-    /// and the methods that need one fail with N0482 if it holds none.
+    /// [load](Self::load) needs an engine without a program,
+    /// and most other methods need one with a program.
     pub fn has_program(&self) -> bool {
         self.program.is_some()
     }
@@ -1089,7 +1091,7 @@ impl Engine {
     /// last [reason](Self::reason) ran to completion, and nothing was
     /// added since.
     ///
-    /// Traces and queries require this, and fail with N0209 or N0510 otherwise.
+    /// The tracing methods, such as [trace](Self::trace), require it.
     pub fn is_at_fixpoint(&self) -> bool {
         self.program.is_some() && self.dirty.is_empty() && self.fixpoint
     }

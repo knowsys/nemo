@@ -1,5 +1,5 @@
 //! Loading, extending, reloading and checking a program,
-//! and adding rows through `import_rows` after a load.
+//! and adding rows through [import_rows](crate::engine::Engine::import_rows) after a load.
 
 mod reload;
 
@@ -55,7 +55,7 @@ impl Default for EngineStages {
     }
 }
 
-/// Returns N0490 for a program that is not linked: its `@use` directives are for
+/// Fails for a program that is not linked: its `@use` directives are for
 /// [link](Engine::link) to instantiate.
 fn expect_linked(program: &Program) -> Result<(), Diagnostic> {
     let using = program
@@ -117,7 +117,7 @@ impl Engine {
     /// Translates a staged first program and stores its data.
     ///
     /// The translation is prepared first, which registers and stores nothing.
-    /// If it needs remote resources not fetched yet, the load is suspended for them (N0491),
+    /// If it needs remote resources not fetched yet, the load is suspended for them,
     /// keeping the prepared translation state, and commits from it once every response is in.
     /// The reports from `already` on are rewritten to refer to the written program.
     pub(super) fn load_staged(
@@ -427,8 +427,8 @@ impl Engine {
     /// Translates a staged extension and stores its data.
     ///
     /// The translation is prepared first, which registers and stores nothing,
-    /// so the loaded program stays as it is while the extension is suspended (N0491) for
-    /// remote resources not fetched yet. It commits from the prepared translation state once every
+    /// so the loaded program stays as it is while the extension is suspended for remote
+    /// resources not fetched yet. It commits from the prepared translation state once every
     /// response is in.
     /// The reports from `already` on are rewritten to refer to the written program.
     pub(super) fn extend_staged(
@@ -787,8 +787,8 @@ impl Engine {
         }
     }
 
-    /// Returns a row given through `import_rows` as fact terms, or N0487 for a row holding a
-    /// null.
+    /// Returns a row given through [import_rows](crate::engine::Engine::import_rows) as fact
+    /// terms, or an error for a row holding a null.
     fn row_terms(predicate: &str, row: &[DataValue]) -> Result<Vec<Term>, Diagnostic> {
         let terms: Option<Vec<Term>> = row.iter().map(Term::value).collect();
         terms.ok_or_else(|| {
@@ -854,7 +854,7 @@ impl Engine {
     /// returning the types its analysis inferred.
     ///
     /// Errors that end a check early are returned as `Err`:
-    /// N0481 if the engine holds a program, and N0490 for a program that is not linked.
+    /// the engine holds a program, or the program is not linked.
     pub(in crate::engine) fn check_inner(
         &mut self,
         program: Program,

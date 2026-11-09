@@ -117,7 +117,8 @@ impl RdfOptions {
 pub struct RdfReader {
     /// The resource shape.
     options: RdfOptions,
-    /// The scope blank node labels name nulls in, or `None` for a scope of each read's own.
+    /// The scope blank node labels name nulls in, or `None` if each read names them in a scope of
+    /// its own.
     blank_nodes: Option<LabelScope>,
 }
 
@@ -279,7 +280,7 @@ struct Statements<'a> {
 
 impl<'a> Statements<'a> {
     /// Creates the empty rows of a read of the given shape,
-    /// naming blank nodes in `blanks`, whose condition evaluates in `context`.
+    /// which names blank nodes in `blanks` and evaluates its condition in `context`.
     fn new(options: &'a RdfOptions, blanks: BlankNodes, context: EvaluationContext) -> Self {
         let arity = options.variant.arity();
         Self {

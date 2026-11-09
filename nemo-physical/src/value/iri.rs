@@ -309,14 +309,14 @@ impl<'a> IriRef<'a> {
     /// assert_eq!(bracketed(r"C:\data\u1"), r"<C:\data\u005Cu1>");
     /// ```
     pub fn bracketed(self) -> impl fmt::Display + 'a {
-        InBrackets(self)
+        BracketedIri(self)
     }
 }
 
 /// An IRI written in angle brackets, as [IriRef::bracketed] returns it.
-struct InBrackets<'a>(IriRef<'a>);
+struct BracketedIri<'a>(IriRef<'a>);
 
-impl fmt::Display for InBrackets<'_> {
+impl fmt::Display for BracketedIri<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let IriRef { namespace, local } = self.0;
         let plain = |text: &str| {

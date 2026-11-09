@@ -37,9 +37,8 @@ fn tracing_every_derived_fact_streams_one_inference_per_fact() {
 
     let outcome = run(&directory, &["program.rls", "-e", "none", "--trace-all"]);
     assert_eq!(outcome.status, Some(0), "{}", outcome.stderr);
-    // A line per fact: a derived fact's rule instance after the lines of its premises,
-    // and a given row, of the derived `both` or of the `edge` the rules read,
-    // as a fact statement.
+    // One line per fact: a derived fact as its rule instance, after the lines of its premises,
+    // and a given row, of the derived `both` or of the `edge` the rules read, as a fact statement.
     let position = |line: &str| outcome.stdout.lines().position(|printed| printed == line);
     assert!(position("edge(1, 2) .") < position("reach(1, 2) :- edge(1, 2) ."));
     let mut lines: Vec<&str> = outcome
@@ -64,7 +63,7 @@ fn tracing_every_derived_fact_streams_one_inference_per_fact() {
         outcome.stdout
     );
 
-    // The old spelling still works, and one trace response goes into the file.
+    // The alias `--trace-all-idb-facts` works too, and one trace response goes into the file.
     let outcome = run(
         &directory,
         &[

@@ -663,7 +663,7 @@ mod tests {
 
     #[test]
     fn durations_of_one_kind_are_totally_ordered() {
-        // Negative month counts and huge durations used to come out incomparable.
+        // Negative month counts and huge durations compare too.
         let ordered = [
             "-P9M",
             "-P7M",

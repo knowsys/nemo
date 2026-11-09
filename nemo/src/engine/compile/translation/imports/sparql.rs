@@ -37,9 +37,9 @@ pub(super) struct SparqlImportSpec {
     /// preceded by a `BASE` clause if a base IRI applies to it.
     ///
     /// The import's resource is named after it,
-    /// so that solutions added through `add_resource` and the load reading them agree on the
-    /// name. The parsed query cannot name it: parsing names some variables and blank nodes
-    /// at random.
+    /// so that solutions added through [add_resource](crate::engine::Engine::add_resource) and
+    /// the load reading them agree on the name. The parsed query cannot name it: parsing names
+    /// some variables and blank nodes at random.
     pub(super) written_query: String,
     /// Request headers, applied to the fetch.
     pub(super) headers: Vec<(String, String)>,
@@ -144,9 +144,8 @@ impl<'a> Translator<'a> {
         if self.options_only(import) {
             return Ok(());
         }
-        // The solutions came from the fetch, or were added through
-        // `add_resource` under the import's resource name. Otherwise the
-        // prefetch returned an error.
+        // The solutions came from the fetch, or were registered under the
+        // import's resource name. Otherwise the prefetch returned an error.
         let bytes = fetched
             .or_else(|| self.resources.get(&spec.resource()).cloned())
             .expect("the prefetch fetched or diagnosed every SPARQL import");

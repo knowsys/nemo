@@ -50,9 +50,9 @@ fn unwritable(path: &Path, error: io::Error) -> Diagnostic {
 }
 
 /// Where `--trace-all` streams the response as its parts arrive:
-/// into the `--trace-output` file as one trace response, its nodes one per line,
-/// or to the standard output as one line per node:
-/// the rule instance of a derived fact, and a loaded fact as a fact statement.
+/// - into the `--trace-output` file, as one trace response with one node per line,
+/// - or to the standard output, one line per node: a derived fact as its rule instance,
+///   a loaded fact as a fact statement.
 struct TraceStream<'a> {
     /// The file, if the trace is written rather than printed.
     path: Option<&'a Path>,
@@ -64,8 +64,8 @@ struct TraceStream<'a> {
     facts: Vec<String>,
     /// The rules of the parts so far, for the end of the file's response, if there is a file.
     rules: Vec<WrittenRule>,
-    /// Whether the standard output closed under the stream: the reader
-    /// has all it wants, so no further part is derived for it.
+    /// Whether the standard output was closed, as when the program reading it has all it
+    /// wants, so that no further part is derived.
     closed: bool,
 }
 
@@ -132,7 +132,7 @@ impl<'a> TraceStream<'a> {
     /// Ends the stream with the traced facts the run named:
     /// the file's response lists them after its rules,
     /// and the standard output notes those that do not hold.
-    /// Says where the trace went.
+    /// It then says where the trace was written.
     fn finish(mut self, named: Vec<TracedFact>) -> Result<(), Diagnostic> {
         let Some(path) = self.path else {
             for traced in named.iter().filter(|traced| traced.node.is_none()) {
@@ -157,7 +157,7 @@ impl<'a> TraceStream<'a> {
         // The file closes before it is removed.
         drop(out);
         if let Some(path) = path {
-            // The failure of the trace is what the run reports, not this one.
+            // The run reports the trace's failure, not a failure to remove the file.
             std::fs::remove_file(path).ok();
         }
     }

@@ -41,7 +41,8 @@ impl std::fmt::Display for RequestId {
 
 /// A request a suspended method needs a response to.
 ///
-/// [Progress](super::Progress) shows how a suspended method lists its requests and takes their responses.
+/// [Progress](super::Progress) shows how a suspended method lists its requests
+/// and takes their responses.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PendingRequest {
     /// The id to pass the response to [resume](crate::engine::Engine::resume) under.

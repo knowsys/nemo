@@ -1,7 +1,7 @@
 //! Narrowing: what the outcome of an evaluation tells about its inputs.
 //!
-//! A rule keeps a row only if its conditions hold and its bindings evaluate,
-//! so the types its inputs can have narrow to those that make the outcome possible.
+//! An evaluation whose outcome is required, a condition that holds or a value it yields,
+//! narrows the types its inputs can have to those that make the outcome possible.
 //! Narrowing works back from the outcome through the program's expression tree:
 //! - an instruction's [signature](super::OpCode::signature)
 //!   bounds its operands by the overloads that can yield the required result;

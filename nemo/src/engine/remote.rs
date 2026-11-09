@@ -17,7 +17,7 @@
 //! ids and continues it.
 //! The engine holds at most one suspended method.
 //! While it is suspended, the methods that would change the program or the stored data are
-//! refused (N0493) until it is completed or [discarded](Engine::discard_pending).
+//! refused until it is completed or [discarded](Engine::discard_pending).
 //!
 //! The types of a request and its outcome are re-exported here:
 //! the [Request] itself, its [Response], the [Failure] that prevents one,
@@ -152,7 +152,7 @@ pub(super) enum LoadKind {
 /// its prepared translation, and the remote resources it fetched and still needs.
 ///
 /// A loading method prepares its translation, which registers and stores nothing,
-/// and is suspended as this until the remote resources the preparation listed come.
+/// and is kept as this while it is suspended for the remote resources the preparation listed.
 /// Once every response is in, it commits from the prepared translation state,
 /// passing each response to the import that asked for it.
 #[derive(Debug)]
@@ -349,7 +349,7 @@ impl std::fmt::Debug for ClientSlot {
 
 impl Engine {
     /// Refuses the given method, which would change the program or the stored data,
-    /// while another method is suspended for data from the network (N0493).
+    /// while another method is suspended for data from the network.
     pub(super) fn refuse_while_suspended(&self, refused: &str) -> Result<(), Diagnostic> {
         let Some(suspension) = &self.suspension else {
             return Ok(());
@@ -407,8 +407,8 @@ impl Engine {
     /// Completes a method by sending the requests it is suspended for through the engine's
     /// client, until it is done.
     ///
-    /// Without a client, the suspended method is discarded, and this fails with N0491.
-    /// If the engine's cancel token stops the wait for the client, this fails with N0492:
+    /// Without a client, the suspended method is discarded, and this fails.
+    /// If the engine's cancel token stops the wait for the client, this fails as cancelled:
     /// a suspended loading method is discarded, having changed nothing,
     /// and a suspended reasoning run stays suspended, for the next `reason()` to continue.
     pub(super) fn complete(
@@ -488,9 +488,9 @@ impl Engine {
 
     /// Discards the suspended method, if any, dropping its requests and their responses.
     ///
-    /// A suspended first load gives the rows added through `import_rows` before it back to
-    /// the engine, and a suspended loading call withdraws its reports and undoes its choice of
-    /// the context.
+    /// A suspended first load gives the rows added through
+    /// [import_rows](Engine::import_rows) before it back to the engine, and a suspended loading
+    /// call withdraws its reports and undoes its choice of the context.
     /// A suspended run ends as a cancelled one does, reporting what its fetches skipped.
     pub(super) fn abandon(&mut self) {
         let load = match self.suspension.take() {

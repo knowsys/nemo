@@ -5,7 +5,7 @@
 //! A shared scope is found by its name while it is open,
 //! and a fresh scope only through the [LabelScope] that opened it.
 //! Every null remembers the name of the scope that minted it by a label, if one did,
-//! kept per run of consecutively minted nulls rather than per null.
+//! kept per range of consecutively minted nulls rather than per null.
 //!
 //! A closed scope keeps only its number and the number of its name, which every scope of that
 //! name shares, so that many short-lived scopes cost little.
@@ -28,7 +28,7 @@ struct ScopeEntry {
     name: u32,
     /// Whether [shared](NullLabels::shared) opened the scope, so that it is found by its name.
     shared: bool,
-    /// The null each label names, or `None` once the scope closed.
+    /// The null each label names, or `None` once the scope is closed.
     #[expect(
         clippy::box_collection,
         reason = "a closed scope, of which a long run leaves many, keeps a pointer's width"
@@ -47,17 +47,17 @@ pub(super) struct NullLabels {
     numbers: HashMap<Box<str>, u32>,
     /// The open shared scopes, by the number of their name.
     shared: HashMap<u32, LabelScope>,
-    /// The runs of consecutively minted nulls, in the order they were minted.
-    runs: Vec<MintRun>,
+    /// The ranges of consecutively minted nulls, in the order they were minted.
+    ranges: Vec<MintedRange>,
 }
 
-/// A run of consecutively minted nulls: the index of its first null,
+/// A range of consecutively minted nulls: the index of its first null,
 /// and the scope that minted its nulls by label, or `None` for nulls minted fresh.
 #[derive(Debug, Clone, Copy)]
-struct MintRun {
-    /// The index of the run's first null.
+struct MintedRange {
+    /// The index of the range's first null.
     first: u64,
-    /// The scope that minted the run's nulls by label, if one did.
+    /// The scope that minted the range's nulls by label, if one did.
     scope: Option<LabelScope>,
 }
 
@@ -73,7 +73,7 @@ impl NullLabels {
         scope
     }
 
-    /// Opens a scope that no other call returns. The name only reports provenance.
+    /// Opens a scope that no other call returns. The name only tells which scope minted a null.
     pub(super) fn fresh(&mut self, name: &str) -> LabelScope {
         let name = self.intern_name(name);
         self.open(name, false)
@@ -141,8 +141,8 @@ impl NullLabels {
 
     /// Records that the null of the given index was minted, by a label of a scope or fresh.
     pub(super) fn minted(&mut self, index: u64, scope: Option<LabelScope>) {
-        if self.runs.last().is_none_or(|run| run.scope != scope) {
-            self.runs.push(MintRun {
+        if self.ranges.last().is_none_or(|range| range.scope != scope) {
+            self.ranges.push(MintedRange {
                 first: index,
                 scope,
             });
@@ -152,12 +152,12 @@ impl NullLabels {
     /// Returns the name of the scope that minted the null of the given index by a label,
     /// or `None` for a null minted fresh.
     pub(super) fn scope_of(&self, index: u64) -> Option<&str> {
-        let run = self.runs.partition_point(|run| run.first <= index);
-        let scope = self.runs.get(run.checked_sub(1)?)?.scope?;
+        let range = self.ranges.partition_point(|range| range.first <= index);
+        let scope = self.ranges.get(range.checked_sub(1)?)?.scope?;
         Some(&*self.names[self.scopes[scope.0 as usize].name as usize])
     }
 
-    /// Returns the bytes the scopes, their names and labels and the runs have allocated,
+    /// Returns the bytes the scopes, their names and labels and the ranges have allocated,
     /// approximately.
     pub(super) fn memory_bytes(&self) -> usize {
         let labels: usize = self
@@ -175,7 +175,7 @@ impl NullLabels {
             + self.names.capacity() * size_of::<Box<str>>()
             + self.numbers.capacity() * (size_of::<Box<str>>() + size_of::<u32>() + 1)
             + self.shared.capacity() * (size_of::<u32>() + size_of::<LabelScope>() + 1)
-            + self.runs.capacity() * size_of::<MintRun>()
+            + self.ranges.capacity() * size_of::<MintedRange>()
             + names
             + labels
     }

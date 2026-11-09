@@ -623,7 +623,8 @@ pub struct DictionaryMemory {
     pub tuples: usize,
     /// The bytes of the map store, excluding the materialized values.
     pub maps: usize,
-    /// The bytes of the null labels, of their scopes, and of the scopes' provenance records.
+    /// The bytes of the null labels, of their scopes, and of the record of which scope minted
+    /// each null.
     pub null_labels: usize,
 }
 

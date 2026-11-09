@@ -45,7 +45,7 @@ impl LiteralSyntax {
 }
 
 /// Returns the IRI a cell spells between angle brackets, its character escapes decoded,
-/// or `None` for a cell without them.
+/// or `None` for a cell not in angle brackets.
 ///
 /// The IRI need not be [valid](Iri::is_valid).
 pub(crate) fn iri(cell: &str) -> Option<Cow<'_, str>> {
@@ -125,7 +125,7 @@ fn unescape(raw: &str, syntax: LiteralSyntax) -> Option<String> {
 ///
 /// A read given a scope names nulls in it, shared with the other reads given it,
 /// such as every response of one SPARQL endpoint.
-/// Otherwise the read opens a scope of its own, the document:
+/// Otherwise the read opens a scope of its own, for the document it reads:
 /// a label names the same null across TriG graph blocks and across a response's rows,
 /// and the scope closes when the read ends.
 #[derive(Debug)]
@@ -182,7 +182,7 @@ mod tests {
             assert_eq!(literal(r#"x"tail"#, syntax), None, "{syntax:?}");
             assert_eq!(literal(r#"trailing\"#, syntax), None, "{syntax:?}");
         }
-        // Turtle reads `\b` as a backspace; the rule language keeps it for regular expressions,
+        // Turtle reads `\b` as a backspace, while term syntax keeps it for regular expressions,
         // and reads `\f` and `\'` as Turtle does.
         assert_eq!(
             literal(r#"café\b\f\'""#, LiteralSyntax::Turtle),
@@ -204,7 +204,7 @@ mod tests {
                 "{syntax:?}"
             );
         }
-        // Only the rule language abbreviates the XML Schema namespace.
+        // Only term syntax abbreviates the XML Schema namespace.
         assert_eq!(
             literal(r#"5"^^<xsd:integer>"#, LiteralSyntax::TermSyntax),
             Some(DataValue::integer(5))

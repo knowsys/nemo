@@ -5,7 +5,7 @@
 //! every derivation must be an instance of its written rule
 //! (the head and each premise its literal under the assignment),
 //! and every premise must come before the node it supports.
-//! A response that passes is a valid proof whatever path the search took.
+//! A response that passes is a valid proof.
 
 mod query;
 

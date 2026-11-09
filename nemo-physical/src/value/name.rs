@@ -1,6 +1,6 @@
 //! The names of term syntax.
 
-/// A kind of name in term syntax, told by what may precede it.
+/// A kind of name in term syntax, distinguished by what may precede it.
 ///
 /// A name starts with a letter or `_` and continues with letters, digits, `_` and `%`.
 /// Letters are those of Turtle's and SPARQL's names, beyond ASCII,
@@ -8,7 +8,7 @@
 /// The kinds differ in what may start a name and in what may join two parts of one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NameKind {
-    /// A name after a marker character, which a language using term syntax gives meaning to.
+    /// A name that follows a marker character.
     ///
     /// Nothing joins two parts, so the name at the start of `x-1` is `x`.
     Marked,

@@ -64,7 +64,7 @@ pub(crate) fn lexical(value: ValueRef<'_>) -> StackValue<'static> {
 /// a string quoted and escaped, a language string with its tag,
 /// an IRI and an exact number bare, every other literal with its datatype.
 ///
-/// Not a SPARQL function; the term as a program would write it.
+/// Not a SPARQL function: the term as term syntax writes it.
 pub(crate) fn canonical(value: ValueRef<'_>) -> StackValue<'static> {
     let text = match value {
         ValueRef::String(text) => quote(text),
@@ -175,7 +175,7 @@ pub(crate) fn language_matches(tag: ValueRef<'_>, range: ValueRef<'_>) -> StackV
 
 /// Creates a typed literal from a lexical and a datatype IRI,
 /// SPARQL's [`STRDT`](https://www.w3.org/TR/sparql12-query/#func-strdt),
-/// normalized like a program literal; see [DataValue::typed_literal].
+/// normalized as [DataValue::typed_literal] normalizes it.
 ///
 /// A lexical that is not one of the datatype is malformed.
 pub(crate) fn typed_literal(lexical: ValueRef<'_>, datatype: ValueRef<'_>) -> StackValue<'static> {

@@ -67,7 +67,7 @@
 //!   and one blank node must be one null in all of them.
 //!   A label names the same null in every response from an endpoint
 //!   ([Dictionary::labeled_null](nemo_physical::dictionary::Dictionary::labeled_null)),
-//!   as stores labelling nodes by their internal ids give them
+//!   as stores that label nodes by their internal ids do
 //!   (Jena's TSV results, Virtuoso, Oxigraph, QLever),
 //!   though SPARQL only promises a label within one result.
 //!   On a store that labels each result anew, two blank nodes of different responses may
@@ -75,14 +75,13 @@
 //!   become two.
 //!   No query can name a blank node, so a binding row holding one fetches nothing,
 //!   which reasoning reports.
-//! - **An unbound value is no value.** Each unbound cell is a null of its own,
-//!   which no other fetch can meet,
+//! - **An unbound value is a null of its own.** No other fetch can meet it,
 //!   so a query that may leave a projected variable unbound is not rewritten.
 //!   A variable no pattern of the query binds counts as well,
 //!   except in a query calling a service, which may bind it.
 //!   There the variable takes only the values the rule's bindings give it,
-//!   as a label service labels only the items it is asked about,
-//!   which the query as written, asked without bindings, would not.
+//!   as a label service labels only the items it is asked about.
+//!   Asked as written, without bindings, the query labels every item its pattern finds.
 //! - **A result is one fixed set.** A query whose result depends on how it is asked
 //!   (`LIMIT`, `OFFSET`, `SAMPLE`, `RAND()`, `NOW()`, `UUID()`, `STRUUID()`, `BNODE()`)
 //!   is never restricted or merged.

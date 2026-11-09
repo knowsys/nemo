@@ -23,7 +23,7 @@ use nemo_physical::{
 ///
 /// A cursor is plain data:
 /// the predicate's revision range and row count are fixed when the cursor is opened.
-/// A read fails with N0206 for a cursor whose table has changed since it was opened,
+/// A read fails for a cursor whose table has changed since it was opened,
 /// rather than return rows that no longer match the table.
 ///
 /// # Example

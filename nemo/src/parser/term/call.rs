@@ -97,8 +97,8 @@ impl Parser<'_> {
         }
         if named < labels.len() {
             let mut problem = ParseError::MixedArguments.at(Some(self.span_from(start)));
-            // Among named arguments, a prefixed name most likely lacks the space that makes
-            // it one too.
+            // Among named arguments, a prefixed name most likely lacks the space that would
+            // make it a named argument too.
             let prefixed = labels
                 .iter()
                 .zip(&terms)

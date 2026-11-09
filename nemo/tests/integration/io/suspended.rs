@@ -146,8 +146,8 @@ fn a_failed_response_fails_the_load() {
     assert!(engine.pending().is_empty());
 }
 
-/// Under `on_error = warn`, a failed import reads nothing and warns;
-/// the rest of the program runs.
+/// Under `on_error = warn`, a failed import reads nothing and warns,
+/// and the rest of the program runs.
 #[test]
 fn a_failed_import_that_warns_reads_nothing() {
     let mut engine = Engine::new();

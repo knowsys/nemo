@@ -26,7 +26,7 @@ impl<'a> Translator<'a> {
     /// in statement order, each tagged with the position of its directive.
     ///
     /// An import needs no request if its data is already stored,
-    /// if its resource is registered through `add_resource`,
+    /// if its resource is registered through [add_resource](crate::engine::Engine::add_resource),
     /// or if it fetches during reasoning (an import with a `where` clause).
     /// A translation that reads no data needs none.
     pub(in crate::engine::compile::translation) fn remote_requests(
@@ -72,7 +72,7 @@ impl<'a> Translator<'a> {
     ///
     /// - A failed fetch fails its import,
     ///   or, under `on_error = warn`, leaves the import reading nothing, with a warning.
-    /// - A remote resource the translation was not prepared with is N0491.
+    /// - A remote resource the translation was not prepared with is a bug, and panics.
     /// - A check reads nothing.
     pub(super) fn prefetch(
         &mut self,
@@ -208,7 +208,8 @@ impl<'a> Translator<'a> {
     /// Returns the remote, unregistered resource of an import, if it has one.
     ///
     /// Bytes registered under the resource name take precedence over the network,
-    /// so data added through `add_resource` is not fetched again.
+    /// so data added through [add_resource](crate::engine::Engine::add_resource) is not fetched
+    /// again.
     fn remote_resource(&self, import: &PendingImport) -> Result<Option<String>, Diagnostic> {
         if matches!(import.format, FileFormat::Sparql | FileFormat::Parquet) {
             // SPARQL builds its own request, and Parquet does not accept

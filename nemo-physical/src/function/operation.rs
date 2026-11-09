@@ -5,7 +5,7 @@
 //! the result, or the [evaluation error](crate::value::EvaluationError) that propagates.
 //! The families know nothing of the stack or the instruction set;
 //! the interpreter in [program](super::StackProgram) dispatches to them,
-//! and the type analysis in `infer` mirrors them.
+//! and the type analysis in [infer](super::infer) mirrors them.
 
 pub(super) mod boolean;
 pub(super) mod compare;
