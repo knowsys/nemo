@@ -11,9 +11,8 @@
 use std::ops::Range;
 
 use nemo_physical::{
-    dictionary::Dictionary,
-    function::{EvaluationContext, OpCode, StackProgram},
-    management::{Revision, TableId, TableManager},
+    function::{OpCode, StackProgram},
+    management::{Revision, TableId},
     plan::{ComputedColumnSpec, FilterSpec, Marker, NodeId, OperationPlan},
     value::DataValue,
 };
@@ -185,9 +184,9 @@ impl<'r> BodySpace<'r> {
     /// Subtracts the rule's negated atoms from a body result,
     /// each matched on the columns it shares with the rule.
     ///
-    /// Guards, which are the negated atoms that share no column with the rule,
-    /// are not subtracted here (see [guard_matches]).
-    /// Without any other negated atom, the result is the input node itself.
+    /// A negated atom that shares no column with the rule drops every row if it matches a row
+    /// of its table, and none otherwise.
+    /// Without negated atoms, the result is the input node itself.
     /// The negated atoms read the given range,
     /// and their loads are returned with the node, so that their ranges can be set before
     /// each execution.
@@ -198,7 +197,7 @@ impl<'r> BodySpace<'r> {
         range: Range<Revision>,
     ) -> (NodeId, Vec<(NodeId, TableId)>) {
         let mut loads = Vec::new();
-        for atom in self.rule.negated.iter().filter(|atom| !atom.is_guard()) {
+        for atom in &self.rule.negated {
             let relation = self.negated_node(plan, atom, range.clone(), &mut loads);
             node = plan.subtract(node, relation);
         }
@@ -247,30 +246,4 @@ fn negated_filters(negated: &NegatedAtom, column_markers: &[Marker]) -> Vec<Filt
             FilterSpec::from_program(inputs, filter.program.clone())
         })
         .collect()
-}
-
-/// Returns whether the table of a guard atom has a matching row before `step`.
-///
-/// A guard is a negated atom that shares no variable with its rule.
-/// Its predicate does not change within the rule's stratum,
-/// so one check per stratum suffices.
-pub(crate) fn guard_matches(
-    negated: &NegatedAtom,
-    step: u64,
-    manager: &mut TableManager,
-    dictionary: &mut Dictionary,
-    context: EvaluationContext,
-) -> bool {
-    let mut plan = OperationPlan::new();
-    let column_markers: Vec<Marker> = negated.columns.iter().map(|_| plan.marker()).collect();
-    let load = plan.load(
-        negated.table,
-        Revision(0)..Revision(step),
-        column_markers.clone(),
-    );
-    let matching = filtered(&mut plan, load, negated_filters(negated, &column_markers));
-    let exists = plan.project(matching, Vec::new());
-    let output = plan.output(exists);
-    let results = plan.execute(manager, dictionary, context);
-    !results.outputs[output].is_empty()
 }

@@ -14,7 +14,7 @@
 //! so no ranking can distinguish a large relation from a small one,
 //! and deviating from the written order without a structural reason would be guesswork.
 
-use crate::engine::compile::compiled::{CompiledRule, NegatedColumn, VariableId};
+use crate::engine::compile::compiled::{CompiledRule, NegatedAtom, NegatedColumn, VariableId};
 
 /// Chooses the variable order of every rule, in place.
 ///
@@ -72,14 +72,14 @@ fn ordered(rule: &CompiledRule, seeds: &[VariableId]) -> Vec<VariableId> {
 /// since their repeated applications produce the most duplicate head rows,
 /// and for a rule that is not recursive, the selectivity of the written order matters more.
 /// The rule must also have a single head atom, and no aggregate, existential variable,
-/// nondeterministic function, or negated atom other than a guard.
+/// nondeterministic function, or negated atom that shares a column with the body.
 /// The new leading variable must occur in a body atom, and no binding may compute it.
 fn head_leader(rule: &CompiledRule, order: &[VariableId]) -> Option<VariableId> {
     if rule.heads.len() != 1
         || rule.aggregate.is_some()
         || rule.existential.is_some()
         || rule.nondeterministic
-        || rule.negated.iter().any(|atom| !atom.is_guard())
+        || rule.negated.iter().any(NegatedAtom::shares_columns)
         || !rule
             .body
             .iter()

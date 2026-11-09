@@ -26,10 +26,7 @@ use crate::{
     engine::{
         Engine,
         compile::compiled::{CompiledProgram, CompiledRule},
-        evaluate::{
-            application::{self, Applied},
-            body,
-        },
+        evaluate::application::{self, Applied},
         registered::Registered,
         remote::{PendingRequest, Progress, Response, Suspension},
     },
@@ -451,7 +448,7 @@ impl Engine {
                     (suspended.active, Some(entry))
                 }
                 None => {
-                    let active = self.activate(program, stratum, context);
+                    let active = Self::activate(program, stratum);
                     self.telemetry.record(&EngineEvent::StratumStarted {
                         stratum: stratum_index,
                         rules: active.len(),
@@ -535,39 +532,12 @@ impl Engine {
     }
 
     /// Returns the active rules of a stratum, which are the rules that can fire in it.
-    ///
-    /// Guard atoms, which are the negated atoms that share no variable with their rule,
-    /// are checked once here, since their predicates do not change within the stratum.
-    fn activate(
-        &mut self,
-        program: &CompiledProgram,
-        stratum: &[usize],
-        context: EvaluationContext,
-    ) -> Vec<usize> {
-        let mut active = Vec::with_capacity(stratum.len());
-        for &index in stratum {
-            let rule = &program.rules[index];
-            if rule.never_fires {
-                continue;
-            }
-            let mut blocked = false;
-            for atom in rule.negated.iter().filter(|atom| atom.is_guard()) {
-                if body::guard_matches(
-                    atom,
-                    self.step,
-                    &mut self.manager,
-                    &mut self.dictionary,
-                    context,
-                ) {
-                    blocked = true;
-                    break;
-                }
-            }
-            if !blocked {
-                active.push(index);
-            }
-        }
-        active
+    fn activate(program: &CompiledProgram, stratum: &[usize]) -> Vec<usize> {
+        stratum
+            .iter()
+            .copied()
+            .filter(|&index| !program.rules[index].never_fires)
+            .collect()
     }
 
     /// Runs one iteration over a stratum's active rules from the given position on.

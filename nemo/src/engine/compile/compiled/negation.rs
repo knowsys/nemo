@@ -31,13 +31,12 @@ pub(crate) enum NegatedColumn {
 }
 
 impl NegatedAtom {
-    /// Returns whether no column is shared.
+    /// Returns whether a column is shared.
     ///
-    /// Such an atom is a *guard*: it drops every body match if its table has a row
+    /// An atom without a shared column drops every body match if its table has a row
     /// that satisfies the filters, and none otherwise.
-    pub(crate) fn is_guard(&self) -> bool {
-        !self
-            .columns
+    pub(crate) fn shares_columns(&self) -> bool {
+        self.columns
             .iter()
             .any(|column| matches!(column, NegatedColumn::Shared(_)))
     }
