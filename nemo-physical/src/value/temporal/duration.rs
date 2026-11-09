@@ -20,19 +20,20 @@ use crate::value::{
     temporal::{TimezoneOffset, instant::ATTOSECONDS_PER_SECOND},
 };
 
-/// An [`xsd:duration`](https://www.w3.org/TR/xmlschema11-2/#duration) value:
-/// a number of months and a number of seconds, both of one sign.
+/// An [`xsd:duration`](https://www.w3.org/TR/xmlschema11-2/#duration) value,
+/// a number of months and a number of seconds.
 ///
+/// The months and the seconds never have opposite signs.
 /// The values of
 /// [`xsd:dayTimeDuration`](https://www.w3.org/TR/xmlschema11-2/#dayTimeDuration)
 /// and [`xsd:yearMonthDuration`](https://www.w3.org/TR/xmlschema11-2/#yearMonthDuration)
 /// are the durations without months and the durations without seconds.
-/// [is_day_time](Self::is_day_time) and [is_year_month](Self::is_year_month) tell them apart,
-/// and [domain](Self::domain) names the most specific of the three.
+/// [is_day_time](Self::is_day_time) and [is_year_month](Self::is_year_month)
+/// distinguish them, and [domain](Self::domain) returns the most specific of the three domains.
 ///
-/// Equality, order and hashing are term identity, which is also XSD's value equality,
-/// as `P1Y` and `P12M` are one value.
-/// The order is by domain, then by months, then by seconds.
+/// Equality, order and hashing follow term identity, which is also XSD's equality by value,
+/// so `P1Y` and `P12M` are the same value.
+/// The values are ordered by domain, then by months, and then by seconds.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(Rust, packed(8))]
 pub struct Duration {
@@ -42,12 +43,12 @@ pub struct Duration {
     attoseconds: i128,
 }
 
-/// The value takes 24 bytes at 8-byte alignment.
+/// Checks at compile time that a value occupies 24 bytes at 8-byte alignment.
 const _: () = assert!(size_of::<Duration>() == 24 && align_of::<Duration>() == 8);
 
 impl Duration {
-    /// Creates the duration of months and attoseconds of the same sign,
-    /// or `None` if the signs differ.
+    /// Creates the duration of `months` months and `attoseconds` attoseconds,
+    /// or `None` if they have opposite signs.
     pub fn new(months: i64, attoseconds: i128) -> Option<Self> {
         let agree = (months >= 0 && attoseconds >= 0) || (months <= 0 && attoseconds <= 0);
         agree.then_some(Self {
@@ -78,7 +79,7 @@ impl Duration {
     }
 
     /// Parses an `xsd:duration`, `xsd:dayTimeDuration` or `xsd:yearMonthDuration` lexical form,
-    /// or `None` for malformed input and for a value beyond the value space.
+    /// or returns `None` for a malformed lexical form or a value beyond the value space.
     ///
     /// # Example
     ///
@@ -101,9 +102,8 @@ impl Duration {
             .map(Self::from_library)
     }
 
-    /// Parses an `xsd:dayTimeDuration` lexical form,
-    /// or `None` for malformed input, for a lexical with years or months,
-    /// and for a value beyond the value space.
+    /// Parses an `xsd:dayTimeDuration` lexical form, or returns `None` for a malformed
+    /// lexical form, one with years or months, or a value beyond the value space.
     pub fn from_day_time_lexical(lexical: &str) -> Option<Self> {
         lexical
             .parse::<LibraryDayTimeDuration>()
@@ -111,9 +111,8 @@ impl Duration {
             .map(|value| Self::from_library(value.into()))
     }
 
-    /// Parses an `xsd:yearMonthDuration` lexical form,
-    /// or `None` for malformed input, for a lexical with days or a time,
-    /// and for a value beyond the value space.
+    /// Parses an `xsd:yearMonthDuration` lexical form, or returns `None` for a malformed
+    /// lexical form, one with days or a time, or a value beyond the value space.
     pub fn from_year_month_lexical(lexical: &str) -> Option<Self> {
         lexical
             .parse::<LibraryYearMonthDuration>()
@@ -130,7 +129,7 @@ impl Duration {
         }
     }
 
-    /// Converts the duration into the `oxsdatatypes` duration.
+    /// Returns the `oxsdatatypes` form of the duration.
     pub(super) fn to_library(self) -> LibraryDuration {
         let mut bytes = [0; 24];
         bytes[..8].copy_from_slice(&self.months.to_be_bytes());
@@ -164,7 +163,8 @@ impl Duration {
     }
 
     /// Returns the whole seconds beyond the whole minutes.
-    /// With [attosecond](Self::attosecond), they give `fn:seconds-from-duration`.
+    ///
+    /// Together with [attosecond](Self::attosecond), they give `fn:seconds-from-duration`.
     pub fn seconds(self) -> i64 {
         i64::try_from(self.whole_seconds() % 60).expect("below 60")
     }
@@ -179,17 +179,17 @@ impl Duration {
         self.attoseconds / ATTOSECONDS_PER_SECOND
     }
 
-    /// Returns the months.
+    /// Returns all the months of the duration, including those of the whole years.
     pub fn total_months(self) -> i64 {
         self.months
     }
 
-    /// Returns the seconds, in attoseconds.
+    /// Returns all the seconds of the duration, in attoseconds.
     pub fn total_attoseconds(self) -> i128 {
         self.attoseconds
     }
 
-    /// Returns whether the duration runs backwards.
+    /// Returns whether the duration is negative.
     pub fn is_negative(self) -> bool {
         self.months < 0 || self.attoseconds < 0
     }
@@ -204,9 +204,11 @@ impl Duration {
         self.attoseconds == 0
     }
 
-    /// Returns the domain of the value, the most specific of the three duration types:
-    /// a duration without months is a dayTimeDuration, the zero duration included,
-    /// one without seconds a yearMonthDuration, and one with both a duration.
+    /// Returns the domain of the value, the most specific of the three duration domains.
+    ///
+    /// - A duration without months, including the zero duration, is a dayTimeDuration.
+    /// - Any other duration without seconds is a yearMonthDuration.
+    /// - A duration with both months and seconds is a duration.
     pub fn domain(self) -> ValueDomain {
         if self.is_day_time() {
             ValueDomain::DayTimeDuration
@@ -217,10 +219,9 @@ impl Duration {
         }
     }
 
-    /// Returns whether two durations share a kind:
-    /// both without months, or both without seconds,
-    /// the zero duration being of either kind.
+    /// Returns whether two durations share a kind, as both have no months or both have no seconds.
     ///
+    /// The zero duration has both kinds.
     /// XPath orders, adds and divides durations only within one kind.
     pub fn shares_kind(self, other: Self) -> bool {
         (self.is_day_time() && other.is_day_time())
@@ -229,7 +230,7 @@ impl Duration {
 
     /// Returns the sum of two durations,
     /// `op:add-yearMonthDurations` and `op:add-dayTimeDurations`,
-    /// or `None` if it overflows or its months and seconds would differ in sign.
+    /// or `None` if the sum overflows or its months and seconds would have opposite signs.
     pub fn checked_add(self, other: Self) -> Option<Self> {
         Self::new(
             self.months.checked_add(other.months)?,
@@ -239,7 +240,7 @@ impl Duration {
 
     /// Returns the difference of two durations,
     /// `op:subtract-yearMonthDurations` and `op:subtract-dayTimeDurations`,
-    /// or `None` if it overflows or its months and seconds would differ in sign.
+    /// or `None` if the difference overflows or its months and seconds would have opposite signs.
     pub fn checked_sub(self, other: Self) -> Option<Self> {
         Self::new(
             self.months.checked_sub(other.months)?,
@@ -247,18 +248,17 @@ impl Duration {
         )
     }
 
-    /// Returns the duration of the same length running the other way,
-    /// or `None` if it overflows.
+    /// Returns the negated duration, or `None` if the negation overflows.
     pub fn checked_neg(self) -> Option<Self> {
         Self::new(self.months.checked_neg()?, self.attoseconds.checked_neg()?)
     }
 
-    /// Returns the order of two durations in XSD's value space,
-    /// or `None` if it depends on the calendar,
-    /// as it does for `P1M` and `P30D`.
+    /// Returns the order of two durations by value,
+    /// or `None` if the order depends on the calendar, as it does for `P1M` and `P30D`.
     ///
-    /// Durations of one kind compare by their months or seconds alone;
-    /// the others by XSD's reference dates, which can overflow for huge durations.
+    /// Durations of one kind are compared by their months or their seconds alone.
+    /// Other durations are compared through XSD's reference dates,
+    /// and the result is also `None` if a reference date overflows for a huge duration.
     pub fn value_cmp(self, other: Self) -> Option<Ordering> {
         if self.shares_kind(other) {
             let (months, attoseconds) = (self.months, self.attoseconds);
@@ -268,12 +268,13 @@ impl Duration {
     }
 }
 
-/// The hooks of the compact representations.
+/// Conversions to and from the compact representation of durations.
 impl Duration {
-    /// The attoseconds of a millisecond.
+    /// The number of attoseconds in a millisecond.
     const ATTOSECONDS_PER_MILLISECOND: i128 = 10i128.pow(15);
 
-    /// Creates the duration of months and milliseconds of the same sign.
+    /// Creates the duration of `months` months and `millis` milliseconds,
+    /// and panics if they have opposite signs.
     pub(crate) fn from_millis(months: i64, millis: i64) -> Self {
         Self::new(
             months,
@@ -282,8 +283,8 @@ impl Duration {
         .expect("the compact fields share the sign of the duration they came from")
     }
 
-    /// Returns the seconds in milliseconds,
-    /// or `None` if they are finer than a millisecond or beyond the 64-bit range.
+    /// Returns the seconds in milliseconds, or `None` if they have a fraction finer than a
+    /// millisecond or lie beyond the 64-bit range of milliseconds.
     pub(crate) fn millis(self) -> Option<i64> {
         let attoseconds = self.attoseconds;
         (attoseconds % Self::ATTOSECONDS_PER_MILLISECOND == 0)
@@ -309,10 +310,12 @@ impl PartialOrd for Duration {
     }
 }
 
-/// The arithmetic with numbers.
+/// Arithmetic with numbers.
 impl Duration {
-    /// Returns the duration with its one component mapped:
-    /// the seconds of a dayTimeDuration or the months of a yearMonthDuration.
+    /// Returns the duration with `map` applied to its one component.
+    ///
+    /// The component is the seconds of a dayTimeDuration, in attoseconds,
+    /// or the months of a yearMonthDuration.
     ///
     /// Fails with [TypeMismatch](EvaluationError::TypeMismatch)
     /// for a duration with both months and seconds,
@@ -339,9 +342,9 @@ impl Mul<NumberRef<'_>> for Duration {
     /// Returns the duration multiplied by a number,
     /// `op:multiply-yearMonthDuration` and `op:multiply-dayTimeDuration`.
     ///
-    /// The product is exact, then rounded to the month or to the attosecond,
-    /// halves toward positive infinity, as `fn:round` rounds.
-    /// A float or double factor counts as the shortest decimal that reads back as it.
+    /// The product is computed exactly, and then rounded to the month or to the attosecond,
+    /// with halves rounded toward positive infinity, as `fn:round` rounds.
+    /// A float or double factor is used as the shortest decimal that is read back as it.
     ///
     /// Fails with [TypeMismatch](EvaluationError::TypeMismatch)
     /// for a duration with both months and seconds,
@@ -360,8 +363,8 @@ impl Div<NumberRef<'_>> for Duration {
     /// Returns the duration divided by a number,
     /// `op:divide-yearMonthDuration` and `op:divide-dayTimeDuration`.
     ///
-    /// The quotient is exact, then rounded as the [product](Self::mul) is;
-    /// an infinite divisor gives the zero duration.
+    /// The quotient is computed exactly, and then rounded as the [product](Self::mul) is.
+    /// An infinite divisor gives the zero duration.
     /// Fails as the product does,
     /// and with [DivisionByZero](EvaluationError::DivisionByZero) for a zero divisor.
     fn div(self, divisor: NumberRef<'_>) -> Self::Output {
@@ -379,11 +382,12 @@ impl Div<NumberRef<'_>> for Duration {
 impl Div for Duration {
     type Output = Result<DataValue, EvaluationError>;
 
-    /// Returns the ratio of two durations of one kind, a decimal,
+    /// Returns the ratio of two durations of one kind as an exact number,
     /// `op:divide-yearMonthDuration-by-yearMonthDuration`
     /// and `op:divide-dayTimeDuration-by-dayTimeDuration`.
     ///
-    /// The ratio divides as exact numbers do (see [NumberRef]).
+    /// The ratio is the [quotient](NumberRef::div) of their months or of their seconds,
+    /// as exact numbers.
     /// Fails with [TypeMismatch](EvaluationError::TypeMismatch)
     /// for durations that [share no kind](Self::shares_kind),
     /// and with [DivisionByZero](EvaluationError::DivisionByZero) for a zero divisor.
@@ -404,7 +408,7 @@ impl Div for Duration {
 }
 
 impl From<TimezoneOffset> for Duration {
-    /// Converts the offset into the duration east of UTC.
+    /// Converts the offset into its duration east of UTC, which is negative to the west.
     fn from(offset: TimezoneOffset) -> Self {
         Self::from_seconds(i64::from(offset.minutes()) * 60)
     }
@@ -418,7 +422,7 @@ impl fmt::Debug for Duration {
 }
 
 impl fmt::Display for Duration {
-    /// Writes the canonical `xsd:duration` lexical form; `PT0S` for the zero duration.
+    /// Writes the canonical `xsd:duration` lexical form, which is `PT0S` for the zero duration.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.to_library())
     }
@@ -426,7 +430,7 @@ impl fmt::Display for Duration {
 
 /// Returns the exact value of a number as `mantissa * 10^exponent`.
 ///
-/// A float or double counts as the shortest decimal that reads back as it.
+/// A float or double is used as the shortest decimal that is read back as it.
 /// Fails with [Malformed](EvaluationError::Malformed) for a NaN
 /// and with [Overflow](EvaluationError::Overflow) for an infinity.
 fn exact(number: NumberRef<'_>) -> Result<(BigInt, i64), EvaluationError> {
@@ -446,7 +450,7 @@ fn exact(number: NumberRef<'_>) -> Result<(BigInt, i64), EvaluationError> {
         }
     };
 
-    // The shortest digits in scientific notation: `-1.25e3` is `-125 * 10^1`.
+    // The shortest digits in scientific notation, so `-1.25e3` becomes `-125 * 10^1`.
     let (significand, exponent) = scientific
         .split_once('e')
         .expect("the notation has an exponent");
@@ -497,7 +501,7 @@ fn power_of_ten(exponent: u64) -> BigInt {
 }
 
 /// Returns the quotient of two integers rounded to an integer,
-/// halves toward positive infinity, as `fn:round` rounds.
+/// with halves rounded toward positive infinity, as `fn:round` rounds.
 fn rounded(numerator: BigInt, denominator: BigInt) -> BigInt {
     let (numerator, denominator) = if denominator.sign() == Sign::Minus {
         (-numerator, -denominator)
@@ -513,11 +517,12 @@ fn rounded(numerator: BigInt, denominator: BigInt) -> BigInt {
 mod tests {
     use super::*;
 
-    /// Parses the duration of a lexical; panics on malformed input.
+    /// Returns the duration of a lexical form, and panics for a malformed one.
     fn duration(lexical: &str) -> Duration {
         Duration::from_lexical(lexical).expect(lexical)
     }
 
+    /// Lexical forms are parsed and written back in canonical form.
     #[test]
     fn lexicals_parse_and_print_canonically() {
         for lexical in [
@@ -551,6 +556,7 @@ mod tests {
         );
     }
 
+    /// Malformed lexical forms and values beyond the value space are rejected.
     #[test]
     fn malformed_lexicals_are_refused() {
         for lexical in [
@@ -561,6 +567,7 @@ mod tests {
         assert_eq!(Duration::from_lexical("P9223372036854775807Y"), None);
     }
 
+    /// Months and seconds of opposite signs are rejected.
     #[test]
     fn components_agree_in_sign() {
         assert_eq!(Duration::new(1, -1), None);
@@ -575,6 +582,7 @@ mod tests {
         assert_eq!(Duration::from_seconds(-90_061), duration("-P1DT1H1M1S"));
     }
 
+    /// The accessors return the components of a duration, normalized and with its sign.
     #[test]
     fn accessors_read_the_components() {
         let value = duration("-P1Y2M3DT4H5M6.5S");
@@ -598,6 +606,7 @@ mod tests {
         assert_eq!(i128::from(value.attosecond()), ATTOSECONDS_PER_SECOND / 4);
     }
 
+    /// The predicates classify a duration by its sign and by the components it has.
     #[test]
     fn predicates_classify_durations() {
         let zero = duration("PT0S");
@@ -612,6 +621,8 @@ mod tests {
         assert!(!mixed.is_negative() && !mixed.is_day_time() && !mixed.is_year_month());
     }
 
+    /// Duration arithmetic gives the results of the examples of XPath,
+    /// and fails on overflow and for components of opposite signs.
     #[test]
     fn arithmetic_follows_xpath() {
         assert_eq!(
@@ -640,6 +651,7 @@ mod tests {
         assert_eq!(Duration::from_months(i64::MIN).checked_neg(), None);
     }
 
+    /// The order by value of durations is partial across kinds.
     #[test]
     fn value_order_is_partial() {
         assert_eq!(duration("P1M").value_cmp(duration("P30D")), None);
@@ -661,6 +673,7 @@ mod tests {
         );
     }
 
+    /// Durations of one kind are totally ordered by value.
     #[test]
     fn durations_of_one_kind_are_totally_ordered() {
         // Negative month counts and huge durations compare too.
@@ -688,6 +701,7 @@ mod tests {
         assert_eq!(duration("PT0S").value_cmp(huge), Some(Ordering::Less));
     }
 
+    /// An offset converts to its duration east of UTC.
     #[test]
     fn offsets_are_durations() {
         let offset = |minutes: i16| TimezoneOffset::new(minutes).expect("in range");
@@ -696,6 +710,7 @@ mod tests {
         assert_eq!(Duration::from(offset(-840)), duration("-PT14H"));
     }
 
+    /// The serialization of `oxsdatatypes` durations has the layout that the bridge assumes.
     #[test]
     fn the_oxsdatatypes_layout_is_pinned() {
         // `oxsdatatypes` serializes eight bytes of months and sixteen of attoseconds, big-endian.

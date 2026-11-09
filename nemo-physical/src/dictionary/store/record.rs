@@ -15,18 +15,19 @@ struct Record<H> {
     bytes: Extent,
 }
 
-/// The lookup table of a [RecordPool]: maps a record's hash to its index.
+/// The lookup table of a [RecordPool], which finds the index of a record by its hash.
 ///
-/// This table holds either indexes below 2³², as `u32`, or indexes of size `usize`.
+/// While every index is below 2³², the table stores the indexes as `u32`s,
+/// and beyond that as `usize`s.
 enum Lookup {
-    /// Slots hold indexes below 2³².
+    /// A table of `u32` indexes, all below 2³².
     U32(HashTable<u32>),
-    /// Slots hold any index.
+    /// A table of `usize` indexes.
     U64(HashTable<usize>),
 }
 
 impl Lookup {
-    /// Returns the index of the entry with the given hash that satisfies `eq`.
+    /// Returns the index of an entry with the given hash for which `eq` returns true.
     fn find(&self, hash: u64, mut eq: impl FnMut(usize) -> bool) -> Option<usize> {
         match self {
             Lookup::U32(table) => table
@@ -36,8 +37,10 @@ impl Lookup {
         }
     }
 
-    /// Inserts an index known to be absent, given the hash of every entry.
+    /// Inserts an index that the table does not contain yet.
     ///
+    /// `hash` is the hash of the new entry, and `hashes` contains the hash of every entry
+    /// by index, which the table needs to grow.
     /// The index must be the number of entries inserted before it.
     fn insert_unique(&mut self, hash: u64, index: usize, hashes: &[u64]) {
         match self {
@@ -56,8 +59,10 @@ impl Lookup {
         }
     }
 
-    /// Rebuilds the table in the 64-bit regime from the hash of every entry,
-    /// with room for one more; the entries are never re-read.
+    /// Rebuilds the table with `usize` indexes from the hash of every entry,
+    /// with room for one more, and returns it.
+    ///
+    /// The entries themselves are not read again.
     fn widen(&mut self, hashes: &[u64]) -> &mut HashTable<usize> {
         let mut rebuilt = HashTable::with_capacity(hashes.len() + 1);
         for (index, &hash) in hashes.iter().enumerate() {
@@ -80,19 +85,17 @@ impl Lookup {
     }
 }
 
-/// An interning pool of records that split into a small fixed header
-/// and a variable byte string,
-/// for example the index of a pair's frequent part beside its rare bytes,
-/// or the sign and exponent of a wide number beside its magnitude.
+/// An interning pool of records, each of a small fixed header and a variable byte string.
 ///
-/// Each distinct record is stored once
-/// and identified by a dense index assigned in first-insertion order.
-///
-/// A read borrows the bytes from the arena, whose addresses are stable.
+/// Examples are the index of a pair's frequent part with the pair's rare bytes,
+/// and the sign and exponent of a wide number with its magnitude.
+/// Each distinct record is stored once,
+/// and is identified by a dense index assigned in the order of first insertion.
+/// A read borrows the bytes from the arena.
 pub(crate) struct RecordPool<H> {
     /// The variable bytes of all entries.
     arena: Arena,
-    /// Maps a record to its index.
+    /// Finds the index of a record by its hash.
     lookup: Lookup,
     /// The entries, in index order.
     records: Vec<Record<H>>,
@@ -120,7 +123,7 @@ impl<H: Copy + Eq + Hash> RecordPool<H> {
     }
 
     /// Interns a record and returns its index,
-    /// or `None` if its bytes exceed the arena's limit.
+    /// or `None` if its bytes are longer than [Arena::LENGTH_LIMIT].
     pub(crate) fn intern(&mut self, header: H, bytes: &[u8]) -> Option<u64> {
         let hash = self.build.hash_one((header, bytes));
 
@@ -144,7 +147,7 @@ impl<H: Copy + Eq + Hash> RecordPool<H> {
             .map(|index| index as u64)
     }
 
-    /// Returns the index of a record whose hash is known.
+    /// Returns the index of a record with the given hash, or `None` if it was never interned.
     fn find_hashed(&self, hash: u64, header: H, bytes: &[u8]) -> Option<usize> {
         self.lookup.find(hash, |index| {
             let record = self.records[index];
@@ -158,11 +161,11 @@ impl<H: Copy + Eq + Hash> RecordPool<H> {
         Some((record.header, self.arena.get(record.bytes)))
     }
 
-    /// Rebuilds the pool with every header mapped through `map`;
-    /// the bytes, the hashes and the table carry over as they are.
+    /// Rebuilds the pool with every header mapped through `map`.
     ///
-    /// A mapped header must hash as the original did,
-    /// since the kept hashes serve the lookups of the new pool.
+    /// The bytes, the hashes and the lookup table are kept as they are.
+    /// A mapped header must therefore have the same hash as the original one,
+    /// since the lookups of the new pool use the kept hashes.
     pub(crate) fn map_headers<M: Copy + Eq + Hash>(self, map: impl Fn(H) -> M) -> RecordPool<M> {
         RecordPool {
             arena: self.arena,
@@ -193,6 +196,7 @@ impl<H: Copy + Eq + Hash> RecordPool<H> {
 mod tests {
     use super::*;
 
+    /// A record is identified by its header and its bytes together.
     #[test]
     fn records_intern_by_header_and_bytes() {
         let mut pool = RecordPool::new();
@@ -211,6 +215,7 @@ mod tests {
         assert_eq!(pool.get(3), None);
     }
 
+    /// Every record keeps its index while the lookup table grows many times.
     #[test]
     fn many_entries_survive_table_growth() {
         let mut pool = RecordPool::new();
@@ -225,8 +230,10 @@ mod tests {
         assert_eq!(pool.len(), 10_000);
     }
 
-    /// The regime switch cannot be reached by inserting 2³² entries in a test,
-    /// so the rebuild is driven directly at the point a pool would perform it.
+    /// A table widened to `usize` indexes still finds every entry,
+    /// and the next entry continues the numbering.
+    ///
+    /// A test cannot insert 2³² entries to reach the switch, so it widens the table directly.
     #[test]
     fn widened_tables_find_every_entry() {
         let mut pool = RecordPool::new();

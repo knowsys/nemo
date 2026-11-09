@@ -1,23 +1,11 @@
-//! SPARQL endpoint imports: one query, one result table.
+//! SPARQL endpoints as sources: each `SELECT` query has one *result table*, its projection.
 //!
-//! An import fetches the query's solutions over the SPARQL protocol:
-//! a GET with the query as a URL parameter while it is short, a POST form beyond that.
-//! The response is requested and parsed as SPARQL TSV, whose cells are Turtle-syntax terms.
-//! A query asked once delivers its whole result.
-//! A query asked with bindings carries them as `VALUES` blocks, a value as its terms
-//! ([SparqlQuery::ground_terms]), and the reader keeps the solutions that match them
-//! ([SparqlReader::with_bindings]).
-//! [SparqlQuery::with_values] says what makes that sound,
-//! and [compose] how several queries merge into one.
-//!
-//! A blank node in a response is a null, which its label names in a
-//! [label scope](nemo_physical::dictionary::LabelScope): the endpoint's, shared by all its
-//! responses ([SparqlReader::with_endpoint_blank_nodes]),
-//! or, for a reader without it, the response's own.
-//! A response cut short is an error, whether the endpoint says so in its body
-//! ([SparqlReader::read]) or in its status and headers
-//! ([Failure::of_partial_response](crate::remote::Failure::of_partial_response),
-//! which the HTTP client checks).
+//! A [SparqlQuery] is a validated query, which builds the [request](SparqlQuery::request) for
+//! its solutions.
+//! A query can also be asked with *bindings*, values for some of its projected variables,
+//! which it sends as `VALUES` blocks ([SparqlQuery::with_values]).
+//! A [SparqlReader] reads the endpoint's responses, which are in SPARQL TSV.
+//! [compose] merges several queries into one.
 
 pub mod compose;
 
@@ -63,25 +51,26 @@ const INTEGER: &str = "http://www.w3.org/2001/XMLSchema#integer";
 /// The datatype IRI of `xsd:decimal`.
 const DECIMAL: &str = "http://www.w3.org/2001/XMLSchema#decimal";
 
-/// The query an import without one asks: everything.
+/// The default query, which asks for every triple.
 pub const DEFAULT_QUERY: &str = "SELECT ?s ?p ?o WHERE { ?s ?p ?o }";
 
-/// The start of the name of every label scope an endpoint's blank nodes are named in.
+/// The prefix of the name of each label scope in which an endpoint's blank nodes are named.
 const BLANK_NODE_SCOPE: &str = "sparql ";
 
-/// Returns the name of the label scope an endpoint's blank nodes are named in.
+/// Returns the name of the label scope in which an endpoint's blank nodes are named.
 fn blank_node_scope(endpoint: &str) -> String {
     format!("{BLANK_NODE_SCOPE}{endpoint}")
 }
 
-/// The longest rendered query that travels as a GET parameter.
+/// The size of the longest request that is sent as a GET,
+/// counted as the bytes of the endpoint and of the rendered query.
 ///
-/// A longer one travels as a POST form,
-/// the SPARQL protocol's convention for staying under URL length limits.
+/// A longer request is sent as a POST form,
+/// which is how the SPARQL protocol stays under URL length limits.
 const GET_LIMIT: usize = 2_000;
 
-/// A validated `SELECT` query: its algebra, its text as sent, and the
-/// projection that is the imported table.
+/// A validated `SELECT` query, with its algebra, its text as sent,
+/// and its projection, which is the result table.
 ///
 /// # Example
 ///
@@ -103,7 +92,7 @@ const GET_LIMIT: usize = 2_000;
 /// ```
 #[derive(Debug, Clone)]
 pub struct SparqlQuery {
-    /// The parsed query, prefixes and base resolved.
+    /// The parsed query, with prefixes and base resolved.
     query: Query,
     /// The query text, as sent.
     text: String,
@@ -114,16 +103,19 @@ pub struct SparqlQuery {
 impl SparqlQuery {
     /// Returns a value as a SPARQL ground term, in the value's canonical lexical form.
     ///
-    /// IRIs become named nodes, strings and language strings literals,
-    /// and every other scalar a typed literal of its domain's datatype:
-    /// an integer is an `xsd:integer`, whatever datatype it was read from,
-    /// and a double is `"2.5E0"^^xsd:double`, in XSD's canonical form,
-    /// the form a store keeping lexical forms as written most likely holds.
-    /// An endpoint finds the value through this term only if it holds the value as this term,
-    /// or canonicalises it on load (see [with_values](Self::with_values)).
+    /// - IRIs become named nodes.
+    /// - Strings and language strings become literals.
+    /// - Every other scalar becomes a typed literal of its domain's datatype.
+    ///   For example, an integer becomes an `xsd:integer`, whatever datatype it was read from,
+    ///   and a double is written in XSD's canonical form, such as `"2.5E0"^^xsd:double`.
+    ///   The canonical form is the one most likely held by a store that keeps lexical forms as
+    ///   written.
+    ///
+    /// An endpoint finds the value by this term only if it holds the value as this term,
+    /// or canonicalizes values when loading them (see [with_values](Self::with_values)).
     ///
     /// Returns `None` for a null, since a query cannot ask for a blank node,
-    /// and for the structured values, which have no RDF form.
+    /// and for tuples and maps, which have no RDF form.
     pub fn ground_term(value: &DataValue) -> Option<GroundTerm> {
         match crate::formats::rdf::object_term(value)? {
             spargebra::term::Term::NamedNode(node) => Some(GroundTerm::NamedNode(node)),
@@ -144,12 +136,12 @@ impl SparqlQuery {
         }
     }
 
-    /// Returns the terms a value goes out as where an endpoint compares it as a term,
-    /// any of which the endpoint may hold it as: its [ground term](Self::ground_term),
-    /// and for an integer also the decimal an endpoint holding quantities as decimals finds,
-    /// `"3.0"^^xsd:decimal` for the integer 3.
+    /// Returns the terms an endpoint may hold a value as, for asking for the value by term.
     ///
-    /// Empty for a value without a ground term.
+    /// They are the value's [ground term](Self::ground_term), and, for an integer, also the
+    /// decimal that an endpoint holding quantities as decimals has,
+    /// such as `"3.0"^^xsd:decimal` for the integer 3.
+    /// Returns an empty list for a value without a ground term.
     pub fn ground_terms(value: &DataValue) -> Vec<GroundTerm> {
         let Some(term) = Self::ground_term(value) else {
             return Vec::new();
@@ -164,12 +156,12 @@ impl SparqlQuery {
         }
     }
 
-    /// Returns an `xsd:integer` literal as the `xsd:decimal` with one zero after the point,
-    /// `"3"` as `"3.0"^^xsd:decimal`, or `None` for any other literal.
+    /// Returns an `xsd:integer` literal as an `xsd:decimal` with one zero after the point,
+    /// such as `"3"` as `"3.0"^^xsd:decimal`, or `None` for any other literal.
     ///
-    /// Stores keep datatypes apart, and some, as Wikidata does, hold every quantity as a
-    /// decimal, which a query for the integer does not find.
-    /// The decimal is written as such a store writes an integral quantity: `"3.0"`.
+    /// Stores keep datatypes apart, and some hold every quantity as a decimal,
+    /// as Wikidata does, so a query for the integer does not find it.
+    /// The decimal is written as such a store writes an integral quantity.
     fn integer_as_decimal(literal: &Literal) -> Option<Literal> {
         (literal.datatype().as_str() == INTEGER).then(|| {
             Literal::new_typed_literal(
@@ -179,15 +171,16 @@ impl SparqlQuery {
         })
     }
 
-    /// Parses and validates a `SELECT` query, whose projection is the result table,
-    /// with the given base and prefixes in scope.
+    /// Parses and validates a `SELECT` query, with the given base and prefixes in scope.
     ///
-    /// So the query can use prefixes declared outside it without a `PREFIX` of its own.
+    /// The prefixes let the query use prefixed names declared outside it,
+    /// without a `PREFIX` of its own.
+    /// A prefix name that the SPARQL grammar does not allow is left out of scope.
     ///
     /// # Errors
     ///
-    /// Returns an error if the text is not a query an import can ask:
-    /// a base that is not an IRI, a text that does not parse, or a query that is not a `SELECT`.
+    /// Returns an error for a base that is not an IRI, a text that does not parse,
+    /// or a query that is not a `SELECT`.
     pub fn parse<'a>(
         text: &str,
         base: Option<&str>,
@@ -203,9 +196,9 @@ impl SparqlQuery {
                 })?;
         }
         for (name, iri) in prefixes {
-            // A prefix the SPARQL grammar cannot carry (empty names are
-            // fine, but not every Nemo prefix is) simply stays out of
-            // scope for the query.
+            // A prefix name that the SPARQL grammar does not allow stays
+            // out of scope for the query. An empty name is allowed, but
+            // not every name given is.
             if let Ok(seeded) = parser.clone().with_prefix(name, iri) {
                 parser = seeded;
             }
@@ -231,8 +224,8 @@ impl SparqlQuery {
             }
         });
         Some(Self {
-            // The parsed form renders with the prefixes and base
-            // resolved, so the request needs no PREFIX preamble.
+            // The parsed form is rendered with the prefixes and base
+            // resolved, so the request needs no PREFIX declarations.
             text: query.to_string(),
             query,
             variables,
@@ -249,7 +242,7 @@ impl SparqlQuery {
         &self.variables
     }
 
-    /// Returns the query text as sent, prefixes and base resolved.
+    /// Returns the query text as sent, with prefixes and base resolved.
     pub fn text(&self) -> &str {
         &self.text
     }
@@ -261,14 +254,15 @@ impl SparqlQuery {
 
     /// Returns the query's dataset clause (`FROM`), if it has one.
     ///
-    /// A query with a dataset is never merged with another,
-    /// since a dataset applies to a whole query.
+    /// A dataset applies to a whole query,
+    /// so a [composition](compose::Composition) has at most one.
     pub fn dataset(&self) -> Option<&spargebra::algebra::QueryDataset> {
         self.query.dataset()
     }
 
-    /// Returns whether the query keeps its variable names when composed:
-    /// it calls a `SERVICE`, which may read or bind variables by name,
+    /// Returns whether the query must keep its variable names when composed.
+    ///
+    /// That is the case if it calls a `SERVICE`, which may read or bind variables by name,
     /// as Wikidata's label service binds `?xLabel` for `?x`.
     pub fn keeps_names(&self) -> bool {
         let mut service = false;
@@ -278,7 +272,7 @@ impl SparqlQuery {
         service
     }
 
-    /// Returns the query's selection pattern.
+    /// Returns the graph pattern of the query.
     fn pattern(&self) -> &GraphPattern {
         match &self.query {
             Query::Select { pattern, .. } => pattern,
@@ -286,26 +280,32 @@ impl SparqlQuery {
         }
     }
 
-    /// Returns what may be pushed into the query, as [QueryShape] describes.
+    /// Returns the shape of the query, which says what can be joined or filtered into it.
     pub fn shape(&self) -> QueryShape {
         algebra::shape(self.pattern())
     }
 
-    /// Returns whether the query groups its solutions or holds a subquery,
-    /// a part the endpoint computes in full before the bindings joined in select from it.
+    /// Returns whether the query groups its solutions or has a subquery.
+    ///
+    /// The endpoint computes such a part in full,
+    /// before the bindings joined into the query select from it.
     pub fn computes_in_full(&self) -> bool {
         algebra::computes_in_full(self.pattern())
     }
 
-    /// Returns whether the query may leave one of its projected variables unbound:
-    /// a variable it binds in some solutions but not in others,
-    /// as an `OPTIONAL` that does not match leaves it unbound, or a computed value that fails,
-    /// or a variable no pattern binds.
+    /// Returns whether the query may leave one of its projected variables unbound.
     ///
-    /// In a query calling a service, a variable no pattern binds does not count:
-    /// the service may bind it, as a label service binds the label variables of the items
-    /// the query is asked with.
-    /// The result is conservative: a variable the query computes counts as sometimes unbound.
+    /// Such a variable is
+    /// - a variable that the query binds in some solutions but not in others,
+    ///   such as a variable bound in an `OPTIONAL` that does not always match,
+    ///   or a computed value that may fail, or
+    /// - a variable that no pattern binds.
+    ///
+    /// In a query that calls a service, a variable that no pattern binds does not count,
+    /// since the service may bind it, as a label service binds the label variables of the items
+    /// that the query asks about.
+    /// The result is conservative: a variable that the query computes counts as sometimes
+    /// unbound.
     pub fn may_leave_unbound(&self) -> bool {
         let always = algebra::bound_in_results(self.pattern());
         let maybe = algebra::possibly_bound(self.pattern());
@@ -317,7 +317,7 @@ impl SparqlQuery {
 
     /// Returns the projected variables that no pattern of the query binds, in projection order.
     ///
-    /// Outside a service, nothing binds such a variable, so every solution leaves it unbound.
+    /// Unless a service binds such a variable, every solution leaves it unbound.
     pub fn never_bound_variables(&self) -> Vec<&str> {
         let always = algebra::bound_in_results(self.pattern());
         let maybe = algebra::possibly_bound(self.pattern());
@@ -328,48 +328,49 @@ impl SparqlQuery {
             .collect()
     }
 
-    /// Returns the request fetching this query's solutions from an endpoint.
+    /// Returns the request for this query's solutions from an endpoint.
     pub fn request(&self, endpoint: &str) -> Request {
         Request::sparql(endpoint, &self.text)
     }
 
-    /// Returns the query text with the bindings joined in.
+    /// Returns the query with the bindings joined in.
     ///
     /// There is one `VALUES` block per [ValuesBlock],
-    /// over the projected variables its positions name.
-    /// The blocks join directly under the outermost projection,
+    /// over the projected variables that its positions name.
+    /// The blocks are joined directly under the outermost projection,
     /// above everything the pattern computes,
     /// so every projected variable is in scope and the blocks select among the final solutions.
-    /// A solution leaving a bound variable unbound (an `OPTIONAL` that did not match)
-    /// is filtered out below the join:
-    /// it would join with every row of the block,
-    /// and the null it becomes in the result stands for no binding.
+    /// A solution that leaves a bound variable unbound, as an `OPTIONAL` that did not match
+    /// does, is filtered out below the join.
+    /// Otherwise it would join with every row of the block,
+    /// while Nemo reads an unbound variable as a null, which matches no binding.
     ///
-    /// Each value goes out as its [ground terms](Self::ground_terms): one,
-    /// or for an integer two, each a row of its own,
-    /// which the endpoint matches by its own notion of equal terms.
-    /// A value the endpoint holds in another datatype or form, such as `"3"^^xsd:int` for the
-    /// integer 3, is not found.
-    /// An endpoint matching more loosely than Nemo, as QLever finds a double for an integer,
-    /// delivers solutions Nemo would not match.
-    /// A reader told the blocks ([SparqlReader::with_bindings]) leaves those out.
-    /// A row holding a value without a ground term, such as a null, is left out of its block.
+    /// Each value is sent as its [ground terms](Self::ground_terms), each in a row of its own:
+    /// one term, or two for an integer.
+    /// The endpoint matches them by its own notion of equal terms.
+    /// - A value that the endpoint holds in another datatype or form,
+    ///   such as `"3"^^xsd:int` for the integer 3, is not found.
+    /// - An endpoint that matches more loosely than Nemo, as QLever matches a double for an
+    ///   integer, delivers solutions that Nemo would not match.
+    ///   A reader given the blocks ([SparqlReader::with_bindings]) leaves those out.
+    ///
+    /// A row with a value that has no ground term, such as a null, is left out of its block.
     ///
     /// # Panics
     ///
     /// Panics for an [opaque](QueryShape::Opaque) query,
-    /// since no injection point of such a query is a selection on the whole result.
-    /// The [shape](Self::shape) tells.
+    /// since no part of such a query selects from its whole result.
+    /// The query's [shape](Self::shape) says whether it is opaque.
     pub fn with_values(&self, blocks: &[ValuesBlock]) -> Self {
         if let QueryShape::Opaque(reason) = self.shape() {
             panic!("values cannot be joined into an opaque query: {reason}");
         }
         let variables = &self.variables;
         let pattern = algebra::under_projection(self.pattern().clone(), |inner| {
-            // Only a variable the pattern binds in some solutions but not
-            // all is guarded; one it never binds the block itself binds.
-            // A filter above the block requiring it bound does not guard it,
-            // since it sees the variable the block bound.
+            // Only a variable that the pattern binds in some solutions but not
+            // all is guarded. A variable that the pattern never binds is bound by
+            // the block itself. A filter above the block that requires the variable
+            // to be bound would not guard it, since it sees the block's binding.
             let assured = algebra::always_bound(&inner);
             let maybe = algebra::possibly_bound(&inner);
             let mut bound: Vec<usize> = blocks
@@ -403,13 +404,13 @@ impl SparqlQuery {
         Self::from_select(self.with_pattern(pattern)).expect("the query stays a SELECT")
     }
 
-    /// Returns the query with a condition over its projected variables filtered in,
-    /// directly under the outermost projection.
+    /// Returns the query with a filter on its projected variables,
+    /// added directly under the outermost projection.
     ///
     /// # Panics
     ///
     /// Panics for an [opaque](QueryShape::Opaque) query.
-    /// The [shape](Self::shape) tells.
+    /// The query's [shape](Self::shape) says whether it is opaque.
     pub fn with_filter(&self, expression: Expression) -> Self {
         if let QueryShape::Opaque(reason) = self.shape() {
             panic!("a condition cannot be filtered into an opaque query: {reason}");
@@ -422,7 +423,7 @@ impl SparqlQuery {
         Self::from_select(self.with_pattern(pattern)).expect("the query stays a SELECT")
     }
 
-    /// Returns this query with another selection pattern, its dataset and base kept.
+    /// Returns this query with another graph pattern, keeping its dataset and base.
     fn with_pattern(&self, pattern: GraphPattern) -> Query {
         Query::Select {
             dataset: self.query.dataset().cloned(),
@@ -433,8 +434,10 @@ impl SparqlQuery {
 }
 
 impl Request {
-    /// Creates the request fetching a rendered query's solutions from an endpoint:
-    /// a GET with the query as its parameter, or a POST form if the URL would grow too long.
+    /// Creates the request for the solutions of a rendered query from an endpoint.
+    ///
+    /// The request is a GET with the query as a parameter,
+    /// or a POST form if the URL would be too long.
     pub fn sparql(endpoint: &str, text: &str) -> Self {
         let mut request = Self::get(endpoint);
         request.accept = FileFormat::Sparql.media_type();
@@ -449,36 +452,35 @@ impl Request {
     }
 }
 
-/// The rows of one `VALUES` block, as a reader matches solutions against them:
-/// the block's columns, by position, and its rows.
+/// One `VALUES` block in the form that a reader matches solutions against.
 #[derive(Debug, Clone)]
 struct ValuesLookup {
-    /// The projected columns the rows bind, by position.
+    /// The positions of the projected columns that the rows bind.
     positions: Vec<usize>,
     /// The rows, one value per position.
     rows: HashSet<Vec<DataValue>>,
 }
 
-/// The reader of an endpoint's responses, solutions in SPARQL TSV,
-/// read like the other formats' resources.
+/// A reader of an endpoint's responses, which contain solutions in SPARQL TSV.
 #[derive(Debug, Clone)]
 pub struct SparqlReader {
-    /// The number of columns a response row has, the number of projected variables.
+    /// The number of columns of a response row, which is the number of projected variables.
     arity: usize,
-    /// The selection over the delivered columns.
+    /// The columns delivered and the rows admitted.
     selection: RowSelection,
-    /// The bindings a solution must match, one per `VALUES` block.
+    /// The bindings that a solution must match, one lookup per `VALUES` block.
     bindings: Vec<ValuesLookup>,
     /// Whether blank node labels name nulls in the endpoint's shared label scope,
-    /// rather than each response in a scope of its own.
+    /// rather than in a separate scope for each response.
     endpoint_blank_nodes: bool,
 }
 
 impl SparqlReader {
-    /// Creates a reader of responses of the given width, delivering the selection.
+    /// Creates a reader of responses with `arity` columns,
+    /// which delivers the columns and rows of `selection`.
     ///
-    /// Each response's blank node labels name nulls of its own,
-    /// unless [with_endpoint_blank_nodes](Self::with_endpoint_blank_nodes) shares them.
+    /// Each response names its blank nodes in a scope of its own,
+    /// unless [with_endpoint_blank_nodes](Self::with_endpoint_blank_nodes) shares the scope.
     pub fn new(arity: usize, selection: RowSelection) -> Self {
         Self {
             arity,
@@ -488,20 +490,20 @@ impl SparqlReader {
         }
     }
 
-    /// Returns the reader naming blank nodes in the endpoint's shared label scope,
-    /// so that the endpoint's responses agree on them: a label names the same null in every
-    /// response.
+    /// Returns the reader with blank nodes named in the endpoint's shared label scope,
+    /// so that a label names the same null in every response of the endpoint.
     ///
-    /// SPARQL scopes a label to one result only, but stores labelling nodes by their internal
-    /// ids, as in Jena's TSV results, Virtuoso, Oxigraph and QLever, keep it across results.
+    /// SPARQL scopes a label to one result only,
+    /// but a store that labels nodes by their internal ids, as Virtuoso does,
+    /// keeps a label across results.
     pub fn with_endpoint_blank_nodes(mut self) -> Self {
         self.endpoint_blank_nodes = true;
         self
     }
 
-    /// Returns whether a null is a blank node an endpoint returned to a reader
+    /// Returns whether the null `id` is a blank node that an endpoint returned to a reader
     /// [with_endpoint_blank_nodes](Self::with_endpoint_blank_nodes),
-    /// rather than one minted otherwise.
+    /// rather than a null minted otherwise.
     pub fn is_endpoint_blank_node(dictionary: &Dictionary, id: u64) -> bool {
         dictionary
             .null_scope_name(id)
@@ -509,12 +511,14 @@ impl SparqlReader {
     }
 
     /// Returns the reader keeping only the solutions that match the bindings the query was
-    /// asked with ([SparqlQuery::with_values]) as Nemo compares values:
-    /// for each block, the solution's values in the block's columns form one of its rows.
+    /// asked with ([SparqlQuery::with_values]), as Nemo compares values.
     ///
-    /// So an import asked with bindings never holds a solution its bindings don't justify,
+    /// A solution matches if, for each block, its values in the block's columns form one of the
+    /// block's rows.
+    /// So a read never delivers a solution that its bindings do not justify,
     /// however loosely the endpoint matches terms.
-    /// It reads a block's columns whether they are delivered or not.
+    /// The reader reads a block's columns whether they are delivered or not,
+    /// and a solution with an unbound value or a blank node in one of them matches no row.
     pub fn with_bindings(mut self, blocks: &[ValuesBlock]) -> Self {
         self.bindings = blocks
             .iter()
@@ -526,9 +530,12 @@ impl SparqlReader {
         self
     }
 
-    /// Reads one response: checks that it is whole, then reads its solutions.
+    /// Reads one response from `endpoint`: checks that it is whole, then reads its solutions.
     ///
-    /// The selection's condition evaluates in the given context.
+    /// `context` is the evaluation context of the selection's condition.
+    /// A response that the endpoint cut off is recognized here by its body.
+    /// A partial response that the endpoint marks in its status or headers is a
+    /// [Failure](crate::remote::Failure) of the fetch instead.
     ///
     /// # Errors
     ///
@@ -560,22 +567,22 @@ impl SparqlReader {
         read.map_err(|diagnostic| diagnostic.with_resource(endpoint.to_owned()))
     }
 
-    /// Returns whether an endpoint cut a response off partway, as [read](Self::read) reports.
+    /// Returns whether an endpoint cut a response off partway,
+    /// which [read](Self::read) reports as an error.
     pub fn is_cut_off(body: &[u8]) -> bool {
         cut_off(body).is_some()
     }
 }
 
-/// Checks that a response is whole.
+/// Checks that a response is whole, and returns an error naming `endpoint` otherwise.
 ///
-/// An endpoint that hits its own time limit partway responds with `200`
-/// and appends the exception to the rows it managed,
+/// An endpoint that hits its own time limit partway may respond with status 200
+/// and append the exception to the rows it managed,
 /// as Blazegraph does behind the Wikidata query service.
 /// A connection closed early leaves the last row unfinished.
-/// Either would read as a few malformed rows after a silently partial result.
-/// Only the lines after the last solution row, a trace if there is one,
-/// are searched for the known markers,
-/// since a row's cells may contain them too.
+/// Either would otherwise be read as a partial result followed by a few malformed rows.
+/// Only the lines after the last solution row, which contain the trace if there is one,
+/// are searched for the known markers, since a row's cells may contain them too.
 fn check_complete(endpoint: &str, body: &[u8]) -> Result<(), Diagnostic> {
     match cut_off(body) {
         Some(reason) => Err(IoError::SparqlResponseCut {
@@ -588,14 +595,15 @@ fn check_complete(endpoint: &str, body: &[u8]) -> Result<(), Diagnostic> {
     }
 }
 
-/// Returns why a response was cut off, if it was (see [check_complete]):
-/// the start of the line saying so after the last row,
-/// or that the response ends partway through a row.
+/// Returns why a response was cut off, or `None` if it is whole (see [check_complete]).
 ///
-/// A response ends partway through a row if its last line is unterminated and not a whole
-/// row, as when its connection closed early without a word.
+/// The reason is the start of the line after the last row that says so,
+/// or that the response ends partway through a row.
+/// A response ends partway through a row if its last line has no line end and is not a whole
+/// row, as when its connection closed early without an error message.
 /// A whole last row needs no line end.
 fn cut_off(body: &[u8]) -> Option<String> {
+    /// Texts that mark a line as part of the error trace of a cut-off response.
     const MARKERS: [&str; 3] = [
         "TimeoutException",
         "upstream request timeout",
@@ -620,17 +628,17 @@ fn cut_off(body: &[u8]) -> Option<String> {
 
 /// Reads a SPARQL TSV response into rows of the given arity.
 ///
-/// Cells are Turtle-syntax terms:
+/// The cells are terms in Turtle syntax:
 /// `<iri>`, quoted literals with language tags and datatypes, and bare numbers and booleans.
-/// A blank node is the null its label names in `blanks`.
-/// An *unbound* cell (an `OPTIONAL` that did not match) mints a fresh null of its own:
-/// the value exists, but is unknown.
-/// A cell that is not a term makes the row malformed, and is counted,
-/// if its column is delivered or bound.
+/// - A blank node is the null that its label names in `blanks`.
+/// - An *unbound* cell, as from an `OPTIONAL` that did not match, becomes a fresh null of its
+///   own, since the value exists but is unknown.
+/// - A cell that is not a term makes the row malformed, if its column is delivered or bound.
+///
 /// In a response of one column, an empty line is a solution whose variable is unbound.
 /// In a wider one, it is not a solution.
-/// A solution not matching the `bindings` is left out (see [SparqlReader::with_bindings]).
-/// The selection's condition evaluates in `context`.
+/// A solution that does not match the `bindings` is left out ([SparqlReader::with_bindings]).
+/// `context` is the evaluation context of the selection's condition.
 fn read_tsv(
     body: &[u8],
     arity: usize,
@@ -672,8 +680,8 @@ fn read_tsv(
             loaded.count_malformed(number);
             continue;
         }
-        // An unbound value or a blank node in a bound column matches no binding:
-        // the row is left out before anything is read, minting no null for it.
+        // An unbound value or a blank node in a bound column matches no binding,
+        // so the row is left out before anything is read, and no null is minted for it.
         if cells
             .iter()
             .zip(&bound)
@@ -681,8 +689,8 @@ fn read_tsv(
         {
             continue;
         }
-        // Each delivered or bound cell is parsed once:
-        // a dropped column that no binding reads cannot make the row malformed.
+        // Only the delivered or bound cells are parsed, once each,
+        // so a column that is neither cannot make the row malformed.
         let mut complete = true;
         for (position, cell) in cells.iter().enumerate() {
             values[position] = None;
@@ -722,10 +730,10 @@ fn read_tsv(
     Ok(loaded)
 }
 
-/// Returns whether a solution's values match the bindings: for each block,
-/// the values in its columns form one of its rows.
+/// Returns whether a solution's values match the bindings:
+/// for each block, the values in the block's columns form one of its rows.
 ///
-/// Every bound column holds a value: [read_tsv] parsed it.
+/// Every bound column must have a value.
 fn matches_bindings(values: &[Option<DataValue>], bindings: &[ValuesLookup]) -> bool {
     bindings.iter().all(|block| {
         let key: Vec<DataValue> = block
@@ -737,17 +745,17 @@ fn matches_bindings(values: &[Option<DataValue>], bindings: &[ValuesLookup]) -> 
     })
 }
 
-/// Returns whether a line of a response is a solution row of the given width:
-/// as many cells as the header, each shaped like a term
-/// (an IRI, a literal, a blank node, a boolean, a number, or unbound).
+/// Returns whether a line of a response looks like a solution row with `columns` cells,
+/// each of which [looks like a term](is_cell).
 ///
-/// The lines of a trace are not.
+/// The lines of an error trace do not.
 fn is_row(line: &str, columns: usize) -> bool {
     let cells: Vec<&str> = line.split('\t').collect();
     cells.len() == columns && cells.into_iter().all(is_cell)
 }
 
-/// Returns whether a cell is shaped like a term, as [is_row] describes.
+/// Returns whether a cell looks like a term by its first characters:
+/// an IRI, a literal, a blank node, a boolean, a number, or an unbound cell.
 fn is_cell(cell: &str) -> bool {
     cell.is_empty()
         || (cell.starts_with('<') && cell.ends_with('>'))
@@ -760,14 +768,16 @@ fn is_cell(cell: &str) -> bool {
             .starts_with(|character: char| character.is_ascii_digit() || character == '.')
 }
 
-/// Parses one TSV cell as a Turtle-syntax term, or returns `None` for a cell that is not a term.
+/// Parses one TSV cell as a term in Turtle syntax,
+/// or returns `None` for a cell that is not a term.
 ///
-/// Quoted literals read in [Turtle's literal syntax](LiteralSyntax::Turtle),
-/// and nulls are minted as [SparqlReader::read] describes.
+/// An unbound cell becomes a fresh null,
+/// and a blank node becomes the null that its label names in `blanks`.
+/// Quoted literals are read in [Turtle's literal syntax](LiteralSyntax::Turtle).
 fn term(cell: &str, blanks: &BlankNodes, dictionary: &mut Dictionary) -> Option<DataValue> {
     if cell.is_empty() {
-        // Unbound: a fresh null every time, since two unbound cells
-        // assert nothing about being equal.
+        // An unbound cell is a fresh null every time, since two unbound cells
+        // say nothing about being equal.
         return Some(DataValue::null(dictionary.fresh_null()));
     }
     if let Some(label) = cell.strip_prefix("_:") {
@@ -776,19 +786,20 @@ fn term(cell: &str, blanks: &BlankNodes, dictionary: &mut Dictionary) -> Option<
     ground_cell(cell)
 }
 
-/// Returns whether a line is a whole solution row of the given width:
-/// as many cells, each a [whole cell](is_whole_cell).
+/// Returns whether a line is a whole solution row with `columns` cells,
+/// each of them a [whole cell](is_whole_cell).
 fn is_whole_row(line: &str, columns: usize) -> bool {
     let cells: Vec<&str> = line.split('\t').collect();
     cells.len() == columns && cells.into_iter().all(is_whole_cell)
 }
 
-/// Returns whether a cell is a whole term by its syntax alone:
-/// unbound, a blank node, an IRI closed by `>`, a literal closed by its quote
-/// (with a language tag or a datatype IRI after it), a boolean, or a number.
+/// Returns whether a cell is a whole term by its syntax alone.
 ///
-/// A literal whose datatype rejects its lexical form is whole, and reads as a malformed row.
-/// An IRI or a literal that stops before its end is not.
+/// A whole term is an unbound cell, a blank node, an IRI closed by `>`,
+/// a literal closed by its quote and possibly followed by a language tag or a datatype IRI,
+/// a boolean, or a number.
+/// A literal whose datatype rejects its lexical form is whole, and is read as a malformed row.
+/// An IRI or a literal that stops before its end is not whole.
 fn is_whole_cell(cell: &str) -> bool {
     if let Some(label) = cell.strip_prefix("_:") {
         return !label.is_empty();
@@ -828,7 +839,7 @@ fn is_whole_cell(cell: &str) -> bool {
     false
 }
 
-/// Parses one TSV cell that is neither unbound nor a blank node as a Turtle-syntax term,
+/// Parses a TSV cell that is neither unbound nor a blank node as a term in Turtle syntax,
 /// or returns `None` for a cell that is not a term.
 fn ground_cell(cell: &str) -> Option<DataValue> {
     if let Some(iri) = term::iri(cell) {
@@ -842,8 +853,8 @@ fn ground_cell(cell: &str) -> Option<DataValue> {
         "false" => return Some(DataValue::boolean(false)),
         _ => {}
     }
-    // Bare numbers, in Turtle's three forms: exponents are doubles,
-    // everything else takes the exact path.
+    // Bare numbers have Turtle's three forms: a number with an exponent is a double,
+    // and any other is an exact integer or decimal.
     let numeric = cell
         .strip_prefix(['+', '-'])
         .unwrap_or(cell)

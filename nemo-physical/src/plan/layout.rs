@@ -1,29 +1,29 @@
 //! The layout of a plan: what executing it needs, derived once from the plan's structure.
 //!
-//! A consumer reads a node in a column order, a sequence of the node's markers;
-//! the node's canonical order is the order of its markers.
-//! The layout collects the orders each node is read in, its required orders.
-//! A load is read from the table manager in each of them.
+//! The *consumers* of a node are the nodes that read it, and a declared output counts as one.
+//! A consumer reads a node in a column order, a sequence of the node's markers.
+//! The node's canonical order is the order of its markers.
+//! The orders a node is read in are its *required orders*.
+//! A read yields *blocks*, the tries that together have the node's rows in the read order.
+//! A load is read from the table manager in each of its required orders.
 //! A materialized node produces only the columns its consumers need, in an order of its own,
 //! and builds one trie from its rows per required order.
 //!
-//! The layout also lists the steps of an execution.
+//! The layout also lists the *steps* of an execution.
 //! A step is a unit, an aggregation,
 //! or an output that only merges the blocks of a load, alias or union.
-//! A unit is a join, or the joins a union unites,
-//! together with the single-input operators above it, which run inside the joins.
 //!
-//! Terms used throughout the layout, each defined in its module:
-//! - a *unit* executes a *base* and the *chain* of single-input operators above it,
-//!   and materializes the rows of its *top*, the last node of the chain;
-//! - the base is a join, the joins a union unites, or a relation read as a join of one input,
-//!   and each of these joins is a *member*, which runs the whole chain;
-//! - a unit *absorbs* a node that executes inside it instead of being materialized,
-//!   and ends below an operator that cannot run inside it;
-//! - a member runs its chain in *stages*: the *descent* while its join binds the layers,
-//!   the *row stage* on each emitted row, and a *sink* that projects the rows;
-//! - a member's *delivery* says what becomes of the rows its join emits;
-//! - a marker *leaves* the descent if the join need not bind it.
+//! Terms used throughout the layout, each defined further in its module:
+//! - A *unit* executes a *base* and the *chain* of single-input operators above it,
+//!   and materializes the rows of its *top*, the last node of the chain.
+//! - The base is a join, the joins a union unites, or a relation read as a join of one input.
+//!   Each of these joins is a *member*, which runs the whole chain.
+//! - A unit *absorbs* the nodes that execute inside it instead of being materialized.
+//!   It ends below an operator that cannot run inside it.
+//! - A member runs its chain in *stages*: the *descent* while its join binds the layers,
+//!   the *row stage* on each emitted row, and a *sink* that projects the rows.
+//! - A member's *delivery* says what becomes of the rows its join emits.
+//! - A marker *leaves* the descent if the join need not bind it.
 
 mod aggregate;
 mod chain;
@@ -46,7 +46,8 @@ use crate::{
 /// The layout of a plan: what an execution reads, joins and builds,
 /// worked out once from the plan's structure.
 ///
-/// The layout is valid as long as the plan's structure is. See [OperationPlan::layout].
+/// The layout stays valid as long as the plan's structure does not change.
+/// See [OperationPlan::layout].
 ///
 /// # Example
 ///
@@ -95,8 +96,9 @@ use crate::{
 pub struct PlanLayout {
     /// Per node, whether an output depends on it.
     pub(crate) live: Vec<bool>,
-    /// Per node and required order, where a read in that order finds its blocks;
-    /// a [RequiredOrder] indexes them.
+    /// Per node and required order, where a read in that order finds its blocks.
+    ///
+    /// A [RequiredOrder] indexes them.
     pub(crate) sources: Vec<Vec<Vec<BlockSource>>>,
     /// Per materializing node, what its materialization builds.
     pub(crate) materializations: Vec<Option<Materialization>>,
@@ -105,7 +107,7 @@ pub struct PlanLayout {
     /// Per step, the materialized results it is the last to read.
     ///
     /// The execution drops them once the step has run.
-    /// Declared outputs are never listed, since their rows leave with the results.
+    /// Declared outputs are never listed, since they are delivered with the results.
     pub(crate) released: Vec<Vec<NodeId>>,
 }
 
@@ -137,15 +139,15 @@ impl PlanLayout {
 /// One step of an execution.
 #[derive(Debug)]
 pub(crate) enum Step {
-    /// An execution unit, materializing its top.
+    /// A unit, which materializes its top.
     Unit(UnitLayout),
-    /// An aggregation, reading its input group key first.
+    /// An aggregation, which reads its input with the group key first.
     Aggregate(AggregateLayout),
-    /// A load, alias or union declared as an output: its blocks merged into one trie.
+    /// A load, alias or union declared as an output, whose blocks are merged into one trie.
     Concatenate {
         /// The node.
         node: NodeId,
-        /// Its canonical order, among its required orders.
+        /// The node's canonical order, as one of its required orders.
         order: RequiredOrder,
     },
 }
@@ -163,27 +165,30 @@ impl Step {
 
 /// What a materializing node builds from its rows.
 ///
-/// The rows arrive in the produced order, and a trie is built per order a consumer reads:
-/// directly from the rows if that is the produced order,
-/// and from a sorted permutation otherwise.
-/// No trie is built in the produced order unless a consumer reads it.
+/// The rows arrive in the produced order.
+/// One trie is built for each order a consumer reads, and for the order an output is delivered in.
+/// A trie in the produced order is built directly from the rows,
+/// and a trie in another order from the rows rearranged and sorted.
+/// No trie is built in the produced order unless one is needed in it.
 #[derive(Debug)]
 pub(crate) struct Materialization {
     /// The columns of the node's rows as it produces them, in order.
     pub(crate) produced: MarkerOrder,
     /// The orders the node's tries are built in, each over the produced columns, without repeats.
     pub(crate) orders: Vec<MarkerOrder>,
-    /// Per order, the column order its build lays the produced columns out in;
-    /// `None` for the produced order, whose rows build as they are.
+    /// Per order, the column order that rearranges the produced columns into it,
+    /// or `None` for the produced order, whose rows are used as they are.
     pub(crate) builds: Vec<Option<ColumnOrder>>,
-    /// For a declared output, the index of the order its trie is delivered in, the node's markers.
+    /// For a declared output, the index of the order its trie is delivered in,
+    /// which is the order of the node's markers.
     pub(crate) output: Option<usize>,
 }
 
 impl Materialization {
-    /// Creates the materialization of rows produced in the given columns
-    /// for the given required orders, and for a declared output,
-    /// for the order its trie is delivered in, the node's markers.
+    /// Creates the materialization of rows produced in the given columns.
+    ///
+    /// It builds a trie for each required order, restricted to the produced columns,
+    /// and for a declared output, one in `output`, the order its trie is delivered in.
     fn new(produced: MarkerOrder, required: &[MarkerOrder], output: Option<&MarkerOrder>) -> Self {
         let mut orders: Vec<MarkerOrder> = Vec::with_capacity(required.len());
         for order in required {
@@ -309,11 +314,11 @@ impl<'a> LayoutBuilder<'a> {
         builder
     }
 
-    /// Lays out one node, unless a unit above runs it.
+    /// Lays out one node, unless no output depends on it or a unit above absorbed it.
     ///
-    /// A load, an alias, and a union passing its inputs through
-    /// pass the orders and needs of their consumers on.
-    /// Declared as an output, they are concatenated.
+    /// A load, an alias, and a union that passes its inputs through
+    /// pass the orders and needs of their consumers on to their inputs.
+    /// If such a node is declared an output, its blocks are concatenated.
     fn visit(&mut self, node: NodeId) {
         let index = node.index();
         if !self.live[index] || self.absorbed[index] {
@@ -335,8 +340,8 @@ impl<'a> LayoutBuilder<'a> {
         }
     }
 
-    /// Lays out a node that passes the blocks of its inputs through:
-    /// its consumers' orders and needs go on to its inputs.
+    /// Lays out a node that passes the blocks of its inputs through,
+    /// so that its consumers' orders and needs pass on to its inputs.
     fn pass_through(&mut self, node: NodeId) {
         let index = node.index();
         if self.is_output[index] {
@@ -393,9 +398,8 @@ impl<'a> LayoutBuilder<'a> {
         }
     }
 
-    /// Returns what a materializing node builds from its rows, produced in the given columns:
-    /// a trie per order its consumers read, and for a declared output,
-    /// one in the order it is delivered in, the node's markers.
+    /// Returns what a materializing node builds from its rows,
+    /// which it produces in the given columns.
     fn materialization(&self, node: NodeId, produced: MarkerOrder) -> Materialization {
         let output = self.is_output[node.index()].then(|| self.plan.node_markers(node));
         Materialization::new(produced, &self.required[node.index()], output)
@@ -472,8 +476,9 @@ impl<'a> LayoutBuilder<'a> {
     }
 
     /// Returns, per step, the materialized results it is the last to read,
-    /// which it releases once it has run; declared outputs are never released.
+    /// which it releases once it has run.
     ///
+    /// Declared outputs are never released.
     /// The steps are walked in execution order, so the last reader wins.
     fn release_after_last_use(&self) -> Vec<Vec<NodeId>> {
         let mut last_use: Vec<Option<usize>> = vec![None; self.plan.nodes().len()];
@@ -512,8 +517,8 @@ impl<'a> LayoutBuilder<'a> {
         released
     }
 
-    /// Collects the materializing nodes a read of a node reaches through aliases and unions,
-    /// the results the reader consumes.
+    /// Collects the materializing nodes that a read of a node reaches through aliases and unions,
+    /// whose results the reader consumes.
     fn materialized_sources(&self, node: NodeId, into: &mut Vec<NodeId>) {
         if self.materializations[node.index()].is_some() {
             into.push(node);
@@ -533,7 +538,8 @@ impl<'a> LayoutBuilder<'a> {
 }
 
 impl fmt::Display for PlanLayout {
-    /// Lists the steps of an execution, a unit with its members and the stages of their operators.
+    /// Lists the steps of an execution,
+    /// and for each unit its members with the number of operators in each stage.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for step in &self.steps {
             match step {
@@ -602,7 +608,7 @@ fn liveness(plan: &OperationPlan) -> Vec<bool> {
 
 /// Returns, per node, how many live nodes and declared outputs consume it.
 ///
-/// A declared output counts as a consumer, so an output is always a unit's top.
+/// A declared output counts as a consumer, so no unit absorbs a declared output.
 fn consumer_counts(plan: &OperationPlan, live: &[bool]) -> Vec<usize> {
     let mut consumers = vec![0usize; plan.nodes().len()];
     for output in plan.declared_outputs() {

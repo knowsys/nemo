@@ -2,11 +2,12 @@
 
 use nemo_physical::management::TableId;
 
-/// A registered predicate: the table storing it, and the number of columns the table holds.
+/// A registered predicate: the table that stores it, and the table's number of columns.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Registered {
-    /// The table storing the predicate's rows.
+    /// The table that stores the predicate's rows.
     pub(crate) table: TableId,
-    /// The number of columns the table holds, the columns its loader delivers.
+    /// The table's number of columns,
+    /// which are the columns that the predicate's loader delivers.
     pub(crate) arity: usize,
 }

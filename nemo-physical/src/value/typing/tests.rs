@@ -1,16 +1,16 @@
-//! Types: admission, intersection, union, containment, and declared labels.
+//! Tests of types: membership, intersection, union, containment, and declared labels.
 
 use crate::value::{
     DataValue, DomainSet, LabelBound, LabelTypes, MapShape, MapValue, Shape, TupleShape,
     TupleValue, Type, ValueDomain,
 };
 
-/// Creates an unrefined type.
+/// Creates the type of one domain, without shapes.
 fn of(domain: ValueDomain) -> Type {
     Type::of(domain)
 }
 
-/// Creates an unlabeled tuple type.
+/// Creates the type of the unlabeled tuples with the given element types.
 fn tuple(elements: Vec<Type>) -> Type {
     Type::tuple(TupleShape {
         label: LabelBound::Exactly(None),
@@ -18,7 +18,7 @@ fn tuple(elements: Vec<Type>) -> Type {
     })
 }
 
-/// Creates a labeled tuple type.
+/// Creates the type of the tuples with the given label and element types.
 fn labeled(label: &str, elements: Vec<Type>) -> Type {
     Type::tuple(TupleShape {
         label: LabelBound::Exactly(Some(label.into())),
@@ -31,7 +31,7 @@ fn value(label: &str, elements: Vec<DataValue>) -> DataValue {
     DataValue::tuple(TupleValue::labeled(label, elements))
 }
 
-/// Returns the labels of `list(int, list | nil)` and `nil()`.
+/// Returns the declared types of the labels of `list(int, list | nil)` and `nil()`.
 fn lists() -> LabelTypes {
     let either = Type::declared("list", ValueDomain::Tuple)
         .union(&Type::declared("nil", ValueDomain::Tuple));
@@ -44,6 +44,7 @@ fn lists() -> LabelTypes {
     labels
 }
 
+/// The type of a tuple value has the tuple's label and the domains of its elements.
 #[test]
 fn values_type_at_depth() {
     let point = value("point", vec![DataValue::integer(1), DataValue::string("x")]);
@@ -56,6 +57,7 @@ fn values_type_at_depth() {
     );
 }
 
+/// A value belongs to a type by its domain, and a tuple must also fit one of the type's shapes.
 #[test]
 fn admission_follows_domains_and_refined_shapes() {
     let none = &LabelTypes::NONE;
@@ -63,7 +65,7 @@ fn admission_follows_domains_and_refined_shapes() {
     let declared = Type::of(ValueDomain::Integer).union(&pair);
     let point = |elements: Vec<DataValue>| DataValue::tuple(TupleValue::new(elements));
 
-    // Scalars decide by domain alone, tuples by the refined shape.
+    // An integer belongs by its domain alone, and a tuple must also fit the shape.
     assert!(declared.admits(DataValue::integer(1).as_ref(), none));
     assert!(!declared.admits(DataValue::string("1").as_ref(), none));
     assert!(declared.admits(
@@ -75,16 +77,18 @@ fn admission_follows_domains_and_refined_shapes() {
         point(vec![DataValue::string("x"), DataValue::integer(2)]).as_ref(),
         none
     ));
-    // A label bound holds the label to it.
+    // A shape with an exact label accepts only the tuples with that label.
     let labeled = labeled("p", vec![of(ValueDomain::Integer)]);
     assert!(labeled.admits(value("p", vec![DataValue::integer(1)]).as_ref(), none));
     assert!(!labeled.admits(point(vec![DataValue::integer(1)]).as_ref(), none));
-    // An unrefined tuple domain takes every tuple.
+    // A tuple domain without shapes accepts every tuple.
     assert!(of(ValueDomain::Tuple).admits(point(vec![]).as_ref(), none));
     assert!(Type::ANY.admits(DataValue::string("x").as_ref(), none));
     assert!(!Type::EMPTY.admits(DataValue::string("x").as_ref(), none));
 }
 
+/// A map fits a map shape if it has exactly the shape's keys and its values fit,
+/// and a shape with a key given twice cannot be created.
 #[test]
 fn map_admission_matches_keys_positionally() {
     let none = &LabelTypes::NONE;
@@ -142,6 +146,7 @@ fn map_admission_matches_keys_positionally() {
     );
 }
 
+/// Types with conflicting shapes share no value, and compatible shapes intersect.
 #[test]
 fn intersection_proves_shape_conflicts() {
     let pair = tuple(vec![of(ValueDomain::Integer), of(ValueDomain::Integer)]);
@@ -150,14 +155,14 @@ fn intersection_proves_shape_conflicts() {
         of(ValueDomain::Integer),
         of(ValueDomain::Integer),
     ]);
-    // Different arities share no tuple.
+    // Shapes of different lengths share no tuple.
     assert!(pair.intersect(&triple).is_empty());
-    // A conflicting element empties the whole structured domain.
+    // One conflicting element removes the whole tuple domain.
     let stringy = tuple(vec![of(ValueDomain::String), of(ValueDomain::Integer)]);
     assert!(pair.intersect(&stringy).is_empty());
-    // An unrefined side keeps the refined shapes.
+    // A side without shapes keeps the shapes of the other side.
     assert_eq!(of(ValueDomain::Tuple).intersect(&pair), pair);
-    // Compatible shapes intersect elementwise.
+    // Compatible shapes intersect element by element.
     let numeric = tuple(vec![
         Type::of_domains(DomainSet::NUMERIC),
         of(ValueDomain::Integer),
@@ -165,11 +170,12 @@ fn intersection_proves_shape_conflicts() {
     assert_eq!(pair.intersect(&numeric), pair);
 }
 
+/// A union keeps every shape, and merges the shapes with the same label and length.
 #[test]
 fn union_keeps_every_shape() {
     let pair = tuple(vec![of(ValueDomain::Integer), of(ValueDomain::Integer)]);
     let stringy = tuple(vec![of(ValueDomain::String), of(ValueDomain::Integer)]);
-    // One label and arity: the elements unite in one shape.
+    // Shapes with the same label and length merge into one, with the union of the elements.
     let both = pair.union(&stringy);
     let [Shape::Structural(shape)] = both.tuple_shapes().expect("refined") else {
         panic!("one shape: {both:?}");
@@ -178,21 +184,21 @@ fn union_keeps_every_shape() {
         shape.elements[0].domains(),
         DomainSet::INTEGER.with(ValueDomain::String)
     );
-    // Different arities, or labels, stay apart.
+    // Shapes with different lengths or labels stay apart.
     let triple = tuple(vec![of(ValueDomain::Integer); 3]);
     assert_eq!(pair.union(&triple).tuple_shapes().map(<[_]>::len), Some(2));
     let point = labeled("point", vec![of(ValueDomain::Integer); 2]);
     let size = labeled("size", vec![of(ValueDomain::Integer); 2]);
     let either = point.union(&size);
     assert_eq!(either.tuple_shapes().map(<[_]>::len), Some(2));
-    // So a third label is outside the union.
+    // So a tuple with a third label is not in the union.
     let other = labeled("other", vec![of(ValueDomain::Integer); 2]);
     assert!(either.intersect(&other).is_empty());
     assert!(!other.is_subset(&either, &LabelTypes::NONE));
     // The order of the union does not matter.
     assert_eq!(either, size.union(&point));
-    // A side without the structured domain leaves the shapes alone,
-    // and a side holding it unrefined takes them in.
+    // A side without the tuple domain leaves the shapes as they are,
+    // and a side with the tuple domain but without shapes leaves the union without shapes.
     assert!(
         pair.union(&of(ValueDomain::Integer))
             .tuple_shapes()
@@ -201,6 +207,7 @@ fn union_keeps_every_shape() {
     assert!(pair.union(&of(ValueDomain::Tuple)).tuple_shapes().is_none());
 }
 
+/// In a union, a shape with an unknown label absorbs the other shapes of its length.
 #[test]
 fn an_unknown_label_takes_in_its_arity() {
     let anonymous = Type::tuple(TupleShape {
@@ -219,6 +226,8 @@ fn an_unknown_label_takes_in_its_arity() {
     );
 }
 
+/// The type of a value is refined down to [Type::DEPTH] levels,
+/// and below them it is the bare domain.
 #[test]
 fn refinement_stops_at_the_depth_cap() {
     let mut value = DataValue::integer(1);
@@ -232,15 +241,16 @@ fn refinement_stops_at_the_depth_cap() {
         };
         typed = shape.elements[0].clone();
     }
-    // Below the cap: the bare domain, no shapes.
+    // Below the cap, the type is the tuple domain without shapes.
     assert_eq!(typed.domains(), DomainSet::TUPLE);
     assert!(typed.tuple_shapes().is_none());
 }
 
+/// Cutting a type off at a depth removes written-out shapes below it, but keeps declared labels.
 #[test]
 fn declared_labels_stay_below_the_cap() {
-    // A written-out shape below the cap is its domain,
-    // but a declared label refers rather than nests.
+    // Below the cap, a written-out shape is reduced to its domain,
+    // but a declared label stays, since it refers to its declaration instead of nesting it.
     let declared = Type::declared("list", ValueDomain::Tuple);
     let nested = tuple(vec![declared.clone()]);
     assert_eq!(nested.capped(1), tuple(vec![declared.clone()]));
@@ -249,6 +259,7 @@ fn declared_labels_stay_below_the_cap() {
     assert!(mixed.capped(0).tuple_shapes().is_none());
 }
 
+/// Containment compares the domains, and the shapes by length, label and elements.
 #[test]
 fn containment_reads_shapes_and_domains() {
     let none = &LabelTypes::NONE;
@@ -263,10 +274,11 @@ fn containment_reads_shapes_and_domains() {
     let wide = tuple(vec![number.clone(), number]);
     assert!(pair.is_subset(&wide, none));
     assert!(!wide.is_subset(&pair, none));
-    // Any tuple lies within the bare domain, and the bare domain within no shape.
+    // Every tuple shape lies within the tuple domain without shapes,
+    // which lies within no shape.
     assert!(pair.is_subset(&of(ValueDomain::Tuple), none));
     assert!(!of(ValueDomain::Tuple).is_subset(&pair, none));
-    // An exact label lies within an unknown one, not the other way.
+    // An exact label lies within an unknown one, but not the other way round.
     let anonymous = Type::tuple(TupleShape {
         label: LabelBound::Unknown,
         elements: vec![int.clone(), int.clone()],
@@ -276,6 +288,7 @@ fn containment_reads_shapes_and_domains() {
     assert!(!anonymous.is_subset(&point, none));
 }
 
+/// A declared label is read through its declaration, for containment and for membership.
 #[test]
 fn a_declared_label_stands_for_its_declaration() {
     let labels = lists();
@@ -283,18 +296,19 @@ fn a_declared_label_stands_for_its_declaration() {
     let nil = Type::declared("nil", ValueDomain::Tuple);
     let either = list.union(&nil);
 
-    // A built list fits by its fields, the tail by its label alone.
+    // A written-out list shape lies within the label if its elements lie within the declaration,
+    // and the tail lies within it by its label alone.
     let built = labeled("list", vec![of(ValueDomain::Integer), either.clone()]);
     assert!(built.is_subset(&list, &labels));
     assert!(!built.is_subset(&nil, &labels));
     let wrong = labeled("list", vec![of(ValueDomain::String), either.clone()]);
     assert!(!wrong.is_subset(&list, &labels));
-    // Without the declarations, nothing is shown.
+    // Without the declarations, the containment cannot be shown.
     assert!(!built.is_subset(&list, &LabelTypes::NONE));
-    // The label lies within its own declaration written out.
+    // The label lies within its own declared shape, written out.
     assert!(list.is_subset(&built, &labels));
 
-    // Admission reads the declaration through every level of the value.
+    // Membership reads the declaration at every level of the value.
     let ok = value(
         "list",
         vec![
@@ -313,7 +327,7 @@ fn a_declared_label_stands_for_its_declaration() {
     assert!(!list.admits(bad.as_ref(), &labels));
     assert!(list.admits(bad.as_ref(), &LabelTypes::NONE));
 
-    // A union absorbs written-out shapes of a declared label,
+    // A union absorbs a written-out shape with a declared label,
     // and an intersection keeps the label.
     assert_eq!(built.union(&list), list);
     assert_eq!(built.intersect(&list), list);

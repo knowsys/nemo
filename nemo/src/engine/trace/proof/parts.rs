@@ -1,5 +1,5 @@
-//! Tracing every stored row of predicates in batches,
-//! which add up to one response handed out a part per batch.
+//! Tracing every stored row of some predicates in batches,
+//! which add up to one response, handed out as one part per batch.
 
 use nemo_physical::{diagnostics::Diagnostic, management::TableId, value::DataValue};
 
@@ -12,18 +12,19 @@ use crate::{
     trace::{TracePart, TracedFact},
 };
 
-/// The rows traced per batch.
+/// The number of rows traced per batch.
 ///
-/// The search writes the store (arrangements, computed values) while the lifting reads it,
-/// so each batch is searched first and lifted afterwards.
-/// A batch's nodes are converted to the protocol together, so a batch also bounds what the
-/// response holds besides the proofs, which are kept until the trace ends.
+/// The search writes to the store, such as arrangements and computed values,
+/// while the lifting reads it, so each batch is searched first and lifted afterwards.
+/// A batch's nodes are converted to the response types together,
+/// so a batch also bounds the memory that the response uses,
+/// apart from the proofs, which are kept until the trace ends.
 const BATCH: usize = 1 << 10;
 
 impl Engine {
-    /// Traces every stored row of the predicates, then the facts,
-    /// handing a part of the response to the sink per batch,
-    /// and returns the facts with their nodes.
+    /// Traces every stored row of `predicates`, then `facts`,
+    /// passes one part of the response to `sink` per batch,
+    /// and returns `facts` with their nodes.
     pub(in crate::engine) fn trace_in_parts(
         &mut self,
         predicates: &[String],

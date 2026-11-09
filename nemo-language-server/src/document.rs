@@ -1,6 +1,5 @@
-//! One open document:
-//! its text, what parsing and checking made of it, and the index that answers questions
-//! about it.
+//! One open document: its text, the results of parsing and checking it,
+//! and the index of its names.
 
 use std::{
     collections::HashMap,
@@ -23,62 +22,64 @@ use nemo_physical::{
 
 use crate::{position::Lines, symbols::Symbols};
 
-/// The file id a document's spans carry.
+/// The file id of a document's spans.
 ///
-/// A document is parsed on its own, so its spans only ever address its
-/// own text and one id serves every document. Composition across files
-/// is the engine's business, and carries the engine's ids.
+/// A document is parsed on its own, so one id serves every document.
+/// The check registers the document first, so that the engine gives it this id too.
+/// The modules that the check reads get other ids from the engine.
 const DOCUMENT: FileId = FileId::new(0);
 
 /// One open document, parsed and checked.
 ///
-/// Parsing and checking happen once per edit, here,
-/// and everything the server responds with afterwards is a lookup,
-/// which keeps a keystroke from costing a parse per request.
+/// It is parsed and checked once per edit, and every request after that only looks up what
+/// was stored, so that a keystroke does not cost a parse per request.
 #[derive(Debug)]
 pub(crate) struct Document {
     /// The text as the editor has it.
     text: String,
-    /// Where its lines begin.
+    /// The index of where the text's lines begin.
     lines: Lines,
-    /// What the parser and the engine's check reported about it.
+    /// The diagnostics of parsing and of the engine's check.
     diagnostics: Vec<Diagnostic>,
-    /// What it says about itself.
+    /// The index of the names in the text.
     symbols: Symbols,
-    /// What parsing made of it, kept because formatting prints it back.
+    /// The parsed program, kept for formatting, which prints it back.
     program: Program,
-    /// The column names the editor shows inline, by offset.
+    /// The column names that the editor shows before arguments, in offset order.
     hints: Vec<ColumnHint>,
-    /// What the document says each declared predicate is, by name.
+    /// The documentation of each declared predicate, by name.
     documentation: HashMap<String, Documentation>,
-    /// What the document says each value label a `@type` declares is, by label.
+    /// The documentation of each value label that a `@type` declares, by label.
     labels: HashMap<String, Documentation>,
     /// The comment blocks directly above the statements that derive each predicate, by name.
     comments: HashMap<String, Vec<String>>,
-    /// The types the last check that saw the whole text inferred.
+    /// The types inferred by the last check of a text that parsed.
     types: Arc<KnownTypes>,
-    /// Whether this text's own check inferred the types,
-    /// rather than an earlier text's, kept because this one does not parse.
+    /// Whether the types were inferred from this text.
+    ///
+    /// If this text does not parse, the types of an earlier text are kept instead.
     fresh: bool,
 }
 
-/// What a declaration says about a predicate or a value label:
-/// the declaration itself, and the comment block written above it.
+/// The documentation of a predicate or a value label:
+/// its declaration, and the comment block written above it.
 #[derive(Debug)]
 pub(crate) struct Documentation {
     /// The declared name with its columns or fields, as `person(name: string, age: int)`.
     pub signature: String,
-    /// The comment lines directly above it, markers stripped.
+    /// The comment lines directly above the declaration, without their `%` markers.
     pub comment: Option<String>,
 }
 
-/// The types a check inferred, as the hover reads them.
+/// The types that a check inferred, for predicates and for the variables of each rule.
 #[derive(Debug, Default)]
 pub(crate) struct KnownTypes {
-    /// What the check inferred, which resolves predicate names.
+    /// The types that the check inferred, in which the types of predicates are looked up.
     inferred: Option<InferredTypes>,
-    /// The variable types of each rule, by the rule's text,
-    /// which outlives edits elsewhere in the document.
+    /// The types of each rule's variables, keyed by the rule's text.
+    ///
+    /// Unlike the rule's position, its text stays the same when the document is edited
+    /// elsewhere.
     rules: HashMap<String, Vec<(String, Type)>>,
 }
 
@@ -88,8 +89,9 @@ impl KnownTypes {
         self.inferred.as_ref()?.predicate(name)
     }
 
-    /// Returns the type of a variable of the rule written as `rule`, by the variable's name
-    /// without the `?`, if it is known.
+    /// Returns the type of the variable `name` of the rule whose text is `rule`, if it is known.
+    ///
+    /// `name` is written without the `?`.
     pub(crate) fn variable(&self, rule: &str, name: &str) -> Option<&Type> {
         self.rules
             .get(rule)?
@@ -99,26 +101,26 @@ impl KnownTypes {
     }
 }
 
-/// One inline column name: what the editor shows before an argument
-/// whose position a declaration names.
+/// An inline column name, which the editor shows before an argument whose column a
+/// declaration names.
 #[derive(Debug)]
 pub(crate) struct ColumnHint {
-    /// The byte offset the hint sits at, the argument's start.
+    /// The byte offset of the hint, which is the start of the argument.
     pub offset: u32,
-    /// What is shown, as `name:`.
+    /// The text shown, as `name:`.
     pub label: String,
 }
 
 impl Document {
-    /// Parses a text into a document and checks it,
-    /// with no data read:
-    /// the parser's diagnostics first,
-    /// then the engine's (resolution, directives, rule compilation, stratification).
+    /// Parses and checks a text, without reading any data.
     ///
-    /// `path` is the document's location, against which its modules resolve.
-    /// Without one it is checked as a program of its own.
-    /// `open` are the other documents the editor holds, by path:
-    /// a `@use` of one of them reads that text, not the disk's.
+    /// The diagnostics of parsing come first, followed by those of the engine's check,
+    /// such as resolution, directives, rule compilation and stratification.
+    /// `path` is the document's file, relative to which its `@use` directives find their
+    /// modules.
+    /// Without a path, the document is checked as a program of its own.
+    /// `open` contains the paths and texts of the other open documents.
+    /// A `@use` of one of them reads its open text rather than the file on disk.
     pub(crate) fn new(text: String, path: Option<PathBuf>, open: &[(PathBuf, &str)]) -> Self {
         let lines = Lines::of(&text);
         let (program, mut diagnostics) = Program::parse(&text, DOCUMENT);
@@ -128,10 +130,9 @@ impl Document {
             .iter()
             .any(|diagnostic| diagnostic.severity() == Severity::Error);
 
-        // The check runs on an engine of this edit's own, so a bug that
-        // panics in it takes down that engine and nothing else. The
-        // document registers first, so its id is [DOCUMENT] and the
-        // check's spans point back into this text.
+        // The check runs on an engine of its own for this edit, so a panic in it loses only
+        // that engine. The document is registered first, so its id is `DOCUMENT` and the
+        // check's spans point into this text.
         let mut inferred = None;
         diagnostics.extend(checked(|| {
             let mut engine = Engine::new();
@@ -149,9 +150,10 @@ impl Document {
                 ),
                 Err(error) => return vec![error],
             }
-            // The other buffers, under the names a `@use` in the document writes for them.
-            // One that no name reaches, or too large to address, stays unregistered,
-            // and a `@use` reads the disk.
+            // The other open documents are registered under the names with which a `@use`
+            // in this document refers to them. A document that no such name reaches, or
+            // that is too large to address, is not registered, and a `@use` of it reads the
+            // file on disk.
             if let Some(directory) = path.as_deref().and_then(Path::parent) {
                 for (other, buffer) in open {
                     if let Some(name) = module_name(directory, other) {
@@ -159,7 +161,7 @@ impl Document {
                     }
                 }
             }
-            // Linking reads the modules, resolved beside the document's path,
+            // Linking reads the modules, relative to the document's path,
             // and its warnings and its error are part of the check.
             let linked = engine.link(program.clone());
             let mut found = engine.reports().to_vec();
@@ -174,8 +176,8 @@ impl Document {
             found
         }));
 
-        // Types inferred from a text that does not parse leave out what the
-        // broken statements say, so such a text keeps an earlier text's.
+        // The types inferred from a text that does not parse ignore its broken statements,
+        // so such a text keeps the types of an earlier text instead.
         let fresh = parsed && inferred.is_some();
         let types = match inferred.filter(|_| fresh) {
             Some(inferred) => KnownTypes {
@@ -216,20 +218,20 @@ impl Document {
         }
     }
 
-    /// Takes over the types of the document this one replaces,
-    /// if its own check inferred none from the whole text.
+    /// Uses the types of `previous`, the document that this one replaces,
+    /// if this document's types were not inferred from its own text.
     pub(crate) fn inherit_types(&mut self, previous: &Document) {
         if !self.fresh {
             self.types = Arc::clone(&previous.types);
         }
     }
 
-    /// Returns the types the last check that saw the whole text inferred.
+    /// Returns the types inferred by the last check of a text that parsed.
     pub(crate) fn types(&self) -> &KnownTypes {
         &self.types
     }
 
-    /// Returns the statements parsing made of it.
+    /// Returns the parsed statements.
     pub(crate) fn statements(&self) -> &[Statement] {
         &self.program.statements
     }
@@ -239,27 +241,27 @@ impl Document {
         &self.text
     }
 
-    /// Returns what the parser reported.
+    /// Returns the diagnostics of parsing and checking.
     pub(crate) fn diagnostics(&self) -> &[Diagnostic] {
         &self.diagnostics
     }
 
-    /// Returns what the document says about itself.
+    /// Returns the index of the document's names.
     pub(crate) fn symbols(&self) -> &Symbols {
         &self.symbols
     }
 
-    /// Returns the column names the editor shows inline, in offset order.
+    /// Returns the column names that the editor shows before arguments, in offset order.
     pub(crate) fn hints(&self) -> &[ColumnHint] {
         &self.hints
     }
 
-    /// Returns what the document says a declared predicate is, if it does.
+    /// Returns the documentation of a predicate, if the document declares it.
     pub(crate) fn documentation(&self, name: &str) -> Option<&Documentation> {
         self.documentation.get(name)
     }
 
-    /// Returns what the document says a value label a `@type` declares is, if it does.
+    /// Returns the documentation of a value label, if a `@type` of the document declares it.
     pub(crate) fn label(&self, name: &str) -> Option<&Documentation> {
         self.labels.get(name)
     }
@@ -275,17 +277,16 @@ impl Document {
         self.lines.position(&self.text, offset as usize)
     }
 
-    /// Returns the byte offset a protocol position addresses.
+    /// Returns the byte offset of a protocol position.
     pub(crate) fn offset(&self, line: u32, character: u32) -> u32 {
         u32::try_from(self.lines.offset(&self.text, line, character)).unwrap_or(u32::MAX)
     }
 
-    /// Returns the protocol positions a span begins and ends at,
-    /// or the start of the file for a span that addresses a different one.
+    /// Returns the protocol positions at which a span begins and ends,
+    /// or the start of the document for a span in another file.
     ///
-    /// Nothing points into another file yet.
-    /// When something does, a module's diagnostic labelling the file it came from,
-    /// pointing at this document's text would be silently wrong rather than absent.
+    /// A span in another file, such as a label of a diagnostic in a module, has no place in
+    /// this document, and placing it in this text would be wrong.
     pub(crate) fn range(&self, span: Span) -> ((u32, u32), (u32, u32)) {
         if span.file != DOCUMENT {
             return ((0, 0), (0, 0));
@@ -296,14 +297,16 @@ impl Document {
         )
     }
 
-    /// Returns whether a span addresses this document at all.
+    /// Returns whether a span is in this document.
     pub(crate) fn holds(&self, span: Span) -> bool {
         span.file == DOCUMENT
     }
 
-    /// Returns the run of name characters immediately before a byte offset,
-    /// with the marker that introduces it:
-    /// what the editor has typed so far, and what decides what it could mean.
+    /// Returns the name characters immediately before a byte offset,
+    /// together with the marker before them, if there is one.
+    ///
+    /// This is the part of a word that the user has typed so far,
+    /// and its marker decides what the word can be.
     pub(crate) fn prefix(&self, offset: u32) -> &str {
         let offset = usize::try_from(offset).unwrap_or(0).min(self.text.len());
         let bytes = self.text.as_bytes();
@@ -318,13 +321,12 @@ impl Document {
         self.text.get(start..offset).unwrap_or("")
     }
 
-    /// Returns the span of an occurrence's *name*, as against the atom or directive that holds
-    /// it.
+    /// Returns the span of `name` inside `span`, the span of an occurrence of the name.
     ///
-    /// The index points at what the cursor can land on,
-    /// while renaming and highlighting need the name itself.
-    /// It is found by looking for it as a whole name inside what holds it,
-    /// or `None` if it cannot be found, so that an edit never lands at a guessed position.
+    /// An occurrence's span can cover a whole atom or directive,
+    /// while renaming and highlighting need the span of the name itself.
+    /// The name is found as the first whole name inside `span` that does not follow an `@`.
+    /// Returns `None` if it is not found, so that an edit never goes to a guessed position.
     pub(crate) fn name_span(&self, name: &str, span: Span) -> Option<Span> {
         if !self.holds(span) || name.is_empty() {
             return None;
@@ -352,7 +354,7 @@ impl Document {
         None
     }
 
-    /// Returns the text a span covers, for showing it back.
+    /// Returns the text of a span, or an empty text for a span in another file.
     pub(crate) fn slice(&self, span: Span) -> &str {
         if span.file != DOCUMENT {
             return "";
@@ -363,8 +365,7 @@ impl Document {
     }
 }
 
-/// Returns what a check reported, or for a check that panicked,
-/// the internal error reporting the bug.
+/// Runs `check` and returns its diagnostics, or an internal error if it panicked.
 fn checked(check: impl FnOnce() -> Vec<Diagnostic>) -> Vec<Diagnostic> {
     panic::catch_unwind(AssertUnwindSafe(check)).unwrap_or_else(|payload| {
         let message = payload
@@ -381,12 +382,12 @@ fn is_name(byte: u8) -> bool {
     byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b':' | b'.') || byte >= 0x80
 }
 
-/// Returns what each declared predicate and each declared value label is:
-/// its `@declare` (or its `@input` with columns), or its `@type`,
-/// and the comment block written directly above it,
-/// the place a meaning is documented.
+/// Returns the documentation of each declared predicate and of each declared value label.
 ///
-/// A predicate's `@declare` counts over its `@input`.
+/// A predicate is declared by a `@declare`, or by an `@input` with columns,
+/// and a `@declare` takes precedence.
+/// A value label is declared by a `@type`.
+/// The documentation consists of the declaration and the comment block directly above it.
 fn documentation(
     program: &Program,
     text: &str,
@@ -451,11 +452,12 @@ fn documentation(
     (predicates, labels)
 }
 
-/// Returns the comment blocks directly above the statements that derive each predicate:
-/// its facts, the rules with it in the head, its imports and its `@input`,
-/// in source order, a block repeated by several statements once.
+/// Returns the comment blocks directly above the statements that derive each predicate,
+/// in source order and without repeats.
 ///
-/// A comment separated from a statement by a blank line belongs to no statement.
+/// These statements are the predicate's facts, the rules with it in the head,
+/// its imports and its `@input`.
+/// A comment that a blank line separates from the next statement belongs to no statement.
 fn derivation_comments(program: &Program, text: &str) -> HashMap<String, Vec<String>> {
     let mut comments: HashMap<String, Vec<String>> = HashMap::new();
     let mut note = |predicate: &Identifier, span: Option<Span>| {
@@ -494,8 +496,8 @@ fn signature(predicate: &Identifier, columns: &[ColumnDeclaration]) -> String {
     format!("{predicate}({})", columns.join(", "))
 }
 
-/// Returns the contiguous `%` comment lines directly above an offset, markers
-/// and surrounding whitespace stripped, in source order.
+/// Returns the consecutive `%` comment lines directly above the line of an offset,
+/// in source order and without their markers and surrounding whitespace.
 fn comment_above(text: &str, offset: usize) -> String {
     let mut lines = Vec::new();
     let mut end = text[..offset.min(text.len())]
@@ -514,11 +516,12 @@ fn comment_above(text: &str, offset: usize) -> String {
     lines.join("\n")
 }
 
-/// Returns the inline column names of a program:
-/// for every positional atom of a predicate whose declaration names its columns,
-/// the name each argument fills.
+/// Returns the inline column names of a program, in offset order.
 ///
-/// An atom that names its own columns needs none.
+/// Every positional atom of a predicate whose `@declare` names its columns gets a hint
+/// before each argument, with the name of the argument's column.
+/// An atom that names its own columns gets no hints,
+/// and neither does an atom whose number of arguments differs from the declaration's.
 fn column_hints(program: &Program) -> Vec<ColumnHint> {
     let mut declarations: HashMap<String, Vec<Option<String>>> = HashMap::new();
     for statement in &program.statements {
@@ -588,8 +591,11 @@ fn column_hints(program: &Program) -> Vec<ColumnHint> {
     hints
 }
 
-/// Returns the name a `@use` in a file in `directory` writes for the module file `file`,
-/// or `None` for a file that is no `.rls` file, or that no module name reaches.
+/// Returns the module name with which a `@use` in a file in `directory` refers to the module
+/// file `file`.
+///
+/// Returns `None` for a file that is not an `.rls` file, or that no module name can refer to,
+/// such as a file on another drive.
 fn module_name(directory: &Path, file: &Path) -> Option<String> {
     if file.extension()? != "rls" {
         return None;
@@ -616,13 +622,15 @@ fn module_name(directory: &Path, file: &Path) -> Option<String> {
 mod tests {
     use super::*;
 
+    /// The occurrence at an offset is found through the document's index,
+    /// with the span of its whole atom.
     #[test]
     fn a_document_finds_occurrences_through_its_index() {
         let source = "edge(1, 2) .\nreach(?x) :- edge(?x, 1) .\n";
         let document = Document::new(source.to_string(), None, &[]);
         assert!(document.diagnostics().is_empty());
 
-        // The cursor on the body's `edge`.
+        // The cursor is on the `edge` of the rule's body.
         let offset = source.rfind("edge").expect("the body mentions it");
         let found = document
             .symbols()
@@ -632,6 +640,7 @@ mod tests {
         assert_eq!(document.slice(found.span), "edge(?x, 1)");
     }
 
+    /// A document with a parse error still indexes the statements that parsed.
     #[test]
     fn a_broken_document_still_indexes_what_parsed() {
         let document = Document::new("p(1) .\nq(?x) :- p(?x\n".to_string(), None, &[]);
@@ -639,14 +648,16 @@ mod tests {
             !document.diagnostics().is_empty(),
             "the tail does not parse"
         );
-        // The fact before the damage is still there to navigate to.
+        // The fact before the error can still be navigated to.
         assert_eq!(document.symbols().occurrences("p").count(), 1);
     }
 
+    /// The check finds a problem that parsing cannot, without reading the imported data,
+    /// and labels it in the document.
     #[test]
     fn a_semantic_problem_is_found_without_reading_data() {
-        // `?y` is never bound, which only the check knows, and the
-        // import's missing file goes unnoticed, because nothing reads it.
+        // `?y` is never bound, which only the check finds. The import's missing file is not
+        // reported, because nothing reads it.
         let document = Document::new(
             "@import p from csv { resource = \"nowhere.csv\", format = (int) } .\n\
              q(?y) :- p(?x) .\n"
@@ -661,12 +672,13 @@ mod tests {
         assert!(document.holds(label.span), "the span is this document's");
     }
 
+    /// A warning of the type analysis is among the document's diagnostics.
     #[test]
     fn a_type_warning_reaches_the_document() {
         use nemo_physical::diagnostics::Severity;
 
-        // `?x` joins a string column with an integer column, so the type
-        // analysis proves the rule dead, as a warning.
+        // `?x` joins a string column with an integer column, so the type analysis warns
+        // that the rule can never derive anything.
         let document = Document::new(
             "word(\"a\") . value(1) .\ndead(?x) :- word(?x), value(?x) .\n".to_string(),
             None,
@@ -679,6 +691,8 @@ mod tests {
         assert!(document.holds(warning.labels()[0].span));
     }
 
+    /// A check that panics is reported as an internal error with the panic's message,
+    /// whether the message is a literal or formatted.
     #[test]
     fn a_panicking_check_reports_an_internal_error() {
         use nemo_physical::diagnostics::Code;
@@ -701,6 +715,8 @@ mod tests {
         }
     }
 
+    /// The column names of a `@declare` become hints before the arguments of the
+    /// predicate's positional atoms.
     #[test]
     fn declared_column_names_become_hints() {
         let source = "@declare person(name: string, age: int) .\n\
@@ -713,8 +729,8 @@ mod tests {
             .iter()
             .map(|hint| (hint.label.as_str(), hint.offset as usize))
             .collect();
-        // The fact and the positional atom get hints; the atom naming
-        // its own columns needs none.
+        // The fact and the positional atom get hints,
+        // and the atom that names its own columns gets none.
         assert_eq!(
             labels,
             [
@@ -726,6 +742,8 @@ mod tests {
         );
     }
 
+    /// A declared predicate's documentation is its signature and the comment block above
+    /// its declaration.
     #[test]
     fn a_declared_predicate_carries_its_documentation() {
         let document = Document::new(
@@ -744,6 +762,7 @@ mod tests {
         assert!(document.documentation("q").is_none());
     }
 
+    /// A value label's documentation is its `@type` declaration and the comment above it.
     #[test]
     fn a_declared_label_carries_its_documentation() {
         let document = Document::new(
@@ -759,6 +778,8 @@ mod tests {
         );
     }
 
+    /// A text that does not parse keeps the types of the document it replaces,
+    /// and a text that parses has its own.
     #[test]
     fn the_types_of_a_text_that_does_not_parse_are_the_last_ones_inferred() {
         let typed = Document::new("p(1) .\nq(?x) :- p(?x) .\n".to_string(), None, &[]);
@@ -779,7 +800,7 @@ mod tests {
             Some("int")
         );
 
-        // Mid-edit, the text does not parse: the types stay.
+        // In the middle of an edit, the text does not parse, so the earlier types are kept.
         let mut broken = Document::new("p(1) .\nq(?x) :- p(?x\n".to_string(), None, &[]);
         assert_eq!(shown(&broken), None);
         broken.inherit_types(&typed);
@@ -791,10 +812,12 @@ mod tests {
         assert_eq!(shown(&changed).as_deref(), Some("string"));
     }
 
+    /// A `@use` of an open document in the same directory, a subdirectory or a sibling
+    /// directory reads the open text rather than the disk.
     #[test]
     fn a_use_reads_an_open_buffer_instead_of_the_disk() {
-        // Neither file exists on disk: the module is what the editor
-        // holds, registered under the name the `@use` writes.
+        // Neither file exists on disk. The module is the text that the editor holds,
+        // registered under the name with which the `@use` refers to it.
         let module = "@input edge .\n@output reach .\nreach(?x, ?y) :- edge(?x, ?y) .\n";
         for (path, name) in [
             ("/nowhere/app/tc.rls", "tc"),
@@ -814,6 +837,8 @@ mod tests {
         }
     }
 
+    /// An open module file is named by its path relative to the using document's directory,
+    /// and a file that is not an `.rls` file gets no name.
     #[test]
     fn a_buffer_is_named_relative_to_the_document() {
         let directory = Path::new("/rules/app");
@@ -835,6 +860,7 @@ mod tests {
         );
     }
 
+    /// The document converts protocol positions to offsets, and spans to protocol ranges.
     #[test]
     fn positions_round_trip_through_the_document() {
         let document = Document::new("p(1) .\nq(2) .\n".to_string(), None, &[]);

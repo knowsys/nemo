@@ -1,4 +1,4 @@
-//! Programs: parsed text, inspectable before any engine exists.
+//! Parsed programs, which can be inspected without an engine.
 
 use pyo3::prelude::*;
 
@@ -6,30 +6,29 @@ use nemo::{diagnostics::render::SourceTexts, model::FileId};
 
 use crate::errors::{Diagnostic, resolve};
 
-/// A parsed program: the text it came from, and what parsing had to say.
+/// A parsed program, with its text and the diagnostics of parsing.
 ///
-/// Parsing is total:
-/// unparsable statements become diagnostics, and the rest becomes the program.
-/// So inspection needs no engine and reads no data.
-/// Loading it into an engine parses the (kept) text again under the engine's own file
-/// identity, so that diagnostics later point into the right source.
+/// Parsing never fails: a statement that does not parse becomes a diagnostic,
+/// and the other statements form the program.
+/// Inspecting a program needs no engine and reads no data.
+/// An engine that loads the program parses its text again under the engine's own file id,
+/// so that later diagnostics point into the right source.
 #[pyclass(frozen, module = "nmo")]
 #[derive(Debug)]
 pub struct Program {
     /// The source text.
     pub text: String,
-    /// The display name diagnostics show for it.
+    /// The name that diagnostics show for the program.
     pub name: String,
-    /// The parsed model (spans numbered from file 0).
+    /// The parsed program, whose spans are in file 0.
     pub model: nemo::model::Program,
-    /// The parse diagnostics, resolved against the text.
+    /// The diagnostics of parsing.
     pub diagnostics: Vec<Diagnostic>,
 }
 
 #[pymethods]
 impl Program {
-    /// Parses a program file, named after its path,
-    /// and reports what did not parse through `diagnostics` as [parse](Self::parse) does.
+    /// Parses a program file, named after its path, as `parse` does.
     ///
     /// Raises `OSError` if the file cannot be read.
     #[staticmethod]
@@ -38,10 +37,10 @@ impl Program {
         Ok(Self::parse(text, path))
     }
 
-    /// Parses program text.
+    /// Parses program text, which diagnostics refer to as `name`.
     ///
-    /// It never raises: `diagnostics` reports what did not parse, and `ok` is whether nothing
-    /// did.
+    /// It never raises: `diagnostics` lists what did not parse,
+    /// and `ok` says whether parsing found no errors.
     #[staticmethod]
     #[pyo3(signature = (text, name = "<program>"))]
     pub fn parse(text: String, name: &str) -> Self {
@@ -59,7 +58,7 @@ impl Program {
         }
     }
 
-    /// Returns the parse diagnostics (errors and warnings).
+    /// Returns the diagnostics of parsing, both errors and warnings.
     #[getter]
     fn diagnostics(&self) -> Vec<Diagnostic> {
         self.diagnostics.clone()
@@ -73,8 +72,10 @@ impl Program {
             .all(|diagnostic| diagnostic.severity != "error")
     }
 
-    /// Returns the predicates the program's atoms name, with their numbers of columns, sorted,
-    /// an inspection without loading anything.
+    /// Returns the predicates that the program's atoms name, each with its number of columns,
+    /// sorted.
+    ///
+    /// A predicate written with two numbers of columns is listed twice.
     #[getter]
     fn predicates(&self) -> Vec<(String, usize)> {
         self.model.predicates()
@@ -85,11 +86,13 @@ impl Program {
         self.model.statements.len()
     }
 
-    /// Returns the program in Nemo syntax (as parsed, not the original text).
+    /// Returns the program in Nemo syntax, printed from the parsed statements rather than
+    /// copied from the original text.
     fn __str__(&self) -> String {
         self.model.to_string()
     }
 
+    /// Returns the program as `Program("name", N statements)`.
     fn __repr__(&self) -> String {
         format!(
             "Program({:?}, {} statements)",

@@ -1,4 +1,4 @@
-//! The pipeline's reports: the warnings and non-fatal errors of a run,
+//! The pipeline's reports, which are warnings and non-fatal errors,
 //! and the labels added to diagnostics about statement versions.
 
 use nemo_physical::diagnostics::Diagnostic;
@@ -9,21 +9,20 @@ use crate::{
 };
 
 impl Pipeline {
-    /// Adds a report to the sink.
+    /// Adds a diagnostic to the reports.
     pub fn report(&mut self, diagnostic: Diagnostic) {
         self.reports.push(diagnostic);
     }
 
-    /// Drops the reports from index `from` on,
-    /// those of a loading call that was suspended for data from the network and discarded.
+    /// Drops the reports from index `from` on.
     pub(crate) fn withdraw_reports(&mut self, from: usize) {
         self.reports.truncate(from);
     }
 
-    /// Returns a diagnostic about a statement version labeled with the `@use` directives that
-    /// instantiated it, if a module instance holds it.
+    /// Returns a diagnostic about a statement version, labeled with the `@use` directives that
+    /// instantiated the statement if it belongs to a module instance.
     ///
-    /// The labels tell apart the same problem in two instances of a module.
+    /// The labels distinguish the same problem in two instances of a module.
     pub(crate) fn label_instances(
         &self,
         diagnostic: Diagnostic,
@@ -37,7 +36,7 @@ impl Pipeline {
     }
 
     /// Labels the reports from index `from` on with the `@use` directives that
-    /// instantiated a statement version, if a module instance holds it.
+    /// instantiated a statement version, if it belongs to a module instance.
     pub(crate) fn label_instances_in_reports(&mut self, from: usize, statement: StatementId) {
         let labels = self.instance_labels(statement);
         if labels.is_empty() {
@@ -50,10 +49,10 @@ impl Pipeline {
         }
     }
 
-    /// Maps the reports from index `from` on through `present`, dropping repeats.
+    /// Maps the reports from index `from` on through `present`, and drops repeats among them.
     ///
-    /// Several statements of the rewritten program can come from one statement
-    /// of the program as written, so a check over the statements can report
+    /// Several statements of the compiled program can come from one statement
+    /// of the written program, so a check over the statements can report
     /// one problem once per copy.
     pub(crate) fn present_reports(
         &mut self,
@@ -69,9 +68,9 @@ impl Pipeline {
         }
     }
 
-    /// Maps the reports from index `from` on through `present`, keeping repeats.
+    /// Maps the reports from index `from` on through `present`, and keeps repeats.
     ///
-    /// Reasoning can report the same problem once per round.
+    /// Reasoning can report the same problem more than once.
     pub(crate) fn map_reports(
         &mut self,
         from: usize,
@@ -82,8 +81,9 @@ impl Pipeline {
     }
 
     /// Returns the spans of the `@use` directives that instantiated a statement version,
-    /// outermost first, each with the label naming its instance,
-    /// or none for a statement of the main program.
+    /// outermost first, each with a label naming its instance.
+    ///
+    /// Returns no spans for a statement of the main program.
     fn instance_labels(&self, statement: StatementId) -> Vec<(Span, String)> {
         let Some(span) = self.source_span(statement) else {
             return Vec::new();
@@ -99,16 +99,17 @@ impl Pipeline {
             .collect()
     }
 
-    /// Returns the accumulated reports.
+    /// Returns the reports collected so far.
     pub fn reports(&self) -> &[Diagnostic] {
         &self.reports
     }
 
-    /// Adds labels to a diagnostic about a statement version
-    /// from the substitutions recorded on its provenance ancestry.
+    /// Adds labels to a diagnostic about a statement version,
+    /// from the substitutions recorded along its provenance.
     ///
     /// For every substituted occurrence that encloses one of the diagnostic's labels,
-    /// it adds a "defined here" label at the definition of the substituted value.
+    /// it adds a label at the definition of the substituted value,
+    /// which says that the variable is defined there.
     pub fn refine(&self, mut diagnostic: Diagnostic, statement: StatementId) -> Diagnostic {
         let labels: Vec<Span> = diagnostic.labels().iter().map(|label| label.span).collect();
 

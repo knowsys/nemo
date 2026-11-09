@@ -1,10 +1,11 @@
 //! The storage mechanisms behind the domain stores.
 //!
-//! Every store keeps its entries through the same few pieces:
-//! an append-only byte [arena](arena::Arena) with stable addresses,
-//! [record pools](RecordPool) that intern a fixed header beside variable bytes in it,
-//! [string pools](StringPool) and [pair pools](PairPool) built on those,
-//! and the [blob encoding](content) of structured values.
+//! The domain stores keep their entries with a few shared pieces:
+//! - an append-only byte [arena](arena::Arena), whose byte strings never move;
+//! - [record pools](RecordPool), which intern records of a fixed header and variable bytes,
+//!   and keep the bytes in an arena;
+//! - [string pools](StringPool) and [pair pools](PairPool), built on record pools;
+//! - the [blob encoding](content) of structured values.
 
 mod arena;
 pub(super) mod content;

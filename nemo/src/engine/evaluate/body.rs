@@ -1,12 +1,12 @@
 //! The body plan: a rule's positive body as a join,
-//! with its bindings, computed columns and filters above it and its negated atoms subtracted.
+//! with the rule's bindings, computed columns and filters above it,
+//! and its negated atoms subtracted.
 //!
-//! A body is built the same way wherever it is evaluated.
-//! A rule application, the proof search, the derivation query,
-//! and a fetch rule's binding rows each choose what every atom reads and the order in which the
-//! join binds the variables.
-//! The operators above the join and the subtraction of the negated atoms are built here for all
-//! of them.
+//! Wherever a body is evaluated, its plan is built here,
+//! so that it is evaluated the same way everywhere.
+//! Each evaluation chooses what every atom reads and the order in which the join binds the
+//! variables.
+//! This module builds the operators above the join and the subtraction of the negated atoms.
 
 use std::ops::Range;
 
@@ -22,7 +22,8 @@ use crate::engine::compile::compiled::{
     BodyAtom, CompiledRule, FilterOrigin, NegatedAtom, NegatedColumn, RuleFilter,
 };
 
-/// Returns the placeholder range of a load whose range a skeleton sets before every execution.
+/// Returns the placeholder range of a load whose range is set before every execution of its
+/// plan.
 pub(super) fn unpatched() -> Range<Revision> {
     Revision(0)..Revision(0)
 }
@@ -36,15 +37,17 @@ pub(crate) fn same_constant(value: DataValue) -> StackProgram {
     )
 }
 
-/// Filters a node by each condition in turn.
+/// Returns a node filtered by each of the given filters in turn.
 pub(crate) fn filtered(plan: &mut OperationPlan, node: NodeId, filters: Vec<FilterSpec>) -> NodeId {
     filters
         .into_iter()
         .fold(node, |node, filter| plan.filter(node, filter))
 }
 
-/// Returns the position of each of a rule's columns in a body result row:
-/// the variables at their positions in the rule's order, the computed columns after them.
+/// Returns the position of each of a rule's columns in a row of a body result.
+///
+/// The variables are at their positions in the rule's order,
+/// and the computed columns come after them.
 pub(crate) fn combined_positions(rule: &CompiledRule) -> Vec<usize> {
     let mut positions: Vec<usize> = (0..rule.variables + rule.computed.len()).collect();
     for (position, &variable) in rule.order.iter().enumerate() {
@@ -56,8 +59,8 @@ pub(crate) fn combined_positions(rule: &CompiledRule) -> Vec<usize> {
 /// A rule's columns as plan markers.
 ///
 /// The rule's columns are its variables, then its computed columns.
-/// Besides one marker per column, it holds the join order (the variables' markers in the rule's
-/// order) and the order of a body result (the join order, then the computed columns).
+/// Besides one marker per column, it stores the join order (the variables' markers in the
+/// rule's order) and the order of a body result (the join order, then the computed columns).
 #[derive(Debug)]
 pub(crate) struct BodySpace<'r> {
     /// The rule.
@@ -101,8 +104,9 @@ impl<'r> BodySpace<'r> {
     }
 
     /// Returns one join of the body:
-    /// the inputs joined in the given order, with the body's operators above it
-    /// (see [operators](Self::operators)).
+    /// the inputs joined in the given order, with the body's operators above it.
+    ///
+    /// `grounding` is as for [operators](Self::operators).
     pub(crate) fn join(
         &self,
         plan: &mut OperationPlan,
@@ -114,14 +118,16 @@ impl<'r> BodySpace<'r> {
         self.operators(plan, node, &order, grounding)
     }
 
-    /// Returns the body's operators above a node binding the given markers.
+    /// Returns the given node with the body's operators above it.
     ///
-    /// These are every binding, computed column and filter whose inputs the node binds,
-    /// and a filter per entry of `grounding` that keeps the rows whose column is that value.
-    /// Above a whole body, these are all of the rule's operators.
-    /// Above a single atom, these are the operators over that atom's columns.
-    /// A binding is the condition that its column is the term its expression computes,
-    /// which the plan can check by a lookup instead of enumerating the column.
+    /// `bound_markers` are the markers that the node binds.
+    /// The operators are every binding, computed column and filter whose columns are bound,
+    /// and one filter per entry of `grounding`, which keeps the rows whose column has that
+    /// value.
+    /// Above a whole body, these are all of the rule's operators,
+    /// and above a single atom, the operators over that atom's columns.
+    /// A binding is the condition that its column is the term that its expression computes.
+    /// The plan can check it by a lookup instead of enumerating the column.
     /// Filters come after the computed columns they may read.
     pub(crate) fn operators(
         &self,
@@ -179,12 +185,12 @@ impl<'r> BodySpace<'r> {
     /// Subtracts the rule's negated atoms from a body result,
     /// each matched on the columns it shares with the rule.
     ///
-    /// Guards, the negated atoms sharing no column with the rule,
-    /// are checked once when their stratum begins, not here.
+    /// Guards, which are the negated atoms that share no column with the rule,
+    /// are not subtracted here (see [guard_matches]).
     /// Without any other negated atom, the result is the input node itself.
     /// The negated atoms read the given range,
-    /// and their loads are returned with the node, for a caller that sets their ranges per
-    /// application.
+    /// and their loads are returned with the node, so that their ranges can be set before
+    /// each execution.
     pub(crate) fn subtract_negations(
         &self,
         plan: &mut OperationPlan,
@@ -204,6 +210,7 @@ impl<'r> BodySpace<'r> {
     ///
     /// Columns the atom shares with no other literal stay existentially quantified inside the
     /// negation.
+    /// The atom's load is added to `loads`.
     fn negated_node(
         &self,
         plan: &mut OperationPlan,
@@ -242,10 +249,11 @@ fn negated_filters(negated: &NegatedAtom, column_markers: &[Marker]) -> Vec<Filt
         .collect()
 }
 
-/// Returns whether the table of a guard atom holds a matching row.
+/// Returns whether the table of a guard atom has a matching row before `step`.
 ///
-/// A guard is a negated atom sharing no variable with its rule.
-/// It is checked once per stratum, since its predicate does not change within the stratum.
+/// A guard is a negated atom that shares no variable with its rule.
+/// Its predicate does not change within the rule's stratum,
+/// so one check per stratum suffices.
 pub(crate) fn guard_matches(
     negated: &NegatedAtom,
     step: u64,

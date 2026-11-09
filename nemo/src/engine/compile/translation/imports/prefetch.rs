@@ -1,9 +1,8 @@
 //! The remote resources of a translation's imports.
 //!
-//! A translation is [prepared](Translator::prepare) before anything reads,
-//! which lists the requests of the remote resources its imports need.
-//! The engine fetches them, or the load is suspended until they are passed in,
-//! and the translation [commits](Translator::commit) with the responses,
+//! [Preparing](Translator::prepare) a translation lists the requests for the remote resources
+//! that its imports need, before any import reads its data.
+//! The translation then [commits](Translator::commit) with the responses,
 //! each found by the position of its import's directive.
 
 use std::sync::Arc;
@@ -22,13 +21,13 @@ use crate::{
 };
 
 impl<'a> Translator<'a> {
-    /// Returns the requests of the remote resources the program's imports read,
+    /// Returns the requests for the remote resources that the program's imports read,
     /// in statement order, each tagged with the position of its directive.
     ///
     /// An import needs no request if its data is already stored,
     /// if its resource is registered through [add_resource](crate::engine::Engine::add_resource),
-    /// or if it fetches during reasoning (an import with a `where` clause).
-    /// A translation that reads no data needs none.
+    /// or if it fetches during reasoning, as an import with atoms in its `where` clause does.
+    /// A translation that reads no data needs no request.
     pub(in crate::engine::compile::translation) fn remote_requests(
         &mut self,
         statements: &[Statement],
@@ -42,7 +41,8 @@ impl<'a> Translator<'a> {
             let Statement::Directive(Directive::Import(directive)) = statement else {
                 continue;
             };
-            // What a failed fetch does is validated before anything is fetched.
+            // The `on_error` option, which says what a failed fetch does,
+            // is validated before anything is fetched.
             let request = self.pending_import(directive, index, 0).and_then(|import| {
                 if import.preloaded {
                     return Ok(None);
@@ -64,16 +64,17 @@ impl<'a> Translator<'a> {
     }
 
     /// Returns the bytes of the remote resources of this translation's imports,
-    /// from what was fetched for them, by the position of their directives.
+    /// taken from what was fetched for them by the position of their directives.
     ///
-    /// The result has one entry per import,
-    /// `None` if nothing was (or needed to be) fetched.
+    /// The result has one entry per import, which is `None` if nothing was fetched for it.
     /// Standard input is read here too, once.
+    /// A failed fetch fails its import,
+    /// or, with `on_error = warn`, leaves the import reading nothing, with a warning.
+    /// A translation that reads no data reads nothing.
     ///
-    /// - A failed fetch fails its import,
-    ///   or, under `on_error = warn`, leaves the import reading nothing, with a warning.
-    /// - A remote resource the translation was not prepared with is a bug, and panics.
-    /// - A check reads nothing.
+    /// # Panics
+    ///
+    /// Panics for a remote resource that the translation was not prepared with.
     pub(super) fn prefetch(
         &mut self,
         imports: &mut [PendingImport],
@@ -126,9 +127,10 @@ impl<'a> Translator<'a> {
         Ok(fetched)
     }
 
-    /// Handles the failed fetch of an import's remote resource:
-    /// it fails the import, or, under `on_error = warn`, leaves the import reading nothing,
-    /// with a warning, returning the empty bytes it then reads.
+    /// Handles the failed fetch of an import's remote resource.
+    ///
+    /// It fails the import, or, with `on_error = warn`, reports a warning and returns empty
+    /// bytes, so that the import reads nothing.
     fn failed_fetch(
         &mut self,
         import: &mut PendingImport,
@@ -150,21 +152,21 @@ impl<'a> Translator<'a> {
             .at(import.span)
             .with_resource(request.resource.clone()),
         );
-        // Marked preloaded: it registers its table and reads nothing.
+        // Marked as preloaded, the import registers its table and reads nothing.
         import.preloaded = true;
         Ok(Some(Arc::from([])))
     }
 
-    /// Returns the request one import needs, or `None` for a local (or registered) source.
+    /// Returns the request that one import needs, or `None` for a local or registered source.
     ///
-    /// Only the options the request needs are evaluated here.
-    /// The import's own option parsing validates the rest.
+    /// Only the options that the request needs are evaluated here,
+    /// and the import's own option parsing validates the rest.
     fn import_request(
         &self,
         import: &PendingImport,
     ) -> Result<Option<ResourceRequest>, Diagnostic> {
         if import.format == FileFormat::Sparql {
-            // An import with a `where` clause sends its requests during
+            // An import with atoms in its `where` clause sends its requests during
             // reasoning, never at load.
             if !import.bindings.is_empty() {
                 return Ok(None);
@@ -221,8 +223,8 @@ impl<'a> Translator<'a> {
         }))
     }
 
-    /// Returns the resource an import names, evaluated,
-    /// or `None` if it names none, or names it by something other than a string or IRI.
+    /// Returns the evaluated resource that an import names,
+    /// or `None` if it names none, or names it by a value that is neither a string nor an IRI.
     fn resource_name(&self, import: &PendingImport) -> Result<Option<String>, Diagnostic> {
         let bindings = self.guard_bindings(&import.guards)?;
         for (key, value) in &import.options {
@@ -241,7 +243,8 @@ impl<'a> Translator<'a> {
     }
 }
 
-/// Returns what an import's failed fetch does, as its `on_error` option sets it.
+/// Returns what a failed fetch of an import does, as its `on_error` option sets it,
+/// which is [OnError::Fail] by default.
 fn import_on_error(import: &PendingImport) -> Result<OnError, Diagnostic> {
     import
         .options

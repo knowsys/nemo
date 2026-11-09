@@ -1,4 +1,4 @@
-//! Literal terms: numbers, strings, and format strings.
+//! Parsing literal terms: numbers, strings and format strings.
 
 use nemo_physical::{diagnostics::Diagnostic, value::Number};
 
@@ -12,8 +12,11 @@ use crate::{
 };
 
 impl Parser<'_> {
-    /// Builds the term of a format string: a concatenation whose text
-    /// pieces are strings and whose embedded expressions wrap in STR.
+    /// Returns the term of a format string with the given parts, which starts at `start`.
+    ///
+    /// The term is a [Concat](Operator::Concat) of the parts.
+    /// In it, a text part is a string,
+    /// and an embedded expression is converted to a string with [Str](Operator::Str).
     pub(super) fn format_string_term(
         &self,
         parts: Vec<FStringPart>,
@@ -40,7 +43,8 @@ impl Parser<'_> {
         }))
     }
 
-    /// Returns the term of a number literal token, read with [Number::from_term_syntax].
+    /// Returns the term of a number literal token, which [Number::from_term_syntax] parses,
+    /// or an error if the literal is malformed.
     pub(super) fn number(&self, token: &Token) -> Result<Term, Diagnostic> {
         let number = Number::from_term_syntax(self.text(token))
             .ok_or_else(|| ParseError::MalformedNumber.at(Some(token.span)))?;
@@ -50,11 +54,12 @@ impl Parser<'_> {
         })
     }
 
-    /// Folds a prefix minus: numeric literals negate in place, anything
-    /// else becomes a negation operation.
+    /// Returns the negation of `operand`, whose prefix minus is at `start`.
+    ///
+    /// The negation of a number is the negated number,
+    /// and the negation of any other term is a [Negate](Operator::Negate) operation.
     pub(super) fn negated(&self, operand: Term, start: Span) -> Term {
         match operand.kind {
-            // The negation of a number is a number.
             TermKind::Number(value) => self.spanned(
                 start,
                 Term::value(&-value).expect("a number has a term").kind,
@@ -70,8 +75,11 @@ impl Parser<'_> {
         }
     }
 
-    /// Finishes a string literal: plain, language-tagged, or with an
-    /// explicit datatype.
+    /// Parses the rest of a string literal with the given value, which starts at `start`.
+    ///
+    /// The literal is a plain string, a language string such as `"chat"@fr`,
+    /// or a literal with a datatype, such as `"5"^^xsd:integer`.
+    /// The language tag is converted to lowercase.
     pub(super) fn string_term(&mut self, value: String, start: Span) -> Result<Term, Diagnostic> {
         if self.at(&TokenKind::LanguageTag) {
             let token = self.advance();

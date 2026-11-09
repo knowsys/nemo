@@ -29,9 +29,9 @@ const _: () = {
 struct LayerClip {
     /// The layer.
     layer: usize,
-    /// The lowest value of the range; `None` leaves it open below.
+    /// The lower bound, included, or `None` for no lower bound.
     low: Option<StorageValue>,
-    /// The value the range ends before; `None` leaves it open above.
+    /// The upper bound, excluded, or `None` for no upper bound.
     high: Option<StorageValue>,
 }
 
@@ -43,37 +43,41 @@ type Cell = Vec<LayerClip>;
 pub(crate) struct Cells {
     /// The cells, in the lexicographic order of their ranges.
     ///
-    /// If only the first layer is partitioned, their rows chain into one sorted sequence.
-    /// A partitioned deeper layer splits the rows of a first layer value across cells,
-    /// whose rows then overlap.
+    /// If only the first layer is partitioned, the rows of the cells follow each other
+    /// in storage order.
+    /// A partitioned deeper layer splits the rows of one first-layer value across cells,
+    /// so the rows of the cells then interleave.
     cells: Vec<Cell>,
-    /// The cut that produced the cells, one task per cell.
+    /// One task per cell, with the decision whether the tasks run on the pool.
     tasks: Tasks,
 }
 
-/// What one cell delivers: what its run returned and the evaluation errors its join counted.
+/// What one cell delivers: the result of `run` on its join,
+/// and the evaluation errors the join counted.
 #[derive(Debug)]
 struct CellOutcome<T> {
-    /// What the run of the cell's join returned.
+    /// The result of `run` on the cell's join.
     rows: T,
     /// The evaluation errors the cell's join counted, by kind.
     errors: ErrorCounts,
 }
 
 impl Cells {
-    /// Splits the join of a shape over the blocks of the given inputs into cells,
-    /// or returns `None` if it is too little work for the pool or has no layer to split.
+    /// Splits the join of a shape over the blocks of the given inputs into cells.
     ///
-    /// The number of cells follows the [work estimate](estimated_work).
-    /// The first layer takes the shares first, and deeper layers take only what it cannot fill.
-    /// Every share of a deeper layer runs the intersections above it once more,
-    /// so a deeper split pays only if a leading layer has few values above large subtrees.
-    /// Only the emitted layers split, so that the cells produce disjoint rows, each once,
-    /// and none bound to a constant.
+    /// Returns `None` if the join is too little work for the pool, or has no layer to split.
+    /// The [work estimate](estimated_work) decides how many cells the split aims at.
+    /// Layers are split in order, each into as many parts as its values allow,
+    /// until the parts multiply to about that number.
+    /// Each part of a deeper layer repeats the intersections above it,
+    /// so splitting a deeper layer pays off only if a leading layer has few values
+    /// above large subtrees.
+    /// Only emitted layers are split, so that the cells produce disjoint rows, each once.
+    /// A layer bound to a constant is not split.
     ///
-    /// The boundary values come from splitting the longest block column intersected at a layer
-    /// at equal positions.
-    /// Each cell's join clips its cursors to its ranges,
+    /// The boundary values of a layer split the longest block column intersected there
+    /// into parts of equal length.
+    /// Each cell's join clips its cursors to the cell's ranges,
     /// so the cells partition every cursor without copying.
     pub(crate) fn partition(shape: &JoinShape, inputs: &[&[&Trie]]) -> Option<Self> {
         let tasks = Tasks::cut(estimated_work(shape, inputs), usize::MAX);
@@ -109,9 +113,11 @@ impl Cells {
         Some(Self { cells, tasks })
     }
 
-    /// Runs the cells on the worker pool, each through `run` on its join,
-    /// and returns what each cell delivered, in cell order,
-    /// with the evaluation errors their joins counted.
+    /// Runs the cells on the worker pool, applying `run` to each cell's join.
+    ///
+    /// `template` builds the joins over the blocks `inputs`.
+    /// Returns the results of `run`, in cell order,
+    /// and the evaluation errors the joins counted.
     pub(crate) fn run<T: Send>(
         &self,
         template: JoinTemplate<'_>,
@@ -138,12 +144,14 @@ impl Cells {
 thread_local! {
     /// The join arena of one worker, kept across the cells it runs.
     ///
-    /// A cell never enters the pool itself, so the borrow never nests.
+    /// A cell never runs tasks on the pool itself,
+    /// so a worker never starts another cell while one borrows the arena.
     static CELL_ARENA: RefCell<JoinArena> = RefCell::new(JoinArena::new());
 }
 
-/// Builds the join of a cell in the worker's arena, clips it to the cell,
-/// and returns the outcome of running it through `run`.
+/// Builds the join of a cell in the worker's arena, and clips it to the cell.
+///
+/// Returns the result of `run` on the join, and the join's evaluation errors.
 fn with_cell_join<T>(
     template: JoinTemplate<'_>,
     inputs: &[&[&Trie]],
@@ -170,28 +178,30 @@ fn with_cell_join<T>(
 /// Returns an estimate of a join's descent work, in cursor value visits,
 /// from the column lengths of its inputs' blocks alone.
 ///
+/// A *binding* of a layer is a combination of values at the shallower layers.
 /// Per emitted layer, the intersection of `s` cursors with average node sizes `N`
-/// costs about `s · min N · log2(1 + max N / min N)` per binding of the layers above,
-/// galloping the smaller cursor through the larger,
+/// costs about `s · min N · log2(1 + max N / min N)` per binding,
+/// since the smaller cursor gallops through the larger,
 /// and yields about `min N` bindings for the layer below.
 /// An input stored in several blocks counts one cursor per nonempty block,
 /// since its union moves each of them and the join drops the empty ones.
-/// Its column counts with the values of every block.
-/// An existence layer beyond the emitted ones stops at its first match,
-/// and a bound layer looks up its one value:
-/// one gallop per cursor either way, and no multiplication of bindings.
+/// The length of its column is summed over its blocks.
+/// A layer below the emitted ones stops at its first match,
+/// and a bound layer looks up its one value.
+/// Either costs one gallop per cursor, and does not multiply the bindings.
 ///
-/// The length of an input's column caps the bindings at the layer it carries.
+/// The length of an input's column caps the bindings at the layer the column is mapped to.
 /// That bounds only the input's own prefixes,
-/// not bindings multiplying through markers the input lacks,
-/// but it keeps a join of a small block against large tables,
-/// done in microseconds, from ever looking like large work.
+/// not bindings that multiply through layers the input does not map.
+/// But it keeps a join of a small block with large tables, which is quick,
+/// from looking like large work.
 fn estimated_work(shape: &JoinShape, inputs: &[&[&Trie]]) -> usize {
-    /// Returns the bits of a value, at least one: the integer stand-in for the logarithm.
+    /// Returns the number of bits of a value, at least one,
+    /// as an integer stand-in for its logarithm.
     ///
-    /// The estimate runs once per join that might split,
-    /// which can be millions of times over many small executions,
-    /// so it stays integral.
+    /// The estimate runs for every join that might be split,
+    /// which over many small executions is very often,
+    /// so it avoids floating point.
     fn bits(value: usize) -> usize {
         usize::try_from(value.max(1).ilog2()).expect("bit counts are small") + 1
     }
@@ -214,7 +224,7 @@ fn estimated_work(shape: &JoinShape, inputs: &[&[&Trie]]) -> usize {
             if length == 0 {
                 return 0;
             }
-            // The nodes the column hangs below: the values of the column before it.
+            // The parent nodes of the column's values are the values of the previous column.
             let parents = match position.column {
                 0 => 1,
                 column => column_length(blocks, column - 1).max(1),
@@ -242,11 +252,12 @@ fn estimated_work(shape: &JoinShape, inputs: &[&[&Trie]]) -> usize {
     work
 }
 
-/// Returns the largest share, at most `cap`, a layer of the given number of values splits into
-/// with balanced buckets.
+/// Returns the largest number of parts, at most `cap`,
+/// into which a layer of `domain` values can be split with balanced parts.
 ///
-/// `p` shares need at least `3 · p · log2 p` values,
-/// the balls-into-bins bound that keeps the largest bucket within a constant of the average.
+/// `p` parts need at least `3 · p · log2 p` values.
+/// This is the balls-into-bins bound that keeps the largest part
+/// within a constant factor of the average.
 fn largest_share(domain: usize, cap: usize) -> usize {
     (2..=cap)
         .rev()
@@ -256,8 +267,10 @@ fn largest_share(domain: usize, cap: usize) -> usize {
         .unwrap_or(1)
 }
 
-/// Returns the layers a join splits to reach about `target` cells,
-/// each with its strictly increasing boundary values; see [Cells::partition] for the policy.
+/// Returns the layers to split to reach about `target` cells,
+/// each with its strictly increasing boundary values.
+///
+/// [Cells::partition] describes the policy.
 fn split_layers(
     shape: &JoinShape,
     inputs: &[&[&Trie]],
@@ -358,6 +371,7 @@ mod tests {
         }
     }
 
+    /// A layer is split into `p` parts only if it has at least `3 · p · log2 p` values.
     #[test]
     fn shares_need_balanced_buckets() {
         assert_eq!(largest_share(0, 64), 1);
@@ -365,14 +379,16 @@ mod tests {
         assert_eq!(largest_share(6, 64), 2);
         assert_eq!(largest_share(1_000_000, 64), 64);
         assert_eq!(largest_share(1_000_000, 1), 1);
-        // 3 · 11 · 3 = 99 fits 100; 3 · 12 · 3 = 108 does not.
+        // 3 · 11 · 3 = 99 is at most 100, and 3 · 12 · 3 = 108 is not.
         assert_eq!(largest_share(100, 64), 11);
     }
 
+    /// A first layer with too few values leaves the split to the second layer,
+    /// whose boundaries strictly increase.
     #[test]
     fn few_outer_values_split_the_next_layer() {
-        // Three first-layer values above 3000 rows each:
-        // the first layer cannot fill the budget, so the second takes the shares.
+        // Three first-layer values with 3000 rows each.
+        // The first layer cannot be split into enough parts, so the second layer is split.
         let mut rows = Vec::new();
         for a in 0..3 {
             for b in 0..3000 {
@@ -389,21 +405,21 @@ mod tests {
         assert_eq!(splits.len(), 1, "three values cannot be split");
         assert_eq!(splits[0].0, 1);
         assert_eq!(splits[0].1.len(), 15);
-        // The second column restarts under every first-layer value;
-        // boundaries out of order would make cells overlap.
+        // The second column restarts under every first-layer value,
+        // and boundaries out of order would make cells overlap.
         assert!(
             splits[0].1.is_sorted_by(|low, high| low < high),
             "the boundaries strictly increase"
         );
 
-        // A first layer of many values takes every share itself.
+        // A first layer of many values is split into all the parts itself.
         let long = int_trie(2, &(0..10_000).map(|a| [a, a]).collect::<Vec<_>>());
         let splits = split_layers(&shape, &[&[&long], &[&right]], 16);
         assert_eq!(splits.len(), 1);
         assert_eq!(splits[0].0, 0);
         assert_eq!(splits[0].1.len(), 15);
 
-        // Only the emitted layers split.
+        // Only emitted layers are split.
         let first_only = JoinShape {
             emitted: 1,
             ..shape
@@ -412,10 +428,11 @@ mod tests {
         assert!(estimated_work(&shape, &[&[&long], &[&right]]) > 0);
     }
 
+    /// A layer bound to a constant is not split, and the next layer is split instead.
     #[test]
     fn layers_bound_to_constants_do_not_split() {
         // The first layer has many values but is bound to one of them,
-        // so the second layer takes the shares.
+        // so the second layer is split.
         let left = int_trie(2, &(0..10_000).map(|a| [a, a]).collect::<Vec<_>>());
         let right = int_trie(2, &(0..10_000).map(|b| [b, b + 1]).collect::<Vec<_>>());
         let layers = chain();
@@ -430,6 +447,9 @@ mod tests {
         assert_eq!(splits[0].0, 1);
     }
 
+    /// A join of a small input with a large one is estimated as less work than a join
+    /// of two large ones, and as too little work for the pool.
+    /// A join with an empty input is estimated as no work.
     #[test]
     fn work_estimates_follow_the_data() {
         let layers = chain();

@@ -1,11 +1,12 @@
-//! The kinds of problems the type analysis reports.
+//! The kinds of problems that the type analysis reports.
 
 use nemo_physical::{diagnostic_kinds, diagnostics::Count};
 
 diagnostic_kinds! {
-    /// A problem the type analysis found: a rule that cannot fire,
-    /// a value outside its declared type (by `@declare`, `@parameter`, or `@type`),
-    /// or a value not shown to fit it.
+    /// A problem that the type analysis found.
+    ///
+    /// It is a rule that can never fire, a value outside the type that `@declare`,
+    /// `@parameter` or `@type` declares for it, or a value that cannot be shown to fit that type.
     pub enum TypeError {
         NeverFires
             => NEVER_FIRES = 205, warning, "this rule can never fire",

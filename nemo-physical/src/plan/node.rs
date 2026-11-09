@@ -29,16 +29,20 @@ impl NodeId {
 /// One operation of a plan, producing a relation whose columns are named by markers.
 #[derive(Debug)]
 pub(crate) enum Node {
-    /// A range of revisions of a stored table; marker `i` names the table's column `i`.
+    /// A range of revisions of a stored table.
+    ///
+    /// Marker `i` names the table's column `i`.
     Load {
         /// The table.
         table: TableId,
         /// The revisions read.
         range: Range<Revision>,
-        /// The column markers.
+        /// The markers of the table's columns.
         markers: MarkerOrder,
     },
-    /// The input's rows under new markers: marker `i` renames the input's column `i`.
+    /// The input's rows under new markers.
+    ///
+    /// Marker `i` renames the input's column `i`.
     Alias {
         /// The renamed relation.
         input: NodeId,
@@ -81,7 +85,7 @@ pub(crate) enum Node {
     Subtract {
         /// The relation rows are dropped from.
         input: NodeId,
-        /// The relation whose matches are dropped.
+        /// The subtracted relation.
         relation: NodeId,
         /// The node's markers, which are the input's.
         markers: MarkerOrder,

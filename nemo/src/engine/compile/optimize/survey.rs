@@ -1,5 +1,5 @@
-//! What the import passes read of a program: its rules in positional
-//! form, and which predicates must be stored whole.
+//! The survey of a program for the import passes:
+//! its rules with positional arguments, and the predicates that must be stored whole.
 
 use std::collections::{HashMap, HashSet};
 
@@ -13,27 +13,35 @@ use crate::{
     },
 };
 
-/// A program as the import passes see it.
+/// What the import passes need to know about the statements of one translation.
 pub(crate) struct ImportSurvey {
-    /// The rules, named arguments resolved to declared positions.
+    /// The rules, with named arguments replaced by positional ones.
+    ///
+    /// An import whose `where` clause has atoms adds a rule
+    /// whose head is the imported predicate and whose body is these atoms.
     pub(crate) rules: Vec<Rule>,
-    /// The predicates an import feeds.
+    /// The imported predicates.
     pub(crate) imported: HashSet<String>,
     /// The predicates that must be stored whole,
-    /// since something other than a rule can read them:
-    /// those written by facts, rule heads, or `@input`, the outputs,
-    /// and those derived in the written program by rules a pipeline stage replaced.
+    /// since something other than a rule body can read them.
+    ///
+    /// These are the predicates of facts, rule heads, exports, `@output` and `@input`,
+    /// and every predicate that the written program derives,
+    /// even if a pipeline stage replaced its rules with an import.
     pub(crate) sealed: HashSet<String>,
-    /// The predicates some rule negates.
+    /// The predicates that some rule negates.
     pub(crate) negated: HashSet<String>,
-    /// Per predicate of an import with a `where` clause,
-    /// which of its kept columns the clause reads, whatever the rules read:
-    /// the columns its atoms bind, the keys its fetch sends,
-    /// and the columns its conditions test.
+    /// Per predicate of an import with a `where` clause, whether the clause reads each kept
+    /// column.
+    ///
+    /// These columns are read whatever the rules read:
+    /// the clause's atoms bind them, and its conditions test them.
     pub(crate) bound: HashMap<String, Vec<bool>>,
-    /// The predicates of an import with conditions on columns the survey cannot place
-    /// among the kept ones, since its `format` option is no list of names:
-    /// they are stored whole.
+    /// The predicates of imports whose `where` clauses the survey cannot place among the kept
+    /// columns, which are stored whole.
+    ///
+    /// This happens if an import's `format` option is not a list of format names,
+    /// or if two imports of a predicate disagree on its arity.
     pub(crate) conditioned: HashSet<String>,
 }
 
@@ -90,8 +98,10 @@ impl ImportSurvey {
         Ok(survey)
     }
 
-    /// Adds a rule: its head predicates are sealed, its negated predicates recorded,
-    /// and the rule, with named arguments made positional, joins the surveyed rules.
+    /// Adds a rule, with named arguments made positional.
+    ///
+    /// Its head predicates are added to [sealed](Self::sealed),
+    /// and its negated predicates to [negated](Self::negated).
     fn take_rule(&mut self, translator: &Translator<'_>, rule: &Rule) -> Result<(), Diagnostic> {
         let rule = translator
             .positional_rule(rule)?
@@ -110,11 +120,11 @@ impl ImportSurvey {
         Ok(())
     }
 
-    /// Adds an import.
+    /// Adds an import directive.
     ///
-    /// An import with a `where` clause reads the clause's predicates like a rule
-    /// whose head is the import.
-    /// Every named column is read there, so the passes keep what the fetch needs.
+    /// The columns that its `where` clause reads are recorded in [bound](Self::bound).
+    /// The clause's atoms read their own predicates like the body of a rule,
+    /// so they are also added as a rule whose head is the imported predicate.
     fn take_import(
         &mut self,
         translator: &Translator<'_>,
@@ -170,8 +180,8 @@ impl ImportSurvey {
         Ok(())
     }
 
-    /// Returns whether a predicate is a candidate: import-fed, and read by
-    /// rules only.
+    /// Returns whether the import passes may leave out parts of a predicate's load,
+    /// which is the case if it is imported and only rule bodies read it.
     pub(crate) fn optimizable(&self, name: &str) -> bool {
         self.imported.contains(name) && !self.sealed.contains(name)
     }
@@ -179,9 +189,10 @@ impl ImportSurvey {
 
 /// Returns how often each universal variable occurs in a rule.
 ///
-/// Every position counts: head and body, atoms and conditions, nested terms included.
+/// Every occurrence counts, in the head and the body, in atoms and conditions,
+/// and inside other terms.
 /// A variable inside an aggregate counts twice,
-/// since an aggregate reads it in ways a single occurrence does not capture.
+/// so that the aggregate alone makes the variable read.
 pub(crate) fn occurrences(rule: &Rule) -> HashMap<String, usize> {
     let mut counts = HashMap::new();
     for atom in &rule.head {
@@ -206,8 +217,8 @@ pub(crate) fn occurrences(rule: &Rule) -> HashMap<String, usize> {
     counts
 }
 
-/// Adds `weight` to every universal variable a term mentions, and two
-/// to every one inside an aggregate.
+/// Adds `weight` to the count of every universal variable that a term mentions,
+/// and two for every one inside an aggregate.
 fn count(term: &Term, weight: usize, counts: &mut HashMap<String, usize>) {
     match &term.kind {
         TermKind::Variable(variable) if variable.kind == VariableKind::Universal => {
@@ -230,8 +241,8 @@ fn count(term: &Term, weight: usize, counts: &mut HashMap<String, usize>) {
 
 /// Returns whether a rule counts its body matches with `#count()`.
 ///
-/// Every body position then shapes the count,
-/// even an anonymous one, or one whose variable is mentioned nowhere else.
+/// Every body position then affects the count,
+/// even an anonymous one or one whose variable occurs nowhere else.
 pub(crate) fn counts_matches(rule: &Rule) -> bool {
     rule.head.iter().any(|atom| {
         atom.any_term(|term| {
@@ -241,11 +252,11 @@ pub(crate) fn counts_matches(rule: &Rule) -> bool {
 }
 
 impl ImportSurvey {
-    /// Records columns of a predicate that an import's `where` clause reads,
-    /// by their positions among the kept columns.
+    /// Records which columns of a predicate an import's `where` clause reads,
+    /// as one flag per kept column.
     ///
-    /// Flags of another width than earlier ones belong to an import of another arity,
-    /// which is reported elsewhere, and keep the predicate whole.
+    /// Flags of another length than earlier ones belong to an import of another arity,
+    /// which is an error of its own, and the predicate is then stored whole.
     fn read_by_import(&mut self, name: &str, read: Vec<bool>) {
         match self.bound.get_mut(name) {
             Some(flags) if flags.len() == read.len() => {
@@ -263,11 +274,12 @@ impl ImportSurvey {
     }
 }
 
-/// Returns which kept columns the conditions of an import's `where` clause read,
-/// or `None` if the import's `format` option is no list of format names,
-/// which leaves unknown which source columns are kept.
+/// Returns, per kept column, whether the conditions of an import's `where` clause read it.
 ///
-/// The column variables name the source columns, and a `skip` format drops a source column.
+/// The import's variables name its source columns,
+/// and a source column with the `skip` format is not kept.
+/// The function returns `None` if the `format` option is not a list of format names,
+/// since the kept columns are then unknown.
 fn tested_columns(import: &ImportDirective) -> Option<Vec<bool>> {
     let mut kept = vec![true; import.variables.len()];
     for (key, value) in &import.options {

@@ -1,14 +1,16 @@
-//! Codes identifying the kinds of problem a diagnostic reports.
+//! Codes that identify the kinds of problem that diagnostics report.
 
 use std::fmt;
 
-/// A code identifying one kind of problem.
+/// A code that identifies one kind of problem.
+///
+/// It is written as `N` followed by four digits, such as `N0042`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Code(u16);
 
 impl Code {
     /// The code of an [internal error](crate::diagnostics::Diagnostic::internal),
-    /// which hosts report caught panics as.
+    /// a bug in Nemo itself.
     pub const INTERNAL: Self = Self(1);
 
     /// Creates the code with the given number.

@@ -1,4 +1,7 @@
-//! Delimiter-separated values, the tabular formats.
+//! Delimiter-separated values (DSV), the tabular formats such as CSV and TSV.
+//!
+//! The *width* of a resource is its number of written columns,
+//! and the *arity* is the number of columns that a reader delivers.
 
 mod parsed;
 mod run_pool;
@@ -25,44 +28,46 @@ use crate::{
     written::{Writer, Written},
 };
 
-/// The shape of a delimiter-separated resource: its delimiter and one [ValueFormat] per column.
+/// The options of a delimiter-separated resource, such as its delimiter and one [ValueFormat]
+/// per column.
 ///
-/// A [Skip](ValueFormat::Skip) column counts toward the file's width but not the delivered arity.
+/// A [Skip](ValueFormat::Skip) column counts toward the width but not toward the arity.
 #[derive(Debug, Clone)]
 pub struct DsvOptions {
-    /// The field delimiter.
+    /// The delimiter between the cells of a record.
     pub delimiter: u8,
-    /// The cell format per column of the file.
+    /// The format of each written column.
     pub formats: Vec<ValueFormat>,
-    /// Per column, whether its cells are only checked:
-    /// a cell the column's format rejects still makes the row malformed,
-    /// but the column is not delivered.
-    /// The columns a load leaves out are read so,
-    /// which keeps which rows are well-formed independent of what is delivered.
-    /// Empty if no column is.
+    /// For each written column, whether its cells are only checked.
+    ///
+    /// A column that is only checked is not delivered,
+    /// but a cell that its format rejects still makes the row malformed.
+    /// Checking a column rather than skipping it keeps the set of well-formed rows the same,
+    /// whichever columns are delivered.
+    /// A column past the end of the list is not only checked, so the list may be empty.
     pub checked_only: Vec<bool>,
-    /// Whether `"` quotes fields, or is an ordinary character.
+    /// Whether `"` quotes cells, rather than being an ordinary character.
     pub quoting: bool,
-    /// Whether the first record is skipped, whatever it holds.
+    /// Whether the first record is skipped, whatever it contains.
     pub ignore_headers: bool,
     /// The stream compression.
     pub compression: Compression,
-    /// A condition over the delivered (non-skipped) columns.
+    /// The condition over the delivered columns, or `None` to admit all rows.
     ///
-    /// Rows failing it are excluded, counted, and never interned.
+    /// A row that fails it is excluded and never interned.
     pub filter: Option<RowFilter>,
-    /// The number of well-formed rows matching the declared types the reader takes before it
-    /// stops.
+    /// The largest number of well-formed rows to read, or `None` for no limit.
     ///
-    /// The rows are counted before the condition,
-    /// so a condition never changes which rows a limited resource yields.
+    /// The rows are counted before the condition is evaluated,
+    /// so the condition never makes a read go further into the resource.
     pub limit: Option<u64>,
 }
 
 impl DsvOptions {
-    /// Options for a delimiter and column formats, with quoting on, no
-    /// header skipping, auto-detected compression, and every row
-    /// delivered.
+    /// Creates options for a delimiter and column formats.
+    ///
+    /// The options have quoting on, no header, detected compression, no column that is only
+    /// checked, no condition and no limit.
     pub fn new(delimiter: u8, formats: Vec<ValueFormat>) -> Self {
         Self {
             delimiter,
@@ -86,14 +91,14 @@ impl DsvOptions {
         Self::new(b'\t', formats)
     }
 
-    /// Creates options for comma-separated columns,
-    /// all interpreted as [Term](ValueFormat::Term), as the tests use them.
+    /// Creates options for `arity` comma-separated columns in the [Term](ValueFormat::Term)
+    /// format, for tests.
     #[cfg(test)]
     pub(crate) fn csv_terms(arity: usize) -> Self {
         Self::csv(vec![ValueFormat::Term; arity])
     }
 
-    /// Returns the delivered arity: the number of columns neither skipped nor only checked.
+    /// Returns the arity: the number of columns that are neither skipped nor only checked.
     pub fn arity(&self) -> usize {
         (0..self.formats.len())
             .filter(|&column| self.delivers(column))
@@ -105,19 +110,19 @@ impl DsvOptions {
         !matches!(self.formats[column], ValueFormat::Skip) && !self.checks_only(column)
     }
 
-    /// Returns whether a column's cells are only checked, not delivered;
-    /// never for a skipped column, whose cells are not read.
+    /// Returns whether a column's cells are only checked, not delivered.
+    ///
+    /// A skipped column's cells are not read, so they are never only checked.
     pub(crate) fn checks_only(&self, column: usize) -> bool {
         !matches!(self.formats[column], ValueFormat::Skip)
             && self.checked_only.get(column).copied().unwrap_or(false)
     }
 
-    /// Returns the selection the options state: the declared types and the condition over the
-    /// delivered columns.
+    /// Returns the selection of the options: every column, and the condition over the delivered
+    /// columns.
     ///
-    /// The [Skip](ValueFormat::Skip) formats and the [checked_only](Self::checked_only) columns
-    /// decide which columns are delivered as the cells parse,
-    /// so the selection keeps every column it sees.
+    /// The parse itself leaves out the [Skip](ValueFormat::Skip) columns and the
+    /// [checked_only](Self::checked_only) ones, so the selection keeps every column it sees.
     pub(crate) fn selection(&self) -> RowSelection {
         RowSelection {
             columns: None,
@@ -127,8 +132,8 @@ impl DsvOptions {
 
     /// Parses a record's cells by their formats, appending the delivered values to `values`.
     ///
-    /// Returns `false`, with `values` as it was, for a record of the wrong width
-    /// or with a cell its format rejects.
+    /// Returns `false`, and leaves `values` as it was, for a record of the wrong width
+    /// or with a cell that its format rejects.
     fn parse_row(&self, cells: &csv::StringRecord, values: &mut Vec<DataValue>) -> bool {
         let before = values.len();
         let complete = cells.len() == self.formats.len()
@@ -150,10 +155,11 @@ impl DsvOptions {
         complete
     }
 
-    /// Returns the number of columns of a file's first record, or `None` for an empty file,
-    /// read with the given quoting, and past a header if the first record is one.
+    /// Returns the number of cells in the first record of a file, or `None` for an empty file.
     ///
-    /// This is how an undeclared table is sized.
+    /// The file is read with the given delimiter, quoting and compression.
+    /// If `ignore_headers` is true, the first record is skipped and the next one is counted.
+    /// This gives the width of a resource whose column formats are not given.
     ///
     /// # Errors
     ///
@@ -170,7 +176,7 @@ impl DsvOptions {
             .map_err(|diagnostic| diagnostic.with_resource(path.display().to_string()))
     }
 
-    /// Returns the number of columns of the first record of an opened stream,
+    /// Returns the number of cells in the first record of a stream,
     /// as [sniff_arity](Self::sniff_arity) does for a file.
     ///
     /// # Errors
@@ -196,24 +202,22 @@ impl DsvOptions {
     }
 }
 
-/// A writer of delimiter-separated values, the inverse of [DsvReader] with its options.
+/// A writer of delimiter-separated values.
 ///
-/// Cells serialize by their column's format.
-/// By default that is the `term` column format:
-/// integers and IRIs bare, strings quoted, and everything else in canonical typed form.
-/// The CSV layer quotes a field only if it holds the delimiter, a quote, or a line break,
-/// and doubles the quotes inside.
+/// Each value is written as its column's format [writes](ValueFormat::write) it.
+/// The resulting cell is quoted only if it contains the delimiter, a quote or a line break,
+/// and the quotes inside it are doubled.
 /// No header row is written.
 /// A [Skip](ValueFormat::Skip) column is left out of every record,
-/// and a row with a cell that does not fit its column's format is dropped and counted.
+/// and a row with a value that does not fit its column's format is dropped and counted.
 #[derive(Debug, Clone)]
 pub struct DsvWriter {
-    /// The target shape.
+    /// The options of the written resources.
     options: DsvOptions,
 }
 
 impl DsvWriter {
-    /// Creates a writer for targets of the given shape.
+    /// Creates a writer with the given options.
     pub fn new(options: DsvOptions) -> Self {
         Self { options }
     }
@@ -269,14 +273,14 @@ impl Writer for DsvWriter {
     }
 }
 
-/// A reader of delimiter-separated values, decoding rows into the physical layer's row buffers.
+/// A reader of delimiter-separated values, which decodes rows into row buffers.
 ///
-/// Reading streams: records are parsed by their columns' formats into runs of bounded size,
-/// and each run is interned as it fills.
-/// A malformed row is counted and skipped, never silently dropped:
-/// a row of the wrong arity, with a cell its format rejects, or with a value the dictionary
-/// cannot hold.
-/// The delivered rows arrive in file order, unsorted, and storing them sorts them.
+/// The reader streams: it parses records by their columns' formats into runs of bounded size,
+/// and interns each run once it is full.
+/// A malformed row is counted and skipped.
+/// A row is malformed if it has the wrong width, if a cell's format rejects the cell,
+/// or if the dictionary cannot hold one of its values.
+/// The delivered rows are in the order of the file, unsorted.
 ///
 /// # Example
 ///
@@ -295,29 +299,29 @@ impl Writer for DsvWriter {
 ///     .read(text.as_bytes(), &mut dictionary, EvaluationContext::now())
 ///     .expect("the text reads");
 ///
-/// // The row whose second cell is not an integer is malformed: counted, not delivered.
+/// // The row whose second cell is not an integer is malformed, so it is counted, not delivered.
 /// assert_eq!(loaded.rows.len(), 2);
 /// assert_eq!((loaded.malformed, loaded.first_malformed), (1, Some(2)));
 /// ```
 #[derive(Debug, Clone)]
 pub struct DsvReader {
-    /// The resource shape.
+    /// The options of the read resources.
     options: DsvOptions,
 }
 
 impl DsvReader {
-    /// Creates a reader for resources of the given shape.
+    /// Creates a reader with the given options.
     pub fn new(options: DsvOptions) -> Self {
         Self { options }
     }
 
-    /// Parses all rows of a resource into [runs](Parsed) without touching a dictionary.
+    /// Parses all rows of a resource into [runs](Parsed) taken from `runs`,
+    /// without using a dictionary.
     ///
-    /// These are the runs [read](Self::read) and the windows of a
-    /// [ResourceBatch](crate::load::ResourceBatch) intern, taken from `runs`.
-    /// Each run goes to `emit` once it is full, and the last one when the resource ends,
-    /// with the lines the parse consumed.
-    /// An `emit` returning `false` ends the parse.
+    /// Each run is passed to `emit` once it is full.
+    /// The last run is passed when the resource ends or the [limit](DsvOptions::limit) is
+    /// reached, with the number of lines that the parse consumed.
+    /// If `emit` returns `false`, the parse ends.
     pub(crate) fn parse(
         &self,
         source: impl Read,
@@ -328,7 +332,7 @@ impl DsvReader {
         let limit = self.options.limit.unwrap_or(u64::MAX);
         let arity = self.options.arity();
         let mut run = runs.take(arity);
-        // Well-formed rows so far, across the runs: what the limit counts.
+        // The well-formed rows so far, across the runs, which the limit counts.
         let mut well_formed = 0;
         let mut wanted = true;
         let consumed = self.records(source, |record, line| {
@@ -350,11 +354,11 @@ impl DsvReader {
         Ok(())
     }
 
-    /// Feeds every record of a resource to the visitor, with its line number,
-    /// until the visitor returns `false`.
+    /// Passes every record of a resource to `visit`, with its line number,
+    /// until `visit` returns `false`.
     ///
     /// Returns the number of lines consumed.
-    /// A record-level error (broken quoting, invalid UTF-8) fails the read.
+    /// Fails for a record that cannot be read, such as one with broken quoting or invalid UTF-8.
     fn records(
         &self,
         source: impl Read,
@@ -367,7 +371,7 @@ impl DsvReader {
             .flexible(true)
             .from_reader(source);
 
-        // One record is reused, so a row costs no allocation.
+        // One record is reused, so that a row needs no allocation.
         let mut record = csv::StringRecord::new();
         while reader
             .read_record(&mut record)
@@ -379,8 +383,8 @@ impl DsvReader {
             }
         }
         // The position after the last record is the first unread line,
-        // so the consumed count is one less, the base a following
-        // window of the same file continues from.
+        // so one line fewer was consumed. A following window of the same
+        // file continues its line numbers from this count.
         Ok(reader.position().line().saturating_sub(1))
     }
 }
@@ -394,8 +398,8 @@ impl Reader for DsvReader {
     ///
     /// # Errors
     ///
-    /// Returns an error if the stream fails or a record cannot be read:
-    /// broken quoting, or text that is not valid UTF-8.
+    /// Returns an error if the stream fails, or if a record cannot be read,
+    /// such as for broken quoting or text that is not valid UTF-8.
     fn read(
         &self,
         source: impl Read,
@@ -428,6 +432,7 @@ mod tests {
 
     use crate::format::ValueFormat;
 
+    /// CSV rows in term syntax are read as their values.
     #[test]
     fn csv_rows_intern_and_round_trip() {
         let mut dictionary = Dictionary::new();
@@ -459,6 +464,7 @@ mod tests {
         );
     }
 
+    /// A row with a cell that its format rejects, or of the wrong width, is counted as malformed.
     #[test]
     fn malformed_rows_are_counted_never_silent() {
         let mut dictionary = Dictionary::new();
@@ -466,7 +472,7 @@ mod tests {
             ValueFormat::String,
             ValueFormat::Integer,
         ]));
-        // Line 2 has a bad integer, line 3 the wrong arity.
+        // Line 2 has a bad integer, and line 3 has the wrong width.
         let input = "a,1\nb,oops\nc\nd,4\n";
         let loaded = reader
             .read(
@@ -481,6 +487,7 @@ mod tests {
         assert_eq!(loaded.first_malformed, Some(2));
     }
 
+    /// A tab-separated resource is read with its own delimiter.
     #[test]
     fn delimiters_are_configurable() {
         let mut dictionary = Dictionary::new();
@@ -498,6 +505,7 @@ mod tests {
         );
     }
 
+    /// An empty resource loads no rows, and no malformed ones.
     #[test]
     fn empty_sources_load_empty() {
         let mut dictionary = Dictionary::new();
@@ -509,6 +517,7 @@ mod tests {
         assert_eq!(loaded.malformed, 0);
     }
 
+    /// A writer writes cells in term syntax, quoting a cell as CSV requires.
     #[test]
     fn writers_serialize_cells_in_the_term_format() {
         let rows: Vec<Vec<DataValue>> = vec![
@@ -529,6 +538,7 @@ mod tests {
         );
     }
 
+    /// A skipped column is left out of every written record.
     #[test]
     fn skipped_columns_are_left_out_of_the_record() {
         let rows: Vec<Vec<DataValue>> = vec![
@@ -549,6 +559,8 @@ mod tests {
         );
     }
 
+    /// A row with a value that does not fit its column's format is dropped from a write, and
+    /// counted.
     #[test]
     fn declared_formats_drop_unfit_rows() {
         let rows: Vec<Vec<DataValue>> =
@@ -561,6 +573,8 @@ mod tests {
         assert_eq!(String::from_utf8(target).expect("text"), "1\n");
     }
 
+    /// The integer and decimal formats write and read numbers beyond 64 bits,
+    /// and the integer format rejects a fraction.
     #[test]
     fn numeric_formats_carry_wide_numbers() {
         let big = |lexical: &str| DataValue::decimal_from_lexical(lexical).expect("well-formed");
@@ -589,6 +603,7 @@ mod tests {
         assert_eq!(ValueFormat::Integer.parse("123456789012345678901.5"), None);
     }
 
+    /// A file written through gzip, as its name asks, is read back as the rows written.
     #[test]
     fn compressed_writes_read_back() {
         let path =
@@ -622,7 +637,7 @@ mod tests {
         assert_eq!(read, rows[0], "the write inverts the read");
     }
 
-    /// Writes rows in the `term` column format and reads them back.
+    /// Writes rows in term syntax, and returns the rows read back from the result.
     fn round_trip(rows: &[Vec<DataValue>]) -> Vec<Vec<DataValue>> {
         let width = rows[0].len();
         let mut target = Vec::new();
@@ -651,11 +666,11 @@ mod tests {
             .collect()
     }
 
+    /// Strings with quotes, backslashes and line breaks are read back as written.
     #[test]
     fn escaped_strings_read_back_as_written() {
-        // Quotes, backslashes, and line breaks are escaped inside the
-        // quoted export form, and the term reading resolves them, in
-        // plain strings, in language strings, and in typed lexicals alike.
+        // The escapes are written inside the quotes, and term syntax resolves them
+        // in plain strings, language strings and typed literals alike.
         let rows = vec![vec![
             DataValue::string(r#"say "hi""#),
             DataValue::string(r"a\b"),
@@ -668,13 +683,14 @@ mod tests {
         assert_eq!(round_trip(&rows), rows);
     }
 
+    /// The limit counts well-formed rows before the condition.
     #[test]
     fn the_limit_counts_rows_before_the_condition() {
         use nemo_physical::function::{OpCode, StackProgram};
 
-        // The first three well-formed rows are `1..=3`, whatever the
-        // condition keeps of them: a pushed condition reduces a limited
-        // import, it never reads further into the source for it.
+        // The first three well-formed rows are 1, 2 and 3, whichever of them
+        // the condition keeps. A condition reduces the rows of a read with a
+        // limit, and never makes it read further into the resource.
         let mut options = DsvOptions::csv(vec![ValueFormat::Integer]);
         options.filter = Some(RowFilter::new(
             vec![0],
@@ -700,6 +716,7 @@ mod tests {
         );
     }
 
+    /// A condition's `NOW()` is the instant of the context the read is given.
     #[test]
     fn a_condition_reads_the_instant_of_the_context_given() {
         use nemo_physical::{
@@ -731,6 +748,8 @@ mod tests {
         assert_eq!(kept(EvaluationContext::now()), 0);
     }
 
+    /// The sniffed width is the number of cells in the first record as it is read,
+    /// with the given quoting and header.
     #[test]
     fn the_width_is_sniffed_as_the_records_are_read() {
         let sniff = |text: &str, quoting, ignore_headers| {

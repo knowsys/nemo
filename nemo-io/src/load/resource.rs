@@ -1,4 +1,4 @@
-//! Where a load's bytes come from.
+//! Resources: where the bytes of a load come from.
 
 use std::{path::PathBuf, sync::Arc};
 
@@ -9,9 +9,11 @@ use crate::{formats::dsv::DsvOptions, stream::compression::Compression};
 pub enum Resource {
     /// A file on disk.
     Path(PathBuf),
-    /// Bytes already in memory, named for diagnostics and compression detection.
+    /// Bytes already in memory, named for diagnostics.
+    ///
+    /// Their compression is detected from their content, not their name.
     Bytes {
-        /// The name diagnostics attribute the resource to.
+        /// The name of the resource in diagnostics.
         name: String,
         /// The content.
         bytes: Arc<[u8]>,
@@ -19,7 +21,7 @@ pub enum Resource {
 }
 
 impl Resource {
-    /// Returns the name diagnostics attribute this resource to.
+    /// Returns the name of the resource in diagnostics.
     pub fn name(&self) -> String {
         match self {
             Resource::Path(path) => path.display().to_string(),
@@ -27,8 +29,9 @@ impl Resource {
         }
     }
 
-    /// Returns whether the resource's stream reads through gzip:
-    /// a file by its name, bytes by their content.
+    /// Returns whether the resource's stream is read through gzip.
+    ///
+    /// For a file, this depends on its name, and for bytes on their content.
     pub(crate) fn compressed(&self, compression: Compression) -> bool {
         match self {
             Resource::Path(path) => compression.applies(path),
@@ -42,12 +45,12 @@ impl Resource {
 pub struct DsvResource {
     /// Where the bytes come from.
     pub input: Resource,
-    /// Their shape.
+    /// The options of the format, such as the delimiter.
     pub options: DsvOptions,
 }
 
 impl DsvResource {
-    /// Creates a resource reading the given file.
+    /// Creates a resource that reads the given file.
     pub fn path(path: impl Into<PathBuf>, options: DsvOptions) -> Self {
         Self {
             input: Resource::Path(path.into()),
@@ -55,8 +58,7 @@ impl DsvResource {
         }
     }
 
-    /// Creates a resource reading bytes already in memory, named for diagnostics
-    /// (and compression detection, under [Compression::Auto]).
+    /// Creates a resource that reads bytes already in memory, under `name` in diagnostics.
     pub fn bytes(
         name: impl Into<String>,
         bytes: impl Into<Arc<[u8]>>,

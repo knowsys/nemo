@@ -9,35 +9,35 @@ use crate::value::temporal::{
     instant::{self, Instant},
 };
 
-/// An [`xsd:dateTime`](https://www.w3.org/TR/xmlschema11-2/#dateTime) value:
-/// an instant on the timeline and the timezone offset it was written with,
-/// or no offset for a local time whose instant is known only to within fourteen hours.
+/// An [`xsd:dateTime`](https://www.w3.org/TR/xmlschema11-2/#dateTime) value,
+/// an instant on the timeline and the timezone offset that it was written with.
 ///
-/// Equality, order and hashing are term identity:
-/// the same instant written in different offsets are distinct values.
-/// The order is by instant, a local time read as UTC,
-/// then by offset, with no offset last.
-/// XSD's value comparison is [value_eq](Self::value_eq) and [value_cmp](Self::value_cmp).
+/// A local time has no offset, and its instant is known only to within fourteen hours.
+/// Equality, order and hashing follow term identity,
+/// so the same instant written with different offsets gives distinct values.
+/// The values are ordered by instant, with a local time read as UTC,
+/// and then by offset, with no offset last.
+/// XSD's comparison by value is [value_eq](Self::value_eq) and [value_cmp](Self::value_cmp).
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct DateTime(Instant);
 
-/// The value takes 24 bytes at 8-byte alignment.
+/// Checks at compile time that a value occupies 24 bytes at 8-byte alignment.
 const _: () = assert!(size_of::<DateTime>() == 24 && align_of::<DateTime>() == 8);
 
 impl DateTime {
-    /// The attoseconds of a millisecond.
+    /// The number of attoseconds in a millisecond.
     const ATTOSECONDS_PER_MILLISECOND: i128 = 10i128.pow(15);
 
-    /// The Unix epoch in attoseconds of the instant.
+    /// The Unix epoch, in attoseconds since `0001-01-01T00:00:00Z`.
     const UNIX_EPOCH: i128 = instant::UNIX_EPOCH_SECONDS * instant::ATTOSECONDS_PER_SECOND;
 
-    /// Creates the dateTime of an instant.
+    /// Creates a dateTime from its instant.
     pub(super) fn from_instant(instant: Instant) -> Self {
         Self(instant)
     }
 
     /// Parses an `xsd:dateTime` lexical form,
-    /// or `None` for malformed input and for a value beyond the value space.
+    /// or returns `None` for a malformed lexical form or a value beyond the value space.
     ///
     /// # Example
     ///
@@ -58,11 +58,10 @@ impl DateTime {
         Instant::from_lexical::<LibraryDateTime>(lexical).map(Self)
     }
 
-    /// Creates the dateTime of calendar components,
-    /// or `None` for components that do not name a day or a time of day,
-    /// or for a value beyond the value space.
+    /// Creates the dateTime with the given calendar and clock fields,
+    /// or `None` for fields that name no day or time of day, or a value beyond the value space.
     ///
-    /// The hour `24` with a zero minute, second and fraction is the start of the next day.
+    /// The hour `24` with zero minutes, seconds and fraction is the start of the next day.
     #[allow(clippy::too_many_arguments)]
     pub fn from_components(
         year: i64,
@@ -83,7 +82,8 @@ impl DateTime {
         Self::from_lexical(&lexical)
     }
 
-    /// Creates the dateTime of milliseconds since the Unix epoch, UTC, and a timezone offset.
+    /// Creates the dateTime `millis` milliseconds after the Unix epoch, UTC,
+    /// which was written with `offset`.
     pub fn from_unix_millis(millis: i64, offset: Option<TimezoneOffset>) -> Self {
         Self(Instant::new(
             Self::UNIX_EPOCH + i128::from(millis) * Self::ATTOSECONDS_PER_MILLISECOND,
@@ -91,8 +91,9 @@ impl DateTime {
         ))
     }
 
-    /// Milliseconds since the Unix epoch, UTC,
-    /// or `None` if the instant is finer than a millisecond or beyond the 64-bit range.
+    /// Returns the milliseconds since the Unix epoch, UTC,
+    /// or `None` if the instant has a fraction finer than a millisecond
+    /// or lies beyond the 64-bit range of milliseconds.
     pub fn unix_millis(self) -> Option<i64> {
         let since_unix_epoch = self.0.attoseconds().checked_sub(Self::UNIX_EPOCH)?;
         (since_unix_epoch % Self::ATTOSECONDS_PER_MILLISECOND == 0)
@@ -127,7 +128,8 @@ impl DateTime {
     }
 
     /// Returns the whole second of the minute.
-    /// With [attosecond](Self::attosecond), it gives `fn:seconds-from-dateTime`.
+    ///
+    /// Together with [attosecond](Self::attosecond), it gives `fn:seconds-from-dateTime`.
     pub fn second(self) -> u8 {
         self.0.second()
     }
@@ -137,13 +139,14 @@ impl DateTime {
         self.0.attosecond()
     }
 
-    /// Returns the timezone offset the value was written with, or `None` for an unzoned value.
+    /// Returns the timezone offset that the value was written with,
+    /// or `None` for an unzoned value.
     pub fn offset(self) -> Option<TimezoneOffset> {
         self.0.offset()
     }
 
     /// Returns the date of the value's day, in the value's offset,
-    /// or `None` if the day's start is beyond the value space.
+    /// or `None` if the start of the day is beyond the value space.
     pub fn date(self) -> Option<Date> {
         self.0.day_start().map(Date::from_instant)
     }
@@ -153,14 +156,15 @@ impl DateTime {
         Time::from_instant(self.0.time_of_day())
     }
 
-    /// Returns whether two values are equal in XSD's value space:
-    /// both zoned or both unzoned, and at the same instant.
+    /// Returns whether two values are equal by value.
+    ///
+    /// They are if both are zoned or both are unzoned, and they are at the same instant.
     pub fn value_eq(self, other: Self) -> bool {
         self.0.value_eq(other.0)
     }
 
-    /// Returns the order of two values in XSD's value space,
-    /// or `None` for a zoned and an unzoned value within fourteen hours of each other.
+    /// Returns the order of two values by value,
+    /// or `None` for a zoned and an unzoned value at most fourteen hours apart.
     pub fn value_cmp(self, other: Self) -> Option<Ordering> {
         self.0.value_cmp(other.0)
     }
@@ -168,9 +172,9 @@ impl DateTime {
     /// Returns the value adjusted to another offset, `fn:adjust-dateTime-to-timezone`,
     /// or `None` beyond the value space.
     ///
-    /// Given an offset, a zoned value keeps its instant and reads it in the new offset,
-    /// and an unzoned value keeps its local fields and takes the offset.
-    /// Given `None`, the value keeps its local fields and drops its offset.
+    /// With an offset, a zoned value keeps its instant and gets the local fields of the new
+    /// offset, and an unzoned value keeps its local fields and gets the offset.
+    /// With `None`, the value keeps its local fields and loses its offset.
     pub fn adjust(self, offset: Option<TimezoneOffset>) -> Option<Self> {
         self.0.adjust::<LibraryDateTime>(offset).map(Self)
     }
@@ -179,21 +183,21 @@ impl DateTime {
     /// `op:add-yearMonthDuration-to-dateTime` and `op:add-dayTimeDuration-to-dateTime`,
     /// or `None` beyond the value space.
     ///
-    /// The months are added first, clamping the day to the month's length,
-    /// then the seconds.
+    /// The months are added first, with the day clamped to the length of the month,
+    /// and then the seconds.
     pub fn checked_add(self, duration: Duration) -> Option<Self> {
         self.0.checked_add::<LibraryDateTime>(duration).map(Self)
     }
 
     /// Returns the value a duration earlier,
-    /// `op:subtract-yearMonthDuration-from-dateTime` and `op:subtract-dayTimeDuration-from-dateTime`,
-    /// or `None` beyond the value space.
+    /// `op:subtract-yearMonthDuration-from-dateTime` and
+    /// `op:subtract-dayTimeDuration-from-dateTime`, or `None` beyond the value space.
     pub fn checked_sub(self, duration: Duration) -> Option<Self> {
         self.0.checked_sub::<LibraryDateTime>(duration).map(Self)
     }
 
     /// Returns the time from an earlier value to this one, `op:subtract-dateTimes`,
-    /// or `None` if one value is zoned and the other not.
+    /// or `None` if one value is zoned and the other is not.
     ///
     /// The result has no months, and it is negative if the other value is later.
     ///
@@ -211,13 +215,13 @@ impl DateTime {
     }
 }
 
-/// The hooks of the storage encoding.
+/// Conversions to and from the storage encoding.
 impl DateTime {
-    /// The number of offset codes, the unzoned mark included.
+    /// The number of offset codes, including the mark of an unzoned value.
     pub(crate) const OFFSET_CODE_COUNT: u64 = instant::OFFSET_CODE_COUNT;
 
-    /// Creates the dateTime of milliseconds since the Unix epoch, UTC, and a raw offset code,
-    /// or `None` if the code is not one.
+    /// Creates the dateTime `millis` milliseconds after the Unix epoch, UTC,
+    /// whose offset has the given raw code, or `None` if the code is not an offset code.
     pub(crate) fn from_millis_and_code(millis: i64, offset_code: u64) -> Option<Self> {
         Instant::from_code(
             Self::UNIX_EPOCH + i128::from(millis) * Self::ATTOSECONDS_PER_MILLISECOND,
@@ -255,12 +259,12 @@ mod tests {
         value::{DataValue, ValueRef},
     };
 
-    /// Parses the dateTime value of a lexical.
+    /// Returns the dateTime value of a lexical form, and panics for a malformed one.
     fn datetime(lexical: &str) -> DataValue {
         DataValue::datetime_from_lexical(lexical).expect(lexical)
     }
 
-    /// Returns the dateTime of a value.
+    /// Returns the dateTime that a value is.
     fn inner(value: &DataValue) -> DateTime {
         match value.as_ref() {
             ValueRef::DateTime(value) => value,
@@ -268,6 +272,7 @@ mod tests {
         }
     }
 
+    /// Values cross the bridge to `oxsdatatypes` and back unchanged.
     #[test]
     fn values_round_trip_through_oxsdatatypes() {
         let instant = |lexical: &str| DateTime::from_lexical(lexical).expect("valid");
@@ -283,7 +288,7 @@ mod tests {
             instant("1970-01-01T00:00:00"),
             DateTime::from_unix_millis(0, None)
         );
-        // The offset whose `oxsdatatypes` serialization coincides with unzoned stays its own.
+        // The offset `-00:01`, which `oxsdatatypes` serializes like no offset, stays an offset.
         assert_eq!(
             instant("1970-01-01T00:00:00-00:01"),
             DateTime::from_unix_millis(60_000, zoned(-1))
@@ -303,6 +308,7 @@ mod tests {
         }
     }
 
+    /// A canonical lexical form is written back unchanged, as a dateTime and in term syntax.
     #[test]
     fn canonical_lexicals_round_trip() {
         for lexical in [
@@ -327,6 +333,7 @@ mod tests {
         }
     }
 
+    /// Lexical forms are normalized to the canonical form.
     #[test]
     fn lexicals_normalize() {
         let normalized = |lexical: &str| inner(&datetime(lexical)).to_string();
@@ -334,20 +341,22 @@ mod tests {
         // The end of a day is the start of the next.
         assert_eq!(normalized("1999-12-31T24:00:00"), "2000-01-01T00:00:00");
 
-        // Trailing zeros of the fraction, and `+00:00` as `Z`.
+        // The trailing zeros of the fraction are dropped, and `+00:00` is written as `Z`.
         assert_eq!(
             normalized("2024-01-01T00:00:00.100+00:00"),
             "2024-01-01T00:00:00.1Z"
         );
         assert_eq!(normalized("2024-01-01T00:00:00.000"), "2024-01-01T00:00:00");
 
-        // The instant is the same, the offset written as given.
+        // The instant is the same, and the offset is kept as written.
         let utc = inner(&datetime("2024-01-01T00:00:00Z"));
         let shifted = inner(&datetime("2024-01-01T02:00:00+02:00"));
         assert!(utc.value_eq(shifted));
         assert_eq!(shifted.hour(), 2);
     }
 
+    /// Instants of whole milliseconds convert to and from milliseconds,
+    /// across the whole 64-bit range.
     #[test]
     fn millisecond_instants_round_trip() {
         // Trailing zeros of the fraction do not make a finer instant.
@@ -364,7 +373,7 @@ mod tests {
             None
         );
 
-        // A dateTime and its milliseconds are one value.
+        // A dateTime created from milliseconds equals the one parsed from its lexical form.
         let value = DateTime::from_unix_millis(1_250, zoned(0));
         assert_eq!(value, inner(&datetime("1970-01-01T00:00:01.25Z")));
         assert_eq!(value.unix_millis(), Some(1_250));
@@ -378,6 +387,8 @@ mod tests {
         }
     }
 
+    /// The extreme instants of `oxsdatatypes` are values,
+    /// which keep their instant through every representation.
     #[test]
     fn the_oxsdatatypes_extremes_are_values() {
         // The `oxsdatatypes` range reaches close to the limits of an `i128`,
@@ -401,7 +412,7 @@ mod tests {
         assert!(DateTime(Instant::from_library(extremes[0])) < epoch);
         assert!(epoch < DateTime(Instant::from_library(extremes[1])));
 
-        // Unzoned values near the extremes rebuild through the same path.
+        // Unzoned values near the extremes are written back unchanged.
         for lexical in [
             "-5391559471918-10-06T00:00:00",
             "5391559471919-03-30T00:00:00",
@@ -411,6 +422,7 @@ mod tests {
         }
     }
 
+    /// Malformed lexical forms and values beyond the value space are rejected.
     #[test]
     fn malformed_lexicals_are_refused() {
         for lexical in [
@@ -439,7 +451,7 @@ mod tests {
             "2024-01-01T00:00:00+1:00",
             "2024-01-01T00:00:00+01:60",
             "2024-01-01T00:00:00 Z",
-            // Finer than the value space's precision.
+            // A fraction finer than the precision of the value space.
             "2024-01-01T00:00:00.0000000000000000001Z",
             // Beyond the range of instants.
             "9223372036854775807-12-31T23:59:59Z",
@@ -452,6 +464,8 @@ mod tests {
         assert!(DateTime::from_lexical("2000-02-29T00:00:00Z").is_some());
     }
 
+    /// A dateTime is created from calendar and clock fields and returns them,
+    /// and fields that name no day or time of day are rejected.
     #[test]
     fn components_build_and_read_values() {
         let value =
@@ -491,6 +505,7 @@ mod tests {
         }
     }
 
+    /// A dateTime splits into its date and its time in its offset, which join back into it.
     #[test]
     fn dates_and_times_split_off_and_join() {
         let value = inner(&datetime("1999-12-31T12:00:00.5+05:30"));
@@ -520,6 +535,7 @@ mod tests {
         assert_eq!(west.date().expect("in range").at(west.time()), Some(west));
     }
 
+    /// Adjusting a dateTime to an offset gives the results of the examples of XPath.
     #[test]
     fn adjusting_follows_xpath() {
         let adjusted = |lexical: &str, offset: Option<TimezoneOffset>| {
@@ -547,6 +563,7 @@ mod tests {
         assert_eq!(adjusted("2002-03-07T10:00:00", None), "2002-03-07T10:00:00");
     }
 
+    /// DateTime arithmetic gives the results of the examples of XPath.
     #[test]
     fn arithmetic_follows_xpath() {
         let value = |lexical: &str| inner(&datetime(lexical));
@@ -570,7 +587,7 @@ mod tests {
             value("2000-10-27T09:57:00")
         );
 
-        // The day clamps to the month's length.
+        // The day is clamped to the length of the month.
         assert_eq!(
             value("2024-01-31T00:00:00Z")
                 .checked_add(duration("P1M"))
@@ -594,6 +611,7 @@ mod tests {
         assert_eq!(far.checked_add(duration("P1Y")), None);
     }
 
+    /// Offset codes convert back to their offsets, and codes beyond the count are rejected.
     #[test]
     fn offset_codes_round_trip() {
         for offset in [None, zoned(0), zoned(-840), zoned(840), zoned(90)] {
@@ -611,6 +629,8 @@ mod tests {
         assert_eq!(DateTime::from_millis_and_code(0, u64::MAX), None);
     }
 
+    /// The term order sorts dateTimes by instant,
+    /// with an unzoned value after the zoned ones at the same instant.
     #[test]
     fn order_is_by_instant_with_unzoned_last() {
         let ordered = [
@@ -636,22 +656,24 @@ mod tests {
         }
     }
 
+    /// The offset is part of the identity of a value,
+    /// so equal instants with different offsets are distinct terms.
     #[test]
     fn identity_includes_the_offset() {
-        // The same instant written with different offsets:
-        // equal but not identical in XSD 1.1, hence distinct terms.
+        // The same instant written with different offsets is equal but not identical in XSD 1.1,
+        // so the two are distinct terms.
         let utc = datetime("1970-01-01T00:00:00Z");
         let shifted = datetime("1970-01-01T01:00:00+01:00");
         assert_ne!(utc, shifted);
         assert!(inner(&utc).value_eq(inner(&shifted)));
-        // `Z` and `+00:00` are one offset; `-00:01` and no offset are not.
+        // `Z` and `+00:00` are the same offset, but `-00:01` and no offset are not.
         assert_eq!(utc, datetime("1970-01-01T00:00:00+00:00"));
         assert_ne!(
             datetime("1970-01-01T00:00:00-00:01"),
             datetime("1970-01-01T00:01:00")
         );
 
-        // The same holds beyond the compact range.
+        // The same holds beyond the 64-bit range of milliseconds.
         let far = datetime("-13798000000-01-01T00:00:00Z");
         let far_shifted = datetime("-13798000000-01-01T01:00:00+01:00");
         assert_ne!(far, far_shifted);

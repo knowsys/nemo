@@ -1,23 +1,23 @@
-//! Input declarations: predicates whose rows come from the program that uses the file.
+//! Input declarations, which declare predicates whose rows come from outside the file.
 
 use std::fmt::{self, Display, Formatter};
 
 use crate::model::{ColumnDeclaration, Identifier, Span, fmt_list, span_ignoring_eq};
 
-/// An input declaration: `@input edge(source: any, target: any) .`.
+/// An input declaration, such as `@input edge(source: any, target: any) .`.
 ///
 /// It declares a predicate whose rows come from the program that `@use`s the file,
-/// or from the API.
-/// A `@use` of the file binds it to one of the using program's predicates.
-/// The columns, if given, declare the predicate like a `@declare` does:
-/// its column types, its arity, and the column names atoms may use.
+/// or through the API, such as [import_rows](crate::engine::Engine::import_rows).
+/// A `@use` of the file binds the predicate to a predicate of the using program.
+/// The columns, if given, declare the predicate as a `@declare` does,
+/// with its column types, its arity, and the column names that atoms may use.
 /// A bare `@input edge .` leaves all of that open.
 #[derive(Debug, Clone)]
 pub struct InputDirective {
     /// The input predicate.
     pub predicate: Identifier,
-    /// The declared columns, fixing the arity,
-    /// or `None` to take the arity from how the predicate is used.
+    /// The declared columns, which fix the arity,
+    /// or `None` if the arity follows from how the predicate is used.
     pub columns: Option<Vec<ColumnDeclaration>>,
     /// The source position, or `None` for a component built programmatically.
     pub span: Option<Span>,

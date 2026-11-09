@@ -1,47 +1,51 @@
-//! The remote fetch of a bound SPARQL import, which its rule performs instead of a join.
+//! The compiled fetch of a SPARQL import with a `where` clause,
+//! which the import's rule performs instead of a join.
 
 use nemo_physical::{management::TableId, value::DataValue};
 
-/// The remote fetch of a SPARQL import with a `where` clause.
+/// The fetch of a SPARQL import with a `where` clause.
 ///
-/// Per application, the rows of the `where` clause's atoms are sent to the endpoint
-/// as `VALUES` blocks, and the solutions are stored in the head table.
+/// Each application of the rule sends the rows of the `where` clause's atoms to the endpoint
+/// as `VALUES` blocks, and stores the solutions in the head table.
 #[cfg(feature = "sparql")]
 #[derive(Debug)]
 pub(crate) struct CompiledFetch {
     /// The endpoint URL.
     pub(crate) endpoint: String,
-    /// The validated query to send, with any pushed-down condition added.
+    /// The validated query, with the import's condition added if it has a SPARQL form.
     pub(crate) query: nemo_io::sparql::SparqlQuery,
-    /// Request headers, applied to every request.
+    /// The HTTP headers sent with every request.
     pub(crate) headers: Vec<(String, String)>,
-    /// At most this many binding rows per atom per request.
+    /// The largest number of rows of one atom that a request sends.
     pub(crate) page_size: usize,
-    /// The columns of the query's projection a response delivers,
-    /// and the condition rows must pass.
+    /// Which columns of a response are delivered, and the condition that a row must satisfy.
     pub(crate) selection: nemo_io::selection::RowSelection,
-    /// The head predicate's name, for the fetch's diagnostics.
+    /// The name of the head predicate, for the fetch's diagnostics.
     pub(crate) predicate: String,
     /// Per body atom, how the fetch reads each of the atom's stored columns.
     pub(crate) atoms: Vec<Vec<FetchColumn>>,
     /// A scratch table of the head's arity,
     /// in which a response's rows are deduplicated against the head before they are stored.
     pub(crate) scratch: TableId,
-    /// The directive's source position, for the fetch's diagnostics.
+    /// The source position of the import directive, for the fetch's diagnostics.
     pub(crate) span: Option<crate::model::Span>,
-    /// What a failed request does.
+    /// What happens when a request fails.
     pub(crate) on_error: crate::model::OnError,
 }
 
-/// One stored column of an atom of the `where` clause, as the fetch reads it.
+/// How a fetch reads one stored column of an atom of the `where` clause.
 #[cfg(feature = "sparql")]
 #[derive(Debug, Clone)]
 pub(crate) enum FetchColumn {
-    /// Bound to a column of the import (a `VALUES` column),
-    /// by its position among the import's source columns.
+    /// The column binds a projected variable of the query, which a request sends as a column
+    /// of a `VALUES` block.
+    ///
+    /// The number is the variable's position in the query's projection.
     Bound(usize),
-    /// Constrained to a constant (a filter of the body atom).
+    /// The column must have this value.
     Constant(DataValue),
-    /// Unconstrained: an anonymous variable.
+    /// The column binds nothing in the query.
+    ///
+    /// It has an anonymous variable, or a variable that an earlier column of the atom binds.
     Free,
 }

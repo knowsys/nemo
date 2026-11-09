@@ -1,4 +1,4 @@
-//! The types a check's analysis inferred.
+//! The types that a check's type analysis inferred.
 
 use std::collections::HashMap;
 
@@ -12,14 +12,14 @@ use crate::{
 
 use super::RuleTypes;
 
-/// The types the analysis of a [check](crate::engine::Engine::check) inferred:
+/// The types that the type analysis of a [check](crate::engine::Engine::check) inferred:
 /// what each predicate's columns can hold,
 /// and what each rule's variables can hold once the rule's conditions narrowed them.
 ///
 /// [TypeSyntax](crate::values::TypeSyntax) writes a type in declaration syntax.
 #[derive(Debug, Clone)]
 pub struct InferredTypes {
-    /// The scope the program's names resolve in.
+    /// The scope that the program's names are resolved in.
     scope: NameScope,
     /// The column types of the program's predicates, by resolved name.
     predicates: HashMap<String, Vec<Type>>,
@@ -28,11 +28,12 @@ pub struct InferredTypes {
 }
 
 impl InferredTypes {
-    /// Collects the types a check inferred for a program:
-    /// the column types of the predicates it writes, given by resolved name,
+    /// Collects the types that a check inferred for a program:
+    /// the column types of the `written` program's predicates, given by resolved name,
     /// and the variable types of its compiled rules.
     ///
-    /// `scope` is the written program's, and `tables` the predicates the check registered.
+    /// `scope` is the written program's name scope,
+    /// and `tables` the predicates that the check registered.
     /// A check runs no import pass, so every column of an import is stored and typed.
     pub(crate) fn of_check<'a>(
         scope: NameScope,
@@ -54,9 +55,9 @@ impl InferredTypes {
         }
     }
 
-    /// Returns the types each column of a predicate can hold,
-    /// its name resolved against the program's `@base` and `@prefix` declarations.
+    /// Returns the types that each column of a predicate can hold.
     ///
+    /// The name is resolved against the program's `@base` and `@prefix` declarations.
     /// Returns `None` for a name the program does not use.
     pub fn predicate(&self, name: &Identifier) -> Option<&[Type]> {
         let name = self.scope.resolve(name, None).ok()?;
@@ -64,7 +65,7 @@ impl InferredTypes {
     }
 
     /// Returns the variable types of the rules, in program order:
-    /// one entry per rule as written, with a source position.
+    /// one entry per written rule that has a source position.
     pub fn rules(&self) -> &[RuleTypes] {
         &self.rules
     }
@@ -72,8 +73,8 @@ impl InferredTypes {
 
 /// Returns the variable types of a compiled program's rules, one entry per source position.
 ///
-/// The stages may compile one written rule into several,
-/// each holding the variable the others hold under the same name,
+/// The pipeline stages may replace one written rule by several,
+/// in which each variable of the written rule keeps its name,
 /// so a variable's type is the union of its types in all of them.
 fn rule_types(compiled: &CompiledProgram) -> Vec<RuleTypes> {
     let mut rules: Vec<(Span, Vec<(String, Type)>)> = Vec::new();

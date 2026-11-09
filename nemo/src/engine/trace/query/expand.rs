@@ -1,6 +1,6 @@
 //! Server-side expansion of a request.
 //!
-//! Each node is expanded by one written rule that derives the node's whole fact set,
+//! Each node is expanded by a written rule that derives the node's whole fact set,
 //! and the rule's premises become the node's children, down to the depth bound.
 
 use nemo_physical::{management::TableId, plan::OperationPlan};
@@ -14,10 +14,11 @@ use crate::engine::{
     },
 };
 
-/// Returns whether the query protocol may expand a rule, one deriving its head by a join.
+/// Returns whether the query protocol can expand a compiled rule,
+/// which it can for a rule that derives its head by a join.
 ///
-/// Aggregate and existential rules are not expandable,
-/// and neither is a bound import's fetch rule, whose facts were fetched from an endpoint.
+/// Aggregate and existential rules cannot be expanded,
+/// and neither can a bound import's fetch rule, whose facts were fetched from an endpoint.
 fn expandable(rule: &CompiledRule) -> bool {
     #[cfg(feature = "sparql")]
     if rule.fetch.is_some() {
@@ -27,11 +28,12 @@ fn expandable(rule: &CompiledRule) -> bool {
 }
 
 impl QueryEvaluation<'_> {
-    /// Expands a written node.
+    /// Expands the written node `written`, by at most `depth` levels.
     ///
     /// The expansion chooses a written rule that derives the node's whole fact set,
-    /// makes the rule's premises its children, computes their sets top-down, and recurses,
-    /// until no rule derives the whole set, or the depth or node bound is reached.
+    /// makes the rule's premises its children, computes their sets top-down, and recurses.
+    /// It stops where no rule derives the whole set,
+    /// or where the depth or node bound is reached.
     pub(super) fn expand(
         &mut self,
         arenas: &mut QueryArenas,
@@ -72,8 +74,7 @@ impl QueryEvaluation<'_> {
             else {
                 continue;
             };
-            // The premises' sets are what participates in deriving this
-            // node's set.
+            // The premises' sets are the facts that take part in deriving this node's set.
             self.filter(&mut arenas.compiled, compiled);
             for child in children {
                 self.expand(arenas, context, child, depth - 1);
@@ -83,7 +84,10 @@ impl QueryEvaluation<'_> {
     }
 
     /// Returns whether a compiled rule derives a node's whole fact set,
-    /// that is, whether the projection of its witnesses onto the head holds the whole set.
+    /// that is, whether the projection of its witnesses onto the head contains the whole set.
+    ///
+    /// The set is given as for [set_load](Self::set_load),
+    /// and `total` is its number of rows.
     fn covers(
         &mut self,
         rule_index: usize,

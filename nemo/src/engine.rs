@@ -1,31 +1,37 @@
 //! The reasoning engine, which evaluates a program to its fixpoint.
 //!
-//! An [Engine] owns the physical stores (tables, dictionary),
+//! An [Engine] owns the physical stores (the tables and the dictionary),
 //! the program [pipeline](crate::pipeline), and the compiled rules.
-//! [load](Engine::load) translates a program:
-//! facts become stored rows, and rules compile into normalized executable form.
-//! [reason](Engine::reason) runs semi-naive evaluation to the fixpoint:
-//! rules apply round-robin, each application reads only what is new since its last one,
-//! and evaluation stops after an iteration over all rules without new rows.
-//! [rows](Engine::rows) reads a predicate's contents back as values.
+//! Its public functions are its *methods*:
+//! - The *loading methods*, [load](Engine::load), [extend](Engine::extend) and
+//!   [reload](Engine::reload), translate a program.
+//!   Facts become stored rows, and rules are compiled into executable form.
+//! - [reason](Engine::reason) evaluates the rules semi-naively to the fixpoint.
+//!   One call of it to its end is a *run*.
+//! - [rows](Engine::rows) and the other result methods read the stored facts back as values.
+//!
+//! The *written program* is the program as the loading methods received it.
+//! The pipeline stages may rewrite it, and what the engine evaluates is the
+//! *compiled program*.
+//! Results, traces and diagnostics refer to the written program.
 //!
 //! The engine covers Datalog with expressions (filters, assignments, head computations),
 //! stratified negation, aggregates, existential rules (the restricted chase),
 //! and global parameters.
 //! Other features are reported as unsupported.
 //!
-//! The engine's modules sit in layers:
-//! - `link`: modules instantiated into the program the engine loads,
-//! - `transform`: the pipeline stages a loaded program passes first,
-//! - `compile`: statements into executable rules,
-//! - `evaluate`: the rules to their fixpoint,
-//! - `trace`: why a fact holds,
-//! - `results`: reading the stored facts back.
+//! The engine's submodules, in the order a program passes through them:
+//! - `link` instantiates the modules a program uses, before the program is loaded.
+//! - `transform` contains the engine's own pipeline stages.
+//! - `compile` translates statements into executable rules.
+//! - `evaluate` applies the rules until the fixpoint.
+//! - `trace` explains why a fact holds.
+//! - `results` reads the stored facts back.
 //!
 //! Alongside them:
-//! - `staging`: loading, extending, reloading and checking a program,
-//! - `remote`: methods suspended for data from the network,
-//! - `cancel`: cancellation.
+//! - `staging` implements the loading methods and the check of a program.
+//! - [remote] implements the methods suspended for data from the network.
+//! - `cancel` implements cancellation.
 
 mod cancel;
 mod check;
@@ -82,9 +88,9 @@ use crate::{
 
 /// The reasoning engine over one program.
 ///
-/// A panic inside a call is a bug in Nemo.
+/// A panic inside a method is a bug in Nemo.
 /// It can leave the engine half-updated,
-/// so an engine that a panic unwound out of must be dropped, not used again.
+/// so after a panic unwinds out of a method, the engine must be dropped, not used again.
 ///
 /// # Example
 ///
@@ -111,103 +117,116 @@ use crate::{
 /// ```
 #[derive(Debug, Default)]
 pub struct Engine {
-    /// The program pipeline (source of truth and report sink).
+    /// The program pipeline, which stores the registered sources, every revision of the
+    /// program, and the reports.
     pipeline: Pipeline,
-    /// The table store.
+    /// The table manager, which stores the tables of the predicates.
     manager: TableManager,
-    /// The dictionary.
+    /// The dictionary, which encodes the stored values.
     dictionary: Dictionary,
-    /// The optimization passes, as [retain_imports](Self::retain_imports) describes.
+    /// The optimization passes that compilation runs.
+    ///
+    /// [retain_imports](Self::retain_imports) removes the import passes.
     passes: compile::optimize::OptimizationPasses,
-    /// The pipeline stages a loaded program passes (see [stages_mut](Self::stages_mut)).
+    /// The pipeline stages that run over every loaded program
+    /// (see [stages_mut](Self::stages_mut)).
     stages: staging::EngineStages,
     /// The registered predicates by resolved name, each with its table
     /// and its number of columns.
     predicates: HashMap<String, Registered>,
-    /// Facts added through [import_rows](Self::import_rows) before a program is loaded,
-    /// which [load](Self::load) translates with the program.
+    /// The rows added through [import_rows](Self::import_rows) before a program is loaded,
+    /// as facts.
+    ///
+    /// [load](Self::load) adds them to the program.
     unloaded_rows: Vec<Statement>,
-    /// In-memory resources registered through
-    /// [add_resource](Self::add_resource), read by imports in place of
-    /// the filesystem.
+    /// The in-memory resources registered through [add_resource](Self::add_resource), by name.
+    ///
+    /// An import of a resource with one of these names reads the bytes from here
+    /// instead of the filesystem.
     resources: HashMap<String, Arc<[u8]>>,
-    /// The module roots and the module texts registered by name, which linking reads.
+    /// The module roots and the module texts registered by name, which [link](Self::link)
+    /// reads.
     modules: link::ModuleSources,
-    /// The compiled rules, present after [load](Self::load).
+    /// The compiled program, or `None` before [load](Self::load).
     program: Option<CompiledProgram>,
-    /// The translation state kept between translations, which extensions,
-    /// and rows added through [import_rows](Self::import_rows) after a load, are translated
-    /// against.
+    /// The translation state kept between translations.
+    ///
+    /// An extension, and the rows added through [import_rows](Self::import_rows) after a
+    /// load, are translated against it.
     translation: TranslationState,
     /// The pipeline revision the compiled program was translated from.
     revision: Option<RevisionId>,
-    /// The written program: the program as loaded, which results and diagnostics refer to.
+    /// The written program, which results and diagnostics refer to.
     written: Option<written::WrittenProgram>,
-    /// The application log: one entry per rule application that stored rows,
-    /// ascending by step.
+    /// The application log, with one entry per rule application that stored rows,
+    /// in ascending order of step.
     ///
-    /// It is tracing's record of which rule wrote which revision.
-    /// [reload](Self::reload), which drops everything derived, clears it.
+    /// It records which rule wrote which revision, for tracing.
+    /// [reload](Self::reload) clears it, since a reload drops every derived row.
     applications: Vec<evaluate::application::LoggedApplication>,
-    /// The evaluation context of each reasoning run.
+    /// The evaluation context of each run.
     ///
-    /// An explanation re-executes a run's applications in the run's context.
-    /// Cleared with the application log.
+    /// Tracing executes a run's rule applications again in the run's context.
+    /// It is cleared together with the application log.
     contexts: evaluate::contexts::RunContexts,
-    /// The evaluation context chosen by the first loading call since the last reasoning run
-    /// began. The loading calls evaluate the `NOW()` of facts and option values at its instant,
-    /// and the next run evaluates its own `NOW()` there too.
+    /// The evaluation context of the next run, if a loading method or
+    /// [import_rows](Self::import_rows) chose it since the last run began.
     ///
-    /// `None` if no loading call chose one since, or if the call that chose it failed or was
-    /// discarded.
+    /// The first such call chooses it at its own instant,
+    /// and it evaluates the `NOW()` of facts and option values in it.
+    /// Later calls, and the next run, evaluate their `NOW()` in the same context.
+    /// A call that fails or is discarded undoes its choice.
     next_context: Option<EvaluationContext>,
     /// The plan skeletons of the compiled program's rules.
     skeletons: evaluate::application::PlanSkeletons,
-    /// The directory relative import resources resolve against, if one is set.
+    /// The directory that relative import resources are resolved against, if one is set.
     import_directory: Option<std::path::PathBuf>,
-    /// Per table, the wall time in nanoseconds of the rule applications that stored rows into it,
-    /// which a query reports as the time deriving a predicate took.
+    /// Per table, the wall time in nanoseconds of the rule applications that stored rows
+    /// into it.
     ///
-    /// Cleared with the application log.
+    /// It is cleared together with the application log.
     derivation_time: HashMap<TableId, u64>,
-    /// Per table, its extensional blocks, ascending.
+    /// Per table, its extensional blocks in ascending order.
     extensional: HashMap<TableId, Vec<ExtensionalBlock>>,
-    /// The tables that gained input facts since the last [reason](Self::reason),
+    /// The tables that gained input facts since the last run,
     /// or may gain facts through new rules.
     ///
-    /// The next `reason` drops the derived facts that depend on them through negation or
-    /// aggregation, and derives them again.
+    /// The next run first drops the derived facts that depend on them through negation or
+    /// aggregation, so that it derives them again (see [recover](Self::recover)).
     dirty: HashSet<TableId>,
-    /// The engine step counter, step 0 holding the loaded facts.
+    /// The step counter, which is the revision that the next stored rows go into.
+    ///
+    /// Revision 0 contains the input facts of the first load.
     step: u64,
-    /// Rule applications performed so far, fetch rules included.
+    /// The number of rule applications so far, including the fetches of bound imports.
     applied: u64,
-    /// Whether the stored facts are at a fixpoint: the last [reason](Self::reason)
-    /// ran to completion and nothing was added since.
+    /// Whether the last run reached the fixpoint and nothing was added since.
     ///
     /// A cancelled run leaves it false.
     fixpoint: bool,
-    /// The facts stored by loading: the program's own and its imports'.
+    /// The number of input rows stored: the program's facts, its imports' rows,
+    /// and the rows added through [import_rows](Self::import_rows).
     loaded: usize,
-    /// New facts derived by reasoning, beyond the loaded ones.
+    /// The number of rows that reasoning stored, less those dropped again.
     derived: usize,
-    /// Evaluation errors counted across all applications.
+    /// The evaluation errors of all rule applications, counted by kind.
     errors: ErrorCounts,
-    /// Wall-clock accounting of the reasoning so far.
+    /// The wall-clock times of the reasoning so far.
     timings: EngineTimings,
-    /// The cancellation flag [reason](Self::reason) checks between rule applications.
+    /// The cancellation flag, which [reason](Self::reason) checks between rule applications.
     ///
-    /// [cancel_token](Self::cancel_token) hands out handles to it.
+    /// [cancel_token](Self::cancel_token) returns handles to it.
     cancel: CancelToken,
-    /// Where telemetry events go, nowhere until a sink is [installed](Self::set_telemetry).
+    /// The sink that receives telemetry events, if one was [installed](Self::set_telemetry).
     telemetry: SinkSlot,
     /// The method suspended for data from the network, if any (see [pending](Self::pending)).
     suspension: Option<Suspension>,
-    /// The client the plain methods send the requests of remote data through
+    /// The client through which the plain methods send their requests
     /// (see [set_client](Self::set_client)).
     client: ClientSlot,
-    /// Per fetch rule, its requests in the current run and the failures `on_error = warn`
-    /// let it continue past, reported as the run ends.
+    /// Per rule of a bound import, by rule index, the tally of its fetches in the current run.
+    ///
+    /// The tallies are reported as warnings when the run ends.
     fetch_tallies: HashMap<usize, evaluate::reason::FetchTally>,
     /// The last id given to a request of a suspended method.
     request_ids: u64,
@@ -219,11 +238,10 @@ impl Engine {
         Self::default()
     }
 
-    /// Registers a source text under a name, returning the id its spans use.
+    /// Registers a source text under a name, and returns the file id for spans into it.
     ///
-    /// Parsing the text against this id makes every diagnostic, the parser's and the engine's,
-    /// point into the same source.
-    /// The engine also registers here the module files it reads for `@use` directives.
+    /// If the text is parsed with this id, every diagnostic, from the parser or the engine,
+    /// points into the registered text.
     ///
     /// # Errors
     ///
@@ -246,8 +264,7 @@ impl Engine {
     ///
     /// # Errors
     ///
-    /// Returns an error if the file cannot be read (N0208),
-    /// or if it is too large to address (N0480).
+    /// Returns N0208 if the file cannot be read, and N0480 if it is 4 GiB or larger.
     pub fn read_source(&mut self, path: &std::path::Path) -> Result<FileId, Diagnostic> {
         let name = path.display().to_string();
         let text = std::fs::read_to_string(path).map_err(|error| {
@@ -261,8 +278,9 @@ impl Engine {
         self.add_source(name, text)
     }
 
-    /// Parses a registered source under its own id,
-    /// so that the spans of what parsing reports point into the registered text.
+    /// Parses a registered source with its own file id.
+    ///
+    /// The spans of the program and of the diagnostics then point into the registered text.
     ///
     /// # Panics
     ///
@@ -274,51 +292,55 @@ impl Engine {
         Program::parse(text, file)
     }
 
-    /// Returns the text a file id addresses, for rendering diagnostics against it,
-    /// including the files the engine read on the program's behalf.
+    /// Returns the text registered under a file id, or `None` for an id the engine did not
+    /// hand out.
+    ///
+    /// The registered texts include the module files that [link](Self::link) read,
+    /// so that a diagnostic can be rendered against the text its spans point into.
     pub fn source(&self, file: FileId) -> Option<&str> {
         self.pipeline.text(file)
     }
 
-    /// Returns the name a file id addresses.
+    /// Returns the name registered under a file id, or `None` for an id the engine did not
+    /// hand out.
     pub fn file_name(&self, file: FileId) -> Option<&str> {
         self.pipeline.file_name(file)
     }
 
-    /// Returns every source registered so far, by id, name, and text,
-    /// including the module files the engine read for `@use` directives.
+    /// Returns every registered source as its file id, name and text,
+    /// including the module files that [link](Self::link) read.
     pub fn sources(&self) -> impl Iterator<Item = (FileId, &str, &str)> {
         self.pipeline.sources()
     }
 
-    /// Sets the directory relative import resources resolve against,
-    /// in place of the directory of the file a directive was written in.
+    /// Sets the directory against which relative import resources are resolved,
+    /// instead of the directory of the file that contains the import.
     ///
-    /// A module's own imports still resolve against the module's directory,
+    /// A module's own imports are still resolved against the module's directory,
     /// so that a module can ship the data it reads.
     pub fn set_import_directory(&mut self, directory: impl Into<std::path::PathBuf>) {
         self.import_directory = Some(directory.into());
     }
 
-    /// Registers an in-memory resource:
-    /// an import whose resource name matches reads these bytes instead of the filesystem.
+    /// Registers an in-memory resource under a name.
     ///
-    /// This serves data that exists only in memory,
-    /// such as a browser blob or a text built in another language, to `@import` directives.
+    /// An import of a resource with that name reads these bytes instead of the filesystem.
+    /// This makes data that exists only in memory available to `@import` directives,
+    /// such as a browser blob or a text built in another language.
     pub fn add_resource(&mut self, name: impl Into<String>, bytes: impl Into<Arc<[u8]>>) {
         self.resources.insert(name.into(), bytes.into());
     }
 
-    /// Keeps every import whole: every declared column, every row.
+    /// Makes imports store every declared column and every row.
     ///
     /// By default, imports are loaded partially:
-    /// columns no rule reads are skipped, and rows no rule can use are discarded.
+    /// the columns no rule reads are skipped, and the rows no rule can use are discarded.
     /// This does not change what the rules derive.
     /// Skipped columns are never parsed,
     /// so a row that is malformed only in a skipped column
     /// is stored rather than dropped and reported.
     /// The counts and warnings of a partial load can therefore differ from those of a whole one.
-    /// Call this before writing imported tables out verbatim,
+    /// Call this before writing imported tables out unchanged,
     /// or before tracing facts by all their source columns.
     ///
     /// It takes effect for programs loaded afterwards.
@@ -326,18 +348,19 @@ impl Engine {
         self.passes.imports.clear();
     }
 
-    /// Returns the pipeline stages a loaded program passes, so that more stages can be added.
+    /// Returns the pipeline stages that run over every loaded program,
+    /// so that more stages can be added.
     ///
-    /// The list starts with the engine's own: `sparql`, if the feature is on.
+    /// The list starts with the engine's own stage, `sparql`, if that feature is enabled.
     /// A stage rewrites the program through a [Commit](crate::pipeline::Commit)
     /// and declares each rewrite,
-    /// so that results and diagnostics can be mapped back to the program as loaded.
+    /// so that results and diagnostics can be mapped back to the written program.
     /// Changes take effect for programs loaded afterwards.
     pub fn stages_mut(&mut self) -> &mut Stages {
         &mut self.stages.0
     }
 
-    /// Directs the engine's telemetry [EngineEvent]s into the given sink.
+    /// Sends the engine's telemetry [EngineEvent]s to the given sink.
     ///
     /// [telemetry](crate::telemetry) describes the events
     /// and the ready-made [Recorder](crate::telemetry::Recorder).
@@ -346,56 +369,61 @@ impl Engine {
         self.telemetry.install(sink);
     }
 
-    /// Returns the cancellation handle of this engine's runs:
-    /// cloneable, thread-safe, and shared by every handle handed out.
+    /// Returns a handle that cancels the method the engine is running.
+    ///
+    /// The handle can be cloned and used from any thread,
+    /// and every handle of the engine sets the same flag.
+    /// [CancelToken] says which methods check it.
     pub fn cancel_token(&self) -> CancelToken {
         self.cancel.clone()
     }
 
-    /// Links a program: every `@use` instantiated, and every module-qualified name resolved,
-    /// into the program [load](Self::load) takes.
+    /// Links a program: instantiates every module it uses with `@use`,
+    /// and resolves every module-qualified name.
     ///
-    /// A program without a `@use` comes back as it is.
-    /// A `@use` names a module relative to the directory of the file it is written in,
-    /// the working directory for a program without a file,
+    /// The result is a program that the loading methods accept.
+    /// A program without a `@use` is returned unchanged.
+    /// A `@use` names a module relative to the directory of the file that contains it,
+    /// or to the working directory for a program without a file,
     /// or inside a [module root](Self::add_module_root).
     /// A text registered with [add_module](Self::add_module) is read instead of the module's file.
-    /// Warnings go to the [reports](Self::reports).
+    /// Warnings are added to the [reports](Self::reports).
     ///
     /// # Errors
     ///
     /// Returns the first problem with the modules:
-    /// a file that cannot be read or does not parse, a cycle, an alias taken twice,
-    /// a name an instance does not offer, or a binding or a parameter that does not fit.
+    /// a file that cannot be read or does not parse, a cycle, an alias used twice,
+    /// a name that an instance does not offer, or a binding or a parameter that does not fit.
     pub fn link(&mut self, program: Program) -> Result<Program, Diagnostic> {
         self.link_program(program)
     }
 
-    /// Loads a program: facts become stored rows, imports read their resources, and rules
-    /// compile.
+    /// Loads a program: stores its facts, reads its imports, and compiles its rules.
     ///
     /// The program becomes the written program:
     /// results, traces and diagnostics refer to its statements,
-    /// not to the forms the pipeline stages rewrite them into.
-    /// A program using modules must be [linked](Self::link) first.
-    /// A relative resource resolves against the directory of the file its directive was
-    /// written in, or against the [import directory](Self::set_import_directory) if one is set.
+    /// not to what the pipeline stages rewrite them into.
+    /// A program that uses modules must be [linked](Self::link) first.
+    /// A relative resource is resolved against the
+    /// [import directory](Self::set_import_directory) if one is set,
+    /// and otherwise against the directory of the file that contains the import.
     ///
     /// Remote imports are fetched through the engine's [client](Self::set_client)
     /// before anything is registered or stored.
-    /// Facts and option values evaluate `NOW()` at the instant the next run evaluates at
+    /// Facts and option values evaluate `NOW()` at the same instant as the next run
     /// (see [reason](Self::reason)).
     ///
     /// # Errors
     ///
-    /// Returns N0481 if the engine already holds a program (see [has_program](Self::has_program)),
-    /// N0490 for a program that is not linked,
-    /// and N0493 if another method is suspended for data from the network
-    /// (see [pending](Self::pending)).
-    /// Returns N0491 if its imports need data from the network but the engine has no client,
-    /// and N0492 if the [cancel token](Self::cancel_token) stops the wait for it.
-    /// The load then changes nothing.
-    /// Returns the first problem of the program or its data otherwise.
+    /// - Returns N0481 if the engine already holds a program
+    ///   (see [has_program](Self::has_program)).
+    /// - Returns N0490 for a program that is not linked.
+    /// - Returns N0493 if another method is suspended for data from the network
+    ///   (see [pending](Self::pending)).
+    /// - Returns N0491 if the imports need data from the network but the engine has no client,
+    ///   and N0492 if the [cancel token](Self::cancel_token) stops the wait for the responses.
+    ///   The load then changes nothing.
+    /// - Otherwise, returns the first problem of the program or its data.
     ///
     /// # Panics
     ///
@@ -407,10 +435,11 @@ impl Engine {
         self.complete(progress)
     }
 
-    /// Loads a program as [load](Self::load) does, but sends no request:
-    /// if its imports need data from the network, it returns their requests
-    /// ([Progress::Suspended]) having registered and stored nothing,
-    /// and [resume](Self::resume) continues the load with the responses.
+    /// Loads a program as [load](Self::load) does, but sends no request.
+    ///
+    /// If the imports need data from the network, it returns [Progress::Suspended] with their
+    /// requests, having registered and stored nothing.
+    /// [resume](Self::resume) then continues the load with the responses.
     ///
     /// # Errors
     ///
@@ -424,26 +453,29 @@ impl Engine {
         self.choosing_context(|engine| engine.load_program(program))
     }
 
-    /// Extends the loaded program:
-    /// the new statements join it, new facts are stored, new imports read,
-    /// and the whole program compiles again, since strata and join orders are global.
+    /// Extends the loaded program with new statements.
     ///
-    /// Every table is kept, and every unchanged rule continues semi-naive evaluation where it
+    /// The new facts are stored and the new imports read.
+    /// The whole program is compiled again, since its strata and join orders depend on every
+    /// rule.
+    /// Every table is kept, and every loaded rule continues semi-naive evaluation where it
     /// left off.
     /// The next [reason](Self::reason) continues to the new fixpoint,
-    /// evaluating `NOW()` at the instant of the extension's facts and option values.
-    /// If a new statement adds facts to a predicate that is negated or aggregated,
-    /// the derived facts that depend on it are dropped and derived again.
+    /// and evaluates `NOW()` at the same instant as the extension's facts and option values.
+    /// If a new statement adds facts to a predicate that a rule reads under negation or
+    /// aggregation, the derived facts that depend on it are dropped and derived again.
     ///
     /// # Errors
     ///
-    /// Returns N0482 if no program is loaded,
-    /// and N0493 if another method is suspended for data from the network.
-    /// Returns an error for an extension that would change what loaded statements mean:
-    /// declaring `@base`, rebinding a prefix, or redefining a parameter.
-    /// Use [reload](Self::reload) for these.
-    /// Returns N0491 or N0492 as [load](Self::load) does, the loaded program unchanged.
-    /// Returns the first problem of the extension or its data otherwise.
+    /// - Returns N0482 if no program is loaded, N0490 for an extension that is not linked,
+    ///   and N0493 if another method is suspended for data from the network.
+    /// - Returns N0488, N0483 or N0484 for an extension that declares a `@base` other than the
+    ///   loaded program's, binds one of its prefixes to another IRI, or declares one of its
+    ///   parameters again.
+    ///   These would change the meaning of the loaded statements,
+    ///   so they need [reload](Self::reload).
+    /// - Returns N0491 or N0492 as [load](Self::load) does, with the loaded program unchanged.
+    /// - Otherwise, returns the first problem of the extension or its data.
     ///
     /// # Panics
     ///
@@ -455,10 +487,11 @@ impl Engine {
         self.complete(progress)
     }
 
-    /// Extends the loaded program as [extend](Self::extend) does, but sends no request:
-    /// if the extension's imports need data from the network, it returns their requests
-    /// ([Progress::Suspended]) with the loaded program unchanged,
-    /// and [resume](Self::resume) continues the extension with the responses.
+    /// Extends the loaded program as [extend](Self::extend) does, but sends no request.
+    ///
+    /// If the extension's imports need data from the network, it returns
+    /// [Progress::Suspended] with their requests, with the loaded program unchanged.
+    /// [resume](Self::resume) then continues the extension with the responses.
     ///
     /// # Errors
     ///
@@ -472,27 +505,28 @@ impl Engine {
         self.choosing_context(|engine| engine.extend_program(program))
     }
 
-    /// Replaces the program, which is how statements are retracted.
+    /// Replaces the loaded program, which is how statements are retracted.
     ///
     /// Every derived row is dropped, every rule starts over,
-    /// and the next [reason](Self::reason) derives everything again from the input facts,
-    /// evaluating `NOW()` at the instant of the program's facts and option values.
+    /// and the next [reason](Self::reason) derives everything again from the input facts.
+    /// It evaluates `NOW()` at the same instant as the program's facts and option values.
     ///
-    /// The dictionary, the registered sources and resources are kept,
-    /// and so are the loaded data of every predicate whose defining statements
-    /// (facts, imports, declarations) are unchanged.
-    /// In particular, unchanged imports are not read again.
-    /// A changed `@prefix`, `@base`, `@parameter`, or `@type` can change the meaning of any value,
-    /// so it rebuilds everything.
-    /// Rows added through [import_rows](Self::import_rows) to a *rebuilt* predicate
+    /// The dictionary and the registered sources and resources are kept.
+    /// So are the input facts of every predicate whose defining statements
+    /// (facts, imports, declarations) are unchanged, and in particular,
+    /// unchanged imports are not read again.
+    /// Every predicate whose defining statements changed is *rebuilt*.
+    /// Any other changed directive, such as `@prefix`, `@base`, `@parameter` or `@type`,
+    /// can change the meaning of any value, so it rebuilds every predicate.
+    /// The rows added through [import_rows](Self::import_rows) to a rebuilt predicate
     /// cannot be reproduced from statements, so they are dropped, with a warning.
     ///
     /// # Errors
     ///
-    /// Returns N0482 if no program is loaded, N0490 for a program that is not linked,
-    /// and N0493 if another method is suspended for data from the network.
-    /// Returns N0491 or N0492 as [load](Self::load) does, the loaded program unchanged.
-    /// Returns the first problem of the program or its data otherwise.
+    /// - Returns N0482 if no program is loaded, N0490 for a program that is not linked,
+    ///   and N0493 if another method is suspended for data from the network.
+    /// - Returns N0491 or N0492 as [load](Self::load) does, with the loaded program unchanged.
+    /// - Otherwise, returns the first problem of the program or its data.
     ///
     /// # Panics
     ///
@@ -504,10 +538,11 @@ impl Engine {
         self.complete(progress)
     }
 
-    /// Replaces the program as [reload](Self::reload) does, but sends no request:
-    /// if its changed imports need data from the network, it returns their requests
-    /// ([Progress::Suspended]) with the loaded program unchanged,
-    /// and [resume](Self::resume) continues the reload with the responses.
+    /// Replaces the loaded program as [reload](Self::reload) does, but sends no request.
+    ///
+    /// If the changed imports need data from the network, it returns [Progress::Suspended]
+    /// with their requests, with the loaded program unchanged.
+    /// [resume](Self::resume) then continues the reload with the responses.
     ///
     /// # Errors
     ///
@@ -521,19 +556,20 @@ impl Engine {
         self.choosing_context(|engine| engine.reload_program(program))
     }
 
-    /// Checks a program without loading it:
-    /// parameters resolve, directives validate, rules compile, and the whole program
-    /// stratifies, but no imported data is read and no facts are stored.
-    /// A parameter declared without a value, which a load must be given, is read as any value
-    /// of its declared type, as an `@input` predicate holds any rows its declaration allows.
+    /// Checks a program without loading it.
     ///
-    /// Unlike [load](Self::load), a check collects problems rather than ending at the first,
-    /// and reports everything it found, warnings included,
-    /// with the types the analysis inferred.
-    /// Reading no data, a check suits a program while it is edited.
-    /// A check leaves the engine unchanged, so the engine can still load a program afterwards.
-    /// Like a load, it takes a [linked](Self::link) program.
-    /// For a program that is not linked, the reported diagnostics include N0490.
+    /// The check resolves the parameters, validates the directives, compiles the rules,
+    /// and stratifies the whole program, but reads no imported data and stores no facts.
+    /// A parameter declared without a value, which a load must be given, stands for any value
+    /// of its declared type, as an `@input` predicate stands for any rows its declaration allows.
+    ///
+    /// Unlike [load](Self::load), a check does not stop at the first problem.
+    /// It reports every problem it found, warnings included,
+    /// with the types that the type analysis inferred.
+    /// Since it reads no data, a check suits a program while it is edited.
+    /// A check stores nothing, so the engine can still load a program afterwards.
+    /// Like a load, it needs a [linked](Self::link) program and an engine without a program.
+    /// Otherwise, the report contains the error that [load](Self::load) would return.
     pub fn check(&mut self, program: Program) -> CheckReport {
         let already = self.pipeline.reports().len();
         let (types, aborted) = match self.check_inner(program) {
@@ -545,16 +581,18 @@ impl Engine {
         CheckReport::new(reports, types)
     }
 
-    /// Registers a program text, [links](Self::link) what it parses to,
-    /// and applies one of the loading methods (`load`, `extend`, `reload`) to the result.
+    /// Registers a program text, parses and [links](Self::link) it,
+    /// and passes the result to `call`.
     ///
+    /// `call` is a loading method, such as [load](Self::load), or another function that
+    /// accepts a linked program.
     /// If parsing reports an error, the text is rejected with everything parsing reported.
     /// Warnings alone do not stop it.
     ///
     /// # Errors
     ///
     /// Returns the diagnostics of the step that failed:
-    /// registration, parsing, linking, or the loading method.
+    /// registration, parsing, linking, or `call`.
     pub fn ingest(
         &mut self,
         name: impl Into<String>,
@@ -566,8 +604,8 @@ impl Engine {
 
     /// Registers a program text and checks it without loading it.
     ///
-    /// Reports what parsing, linking and [check](Self::check) reported, warnings included,
-    /// or the error of a failed registration.
+    /// The report contains what parsing, linking and [check](Self::check) reported,
+    /// warnings included, or the error of a failed registration.
     pub fn check_source(
         &mut self,
         name: impl Into<String>,
@@ -578,22 +616,24 @@ impl Engine {
 
     /// Adds rows computed in memory, rather than read from a file, to a predicate.
     ///
-    /// Before [load](Self::load), the rows join the program as facts,
-    /// with declaration checks, type analysis, and everything else.
-    /// After a load, each row is checked as a fact of the program is,
+    /// Before [load](Self::load), the rows are kept, and the load adds them to the program as
+    /// facts, so that they are checked and analyzed like the program's own facts.
+    /// After a load, each row is checked like a fact of the program,
     /// and the rows are stored in the predicate's table as a new revision.
     /// The next [reason](Self::reason) treats them as new facts and continues to the new
     /// fixpoint, dropping and deriving again the facts that depend on the predicate through
     /// negation or aggregation.
-    /// The predicate is named by its resolved form, as in [rows](Self::rows).
+    /// The predicate is given by its resolved name, as for [rows](Self::rows).
     ///
     /// # Errors
     ///
-    /// After a load, returns N0486 for a predicate the program does not use,
-    /// since only [extend](Self::extend) introduces new ones.
-    /// Returns N0487 for a row holding a null, since nulls are only created by reasoning,
-    /// and an error for a row of the wrong width or outside the predicate's declaration.
-    /// Returns N0493 if a method is suspended for data from the network.
+    /// - After a load, returns N0486 for a predicate the program does not use,
+    ///   since only [extend](Self::extend) introduces new ones.
+    /// - Returns N0487 for a row that contains a null, since nulls are only created by
+    ///   reasoning.
+    /// - Returns an error for a row with the wrong number of values,
+    ///   or with a value that the predicate's declaration does not allow.
+    /// - Returns N0493 if a method is suspended for data from the network.
     pub fn import_rows(
         &mut self,
         predicate: &str,
@@ -604,16 +644,17 @@ impl Engine {
             .map(drop)
     }
 
-    /// Sets the client the plain methods ([load](Self::load), [extend](Self::extend),
-    /// [reload](Self::reload), [reason](Self::reason)) send the requests of remote data
-    /// through, or removes it.
+    /// Sets the client through which the plain methods ([load](Self::load),
+    /// [extend](Self::extend), [reload](Self::reload), [reason](Self::reason)) send their
+    /// requests for data from the network, or removes it.
     ///
-    /// A new engine has the HTTP client of the `http` feature, if built with it, and none
-    /// otherwise. Without a client, a plain method that needs data from the network fails.
-    /// The `start_*` methods, such as [start_load](Self::start_load), send no request either
-    /// way: they return the requests, and [resume](Self::resume) takes the responses.
+    /// A new engine has the HTTP client of the `http` feature if it is built with that
+    /// feature, and no client otherwise.
+    /// Without a client, a plain method that needs data from the network fails.
+    /// The `start_*` methods, such as [start_load](Self::start_load), never send a request:
+    /// they return the requests, and [resume](Self::resume) accepts the responses.
     ///
-    /// Returns the client set before, which can be set again later.
+    /// Returns the client that was set before, which can be set again later.
     pub fn set_client(
         &mut self,
         client: Option<Box<dyn Client + Send>>,
@@ -621,31 +662,35 @@ impl Engine {
         std::mem::replace(&mut self.client, ClientSlot(client)).0
     }
 
-    /// Returns the requests the suspended method needs responses to,
+    /// Returns the requests that the suspended method needs responses to,
     /// or none if no method is suspended.
     ///
     /// A method is suspended after a `start_*` method or [resume](Self::resume) returned
-    /// [Progress::Suspended], and a reasoning run also after the
-    /// [cancel token](Self::cancel_token) stopped [reason](Self::reason) while its client
-    /// waited for a fetch.
+    /// [Progress::Suspended].
+    /// A run is also suspended after the [cancel token](Self::cancel_token) stopped
+    /// [reason](Self::reason) while its client waited for the responses of a fetch.
     pub fn pending(&self) -> Vec<PendingRequest> {
         self.suspension
             .as_ref()
             .map_or_else(Vec::new, Suspension::pending)
     }
 
-    /// Continues the suspended method with responses to its requests:
-    /// for each, the id it was listed under and its body, or the failure that prevented one.
+    /// Continues the suspended method with responses to its requests.
     ///
-    /// Once every request it sent has a response, the method continues where it was
-    /// suspended: a loading method commits its prepared translation,
-    /// and a reasoning run continues at the application that fetched.
+    /// Each response is given under the id that [pending](Self::pending) listed for its
+    /// request.
+    /// It is either the body's bytes or the failure that prevented them.
+    /// While some request has no response yet, the method stays suspended,
+    /// and the result lists the requests still pending.
+    /// Once every request has a response, the method continues where it was suspended:
+    /// a loading method completes its translation,
+    /// and a run continues at the rule application that fetched.
     /// It may then be suspended again, for new requests.
-    /// Until then, it stays suspended for the rest, which the result lists.
-    /// A failure is final, so retry before passing it in.
-    /// A request too large for the server (status 413 or 414),
-    /// or one whose response the server cut off partway, typically at its time limit,
-    /// is sent again in smaller pieces if the engine can split it.
+    ///
+    /// A failure is final, so retry a failed request before passing its failure in.
+    /// A run's request that was too large for the server (status 413 or 414),
+    /// or whose response the server cut off partway, typically at its time limit,
+    /// is listed again in smaller pieces if the engine can split it.
     /// With no method suspended and no response given, this does nothing.
     ///
     /// # Errors
@@ -664,54 +709,57 @@ impl Engine {
         self.pass_responses(responses)
     }
 
-    /// Discards the suspended method, if there is one, returning whether there was.
+    /// Discards the suspended method, if there is one, and returns whether there was.
     ///
-    /// A suspended loading method has changed nothing, so the engine is as before it.
-    /// A suspended reasoning run stops with the tables consistent, as after a cancellation,
-    /// reporting the requests its fetches skipped so far,
-    /// and the next [reason](Self::reason) continues toward the fixpoint.
+    /// A suspended loading method has changed nothing, so the engine is as before the method.
+    /// A suspended run stops with the tables consistent, as after a cancellation,
+    /// and reports the requests that its fetches skipped so far.
+    /// The next [reason](Self::reason) continues toward the fixpoint.
     pub fn discard_pending(&mut self) -> bool {
         let suspended = self.suspension.is_some();
         self.abandon();
         suspended
     }
 
-    /// Runs semi-naive evaluation to the fixpoint, stratum by stratum.
+    /// Evaluates the rules semi-naively to the fixpoint, stratum by stratum.
     ///
-    /// A stratum's negated predicates are final before it starts.
-    /// The run is one evaluation [context](EvaluationContext):
-    /// every `NOW()` it evaluates reads the same instant, the one the facts loaded for it
-    /// were evaluated at.
-    /// That is the instant of the first successful call of [load](Self::load),
-    /// [extend](Self::extend), [reload](Self::reload) or [import_rows](Self::import_rows) since
-    /// the last run, or, if there was none, the instant the run began at.
-    /// The fetches of bound imports (imports with a `where` clause) go through the engine's
-    /// [client](Self::set_client).
-    /// A run left suspended for data from the network, after the cancel token stopped the wait
-    /// for its client, continues.
+    /// The predicates that a stratum negates are final before the stratum starts.
+    /// A run evaluates in one [context](EvaluationContext), so every `NOW()` in it reads the
+    /// same instant.
+    /// The facts loaded since the last run evaluated their `NOW()` at this instant too.
+    /// The instant is that of the first successful call, since the last run,
+    /// of a loading method or of [import_rows](Self::import_rows) after a load.
+    /// Without such a call, it is the instant at which the run starts.
+    /// The bound imports, which are the imports with a `where` clause, fetch their data through
+    /// the engine's [client](Self::set_client).
+    /// If the cancel token stopped a run while its client waited for responses,
+    /// the run is still suspended, and this method continues it.
     ///
     /// # Errors
     ///
-    /// Returns N0482 if no program is loaded,
-    /// and N0493 if a loading method is suspended for data from the network.
-    /// Returns N0207 if the run's [cancel token](Self::cancel_token) is cancelled,
-    /// which the run checks between rule applications.
-    /// The run stops there with the tables consistent and its progress recorded,
-    /// and a further `reason()` continues toward the fixpoint.
-    /// Returns N0492 if the token stops the wait for a fetch. The run then stays suspended,
-    /// and a further `reason()` continues it.
-    /// Returns N0491 if a bound import needs data from the network but the engine has no
-    /// client. The run then stops as after a cancellation.
-    /// Returns the first failure of a rule application otherwise.
+    /// - Returns N0482 if no program is loaded,
+    ///   and N0493 if a loading method is suspended for data from the network.
+    /// - Returns N0207 if the [cancel token](Self::cancel_token) is cancelled.
+    ///   The run checks the token between rule applications,
+    ///   and stops there with the tables consistent and its progress recorded.
+    ///   A later call continues toward the fixpoint.
+    /// - Returns N0492 if the token stops the wait for the responses of a fetch.
+    ///   The run then stays suspended, and a later call continues it.
+    /// - Returns N0491 if a bound import needs data from the network but the engine has no
+    ///   client. The run then stops as after a cancellation.
+    /// - Otherwise, returns the first failure of a rule application.
     pub fn reason(&mut self) -> Result<(), Diagnostic> {
         let progress = self.start_reason();
         self.complete(progress)
     }
 
-    /// Reasons as [reason](Self::reason) does, but sends no request:
-    /// if a bound import fetches, it returns the requests ([Progress::Suspended]),
-    /// and [resume](Self::resume) continues the run at that application with the responses.
-    /// A suspended run returns its requests again.
+    /// Reasons as [reason](Self::reason) does, but sends no request.
+    ///
+    /// If a bound import needs data from the network, it returns [Progress::Suspended] with
+    /// the requests.
+    /// [resume](Self::resume) then continues the run at that rule application with the
+    /// responses.
+    /// If a run is already suspended, it returns that run's pending requests again.
     ///
     /// # Errors
     ///
@@ -728,8 +776,10 @@ impl Engine {
         self.reason_until_suspended()
     }
 
-    /// Runs the reasoning to the fixpoint, or until it is suspended for data from the network,
-    /// presenting its reports against the written program.
+    /// Starts or continues a run, until the fixpoint or until the run is suspended for data
+    /// from the network.
+    ///
+    /// The run's reports and error are rewritten to refer to the written program.
     pub(in crate::engine) fn reason_until_suspended(&mut self) -> Result<Progress, Diagnostic> {
         let already = self.pipeline.reports().len();
         let outcome = self.reason_to_fixpoint();
@@ -753,11 +803,12 @@ impl Engine {
             .collect()
     }
 
-    /// Returns a predicate of the program, or `None` for a name the program never used.
+    /// Returns the description of a predicate of the program,
+    /// or `None` for a name the program never used.
     ///
-    /// Its role follows the written program:
-    /// a predicate is derived if a rule has it in a head,
-    /// and extensional if a fact, an import, or an `@input` produces facts for it,
+    /// Its [role](PredicateRole) follows the written program.
+    /// A predicate is derived if a written rule has it in a head.
+    /// It is extensional if a written fact, import or `@input` produces facts for it,
     /// or if rows were added to it through [import_rows](Self::import_rows).
     /// A predicate that is only read counts as extensional, even if it holds no facts.
     pub fn predicate(&self, name: &str) -> Option<PredicateInfo> {
@@ -768,20 +819,22 @@ impl Engine {
         })
     }
 
-    /// Returns the program's outputs:
-    /// the predicates it declares `@output` or exports, in declaration order,
-    /// or every predicate rules derive, sorted by name, if it declares neither.
+    /// Returns the program's outputs.
     ///
+    /// They are the predicates that the program declares `@output` or exports,
+    /// in declaration order.
+    /// If it declares neither, they are the predicates that its rules derive, sorted by name.
     /// An output is stored whole,
     /// so [rows](Self::rows) and [count](Self::count) deliver all of its facts.
     pub fn outputs(&self) -> Vec<String> {
         self.output_names()
     }
 
-    /// Returns the type of value each column of a predicate can hold,
-    /// as the type analysis inferred it:
-    /// an upper bound per column, including the types of nested fields of tuples and maps.
+    /// Returns the types of the values that each column of a predicate can hold,
+    /// as the type analysis inferred them.
     ///
+    /// Each type is an upper bound, which includes the types of the nested fields of tuples
+    /// and maps.
     /// Returns `None` for a name the program never used,
     /// and for a predicate the engine does not store whole.
     /// [TypeSyntax](crate::values::TypeSyntax) writes a type in declaration syntax.
@@ -794,21 +847,22 @@ impl Engine {
             .map(Vec::as_slice)
     }
 
-    /// Returns the number of input facts the program's predicates hold: its
-    /// facts and imports, and the rows added through [import_rows](Self::import_rows).
+    /// Returns the number of input facts that the program's predicates hold:
+    /// the rows of its facts and imports, and the rows added through
+    /// [import_rows](Self::import_rows).
     pub fn loaded_facts(&self) -> usize {
         self.fact_counts().0
     }
 
-    /// Returns the number of facts the program's predicates hold from reasoning,
-    /// a bound import's fetches included.
+    /// Returns the number of facts that reasoning stored in the program's predicates,
+    /// including the rows that bound imports fetched.
     pub fn derived_facts(&self) -> usize {
         self.fact_counts().1
     }
 
     /// Returns the stored rows of a predicate, decoded into values.
     ///
-    /// This is the convenience that drains a [cursor](Self::cursor) in one call.
+    /// This reads a [cursor](Self::cursor) to its end in one call.
     /// For large results, read in bounded chunks through the cursor instead.
     ///
     /// # Errors
@@ -824,7 +878,7 @@ impl Engine {
         Ok(rows)
     }
 
-    /// Opens a cursor over a predicate's stored rows, which [read_chunk](Self::read_chunk) reads.
+    /// Opens a cursor over a predicate's stored rows, for [read_chunk](Self::read_chunk) to read.
     ///
     /// # Errors
     ///
@@ -834,16 +888,17 @@ impl Engine {
         self.open_cursor(predicate)
     }
 
-    /// Returns the next rows of a cursor, at most `budget` of them,
-    /// decoded into an owned column-major [RowChunk], which is empty once the cursor is exhausted.
+    /// Returns the next rows of a cursor, at most `budget` of them, decoded into a [RowChunk].
     ///
-    /// The cursor holds no borrow, and each read borrows the engine for its own duration only.
+    /// The chunk is empty once the cursor has delivered every row.
+    /// The cursor holds no borrow of the engine, and each read borrows the engine only while it
+    /// runs.
     ///
     /// # Errors
     ///
-    /// Returns N0206 for a cursor whose table has changed since it was opened,
-    /// rather than return rows that no longer match the table.
-    /// [is_current](Self::is_current) checks this beforehand.
+    /// Returns N0206 for a cursor whose table changed after the cursor was opened,
+    /// since its remaining rows would no longer match the table.
+    /// [is_current](Self::is_current) checks for this beforehand.
     pub fn read_chunk(
         &mut self,
         cursor: &mut PredicateCursor,
@@ -852,13 +907,13 @@ impl Engine {
         self.decode_chunk(cursor, budget)
     }
 
-    /// Returns whether a cursor still reads the rows it was opened on:
-    /// no later work changed its predicate's table.
+    /// Returns whether a cursor still reads the rows it was opened on,
+    /// which holds while nothing changes its predicate's table.
     ///
     /// [read_chunk](Self::read_chunk) refuses a cursor that is not current.
     pub fn is_current(&self, cursor: &PredicateCursor) -> bool {
-        // The blocks are compared before the range is read: a merged
-        // block would make the cursor's range misaligned.
+        // The blocks are compared first, since counting the rows of a range panics if the range
+        // does not align with the table's blocks, which a merge of blocks can cause.
         self.manager.blocks(cursor.table) == cursor.blocks
             && self.manager.row_count(cursor.table, cursor.range.clone()) == cursor.rows
     }
@@ -875,20 +930,20 @@ impl Engine {
             .row_count(table, Revision(0)..Revision(self.step.max(1))))
     }
 
-    /// Returns the export directives, resolved, in directive order.
+    /// Returns the program's export directives as specifications, in directive order,
+    /// or none before [load](Self::load).
     pub fn exports(&self) -> &[ExportSpec] {
         self.program
             .as_ref()
             .map_or(&[], |program| program.exports.as_slice())
     }
 
-    /// Writes every export directive's rows into the given directory.
+    /// Writes the rows of every export directive into the given directory.
     ///
-    /// Files take their declared resource name,
-    /// or the conventional `predicate.extension`, with the characters of an IRI predicate that
-    /// no file name takes mangled to `_`.
-    /// A predicate the program never used yields an empty file.
-    /// Rows with cells that do not fit a declared column format are dropped and reported.
+    /// Each export is written to the file that [ExportSpec::file_name] names,
+    /// or to the standard output if its resource name is empty.
+    /// A predicate the program never used is written as an empty file.
+    /// Rows with values that do not fit a declared column format are dropped, with a warning.
     ///
     /// # Errors
     ///
@@ -898,10 +953,12 @@ impl Engine {
         self.export_specs(directory, &specs)
     }
 
-    /// Writes the rows of the given export specifications into the given directory.
+    /// Writes the rows of the given export specifications into the given directory,
+    /// as [export](Self::export) does.
     ///
-    /// For predicates the program does not export, the specifications can be built directly,
-    /// for example to write every predicate or to choose another serialization.
+    /// The specifications can also be built directly,
+    /// for example to write a predicate that the program does not export,
+    /// or to write in another serialization.
     ///
     /// # Errors
     ///
@@ -915,12 +972,11 @@ impl Engine {
         self.write_exports(directory, specs)
     }
 
-    /// Serializes one export specification's rows into memory,
-    /// as the bytes the file of [export_specs](Self::export_specs) would hold, compression
-    /// included.
+    /// Returns the bytes that [export_specs](Self::export_specs) would write to the file of one
+    /// export specification, compression included.
     ///
     /// This serves environments without a filesystem, such as browsers,
-    /// and exports that are streamed elsewhere.
+    /// and exports that are sent somewhere other than a file.
     ///
     /// # Errors
     ///
@@ -930,42 +986,44 @@ impl Engine {
         self.serialize_export(spec)
     }
 
-    /// Traces facts: for each, whether it holds after reasoning,
-    /// and if it does, the derivation explaining why, as [trace](crate::trace) types:
-    /// the derivations of all of them as one graph of facts.
+    /// Traces facts: returns for each whether it holds after reasoning,
+    /// and if it does, the derivation that explains why.
     ///
-    /// Facts are ground atoms over the program's predicates,
-    /// and their named arguments resolve as in the program text.
+    /// The derivations of all the facts form one graph of facts,
+    /// in the types of [trace](crate::trace).
+    /// The facts are ground atoms over the program's predicates,
+    /// and their named arguments are resolved as in the program text.
     /// Traces describe the facts at the fixpoint,
-    /// so tracing fails for an engine that has not reached it.
+    /// so the engine must be [at the fixpoint](Self::is_at_fixpoint).
     ///
     /// # Errors
     ///
-    /// Returns N0482 if no program is loaded,
-    /// N0209 if the engine holds updates [reason](Self::reason) has not processed,
-    /// and N0510 if reasoning has not reached the fixpoint.
-    /// Returns an error as well for a fact that names no predicate of the program or does not
-    /// fit it.
+    /// - Returns N0482 if no program is loaded,
+    ///   N0209 if the engine holds updates that [reason](Self::reason) has not processed,
+    ///   and N0510 if the last run did not reach the fixpoint.
+    /// - Returns an error for a fact that names no predicate of the program,
+    ///   or that does not fit its predicate.
     pub fn trace(&mut self, facts: &[Fact]) -> Result<TraceResponse, Diagnostic> {
         self.traceable()?;
         let resolved = self.ground_facts(facts)?;
         trace::proof::run(self, resolved)
     }
 
-    /// Traces every stored row of the given predicates and then the given facts,
-    /// as [trace](Self::trace) does,
-    /// and returns the facts, each with its node.
+    /// Traces every stored row of the given predicates, and then the given facts,
+    /// as [trace](Self::trace) does.
     ///
-    /// The response is handed to the sink in [parts](crate::trace::TracePart) as it grows,
-    /// a batch of rows at a time:
-    /// each fact is proven once, and becomes one node, listed after its premises.
-    /// Memory holds every proof until the trace ends.
+    /// Returns the traced facts, each with its node.
+    /// The response is passed to `sink` in [parts](crate::trace::TracePart) as it grows,
+    /// one batch of rows at a time.
+    /// Each fact is proven once and becomes one node,
+    /// which is listed after the nodes of its premises.
+    /// Every proof is kept in memory until the trace ends.
     ///
     /// # Errors
     ///
     /// Returns what [trace](Self::trace) returns for the facts,
     /// what [cursor](Self::cursor) returns for a predicate,
-    /// and the first error of the sink, which ends the tracing.
+    /// and the first error of `sink`, which ends the tracing.
     ///
     /// # Example
     ///
@@ -1009,12 +1067,14 @@ impl Engine {
         self.trace_in_parts(predicates, facts, sink)
     }
 
-    /// Answers a `treeForTable` query of the [query format](crate::trace::query):
-    /// the selected facts of a predicate, with their derivation expanded by the engine.
+    /// Answers a `treeForTable` query of the [query format](crate::trace::query).
+    ///
+    /// The response contains the selected facts of a predicate, with their derivations
+    /// expanded.
     ///
     /// # Errors
     ///
-    /// Returns the errors of [trace](Self::trace),
+    /// Returns N0482, N0209 or N0510 as [trace](Self::trace) does,
     /// and an error for a query that does not fit the written program.
     pub fn tree_for_table(
         &mut self,
@@ -1024,13 +1084,14 @@ impl Engine {
         trace::query::tree_for_table(self, query)
     }
 
-    /// Answers a `tableEntriesForTreeNodes` query of the [query format](crate::trace::query):
-    /// per node of the tree the query describes, the facts consistent with all of its
-    /// constraints, parents before children.
+    /// Answers a `tableEntriesForTreeNodes` query of the [query format](crate::trace::query).
+    ///
+    /// The response lists, per node of the tree that the query describes,
+    /// the facts consistent with all of its constraints, with parents before children.
     ///
     /// # Errors
     ///
-    /// Returns the errors of [trace](Self::trace),
+    /// Returns N0482, N0209 or N0510 as [trace](Self::trace) does,
     /// and an error for a query that does not fit the written program.
     pub fn table_entries_for_tree_nodes(
         &mut self,
@@ -1040,10 +1101,11 @@ impl Engine {
         trace::query::table_entries_for_tree_nodes(self, query)
     }
 
-    /// Returns the rule a statement id names, as traces and queries refer to it:
-    /// a rule of the written program or a bound import, with its text, `#[name]` and source
-    /// position.
+    /// Returns the rule with the given statement id, by which traces and queries refer to it.
     ///
+    /// A statement id is the position of a statement in the written program.
+    /// The rule is a rule of the written program or a bound import,
+    /// with its text, `#[name]` and source position.
     /// Returns `None` for an id that names no such statement.
     pub fn rule(&self, id: usize) -> Option<crate::trace::WrittenRule> {
         let statement = self.written.as_ref()?.statement(id)?;
@@ -1063,11 +1125,12 @@ impl Engine {
         self.program.is_some()
     }
 
-    /// Returns a value in term syntax as the program reads it back,
-    /// in a fact given to [trace](Self::trace) for example.
+    /// Returns a value in term syntax that the program reads back as the same value,
+    /// for example in a fact given to [trace](Self::trace).
     ///
     /// Under a base IRI, a bare name is relative to the base,
-    /// so every IRI is written in angle brackets, which the program takes as written.
+    /// so every IRI is written in angle brackets, which the program parses as the IRI they
+    /// enclose.
     pub fn term_text(&self, value: ValueRef<'_>) -> String {
         if self.translation.base_iri.is_some() {
             value.bracketed().to_string()
@@ -1076,9 +1139,10 @@ impl Engine {
         }
     }
 
-    /// Returns a predicate's name as the program reads it back:
-    /// bare where it reads back bare, and in angle brackets otherwise
-    /// or under a base IRI, as [term_text](Self::term_text) writes values.
+    /// Returns a predicate's name written so that the program reads it back as the same name.
+    ///
+    /// The name is written bare if it is read back unchanged,
+    /// and in angle brackets otherwise or under a base IRI, as for [term_text](Self::term_text).
     pub fn predicate_text(&self, predicate: &str) -> String {
         if self.translation.base_iri.is_some() {
             IriRef::new(predicate).bracketed().to_string()
@@ -1087,21 +1151,20 @@ impl Engine {
         }
     }
 
-    /// Returns whether the stored facts are at the fixpoint of the program: the
-    /// last [reason](Self::reason) ran to completion, and nothing was
-    /// added since.
+    /// Returns whether the stored facts are at the fixpoint of the program,
+    /// which holds if the last run reached it and nothing was added since.
     ///
     /// The tracing methods, such as [trace](Self::trace), require it.
     pub fn is_at_fixpoint(&self) -> bool {
         self.program.is_some() && self.dirty.is_empty() && self.fixpoint
     }
 
-    /// Returns the number of rule applications performed so far.
+    /// Returns the number of rule applications so far.
     pub fn applications(&self) -> u64 {
         self.applied
     }
 
-    /// Returns the wall-clock accounting of the reasoning so far.
+    /// Returns the wall-clock times and work counts of the reasoning so far.
     pub fn timings(&self) -> EngineTimings {
         let mut timings = self.timings;
         timings.stored_orders = self
@@ -1112,19 +1175,20 @@ impl Engine {
         timings
     }
 
-    /// Returns the bytes currently allocated across all stored tables and the dictionary.
+    /// Returns the number of bytes currently allocated by the stored tables and the dictionary.
     ///
     /// Transient buffers are not counted.
-    /// Their high-water mark is [WorkCounts::buffer_bytes](nemo_physical::plan::WorkCounts::buffer_bytes)
+    /// Their high-water mark is
+    /// [WorkCounts::buffer_bytes](nemo_physical::plan::WorkCounts::buffer_bytes)
     /// in [EngineTimings::counts].
     pub fn memory_bytes(&self) -> usize {
         self.manager.memory_bytes() + self.dictionary.memory().total()
     }
 
-    /// Returns the program as loaded and after every pipeline stage that rewrote it,
-    /// each with the stage's name (`"loaded"` for the first) and its text,
-    /// which parses back to the same program.
+    /// Returns the written program, and the program after every pipeline stage that rewrote it.
     ///
+    /// Each program comes with the name of its stage, or `"loaded"` for the written program,
+    /// and with its text, which parses back to the same program.
     /// Returns none before [load](Self::load).
     pub fn revisions(&self) -> Vec<(&'static str, String)> {
         let Some(revision) = self.revision else {
@@ -1134,7 +1198,7 @@ impl Engine {
         let mut previous: Option<&[crate::pipeline::StatementId]> = None;
         for revision in self.pipeline.lineage(revision) {
             let statements = self.pipeline.revision_statements(revision);
-            // A stage that rewrote nothing shows nothing.
+            // A stage that rewrote nothing is left out.
             if previous == Some(statements) {
                 continue;
             }
@@ -1150,11 +1214,11 @@ impl Engine {
     /// Returns the rendered texts of the compiled program's rules, by position.
     ///
     /// A rule's position is its index among the rules of the compiled program,
-    /// which the pipeline stages may have rewritten.
-    /// Telemetry events and [join_order](Self::join_order) name rules by it,
+    /// which are the rules after the pipeline stages rewrote them.
+    /// Telemetry events and [join_order](Self::join_order) name rules by their position,
     /// while traces name them by statement id (see [rule](Self::rule)).
+    /// A bound import is a rule here too, rendered as its directive.
     /// Returns none before [load](Self::load).
-    /// A bound SPARQL import is a rule here too, rendered as its directive.
     pub fn ran_rules(&self) -> &[String] {
         self.program
             .as_ref()
@@ -1163,7 +1227,7 @@ impl Engine {
 
     /// Returns the join order chosen for the rule at a [position](Self::ran_rules),
     /// as variable ids in the order the join binds them,
-    /// or `None` if the program has fewer rules.
+    /// or `None` if there is no rule at that position.
     pub fn join_order(&self, position: usize) -> Option<Vec<usize>> {
         self.program
             .as_ref()?
@@ -1172,7 +1236,8 @@ impl Engine {
             .map(|rule| rule.order.clone())
     }
 
-    /// Returns the reports accumulated while loading and reasoning.
+    /// Returns the diagnostics that the methods reported so far,
+    /// such as the warnings of loading and reasoning.
     pub fn reports(&self) -> &[Diagnostic] {
         self.pipeline.reports()
     }

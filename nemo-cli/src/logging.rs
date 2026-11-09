@@ -1,7 +1,7 @@
-//! The global `tracing` subscriber of a run:
-//! log lines to the error stream at the asked-for level,
-//! the telemetry stream into the recorder,
-//! and the event log as JSON lines if asked for.
+//! The global `tracing` subscriber of a run.
+//!
+//! It writes log lines to the error stream, passes the engine's telemetry stream to the
+//! recorder, and writes the telemetry stream to the event log as JSON lines.
 
 use std::{
     fs::File,
@@ -24,17 +24,21 @@ type Boxed = Box<dyn Layer<Registry> + Send + Sync>;
 
 use crate::{arguments::Arguments, error::CliError};
 
-/// The environment variable holding a default filter, as `NMO_LOG`.
+/// The environment variable that sets the default log filter.
 pub(crate) const ENVIRONMENT: &str = "NMO_LOG";
 
 /// Installs the run's subscriber.
 ///
-/// The stderr level comes, in order of precedence,
-/// from `--log`, `-v` (info, debug, trace), `-q` (errors only), the `NMO_LOG` environment,
-/// and otherwise `warn`.
-/// `--log` and `NMO_LOG` take full filter directives (`nemo::io=debug`).
-/// The recorder, if one records, reads the telemetry stream whatever that level,
-/// and `--events` writes the same stream as JSON lines.
+/// The filter of the log lines comes from the first of these that is given:
+/// - `--log`;
+/// - `-v`, `-vv` or `-vvv`, for `info`, `debug` or `trace`;
+/// - `--quiet`, for `error`;
+/// - the `NMO_LOG` environment variable;
+/// - otherwise `warn`.
+///
+/// `--log` and `NMO_LOG` accept full filter directives, such as `nemo::io=debug`.
+/// The recorder, if given, receives the telemetry stream whatever the log filter,
+/// and `--events` writes the same stream to a file as JSON lines.
 pub(crate) fn install(
     arguments: &Arguments,
     recorder: Option<&Arc<Recorder>>,
@@ -54,7 +58,9 @@ pub(crate) fn install(
     Ok(())
 }
 
-/// Returns the stderr filter the arguments ask for.
+/// Returns the filter of the log lines that the arguments select.
+///
+/// Fails for filter directives that do not parse.
 fn filter(arguments: &Arguments) -> Result<EnvFilter, Diagnostic> {
     let directives = match (&arguments.log, arguments.verbose, arguments.quiet) {
         (Some(directives), _, _) => directives.clone(),
@@ -76,7 +82,9 @@ fn filter(arguments: &Arguments) -> Result<EnvFilter, Diagnostic> {
     })
 }
 
-/// Returns the JSON-lines layer writing the telemetry stream to a file.
+/// Returns the layer that writes the telemetry stream to the file at `path` as JSON lines.
+///
+/// Fails if the file cannot be created.
 fn events(path: &Path) -> Result<Boxed, Diagnostic> {
     let file = File::create(path).map_err(|error| {
         CliError::EventsUnwritable {

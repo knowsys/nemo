@@ -8,10 +8,11 @@ use crate::{
     },
 };
 
-/// A single value as stored in a trie: its [Tag] and the payload encoding it.
+/// A single value as a trie stores it, a [Tag] and a payload that encodes the value.
 ///
-/// Comparing two values of the same tag compares the values they encode,
-/// and the derived order on `(tag, payload)` is the storage order.
+/// For the tag of an inline type,
+/// comparing two storage values compares the values that they encode.
+/// The derived order on `(tag, payload)` is the [storage order](crate::storage).
 ///
 /// # Example
 ///
@@ -21,20 +22,20 @@ use crate::{
 ///     value::{DataValue, NumberRef, ValueRef},
 /// };
 ///
-/// // An integer is its own payload, and decodes without a dictionary.
+/// // An integer is its own payload, and it decodes without a dictionary.
 /// let five = StorageValue::integer(5);
 /// assert_eq!(five.tag, Tag::Int);
 /// assert_eq!(five.to_value(), Some(ValueRef::Number(NumberRef::Decimal(5.into()))));
 /// assert!(StorageValue::integer(-3) < five);
 ///
-/// // A string has no inline payload: a dictionary stores it.
+/// // A string has no inline payload, since the dictionary stores it.
 /// assert_eq!(StorageValue::from_value(DataValue::string("five").as_ref()), None);
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct StorageValue {
     /// The type of the value.
     pub tag: Tag,
-    /// The payload encoding the value.
+    /// The payload that encodes the value.
     pub(crate) payload: u64,
 }
 
@@ -54,7 +55,7 @@ impl StorageValue {
         Self::new(Tag::Bool, value.to_payload())
     }
 
-    /// Creates a storage value from a signed integer.
+    /// Creates a storage value from a 64-bit integer.
     pub fn integer(value: i64) -> Self {
         Self::new(Tag::Int, value.to_payload())
     }
@@ -75,13 +76,13 @@ impl StorageValue {
     }
 
     /// Creates a storage value from a dateTime,
-    /// or `None` for a dateTime the payload cannot hold.
+    /// or returns `None` for a dateTime that does not fit in a payload.
     pub fn datetime(value: DateTime) -> Option<Self> {
         Self::encode(value)
     }
 
     /// Creates a storage value through a type's [PayloadEncoding],
-    /// or `None` if the encoding rejects the value.
+    /// or returns `None` if the value does not fit in a payload.
     fn encode<T: PayloadEncoding>(value: T) -> Option<Self> {
         value.to_payload().into().map(|payload| Self {
             tag: T::TAG,
@@ -89,8 +90,8 @@ impl StorageValue {
         })
     }
 
-    /// Encodes a value inline,
-    /// or `None` if the value lives in the dictionary.
+    /// Encodes an inline value,
+    /// or returns `None` for a value that the dictionary stores.
     pub fn from_value(value: ValueRef<'_>) -> Option<Self> {
         match value {
             ValueRef::Boolean(value) => Some(Self::boolean(value)),
@@ -116,7 +117,7 @@ impl StorageValue {
     }
 
     /// Decodes an inline value,
-    /// or `None` for a dictionary-backed tag, which only the dictionary resolves.
+    /// or returns `None` for a tag of dictionary entries, which only the dictionary can decode.
     pub fn to_value(self) -> Option<ValueRef<'static>> {
         match self.tag {
             Tag::Bool => Some(ValueRef::Boolean(bool::from_payload(self.payload))),
@@ -155,10 +156,10 @@ mod tests {
 
     use crate::value::{DataValue, TimezoneOffset, datatype::xsd};
 
+    /// Every value of a lower tag sorts before every value of a higher tag,
+    /// whatever the payloads.
     #[test]
     fn engine_order_is_tag_major() {
-        // Every value of a lower tag sorts before every value of a higher one,
-        // whatever the payloads.
         let ordered = [
             StorageValue::term(u64::MAX),
             StorageValue::boolean(true),
@@ -189,6 +190,7 @@ mod tests {
         }
     }
 
+    /// Every inline value decodes to itself.
     #[test]
     fn inline_values_round_trip() {
         let values = [
@@ -212,6 +214,7 @@ mod tests {
         }
     }
 
+    /// A value of an inline type beyond the range of its encoding is not inline.
     #[test]
     fn the_wide_cases_are_not_inline() {
         let values = [
@@ -229,6 +232,8 @@ mod tests {
         }
     }
 
+    /// IRIs, strings and nulls are not inline,
+    /// and a storage value with a tag of dictionary entries does not decode on its own.
     #[test]
     fn dictionary_domains_are_not_inline() {
         let values = [

@@ -1,5 +1,7 @@
-//! The construction from runs: the bounds sampled across them,
-//! the window of their rows between two bounds, and the build of a window.
+//! The construction of a trie's columns from runs.
+//!
+//! It samples the bounds across the runs, takes the *window* of their rows between two bounds,
+//! and builds each window.
 
 mod chain;
 
@@ -38,8 +40,10 @@ impl<'a, 'r> Runs<'a, 'r> {
         Self { arity, runs }
     }
 
-    /// Returns the nonempty pieces of the runs whose first-column value lies in `low..high`,
-    /// a side unbounded if `None`.
+    /// Returns the nonempty pieces of the runs with the rows whose first-column value lies in
+    /// `low..high`.
+    ///
+    /// A bound that is `None` leaves its side unbounded.
     fn window(&self, low: Option<StorageValue>, high: Option<StorageValue>) -> Vec<Run<'r>> {
         self.runs
             .iter()
@@ -57,8 +61,11 @@ impl ShardSource for Runs<'_, '_> {
         self.arity
     }
 
-    /// Samples the first-column values at equal row positions across the runs laid end to end:
-    /// balanced for disjoint runs, a sample of the value distribution for overlapping ones.
+    /// Samples the first-column values at equally spaced row positions across the runs laid
+    /// end to end.
+    ///
+    /// The shards are balanced for disjoint runs,
+    /// and the sample follows the distribution of the values for overlapping runs.
     fn bounds(&self, shards: usize) -> Vec<StorageValue> {
         let rows: usize = self.runs.iter().map(Run::len).sum();
         let mut bounds: Vec<StorageValue> = (1..shards)
@@ -80,9 +87,9 @@ impl ShardSource for Runs<'_, '_> {
 
     /// Builds the shard from its pieces of the runs.
     ///
-    /// Pieces that follow one another are one sorted sequence,
-    /// built in a linear pass over exactly sized storage;
-    /// otherwise the pieces group into [chains](RunChain) that merge.
+    /// Pieces that follow one another form one sorted sequence,
+    /// which is built in a linear pass into exactly sized storage.
+    /// Otherwise, the pieces are grouped into [chains](RunChain), which are merged.
     fn build_shard(&self, low: Option<StorageValue>, high: Option<StorageValue>) -> Vec<Column> {
         let mut chains = RunChain::partition(&self.window(low, high));
         if chains.len() == 1 {
@@ -93,9 +100,10 @@ impl ShardSource for Runs<'_, '_> {
     }
 }
 
-/// Builds the column pieces of one sorted sequence:
-/// a scan pass sizes each column exactly and finds its layout,
-/// so the storage is sized once, and a second pass emits the distinct rows into it.
+/// Builds the column pieces of one sorted sequence.
+///
+/// A first pass sizes each column exactly and finds its layout, so the storage is sized once.
+/// A second pass writes the distinct rows into it.
 fn build_sequence(arity: usize, sequence: &RunChain<'_>) -> Vec<Column> {
     let mut scans = vec![ColumnScan::default(); arity];
     let mut distinct = Distinct::borrowed();
@@ -120,9 +128,11 @@ fn build_sequence(arity: usize, sequence: &RunChain<'_>) -> Vec<Column> {
     builder.finish()
 }
 
-/// Builds the column pieces of chains that overlap:
-/// a scan of the values finds each column's layout, as a repeat changes none,
-/// and the chains merge into storage bounded by their row total, trimmed at finish.
+/// Builds the column pieces of chains that overlap.
+///
+/// A scan of the values finds each column's layout, which repeated rows do not change.
+/// The chains are then merged into storage sized by their total number of rows,
+/// and the unused capacity is released at the end.
 fn merge_chains(arity: usize, chains: Vec<RunChain<'_>>) -> Vec<Column> {
     let rows: usize = chains.iter().map(RunChain::len).sum();
     let mut scans = vec![KindScan::default(); arity];

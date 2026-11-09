@@ -1,20 +1,23 @@
 //! Commits: rewriting one revision into the next.
 //!
-//! A commit rewrites its *input*, the base revision it starts from, under one stage's name.
-//! Statements that produce no facts (`@declare` directives, outputs, exports) change freely.
-//! Rules, facts and imports change only through *declared rewrites*:
-//! every statement created that way comes with a rewrite declaration
-//! of how it relates to the input. The statement does one of the following:
+//! A commit rewrites its *input*, the base revision it starts from, under the name of one stage.
+//! Statements that produce no facts, such as `@declare` directives, outputs and exports,
+//! change freely.
+//! Rules, facts and imports change only through *declared rewrites*.
+//! Each statement that a declared rewrite creates comes with a *rewrite declaration*,
+//! which says how the statement relates to the input.
+//! The statement does one of the following:
 //!
 //! - It replaces an input rule.
 //! - It defines a new predicate.
 //! - It defines a *filter*: a new predicate that other statements use
 //!   only to restrict their matches, and that proofs never expand.
 //!
-//! A rule replacing an input rule gives the [path](crate::pipeline::LiteralPath)
-//! of each of the input rule's literals in it,
-//! and the commit computes the correspondence of the two rules when it [finishes](Commit::finish).
-//! The shorthands, such as [fold](Commit::fold), write the rewrite declarations
+//! A rule that replaces an input rule comes with the [path](crate::pipeline::LiteralPath)
+//! of each literal of the input rule in it.
+//! When the commit [finishes](Commit::finish),
+//! it computes the *correspondence* of the two rules from these paths.
+//! The shorthands, such as [fold](Commit::fold), make the rewrite declarations
 //! of common rewrites, paths included.
 
 mod declare;
@@ -36,23 +39,24 @@ use crate::{
 
 use self::declare::PendingDeclaration;
 
-/// A commit in progress: the rewriting of a base revision under one stage's name.
+/// A commit in progress, which rewrites a base revision under the name of one stage.
 ///
-/// Keeping a statement is the default:
-/// the working list starts as the base revision's,
-/// and statements leave it only through a method that replaces or [removes](Self::remove) them.
+/// Keeping a statement is the default.
+/// The working list starts as the list of the base revision,
+/// and a statement leaves it only through a method that replaces or [removes](Self::remove) it.
 /// Every method records its provenance edge as it runs.
-/// A new statement without a span takes the span of its first source.
-/// Dropping a commit without [finish](Self::finish) creates no revision
-/// (the statement versions its methods created stay in the arena, unreachable).
+/// A new statement without a span gets the span of its first source.
+/// Dropping a commit without calling [finish](Self::finish) creates no revision.
+/// The statement versions that its methods created then stay in the arena, unreachable.
 ///
-/// A commit over an extension freezes the statements of the program the extension is appended to:
-/// they were rewritten when that program loaded,
-/// and the stage may read them but not rewrite them.
+/// A commit over an extension freezes the statements of the program that the extension is
+/// appended to.
+/// Those statements were rewritten when that program was loaded,
+/// so the stage may read them but not rewrite them.
 ///
 /// # Example
 ///
-/// A stage splitting long rule bodies, added to an engine:
+/// A stage that splits long rule bodies, added to an engine:
 ///
 /// ```
 /// use nemo::{
@@ -104,38 +108,39 @@ use self::declare::PendingDeclaration;
 /// ```
 #[derive(Debug)]
 pub struct Commit<'a> {
-    /// The pipeline committed into.
+    /// The pipeline that the commit writes into.
     pipeline: &'a mut Pipeline,
-    /// The rewritten revision.
+    /// The revision being rewritten.
     base: RevisionId,
-    /// The committing stage's name.
+    /// The name of the stage that makes the commit.
     stage: &'static str,
     /// The working list of live statements.
     statements: Vec<StatementId>,
-    /// The statements the stage may read but not rewrite.
+    /// The statements that the stage may read but not rewrite.
     frozen: HashSet<StatementId>,
-    /// The statement versions this commit created.
+    /// The statement versions that this commit created.
     created: Vec<StatementId>,
-    /// The rewrite declarations of the statements created through declared
-    /// rewrites, recorded when the commit finishes.
+    /// The rewrite declarations made so far,
+    /// which are recorded on the provenance edges when the commit finishes.
     pending: Vec<PendingDeclaration>,
     /// The name scope of the base revision, built on first use.
     scope: OnceCell<NameScope>,
-    /// The resolved predicate names the input uses, collected on first
-    /// use.
+    /// The resolved names of the predicates that the input uses, collected on first use.
     input_names: OnceCell<HashSet<String>>,
-    /// The resolved predicate names in use, those drawn fresh included,
-    /// collected on first use.
+    /// The resolved names of the predicates in use,
+    /// including those drawn by [fresh](Self::fresh), collected on first use.
     taken: Option<HashSet<String>>,
-    /// The imports removed because the stage's rules query their endpoint
-    /// directly, each with its predicate's resolved name, which no statement
-    /// may read when the commit finishes.
+    /// The imports removed with [remove_import](Self::remove_import),
+    /// each with the resolved name of its predicate.
+    ///
+    /// When the commit finishes, no statement other than a `@declare` directive may name these
+    /// predicates.
     removed_imports: Vec<(StatementId, String)>,
 }
 
 impl<'a> Commit<'a> {
-    /// Starts a commit over a base revision whose leading `frozen`
-    /// statements the stage may not rewrite.
+    /// Starts a commit over a base revision whose first `frozen` statements
+    /// the stage may not rewrite.
     pub(crate) fn new(
         pipeline: &'a mut Pipeline,
         base: RevisionId,
@@ -159,8 +164,7 @@ impl<'a> Commit<'a> {
         }
     }
 
-    /// Returns the live statements the stage may rewrite, in program
-    /// order.
+    /// Returns the live statements that the stage may rewrite, in program order.
     pub fn ids(&self) -> Vec<StatementId> {
         self.statements
             .iter()
@@ -169,36 +173,36 @@ impl<'a> Commit<'a> {
             .collect()
     }
 
-    /// Returns every live statement, in program order,
-    /// including the frozen statements of the program an extension is appended to.
+    /// Returns every live statement, in program order, including the frozen ones.
     pub fn all_ids(&self) -> Vec<StatementId> {
         self.statements.clone()
     }
 
-    /// Returns whether a statement is frozen: the stage may read it but
-    /// not rewrite it.
+    /// Returns whether a statement is frozen, so that the stage may read it but not rewrite it.
     pub fn is_frozen(&self, id: StatementId) -> bool {
         self.frozen.contains(&id)
     }
 
-    /// Returns the statement version behind an id.
+    /// Returns the statement version with the given id.
     pub fn statement(&self, id: StatementId) -> &Statement {
         self.pipeline.statement(id)
     }
 
-    /// Returns the absolute name a predicate or a constant stands for in
-    /// the program's scope.
+    /// Returns the absolute name that a predicate or a constant stands for
+    /// in the scope of the base revision.
     ///
     /// # Errors
     ///
-    /// Returns a diagnostic if the name uses a prefix the program does
-    /// not declare.
+    /// Returns a diagnostic if the name uses a prefix that the base revision does not declare,
+    /// or if it is a module-qualified name.
     pub fn resolve(&self, identifier: &Identifier) -> Result<String, Diagnostic> {
         self.scope().resolve(identifier, None)
     }
 
-    /// Returns a bare predicate name that no statement uses yet: the
-    /// stem followed by the first number that makes it fresh.
+    /// Returns a bare predicate name that no statement uses yet.
+    ///
+    /// The name is `stem` followed by the first number from 1 that makes it unused.
+    /// A name that this method returns counts as used from then on.
     pub fn fresh(&mut self, stem: &str) -> Identifier {
         if self.taken.is_none() {
             self.taken = Some(self.names_of(&self.statements));
@@ -221,15 +225,16 @@ impl<'a> Commit<'a> {
         unreachable!("the naturals run out before the names do")
     }
 
-    /// Reports a warning, and the run carries on.
+    /// Adds a diagnostic to the pipeline's [reports](Pipeline::reports),
+    /// without aborting the stage.
     pub fn report(&mut self, diagnostic: Diagnostic) {
         self.pipeline.report(diagnostic);
     }
 
-    /// Adds a statement that produces no facts (a `@declare` directive, an output, an export),
-    /// derived from the given sources.
+    /// Adds a statement that produces no facts, such as a `@declare` directive, an output or an
+    /// export, derived from `sources`.
     ///
-    /// It is inserted before the first of `sources` the stage may rewrite,
+    /// The statement is inserted before the first of `sources` that is live and not frozen,
     /// or at the end of the program if there is none.
     ///
     /// # Panics
@@ -255,9 +260,10 @@ impl<'a> Commit<'a> {
         self.derive_at(&[old], vec![new], position)[0]
     }
 
-    /// Removes a statement that produces no facts, recording a deletion edge.
+    /// Removes a statement that produces no facts,
+    /// and records the removal as a provenance edge without targets.
     ///
-    /// The version stays addressable in the arena.
+    /// The version stays in the arena.
     ///
     /// # Panics
     ///
@@ -270,7 +276,8 @@ impl<'a> Commit<'a> {
         self.take_out(old);
     }
 
-    /// Takes a live statement out, recording the deletion edge.
+    /// Removes a live statement from the working list,
+    /// and records the removal as a provenance edge without targets.
     fn take_out(&mut self, old: StatementId) {
         self.pipeline.record_edge(ProvenanceEdge {
             stage: self.stage,
@@ -285,10 +292,12 @@ impl<'a> Commit<'a> {
     ///
     /// # Panics
     ///
-    /// Panics if a predicate is defined twice, if an input literal does
-    /// not match the literal at its path, if a statement reads the predicate
-    /// of an import removed with [remove_import](Self::remove_import),
-    /// or if the commit wrote a construct a loaded program cannot hold.
+    /// Panics if the commit broke a rule of its methods:
+    /// - a predicate is defined twice;
+    /// - an input rule does not match the rule that replaces it along the given literal paths;
+    /// - a statement other than a `@declare` directive names the predicate of an import removed
+    ///   with [remove_import](Self::remove_import);
+    /// - the commit wrote a construct that a loaded program cannot contain.
     pub fn finish(mut self) -> RevisionId {
         self.record_declarations();
         self.expect_unread();
@@ -316,7 +325,7 @@ impl<'a> Commit<'a> {
     /// Replaces a statement by several of any kind, in place and in order,
     /// under one provenance edge and without a rewrite declaration.
     ///
-    /// The provenance tests use it to build edges without rewrite declarations.
+    /// It lets tests build provenance edges without rewrite declarations.
     #[cfg(test)]
     pub(crate) fn split(&mut self, old: StatementId, new: Vec<Statement>) -> Vec<StatementId> {
         let position = self.position(old);
@@ -324,10 +333,10 @@ impl<'a> Commit<'a> {
         self.derive_at(&[old], new, position)
     }
 
-    /// Adds a statement of any kind derived from the given sources, which
-    /// stay live, at the end of the program, without a rewrite declaration.
+    /// Adds a statement of any kind at the end of the program,
+    /// derived from `sources` and without a rewrite declaration.
     ///
-    /// The engine uses it to restore, for an extension, a plain import that a stage removed.
+    /// The sources stay live.
     #[cfg_attr(
         not(any(feature = "sparql", test)),
         expect(dead_code, reason = "only the SPARQL rewrite takes imports out")
@@ -336,8 +345,8 @@ impl<'a> Commit<'a> {
         self.derive_at(sources, vec![new], self.statements.len())[0]
     }
 
-    /// Adds a statement derived from the given sources before the first
-    /// one the stage may rewrite, or at the end if there is none.
+    /// Adds a statement derived from `sources`,
+    /// before the first of them that is live and not frozen, or at the end if there is none.
     fn insert(&mut self, sources: &[StatementId], statement: Statement) -> StatementId {
         let position = sources
             .iter()
@@ -347,10 +356,10 @@ impl<'a> Commit<'a> {
         self.derive_at(sources, vec![statement], position)[0]
     }
 
-    /// Records one edge and interns its targets at a position of the
-    /// working list.
+    /// Records one provenance edge from `sources` to the statements `new`,
+    /// and inserts them into the working list at `position`.
     ///
-    /// A new statement without a span takes the span of the first source.
+    /// A new statement without a span gets the span of the first source.
     fn derive_at(
         &mut self,
         sources: &[StatementId],
@@ -381,8 +390,11 @@ impl<'a> Commit<'a> {
         ids
     }
 
-    /// Returns the working-list position of a live statement the stage
-    /// may rewrite.
+    /// Returns the position of a statement in the working list.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the statement is frozen or not live.
     fn position(&self, id: StatementId) -> usize {
         assert!(
             !self.frozen.contains(&id),
@@ -396,8 +408,8 @@ impl<'a> Commit<'a> {
             .expect("rewritten statements are live in the commit")
     }
 
-    /// Panics, naming the stage, if a statement produces facts: a rule, a
-    /// fact or an import.
+    /// Panics, naming the stage, if a statement produces facts,
+    /// as a rule, a fact or an import does.
     fn expect_no_facts(&self, statement: &Statement) {
         assert!(
             !matches!(
@@ -424,14 +436,14 @@ impl<'a> Commit<'a> {
         })
     }
 
-    /// Returns the resolved names of every predicate the statements
-    /// name.
+    /// Returns the resolved names of the predicates that the statements `ids` name.
+    ///
+    /// A name that does not resolve is left out.
     fn names_of(&self, ids: &[StatementId]) -> HashSet<String> {
         let scope = self.scope();
         let mut names = HashSet::new();
         for &id in ids {
-            // A fact names its predicate and nothing else; the walk below
-            // would clone it for that.
+            // A fact names only its predicate, so it is not cloned for the walk below.
             if let Statement::Fact(fact) = self.pipeline.statement(id) {
                 if let Ok(name) = scope.resolve(&fact.predicate, None) {
                     names.insert(name);

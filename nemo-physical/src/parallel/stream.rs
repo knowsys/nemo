@@ -1,4 +1,6 @@
-//! Tasks whose results are handed to the caller as they are made.
+//! Tasks whose items are passed to a consumer on the calling thread as they are made.
+//!
+//! The *consumer* is the calling thread, which passes each item to a callback.
 
 use std::{
     ops::ControlFlow,
@@ -7,7 +9,8 @@ use std::{
 
 use crate::parallel::{Tasks, Workers};
 
-/// The items one worker has made that the consumer has not taken yet, by weight.
+/// The total weight of the items that one worker has made and the consumer has not taken yet,
+/// and whether the consumer has stopped.
 #[derive(Debug, Default)]
 struct Held {
     /// The weight held, and whether the consumer has stopped taking items.
@@ -17,9 +20,11 @@ struct Held {
 }
 
 impl Held {
-    /// Waits until an item of the given weight may join the held ones, and adds it:
-    /// at once if nothing is held, else once the held weight leaves room for it within `ahead`.
+    /// Waits until an item of the given weight may be held, and adds its weight.
     ///
+    /// The item may be held at once if nothing is held,
+    /// and otherwise once the held weight plus its weight is at most `ahead`.
+    /// The wait also ends once the consumer has stopped.
     /// Returns whether the consumer still takes items.
     fn admit(&self, weight: usize, ahead: usize) -> bool {
         let mut state = self.state.lock().unwrap_or_else(PoisonError::into_inner);
@@ -33,24 +38,26 @@ impl Held {
         !state.1
     }
 
-    /// Releases the weight of an item the consumer took.
+    /// Releases the weight of an item that the consumer took.
     fn release(&self, weight: usize) {
         self.state.lock().unwrap_or_else(PoisonError::into_inner).0 -= weight;
         self.taken.notify_one();
     }
 
-    /// Marks the consumer stopped, waking a waiting worker.
+    /// Marks the consumer as stopped, and wakes the waiting worker.
     fn stop(&self) {
         self.state.lock().unwrap_or_else(PoisonError::into_inner).1 = true;
         self.taken.notify_all();
     }
 }
 
-/// Stops every worker's [Held] when dropped,
-/// so that no worker waits for a consumer that is gone, however it left.
+/// A guard that stops every worker's [Held] when it is dropped,
+/// so that no worker keeps waiting for a consumer that has left,
+/// whether by returning or by panicking.
 struct Stopping<'a>(&'a [Held]);
 
 impl Drop for Stopping<'_> {
+    /// Marks the consumer as stopped in every worker's [Held].
     fn drop(&mut self) {
         for held in self.0 {
             held.stop();
@@ -58,37 +65,38 @@ impl Drop for Stopping<'_> {
     }
 }
 
-/// Runs the tasks and hands what they emit to `consume` on the calling thread:
-/// task by task in task order, and each task's items in the order it emitted them.
+/// Runs the tasks and passes the items they emit to `consume` on the calling thread,
+/// in task order, and within a task in the order of emission.
 ///
 /// `produce` runs the task with the given index,
-/// passing each item it makes to the emitter it is given.
-/// The emitter answers whether the items are still wanted,
+/// and passes each item that it makes to the emit function that it is given.
+/// The emit function returns whether items are still wanted,
 /// and a task stops at the first `false`.
 /// `produce` may be called from several worker threads at once,
 /// so it reads its input through shared references.
-/// `consume` receives each item with the index of its task,
-/// and ends the phase early by breaking:
-/// no item is consumed after that.
+/// `consume` receives each item with the index of its task.
+/// It ends the stream early by breaking, and no item is consumed after that.
+/// `weight` returns the weight of an item, and `ahead` the weight of the items of a task
+/// that its worker may hold.
 ///
-/// When the tasks may use the pool,
-/// they run there while the calling thread consumes,
+/// If the tasks may use the pool, they run there while the calling thread consumes,
 /// so even a single task overlaps with the consumption of its items.
-/// Of `n` workers, worker `w` runs the tasks `w`, `w + n`, `w + 2n`, … in order,
-/// passing their items through a channel of its own.
-/// A worker holds the items it made and the consumer did not take
-/// up to a total `weight` of `ahead(task)` for the task it runs, or a single item of any weight,
-/// and waits before an item that would exceed that.
+/// With `n` workers, worker `w` runs the tasks `w`, `w + n`, `w + 2n`, … in order,
+/// and passes their items through a channel of its own.
+/// A worker holds the items that it made and that were not consumed yet,
+/// up to a total weight of `ahead(task)` for its current task, or a single item of any weight.
+/// It waits before an item that would exceed that.
 /// So the task whose items the consumer waits for has always started,
-/// and the items made and not yet consumed weigh at most the largest `ahead`
-/// plus two items per worker, however long or short the tasks are.
-/// A later task whose items weigh at most its `ahead` is made whole
-/// while the consumer still takes the items of earlier ones.
-/// Otherwise each task runs on the calling thread,
+/// and for each worker, the items made and not yet consumed weigh at most the largest `ahead`
+/// plus two items, however long or short the tasks are.
+/// A later task whose items weigh at most its `ahead` is made in full
+/// while the consumer still takes the items of earlier tasks.
+/// If the tasks may not use the pool, each task runs on the calling thread,
 /// and every item is consumed as soon as it is emitted.
 ///
-/// A panic in a task or in `consume` propagates to the caller
-/// once every task has stopped.
+/// # Panics
+///
+/// A panic in a task or in `consume` is propagated once every task has stopped.
 ///
 /// # Example
 ///
@@ -97,7 +105,7 @@ impl Drop for Stopping<'_> {
 ///
 /// use nemo_physical::parallel::{stream_tasks, Tasks};
 ///
-/// // Each task emits its index three times; the consumer sees them in order.
+/// // Each task emits its index three times, and `consume` receives them in order.
 /// let mut seen = Vec::new();
 /// stream_tasks(
 ///     Tasks::of(4),
@@ -142,7 +150,7 @@ pub fn stream_tasks<T: Send>(
     };
 
     let workers = Workers::get().threads().min(tasks.count);
-    // A task's items go through its worker's channel with their weights, `None` ending the task.
+    // A task's items go through its worker's channel with their weights, and `None` ends the task.
     let (senders, receivers): (Vec<_>, Vec<_>) = (0..workers)
         .map(|_| mpsc::channel::<Option<(usize, T)>>())
         .unzip();
@@ -170,8 +178,8 @@ pub fn stream_tasks<T: Send>(
             });
         }
 
-        // Owned here, so that leaving early closes every channel
-        // and wakes every waiting worker, which then stops.
+        // The receivers are owned here, so that leaving early closes every channel,
+        // and the guard wakes every waiting worker, which then stops.
         let receivers = receivers;
         let _stopping = Stopping(helds);
         for task in 0..tasks.count {
@@ -184,7 +192,7 @@ pub fn stream_tasks<T: Send>(
                         }
                     }
                     Ok(None) => break,
-                    // Its worker panicked; the panic propagates once the scope ends.
+                    // The task's worker panicked, and the panic propagates once the scope ends.
                     Err(_) => return,
                 }
             }
@@ -201,7 +209,8 @@ mod tests {
         thread,
     };
 
-    /// Streams `count` tasks of `items` items each, returning the `(task, item)` pairs consumed.
+    /// Streams the tasks with `items` items each,
+    /// and returns the consumed pairs of a task index and an item.
     fn streamed(tasks: Tasks, ahead: usize, items: usize) -> Vec<(usize, usize)> {
         let mut seen = Vec::new();
         stream_tasks(
@@ -224,6 +233,8 @@ mod tests {
         seen
     }
 
+    /// Items arrive in task order and in the order of emission,
+    /// on the pool or not, and for any `ahead`.
     #[test]
     fn streamed_items_arrive_in_task_and_emission_order() {
         for count in [0, 1, 2, 7, 50] {
@@ -237,6 +248,7 @@ mod tests {
         }
     }
 
+    /// No item is consumed after `consume` breaks.
     #[test]
     fn a_breaking_consumer_ends_the_stream() {
         let expected: Vec<(usize, usize)> = (0..3)
@@ -269,9 +281,10 @@ mod tests {
         }
     }
 
-    /// The most weight made and not yet consumed while streaming `count` tasks
-    /// of `items` items each, an item weighing `weigh(item)`,
-    /// the consumer pausing on every item.
+    /// Returns the largest weight that was made and not yet consumed
+    /// while streaming `count` tasks of `items` items each.
+    ///
+    /// An item weighs `weigh(item)`, and the consumer yields its thread after every item.
     fn most_waiting(count: usize, items: usize, ahead: usize, weigh: fn(usize) -> usize) -> usize {
         let made = AtomicUsize::new(0);
         let mut consumed = 0;
@@ -301,22 +314,25 @@ mod tests {
         most
     }
 
+    /// The items made and not yet consumed stay within `ahead` plus two items per worker,
+    /// for long tasks and for short ones.
     #[test]
     fn tasks_run_at_most_ahead_items_in_front_of_the_consumer() {
         let ahead = 2;
         let bound = Workers::get().threads() * (ahead + 2);
-        // Long tasks wait on their worker's held items; short ones finish at once
-        // and their worker's next task waits behind them.
+        // Long tasks wait while their worker holds `ahead` items.
+        // Short tasks finish at once, and their worker's next task waits behind them.
         for (count, items) in [(16, 200), (2000, 1)] {
             let most = most_waiting(count, items, ahead, |_| 1);
             assert!(most <= bound, "{most} items waited, at most {bound} may");
         }
     }
 
+    /// With items of different weights, a worker holds at most `ahead` in weight.
     #[test]
     fn a_worker_holds_at_most_ahead_in_weight_or_one_item() {
-        // A worker holds `ahead`, waits with one more item,
-        // and the consumer counts the item it took last.
+        // Per worker, the bound allows `ahead` in weight, one more item that waits,
+        // and the item that the consumer took last.
         let ahead = 16;
         let bound = Workers::get().threads() * (ahead + 3 * 10);
         let most = most_waiting(16, 200, ahead, |item| 1 + item % 10);
@@ -326,6 +342,7 @@ mod tests {
         );
     }
 
+    /// An item heavier than `ahead` is still passed on, one at a time.
     #[test]
     fn an_item_heavier_than_ahead_passes_alone() {
         let bound = Workers::get().threads() * 3 * 100;
@@ -336,6 +353,7 @@ mod tests {
         );
     }
 
+    /// A panic in `consume` propagates, and the waiting workers are released.
     #[test]
     fn a_panicking_consumer_releases_the_waiting_workers() {
         let outcome = std::panic::catch_unwind(|| {
@@ -361,6 +379,7 @@ mod tests {
         assert!(outcome.is_err());
     }
 
+    /// A panic in a task propagates, and the stream does not wait forever.
     #[test]
     fn a_panicking_task_propagates_without_stalling_the_stream() {
         for failing in [0, 3] {

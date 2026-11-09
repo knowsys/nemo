@@ -1,4 +1,4 @@
-//! 32-bit floating point numbers.
+//! 32-bit floating-point numbers.
 
 use std::{
     cmp::Ordering,
@@ -9,21 +9,21 @@ use std::{
 
 use crate::value::number::lexical::{Lexical, scientific, write_float};
 
-/// An [`xsd:float`](https://www.w3.org/TR/xmlschema11-2/#float) value:
-/// a single-precision IEEE number in which all NaNs are one value.
+/// An [`xsd:float`](https://www.w3.org/TR/xmlschema11-2/#float) value,
+/// a single-precision IEEE 754 number in which all NaNs are one value.
 ///
-/// Equality, order and hashing are term identity:
-/// the NaN is identical to itself and above `INF`,
-/// and `-0.0` is a term of its own directly below `0.0`.
-/// XSD's value comparison is [value_eq](Self::value_eq) and [value_cmp](Self::value_cmp).
+/// Equality, order and hashing follow term identity:
+/// NaN is identical to itself and lies above `INF`,
+/// and `-0.0` is a term of its own, directly below `0.0`.
+/// XSD's comparison by value is [value_eq](Self::value_eq) and [value_cmp](Self::value_cmp).
 #[derive(Clone, Copy)]
 pub struct Float(f32);
 
-/// The value takes the bits of its number.
+/// Checks at compile time that a value occupies exactly the 4 bytes of its number.
 const _: () = assert!(size_of::<Float>() == 4);
 
 impl Float {
-    /// The bit pattern every NaN canonicalizes to, a quiet NaN.
+    /// The bit pattern of the canonical NaN, a quiet NaN, which replaces every other NaN.
     const CANONICAL_NAN: u32 = 0x7FC0_0000;
 
     /// The sign bit of the bit pattern.
@@ -38,10 +38,10 @@ impl Float {
         }
     }
 
-    /// Parses an `xsd:float` lexical form,
-    /// a signed decimal with an optional exponent
-    /// or one of `INF`, `+INF`, `-INF` and `NaN`,
-    /// or `None` for malformed input.
+    /// Parses an `xsd:float` lexical form, or returns `None` for a malformed lexical form.
+    ///
+    /// The lexical form is a decimal with an optional sign and an optional exponent,
+    /// or one of `INF`, `+INF`, `-INF` and `NaN`.
     ///
     /// # Example
     ///
@@ -58,7 +58,7 @@ impl Float {
             "INF" | "+INF" => Some(Self(f32::INFINITY)),
             "-INF" => Some(Self(f32::NEG_INFINITY)),
             "NaN" => Some(Self::new(f32::NAN)),
-            // The standard parser accepts more spellings than the XSD form.
+            // The standard parser accepts more spellings than XSD, so the form is checked first.
             _ if Lexical::is_float_form(lexical) => lexical.parse().ok().map(Self),
             _ => None,
         }
@@ -74,7 +74,7 @@ impl Float {
         self.0.is_finite()
     }
 
-    /// Returns whether the value is the NaN.
+    /// Returns whether the value is NaN.
     pub fn is_nan(self) -> bool {
         self.0.is_nan()
     }
@@ -84,31 +84,33 @@ impl Float {
         Self(self.0.abs())
     }
 
-    /// Returns the value as a double, which holds every float exactly.
+    /// Returns the value as a double, which can hold every float exactly.
     pub fn to_f64(self) -> f64 {
         f64::from(self.0)
     }
 
-    /// Returns whether two values are equal in XSD's value space, `op:numeric-equal`:
-    /// the NaN equals nothing, and the two zeros are equal.
+    /// Returns whether two values are equal by value, `op:numeric-equal`.
+    ///
+    /// NaN equals nothing, and the two zeros are equal.
     pub fn value_eq(self, other: Self) -> bool {
         self.0 == other.0
     }
 
-    /// Returns the order of two values in XSD's value space, `op:numeric-less-than`,
-    /// or `None` if either is the NaN.
+    /// Returns the order of two values by value, `op:numeric-less-than`,
+    /// or `None` if either is NaN.
     pub fn value_cmp(self, other: Self) -> Option<Ordering> {
         self.0.partial_cmp(&other.0)
     }
 }
 
-/// The hooks of the storage encoding.
+/// The order keys of the storage encoding.
 impl Float {
     /// Returns an unsigned key whose order is the term order,
-    /// and which two values share exactly if they are one term.
+    /// and which two values share exactly if they are the same term.
     ///
-    /// A positive value gets its sign bit set and a negative one has all bits flipped,
-    /// which maps the IEEE order onto the unsigned order.
+    /// A value with a clear sign bit gets the bit set,
+    /// and a value with a set sign bit has all its bits flipped.
+    /// This maps the IEEE order onto the order of unsigned integers.
     pub(crate) fn order_key(self) -> u32 {
         let bits = self.0.to_bits();
         if bits & Self::SIGN_BIT == 0 {
@@ -118,7 +120,7 @@ impl Float {
         }
     }
 
-    /// Decodes the value of an order key.
+    /// Returns the value of an order key.
     pub(crate) fn from_order_key(key: u32) -> Self {
         Self(f32::from_bits(if key & Self::SIGN_BIT != 0 {
             key ^ Self::SIGN_BIT
@@ -164,7 +166,9 @@ impl Mul for Float {
 impl Div for Float {
     type Output = Self;
 
-    /// Returns the IEEE quotient, `op:numeric-divide`; a zero divisor gives an infinity or the NaN.
+    /// Returns the IEEE quotient, `op:numeric-divide`.
+    ///
+    /// A zero divisor gives an infinity or NaN.
     fn div(self, other: Self) -> Self {
         Self::new(self.0 / other.0)
     }
@@ -206,17 +210,17 @@ impl Hash for Float {
 }
 
 impl fmt::Debug for Float {
-    /// Writes the value in its lexical form.
+    /// Writes the value as its `Display` does.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{self}")
     }
 }
 
 impl Float {
-    /// Returns XSD's canonical lexical form of the value, as `2.5E0` or `1.0E3`,
-    /// or `INF`, `-INF` and `NaN`.
+    /// Returns XSD's canonical lexical form of the value,
+    /// such as `2.5E0`, `1.0E3`, `INF`, `-INF` or `NaN`.
     ///
-    /// [Display](fmt::Display) writes the value as XPath does instead.
+    /// [Display](fmt::Display) writes the value as XPath casts it to a string instead.
     pub fn canonical_lexical(self) -> String {
         if self.0.is_finite() {
             scientific(self.0)
@@ -227,12 +231,16 @@ impl Float {
 }
 
 impl fmt::Display for Float {
-    /// Writes the `xsd:float` lexical form XPath casts the value to a string as
-    /// (XPath and XQuery Functions and Operators, casting to `xs:string`):
-    /// - plain shortest digits for magnitudes from `0.000001` to below `1000000`,
-    ///   as `5.5` or `1000`, and for zero, as `0` or `-0`,
-    /// - XSD's canonical scientific form for other magnitudes, as `1.0E30`,
-    /// - `INF`, `-INF` and `NaN` for the special values.
+    /// Writes the value as XPath casts it to a string,
+    /// which is one of the `xsd:float` lexical forms.
+    ///
+    /// - A magnitude from `0.000001` to below `1000000`, and zero,
+    ///   is written in the shortest plain digits, such as `5.5`, `1000`, `0` or `-0`.
+    /// - Any other finite value is written in XSD's canonical scientific form,
+    ///   such as `1.0E30`.
+    /// - The special values are written `INF`, `-INF` and `NaN`.
+    ///
+    /// The source is the casting to `xs:string` in XPath and XQuery Functions and Operators.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.0.is_nan() {
             f.write_str("NaN")
@@ -254,9 +262,10 @@ mod tests {
 
     use crate::value::{NumberRef, ValueRef};
 
+    /// Order keys and the term order sort floats from `-INF` to `INF`,
+    /// with `-0.0` below `0.0` and NaN at the top.
     #[test]
     fn keys_order_the_xsd_value_space() {
-        // NaN above +INF, `-0.0` below `+0.0`.
         let values = [
             f32::NEG_INFINITY,
             -1e30,
@@ -283,6 +292,7 @@ mod tests {
         }
     }
 
+    /// Order keys convert back to their values, and every NaN has the same key, hash and value.
     #[test]
     fn keys_round_trip_and_collapse_nans() {
         for value in [f32::NEG_INFINITY, -1.5, -0.0, 0.0, 1.5, f32::INFINITY] {
@@ -306,13 +316,15 @@ mod tests {
         );
     }
 
+    /// Floats are written as XPath casts them to strings, and canonically as XSD writes them,
+    /// and the written forms are parsed back.
     #[test]
     fn special_values_spell_as_xsd_does() {
         assert_eq!(Float::new(f32::INFINITY).to_string(), "INF");
         assert_eq!(Float::new(f32::NEG_INFINITY).to_string(), "-INF");
         assert_eq!(Float::new(f32::NAN).to_string(), "NaN");
-        // As XPath casts a float to a string, with the shortest digits of the float,
-        // not of the double it widens to.
+        // XPath casts a float to a string with the shortest digits of the float,
+        // not with those of the double it widens to.
         assert_eq!(Float::new(2.5).to_string(), "2.5");
         assert_eq!(Float::new(0.1).to_string(), "0.1");
         assert_eq!(Float::new(3.0e38).to_string(), "3.0E38");
@@ -329,6 +341,7 @@ mod tests {
         }
     }
 
+    /// Only XSD's lexical forms of floats are parsed.
     #[test]
     fn lexicals_take_the_xsd_form_only() {
         assert_eq!(Float::from_lexical("+INF"), Some(Float::new(f32::INFINITY)));
@@ -344,6 +357,7 @@ mod tests {
         }
     }
 
+    /// The operators canonicalize NaN, and comparison by value follows IEEE 754.
     #[test]
     fn operators_canonicalize_and_values_compare_by_ieee() {
         let inf = Float::new(f32::INFINITY);

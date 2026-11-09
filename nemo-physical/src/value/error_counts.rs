@@ -48,7 +48,7 @@ impl ErrorCounts {
         self.0.iter().all(|&count| count == 0)
     }
 
-    /// Adds the counts of another to these.
+    /// Adds the counts of `other` to these counts.
     pub fn absorb(&mut self, other: &ErrorCounts) {
         for (total, count) in self.0.iter_mut().zip(other.0) {
             *total += count;

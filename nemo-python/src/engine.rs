@@ -1,4 +1,4 @@
-//! The engine: load, reason, read back.
+//! The `Engine` class, which loads programs, reasons, and reads the results.
 
 use std::{
     collections::VecDeque,
@@ -27,36 +27,39 @@ use crate::{
 /// How often a running call checks for Ctrl-C.
 const SIGNAL_POLL: Duration = Duration::from_millis(50);
 
-/// What the lock protects: the engine and the sources its diagnostics render against,
-/// which change together.
+/// The state behind the engine's lock: the engine,
+/// and the sources against which its diagnostics are rendered.
+///
+/// The two change together, so one lock protects both.
 #[derive(Debug, Default)]
 pub(crate) struct Inner {
     /// The wrapped engine.
     pub engine: nemo::engine::Engine,
-    /// The source texts of this run.
+    /// The texts of the engine's sources, for rendering diagnostics.
     pub sources: SourceTexts,
 }
 
 impl Inner {
-    /// Raises one diagnostic against this run's sources.
+    /// Returns the `DiagnosticsError` of one diagnostic, rendered against the engine's sources.
     fn raise(&self, py: Python<'_>, diagnostic: nemo::diagnostics::Diagnostic) -> PyErr {
         raise(py, vec![diagnostic], &self.sources)
     }
 }
 
-/// The reasoning engine over one program:
-/// load it, reason to the fixpoint, read the results back.
+/// The reasoning engine for one program,
+/// which loads the program, reasons to the fixpoint, and reads the results.
 ///
-/// One call runs at a time.
-/// A concurrent call from another Python thread raises `NemoError` instead of blocking,
-/// since blocking under the GIL would deadlock against a run polling for Ctrl-C.
+/// One method runs at a time, except `cancel`.
+/// A method called from another Python thread while one runs raises `NemoError` instead of
+/// waiting, since waiting while holding the GIL would deadlock with a run that polls for
+/// Ctrl-C.
 #[pyclass(frozen, module = "nmo")]
 #[derive(Debug)]
 pub struct Engine {
-    /// The engine and sources, behind the one-call-at-a-time lock.
+    /// The engine and its sources, behind the lock that lets one method run at a time.
     inner: Mutex<Inner>,
-    /// The engine's cancellation handle, outside the lock,
-    /// because cancelling is how another thread reaches a *running* engine.
+    /// The engine's cancel token, kept outside the lock,
+    /// so that another thread can cancel a running method.
     token: nemo::engine::CancelToken,
 }
 
@@ -72,8 +75,12 @@ impl Default for Engine {
 }
 
 impl Engine {
-    /// Carries a program through one of the loading methods (`load`, `extend`, `reload`),
-    /// fetching the data it needs from the network, and raises the errors it reports.
+    /// Passes `program` to `call`, a loading method of the engine,
+    /// and raises the diagnostics of a failure.
+    ///
+    /// [Engine::ingest](nemo::engine::Engine::ingest) parses the program's text again,
+    /// under the engine's own file id.
+    /// The call runs as [interruptible](Self::interruptible) describes.
     fn ingest(
         &self,
         py: Python<'_>,
@@ -92,16 +99,17 @@ impl Engine {
         let outcome = self.interruptible(py, || {
             engine.ingest(name, text, |engine, model| call(engine, model))
         })?;
-        // Linking reads the program's modules, so their sources are
-        // taken in before its outcome is reported against them.
+        // Linking reads the program's modules, so their sources are added before the
+        // outcome is rendered against them.
         inner.sources.absorb(inner.engine.sources());
         outcome.map_err(|diagnostics| raise(py, diagnostics, &inner.sources))
     }
 
-    /// Runs a call with the GIL released, on a thread of its own while
-    /// this one polls for signals: Ctrl-C cancels the call at its next
-    /// rule boundary, or while it waits for data from the network, and
-    /// raises `KeyboardInterrupt`.
+    /// Runs `call` with the GIL released, on a thread of its own,
+    /// while this thread polls for signals every [SIGNAL_POLL].
+    ///
+    /// Ctrl-C cancels the call through the engine's cancel token.
+    /// Once the call has stopped, `KeyboardInterrupt` is raised in place of its outcome.
     fn interruptible<T: Send>(
         &self,
         py: Python<'_>,
@@ -133,7 +141,10 @@ impl Engine {
         }
     }
 
-    /// Returns the engine, or a raised explanation of why not now.
+    /// Locks the engine's state.
+    ///
+    /// Raises `NemoError` if a method is running in another thread,
+    /// or if an earlier method panicked.
     fn lock(&self) -> PyResult<MutexGuard<'_, Inner>> {
         match self.inner.try_lock() {
             Ok(guard) => Ok(guard),
@@ -155,14 +166,16 @@ impl Engine {
         Self::default()
     }
 
-    /// Adds in-memory rows to a predicate.
+    /// Adds rows from memory to a predicate.
     ///
-    /// Before `load`, they join the program as facts.
-    /// After it, they land as deltas and the next `reason()` continues to the new fixpoint,
-    /// and the predicate must be one the program uses (`extend` introduces new ones).
-    /// Values convert per the module's conversion table.
-    /// Raises `DiagnosticsError` with code N0493 while a run is left suspended
-    /// (see `discard_pending`).
+    /// `rows` is an iterable of rows, each an iterable of values,
+    /// which are converted by the module's conversion table.
+    /// Before `load`, the rows become facts of the program.
+    /// After it, they are new facts, and the next `reason()` continues to the new fixpoint.
+    /// The predicate must then be one that the program uses, since only `extend` adds new ones.
+    /// Raises `ValueError` or `TypeError` for a value that does not convert,
+    /// and `DiagnosticsError` for a row that the predicate does not accept,
+    /// or with code N0493 while a run is suspended (see `discard_pending`).
     fn import_rows(
         &self,
         py: Python<'_>,
@@ -185,9 +198,11 @@ impl Engine {
             .map_err(|diagnostic| inner.raise(py, diagnostic))
     }
 
-    /// Registers an in-memory resource: an `@import` whose resource
-    /// name matches reads these bytes (or this text) instead of the
-    /// filesystem.
+    /// Registers a resource in memory under `name`.
+    ///
+    /// An `@import` of a resource with that name reads `content`, a `str` or `bytes`,
+    /// instead of the file system.
+    /// Raises `TypeError` if `content` is neither.
     fn add_resource(&self, name: &str, content: &Bound<'_, PyAny>) -> PyResult<()> {
         let bytes: Vec<u8> = match content.extract::<String>() {
             Ok(text) => text.into_bytes(),
@@ -197,9 +212,10 @@ impl Engine {
         Ok(())
     }
 
-    /// Registers a module text under the name a `@use` in the program writes for it,
-    /// such as `lib::tc`: a `@use` of the module reads this text instead of its file.
+    /// Registers the text of a module under `name`, the name with which a `@use` refers to it,
+    /// such as `lib::tc`.
     ///
+    /// A `@use` of the module then reads this text instead of its file.
     /// Raises `DiagnosticsError` if `name` is not a module name.
     fn add_module(&self, py: Python<'_>, name: &str, text: &str) -> PyResult<()> {
         let mut inner = self.lock()?;
@@ -209,9 +225,9 @@ impl Engine {
             .map_err(|diagnostic| inner.raise(py, diagnostic))
     }
 
-    /// Declares a module root: a directory whose modules a `@use` names as `name::module`.
+    /// Declares a module root, a directory whose modules a `@use` refers to as `name::module`.
     ///
-    /// Raises `DiagnosticsError` if `name` is not a single plain name.
+    /// Raises `DiagnosticsError` if `name` is not a single plain name, or is `super`.
     fn add_module_root(&self, py: Python<'_>, name: &str, directory: &str) -> PyResult<()> {
         let mut inner = self.lock()?;
         inner
@@ -220,8 +236,8 @@ impl Engine {
             .map_err(|diagnostic| inner.raise(py, diagnostic))
     }
 
-    /// Sets the directory relative import resources resolve against,
-    /// in place of the directory of the program file an import is written in.
+    /// Sets the directory against which relative import resources are resolved,
+    /// instead of the directory of the program file that contains the import.
     fn set_import_directory(&self, directory: &str) -> PyResult<()> {
         self.lock()?.engine.set_import_directory(directory);
         Ok(())
@@ -229,51 +245,58 @@ impl Engine {
 
     /// Keeps every imported predicate whole.
     ///
-    /// Without it, loading stores only the columns and rows of an import its rules read,
-    /// and a trace or a query over the rest raises `DiagnosticsError`.
+    /// Without it, loading stores only the columns and rows of an import that the rules read,
+    /// and tracing or reading the rest raises `DiagnosticsError`.
     /// Call it before `load`.
     fn retain_imports(&self) -> PyResult<()> {
         self.lock()?.engine.retain_imports();
         Ok(())
     }
 
-    /// Loads a program: facts become stored rows, imports read their resources, rules compile.
+    /// Loads a program: it stores the facts, reads the imports and compiles the rules.
     ///
-    /// Relative resources resolve beside the program's file
+    /// Relative resources are resolved against the directory of the program's file
     /// (see `set_import_directory`), and remote ones are fetched, with retries.
+    /// Ctrl-C cancels the load, which then changes nothing, and raises `KeyboardInterrupt`.
     /// Raises `DiagnosticsError` if the program does not parse or load,
-    /// and with code N0493 while a run is left suspended (see `discard_pending`).
-    /// Ctrl-C cancels it.
+    /// and with code N0493 while a run is suspended (see `discard_pending`).
     fn load(&self, py: Python<'_>, program: &Program) -> PyResult<()> {
         self.ingest(py, program, |engine, model| engine.load(model))
     }
 
-    /// Extends the loaded program:
-    /// the new statements join it, new facts and imports store, the program recompiles,
-    /// and the next `reason()` continues to the new fixpoint.
+    /// Extends the loaded program with the statements of `program`.
     ///
-    /// An extension cannot change what loaded statements mean:
-    /// `@base`, prefix rebinding, and parameter redefinition raise `DiagnosticsError`,
-    /// since they need a `reload`.
-    /// It raises with code N0493 while a run is left suspended (see `discard_pending`).
+    /// The new facts and imports are stored, the whole program is compiled again,
+    /// and the next `reason()` continues to the new fixpoint.
+    /// An extension cannot change what the loaded statements mean,
+    /// so a new `@base`, a prefix bound to another IRI, or a parameter declared again
+    /// raises `DiagnosticsError`, since these need a `reload`.
+    /// Ctrl-C cancels it as it cancels `load`.
+    /// It also raises `DiagnosticsError` with code N0493 while a run is suspended
+    /// (see `discard_pending`).
     fn extend(&self, py: Python<'_>, program: &Program) -> PyResult<()> {
         self.ingest(py, program, |engine, model| engine.extend(model))
     }
 
-    /// Replaces the program:
-    /// every derived row drops, every rule starts over,
-    /// and the next `reason()` computes again from the loaded data.
+    /// Replaces the loaded program with `program`.
     ///
-    /// Unchanged predicates keep their data, and unchanged imports are not read again.
-    /// Rows imported into a predicate whose definition changed are dropped, with a report.
-    /// Raises `DiagnosticsError` with code N0493 while a run is left suspended
-    /// (see `discard_pending`).
+    /// Every derived row is dropped, every rule starts over,
+    /// and the next `reason()` derives everything again from the input facts.
+    /// A predicate whose facts, imports and declarations are unchanged keeps its input facts,
+    /// and an unchanged import is not read again.
+    /// The rows added through `import_rows` to a predicate whose definition changed are
+    /// dropped, with a warning.
+    /// Ctrl-C cancels it as it cancels `load`.
+    /// Raises `DiagnosticsError` if the program does not parse or load,
+    /// and with code N0493 while a run is suspended (see `discard_pending`).
     fn reload(&self, py: Python<'_>, program: &Program) -> PyResult<()> {
         self.ingest(py, program, |engine, model| engine.reload(model))
     }
 
-    /// Checks a program without loading it:
-    /// no data is read, nothing is stored, and every problem is returned rather than raised.
+    /// Checks a program without loading it, and returns its diagnostics.
+    ///
+    /// No data is read and nothing is stored.
+    /// Every problem, warnings included, is returned rather than raised.
     fn check(&self, program: &Program) -> PyResult<Vec<Diagnostic>> {
         let mut inner = self.lock()?;
         let inner = &mut *inner;
@@ -288,11 +311,14 @@ impl Engine {
             .collect())
     }
 
-    /// Runs semi-naive evaluation to the fixpoint, fetching what bound imports ask for.
+    /// Reasons to the fixpoint by semi-naive evaluation,
+    /// and fetches the data that bound imports need from the network.
     ///
     /// The GIL is released for the whole run.
-    /// Ctrl-C cancels it at a rule boundary or while it waits for data from the network,
-    /// raising `KeyboardInterrupt`, and calling `reason()` again continues.
+    /// Ctrl-C cancels the run between rule applications, or while it waits for data from the
+    /// network, and raises `KeyboardInterrupt`.
+    /// Calling `reason()` again continues the run.
+    /// Raises `DiagnosticsError` if no program is loaded, or if a rule application fails.
     fn reason(&self, py: Python<'_>) -> PyResult<()> {
         let mut inner = self.lock()?;
         let engine = &mut inner.engine;
@@ -300,32 +326,42 @@ impl Engine {
         outcome.map_err(|diagnostic| inner.raise(py, diagnostic))
     }
 
-    /// Cancels the running `reason()` call, for another thread,
-    /// since the calling thread's Ctrl-C already cancels.
+    /// Cancels the method that is running in another thread.
     ///
-    /// A cancel issued before a run starts is cleared when it starts,
-    /// since a token cancels the call that is running, not a future one.
+    /// A run stops between rule applications,
+    /// and a method that waits for data from the network stops waiting.
+    /// The cancelled method then raises `DiagnosticsError`.
+    /// In the thread that runs the method, Ctrl-C cancels it instead.
+    /// A cancellation before a method starts has no effect,
+    /// since each method clears it when it starts.
     fn cancel(&self) {
         self.token.cancel();
     }
 
-    /// Discards a run left suspended for data from the network, returning whether there was
-    /// one.
+    /// Discards a run that is suspended for data from the network,
+    /// and returns whether there was one.
     ///
-    /// A run cancelled while its client waits for a fetch stays suspended, for `reason()` to
-    /// continue. Until then, `load`, `extend`, `reload` and `import_rows` are refused (N0493),
-    /// and discarding it stops the run as a cancellation between rules does.
+    /// A run that is cancelled while it waits for data from the network stays suspended,
+    /// and `reason()` continues it.
+    /// While it is suspended, `load`, `extend`, `reload` and `import_rows` raise
+    /// `DiagnosticsError` with code N0493.
+    /// Discarding the run stops it as a cancellation between rule applications does,
+    /// and the next `reason()` continues toward the fixpoint.
     fn discard_pending(&self) -> PyResult<bool> {
         Ok(self.lock()?.engine.discard_pending())
     }
 
-    /// Traces facts, one fact string like `"reach(a, b)"` or a list of them,
-    /// returning the protocol response as a dict:
-    /// per fact, its node if it holds, and the nodes of the derivations.
-    /// A node's `rule` is the rule's dict and its `premises` are the premises' nodes,
-    /// so a derivation walks like a tree, and a fact several derivations use is one dict.
+    /// Traces facts, and returns the trace response as a dict.
     ///
-    /// Raises `DiagnosticsError` if the engine holds updates `reason()` has not processed.
+    /// `facts` is one fact as a string, such as `"reach(a, b)"`, or a list of such strings,
+    /// and the terminating `.` may be left out.
+    /// The response lists, for each fact, its node if the fact holds,
+    /// and the nodes of the derivations.
+    /// A node's `rule` is the dict of its rule, and its `premises` are the nodes of its
+    /// premises, so a derivation can be walked like a tree,
+    /// and a fact that several derivations use is one dict.
+    /// Raises `DiagnosticsError` for a text that is not a fact, or if the facts cannot be
+    /// traced, for example while the engine holds updates that `reason()` has not processed.
     fn trace(&self, py: Python<'_>, facts: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
         let mut inner = self.lock()?;
         let facts = trace_facts(py, facts, &inner)?;
@@ -338,7 +374,7 @@ impl Engine {
         Ok(value)
     }
 
-    /// Returns the `trace` rendered as ASCII proof trees, the terminal-style convenience.
+    /// Traces facts as `trace` does, and returns the response as ASCII proof trees.
     fn trace_ascii(&self, py: Python<'_>, facts: &Bound<'_, PyAny>) -> PyResult<String> {
         let mut inner = self.lock()?;
         let facts = trace_facts(py, facts, &inner)?;
@@ -349,9 +385,13 @@ impl Engine {
         Ok(response.ascii())
     }
 
-    /// Answers the explanation view's `treeForTable` query: the facts it
-    /// selects, their derivation expanded. Takes and returns the
-    /// protocol's camelCase shapes as dicts.
+    /// Answers a `treeForTable` query of the explanation view, given as a dict.
+    ///
+    /// The response, also a dict, contains the facts that the query selects,
+    /// with their derivations expanded.
+    /// The query and the response use the protocol's camelCase keys.
+    /// Raises `NemoError` for a query that does not have the protocol's shape,
+    /// and `DiagnosticsError` if the engine cannot answer it.
     fn tree_for_table(&self, py: Python<'_>, query: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
         let query = from_python(py, query)?;
         let mut inner = self.lock()?;
@@ -362,10 +402,12 @@ impl Engine {
         into_python(py, &response)
     }
 
-    /// Answers the explanation view's `tableEntriesForTreeNodes` query:
-    /// the facts of every node of the tree it shapes, parents before
-    /// children. Takes the protocol's camelCase query as a dict and
-    /// returns a list of node dicts.
+    /// Answers a `tableEntriesForTreeNodes` query of the explanation view, given as a dict.
+    ///
+    /// The response is a list of dicts, one for each node of the tree that the query
+    /// describes, with the node's facts, parents before children.
+    /// The query and the response use the protocol's camelCase keys.
+    /// Raises as `tree_for_table` does.
     fn table_entries_for_tree_nodes(
         &self,
         py: Python<'_>,
@@ -380,8 +422,10 @@ impl Engine {
         into_python(py, &response)
     }
 
-    /// Returns the rule a statement id names, as traces and queries refer to it:
-    /// a dict with its text, `#[name]` and source position, or `None`.
+    /// Returns the rule with the statement id `id`, by which traces and queries refer to it.
+    ///
+    /// The rule is a dict with its text, its `#[name]` and its source position,
+    /// or `None` if no rule has that id.
     fn rule(&self, py: Python<'_>, id: usize) -> PyResult<Py<PyAny>> {
         let inner = self.lock()?;
         match inner.engine.rule(id) {
@@ -390,8 +434,12 @@ impl Engine {
         }
     }
 
-    /// Returns the stored rows of a predicate, as a list of tuples of converted
-    /// values. For large results, iterate `cursor` instead.
+    /// Returns the stored rows of a predicate, as a list of tuples of converted values.
+    ///
+    /// For large results, iterate over `cursor` instead.
+    /// Raises `DiagnosticsError` for a predicate that the program does not have,
+    /// or that the engine does not store whole,
+    /// and `ValueError` for a map whose keys convert to the same dict key.
     fn rows(&self, py: Python<'_>, predicate: &str) -> PyResult<Vec<Py<PyAny>>> {
         let mut inner = self.lock()?;
         let rows = inner
@@ -411,6 +459,8 @@ impl Engine {
 
     /// Returns an iterator over a predicate's rows, read in bounded chunks,
     /// so that memory stays bounded however large the predicate is.
+    ///
+    /// Raises `DiagnosticsError` as `rows` does.
     fn cursor(slf: Py<Self>, py: Python<'_>, predicate: &str) -> PyResult<Cursor> {
         let cursor = {
             let engine = slf.get();
@@ -427,6 +477,8 @@ impl Engine {
     }
 
     /// Returns the number of stored rows of a predicate.
+    ///
+    /// Raises `DiagnosticsError` as `rows` does.
     fn count(&self, py: Python<'_>, predicate: &str) -> PyResult<usize> {
         let inner = self.lock()?;
         inner
@@ -436,8 +488,11 @@ impl Engine {
     }
 
     /// Returns every predicate of the program, sorted by name,
-    /// as its name, its number of columns, and what feeds it:
-    /// `"extensional"` (given from outside), `"derived"` (by rules), or `"both"`.
+    /// as a tuple of its name, its number of columns and its role.
+    ///
+    /// The role is `"derived"` for a predicate that rules derive and that has no input facts,
+    /// `"both"` for one that rules derive and that also has input facts,
+    /// and `"extensional"` for any other.
     fn predicates(&self) -> PyResult<Vec<(String, usize, &'static str)>> {
         Ok(self
             .lock()?
@@ -449,6 +504,9 @@ impl Engine {
     }
 
     /// Returns the inferred column types of a predicate, in declaration syntax.
+    ///
+    /// Returns `None` for a predicate that the program never used,
+    /// or that the engine does not store whole.
     fn column_types(&self, predicate: &str) -> PyResult<Option<Vec<String>>> {
         Ok(self.lock()?.engine.column_types(predicate).map(|types| {
             types
@@ -458,7 +516,9 @@ impl Engine {
         }))
     }
 
-    /// Writes the program's declared exports into a directory.
+    /// Writes the program's exports into `directory`.
+    ///
+    /// Raises `DiagnosticsError` if no program is loaded, or if a file cannot be written.
     fn export(&self, py: Python<'_>, directory: &str) -> PyResult<()> {
         let mut inner = self.lock()?;
         inner
@@ -467,12 +527,15 @@ impl Engine {
             .map_err(|diagnostic| inner.raise(py, diagnostic))
     }
 
-    /// Returns the predicate's rows as an Arrow stream,
-    /// an object any consumer of the Arrow C stream interface (`__arrow_c_stream__`) takes
-    /// directly: `polars.DataFrame(stream)`, `pyarrow.table(stream)`.
+    /// Returns a predicate's rows as an Arrow stream.
     ///
+    /// The stream implements the Arrow C stream interface (`__arrow_c_stream__`),
+    /// so libraries that accept it read it directly,
+    /// as in `polars.DataFrame(stream)` or `pyarrow.table(stream)`.
     /// It needs no pyarrow.
-    /// The module notes describe the dataframe projection's typing.
+    /// A column whose values are all integers, all doubles or all booleans becomes an Arrow
+    /// array of that type, and every other column becomes text.
+    /// Raises `DiagnosticsError` as `rows` does.
     #[cfg(feature = "arrow")]
     fn arrow_stream(&self, py: Python<'_>, predicate: &str) -> PyResult<crate::arrow::ArrowStream> {
         let mut inner = self.lock()?;
@@ -480,7 +543,7 @@ impl Engine {
         crate::arrow::stream(py, &mut inner.engine, &inner.sources, predicate)
     }
 
-    /// Returns the predicate's rows as a `pyarrow.Table` (pyarrow required).
+    /// Returns a predicate's rows as a `pyarrow.Table`, which needs pyarrow.
     #[cfg(feature = "arrow")]
     fn to_arrow(&self, py: Python<'_>, predicate: &str) -> PyResult<Py<PyAny>> {
         let stream = self.arrow_stream(py, predicate)?;
@@ -488,15 +551,15 @@ impl Engine {
         Ok(table.call1((stream,))?.unbind())
     }
 
-    /// Returns the predicate's rows as a `pandas.DataFrame` (pyarrow and pandas
-    /// required).
+    /// Returns a predicate's rows as a `pandas.DataFrame`, which needs pyarrow and pandas.
     #[cfg(feature = "arrow")]
     fn to_pandas(&self, py: Python<'_>, predicate: &str) -> PyResult<Py<PyAny>> {
         let table = self.to_arrow(py, predicate)?;
         Ok(table.bind(py).call_method0("to_pandas")?.unbind())
     }
 
-    /// Returns the warnings (and other reports) the run collected so far.
+    /// Returns the reports, such as warnings, that the engine has collected while loading and
+    /// reasoning.
     fn reports(&self) -> PyResult<Vec<Diagnostic>> {
         let inner = self.lock()?;
         Ok(inner
@@ -507,14 +570,15 @@ impl Engine {
             .collect())
     }
 
-    /// Facts the program's predicates hold from outside: its facts and
-    /// imports, and the rows added through `import_rows`.
+    /// Returns the number of input facts: the rows of the program's facts and imports,
+    /// and the rows added through `import_rows`.
     #[getter]
     fn loaded_facts(&self) -> PyResult<usize> {
         Ok(self.lock()?.engine.loaded_facts())
     }
 
-    /// Facts the program's predicates hold from reasoning.
+    /// Returns the number of facts that reasoning stored,
+    /// including the rows that bound imports fetched.
     #[getter]
     fn derived_facts(&self) -> PyResult<usize> {
         Ok(self.lock()?.engine.derived_facts())
@@ -526,13 +590,14 @@ impl Engine {
         Ok(self.lock()?.engine.applications())
     }
 
-    /// Bytes currently allocated across tables and the dictionary.
+    /// Returns the number of bytes that the tables and the dictionary currently use.
     #[getter]
     fn memory_bytes(&self) -> PyResult<usize> {
         Ok(self.lock()?.engine.memory_bytes())
     }
 
-    /// Returns the wall-clock accounting of the reasoning, in nanoseconds by stage.
+    /// Returns the wall-clock time that reasoning spent in each phase, in nanoseconds,
+    /// under the keys `apply`, `store` and `consolidate`.
     fn timings(&self) -> PyResult<std::collections::HashMap<&'static str, u64>> {
         let timings = self.lock()?.engine.timings();
         Ok(std::collections::HashMap::from([
@@ -542,6 +607,8 @@ impl Engine {
         ]))
     }
 
+    /// Returns the engine as `Engine(N predicates, M facts)`,
+    /// or as `Engine(busy)` while a method runs.
     fn __repr__(&self) -> String {
         match self.inner.try_lock() {
             Ok(inner) => format!(
@@ -554,20 +621,22 @@ impl Engine {
     }
 }
 
-/// An iterator over one predicate's rows, fetching bounded chunks from
-/// its engine as it is advanced.
+/// An iterator over a predicate's rows, which reads bounded chunks from its engine as it
+/// advances.
 #[pyclass(frozen, module = "nmo")]
 #[derive(Debug)]
 pub struct Cursor {
-    /// The engine fetched from.
+    /// The engine whose rows the cursor reads.
     engine: Py<Engine>,
-    /// The engine-side cursor and the rows fetched but not delivered.
+    /// The engine's cursor, and the rows read but not yet returned.
     cursor: Mutex<(PredicateCursor, VecDeque<Vec<DataValue>>)>,
 }
 
 #[pymethods]
 impl Cursor {
-    /// Returns the rows not yet delivered.
+    /// Returns the number of rows not yet returned.
+    ///
+    /// Raises `NemoError` while another thread uses the cursor.
     #[getter]
     fn remaining(&self) -> PyResult<usize> {
         let state = self
@@ -577,10 +646,16 @@ impl Cursor {
         Ok(state.0.remaining() + state.1.len())
     }
 
+    /// Returns the cursor itself.
     fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
         slf
     }
 
+    /// Returns the next row as a tuple of converted values,
+    /// reading the next chunk from the engine when the rows read so far are used up.
+    ///
+    /// Raises `NemoError` while another thread uses the cursor or the engine,
+    /// and `DiagnosticsError` if the engine cannot read the chunk.
     fn __next__(&self, py: Python<'_>) -> PyResult<Option<Py<PyAny>>> {
         let mut state = self
             .cursor
@@ -606,8 +681,10 @@ impl Cursor {
     }
 }
 
-/// Returns the fact list of a `trace` call: one fact string, or an iterable of
-/// them, each parsed with the terminator optional.
+/// Returns the facts of a `trace` call, given as one fact string or as a sequence of them.
+///
+/// Each is parsed with its terminating `.` optional,
+/// and a text that is not a fact raises `DiagnosticsError`.
 fn trace_facts(
     py: Python<'_>,
     facts: &Bound<'_, PyAny>,
@@ -625,7 +702,9 @@ fn trace_facts(
         .collect()
 }
 
-/// Creates a protocol value from Python objects, through its JSON form.
+/// Returns a protocol value made from Python objects, converted through their JSON form.
+///
+/// Raises `NemoError` if the JSON does not have the value's shape.
 fn from_python<T: serde::de::DeserializeOwned>(
     py: Python<'_>,
     value: &Bound<'_, PyAny>,
@@ -639,8 +718,10 @@ fn from_python<T: serde::de::DeserializeOwned>(
         .map_err(|error| NemoError::new_err(format!("invalid query: {error}")))
 }
 
-/// Replaces the ids in a trace response's Python value by what they name:
-/// a node's rule and premises, and a traced fact's node.
+/// Replaces the ids in the Python value of a trace response with the dicts they refer to.
+///
+/// A node's `rule` becomes the rule's dict, and its `premises` become the premises' nodes.
+/// A traced fact's `node` becomes the node's dict.
 fn linked(py: Python<'_>, response: &TraceResponse, value: &Bound<'_, PyAny>) -> PyResult<()> {
     let nodes = value.get_item("nodes")?.cast_into::<PyList>()?;
     let rules = value.get_item("rules")?.cast_into::<PyList>()?;

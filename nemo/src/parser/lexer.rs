@@ -1,4 +1,4 @@
-//! The lexer: source text into a token buffer.
+//! The lexer, which turns source text into a buffer of tokens.
 
 mod literal;
 mod number;
@@ -16,17 +16,23 @@ use crate::{
     model::{FileId, Span, VariableKind},
 };
 
-/// Tokenizes a source file completely.
+/// Tokenizes a whole source text.
 ///
-/// Lexical problems become diagnostics plus [Error](TokenKind::Error) tokens,
-/// so every byte of the input ends up in a token.
-/// The buffer ends with [End](TokenKind::End).
+/// Each lexical problem becomes a diagnostic and an [Error](TokenKind::Error) token,
+/// so every byte of the input other than whitespace, comments and a leading byte order mark
+/// belongs to a token.
+/// The buffer ends with an [End](TokenKind::End) token.
+/// A text too long for 32-bit spans becomes one diagnostic and only the [End](TokenKind::End)
+/// token.
 pub(super) fn tokenize(source: &str, file: FileId) -> (Vec<Token>, Vec<Diagnostic>) {
     tokenize_at(source, file, 0)
 }
 
-/// Tokenizes a slice of a larger file completely,
-/// with spans shifted by the slice's offset within it (for embedded format-string expressions).
+/// Tokenizes a whole slice of a larger source text, such as an expression inside a format
+/// string, as [tokenize] does.
+///
+/// `offset` is the position of the slice in the larger text, and the spans of the tokens
+/// are shifted by it.
 pub(super) fn tokenize_at(
     source: &str,
     file: FileId,
@@ -44,36 +50,36 @@ pub(super) fn tokenize_at(
     .run()
 }
 
-/// The lexer state over one source file.
+/// The state of the lexer over one source text.
 struct Lexer<'a> {
     /// The source text.
     source: &'a str,
-    /// The source as bytes, for single-byte dispatch.
+    /// The bytes of the source text, which the lexer inspects one at a time.
     bytes: &'a [u8],
-    /// The file the spans point into.
+    /// The id of the text that the spans point into.
     file: FileId,
-    /// The offset of this text within its file.
+    /// The position of `source` within the text that `file` identifies.
     offset: usize,
-    /// The current byte position.
+    /// The position of the next byte to read in `source`.
     position: usize,
-    /// The tokens produced so far.
+    /// The tokens emitted so far.
     tokens: Vec<Token>,
-    /// The problems found so far.
+    /// The diagnostics reported so far.
     diagnostics: Vec<Diagnostic>,
 }
 
 impl Lexer<'_> {
     /// Runs the lexer to the end of the input.
     fn run(mut self) -> (Vec<Token>, Vec<Diagnostic>) {
-        // Spans address a file by 32-bit offsets. A text they cannot
-        // address is rejected whole rather than given wrong locations.
+        // Spans store 32-bit offsets. A text that reaches beyond them is rejected as a whole,
+        // so that no span points to a wrong location.
         if !addressable(self.offset, self.source.len()) {
             self.diagnostics.push(ParseError::TextTooLarge.diagnostic());
             self.push(TokenKind::End, 0);
             return (self.tokens, self.diagnostics);
         }
-        // A UTF-8 byte order mark opens many a Windows-written file; at
-        // the very start it is encoding metadata, not content.
+        // Many files written on Windows start with a UTF-8 byte order mark.
+        // At the very start of a text, it marks the encoding and is not content.
         if self.offset == 0 && self.source.starts_with('\u{feff}') {
             self.position = '\u{feff}'.len_utf8();
         }
@@ -88,7 +94,7 @@ impl Lexer<'_> {
         }
     }
 
-    /// Lexes one token, from the given byte at `start`.
+    /// Lexes the token that starts with `byte`, at the position `start`.
     fn token(&mut self, byte: u8, start: usize) {
         match byte {
             b'(' => self.single(TokenKind::ParenOpen),
@@ -140,8 +146,8 @@ impl Lexer<'_> {
                 if self.eat_byte(b'^') {
                     self.push(TokenKind::Carets, start);
                 } else {
-                    // After a string, the carets of a datatype were meant,
-                    // and elsewhere most likely a power.
+                    // After a string, the writer most likely meant the `^^` of a datatype,
+                    // and elsewhere a power.
                     let hint = if self.previous_is_string() {
                         "write `^^` to give a literal its datatype"
                     } else {
@@ -159,9 +165,9 @@ impl Lexer<'_> {
                 self.position += 1;
                 self.format_string(start);
             }
-            // `_:label` is a blank node, whose label is a local name;
-            // a bare `_` (or `_name`) a name,
-            // which the parser reads as anonymous where it is alone.
+            // `_:label` is a blank node, whose label is a local name.
+            // Otherwise, `_` starts a bare name, such as `_name` or `_` alone.
+            // The parser makes a lone `_` an anonymous variable.
             b'_' if self.peek_at(1) == Some(b':')
                 && NameKind::Local.length(&self.source[start + 2..]) > 0 =>
             {
@@ -177,13 +183,15 @@ impl Lexer<'_> {
         }
     }
 
-    /// Lexes what `:` opens: `::`, `:-`, or the colon itself.
+    /// Lexes the token that starts with `:`, which is `::`, `:-` or a colon alone.
     ///
-    /// A colon separates a prefix from a local name if it touches the name before it,
-    /// or if no name comes before it, as the empty prefix's does in `:a`.
-    /// A local name directly after such a colon is lexed as one, as in `wd:42` or `ex:v1.2`.
-    /// A colon after a name and a space, as in `age :30`, separates a named argument's label
-    /// from its value instead.
+    /// A colon alone separates a prefix from a local name
+    /// if it directly follows a name, or if the token before it is not a name,
+    /// as for the empty prefix in `:a`.
+    /// The local name directly after such a colon is lexed as one name token,
+    /// so that `wd:42` and `ex:v1.2` are prefixed names.
+    /// A colon that follows a name after a space, as in `age :30`,
+    /// instead separates the label of a named argument from its value.
     fn colon(&mut self, start: usize) {
         let separates_prefix = self.tokens.last().is_none_or(|token| {
             token.kind != TokenKind::Ident || token.span.end as usize == self.offset + start
@@ -206,7 +214,7 @@ impl Lexer<'_> {
         }
     }
 
-    /// Lexes what `!` opens: `!=`, `!==`, or an existential variable.
+    /// Lexes the token that starts with `!`, which is `!=`, `!==` or an existential variable.
     fn bang(&mut self, start: usize) {
         self.position += 1;
         if self.eat_byte(b'=') {
@@ -216,9 +224,11 @@ impl Lexer<'_> {
         }
     }
 
-    /// Lexes what `@` opens:
-    /// a language tag directly after a string literal, with any `-` subtags (`en-US`),
-    /// and a directive keyword otherwise.
+    /// Lexes the token that starts with `@`.
+    ///
+    /// Directly after a string literal, this is a language tag,
+    /// with any subtags after `-`, as in `@en-US`.
+    /// Elsewhere, it is a directive's name, such as `@prefix`.
     fn at_sign(&mut self, start: usize) {
         self.position += 1;
         if !self.previous_is_string() {
@@ -242,7 +252,7 @@ impl Lexer<'_> {
 
     /// Skips whitespace, `%` line comments, and `/* … */` block comments.
     ///
-    /// An unterminated block comment runs to the end.
+    /// An unterminated block comment extends to the end of the input.
     fn skip_trivia(&mut self) {
         loop {
             match self.peek() {
@@ -272,7 +282,7 @@ impl Lexer<'_> {
         self.bytes.get(self.position + n).copied()
     }
 
-    /// Consumes the given byte if it is next.
+    /// Consumes the given byte if it is next, and returns whether it was.
     fn eat_byte(&mut self, byte: u8) -> bool {
         let next = self.peek() == Some(byte);
         if next {
@@ -288,7 +298,7 @@ impl Lexer<'_> {
         }
     }
 
-    /// Consumes the character at the current position.
+    /// Consumes and returns the character at the current position.
     fn character(&mut self) -> char {
         let character = self.source[self.position..]
             .chars()
@@ -298,22 +308,27 @@ impl Lexer<'_> {
         character
     }
 
-    /// Emits a single-byte token.
+    /// Consumes the byte at the current position, and emits a token of the given kind for it.
     fn single(&mut self, kind: TokenKind) {
         let start = self.position;
         self.position += 1;
         self.push(kind, start);
     }
 
-    /// Emits the `long` token if `second` is the next byte, consuming it,
-    /// and the `short` one otherwise, the token's first byte already consumed.
+    /// Emits a token from `start`, of the kind `long` if the next byte is `second`,
+    /// and of the kind `short` otherwise.
+    ///
+    /// The first byte of the token must already be consumed,
+    /// and `second` is consumed if it is next.
     fn either(&mut self, second: u8, long: TokenKind, short: TokenKind, start: usize) {
         let kind = if self.eat_byte(second) { long } else { short };
         self.push(kind, start);
     }
 
-    /// Consumes a name after a marker character, emitting the given kind
-    /// (or an error if no name follows).
+    /// Consumes the name after a marker character, such as the `?` of a variable,
+    /// and emits a token of the given kind from `start`.
+    ///
+    /// If no name follows the marker, it emits an error token instead.
     fn marked_name(&mut self, kind: TokenKind, start: usize) {
         if self.take_name(NameKind::Marked) {
             self.push(kind, start);
@@ -323,15 +338,17 @@ impl Lexer<'_> {
     }
 
     /// Consumes the longest name of the given kind at the current position,
-    /// returning whether there is one.
+    /// and returns whether there is one.
     fn take_name(&mut self, kind: NameKind) -> bool {
         let length = kind.length(&self.source[self.position..]);
         self.position += length;
         length > 0
     }
 
-    /// Returns whether the previous token is a string ending exactly at the current start,
-    /// the adjacency that makes `@en` a language tag.
+    /// Returns whether the previous token is a string that ends directly before the byte
+    /// just consumed.
+    ///
+    /// This is what makes the `@en` in `"text"@en` a language tag.
     fn previous_is_string(&self) -> bool {
         self.tokens.last().is_some_and(|token| {
             matches!(token.kind, TokenKind::String(_))
@@ -339,11 +356,11 @@ impl Lexer<'_> {
         })
     }
 
-    /// Distinguishes an IRI from a less-than: `<` opens an IRI when a
-    /// closing `>` appears before any whitespace.
+    /// Lexes the token that starts with `<`, which is an IRI, `<=` or `<`.
     ///
-    /// An IRI that spells the character U+0000, as written or as a character escape,
-    /// is refused.
+    /// `<` starts an IRI if a `>` follows before any whitespace.
+    /// An IRI that contains the character U+0000, written directly or as an escape,
+    /// becomes an error token.
     fn less_or_iri(&mut self, start: usize) {
         let rest = &self.bytes[start + 1..];
         let closes = rest
@@ -376,7 +393,8 @@ impl Lexer<'_> {
         });
     }
 
-    /// Records a lexical problem and emits an error token.
+    /// Records a lexical problem as a diagnostic,
+    /// and emits an error token from `start` to the current position.
     fn error(&mut self, start: usize, kind: ParseError) {
         let span = self.span(start);
         self.reject(span, kind.at(Some(span)));
@@ -401,8 +419,8 @@ impl Lexer<'_> {
     }
 }
 
-/// Returns whether a text of the given length at the given offset within its
-/// file stays addressable by 32-bit spans.
+/// Returns whether 32-bit spans can address a text of the given length
+/// at the given offset within a larger text.
 fn addressable(offset: usize, length: usize) -> bool {
     offset
         .checked_add(length)
@@ -413,7 +431,9 @@ fn addressable(offset: usize, length: usize) -> bool {
 mod tests {
     use super::addressable;
 
-    /// No test holds a 4 GiB text, so the guard is checked on its own.
+    /// A text that ends beyond the range of 32-bit offsets is not addressable.
+    ///
+    /// No test builds a 4 GiB text, so the guard is checked on its own.
     #[test]
     fn texts_beyond_the_span_range_are_not_addressable() {
         assert!(addressable(0, u32::MAX as usize));

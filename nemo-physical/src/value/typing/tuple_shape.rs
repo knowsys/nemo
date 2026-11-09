@@ -7,12 +7,12 @@ use crate::value::{
     typing::{LabelBound, LabelTypes, Shape, Type, shape::StructuralShape},
 };
 
-/// The shape of tuples: label and element types.
+/// A written-out shape of tuples: a bound on their label and the types of their elements.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TupleShape {
-    /// What is known of the label.
+    /// What is known about the label.
     pub label: LabelBound,
-    /// The element types, fixing the arity.
+    /// The types of the elements, whose number fixes the length of the tuples.
     pub elements: Vec<Type>,
 }
 

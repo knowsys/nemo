@@ -1,11 +1,11 @@
-//! SPARQL queries: validation, shapes, bindings and filters joined in,
+//! Tests of SPARQL queries: validation, shapes, bindings and filters joined in,
 //! ground terms, and reading TSV responses.
 
 use nemo_physical::value::ValueRef;
 
 use super::*;
 
-/// Reads a response as a read of its own, without bindings, delivering every column.
+/// Reads a response in a blank node scope of its own, without bindings, delivering every column.
 fn read_response(body: &str, arity: usize, dictionary: &mut Dictionary) -> Loaded {
     let blanks = BlankNodes::open(None, "response", dictionary);
     let loaded = read_tsv(
@@ -21,12 +21,14 @@ fn read_response(body: &str, arity: usize, dictionary: &mut Dictionary) -> Loade
     loaded.expect("the response reads")
 }
 
+/// A `SELECT` query parses with its projection and the given prefixes,
+/// and a broken text, a base that is not an IRI, or another form of query is rejected.
 #[test]
 fn queries_validate_and_count_their_projection() {
     let query = SparqlQuery::parse("SELECT ?a ?b WHERE { ?a ?b ?c }", None, []).expect("valid");
     assert_eq!(query.arity(), 2);
     assert_eq!(query.variables(), ["a", "b"]);
-    // Prefixes seed the parser, so directives need no PREFIX line.
+    // The given prefixes are in scope for the parser, so the query needs no PREFIX line.
     let query = SparqlQuery::parse(
         "SELECT ?x WHERE { ?x a ex:Thing }",
         None,
@@ -48,6 +50,7 @@ fn queries_validate_and_count_their_projection() {
     );
 }
 
+/// A short query is sent as a GET parameter, and a long one as a POST form.
 #[test]
 fn short_queries_travel_as_get_long_ones_as_post() {
     let query = SparqlQuery::parse(DEFAULT_QUERY, None, []).expect("valid");
@@ -65,6 +68,7 @@ fn short_queries_travel_as_get_long_ones_as_post() {
     assert!(request.parameters.is_empty());
 }
 
+/// A query's shape distinguishes plain patterns from complex and opaque queries.
 #[test]
 fn shapes_tell_patterns_from_complex_and_opaque_queries() {
     let shape = |text: &str| SparqlQuery::parse(text, None, []).expect("valid").shape();
@@ -76,8 +80,8 @@ fn shapes_tell_patterns_from_complex_and_opaque_queries() {
         shape("SELECT ?a WHERE { ?a ?b ?c . BIND(STR(?a) AS ?s) }"),
         QueryShape::Pattern
     );
-    // A part binding only some solutions makes the query a subquery
-    // in a merge: a term substituted into it would change it.
+    // A part that binds only some solutions makes the query a subquery in a merge,
+    // since substituting a term into the part would change the query.
     assert_eq!(
         shape("SELECT ?a WHERE { ?a ?b ?c . OPTIONAL { ?c ?d ?e } }"),
         QueryShape::Complex
@@ -90,8 +94,8 @@ fn shapes_tell_patterns_from_complex_and_opaque_queries() {
         shape("SELECT ?a WHERE { { SELECT ?a WHERE { ?a ?b ?c } } ?a ?d ?e }"),
         QueryShape::Complex
     );
-    // LIMIT bounds the whole result: no per-request selection
-    // reproduces it, at the top or inside a subquery.
+    // LIMIT bounds the whole result, at the top or inside a subquery,
+    // so no selection in each request reproduces it.
     assert!(matches!(
         shape("SELECT ?a WHERE { ?a ?b ?c } LIMIT 100"),
         QueryShape::Opaque(_)
@@ -104,7 +108,7 @@ fn shapes_tell_patterns_from_complex_and_opaque_queries() {
         shape("SELECT ?a WHERE { ?a ?b ?c } OFFSET 5"),
         QueryShape::Opaque(_)
     ));
-    // A nondeterministic query has no one result to restrict.
+    // A nondeterministic query has no single result to restrict.
     assert!(matches!(
         shape("SELECT ?a WHERE { ?a ?b ?c . FILTER(RAND() < 0.5) }"),
         QueryShape::Opaque(_)
@@ -119,9 +123,11 @@ fn shapes_tell_patterns_from_complex_and_opaque_queries() {
     ));
 }
 
+/// A bound variable that the pattern may leave unbound is required to be bound below the
+/// `VALUES` join.
 #[test]
 fn bound_variables_are_required_below_the_values_join() {
-    // An OPTIONAL that did not match leaves ?p unbound; the block
+    // An OPTIONAL that did not match leaves ?p unbound, and the block
     // must not join with such solutions.
     let query = SparqlQuery::parse(
         "SELECT ?c ?p WHERE { ?c a <urn:C> OPTIONAL { ?c <urn:parent> ?p } }",
@@ -139,11 +145,12 @@ fn bound_variables_are_required_below_the_values_join() {
     let guard = text.find("FILTER(BOUND(?p))").expect("the guard is there");
     let values = text.find("VALUES").expect("the block is there");
     assert!(guard < values, "the guard sits below the join: {text}");
-    // The guard closes its group before the block joins it.
+    // The guard's group closes before the block is joined with it.
     let between = &text[guard..values];
     assert!(between.contains('}'), "{text}");
 }
 
+/// A query says whether some solution may leave a projected variable unbound.
 #[test]
 fn queries_tell_whether_a_solution_may_leave_a_variable_unbound() {
     let leaves = |text: &str| {
@@ -161,7 +168,7 @@ fn queries_tell_whether_a_solution_may_leave_a_variable_unbound() {
     assert!(leaves(
         "SELECT ?s WHERE { { ?s <urn:p> ?o } UNION { ?t <urn:q> ?o } }"
     ));
-    // A filter requiring the variable bound keeps only the solutions binding it.
+    // A filter that requires the variable to be bound keeps only the solutions that bind it.
     assert!(!leaves(
         "SELECT ?s ?r WHERE { ?s <urn:p> ?o OPTIONAL { ?s <urn:q> ?r } FILTER(BOUND(?r)) }"
     ));
@@ -177,6 +184,7 @@ fn queries_tell_whether_a_solution_may_leave_a_variable_unbound() {
     ));
 }
 
+/// A query lists the projected variables that no pattern binds, in projection order.
 #[test]
 fn queries_list_the_projected_variables_no_pattern_binds() {
     let never = |text: &str| {
@@ -195,6 +203,7 @@ fn queries_list_the_projected_variables_no_pattern_binds() {
     );
 }
 
+/// A query with a grouping or a subquery is computed in full, and one without is not.
 #[test]
 fn groupings_and_subqueries_are_computed_in_full() {
     let in_full = |text: &str| {
@@ -217,10 +226,11 @@ fn groupings_and_subqueries_are_computed_in_full() {
     ));
 }
 
+/// The query's own filter above the `VALUES` block does not replace the guard below it.
 #[test]
 fn a_filter_above_the_values_does_not_guard_them() {
     // The query's own filter sees ?p as the block binds it, so a solution without a parent
-    // would join the block and pass; the guard must sit below the block.
+    // would join the block and pass. The guard must be below the block.
     let query = SparqlQuery::parse(
         "SELECT ?c ?p WHERE { ?c a <urn:C> OPTIONAL { ?c <urn:parent> ?p } FILTER(BOUND(?p)) }",
         None,
@@ -240,6 +250,7 @@ fn a_filter_above_the_values_does_not_guard_them() {
     assert!(guard < text.find("VALUES").expect("a block"), "{text}");
 }
 
+/// A `VALUES` block is joined in under the projection, with the modifiers kept above it.
 #[test]
 fn values_join_in_under_the_projection() {
     let term = DataValue::iri;
@@ -261,15 +272,17 @@ fn values_join_in_under_the_projection() {
         bound.contains("<urn:x>") && bound.contains("<urn:y>"),
         "{bound}"
     );
-    // The modifiers stay above the injection.
+    // The modifiers stay above the block.
     assert!(bound.starts_with("SELECT DISTINCT ?a ?c"), "{bound}");
     assert!(bound.trim_end().ends_with("ORDER BY ASC(?c)"), "{bound}");
-    // Re-parsing keeps the projection: the block did not widen it.
+    // Parsing the text again gives the same projection, so the block did not widen it.
     let reparsed = SparqlQuery::parse(&bound, None, []).expect("the bound query parses");
     assert_eq!(reparsed.variables(), ["a", "c"]);
     assert_eq!(reparsed.shape(), QueryShape::Pattern);
 }
 
+/// A `VALUES` block is placed inside the filters at the top,
+/// so a `NOT EXISTS` sees what it binds.
 #[test]
 fn values_land_inside_the_filters_so_absences_see_them() {
     let term = DataValue::iri;
@@ -295,6 +308,7 @@ fn values_land_inside_the_filters_so_absences_see_them() {
     assert_eq!(reparsed.variables(), ["s", "i"]);
 }
 
+/// A `VALUES` block on an aggregate's variable is placed above the grouping.
 #[test]
 fn values_on_an_aggregate_result_land_above_the_group() {
     let query = SparqlQuery::parse(
@@ -311,8 +325,8 @@ fn values_on_an_aggregate_result_land_above_the_group() {
         }])
         .text()
         .to_owned();
-    // The block sits where ?n exists: outside the grouping, which
-    // the rendering keeps whole as a subquery.
+    // The block is placed where ?n exists, outside the grouping, which
+    // the rendered text keeps whole as a subquery.
     assert!(bound.contains("VALUES ( ?n )"), "{bound}");
     assert!(
         bound.contains("\"2\"^^<http://www.w3.org/2001/XMLSchema#integer>"),
@@ -323,6 +337,7 @@ fn values_on_an_aggregate_result_land_above_the_group() {
     assert_eq!(reparsed.shape(), QueryShape::Complex);
 }
 
+/// Joining `VALUES` blocks into an opaque query panics.
 #[test]
 #[should_panic(expected = "opaque query")]
 fn values_cannot_join_an_opaque_query() {
@@ -331,6 +346,7 @@ fn values_cannot_join_an_opaque_query() {
         .with_values(&[]);
 }
 
+/// A filter is added under the projection, which stays as it was.
 #[test]
 fn filters_push_under_the_projection() {
     let query =
@@ -348,6 +364,7 @@ fn filters_push_under_the_projection() {
     assert_eq!(filtered.variables(), ["a", "l"]);
 }
 
+/// A value's ground term is in its canonical lexical form, and a null has none.
 #[test]
 fn ground_terms_render_values_in_their_lexical_forms() {
     let render = |value: DataValue| SparqlQuery::ground_term(&value).map(|term| term.to_string());
@@ -377,7 +394,8 @@ fn ground_terms_render_values_in_their_lexical_forms() {
         render(int.expect("an int")).as_deref(),
         Some("\"3\"^^<http://www.w3.org/2001/XMLSchema#integer>")
     );
-    // Doubles and floats in XSD's canonical form, the special values as Nemo writes them.
+    // Doubles and floats are in XSD's canonical form,
+    // and the special values are written as Nemo writes them.
     let double = |value: f64| render(DataValue::double(value));
     let xsd_double = |lexical: &str| {
         Some(format!(
@@ -398,6 +416,7 @@ fn ground_terms_render_values_in_their_lexical_forms() {
     assert_eq!(render(DataValue::null(7)), None);
 }
 
+/// An integer is sent as an integer and as a decimal, and every other value as its one term.
 #[test]
 fn an_integer_goes_out_as_an_integer_and_as_a_decimal() {
     let terms = |value: DataValue| -> Vec<String> {
@@ -420,7 +439,7 @@ fn an_integer_goes_out_as_an_integer_and_as_a_decimal() {
             "\"-12.0\"^^<http://www.w3.org/2001/XMLSchema#decimal>"
         ]
     );
-    // Every other value goes out as its one term.
+    // Every other value is sent as its one term.
     assert_eq!(
         terms(DataValue::decimal(15, -1).expect("representable")),
         ["\"1.5\"^^<http://www.w3.org/2001/XMLSchema#decimal>"]
@@ -434,6 +453,9 @@ fn an_integer_goes_out_as_an_integer_and_as_a_decimal() {
     assert!(terms(DataValue::null(1)).is_empty());
 }
 
+/// TSV cells are parsed as Turtle terms.
+///
+/// A blank node label names one null across rows, and an unbound cell becomes a fresh null.
 #[test]
 fn tsv_cells_parse_as_turtle_terms() {
     let body = "?s\t?p\t?o\n\
@@ -482,7 +504,9 @@ fn tsv_cells_parse_as_turtle_terms() {
 }
 
 /// In a response of one column, a solution whose variable is unbound is an empty line,
-/// and a row of its own. In a wider response, an empty line is not a solution.
+/// and a row of its own.
+///
+/// In a wider response, an empty line is not a solution.
 #[test]
 fn an_unbound_solution_of_one_column_is_an_empty_line() {
     let read = |body: &str, arity: usize| read_response(body, arity, &mut Dictionary::new());
@@ -494,6 +518,7 @@ fn an_unbound_solution_of_one_column_is_an_empty_line() {
     assert_eq!((loaded.rows.len(), loaded.malformed), (2, 0));
 }
 
+/// A response with a timeout trace after its rows is cut off, however long the trace.
 #[test]
 fn a_cut_off_response_is_an_error() {
     let whole = "?x\n<http://example.org/a>\n";
@@ -513,9 +538,11 @@ fn a_cut_off_response_is_an_error() {
     assert!(check_complete("http://e/sparql", long.as_bytes()).is_err());
 }
 
+/// A response whose last line is an unfinished row is cut off,
+/// and one whose last row is whole is not, with a line end or without.
 #[test]
 fn a_response_ending_partway_through_a_row_is_cut_off() {
-    // A connection closing early leaves an unterminated, broken last line.
+    // A connection closing early leaves a broken last line without a line end.
     for cut in [
         "?x\t?y\n<http://e/a>\t<http://e/b>\n<http://e/c>\t<http://e/d",
         "?x\t?y\n<http://e/a>\t\"half a lit",
@@ -544,7 +571,7 @@ fn a_response_ending_partway_through_a_row_is_cut_off() {
 }
 
 /// A last row without a line end is whole if its cells are whole terms by their syntax,
-/// even if a datatype rejects a lexical form, which then reads as one malformed row.
+/// even if a datatype rejects a lexical form, which is then read as one malformed row.
 #[test]
 fn a_whole_last_row_is_told_by_its_syntax() {
     let whole = [
@@ -573,6 +600,7 @@ fn a_whole_last_row_is_told_by_its_syntax() {
     }
 }
 
+/// A marker inside a term of a solution row does not make the response cut off.
 #[test]
 fn solution_rows_may_contain_the_markers() {
     // The words inside a term are data, not a trace.
@@ -584,6 +612,7 @@ fn solution_rows_may_contain_the_markers() {
     assert!(check_complete("http://e/sparql", sparse.as_bytes()).is_ok());
 }
 
+/// A cell that is not a term makes its row malformed, reported at its line.
 #[test]
 fn a_cell_that_is_no_term_makes_the_row_malformed() {
     let body = "?x\nnot a term\n<http://example.org/ok>\n";
@@ -592,6 +621,8 @@ fn a_cell_that_is_no_term_makes_the_row_malformed() {
     assert_eq!(loaded.first_malformed, Some(2));
 }
 
+/// A `VALUES` row is sent once per combination of its values' terms,
+/// and a row with a null is not sent at all.
 #[test]
 fn a_row_goes_out_as_the_combinations_of_its_terms() {
     let query = SparqlQuery::parse(
@@ -619,7 +650,7 @@ fn a_row_goes_out_as_the_combinations_of_its_terms() {
         }])
         .text()
         .to_owned();
-    // The integer goes out as an integer and as a decimal, so its row goes out as two rows.
+    // The integer is sent as an integer and as a decimal, so its row is sent as two rows.
     assert!(text.contains("VALUES ( ?s ?v ?b )"), "{text}");
     assert_eq!(text.matches("( <urn:a> ").count(), 2, "{text}");
     assert!(
@@ -635,6 +666,8 @@ fn a_row_goes_out_as_the_combinations_of_its_terms() {
     SparqlQuery::parse(&text, None, []).expect("the query parses");
 }
 
+/// Responses read in the endpoint's scope agree on blank nodes,
+/// while responses read in scopes of their own do not.
 #[test]
 fn responses_sharing_a_scope_agree_on_blank_nodes() {
     let body = "?s\t?o\n_:b0\t<urn:x>\n";
@@ -653,11 +686,11 @@ fn responses_sharing_a_scope_agree_on_blank_nodes() {
             .to_owned()
     };
     let mut dictionary = Dictionary::new();
-    // Per response, as SPARQL promises: two responses, two nulls.
+    // In a scope for each response, as SPARQL specifies, two responses give two nulls.
     let own = SparqlReader::new(2, RowSelection::default());
     assert_ne!(read(&own, &mut dictionary), read(&own, &mut dictionary));
     // In the endpoint's scope, one label names one null in every response,
-    // which reports the endpoint as its source.
+    // and the null's scope shows that it came from an endpoint.
     let shared = SparqlReader::new(2, RowSelection::default()).with_endpoint_blank_nodes();
     let first = read(&shared, &mut dictionary);
     assert_eq!(read(&shared, &mut dictionary), first);
@@ -669,6 +702,8 @@ fn responses_sharing_a_scope_agree_on_blank_nodes() {
     assert!(!SparqlReader::is_endpoint_blank_node(&dictionary, fresh));
 }
 
+/// A reader given the bindings keeps only the solutions whose values match them,
+/// as Nemo compares values.
 #[test]
 fn a_reader_told_the_bindings_keeps_the_solutions_that_match_them() {
     let block = ValuesBlock {
@@ -701,13 +736,13 @@ fn a_reader_told_the_bindings_keeps_the_solutions_that_match_them() {
             EvaluationContext::now(),
         )
         .expect("the response reads");
-    // Integer 3 for the first two, double 2.5 for the third, however the endpoint matched
-    // them. The double 3 is a different value to Nemo, and the last two match nothing.
+    // The first two are the integer 3 and the third is the double 2.5, however the endpoint
+    // matched them. The double 3 is a different value for Nemo, and the last two match nothing.
     assert_eq!((loaded.rows.len(), loaded.malformed), (3, 0));
 }
 
-/// A bound cell that is not a term makes its row malformed, counted as such,
-/// while an unbound value or a blank node in a bound column simply matches no binding.
+/// A bound cell that is not a term makes its row malformed,
+/// while an unbound value or a blank node in a bound column only matches no binding.
 #[test]
 fn a_malformed_bound_cell_is_counted() {
     let block = ValuesBlock {

@@ -5,22 +5,22 @@
 //! # Main components
 //!
 //! Values:
-//! - [value] defines the semantic data values.
-//! - [storage] defines the physical storage of values in memory.
-//! - [dictionary] handles values that do not fit inline.
+//! - [value] defines the data values and the operations on them.
+//! - [storage] defines the storage values, the form in which tables store values in memory.
+//! - [dictionary] stores the values that a storage value cannot encode in its payload.
 //!
 //! Tables and operations:
 //! - [trie] is the immutable columnar table structure.
-//! - [management] organizes related tables and their orders.
+//! - [management] stores the tables, with their rows in the column orders that reads ask for.
 //! - [plan] describes computations such as joins or filters as operation plans,
 //!   and executes them.
-//! - [function] compiles builtin expressions into stack programs.
+//! - [function] evaluates builtin functions as stack programs.
 //!
 //! Infrastructure:
-//! - [parallel] contains functions for the parallel execution of operations.
-//! - [tuning] contains constants for performance tuning.
-//! - [diagnostics] provides data structures for error reporting.
-//! - [stopwatch] provides the clock execution timings are measured with.
+//! - [parallel] runs the parallel phases of operations on a worker pool.
+//! - [tuning] defines the thresholds that decide how operations run in parallel.
+//! - [diagnostics] provides data structures for errors and warnings.
+//! - [stopwatch] provides the clock that measures execution times.
 //!
 //! The primary public entry point is [TableManager](management::TableManager),
 //! which owns and maintains the in-memory tables.

@@ -1,13 +1,13 @@
-//! Attributes: generic statement metadata.
+//! Attributes, which attach information to a rule.
 
 use std::fmt::{self, Display, Formatter};
 
 use crate::model::{Identifier, Span, Term, fmt_list, span_ignoring_eq};
 
-/// An attribute attached to a statement, like `#[name("reach")]`.
+/// An attribute attached to a rule, like `#[name("reach")]`.
 #[derive(Debug, Clone)]
 pub struct Attribute {
-    /// The attribute name.
+    /// The attribute's name.
     pub name: Identifier,
     /// The argument terms.
     pub arguments: Vec<Term>,

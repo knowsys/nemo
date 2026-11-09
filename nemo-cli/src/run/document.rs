@@ -1,7 +1,9 @@
-//! The observability document of a run,
-//! the application-level facts beside the recorded telemetry,
-//! and its destinations:
-//! the standard output as JSON, the export directory as a page, the live dashboard.
+//! The report document of a run, and where it goes.
+//!
+//! The document combines the run's facts, such as its stage times and counts,
+//! with the recorded telemetry.
+//! It is written to standard output as JSON or to the export directory as an HTML page,
+//! and the live dashboard serves it while the run goes on.
 
 use std::{sync::Arc, time::Duration};
 
@@ -23,7 +25,7 @@ use crate::{
 pub(super) const REPORT_PAGE: &str = "report.html";
 
 impl Run<'_> {
-    /// Returns the run's title, the program paths as they were given.
+    /// Returns the run's title, which lists the program paths as they were given.
     fn title(&self) -> String {
         let names: Vec<String> = self
             .arguments
@@ -34,8 +36,11 @@ impl Run<'_> {
         names.join(", ")
     }
 
-    /// Returns the application-level facts of the finished run, for the
-    /// observability document.
+    /// Returns the facts of the finished run for the report document.
+    ///
+    /// These are the stage times, the counts of facts and rule applications, the memory,
+    /// the reasoning timings, the dropped rows, the size of each predicate,
+    /// and the program's text after each pipeline stage.
     pub(super) fn facts(&self, engine: &Engine, times: Times) -> RunFacts {
         let nanos = |duration: Duration| u64::try_from(duration.as_nanos()).unwrap_or(u64::MAX);
         let errors = engine
@@ -46,9 +51,8 @@ impl Run<'_> {
                 count,
             })
             .collect();
-        // A predicate whose rows cannot be counted, or which the engine
-        // does not store whole, is left out; the summary reported the
-        // former.
+        // A predicate whose rows cannot be counted is left out,
+        // for example one that the engine does not store whole.
         let predicates = engine
             .predicates()
             .into_iter()
@@ -85,9 +89,13 @@ impl Run<'_> {
         }
     }
 
-    /// Delivers the document as the report level asks for it:
-    /// as the JSON on the standard output, which the run kept for it,
-    /// or rendered as the page written into the export directory.
+    /// Writes the report document as `level` selects.
+    ///
+    /// [Report::Json] writes it to standard output as JSON,
+    /// and [Report::Html] writes it to the export directory as a page.
+    /// Other levels write nothing.
+    /// `facts` are the facts of the finished run,
+    /// and `recorder` is the recorder of the telemetry, if the run recorded any.
     pub(super) fn document(
         &self,
         level: Report,
@@ -107,8 +115,8 @@ impl Run<'_> {
         }
     }
 
-    /// Writes the report page over a document into the export directory,
-    /// and says where it went.
+    /// Writes `document` into the export directory as an HTML page,
+    /// and prints the page's path to the error stream.
     fn page(&self, document: &ReportDocument<'_>) -> Result<(), Diagnostic> {
         let path = self.arguments.export_dir.join(REPORT_PAGE);
         let page = document.page(false);
@@ -125,7 +133,10 @@ impl Run<'_> {
         Ok(())
     }
 
-    /// Starts the live dashboard if one was asked for, and says where it serves.
+    /// Starts the live dashboard if `--dashboard` is given,
+    /// and prints its address to the error stream.
+    ///
+    /// `recorder` must be given whenever `--dashboard` is.
     pub(super) fn dashboard(
         &self,
         recorder: Option<&Arc<Recorder>>,
@@ -146,8 +157,8 @@ impl Run<'_> {
         Ok(Some(dashboard))
     }
 
-    /// Keeps the dashboard serving, the finished run's facts included,
-    /// until the process is interrupted.
+    /// Gives the dashboard the finished run's facts, if there are any,
+    /// and keeps it serving until the process is interrupted.
     pub(super) fn serve(dashboard: Dashboard, facts: Option<RunFacts>) -> ! {
         if let Some(facts) = facts {
             dashboard.finish(facts);

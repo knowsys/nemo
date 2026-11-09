@@ -11,7 +11,7 @@ use crate::{
     value::{DataValue, TimezoneOffset},
 };
 
-/// Asserts that a call panics with a message containing `expected`.
+/// Asserts that a call panics with a message that contains `expected`.
 #[track_caller]
 pub(crate) fn assert_panics<T>(expected: &str, call: impl FnOnce() -> T) {
     let Err(payload) = catch_unwind(AssertUnwindSafe(call)) else {
@@ -29,24 +29,24 @@ pub(crate) fn assert_panics<T>(expected: &str, call: impl FnOnce() -> T) {
     );
 }
 
-/// Returns the number a lexical denotes.
+/// Returns the number that a lexical form denotes, and panics if the form is malformed.
 pub(crate) fn number(lexical: &str) -> DataValue {
     DataValue::decimal_from_lexical(lexical).expect("a well-formed number lexical")
 }
 
-/// Returns the offset of the given minutes from UTC.
+/// Returns the timezone offset of the given number of minutes from UTC.
 pub(crate) fn zoned(minutes: i16) -> Option<TimezoneOffset> {
     Some(TimezoneOffset::new(minutes).expect("the offset is in range"))
 }
 
-/// Returns the payload of a temporal value that has one.
+/// Returns the payload of a temporal value, and panics if the value has none.
 pub(crate) fn payload<T: PayloadEncoding<Encoded = Option<u64>>>(value: T) -> u64 {
     value
         .to_payload()
         .expect("the value is in the payload range")
 }
 
-/// Returns the value of an operation that succeeded.
+/// Returns the result of an operation as an owned value, and panics if the operation failed.
 pub(crate) fn value(result: StackValue<'_>) -> DataValue {
     result
         .as_result()
@@ -54,9 +54,10 @@ pub(crate) fn value(result: StackValue<'_>) -> DataValue {
         .to_owned()
 }
 
-/// The number of rows of a unary relation whose join splits into cells:
-/// its estimated work, one value visit per row,
-/// passes the default tuning's `parallel_work`.
+/// A number of rows for which the join of a unary relation runs in cells.
+///
+/// The estimated work of the join, one value visit per row,
+/// exceeds the [parallel_work](crate::tuning::Tuning::parallel_work) of the default tuning.
 pub(crate) const CELL_ROWS: i64 = 200_000;
 
 /// Returns the storage value of an integer.
@@ -64,7 +65,7 @@ pub(crate) fn int(value: i64) -> StorageValue {
     StorageValue::integer(value)
 }
 
-/// Returns a buffer of the given arity holding rows of integers.
+/// Returns a buffer of the given arity with the given rows of integers.
 pub(crate) fn int_buffer<R: AsRef<[i64]>>(arity: usize, rows: &[R]) -> RowBuffer {
     let mut buffer = RowBuffer::new(arity);
     for row in rows {
@@ -75,7 +76,7 @@ pub(crate) fn int_buffer<R: AsRef<[i64]>>(arity: usize, rows: &[R]) -> RowBuffer
     buffer
 }
 
-/// Returns the trie of the given arity holding the given rows.
+/// Returns the trie of the given arity with the given rows.
 pub(crate) fn trie<R: AsRef<[StorageValue]>>(arity: usize, rows: &[R]) -> Trie {
     let mut buffer = RowBuffer::new(arity);
     for row in rows {
@@ -85,13 +86,13 @@ pub(crate) fn trie<R: AsRef<[StorageValue]>>(arity: usize, rows: &[R]) -> Trie {
     Trie::from_buffer(buffer)
 }
 
-/// Returns the trie of the given arity holding rows of integers.
+/// Returns the trie of the given arity with the given rows of integers.
 pub(crate) fn int_trie<R: AsRef<[i64]>>(arity: usize, rows: &[R]) -> Trie {
     Trie::from_buffer(int_buffer(arity, rows))
 }
 
 /// Returns the rows of a trie in storage order,
-/// checking that they are as many as the trie counts.
+/// and asserts that their number is the trie's row count.
 pub(crate) fn rows(trie: &Trie) -> Vec<Vec<StorageValue>> {
     let mut rows = Vec::new();
     trie.for_each_row(|row| rows.push(row.to_vec()));
@@ -100,7 +101,8 @@ pub(crate) fn rows(trie: &Trie) -> Vec<Vec<StorageValue>> {
     rows
 }
 
-/// Returns the rows of a trie of integers in storage order.
+/// Returns the rows of a trie of integers in storage order,
+/// and asserts that every value is a 64-bit integer.
 pub(crate) fn int_rows(trie: &Trie) -> Vec<Vec<i64>> {
     rows(trie)
         .iter()

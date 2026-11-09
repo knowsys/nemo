@@ -1,31 +1,28 @@
-//! Formatting: statements rewritten as the model prints them.
+//! Formatting a document by printing its statements as the model prints them.
 //!
-//! Every `Display` in the model produces valid Nemo syntax,
-//! and the parser and the printer are round-trip tested against each other,
-//! so formatting a statement is printing it.
-//!
-//! What the model does *not* carry is trivia: the comments and blank lines a program is
-//! written with.
-//! So only statements are rewritten, each inside its own span,
-//! and everything between them, which holds the comments, is left exactly as it was.
-//! A statement whose own text holds a `%` or a `/*` is left alone as well,
-//! since a comment inside it would not survive the round trip,
-//! and a comment marker inside a string is indistinguishable here from one that opens a
-//! comment.
-//! Leaving such a statement as written is the safe direction of that doubt.
+//! Every `Display` of the model writes valid Nemo syntax that parses back to the same
+//! statement, so formatting a statement means printing it.
+//! The model does not keep comments and blank lines,
+//! so only the statements are replaced, each within its own span,
+//! and the text between them, including the comments, is left as it is.
 
 use nemo::model::{Span, Statement};
 
-/// One replacement: the text to put, and its place.
+/// A replacement of the text of a span.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Edit {
     /// The span to replace.
     pub span: Span,
-    /// What to put in its place.
+    /// The new text.
     pub text: String,
 }
 
 /// Returns the edits that normalize a document's statements, in source order.
+///
+/// A statement whose text contains `%` or `/*` is left as written,
+/// since printing it would drop a comment inside it.
+/// This check cannot distinguish a comment marker inside a string from one that starts a
+/// comment, so such a statement is left as written too, which is the safe choice.
 pub(crate) fn edits(statements: &[Statement], text: &str) -> Vec<Edit> {
     let mut edits = Vec::new();
     for statement in statements {
@@ -49,11 +46,10 @@ pub(crate) fn edits(statements: &[Statement], text: &str) -> Vec<Edit> {
     edits
 }
 
-/// Returns a statement as the model prints it.
+/// Returns a statement as the model prints it, but without a rule's attributes.
 ///
-/// A rule's span begins after its attributes while its printing includes them,
-/// so an attributed rule is printed without them,
-/// since what the span covers is what the edit may replace.
+/// A rule's span begins after its attributes, but its printed form includes them.
+/// An edit may replace only what the span covers, so the attributes are left out.
 fn printed(statement: &Statement) -> String {
     match statement {
         Statement::Rule(rule) if !rule.attributes.is_empty() => {
@@ -65,7 +61,7 @@ fn printed(statement: &Statement) -> String {
     }
 }
 
-/// Returns the text a span covers.
+/// Returns the text of a span, or `None` if the span is not inside the text.
 fn slice(text: &str, span: Span) -> Option<&str> {
     let start = usize::try_from(span.start).ok()?;
     let end = usize::try_from(span.end).ok()?;
@@ -78,18 +74,19 @@ mod tests {
 
     use nemo::model::{FileId, Program};
 
-    /// A document's text with its formatting edits applied.
+    /// Returns the text of a source that parses, with its formatting edits applied.
     fn formatted(source: &str) -> String {
         let (program, diagnostics) = Program::parse(source, FileId::new(0));
         assert!(diagnostics.is_empty(), "{diagnostics:?}");
         let mut text = source.to_string();
-        // Back to front, so an earlier edit's span stays valid.
+        // The edits are applied from the back, so that the spans of earlier edits stay valid.
         for edit in edits(&program.statements, source).into_iter().rev() {
             text.replace_range(edit.span.start as usize..edit.span.end as usize, &edit.text);
         }
         text
     }
 
+    /// The spacing inside a statement is normalized.
     #[test]
     fn spacing_is_normalized_within_a_statement() {
         assert_eq!(formatted("p(1,2)   .\n"), "p(1, 2) .\n");
@@ -99,10 +96,10 @@ mod tests {
         );
     }
 
+    /// The comments and blank lines between statements are kept.
     #[test]
     fn what_lies_between_statements_is_left_alone() {
-        // The comment and the blank lines are not the model's to keep,
-        // so nothing that would rewrite them is emitted.
+        // The model does not keep the comments and blank lines, so no edit touches them.
         let source = "% what this file is about\np(1,2) .\n\n\n% and this rule\nq(?x):-p(?x,1) .\n";
         assert_eq!(
             formatted(source),
@@ -110,40 +107,45 @@ mod tests {
         );
     }
 
+    /// A statement that contains a `%` comment is left as written.
     #[test]
     fn a_statement_holding_a_comment_is_left_as_written() {
-        // The comment sits inside the rule's own span; printing the rule
-        // would drop it, so the rule is not printed.
+        // The comment is inside the rule's span, and printing the rule would drop it,
+        // so the rule is not printed.
         let source = "q(?x) :-  % why\n    p(?x) .\n";
         assert_eq!(formatted(source), source);
     }
 
+    /// A statement that contains a block comment is left as written.
     #[test]
     fn a_statement_holding_a_block_comment_is_left_as_written() {
-        // A block comment is trivia wherever whitespace is, so one can
-        // be inside a statement, where printing would drop it.
+        // A block comment may appear wherever whitespace may, so it can be inside a
+        // statement, where printing would drop it.
         let source = "q(?x) :- /* why */ p(?x) .\n";
         assert_eq!(formatted(source), source);
         let source = "p(1, /* unit: cm */ 2) .\n";
         assert_eq!(formatted(source), source);
     }
 
+    /// A statement with a `%` inside a string is left as written as well.
     #[test]
     fn a_string_that_looks_like_a_comment_is_left_alone_too() {
-        // `%` in a string cannot be told from one that opens a comment
-        // without lexing, and leaving it is the safe way to be wrong.
+        // Without lexing, a `%` in a string cannot be distinguished from one that starts a
+        // comment, and leaving the statement as written is the safe mistake.
         let source = "p(\"100%\",1) .\n";
         assert_eq!(formatted(source), source);
     }
 
+    /// Formatting a rule with an attribute does not repeat the attribute.
     #[test]
     fn an_attributed_rule_keeps_its_attribute_once() {
-        // The rule's span starts after the attribute; printing the rule
-        // would print the attribute again.
+        // The rule's span starts after the attribute,
+        // so printing the rule with it would write the attribute twice.
         let source = "#[name(\"reach\")]\nq(?x):-p(?x) .\n";
         assert_eq!(formatted(source), "#[name(\"reach\")]\nq(?x) :- p(?x) .\n");
     }
 
+    /// A document that is already formatted gets no edits.
     #[test]
     fn a_formatted_document_is_left_alone() {
         let source = "p(1, 2) .\nq(?x) :- p(?x, 2) .\n@output q .\n";
@@ -155,6 +157,7 @@ mod tests {
         );
     }
 
+    /// The spacing inside a directive is normalized too.
     #[test]
     fn directives_are_normalized_too() {
         assert_eq!(formatted("@output   p ,q .\n"), "@output p, q .\n");

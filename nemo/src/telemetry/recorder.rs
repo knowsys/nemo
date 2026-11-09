@@ -1,4 +1,4 @@
-//! The aggregating consumer of the engine's event stream.
+//! The recorder: a sink that aggregates the engine's events.
 
 mod curves;
 mod orders;
@@ -18,23 +18,24 @@ use serde::{Serialize, Serializer};
 use self::state::RecorderState;
 use crate::telemetry::{EngineEvent, EventSink};
 
-/// A sink that aggregates the engine's events into a run summary:
-/// per-rule statistics, derivation and memory curves, and phase totals.
+/// A sink that aggregates the engine's events into a summary of the run.
 ///
-/// It timestamps events relative to its own creation,
-/// and can be snapshotted as JSON at any moment, also during a run.
+/// The summary has per-rule statistics, curves of the derivations and the memory,
+/// and phase totals.
+/// The recorder stamps each event with the time since its creation,
+/// and can write a JSON snapshot at any moment, also during a run.
 #[derive(Debug)]
 pub struct Recorder {
-    /// The measurement origin every stamp is relative to.
+    /// The stopwatch started at the recorder's creation, against which events are stamped.
     started: Stopwatch,
     /// The aggregated state.
     state: Mutex<RecorderState>,
-    /// Bumped per change, so pollers can skip unchanged snapshots.
+    /// A counter that is incremented on every change.
     version: AtomicU64,
 }
 
 impl Recorder {
-    /// Creates a recorder, from which stamps count.
+    /// Creates a recorder, whose stamps count from now.
     pub fn new() -> Self {
         Self {
             started: Stopwatch::start(),
@@ -43,26 +44,28 @@ impl Recorder {
         }
     }
 
-    /// Sets the rules' rendered texts, by which the snapshot names the rules.
+    /// Sets the rendered texts of the rules, by which the snapshot names the rules.
     ///
-    /// These are typically the engine's [ran_rules](crate::engine::Engine::ran_rules),
-    /// handed over once the program has loaded.
+    /// `texts` gives each rule's text at its [position](crate::engine::Engine::ran_rules),
+    /// which is how events name rules.
+    /// Once texts are set, an event for a position beyond them counts only towards the totals.
     pub fn set_rules(&self, texts: Vec<String>) {
         self.lock().texts = texts;
         self.version.fetch_add(1, Ordering::Release);
     }
 
-    /// Returns a counter bumped on every change,
-    /// which pollers compare to skip snapshots nothing has happened between.
+    /// Returns a counter that is incremented on every change.
+    ///
+    /// A poller can compare it to skip a snapshot when nothing has changed.
     pub fn version(&self) -> u64 {
         self.version.load(Ordering::Acquire)
     }
 
-    /// Returns the current state as one JSON object:
-    /// the run's progress and totals, the imports, the rules,
-    /// the timeline curves, and the phase and work tables.
+    /// Returns the current state as one JSON object.
     ///
-    /// Times are nanoseconds and sizes bytes.
+    /// The object has the run's progress and totals, the imports, the rules, the curves,
+    /// and the phase and work tables.
+    /// Times are in nanoseconds and sizes in bytes.
     pub fn snapshot_json(&self) -> String {
         serde_json::to_string(self).expect("a snapshot serializes")
     }
@@ -84,9 +87,9 @@ impl Recorder {
             .collect()
     }
 
-    /// Returns the state under its lock.
+    /// Returns the state under its lock, even if the lock is poisoned.
     ///
-    /// A poisoning panic elsewhere does not take the telemetry down with it.
+    /// A panic in another thread that held the lock then does not stop the telemetry.
     fn lock(&self) -> MutexGuard<'_, RecorderState> {
         self.state.lock().unwrap_or_else(PoisonError::into_inner)
     }
@@ -133,6 +136,7 @@ mod tests {
         }
     }
 
+    /// Rule applications are summed per rule and in total, and every event increments the version.
     #[test]
     fn events_aggregate_per_rule_and_in_total() {
         let recorder = Recorder::new();
@@ -165,6 +169,8 @@ mod tests {
         assert!(recorder.version() >= 6);
     }
 
+    /// The timeline coarsens below its cap, keeps the sum of the derived rows,
+    /// and stays in time order.
     #[test]
     fn timelines_downsample_but_keep_their_sums() {
         let recorder = Recorder::new();
@@ -179,10 +185,10 @@ mod tests {
         assert!(timeline.is_sorted_by_key(|point| point.at));
     }
 
+    /// Coarsening the timeline of a long run loses no derivations,
+    /// and keeps at least one point in every tenth of the run.
     #[test]
     fn downsampling_keeps_the_whole_run_in_view() {
-        // Coarsening keeps every part of a long run represented:
-        // each tenth of the run keeps at least one point.
         let mut state = RecorderState::default();
         let total: u64 = 200_000;
         for index in 0..total {
@@ -209,6 +215,8 @@ mod tests {
         }
     }
 
+    /// An event for an unknown rule position counts towards the run's totals,
+    /// but makes no rule entry.
     #[test]
     fn an_unknown_rule_index_still_counts_towards_the_run() {
         let recorder = Recorder::new();
@@ -238,6 +246,7 @@ mod tests {
         assert_eq!(rules[0].applications, 1);
     }
 
+    /// The rows fetched from an endpoint add up with the rows imported from the same resource.
     #[test]
     fn fetches_add_up_under_their_endpoint() {
         let recorder = Recorder::new();
@@ -268,9 +277,10 @@ mod tests {
         );
     }
 
-    /// The snapshot's shape is what the report page and the command line's JSON readers rely
-    /// on: every key, in order, byte for byte, over one event of every kind,
-    /// at synthetic stamps.
+    /// The snapshot after one event of every kind, at synthetic stamps,
+    /// has every key in order, byte for byte.
+    ///
+    /// Readers of the snapshot, such as the report page, rely on its shape.
     #[test]
     fn snapshots_keep_their_shape() {
         let mut state = RecorderState::default();

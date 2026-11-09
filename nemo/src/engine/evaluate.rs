@@ -1,13 +1,14 @@
 //! Evaluation of the compiled program to its fixpoint.
 //!
-//! The modules are:
-//!
-//! - `reason`: the semi-naive loop over the strata and their rules,
-//! - `application`: one rule application as an operation plan,
-//! - `body`: the plan of a rule body, shared with the explanations,
-//! - `extensional`: which revision blocks of a table hold input facts rather than derived ones,
-//! - `contexts`: the evaluation context of each reasoning run,
-//! - `fetch`: the rules of bound SPARQL imports, which query an endpoint instead of joining.
+//! The modules:
+//! - [reason] runs the semi-naive loop over the strata and their rules.
+//! - [application] performs one rule application as an operation plan.
+//! - [body] builds the plan of a rule body, wherever a body is evaluated.
+//! - [extensional] records which revision blocks of a table hold input facts rather than
+//!   derived ones.
+//! - [contexts] keeps the evaluation context of each run.
+//! - `fetch` applies the rules of bound SPARQL imports, which query an endpoint instead of
+//!   joining.
 
 pub(super) mod application;
 pub(super) mod body;

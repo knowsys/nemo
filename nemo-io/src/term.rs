@@ -1,11 +1,5 @@
-//! The term syntax cells share.
-//!
-//! The DSV `term` format and the SPARQL TSV reader both read an IRI in angle brackets,
-//! a quoted literal with its language tag or datatype, the value of a typed literal,
-//! and a blank node label.
-//! What a *bare* cell means (a number, a boolean, an IRI constant, a blank node)
-//! each reader decides for itself,
-//! and each reads a quoted literal in its own [literal syntax](LiteralSyntax).
+//! Reading the terms that cells hold, shared by the DSV [Term](crate::format::ValueFormat::Term)
+//! format and the SPARQL TSV reader.
 
 use std::borrow::Cow;
 
@@ -17,25 +11,30 @@ use nemo_physical::{
 /// The XML Schema namespace.
 const XSD: &str = "http://www.w3.org/2001/XMLSchema#";
 
-/// The syntax of a quoted literal, which differs between readers.
+/// The syntax of a quoted literal, which differs between the readers of terms.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum LiteralSyntax {
-    /// Nemo's term syntax, which the DSV `term` format reads and writes:
-    /// the escapes [Escape::in_string] reads,
-    /// any other backslash kept as written, as programs keep it,
-    /// and `xsd:` abbreviating the XML Schema namespace in a datatype.
+    /// Nemo's term syntax, which the DSV [Term](crate::format::ValueFormat::Term) format reads
+    /// and writes.
+    ///
+    /// It resolves the escapes that [Escape::in_string] recognizes
+    /// and keeps any other backslash as written.
+    /// In a datatype, `xsd:` abbreviates the XML Schema namespace.
     TermSyntax,
-    /// Turtle's syntax, which SPARQL TSV uses for terms: the escapes `\t`,
-    /// `\b`, `\n`, `\r`, `\f`, `\"`, `\'`, `\\`, `\uXXXX`, and
-    /// `\UXXXXXXXX`, and datatypes as written. Only the SPARQL reader
-    /// reads Turtle terms, so a build without it constructs none.
+    /// Turtle's syntax, which SPARQL TSV uses for terms.
+    ///
+    /// It resolves the escapes `\t`, `\b`, `\n`, `\r`, `\f`, `\"`, `\'`, `\\`, `\uXXXX`
+    /// and `\UXXXXXXXX`, and rejects any other.
+    /// Datatypes are read as written.
+    ///
+    /// Only the SPARQL reader reads Turtle terms, so a build without it constructs none.
     #[cfg_attr(not(feature = "sparql"), allow(dead_code))]
     Turtle,
 }
 
 impl LiteralSyntax {
-    /// Returns the datatype IRI a literal's `^^<…>` names,
-    /// the term syntax's `xsd:` abbreviation expanded.
+    /// Returns the datatype IRI written in a literal's `^^<…>`,
+    /// with the `xsd:` abbreviation of term syntax expanded.
     fn datatype(self, written: &str) -> Cow<'_, str> {
         match (self, written.strip_prefix("xsd:")) {
             (LiteralSyntax::TermSyntax, Some(local)) => Cow::Owned(format!("{XSD}{local}")),
@@ -44,8 +43,8 @@ impl LiteralSyntax {
     }
 }
 
-/// Returns the IRI a cell spells between angle brackets, its character escapes decoded,
-/// or `None` for a cell not in angle brackets.
+/// Returns the IRI written between the angle brackets of a cell, with its character escapes
+/// decoded, or `None` for a cell not in angle brackets.
 ///
 /// The IRI need not be [valid](Iri::is_valid).
 pub(crate) fn iri(cell: &str) -> Option<Cow<'_, str>> {
@@ -54,11 +53,15 @@ pub(crate) fn iri(cell: &str) -> Option<Cow<'_, str>> {
         .map(Iri::unescape)
 }
 
-/// Returns the value of a quoted literal (`"…"`, `"…"@lang`, or `"…"^^<datatype>`),
-/// given the cell after its opening quote.
+/// Returns the value of a quoted literal: `"…"`, `"…"@lang` or `"…"^^<datatype>`.
 ///
-/// Returns `None` for a quote that never closes, an escape the syntax does not define,
-/// a tail that is neither a language tag nor a datatype, or a lexical its datatype rejects.
+/// `rest` is the cell after the literal's opening quote.
+///
+/// Returns `None` if
+/// - the quote never closes,
+/// - the text after the closing quote is neither a language tag nor a datatype,
+/// - the language tag is not well-formed, or the datatype rejects the text, or
+/// - in [Turtle](LiteralSyntax::Turtle), the text has an escape that Turtle does not define.
 pub(crate) fn literal(rest: &str, syntax: LiteralSyntax) -> Option<DataValue> {
     let (raw, tail) = split(rest)?;
     let text = unescape(raw, syntax)?;
@@ -76,8 +79,10 @@ pub(crate) fn literal(rest: &str, syntax: LiteralSyntax) -> Option<DataValue> {
     }
 }
 
-/// Splits a literal after its opening quote at its closing one,
-/// the first quote no backslash escapes, into the raw text and the tail after the quote.
+/// Splits a literal at its closing quote into the raw text before it and the rest after it.
+///
+/// `rest` is the literal after its opening quote.
+/// The closing quote is the first quote that no backslash escapes.
 ///
 /// Returns `None` if the literal never closes.
 fn split(rest: &str) -> Option<(&str, &str)> {
@@ -94,11 +99,11 @@ fn split(rest: &str) -> Option<(&str, &str)> {
     None
 }
 
-/// Resolves the escapes of a literal's raw text in a literal syntax:
-/// those [Escape::in_string] reads, and in Turtle also `\b`, a backspace.
+/// Resolves the escapes in the raw text of a literal.
 ///
-/// Returns `None` for an escape Turtle does not define, or a backslash that ends the text;
-/// term syntax keeps such a backslash, as programs do.
+/// Both syntaxes resolve the escapes that [Escape::in_string] recognizes,
+/// and Turtle also resolves `\b`, a backspace.
+/// For any other backslash, Turtle returns `None`, and term syntax keeps the backslash as written.
 fn unescape(raw: &str, syntax: LiteralSyntax) -> Option<String> {
     if !raw.contains('\\') {
         return Some(raw.to_owned());
@@ -121,24 +126,27 @@ fn unescape(raw: &str, syntax: LiteralSyntax) -> Option<String> {
     Some(resolved)
 }
 
-/// The blank node labels of one read: the [label scope](LabelScope) in which each names a null.
+/// The blank nodes of one read of a document, each a null that its label names
+/// in a [label scope](LabelScope).
 ///
-/// A read given a scope names nulls in it, shared with the other reads given it,
+/// A read given a scope names its nulls in that scope, which other reads may share,
 /// such as every response of one SPARQL endpoint.
-/// Otherwise the read opens a scope of its own, for the document it reads:
-/// a label names the same null across TriG graph blocks and across a response's rows,
-/// and the scope closes when the read ends.
+/// Otherwise the read opens a scope of its own, which closes when the read ends.
+/// Either way, a label names the same null throughout the document,
+/// for example across the graph blocks of a TriG file or across the rows of a response.
 #[derive(Debug)]
 pub(crate) struct BlankNodes {
-    /// The scope the labels name nulls in.
+    /// The scope in which the labels name nulls.
     scope: LabelScope,
-    /// Whether the read opened the scope, and closes it.
+    /// Whether the read opened the scope, and so must close it.
     owned: bool,
 }
 
 impl BlankNodes {
-    /// Returns the blank nodes of a read, in the given scope,
-    /// or in a fresh one under the given name if there is none.
+    /// Returns the blank nodes of a new read.
+    ///
+    /// The read names its nulls in the `given` scope,
+    /// or, if that is `None`, in a fresh scope called `name`.
     pub(crate) fn open(given: Option<LabelScope>, name: &str, dictionary: &mut Dictionary) -> Self {
         match given {
             Some(scope) => Self {
@@ -152,7 +160,7 @@ impl BlankNodes {
         }
     }
 
-    /// Returns the null a label names, minted on first sight.
+    /// Returns the null that a label names, minting it on the label's first use.
     pub(crate) fn null(&self, label: &str, dictionary: &mut Dictionary) -> DataValue {
         DataValue::null(dictionary.labeled_null(self.scope, label))
     }
@@ -169,6 +177,10 @@ impl BlankNodes {
 mod tests {
     use super::*;
 
+    /// Term syntax and Turtle share most escapes.
+    ///
+    /// Only Turtle resolves `\b` and rejects an unknown escape,
+    /// and only term syntax abbreviates the XML Schema namespace.
     #[test]
     fn term_syntax_and_turtle_differ_in_escapes_and_datatype_abbreviations() {
         // The escapes both syntaxes read.
@@ -182,8 +194,8 @@ mod tests {
             assert_eq!(literal(r#"x"tail"#, syntax), None, "{syntax:?}");
             assert_eq!(literal(r#"trailing\"#, syntax), None, "{syntax:?}");
         }
-        // Turtle reads `\b` as a backspace, while term syntax keeps it for regular expressions,
-        // and reads `\f` and `\'` as Turtle does.
+        // Turtle reads `\b` as a backspace, while term syntax keeps it for regular expressions.
+        // Both read `\f` and `\'`.
         assert_eq!(
             literal(r#"café\b\f\'""#, LiteralSyntax::Turtle),
             Some(DataValue::string("café\u{8}\u{C}'"))
@@ -222,6 +234,8 @@ mod tests {
         assert_eq!(iri("urn:a"), None);
     }
 
+    /// A label names one null within a read,
+    /// and the same null in another read only if both share a scope.
     #[test]
     fn labels_name_one_null_each() {
         let mut dictionary = Dictionary::new();

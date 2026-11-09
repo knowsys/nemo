@@ -1,4 +1,4 @@
-//! Which predicates a run selects, and the predicates that reaches.
+//! Selecting the predicates that a run writes or prints.
 
 use nemo::{
     codes::NOT_STORED_WHOLE,
@@ -11,32 +11,30 @@ use crate::{arguments::Mode, error::CliError};
 /// Which predicates a run selects for writing or printing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Selection {
-    /// What the program declares: its exports, and for printing its
+    /// The predicates that the program declares: its exports, and for printing also its
     /// outputs.
     Declared,
-    /// Every predicate rules derive into.
+    /// Every predicate that rules derive facts for.
     Derived,
-    /// Every predicate fed from outside.
+    /// Every extensional predicate.
     Extensional,
     /// Every predicate.
     All,
-    /// None.
+    /// No predicate.
     None,
 }
 
-/// The predicates a selection reaches.
+/// The predicates that a selection includes.
 #[derive(Debug, Default)]
 pub(super) struct Reached {
     /// The predicates to write, in order.
     pub(super) predicates: Vec<String>,
-    /// The predicates left out, since the engine does not store them
-    /// whole.
+    /// The predicates left out, since the engine does not store them whole.
     pub(super) skipped: Vec<String>,
 }
 
 impl Reached {
-    /// Splits role-selected predicates into the ones the engine can
-    /// deliver and the ones it does not store whole.
+    /// Splits `predicates` into those that the engine stores whole and those it does not.
     pub(super) fn split(engine: &Engine, predicates: Vec<String>) -> Self {
         let mut reached = Self::default();
         for predicate in predicates {
@@ -81,8 +79,9 @@ impl Selection {
         }
     }
 
-    /// Returns whether a predicate of the given role is selected,
-    /// for the role-driven selections.
+    /// Returns whether a selection by role includes a predicate with `role`.
+    ///
+    /// [Declared](Self::Declared) and [None](Self::None) include no predicate by its role.
     fn admits(self, role: PredicateRole) -> bool {
         match self {
             Selection::Derived => role.is_derived(),
@@ -92,14 +91,18 @@ impl Selection {
         }
     }
 
-    /// Returns the predicates the selection reaches, in order:
-    /// the exported ones as the program declares them,
-    /// or the predicates whose role is admitted as the engine lists them, by name.
+    /// Returns the predicates that the selection includes, in order.
     ///
-    /// A declared export of a predicate no statement used is reached by the declared selection
-    /// alone, since the engine lists no role for it.
-    /// A selection by role skips what the engine does not store whole,
-    /// and a declared predicate is always stored whole.
+    /// - [Declared](Self::Declared) includes the exported predicates,
+    ///   in the order of the program's exports.
+    /// - A selection by role includes the predicates with a matching role, sorted by name,
+    ///   and skips those that the engine does not store whole.
+    /// - [None](Self::None) includes no predicate.
+    ///
+    /// An export of a predicate that no statement uses is included only by
+    /// [Declared](Self::Declared), since the engine lists no such predicate.
+    /// [Declared](Self::Declared) skips nothing, since the engine stores every exported
+    /// predicate whole.
     pub(super) fn reaches(self, engine: &Engine) -> Reached {
         match self {
             Selection::None => Reached::default(),

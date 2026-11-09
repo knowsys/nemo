@@ -1,4 +1,4 @@
-//! Aggregates and their scopes.
+//! Parsing aggregates and their scopes.
 
 use nemo_physical::diagnostics::Diagnostic;
 
@@ -12,8 +12,10 @@ use crate::{
 };
 
 impl Parser<'_> {
-    /// Parses an aggregate: `#count()`, `#count(per ?w, …)`, `#kind(?v)`, or `#kind(?v per ?w, …)`,
-    /// and the legacy comma list `#kind(?v, ?w…)`, which means the `per` form.
+    /// Parses an aggregate whose `#name` is `token` and which starts at `start`.
+    ///
+    /// The forms are `#count()`, `#count(per ?w, …)`, `#kind(?v)` and `#kind(?v per ?w, …)`.
+    /// The deprecated form `#kind(?v, ?w, …)` means the same as `#kind(?v per ?w, …)`.
     pub(super) fn aggregate(&mut self, token: &Token, start: Span) -> Result<Term, Diagnostic> {
         let name = self.marked_text(token);
         let Some(kind) = AggregateKind::from_name(name) else {
@@ -29,8 +31,8 @@ impl Parser<'_> {
         };
         self.expect(&TokenKind::ParenOpen, "`(` after the aggregate name")?;
 
-        // A count has no value apart from its scope, so it may name the
-        // scope alone. The word is a keyword only when a variable follows it.
+        // A count needs no value, so it may have a scope alone.
+        // `per` is a keyword only if a variable follows it.
         let alone = self.at(&TokenKind::ParenClose)
             || (self.at_word("per") && matches!(self.peek_second(), TokenKind::Variable(_)));
         let (input, value, (scope, legacy_list)) = if alone {
@@ -51,11 +53,12 @@ impl Parser<'_> {
         }))
     }
 
-    /// Parses the scope of an aggregate without a value:
-    /// none for `#count()`, which counts the body matches,
-    /// and `?x, ?y` for `#count(per ?x, ?y)`, which counts their distinct combinations.
+    /// Parses the scope of an aggregate without a value.
     ///
-    /// Every aggregate other than a count needs a value.
+    /// The scope is empty for `#count()`, which counts the body matches,
+    /// and `?x, ?y` for `#count(per ?x, ?y)`, which counts their distinct combinations.
+    /// Every aggregate other than a count needs a value, so for any other `kind`
+    /// this returns an error, which spans the aggregate from `start`.
     fn scope_alone(
         &mut self,
         kind: AggregateKind,
@@ -80,16 +83,16 @@ impl Parser<'_> {
         self.scope_variables()
     }
 
-    /// Parses the terms an aggregate aggregates: `?v`, or a map's `?k = ?v`.
+    /// Parses the aggregated terms of an aggregate, which are `?v`, or `?k = ?v` for a `#map`.
     ///
-    /// Returns the input and a map's value.
+    /// Returns the aggregate's input and, for a `#map`, its value.
     fn aggregated_terms(
         &mut self,
         kind: AggregateKind,
     ) -> Result<(Term, Option<Box<Term>>), Diagnostic> {
         if kind == AggregateKind::Map {
-            // `#map(?k = ?v)` mirrors the map value syntax, so its `=`
-            // separates rather than compares.
+            // `#map(?k = ?v)` is written like a pair of a map,
+            // so its `=` separates the key from the value and does not compare them.
             let key = self.plain_term()?;
             self.expect(&TokenKind::Equal, "`=` between the map key and its value")?;
             Ok((key, Some(Box::new(self.plain_term()?))))
@@ -98,21 +101,21 @@ impl Parser<'_> {
         }
     }
 
-    /// Parses the scope after an aggregate's value: `per ?w, …`, the legacy `, ?w…`, or nothing.
+    /// Parses the scope after an aggregate's value,
+    /// which is `per ?w, …`, the deprecated `, ?w, …`, or nothing.
     ///
-    /// Returns the scope variables and whether they were written as the legacy list.
+    /// Returns the scope variables, and whether they were written as a comma list.
     fn scope(&mut self) -> Result<(Vec<Variable>, bool), Diagnostic> {
         let keyword = self.at_word("per");
         if !keyword && !self.at(&TokenKind::Comma) {
             return Ok((Vec::new(), false));
         }
-        // The `per` keyword or the legacy comma, either way one token
-        // before the scope list.
+        // Both `per` and the comma are one token before the scope variables.
         self.advance();
         Ok((self.scope_variables()?, !keyword))
     }
 
-    /// Parses the variable list of an aggregate's `per` scope.
+    /// Parses the variables of an aggregate's scope, separated by commas.
     fn scope_variables(&mut self) -> Result<Vec<Variable>, Diagnostic> {
         self.separated(|parser| parser.variable("a scope variable"))
     }

@@ -1,11 +1,12 @@
-//! The statements of the written program a derivation names, and their source positions.
+//! The statements of the written program that a derivation names, and their source
+//! positions.
 
 use serde::{Deserialize, Serialize};
 
 /// A rule of the written program, with its id, text and source position.
 ///
-/// It is a rule statement, or a bound import (an import with a `where` clause),
-/// which also derives facts.
+/// It is a rule statement, or a bound import,
+/// which is an import with a `where` clause and also derives facts.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WrittenRule {
@@ -13,11 +14,10 @@ pub struct WrittenRule {
     pub rule: usize,
     /// The rule's text, as written.
     pub text: String,
-    /// The rule's `#[name]`, if it carries one.
+    /// The rule's `#[name]`, if it has one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
-    /// Where the rule is written (a module file for instantiated
-    /// module rules).
+    /// Where the rule is written, which is a module file for a rule of a module instance.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<SourceLocation>,
     /// The `@use` directives that instantiated the rule, outermost first,
@@ -44,9 +44,9 @@ pub struct WrittenStatement {
 pub struct SourceLocation {
     /// The file's registered name.
     pub file: String,
-    /// Byte offset of the first character.
+    /// The byte offset of the first character.
     pub start: u32,
-    /// Byte offset one past the last character.
+    /// The byte offset one past the last character.
     pub end: u32,
     /// The 1-based line of the first character.
     pub line: u32,

@@ -6,14 +6,16 @@ use crate::trie::{RowBuffer, Run, SegmentedRowBuffer, SortedRowBuffer};
 ///
 /// The sequential joins write their rows into one buffer, segment by segment.
 /// The buffers of cells stay apart instead of being copied.
-/// A row may repeat across runs; the build drops the repeats.
+/// A row may repeat across runs, and the build drops the repeats.
 #[derive(Debug)]
 pub(super) struct Runs {
     /// The rows of the sequential joins, segment by segment.
     buffer: SegmentedRowBuffer,
     /// The buffers of the cells.
     cells: Vec<SortedRowBuffer>,
-    /// The runs; their order does not matter to the build, which merges them.
+    /// The runs.
+    ///
+    /// Their order does not matter, since the build merges them.
     runs: Vec<RunSource>,
 }
 
@@ -78,9 +80,9 @@ impl Runs {
         self.cells.push(cell);
     }
 
-    /// Sorts and deduplicates the buffer into one run, for segments that are not runs.
+    /// Sorts and deduplicates the buffer into one run, for segments that are not sorted runs.
     ///
-    /// The buffers of the cells stay the runs they are.
+    /// The buffers of the cells remain runs of their own.
     pub(super) fn sort_buffer(&mut self) {
         self.buffer.sort_all();
         self.runs.retain(|run| matches!(run, RunSource::Cell(_)));
@@ -141,6 +143,7 @@ mod tests {
 
     use crate::storage::StorageValue;
 
+    /// The segments of the buffer and the buffers of cells are separate runs.
     #[test]
     fn runs_keep_segments_and_cells_apart() {
         let mut runs = Runs::new(1);
@@ -160,8 +163,8 @@ mod tests {
             assert_eq!(sorted[2].row(0), &[StorageValue::integer(2)]);
         });
 
-        // Sorting the buffer folds its segments into one run
-        // and leaves the cell a run of its own.
+        // Sorting the buffer folds its segments into one run,
+        // and the cell remains a run of its own.
         runs.sort_buffer();
         runs.with_runs(|sorted| {
             assert_eq!(sorted.len(), 2);

@@ -5,19 +5,20 @@ use std::{fmt::Display, path::Path};
 
 use nemo_physical::{diagnostic_kinds, diagnostics::Diagnostic};
 
-/// The name of the field naming the resource a problem is about.
+/// The name of the diagnostic field that names the resource a problem is about.
 const RESOURCE: &str = "resource";
 
-/// Diagnostics that name the resource they are about,
-/// a file path, an IRI or an endpoint.
+/// Diagnostics that name the resource they are about, such as a file path, an IRI or an endpoint.
 ///
-/// The resource is the field named `resource`,
-/// declared on a kind or added to a diagnostic that came from deeper down.
+/// The resource is the diagnostic's field `resource`.
+/// Either the diagnostic's kind declares that field,
+/// or [with_resource](Self::with_resource) adds it, for example to a diagnostic of the physical
+/// layer.
 pub trait AboutResource: Sized {
     /// Names the resource the problem is about.
     fn with_resource(self, resource: impl Into<String>) -> Self;
 
-    /// Returns the resource the problem is about, if named.
+    /// Returns the resource the problem is about, or `None` if none is named.
     fn resource(&self) -> Option<&str>;
 }
 
@@ -32,8 +33,10 @@ impl AboutResource for Diagnostic {
 }
 
 diagnostic_kinds! {
-    /// A problem reading or writing a resource: the bytes could not be
-    /// reached, or they were not what the format expects.
+    /// A problem reading or writing a resource.
+    ///
+    /// Either the resource's bytes could not be reached,
+    /// or they were not what the format expects.
     pub enum IoError {
         Unreadable { resource: String, reason: String }
             => UNREADABLE = 101, error, "could not read `{resource}`: {reason}",

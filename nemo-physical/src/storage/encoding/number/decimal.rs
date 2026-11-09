@@ -1,4 +1,4 @@
-//! Payload encoding of [Tag::Decimal].
+//! The payload encoding of [Tag::Decimal].
 
 use crate::{
     storage::{
@@ -11,14 +11,17 @@ use crate::{
 /// The sign bit of a payload.
 const SIGN_BIT: u64 = 1 << 63;
 
-/// The field holding the scaled exponent, below the sign bit.
+/// The field of the [scaled exponent](decimal::Compact::scaled_exponent), below the sign bit.
 const EXPONENT: BitField = BitField::new(54..63);
 
-/// The field holding the digits of the mantissa, padded to full length, in the low bits.
+/// The field of the digits of the mantissa, in the low bits.
+///
+/// The digits are padded with zeros to
+/// [SIGNIFICANT_DIGITS](decimal::Compact::SIGNIFICANT_DIGITS) digits.
 const MANTISSA: BitField = BitField::new(0..54);
 
-/// The compact range fits the fields:
-/// sixteen digits in the mantissa, and the scaled exponents in the exponent.
+/// A check that every compact decimal fits the fields,
+/// its digits in the mantissa field and its scaled exponent in the exponent field.
 const _: () = {
     assert!(10u64.pow(decimal::Compact::SIGNIFICANT_DIGITS) <= 1 << MANTISSA.width());
     let half = 1 << (EXPONENT.width() - 1);
@@ -26,7 +29,12 @@ const _: () = {
     assert!(-half <= range.start && range.end <= half);
 };
 
-/// Compact decimals are exactly the values the payload holds.
+/// A compact decimal is encoded as a sign bit, its scaled exponent and its padded digits,
+/// from the most significant bit down.
+///
+/// A negative decimal has all bits flipped, so that its payload sorts below every positive one,
+/// and lower for a larger magnitude.
+/// Every compact decimal has a payload.
 impl PayloadEncoding for decimal::Compact {
     const TAG: Tag = Tag::Decimal;
     type Encoded = u64;
@@ -73,10 +81,10 @@ mod tests {
 
     use rand::{Rng, SeedableRng, rngs::StdRng};
 
-    /// Number of random samples drawn by the randomized tests.
+    /// The number of random samples that each randomized test draws.
     const SAMPLES: usize = 100_000;
 
-    /// Draws a random compact decimal.
+    /// Returns a random compact decimal.
     fn random_input(rng: &mut StdRng) -> decimal::Compact {
         loop {
             if let Some(value) = decimal::Compact::new(
@@ -88,7 +96,7 @@ mod tests {
         }
     }
 
-    /// The edges of the compact range.
+    /// Returns decimals at the edges of the compact range.
     fn edge_cases() -> Vec<decimal::Compact> {
         [
             (9_999_999_999_999_999, -9),
@@ -112,6 +120,7 @@ mod tests {
         .to_vec()
     }
 
+    /// Every compact decimal decodes to itself, at the edges of the range and at random.
     #[test]
     fn encoding_round_trips() {
         let mut rng = StdRng::seed_from_u64(1);
@@ -125,9 +134,10 @@ mod tests {
         }
     }
 
+    /// The order of the payloads is the order of the decimals.
     #[test]
     fn encoding_preserves_order() {
-        // Across signs, across scaled exponents (0.09 and 0.1),
+        // The order holds across signs, across scaled exponents (0.09 and 0.1),
         // within one scaled exponent, and at the ends of the range.
         let ordered = [
             (-9_999_999_999_999_999, -1),

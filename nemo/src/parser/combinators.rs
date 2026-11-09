@@ -1,6 +1,7 @@
-//! The combinators: lists, options, and token classes, built from the cursor's primitives.
+//! Combinators that parse lists, optional items, variables and names,
+//! built on the basic operations of the parser's cursor.
 //!
-//! Each decides by peeking at the next token and never backtracks.
+//! Each decides what to parse by looking at the next token, and never backtracks.
 
 use nemo_physical::diagnostics::Diagnostic;
 
@@ -10,8 +11,10 @@ use crate::{
 };
 
 impl Parser<'_> {
-    /// Parses a comma-separated list of items, possibly empty,
-    /// up to and including the closing token, which `closing` names for the message.
+    /// Parses a list of items separated by commas, possibly empty, through the token `close`.
+    ///
+    /// `closing` describes the `close` token in the error if it is missing.
+    /// A comma after the last item is an error.
     pub(super) fn list<T>(
         &mut self,
         close: &TokenKind,
@@ -27,7 +30,7 @@ impl Parser<'_> {
         Ok(items)
     }
 
-    /// Parses one or more comma-separated items: `item (, item)*`.
+    /// Parses one or more items separated by commas: `item (, item)*`.
     pub(super) fn separated<T>(
         &mut self,
         mut item: impl FnMut(&mut Self) -> Result<T, Diagnostic>,
@@ -39,7 +42,8 @@ impl Parser<'_> {
         Ok(items)
     }
 
-    /// Parses an item introduced by the given token, if that token is next: `[kind item]`.
+    /// Parses an item after the token `kind` if that token is next, and returns `None`
+    /// otherwise.
     pub(super) fn after<T>(
         &mut self,
         kind: &TokenKind,
@@ -48,13 +52,16 @@ impl Parser<'_> {
         self.eat(kind).map(|_| item(self)).transpose()
     }
 
-    /// Consumes a variable of the given kind if one is next, returning its name.
+    /// Consumes a variable of the given kind if one is next, and returns its name.
     pub(super) fn eat_variable(&mut self, kind: VariableKind) -> Option<String> {
         let token = self.eat(&TokenKind::Variable(kind))?;
         Some(self.marked_text(&token).to_owned())
     }
 
-    /// Consumes a variable of the given kind, requiring it, and returns its name.
+    /// Consumes a variable of the given kind and returns its name,
+    /// or returns an error if no such variable is next.
+    ///
+    /// `what` describes the expected variable in the error.
     pub(super) fn expect_variable(
         &mut self,
         kind: VariableKind,
@@ -63,7 +70,8 @@ impl Parser<'_> {
         self.eat_variable(kind).ok_or_else(|| self.unexpected(what))
     }
 
-    /// Consumes a variable of any kind, requiring it.
+    /// Consumes and returns a variable of any kind,
+    /// or returns an error if no variable is next.
     pub(super) fn variable(&mut self, what: &str) -> Result<Variable, Diagnostic> {
         let &TokenKind::Variable(kind) = self.peek() else {
             return Err(self.unexpected(what));
@@ -75,7 +83,7 @@ impl Parser<'_> {
         })
     }
 
-    /// Consumes a bare name, requiring it, and returns its text.
+    /// Consumes a bare name and returns its text, or returns an error if no bare name is next.
     pub(super) fn name(&mut self, what: &str) -> Result<String, Diagnostic> {
         let token = self.expect(&TokenKind::Ident, what)?;
         Ok(self.text(&token).to_owned())

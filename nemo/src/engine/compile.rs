@@ -1,8 +1,9 @@
-//! Compilation: a program's statements into the forms the engine executes.
+//! Compilation: turning a program's statements into the [compiled program](compiled).
 //!
-//! The modules hold the translation into compiled rules,
-//! the optimization passes over imports and rules, the type analysis,
-//! and the rules' join orders and strata.
+//! - [translation] turns the statements into stored rows and compiled rules.
+//! - [import_plan] and [layout] describe what the loads of imported predicates leave out.
+//! - [optimize] has the optimization passes, and [types] the type analysis.
+//! - [order] and [strata] choose the rules' join orders and strata.
 
 pub(super) mod compiled;
 pub(super) mod import_plan;

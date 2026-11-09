@@ -1,13 +1,12 @@
-//! The program's predicates as results refer to them.
+//! The program's predicates, as the result methods name and describe them.
 //!
-//! The written program names them,
-//! and a method that delivers a predicate's facts fails for one the engine does not store
-//! whole.
-//!
+//! The predicates are those of the written program.
+//! A predicate is *stored whole* if the engine stores every one of its facts.
 //! Every derived predicate is stored whole,
-//! and so is every predicate the program writes out (`@output`, `@export`).
-//! Only an import can be stored partially, if the optimization passes left out columns or rows
-//! no rule reads, or not at all, if the rules query it at its endpoint.
+//! and so is every predicate that the program declares `@output` or exports.
+//! Only an imported predicate can be stored partially, without the columns or rows that no
+//! rule can use, or not at all, if the rules query its import at the endpoint.
+//! The methods that deliver a predicate's facts fail for a predicate that is not stored whole.
 
 use nemo_physical::{
     diagnostics::Diagnostic,
@@ -22,7 +21,7 @@ use crate::{
 /// Where a predicate's rows come from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PredicateRole {
-    /// Not derived by any rule.
+    /// Not derived by any written rule.
     ///
     /// Its facts, if any, come from facts, imports, `@input`,
     /// or rows added through [import_rows](Engine::import_rows).
@@ -48,13 +47,13 @@ impl PredicateRole {
         matches!(self, PredicateRole::Derived | PredicateRole::Both)
     }
 
-    /// Returns whether the predicate holds input facts.
+    /// Returns whether the predicate can hold input facts.
     pub fn is_extensional(self) -> bool {
         matches!(self, PredicateRole::Extensional | PredicateRole::Both)
     }
 }
 
-/// One predicate of the program, as the engine lists it.
+/// One predicate of the program, as [predicates](Engine::predicates) lists it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PredicateInfo {
     /// The predicate's resolved name.
@@ -67,16 +66,16 @@ pub struct PredicateInfo {
 
 /// How much of a predicate's facts the engine stores.
 enum StoredExtent {
-    /// Every fact, in the table.
+    /// Every fact is stored, in this table.
     Whole(TableId),
-    /// The table leaves out what no rule reads.
+    /// The table leaves out the columns or rows that no rule can use.
     Partial {
         /// The columns left out, by position.
         pruned: Vec<usize>,
-        /// Whether the rows no rule can use were left out.
+        /// Whether the rows that no rule can use were left out.
         filtered: bool,
     },
-    /// No table: the rules query the predicate's import at its endpoint.
+    /// There is no table, since the rules query the predicate's import at its endpoint.
     Absent,
 }
 
@@ -105,7 +104,7 @@ impl Engine {
         }
     }
 
-    /// Returns the names of the program's outputs.
+    /// Returns the names of the program's outputs (see [outputs](Self::outputs)).
     pub(in crate::engine) fn output_names(&self) -> Vec<String> {
         match &self.written {
             Some(written) if !written.declared_outputs().is_empty() => {
@@ -134,13 +133,14 @@ impl Engine {
         }
     }
 
-    /// Returns the facts of the program's predicates, split into the loaded and the derived.
+    /// Returns the numbers of loaded and of derived facts of the program's predicates.
     ///
     /// A block of extensional rows counts as loaded if it was added through
     /// [import_rows](crate::engine::Engine::import_rows),
     /// or if a written fact, import, or `@input` produces facts for the predicate.
     /// Every other row counts as derived,
-    /// so the rows of an import that a stage put in place of a written rule count as derived.
+    /// so the rows of an import with which a pipeline stage replaced a written rule count as
+    /// derived.
     pub(in crate::engine) fn fact_counts(&self) -> (usize, usize) {
         let range = Revision(0)..Revision(self.step.max(1));
         let (mut loaded, mut derived) = (0, 0);
@@ -204,8 +204,8 @@ impl Engine {
     ///
     /// # Errors
     ///
-    /// Returns N0486 for a predicate the program never used, and for one
-    /// a pipeline stage introduced, which no user wrote.
+    /// Fails for a predicate that the program never used, and for one that a pipeline stage
+    /// introduced, which no user wrote.
     pub(crate) fn written_predicate(
         &self,
         predicate: &str,
@@ -219,14 +219,14 @@ impl Engine {
         }
     }
 
-    /// Returns the table and the number of columns of a predicate of the program the engine
-    /// stores whole, which the methods delivering the predicate's facts read.
+    /// Returns the table and the number of columns of a predicate of the program that the
+    /// engine stores whole.
     ///
     /// # Errors
     ///
-    /// Returns N0482 if no program is loaded,
-    /// N0486 for a name that is not one of the program's predicates,
-    /// and N0489 for a predicate the engine does not store whole, naming what it leaves out.
+    /// Fails if no program is loaded,
+    /// for a name that is not one of the program's predicates,
+    /// and for a predicate that the engine does not store whole, naming what it leaves out.
     pub(crate) fn whole_predicate(&self, predicate: &str) -> Result<(TableId, usize), Diagnostic> {
         if self.program.is_none() {
             return Err(EngineError::NoProgram.diagnostic());
@@ -265,7 +265,7 @@ impl Engine {
     }
 }
 
-/// Returns the error for a predicate the engine does not store whole, naming
+/// Returns the error for a predicate that the engine does not store whole, which names
 /// what it leaves out in the program's terms.
 fn not_stored_whole(predicate: &str, extent: StoredExtent) -> Diagnostic {
     let (missing, hint) = match extent {

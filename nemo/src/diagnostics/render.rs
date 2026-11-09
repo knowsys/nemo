@@ -1,13 +1,9 @@
-//! Rendering of diagnostics for people.
+//! Rendering of diagnostics as text, for a terminal or for exception messages.
 //!
-//! Diagnostics are structured ([Diagnostic]: code, severity, labelled spans, named fields,
-//! notes, hints).
-//! This module renders them as text, for a terminal or for exception messages.
-//! Tools with their own display, such as a language server, use the structured form directly.
-//!
-//! Rendering needs the source *texts* spans point into.
-//! [SourceTexts] holds copies of the texts an engine registered,
-//! so that any span the engine produced can be quoted.
+//! A [Diagnostic] is structured data: a code, a severity, labelled spans, named fields,
+//! notes and hints.
+//! Rendering quotes the source lines that the spans point into, so it needs the source texts.
+//! [SourceTexts] keeps copies of the texts that an engine registered.
 
 mod sources;
 
@@ -21,12 +17,13 @@ use nemo_physical::diagnostics::{Diagnostic, FileId, Severity, Span};
 
 use crate::diagnostics::{AboutPredicate, AboutResource};
 
-/// One label of a [ResolvedDiagnostic]: its message, and its source position if the source is known.
+/// One label of a [ResolvedDiagnostic], with its message and, if the source is known,
+/// its position.
 #[derive(Debug, Clone)]
 pub struct ResolvedLabel {
     /// The label's message.
     pub message: String,
-    /// The name of the source the span points into, if known.
+    /// The name of the source that the label's span points into, if the source is known.
     pub source: Option<String>,
     /// The 1-based line, if the source is known.
     pub line: Option<u32>,
@@ -34,31 +31,33 @@ pub struct ResolvedLabel {
     pub column: Option<u32>,
 }
 
-/// One diagnostic resolved against a run's sources, as plain data.
+/// A diagnostic resolved against its source texts, as plain data.
 ///
-/// Each span is resolved to a source name, line and column.
-/// The plain-text rendering is included.
+/// Each span is resolved to a source name, a line and a column,
+/// and the plain-text rendering is included.
 #[derive(Debug, Clone)]
 pub struct ResolvedDiagnostic {
-    /// The stable code, like `"N0204"`.
+    /// The code, such as `"N0204"`.
     pub code: String,
     /// The severity.
     pub severity: Severity,
-    /// The headline message.
+    /// The main message.
     pub message: String,
-    /// The labels, resolved.
+    /// The resolved labels.
     pub labels: Vec<ResolvedLabel>,
-    /// Additional notes, led by the resource and the predicate the message does not name,
-    /// as the rendering shows them.
+    /// The notes, in the order that the rendering shows them.
+    ///
+    /// They begin with a note naming the diagnostic's resource and one naming its predicate,
+    /// each only if the message does not name it already.
     pub notes: Vec<String>,
     /// Hints toward a fix.
     pub hints: Vec<String>,
-    /// The full plain rendering, snippets included.
+    /// The plain-text rendering, with the quoted source lines.
     pub rendered: String,
 }
 
 impl ResolvedDiagnostic {
-    /// Resolves a diagnostic against the sources of its run.
+    /// Resolves a diagnostic against the source texts in `sources`.
     pub fn new(diagnostic: &Diagnostic, sources: &SourceTexts) -> Self {
         let labels = diagnostic
             .labels()
@@ -91,8 +90,9 @@ impl ResolvedDiagnostic {
     }
 }
 
-/// Returns the notes naming what a diagnostic is about, its resource and its predicate,
-/// each one only if the message does not name it already.
+/// Returns the notes that name a diagnostic's resource and its predicate.
+///
+/// A note is left out if the message already names its resource or predicate in backticks.
 fn subject_notes(diagnostic: &Diagnostic) -> Vec<String> {
     let message = diagnostic.message();
     let mut notes = Vec::new();
@@ -109,31 +109,34 @@ fn subject_notes(diagnostic: &Diagnostic) -> Vec<String> {
     notes
 }
 
-/// The escape sequences a stream accepts.
+/// The escape sequences for colour and emphasis that an output stream accepts.
 ///
-/// They are all empty if it accepts none, so the same code writes coloured and plain output.
+/// They are all empty for a stream that accepts none,
+/// so that the same code writes coloured and plain output.
 #[derive(Debug, Clone, Copy)]
 pub struct TerminalStyle {
-    /// Whether escapes are written at all, which the snippet renderer is told as well.
+    /// Whether any escapes are written.
+    ///
+    /// The snippet writer applies its own colours, so it is given this flag as well.
     pub coloured: bool,
     /// The colour of errors.
     pub error: &'static str,
     /// The colour of warnings.
     pub warning: &'static str,
-    /// The colour of context lines.
+    /// The colour of secondary text, such as the `Note:` and `Help:` prefixes.
     pub accent: &'static str,
     /// The emphasis of a diagnostic's message.
     pub bold: &'static str,
-    /// The emphasis of the summary's headline numbers.
+    /// A stronger emphasis than [bold](Self::bold), in bold green.
     pub strong: &'static str,
-    /// Returns to the stream's own appearance.
+    /// The sequence that restores the stream's default appearance.
     pub reset: &'static str,
 }
 
 impl TerminalStyle {
-    /// The colours, for a terminal that shows them.
+    /// The style for a terminal that shows colours.
     ///
-    /// The accent is the snippet renderer's own note colour.
+    /// The accent is the colour that the snippet writer gives notes.
     const COLOURED: Self = Self {
         coloured: true,
         error: "\x1b[1;31m",
@@ -144,7 +147,7 @@ impl TerminalStyle {
         reset: "\x1b[0m",
     };
 
-    /// No escapes at all.
+    /// The style without any escapes.
     const PLAIN: Self = Self {
         coloured: false,
         error: "",
@@ -155,8 +158,10 @@ impl TerminalStyle {
         reset: "",
     };
 
-    /// Returns the style the error stream takes: colours unless it is
-    /// redirected, or `NO_COLOR` asks for none.
+    /// Returns the style for the error stream.
+    ///
+    /// The style is coloured if the stream is a terminal
+    /// and the environment variable `NO_COLOR` is not set.
     pub fn detect() -> Self {
         if std::io::stderr().is_terminal() && std::env::var_os("NO_COLOR").is_none() {
             Self::COLOURED
@@ -165,7 +170,7 @@ impl TerminalStyle {
         }
     }
 
-    /// Returns the colour a severity shows in.
+    /// Returns the colour of a severity.
     fn severity(self, severity: Severity) -> &'static str {
         match severity {
             Severity::Error => self.error,
@@ -174,10 +179,11 @@ impl TerminalStyle {
     }
 }
 
-/// Renders diagnostics for a terminal (or any text sink).
+/// The text renderer of diagnostics, for a terminal or any other text output.
 ///
-/// Labelled spans are quoted from their sources as an underlined snippet,
-/// and a diagnostic with nothing to quote becomes a compact block of the same shape.
+/// The source lines of the labelled spans are quoted as a snippet, with the spans underlined.
+/// A diagnostic with nothing to quote becomes a compact block with the same header, notes and
+/// hints.
 ///
 /// # Example
 ///
@@ -196,14 +202,15 @@ impl TerminalStyle {
 /// ```
 #[derive(Debug)]
 pub struct Renderer<'a> {
-    /// The texts spans resolve against.
+    /// The source texts that spans are resolved against.
     sources: &'a SourceTexts,
-    /// The escapes the target stream accepts.
+    /// The escape sequences that the output accepts.
     style: TerminalStyle,
 }
 
 impl<'a> Renderer<'a> {
-    /// Creates a renderer for the error stream, coloured if it is a terminal.
+    /// Creates a renderer for the error stream, in the style that [TerminalStyle::detect]
+    /// returns.
     pub fn new(sources: &'a SourceTexts) -> Self {
         Self {
             sources,
@@ -211,9 +218,9 @@ impl<'a> Renderer<'a> {
         }
     }
 
-    /// Creates a renderer that emits no escape sequences.
+    /// Creates a renderer that writes no escape sequences.
     ///
-    /// It suits output that is not a terminal (exception text, logs).
+    /// It suits output that is not a terminal, such as exception messages or logs.
     pub fn plain(sources: &'a SourceTexts) -> Self {
         Self {
             sources,
@@ -221,10 +228,10 @@ impl<'a> Renderer<'a> {
         }
     }
 
-    /// Renders a diagnostic to a newline-terminated block.
+    /// Renders a diagnostic as text that ends with a newline.
     pub fn show(&self, diagnostic: &Diagnostic) -> String {
-        // A label whose span points into a source this run did not read
-        // keeps its message: dropping it would lose what it says.
+        // A label whose span points into an unknown source becomes a note,
+        // so that its message is not lost.
         let mut located = Vec::new();
         let mut context: Vec<String> = Vec::new();
         for label in diagnostic.labels() {
@@ -245,11 +252,11 @@ impl<'a> Renderer<'a> {
             .unwrap_or_else(|| self.block(diagnostic, &context))
     }
 
-    /// Returns the full rendering: the source lines the located labels point at,
-    /// quoted and underlined.
+    /// Renders a diagnostic with the source lines that `labels` point at, quoted and underlined.
     ///
-    /// Returns `None` only if the snippet writer fails,
-    /// which no diagnostic is expected to make it do.
+    /// `labels` are the diagnostic's labels whose sources are known,
+    /// and `context` contains the lines shown as notes.
+    /// Returns `None` only if the snippet writer fails, which no diagnostic is expected to cause.
     fn snippet(
         &self,
         diagnostic: &Diagnostic,
@@ -260,9 +267,8 @@ impl<'a> Renderer<'a> {
             Severity::Error => ReportKind::Error,
             Severity::Warning => ReportKind::Warning,
         };
-        // Spans are byte ranges. The writer applies or drops the colours
-        // itself, so plain output is a configuration flag, not a separate
-        // code path.
+        // Spans are byte ranges. The writer applies or omits the colours itself,
+        // so plain output needs only a configuration flag.
         let config = Config::new()
             .with_index_type(IndexType::Byte)
             .with_color(self.style.coloured);
@@ -272,8 +278,9 @@ impl<'a> Renderer<'a> {
             .with_code(diagnostic.code())
             .with_message(diagnostic.message());
         // The writer starts a new group, headed by the problem's location, whenever a label
-        // lies above the one before it. So the labels go in source order: by file, in the
-        // order the files first appear, and by position within a file.
+        // lies above the one before it. So the labels are added in source order: by file, in
+        // the order in which the files first appear among the labels, and by position within
+        // a file.
         let first_in = |file: FileId| labels.iter().position(|label| label.span.file == file);
         let mut order: Vec<usize> = (0..labels.len()).collect();
         order.sort_by_key(|&index| {
@@ -282,8 +289,7 @@ impl<'a> Renderer<'a> {
         });
         for index in order {
             let label = labels[index];
-            // The first label marks the problem; the others are the
-            // context it is seen against.
+            // The first label marks the problem, and the others show its context.
             let colour = match (index, diagnostic.severity()) {
                 (0, Severity::Error) => Color::Red,
                 (0, Severity::Warning) => Color::Yellow,
@@ -302,8 +308,7 @@ impl<'a> Renderer<'a> {
             report = report.with_help(hint);
         }
 
-        // The cache quotes each named source once, however many labels
-        // point into it.
+        // The writer's cache gets each named source once, however many labels point into it.
         let mut quoted: Vec<(String, &str)> = labels
             .iter()
             .filter_map(|label| {
@@ -322,8 +327,8 @@ impl<'a> Renderer<'a> {
         String::from_utf8(rendered).ok()
     }
 
-    /// Returns a span as the snippet writer addresses it: the source's name and
-    /// a byte range clamped into its text.
+    /// Returns a span in the form that the snippet writer accepts,
+    /// as the source's name and a byte range clamped to its text.
     fn place(&self, span: Span) -> (String, std::ops::Range<usize>) {
         let text = self.sources.text(span.file);
         let name = self.sources.name(span.file).unwrap_or_default().to_owned();
@@ -336,8 +341,10 @@ impl<'a> Renderer<'a> {
         (name, start..end)
     }
 
-    /// Returns the compact block for a diagnostic with nothing to quote: the
-    /// header the snippet renderer would write, then its context.
+    /// Returns the compact rendering of a diagnostic without quoted source lines.
+    ///
+    /// It has the header that the snippet writer would write,
+    /// then the lines of `context` as notes, then the hints.
     fn block(&self, diagnostic: &Diagnostic, context: &[String]) -> String {
         let TerminalStyle {
             accent,
@@ -371,12 +378,13 @@ mod tests {
 
     use nemo_physical::diagnostics::{Code, FileId};
 
-    /// The plain rendering of a diagnostic over one two-line source.
+    /// Returns the plain rendering of a diagnostic against one source of two lines.
     fn render(diagnostic: &Diagnostic) -> String {
         let sources = SourceTexts::detached("test.rls", "p(1, 2) .\nq(?x) :- p(?x, 3) .\n");
         Renderer::plain(&sources).show(diagnostic)
     }
 
+    /// A label's snippet names the source, line and column of its span, and quotes the line.
     #[test]
     fn a_label_points_at_its_source_line() {
         // Bytes 19..27 are the body atom `p(?x, 3)` of the second line.
@@ -407,6 +415,8 @@ mod tests {
         );
     }
 
+    /// The labels of one source share one snippet, even if a later label lies above an earlier
+    /// one.
     #[test]
     fn labels_of_one_source_share_one_snippet_whatever_their_order() {
         // The problem is on the second line, its context on the first.
@@ -430,10 +440,10 @@ mod tests {
         );
     }
 
+    /// A label in an unknown source is shown as a note with its message.
     #[test]
     fn a_label_the_run_cannot_place_keeps_its_message() {
-        // File 9 was never registered, so the label has no line to point
-        // at, but its message is still shown.
+        // File 9 was never registered, so the label has no line to point at.
         let span = Span {
             file: FileId::new(9),
             start: 0,
@@ -452,6 +462,7 @@ mod tests {
         assert_eq!(rendered, expected);
     }
 
+    /// A diagnostic without labels is rendered as a compact block with its notes and hints.
     #[test]
     fn a_diagnostic_without_labels_still_shows_its_context() {
         let rendered = render(
@@ -469,6 +480,8 @@ mod tests {
         assert_eq!(rendered, expected);
     }
 
+    /// A message that names its resource gets no note for the resource,
+    /// but a note for a predicate that it does not name.
     #[test]
     fn a_message_naming_its_resource_has_no_note_repeating_it() {
         let rendered = render(

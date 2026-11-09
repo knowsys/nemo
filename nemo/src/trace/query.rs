@@ -1,30 +1,24 @@
-//! The derivation-structure queries of the explanation viewer of nemo-web (nev):
-//! a tree of nodes over the written program, each holding facts of one predicate,
-//! connected by rule applications.
+//! The derivation-structure queries of nev, the explanation viewer of nemo-web.
 //!
-//! The format is nev's own, defined by its maintainers
-//! (their cue/OpenAPI specification, v0.1.0),
-//! and these types follow it field for field:
-//! camelCase on the wire, and terms in canonical term syntax.
-//! Each type names the model of that specification it corresponds to.
-//!
-//! Two queries share these types:
-//!
-//! - [TreeForTableQuery] selects facts of one predicate and lets the server expand their
-//!   derivation.
-//!   The server keeps expanding a node as long as one written rule derives all of its facts.
-//!   The children then hold the facts those derivations use.
-//! - [TableEntriesForTreeNodesQuery] gives the tree's shape:
-//!   at every expanded node, a rule and the head atom that derives the node's facts,
-//!   and a selection on any node.
-//!   The response lists, per node, the facts consistent with every constraint of the tree.
-//!
+//! A query describes a tree of *nodes* over the written program.
+//! Each node has facts of one predicate,
+//! and a node is *expanded* by a rule that derives its facts.
 //! An expanded node has one child per positive body literal of its rule, in body order,
-//! followed by one child per negated literal, which lists the facts the negated predicate holds.
+//! followed by one child per negated literal, which lists facts of the negated predicate.
 //! Rules are named by *statement id*, their position in the written program,
 //! as [WrittenRule::rule](crate::trace::WrittenRule::rule) names them.
 //! A node's facts are numbered by *entry id*, their position in the predicate's stored order,
-//! the same numbering the engine's row cursors use.
+//! which is the numbering of the engine's [cursors](crate::engine::Engine::cursor).
+//!
+//! Two queries share these types:
+//! - A [TreeForTableQuery] selects facts of one predicate, and the server expands the tree.
+//! - A [TableEntriesForTreeNodesQuery] gives the shape of the tree,
+//!   and the response lists the facts of each node that fit every constraint of the tree.
+//!
+//! The format is nev's own, defined by its maintainers in their cue/OpenAPI specification,
+//! v0.1.0, and these types follow it field for field.
+//! The JSON field names are camelCase, and terms are in canonical term syntax.
+//! Each type names the model of the specification that it corresponds to.
 
 mod node;
 mod rule;
@@ -46,8 +40,8 @@ pub use self::{
 mod tests {
     use super::*;
 
-    /// The JSON follows nev's format: camelCase names, entries as numbers or
-    /// strings, and optional parts omitted.
+    /// Queries and responses follow nev's JSON format, with camelCase names,
+    /// entries as numbers or strings, and optional parts left out.
     #[test]
     fn queries_and_responses_follow_the_viewer_format() {
         let query: TableEntriesForTreeNodesQuery = serde_json::from_str(

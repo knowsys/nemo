@@ -1,20 +1,20 @@
-//! Merge policies: the choice of the subtables a consolidation merges next.
+//! Merge policies, which choose the subtables that a consolidation merges next.
 //!
-//! Merging trades the rows a merge rewrites
-//! against the width of later reads, the number of subtables a read covers.
+//! A policy trades the rows that merges rewrite against the *width* of later reads,
+//! which is the number of subtables that a read covers.
 
 use std::ops::Range;
 
 use crate::management::{Revision, subtable::Subtable};
 
-/// The policy that chooses the subtables a consolidation merges next.
+/// The policy that chooses the subtables that a consolidation merges next.
 ///
-/// A consolidation receives walls:
-/// revisions at which reads must still be able to start or end.
-/// No merge crosses one, since a merged subtable is only read as a whole.
-/// The walls thus divide a table into compartments,
-/// the longest sequences of adjacent subtables with no wall between them,
-/// and the policy plans each compartment on its own.
+/// A consolidation is given *walls*,
+/// the revisions at which reads must still be able to start or end.
+/// No merge crosses a wall, since a merged subtable can only be read as a whole.
+/// So the walls divide a table into *compartments*,
+/// which are the longest sequences of adjacent subtables with no wall between them.
+/// The policy plans each compartment on its own.
 ///
 /// # Example
 ///
@@ -54,23 +54,26 @@ use crate::management::{Revision, subtable::Subtable};
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MergePolicy {
-    /// Merges the newest subtable of a compartment with the ones before it,
-    /// taking them newest first and stopping at the first one
-    /// that holds more rows than the merge has gathered so far.
+    /// Merges the newest subtable of a compartment with the ones before it.
+    ///
+    /// It takes the older subtables newest first,
+    /// and stops at the first one that has more rows than the merge has gathered so far.
     Doubling,
-    /// Holds each compartment to two subtables:
-    /// the leader, its oldest subtable, and the suffix, which collects the newer batches.
-    /// Each new batch merges into the suffix,
-    /// until the rows these merges rewrote catch up with the leader's rows.
-    /// Then the suffix folds into the leader, and the next batch starts a new suffix.
+    /// Keeps at most two subtables in each compartment.
+    ///
+    /// The *leader* is the oldest subtable of the compartment,
+    /// and the *suffix* collects the newer batches.
+    /// Each new batch is merged into the suffix,
+    /// until the rows that these merges rewrote reach the number of the leader's rows.
+    /// Then the suffix is merged into the leader, and the next batch starts a new suffix.
     ///
     /// A read covers at most two subtables per compartment,
-    /// and a compartment that grows to n rows has its merges rewrite O(n·√n) rows in total.
+    /// and the merges of a compartment that grows to n rows rewrite O(n·√n) rows in total.
     TwoLevel,
     /// Merges every compartment into one subtable.
     ///
-    /// Suits a table that no longer grows:
-    /// it pays for one merge, after which a read covers one subtable per compartment.
+    /// It suits a table that no longer grows.
+    /// It costs one merge, after which a read covers one subtable per compartment.
     Whole,
 }
 
@@ -78,6 +81,7 @@ impl MergePolicy {
     /// Returns the range of revisions to merge next within a compartment,
     /// or `None` if the policy merges nothing there.
     ///
+    /// `compartment` contains the subtables of one compartment, in ascending order.
     /// A proposal covers at least two subtables.
     pub(super) fn propose(self, compartment: &[Subtable]) -> Option<Range<Revision>> {
         match self {
@@ -87,7 +91,7 @@ impl MergePolicy {
         }
     }
 
-    /// Returns the merge of a whole compartment, if it holds several subtables.
+    /// Returns the range of a whole compartment, if it has several subtables.
     fn whole(compartment: &[Subtable]) -> Option<Range<Revision>> {
         let [first, .., last] = compartment else {
             return None;
@@ -96,7 +100,7 @@ impl MergePolicy {
         Some(first.range.start..last.range.end)
     }
 
-    /// Returns the merge the doubling cascade proposes within a compartment.
+    /// Returns the merge that [Doubling](Self::Doubling) proposes within a compartment, if any.
     fn doubling(compartment: &[Subtable]) -> Option<Range<Revision>> {
         let (newest, older) = compartment.split_last()?;
 
@@ -115,7 +119,7 @@ impl MergePolicy {
             .map(|oldest| oldest.range.start..newest.range.end)
     }
 
-    /// Returns the merge the two-level schedule proposes within a compartment.
+    /// Returns the merge that [TwoLevel](Self::TwoLevel) proposes within a compartment, if any.
     fn two_level(compartment: &[Subtable]) -> Option<Range<Revision>> {
         let [leader, suffix @ ..] = compartment else {
             return None;
@@ -124,9 +128,9 @@ impl MergePolicy {
             return None;
         };
 
-        // A suffix of several subtables owes one more merge.
-        // Counting it in decides the fold before that merge happens,
-        // so that the fold writes those rows once.
+        // A suffix of several subtables still needs a merge, which would rewrite its rows.
+        // Counting those rows decides on merging into the leader before that merge happens,
+        // so that the rows are written only once.
         let rewritten = suffix
             .iter()
             .map(|subtable| subtable.rewritten)

@@ -2,17 +2,20 @@
 
 /// Declares an enum of diagnostic kinds.
 ///
-/// Each variant is one kind of problem:
-/// the fields its message needs, each with optional attributes such as a doc comment,
-/// the name and the number of its code,
-/// its severity, `error` or `warning`,
-/// its message, a `format!` template over the fields,
-/// in which a [Count](crate::diagnostics::Count) field gives the plural of its noun
-/// (`{rows} row{rows:#}`),
-/// its explanation, shown when the code is looked up
-/// and the doc comment of the variant,
-/// and optionally a fixed note and a fixed hint.
+/// Each variant is one kind of problem, and it declares, in this order:
+/// - the fields that its message needs, each with optional attributes such as a doc comment;
+/// - the name and the number of its code;
+/// - its severity, `error` or `warning`;
+/// - its message, a `format!` template over the fields,
+///   in which a [Count](crate::diagnostics::Count) field gives the plural of its noun
+///   (`{rows} row{rows:#}`);
+/// - its explanation, which is shown when the code is looked up
+///   and is also the doc comment of the variant;
+/// - optionally, a fixed note and a fixed hint.
+///
 /// Only the message is formatted.
+/// The macro also declares a module `codes` with one constant per code,
+/// and the methods `diagnostic` and `at` of the enum.
 ///
 /// # Example
 ///
@@ -139,14 +142,13 @@ macro_rules! diagnostic_kinds {
         }
 
         impl $Name {
-            /// Returns the diagnostic this kind reports,
-            /// without a source location.
+            /// Returns the diagnostic of this kind, without a source location.
             pub fn diagnostic(&self) -> $crate::diagnostics::Diagnostic {
                 $crate::diagnostics::Diagnostic::from_kind(self)
             }
 
-            /// Returns the diagnostic this kind reports,
-            /// pointing at the given span if one is known.
+            /// Returns the diagnostic of this kind,
+            /// with a label at the given span if one is known.
             pub fn at(
                 &self,
                 span: Option<$crate::diagnostics::Span>,

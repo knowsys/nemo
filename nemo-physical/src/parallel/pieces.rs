@@ -2,23 +2,21 @@
 
 use crate::parallel::Tasks;
 
-/// Runs `run` over consecutive pieces of `slice`, editing them in place.
+/// Runs `run` on each piece of `slice`, editing the pieces in place.
 ///
-/// The pieces are given by their ends:
-/// `ends` holds the ascending offsets at which each piece ends,
-/// the last one being the slice's length,
-/// so the pieces are `0..ends[0]`, `ends[0]..ends[1]`, and so on.
+/// The pieces are consecutive, and `ends` contains the ascending offsets at which they end,
+/// the last one being the slice's length.
+/// So the pieces are `0..ends[0]`, `ends[0]..ends[1]`, and so on.
 /// `run` receives one piece as a mutable slice and may do anything with it.
-/// Every piece is edited by exactly one call,
-/// and no two calls share memory,
-/// so `run` needs no coordination with its other calls.
+/// Each piece is passed to exactly one call, and no two calls share memory,
+/// so the calls of `run` need no coordination.
 ///
 /// # Example
 ///
 /// ```
 /// use nemo_physical::parallel::{for_each_piece, Tasks};
 ///
-/// // Three runs of numbers, each to be sorted on its own.
+/// // Three pieces of numbers, each sorted on its own.
 /// let mut values = vec![3, 1, 2, 9, 8, 7, 6, 5, 4];
 /// let ends = [3, 4, 9];
 /// for_each_piece(&mut values, &ends, Tasks::of(2), |piece| piece.sort());
@@ -45,9 +43,10 @@ pub fn for_each_piece<T: Send>(
     }
 }
 
-/// Runs the pieces one after another;
-/// `offset` is where `slice` begins within the whole,
-/// so the ends translate to local positions.
+/// Runs `run` on the pieces one after another.
+///
+/// `offset` is the position at which `slice` begins in the whole slice,
+/// and is subtracted from the ends.
 fn pieces_in_order<T>(slice: &mut [T], offset: usize, ends: &[usize], run: &impl Fn(&mut [T])) {
     let mut start = 0;
 
@@ -58,9 +57,10 @@ fn pieces_in_order<T>(slice: &mut [T], offset: usize, ends: &[usize], run: &impl
     }
 }
 
-/// Halves the pieces into stealable jobs
-/// until a job holds at most `per_task` of them,
-/// the recursive part of [for_each_piece].
+/// Splits the pieces in halves, as jobs that other workers can steal,
+/// until a job has at most `per_task` pieces, which it runs in order.
+///
+/// It is the recursive part of [for_each_piece], and `offset` is as for [pieces_in_order].
 fn pieces<T: Send>(
     slice: &mut [T],
     offset: usize,
@@ -87,6 +87,8 @@ fn pieces<T: Send>(
 mod tests {
     use super::*;
 
+    /// Each piece, an empty one included, is edited in place by one call,
+    /// for any number of tasks, and no pieces mean no call.
     #[test]
     fn pieces_are_edited_in_place_and_disjointly() {
         let ends = [3, 3, 10, 500, 1000];

@@ -1,12 +1,12 @@
-//! Row revisions: the revision each row of a subtable was added at.
+//! Row revisions: the revision at which each row of a subtable was added.
 
 use crate::trie::Trie;
 
-/// The revision each row of a subtable was added at,
-/// as its distance from the start of the subtable's block,
-/// by the row's index in the subtable's first arrangement.
+/// The revision at which each row of a subtable was added.
 ///
-/// The distances take the narrowest width that holds the block's span.
+/// A revision is stored as its *distance* from the start of the subtable's block,
+/// by the row's index in the subtable's first arrangement.
+/// The distances are stored in the narrowest width that fits the block's span.
 #[derive(Debug)]
 pub(super) enum RowRevisions {
     /// Every row was added at the block's start, as in the subtable of one batch.
@@ -22,12 +22,14 @@ pub(super) enum RowRevisions {
 }
 
 impl RowRevisions {
-    /// Merges tries as [Trie::merge] does, and returns the merged trie
-    /// with the distances of its rows' revisions from the merged block's start.
+    /// Merges tries as [Trie::merge] does,
+    /// and returns the merged trie with the distances of its rows' revisions.
     ///
-    /// `distance(source, row)` is the distance of the row of the given index in a source,
-    /// below `span`, the number of revisions the merged block spans;
-    /// a merged row takes the distance of the earliest source holding it.
+    /// `span` is the number of revisions that the merged block spans.
+    /// `distance(source, row)` is the distance from the merged block's start
+    /// of the row with the given index in the given source, and is below `span`.
+    /// A row in several sources takes the distance from the first source in the list
+    /// that contains it.
     pub(super) fn merge(
         sources: &[&Trie],
         span: u64,
@@ -71,7 +73,9 @@ impl RowRevisions {
     }
 }
 
-/// Merges the tries carrying the distances in a width that holds them all.
+/// Merges the tries as [Trie::merge_carrying] does, with the distances in the width `T`.
+///
+/// Panics if a distance does not fit in `T`.
 fn narrowed<T: TryFrom<u64> + Send>(
     sources: &[&Trie],
     distance: impl Fn(usize, usize) -> u64 + Sync,
@@ -89,6 +93,8 @@ mod tests {
 
     use crate::testing::int_trie;
 
+    /// A merged row keeps the distance from the first source that contains it,
+    /// and the distances are stored in the narrowest width that fits the span.
     #[test]
     fn merged_rows_keep_the_earliest_distance_in_the_narrowest_width() {
         let early = int_trie(1, &[[1], [3]]);
@@ -98,7 +104,8 @@ mod tests {
         let (trie, revisions) = RowRevisions::merge(&[&early, &late], 256, distance);
         assert_eq!(trie.row_count(), 3);
         assert!(matches!(revisions, RowRevisions::U8(_)));
-        // Rows 1, 2, 3: the first from the early source, the second from the late one.
+        // The rows are 1, 2 and 3. Row 1 is in both sources and keeps its early distance,
+        // row 2 is only in the late source, and row 3 only in the early one.
         let distances: Vec<u64> = (0..3).map(|row| revisions.distance(row)).collect();
         assert_eq!(distances, [0, 11, 1]);
 

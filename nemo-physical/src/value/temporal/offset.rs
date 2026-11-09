@@ -5,8 +5,9 @@ use std::fmt;
 use crate::value::temporal::{Duration, instant::ATTOSECONDS_PER_SECOND};
 
 /// A timezone offset from UTC,
-/// a whole number of minutes within fourteen hours either way,
-/// as XSD allows on its [date and time values](https://www.w3.org/TR/xmlschema11-2/#dateTime).
+/// as XSD allows it on its [date and time values](https://www.w3.org/TR/xmlschema11-2/#dateTime).
+///
+/// It is a whole number of minutes, at most fourteen hours in either direction.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct TimezoneOffset {
     /// Minutes east of UTC.
@@ -14,35 +15,36 @@ pub struct TimezoneOffset {
 }
 
 impl TimezoneOffset {
-    /// The largest offset magnitude, in minutes.
+    /// The largest magnitude of an offset, in minutes.
     const MAX_MINUTES: i16 = 14 * 60;
 
-    /// The number of offsets, one per minute.
+    /// The number of offsets, one for each minute, and so the number of their codes.
     pub(super) const CODE_COUNT: u16 = 2 * Self::MAX_MINUTES.cast_unsigned() + 1;
 
     /// The offset of UTC, `Z`.
     pub const UTC: Self = Self { minutes: 0 };
 
-    /// The westmost offset, `-14:00`.
+    /// The westernmost offset, `-14:00`.
     pub const MIN: Self = Self {
         minutes: -Self::MAX_MINUTES,
     };
 
-    /// The eastmost offset, `+14:00`.
+    /// The easternmost offset, `+14:00`.
     pub const MAX: Self = Self {
         minutes: Self::MAX_MINUTES,
     };
 
     /// Creates the offset of a number of minutes east of UTC,
-    /// or `None` beyond fourteen hours either way.
+    /// or `None` beyond fourteen hours in either direction.
     pub fn new(minutes: i16) -> Option<Self> {
         (-Self::MAX_MINUTES..=Self::MAX_MINUTES)
             .contains(&minutes)
             .then_some(Self { minutes })
     }
 
-    /// Creates the offset a duration names, the one `fn:adjust-dateTime-to-timezone` takes,
-    /// or `None` for a duration that is not whole minutes within fourteen hours either way.
+    /// Creates the offset that a duration denotes, as `fn:adjust-dateTime-to-timezone` reads it,
+    /// or `None` for a duration with months,
+    /// or one that is not a whole number of minutes within fourteen hours in either direction.
     pub fn from_duration(duration: Duration) -> Option<Self> {
         const ATTOSECONDS_PER_MINUTE: i128 = 60 * ATTOSECONDS_PER_SECOND;
 
@@ -54,17 +56,19 @@ impl TimezoneOffset {
         Self::new(i16::try_from(attoseconds / ATTOSECONDS_PER_MINUTE).ok()?)
     }
 
-    /// Minutes east of UTC, negative to the west.
+    /// Returns the minutes east of UTC, which are negative to the west.
     pub fn minutes(self) -> i16 {
         self.minutes
     }
 
-    /// Returns the order-preserving code of the offset, below [CODE_COUNT](Self::CODE_COUNT).
+    /// Returns the code of the offset,
+    /// which is below [CODE_COUNT](Self::CODE_COUNT) and preserves the order of offsets.
     pub(super) fn code(self) -> u16 {
         (self.minutes + Self::MAX_MINUTES).cast_unsigned()
     }
 
-    /// Decodes the offset of a code, or `None` for a code at or above [CODE_COUNT](Self::CODE_COUNT).
+    /// Returns the offset of a code,
+    /// or `None` for a code at or above [CODE_COUNT](Self::CODE_COUNT).
     pub(super) fn from_code(code: u16) -> Option<Self> {
         (code < Self::CODE_COUNT).then(|| Self {
             minutes: code.cast_signed() - Self::MAX_MINUTES,
@@ -80,7 +84,7 @@ impl fmt::Debug for TimezoneOffset {
 }
 
 impl fmt::Display for TimezoneOffset {
-    /// Writes the canonical form: `Z` for UTC, `+hh:mm` or `-hh:mm` otherwise.
+    /// Writes the canonical form, which is `Z` for UTC and `+hh:mm` or `-hh:mm` otherwise.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.minutes == 0 {
             return f.write_str("Z");
@@ -95,6 +99,7 @@ impl fmt::Display for TimezoneOffset {
 mod tests {
     use super::*;
 
+    /// An offset is a whole number of minutes within fourteen hours in either direction.
     #[test]
     fn offsets_are_whole_minutes_within_fourteen_hours() {
         assert_eq!(TimezoneOffset::new(0), Some(TimezoneOffset::UTC));
@@ -106,6 +111,8 @@ mod tests {
         assert_eq!(TimezoneOffset::new(330).expect("in range").minutes(), 330);
     }
 
+    /// A duration denotes an offset only if it is a whole number of minutes in range,
+    /// without months.
     #[test]
     fn offsets_are_named_by_durations_of_whole_minutes() {
         let offset = |lexical| TimezoneOffset::from_duration(Duration::from_lexical(lexical)?);
@@ -119,6 +126,7 @@ mod tests {
         assert_eq!(offset("P999999999999D"), None);
     }
 
+    /// Offsets are written in canonical form, by `Display` and `Debug` alike.
     #[test]
     fn offsets_print_canonically() {
         for (minutes, lexical) in [
@@ -136,6 +144,7 @@ mod tests {
         }
     }
 
+    /// Codes convert back to their offsets, and their order is the order of the offsets.
     #[test]
     fn codes_round_trip_in_order() {
         let mut previous = None;

@@ -1,10 +1,12 @@
-//! The value bridge: one conversion table, both directions.
+//! The conversion of values between the engine and Python, in both directions.
 //!
-//! The governing rule is that *Python equality mirrors term identity*:
-//! two values compare (and hash) equal in Python exactly if the engine's `=` would join them.
-//! Values that map losslessly onto a Python builtin cross as that builtin.
-//! Every other kind gets a small wrapper class, never a `str` subclass,
-//! since `Iri("a") == "a"` would collapse two distinct terms.
+//! The conversion keeps term identity: two values are equal in Python, and hash equally,
+//! exactly if they are the same term for the engine.
+//! The exception is Python's own equality across builtin types,
+//! under which `True`, `1` and `1.0` are equal although they are different terms.
+//! A value that a Python builtin type holds without loss is converted to that type.
+//! Every other kind of value becomes an instance of a small wrapper class, never a `str`
+//! subclass, since `Iri("a") == "a"` would make two different terms equal.
 
 use std::sync::OnceLock;
 
@@ -40,13 +42,15 @@ static TIMEDELTA: OnceLock<Py<PyType>> = OnceLock::new();
 /// The `datetime.timezone` type, imported once.
 static TIMEZONE: OnceLock<Py<PyType>> = OnceLock::new();
 
-/// The attoseconds of a microsecond, the precision of Python's times and timedeltas.
+/// The number of attoseconds in a microsecond, the precision of Python's times and
+/// timedeltas.
 const ATTOSECONDS_PER_MICROSECOND: i128 = 10i128.pow(12);
 
-/// The attoseconds of a second.
+/// The number of attoseconds in a second.
 const ATTOSECONDS_PER_SECOND: i128 = 10i128.pow(18);
 
-/// Returns a cached type from a stdlib module.
+/// Returns the type `name` of the standard library module `module`,
+/// imported once and cached in `cell`.
 fn stdlib_type<'py>(
     py: Python<'py>,
     cell: &OnceLock<Py<PyType>>,
@@ -64,7 +68,7 @@ fn stdlib_type<'py>(
     Ok(cell.get_or_init(|| looked).bind(py).clone())
 }
 
-/// An IRI (RDF resource), a term distinct from the plain string of the same characters.
+/// An IRI, which is a term different from the string with the same characters.
 #[pyclass(frozen, eq, hash, str, skip_from_py_object, module = "nmo")]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Iri {
@@ -81,6 +85,7 @@ impl Iri {
         Self { value }
     }
 
+    /// Returns the IRI as `Iri("…")`.
     fn __repr__(&self) -> String {
         format!("Iri({:?})", self.value)
     }
@@ -96,10 +101,10 @@ impl std::fmt::Display for Iri {
 #[pyclass(frozen, eq, hash, str, skip_from_py_object, module = "nmo")]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct LanguageString {
-    /// The text content.
+    /// The text.
     #[pyo3(get)]
     pub text: String,
-    /// The BCP 47 language tag, without the `@`.
+    /// The BCP 47 language tag, in lowercase and without the `@`.
     #[pyo3(get)]
     pub language: String,
 }
@@ -107,9 +112,11 @@ pub struct LanguageString {
 #[pymethods]
 impl LanguageString {
     /// Creates a language-tagged string.
+    ///
+    /// Raises `ValueError` if `language` is not a valid language tag.
     #[new]
     fn new(text: String, language: String) -> PyResult<Self> {
-        // Construction validates (and lowercases) the tag right away.
+        // Creating the engine's value checks the tag and lowercases it.
         let value = DataValue::language_string(text.as_str(), language.as_str())
             .ok_or_else(|| value_error(format!("`{language}` is not a valid language tag")))?;
         let ValueRef::LanguageString(value) = value.as_ref() else {
@@ -121,6 +128,7 @@ impl LanguageString {
         })
     }
 
+    /// Returns the string as `LanguageString("text", "language")`.
     fn __repr__(&self) -> String {
         format!("LanguageString({:?}, {:?})", self.text, self.language)
     }
@@ -135,9 +143,10 @@ impl std::fmt::Display for LanguageString {
     }
 }
 
-/// A 32-bit floating point number,
-/// a term distinct from the 64-bit double of the same value,
-/// which crosses as a plain Python `float`.
+/// A 32-bit floating-point number.
+///
+/// It is a term different from the 64-bit double with the same value,
+/// which is converted to a plain Python `float`.
 #[pyclass(name = "Float", frozen, str, skip_from_py_object, module = "nmo")]
 #[derive(Debug, Clone)]
 pub struct Float32 {
@@ -147,7 +156,7 @@ pub struct Float32 {
 
 #[pymethods]
 impl Float32 {
-    /// Creates a 32-bit float (the given double is rounded to it).
+    /// Creates a 32-bit float, rounding `value` to 32 bits.
     #[new]
     fn new(value: f64) -> Self {
         #[allow(clippy::cast_possible_truncation)]
@@ -162,18 +171,21 @@ impl Float32 {
         self.value.to_f64()
     }
 
+    /// Returns the number as `Float(…)`.
     fn __repr__(&self) -> String {
         format!("Float({})", self.value)
     }
 
+    /// Returns whether `other` is a `Float` that is the same term.
     fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {
-        // Term identity: one NaN equal to itself, -0.0 and 0.0 distinct,
-        // and never equal to a bare float, which is a double term.
+        // Equality is term identity: a NaN equals itself, -0.0 and 0.0 differ,
+        // and a `Float` never equals a plain `float`, which is a double.
         other
             .cast::<Self>()
             .is_ok_and(|other| self.value == other.get().value)
     }
 
+    /// Returns a hash of the number's bits.
     fn __hash__(&self) -> u64 {
         self.value.get().to_bits().into()
     }
@@ -185,25 +197,27 @@ impl std::fmt::Display for Float32 {
     }
 }
 
-/// A labeled null, an anonymous individual the engine invented.
+/// A labeled null, an anonymous value that the engine created.
 ///
-/// It can be read back but never fed in, since no term denotes it.
+/// It can be read from the engine but not passed to it, since no term denotes it.
+/// Passing one to the engine raises `ValueError`.
 #[pyclass(frozen, eq, hash, str, skip_from_py_object, module = "nmo")]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Null {
-    /// The engine-scoped id.
+    /// The null's number, which identifies it within one engine.
     #[pyo3(get)]
     pub id: u64,
 }
 
 #[pymethods]
 impl Null {
-    /// Creates a null handle (meaningful only within one engine run).
+    /// Creates a null with the number `id`, which is meaningful only within one engine.
     #[new]
     fn new(id: u64) -> Self {
         Self { id }
     }
 
+    /// Returns the null as `Null(id)`.
     fn __repr__(&self) -> String {
         format!("Null({})", self.id)
     }
@@ -215,8 +229,8 @@ impl std::fmt::Display for Null {
     }
 }
 
-/// A literal of a datatype without a native Python mapping, as its
-/// lexical form and datatype IRI.
+/// A typed literal whose value no Python type holds, given by its lexical form and its
+/// datatype IRI.
 #[pyclass(frozen, eq, hash, str, skip_from_py_object, module = "nmo")]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Literal {
@@ -231,19 +245,23 @@ pub struct Literal {
 #[pymethods]
 impl Literal {
     /// Creates a typed literal.
+    ///
+    /// Passing it to the engine raises `ValueError` if `lexical` is not a valid lexical form
+    /// of `datatype`.
     #[new]
     fn new(lexical: String, datatype: String) -> Self {
         Self { lexical, datatype }
     }
 
+    /// Returns the literal as `Literal("lexical", "datatype")`.
     fn __repr__(&self) -> String {
         format!("Literal({:?}, {:?})", self.lexical, self.datatype)
     }
 }
 
 impl std::fmt::Display for Literal {
-    /// Writes the term the literal denotes,
-    /// or the literal itself if its lexical form is not one of its datatype.
+    /// Writes the term that the literal denotes,
+    /// or the literal itself if its lexical form is not valid for its datatype.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match DataValue::typed_literal(&self.datatype, &self.lexical) {
             Some(value) => write!(f, "{value}"),
@@ -255,12 +273,14 @@ impl std::fmt::Display for Literal {
     }
 }
 
-/// A labeled structure: the label, and the `tuple` (for `point(1, 2)`)
-/// or `dict` (for `config{port = 80}`) it labels.
+/// A labeled structure: a label, and the `tuple` or `dict` that it labels.
+///
+/// For example, `point(1, 2)` is the label `point` with a tuple,
+/// and `config{port = 80}` is the label `config` with a dict.
 #[pyclass(frozen, str, module = "nmo")]
 #[derive(Debug)]
 pub struct Labeled {
-    /// The label naming the structure's shape.
+    /// The label.
     #[pyo3(get)]
     pub label: String,
     /// The labeled content: a `tuple` or a `dict`.
@@ -270,12 +290,16 @@ pub struct Labeled {
 
 #[pymethods]
 impl Labeled {
-    /// Creates a labeled structure over a `tuple` or `dict`.
+    /// Creates a labeled structure of `label` and `value`.
+    ///
+    /// Passing it to the engine raises `TypeError` if `value` is not a `tuple`, a `list`
+    /// or a `dict`.
     #[new]
     fn new(label: String, value: Py<PyAny>) -> Self {
         Self { label, value }
     }
 
+    /// Returns the structure as `Labeled("label", value)`.
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
         Ok(format!(
             "Labeled({:?}, {})",
@@ -284,6 +308,7 @@ impl Labeled {
         ))
     }
 
+    /// Returns whether `other` is a `Labeled` with the same label and equal content.
     fn __eq__(&self, other: &Bound<'_, PyAny>, py: Python<'_>) -> PyResult<bool> {
         let Ok(other) = other.cast::<Self>() else {
             return Ok(false);
@@ -292,9 +317,10 @@ impl Labeled {
         Ok(self.label == other.label && self.value.bind(py).eq(other.value.bind(py))?)
     }
 
+    /// Returns a hash of the label and the content.
     fn __hash__(&self, py: Python<'_>) -> PyResult<isize> {
-        // Delegates to the content's hash, so a Labeled over a dict is
-        // unhashable exactly like the dict itself.
+        // The hash starts from the content's hash, so a `Labeled` of a dict cannot be
+        // hashed, just like the dict itself.
         let mut hash = self.value.bind(py).hash()?;
         for byte in self.label.bytes() {
             hash = hash.wrapping_mul(31).wrapping_add(byte as isize);
@@ -316,6 +342,8 @@ impl std::fmt::Display for Labeled {
 }
 
 /// Attaches a label to a converted tuple or map value.
+///
+/// Raises `ValueError` for a map with a repeated key, and `TypeError` for any other value.
 fn relabel(label: &str, value: DataValue) -> Result<DataValue, PyErr> {
     match value.as_ref() {
         ValueRef::Tuple(tuple) => Ok(DataValue::tuple(TupleValue::labeled(
@@ -335,8 +363,8 @@ fn relabel(label: &str, value: DataValue) -> Result<DataValue, PyErr> {
     }
 }
 
-/// Returns the typed literal of a value whose Python type cannot hold it,
-/// given its lexical form.
+/// Returns `value` as a [Literal] with the lexical form `lexical`,
+/// for a value that its usual Python type cannot hold.
 fn typed_literal(py: Python<'_>, value: ValueRef<'_>, lexical: String) -> PyResult<Py<PyAny>> {
     let datatype = value
         .datatype_iri()
@@ -348,7 +376,9 @@ fn typed_literal(py: Python<'_>, value: ValueRef<'_>, lexical: String) -> PyResu
     .into_py_any(py)
 }
 
-/// Converts an engine value into its Python form, per the table.
+/// Converts an engine value into its Python form.
+///
+/// Raises `ValueError` for a map whose keys convert to the same dict key.
 pub(crate) fn to_python(py: Python<'_>, value: ValueRef<'_>) -> PyResult<Py<PyAny>> {
     match value {
         ValueRef::Iri(iri) => Iri {
@@ -387,8 +417,8 @@ pub(crate) fn to_python(py: Python<'_>, value: ValueRef<'_>) -> PyResult<Py<PyAn
 fn decimal_to_python(py: Python<'_>, value: DecimalRef<'_>) -> PyResult<Py<PyAny>> {
     match value.to_i64() {
         Some(integer) => integer.into_py_any(py),
-        // Any other integer is an `int` too; the canonical lexical
-        // carries the exact value across.
+        // Any other integer becomes an `int` too, made from its canonical lexical form,
+        // which keeps its exact value.
         None if value.is_integral() => {
             let int = py.import("builtins")?.getattr("int")?;
             Ok(int.call1((value.to_string(),))?.unbind())
@@ -416,8 +446,8 @@ fn date_time_to_python(py: Python<'_>, value: DateTime) -> PyResult<Py<PyAny>> {
 
 /// Converts a date into a `datetime.date`.
 ///
-/// That type has no timezone and covers years 1–9999,
-/// and any other date comes back as its typed literal.
+/// That type has no time zone and holds the years 1 to 9999,
+/// so a date with a time zone offset or in another year becomes a [Literal].
 fn date_to_python(py: Python<'_>, date: Date) -> PyResult<Py<PyAny>> {
     if date.offset().is_some() || !(1..=9999).contains(&date.year()) {
         return typed_literal(py, ValueRef::Date(date), date.to_string());
@@ -428,9 +458,9 @@ fn date_to_python(py: Python<'_>, date: Date) -> PyResult<Py<PyAny>> {
         .unbind())
 }
 
-/// Converts a time into a `datetime.time`, aware if the time is zoned, as a zoned dateTime is.
+/// Converts a time into a `datetime.time`, with a time zone if the time has an offset.
 ///
-/// That type holds microseconds, and a finer time comes back as its typed literal.
+/// That type holds microseconds, so a finer time becomes a [Literal].
 fn time_to_python(py: Python<'_>, time: Time) -> PyResult<Py<PyAny>> {
     let attosecond = i128::from(time.attosecond());
     if attosecond % ATTOSECONDS_PER_MICROSECOND != 0 {
@@ -460,8 +490,8 @@ fn time_to_python(py: Python<'_>, time: Time) -> PyResult<Py<PyAny>> {
 
 /// Converts a duration into a `datetime.timedelta`.
 ///
-/// That type holds a dayTimeDuration to the microsecond within a billion days,
-/// and a finer or longer one, and any duration with months, comes back as its typed literal.
+/// That type holds a duration without months, to the microsecond and within a billion days.
+/// Any other duration becomes a [Literal].
 fn duration_to_python(py: Python<'_>, duration: Duration) -> PyResult<Py<PyAny>> {
     let attoseconds = duration.total_attoseconds();
     let microseconds = (duration.is_day_time() && attoseconds % ATTOSECONDS_PER_MICROSECOND == 0)
@@ -477,7 +507,7 @@ fn duration_to_python(py: Python<'_>, duration: Duration) -> PyResult<Py<PyAny>>
     }
 }
 
-/// Converts a tuple into a Python `tuple`, wrapped as [Labeled] if it carries a label.
+/// Converts a tuple into a Python `tuple`, wrapped as [Labeled] if it has a label.
 fn tuple_to_python(py: Python<'_>, tuple: TupleRef<'_>) -> PyResult<Py<PyAny>> {
     let elements: Vec<Py<PyAny>> = tuple
         .elements()
@@ -494,10 +524,11 @@ fn tuple_to_python(py: Python<'_>, tuple: TupleRef<'_>) -> PyResult<Py<PyAny>> {
     }
 }
 
-/// Converts a map into a Python `dict`, wrapped as [Labeled] if it carries a label.
+/// Converts a map into a Python `dict`, wrapped as [Labeled] if it has a label.
 ///
-/// Two terms can cross as one dict key (`1` and `true`, `1` and `1.0d`),
-/// and a map holding both cannot be converted without losing a pair, so it raises `ValueError`.
+/// Two different terms can convert to equal dict keys, such as `1` and `true`,
+/// or `1` and `1.0d`.
+/// A map with both cannot be converted without losing a pair, so it raises `ValueError`.
 fn map_to_python(py: Python<'_>, map: MapRef<'_>) -> PyResult<Py<PyAny>> {
     let content = PyDict::new(py);
     for (index, (key, value)) in map.pairs().enumerate() {
@@ -520,8 +551,8 @@ fn map_to_python(py: Python<'_>, map: MapRef<'_>) -> PyResult<Py<PyAny>> {
     }
 }
 
-/// Returns the key among earlier map pairs whose Python form equals a converted key,
-/// the other half of a collision, named in the error.
+/// Returns the key among `pairs` whose Python form equals `converted`,
+/// which is the other key of a collision, for the error message.
 fn collided<'a>(
     py: Python<'_>,
     pairs: impl Iterator<Item = (ValueRef<'a>, ValueRef<'a>)>,
@@ -535,12 +566,16 @@ fn collided<'a>(
     Err(value_error("two map keys convert to the same dict key"))
 }
 
-/// One step of [to_value]: a conversion of some Python values, or `None` for the others.
+/// One step of [to_value], which converts some kinds of Python values and returns `None`
+/// for the others.
 type Step = fn(&Bound<'_, PyAny>) -> PyResult<Option<DataValue>>;
 
-/// Converts a Python value into an engine value, per the table.
+/// Converts a Python value into an engine value.
+///
+/// Raises `TypeError` for a value of a type that does not convert,
+/// and `ValueError` for a value that the conversion of its type rejects.
 pub(crate) fn to_value(any: &Bound<'_, PyAny>) -> PyResult<DataValue> {
-    // The wrapper classes first, since every one is unambiguous.
+    // The wrapper classes come first, since each of them converts in exactly one way.
     let steps: [Step; 4] = [
         wrapper_to_value,
         builtin_to_value,
@@ -560,6 +595,8 @@ pub(crate) fn to_value(any: &Bound<'_, PyAny>) -> PyResult<DataValue> {
 
 /// Converts an instance of one of the module's wrapper classes,
 /// or returns `None` for any other value.
+///
+/// A [Null] raises `ValueError`, since no term denotes it.
 fn wrapper_to_value(any: &Bound<'_, PyAny>) -> PyResult<Option<DataValue>> {
     if let Ok(iri) = any.cast::<Iri>() {
         return Ok(Some(DataValue::iri(iri.get().value.as_str())));
@@ -577,8 +614,8 @@ fn wrapper_to_value(any: &Bound<'_, PyAny>) -> PyResult<Option<DataValue>> {
     }
     if let Ok(literal) = any.cast::<Literal>() {
         let literal = literal.get();
-        // The typed forms with native values canonicalize, so
-        // `Literal("42", …integer)` and `42` are one term.
+        // A literal of a datatype with native values becomes its canonical value,
+        // so `Literal("42", …integer)` and `42` are the same term.
         return DataValue::typed_literal(&literal.datatype, &literal.lexical)
             .map(Some)
             .ok_or_else(|| {
@@ -602,8 +639,11 @@ fn wrapper_to_value(any: &Bound<'_, PyAny>) -> PyResult<Option<DataValue>> {
 
 /// Converts a value of a builtin scalar type (`bool`, `int`, `str`, `float`),
 /// or returns `None` for any other value.
+///
+/// The types are checked exactly, so an instance of a subclass is not converted here.
 fn builtin_to_value(any: &Bound<'_, PyAny>) -> PyResult<Option<DataValue>> {
-    // `bool` precedes `int`, being its subtype.
+    // `bool` is a subclass of `int`, but the exact checks keep a `bool` from converting as
+    // an `int`.
     if let Ok(value) = any.cast_exact::<pyo3::types::PyBool>() {
         return Ok(Some(DataValue::boolean(value.is_true())));
     }
@@ -611,7 +651,7 @@ fn builtin_to_value(any: &Bound<'_, PyAny>) -> PyResult<Option<DataValue>> {
         if let Ok(value) = any.extract::<i64>() {
             return Ok(Some(DataValue::integer(value)));
         }
-        // Beyond 64 bits: through the canonical lexical.
+        // An integer beyond 64 bits is converted through its decimal text.
         let lexical = any.str()?.to_string();
         return DataValue::decimal_from_lexical(&lexical)
             .map(Some)
@@ -626,12 +666,13 @@ fn builtin_to_value(any: &Bound<'_, PyAny>) -> PyResult<Option<DataValue>> {
     Ok(None)
 }
 
-/// Converts a value of a standard library type (`decimal` and `datetime`),
-/// or returns `None` for any other value.
+/// Converts a value of a standard library type, a `decimal.Decimal` or a type of the
+/// `datetime` module, or returns `None` for any other value.
 fn standard_to_value(any: &Bound<'_, PyAny>) -> PyResult<Option<DataValue>> {
     let py = any.py();
     if any.is_instance(stdlib_type(py, &DECIMAL, "decimal", "Decimal")?.as_any())? {
-        // Plain (non-scientific) notation, then the lenient parse.
+        // The decimal is written in plain notation, not in scientific notation, and then
+        // parsed.
         let lexical: String = any.call_method1("__format__", ("f",))?.extract()?;
         return DataValue::decimal_from_lexical(&lexical)
             .map(Some)
@@ -643,7 +684,7 @@ fn standard_to_value(any: &Bound<'_, PyAny>) -> PyResult<Option<DataValue>> {
             .map(Some)
             .ok_or_else(|| value_error(format!("`{lexical}` is not an xsd:dateTime lexical")));
     }
-    // After `datetime.datetime`, which is a `datetime.date` too.
+    // This check comes after `datetime.datetime`, which is a subclass of `datetime.date`.
     if any.is_instance(stdlib_type(py, &DATE, "datetime", "date")?.as_any())? {
         let lexical: String = any.call_method0("isoformat")?.extract()?;
         return Date::from_lexical(&lexical)
@@ -670,8 +711,11 @@ fn standard_to_value(any: &Bound<'_, PyAny>) -> PyResult<Option<DataValue>> {
     Ok(None)
 }
 
-/// Converts a container (`tuple`, `list`, `dict`), its contents recursively,
-/// or returns `None` for any other value.
+/// Converts a container, a `tuple`, `list` or `dict`, with its contents converted
+/// recursively, or returns `None` for any other value.
+///
+/// A `tuple` and a `list` both become an unlabeled tuple.
+/// A `dict` whose keys convert to the same term raises `ValueError`.
 fn container_to_value(any: &Bound<'_, PyAny>) -> PyResult<Option<DataValue>> {
     if let Ok(value) = any.cast::<PyTuple>() {
         let elements: Vec<DataValue> = value

@@ -1,6 +1,4 @@
-//! The translation state the engine keeps from one translation to the next
-//! (the initial load, [extend](crate::engine::Engine::extend),
-//! [reload](crate::engine::Engine::reload), and [import_rows](crate::engine::Engine::import_rows)).
+//! The translation state that the engine keeps from one translation to the next.
 
 use std::collections::{HashMap, HashSet};
 
@@ -14,46 +12,53 @@ use crate::{
     model::{Atom, Identifier, Span, Term, TypeExpression, Variable},
 };
 
-/// The translation state that outlives one translation,
-/// which [extend](crate::engine::Engine::extend) and rows added through
-/// [import_rows](crate::engine::Engine::import_rows) translate against.
+/// The translation state that outlives one translation.
 ///
-/// The parts derived from statements (prefixes, base, parameters, declarations, `@type`
-/// definitions and their types, inputs) are rebuilt from the full statement list on every translation,
-/// and [clear_statement_state](Self::clear_statement_state) empties them beforehand.
-/// The other parts (seeds, open, plan, scratch) describe what the tables already store,
-/// which skipped facts and unread imports cannot derive again, so they persist.
+/// Later translations start from it, such as those of
+/// [extend](crate::engine::Engine::extend) and of rows added through
+/// [import_rows](crate::engine::Engine::import_rows).
+/// - The parts that statements determine (prefixes, base, parameters, declarations, `@type`
+///   definitions and their types, and inputs) are rebuilt from the full list of statements in
+///   every translation, and [clear_statement_state](Self::clear_statement_state) empties them
+///   beforehand.
+/// - The other parts (`seeds`, `open`, `plan` and `scratch`) describe what the tables already
+///   store. Preloaded facts and imports are not read again and cannot derive these parts
+///   again, so they persist.
 #[derive(Debug, Default, Clone)]
 pub(crate) struct TranslationState {
-    /// The declared base IRI bare names resolve against.
+    /// The declared base IRI, against which bare names are resolved.
     pub(crate) base_iri: Option<String>,
     /// The declared prefixes.
     pub(crate) prefixes: HashMap<String, String>,
-    /// The resolved global parameters.
+    /// The values of the global parameters, by name.
     pub(crate) globals: HashMap<String, DataValue>,
     /// The declared column types, by resolved predicate name.
     pub(crate) declarations: HashMap<String, types::PredicateDeclaration>,
     /// The `@type` definitions, by resolved label.
     pub(crate) type_definitions: HashMap<String, (TypeExpression, Option<Span>)>,
-    /// The types the `@type` definitions declare, by resolved label.
+    /// The types that the `@type` definitions declare, by resolved label.
     pub(crate) label_types: LabelTypes,
-    /// The seeded column types per table, from the facts and the import formats.
+    /// Per table, the initial column types from the facts and import formats.
     pub(crate) seeds: HashMap<TableId, Vec<Type>>,
-    /// Import-fed predicates whose columns are not statically known.
+    /// The imported predicates whose column types are not known before loading,
+    /// and the `@input` predicates.
     pub(crate) open: HashSet<String>,
-    /// The `@input` predicates, resolved.
+    /// The resolved `@input` predicates.
     pub(crate) inputs: HashSet<String>,
-    /// What the loaders of import-fed predicates left out.
+    /// What the loads of imported predicates left out.
     pub(crate) plan: ImportPlan,
-    /// Per bound import's predicate, the scratch table its fetches deduplicate through,
-    /// registered once and reused across translations.
+    /// Per predicate of an import with atoms in its `where` clause,
+    /// the scratch table through which its fetches deduplicate their rows.
+    ///
+    /// It is registered once, and reused across translations while its arity stays the same.
     pub(crate) scratch: HashMap<String, TableId>,
 }
 
 impl TranslationState {
-    /// Empties what statements alone determine, keeping what stored data determines.
+    /// Empties the parts that statements alone determine,
+    /// and keeps the parts that stored data determines.
     ///
-    /// The next translation of the full statement list rebuilds the former.
+    /// The next translation of the full list of statements rebuilds the emptied parts.
     pub(crate) fn clear_statement_state(&mut self) {
         self.base_iri = None;
         self.prefixes.clear();
@@ -71,9 +76,12 @@ impl TranslationState {
         resolve_identifier(self.base_iri.as_deref(), &self.prefixes, identifier)
     }
 
-    /// Returns the terms of an atom that translated, in declaration
-    /// order: a named argument at its declared column, a column it
-    /// leaves out as an anonymous variable.
+    /// Returns the terms of an atom that was translated, in declaration order.
+    ///
+    /// A named argument is placed at its declared column,
+    /// and a column that the atom leaves out becomes an anonymous variable.
+    /// An atom without named arguments, or of a predicate without a declaration,
+    /// keeps its terms.
     pub(crate) fn positional(&self, atom: &Atom) -> Vec<Term> {
         let Some(labels) = &atom.labels else {
             return atom.terms.clone();

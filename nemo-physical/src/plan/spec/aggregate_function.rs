@@ -5,25 +5,33 @@ use crate::{execution::AggregateKind, plan::Marker};
 /// What an aggregate computes, with the columns it reads.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AggregateFunction {
-    /// The number of distinct tuples of the aggregate's
+    /// The number of distinct combinations of values of the aggregate's
     /// [per](super::AggregateColumnSpec::per) markers.
+    ///
     /// It reads no value of its own.
     Count,
-    /// The sum of a column's values, which are numbers or durations of one kind,
-    /// exact over integers and decimals.
+    /// The sum of a column's values, which must be numbers or durations of one kind.
+    ///
+    /// The sum is exact over integers and decimals.
     Sum(Marker),
     /// The smallest value of a column.
-    /// Values compare by value if they are comparable, and by their order as terms otherwise.
+    ///
+    /// Values are compared in value order if they are comparable,
+    /// and in term order otherwise or if they are equal.
     Min(Marker),
     /// The largest value of a column.
-    /// Values compare by value if they are comparable, and by their order as terms otherwise.
+    ///
+    /// Values are compared in value order if they are comparable,
+    /// and in term order otherwise or if they are equal.
     Max(Marker),
-    /// The average of a column's values, which are numbers or durations of one kind:
-    /// their sum divided by their count, exactly over integers and decimals.
+    /// The average of a column's values, which must be numbers or durations of one kind.
+    ///
+    /// It is their sum, which is exact over integers and decimals, divided by their count.
     Average(Marker),
     /// A column's values as a tuple, in ascending term order.
     Tuple(Marker),
     /// The pairs of two columns as a map.
+    ///
     /// A key with two different values fails the group.
     Map {
         /// The column of the keys.
@@ -47,7 +55,9 @@ impl AggregateFunction {
         }
     }
 
-    /// Returns the columns the function reads: its column and `None`,
+    /// Returns the columns the function reads, as a pair.
+    ///
+    /// The pair is the function's column and `None`,
     /// the keys and the values for [AggregateFunction::Map],
     /// and `None` twice for [AggregateFunction::Count].
     pub(crate) fn columns(&self) -> (Option<Marker>, Option<Marker>) {

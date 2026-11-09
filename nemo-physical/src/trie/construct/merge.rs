@@ -1,13 +1,13 @@
-//! The merge: the distinct rows of several sorted row streams, each with its change.
+//! The merge, which produces the distinct rows of several sorted row streams,
+//! each with its change.
 //!
 //! The sources are kept in a heap ordered by their front rows,
 //! so the least unread row is always at the top.
-//! Each round takes that row, drops it if a [Distinct] filter finds
-//! that it is a repeat of the last row emitted,
-//! and steps the source it came from to its next row.
-//! Equal rows from different sources
-//! surface back to back, the earliest source's first,
-//! so the filter catches repeats across sources too and keeps the earliest source's row.
+//! Each round takes that row, drops it if a [Distinct] filter finds that it repeats the last
+//! row emitted, and advances its source to the next row.
+//! Equal rows from different sources come out one after another,
+//! led by the row of the source that comes first in the list.
+//! So the filter also catches repeats across sources, and keeps the first source's row.
 
 use std::{
     cmp::{Ordering, Reverse},
@@ -21,23 +21,26 @@ use crate::{
 
 /// A sorted stream of rows, read one at a time by a [merge].
 pub(super) trait RowSource {
-    /// Returns the current row; valid while the source [has one](Self::has_row).
+    /// Returns the current row.
+    ///
+    /// It is valid while the source [has one](Self::has_row).
     fn row(&self) -> &[StorageValue];
 
     /// Returns whether the source still has a row.
     fn has_row(&self) -> bool;
 
-    /// Steps past the current row.
+    /// Moves past the current row.
     fn advance(&mut self);
 }
 
-/// Visits the distinct rows of the sources in storage order,
-/// each with the source it was taken from, positioned at it, and its [RowChange].
+/// Visits the distinct rows of the sources in storage order.
 ///
-/// A row several sources hold is taken from the earliest of them in the list.
-/// The least source steps in place through the heap's top handle,
-/// which sinks it to where its next row belongs when released,
-/// or removes it when it has none.
+/// `visit` receives the source that the row was taken from, positioned at the row,
+/// and the row's [RowChange].
+/// A row that several sources contain is taken from the first of them in the list.
+/// The least source advances in place, through the heap's handle to its top.
+/// When the handle is released, the source sinks to where its next row belongs,
+/// or it is removed if it has no next row.
 pub(super) fn merge<S: RowSource>(
     sources: Vec<S>,
     arity: usize,
@@ -64,8 +67,10 @@ pub(super) fn merge<S: RowSource>(
     }
 }
 
-/// A source with its index among the sources, ordered by its front row and then the index,
-/// for the heap of a [merge]. Only sources that have a row are compared.
+/// A source with its index among the sources, for the heap of a [merge].
+///
+/// It is ordered by its front row and then by the index.
+/// Only sources that have a row are compared.
 struct ByFront<S> {
     /// The source's index among the sources.
     index: usize,
@@ -100,7 +105,7 @@ impl<S: RowSource> Ord for ByFront<S> {
 mod tests {
     use super::*;
 
-    /// A run of integer rows of arity 2, read as a source, with its index among the sources.
+    /// Integer rows of arity 2 as a source, with its index among the sources.
     struct Rows {
         /// The rows.
         rows: Vec<[StorageValue; 2]>,
@@ -124,7 +129,7 @@ mod tests {
         }
     }
 
-    /// A source of the given rows, with the given index among the sources.
+    /// Returns a source of the given rows, with the given index among the sources.
     fn rows(index: usize, rows: &[[i64; 2]]) -> Rows {
         Rows {
             rows: rows
@@ -136,6 +141,8 @@ mod tests {
         }
     }
 
+    /// The merge interleaves the sources in storage order and drops repeats,
+    /// keeping the row of the first source in the list.
     #[test]
     fn merged_sources_interleave_and_drop_repeats() {
         let sources = vec![
@@ -149,7 +156,7 @@ mod tests {
             merged.push((source.index, source.row().to_vec(), change))
         });
 
-        // A repeat is taken from the earliest source holding it.
+        // A repeated row is taken from the first source that contains it.
         let expected = [
             (3, [0, 9], RowChange::First),
             (0, [1, 1], RowChange::At(0)),

@@ -1,7 +1,8 @@
-//! Declared rewrites: the [Commit] methods that change rules and imports,
-//! each with a rewrite declaration of how the statement it creates relates
-//! to the input, and the correspondences computed from those declarations
-//! when the commit finishes.
+//! Declared rewrites: the [Commit] methods that change rules and imports.
+//!
+//! Each method makes a rewrite declaration about the statement it creates.
+//! When the commit finishes, it records the declarations,
+//! with the correspondences computed from them.
 
 use std::collections::{HashMap, HashSet};
 
@@ -17,7 +18,7 @@ use crate::{
     },
 };
 
-/// A rewrite declaration made while the commit runs, recorded when it finishes.
+/// A rewrite declaration made during a commit, which is recorded when the commit finishes.
 #[derive(Debug)]
 pub(super) enum PendingDeclaration {
     /// The created statement replaces an input rule.
@@ -26,11 +27,11 @@ pub(super) enum PendingDeclaration {
         created: StatementId,
         /// The input rule it replaces.
         input: StatementId,
-        /// An import's view, or `None` for a rule.
+        /// The view of the created import, or `None` if the created statement is a rule.
         view: Option<Rule>,
         /// The path of each literal of the input rule.
         literals: Vec<LiteralPath>,
-        /// The occurrences a substitution replaced.
+        /// The occurrences that a substitution replaced, if any.
         substituted: Vec<SubstitutionRecord>,
     },
     /// The created statement defines a new predicate.
@@ -39,7 +40,7 @@ pub(super) enum PendingDeclaration {
         created: StatementId,
         /// The resolved name of the defined predicate.
         predicate: String,
-        /// An import's view, or `None` for a rule.
+        /// The view of the created import, or `None` if the created statement is a rule.
         view: Option<Rule>,
     },
     /// The created rule defines a filter.
@@ -64,17 +65,18 @@ impl Commit<'_> {
     /// Replaces an input rule by a rewritten rule, in place.
     ///
     /// `literals` gives the [path](LiteralPath) of each literal of the input rule, in order.
-    /// Once its literals over predicates this commit defines are unfolded along those paths,
-    /// the new rule contains an instance of the input rule.
+    /// The new rule must contain an instance of the input rule
+    /// once its literals over the predicates that this commit defines are unfolded along the
+    /// paths.
     /// A literal of the new rule that no path leads to only restricts the rule's matches.
-    /// Proofs over the new rule are mapped back onto the input rule through these paths,
-    /// and the paths are checked only as far as that mapping needs.
+    /// The paths let proofs over the new rule be mapped back onto the input rule,
+    /// and they are checked only as far as that mapping needs.
     ///
     /// # Panics
     ///
-    /// Panics if `input` is not a live rule the stage may rewrite.
-    /// The commit panics when it finishes if the input head, or an input literal,
-    /// does not match the literal at its path.
+    /// Panics if `input` is not a live rule that the stage may rewrite.
+    /// The commit panics when it finishes if the input head does not match the new head,
+    /// or if an input literal does not match the literal at its path.
     pub fn replace_rule(
         &mut self,
         input: StatementId,
@@ -84,8 +86,8 @@ impl Commit<'_> {
         self.replace_rule_substituted(input, rule, literals, Vec::new())
     }
 
-    /// Adds a rule defining a new predicate, before the first of its
-    /// sources the stage may rewrite.
+    /// Adds a rule that defines a new predicate,
+    /// before the first of `sources` that is live and not frozen.
     ///
     /// The rule is the predicate's definition.
     /// A rule that replaces an input rule and uses the predicate
@@ -93,8 +95,8 @@ impl Commit<'_> {
     ///
     /// # Panics
     ///
-    /// Panics if the head is not one atom of distinct universal
-    /// variables, or if the input uses its predicate.
+    /// Panics if the head is not one atom of distinct universal variables,
+    /// or if the input uses its predicate.
     pub fn define(&mut self, rule: Rule, sources: &[StatementId]) -> StatementId {
         let predicate = self.new_definition(&rule);
         let created = self.insert(sources, Statement::Rule(rule));
@@ -106,14 +108,14 @@ impl Commit<'_> {
         created
     }
 
-    /// Adds an import defining a new predicate,
-    /// before the first of its sources the stage may rewrite.
+    /// Adds an import that defines a new predicate,
+    /// before the first of `sources` that is live and not frozen.
     ///
-    /// The view is a rule over input predicates whose head is the import's atom,
-    /// and it defines the import's rows.
+    /// `view` is a rule over input predicates that defines the import's rows,
+    /// and its head is the import's atom.
     /// The import's atom is its predicate over its column variables.
-    /// An import that names no columns (as file imports do)
-    /// takes the variables of the view's head as its columns.
+    /// An import that names no columns, as a file import does,
+    /// uses the variables of the view's head as its columns.
     ///
     /// # Panics
     ///
@@ -136,7 +138,7 @@ impl Commit<'_> {
         created
     }
 
-    /// Adds a filter rule, before the first of its sources the stage may rewrite.
+    /// Adds a filter rule, before the first of `sources` that is live and not frozen.
     ///
     /// The rule defines a new predicate that other statements use only to restrict their matches,
     /// in an import's `where` clause or as an extra body literal.
@@ -159,14 +161,14 @@ impl Commit<'_> {
         created
     }
 
-    /// Removes an import whose rows no rule reads any more,
-    /// because the stage's rules query its endpoint directly.
+    /// Removes an import whose rows no rule reads after the stage's rewrite,
+    /// for example because the stage's rules query its endpoint directly.
     ///
-    /// Its predicate stays in the program, without a stored table.
+    /// A `@declare` directive may still name the import's predicate.
     ///
     /// # Panics
     ///
-    /// Panics if `import` is not a live import the stage may rewrite,
+    /// Panics if `import` is not a live import that the stage may rewrite,
     /// or if its predicate does not resolve.
     /// The commit panics when it finishes if a statement other than
     /// a `@declare` directive still names the predicate.
@@ -218,7 +220,7 @@ impl Commit<'_> {
     }
 
     /// Replaces an input rule by a rewritten rule, in place,
-    /// recording the occurrences a substitution replaced.
+    /// and records `substituted`, the occurrences that a substitution replaced.
     ///
     /// The other arguments and the panics are those of [replace_rule](Self::replace_rule).
     pub(super) fn replace_rule_substituted(
@@ -275,12 +277,11 @@ impl Commit<'_> {
         created
     }
 
-    /// Records the rewrite declaration of every created statement still live
+    /// Records the rewrite declaration of every created statement that is still live,
     /// on the provenance edge that created it.
     ///
-    /// For a rule that replaces an input rule, this computes the correspondence:
-    /// what every input variable became, from matching each input literal
-    /// against the literal at its path.
+    /// For a rule that replaces an input rule, this computes the correspondence
+    /// by matching each input literal against the literal at its path.
     ///
     /// # Panics
     ///
@@ -348,8 +349,10 @@ impl Commit<'_> {
         }
     }
 
-    /// Returns the rules defining the predicates the pending rewrite declarations define,
-    /// by predicate.
+    /// Returns the definitions that the pending rewrite declarations make,
+    /// by the resolved name of the defined predicate.
+    ///
+    /// The definition made by an import is its view.
     ///
     /// # Panics
     ///
@@ -400,9 +403,12 @@ impl Commit<'_> {
         );
     }
 
-    /// Returns the resolved name of the predicate a definition defines,
-    /// checking its shape: one head atom of distinct universal variables
-    /// over a predicate the input does not use.
+    /// Returns the resolved name of the predicate that a definition defines.
+    ///
+    /// # Panics
+    ///
+    /// Panics, naming the stage, unless the definition has one head atom
+    /// of distinct universal variables, over a predicate that the input does not use.
     fn new_definition(&self, rule: &Rule) -> String {
         let [head] = rule.head.as_slice() else {
             panic!(
@@ -419,9 +425,10 @@ impl Commit<'_> {
         self.expect_new(&head.predicate)
     }
 
-    /// Panics, naming the stage, unless a view's head is the import's atom:
-    /// its predicate over its column variables,
-    /// or over distinct universal variables if it names no columns.
+    /// Panics, naming the stage, unless a view's head is the import's atom.
+    ///
+    /// The import's atom is its predicate over its column variables,
+    /// or over distinct universal variables if the import names no columns.
     fn expect_view(&self, import: &ImportDirective, view: &Rule) {
         let fits = match view.head.as_slice() {
             [head] if import.variables.is_empty() => {
@@ -447,8 +454,12 @@ impl Commit<'_> {
         );
     }
 
-    /// Returns the resolved name of a predicate the input does not use,
-    /// panicking, naming the stage, if it does.
+    /// Returns the resolved name of a new predicate.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the name does not resolve, or, naming the stage, if the input uses the
+    /// predicate.
     fn expect_new(&self, predicate: &Identifier) -> String {
         let name = self
             .resolve(predicate)
@@ -461,7 +472,7 @@ impl Commit<'_> {
         name
     }
 
-    /// Returns the resolved predicate names the input uses.
+    /// Returns the resolved names of the predicates that the input uses.
     fn input_names(&self) -> &HashSet<String> {
         self.input_names
             .get_or_init(|| self.names_of(self.pipeline.revision_statements(self.base)))

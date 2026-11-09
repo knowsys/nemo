@@ -4,7 +4,7 @@
 //! The joins read the dictionary while they run, so no value can be added to it yet.
 //! The row stage therefore runs in two phases.
 //! The [RowEvaluator] evaluates the programs as a join drains into it,
-//! and keeps their results apart from the rows.
+//! and stores their results separately from the rows.
 //! Once every join is done, [encoding](PendingRows::encode) adds the results to the dictionary
 //! and completes the rows.
 
@@ -23,16 +23,19 @@ use crate::{
 /// The result of a computed column on one row.
 #[derive(Debug, Clone)]
 enum Computed {
-    /// A value with its storage value: inline, or an entry the dictionary holds already.
+    /// A value that has a storage value:
+    /// an inline value, or an entry that the dictionary has already.
     Stored(StorageValue),
-    /// A value the dictionary stores, added once the join is done.
+    /// A value without a known storage value, encoded once the joins are done.
     Value(DataValue),
 }
 
 impl Computed {
-    /// Returns the result holding a value:
-    /// its storage value if the value is inline or a stored structure read from the dictionary,
-    /// and the value otherwise.
+    /// Returns the result for a value.
+    ///
+    /// The result is the value's storage value if the value is inline,
+    /// or if it is a tuple or map read from the dictionary, which knows its entry.
+    /// Any other value is kept as it is, to be encoded later.
     fn of(value: ValueRef<'_>, dictionary: &Dictionary) -> Self {
         match StorageValue::from_value(value).or_else(|| dictionary.entry_of(value)) {
             Some(stored) => Computed::Stored(stored),
@@ -44,46 +47,47 @@ impl Computed {
 /// The result of a computed column on one row, or the error its evaluation raised.
 type ComputedResult = Result<Computed, EvaluationError>;
 
-/// The sink evaluating a row stage on a join's rows, as its [shape](RowStageShape) specifies.
+/// The sink that evaluates a row stage on a join's rows, as its [shape](RowStageShape) specifies.
 ///
-/// A join drains into the evaluator, which keeps the rows every post-filter passes
-/// together with the results of their computed columns;
-/// [finish](Self::finish) hands them over for encoding.
+/// A join drains into the evaluator, which keeps the rows that every post-filter passes,
+/// with the results of their computed columns.
+/// [finish](Self::finish) returns them for encoding.
 ///
 /// Each computed column keeps its result until a row changes the deepest layer it reads,
-/// or one above it, so a program over shallow layers runs once per distinct prefix.
+/// or a shallower one, so a program over shallow layers runs once per distinct prefix.
 /// A program runs its integer form if it has one and its inputs are integers on the row,
 /// and the generic interpreter otherwise.
 #[derive(Debug)]
 pub(crate) struct RowEvaluator<'a> {
     /// The shape of the row stage.
     shape: &'a RowStageShape,
-    /// The dictionary the layer values decode through.
+    /// The dictionary the layer values are decoded through.
     dictionary: &'a Dictionary,
     /// The context the programs evaluate in.
     context: EvaluationContext,
-    /// The emitted values of the rows kept, in join order.
+    /// The emitted values of the kept rows, in join order.
     prefixes: RowBuffer,
-    /// Per row kept and computed column, the index of its result.
+    /// Per kept row and computed column, the index of the column's result in `unique`.
     chosen: Vec<usize>,
-    /// Per computed column, its distinct results so far, the last of them the current one.
+    /// Per computed column, the results of its evaluations so far,
+    /// the last of them the current one.
     unique: Vec<Vec<ComputedResult>>,
-    /// The rows a post-filter dropped by erroring, counted by kind.
+    /// The errors of the post-filters, each of which dropped its row, counted by kind.
     dropped: ErrorCounts,
     /// The evaluation stack of the integer forms.
     integer_stack: Vec<IntegerValue>,
-    /// The inputs of the integer form run last.
+    /// The buffer for the inputs of an integer form.
     integers: Vec<i64>,
     /// The evaluation stack of the generic interpreter.
     stack: Vec<StackValue<'a>>,
-    /// The inputs of the generic interpreter run last, decoded.
+    /// The buffer for the decoded inputs of the generic interpreter.
     values: Vec<ValueRef<'a>>,
 }
 
 impl<'a> RowEvaluator<'a> {
-    /// Creates the evaluator of a shape over joins emitting `emitted` layers;
-    /// the values decode through the dictionary, and the programs evaluate in the context.
+    /// Creates the evaluator of a shape over joins that emit `emitted` layers.
     ///
+    /// The values are decoded through `dictionary`, and the programs evaluate in `context`.
     /// Only debug builds check that the shape fits the joins.
     pub(crate) fn new(
         shape: &'a RowStageShape,
@@ -121,11 +125,11 @@ impl<'a> RowEvaluator<'a> {
         }
     }
 
-    /// Evaluates the computed columns whose results are stale on a row,
-    /// given the shallowest layer the row changed.
+    /// Evaluates the computed columns whose results are stale on a row.
     ///
-    /// A result is stale if the column is volatile, if it has none yet,
-    /// or if the row changed the deepest layer the column reads, or one above it.
+    /// `changed` is the shallowest layer the row changed.
+    /// A result is stale if the column is volatile, if the column has no result yet,
+    /// or if the row changed the deepest layer the column reads, or a shallower one.
     fn evaluate_columns(&mut self, row: &[StorageValue], changed: usize) {
         let shape = self.shape;
         for (column, computed) in shape.computed.iter().enumerate() {
@@ -168,9 +172,10 @@ impl<'a> RowEvaluator<'a> {
         }
     }
 
-    /// Checks the post-filters on a row, and returns whether every one passes it.
+    /// Returns whether a row passes every post-filter.
     ///
-    /// A post-filter that errors drops the row with its error.
+    /// Fails with the error of a post-filter that fails to evaluate,
+    /// which may come from a computed column it reads.
     fn check_filters(&mut self, row: &[StorageValue]) -> Result<bool, EvaluationError> {
         let shape = self.shape;
         for filter in &shape.post_filters {
@@ -200,7 +205,7 @@ impl<'a> RowEvaluator<'a> {
             .expect("computed columns evaluate in order")
     }
 
-    /// Returns a layer's value decoded.
+    /// Decodes a layer's value.
     fn decode(&self, value: StorageValue) -> ValueRef<'a> {
         let dictionary: &'a Dictionary = self.dictionary;
         dictionary
@@ -208,11 +213,11 @@ impl<'a> RowEvaluator<'a> {
             .expect("storage values decode against their dictionary")
     }
 
-    /// Runs a program's integer form on a row, through one of its entry points,
-    /// such as [IntegerProgram::evaluate].
+    /// Runs a program's integer form on a row through `run`,
+    /// one of its entry points such as [IntegerProgram::evaluate].
     ///
     /// Returns `None` if the program has no integer form,
-    /// if an input is not an integer on this row, or if the integer form gives up.
+    /// if an input is not an integer on this row, or if the integer form falls back.
     /// The generic interpreter decides then.
     fn run_integers<T>(
         &mut self,
@@ -229,8 +234,8 @@ impl<'a> RowEvaluator<'a> {
                 RowInput::Layer(layer) => row[layer],
                 RowInput::Computed(column) => match self.current(column) {
                     Ok(Computed::Stored(value)) => *value,
-                    // A value the dictionary stores is no integer,
-                    // and an error propagates through the generic interpreter.
+                    // A value without a storage value is no integer, since integers are inline,
+                    // and the generic interpreter passes an error on.
                     Ok(Computed::Value(_)) | Err(_) => return None,
                 },
             };
@@ -243,13 +248,15 @@ impl<'a> RowEvaluator<'a> {
         run(integer, &mut self.integer_stack, &self.integers)
     }
 
-    /// Runs the generic interpreter over a row through one of its entry points,
-    /// such as [StackProgram::evaluate], its layer inputs decoded through the dictionary.
+    /// Runs the generic interpreter on a row through `run`,
+    /// one of its entry points such as [StackProgram::evaluate].
     ///
-    /// The interpreter runs in the reusable buffers if every input is a layer or an inline result.
-    /// An owned result among the inputs lives in the results collected so far,
-    /// which the buffers cannot borrow; the run then borrows them in buffers of its own.
-    /// An erroring input propagates its error.
+    /// The layer inputs are decoded through the dictionary.
+    /// The interpreter runs in the reusable buffers if every input is a layer
+    /// or a result with a storage value.
+    /// Any other result lives in `unique`, which the reusable buffers cannot borrow,
+    /// so the run then uses buffers of its own, through [run_borrowing](Self::run_borrowing).
+    /// An input that failed passes its error on.
     fn run_generic<T>(
         &mut self,
         program: &'a StackProgram,
@@ -279,8 +286,8 @@ impl<'a> RowEvaluator<'a> {
         run(program, self.context, &mut self.stack, &self.values)
     }
 
-    /// Runs the generic interpreter over a row in buffers of its own,
-    /// borrowing the owned results among its inputs; see [run_generic](Self::run_generic).
+    /// Runs the generic interpreter on a row as [run_generic](Self::run_generic) does,
+    /// but in buffers of its own, which can borrow the results without a storage value.
     fn run_borrowing<T>(
         &self,
         program: &StackProgram,
@@ -335,23 +342,27 @@ impl RowSink for RowEvaluator<'_> {
 pub(crate) struct PendingRows {
     /// The emitted values of the rows, in join order.
     prefixes: RowBuffer,
-    /// Per row and computed column, the index of its result.
+    /// Per row and computed column, the index of the column's result in `unique`.
     chosen: Vec<usize>,
-    /// Per computed column, its distinct results, in the order of their first use.
+    /// Per computed column, the results of its evaluations, in order.
     unique: Vec<Vec<ComputedResult>>,
-    /// The rows a post-filter dropped by erroring, counted by kind.
+    /// The errors of the post-filters, each of which dropped its row, counted by kind.
     dropped: ErrorCounts,
 }
 
 impl PendingRows {
-    /// Encodes the results of the rows and adds the completed rows to a buffer:
-    /// the emitted layers, then the delivered computed columns, given by index.
-    /// Returns the errors counted per kind, those of the post-filters included.
+    /// Encodes the results of the rows, and adds the completed rows to `buffer`.
     ///
-    /// Each distinct result is encoded once, and one with its storage value needs no encoding.
-    /// A row whose computation errored, or whose result the dictionary cannot store, is dropped,
-    /// and the error is counted per evaluation;
-    /// that holds for the columns the row does not deliver as well.
+    /// A completed row has the emitted layers,
+    /// then the computed columns that `delivered` lists by index.
+    /// Returns the errors counted by kind, those of the post-filters included.
+    ///
+    /// Each result is encoded once, however many rows share it,
+    /// and a result with a storage value needs no encoding.
+    /// A row is dropped if one of its computed columns failed,
+    /// or has a result the dictionary cannot store,
+    /// even if the row does not deliver that column.
+    /// Such an error is counted once per evaluation, not per row.
     pub(crate) fn encode(
         self,
         delivered: &[usize],

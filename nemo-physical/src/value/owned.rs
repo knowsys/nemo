@@ -1,4 +1,4 @@
-//! Owned data values with canonicalizing construction.
+//! Owned data values, which their constructors bring into canonical form.
 
 use std::{
     cmp::Ordering,
@@ -15,9 +15,10 @@ use crate::value::{
     number::{Number, decimal::workspace},
 };
 
-/// An owned data value, e.g., an IRI, a string, a number, a dateTime, a structured value,
-/// or a value of any other [domain](ValueDomain).
+/// An owned data value, such as an IRI, a string, a number, a dateTime or a tuple.
+///
 /// Its borrowed view is [ValueRef].
+/// The constructors bring each value into canonical form, so that it has one representation.
 #[derive(Clone)]
 pub struct DataValue(Repr);
 
@@ -32,45 +33,43 @@ enum Repr {
     LanguageString(LanguageString),
     /// A boolean.
     Boolean(bool),
-    /// A number, in the case that holds it.
+    /// A number.
     Number(Number),
-    /// A dateTime at millisecond granularity:
-    /// milliseconds since the Unix epoch, UTC, and the offset it was written with.
+    /// A dateTime whose instant is a whole number of milliseconds within the 64-bit range.
     DateTime {
-        /// Milliseconds since the Unix epoch, UTC.
+        /// The milliseconds since the Unix epoch, UTC.
         millis: i64,
-        /// The timezone offset the value was written with.
+        /// The timezone offset that the value was written with.
         offset: Option<TimezoneOffset>,
     },
-    /// A dateTime finer than a millisecond or beyond the 64-bit range of milliseconds.
+    /// A dateTime whose instant has a fraction finer than a millisecond,
+    /// or lies beyond the 64-bit range of milliseconds.
     WideDateTime(Arc<DateTime>),
-    /// A date: the minutes since the Unix epoch, UTC, at which its day starts,
-    /// and the offset it was written with.
+    /// A date, stored as the instant at which its day starts.
     Date {
-        /// Minutes since the Unix epoch, UTC.
+        /// The minutes since the Unix epoch, UTC, at which the day starts.
         minutes: i64,
-        /// The timezone offset the value was written with.
+        /// The timezone offset that the value was written with.
         offset: Option<TimezoneOffset>,
     },
-    /// A time at nanosecond granularity:
-    /// nanoseconds since the start of the reference day, UTC,
-    /// and the offset it was written with.
+    /// A time whose instant is a whole number of nanoseconds.
     Time {
-        /// Nanoseconds since the start of the reference day, UTC.
+        /// The nanoseconds since the start of the reference day, UTC.
         nanos: i64,
-        /// The timezone offset the value was written with.
+        /// The timezone offset that the value was written with.
         offset: Option<TimezoneOffset>,
     },
-    /// A time finer than a nanosecond.
+    /// A time whose instant has a fraction finer than a nanosecond.
     WideTime(Arc<Time>),
-    /// A duration whose seconds are whole milliseconds within the 64-bit range.
+    /// A duration whose seconds are a whole number of milliseconds within the 64-bit range.
     Duration {
         /// The months.
         months: i64,
         /// The seconds, in milliseconds.
         millis: i64,
     },
-    /// A duration whose seconds are finer than a millisecond or beyond the 64-bit range.
+    /// A duration whose seconds have a fraction finer than a millisecond,
+    /// or lie beyond the 64-bit range of milliseconds.
     WideDuration(Arc<Duration>),
     /// A labeled null, identified by its id.
     Null(u64),
@@ -78,11 +77,11 @@ enum Repr {
     Tuple(Arc<TupleValue>),
     /// A map.
     Map(Arc<MapValue>),
-    /// A literal of an unsupported datatype.
+    /// A literal of a datatype without native support.
     Other(OtherLiteral),
 }
 
-/// Compile-time check of the size target for owned values.
+/// Checks at compile time that an owned value occupies at most 24 bytes.
 const _: () = assert!(size_of::<DataValue>() <= 24);
 
 impl DataValue {
@@ -96,8 +95,8 @@ impl DataValue {
         Self(Repr::String(string.into()))
     }
 
-    /// Creates a language-tagged string, lowercasing the tag,
-    /// or `None` for a tag that is not well-formed (see [LanguageString::new]).
+    /// Creates a language-tagged string with the tag in lowercase,
+    /// or `None` for a tag that is not [well-formed](LanguageString).
     pub fn language_string(text: impl Into<Box<str>>, language: &str) -> Option<Self> {
         LanguageString::new(text, language).map(Self::from)
     }
@@ -112,21 +111,19 @@ impl DataValue {
         Self::from(Decimal::from(value))
     }
 
-    /// Creates the exact number `mantissa * 10^exponent`, an `xsd:decimal` value,
-    /// or `None` for a value whose canonical form exceeds the length limit of numbers.
+    /// Creates the exact number `mantissa * 10^exponent`,
+    /// or `None` for a value beyond the [length limit](Decimal) of numbers.
     ///
-    /// The value takes its canonical form:
-    /// an integral value is an integer, and any other a decimal.
+    /// An integral value becomes an integer, and any other value a decimal.
     pub fn decimal(mantissa: i128, exponent: i64) -> Option<Self> {
         Decimal::new(mantissa, exponent).map(Self::from)
     }
 
     /// Creates a number from an `xsd:decimal` lexical form,
-    /// which includes every `xsd:integer` lexical form,
-    /// or `None` for malformed input
-    /// and for a value whose canonical form exceeds the length limit of numbers.
+    /// or `None` for a malformed lexical form or a value beyond the [length limit](Decimal).
     ///
-    /// The value takes its canonical form like [decimal](Self::decimal).
+    /// Every `xsd:integer` lexical form is also an `xsd:decimal` lexical form.
+    /// An integral value becomes an integer, as for [decimal](Self::decimal).
     ///
     /// # Example
     ///
@@ -145,9 +142,9 @@ impl DataValue {
         Decimal::from_lexical(lexical).map(Self::from)
     }
 
-    /// Creates a number from a number literal of Nemo term syntax,
-    /// or `None` for any other lexical
-    /// (see [Number::from_term_syntax]).
+    /// Creates a number from a number literal of term syntax, or `None` for any other text.
+    ///
+    /// [Number::from_term_syntax] lists the accepted forms.
     ///
     /// # Example
     ///
@@ -168,10 +165,9 @@ impl DataValue {
         Number::from_term_syntax(lexical).map(Self::from)
     }
 
-    /// Creates an integer value from an `xsd:integer` lexical form,
-    /// a signed sequence of digits,
-    /// or `None` for malformed input
-    /// and for a value whose canonical form exceeds the length limit of numbers.
+    /// Creates an integer from an `xsd:integer` lexical form, which is a sequence of digits
+    /// with an optional sign, or `None` for a malformed lexical form or a value beyond the
+    /// [length limit](Decimal).
     pub(crate) fn integer_from_lexical(lexical: &str) -> Option<Self> {
         if lexical.contains('.') {
             return None;
@@ -179,12 +175,12 @@ impl DataValue {
         Self::decimal_from_lexical(lexical)
     }
 
-    /// Creates a 32-bit float value, turning every NaN into the canonical NaN.
+    /// Creates a 32-bit floating-point value, with every NaN replaced by the one canonical NaN.
     pub fn float(value: impl Into<Float>) -> Self {
         Self(Repr::Number(Number::Float(value.into())))
     }
 
-    /// Creates a 64-bit float value, turning every NaN into the canonical NaN.
+    /// Creates a 64-bit floating-point value, with every NaN replaced by the one canonical NaN.
     pub fn double(value: impl Into<Double>) -> Self {
         Self(Repr::Number(Number::Double(value.into())))
     }
@@ -201,7 +197,7 @@ impl DataValue {
     }
 
     /// Creates a dateTime value from an `xsd:dateTime` lexical form,
-    /// or `None` for malformed input.
+    /// or `None` for a lexical form that [DateTime::from_lexical] rejects.
     pub fn datetime_from_lexical(lexical: &str) -> Option<Self> {
         DateTime::from_lexical(lexical).map(Self::datetime)
     }
@@ -225,8 +221,7 @@ impl DataValue {
         }
     }
 
-    /// Creates a duration value,
-    /// of the most specific of the three duration domains (see [Duration::domain]).
+    /// Creates a duration value in the domain that [Duration::domain] returns for it.
     pub fn duration(value: Duration) -> Self {
         match value.millis() {
             Some(millis) => Self(Repr::Duration {
@@ -239,7 +234,8 @@ impl DataValue {
 
     /// Creates a labeled null with the given id.
     ///
-    /// Ids identify nulls, and the dictionary mints fresh ones.
+    /// Nulls with the same id are the same value.
+    /// [fresh_null](crate::dictionary::Dictionary::fresh_null) returns an id for a new null.
     pub fn null(id: u64) -> Self {
         Self(Repr::Null(id))
     }
@@ -256,12 +252,12 @@ impl DataValue {
 
     /// Creates the value of a typed literal from its datatype IRI and lexical form.
     ///
-    /// The supported XSD datatypes parse into their native representations,
-    /// so that term identity never splits between a literal and its value.
-    /// Any other datatype keeps its lexical form as an [other](Self::other) value.
+    /// A literal of a supported XSD datatype becomes the value it denotes, such as a number,
+    /// so that a literal and its value are the same term.
+    /// A literal of any other datatype keeps its lexical form, as an [other](Self::other) value.
     ///
-    /// Returns `None` for a lexical the datatype does not accept,
-    /// and for `rdf:langString`, which has no value without a tag.
+    /// Returns `None` for a lexical form that the datatype does not accept,
+    /// and for `rdf:langString`, which has no value without a language tag.
     pub fn typed_literal(datatype: &str, lexical: &str) -> Option<Self> {
         match Datatype::of(datatype) {
             Datatype::Native(native) => native.parse(lexical),
@@ -270,17 +266,16 @@ impl DataValue {
         }
     }
 
-    /// Creates a literal of a datatype this crate has no special support for,
-    /// kept as lexical form plus datatype IRI.
+    /// Creates a literal of a datatype without native support,
+    /// which keeps its lexical form and datatype IRI.
     ///
-    /// Returns `None` for the datatypes [typed_literal](Self::typed_literal) parses
-    /// (see [OtherLiteral::new]).
+    /// Returns `None` for a datatype with dedicated support,
+    /// such as the datatypes that [typed_literal](Self::typed_literal) parses.
     pub fn other(datatype: impl Into<Box<str>>, lexical: impl Into<Box<str>>) -> Option<Self> {
         OtherLiteral::new(datatype, lexical).map(Self::from)
     }
 
-    /// Returns the borrowed view of this value,
-    /// the surface for matching on its content and the input to builtin evaluation.
+    /// Returns the borrowed view of this value, on which code matches to inspect its content.
     pub fn as_ref(&self) -> ValueRef<'_> {
         match &self.0 {
             Repr::Iri(iri) => ValueRef::Iri(iri.as_ref()),
@@ -308,20 +303,20 @@ impl DataValue {
         }
     }
 
-    /// Returns the semantic domain of this value.
+    /// Returns the domain of this value.
     pub fn domain(&self) -> ValueDomain {
         self.as_ref().domain()
     }
 
     /// Returns the datatype IRI of this value,
-    /// or `None` for the non-literal domains (see [ValueDomain::datatype_iri]).
+    /// or `None` for a value that is not a literal, such as an IRI, a null or a tuple.
     pub fn datatype_iri(&self) -> Option<&str> {
         self.as_ref().datatype_iri()
     }
 
-    /// Clones a borrowed view into an owned value.
+    /// Returns an owned copy of a borrowed view.
     ///
-    /// The view is taken to be canonical, as every view from a constructed value is.
+    /// The view must be canonical, as every view of a constructed value is.
     pub(crate) fn from_ref(value: ValueRef<'_>) -> Self {
         match value {
             ValueRef::Iri(iri) => Self::from(iri.to_owned()),
@@ -372,7 +367,7 @@ impl From<Decimal> for DataValue {
 }
 
 impl From<workspace::Big> for DataValue {
-    /// Routes a workspace value, which is bounded already, to its canonical form.
+    /// Converts a workspace value, which is within the length limit, into its canonical form.
     fn from(value: workspace::Big) -> Self {
         Self::from(Decimal::from(value))
     }
@@ -411,29 +406,19 @@ impl fmt::Debug for DataValue {
 }
 
 impl fmt::Display for DataValue {
-    /// Writes the value in canonical Nemo term syntax:
-    /// IRIs in angle brackets,
-    /// strings quoted with `\` and `"` escaped,
-    /// floats and doubles with their `f` and `d` suffixes,
-    /// or as typed literals when not finite,
-    /// dates, times, durations and unsupported datatypes as typed literals,
-    /// and structured values recursively.
-    ///
-    /// One value has one rendering, and distinct values render distinctly.
-    /// Every rendering re-parses as a term denoting this value,
-    /// except a null, which renders as `_:id` in the syntax of data, not of programs.
+    /// Writes the value in canonical term syntax, as its [view](Self::as_ref) does.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.as_ref())
     }
 }
 
 impl DataValue {
-    /// Returns whether two values are equal. See [ValueRef::value_eq].
+    /// Returns whether two values are equal by value, as [ValueRef::value_eq] does.
     pub fn value_eq(&self, other: &Self) -> Result<bool, EvaluationError> {
         self.as_ref().value_eq(other.as_ref())
     }
 
-    /// Returns the order of two values. See [ValueRef::value_cmp].
+    /// Returns the order of two values by value, as [ValueRef::value_cmp] does.
     pub fn value_cmp(&self, other: &Self) -> Result<Option<Ordering>, EvaluationError> {
         self.as_ref().value_cmp(other.as_ref())
     }
@@ -494,6 +479,7 @@ mod tests {
         DataValue::typed_literal(&format!("{}{datatype}", xsd::NAMESPACE), lexical)
     }
 
+    /// The operators and comparisons of owned values give the results of their views.
     #[test]
     fn operators_and_comparisons_forward_to_the_view() {
         let (seven, two) = (DataValue::integer(7), DataValue::integer(2));
@@ -510,6 +496,7 @@ mod tests {
         assert_eq!(seven.value_cmp(&two), left.value_cmp(right));
     }
 
+    /// Every NaN becomes the same value, while the two zeros stay distinct.
     #[test]
     fn floats_canonicalize_nans() {
         assert_eq!(DataValue::double(f64::NAN), DataValue::double(-f64::NAN));
@@ -520,6 +507,7 @@ mod tests {
         assert_ne!(DataValue::double(-0.0), DataValue::double(0.0));
     }
 
+    /// Float and double literals accept only XSD's lexical forms.
     #[test]
     fn float_literals_take_the_xsd_form_only() {
         assert_eq!(typed("float", "INF"), Some(DataValue::float(f32::INFINITY)));
@@ -539,7 +527,7 @@ mod tests {
             assert_eq!(typed("double", lexical), None, "{lexical:?}");
         }
 
-        // The rendering of a special value re-parses as the same term.
+        // A special value is written as a typed literal that is parsed back as the same value.
         for value in [
             DataValue::double(f64::INFINITY),
             DataValue::double(f64::NEG_INFINITY),
@@ -556,6 +544,8 @@ mod tests {
         }
     }
 
+    /// A literal of a supported datatype becomes its value,
+    /// and a literal of another datatype becomes an other value.
     #[test]
     fn typed_literals_of_native_datatypes_take_their_values() {
         assert_eq!(typed("string", "hello"), Some(DataValue::string("hello")));
@@ -569,6 +559,8 @@ mod tests {
         assert_eq!(DataValue::other(xsd::INTEGER, "42"), None);
     }
 
+    /// A literal of a bounded integer datatype becomes an integer
+    /// if its value lies within the bounds.
     #[test]
     fn derived_integer_types_fold_into_integers_within_their_bounds() {
         for datatype in [
@@ -605,7 +597,7 @@ mod tests {
             );
         }
 
-        // Outside the bound: not a value of the type.
+        // A value outside the bounds is not a value of the datatype.
         assert_eq!(typed("byte", "128"), None);
         assert_eq!(typed("unsignedByte", "-1"), None);
         assert_eq!(typed("positiveInteger", "0"), None);
@@ -625,7 +617,7 @@ mod tests {
             Some(DataValue::integer(0))
         );
 
-        // Beyond 64 bits the value is wide, in the bound or not.
+        // Beyond the 64-bit range, an integer is stored wide, and the bounds still apply.
         let wide = typed("unsignedLong", "18446744073709551615").expect("within the bound");
         assert!(matches!(
             wide.as_ref(),
@@ -639,6 +631,7 @@ mod tests {
         assert_eq!(typed("unsignedLong", "18446744073709551616"), None);
     }
 
+    /// An `xsd:dateTimeStamp` becomes a dateTime only if it has a timezone offset.
     #[test]
     fn datetime_literals_fold_and_validate() {
         assert_eq!(
@@ -648,11 +641,14 @@ mod tests {
         assert_eq!(typed("dateTimeStamp", "2024-01-01T00:00:00"), None);
         assert_eq!(typed("dateTime", "2024-01-01"), None);
 
-        // Sub-millisecond fractions and far years are values, not malformed input.
+        // Fractions finer than a millisecond and distant years are values,
+        // not malformed lexical forms.
         assert!(typed("dateTime", "2024-01-01T00:00:00.1234Z").is_some());
         assert!(typed("dateTime", "-13798000000-01-01T00:00:00Z").is_some());
     }
 
+    /// Date and time literals become values only if they are valid,
+    /// and `24:00:00` is the start of the next day.
     #[test]
     fn date_and_time_literals_validate() {
         assert_eq!(
@@ -669,6 +665,7 @@ mod tests {
         assert_eq!(typed("time", "25:00:00"), None);
     }
 
+    /// A duration literal becomes a value of the most specific duration domain.
     #[test]
     fn duration_literals_fold_into_the_most_specific_domain() {
         let domain = |datatype, lexical| typed(datatype, lexical).map(|value| value.domain());
@@ -686,7 +683,7 @@ mod tests {
         );
         assert_eq!(domain("duration", "P1MT1S"), Some(ValueDomain::Duration));
 
-        // The derived types keep to their restricted lexical forms.
+        // The derived datatypes accept only their restricted lexical forms.
         assert_eq!(typed("dayTimeDuration", "P1Y"), None);
         assert_eq!(typed("dayTimeDuration", "P1M"), None);
         assert_eq!(typed("yearMonthDuration", "P1D"), None);
@@ -697,6 +694,7 @@ mod tests {
         assert_eq!(rendered, format!("\"P1D\"^^<{}>", xsd::DAY_TIME_DURATION));
     }
 
+    /// A value of every kind of representation is unchanged by a round trip through its view.
     #[test]
     fn views_round_trip() {
         let values = [
@@ -730,6 +728,7 @@ mod tests {
         }
     }
 
+    /// An owned value and its view hash alike.
     #[test]
     fn owned_and_borrowed_hashing_agree() {
         let state = RandomState::new();

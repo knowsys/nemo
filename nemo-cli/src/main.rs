@@ -1,10 +1,10 @@
 //! The command line interface of the Nemo rule engine.
 //!
-//! `nmo` runs rule programs:
-//! it reads them, loads what they import, reasons to the fixpoint, writes what they export,
+//! `nmo` runs rule programs.
+//! It reads them, loads what they import, reasons to the fixpoint, writes what they export,
 //! and reports what happened.
-//! Everything it says about a program (parse errors, unsafe rules, dropped rows)
-//! is a [diagnostic](nemo_physical::diagnostics) rendered against the source it came from.
+//! It reports every problem with a program, such as a parse error, an unsafe rule or a dropped
+//! row, as a [diagnostic](nemo_physical::diagnostics) shown against the program's source.
 
 mod bug;
 mod dashboard;
@@ -17,16 +17,17 @@ mod stdout;
 use std::{process::ExitCode, thread};
 
 use clap::Parser;
-// The library's, so that the modules here reach it as `crate::arguments`.
+// The arguments are defined in the library, and this import lets the binary's modules
+// refer to them as `crate::arguments`.
 use nemo_cli::arguments;
 
 use crate::{arguments::Arguments, run::Run};
 
-/// The stack the run's thread reserves.
+/// The stack size of the run's thread, in bytes.
 ///
-/// Tracing recurses once per level of a proof, and a proof is as deep as its derivation,
-/// which the main thread's stack (a megabyte on Windows) does not hold for long chains.
-/// The reservation is address space, used only as deep as the run goes.
+/// Tracing recurses once per level of a proof, so a long chain of derivations needs a deep
+/// stack, deeper than the main thread's stack of one megabyte on Windows.
+/// The reservation is only address space, and memory is used only as deep as the run goes.
 const STACK_BYTES: usize = 1 << 30;
 
 /// Runs the program the command line describes.
@@ -38,6 +39,6 @@ fn main() -> ExitCode {
         .spawn(move || Run::new(&arguments).execute())
         .expect("the run's thread starts")
         .join()
-        // The hook reported the panic: exit as a panic does.
+        // The panic hook has reported the panic, so exit with the exit code of a panic.
         .unwrap_or(ExitCode::from(101))
 }

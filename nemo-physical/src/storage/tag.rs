@@ -2,18 +2,19 @@
 
 /// The type of a [StorageValue](super::StorageValue).
 ///
-/// The order of the tags defines the "storage order" of the values they identify.
-/// However, that order is not the semantic order of the values:
-/// every integer sorts before every decimal, for example,
-/// and every wide value after every compact one of its domain.
+/// The order of the tags is the first criterion of the [storage order](crate::storage).
+/// It is neither the term order nor the value order of the values:
+/// for example, every integer sorts before every decimal,
+/// and every wide value after every inline value of its domain.
 #[repr(u8)]
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Tag {
-    /// An id of an RDF term in the dictionary:
-    /// an IRI, a string, a language string, an other literal or a null.
+    /// The id of an RDF term in the dictionary,
+    /// an IRI, a plain or language-tagged string, a literal of another datatype, or a null.
     ///
     /// The name follows RDF, whose terms these are.
-    /// The term identity and the term order of the [values](crate::value) cover every value.
+    /// The term identity and the term order of the [values](crate::value) apply to every value,
+    /// not only to the values of this tag.
     #[default]
     Term = 0,
     /// A boolean.
@@ -30,7 +31,7 @@ pub enum Tag {
     Float = 6,
     /// A 64-bit floating point number.
     Double = 7,
-    /// An instant with a timezone offset, within the inline range.
+    /// A dateTime, with or without a timezone offset, within the inline range.
     DateTime = 8,
     /// An index into the dictionary's store of dateTimes beyond the inline range.
     WideDateTime = 9,
@@ -82,11 +83,11 @@ impl Tag {
 
 /// The type of a storage value whose payload fits in 32 bits.
 ///
-/// The store indices of the dictionary-backed tags fit,
-/// as the stores hold fewer than 2³² entries.
+/// The payload of a dictionary entry fits only while the entry's index is small enough,
+/// so the layout of a column checks its payloads before it uses this type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum Tag32 {
-    /// An id of an RDF term in the dictionary.
+    /// The id of an RDF term in the dictionary.
     Term,
     /// A boolean.
     Bool,
@@ -158,6 +159,8 @@ impl Tag32 {
 mod tests {
     use super::*;
 
+    /// Every tag converts to its byte and back, the bytes follow the order of the tags,
+    /// and a 32-bit tag converts back to its tag.
     #[test]
     fn bytes_round_trip_in_order() {
         let mut previous = None;

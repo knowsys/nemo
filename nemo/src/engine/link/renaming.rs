@@ -13,7 +13,9 @@ pub(super) struct InstanceRenaming<'a> {
     module: &'a InstantiatedModule,
     /// The instantiations the module itself makes.
     nested: &'a InstancesByAlias,
-    /// Their aliases: no name of the module may resolve to a name they own.
+    /// Their aliases.
+    ///
+    /// No name of the module may resolve to a name that they own.
     owned: Vec<String>,
 }
 
@@ -43,8 +45,8 @@ impl IdentifierRenaming for InstanceRenaming<'_> {
             // The engine matches these by their exact text, so they are not
             // names in the program's namespace and nothing rewrites them.
             IdentifierRole::Reserved => Ok(None),
-            // A value means the same thing everywhere; resolving it in
-            // the module's own scope is all an instantiation does to it.
+            // A value means the same thing everywhere, so resolving it in
+            // the module's own scope is all that an instantiation does to it.
             IdentifierRole::Value => Ok(Some(Identifier::Iri(
                 self.module.scope.resolve(identifier, span)?,
             ))),
@@ -66,14 +68,15 @@ impl IdentifierRenaming for InstanceRenaming<'_> {
     }
 
     fn global(&mut self, name: &str) -> Option<String> {
-        // A module's globals are the module's: it can neither read the
-        // using program's nor collide with them.
+        // A module's parameters belong to the module, so it can neither
+        // read the using program's parameters nor collide with them.
         Some(format!("{}{name}", self.module.namespace))
     }
 
     fn blank(&mut self, label: &str) -> Option<String> {
-        // A blank node names a value of the instance's own, as one names
-        // a value of the document in an RDF file: every instance has its own.
+        // A blank node names a value of the instance's own, as a blank node
+        // in an RDF file names a value of that document, so every instance
+        // has its own.
         Some(format!("{}{label}", self.module.namespace))
     }
 }

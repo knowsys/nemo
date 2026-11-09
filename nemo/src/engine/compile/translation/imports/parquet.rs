@@ -1,4 +1,4 @@
-//! Parquet imports: a file's columns into a predicate of its width.
+//! Parquet imports: loading a file's columns into a predicate with as many columns.
 
 use crate::{
     diagnostics::TranslationError,
@@ -42,8 +42,8 @@ impl<'a> Translator<'a> {
             return Ok(());
         }
         let file_arity = ParquetReader::arity(&path).map_err(ImportFailure::Reading)?;
-        // Named column variables are as many as the width, so the file
-        // disagrees with them.
+        // The import names as many columns as the width,
+        // so the file disagrees with the names.
         if file_arity != width && !import.variables.is_empty() {
             return Err(ImportFailure::Reading(
                 TranslationError::ImportColumnCount {
@@ -72,13 +72,13 @@ impl<'a> Translator<'a> {
         Ok(())
     }
 
-    /// Returns the width of a Parquet import, every file column kept, or `None` if a check
-    /// leaves it open.
+    /// Returns the number of columns of a Parquet import, all of them kept,
+    /// or `None` if a translation that reads no data leaves it open.
     ///
-    /// A registered predicate or a declaration fixes it.
-    /// Otherwise the file's schema does, read from the footer without the data.
-    /// A translation reading no data does not read the schema, and marks the predicate open
-    /// instead.
+    /// A registered predicate, a declaration or the directive's column names fix it.
+    /// Otherwise the file's schema does, which is read from the footer without the data.
+    /// A translation that reads no data does not read the schema,
+    /// and marks the predicate open instead.
     fn parquet_width(
         &mut self,
         import: &PendingImport,
@@ -105,11 +105,11 @@ impl<'a> Translator<'a> {
 
 #[cfg(not(feature = "parquet"))]
 impl<'a> Translator<'a> {
-    /// Returns an error for a Parquet import in a run of a build without the `parquet` feature,
+    /// Returns an error for a Parquet import in a build without the `parquet` feature,
     /// rather than misreading it.
     ///
-    /// A check accepts what this build cannot validate,
-    /// since the program may be meant for a build that can.
+    /// A check accepts the import and marks its predicate open,
+    /// since the program may be meant for a build that can validate it.
     pub(super) fn parquet_import(&mut self, import: &PendingImport) -> Result<(), ImportFailure> {
         use crate::engine::compile::translation::Purpose;
 

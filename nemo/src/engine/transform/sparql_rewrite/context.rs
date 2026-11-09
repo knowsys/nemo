@@ -1,5 +1,7 @@
 //! What the SPARQL rewrite knows of the program: its name scope and parameters,
 //! the candidate imports, and the declarations, writers and dependencies of its predicates.
+//!
+//! A *candidate* is a plain import over which the stage may rewrite rules.
 
 use std::collections::{HashMap, HashSet};
 
@@ -14,15 +16,15 @@ use crate::{
     pipeline::{NameScope, StatementId},
 };
 
-/// A plain import the stage may rewrite rules over.
+/// A plain import over which the stage may rewrite rules.
 pub(super) struct CandidateImport {
     /// The directive's statement.
     pub(super) id: StatementId,
     /// The directive.
     pub(super) directive: ImportDirective,
-    /// Its validated query.
+    /// The import's validated query.
     pub(super) query: SparqlQuery,
-    /// The local part of the predicate's name, seeding fresh names.
+    /// The local part of the predicate's name, from which fresh names are made.
     pub(super) stem: String,
 }
 
@@ -39,10 +41,11 @@ impl CandidateImport {
             .unwrap_or_default()
     }
 
-    /// Returns whether the query is never merged with another:
-    /// it names its own dataset, which applies to a whole query,
-    /// or it [keeps its variable names](SparqlQuery::keeps_names),
-    /// which a second instance in one query could not.
+    /// Returns whether the query is never merged with another.
+    ///
+    /// This is the case if it names its own dataset, which applies to a whole query,
+    /// or if it [keeps its variable names](SparqlQuery::keeps_names),
+    /// which a second instance in the same query could not.
     pub(super) fn stands_alone(&self) -> bool {
         self.query.dataset().is_some() || self.query.keeps_names()
     }
@@ -58,11 +61,14 @@ pub(super) struct RewriteContext {
     pub(super) candidates: HashMap<String, CandidateImport>,
     /// How many rule heads write each predicate.
     pub(super) writers: HashMap<String, usize>,
-    /// The declarations by resolved predicate name,
-    /// which a fresh import copies from the candidate imports it replaces.
+    /// The declarations by resolved predicate name.
+    ///
+    /// A fresh import copies its declaration from those of the candidate imports that it
+    /// replaces.
     pub(super) declarations: HashMap<String, DeclareDirective>,
-    /// Per rule head predicate, the predicates its rules read,
-    /// the dependency graph in which a binding must not close a negative cycle.
+    /// Per head predicate, the predicates that its rules read.
+    ///
+    /// This is the dependency graph in which a binding must not close a negative cycle.
     dependencies: HashMap<String, HashSet<String>>,
 }
 
@@ -77,7 +83,7 @@ impl RewriteContext {
     }
 
     /// Returns whether the atoms at the given body positions depend on one of the rule's head
-    /// predicates, reading it, or reading what is derived from it.
+    /// predicates, by reading it or something derived from it.
     pub(super) fn recurs_through(&self, positions: &[usize], rule: &Rule) -> bool {
         let heads: HashSet<String> = rule
             .head
@@ -117,15 +123,16 @@ struct RewriteContextBuilder<'a> {
     parameters: HashMap<String, Term>,
     /// How many rule heads write each predicate.
     writers: HashMap<String, usize>,
-    /// The predicates that cannot be candidates: those written by facts,
-    /// rule heads, or `@input`, and those read by exports, outputs, or a
-    /// bound import's fetch.
+    /// The predicates that cannot be candidates.
+    ///
+    /// These are the predicates of facts, rule heads and `@input`,
+    /// and those that exports, outputs, or the fetch of a bound import read.
     sealed: HashSet<String>,
     /// The import directives of each predicate.
     imports: HashMap<String, Vec<(StatementId, &'a ImportDirective)>>,
     /// The declarations by resolved predicate name.
     declarations: HashMap<String, DeclareDirective>,
-    /// Per rule head predicate, the predicates its rules read.
+    /// Per head predicate, the predicates that its rules read.
     dependencies: HashMap<String, HashSet<String>>,
 }
 
@@ -148,7 +155,7 @@ impl<'a> RewriteContextBuilder<'a> {
         self.scope.resolve(predicate, None).ok()
     }
 
-    /// Notes a predicate that cannot be a candidate.
+    /// Records a predicate that cannot be a candidate.
     fn seal(&mut self, predicate: &Identifier) {
         if let Some(name) = self.resolve(predicate) {
             self.sealed.insert(name);
@@ -209,8 +216,9 @@ impl<'a> RewriteContextBuilder<'a> {
     }
 
     /// Records an import: its directive under its predicate,
-    /// and the binding predicates its fetch reads,
-    /// which must be stored as written and so cannot be candidates.
+    /// and the predicates of the atoms of its `where` clause, which its fetch reads.
+    ///
+    /// These predicates must be stored as written, so they cannot be candidates.
     fn import(&mut self, id: StatementId, import: &'a ImportDirective) {
         if let Some(name) = self.resolve(&import.predicate) {
             self.imports.entry(name).or_default().push((id, import));
@@ -220,17 +228,17 @@ impl<'a> RewriteContextBuilder<'a> {
         }
     }
 
-    /// Chooses the candidates and returns the finished context.
+    /// Chooses the candidates, and returns the finished context.
     ///
     /// A candidate is a plain `sparql` import that is the only statement defining its predicate,
     /// whose predicate only rule bodies read,
     /// and whose query is a string that parses, can be restricted,
     /// and binds every projected variable in every solution.
     ///
-    /// An unbound value becomes a fresh null in each fetch that delivers it, so a query that
-    /// may leave one stays one import, fetched once: rewritten into several fetches, its rules
-    /// would see different nulls for the same solution, and a bound fetch would lose the
-    /// solutions whose bound variables are unbound.
+    /// An unbound value becomes a fresh null in each fetch that delivers it.
+    /// So a query that may leave a variable unbound stays one import, fetched once.
+    /// Rewritten into several fetches, its rules would see different nulls for the same
+    /// solution, and a bound fetch would lose the solutions whose bound variables are unbound.
     /// A blank node, unlike an unbound value, has a label, which names one null in every
     /// response of the endpoint, so the fetches of a rewritten import agree on it.
     fn finish(self) -> RewriteContext {
@@ -281,7 +289,7 @@ fn option<'a>(directive: &'a ImportDirective, name: &str) -> Option<&'a Term> {
 }
 
 /// Returns the validated query of a plain import,
-/// if its `query` option is a string (or absent) and parses in the scope.
+/// if its `query` option is a string or absent, and the query parses in the scope.
 fn query_of(directive: &ImportDirective, scope: &NameScope) -> Option<SparqlQuery> {
     let text = match option(directive, "query") {
         None => nemo_io::sparql::DEFAULT_QUERY.to_owned(),
@@ -314,7 +322,10 @@ fn query_of(directive: &ImportDirective, scope: &NameScope) -> Option<SparqlQuer
     .ok()
 }
 
-/// Returns the local part of a predicate name, as a bare-name stem.
+/// Returns the local part of a predicate name as the stem of a bare name.
+///
+/// Characters that a bare name cannot contain are dropped,
+/// and a stem that would be empty or start with a digit gets the prefix `import`.
 fn stem(predicate: &Identifier) -> String {
     let local = match predicate {
         Identifier::Bare(name)

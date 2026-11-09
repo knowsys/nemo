@@ -1,5 +1,5 @@
-//! The concatenation: the column pieces built for consecutive shards of one trie,
-//! joined into the trie's columns.
+//! The concatenation of the column pieces built for consecutive shards of one trie
+//! into the trie's columns.
 
 use crate::{
     parallel::{self, Tasks},
@@ -7,10 +7,12 @@ use crate::{
 };
 
 impl Column {
-    /// Concatenates the columns built for consecutive shards of one trie,
-    /// each shard a column vector of the arity, into the trie's columns,
-    /// one column per task; see [concat](Self::concat).
-    /// A single shard's columns are the trie's.
+    /// Concatenates the columns built for consecutive shards of one trie
+    /// into the trie's columns.
+    ///
+    /// Each shard is a vector of `arity` column pieces.
+    /// Each column is concatenated on a task of its own, as [concat](Self::concat) describes.
+    /// The columns of a single shard are the trie's columns.
     pub(crate) fn concat_shards(arity: usize, mut shards: Vec<Vec<Column>>) -> Vec<Column> {
         if shards.len() == 1 {
             return shards.pop().expect("one shard");
@@ -31,12 +33,14 @@ impl Column {
         })
     }
 
-    /// Concatenates the pieces of one column built for consecutive shards of its rows:
-    /// the values in order, each piece's blocks shifted behind the values before it.
+    /// Concatenates the pieces of one column, built for consecutive shards of its rows.
     ///
-    /// With `continued`, the pieces' first blocks are one block cut across them,
+    /// The values are concatenated in order,
+    /// and each piece's block offsets are shifted by the number of values before the piece.
+    /// If `continued` is true, the first blocks of the pieces are one block cut across them,
     /// as in the first column, whose single block spans every row.
-    /// The pieces may differ in layout; the result takes the most compact layout that holds them all.
+    /// The pieces may differ in layout,
+    /// and the result has the most compact layout that can store them all.
     fn concat(pieces: &[Column], continued: bool) -> Column {
         let total: usize = pieces.iter().map(Column::len).sum();
         let blocks: usize = pieces.iter().map(|piece| piece.intervals().blocks()).sum();
@@ -127,6 +131,8 @@ mod tests {
         trie::construct::builder::ColumnBuilder,
     };
 
+    /// Concatenated pieces widen to the layout that can store them all,
+    /// and a continued first block stays one block.
     #[test]
     fn concatenated_pieces_widen_to_the_layout_holding_them_all() {
         let column32 = ColumnBuilder::single_block(&[StorageValue::term(1), StorageValue::term(2)]);

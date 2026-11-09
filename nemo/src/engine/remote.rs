@@ -1,27 +1,28 @@
-//! Remote data: the requests of engine methods that need data from the network,
-//! the client that sends them, and the methods suspended until their responses come.
+//! Remote data: the requests of the engine methods that need data from the network,
+//! the client that sends them, and the methods suspended until their responses arrive.
 //!
 //! A method needs data from the network at one point:
-//! - a loading method (`load`, `extend`, `reload`) for its remote imports,
-//!   before it registers or stores anything,
-//! - [reason](Engine::reason) for the fetches of a bound import, an import with a `where`
-//!   clause, at the rule application that fetches.
+//! - A loading method ([load](Engine::load), [extend](Engine::extend),
+//!   [reload](Engine::reload)) needs it for its remote imports,
+//!   before it registers or stores anything.
+//! - [reason](Engine::reason) needs it for the fetches of a bound import, which is an import
+//!   with a `where` clause, at the rule application that fetches.
 //!
 //! The *plain* methods, [load](Engine::load), [extend](Engine::extend),
 //! [reload](Engine::reload) and [reason](Engine::reason), send the requests through the
 //! engine's [Client] (see [set_client](Engine::set_client)), wait for the responses, and
 //! complete.
-//! The `start_*` methods, such as [start_load](Engine::start_load), send nothing:
-//! they return [Progress::Suspended] with the requests, each under a [RequestId],
-//! and the method is suspended until [resume](Engine::resume) has the responses under these
-//! ids and continues it.
-//! The engine holds at most one suspended method.
-//! While it is suspended, the methods that would change the program or the stored data are
-//! refused until it is completed or [discarded](Engine::discard_pending).
+//! The `start_*` methods, such as [start_load](Engine::start_load), send nothing.
+//! They return [Progress::Suspended] with the requests, each under a [RequestId],
+//! and the method is then *suspended*.
+//! [resume](Engine::resume) accepts the responses under these ids and continues the method.
+//! The engine has at most one suspended method.
+//! Until it is completed or [discarded](Engine::discard_pending),
+//! the methods that would change the program or the stored data are refused.
 //!
 //! The types of a request and its outcome are re-exported here:
 //! the [Request] itself, its [Response], the [Failure] that prevents one,
-//! the [Client] trait, and the [Retry] schedule a failed request is sent again on.
+//! the [Client] trait, and the [Retry] schedule on which a failed request is sent again.
 
 mod pending_request;
 mod progress;
@@ -47,24 +48,24 @@ use crate::{
     model::Statement,
 };
 
-/// A remote resource a loading method needs: the import that reads it, its name,
+/// A remote resource that a loading method needs: the import that reads it, its name,
 /// and the request that fetches it.
-///
-/// The import is the position of its directive among the statements of the staged program,
-/// under which the response is passed to the translation.
-/// The name is the one [add_resource](Engine::add_resource) registers the resource's bytes
-/// under, and the one diagnostics give.
 #[derive(Debug, Clone)]
 pub(super) struct ResourceRequest {
     /// The position of the import's directive among the statements translated.
+    ///
+    /// The response is passed to the translation under this position.
     pub(super) statement: usize,
-    /// The resource name.
+    /// The resource name, which diagnostics give.
+    ///
+    /// It is the name under which [add_resource](Engine::add_resource) would register the
+    /// resource's bytes, which are then read without a request.
     pub(super) resource: String,
-    /// The request fetching the resource.
+    /// The request that fetches the resource.
     pub(super) request: Request,
 }
 
-/// A remote resource a loading method fetched: the request, and the response to it.
+/// A remote resource that a loading method fetched: the request, and the response to it.
 #[derive(Debug, Clone)]
 pub(super) struct FetchedResource {
     /// The request.
@@ -73,21 +74,21 @@ pub(super) struct FetchedResource {
     pub(super) response: Response,
 }
 
-/// One request of a suspended call: its id, the key the call knows it by, and its
-/// response once given.
+/// One request of a suspended method: its id, the key by which the method knows it,
+/// and its response once given.
 #[derive(Debug, Clone)]
 pub(super) struct RequestSlot<K> {
-    /// The id the response is passed under.
+    /// The id under which the response is passed.
     pub(super) id: u64,
     /// The request.
     pub(super) request: Request,
-    /// The key the suspended call knows the request by.
+    /// The key by which the suspended method knows the request.
     pub(super) key: K,
     /// The response, once given.
     pub(super) response: Option<Response>,
 }
 
-/// The requests of a suspended call.
+/// The requests of a suspended method.
 #[derive(Debug, Clone)]
 pub(super) struct RequestSlots<K>(pub(super) Vec<RequestSlot<K>>);
 
@@ -99,6 +100,8 @@ impl<K> Default for RequestSlots<K> {
 
 impl<K> RequestSlots<K> {
     /// Adds a request under a fresh id.
+    ///
+    /// `ids` is the last id given, which this advances.
     pub(super) fn push(&mut self, request: Request, key: K, ids: &mut u64) {
         *ids += 1;
         self.0.push(RequestSlot {
@@ -125,7 +128,7 @@ impl<K> RequestSlots<K> {
             })
     }
 
-    /// Stores the response to a pending request, if one has the id.
+    /// Stores the response to the pending request with the given id, if there is one.
     pub(super) fn respond(&mut self, id: u64, response: Response) {
         if let Some(slot) = self
             .0
@@ -151,10 +154,11 @@ pub(super) enum LoadKind {
 /// The state of a loading method after the pipeline stages ran:
 /// its prepared translation, and the remote resources it fetched and still needs.
 ///
-/// A loading method prepares its translation, which registers and stores nothing,
-/// and is kept as this while it is suspended for the remote resources the preparation listed.
+/// A loading method first prepares its translation, which registers and stores nothing,
+/// and lists the remote resources it needs.
+/// While the method is suspended for them, it is kept as this state.
 /// Once every response is in, it commits from the prepared translation state,
-/// passing each response to the import that asked for it.
+/// and passes each response to the import that asked for it.
 #[derive(Debug)]
 pub(super) struct SuspendedLoad {
     /// The loading method.
@@ -162,12 +166,12 @@ pub(super) struct SuspendedLoad {
     /// The program, with the revisions the pipeline made of it.
     pub(super) staged: Staged,
     /// The number of rows added through [import_rows](Engine::import_rows) before a first load,
-    /// which the load took into its program.
+    /// which the load added to its program.
     ///
     /// They are the last statements of its written revision,
-    /// and go back to the engine if the suspended call is discarded.
+    /// and go back to the engine if the suspended method is discarded.
     pub(super) imported_rows: usize,
-    /// The translation state the preparation left, once the load was suspended for data,
+    /// The translation state that the preparation left, once the method was suspended,
     /// from which it commits without preparing again.
     pub(super) prepared: Option<TranslationState>,
     /// For a reload, the predicates it rebuilds because a stored import no longer covers what
@@ -177,14 +181,16 @@ pub(super) struct SuspendedLoad {
     pub(super) fetched: HashMap<usize, FetchedResource>,
     /// The requests sent, with their responses once given.
     pub(super) slots: RequestSlots<ResourceRequest>,
-    /// The imports asking for the same request as one in a slot,
-    /// which take its response once it comes.
+    /// The imports that ask for the same request as one in a slot,
+    /// and receive its response once it arrives.
     pub(super) sharing: Vec<ResourceRequest>,
-    /// Whether the loading call chose the context the next run evaluates in,
-    /// a choice undone if the call fails or is discarded.
+    /// Whether the method chose the evaluation context of the next run.
+    ///
+    /// The choice is undone if the method fails or is discarded.
     pub(super) chose_context: bool,
-    /// The index of the first report the loading call made,
-    /// from which its reports are withdrawn if it is discarded.
+    /// The index of the method's first report.
+    ///
+    /// If the method is discarded, its reports from this index on are withdrawn.
     pub(super) reports_from: usize,
 }
 
@@ -206,7 +212,8 @@ impl SuspendedLoad {
         }
     }
 
-    /// Returns which of the requests a preparation listed have not been fetched.
+    /// Returns the requests, among those a preparation listed, whose resources have not been
+    /// fetched.
     pub(super) fn missing(&self, requests: Vec<ResourceRequest>) -> Vec<ResourceRequest> {
         requests
             .into_iter()
@@ -216,9 +223,11 @@ impl SuspendedLoad {
 
     /// Adds the given requests under fresh ids.
     ///
-    /// A request is sent once: an import asking for the same request (URL, form and headers)
-    /// as one fetched or pending takes that one's response,
+    /// Each distinct request is sent once.
+    /// An import that asks for the same request (URL, form and headers) as one that was
+    /// fetched or is pending receives that request's response,
     /// so that imports of one document read the same bytes.
+    /// `ids` is the last id given, which this advances.
     pub(super) fn add_requests(&mut self, requests: Vec<ResourceRequest>, ids: &mut u64) {
         for request in requests {
             if let Some(response) = self.response_to(&request) {
@@ -246,7 +255,7 @@ impl SuspendedLoad {
     }
 
     /// Moves the responses given so far to the fetched resources,
-    /// keeping the requests still without a response pending.
+    /// and keeps the requests without a response pending.
     pub(super) fn take_responses(&mut self) {
         let slots = std::mem::take(&mut self.slots.0);
         for slot in slots {
@@ -276,13 +285,13 @@ impl SuspendedLoad {
 }
 
 /// A method suspended for data from the network.
-// An engine holds at most one, so the size difference costs nothing worth a box.
+// An engine has at most one, so the size difference costs nothing worth a box.
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
 pub(in crate::engine) enum Suspension {
-    /// A loading method, its translation prepared, suspended with its staged program.
+    /// A suspended loading method, with its staged program and prepared translation.
     Load(SuspendedLoad),
-    /// A reasoning run, suspended in the application of a fetch rule.
+    /// A run suspended in the rule application of a bound import.
     Reason(SuspendedReasoning),
 }
 
@@ -307,7 +316,7 @@ impl Suspension {
         }
     }
 
-    /// Stores the response to a pending request, if one has the id.
+    /// Stores the response to the pending request with the given id, if there is one.
     pub(in crate::engine) fn respond(&mut self, id: u64, response: Response) {
         match self {
             Suspension::Load(load) => load.slots.respond(id, response),
@@ -324,7 +333,7 @@ impl Suspension {
     }
 }
 
-/// The client an engine sends the requests of its methods through, if it has one.
+/// The client through which an engine sends the requests of its methods, if it has one.
 pub(super) struct ClientSlot(pub(super) Option<Box<dyn Client + Send>>);
 
 impl Default for ClientSlot {
@@ -348,8 +357,10 @@ impl std::fmt::Debug for ClientSlot {
 }
 
 impl Engine {
-    /// Refuses the given method, which would change the program or the stored data,
-    /// while another method is suspended for data from the network.
+    /// Fails if a method is suspended for data from the network.
+    ///
+    /// `refused` names the method that calls this, which would change the program or the
+    /// stored data.
     pub(super) fn refuse_while_suspended(&self, refused: &str) -> Result<(), Diagnostic> {
         let Some(suspension) = &self.suspension else {
             return Ok(());
@@ -362,8 +373,8 @@ impl Engine {
         .diagnostic())
     }
 
-    /// Passes the responses to the suspended method and continues it,
-    /// once every request it sent has its response.
+    /// Passes the responses to the suspended method,
+    /// and continues the method once every request it sent has a response.
     ///
     /// # Panics
     ///
@@ -407,10 +418,11 @@ impl Engine {
     /// Completes a method by sending the requests it is suspended for through the engine's
     /// client, until it is done.
     ///
+    /// `progress` is what the `start_*` form of the method returned.
     /// Without a client, the suspended method is discarded, and this fails.
-    /// If the engine's cancel token stops the wait for the client, this fails as cancelled:
-    /// a suspended loading method is discarded, having changed nothing,
-    /// and a suspended reasoning run stays suspended, for the next `reason()` to continue.
+    /// If the engine's cancel token stops the wait for the client, this fails as cancelled.
+    /// A suspended loading method is then discarded, having changed nothing,
+    /// and a suspended run stays suspended, for the next [reason](Engine::reason) to continue.
     pub(super) fn complete(
         &mut self,
         progress: Result<Progress, Diagnostic>,
@@ -446,8 +458,8 @@ impl Engine {
                 }
                 return Err(EngineError::WaitCancelled.diagnostic());
             };
-            // A client giving fewer responses than requests fails the rest,
-            // rather than leaving them to be sent again forever.
+            // If the client gives fewer responses than requests, the rest fail,
+            // rather than be sent again forever.
             let mut responses = responses.into_iter();
             let responses: Vec<(RequestId, Response)> = ids
                 .into_iter()
@@ -464,7 +476,7 @@ impl Engine {
         }
     }
 
-    /// Continues the suspended method with the responses given.
+    /// Continues the suspended method with the responses given, if a method is suspended.
     pub(in crate::engine) fn resume_suspended(&mut self) -> Result<Progress, Diagnostic> {
         match self.suspension.take() {
             None => Ok(Progress::Done),
@@ -486,12 +498,13 @@ impl Engine {
         }
     }
 
-    /// Discards the suspended method, if any, dropping its requests and their responses.
+    /// Discards the suspended method, if any, with its requests and their responses.
     ///
-    /// A suspended first load gives the rows added through
-    /// [import_rows](Engine::import_rows) before it back to the engine, and a suspended loading
-    /// call withdraws its reports and undoes its choice of the context.
-    /// A suspended run ends as a cancelled one does, reporting what its fetches skipped.
+    /// A suspended loading method withdraws its reports and undoes its choice of the
+    /// evaluation context.
+    /// A suspended first load also returns the rows that were added through
+    /// [import_rows](Engine::import_rows) before it to the engine.
+    /// A suspended run ends as a cancelled one does, and reports what its fetches skipped.
     pub(super) fn abandon(&mut self) {
         let load = match self.suspension.take() {
             Some(Suspension::Load(load)) => load,
@@ -517,8 +530,8 @@ impl Engine {
         }
     }
 
-    /// Records a suspended method, returning the progress of its call:
-    /// the requests it is suspended for.
+    /// Records a suspended method, and returns [Progress::Suspended] with the requests it is
+    /// suspended for.
     pub(super) fn suspend(&mut self, suspension: Suspension) -> Progress {
         self.suspension = Some(suspension);
         Progress::Suspended(self.pending())

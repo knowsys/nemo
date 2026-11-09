@@ -1,26 +1,21 @@
-//! Execution telemetry: the engine's event stream and its consumers.
+//! Execution telemetry: the events that the engine emits, and the sinks that consume them.
 //!
-//! The engine emits typed [EngineEvent]s into an installed [EventSink] as it loads and reasons:
-//! imports finishing, strata starting, rule applications with their phase accounting,
-//! iterations with their sizes, and the end of the run.
-//! Nothing is emitted until a sink is [installed](crate::engine::Engine::set_telemetry).
+//! As it loads and reasons, the engine emits [EngineEvent]s into the [EventSink]
+//! installed with [Engine::set_telemetry](crate::engine::Engine::set_telemetry).
+//! Nothing is emitted while no sink is installed.
+//! Two sinks are ready-made:
+//! - The [Recorder] aggregates the events into statistics and curves over the run,
+//!   which it writes as JSON snapshots.
+//! - The [TracingSink] emits each event as a `tracing` event under the [TARGET] target,
+//!   where a `tracing` subscriber receives it along with the engine's log lines.
+//!   Behind the `subscriber` feature, the `SinkLayer` decodes these back into events for any
+//!   sink.
 //!
-//! The [Recorder] is the ready-made consumer:
-//! it aggregates the stream into per-rule statistics and downsampled curves,
-//! snapshotted as JSON at any moment.
-//! A [ReportDocument] combines a recorder snapshot with the [RunFacts] of a finished run
-//! into one JSON document.
-//! The JSON report and the HTML page are both built from it.
-//! The [PhaseTable] lists the phase accounting under the names all reports use,
-//! the text summary included.
+//! A [ReportDocument] combines a recorder with the [RunFacts] of a finished run into one JSON
+//! document, which it can also render as an HTML page.
+//! The [PhaseTable] lists the phase accounting under the names that the documents use.
 //!
-//! Events can also be forwarded to `tracing`:
-//! the [TracingSink] emits each one as a `tracing` event under the
-//! [`nemo::telemetry`](TARGET) target,
-//! where a `tracing` subscriber receives it along with the engine's log lines.
-//! Behind the `subscriber` feature, the `SinkLayer` turns these back into events for any sink,
-//! the recorder included.
-//! Without a global `tracing` subscriber, a sink is installed on the engine directly:
+//! A sink can be installed on the engine directly, without a `tracing` subscriber:
 //!
 //! ```
 //! use std::sync::Arc;

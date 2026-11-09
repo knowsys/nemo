@@ -1,16 +1,16 @@
 //! How a predicate's columns map from an import source to its table.
 
-/// How columns get from an import source to a predicate's table.
+/// How the columns of an import source map to a predicate's table.
 ///
-/// The *source columns* are the import's full column list.
-/// A directive *keeps* some of them (a `skip` format drops the rest),
-/// and the kept columns are the predicate's columns as the program sees them,
-/// the ones its rules, facts, and declaration refer to.
-/// The [import plan](super::import_plan::ImportPlan) *prunes* kept columns no rule reads,
-/// and what is left is *delivered* to the table.
+/// - The *source columns* are all columns of the import.
+/// - A directive *keeps* the source columns whose format is not `skip`.
+///   The kept columns are the predicate's columns as the program sees them,
+///   the ones its rules, facts and declaration refer to.
+/// - The [import plan](super::import_plan::ImportPlan) *prunes* the kept columns that no rule
+///   reads, and the rest are *delivered* to the table.
 ///
-/// Every consumer asks this object for its widths and positions,
-/// so no two of them can disagree on what a position means.
+/// Positions are mapped between these lists only through a layout,
+/// so that no two parts of the compilation can disagree on what a position means.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ColumnLayout {
     /// Per source column, whether the directive keeps it.
@@ -20,11 +20,13 @@ pub(crate) struct ColumnLayout {
 }
 
 impl ColumnLayout {
-    /// Creates a layout keeping the given source columns.
+    /// Creates a layout from the source columns that the directive keeps,
+    /// and the kept columns that the plan prunes.
     ///
-    /// The pruning applies only if its length is the kept width.
-    /// Otherwise the predicate is used at another arity, which is reported elsewhere,
-    /// and nothing is pruned.
+    /// `kept` has one flag per source column, and `pruned` one per kept column.
+    /// The pruning applies only if its length is the number of kept columns.
+    /// Otherwise nothing is pruned, since the predicate is used at another arity,
+    /// which is an error of its own.
     pub(super) fn new(kept: Vec<bool>, pruned: Option<&[bool]>) -> Self {
         let width = kept.iter().filter(|&&keep| keep).count();
         let pruned = match pruned {
@@ -34,23 +36,23 @@ impl ColumnLayout {
         Self { kept, pruned }
     }
 
-    /// Creates a layout of the given width with every column kept.
+    /// Creates a layout of `width` source columns, all of them kept,
+    /// with `pruned` as for [new](Self::new).
     pub(super) fn whole(width: usize, pruned: Option<&[bool]>) -> Self {
         Self::new(vec![true; width], pruned)
     }
 
-    /// Returns the source width: the number of source columns.
+    /// Returns the number of source columns.
     pub(crate) fn source_width(&self) -> usize {
         self.kept.len()
     }
 
-    /// Returns the kept width: the predicate's columns as the program sees
-    /// them.
+    /// Returns the number of kept columns, which is the predicate's arity in the program.
     pub(crate) fn kept(&self) -> usize {
         self.pruned.len()
     }
 
-    /// Returns the delivered width: the table's arity.
+    /// Returns the number of delivered columns, which is the table's arity.
     pub(crate) fn delivered(&self) -> usize {
         self.pruned.iter().filter(|&&pruned| !pruned).count()
     }
@@ -60,13 +62,12 @@ impl ColumnLayout {
         self.pruned.contains(&true)
     }
 
-    /// Returns whether a kept column, by its position among the kept ones, is
-    /// pruned.
+    /// Returns whether the kept column at position `kept` is pruned.
     pub(crate) fn is_pruned(&self, kept: usize) -> bool {
         self.pruned.get(kept).copied().unwrap_or(false)
     }
 
-    /// Returns the position a kept column takes among the delivered ones,
+    /// Returns the position among the delivered columns of the kept column at position `kept`,
     /// or `None` if it is pruned.
     pub(crate) fn delivered_position(&self, kept: usize) -> Option<usize> {
         if self.is_pruned(kept) {
@@ -81,8 +82,8 @@ impl ColumnLayout {
         )
     }
 
-    /// Returns the position among the kept columns of a delivered column,
-    /// or `None` if fewer columns are delivered.
+    /// Returns the position among the kept columns of the delivered column at position
+    /// `delivered`, or `None` if fewer columns are delivered.
     pub(crate) fn kept_position(&self, delivered: usize) -> Option<usize> {
         self.pruned
             .iter()
@@ -92,7 +93,7 @@ impl ColumnLayout {
             .map(|(kept, _)| kept)
     }
 
-    /// Returns whether a source column reaches the table: kept and not pruned.
+    /// Returns whether a source column is delivered, which means kept and not pruned.
     pub(crate) fn delivers(&self, column: usize) -> bool {
         self.delivered_source(column).is_some()
     }
@@ -102,7 +103,7 @@ impl ColumnLayout {
         !self.kept.get(column).copied().unwrap_or(false)
     }
 
-    /// Returns the position a source column takes among the delivered ones,
+    /// Returns the position among the delivered columns of a source column,
     /// or `None` if the directive skips it or the plan prunes it.
     pub(crate) fn delivered_source(&self, column: usize) -> Option<usize> {
         if !self.kept.get(column).copied().unwrap_or(false) {
@@ -119,10 +120,11 @@ impl ColumnLayout {
             .collect()
     }
 
-    /// Returns a list over the kept columns reduced to the delivered ones.
+    /// Returns a list with one item per kept column, reduced to the items of the delivered
+    /// columns.
     ///
-    /// A list of another width is returned unchanged:
-    /// it belongs to a use of the predicate at another arity, which is reported elsewhere.
+    /// A list of another length is returned unchanged,
+    /// since it belongs to a use of the predicate at another arity, which is an error of its own.
     pub(crate) fn deliver<T>(&self, kept: Vec<T>) -> Vec<T> {
         if kept.len() != self.kept() {
             return kept;
@@ -139,6 +141,8 @@ impl ColumnLayout {
 mod tests {
     use super::*;
 
+    /// A directive's skipped columns and the plan's pruned columns combine,
+    /// and positions map correctly between source, kept and delivered columns.
     #[test]
     fn skips_and_pruning_compose_over_the_source_columns() {
         // Four source columns: the directive skips the second, and the
@@ -156,6 +160,7 @@ mod tests {
         assert_eq!(layout.deliver(vec!['a', 'b', 'c']), ['b', 'c']);
     }
 
+    /// A pruning whose length is not the number of kept columns prunes nothing.
     #[test]
     fn pruning_at_another_width_does_not_apply() {
         let layout = ColumnLayout::whole(2, Some(&[true, false, false]));

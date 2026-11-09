@@ -2,10 +2,12 @@
 
 use super::*;
 
+/// A type conflict over a constructor whose name is close to a builtin's hints at the builtin,
+/// while the name alone, without a conflict, gets no hint.
 #[test]
 fn a_type_conflict_hints_at_a_near_builtin() {
-    // Only a conflict earns the hint: `loh(?x)` into a declared
-    // double column is probably a misspelled `LOG`.
+    // `loh(?x)` builds a tuple, so writing it into a declared double
+    // column is probably a misspelled `LOG`.
     let (program, _) = Program::parse(
         "@declare out(v: double) . n(1) . out(loh(?x)) :- n(?x) .",
         FileId::new(0),
@@ -40,9 +42,11 @@ fn a_type_conflict_hints_at_a_near_builtin() {
     assert!(engine.reports().is_empty(), "{:?}", engine.reports());
 }
 
+/// `iri` and `langstring` can be declared like any base type,
+/// and the inferred types are written back under these names.
 #[test]
 fn iri_and_langstring_declare_like_any_base_type() {
-    // Every inferred kind has a declaration spelling; a fact
+    // Every inferred kind can be declared, and a fact
     // provably outside the declared kind is an error.
     let program = parse(
         "@declare said(who: iri, what: langstring) .
@@ -55,7 +59,7 @@ fn iri_and_langstring_declare_like_any_base_type() {
     assert_eq!(problem.code(), codes::FACT_OUTSIDE_DECLARATION);
     assert_eq!(problem.field("declared"), Some("langstring"));
 
-    // The declared types read back as declared: the display and the
+    // The declared types are written back as declared, since the display and the
     // declaration use the same names.
     let (program, _) = Program::parse(
         "@declare said(who: iri, what: langstring) . said(alice, \"hi\"@en) .",
@@ -71,6 +75,7 @@ fn iri_and_langstring_declare_like_any_base_type() {
     assert_eq!(rendered, ["iri", "langstring"]);
 }
 
+/// A declared union accepts the values of each of its members, and no other value.
 #[test]
 fn a_union_admits_the_values_of_its_members() {
     // `null` names the nulls an existential rule invents, and `number`
@@ -108,6 +113,8 @@ fn a_union_admits_the_values_of_its_members() {
     );
 }
 
+/// A rule's conditions narrow the types of the columns it writes,
+/// and conditions that no value meets at once make the rule never fire.
 #[test]
 fn conditions_narrow_what_a_rule_writes() {
     let rendered = |engine: &Engine, predicate: &str| -> Vec<String> {
@@ -151,6 +158,7 @@ fn conditions_narrow_what_a_rule_writes() {
     );
 }
 
+/// A `@type` cannot define a label named like a base type.
 #[test]
 fn base_type_names_cannot_be_declared_with_type() {
     let (program, _) = Program::parse("@type langstring(int) .", FileId::new(0));
@@ -165,6 +173,8 @@ fn base_type_names_cannot_be_declared_with_type() {
     assert_eq!(problem.field("name"), Some("langstring"));
 }
 
+/// A join of columns whose types share no value is reported as never firing,
+/// and the rule still runs.
 #[test]
 fn a_disjoint_join_is_warned_and_still_runs() {
     let mut engine = run("
@@ -182,6 +192,7 @@ fn a_disjoint_join_is_warned_and_still_runs() {
     );
 }
 
+/// A condition that always fails to evaluate on its column's type is reported.
 #[test]
 fn a_condition_that_cannot_hold_is_warned() {
     let engine = run("
@@ -198,10 +209,12 @@ fn a_condition_that_cannot_hold_is_warned() {
     );
 }
 
+/// The analysis reports nothing for a condition that some value of its column's type can
+/// meet.
 #[test]
 fn the_analysis_stays_silent_where_a_value_could_fit() {
-    // `?x` can be an integer, so nothing is provable, and provable is
-    // the only thing reported.
+    // `?x` can be an integer, so nothing is provable,
+    // and the analysis reports only what it proves.
     let engine = run("
         p(1) . p(\"a\") .
         q(?x) :- p(?x), ?x > 0 .
@@ -209,6 +222,7 @@ fn the_analysis_stays_silent_where_a_value_could_fit() {
     assert!(engine.reports().is_empty(), "{:?}", engine.reports());
 }
 
+/// A fact with a value outside its declared type is an error.
 #[test]
 fn a_fact_violating_its_declaration_is_an_error() {
     let (program, _) = Program::parse("@declare p(int) . p(\"a\") .", FileId::new(0));
@@ -222,6 +236,7 @@ fn a_fact_violating_its_declaration_is_an_error() {
     );
 }
 
+/// A declared tuple type checks the elements of a fact's tuple.
 #[test]
 fn a_declared_shape_checks_fact_elements() {
     // The declaration reaches inside the tuple: a string where an
@@ -242,10 +257,11 @@ fn a_declared_shape_checks_fact_elements() {
     assert_eq!(problem.field("declared"), Some("(int, int)"));
 }
 
+/// A pattern whose arity differs from the declared tuple type never matches,
+/// and its rule is reported as never firing.
 #[test]
 fn a_pattern_against_a_declared_shape_proves_dead() {
-    // The declared arity is two; a three-element pattern can never
-    // match, and the guard's conjunction is provably false.
+    // The declared arity is two, so a three-element pattern can never match.
     let mut engine = run("
         @declare city(location: (int, int), name: string) .
         city((51, 13), \"Dresden\") .
@@ -263,10 +279,10 @@ fn a_pattern_against_a_declared_shape_proves_dead() {
     );
 }
 
+/// Without a declaration, the arity of the facts' tuples alone proves that a pattern of
+/// another arity never matches.
 #[test]
 fn a_pattern_against_the_facts_shape_proves_dead() {
-    // No declaration: the facts alone fix the arity, and the
-    // mismatched pattern is proven dead the same way.
     let engine = run("
         p((1, 2)) . p((3, 4)) .
         q(?x, ?y, ?z) :- p((?x, ?y, ?z)) .
@@ -277,6 +293,8 @@ fn a_pattern_against_the_facts_shape_proves_dead() {
     assert_eq!(warning.code(), codes::NEVER_FIRES, "{warning:?}");
 }
 
+/// A pattern with another label than the column's tuples never matches,
+/// and its rule is reported as never firing.
 #[test]
 fn a_label_mismatch_proves_dead() {
     let engine = run("
@@ -289,10 +307,11 @@ fn a_label_mismatch_proves_dead() {
     assert_eq!(warning.code(), codes::NEVER_FIRES, "{warning:?}");
 }
 
+/// An accessor passes the declared element type on to the condition that reads it.
 #[test]
 fn element_types_flow_through_accessors() {
-    // The element type reaches the condition: a string function
-    // over a provably integer element can never evaluate.
+    // A string function over an element that is provably an integer
+    // can never evaluate.
     let engine = run("
         @declare city(location: (int, int), name: string) .
         city((51, 13), \"Dresden\") .
@@ -304,10 +323,11 @@ fn element_types_flow_through_accessors() {
     assert_eq!(warning.code(), codes::NEVER_FIRES, "{warning:?}");
 }
 
+/// A column with tuples of two arities widens to the bare tuple type,
+/// and a pattern of either arity is not reported.
 #[test]
 fn mixed_shapes_widen_and_stay_quiet() {
-    // Two arities in one column: the shape widens to the bare
-    // kind, and provable is the only thing reported.
+    // The analysis reports only what it proves.
     let mut engine = run("
         p((1, 2)) . p((1, 2, 3)) .
         q(?x, ?y, ?z) :- p((?x, ?y, ?z)) .
@@ -316,6 +336,7 @@ fn mixed_shapes_widen_and_stay_quiet() {
     assert!(engine.reports().is_empty(), "{:?}", engine.reports());
 }
 
+/// An unlabeled tuple type does not accept a labeled tuple.
 #[test]
 fn an_unlabeled_tuple_type_is_exactly_unlabeled() {
     // `(int, int)` and `point(int, int)` are different values, so
@@ -331,6 +352,7 @@ fn an_unlabeled_tuple_type_is_exactly_unlabeled() {
     );
 }
 
+/// The bare types `tuple` and `map` accept any value of their kind and no other.
 #[test]
 fn bare_structure_types_declare_the_kind() {
     let (program, _) = Program::parse("@declare p(tuple) . p({a = 1}) .", FileId::new(0));
@@ -351,10 +373,10 @@ fn bare_structure_types_declare_the_kind() {
     assert!(engine.reports().is_empty(), "{:?}", engine.reports());
 }
 
+/// A `@type` checks every ground construction of its label, anywhere in a value.
 #[test]
 fn a_type_declaration_checks_ground_constructions() {
-    // The wrapper type: `angle(decimal)` takes decimals (integers
-    // canonicalize into them), anywhere in a value.
+    // `angle(decimal)` accepts decimals, and integers, which are decimals too.
     let mut engine = run("
         @type angle(decimal) .
         a(angle(1.5)) . a(angle(2)) .
@@ -378,10 +400,10 @@ fn a_type_declaration_checks_ground_constructions() {
     }
 }
 
+/// A `@type` checks what a rule's construction of its label fixes,
+/// the arity and the ground parts, before anything runs, each with an error of its own.
 #[test]
 fn a_type_declaration_checks_rule_constructions() {
-    // What is static at the site (the arity and the ground parts)
-    // errors before anything runs, each as its own kind.
     for (bad, code) in [
         (
             "@type point(int, int) . n(1) . q(point(?x, ?x, ?x)) :- n(?x) .",
@@ -411,10 +433,12 @@ fn a_type_declaration_checks_rule_constructions() {
     assert_eq!(count(&mut engine, "q"), 2);
 }
 
+/// A `@type` checks the values that a rule's variables put into a construction of its label,
+/// and accepts the construction only if they provably fit.
 #[test]
 fn a_type_declaration_checks_what_variables_build() {
     // The values a variable can hold flow into the fields it builds, so a
-    // construction no value can fit errors, though `q` declares nothing.
+    // construction that no value can fit is an error, though `q` declares nothing.
     for bad in [
         "@type angle(decimal) . p(\"x\") . q(angle(?v)) :- p(?v) .",
         "@type angle(decimal) . p(\"x\") . q((angle(?v), 1)) :- p(?v) .",
@@ -439,7 +463,7 @@ fn a_type_declaration_checks_what_variables_build() {
         .load(program)
         .expect_err("the column excludes the built value");
     assert_eq!(problem.code(), codes::RULE_WRITES_OUTSIDE, "{problem:?}");
-    // Values that may not fit are an error too: every construction must provably fit.
+    // Values that may not fit are an error too, since every construction must provably fit.
     let problem = Engine::new()
         .load(parse(
             "@type angle(decimal) . p(1.5) . p(\"x\") . q(angle(?v)) :- p(?v) .",
@@ -459,6 +483,8 @@ fn a_type_declaration_checks_what_variables_build() {
     assert_eq!(count(&mut engine, "q"), 1);
 }
 
+/// A label declared with `@type` is a type, which other declarations can use,
+/// and which a bare value of its content does not fit.
 #[test]
 fn a_declared_label_is_a_type() {
     // The name can be used in type expressions, including later `@type`
@@ -487,9 +513,11 @@ fn a_declared_label_is_a_type() {
     );
 }
 
+/// A recursive `@type` is checked by its label, so a value built by recursion fits at any
+/// length, and a fact is checked through every level.
 #[test]
 fn a_recursive_type_is_checked_by_its_label() {
-    // A value of the wrong kind is no tree.
+    // A value of the wrong kind is not a tree.
     let problem = Engine::new()
         .load(parse(
             "@type tree(int, tree, tree) . @declare t(root: tree) . t(5) .",
@@ -525,6 +553,8 @@ fn a_recursive_type_is_checked_by_its_label() {
     assert_eq!(problem.code(), codes::VALUE_OUTSIDE_TYPE, "{problem:?}");
 }
 
+/// A rule that may write a value outside its head's declaration is an error,
+/// with a note on where the value comes from and a hint at the condition that would fix it.
 #[test]
 fn a_write_not_shown_to_fit_is_an_error() {
     // One value of `p` fits and one does not, so the write is not shown to fit.
@@ -575,6 +605,8 @@ fn a_write_not_shown_to_fit_is_an_error() {
     );
 }
 
+/// The error for a construction that may not fit its `@type` notes where its fields' values
+/// come from, and hints at a condition that would make it fit.
 #[test]
 fn a_construction_not_shown_to_fit_says_where_its_fields_come_from() {
     let problem = Engine::new()
@@ -603,6 +635,8 @@ fn a_construction_not_shown_to_fit_says_where_its_fields_come_from() {
     );
 }
 
+/// The error for a computed head value that may not fit its declaration notes where the
+/// computation's inputs come from.
 #[test]
 fn a_computed_value_not_shown_to_fit_says_where_its_inputs_come_from() {
     // A string cannot reach the sum, whose evaluation drops its row,
@@ -628,6 +662,7 @@ fn a_computed_value_not_shown_to_fit_says_where_its_inputs_come_from() {
     );
 }
 
+/// For a declared union, the hint suggests the type tests of its members, combined.
 #[test]
 fn a_union_is_established_by_tests_combined() {
     let problem = Engine::new()
@@ -647,9 +682,11 @@ fn a_union_is_established_by_tests_combined() {
     );
 }
 
+/// A pattern whose arity differs from its label's `@type` never matches,
+/// and its rule is reported as never firing.
 #[test]
 fn a_pattern_against_a_declared_label_is_proved_dead_by_its_declaration() {
-    // The column holds points, which the label's declaration gives two
+    // The column contains points, which the label's declaration gives two
     // fields, so a pattern of three never matches.
     let engine = run("
         @type point(int, int) .
@@ -662,6 +699,8 @@ fn a_pattern_against_a_declared_label_is_proved_dead_by_its_declaration() {
     assert_eq!(warning.code(), codes::NEVER_FIRES, "{warning:?}");
 }
 
+/// Arithmetic and aggregates give results of the types their inputs determine:
+/// integers add and sum to integers, but a quotient of integers may be a decimal.
 #[test]
 fn arithmetic_and_aggregates_keep_their_types() {
     // Integers add to integers, and sum to one.
@@ -683,6 +722,8 @@ fn arithmetic_and_aggregates_keep_their_types() {
     assert_eq!(problem.code(), codes::RULE_MAY_WRITE_OUTSIDE, "{problem:?}");
 }
 
+/// A declaration that writes out the type of a label declared with `@type`, instead of
+/// naming the label, is an error with a hint to name it.
 #[test]
 fn a_declared_label_is_named_rather_than_written_out() {
     let problem = Engine::new()
@@ -701,6 +742,8 @@ fn a_declared_label_is_named_rather_than_written_out() {
     );
 }
 
+/// Rows added through [import_rows](Engine::import_rows) after a load are refused if they
+/// would break a declaration, and otherwise widen the inferred types.
 #[test]
 fn rows_added_after_a_load_keep_the_declarations() {
     let rendered = |engine: &Engine, predicate: &str| -> Vec<String> {
@@ -752,6 +795,7 @@ fn rows_added_after_a_load_keep_the_declarations() {
     assert_eq!(rendered(&engine, "q"), ["string | int"]);
 }
 
+/// An extension that would break a declaration is refused, and the loaded program is kept.
 #[test]
 fn an_extension_that_breaks_a_declaration_is_refused() {
     let mut engine = run("@declare q(int) . p(1) . q(?x) :- p(?x) .");
@@ -770,8 +814,8 @@ fn an_extension_that_breaks_a_declaration_is_refused() {
     assert_eq!(count(&mut engine, "q"), 1);
 }
 
-/// Debug builds hold every stored block to the inferred column types,
-/// so a value outside them, which would be a bug in the analysis, stops the run.
+/// Debug builds check every stored block against the inferred column types,
+/// so a value outside them, which would be a bug in the analysis, panics.
 #[cfg(debug_assertions)]
 #[test]
 #[should_panic(expected = "the analysis inferred")]
@@ -793,6 +837,8 @@ fn a_stored_value_outside_the_inferred_types_panics_in_debug_builds() {
     engine.assert_stored_types(&types, table, &rows);
 }
 
+/// A `@type` named like a base type or a builtin, an unnamed `@type`, a second `@type` of a
+/// label, and an unknown type in a declaration are errors.
 #[test]
 fn type_declaration_names_are_checked() {
     for (bad, expected) in [
@@ -812,6 +858,7 @@ fn type_declaration_names_are_checked() {
     }
 }
 
+/// A rule that writes a tuple of the wrong arity into a declared column is an error.
 #[test]
 fn a_rule_writing_a_wrong_shape_is_an_error() {
     // The head builds a three-element tuple into a column declared
@@ -828,6 +875,7 @@ fn a_rule_writing_a_wrong_shape_is_an_error() {
     assert_eq!(problem.code(), codes::RULE_WRITES_OUTSIDE, "{problem:?}");
 }
 
+/// A rule that provably writes a value outside its head's declaration is an error.
 #[test]
 fn a_rule_writing_outside_a_declaration_is_an_error() {
     let (program, _) = Program::parse(
@@ -840,6 +888,7 @@ fn a_rule_writing_outside_a_declaration_is_an_error() {
     assert_eq!(problem.code(), codes::RULE_WRITES_OUTSIDE, "{problem:?}");
 }
 
+/// A fact with another number of columns than its predicate's declaration is an error.
 #[test]
 fn a_declaration_fixes_the_arity() {
     let (program, _) = Program::parse("@declare p(int, int) . p(1) .", FileId::new(0));
@@ -849,10 +898,9 @@ fn a_declaration_fixes_the_arity() {
     assert_eq!(problem.code(), codes::DECLARED_ARITY, "{problem:?}");
 }
 
+/// A predicate used with two numbers of columns is an error at the second use.
 #[test]
 fn a_predicate_has_one_arity() {
-    // A name is one predicate; a second use with a different number
-    // of columns is refused where it happens.
     let program = parse("p(1) . p(1, 2) .");
     let problem = Engine::new()
         .load(program)
@@ -862,6 +910,9 @@ fn a_predicate_has_one_arity() {
     assert_eq!(problem.field("registered"), Some("1"));
 }
 
+/// Named arguments fail the load where they cannot be resolved to columns:
+/// without a declaration, for an unknown column, for a fact that leaves a column out,
+/// and for a column given twice.
 #[test]
 fn named_arguments_are_errors_where_they_cannot_resolve() {
     for (source, gap) in [
@@ -884,6 +935,8 @@ fn named_arguments_are_errors_where_they_cannot_resolve() {
     }
 }
 
+/// The inferred column types of a predicate can be read after a load,
+/// and a structured column's type is written with its shape.
 #[test]
 fn inferred_types_are_readable() {
     use nemo_physical::value::{Type, ValueDomain};
@@ -904,7 +957,7 @@ fn inferred_types_are_readable() {
             Type::of(ValueDomain::Integer)
         ]
     );
-    // A structured column reads back with its shape.
+    // A structured column's type is written with its shape.
     let [located] = engine
         .column_types("located")
         .expect("the predicate is known")
@@ -914,6 +967,7 @@ fn inferred_types_are_readable() {
     assert_eq!(TypeSyntax::of(located).to_string(), "point(int, int)");
 }
 
+/// A typed parameter with a value outside its type is an error.
 #[test]
 fn a_typed_parameter_rejects_a_value_outside_its_type() {
     let (program, _) = Program::parse("@parameter $limit: int = \"ten\" .\np(1) .", FileId::new(0));
@@ -923,12 +977,13 @@ fn a_typed_parameter_rejects_a_value_outside_its_type() {
     assert_eq!(problem.code(), codes::PARAMETER_OUTSIDE_TYPE, "{problem:?}");
 }
 
-/// The program reading two columns of a three-column import, so the middle one is pruned.
+/// A program that reads two columns of a three-column import, so the middle one is not
+/// stored.
 const PRUNED_IMPORT: &str = "@import c from csv { resource = \"c.csv\", format = (string, int, \
                              string) } .\nq(?s, ?z) :- c(?s, _, ?z) .\n@output q .";
 
-/// A row given to `import_rows` for an import stored without a column is checked at its
-/// columns as written, the pruned one included.
+/// A row given to [import_rows](Engine::import_rows) for an import stored without a column
+/// is checked at its columns as written, including the column that is not stored.
 #[test]
 fn rows_of_a_pruned_import_are_checked_at_their_written_columns() {
     let data = [("c.csv", "a,1,b\nc,2,d\n")];
@@ -965,8 +1020,8 @@ fn rows_of_a_pruned_import_are_checked_at_their_written_columns() {
     assert_eq!(count(&mut engine, "q"), 3);
 }
 
-/// A declaration an extension gives an import stored without a column is checked against
-/// the stored columns, each at its column as written.
+/// A declaration that an extension gives an import stored without a column is checked
+/// against the stored columns, each at its column as written.
 #[test]
 fn a_late_declaration_checks_a_pruned_import_at_its_written_columns() {
     let data = [("c.csv", "a,1,b\nc,2,d\n")];
@@ -986,7 +1041,7 @@ fn a_late_declaration_checks_a_pruned_import_at_its_written_columns() {
 }
 
 /// The note on where a write's values come from names the column as written,
-/// also where the loader leaves out columns before it.
+/// even where the import leaves out columns before it.
 #[test]
 fn origin_notes_name_the_written_column_of_a_pruned_import() {
     let mut engine = Engine::new();
@@ -1007,8 +1062,8 @@ fn origin_notes_name_the_written_column_of_a_pruned_import() {
     );
 }
 
-/// A rule writing values that cannot fit a declaration is told where they come from,
-/// and given no hint: no condition makes them fit.
+/// The error for a rule that writes values that cannot fit a declaration notes where they
+/// come from, and gives no hint, since no condition makes them fit.
 #[test]
 fn a_write_that_cannot_fit_names_its_origin_without_a_hint() {
     let problem = Engine::new()
@@ -1031,8 +1086,8 @@ fn a_write_that_cannot_fit_names_its_origin_without_a_hint() {
     assert!(problem.hints().is_empty(), "{problem:?}");
 }
 
-/// A dead rule's labels name what rules out every row, at the part of the rule
-/// written for it.
+/// The label of a rule that never fires names what rules out every row,
+/// at the part of the rule that causes it.
 #[test]
 fn never_firing_rules_are_labeled_at_their_cause() {
     // Rows dropped at run time are reported too, so the warning is looked up by its code.

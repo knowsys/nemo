@@ -1,6 +1,6 @@
 //! The datatypes of literals.
 //!
-//! This module contains the IRIs of the datatypes this crate supports,
+//! This module contains the IRIs of the datatypes that this crate supports,
 //! and the parsing of typed literals into the values they denote.
 
 use std::str::FromStr;
@@ -9,14 +9,14 @@ use crate::value::{DataValue, Date, DateTime, Double, Duration, Float, NumberRef
 
 /// Datatype IRIs in the [XML Schema](https://www.w3.org/TR/xmlschema11-2/) namespace.
 pub(crate) mod xsd {
-    /// The full IRI of a datatype in the XSD namespace.
+    /// Expands to the full IRI of the XSD datatype with the given local name.
     macro_rules! iri {
         ($local:literal) => {
             concat!("http://www.w3.org/2001/XMLSchema#", $local)
         };
     }
 
-    /// The namespace itself.
+    /// The XSD namespace, which every XSD datatype IRI starts with.
     pub(crate) const NAMESPACE: &str = iri!("");
     /// [`xsd:string`](https://www.w3.org/TR/xmlschema11-2/#string).
     pub(crate) const STRING: &str = iri!("string");
@@ -53,12 +53,14 @@ pub(crate) mod rdf {
 /// A datatype IRI, classified by how this crate represents its literals.
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum Datatype {
-    /// An XSD datatype whose lexical forms parse into native values.
+    /// An XSD datatype whose literals are parsed into values of their own domain,
+    /// such as numbers or dates.
     Native(NativeDatatype),
     /// `rdf:langString`, whose literals are language-tagged strings.
     LangString,
-    /// A datatype this crate has no special support for;
-    /// its literals keep their lexical form and IRI.
+    /// A datatype without native support in this crate.
+    ///
+    /// Its literals keep their lexical form and datatype IRI.
     Other,
 }
 
@@ -72,13 +74,14 @@ impl Datatype {
         }
     }
 
-    /// Returns whether this crate has no dedicated value for literals of the datatype.
+    /// Returns whether the datatype is [Other](Self::Other),
+    /// so that its literals keep their lexical form.
     pub(crate) fn is_other(self) -> bool {
         matches!(self, Self::Other)
     }
 }
 
-/// The XSD datatypes whose literals parse into native values.
+/// An XSD datatype whose literals are parsed into values of their own domain.
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum NativeDatatype {
     /// `xsd:string`.
@@ -93,13 +96,13 @@ pub(crate) enum NativeDatatype {
     Float,
     /// `xsd:double`.
     Double,
-    /// A type derived from `xsd:integer` by a bound on its values:
-    /// the fixed-width types and the sign-constrained ones.
+    /// A datatype derived from `xsd:integer` by bounds on its values,
+    /// such as `xsd:int` or `xsd:nonNegativeInteger`.
     Bounded(IntegerBound),
     /// `xsd:dateTime`.
     DateTime,
     /// [`xsd:dateTimeStamp`](https://www.w3.org/TR/xmlschema11-2/#dateTimeStamp),
-    /// a dateTime that must carry an offset.
+    /// a dateTime that must have a timezone offset.
     DateTimeStamp,
     /// `xsd:date`.
     Date,
@@ -107,14 +110,15 @@ pub(crate) enum NativeDatatype {
     Time,
     /// `xsd:duration`.
     Duration,
-    /// `xsd:dayTimeDuration`, a duration whose lexical has no years or months.
+    /// `xsd:dayTimeDuration`, a duration whose lexical form has no years or months.
     DayTimeDuration,
-    /// `xsd:yearMonthDuration`, a duration whose lexical has no days or time.
+    /// `xsd:yearMonthDuration`, a duration whose lexical form has no days or time.
     YearMonthDuration,
 }
 
-/// A numeric type
-/// [derived from `xsd:integer`](https://www.w3.org/TR/xmlschema11-2/#built-in-derived).
+/// An integer datatype
+/// [derived from `xsd:integer`](https://www.w3.org/TR/xmlschema11-2/#built-in-derived)
+/// by bounds on its values.
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum IntegerBound {
     /// [`xsd:long`](https://www.w3.org/TR/xmlschema11-2/#long), the 64-bit range.
@@ -125,13 +129,17 @@ pub(crate) enum IntegerBound {
     Short,
     /// [`xsd:byte`](https://www.w3.org/TR/xmlschema11-2/#byte), the 8-bit range.
     Byte,
-    /// [`xsd:unsignedLong`](https://www.w3.org/TR/xmlschema11-2/#unsignedLong), the unsigned 64-bit range.
+    /// [`xsd:unsignedLong`](https://www.w3.org/TR/xmlschema11-2/#unsignedLong),
+    /// the unsigned 64-bit range.
     UnsignedLong,
-    /// [`xsd:unsignedInt`](https://www.w3.org/TR/xmlschema11-2/#unsignedInt), the unsigned 32-bit range.
+    /// [`xsd:unsignedInt`](https://www.w3.org/TR/xmlschema11-2/#unsignedInt),
+    /// the unsigned 32-bit range.
     UnsignedInt,
-    /// [`xsd:unsignedShort`](https://www.w3.org/TR/xmlschema11-2/#unsignedShort), the unsigned 16-bit range.
+    /// [`xsd:unsignedShort`](https://www.w3.org/TR/xmlschema11-2/#unsignedShort),
+    /// the unsigned 16-bit range.
     UnsignedShort,
-    /// [`xsd:unsignedByte`](https://www.w3.org/TR/xmlschema11-2/#unsignedByte), the unsigned 8-bit range.
+    /// [`xsd:unsignedByte`](https://www.w3.org/TR/xmlschema11-2/#unsignedByte),
+    /// the unsigned 8-bit range.
     UnsignedByte,
     /// [`xsd:nonNegativeInteger`](https://www.w3.org/TR/xmlschema11-2/#nonNegativeInteger).
     NonNegative,
@@ -144,7 +152,8 @@ pub(crate) enum IntegerBound {
 }
 
 impl NativeDatatype {
-    /// Returns the native datatype with the given IRI, if it is one.
+    /// Returns the native datatype with the given IRI,
+    /// or `None` if the IRI names no native datatype.
     fn of(datatype: &str) -> Option<Self> {
         Some(match datatype.strip_prefix(xsd::NAMESPACE)? {
             "string" => Self::String,
@@ -176,16 +185,17 @@ impl NativeDatatype {
         })
     }
 
-    /// Returns the value a lexical form of this datatype denotes,
-    /// or `None` for a lexical the datatype does not accept.
+    /// Returns the value that a lexical form of this datatype denotes,
+    /// or `None` for a lexical form that the datatype does not accept.
     ///
-    /// - An `xsd:integer` lexical carries no point.
-    /// - An `xsd:decimal` lexical parses exactly.
-    /// - Floats take XSD's `INF` and `NaN` spellings.
-    /// - A derived integer type's lexical must lie within its bound.
-    /// - `dateTimeStamp` folds into `dateTime`.
-    /// - The three duration types fold into one value,
-    ///   and the derived ones hold to their restricted lexical forms.
+    /// - An `xsd:integer` lexical form has no decimal point.
+    /// - An `xsd:decimal` lexical form is parsed exactly.
+    /// - Floats and doubles accept XSD's spellings `INF` and `NaN`.
+    /// - The value of a bounded integer datatype must lie within its bounds.
+    /// - An `xsd:dateTimeStamp` must have an offset, and becomes a dateTime.
+    /// - All three duration datatypes become a [Duration].
+    ///   `xsd:dayTimeDuration` and `xsd:yearMonthDuration` accept only their restricted
+    ///   lexical forms.
     pub(crate) fn parse(self, lexical: &str) -> Option<DataValue> {
         match self {
             Self::String => Some(DataValue::string(lexical)),
@@ -217,10 +227,10 @@ impl NativeDatatype {
 }
 
 impl IntegerBound {
-    /// Returns the integer a lexical form of the bounded type denotes,
-    /// or `None` for malformed input and for a value outside the bound.
+    /// Returns the integer that a lexical form of the datatype denotes,
+    /// or `None` for a malformed lexical form or a value outside the bounds.
     fn parse(self, lexical: &str) -> Option<DataValue> {
-        /// Parses the integer of a lexical within a fixed-width range.
+        /// Parses a lexical form as an integer in the range of `T`.
         fn fixed<T: FromStr + Into<i64>>(lexical: &str) -> Option<DataValue> {
             lexical
                 .parse::<T>()
@@ -228,7 +238,8 @@ impl IntegerBound {
                 .map(|value| DataValue::integer(value.into()))
         }
 
-        /// Parses the integer of a lexical that satisfies the bound.
+        /// Parses a lexical form as an integer,
+        /// and returns it only if `admits` holds for it.
         fn signed(lexical: &str, admits: impl FnOnce(NumberRef) -> bool) -> Option<DataValue> {
             let value = DataValue::integer_from_lexical(lexical)?;
             let ValueRef::Number(integer) = value.as_ref() else {

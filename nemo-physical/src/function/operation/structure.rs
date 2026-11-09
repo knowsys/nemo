@@ -1,15 +1,17 @@
-//! Construction and destructuring of structured values.
+//! Building structured values, tuples and maps, and reading their parts.
 //!
-//! A tuple or a map is built from the values on the stack,
-//! so an error in any part is an error in the whole:
-//! a structure containing an error is not a structure.
+//! A structure built from operands of which one is an error is that error,
+//! since a structure cannot contain an error.
 
 use crate::{
     function::StackValue,
     value::{DataValue, EvaluationError, IriRef, MapValue, NumberRef, TupleValue, ValueRef},
 };
 
-/// Builds a tuple from its elements, in the order given.
+/// Builds a tuple from its elements, in the given order.
+///
+/// `label` is the label operand of a labeled tuple, which must be an IRI or a plain string.
+/// An error among the elements takes precedence over an error of the label.
 pub(crate) fn tuple<'a>(
     label: Option<&StackValue<'_>>,
     elements: &[StackValue<'_>],
@@ -29,6 +31,9 @@ pub(crate) fn tuple<'a>(
 }
 
 /// Builds a map from alternating keys and values.
+///
+/// `label` is as for [tuple()].
+/// A key given twice is [Malformed](EvaluationError::Malformed).
 pub(crate) fn map<'a>(label: Option<&StackValue<'_>>, pairs: &[StackValue<'_>]) -> StackValue<'a> {
     let flat = match owned(pairs) {
         Ok(flat) => flat,
@@ -51,22 +56,24 @@ pub(crate) fn map<'a>(label: Option<&StackValue<'_>>, pairs: &[StackValue<'_>]) 
 
     match built {
         Some(map) => StackValue::Owned(DataValue::map(map)),
-        // Pairs sharing a key describe no map: which value the key has
-        // would be a matter of which pair was written first.
+        // Two pairs with the same key describe no map,
+        // since the key's value would depend on which pair comes first.
         None => StackValue::Error(EvaluationError::Malformed),
     }
 }
 
-/// Returns the component of a structure:
-/// a tuple's element at a 0-based integer index, a map's value at a key.
+/// Returns the component of a structure at a key.
 ///
-/// An absent component is [Missing](EvaluationError::Missing);
-/// a non-structure, or a tuple indexed by anything but an integer, is a type mismatch.
+/// The component of a tuple is its element at a 0-based integer index,
+/// and the component of a map is its value at the key.
+/// An absent component is [Missing](EvaluationError::Missing).
+/// A value that is not a structure, or a tuple with a key that is not an integer,
+/// is a [TypeMismatch](EvaluationError::TypeMismatch).
 ///
-/// Takes the stack entries rather than views,
-/// so that a component of a borrowed structure comes back borrowed.
-/// Only a component of an owned intermediate, a structure built earlier in the same program,
-/// is cloned, since its storage does not outlive the stack slot.
+/// The operands are stack values rather than [ValueRef]s,
+/// so that a component of a borrowed structure is returned borrowed.
+/// Only a component of an owned structure, one built earlier in the same program, is cloned,
+/// since the owned structure does not outlive its place on the stack.
 pub(crate) fn get<'a>(structure: &StackValue<'a>, key: &StackValue<'_>) -> StackValue<'a> {
     let key = match structure.as_result().and(key.as_result()) {
         Ok(key) => key,
@@ -103,10 +110,10 @@ fn component<'a>(
     }
 }
 
-/// Returns the label of a structure: an IRI, or the empty string if it has none.
+/// Returns the label of a structure as an IRI, or the empty string if it has none.
 ///
-/// The operation is total over structures, like the language of a string,
-/// so that a label test in a condition is a comparison and never an error.
+/// Every structure has a result, as every literal has a [language](super::generic::language),
+/// so that a test of the label in a condition is a comparison and never an error.
 pub(crate) fn label<'a>(structure: &StackValue<'a>) -> StackValue<'a> {
     let as_value = |label: Option<&'a str>| match label {
         Some(label) => StackValue::Value(ValueRef::Iri(IriRef::new(label))),
@@ -140,7 +147,8 @@ pub(crate) fn length(value: ValueRef<'_>) -> StackValue<'static> {
     }
 }
 
-/// Returns a count as an integer value.
+/// Returns a count as an integer value, or an [Overflow](EvaluationError::Overflow)
+/// beyond 64 bits.
 fn count(length: usize) -> StackValue<'static> {
     match i64::try_from(length) {
         Ok(length) => StackValue::Value(ValueRef::Number(NumberRef::Decimal(length.into()))),
@@ -148,8 +156,7 @@ fn count(length: usize) -> StackValue<'static> {
     }
 }
 
-/// Returns the keys of a map as a tuple, in the canonical term order the map
-/// stores them in.
+/// Returns the keys of a map as a tuple, in term order.
 pub(crate) fn keys(value: ValueRef<'_>) -> StackValue<'static> {
     match value {
         ValueRef::Map(map) => {
@@ -161,6 +168,8 @@ pub(crate) fn keys(value: ValueRef<'_>) -> StackValue<'static> {
 }
 
 /// Joins a tuple of plain strings with a separator.
+///
+/// An element that is not a plain string is a [TypeMismatch](EvaluationError::TypeMismatch).
 pub(crate) fn join_strings(tuple: ValueRef<'_>, separator: ValueRef<'_>) -> StackValue<'static> {
     let (ValueRef::Tuple(tuple), ValueRef::String(separator)) = (tuple, separator) else {
         return StackValue::Error(EvaluationError::TypeMismatch);
@@ -182,7 +191,8 @@ pub(crate) fn join_strings(tuple: ValueRef<'_>, separator: ValueRef<'_>) -> Stac
 
 /// Splits a plain string at every occurrence of a separator.
 ///
-/// An empty separator is malformed, since it would occur between any two characters.
+/// An empty separator is [Malformed](EvaluationError::Malformed),
+/// since it would occur between any two characters.
 pub(crate) fn split_string(text: ValueRef<'_>, separator: ValueRef<'_>) -> StackValue<'static> {
     let (ValueRef::String(text), ValueRef::String(separator)) = (text, separator) else {
         return StackValue::Error(EvaluationError::TypeMismatch);
@@ -195,7 +205,7 @@ pub(crate) fn split_string(text: ValueRef<'_>, separator: ValueRef<'_>) -> Stack
     StackValue::Owned(DataValue::tuple(TupleValue::new(parts)))
 }
 
-/// Returns whether a map holds a key.
+/// Returns whether a map has a key.
 pub(crate) fn has_key(map: ValueRef<'_>, key: ValueRef<'_>) -> StackValue<'static> {
     match map {
         ValueRef::Map(map) => map.get(key).is_some().into(),
@@ -203,7 +213,7 @@ pub(crate) fn has_key(map: ValueRef<'_>, key: ValueRef<'_>) -> StackValue<'stati
     }
 }
 
-/// Returns the values behind the stack entries, or the first error among them.
+/// Returns the values of the stack values as owned values, or the first error among them.
 fn owned(entries: &[StackValue<'_>]) -> Result<Vec<DataValue>, EvaluationError> {
     entries
         .iter()
@@ -211,8 +221,10 @@ fn owned(entries: &[StackValue<'_>]) -> Result<Vec<DataValue>, EvaluationError> 
         .collect()
 }
 
-/// Returns the label a value stands for:
-/// an IRI or a plain string names a structure, nothing else does.
+/// Returns the label that a label operand names.
+///
+/// An IRI or a plain string names a label,
+/// and any other value is a [TypeMismatch](EvaluationError::TypeMismatch).
 fn name(value: &StackValue<'_>) -> Result<String, EvaluationError> {
     match value.as_result()? {
         ValueRef::Iri(iri) => Ok(iri.to_string()),

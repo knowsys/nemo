@@ -1,13 +1,11 @@
-//! The format adapters: one module per serialization.
+//! The format adapters, one module per kind of serialization: delimited text, RDF, JSON,
+//! Parquet, and the solutions of SPARQL endpoints.
 //!
-//! Each module holds a reader decoding resources into [loads](crate::load::Loaded),
-//! and a writer serializing rows, over the vocabulary of the crate root.
-//! There are modules for delimited text, RDF, JSON, Parquet, and the solutions of SPARQL
-//! endpoints.
+//! Each module has a reader, which decodes resources into [loads](crate::load::Loaded).
+//! Every module except the SPARQL one also has a writer, which serializes rows.
 //!
-//! Every reader hands each well-formed row to the same routine of the load,
-//! [take](crate::load::Loaded::take), so the declared types, the condition, and the counts of
-//! dropped rows mean the same in every format.
+//! Every reader counts and admits its rows through the same methods of a load,
+//! so the selection's condition and the counts of dropped rows mean the same in every format.
 
 pub mod dsv;
 pub mod json;

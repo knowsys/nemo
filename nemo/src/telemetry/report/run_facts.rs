@@ -1,4 +1,4 @@
-//! The account of a finished run beyond the engine's event stream.
+//! The facts about a finished run that the engine's events do not give.
 
 use serde::{Serialize, Serializer};
 
@@ -7,41 +7,42 @@ use crate::telemetry::{
     report::tables::{NamedCounts, PhaseTable, WorkTable},
 };
 
-/// The facts about a run that exist only once it is over:
-/// stage wall times, the final sizes, and per-predicate row counts.
+/// The facts about a run of a program that exist only once it is over.
 ///
+/// A run here is the parsing, loading, reasoning and exporting of one program.
+/// The facts are the wall times of these parts, the final sizes,
+/// and the row counts of the predicates.
 /// They are the part of the [document](crate::telemetry::ReportDocument)
-/// beside the recorder snapshot.
+/// beside the recorder's snapshot.
 /// Times are in nanoseconds and sizes in bytes.
 #[derive(Debug, Clone, Default)]
 pub struct RunFacts {
-    /// Reading and parsing the programs.
+    /// The wall time of reading and parsing the programs.
     pub parse: u64,
-    /// Loading the imported data.
+    /// The wall time of loading the imported data.
     pub load: u64,
-    /// Reasoning to the fixpoint.
+    /// The wall time of reasoning to the fixpoint.
     pub reason: u64,
-    /// Writing the exports.
+    /// The wall time of writing the exports.
     pub export: u64,
-    /// The whole run.
+    /// The wall time of the whole run.
     pub total: u64,
-    /// Facts stored by loading.
+    /// The number of facts stored by loading.
     pub loaded: u64,
-    /// New facts derived beyond the loaded ones.
+    /// The number of new facts derived beyond the loaded ones.
     pub derived: u64,
-    /// The rule applications performed,
+    /// The number of rule applications,
     /// as the engine [counts them](crate::engine::Engine::applications).
     pub applications: u64,
-    /// Bytes across stored tables and the dictionary.
+    /// The bytes used by the stored tables and the dictionary.
     pub memory: u64,
-    /// The engine's cumulative wall-clock accounting.
+    /// The engine's cumulative accounting of its reasoning.
     pub timings: EngineTimings,
-    /// Evaluation errors by kind, nonzero kinds only.
+    /// The evaluation errors by kind, for the kinds that occurred.
     pub errors: Vec<ErrorCount>,
     /// The stored predicates.
     pub predicates: Vec<PredicateSize>,
-    /// The program as loaded and after every stage that rewrote it, in order:
-    /// what the engine ran, and how it got there.
+    /// The program as loaded, and after every pipeline stage that rewrote it, in order.
     pub programs: Vec<ProgramText>,
 }
 
@@ -50,7 +51,7 @@ pub struct RunFacts {
 pub struct ErrorCount {
     /// The kind's name.
     pub kind: String,
-    /// How many rows errors of this kind dropped.
+    /// The number of rows that errors of this kind dropped.
     pub count: u64,
 }
 
@@ -68,49 +69,49 @@ pub struct PredicateSize {
 /// The program after one pipeline stage.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ProgramText {
-    /// The stage's name, `"loaded"` for the program as loaded.
+    /// The stage's name, or `"loaded"` for the program as loaded.
     pub stage: String,
     /// The program's text.
     pub text: String,
 }
 
-/// The stage wall times, as the document nests them.
+/// The wall times of the parts of a run, as the document nests them.
 #[derive(Serialize)]
 struct StageTimes {
-    /// Reading and parsing the programs.
+    /// The wall time of reading and parsing the programs.
     parse: u64,
-    /// Loading the imported data.
+    /// The wall time of loading the imported data.
     load: u64,
-    /// Reasoning to the fixpoint.
+    /// The wall time of reasoning to the fixpoint.
     reason: u64,
-    /// Writing the exports.
+    /// The wall time of writing the exports.
     export: u64,
-    /// The whole run.
+    /// The wall time of the whole run.
     total: u64,
 }
 
 /// The facts as the document lays them out.
 #[derive(Serialize)]
 struct FactsView<'a> {
-    /// The stage wall times.
+    /// The wall times of the parts of the run.
     stages: StageTimes,
-    /// Facts stored by loading.
+    /// The number of facts stored by loading.
     loaded: u64,
-    /// New facts derived beyond the loaded ones.
+    /// The number of new facts derived beyond the loaded ones.
     derived: u64,
-    /// The rule applications performed.
+    /// The number of rule applications.
     applications: u64,
-    /// Bytes across stored tables and the dictionary.
+    /// The bytes used by the stored tables and the dictionary.
     memory: u64,
     /// The phase table of the run.
     phases: NamedCounts<'a>,
     /// The work table of the run.
     counts: NamedCounts<'a>,
-    /// Evaluation errors by kind.
+    /// The evaluation errors by kind.
     errors: &'a [ErrorCount],
     /// The stored predicates.
     predicates: &'a [PredicateSize],
-    /// The program after every stage.
+    /// The program as loaded, and after every pipeline stage that rewrote it.
     programs: &'a [ProgramText],
 }
 
@@ -146,7 +147,7 @@ mod tests {
 
     use super::*;
 
-    /// Creates an error count.
+    /// Returns an error count.
     fn error(kind: &str, count: u64) -> ErrorCount {
         ErrorCount {
             kind: kind.to_owned(),
@@ -154,7 +155,7 @@ mod tests {
         }
     }
 
-    /// Creates a predicate size.
+    /// Returns a predicate size.
     fn size(name: &str, columns: usize, rows: u64) -> PredicateSize {
         PredicateSize {
             name: name.to_owned(),
@@ -163,7 +164,7 @@ mod tests {
         }
     }
 
-    /// Creates a program text.
+    /// Returns a program text.
     fn text(stage: &str, text: &str) -> ProgramText {
         ProgramText {
             stage: stage.to_owned(),
@@ -171,6 +172,8 @@ mod tests {
         }
     }
 
+    /// The facts serialize with their sections: the wall times, the counts, the errors,
+    /// the predicates and the programs.
     #[test]
     fn facts_serialize_their_sections() {
         let mut facts = RunFacts {
@@ -199,8 +202,9 @@ mod tests {
         );
     }
 
-    /// The document's shape is what the report page and the command
-    /// line's JSON readers rely on: every key, in order, byte for byte.
+    /// The facts serialize with every key in order, byte for byte.
+    ///
+    /// Readers of the document, such as the report page, rely on its shape.
     #[test]
     fn facts_keep_their_shape() {
         let facts = RunFacts {

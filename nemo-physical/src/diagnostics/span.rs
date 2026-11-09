@@ -1,6 +1,6 @@
 //! Locations in source texts.
 
-/// Identifies one source text that a diagnostic may point into.
+/// The id of one source text that a diagnostic may point into.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct FileId(u32);
 
@@ -19,7 +19,7 @@ impl FileId {
 /// A range of one source text, in bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Span {
-    /// The text the range lies in.
+    /// The text that the range lies in.
     pub file: FileId,
     /// The offset of the first byte of the range.
     pub start: u32,
@@ -28,15 +28,19 @@ pub struct Span {
 }
 
 impl Span {
-    /// Returns where the range starts in the given text, as an editor
-    /// counts: the 1-based line and the 1-based column in characters.
-    /// A start past the text's end counts from the end.
+    /// Returns the 1-based line and column at which the range starts in the given text.
+    ///
+    /// The column counts characters, as an editor does.
+    /// A start past the end of the text is taken as the end.
     pub fn line_column(&self, text: &str) -> (u32, u32) {
         self.line_column_in(text, &Self::line_starts(text))
     }
 
-    /// Returns where the range starts in the given text, as [line_column](Self::line_column)
-    /// counts, finding its line among the [starts](Self::line_starts) of the text's lines.
+    /// Returns the line and column at which the range starts in the given text,
+    /// as [line_column](Self::line_column) does.
+    ///
+    /// `line_starts` must be the [line starts](Self::line_starts) of `text`,
+    /// so that many ranges of one text can share them.
     pub fn line_column_in(&self, text: &str, line_starts: &[usize]) -> (u32, u32) {
         let start = (self.start as usize).min(text.len());
         let start = (0..=start)
@@ -49,8 +53,8 @@ impl Span {
         (saturate(line), saturate(column))
     }
 
-    /// Returns the byte offsets at which the lines of a text start:
-    /// 0, and the offset after every line break.
+    /// Returns the byte offsets at which the lines of a text start,
+    /// 0 and the offset after every line break.
     pub fn line_starts(text: &str) -> Vec<usize> {
         std::iter::once(0)
             .chain(text.match_indices('\n').map(|(index, _)| index + 1))
@@ -62,6 +66,8 @@ impl Span {
 mod tests {
     use super::*;
 
+    /// Lines and columns count from 1, columns count characters,
+    /// and a start past the end of the text is taken as the end.
     #[test]
     fn lines_and_columns_count_characters_from_one() {
         let text = "p(a) .\nq(\"ä\", b) .";

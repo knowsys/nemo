@@ -25,7 +25,7 @@ pub(super) enum Accumulator {
     Extremum {
         /// Whether the largest value wins, rather than the smallest.
         maximum: bool,
-        /// The extreme value so far; `None` before the first row.
+        /// The extreme value so far, or `None` before the first row.
         best: Option<DataValue>,
     },
     /// The running sum and the number of rows so far.
@@ -56,15 +56,17 @@ impl Accumulator {
         }
     }
 
-    /// Folds one row's value in, with its pair for a map;
-    /// a count reads no value.
+    /// Adds one row's value to the state.
+    ///
+    /// `pair` is the row's value in a map's layer of values.
+    /// A count reads neither value.
     pub(super) fn update(
         &mut self,
         value: Option<StorageValue>,
         pair: Option<StorageValue>,
         dictionary: &Dictionary,
     ) {
-        // Counting never looks at the value; everything else decodes it.
+        // A count never reads the value, and every other aggregate decodes it.
         if let Accumulator::Count(count) = self {
             *count += 1;
             return;
@@ -108,14 +110,14 @@ impl Accumulator {
                 sum.as_ref() / ValueRef::Number(NumberRef::Decimal(count.into()))
             }
             Accumulator::Tuple(mut values) => {
-                // Usually a no-op: the values arrive sorted
-                // where their layer directly follows the group key.
+                // This is usually a no-op, since the values arrive sorted
+                // if their layer directly follows the group key.
                 values.sort();
                 Ok(DataValue::tuple(TupleValue::new(values)))
             }
             Accumulator::Map(mut pairs) => {
-                // Identical pairs collapse; a key with two different values
-                // describes no map, the error a map literal raises.
+                // Identical pairs become one,
+                // and a key with two different values describes no map.
                 pairs.sort();
                 pairs.dedup();
                 MapValue::new(pairs)
@@ -128,8 +130,8 @@ impl Accumulator {
 
 /// Folds a value into a running extremum.
 ///
-/// Values compare by value if they are comparable,
-/// and by their order as terms otherwise or if they are equal.
+/// Values are compared in value order if they are comparable,
+/// and in term order otherwise or if they are equal.
 /// A NaN makes the extremum NaN, as in XPath's `fn:min` and `fn:max`.
 fn update_extremum(best: &mut Option<DataValue>, maximum: bool, value: ValueRef<'_>) {
     let Some(current) = best else {
@@ -146,8 +148,8 @@ fn update_extremum(best: &mut Option<DataValue>, maximum: bool, value: ValueRef<
         return;
     }
 
-    // Equal values that are distinct terms, such as `1` and `1.0d`, fall to the term order too,
-    // which keeps the result independent of the order the rows arrive in.
+    // Equal values that are distinct terms, such as `1` and `1.0d`, are ordered by term order,
+    // which makes the result independent of the order the rows arrive in.
     let ordering = match value.value_cmp(current.as_ref()) {
         Ok(Some(ordering)) => ordering.then_with(|| value.cmp(&current.as_ref())),
         _ => value.cmp(&current.as_ref()),
@@ -163,33 +165,33 @@ fn update_extremum(best: &mut Option<DataValue>, maximum: bool, value: ValueRef<
     }
 }
 
-/// The running state of a sum:
-/// a fold of [`+`](ValueRef::add) over numbers and durations, as XPath's `fn:sum` takes them.
+/// The running state of a sum, which folds [`+`](ValueRef::add) over numbers and durations,
+/// as XPath's `fn:sum` does.
 ///
-/// A step whose sum and value share one primitive kind folds in place;
-/// every other step is the `+` of values, so the sum cannot drift from it.
+/// A step whose sum and value have the same primitive kind adds in place.
+/// Every other step applies the `+` of values, so the sum cannot drift from it.
 #[derive(Debug)]
 pub(super) enum SumState {
-    /// No value yet: the sum of nothing is the integer zero.
+    /// No value yet, which sums to the integer zero.
     Empty,
     /// An exact sum of integers.
     Int(i128),
-    /// An exact sum of decimals, which takes any compact exact number in place.
+    /// An exact sum of decimals, which adds any compact exact number in place.
     Fixed(workspace::Fixed),
     /// A sum of floats.
     Float(Float),
     /// A sum of doubles.
     Double(Double),
-    /// An exact sum beyond the compact range, which takes any exact number in place.
+    /// An exact sum beyond the compact range, which adds any exact number in place.
     Big(workspace::Big),
     /// Any other sum.
     Value(DataValue),
-    /// The error that poisoned the sum.
+    /// The error that made the sum fail.
     Error(EvaluationError),
 }
 
 impl SumState {
-    /// Folds one value in.
+    /// Adds one value to the sum.
     fn add(&mut self, value: ValueRef<'_>) {
         match (&mut *self, value) {
             (SumState::Error(_), _) => return,
@@ -210,8 +212,8 @@ impl SumState {
                 *sum = *sum + value;
                 return;
             }
-            // `+` sums exact numbers in the same workspaces, to the same bound;
-            // where the `i128` workspace runs out, `+` below continues in the big one.
+            // `+` adds exact numbers in the same workspaces, up to the same bound.
+            // Where the `i128` workspace overflows, the `+` below continues in the big one.
             (SumState::Fixed(sum), ValueRef::Number(NumberRef::Decimal(number))) => {
                 if let Some(value) = workspace::Fixed::of(number)
                     && let Some((left, right, exponent)) = sum.align(value)
@@ -240,13 +242,14 @@ impl SumState {
         };
     }
 
-    /// Returns whether a value takes part in a sum:
-    /// `+` also moves a point in time by a duration, which a sum does not.
+    /// Returns whether a value can be summed.
+    ///
+    /// Only numbers and durations can, although `+` also moves a point in time by a duration.
     fn summable(value: ValueRef<'_>) -> bool {
         matches!(value, ValueRef::Number(_) | ValueRef::Duration(_))
     }
 
-    /// Returns the state holding a sum, in place if its kind allows.
+    /// Returns the state of a sum, kept in place if its kind allows.
     fn of(sum: DataValue) -> Self {
         match sum.as_ref() {
             ValueRef::Number(NumberRef::Decimal(number)) => match number.0 {
@@ -262,7 +265,7 @@ impl SumState {
         }
     }
 
-    /// Returns the sum of a state that holds one.
+    /// Returns the sum of a state that has one.
     fn into_value(self) -> DataValue {
         match self {
             SumState::Int(sum) => {
@@ -301,6 +304,8 @@ mod tests {
         state.finish()
     }
 
+    /// Durations of one kind sum, and durations of different kinds,
+    /// or durations and numbers, fail with a type mismatch.
     #[test]
     fn durations_sum_within_a_kind() {
         let duration = |lexical| {
@@ -344,6 +349,8 @@ mod tests {
         );
     }
 
+    /// The extremum of equal values that are distinct terms
+    /// does not depend on the order they arrive in.
     #[test]
     fn extrema_of_equal_values_do_not_depend_on_arrival() {
         /// Returns the extremum of the values, folded in order.
@@ -366,11 +373,12 @@ mod tests {
                 );
             }
         }
-        // The term order decides, as for `MIN` and `MAX`.
+        // The term order decides between them.
         assert_eq!(extremum(&[&zero, &negative_zero], false), negative_zero);
         assert_eq!(extremum(&[&negative_zero, &zero], true), zero);
     }
 
+    /// A sum equals the left fold of `+` over its values.
     #[test]
     fn sums_fold_the_addition() {
         /// Returns the left fold of `+` over the values.
@@ -385,7 +393,8 @@ mod tests {
         let cases: Vec<(Vec<DataValue>, Result<DataValue, EvaluationError>)> = vec![
             // Integers leave the 64-bit range exactly, and come back.
             (vec![int(i64::MAX), int(1), int(-2)], Ok(int(i64::MAX - 1))),
-            // Exact sums land in their home: two decimals may sum to an integer.
+            // The representation of an exact sum follows its value,
+            // so two decimals may sum to an integer.
             (vec![number("1.5"), number("1.5"), int(1)], Ok(int(4))),
             (
                 vec![number("0.25"), int(2), number("-0.125"), number("0.5")],
@@ -399,7 +408,7 @@ mod tests {
                 ],
                 Ok(number("1.1000000000000000000000000000000000000001")),
             ),
-            // Whichever side arrives first, a floating-point type wins the promotion.
+            // Whichever side arrives first, the sum is promoted to the floating-point type.
             (
                 vec![number("123456789012345678901"), double(0.5)],
                 Ok(double(1.2345678901234568e20)),
@@ -408,7 +417,7 @@ mod tests {
                 vec![float(0.5), number("123456789012345678901")],
                 Ok(float(1.234_567_9e20)),
             ),
-            // A sum past the compact range folds exactly, and may come back.
+            // A sum beyond the compact range stays exact, and may return into it.
             (
                 vec![
                     int(i64::MAX),
@@ -424,8 +433,8 @@ mod tests {
             ),
             (vec![number("0.3"), double(0.0)], Ok(double(0.3))),
             (vec![float(1.0), double(1.0), int(1)], Ok(double(3.0))),
-            // An exact sum rounds to a float once, not through the double:
-            // each lies just above the midpoint between two floats.
+            // An exact sum is rounded to a float once, not through a double.
+            // Each of these sums lies just above the midpoint between two floats.
             (
                 vec![float(0.0), int((1 << 53) + (1 << 29) + 1)],
                 Ok(float(2f32.powi(53) + 2f32.powi(30))),

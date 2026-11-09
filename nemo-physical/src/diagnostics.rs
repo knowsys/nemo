@@ -1,23 +1,19 @@
-//! Datastructures for errors and warnings.
+//! Data structures for errors and warnings.
 //!
-//! A [Diagnostic] represents one error or warning:
-//! its [Code] names the kind of problem,
-//! its message says what happened,
-//! [Span]s point into source texts, if the problem lies in one,
-//! and [Field]s hold additional context information.
-//! Notes and hints explain the problem further.
+//! A [Diagnostic] is one error or warning.
+//! Its [Code] names the kind of problem, and its message says what happened.
+//! Its [Label]s point at [Span]s of source texts, if the problem lies in one,
+//! its [Field]s give named values of the problem, and its notes and hints explain it further.
 //!
-//! Each crate declares the kinds of problem it reports
-//! with [diagnostic_kinds](crate::diagnostic_kinds):
-//! an enum with one variant per kind,
-//! implementing [DiagnosticKind].
-//! A [Registry] documents the diagnostics that the crate reports,
-//! built from the registries below it and the kinds it declares.
+//! A crate declares the kinds of problem that it reports
+//! with [diagnostic_kinds](crate::diagnostic_kinds),
+//! as an enum with one variant per kind that implements [DiagnosticKind].
+//! A [Registry] collects the documentation of the kinds by code.
 //!
 //! Messages follow the style of rustc:
-//! lowercase, without a trailing period, code in backticks,
-//! and mismatches as "expected …, found …".
-//! A note adds context, a hint says what to do.
+//! lowercase, without a trailing period, with code in backticks,
+//! and with mismatches written as "expected …, found …".
+//! A note adds context, and a hint says what to do.
 
 mod code;
 mod count;

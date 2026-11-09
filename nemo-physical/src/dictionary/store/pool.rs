@@ -2,10 +2,10 @@
 
 use crate::dictionary::store::record::RecordPool;
 
-/// An interning pool of byte strings:
-/// each distinct string is stored once
-/// and identified by a dense index assigned in first-insertion order.
+/// An interning pool of byte strings.
 ///
+/// Each distinct string is stored once,
+/// and is identified by a dense index assigned in the order of first insertion.
 /// It is a [RecordPool] whose records have no header.
 pub(crate) struct StringPool {
     /// The strings, as records without a header.
@@ -26,7 +26,7 @@ impl StringPool {
     }
 
     /// Interns a byte string and returns its index,
-    /// or `None` if the pool cannot hold it.
+    /// or `None` if it is longer than [Arena::LENGTH_LIMIT](super::arena::Arena::LENGTH_LIMIT).
     pub(crate) fn intern(&mut self, bytes: &[u8]) -> Option<u64> {
         self.records.intern((), bytes)
     }

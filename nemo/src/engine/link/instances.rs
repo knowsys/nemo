@@ -47,7 +47,7 @@ impl InstancesByAlias {
     /// A public name can stand for another instantiation's public name,
     /// if a `@use` bound an input to one,
     /// so the reference is followed until it reaches a name that is not qualified.
-    /// A chain that visits no name twice takes at most as many steps as there are public names,
+    /// A chain that visits no name twice is at most as long as the number of public names,
     /// so a longer one is a cycle.
     pub(super) fn resolve(
         &self,

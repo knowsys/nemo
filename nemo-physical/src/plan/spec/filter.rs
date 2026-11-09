@@ -1,4 +1,4 @@
-//! Specification of the filter operation.
+//! The specification of a filter.
 
 use crate::{
     function::StackProgram,
@@ -11,7 +11,7 @@ use crate::{
 /// A row for which the condition does not hold is dropped.
 #[derive(Debug, Clone)]
 pub struct FilterSpec {
-    /// The markers feeding the program, in program input order.
+    /// The markers whose values are the program's inputs, in order.
     pub(crate) inputs: Vec<Marker>,
     /// The condition.
     pub(crate) program: StackProgram,
@@ -23,7 +23,7 @@ impl FilterSpec {
     /// # Errors
     ///
     /// Returns [ExpressionTooLarge](PlanError::ExpressionTooLarge)
-    /// if the expression reads more columns or constants than an instruction addresses.
+    /// if the expression reads more columns or constants than an instruction can address.
     ///
     /// # Panics
     ///
@@ -34,12 +34,13 @@ impl FilterSpec {
         Ok(Self::from_program(inputs, program))
     }
 
-    /// Creates the condition a compiled program states
-    /// over the given markers, in program input order.
+    /// Creates the condition a compiled program states.
+    ///
+    /// `inputs` are the markers whose values are the program's inputs, in order.
     ///
     /// # Panics
     ///
-    /// Panics if the program reads a different number of inputs than markers are given.
+    /// Panics if the program has a different number of inputs than `inputs` has markers.
     pub fn from_program(inputs: Vec<Marker>, program: StackProgram) -> Self {
         assert_eq!(
             program.inputs(),

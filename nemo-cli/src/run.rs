@@ -1,11 +1,9 @@
-//! One command line run, from source files to written exports.
+//! One command line run, from the program files to the written exports.
 //!
-//! [Run::perform] is the run in stages:
-//! the engine and what observes it, the program, loading, the exports settled before the work,
-//! reasoning, writing, tracing, and the reports.
-//! Each stage is a method here or in the module of its concern:
-//! the selection of predicates, the export and print paths, the parameters, the traces,
-//! the summary, and the observability document.
+//! [Run::perform] runs the stages in order: setting up the engine and its observers,
+//! parsing the program, loading, settling the exports, reasoning, writing the results,
+//! tracing, and reporting.
+//! Each stage is a method of [Run], defined here or in the submodule for its concern.
 
 mod document;
 mod exports;
@@ -42,22 +40,22 @@ const WARNED: u8 = 3;
 /// The wall-clock times of a run's stages.
 #[derive(Debug, Clone, Copy)]
 struct Times {
-    /// The instant the run began, which the total is measured from.
+    /// The instant the run began, from which the total is measured.
     started: Instant,
-    /// Reading and parsing the programs.
+    /// The time spent parsing the programs and supplying the parameters.
     parse: Duration,
-    /// Loading the imported data.
+    /// The time spent linking and loading the program.
     load: Duration,
-    /// Reasoning to the fixpoint.
+    /// The time spent reasoning to the fixpoint.
     reason: Duration,
-    /// Writing the exports.
+    /// The time spent writing or printing the results.
     export: Duration,
-    /// Everything, from the first file read.
+    /// The time from the start of the run until the results were written.
     total: Duration,
 }
 
 impl Times {
-    /// Times counted from now, no stage run yet.
+    /// Returns times that start now, with every stage at zero.
     fn start() -> Self {
         Self {
             started: Instant::now(),
@@ -70,8 +68,9 @@ impl Times {
     }
 }
 
-/// Returns the diagnostic for something claiming the standard output the JSON
-/// report writes its document to.
+/// Returns the diagnostic for an output that would share standard output with the JSON report.
+///
+/// `claimant` names that output, as "the printed results".
 fn stdout_conflict(claimant: &str) -> Diagnostic {
     CliError::StdoutConflict {
         claimant: claimant.to_owned(),
@@ -79,22 +78,22 @@ fn stdout_conflict(claimant: &str) -> Diagnostic {
     .diagnostic()
 }
 
-/// One command line run: reads the programs, reasons, writes the
-/// exports, and reports what happened.
+/// One command line run, which reads the programs, reasons, writes the exports,
+/// and reports what happened.
 #[derive(Debug)]
 pub(crate) struct Run<'a> {
-    /// What was asked for.
+    /// The command line arguments.
     arguments: &'a Arguments,
-    /// The texts the run was read from, for resolving spans.
+    /// The texts of the programs and their modules, against which diagnostics are shown.
     sources: SourceTexts,
-    /// Whether a warning was reported, which makes a completed run exit 3.
+    /// Whether a warning was reported, for the [exit code](Self::exit_code).
     warned: Cell<bool>,
     /// How many of the engine's reports have been shown.
     shown: Cell<usize>,
 }
 
 impl<'a> Run<'a> {
-    /// Prepares a run of the given arguments.
+    /// Creates a run of the given arguments.
     pub(crate) fn new(arguments: &'a Arguments) -> Self {
         Self {
             arguments,
@@ -104,7 +103,7 @@ impl<'a> Run<'a> {
         }
     }
 
-    /// Carries the run out, returning the process exit code.
+    /// Performs the run, shows its error if it fails, and returns the process exit code.
     pub(crate) fn execute(mut self) -> ExitCode {
         match self.perform() {
             Ok(code) => code,
@@ -115,12 +114,14 @@ impl<'a> Run<'a> {
         }
     }
 
-    /// Performs the run itself, stage by stage.
+    /// Performs the stages of the run in order, and returns the exit code.
     ///
-    /// Anything it cannot recover from surfaces as one diagnostic.
+    /// It returns anything it cannot recover from as one diagnostic.
+    /// A program that fails to parse is not returned as an error.
+    /// Its diagnostics are shown, and the exit code is a failure.
     fn perform(&mut self) -> Result<ExitCode, Diagnostic> {
         if let Some(code) = &self.arguments.explain {
-            // Explaining a code is the whole of such a run.
+            // With `--explain`, explaining the code is all that the run does.
             explain::print(code)?;
             return Ok(ExitCode::SUCCESS);
         }
@@ -150,16 +151,17 @@ impl<'a> Run<'a> {
         Ok(self.exit_code())
     }
 
-    /// Returns the engine, set up as the arguments ask:
-    /// the worker threads, the import directory, the module roots,
-    /// and the imports kept whole if the run shows the given predicates.
+    /// Creates the engine with the settings of the arguments.
     ///
-    /// Returns an error for a module root that is not `name=directory` with a name,
-    /// or whose name cannot name a root.
+    /// These are the number of worker threads, the import directory, the module roots,
+    /// and whether imports are loaded whole, which they are if the run writes or prints the
+    /// extensional predicates, or traces.
+    /// Returns an error for a module root that is not written as `name=directory` with a
+    /// nonempty name, or whose name the engine rejects.
     fn engine(&self) -> Result<Engine, Diagnostic> {
         if let Some(threads) = self.arguments.threads {
-            // The first parallel phase reads the thread count, and none
-            // runs before the engine is made.
+            // The thread count is read by the first parallel phase, and none runs before the
+            // engine is created.
             let applied = nemo_physical::parallel::Workers::set(threads as usize);
             debug_assert!(applied, "the thread count is set before any parallel phase");
         }
@@ -180,24 +182,26 @@ impl<'a> Run<'a> {
             engine.add_module_root(name.trim(), directory)?;
         }
         if self.arguments.selects_extensional() || self.arguments.traces() {
-            // Writing the given predicates shows tables verbatim, and a
-            // trace names facts by their written columns; the loader must
-            // not leave out what no rule happens to read.
+            // Writing the extensional predicates shows the imported tables as they were
+            // read, and a trace names facts by all their columns. So the imports must keep
+            // the columns and rows that no rule reads.
             engine.retain_imports();
         }
         Ok(engine)
     }
 
-    /// Returns an error, before any work, for what would share the
-    /// standard output with the JSON report's document: the printed
-    /// results, or a trace printed rather than written. An export to it
-    /// is an error once the exports are known.
+    /// Returns an error if the report level is JSON and the printed results or a trace would
+    /// also be written to standard output.
+    ///
+    /// It runs before any work is done.
+    /// An export to standard output is checked once the exports are known,
+    /// in [exports](Self::exports).
     fn reserve_stdout(&self, level: Report) -> Result<(), Diagnostic> {
         if level != Report::Json {
             return Ok(());
         }
-        // The document owns stdout; anything else written there would
-        // leave neither readable.
+        // The JSON document needs standard output to itself, since anything else written
+        // there would make both unreadable.
         if self.arguments.printing().is_some() {
             return Err(stdout_conflict("the printed results")
                 .with_hint("pass only one of `--print` and `--report json`"));
@@ -209,10 +213,11 @@ impl<'a> Run<'a> {
         Ok(())
     }
 
-    /// Installs the run's subscriber,
-    /// which the log lines, the telemetry stream the engine puts on the `tracing` wire,
-    /// and the event log meet in,
-    /// with a recorder reading the stream if the report or the dashboard needs one.
+    /// Installs the run's `tracing` subscriber,
+    /// and returns a recorder of the telemetry if the report or the dashboard needs one.
+    ///
+    /// The subscriber receives both the log lines and the engine's telemetry,
+    /// as [logging::install] describes.
     fn observe(&self, level: Report) -> Result<Option<Arc<Recorder>>, Diagnostic> {
         let recorder = (level.observes() || self.arguments.dashboard.is_some())
             .then(|| Arc::new(Recorder::new()));
@@ -220,17 +225,17 @@ impl<'a> Run<'a> {
         Ok(recorder)
     }
 
-    /// Reads the programs and the `--param` settings,
-    /// and parses them into the one program to run,
-    /// or returns `None` if a program failed to parse, which was reported already.
+    /// Reads and parses the programs into one program, and supplies the `--param` values.
+    ///
+    /// Returns `None` if a program failed to parse, after showing its diagnostics.
     fn program(
         &mut self,
         engine: &mut Engine,
         times: &mut Times,
     ) -> Result<Option<Program>, Diagnostic> {
-        // The engine hands out file ids, because it reads files this run
-        // never names: the modules a program pulls in. Registering every
-        // text through it before parsing is what keeps one numbering.
+        // The engine assigns the file ids, since it also reads files that the command line
+        // does not name: the modules that a program uses. Registering every text through
+        // the engine before parsing gives all files one numbering.
         let mut programs = Vec::with_capacity(self.arguments.programs.len());
         for path in &self.arguments.programs {
             let file = engine.read_source(path).map_err(|problem| {
@@ -261,7 +266,7 @@ impl<'a> Run<'a> {
         Ok(Some(program))
     }
 
-    /// Parses every program into one, reporting as it goes,
+    /// Parses the programs into one program and shows their diagnostics,
     /// or returns `None` if any of them failed to parse.
     fn parse(&self, engine: &Engine, programs: &[FileId]) -> Option<Program> {
         let mut statements = Vec::new();
@@ -277,11 +282,12 @@ impl<'a> Run<'a> {
         (!failed).then(|| Program::new(statements))
     }
 
-    /// Links and loads the program:
-    /// its modules, its imports (remote ones fetched by the engine's HTTP client), and its facts.
+    /// Links and loads the program: its modules, its imports and its facts.
     ///
-    /// What the engine reports is shown as the stage ends,
-    /// so a stage that fails does not bury the warnings before it.
+    /// The engine's client fetches the remote imports.
+    /// The engine's reports are shown before an error is returned,
+    /// so that a failed stage still shows the warnings that came before the failure.
+    /// The recorder, if there is one, receives the texts of the compiled program's rules.
     fn load(
         &mut self,
         engine: &mut Engine,
@@ -292,8 +298,8 @@ impl<'a> Run<'a> {
         let start = Instant::now();
         let loaded = engine.link(program).and_then(|linked| engine.load(linked));
         times.load = start.elapsed();
-        // Linking is what reads a program's modules, so the sources it
-        // registered are taken in before anything is shown against them.
+        // Linking reads the program's modules, so their sources are added before any
+        // diagnostic is shown against them.
         self.sources.absorb(engine.sources());
         self.reports(engine);
         loaded?;
@@ -303,8 +309,10 @@ impl<'a> Run<'a> {
         Ok(())
     }
 
-    /// Reasons to the fixpoint, the bound imports' requests fetched by the engine's HTTP client,
-    /// showing what the engine reports and the rows it dropped on the way.
+    /// Reasons to the fixpoint, and shows the engine's reports and the rows that rule
+    /// evaluation dropped.
+    ///
+    /// The engine's client fetches the remote data that reasoning needs.
     fn reason(&self, engine: &mut Engine, times: &mut Times) -> Result<(), Diagnostic> {
         let start = Instant::now();
         let reasoned = engine.reason();
@@ -314,8 +322,8 @@ impl<'a> Run<'a> {
         reasoned
     }
 
-    /// Writes the results: printed to the standard output, or exported
-    /// as specified.
+    /// Writes the results, either printed to standard output or exported as `specifications`
+    /// say.
     fn write(
         &self,
         engine: &mut Engine,
@@ -333,8 +341,7 @@ impl<'a> Run<'a> {
         written
     }
 
-    /// Shows the reports the engine has gathered beyond the ones already
-    /// shown.
+    /// Shows the engine's reports that have not been shown yet.
     fn reports(&self, engine: &Engine) {
         let reports = engine.reports();
         for report in &reports[self.shown.get().min(reports.len())..] {
@@ -343,7 +350,7 @@ impl<'a> Run<'a> {
         self.shown.set(reports.len());
     }
 
-    /// Reports the rows that rule evaluation dropped, if any did.
+    /// Shows a warning for each kind of error for which rule evaluation dropped rows.
     fn attrition(&self, engine: &Engine) {
         for (kind, count) in engine.evaluation_errors().iter() {
             self.show(
@@ -356,8 +363,9 @@ impl<'a> Run<'a> {
         }
     }
 
-    /// Writes a diagnostic to the error stream,
-    /// a warning only if the run shows them, and notes it either way for the exit code.
+    /// Writes a diagnostic to the error stream, and notes a warning for the exit code.
+    ///
+    /// A warning is noted even with `--no-warnings`, which only keeps it from being written.
     fn show(&self, diagnostic: &Diagnostic) {
         if diagnostic.severity() == Severity::Warning {
             self.warned.set(true);
@@ -369,7 +377,7 @@ impl<'a> Run<'a> {
     }
 
     /// Returns the exit code of a completed run:
-    /// 3 if a warning was reported and warnings count, 0 otherwise.
+    /// 3 if a warning was reported without `--no-warnings`, and 0 otherwise.
     fn exit_code(&self) -> ExitCode {
         if self.warned.get() && !self.arguments.no_warnings {
             ExitCode::from(WARNED)

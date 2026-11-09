@@ -4,22 +4,22 @@ use crate::value::{DataValue, EvaluationError, ValueRef};
 
 /// A value on the evaluation stack.
 ///
-/// - A row input, a program constant, and a result that needs no allocation are borrowed.
-/// - A result an operation had to construct, such as a string or a wide number, is owned.
-/// - An evaluation error is a value too,
-///   which propagates through the operations as SPARQL's error semantics prescribe.
+/// - An input, a constant, and a result that needs no allocation are borrowed.
+/// - A result that an operation had to construct, such as a string or a wide number, is owned.
+/// - An evaluation error is a stack value too,
+///   and it propagates through the operations as SPARQL's error semantics prescribe.
 #[derive(Debug, Clone)]
 pub enum StackValue<'a> {
     /// A borrowed value.
     Value(ValueRef<'a>),
-    /// A freshly constructed value.
+    /// A value that an operation constructed.
     Owned(DataValue),
-    /// A propagating evaluation error.
+    /// An evaluation error.
     Error(EvaluationError),
 }
 
 impl StackValue<'_> {
-    /// Returns the value as a view, or the propagating error.
+    /// Returns the value as a [ValueRef], or the error.
     pub fn as_result(&self) -> Result<ValueRef<'_>, EvaluationError> {
         match self {
             StackValue::Value(value) => Ok(*value),

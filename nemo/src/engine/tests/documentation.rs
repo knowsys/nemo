@@ -1,6 +1,7 @@
-//! The builtins' documented signatures, held to the type analysis:
-//! each argument type must be one the builtin needs,
-//! and each result type must hold what the builtin yields from such arguments.
+//! Tests that the builtins' documented signatures agree with the type analysis.
+//!
+//! Each argument type must be one that the builtin needs,
+//! and each result type must contain what the builtin returns for such arguments.
 
 use super::*;
 
@@ -16,7 +17,7 @@ struct Signature {
     result: String,
 }
 
-/// Reads a signature: `NAME(x: t, …) -> r`, `#name(x: t) -> r`, or `t op t -> r`.
+/// Parses a signature: `NAME(x: t, …) -> r`, `#name(x: t) -> r`, or `t op t -> r`.
 ///
 /// A trailing `…` repeats the argument before it once.
 fn signature(written: &str) -> Signature {
@@ -44,7 +45,7 @@ fn signature(written: &str) -> Signature {
     let inside = call[open + 1..]
         .strip_suffix(')')
         .unwrap_or_else(|| panic!("`{written}` closes its arguments"));
-    // A map aggregate takes a key and a value.
+    // A map aggregate accepts a key and a value.
     if let Some((key, value)) = inside.split_once(" = ") {
         let types = [key, value].map(|part| part.split_once(": ").expect("a typed part").1);
         return Signature {
@@ -75,7 +76,7 @@ fn signature(written: &str) -> Signature {
     }
 }
 
-/// Returns what is wrong with a signature, or nothing if the analysis agrees with it.
+/// Returns what is wrong with a signature, or `None` if the analysis agrees with it.
 fn disagreement(written: &str) -> Option<String> {
     let Signature {
         call,
@@ -90,7 +91,8 @@ fn disagreement(written: &str) -> Option<String> {
     let variables: Vec<String> = (0..arguments.len())
         .map(|index| format!("?a{index}"))
         .collect();
-    // The declaration of `out` holds the call to its result type: N0463 otherwise.
+    // The declaration of `out` makes the check report N0463 if the call's result does not
+    // fit the result type.
     let mut source = format!("@declare out({result}) .\ngo(1) .\n");
     let body = if arguments.is_empty() {
         String::from("go(?g)")
@@ -150,6 +152,8 @@ fn operators() -> Vec<Operator> {
     operators
 }
 
+/// Every documented signature of a builtin operator or aggregate agrees with the types that
+/// the analysis infers.
 #[test]
 fn every_documented_signature_is_what_the_analysis_infers() {
     let aggregates = AggregateKind::ALL.iter().map(|kind| kind.documentation());
@@ -168,6 +172,7 @@ fn every_documented_signature_is_what_the_analysis_infers() {
     assert!(wrong.is_empty(), "\n{}", wrong.join("\n"));
 }
 
+/// Every documented signature of an operator calls it by its name or its infix symbol.
 #[test]
 fn every_signature_calls_the_builtin_by_one_of_its_names() {
     for operator in operators() {

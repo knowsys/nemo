@@ -1,10 +1,12 @@
-//! The kinds of problems module instantiation reports.
+//! The kinds of problems that module instantiation reports.
 
 use nemo_physical::{diagnostic_kinds, diagnostics::Count};
 
 diagnostic_kinds! {
-    /// A problem with `@use`: the modules a program composes, their
-    /// interfaces, and the names passed between them.
+    /// A problem with the modules that a program uses through `@use`.
+    ///
+    /// It concerns the modules themselves, their interfaces,
+    /// or the names passed between them.
     pub enum ModuleError {
         OwnedName { name: String, alias: String }
             => OWNED_NAME = 400, error, "`{name}` belongs to module instance `{alias}`",

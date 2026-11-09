@@ -1,5 +1,6 @@
-//! The engine through its methods, one module per subject, sharing the
-//! helpers below.
+//! Tests of the engine through its methods, with one module per subject.
+//!
+//! The modules share the helpers below.
 
 use super::*;
 
@@ -26,7 +27,7 @@ mod rules;
 mod structures;
 mod types;
 
-/// The rows of a predicate as displayed values, sorted.
+/// Returns the rows of a predicate as displayed values, sorted.
 fn rows(engine: &mut Engine, predicate: &str) -> Vec<Vec<String>> {
     let mut rows: Vec<Vec<String>> = engine
         .rows(predicate)
@@ -38,13 +39,13 @@ fn rows(engine: &mut Engine, predicate: &str) -> Vec<Vec<String>> {
     rows
 }
 
-/// The number of stored rows of a predicate.
+/// Returns the number of stored rows of a predicate.
 fn count(engine: &mut Engine, predicate: &str) -> usize {
     engine.rows(predicate).expect("the predicate exists").len()
 }
 
-/// Returns the rows and the columns a predicate's table holds, whole or not,
-/// which is what the import passes left of it.
+/// Returns the numbers of rows and of columns of a predicate's table,
+/// whether or not it is stored whole, which shows what the import passes left of it.
 fn stored(engine: &Engine, predicate: &str) -> (usize, usize) {
     let &Registered { table, arity } = engine
         .predicates
@@ -56,8 +57,10 @@ fn stored(engine: &Engine, predicate: &str) -> (usize, usize) {
     (rows, arity)
 }
 
-/// Loads a program over registered resources and returns the engine
-/// with its reports.
+/// Loads a program over in-memory resources, given by name and content, and reasons to the
+/// fixpoint.
+///
+/// Returns the engine, with its reports.
 fn load_resources(source: &str, resources: &[(&str, &str)]) -> Engine {
     let program = parse(source);
     let mut engine = Engine::new();
@@ -69,7 +72,8 @@ fn load_resources(source: &str, resources: &[(&str, &str)]) -> Engine {
     engine
 }
 
-/// The `count` a warning of the given code reports, where one was.
+/// Returns the `count` that the first warning of the given code reports,
+/// or `None` if there is no such warning.
 fn reported_count(engine: &Engine, code: nemo_physical::diagnostics::Code) -> Option<u64> {
     engine.reports().iter().find_map(|report| {
         (report.code() == code).then(|| {
@@ -81,14 +85,14 @@ fn reported_count(engine: &Engine, code: nemo_physical::diagnostics::Code) -> Op
     })
 }
 
-/// The problems checking a source collects.
+/// Returns the problems that a check of a source reports.
 fn check(source: &str) -> Vec<Diagnostic> {
     let program = parse(source);
     Engine::new().check(program).into_diagnostics()
 }
 
-/// Returns the steps each rule's plan runs per application,
-/// its execution units and aggregations, read off its layout.
+/// Returns, per rule, the number of top-level operations that its plan runs per application,
+/// which are its execution units and aggregations, read off its layout.
 fn rule_steps(engine: &Engine) -> Vec<usize> {
     let program = engine.program.as_ref().expect("the program is loaded");
     (0..program.rules.len())

@@ -1,4 +1,4 @@
-//! The source texts a pipeline registers: the texts programs were read from,
+//! The source texts that a pipeline registers: the texts that programs were read from,
 //! and the module instances made of them.
 
 use std::sync::{Arc, OnceLock};
@@ -8,25 +8,25 @@ use crate::{
     pipeline::Pipeline,
 };
 
-/// One source text a program was read from: how diagnostics name it,
-/// and what its spans point into.
+/// One registered source text, with the name that diagnostics show for it.
 #[derive(Debug)]
 pub(super) struct SourceFile {
-    /// The name diagnostics show: a path, or the name given to [Pipeline::add_source].
+    /// The name that diagnostics show, as given to [Pipeline::add_source], such as a path.
     name: String,
     /// The text, shared by the instances of a module file.
     text: Arc<str>,
-    /// The byte offsets at which the text's lines start, computed at first need
-    /// and shared like the text.
+    /// The byte offsets at which the text's lines start,
+    /// computed when first needed and shared like the text.
     lines: Arc<OnceLock<Box<[usize]>>>,
-    /// For a module instance, the `@use` that made it,
-    /// and `None` for a text added with [Pipeline::add_source].
+    /// The `@use` directive that made a module instance,
+    /// or `None` for a text added with [Pipeline::add_source].
     instance: Option<UseDirective>,
 }
 
 impl SourceFile {
-    /// Returns where a span starts in the text, as [Span::line_column] counts,
-    /// finding the line in the text's line index.
+    /// Returns the line and column where a span starts, as [Span::line_column] counts them.
+    ///
+    /// The line is looked up in the text's line index.
     fn line_column(&self, span: Span) -> (u32, u32) {
         let text = &*self.text;
         let lines = self
@@ -37,12 +37,11 @@ impl SourceFile {
 }
 
 impl Pipeline {
-    /// Registers a source text under a name, returning the id its spans
-    /// use.
+    /// Registers a source text under a name, and returns the file id for its spans.
     ///
     /// Registering a name again adds a new source under a new id.
-    /// Ids are never reused, so spans taken from an earlier version
-    /// of a file read again stay valid.
+    /// Ids are never reused,
+    /// so the spans of an earlier version of a file that is read again stay valid.
     pub fn add_source(&mut self, name: impl Into<String>, text: impl Into<String>) -> FileId {
         let text: String = text.into();
         self.push_source(SourceFile {
@@ -53,8 +52,10 @@ impl Pipeline {
         })
     }
 
-    /// Registers an instance of a registered module file: its name and
-    /// text, under an id of its own, made by the given `@use`.
+    /// Registers a module instance of the registered file `file`,
+    /// made by the `@use` directive `directive`.
+    ///
+    /// The instance has the file's name and text, under a file id of its own.
     ///
     /// # Panics
     ///
@@ -75,7 +76,7 @@ impl Pipeline {
     }
 
     /// Returns the chain of `@use` directives that instantiated a file as a module instance,
-    /// outermost first, or none for a text added with [add_source](Self::add_source).
+    /// outermost first, or an empty chain for a text added with [add_source](Self::add_source).
     pub(crate) fn instances(&self, file: FileId) -> Vec<&UseDirective> {
         let mut chain = Vec::new();
         let mut current = Some(file);
@@ -90,31 +91,31 @@ impl Pipeline {
         chain
     }
 
-    /// Appends a source, returning its id.
+    /// Appends a source, and returns its file id.
     fn push_source(&mut self, source: SourceFile) -> FileId {
         let id = FileId::new(u32::try_from(self.files.len()).expect("file counts stay below u32"));
         self.files.push(source);
         id
     }
 
-    /// Returns the name of a registered source file.
+    /// Returns the name of a source file, or `None` if the file is not registered.
     pub fn file_name(&self, file: FileId) -> Option<&str> {
         self.source(file).map(|source| source.name.as_str())
     }
 
-    /// Returns the text of a registered source file.
+    /// Returns the text of a source file, or `None` if the file is not registered.
     pub fn text(&self, file: FileId) -> Option<&str> {
         self.source(file).map(|source| &*source.text)
     }
 
-    /// Returns where a span starts in its registered source file, as [Span::line_column] counts,
-    /// or `None` if the file is not registered.
+    /// Returns the line and column where a span starts, as [Span::line_column] counts them,
+    /// or `None` if its file is not registered.
     pub(crate) fn line_column(&self, span: Span) -> Option<(u32, u32)> {
         self.source(span.file)
             .map(|source| source.line_column(span))
     }
 
-    /// Returns every registered source, by id, name, and text, for rendering diagnostics.
+    /// Returns every registered source as its file id, name and text.
     pub fn sources(&self) -> impl Iterator<Item = (FileId, &str, &str)> {
         self.files.iter().enumerate().map(|(index, source)| {
             let id = FileId::new(u32::try_from(index).expect("file counts stay below u32"));

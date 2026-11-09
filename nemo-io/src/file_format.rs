@@ -1,11 +1,12 @@
-//! File formats: the serializations data is read from and written to.
+//! File formats: the serializations that data is read from and written to.
 //!
-//! Each format comes with its name, its media type and file extension,
-//! the number of columns it fixes, and the options a read or a write of it accepts.
+//! Each format has a name, and may have a media type, a file extension and a fixed number of
+//! columns.
+//! It accepts its own options for reading and for writing.
 
 use crate::stream::compression::Compression;
 
-/// A serialization data is read from or written to.
+/// A serialization that data is read from or written to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FileFormat {
     /// Comma-separated values.
@@ -14,10 +15,12 @@ pub enum FileFormat {
     Tsv,
     /// Values separated by a declared delimiter.
     Dsv,
-    /// An RDF serialization: a named variant, or the generic `rdf`
-    /// format name, which resolves by the resource's extension.
+    /// An RDF serialization, either a named variant or `None` for the generic format `rdf`.
+    ///
+    /// The variant of the generic format is the one that the resource's extension names
+    /// ([rdf_variant](Self::rdf_variant)).
     Rdf(Option<RdfVariant>),
-    /// A JSON document (reading) or array of rows (writing).
+    /// A JSON document when reading, and an array of rows when writing.
     Json,
     /// A Parquet file.
     Parquet,
@@ -25,7 +28,7 @@ pub enum FileFormat {
     Sparql,
 }
 
-/// The RDF serialization variants.
+/// A named RDF serialization.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RdfVariant {
     /// N-Triples (`.nt`).
@@ -40,27 +43,27 @@ pub enum RdfVariant {
     RdfXml,
 }
 
-/// The options of the shared vocabulary a format accepts.
+/// The options shared by all formats that a format accepts.
 ///
-/// Any other option of that vocabulary is an error.
+/// Each field says whether the format accepts one of these options.
+/// An option that the format does not accept is an error.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FormatOptions {
-    /// Whether `base` is meaningful.
+    /// Whether the format accepts `base`, the IRI that relative IRIs are resolved against.
     pub base: bool,
-    /// Whether `compression` is meaningful.
+    /// Whether the format accepts `compression`.
     pub compression: bool,
-    /// Whether `http_headers` is meaningful (reading a possibly remote
-    /// resource).
+    /// Whether the format accepts `http_headers`, which only a read of a possibly remote
+    /// resource uses.
     pub headers: bool,
-    /// Whether `limit` (at most this many rows) applies.
+    /// Whether the format accepts `limit`, the largest number of rows.
     pub limit: bool,
-    /// Whether `format` (one column format per column, `skip` dropping
-    /// a column) applies.
+    /// Whether the format accepts `format`, one [ValueFormat](crate::format::ValueFormat) per
+    /// column.
     pub formats: bool,
 }
 
-/// What goes with a format:
-/// its name, and its conventional file extension and media type if it has them.
+/// The name of a format, and its conventional file extension and media type if it has them.
 #[derive(Debug, Clone, Copy)]
 struct Entry {
     /// The name of the format.
@@ -72,8 +75,9 @@ struct Entry {
 }
 
 impl FileFormat {
-    /// Every format there is a name for, the generic RDF format included:
-    /// what the lookups by name and by extension search.
+    /// Every format that has a name, including the generic RDF format.
+    ///
+    /// The lookups by name and by extension search this list.
     const ALL: [FileFormat; 12] = [
         FileFormat::Csv,
         FileFormat::Tsv,
@@ -89,9 +93,10 @@ impl FileFormat {
         FileFormat::Sparql,
     ];
 
-    /// Returns what goes with the format, from the one table every lookup reads.
+    /// Returns the name, the file extension and the media type of the format.
     ///
-    /// The RDF variants' rows are [theirs](RdfVariant::entry).
+    /// This is the one table that every lookup reads.
+    /// The entries of the named RDF variants are in [RdfVariant::entry].
     fn entry(self) -> Entry {
         match self {
             FileFormat::Csv => Entry {
@@ -132,8 +137,8 @@ impl FileFormat {
                 extension: Some("parquet"),
                 media_type: Some("application/vnd.apache.parquet"),
             },
-            // The solutions arrive as SPARQL TSV: the media type is the
-            // response's, and no file carries the format.
+            // The solutions arrive as SPARQL TSV. The media type is the
+            // response's, and since no file has this format, there is no extension.
             FileFormat::Sparql => Entry {
                 name: "sparql",
                 extension: None,
@@ -142,7 +147,7 @@ impl FileFormat {
         }
     }
 
-    /// Returns the format a name names, if any.
+    /// Returns the format with the given name, or `None` for an unknown name.
     pub fn from_name(name: &str) -> Option<Self> {
         Self::ALL.into_iter().find(|format| format.name() == name)
     }
@@ -152,10 +157,10 @@ impl FileFormat {
         self.entry().name
     }
 
-    /// Returns the format a resource's extension names, after any compression suffix.
+    /// Returns the format that the extension of a resource's name names,
+    /// after [stripping](Compression::strip_suffix) any compression suffix.
     ///
-    /// This is how the generic formats resolve.
-    /// A `.dsv` name resolves to nothing, since it says nothing about the delimiter.
+    /// Returns `None` for a `.dsv` name, which does not say what the delimiter is.
     pub(crate) fn from_extension(resource: &str) -> Option<Self> {
         let (_, extension) = Compression::strip_suffix(resource).rsplit_once('.')?;
         Self::ALL
@@ -164,22 +169,25 @@ impl FileFormat {
             .find(|format| format.extension() == Some(extension))
     }
 
-    /// Returns the conventional file extension, if the format has one.
+    /// Returns the conventional file extension, or `None` if the format has none.
     ///
-    /// A generic RDF format has none until it resolves.
+    /// The generic RDF format has none.
     pub fn extension(self) -> Option<&'static str> {
         self.entry().extension
     }
 
-    /// Returns the media type a fetch asks for, if the format has one.
+    /// Returns the media type to ask for when fetching a resource of the format,
+    /// or `None` if the format has none.
     ///
-    /// For SPARQL, it is the type of the response the reader parses.
+    /// For SPARQL, it is the media type of the responses that the reader parses.
     pub fn media_type(self) -> Option<&'static str> {
         self.entry().media_type
     }
 
-    /// Returns the number of columns the format fixes, if it fixes one:
-    /// for RDF statements, and for the node/edge triples of the JSON reader.
+    /// Returns the number of columns that the format fixes, or `None` if it fixes none.
+    ///
+    /// A named RDF variant fixes its [arity](RdfVariant::arity),
+    /// and JSON fixes three, for the triples that the [JSON reader](crate::json) produces.
     pub fn arity(self) -> Option<usize> {
         match self {
             FileFormat::Rdf(Some(variant)) => Some(variant.arity()),
@@ -193,10 +201,11 @@ impl FileFormat {
         matches!(self, FileFormat::Csv | FileFormat::Tsv | FileFormat::Dsv)
     }
 
-    /// Returns the RDF variant the format fixes,
-    /// or for the generic format the one the resource's extension names.
+    /// Returns the RDF variant of the format.
     ///
-    /// Returns `None` for any other format and for a resource whose extension names no variant.
+    /// For the generic RDF format, it is the variant that the extension of `resource` names.
+    /// Returns `None` for a format that is not RDF,
+    /// and for the generic one if `resource` is `None` or its extension names no variant.
     pub fn rdf_variant(self, resource: Option<&str>) -> Option<RdfVariant> {
         match self {
             FileFormat::Rdf(Some(variant)) => Some(variant),
@@ -208,7 +217,8 @@ impl FileFormat {
         }
     }
 
-    /// Returns the options the format accepts, for reading or for writing.
+    /// Returns the options that the format accepts,
+    /// for reading if `reading` is true and for writing otherwise.
     pub fn options(self, reading: bool) -> FormatOptions {
         match self {
             FileFormat::Rdf(_) => FormatOptions {
@@ -218,8 +228,8 @@ impl FileFormat {
                 limit: true,
                 formats: reading,
             },
-            // A JSON import is read whole; its compression detects
-            // from the name alone.
+            // A JSON document is read whole, and its compression is
+            // detected from its name alone.
             FileFormat::Json => FormatOptions {
                 base: false,
                 compression: !reading,
@@ -227,8 +237,8 @@ impl FileFormat {
                 limit: !reading,
                 formats: false,
             },
-            // Parquet compresses internally, and remote Parquet is
-            // future work: the resource alone.
+            // Parquet has its own compression, and is read from local
+            // files only.
             FileFormat::Parquet => FormatOptions {
                 base: false,
                 compression: false,
@@ -261,8 +271,9 @@ impl std::fmt::Display for FileFormat {
 }
 
 impl RdfVariant {
-    /// Returns the name, the file extension, and the media type of the variant,
-    /// from the one table every lookup reads.
+    /// Returns the name, the file extension and the media type of the variant.
+    ///
+    /// This is the one table of the variants that every lookup reads.
     fn entry(self) -> (&'static str, &'static str, &'static str) {
         match self {
             RdfVariant::NTriples => ("ntriples", "nt", "application/n-triples"),
@@ -285,19 +296,19 @@ impl RdfVariant {
         media_type
     }
 
-    /// Returns whether statements carry a graph column.
+    /// Returns whether the variant's statements are quads, which have a graph.
     pub fn quads(self) -> bool {
         matches!(self, RdfVariant::NQuads | RdfVariant::TriG)
     }
 
-    /// Returns whether a statement of the variant takes one line,
-    /// as in N-Triples and N-Quads.
+    /// Returns whether the variant puts each statement on a line of its own,
+    /// as N-Triples and N-Quads do.
     pub fn line_based(self) -> bool {
         matches!(self, RdfVariant::NTriples | RdfVariant::NQuads)
     }
 
-    /// Returns the delivered arity: four columns for the quad variants, the graph first,
-    /// and three otherwise.
+    /// Returns the number of columns of the variant's rows:
+    /// four for quads, with the graph first, and three for triples.
     pub fn arity(self) -> usize {
         if self.quads() { 4 } else { 3 }
     }
@@ -307,11 +318,13 @@ impl RdfVariant {
 mod tests {
     use super::*;
 
+    /// The name of every format.
     const NAMES: [&str; 12] = [
         "csv", "tsv", "dsv", "rdf", "ntriples", "nquads", "turtle", "trig", "rdfxml", "json",
         "parquet", "sparql",
     ];
 
+    /// Every format's name maps back to the format, and an unknown name maps to none.
     #[test]
     fn names_round_trip() {
         for name in NAMES {
@@ -321,6 +334,8 @@ mod tests {
         assert_eq!(FileFormat::from_name("xml"), None);
     }
 
+    /// The extension of a resource's name gives its format, ignoring a compression suffix and a
+    /// URL's query and fragment, and it gives the variant of the generic RDF format.
     #[test]
     fn extensions_resolve_through_compression() {
         assert_eq!(
@@ -353,6 +368,7 @@ mod tests {
         assert_eq!(FileFormat::Json.rdf_variant(Some("x.ttl")), None);
     }
 
+    /// Each format has its own media type, extension, arity and options.
     #[test]
     fn metadata_is_per_format() {
         assert_eq!(FileFormat::Csv.media_type(), Some("text/csv"));

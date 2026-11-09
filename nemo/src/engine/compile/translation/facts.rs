@@ -1,4 +1,4 @@
-//! Facts: translating one into an encoded row of its table.
+//! Facts: translating a fact into an encoded row of its table.
 
 use nemo_physical::{
     diagnostics::Diagnostic,
@@ -16,8 +16,8 @@ use crate::{
 impl<'a> Translator<'a> {
     /// Translates a fact into an encoded row of its table.
     ///
-    /// Every value is checked at its column as written, a pruned one included,
-    /// and the delivered ones are stored.
+    /// Every value is checked against the declaration of its kept column, even a pruned one,
+    /// and the values of the delivered columns are stored.
     pub(crate) fn fact(&mut self, fact: &Fact) -> Result<(), Diagnostic> {
         let positional = self.positional_fact(fact)?;
         let fact = positional.as_ref().unwrap_or(fact);
@@ -58,10 +58,10 @@ impl<'a> Translator<'a> {
         Ok(())
     }
 
-    /// Returns the layout that takes a fact's columns, as written, to its table's columns:
-    /// the delivered columns of a pruned predicate, every column otherwise.
+    /// Returns the layout that maps a fact's columns to its table's columns.
     ///
-    /// A row at the delivered width of a pruned predicate is an error,
+    /// For a pruned predicate, these are the delivered columns, and otherwise every column.
+    /// A fact with as many values as a pruned predicate has delivered columns is an error,
     /// since its values would land in the wrong columns.
     fn fact_layout(&self, name: &str, fact: &Fact) -> Result<ColumnLayout, Diagnostic> {
         let layout = self.plan.layout_of(name, fact.terms.len());
@@ -80,10 +80,10 @@ impl<'a> Translator<'a> {
         Ok(layout)
     }
 
-    /// Checks a fact's value against the declared type of its column as written,
+    /// Checks a fact's value against the declared type of its kept column,
     /// through every level of its structure.
     ///
-    /// A value of a type the declaration excludes is an error before anything runs.
+    /// A value of a type that the declaration excludes is an error before anything runs.
     /// A tuple of the wrong shape is excluded like a string in an integer column.
     fn check_fact_declaration(
         &self,

@@ -1,12 +1,16 @@
-//! The arithmetic over numbers: promotion along the type ladder,
-//! then the operation of the type both operands meet at,
-//! exact for [decimals](DecimalRef) and IEEE's for floats and doubles.
+//! Arithmetic on numbers.
 //!
-//! The operators are the `std::ops` traits with a [Result] output,
-//! and every failure is one of two:
-//! a [DivisionByZero](EvaluationError::DivisionByZero) for an exact zero divisor,
-//! an [Overflow](EvaluationError::Overflow) for a result past the length limit of numbers.
-//! Floats never fail: an infinity or the NaN is a value of their domain.
+//! An operation first promotes both operands to the first type that can hold them,
+//! in the order integer, decimal, float, double, and then computes in that type:
+//! exactly for [decimals](DecimalRef), and as IEEE 754 defines it for floats and doubles.
+//!
+//! The operators are the `std::ops` traits with a [Result] output.
+//! Besides [TypeMismatch](EvaluationError::TypeMismatch) for an operand that an operation
+//! does not accept, such as a float for a remainder, an operation fails in one of two ways:
+//! - with [DivisionByZero](EvaluationError::DivisionByZero) for an exact zero divisor;
+//! - with [Overflow](EvaluationError::Overflow) for a result past the length limit of numbers.
+//!
+//! Floating-point operations never fail, since infinities and NaN are values of their domains.
 
 use std::ops::{Add, Div, Mul, Neg, Rem, Sub};
 
@@ -71,11 +75,12 @@ impl Div for NumberRef<'_> {
 
     /// Returns the quotient, `op:numeric-divide`.
     ///
-    /// Exact operands divide exactly if the quotient terminates within the scale,
-    /// and are rounded half to even at it otherwise.
+    /// The quotient of exact operands is exact if it terminates within the scale,
+    /// and is rounded half to even at the scale otherwise.
     /// The scale is the largest of eighteen significant digits, eighteen fraction digits,
     /// and the fraction digits of either operand.
-    /// Floats divide as IEEE does, to an infinity or the NaN for a zero divisor.
+    /// Floats and doubles divide as IEEE 754 defines it,
+    /// so a zero divisor gives an infinity or NaN.
     ///
     /// # Errors
     ///
@@ -107,7 +112,8 @@ impl Div for NumberRef<'_> {
 impl Rem for NumberRef<'_> {
     type Output = Result<DataValue, EvaluationError>;
 
-    /// Returns the remainder of integer division with the dividend's sign, `op:numeric-mod`.
+    /// Returns the remainder of the division of two integers, which has the sign of the
+    /// dividend, `op:numeric-mod`.
     ///
     /// # Errors
     ///
@@ -124,12 +130,11 @@ impl Rem for NumberRef<'_> {
 }
 
 impl NumberRef<'_> {
-    /// Returns the value promoted along the ladder to a numeric domain at or above its own,
-    /// as the operations promote their operands.
+    /// Returns the value promoted to a numeric domain at or above its own,
+    /// in the order integer, decimal, float, double, as the arithmetic promotes its operands.
     ///
-    /// The value becomes a float or a double for those domains.
-    /// For an exact domain it stays as it is,
-    /// since integers and decimals share one value space.
+    /// For the float or the double domain, the value becomes a float or a double.
+    /// For an exact domain it stays as it is, since integers and decimals share one value space.
     pub(crate) fn promote_to(self, domain: ValueDomain) -> Self {
         match domain {
             ValueDomain::Float => NumberRef::Float(Float::new(self.to_f32())),
@@ -160,29 +165,35 @@ impl NumberRef<'_> {
         }
     }
 
-    /// Returns the nearest integer, halves toward positive infinity, `fn:round`.
-    /// A decimal becomes an integer, and a float stays a float.
+    /// Returns the nearest integer, with halves rounded toward positive infinity, `fn:round`.
+    ///
+    /// A decimal becomes an integer, and a float or a double keeps its domain.
     pub fn round(self) -> DataValue {
         self.to_integral(Rounding::Nearest)
     }
 
     /// Returns the smallest integer not below the value, `fn:ceiling`.
-    /// A decimal becomes an integer, and a float stays a float.
+    ///
+    /// A decimal becomes an integer, and a float or a double keeps its domain.
     pub fn ceil(self) -> DataValue {
         self.to_integral(Rounding::Up)
     }
 
     /// Returns the largest integer not above the value, `fn:floor`.
-    /// A decimal becomes an integer, and a float stays a float.
+    ///
+    /// A decimal becomes an integer, and a float or a double keeps its domain.
     pub fn floor(self) -> DataValue {
         self.to_integral(Rounding::Down)
     }
 
-    /// Returns the value taken to an integer by the given rounding, within its domain.
+    /// Returns the value rounded to an integer by `rounding`.
+    ///
+    /// A float or a double keeps its domain.
     fn to_integral(self, rounding: Rounding) -> DataValue {
         match self {
             NumberRef::Decimal(value) => DataValue::from(value.to_integral(rounding)),
-            // An integral value near a float is representable in it: the cast back is exact.
+            // The rounded value is a float again: below 2^24 every integer is a float,
+            // and from 2^24 on every float is an integer. So the cast back is exact.
             #[allow(clippy::cast_possible_truncation)]
             NumberRef::Float(value) => DataValue::float(rounding.apply(value.to_f64()) as f32),
             NumberRef::Double(value) => DataValue::double(rounding.apply(value.get())),
@@ -224,27 +235,27 @@ forward_binary!(Div, div);
 forward_binary!(Rem, rem);
 
 impl Number {
-    /// Returns the value raised to a power. See [NumberRef::pow].
+    /// Returns the value raised to a power, as [NumberRef::pow] does.
     pub fn pow(&self, power: u32) -> Result<DataValue, EvaluationError> {
         self.as_ref().pow(power)
     }
 
-    /// Returns the absolute value. See [NumberRef::abs].
+    /// Returns the absolute value, as [NumberRef::abs] does.
     pub fn abs(&self) -> DataValue {
         self.as_ref().abs()
     }
 
-    /// Returns the nearest integer. See [NumberRef::round].
+    /// Returns the nearest integer, as [NumberRef::round] does.
     pub fn round(&self) -> DataValue {
         self.as_ref().round()
     }
 
-    /// Returns the smallest integer not below the value. See [NumberRef::ceil].
+    /// Returns the smallest integer not below the value, as [NumberRef::ceil] does.
     pub fn ceil(&self) -> DataValue {
         self.as_ref().ceil()
     }
 
-    /// Returns the largest integer not above the value. See [NumberRef::floor].
+    /// Returns the largest integer not above the value, as [NumberRef::floor] does.
     pub fn floor(&self) -> DataValue {
         self.as_ref().floor()
     }
@@ -268,10 +279,10 @@ impl Neg for Number {
     }
 }
 
-/// The ways a number is taken to an integer.
+/// The ways of rounding a number to an integer.
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum Rounding {
-    /// To the nearest integer, halves toward positive infinity.
+    /// To the nearest integer, with halves rounded toward positive infinity.
     Nearest,
     /// To the nearest integer not below the value.
     Up,
@@ -284,9 +295,9 @@ impl Rounding {
     fn apply(self, value: f64) -> f64 {
         match self {
             Rounding::Nearest => {
-                // The primitive takes halves away from zero;
-                // a negative half comes back up, to negative zero from -0.5,
-                // as `fn:round` has it.
+                // `f64::round` rounds halves away from zero.
+                // A negative half is moved back up, and -0.5 becomes negative zero,
+                // as `fn:round` requires.
                 let rounded = value.round();
                 if rounded - value == -0.5 {
                     (rounded + 1.0).copysign(value)
@@ -300,17 +311,18 @@ impl Rounding {
     }
 }
 
-/// A pair of numbers promoted to their smallest common type.
+/// Two numbers promoted to the first type that can hold both.
 enum Pair<'a> {
     /// Both are exact.
     Decimal(DecimalRef<'a>, DecimalRef<'a>),
-    /// At least one float, no double.
+    /// At least one was a float, and neither was a double.
     Float(Float, Float),
-    /// At least one double.
+    /// At least one was a double.
     Double(Double, Double),
 }
 
-/// Promotes two numbers to their smallest common type.
+/// Promotes two numbers to the first type that can hold both,
+/// in the order integer, decimal, float, double.
 fn promote<'a>(left: NumberRef<'a>, right: NumberRef<'a>) -> Pair<'a> {
     match (left, right) {
         (NumberRef::Decimal(left), NumberRef::Decimal(right)) => Pair::Decimal(left, right),
@@ -330,7 +342,7 @@ mod tests {
         value::{Decimal, ValueRef},
     };
 
-    /// Returns the number a value holds.
+    /// Returns the view of a value that is a number.
     fn of(value: &DataValue) -> NumberRef<'_> {
         match value.as_ref() {
             ValueRef::Number(number) => number,
@@ -338,16 +350,17 @@ mod tests {
         }
     }
 
-    /// Returns a float.
+    /// Returns the view of a float.
     fn float(value: f32) -> NumberRef<'static> {
         NumberRef::Float(Float::new(value))
     }
 
-    /// Returns a double.
+    /// Returns the view of a double.
     fn double(value: f64) -> NumberRef<'static> {
         NumberRef::Double(Double::new(value))
     }
 
+    /// The operands are promoted to the first type that can hold both.
     #[test]
     fn the_ladder_picks_the_smallest_type() {
         let add = |left: &DataValue, right: NumberRef<'_>| (of(left) + right).expect("bounded");
@@ -366,9 +379,11 @@ mod tests {
         );
     }
 
+    /// An exact result is stored in the representation for its range,
+    /// across the 64-bit boundary in both directions.
     #[test]
     fn results_land_in_their_home() {
-        /// Applies a binary operation to two number lexicals.
+        /// Applies a binary operation to the numbers with the given lexical forms.
         fn apply(
             left: &str,
             right: &str,
@@ -407,7 +422,7 @@ mod tests {
         );
         assert_eq!(apply("1", "0.001", |l, r| l + r), number("1.001"));
 
-        // An alignment beyond the workspace continues in the big one.
+        // An alignment of exponents beyond the `i128` workspace continues in the big one.
         assert_eq!(
             apply("1", "0.0000000000000000000000000000000000000001", |l, r| l
                 + r),
@@ -415,6 +430,8 @@ mod tests {
         );
     }
 
+    /// Exact division is exact within the scale and rounds beyond it,
+    /// and fails for a zero divisor.
     #[test]
     fn division_is_exact_within_the_scale() {
         let div = |left: &str, right: &str| of(&number(left)) / of(&number(right));
@@ -439,7 +456,7 @@ mod tests {
             Ok(number("1234567890123456789.01"))
         );
 
-        // A scaled numerator beyond the workspace divides in the big one.
+        // A scaled numerator beyond the `i128` workspace is divided in the big one.
         assert_eq!(
             div(
                 "9223372036854775807",
@@ -451,6 +468,7 @@ mod tests {
         );
     }
 
+    /// Floating-point arithmetic follows IEEE 754, with infinities and NaN as results.
     #[test]
     fn floats_follow_ieee() {
         assert_eq!(
@@ -473,6 +491,7 @@ mod tests {
         assert_eq!(-double(f64::INFINITY), DataValue::double(f64::NEG_INFINITY));
     }
 
+    /// The operations on owned numbers give the results of their views.
     #[test]
     fn owned_numbers_forward_to_the_view() {
         let owned =
@@ -493,6 +512,7 @@ mod tests {
         assert_eq!(-seven, DataValue::integer(-7));
     }
 
+    /// Remainders accept only integers, and powers only exact numbers.
     #[test]
     fn remainders_and_powers_are_for_integers() {
         let int = |value: i64| NumberRef::Decimal(value.into());
@@ -518,6 +538,7 @@ mod tests {
         assert_eq!(float(2.0).pow(2), Err(EvaluationError::TypeMismatch));
     }
 
+    /// A result beyond the length limit fails with an overflow, without being computed.
     #[test]
     fn results_past_the_limit_are_refused_before_they_are_computed() {
         assert_eq!(
@@ -528,14 +549,16 @@ mod tests {
         assert_eq!(of(&half) * of(&half), Err(EvaluationError::Overflow));
     }
 
+    /// Rounding is exact for decimals and rounds halves up,
+    /// and a float or a double keeps its domain.
     #[test]
     fn compact_decimals_round_exactly() {
-        /// Applies a unary operation to a number lexical.
+        /// Applies a unary operation to the number with the given lexical form.
         fn apply(operation: impl Fn(NumberRef<'_>) -> DataValue, lexical: &str) -> DataValue {
             operation(of(&number(lexical)))
         }
 
-        // Digits past a double's precision still decide the direction.
+        // Digits beyond a double's precision still decide the direction.
         assert_eq!(
             apply(|n| n.ceil(), "2.0000000000000001"),
             DataValue::integer(3)
@@ -553,7 +576,7 @@ mod tests {
             DataValue::integer(-3)
         );
 
-        // Halves go up; the directed roundings move on any fraction toward their side.
+        // Halves are rounded up, and the directed roundings move any fraction toward their side.
         assert_eq!(apply(|n| n.round(), "2.5"), DataValue::integer(3));
         assert_eq!(apply(|n| n.round(), "-2.5"), DataValue::integer(-2));
         assert_eq!(apply(|n| n.round(), "-2.6"), DataValue::integer(-3));
@@ -568,7 +591,7 @@ mod tests {
         assert_eq!(apply(|n| n.ceil(), "-2.5"), DataValue::integer(-2));
         assert_eq!(apply(|n| n.floor(), "2.5"), DataValue::integer(2));
 
-        // A fraction beyond the workspace rounds in the big one.
+        // A fraction beyond the `i128` workspace is rounded in the big one.
         let tiny = format!("0.{}1", "0".repeat(39));
         assert_eq!(apply(|n| n.round(), &tiny), DataValue::integer(0));
         assert_eq!(apply(|n| n.ceil(), &tiny), DataValue::integer(1));
@@ -577,7 +600,7 @@ mod tests {
             DataValue::integer(-1)
         );
 
-        // Integers stay, wide ones included; floats stay floats.
+        // Integers, including wide ones, stay as they are, and floats stay floats.
         assert_eq!(
             apply(|n| n.round(), "123456789012345678901"),
             number("123456789012345678901")

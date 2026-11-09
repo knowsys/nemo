@@ -1,35 +1,30 @@
-//! Tracing: derivations of facts, and the format they are exchanged in.
+//! Tracing: the derivations of facts, and the format in which they are exchanged.
 //!
-//! A derivation is a static object over the written program:
-//! the program as the user wrote it, with its modules instantiated.
-//! A derived fact comes with the rule instance that derives it:
-//! its rule, its variable assignment, and one premise per positive body literal.
+//! A *derivation* explains a fact over the *written program*,
+//! which is the program as the user wrote it, with its modules instantiated.
+//! A derived fact comes with the rule instance that derives it,
+//! which consists of its rule, its variable assignment, and one premise per positive body
+//! literal.
 //! The facts at the bottom were loaded.
-//! Validity makes no reference to the history of the run:
-//! substitute the assignment, and every derivation checks out against the written rules.
-//! [Engine::trace](crate::engine::Engine::trace) finds a derivation for each requested fact
-//! by a grounded backward search over the compiled program,
-//! and translates it back onto the written program.
-//! [Engine::trace_predicates](crate::engine::Engine::trace_predicates) does so for every row
-//! of some predicates, handing the response out in [parts](TracePart).
+//! A derivation does not depend on how reasoning went:
+//! with its assignment substituted, each rule instance can be checked against the written rules.
 //!
-//! The derivations of one response form a graph, a [TraceResponse]:
-//! every fact is one node, a premise of several derivations included,
-//! and a derived node names its premises by node id.
-//! A [Proof] walks it like a tree.
-//! Rules are listed once per response, and each carries its *statement id*,
-//! its position in the written program.
-//! If the run never had a value at a position
-//! (a variable a query to an endpoint did not return, a column no rule reads),
-//! a fact shows the written term there instead, a variable or `_`.
+//! [Engine::trace](crate::engine::Engine::trace) returns the derivations of the requested facts
+//! as one graph, a [TraceResponse], in which every fact is one node.
+//! A [Proof] walks the graph like a tree.
+//! Each rule is listed once per response, with its *statement id*,
+//! which is its position in the written program.
+//! [Engine::trace_predicates](crate::engine::Engine::trace_predicates) hands out a response in
+//! [parts](TracePart).
 //!
-//! The types here are the response format of [trace](crate::engine::Engine::trace).
-//! They are serde-derived and camelCase on the wire,
-//! and every [TraceResponse] carries a [version](VERSION) field, while its parts carry none.
+//! The types here are serde types whose JSON field names are camelCase.
+//! Every [TraceResponse] has a [version](VERSION) field, while its parts have none.
 //! Facts and terms are written in canonical term syntax, which parses back,
 //! except for nulls, which are written `_:id`.
-//! The derivation-structure queries of nemo-web's explanation viewer use that viewer's own
-//! format, described in [query].
+//! Where reasoning never computed a value, a fact shows the written term instead,
+//! which is a variable or `_`.
+//! This happens, for example, for a variable that a query to an endpoint did not return.
+//! The derivation-structure queries of [query] follow the format of an external viewer.
 
 mod ascii;
 mod node;
@@ -48,14 +43,15 @@ pub use self::{
     written::{SourceLocation, WrittenRule, WrittenStatement},
 };
 
-/// The version of the trace response this build writes, which every response carries.
+/// The version of the trace response format that this build writes into every response.
 pub const VERSION: u32 = 1;
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// A response of one derived fact over a loaded one.
+    /// Returns a response with one derived fact over a loaded one, and one fact that does not
+    /// hold.
     fn response() -> TraceResponse {
         TraceResponse {
             version: VERSION,
@@ -100,8 +96,8 @@ mod tests {
         }
     }
 
-    /// A response round-trips through its JSON rendering, whose field names are camelCase,
-    /// a derivation's fields sit in its node, and empty lists are left out.
+    /// A response round-trips through JSON, in which the field names are camelCase,
+    /// a derivation's fields are inlined into its node, and empty lists are left out.
     #[test]
     fn responses_round_trip_through_camel_case_json() {
         let response = response();

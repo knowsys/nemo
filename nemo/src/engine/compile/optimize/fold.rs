@@ -8,14 +8,14 @@ use crate::{
     model::Span,
 };
 
-/// The pass that evaluates every ground condition of a rule once.
+/// The program pass that evaluates every ground condition of a rule once.
 ///
-/// A true condition is removed, and a false or failing one makes the rule never fire.
-/// A failing one is also reported, as a rule that can never fire,
-/// since the user presumably meant it to hold;
-/// a false one is not, since a parameter may switch a rule off that way.
-/// Conditions calling a nondeterministic function (such as `RAND()`) are not folded,
-/// and are evaluated per row.
+/// The condition is then removed, and if it is false or fails, the rule never fires.
+/// A failing condition is also reported as a rule that never fires,
+/// since it was presumably meant to hold.
+/// A false one is not reported, since a parameter may switch a rule off that way.
+/// A condition that calls a nondeterministic function, such as `RAND()`, is not folded,
+/// and is evaluated per row.
 #[derive(Debug)]
 pub(crate) struct ConstantFold;
 

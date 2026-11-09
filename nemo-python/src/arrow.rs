@@ -1,16 +1,11 @@
-//! Arrow interchange: results as columnar record batches.
+//! Reading a predicate's rows as Arrow record batches.
 //!
-//! The engine's chunks are column-major already.
-//! This module projects them onto Arrow arrays through
-//! [nemo-io's shared mapping](nemo_io::arrow)
-//! and hands them over through the Arrow C stream interface (`__arrow_c_stream__`),
-//! which pandas, polars, and duckdb consume, with no pyarrow dependency on this side.
-//!
-//! Typing is per column over the whole result.
-//! Uniformly integer, double, or boolean columns become native arrays,
-//! and every other column becomes text:
-//! plain strings raw, IRIs bare, everything else in canonical term syntax.
-//! The typed API (`rows`, `query`) keeps the exact values, and this is the dataframe projection.
+//! The rows are converted to Arrow arrays by [nemo-io's mapping](nemo_io::arrow),
+//! and passed to Python through the Arrow C stream interface (`__arrow_c_stream__`),
+//! which libraries such as pandas, polars and duckdb read without pyarrow.
+//! The mapping loses information: a column whose values are all integers, all doubles
+//! or all booleans becomes an Arrow array of that type, and every other column becomes text.
+//! The engine's `rows` and `cursor` keep the exact values.
 
 use std::sync::Arc;
 
@@ -23,8 +18,8 @@ use arrow::{
 use nemo_io::arrow::ColumnKind;
 use pyo3::{prelude::*, types::PyCapsule};
 
-/// A finished columnar result, handed to consumers through the Arrow C
-/// stream interface.
+/// The rows of a predicate as Arrow record batches,
+/// which other libraries read through the Arrow C stream interface.
 #[pyclass(frozen, module = "nmo")]
 #[derive(Debug)]
 pub struct ArrowStream {
@@ -38,7 +33,8 @@ pub struct ArrowStream {
 impl ArrowStream {
     /// Returns the Arrow C stream capsule.
     ///
-    /// Each call yields a fresh stream over the same batches.
+    /// Each call returns a new stream over the same batches.
+    /// `requested_schema` is ignored.
     #[pyo3(signature = (requested_schema = None))]
     fn __arrow_c_stream__<'py>(
         &self,
@@ -60,15 +56,17 @@ impl ArrowStream {
     }
 }
 
-/// Reads a predicate into an [ArrowStream].
+/// Reads the rows of a predicate into an [ArrowStream].
+///
+/// Raises `DiagnosticsError`, rendered against `sources`, if the rows cannot be read.
 pub(crate) fn stream(
     py: Python<'_>,
     engine: &mut nemo::engine::Engine,
     sources: &nemo::diagnostics::render::SourceTexts,
     predicate: &str,
 ) -> PyResult<ArrowStream> {
-    // Drain the cursor first: column types are inferred over the whole
-    // result, so every chunk is needed before the first array builds.
+    // The whole cursor is read first, since the type of a column depends on all of its
+    // values, and every array needs that type.
     let mut cursor = engine
         .cursor(predicate)
         .map_err(|diagnostic| crate::errors::raise(py, vec![diagnostic], sources))?;
@@ -107,8 +105,8 @@ pub(crate) fn stream(
                     kind.array(chunk.column(index).iter().map(|value| value.as_ref()))
                 })
                 .collect();
-            // The row count travels with the batch: a nullary predicate
-            // holds its row in no column at all.
+            // The batch states its row count, since the row of a predicate without columns
+            // is in no column.
             RecordBatch::try_new_with_options(
                 schema.clone(),
                 arrays,

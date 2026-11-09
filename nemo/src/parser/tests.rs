@@ -1,5 +1,5 @@
-//! The parser: what it reads, how it binds and classifies, how it
-//! recovers, and what its problems say.
+//! Tests of the parser: the syntax it accepts, how operators bind,
+//! how it recovers from errors, and what its diagnostics say.
 
 use super::{cursor::MAX_NESTING, *};
 
@@ -7,8 +7,8 @@ use nemo_physical::value::{Number, ValueDomain};
 
 use crate::model::{Directive, Identifier, Literal, Operator, TermKind};
 
-/// Statements whose canonical display equals their source text,
-/// which must round-trip when parsed and printed back.
+/// Statements written in their canonical form,
+/// so that each one is displayed exactly as written after it is parsed.
 const ROUND_TRIPS: &[&str] = &[
     "edge(1, 2) .",
     "reach(?x, ?y) :- edge(?x, ?y) .",
@@ -71,6 +71,8 @@ const ROUND_TRIPS: &[&str] = &[
     "q(?v) :- p(config{port = ?v}) .",
 ];
 
+/// Block comments are skipped, even an unterminated one at the end,
+/// and blank nodes are terms that are displayed as written.
 #[test]
 fn block_comments_are_trivia_and_blank_nodes_are_terms() {
     let (program, diagnostics) = Program::parse(
@@ -84,16 +86,16 @@ fn block_comments_are_trivia_and_blank_nodes_are_terms() {
     let (again, diagnostics) = Program::parse(&rendered, FileId::new(0));
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
     assert_eq!(again.statements[0], program.statements[0]);
-    // A bare `_` stays anonymous, `_x` a name.
+    // A lone `_` is an anonymous variable, and `_x` is a name.
     let (program, diagnostics) = Program::parse("r(?y) :- s(_, ?y, _x) .", FileId::new(0));
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
     assert!(program.statements[0].to_string().contains("s(_, ?y, _x)"));
 }
 
+/// Every IRI written in term syntax is parsed back as the same IRI.
 #[test]
 fn iris_in_term_syntax_read_back_as_themselves() {
-    // Term syntax writes a bare name without brackets, and everything it
-    // writes parses back to the same IRI.
+    // Term syntax writes an IRI that is a bare name without brackets.
     for iri in [
         "alice",
         "Q42",
@@ -128,6 +130,8 @@ fn iris_in_term_syntax_read_back_as_themselves() {
     }
 }
 
+/// Each statement of [ROUND_TRIPS] parses without diagnostics
+/// and is displayed exactly as written.
 #[test]
 fn statements_round_trip_through_display() {
     for source in ROUND_TRIPS {
@@ -142,10 +146,11 @@ fn statements_round_trip_through_display() {
     }
 }
 
+/// A string in triple quotes, such as a SPARQL query, keeps its inner quotes and line breaks,
+/// and may be empty.
 #[test]
 fn triple_quoted_strings_span_lines() {
-    // The multiline form carries real SPARQL queries; inner quotes
-    // and line breaks are text, and `\r\n` normalizes.
+    // `\r\n` is read as `\n`.
     let term = Term::parse("\"\"\"SELECT ?s\r\nWHERE { \"x\" }\"\"\"").expect("parses");
     assert_eq!(
         term.kind,
@@ -155,9 +160,10 @@ fn triple_quoted_strings_span_lines() {
     assert_eq!(empty.kind, TermKind::String(String::new()));
 }
 
+/// A `\r\n` in every form of string literal and format string is read as `\n`.
 #[test]
 fn line_breaks_in_literals_normalize_in_every_form() {
-    // A line break in a literal is text, whatever the file's line endings.
+    // A line break in a literal is part of the text, whatever line endings the file uses.
     for source in ["\"a\r\nb\"", "\"\"\"a\r\nb\"\"\""] {
         let term = Term::parse(source).expect("parses");
         assert_eq!(
@@ -178,6 +184,7 @@ fn line_breaks_in_literals_normalize_in_every_form() {
     }
 }
 
+/// An import requires `from` and an export requires `to` before the format.
 #[test]
 fn imports_and_exports_take_only_their_own_connective() {
     // The rule arrow connects neither direction.
@@ -201,7 +208,7 @@ fn imports_and_exports_take_only_their_own_connective() {
         assert_eq!(diagnostics[0].field("found"), Some("`:-`"));
     }
 
-    // The directions do not cross.
+    // An import with `to` is an error too.
     let (_, diagnostics) = Program::parse(
         "@import edge to csv { resource = \"e.csv\" } .",
         FileId::new(0),
@@ -216,6 +223,7 @@ fn imports_and_exports_take_only_their_own_connective() {
     assert_eq!(diagnostics[0].field("connective"), Some("from"));
 }
 
+/// A hyphen inside a bare, prefixed or qualified name is part of the name.
 #[test]
 fn a_hyphen_joins_the_parts_of_a_name_without_a_marker() {
     let name = |source: &str| match Term::parse(source).expect(source).kind {
@@ -239,8 +247,8 @@ fn a_hyphen_joins_the_parts_of_a_name_without_a_marker() {
         })
     );
 
-    // A `-` behind a marker, with space around it, or before what cannot
-    // continue a name subtracts.
+    // A `-` is a minus after a variable or a number, next to a space,
+    // or before a character that cannot continue a name.
     for source in ["?x-1", "?x-y", "$limit-1", "a - b", "a-?x", "a -b", "3-a"] {
         assert_eq!(name(source), None, "{source:?}");
     }
@@ -250,6 +258,7 @@ fn a_hyphen_joins_the_parts_of_a_name_without_a_marker() {
     assert_eq!(fact.to_string(), "stock-item(_:b-1, a-1) .");
 }
 
+/// A module name is any number of `super`, followed by one or more names.
 #[test]
 fn a_module_name_is_super_steps_then_names() {
     let name = ModuleName::parse("super::super::util::pairs").expect("it is a module name");
@@ -257,14 +266,14 @@ fn a_module_name_is_super_steps_then_names() {
     assert_eq!(name.segments, ["util", "pairs"]);
     assert_eq!(name.to_string(), "super::super::util::pairs");
 
-    // `super` cannot go back up a directory the name went into.
+    // `super` cannot follow a name, since it would leave a directory that the name entered.
     let problem = ModuleName::parse("util::super::pairs").expect_err("`super` follows a name");
     assert_eq!(
         problem.code(),
         crate::codes::SUPER_INSIDE_MODULE_NAME,
         "{problem:?}"
     );
-    // A name of `super` steps alone names no module.
+    // Only `super`, a trailing `::` or nothing at all is not a module name.
     for source in ["super", "super::", "lib::", ""] {
         let problem = ModuleName::parse(source).expect_err(source);
         assert_eq!(
@@ -275,6 +284,8 @@ fn a_module_name_is_super_steps_then_names() {
     }
 }
 
+/// A `@use` with a path in place of a module name is an error
+/// that shows how to write the module name.
 #[test]
 fn a_use_names_its_module_rather_than_a_path() {
     let (_, diagnostics) = Program::parse("@use \"lib/tc.rls\" as t .", FileId::new(0));
@@ -286,17 +297,19 @@ fn a_use_names_its_module_rather_than_a_path() {
     );
 }
 
+/// A byte order mark at the start of a source text is skipped.
 #[test]
 fn a_leading_byte_order_mark_is_not_content() {
     let (program, diagnostics) = Program::parse("\u{feff}p(1) .\n", FileId::new(0));
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
     assert_eq!(program.statements.len(), 1);
 
-    // Anywhere else the mark is a zero-width character, not markup.
+    // Anywhere else, the mark is a zero-width character, which is reported.
     let (_, diagnostics) = Program::parse("p(1\u{feff}) .\n", FileId::new(0));
     assert!(!diagnostics.is_empty(), "a stray mark is still reported");
 }
 
+/// Multiplication binds more tightly than addition, and addition more than a comparison.
 #[test]
 fn precedence_binds_arithmetic_over_comparisons() {
     let term = Term::parse("?x + 2 * ?y = ?z").expect("the term parses");
@@ -313,11 +326,13 @@ fn precedence_binds_arithmetic_over_comparisons() {
     };
     assert_eq!(product.operator, Operator::Multiply);
 
-    // Parentheses group; the display re-parenthesizes them.
+    // Parentheses group terms, and the display writes the parentheses that grouping needs.
     let grouped = Term::parse("(?x + 1) * ?y").expect("the term parses");
     assert_eq!(grouped.to_string(), "(?x + 1) * ?y");
 }
 
+/// Component access binds more tightly than every infix operator,
+/// and `GET(?t, 0)` is displayed as `?t[0]`.
 #[test]
 fn component_access_binds_tightest_and_writes_the_sugar() {
     // `?t[0] + 1` indexes before it adds.
@@ -331,14 +346,15 @@ fn component_access_binds_tightest_and_writes_the_sugar() {
     };
     assert_eq!(access.operator, Operator::Get);
 
-    // The named form is the same operation, printed the short way;
-    // an infix base is parenthesized.
+    // `GET` is the same operation, and is displayed in the short form.
+    // An operation with an infix operator before the brackets is put in parentheses.
     let named = Term::parse("GET(?t, 0)").expect("the term parses");
     assert_eq!(named.to_string(), "?t[0]");
     let based = Term::parse("(?x + ?y)[0]").expect("the term parses");
     assert_eq!(based.to_string(), "(?x + ?y)[0]");
 }
 
+/// The form of a number literal decides its domain.
 #[test]
 fn numbers_classify_by_form() {
     /// Returns the domain of the number a source parses to.
@@ -350,16 +366,16 @@ fn numbers_classify_by_form() {
     }
 
     assert_eq!(Term::parse("5").expect("parses"), Term::integer(5));
-    // Integral decimals canonicalize to integers, the value layer's
-    // term identity, mirrored by the model.
+    // A decimal with an integral value is the same term as the integer,
+    // as it is in the value layer.
     assert_eq!(Term::parse("2500.0").expect("parses"), Term::integer(2500));
     assert_eq!(domain("1.5"), ValueDomain::Decimal);
     assert_eq!(domain("2.5e3"), ValueDomain::Double);
     assert_eq!(domain("99999999999999999999"), ValueDomain::Integer);
     assert_eq!(domain("-99999999999999999999.5"), ValueDomain::Decimal);
 
-    // Type suffixes fix the floating domain, exponent or not, and
-    // the canonical displays round-trip.
+    // A suffix makes the number a float or a double, with or without an exponent,
+    // and the display of a float is parsed back as the same term.
     for (source, double) in [
         ("2.5d", 2.5),
         ("9D", 9.0),
@@ -382,6 +398,7 @@ fn numbers_classify_by_form() {
     }
 }
 
+/// A prefix `+` is allowed only before a number literal.
 #[test]
 fn a_plus_signs_only_numbers() {
     assert_eq!(Term::parse("+7").expect("parses"), Term::integer(7));
@@ -405,6 +422,7 @@ fn a_plus_signs_only_numbers() {
     assert!(Term::parse("+(1)").is_err());
 }
 
+/// Terms nested more deeply than [MAX_NESTING] are an error.
 #[test]
 fn nesting_deeper_than_the_limit_returns_an_error() {
     // Deep enough nesting would overflow the stack of the recursive descent,
@@ -419,10 +437,11 @@ fn nesting_deeper_than_the_limit_returns_an_error() {
     assert_eq!(problem.code(), crate::codes::TOO_DEEP, "{problem:?}");
 }
 
+/// Format strings nested in format strings count toward the nesting limit.
 #[test]
 fn nesting_through_format_strings_counts_too() {
-    // An embedded expression re-enters the term grammar, one level
-    // further in, so nested format strings meet the same limit.
+    // An embedded expression is parsed as a term one level deeper,
+    // so nested format strings meet the same limit.
     let deep = format!(
         "p({}1{}) .",
         "f\"{".repeat(MAX_NESTING + 8),
@@ -433,6 +452,7 @@ fn nesting_through_format_strings_counts_too() {
     assert_eq!(problem.code(), crate::codes::TOO_DEEP, "{problem:?}");
 }
 
+/// Terms nested less deeply than [MAX_NESTING] parse.
 #[test]
 fn nesting_within_the_limit_is_accepted() {
     let deep = format!(
@@ -444,6 +464,8 @@ fn nesting_within_the_limit_is_accepted() {
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
 }
 
+/// `?x<?y` without spaces is a comparison, since no `>` follows the `<`,
+/// while `<…>` is an IRI.
 #[test]
 fn unspaced_less_than_is_not_an_iri() {
     let rule = Rule::parse("p(?x) :- q(?x, ?y), ?x<?y .").expect("the rule parses");
@@ -456,6 +478,7 @@ fn unspaced_less_than_is_not_an_iri() {
     assert!(matches!(iri.kind, TermKind::Constant(_)));
 }
 
+/// The literals of a body are atoms, negated atoms or operations.
 #[test]
 fn body_literals_classify_without_reparsing() {
     let rule =
@@ -466,6 +489,8 @@ fn body_literals_classify_without_reparsing() {
     assert!(matches!(rule.body[3], Literal::Positive(_)));
 }
 
+/// A statement that does not parse becomes one diagnostic,
+/// and the statements around it still parse.
 #[test]
 fn recovery_keeps_the_healthy_statements() {
     let source = "good(1) .\nbroken( .\ngood(2) .";
@@ -475,6 +500,8 @@ fn recovery_keeps_the_healthy_statements() {
     assert_eq!(program.to_string(), "good(1) .\ngood(2) .");
 }
 
+/// The `parse` function of a component fails for input
+/// that is not exactly one component of its kind.
 #[test]
 fn component_parsers_demand_complete_input() {
     assert!(Term::parse("?x + 1").is_ok());
@@ -486,6 +513,7 @@ fn component_parsers_demand_complete_input() {
     assert!(Fact::parse("p(1) .").is_ok());
 }
 
+/// The span of a parsed statement has the given file id and covers the statement's text.
 #[test]
 fn spans_point_into_the_source() {
     let source = "p(?x) :- q(?x) .";
@@ -498,6 +526,7 @@ fn spans_point_into_the_source() {
     assert_eq!(&source[span.start as usize..span.end as usize], source);
 }
 
+/// An attribute before a fact or a directive is an error.
 #[test]
 fn attributes_belong_to_rules_only() {
     let (_, diagnostics) = Program::parse("#[name(\"x\")]\nfact(1) .", FileId::new(0));
@@ -506,6 +535,7 @@ fn attributes_belong_to_rules_only() {
     assert!(!diagnostics.is_empty());
 }
 
+/// An unknown directive is an error that names it and has a hint.
 #[test]
 fn unknown_directives_are_diagnosed_with_hints() {
     let (program, diagnostics) = Program::parse("@baseerror <x> .", FileId::new(0));
@@ -521,6 +551,8 @@ fn unknown_directives_are_diagnosed_with_hints() {
     assert!(!diagnostics[0].hints().is_empty());
 }
 
+/// A string literal decodes its escapes,
+/// and a language tag with a subtag is converted to lowercase.
 #[test]
 fn strings_process_escapes_and_language_subtags() {
     let term = Term::parse("\"say \\\"hi\\\"\\n\"").expect("the string parses");
@@ -529,8 +561,8 @@ fn strings_process_escapes_and_language_subtags() {
     };
     assert_eq!(value, "say \"hi\"\n");
 
-    // Character escapes resolve as in Turtle; any other backslash stays for later readers,
-    // as regular expressions.
+    // Character escapes are decoded as in Turtle.
+    // Any other backslash is kept for a later reader of the text, such as a regular expression.
     for (written, value) in [
         (r#""\u0041\U0001F600""#, "A\u{1F600}"),
         (r#""\d+ \user""#, r"\d+ \user"),
@@ -550,6 +582,8 @@ fn strings_process_escapes_and_language_subtags() {
     assert_eq!(language, "en-us");
 }
 
+/// The `where` clause of an import contains binding atoms and conditions,
+/// and a negated atom in it is an error.
 #[test]
 fn a_where_clause_holds_atoms_and_conditions_but_no_negation() {
     let (program, diagnostics) = Program::parse(
@@ -571,6 +605,7 @@ fn a_where_clause_holds_atoms_and_conditions_but_no_negation() {
     assert_eq!(diagnostics[0].code(), crate::codes::NEGATION_IN_WHERE);
 }
 
+/// A fact with several atoms is an error.
 #[test]
 fn facts_reject_multiple_heads() {
     let (program, diagnostics) = Program::parse("p(1), q(2) .", FileId::new(0));
@@ -578,10 +613,10 @@ fn facts_reject_multiple_heads() {
     assert!(!diagnostics.is_empty());
 }
 
+/// An error message about a misplaced token stays one short line.
 #[test]
 fn a_misplaced_token_is_quoted_only_as_far_as_a_message_shows() {
-    // A multi-line string in place of a prefix name: the
-    // message names its kind and stays one line.
+    // A string over several lines in place of a prefix is described by its kind.
     let (_, diagnostics) = Program::parse("@prefix \"\"\"a\nb\"\"\" .", FileId::new(0));
     assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
     let message = diagnostics[0].message();
@@ -597,6 +632,7 @@ fn a_misplaced_token_is_quoted_only_as_far_as_a_message_shows() {
     assert!(message.ends_with("…`"), "{message}");
 }
 
+/// A lexical problem is reported once, and not again by the parser.
 #[test]
 fn a_lexical_problem_is_reported_once() {
     let (program, diagnostics) = Program::parse("p(a) & q(b) .\ngood(1) .", FileId::new(0));
@@ -605,9 +641,10 @@ fn a_lexical_problem_is_reported_once() {
     assert_eq!(program.to_string(), "good(1) .");
 }
 
+/// A stray `}` in a format string is reported at its position.
 #[test]
 fn a_stray_brace_is_reported_where_it_stands() {
-    // The format string still runs to its closing quote, so the rest of the text parses.
+    // The format string still extends to its closing quote, so the rest of the text parses.
     let source = "p(f\"a}b\") .\ngood(1) .";
     let (program, diagnostics) = Program::parse(source, FileId::new(0));
     assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
@@ -617,6 +654,8 @@ fn a_stray_brace_is_reported_where_it_stands() {
     assert_eq!(program.to_string(), "good(1) .");
 }
 
+/// An error at the end of an embedded expression names the end of the expression,
+/// not the end of the input.
 #[test]
 fn the_end_of_an_embedded_expression_is_not_the_end_of_the_input() {
     let (_, diagnostics) = Program::parse("p(f\"a{1 +}b\") .", FileId::new(0));
@@ -627,6 +666,8 @@ fn the_end_of_an_embedded_expression_is_not_the_end_of_the_input() {
     );
 }
 
+/// The error for a builtin's name in place of an atom says that it is a call,
+/// and the error for an expression in place of an atom has no hint to rename it.
 #[test]
 fn only_a_builtin_name_in_place_of_an_atom_is_called_a_call() {
     let (_, diagnostics) = Program::parse("strlen(?x) :- p(?x) .", FileId::new(0));
@@ -644,6 +685,7 @@ fn only_a_builtin_name_in_place_of_an_atom_is_called_a_call() {
     }
 }
 
+/// Parsing a rule as a fact is an error that quotes the rule as written.
 #[test]
 fn a_statement_of_another_kind_is_quoted_as_written() {
     let problem = Fact::parse_loose("q(a) :- p(a)").expect_err("a rule is not a fact");
@@ -651,6 +693,7 @@ fn a_statement_of_another_kind_is_quoted_as_written() {
     assert_eq!(problem.field("found"), Some("`q(a) :- p(a)`"));
 }
 
+/// A hexadecimal literal that needs more than 128 bits is out of range.
 #[test]
 fn a_radix_literal_beyond_128_bits_is_out_of_range() {
     let source = format!("0x1{}", "0".repeat(32));
@@ -663,6 +706,7 @@ fn a_radix_literal_beyond_128_bits_is_out_of_range() {
     assert_eq!(problem.message(), "number literal is out of range");
 }
 
+/// A lone `^` gets a hint about datatypes after a string, and about powers elsewhere.
 #[test]
 fn a_lone_caret_is_explained_by_what_precedes_it() {
     let hint = |source: &str| {
@@ -675,6 +719,7 @@ fn a_lone_caret_is_explained_by_what_precedes_it() {
     assert!(hint("p(?y) :- q(?x), ?y = ?x ^ 2 .").contains("`POW(base, exponent)`"));
 }
 
+/// Spacing around the `:` distinguishes a prefixed name from a named argument.
 #[test]
 fn spacing_tells_a_prefixed_name_from_a_named_argument() {
     let prefixed = |prefix: &str, name: &str| {
@@ -687,8 +732,8 @@ fn spacing_tells_a_prefixed_name_from_a_named_argument() {
         fact.terms.iter().map(|term| term.kind.clone()).collect()
     };
 
-    // Touching parts are a prefixed name: its local name may start with a digit,
-    // and is empty where the `:` ends the term.
+    // A name, a `:` and a local name without spaces between them are a prefixed name.
+    // The local name may start with a digit, and it is empty if the `:` ends the term.
     let fact = Fact::parse("in(wd:42, wd:4-2a, age:30, ex:, ex:) .").expect("the fact parses");
     assert_eq!(fact.labels, None);
     assert_eq!(
@@ -717,14 +762,15 @@ fn spacing_tells_a_prefixed_name_from_a_named_argument() {
         ["write `age: 30` with a space for a named argument"]
     );
 
-    // A prefix alone also ends an embedded expression.
+    // A prefixed name with an empty local name may also end an embedded expression.
     let (_, diagnostics) = Program::parse("p(f\"{ex:}x\") .", FileId::new(0));
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
 }
 
+/// A dot belongs to a local name only if a character of the name follows it,
+/// and otherwise ends the statement.
 #[test]
 fn a_dot_joins_a_local_name_only_inside_it() {
-    // A dot ends the statement where nothing of a name follows it.
     let source = "p(?x) :- q(?x), ?x = ex:a.\nr(ex:v1.2).% the end\n";
     let (program, diagnostics) = Program::parse(source, FileId::new(0));
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
@@ -733,12 +779,14 @@ fn a_dot_joins_a_local_name_only_inside_it() {
         "p(?x) :- q(?x), ?x = ex:a .\nr(ex:v1.2) ."
     );
 
-    // After a label and a space, a `:` starts the value of a named argument.
+    // After a name and a space, a `:` separates the label of a named argument from its value.
     let fact = Fact::parse("in(name :42) .").expect("the fact parses");
     assert_eq!(fact.labels, Some(vec!["name".to_owned()]));
     assert!(matches!(fact.terms[0].kind, TermKind::Number(_)));
 }
 
+/// Escapes in strings are decoded as in Turtle, except `\b`, which is kept as written,
+/// and escapes in IRIs are decoded too.
 #[test]
 fn escapes_decode_as_turtle_reads_them_except_a_word_boundary() {
     let text = |source: &str| match Term::parse(source).expect(source).kind {
@@ -757,6 +805,7 @@ fn escapes_decode_as_turtle_reads_them_except_a_word_boundary() {
     assert_eq!(iri.to_string(), "<http://e.org/café>");
 }
 
+/// An IRI that contains U+0000, written directly or as an escape, is an error.
 #[test]
 fn an_iri_cannot_spell_the_character_u0000() {
     for source in [
@@ -774,7 +823,8 @@ fn an_iri_cannot_spell_the_character_u0000() {
         );
     }
 
-    // Other control characters stay, so that every IRI term syntax writes reads back.
+    // Other control characters are allowed,
+    // so that every IRI that term syntax writes is parsed back.
     let (_, diagnostics) = Program::parse("<a\\u0009b\\u007Fc\u{85}d>(5) .", FileId::new(0));
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
 }

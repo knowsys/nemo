@@ -4,7 +4,7 @@ use crate::trie::{RowBuffer, Run};
 
 /// A [RowBuffer] whose rows are in storage order.
 ///
-/// Rows may repeat; a trie built from the rows, as one [Run], keeps each once.
+/// Rows may repeat, and a trie built from the rows as one [Run] keeps each row once.
 #[derive(Debug)]
 pub(crate) struct SortedRowBuffer {
     /// The rows, in storage order.
@@ -12,7 +12,7 @@ pub(crate) struct SortedRowBuffer {
 }
 
 impl SortedRowBuffer {
-    /// Wraps a buffer whose rows stand in storage order.
+    /// Wraps a buffer whose rows are in storage order.
     pub(super) fn new(buffer: RowBuffer) -> Self {
         Self { buffer }
     }
@@ -27,7 +27,7 @@ impl SortedRowBuffer {
         self.buffer.len()
     }
 
-    /// Returns whether the buffer holds no rows.
+    /// Returns whether the buffer has no rows.
     pub(crate) fn is_empty(&self) -> bool {
         self.buffer.is_empty()
     }
@@ -47,7 +47,7 @@ impl SortedRowBuffer {
         Run::new(self.buffer.values(), self.buffer.arity(), self.buffer.len())
     }
 
-    /// Removes the repeated rows, which stand adjacent.
+    /// Removes the repeated rows, which are adjacent since the rows are sorted.
     pub(super) fn dedup(&mut self) {
         let arity = self.buffer.arity();
         let rows = self.buffer.len();
@@ -86,6 +86,8 @@ mod tests {
 
     use crate::testing::int_buffer;
 
+    /// Deduplication keeps one row of each group of equal rows,
+    /// in an empty and a nullary buffer too.
     #[test]
     fn deduplication_keeps_one_row_per_run() {
         let mut buffer =
@@ -100,7 +102,7 @@ mod tests {
         empty.dedup();
         assert!(empty.is_empty());
 
-        // The empty rows are all equal; existence collapses to one.
+        // The empty rows are all equal, so one of them is kept.
         let mut nullary = int_buffer(0, &[&[], &[], &[]]).into_sorted();
         nullary.dedup();
         assert_eq!(nullary.len(), 1);

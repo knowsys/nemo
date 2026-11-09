@@ -7,12 +7,12 @@ use crate::{
     trie::{RowBuffer, Run, SortedRowBuffer},
 };
 
-/// A [RowBuffer] whose rows form segments, each a run:
-/// the rows appended between one [begin_segment](Self::begin_segment) and the next.
+/// A [RowBuffer] whose rows form segments, each of which is a run.
 ///
-/// A segment's rows arrive in storage order,
-/// or in order by a prefix of their columns,
-/// which [sort_last_segment](Self::sort_last_segment) completes.
+/// A segment contains the rows appended between one [begin_segment](Self::begin_segment)
+/// and the next.
+/// A segment's rows arrive in storage order, or ordered only by a prefix of their columns,
+/// in which case [sort_last_segment](Self::sort_last_segment) completes the order.
 /// Rows may repeat within a segment and across segments.
 #[derive(Debug)]
 pub(crate) struct SegmentedRowBuffer {
@@ -31,7 +31,7 @@ impl SegmentedRowBuffer {
         }
     }
 
-    /// Creates a buffer whose one segment holds the given rows.
+    /// Creates a buffer whose only segment contains the given rows.
     pub(crate) fn from_sorted(rows: SortedRowBuffer) -> Self {
         Self {
             buffer: rows.into_rows(),
@@ -59,19 +59,21 @@ impl SegmentedRowBuffer {
         self.starts.len()
     }
 
-    /// Begins a segment at the end and returns the buffer its rows are appended to,
-    /// in storage order unless [sort_last_segment](Self::sort_last_segment) follows.
+    /// Begins a new segment and returns the buffer to append its rows to.
+    ///
+    /// The rows must be appended in storage order,
+    /// unless [sort_last_segment](Self::sort_last_segment) is called afterwards.
     pub(crate) fn begin_segment(&mut self) -> &mut RowBuffer {
         self.starts.push(self.buffer.len());
         &mut self.buffer
     }
 
-    /// Sorts the segment begun last,
-    /// whose rows stand in order by their leading `prefix` columns,
-    /// into one run: the rows within each group of equal prefix are sorted.
+    /// Sorts the last segment into a run,
+    /// given that its rows are ordered by their leading `prefix` columns.
     ///
-    /// The groups sort independently, on the pool if they are many and large enough.
-    /// A prefix of zero makes the segment one group, which is a plain sort of it.
+    /// Only the rows within each group of equal prefix are sorted.
+    /// The groups are sorted independently, on the pool if they are many and large enough.
+    /// A prefix of zero makes the segment one group, so the whole segment is sorted.
     pub(crate) fn sort_last_segment(&mut self, prefix: usize) {
         let start = *self.starts.last().expect("a segment was begun");
         let arity = self.buffer.arity();
@@ -97,7 +99,7 @@ impl SegmentedRowBuffer {
         });
     }
 
-    /// Returns the segment of the given index as a run.
+    /// Returns the segment with the given index as a run.
     pub(crate) fn segment(&self, index: usize) -> Run<'_> {
         let arity = self.buffer.arity();
         let start = self.starts[index];
@@ -115,7 +117,7 @@ impl SegmentedRowBuffer {
         Run::new(values, arity, end - start)
     }
 
-    /// Sorts and deduplicates all rows, folding the segments into one.
+    /// Sorts all rows and removes the repeats, which merges the segments into one.
     pub(crate) fn sort_all(&mut self) {
         let arity = self.buffer.arity();
         let mut sorted = mem::replace(&mut self.buffer, RowBuffer::new(arity)).into_sorted();
@@ -139,7 +141,7 @@ mod tests {
 
     use crate::{storage::StorageValue, testing::int};
 
-    /// The rows of a run, for comparison.
+    /// Returns the rows of a run, for comparison.
     fn rows_of(run: Run<'_>) -> Vec<Vec<StorageValue>> {
         run.iter().map(<[StorageValue]>::to_vec).collect()
     }
@@ -152,10 +154,12 @@ mod tests {
         }
     }
 
+    /// Sorting the last segment by the groups of its first column equals sorting it whole,
+    /// and leaves the segment before it unchanged.
     #[test]
     fn sorting_the_last_segment_matches_a_full_sort_of_it() {
-        // Rows in order by their first column, unordered within each
-        // group, with repeats, behind a segment that must stay put.
+        // The rows are ordered by their first column, unordered within each group, and repeat.
+        // They follow a segment that must stay as it is.
         let mut rng = StdRng::seed_from_u64(7);
         for _ in 0..40 {
             let arity = rng.gen_range(2..=4);
@@ -189,6 +193,7 @@ mod tests {
         }
     }
 
+    /// A single large group is sorted like the whole segment.
     #[test]
     fn large_groups_sort_like_the_whole_segment() {
         let mut rng = StdRng::seed_from_u64(11);
@@ -207,6 +212,8 @@ mod tests {
         );
     }
 
+    /// Each segment is the run of rows from its start to the next segment's start,
+    /// and may be empty.
     #[test]
     fn segments_are_runs_cut_at_their_starts() {
         let mut buffer = SegmentedRowBuffer::new(1);
@@ -224,6 +231,8 @@ mod tests {
         assert_eq!(buffer.rows().len(), 3);
     }
 
+    /// Sorting the last segment sorts within each group, keeps repeats,
+    /// and leaves the earlier segment alone.
     #[test]
     fn the_last_segment_sorts_within_its_groups() {
         let mut buffer = SegmentedRowBuffer::new(2);
@@ -246,6 +255,7 @@ mod tests {
         );
     }
 
+    /// Sorting all rows merges the segments into one sorted segment without repeats.
     #[test]
     fn sorting_all_folds_the_segments_into_one() {
         let mut buffer = SegmentedRowBuffer::new(1);

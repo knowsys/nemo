@@ -31,10 +31,12 @@ impl<'a, C: SeekCursor> InputCursor<'a, C> {
         }
     }
 
-    /// Withdraws the ranges of every block, before the blocks holding a value are given new ones.
+    /// Withdraws the ranges of every block,
+    /// before the blocks that contain a value are given new ones.
     ///
-    /// The single block of an input holds every value the join descends from,
-    /// so it is given its range right after.
+    /// For an input of one block, nothing is withdrawn.
+    /// Its block contains every value the join descends from,
+    /// so it is given a new range right after.
     #[inline]
     pub(crate) fn clear_ranges(&mut self) {
         if let InputCursor::Union(union) = self {
@@ -44,7 +46,7 @@ impl<'a, C: SeekCursor> InputCursor<'a, C> {
 
     /// Restricts the cursor of one block to a range, read from the next [rewind](Self::rewind) on.
     ///
-    /// Only a block holding the value the join descends from is given a range,
+    /// Only a block that contains the value the join descends from is given a range,
     /// and that range is never empty, since trie nodes always have children.
     #[inline]
     pub(crate) fn set_range(&mut self, block: usize, range: Range<usize>) {
@@ -84,8 +86,9 @@ impl<'a, C: SeekCursor> InputCursor<'a, C> {
         }
     }
 
-    /// Returns the value at the cursor;
-    /// valid while the cursor [has a current value](Self::has_current).
+    /// Returns the value at the cursor.
+    ///
+    /// The cursor must [have a current value](Self::has_current).
     #[inline]
     pub(crate) fn current_value(&self) -> C::Value {
         match self {
@@ -94,8 +97,8 @@ impl<'a, C: SeekCursor> InputCursor<'a, C> {
         }
     }
 
-    /// Calls `found` with each block holding the value the cursor stands at,
-    /// and the position of the value in the block's column.
+    /// Calls `found` with each block that contains the cursor's current value,
+    /// and the position of the value in that block's column.
     #[inline]
     pub(crate) fn for_each_match(&self, mut found: impl FnMut(usize, usize)) {
         match self {
@@ -104,7 +107,7 @@ impl<'a, C: SeekCursor> InputCursor<'a, C> {
         }
     }
 
-    /// Steps to the next value and returns it, or returns `None` at the end.
+    /// Steps to the next value and returns it, or returns `None` at the end of the range.
     #[inline]
     pub(crate) fn next(&mut self) -> Option<C::Value> {
         match self {

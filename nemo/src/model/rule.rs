@@ -1,17 +1,18 @@
-//! Rules: the derivation statements.
+//! Rules, the statements that derive new facts.
 
 use std::fmt::{self, Display, Formatter};
 
 use crate::model::{Atom, Attribute, Literal, Span, fmt_list, span_ignoring_eq};
 
-/// A rule: head atoms derived whenever all body literals are satisfied.
+/// A rule, which derives its head atoms whenever all its body literals hold,
+/// such as `reach(?x, ?y) :- edge(?x, ?y) .`.
 #[derive(Debug, Clone)]
 pub struct Rule {
     /// The attributes attached to the rule, like `#[name("reach")]`.
     pub attributes: Vec<Attribute>,
-    /// The head: atoms derived by the rule.
+    /// The head, whose atoms the rule derives.
     pub head: Vec<Atom>,
-    /// The body: literals that must be satisfied.
+    /// The body, whose literals must all hold.
     pub body: Vec<Literal>,
     /// The source position, or `None` for a component built programmatically.
     pub span: Option<Span>,

@@ -1,4 +1,6 @@
-//! RDF serializations: triples and quads, through one parser and one serializer front-end.
+//! RDF serializations of triples and quads, read and written through `oxrdfio`.
+//!
+//! A *statement* is one triple, or one quad in the variants with graphs.
 
 use std::io::{BufRead, BufReader, Read};
 
@@ -23,13 +25,14 @@ use crate::{
 
 use crate::file_format::RdfVariant;
 
-/// The IRI naming the default graph of a quad resource.
+/// The IRI that names the default graph in the graph column of quads.
 ///
-/// SPARQL provides no standard identifier, so this ad-hoc one is used for compatibility.
+/// RDF and SPARQL give the default graph no name,
+/// so this IRI stands for it in the rows that are read and written.
 pub(crate) const DEFAULT_GRAPH: &str = "tag:nemo:defaultgraph";
 
 impl RdfVariant {
-    /// Returns the parser format behind the variant.
+    /// Returns the `oxrdfio` format of the variant.
     fn format(self) -> RdfFormat {
         match self {
             RdfVariant::NTriples => RdfFormat::NTriples,
@@ -41,29 +44,29 @@ impl RdfVariant {
     }
 }
 
-/// The shape of an RDF resource.
+/// The options of an RDF resource for reading.
 #[derive(Debug, Clone)]
 pub struct RdfOptions {
     /// The serialization variant.
     pub variant: RdfVariant,
-    /// The base IRI relative references resolve against (effective for
-    /// Turtle, TriG, and RDF/XML, and checked for every variant).
+    /// The base IRI that relative IRIs are resolved against.
+    ///
+    /// Turtle, TriG and RDF/XML use it, and it is checked for every variant.
     pub base: Option<String>,
     /// The stream compression.
     pub compression: Compression,
     /// The columns delivered and the rows admitted.
     pub selection: RowSelection,
-    /// The number of well-formed statements matching the declared types the reader takes before
-    /// it stops.
+    /// The largest number of well-formed statements to read, or `None` for no limit.
     ///
-    /// The statements are counted before the condition,
-    /// so a condition never changes which rows a limited resource yields.
+    /// The statements are counted before the condition is evaluated,
+    /// so the condition never makes a read go further into the resource.
     pub limit: Option<u64>,
 }
 
 impl RdfOptions {
-    /// Options for a variant, with no base, auto-detected compression,
-    /// and every column and row delivered.
+    /// Creates options for a variant, with no base, detected compression,
+    /// every column delivered, every row admitted, and no limit.
     pub fn new(variant: RdfVariant) -> Self {
         Self {
             variant,
@@ -75,15 +78,18 @@ impl RdfOptions {
     }
 }
 
-/// A reader of RDF statements, decoding them into the physical layer's row buffers.
+/// A reader of RDF statements, which decodes them into row buffers.
 ///
-/// Reading streams, and is lenient per statement:
-/// a syntax error or a term the dictionary cannot hold skips that statement, counted,
-/// and parsing resumes with its state (prefix bindings) intact.
-/// A stream that cannot be read, a compressed member cut short or a failing device,
+/// The reader streams, and handles each statement on its own.
+/// A statement with a syntax error, a literal that its datatype rejects,
+/// or a term that the dictionary cannot hold is counted as malformed and skipped,
+/// and parsing resumes with its state, such as the prefix declarations, intact.
+/// A stream that cannot be read, such as a compressed stream cut short or a failing device,
 /// ends the read with an error instead.
-/// Blank nodes become fresh labeled nulls, one per distinct label per read
-/// (document scope, spanning TriG graph blocks).
+///
+/// Blank nodes become nulls, one for each label in the read's label scope.
+/// That scope is the read's own, spanning the graph blocks of a TriG document,
+/// unless [with_blank_node_scope](Self::with_blank_node_scope) gives a shared one.
 ///
 /// # Example
 ///
@@ -104,7 +110,7 @@ impl RdfOptions {
 ///     .expect("the triples read");
 /// assert_eq!(loaded.rows.len(), 2);
 ///
-/// // The blank node is one fresh null in both statements.
+/// // The blank node is the same fresh null in both statements.
 /// let object = dictionary.decode(loaded.rows.row(0)[2]).expect("stored");
 /// let subject = dictionary.decode(loaded.rows.row(1)[0]).expect("stored");
 /// assert_eq!(object, subject);
@@ -115,17 +121,17 @@ impl RdfOptions {
 /// ```
 #[derive(Debug, Clone)]
 pub struct RdfReader {
-    /// The resource shape.
+    /// The options of the read resources.
     options: RdfOptions,
-    /// The scope blank node labels name nulls in, or `None` if each read names them in a scope of
-    /// its own.
+    /// The scope in which blank node labels name nulls,
+    /// or `None` if each read has a scope of its own.
     blank_nodes: Option<LabelScope>,
 }
 
 impl RdfReader {
-    /// Creates a reader for resources of the given shape.
+    /// Creates a reader with the given options.
     ///
-    /// Each read's blank node labels name nulls of its own,
+    /// Each read names its blank nodes in a scope of its own,
     /// unless [with_blank_node_scope](Self::with_blank_node_scope) gives a shared scope.
     pub fn new(options: RdfOptions) -> Self {
         Self {
@@ -134,24 +140,26 @@ impl RdfReader {
         }
     }
 
-    /// Returns the reader naming blank nodes in the given open label scope,
-    /// so that reads sharing it, such as two imports of one document, agree on them.
+    /// Returns the reader with its blank nodes named in the given open label scope.
+    ///
+    /// Reads that share a scope agree on their blank nodes,
+    /// as two reads of one document should.
     pub fn with_blank_node_scope(mut self, scope: LabelScope) -> Self {
         self.blank_nodes = Some(scope);
         self
     }
 
     /// Returns the parser for the variant,
-    /// resolving relative references against the base if one is declared.
+    /// which resolves relative IRIs against the base if one is declared.
     ///
     /// The base is checked for every variant,
-    /// although the line-based ones have no relative references and ignore it.
+    /// although the line-based ones have no relative IRIs and ignore it.
     fn parser(&self) -> Result<RdfParser, Diagnostic> {
         let parser = RdfParser::from_format(self.options.variant.format());
         let Some(base) = &self.options.base else {
             return Ok(parser);
         };
-        // The Turtle parser checks a base where the line-based parsers take any text.
+        // The Turtle parser checks a base, while the line-based parsers accept any text.
         RdfParser::from_format(RdfFormat::Turtle)
             .with_base_iri(base.clone())
             .and_then(|_| parser.with_base_iri(base.clone()))
@@ -201,7 +209,8 @@ impl Reader for RdfReader {
 }
 
 impl RdfReader {
-    /// Reads the statements of a resource into `statements`.
+    /// Reads the statements of a resource into `statements`,
+    /// until the [limit](RdfOptions::limit) of well-formed statements is reached.
     fn read_statements(
         &self,
         parser: RdfParser,
@@ -218,8 +227,8 @@ impl RdfReader {
         };
 
         if self.options.variant.line_based() {
-            // A statement takes one line, so a line with a syntax error is one malformed row,
-            // and none of its statements is taken, nor does the error reach the next line.
+            // A statement fits on one line, so a line with a syntax error is one malformed row.
+            // None of the line's statements is kept, and the error does not affect the next line.
             let mut source = BufReader::new(source);
             let (mut line, mut quads, mut number) = (Vec::new(), Vec::new(), 0u64);
             while statements.loaded.well_formed < limit {
@@ -252,8 +261,8 @@ impl RdfReader {
                 match quad {
                     Ok(quad) => statements.take(quad, dictionary, 0),
                     Err(oxrdfio::RdfParseError::Syntax(_)) => statements.loaded.count_malformed(0),
-                    // The stream itself broke: the error would repeat on
-                    // every statement from here, so the source ends.
+                    // The stream itself broke, and the error would repeat for
+                    // every further statement, so the read ends.
                     Err(oxrdfio::RdfParseError::Io(error)) => return Err(unreadable(error)),
                 }
             }
@@ -262,25 +271,27 @@ impl RdfReader {
     }
 }
 
-/// The statements of one read, taken into its rows.
+/// The rows of one read, built from its statements.
 struct Statements<'a> {
-    /// The resource shape.
+    /// The options of the read resource.
     options: &'a RdfOptions,
-    /// The rows so far.
+    /// The rows loaded so far.
     loaded: Loaded,
-    /// The nulls the blank node labels name.
+    /// The blank nodes of the read.
     blanks: BlankNodes,
-    /// A statement's terms, as values.
+    /// The terms of the current statement as values, with `None` for a literal without a value.
     terms: Vec<Option<DataValue>>,
-    /// The delivered values of a statement.
+    /// The delivered values of the current statement.
     kept: Vec<DataValue>,
-    /// The encoded row of a statement.
+    /// A scratch buffer for the encoded row of the current statement.
     row: Vec<StorageValue>,
 }
 
 impl<'a> Statements<'a> {
-    /// Creates the empty rows of a read of the given shape,
-    /// which names blank nodes in `blanks` and evaluates its condition in `context`.
+    /// Creates the empty rows of a read with the given options.
+    ///
+    /// `blanks` are the read's blank nodes,
+    /// and `context` is the evaluation context of the selection's condition.
     fn new(options: &'a RdfOptions, blanks: BlankNodes, context: EvaluationContext) -> Self {
         let arity = options.variant.arity();
         Self {
@@ -293,8 +304,9 @@ impl<'a> Statements<'a> {
         }
     }
 
-    /// Takes a statement read on the given line (0 if unknown) into the rows,
-    /// or counts it as malformed.
+    /// Adds a statement to the rows, or counts it as malformed.
+    ///
+    /// `line` is the statement's line, or `0` if it is not known.
     fn take(&mut self, quad: oxrdf::Quad, dictionary: &mut Dictionary, line: u64) {
         let selection = &self.options.selection;
         statement(
@@ -305,7 +317,7 @@ impl<'a> Statements<'a> {
             &mut self.terms,
         );
         // Every column decides whether the statement is well-formed,
-        // the ones not delivered included.
+        // including the columns that are not delivered.
         if self.terms.iter().all(Option::is_some) {
             self.kept.clear();
             self.kept.extend(
@@ -323,11 +335,13 @@ impl<'a> Statements<'a> {
     }
 }
 
-/// Writes a statement's terms onto `terms` as values, the graph first for quad variants.
+/// Writes the terms of a statement into `terms` as values,
+/// with the graph first if `quads` is true.
 ///
-/// IRIs stay as they are, blank nodes become the nulls their labels name,
-/// and literals become their [values](literal_value).
-/// Returns `None` if a literal has no value.
+/// - IRIs stay as they are, and the default graph becomes [DEFAULT_GRAPH].
+/// - Blank nodes become the nulls that their labels name in `blanks`.
+/// - Literals become their [values](literal_value),
+///   and a literal without a value becomes `None`.
 fn statement(
     quad: oxrdf::Quad,
     quads: bool,
@@ -355,11 +369,11 @@ fn statement(
     });
 }
 
-/// Returns the value of an RDF literal, or `None` for an invalid lexical.
+/// Returns the value of an RDF literal, or `None` for an invalid literal.
 ///
-/// Plain and `xsd:string` literals are plain strings, one value as in RDF 1.1.
-/// Language-tagged literals keep their tag.
-/// Typed literals normalize like [typed_literal](DataValue::typed_literal).
+/// - Plain and `xsd:string` literals become plain strings, since RDF 1.1 makes them one value.
+/// - Language-tagged literals keep their tag.
+/// - Typed literals are normalized as [typed_literal](DataValue::typed_literal) does.
 fn literal_value(literal: &oxrdf::Literal) -> Option<DataValue> {
     if let Some(language) = literal.language() {
         return DataValue::language_string(literal.value(), language);
@@ -367,22 +381,22 @@ fn literal_value(literal: &oxrdf::Literal) -> Option<DataValue> {
     DataValue::typed_literal(literal.datatype().as_str(), literal.value())
 }
 
-/// The shape of an RDF target.
+/// The options of an RDF resource for writing.
 #[derive(Debug, Clone)]
 pub struct RdfWriterOptions {
     /// The serialization variant.
     pub variant: RdfVariant,
-    /// The base IRI written into serializations that carry one.
+    /// The base IRI, written into the serializations that can declare one.
     pub base: Option<String>,
-    /// Prefix declarations written into the serializations that abbreviate
-    /// (Turtle, TriG, RDF/XML).
+    /// Prefix declarations, written into the serializations that abbreviate IRIs:
+    /// Turtle, TriG and RDF/XML.
     pub prefixes: Vec<(String, String)>,
     /// The stream compression.
     pub compression: Compression,
 }
 
 impl RdfWriterOptions {
-    /// Options for a variant, with no base, no prefixes, and
+    /// Creates options for a variant, with no base, no prefixes, and
     /// auto-detected compression.
     pub fn new(variant: RdfVariant) -> Self {
         Self {
@@ -394,21 +408,24 @@ impl RdfWriterOptions {
     }
 }
 
-/// A writer of RDF statements, the inverse of [RdfReader].
+/// A writer of RDF statements.
 ///
-/// Its rows have three columns, or four with the graph *first* for the quad variants.
-/// Values map onto terms:
-/// IRIs become named nodes, labeled nulls blank nodes (stable within one write),
-/// strings literals, and every other scalar a typed literal in its canonical lexical.
-/// A row that fits no term (a non-IRI predicate, a tuple, a map) is dropped and counted.
+/// Its rows have three columns, or four for the quad variants, with the graph *first*.
+/// Values are written as terms:
+/// - IRIs as named nodes, and nulls as blank nodes labeled by their numbers,
+/// - strings and language strings as literals,
+/// - every other scalar as a typed literal in its canonical lexical form.
+///
+/// A row with a value that has no term in its position, such as a predicate that is not an IRI,
+/// a literal subject, a tuple or a map, is dropped and counted.
 #[derive(Debug, Clone)]
 pub struct RdfWriter {
-    /// The target shape.
+    /// The options of the written resources.
     options: RdfWriterOptions,
 }
 
 impl RdfWriter {
-    /// Creates a writer for targets of the given shape.
+    /// Creates a writer with the given options.
     pub fn new(options: RdfWriterOptions) -> Self {
         Self { options }
     }
@@ -427,8 +444,7 @@ impl Writer for RdfWriter {
     ///
     /// # Panics
     ///
-    /// Panics if a row does not have the variant's number of columns:
-    /// three for triples, four for quads, the graph first.
+    /// Panics if a row does not have the variant's [arity](RdfVariant::arity).
     fn write<'a>(
         &self,
         target: impl std::io::Write,
@@ -436,9 +452,9 @@ impl Writer for RdfWriter {
     ) -> Result<Written, Diagnostic> {
         let mut serializer = RdfSerializer::from_format(self.options.variant.format());
         for (name, iri) in &self.options.prefixes {
-            // A prefix pair the serialization cannot carry (an
-            // abbreviation-free format ignores them wholesale) does
-            // not fail the export.
+            // A prefix that the serialization cannot declare does not
+            // fail the write. A format without abbreviations ignores
+            // all prefixes.
             if let Ok(with) = serializer.clone().with_prefix(name, iri) {
                 serializer = with;
             }
@@ -492,8 +508,10 @@ impl Writer for RdfWriter {
     }
 }
 
-/// Returns the node a value is in a subject or graph position:
-/// an IRI or a labeled null (a blank node), and `None` for any other value.
+/// Returns the node of a value in the subject or graph position.
+///
+/// An IRI becomes a named node, and a null a blank node labeled by its number.
+/// Returns `None` for an invalid IRI and for any other value.
 fn subject_node(value: &DataValue) -> Option<oxrdf::NamedOrBlankNode> {
     match value.as_ref() {
         ValueRef::Iri(iri) => oxrdf::NamedNode::new(iri.to_string()).map(Into::into).ok(),
@@ -509,7 +527,8 @@ fn subject_node(value: &DataValue) -> Option<oxrdf::NamedOrBlankNode> {
     }
 }
 
-/// Returns the node a value is in the predicate position: an IRI only.
+/// Returns the node of a value in the predicate position,
+/// or `None` if the value is not a valid IRI.
 fn predicate_node(value: &DataValue) -> Option<oxrdf::NamedNode> {
     match value.as_ref() {
         ValueRef::Iri(iri) => oxrdf::NamedNode::new(iri.to_string()).ok(),
@@ -517,9 +536,9 @@ fn predicate_node(value: &DataValue) -> Option<oxrdf::NamedNode> {
     }
 }
 
-/// Returns the name a value is in the graph position.
+/// Returns the graph name of a value in the graph position, as [subject_node] does for nodes.
 ///
-/// The [DEFAULT_GRAPH] sentinel maps back to the actual default graph.
+/// [DEFAULT_GRAPH] becomes the default graph.
 fn graph_node(value: &DataValue) -> Option<oxrdf::GraphName> {
     if matches!(
         value.as_ref(),
@@ -533,10 +552,10 @@ fn graph_node(value: &DataValue) -> Option<oxrdf::GraphName> {
     })
 }
 
-/// Returns the term a value is in the object position:
-/// nodes as in the subject position, and every scalar a literal.
+/// Returns the term of a value in the object position:
+/// a node as in the subject position, or a literal for any other scalar.
 ///
-/// Returns `None` for the structured values, which have no RDF form.
+/// Returns `None` for tuples and maps, which have no RDF form.
 pub(crate) fn object_term(value: &DataValue) -> Option<oxrdf::Term> {
     let typed = |lexical: String, datatype: &str| -> Option<oxrdf::Term> {
         oxrdf::NamedNode::new(datatype)
@@ -565,7 +584,7 @@ pub(crate) fn object_term(value: &DataValue) -> Option<oxrdf::Term> {
     }
 }
 
-/// Returns the datatype of a value of a native datatype, the one of its domain.
+/// Returns the datatype IRI of a value of a native datatype, which is its domain's datatype.
 fn native_datatype(value: &DataValue) -> &'static str {
     value
         .domain()
@@ -577,8 +596,8 @@ fn native_datatype(value: &DataValue) -> &'static str {
 mod tests {
     use super::*;
 
-    /// Rows written as Turtle read back as the same rows,
-    /// and carry the declared prefix abbreviation.
+    /// Rows written as Turtle are read back as the same rows,
+    /// and the output uses the declared prefix.
     #[test]
     fn written_turtle_reads_back() {
         let rows: Vec<Vec<DataValue>> = vec![
@@ -592,7 +611,7 @@ mod tests {
                 DataValue::iri("http://example.org/p"),
                 DataValue::language_string("Foo", "en").expect("valid tag"),
             ],
-            // No RDF form: dropped, counted.
+            // This row has no RDF form, so it is dropped and counted.
             vec![
                 DataValue::string("not a subject"),
                 DataValue::iri("http://example.org/p"),
@@ -629,8 +648,8 @@ mod tests {
         );
     }
 
-    /// Reads a resource on its own thread, failing the test if the read
-    /// never returns, as a stream that keeps erroring could make it.
+    /// Reads a resource on a thread of its own, and fails the test if the read does not return,
+    /// as could happen for a stream that keeps failing.
     fn read_or_hang(
         variant: RdfVariant,
         source: impl Read + Send + 'static,
@@ -648,9 +667,10 @@ mod tests {
             .expect("the read returns")
     }
 
-    /// A stream that breaks partway ends the read with an error rather
-    /// than an endless run of malformed statements: a gzip member cut
-    /// short, and plain bytes under a gzip decoder.
+    /// A stream that breaks partway ends the read with an error,
+    /// rather than an endless series of malformed statements.
+    ///
+    /// The broken streams are a gzip member cut short, and plain bytes under a gzip decoder.
     #[test]
     fn a_broken_stream_ends_the_read() {
         use std::io::Write;
@@ -687,8 +707,9 @@ mod tests {
         assert_eq!(problem.code(), crate::codes::INPUT_UNREADABLE);
     }
 
-    /// A line of N-Triples with a syntax error is one malformed row:
-    /// none of its terms is taken, and the error ends with the line.
+    /// A line of N-Triples with a syntax error is one malformed row.
+    ///
+    /// None of the line's statements is kept, and the error ends with the line.
     #[test]
     fn a_malformed_line_is_one_malformed_row() {
         let triples = "<http://x/s1> <http://x/p> \"a\" \"b\" .\n\
@@ -722,9 +743,8 @@ mod tests {
         );
     }
 
-    /// The limit counts statements before the condition, so a pushed
-    /// condition reduces what a limited resource yields and never reads
-    /// further into it.
+    /// The limit counts statements before the condition, so a condition reduces the rows of a
+    /// read with a limit, and never makes it read further into the resource.
     #[test]
     fn the_limit_counts_statements_before_the_condition() {
         use nemo_physical::function::{OpCode, StackProgram};
@@ -753,8 +773,8 @@ mod tests {
         );
     }
 
-    /// Quads write with the graph column first, the sentinel naming the
-    /// default graph.
+    /// Quads are written with the graph column first,
+    /// and [DEFAULT_GRAPH] becomes the default graph.
     #[test]
     fn quads_write_with_their_graph() {
         let rows: Vec<Vec<DataValue>> = vec![
@@ -786,8 +806,8 @@ mod tests {
         assert!(text.contains("<http://example.org/g>"), "{text}");
     }
 
-    /// A base that is not an absolute IRI is refused for every variant,
-    /// the line-based ones included, which have no use for it.
+    /// A base that is not an absolute IRI is rejected for every variant,
+    /// including the line-based ones, which have no use for it.
     #[test]
     fn every_variant_refuses_a_base_that_is_not_an_iri() {
         for variant in [RdfVariant::NTriples, RdfVariant::NQuads, RdfVariant::Turtle] {

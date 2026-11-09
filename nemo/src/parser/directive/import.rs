@@ -1,4 +1,5 @@
-//! Import and export directives: the specification of predicate, format, and options they share.
+//! Parsing import and export directives,
+//! which share the specification of a predicate, a format and options.
 
 use nemo_physical::diagnostics::Diagnostic;
 
@@ -10,17 +11,17 @@ use crate::{
     parser::{cursor::Parser, lexer::TokenKind},
 };
 
-/// The parsed pieces of an import/export specification.
+/// The parsed parts of an import or export specification.
 struct Specification {
     /// The predicate.
     predicate: Identifier,
-    /// The column names an import gives its predicate, if any.
+    /// The variables that an import names its columns by, or empty if it names none.
     variables: Vec<String>,
     /// The format.
     format: Identifier,
-    /// The option pairs.
+    /// The options, as key-value pairs.
     options: Vec<(Term, Term)>,
-    /// The guard bindings.
+    /// The guards, which bind variables that the option values may use.
     guards: Vec<(String, Term)>,
     /// An import's binding atoms, if it has a `where` clause.
     bindings: Vec<Atom>,
@@ -57,12 +58,14 @@ impl Parser<'_> {
         })
     }
 
-    /// Parses an import or export specification: `predicate from|to format { key = value, … }`.
+    /// Parses an import or export specification,
+    /// such as `predicate from format { key = value, … }`.
     ///
-    /// The connective is the direction the data flows:
-    /// `from` for an import and `to` for an export, keywords only in this position.
-    /// An import (`bindable`) may additionally name its columns after the predicate
-    /// and end in a `where` clause of binding atoms.
+    /// `connective` is the word before the format,
+    /// which is `from` for an import and `to` for an export.
+    /// It is a keyword only in this position.
+    /// `bindable` says whether the specification may name its columns after the predicate
+    /// and end in a `where` clause, as an import may.
     fn specification(
         &mut self,
         connective: &str,
@@ -98,7 +101,7 @@ impl Parser<'_> {
                 )
             })?
             .unwrap_or_default();
-        // Guard bindings: `, ?var = term` after the options.
+        // Guards `, ?x = term` follow the options.
         let mut guards = Vec::new();
         while self.eat(&TokenKind::Comma).is_some() {
             let variable =
@@ -106,8 +109,8 @@ impl Parser<'_> {
             self.expect(&TokenKind::Equal, "`=` after the guard variable")?;
             guards.push((variable, self.term()?));
         }
-        // The `where` clause: binding atoms and conditions, as in a rule
-        // body, `where` a keyword only in this position.
+        // The `where` clause contains binding atoms and conditions, as in a rule body.
+        // `where` is a keyword only in this position.
         let mut bindings = Vec::new();
         let mut conditions = Vec::new();
         if bindable && self.at_word("where") {

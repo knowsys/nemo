@@ -1,5 +1,5 @@
-//! Projection pushdown: the import columns no rule reads, dropped at
-//! load.
+//! Projection pushdown: the import pass that prunes the columns of imported predicates that no
+//! rule reads.
 
 use std::collections::HashMap;
 
@@ -17,16 +17,16 @@ use crate::{
     model::{Term, TermKind, VariableKind},
 };
 
-/// Finds the import columns no rule reads.
+/// The import pass that prunes the columns of imported predicates that no rule reads.
 ///
-/// The pass applies to a predicate that only rules read
-/// (not a fact, rule head, export, or `@input`),
-/// and finds the positions holding, in every body occurrence,
-/// an anonymous term or a universal variable the rule mentions nowhere else.
-/// A rule with `#count()` reads every position, anonymous ones included,
+/// The pass applies to a predicate that only rule bodies read,
+/// and not facts, rule heads, exports or `@input`.
+/// It prunes the positions that, in every body atom of the predicate,
+/// have an anonymous variable or a universal variable that occurs nowhere else in the rule.
+/// A rule with `#count()` reads every position, even an anonymous one,
 /// since it counts the body matches.
-/// Rows differing only in such columns collapse into one stored row, which no rule can observe,
-/// so the loader skips such columns before they are parsed, interned, or stored.
+/// Rows that differ only in pruned columns become one stored row, which no rule can observe,
+/// so the load leaves these columns out before their values are interned or stored.
 /// A predicate whose rules read none of its columns is stored whole,
 /// so that its atoms can still test whether a row exists.
 #[derive(Debug)]
@@ -43,9 +43,8 @@ impl ImportPass for ProjectionPushdown {
         translator: &Translator<'_>,
         plan: &mut ImportPlan,
     ) -> Result<(), Diagnostic> {
-        // Per candidate, whether each position was read anywhere. A
-        // width disagreement disqualifies the predicate (the arity
-        // diagnostics report it).
+        // Per predicate, whether some rule reads each position,
+        // or `None` if its atoms disagree on its arity, which is an error of its own.
         let mut read: HashMap<String, Option<Vec<bool>>> = HashMap::new();
         for rule in &survey.rules {
             let counts = occurrences(rule);
@@ -71,9 +70,8 @@ impl ImportPass for ProjectionPushdown {
                 }
             }
         }
-        // For an import with a `where` clause, the columns the clause's
-        // atoms bind are the keys its fetch sends, and the columns its
-        // conditions test are read too, whatever the rules read.
+        // The columns that an import's `where` clause reads are read whatever the rules read:
+        // its atoms bind them as the keys that its fetch sends, and its conditions test them.
         for (name, bound) in &survey.bound {
             if let Some(Some(flags)) = read.get_mut(name)
                 && flags.len() == bound.len()
@@ -104,9 +102,12 @@ impl ImportPass for ProjectionPushdown {
     }
 }
 
-/// Returns whether a term at an atom position reads nothing: in a rule without
-/// `#count()`, anonymous, or a universal variable occurring nowhere
-/// else in the rule.
+/// Returns whether a term at an atom position reads nothing.
+///
+/// In a rule without `#count()`, this is the case for an anonymous variable,
+/// and for a universal variable that occurs nowhere else in the rule.
+/// `counts` contains the number of occurrences of each variable in the rule,
+/// and `counted` says whether the rule has `#count()`.
 fn unread(term: &Term, counts: &HashMap<String, usize>, counted: bool) -> bool {
     !counted
         && match &term.kind {

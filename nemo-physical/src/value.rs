@@ -1,28 +1,28 @@
-//! Data values and operations.
+//! Data values and the operations on them.
 //!
-//! A data value is a value as users of this crate see it, e.g.
-//! an IRI, a string, a number, a dateTime, or a structured value.
-//! [DataValue] is the owned form,
-//! whose constructors canonicalize so that each value has one representation.
-//! [ValueRef] is the borrowed view,
-//! obtained from an owned value or from the dictionary without allocation.
+//! A data value is a value as users of this crate see it,
+//! such as an IRI, a string, a number, a dateTime or a structured value.
+//! [DataValue] is the owned form.
+//! Its constructors bring each value into canonical form, so that it has one representation.
+//! [ValueRef] is the borrowed view, which is obtained without allocation
+//! from an owned value or from the dictionary.
 //!
-//! Every value belongs to one [domain](ValueDomain),
-//! its semantic classification.
+//! Every value belongs to one [domain](ValueDomain).
 //!
-//! Equality, order and hashing of values are *term identity*:
+//! Equality, order and hashing of values follow *term identity*:
 //! two values are equal exactly if they are the same term,
 //! so `1`, `1.0d` and `"1"` are three distinct values.
-//! Values of different domains order by domain, and values of one domain by value.
-//! An owned value and its borrowed view compare, hash and print alike.
-//! XSD's *value* comparison, under which `1` and `1.0d` are equal,
-//! is [value_eq](ValueRef::value_eq) and [value_cmp](ValueRef::value_cmp).
+//! The order of values under term identity is the *term order*.
+//! It orders values of different domains by domain, and values of one domain by value.
+//! An owned value and its borrowed view compare, hash and print the same way.
+//! XSD's comparison by value, under which `1` and `1.0d` are equal, gives the *value order*.
+//! It is computed by [value_eq](ValueRef::value_eq) and [value_cmp](ValueRef::value_cmp).
 //!
-//! A [Type] bounds the values a place can hold by a set of domains.
+//! A [Type] is an upper bound on the values that a column or an expression can hold.
 //!
-//! Values print in *term syntax*, the notation of values in Nemo's programs and results
-//! ([Display](std::fmt::Display) of [DataValue] and [ValueRef]).
-//! [NameKind] tells the names term syntax writes without quotes or brackets,
+//! Values are written in *term syntax*, Nemo's notation for values,
+//! by the [Display](std::fmt::Display) of [DataValue] and [ValueRef].
+//! [NameKind] distinguishes the names that term syntax writes without quotes or brackets,
 //! and [Escape] reads its escape sequences.
 
 pub(crate) mod datatype;

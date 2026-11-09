@@ -1,5 +1,5 @@
-//! A rule's columns: what each can hold, narrowed by the rule's conditions,
-//! and what the rule writes into the tables.
+//! The types of a rule's columns, narrowed by the rule's conditions,
+//! and the table columns that the rule writes.
 
 use std::collections::HashMap;
 
@@ -14,14 +14,14 @@ use crate::{
     model::AggregateKind,
 };
 
-/// Returns the types each of a rule's columns can hold.
+/// Returns the types that each of a rule's columns can hold.
 ///
-/// Variables intersect the table columns they join,
-/// bound columns additionally what their expressions produce,
-/// and computed columns hold what their expressions produce.
-/// The rule's conditions, bindings and computed columns then narrow the columns they read:
-/// a row is kept only if every condition holds, every binding yields its column's value,
-/// and every computed column evaluates.
+/// A variable's type is the intersection of the types of the table columns that it joins,
+/// and for a bound column also of what its expression produces.
+/// A computed column can hold what its expression produces.
+/// The rule's conditions, bindings and computed columns then narrow the columns that they
+/// read, since a row is kept only if every condition holds, every binding produces its
+/// column's value, and every computed column can be evaluated.
 pub(super) fn rule_columns(
     rule: &CompiledRule,
     types: &HashMap<TableId, Vec<Type>>,
@@ -30,8 +30,10 @@ pub(super) fn rule_columns(
     columns_of(rule, types, labels, true)
 }
 
-/// Returns the types each of a rule's columns can hold before its conditions narrow them:
-/// the columns a proof that the rule cannot fire is told in.
+/// Returns the types that each of a rule's columns can hold before its conditions narrow
+/// them.
+///
+/// A proof that the rule cannot fire is told in terms of these types.
 pub(super) fn joined_columns(
     rule: &CompiledRule,
     types: &HashMap<TableId, Vec<Type>>,
@@ -40,8 +42,9 @@ pub(super) fn joined_columns(
     columns_of(rule, types, labels, false)
 }
 
-/// Returns the types each of a rule's columns can hold,
-/// narrowed by its conditions and bindings if `narrowing` is set; see [rule_columns].
+/// Returns the types that each of a rule's columns can hold,
+/// narrowed by its conditions, bindings and computed columns if `narrowing` is set
+/// (see [rule_columns]).
 fn columns_of(
     rule: &CompiledRule,
     types: &HashMap<TableId, Vec<Type>>,
@@ -89,7 +92,7 @@ fn columns_of(
                 columns[column] = refined;
                 changed = true;
             }
-            // A row whose computed column errors is dropped.
+            // A row for which a computed column fails is dropped.
             if narrowing {
                 let outcome = Outcome::Within(columns[column].clone());
                 let narrowed = computed.program.narrow(&inputs, labels, &outcome);
@@ -103,13 +106,13 @@ fn columns_of(
     columns
 }
 
-/// Returns the types of the columns an expression reads, in input order.
+/// Returns the types of the columns that an expression reads, in input order.
 pub(super) fn read(columns: &[Type], inputs: &[usize]) -> Vec<Type> {
     inputs.iter().map(|&input| columns[input].clone()).collect()
 }
 
-/// Intersects the columns an expression reads with their narrowed types, in input order,
-/// returning whether any column shrank.
+/// Intersects the columns that an expression reads with their narrowed types, in input order,
+/// and returns whether any column shrank.
 fn narrow(columns: &mut [Type], inputs: &[usize], narrowed: Vec<Type>) -> bool {
     let mut changed = false;
     for (&input, narrowed) in inputs.iter().zip(narrowed) {
@@ -122,9 +125,11 @@ fn narrow(columns: &mut [Type], inputs: &[usize], narrowed: Vec<Type>) -> bool {
     changed
 }
 
-/// Calls the action for every column a rule writes: its head atoms, its
-/// aggregate head, and its existential inserts,
-/// with the rule column the written values come from, if one does.
+/// Calls `action` for every table column that a rule writes,
+/// in its head atoms, its aggregate head and its existential inserts.
+///
+/// `action` receives the table, the position, the type of the written values,
+/// and the rule column that the values come from, if there is one.
 pub(super) fn each_write(
     rule: &CompiledRule,
     columns: &[Type],
@@ -161,7 +166,7 @@ pub(super) fn each_write(
     }
 }
 
-/// Returns the types an aggregate head's columns can hold.
+/// Returns the types that an aggregate head's columns can hold.
 fn aggregate_output(
     aggregate: &CompiledAggregate,
     columns: &[Type],
@@ -173,14 +178,14 @@ fn aggregate_output(
         .functions
         .iter()
         .map(|function| {
-            // `#count()` has no input; every other aggregate does.
+            // Only a count may have no input, and the count's arm reads none.
             let input = || function.input.expect("only a match count has no input");
             match function.kind {
                 AggregateKind::Count => Type::of(ValueDomain::Integer),
                 // A sum adds its inputs, and an average divides the sum by the count,
                 // so the numbers promote as they do under `+` and `/`:
-                // an exact sum that is integral is an integer, and an exact average any exact
-                // number. Durations sum and average to durations of one kind.
+                // an exact sum of integers is an integer, and an exact average can be any
+                // exact number. Durations sum and average to durations of one kind.
                 // Extrema return one of their inputs, whatever its type.
                 AggregateKind::Sum | AggregateKind::Average => {
                     let domains = columns[input()].domains();
@@ -198,7 +203,8 @@ fn aggregate_output(
                     Type::of_domains(result)
                 }
                 AggregateKind::Min | AggregateKind::Max => columns[input()].clone(),
-                // Arities and keys are per-group facts, not types.
+                // The lengths and keys of the results depend on the group,
+                // so the types record only the domain.
                 AggregateKind::Tuple => Type::of(ValueDomain::Tuple),
                 AggregateKind::Map => Type::of(ValueDomain::Map),
             }

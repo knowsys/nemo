@@ -1,7 +1,8 @@
-//! The module files: how a `@use` finds its module's text,
-//! how the text is read once per link and registered under the file's path,
-//! how each instance parses it under an id of its own,
-//! and how a module's relative import paths resolve against the module's directory.
+//! The module files: finding the text of the module that a `@use` names,
+//! reading it, and parsing it for each instance.
+//!
+//! A module's text is read once per linking and registered under the file's path.
+//! Each instance parses it under a file id of its own.
 
 use std::{
     fs,
@@ -20,15 +21,16 @@ use crate::{
 };
 
 /// Resolves the relative resource of a module's `@import` against the directory
-/// the module was read from, so a module can ship the data it reads.
+/// the module was read from, so that a module can ship the data it reads.
 ///
 /// The rewritten path is *absolute*.
-/// The linked program is translated against the import directory of the using program,
-/// which would otherwise be joined onto a relative path a second time,
-/// reading a file next to the using program rather than next to the module, or none at all.
-/// An absolute path is unchanged by that join.
+/// The linked program is translated against the import directory of the using program.
+/// That directory would otherwise be joined onto a relative path a second time,
+/// and the import would read a file next to the using program rather than next to the
+/// module, or none at all.
+/// Joining leaves an absolute path unchanged.
 ///
-/// Absolute paths and URLs are left unchanged.
+/// Absolute paths and URLs are left unchanged, and so is a statement that is not an import.
 pub(super) fn anchor_import_resources(statement: &mut Statement, directory: &Path) {
     let Statement::Directive(Directive::Import(import)) = statement else {
         return;
@@ -41,7 +43,7 @@ pub(super) fn anchor_import_resources(statement: &mut Statement, directory: &Pat
             continue;
         }
         // A resource is written as a string or as an IRI, and the
-        // engine takes both.
+        // engine accepts both.
         let resource = match &value.kind {
             TermKind::String(resource) => resource.clone(),
             TermKind::Constant(Identifier::Iri(resource)) => resource.clone(),
@@ -58,7 +60,7 @@ pub(super) fn anchor_import_resources(statement: &mut Statement, directory: &Pat
     }
 }
 
-/// Returns the directory a file's relative paths resolve against:
+/// Returns the directory that a file's relative paths are resolved against:
 /// its parent, or the current directory if it has none.
 pub(in crate::engine) fn directory_of(path: &Path) -> PathBuf {
     path.parent()
@@ -67,11 +69,12 @@ pub(in crate::engine) fn directory_of(path: &Path) -> PathBuf {
 }
 
 impl Linker<'_> {
-    /// Resolves the module a `@use` written in the directory `from` names.
+    /// Returns the location of the module that a `@use` in the directory `from` names.
     ///
-    /// `program` is the directory of the program containing the outermost `@use`.
-    /// Returns an error for a name leading out of a root,
-    /// and for a name beginning with a root while a directory of the same name lies in `from`.
+    /// `program` is the directory of the program that contains the outermost `@use`.
+    /// Returns an error for a name that leads out of a root,
+    /// and for a name that begins with a root while a directory of the same name lies in
+    /// `from`.
     pub(super) fn locate(
         &self,
         directive: &UseDirective,
@@ -91,8 +94,8 @@ impl Linker<'_> {
         Ok(location)
     }
 
-    /// Returns whether a directory of the given name lies in the directory `from`:
-    /// on disk, or holding a registered module text.
+    /// Returns whether a directory of the given name lies in the directory `from`,
+    /// either on disk or as the directory of a registered module text.
     fn is_directory(&self, from: &Location, name: &str, program: &Path) -> bool {
         let mut location = from.clone();
         location.segments.push(name.to_owned());
@@ -107,7 +110,7 @@ impl Linker<'_> {
             || (matches!(entry(&directory, name), Entry::Exact) && directory.join(name).is_dir())
     }
 
-    /// Reads a module's text once per link, and returns the id it is registered under.
+    /// Reads a module's text once per linking, and returns the file id it is registered under.
     ///
     /// A text registered with [add_module](crate::engine::Engine::add_module)
     /// is used instead of the file.
@@ -169,7 +172,7 @@ impl Linker<'_> {
         })
     }
 
-    /// Returns what explains a missing module file, if anything does.
+    /// Returns a note that explains why a module file is missing, if there is one.
     fn missing_note(&self, missing: Missing, directive: &UseDirective) -> Option<String> {
         let module = &directive.module;
         match missing {
@@ -188,8 +191,8 @@ impl Linker<'_> {
         }
     }
 
-    /// Parses a module file's text under the id of one of its instances,
-    /// so the statements' spans identify the instance they belong to.
+    /// Parses a module file's text under the file id of one of its instances,
+    /// so that the statements' spans identify the instance they belong to.
     ///
     /// Parser warnings are reported for the first instance only.
     pub(super) fn parse(
@@ -253,16 +256,16 @@ pub(super) fn identity(path: &Path) -> String {
 enum Entry {
     /// An entry has exactly the name.
     Exact,
-    /// No entry has the name, but one differs from it in case only: that entry's name.
+    /// No entry has the name, but this entry's name differs from it only in case.
     Differs(String),
     /// No entry has the name.
     Missing,
 }
 
-/// Looks a name up among the entries of a directory.
+/// Returns how a name was found among the entries of a directory.
 ///
 /// Comparing with the entries, rather than opening the joined path,
-/// makes a case-insensitive filesystem tell names apart by case as other filesystems do.
+/// makes a case-insensitive filesystem distinguish names by case as other filesystems do.
 fn entry(directory: &Path, name: &str) -> Entry {
     let Ok(entries) = fs::read_dir(directory) else {
         return Entry::Missing;
@@ -285,16 +288,20 @@ fn entry(directory: &Path, name: &str) -> Entry {
 
 /// Why no module file lies at a location.
 enum Missing {
-    /// A directory or the file differs in case from the name's part: its name on disk.
+    /// A directory or the file differs in case from the name's part,
+    /// and this is its name on disk.
     Case(String),
-    /// A directory of the module's name lies where its file was expected: the directory's name.
+    /// A directory with the module's name lies where its file was expected,
+    /// and this is the directory's name.
     Directory(String),
     /// Nothing lies there.
     Nothing,
 }
 
-/// Checks that a module file lies at a location whose tree lies in `tree`,
-/// every part of the name matching a directory or the file exactly.
+/// Checks that a module file lies at a location,
+/// with every part of the name matching a directory or the file exactly.
+///
+/// `tree` is the location's tree (see [Location::tree]).
 fn find_exactly(location: &Location, tree: &Path) -> Result<(), Missing> {
     let Some((name, directories)) = location.segments.split_last() else {
         return Err(Missing::Nothing);

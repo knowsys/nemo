@@ -12,7 +12,7 @@ pub(super) enum ChainBase<'a> {
     Join {
         /// The join's markers.
         markers: &'a [Marker],
-        /// The layers, outermost first: the markers, without those that left the descent.
+        /// The layers, shallowest first: the markers, without those that left the descent.
         layers: &'a [Marker],
     },
     /// The markers of a relation read as a join of one input,
@@ -32,7 +32,7 @@ pub(super) enum ChainColumn {
 /// A condition of a chain on the columns it reads.
 #[derive(Debug, Clone)]
 pub(super) struct ChainCondition<C> {
-    /// The columns feeding the program, in program input order.
+    /// The columns whose values are the program's inputs, in order.
     pub(super) inputs: Vec<C>,
     /// The condition.
     pub(super) program: StackProgram,
@@ -41,7 +41,7 @@ pub(super) struct ChainCondition<C> {
 /// A computed column of a chain.
 #[derive(Debug, Clone)]
 pub(super) struct ChainComputation {
-    /// The columns feeding the program, in program input order.
+    /// The columns whose values are the program's inputs, in order.
     pub(super) inputs: Vec<ChainColumn>,
     /// The program computing the value.
     pub(super) program: StackProgram,
@@ -51,12 +51,13 @@ pub(super) struct ChainComputation {
 
 /// A chain of operators, sorted into the stages of a unit.
 ///
-/// The descent holds the filters reading only base markers deterministically,
-/// and the subtractions comparing only base markers.
-/// The row stage holds the computed columns and the other filters,
-/// evaluated on each row the descent emits.
-/// The operators move by exact commutations only:
-/// a filter or a subtraction passes below a computed column it does not read and below a projection.
+/// The descent checks the deterministic filters that read one or more base markers
+/// and nothing else, and the subtractions that compare only base markers.
+/// The row stage evaluates the computed columns and the other filters
+/// on each row the descent emits.
+/// Operators are moved only where they commute:
+/// a filter or a subtraction moves below a projection,
+/// and below a computed column it does not read.
 #[derive(Debug, Clone)]
 pub(super) struct Chain {
     /// The conditions checked in the descent, on base markers.
@@ -83,15 +84,16 @@ pub(super) struct Chain {
 impl Chain {
     /// Sorts a chain of operators above a base, listed bottom-up, into the stages of a unit.
     ///
-    /// Returns the position of the first operator that cannot join the unit of those below it:
+    /// Fails with the position of the first operator that cannot run in one unit
+    /// with the operators below it:
     /// - a subtraction comparing a computed column, since only the descent subtracts,
     /// - a projection merging rows above the row stage, or an operator of the row stage above it,
     ///   since the sink deduplicates storage values,
     ///   which computed values have only once the join is done.
     ///
     /// Every operator resolves its markers against its own input,
-    /// so a marker a projection dropped below it is out of its scope,
-    /// even if the descent still carries it as a layer.
+    /// so a marker that a projection below it dropped is out of its scope,
+    /// even if the descent still has the marker as a layer.
     pub(super) fn sort(
         plan: &OperationPlan,
         base: ChainBase<'_>,
@@ -175,8 +177,8 @@ impl Chain {
 
     /// Returns whether the chain evaluates programs on each emitted row.
     ///
-    /// A chain with a row stage never deduplicates:
-    /// sorting cuts it where a projection merging rows would meet the row stage.
+    /// A chain with a row stage never deduplicates,
+    /// since sorting cuts the chain where a projection that merges rows would meet the row stage.
     pub(super) fn has_row_stage(&self) -> bool {
         !self.computed.is_empty() || !self.post_filters.is_empty()
     }
@@ -225,8 +227,8 @@ impl Chain {
             .collect()
     }
 
-    /// Records an operator of the row stage reading the given columns,
-    /// or returns its position if a projection below it merges rows.
+    /// Records an operator of the row stage that reads the given columns,
+    /// or fails with its position if a projection below it merges rows.
     fn enter_row_stage(
         &mut self,
         position: usize,
@@ -264,7 +266,7 @@ impl Chain {
     }
 
     /// Records a projection to the given markers,
-    /// or returns its position if it merges rows above the row stage.
+    /// or fails with its position if it merges rows above the row stage.
     ///
     /// A projection merges rows if it drops a base marker the row stage reads,
     /// or, over the layers of a join, if it drops a layer above one it keeps.

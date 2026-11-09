@@ -1,4 +1,4 @@
-//! `--explain CODE`: what a diagnostic code means.
+//! Printing the explanation of a diagnostic code, for `--explain CODE`.
 
 use std::sync::LazyLock;
 
@@ -7,17 +7,19 @@ use nemo_physical::diagnostics::{Code, Diagnostic, Registry};
 
 use crate::{error::CliError, stdout};
 
-/// The registry of every code the command line reports: the engine's
-/// and its own.
+/// The registry of every code that the command line reports, both the engine's and its own.
 static REGISTRY: LazyLock<Registry> = LazyLock::new(|| {
     Registry::new()
         .with_registry(&nemo::codes::REGISTRY)
         .with_kinds::<CliError>()
 });
 
-/// Prints the registry entry of a code to the standard output:
-/// its name, its message template, the explanation written on its declaration,
-/// and the note and hint its diagnostics carry.
+/// Prints the registry entry of `code` to standard output.
+///
+/// The entry consists of the code's name, its message template, its explanation,
+/// and the note and hint of its diagnostics.
+/// The code is written as `N0204`, and a lowercase `n` is accepted too.
+/// Fails for an unknown code, or if standard output cannot be written.
 pub(crate) fn print(code: &str) -> Result<(), Diagnostic> {
     let unknown = || {
         CliError::UnknownCode {
@@ -40,7 +42,7 @@ pub(crate) fn print(code: &str) -> Result<(), Diagnostic> {
         reset,
         ..
     } = TerminalStyle::detect();
-    // The summary is a message template, its literal braces doubled.
+    // The summary is a message template, in which literal braces are doubled.
     let summary = entry.summary.replace("{{", "{").replace("}}", "}");
     let mut text = format!("{strong}{}{reset} {}\n{summary}\n", entry.code, entry.name);
     if !entry.explanation.is_empty() {
@@ -48,7 +50,7 @@ pub(crate) fn print(code: &str) -> Result<(), Diagnostic> {
         text.push_str(entry.explanation);
         text.push('\n');
     }
-    // Labelled as the rendered diagnostics label them.
+    // The note and hint are labelled as in rendered diagnostics.
     if entry.note.is_some() || entry.hint.is_some() {
         text.push('\n');
     }
@@ -66,9 +68,10 @@ mod tests {
     use super::*;
     use crate::error::codes;
 
-    /// The command line's codes share one numbering with the engine's:
-    /// building the registry rejects a code documented twice, and every
-    /// kind explains itself.
+    /// Every code of the command line and the engine has an explanation.
+    ///
+    /// Building the registry also checks that the two share one numbering,
+    /// since it panics for a code that names two different kinds.
     #[test]
     fn every_code_is_explained() {
         for entry in REGISTRY.entries() {
@@ -81,6 +84,8 @@ mod tests {
         }
     }
 
+    /// The registry finds the codes of the command line and of the engine,
+    /// and no code that is not declared.
     #[test]
     fn codes_of_every_layer_are_found() {
         assert_eq!(

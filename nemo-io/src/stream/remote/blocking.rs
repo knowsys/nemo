@@ -1,4 +1,4 @@
-//! The blocking client over `reqwest`.
+//! The blocking HTTP client, built on `reqwest`.
 
 use std::{
     sync::{
@@ -11,12 +11,12 @@ use std::{
 
 use crate::stream::remote::{Client, Failure, Request, Response, Retry};
 
-/// The client of builds with the `http` feature: `reqwest`'s blocking client.
+/// A [Client] that sends requests over HTTP with `reqwest`'s blocking client.
 ///
-/// It runs an async runtime internally, so this crate needs none of its own.
-/// The requests of one call overlap on a bounded pool of threads over one pooled connection
-/// client, and each failed request is retried on the [Retry] schedule before its failure is
-/// returned.
+/// `reqwest` runs an async runtime internally, so this crate needs none of its own.
+/// The requests of one call run in parallel on a bounded pool of threads,
+/// which share one `reqwest` client and its pooled connections.
+/// A failed request is retried on the client's [Retry] schedule.
 ///
 /// # Example
 ///
@@ -33,51 +33,51 @@ use crate::stream::remote::{Client, Failure, Request, Response, Retry};
 /// ```
 #[derive(Debug, Default, Clone, Copy)]
 pub struct BlockingClient {
-    /// When failed requests are sent again.
+    /// The schedule on which failed requests are sent again.
     retry: Retry,
 }
 
-/// The number of requests in flight at once.
+/// The largest number of requests in flight at once.
 ///
-/// It is enough to overlap their latencies,
-/// and as many as a public endpoint allows one client:
-/// Wikidata's query service runs five queries in parallel per IP address.
+/// It is enough to overlap their latencies, and no more than a public endpoint allows one
+/// client.
+/// For example, Wikidata's query service runs five queries in parallel per IP address.
 const MAX_IN_FLIGHT: usize = 5;
 
-/// How often a waiting call looks at its cancellation flag.
+/// How often a waiting call checks whether it is cancelled.
 const POLL: Duration = Duration::from_millis(50);
 
 /// The time one request may take, from connection to last byte.
 ///
-/// A SPARQL endpoint may take minutes to respond to a heavy query, and enforces a limit of its
-/// own.
-/// The client's default of thirty seconds would cut such responses off mid-body.
+/// A SPARQL endpoint may take minutes to respond to a heavy query,
+/// and usually enforces a time limit of its own.
+/// `reqwest`'s default of thirty seconds would cut such responses off in the middle of the body.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(600);
 
-/// How much of a failed response's body its failure quotes.
+/// The largest number of characters of a failed response's body that its failure quotes.
 const EXCERPT_CHARS: usize = 300;
 
-/// What the threads of one call share: the requests, the next one to
-/// take, and whether the call was cancelled.
+/// The state that the threads of one call share.
 struct RequestBatch {
     /// The requests, in order.
     requests: Vec<Request>,
     /// The index of the next request a thread takes.
     next: AtomicUsize,
-    /// Set when the call is cancelled: threads take no further
-    /// request and stop backing off.
+    /// Whether the call was cancelled.
+    ///
+    /// Once it is, the threads take no further request and stop waiting to retry.
     abandoned: AtomicBool,
 }
 
 impl BlockingClient {
-    /// Creates a client retrying on the given schedule.
+    /// Creates a client that retries on the given schedule.
     pub fn new(retry: Retry) -> Self {
         Self { retry }
     }
 
-    /// Sends several requests, as [Client::fetch_all] does.
+    /// Sends several requests, as [Client::fetch_all] describes.
     ///
-    /// If `cancelled` turns true, the requests in flight finish on their own threads,
+    /// If `cancelled` returns true, the requests in flight finish on their own threads,
     /// and their responses are dropped.
     fn send_all(
         &self,
@@ -131,7 +131,7 @@ impl BlockingClient {
                         return None;
                     }
                 }
-                // Every thread ended; a panicked one left its slot empty.
+                // Every thread has ended, and a thread that panicked left its slot empty.
                 Err(mpsc::RecvTimeoutError::Disconnected) => break,
             }
         }
@@ -156,7 +156,8 @@ impl Client for BlockingClient {
     }
 }
 
-/// Returns the client of one call, whose connections pool across the call's requests.
+/// Returns the `reqwest` client of one call, which pools connections across the call's
+/// requests.
 fn client() -> Result<reqwest::blocking::Client, Failure> {
     reqwest::blocking::Client::builder()
         .user_agent(concat!("nemo/", env!("CARGO_PKG_VERSION")))
@@ -165,9 +166,9 @@ fn client() -> Result<reqwest::blocking::Client, Failure> {
         .map_err(|error| Failure::transport(format!("the HTTP client could not be built: {error}")))
 }
 
-/// Performs one request, sending it again while the schedule says so.
+/// Sends one request, and sends it again for as long as the schedule says so.
 ///
-/// It gives up on the retries once the call is abandoned.
+/// It stops retrying once the call is abandoned.
 fn fetch_retrying(
     client: &reqwest::blocking::Client,
     request: &Request,
@@ -186,7 +187,7 @@ fn fetch_retrying(
         let Some(delay) = delay else {
             return Err(failure);
         };
-        // A warning, since a wait the server asks for can take minutes.
+        // This is a warning, since a wait that the server asks for can take minutes.
         tracing::warn!(
             url = request.url.as_str(),
             status = failure.status,
@@ -201,8 +202,9 @@ fn fetch_retrying(
     }
 }
 
-/// Sleeps for a duration, in slices, unless the call is abandoned first,
-/// and returns whether the whole wait passed.
+/// Sleeps for a duration in short slices, and returns whether it slept the whole duration.
+///
+/// It stops early if the call is abandoned.
 fn wait(duration: Duration, abandoned: &AtomicBool) -> bool {
     let end = Instant::now() + duration;
     loop {
@@ -217,8 +219,8 @@ fn wait(duration: Duration, abandoned: &AtomicBool) -> bool {
     }
 }
 
-/// Sends one request: its body, or the failure with the response's
-/// `Retry-After` value.
+/// Sends one request once, and returns its body,
+/// or its failure together with the response's `Retry-After` value.
 fn send(
     client: &reqwest::blocking::Client,
     request: &Request,
@@ -276,9 +278,10 @@ fn send(
     Ok(Arc::from(bytes.as_ref()))
 }
 
-/// Returns why a transfer failed, with the causes the error carries,
-/// such as a refused connection,
-/// and without the URL, which the diagnostic names already.
+/// Returns why a transfer failed, including the causes in the error, such as a refused
+/// connection.
+///
+/// The URL is left out, since the failure's [diagnostic](Failure::diagnostic) names it already.
 fn transport_reason(error: reqwest::Error) -> String {
     let error = error.without_url();
     let mut reason = error.to_string();
@@ -295,7 +298,9 @@ fn transport_reason(error: reqwest::Error) -> String {
     reason
 }
 
-/// Returns the start of a response body on one line, whitespace collapsed.
+/// Returns the start of a response body on one line, with its whitespace collapsed.
+///
+/// A longer text is cut after [EXCERPT_CHARS] characters and ends in an ellipsis.
 fn excerpt(body: &str) -> String {
     let mut excerpt = String::new();
     for (index, word) in body.split_whitespace().enumerate() {
@@ -317,6 +322,7 @@ mod tests {
 
     use super::*;
 
+    /// An excerpt keeps the start of a body on one line, and cuts a long one.
     #[test]
     fn excerpts_keep_the_start_of_a_body_on_one_line() {
         assert_eq!(
@@ -329,9 +335,10 @@ mod tests {
         assert_eq!(cut.chars().count(), EXCERPT_CHARS + 1);
     }
 
+    /// A cancelled call returns without waiting for a server that never responds.
     #[test]
     fn a_cancelled_call_stops_waiting_for_its_requests() {
-        // A server that accepts and never responds.
+        // A server that accepts the connection and never responds.
         let listener = TcpListener::bind("127.0.0.1:0").expect("a local port");
         let url = format!("http://{}/slow", listener.local_addr().expect("an address"));
         let started = Instant::now();

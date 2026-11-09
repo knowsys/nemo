@@ -4,8 +4,8 @@ use crate::dictionary::store::PairPool;
 
 /// The store of language-tagged strings.
 ///
-/// The language tag is the frequent part, interned once per language:
-/// a dataset uses few languages over many texts.
+/// The language tag is the frequent part of a [PairPool], stored once per language,
+/// since a dataset uses few languages for many texts.
 pub(crate) struct LanguageStringStore {
     /// The interned (language, text) pairs.
     pairs: PairPool,
@@ -24,8 +24,8 @@ impl LanguageStringStore {
         self.pairs.len()
     }
 
-    /// Interns a language-tagged string and returns its index,
-    /// or `None` if the store cannot hold it.
+    /// Interns a language-tagged string and returns its index, or `None` if a part is longer
+    /// than [LENGTH_LIMIT](crate::dictionary::Dictionary::LENGTH_LIMIT).
     ///
     /// The language must be in its canonical lowercase form,
     /// as [ValueRef](crate::value::ValueRef) guarantees.
@@ -42,8 +42,8 @@ impl LanguageStringStore {
     /// Returns the text and the language of the entry with the given index,
     /// borrowed from the store, or `None` for an unknown index.
     pub(crate) fn get(&self, index: u64) -> Option<(&str, &str)> {
-        // SAFETY: the pool is fed by `intern` alone,
-        // which stores the bytes of `&str`s.
+        // SAFETY: only `intern` adds pairs to the pool,
+        // and it stores the bytes of `&str`s.
         self.pairs.get(index).map(|(language, text)| unsafe {
             (
                 std::str::from_utf8_unchecked(text),

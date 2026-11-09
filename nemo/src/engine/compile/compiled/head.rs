@@ -1,43 +1,45 @@
-//! Head atoms, and the existential head the restricted chase evaluates.
+//! Compiled head atoms, and the existential head of a rule with existential variables.
 
 use nemo_physical::{management::TableId, value::DataValue};
 
-/// One head atom: a table receiving rows built from the rule's columns.
+/// One head atom: the table that receives the rule's rows, and the column of each position.
 #[derive(Debug)]
 pub(crate) struct HeadAtom {
     /// The predicate's table.
     pub(crate) table: TableId,
-    /// The rule column at each position, distinct by normalization.
+    /// The rule column at each position.
+    ///
+    /// The columns are distinct, since a variable written again becomes a computed copy.
     pub(crate) columns: Vec<usize>,
 }
 
 /// The existential head of a rule with `!`-variables, evaluated by the restricted chase.
 ///
-/// Satisfaction is checked against the stored tables, without further state.
-/// Per application, the delta of body matches is projected to the frontier.
-/// A frontier tuple is *satisfied* if one assignment of all existential variables makes every
-/// head atom hold.
-/// Unsatisfied tuples receive one fresh null per existential variable,
-/// which instantiates the insert atoms.
-/// Head atoms without existential variables stay ordinary [HeadAtom]s,
-/// which fire for every delta match, whether or not its frontier tuple is satisfied.
+/// The *frontier tuple* of a body match is its values for the universal head variables.
+/// A frontier tuple is *satisfied* if some values for the existential variables make every
+/// head atom hold in the stored tables.
+/// For an unsatisfied tuple, each existential variable gets a fresh null,
+/// and the [inserts](Self::inserts) are instantiated with these nulls.
+///
+/// The head atoms without existential variables are also ordinary [HeadAtom]s of the rule.
+/// So they receive a row for every new body match, whether its frontier tuple is satisfied or
+/// not.
 #[derive(Debug)]
 pub(crate) struct ExistentialHead {
-    /// The frontier: the rule columns of the universal head
-    /// variables, in first-mention order.
+    /// The rule columns of the universal head variables, in order of first mention.
     pub(crate) frontier: Vec<usize>,
-    /// Number of distinct existential variables, indexed in
-    /// first-occurrence order.
+    /// The number of distinct existential variables,
+    /// which are numbered in order of first mention.
     pub(crate) existentials: usize,
-    /// The satisfaction check: every head atom.
+    /// Every head atom, for the test of whether a frontier tuple is satisfied.
     pub(crate) check: Vec<ExistentialAtom>,
-    /// The atoms instantiated per unsatisfied tuple, the head atoms carrying existential
-    /// variables.
+    /// The head atoms with existential variables,
+    /// which are instantiated for each unsatisfied frontier tuple.
     pub(crate) inserts: Vec<ExistentialAtom>,
 }
 
-/// One atom of the existential head, over frontier columns, existential
-/// variables, and constants.
+/// One atom of the existential head, over frontier columns, existential variables and
+/// constants.
 #[derive(Debug, Clone)]
 pub(crate) struct ExistentialAtom {
     /// The predicate's table.
@@ -49,10 +51,10 @@ pub(crate) struct ExistentialAtom {
 /// One column of an existential head atom.
 #[derive(Debug, Clone)]
 pub(crate) enum ExistentialTerm {
-    /// A frontier column, by index into the frontier list.
+    /// A frontier column, by its index in [frontier](ExistentialHead::frontier).
     Frontier(usize),
-    /// An existential variable, by index.
+    /// An existential variable, by its number.
     Existential(usize),
-    /// A ground value.
+    /// A constant.
     Constant(DataValue),
 }

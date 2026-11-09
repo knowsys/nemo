@@ -4,8 +4,8 @@ use serde::{Deserialize, Serialize};
 
 /// A rule of the written program, together with one of its head atoms (nev: `Rule`).
 ///
-/// A bound import (an import with a `where` clause) counts as such a rule:
-/// its predicate is the head, and the atoms of its `where` clause are the body.
+/// A bound import, which is an import with a `where` clause, counts as such a rule.
+/// Its predicate is the head, and the atoms of its `where` clause are the body.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct QueryRule {
@@ -13,10 +13,10 @@ pub struct QueryRule {
     pub id: usize,
     /// The head atom.
     pub relevant_head_predicate: PredicateWithParameters,
-    /// The head atom's index over the rule's head.
+    /// The head atom's index among the rule's head atoms.
     pub relevant_head_predicate_index: usize,
-    /// The body's atoms in body order, a negated one's name prefixed
-    /// with `~`.
+    /// The atoms of the body, in body order,
+    /// with the name of a negated atom prefixed by `~`.
     pub body_predicates: Vec<PredicateWithParameters>,
     /// The rule as written.
     pub string_representation: String,
@@ -27,8 +27,8 @@ pub struct QueryRule {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PredicateWithParameters {
-    /// The predicate, by resolved name.
+    /// The predicate's resolved name, with a `~` before it for a negated body atom.
     pub name: String,
-    /// The terms, as written.
+    /// The terms as written, in declaration order.
     pub parameters: Vec<String>,
 }

@@ -1,4 +1,4 @@
-//! The statement grammar: facts, rules, and their pieces.
+//! Parsing statements, and the atoms and literals of facts and rules.
 
 use nemo_physical::diagnostics::Diagnostic;
 
@@ -11,8 +11,10 @@ use crate::{
 };
 
 impl Parser<'_> {
-    /// Parses one statement: attributes, then a directive, rule, or
-    /// fact, through its terminating ` .`.
+    /// Parses one statement, through its terminating ` .`.
+    ///
+    /// A statement is a directive, a rule or a fact.
+    /// Attributes may come before a rule, and are an error before a directive or a fact.
     pub(super) fn statement(&mut self) -> Result<Statement, Diagnostic> {
         let attributes = self.attributes()?;
 
@@ -51,7 +53,7 @@ impl Parser<'_> {
         }))
     }
 
-    /// Parses the attributes preceding a statement.
+    /// Parses the attributes `#[name(…)]` before a statement, if there are any.
     fn attributes(&mut self) -> Result<Vec<Attribute>, Diagnostic> {
         let mut attributes = Vec::new();
         while self.at(&TokenKind::AttributeOpen) {
@@ -77,14 +79,15 @@ impl Parser<'_> {
         Ok(attributes)
     }
 
-    /// Parses an atom: a name applied to terms.
+    /// Parses an atom, such as `parent(?x, ?y)`.
     pub(super) fn atom(&mut self) -> Result<Atom, Diagnostic> {
         let start = self.peek_span();
         let term = self.term()?;
         self.atom_from(term, start)
     }
 
-    /// Parses one body literal: a negated atom, an atom, or an operation constraint.
+    /// Parses one literal of a rule's body,
+    /// which is an atom, a negated atom `~atom`, or an operation, such as `?x > 1`.
     pub(super) fn literal(&mut self) -> Result<Literal, Diagnostic> {
         if self.eat(&TokenKind::Tilde).is_some() {
             return Ok(Literal::Negative(self.atom()?));
@@ -97,7 +100,10 @@ impl Parser<'_> {
         }
     }
 
-    /// Reinterprets a parsed term as an atom.
+    /// Converts a parsed term into an atom, or returns an error if the term is not an atom.
+    ///
+    /// An atom is parsed as a term first, since it looks like a function term.
+    /// `start` is the span of the term's first token.
     fn atom_from(&self, term: Term, start: Span) -> Result<Atom, Diagnostic> {
         match term.kind {
             TermKind::Function {
@@ -113,8 +119,8 @@ impl Parser<'_> {
             TermKind::Operation(operation) => {
                 let span = self.span_from(start);
                 let written = self.span_text(start);
-                // Builtin names are reserved, so a predicate named like a builtin
-                // parses as a builtin call. Point that out.
+                // Builtin names are reserved, so a predicate with the name of a builtin
+                // is parsed as a call of the builtin. The error points that out.
                 if Operator::from_name(written) == Some(operation.operator) {
                     return Err(ParseError::ExpectedAtom
                         .diagnostic()

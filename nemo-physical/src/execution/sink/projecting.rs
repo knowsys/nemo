@@ -1,4 +1,4 @@
-//! The sink projecting rows to some of their columns.
+//! The sink that projects rows to some of their columns.
 
 use crate::{
     execution::{
@@ -9,18 +9,17 @@ use crate::{
     trie::RowBuffer,
 };
 
-/// The scratch of a projection, kept across the joins drained through it:
-/// the projected rows of the current group, and the projected row.
+/// The scratch memory of a projection, kept across the joins drained through it.
 #[derive(Debug)]
 pub(crate) struct ProjectionScratch {
     /// The projected rows of the current group, without their group prefix.
     seen: RowSet,
-    /// The projected row.
+    /// The buffer for the projected row.
     row: Vec<StorageValue>,
 }
 
 impl ProjectionScratch {
-    /// Creates the scratch of a projection.
+    /// Creates the scratch memory of a projection.
     pub(crate) fn new(shape: &ProjectionShape) -> Self {
         Self {
             seen: RowSet::new(shape.columns.len() - shape.group_prefix),
@@ -30,13 +29,14 @@ impl ProjectionScratch {
 }
 
 /// A sink that projects each row to some of its columns, as its [shape](ProjectionShape) says,
-/// and keeps the projected rows it has not seen in the current group.
+/// and keeps the projected rows that are new in the current group.
 ///
-/// The projection starts with the row's leading columns, unchanged:
-/// the group prefix.
-/// While the prefix stands, a projected row repeats
-/// only through the layers projected away, and the set drops those repeats.
-/// The repeats across drains are dropped when the drained runs are merged into a trie.
+/// The projection starts with the row's leading columns, unchanged,
+/// which are its [group prefix](ProjectionShape::group_prefix).
+/// While the group prefix stays the same,
+/// a projected row can repeat only through the layers projected away,
+/// and the sink drops those repeats.
+/// Repeats across drains are dropped when the drained runs are merged into a trie.
 #[derive(Debug)]
 pub(crate) struct ProjectingSink<'a> {
     /// Per projected column, the column of the drained row it reads.
@@ -45,15 +45,16 @@ pub(crate) struct ProjectingSink<'a> {
     group_prefix: usize,
     /// The projected rows of the current group, without their group prefix.
     seen: &'a mut RowSet,
-    /// The scratch for the projected row.
+    /// The buffer for the projected row.
     row: &'a mut Vec<StorageValue>,
     /// The buffer receiving the projected rows not seen before.
     out: &'a mut RowBuffer,
 }
 
 impl<'a> ProjectingSink<'a> {
-    /// Creates a sink projecting as the shape says into `out`,
-    /// and starts a new group in the scratch, which must be the shape's.
+    /// Creates a sink that projects into `out` as the shape says, and starts a new group.
+    ///
+    /// `scratch` must have been created for the same shape.
     pub(crate) fn new(
         shape: &'a ProjectionShape,
         scratch: &'a mut ProjectionScratch,
@@ -98,15 +99,17 @@ mod tests {
 
     use crate::testing::int;
 
+    /// A projecting sink drops repeats within a group,
+    /// and starts a new group when a layer of the group prefix changes.
     #[test]
     fn projecting_sinks_group_on_the_changed_layer() {
-        // Project (a, c) from rows (a, b, c); a is the group prefix.
+        // Project (a, c) from rows (a, b, c), with a as the group prefix.
         let shape = ProjectionShape::new(vec![0, 2]);
         let mut scratch = ProjectionScratch::new(&shape);
         let mut out = RowBuffer::new(2);
         let mut sink = ProjectingSink::new(&shape, &mut scratch, &mut out);
 
-        // (1, *, 7) twice through different b's: one survivor.
+        // (1, 7) arrives twice, with different b, and is kept once.
         sink.accept(&[int(1), int(2), int(7)], 0);
         sink.accept(&[int(1), int(3), int(7)], 1);
         sink.accept(&[int(1), int(3), int(9)], 2);

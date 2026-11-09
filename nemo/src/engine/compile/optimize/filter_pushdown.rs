@@ -1,4 +1,4 @@
-//! Filter pushdown: the rows no rule can use, excluded at load.
+//! Filter pushdown: the import pass that excludes at load the rows that no rule can use.
 
 use std::collections::HashMap;
 
@@ -17,28 +17,29 @@ use crate::{
     },
 };
 
-/// Finds the import rows no rule can use.
+/// The import pass that finds the rows of imported predicates that no rule can use.
 ///
-/// The pass applies to a predicate that only rules read, and only positively
-/// (not a fact, rule head, export, `@input`, or negated atom),
-/// if *every* body atom reading it (a *reader*) constrains some column:
-/// by a constant in the atom,
-/// or by a body comparison of an expression over one of its variables against a ground value.
-/// Such a comparison holds for every match of the rule, wherever else the variable occurs.
-/// The loader then admits only rows passing the disjunction, over the readers,
+/// A *reader* of a predicate is a positive body atom of the predicate.
+/// The pass applies to a predicate that only rule bodies read, and only positively,
+/// if every reader constrains some column in one of two ways:
+/// - by a constant in the atom;
+/// - by a body comparison between a ground value and an expression over one of the atom's
+///   variables. Such a comparison holds for every match of the rule,
+///   wherever else the variable occurs.
+///
+/// The load then admits only the rows that satisfy the disjunction, over the readers,
 /// of each reader's constraints.
-/// One unconstrained reader disables the pass for the predicate.
-/// A loader that can ask its source for less, a SPARQL endpoint,
-/// also receives the condition as written, to translate as far as it can.
+/// A load that can ask its source for fewer rows, such as a SPARQL query,
+/// also receives the condition as written, and translates as much of it as it can.
 ///
 /// Every rule keeps its own filter, since rows added by other means
 /// ([import_rows](crate::engine::Engine::import_rows), [extend](crate::engine::Engine::extend))
 /// still pass through it.
-/// The pushdown therefore only reduces what is loaded, and never changes what is derived.
+/// So the pushdown only reduces what is loaded, and never changes what is derived.
 #[derive(Debug)]
 pub(crate) struct FilterPushdown;
 
-/// The comparison operators a reader's constraint may use.
+/// The comparison operators that a reader's constraint may use.
 const COMPARISONS: [Operator; 8] = [
     Operator::Equal,
     Operator::Unequal,
@@ -61,8 +62,8 @@ impl ImportPass for FilterPushdown {
         translator: &Translator<'_>,
         plan: &mut ImportPlan,
     ) -> Result<(), Diagnostic> {
-        // Per candidate, the readers' constraints over delivered
-        // columns; `None` once a reader has none.
+        // Per predicate, the readers' constraints over delivered columns,
+        // or `None` once a reader has none.
         let mut readers: HashMap<String, Option<Vec<Operation>>> = HashMap::new();
         for rule in &survey.rules {
             let comparisons = simple_comparisons(rule);
@@ -78,8 +79,8 @@ impl ImportPass for FilterPushdown {
                     .entry(name.clone())
                     .or_insert_with(|| Some(Vec::new()));
                 let Some(conjunctions) = entry else { continue };
-                // The condition refers to delivered positions: the columns
-                // the loader stores after the projection pass pruned.
+                // The condition refers to delivered columns,
+                // the columns that remain after the projection pass.
                 let layout = plan.layout_of(&name, atom.terms.len());
                 let mut conjuncts = Vec::new();
                 for (kept, term) in atom.terms.iter().enumerate() {
@@ -122,8 +123,8 @@ impl ImportPass for FilterPushdown {
             let Some(disjunction) = disjoin(conjunctions) else {
                 continue;
             };
-            // A constraint the compiler cannot express is dropped, and
-            // the rule's own compilation reports what is wrong with it.
+            // A condition that cannot be compiled is dropped,
+            // and the rule's own compilation reports what is wrong with it.
             let Ok((inputs, program)) = translator.condition(&disjunction) else {
                 continue;
             };
@@ -133,8 +134,11 @@ impl ImportPass for FilterPushdown {
     }
 }
 
-/// Returns the one universal variable a term mentions, if it mentions exactly
-/// one (however often) and no other kind of variable except global ones (`$x`).
+/// Returns the universal variable that a term mentions, if it mentions exactly one,
+/// however often.
+///
+/// The term may also mention parameters (`$x`), but no other kind of variable and no
+/// aggregate.
 fn single_variable(term: &Term) -> Option<String> {
     let mut aggregated = false;
     term.walk(&mut |term| aggregated |= matches!(term.kind, TermKind::Aggregate(_)));
@@ -155,15 +159,18 @@ fn single_variable(term: &Term) -> Option<String> {
     found.map(str::to_owned)
 }
 
-/// Returns the pseudo-variable standing for a delivered column in an import's condition.
+/// Returns the variable that stands for a delivered column in an import's condition.
 ///
-/// The language cannot write its name, so it collides with no rule variable.
+/// Its name, `column N`, contains a space, which no variable written in a program can,
+/// so it collides with no rule variable.
 pub(crate) fn column_variable(position: usize) -> Term {
     Term::variable(Variable::universal(format!("column {position}")))
 }
 
-/// Returns, per variable, the body comparisons of an expression over it alone against a ground
-/// value.
+/// Returns, per variable, the body comparisons between a ground value and an expression over
+/// that variable alone.
+///
+/// A comparison that calls a nondeterministic function is left out.
 fn simple_comparisons(rule: &Rule) -> HashMap<String, Vec<&Operation>> {
     let mut found: HashMap<String, Vec<&Operation>> = HashMap::new();
     for literal in &rule.body {
@@ -173,8 +180,8 @@ fn simple_comparisons(rule: &Rule) -> HashMap<String, Vec<&Operation>> {
         if !COMPARISONS.contains(&operation.operator) || operation.arguments.len() != 2 {
             continue;
         }
-        // The rule draws a nondeterministic call once per row;
-        // a copy at the loader would draw a second time.
+        // The rule evaluates a nondeterministic call once per row,
+        // and a copy in the load would evaluate it a second time.
         let draws = operation.arguments.iter().any(|argument| {
             argument.any_term(|term| {
                 matches!(&term.kind, TermKind::Operation(call) if call.operator.is_nondeterministic())
@@ -196,17 +203,18 @@ fn simple_comparisons(rule: &Rule) -> HashMap<String, Vec<&Operation>> {
     found
 }
 
-/// Returns the conjunction of conditions, `None` for none.
+/// Returns the conjunction of the conditions, or `None` if there are none.
 pub(crate) fn conjoin(conditions: Vec<Operation>) -> Option<Operation> {
     combine(Operator::And, conditions)
 }
 
-/// Returns the disjunction of conditions, `None` for none.
+/// Returns the disjunction of the conditions, or `None` if there are none.
 fn disjoin(conditions: Vec<Operation>) -> Option<Operation> {
     combine(Operator::Or, conditions)
 }
 
-/// Folds conditions pairwise under a binary connective.
+/// Combines the conditions with a binary connective from left to right,
+/// or returns `None` if there are none.
 fn combine(connective: Operator, conditions: Vec<Operation>) -> Option<Operation> {
     let mut conditions = conditions.into_iter();
     let first = conditions.next()?;

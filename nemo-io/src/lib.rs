@@ -3,24 +3,25 @@
 //! This crate imports and exports tabular and RDF data:
 //! delimiter-separated values, RDF serializations, JSON, Parquet,
 //! and the solutions of SPARQL endpoints, compressed or not, local or remote.
-//! It is a client of the [`nemo_physical`] load API and holds no rule-language or engine logic.
-//! The configurations it reads and writes with are validated before they reach it.
+//! It uses the load API of [`nemo_physical`], and has no rule-language or engine logic.
+//! It expects every configuration it is given, such as a format's options, to be valid already.
 //!
 //! The crate has three layers.
-//! At the top is the vocabulary every format shares:
-//! - Cell [formats](mod@format) parse fields into values.
-//! - A [file format](file_format::FileFormat) carries the metadata of a serialization.
-//! - A [selection](selection::RowSelection) says which columns and rows a reader delivers,
-//!   and its [condition](row_filter) which rows it admits.
-//! - Every reader reports the same [load](load::Loaded),
-//!   and every writer the same [outcome](written::Written).
+//! At the top is the vocabulary that every format shares:
+//! - Cell [formats](mod@format) read the text of cells as values, and write values as cells.
+//! - A [file format](file_format::FileFormat) names a serialization and its metadata.
+//! - A [selection](selection::RowSelection) says which columns a reader delivers,
+//!   and its [condition](row_filter) says which rows it admits.
+//! - Every reader produces the same kind of [load](load::Loaded),
+//!   and every writer reports the same kind of [outcome](written::Written).
 //! - A [batch](load::ResourceBatch) parses its resources in parallel,
-//!   while one thread interns what they deliver, in order, as it arrives.
+//!   while one thread interns their rows in order, as they arrive.
 //!
-//! In the middle are the format adapters, one reader and one writer per serialization:
+//! In the middle are the format adapters, each with a reader and, except for SPARQL, a writer:
 //! [dsv], [rdf], [json], and `parquet` and `sparql` behind their features.
-//! At the bottom are the streams they read and write:
-//! [compression] around a byte stream, and [remote] resources fetched into one.
+//! At the bottom are the byte streams they read and write:
+//! [compression] wraps a byte stream, and [remote] has the requests for remote resources and
+//! the clients that send them.
 
 mod error;
 mod term;

@@ -1,4 +1,7 @@
-//! The directive grammar: a dispatch over the directive kinds, one parser per kind.
+//! Parsing directives, with one function per kind of directive.
+//!
+//! The function of one kind parses what follows the directive's name,
+//! and leaves the span to [directive](Parser::directive).
 
 mod import;
 mod types;
@@ -97,8 +100,8 @@ impl Parser<'_> {
         })
     }
 
-    /// Parses `@type`, which declares the argument types of a constructor,
-    /// written as the type of its values: `@type point(double, double) .`.
+    /// Parses `@type`, which declares the element types of the structures with a label,
+    /// written as the type of those structures, as in `@type point(double, double) .`.
     fn type_directive(&mut self) -> Result<TypeDirective, Diagnostic> {
         Ok(TypeDirective {
             definition: self.type_expression()?,
@@ -106,8 +109,7 @@ impl Parser<'_> {
         })
     }
 
-    /// Parses `@parameter $name`, with an optional `: type` and
-    /// `= value`.
+    /// Parses `@parameter $name`, with an optional `: type` and an optional `= value`.
     fn parameter_directive(&mut self) -> Result<ParameterDirective, Diagnostic> {
         let name =
             self.expect_variable(VariableKind::Global, "a global variable like `$threshold`")?;
@@ -144,7 +146,7 @@ impl Parser<'_> {
                 &TokenKind::BraceClose,
                 "`}` closing the bindings",
                 |parser| {
-                    // The `$` tells a value binding from an input binding.
+                    // The `$` distinguishes a parameter binding from an input binding.
                     if let Some(name) = parser.eat_variable(VariableKind::Global) {
                         parser.expect(&TokenKind::Equal, "`=` binding the parameter")?;
                         values.push((name, parser.term()?));

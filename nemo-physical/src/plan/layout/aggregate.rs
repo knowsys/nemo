@@ -24,9 +24,10 @@ pub(crate) struct AggregateLayout {
 /// How an aggregation computes its aggregates.
 #[derive(Debug)]
 pub(crate) enum AggregatePass {
-    /// A count of the input's rows, which needs no pass over them:
-    /// the single aggregate of an ungrouped aggregation is a count
-    /// that tells the rows apart by every column of the input.
+    /// A count of the input's rows, which needs no pass over them.
+    ///
+    /// It applies if the only aggregate of an aggregation without a group key
+    /// is a count whose `per` markers include every column of the input.
     CountRows,
     /// One pass of an aggregating sink over the input.
     Scan(ScanLayout),
@@ -44,7 +45,7 @@ pub(crate) struct ScanLayout {
 }
 
 impl LayoutBuilder<'_> {
-    /// Lays out an aggregation node, requires its input in the order it reads it,
+    /// Lays out an aggregation node, records the order it reads its input in,
     /// and records what it materializes.
     pub(super) fn lay_out_aggregate(&mut self, node: NodeId, aggregate: &AggregateNode) {
         let input_markers = self.plan.node_markers(aggregate.input);
@@ -100,8 +101,10 @@ impl AggregatePass {
     }
 }
 
-/// Returns the order an aggregation reads its input in, whose markers are given:
+/// Returns the order an aggregation reads its input in:
 /// the group key, then the input's other markers.
+///
+/// `input_markers` are the markers of the input.
 fn read_order(aggregate: &AggregateNode, input_markers: &[Marker]) -> MarkerOrder {
     let group = aggregate.group();
     let others = input_markers

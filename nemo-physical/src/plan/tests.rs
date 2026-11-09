@@ -78,11 +78,12 @@ fn the_member(layout: &PlanLayout) -> &MemberLayout {
     member
 }
 
-/// Builds a plan that fuses, and returns it with its subtract-projecting join and its union.
+/// Builds a plan whose projection and subtraction can run inside the joins of a union,
+/// and returns it with the subtraction node and the union.
 ///
 /// Two joins R(x, z) ⋈ S(z, y), each over a different range of R's revisions, are united.
-/// A join over the union projects to the columns `kept` lists
-/// and subtracts the stored table.
+/// The union is projected to the columns `kept` lists,
+/// and the rows of the stored table are subtracted from the projection.
 fn subtract_projection_plan(
     r: TableId,
     s: TableId,
@@ -111,12 +112,11 @@ fn subtract_projection_plan(
     (plan, fresh, union)
 }
 
+/// A projection and a subtraction that run inside the joins of a union yield the rows
+/// of the same plan with a second consumer of the union, which runs them apart,
+/// and both match brute force.
 #[test]
 fn fused_subtract_projections_match_the_unfused_rows() {
-    // The differential property of fusion: for every projection,
-    // the fused execution computes exactly the rows of the unfused plan
-    // (the same plan with a second consumer of the union),
-    // which in turn match brute force.
     let mut rng = StdRng::seed_from_u64(23);
     for round in 0..120 {
         let r_rows = random_rows(&mut rng, 2);
@@ -166,8 +166,8 @@ fn fused_subtract_projections_match_the_unfused_rows() {
         let results = plan.execute(&mut manager, &mut dictionary, EvaluationContext::now());
         assert_eq!(int_rows(&results.outputs[0]), expected, "round {round}");
 
-        // The same plan with a second consumer must not fuse, and
-        // must agree.
+        // With a second consumer of the union, the operators must not run inside its joins,
+        // and the rows must be the same.
         let (mut defused, fresh, union) = subtract_projection_plan(r, s, stored, Revision(2), kept);
         defused.output(union);
         let layout = defused.layout();
@@ -197,11 +197,13 @@ fn condition(
     FilterSpec::from_program(inputs, program)
 }
 
+/// A join that reads a table in another column order has the table build that arrangement,
+/// and the delivered trie can be stored as it is.
 #[test]
 fn joins_derive_stored_orders() {
-    // Converging edges: rows (x, y, z) with edge(x, y) and
-    // edge(z, y) — the second load reads the table as (z, y), whose
-    // derived order (y, z) exercises an on-demand reorder.
+    // Converging edges: rows (x, y, z) with edge(x, y) and edge(z, y).
+    // The second load reads the table as (z, y), and the join reads it in the order (y, z),
+    // which the table builds on demand.
     let mut manager = TableManager::new();
     let edge = add_table(&mut manager, 2, &[&[&[1, 2], &[2, 3], &[1, 3]]]);
     let mut dictionary = Dictionary::new();
@@ -227,7 +229,7 @@ fn joins_derive_stored_orders() {
     assert_eq!(results.counts.arrangements, 1, "one arrangement in (y, z)");
     assert_eq!(results.counts.arranged_rows, 3);
 
-    // The delivered trie feeds the manager back unchanged.
+    // The delivered trie can be added to the manager unchanged.
     let paths = manager.register("paths", 3);
     let [trie] = results.outputs.try_into().expect("one output");
     let stored = manager.add_trie(paths, Revision(1), ColumnOrder::identity(3), trie);
@@ -245,6 +247,7 @@ fn large_table(manager: &mut TableManager, rows: i64) -> TableId {
     table
 }
 
+/// A condition that binds a layer to an expression over a deeper layer stays a filter.
 #[test]
 fn bindings_over_deeper_layers_stay_filters() {
     // a is the same term as c * 1, but c lies deeper than a,
@@ -289,10 +292,10 @@ fn bindings_over_deeper_layers_stay_filters() {
     );
 }
 
+/// A join past the parallel threshold runs in cells,
+/// and delivers the sorted, distinct rows of the sequential join.
 #[test]
 fn partitioned_joins_match_the_sequential_row_sequence() {
-    // Above the parallel threshold, the join runs in cells
-    // and must deliver the same sorted, distinct rows the sequential run would.
     let mut manager = TableManager::new();
     let table = large_table(&mut manager, CELL_ROWS);
     let mut dictionary = Dictionary::new();
@@ -308,10 +311,10 @@ fn partitioned_joins_match_the_sequential_row_sequence() {
     assert!(rows.iter().map(|row| row[0]).eq(0..CELL_ROWS));
 }
 
+/// A row stage in cells evaluates the programs on each cell's rows,
+/// and every row gets its computed value once the cells are done.
 #[test]
 fn partitioned_computed_columns_extend_every_row() {
-    // A row stage in cells: each cell evaluates the programs on its own rows,
-    // and the results are encoded once every cell is done.
     let mut manager = TableManager::new();
     let table = large_table(&mut manager, CELL_ROWS);
     let mut dictionary = Dictionary::new();
@@ -338,9 +341,10 @@ fn partitioned_computed_columns_extend_every_row() {
     assert!(rows.iter().all(|row| row[1] == row[0] + 1));
 }
 
+/// A projection that merges rows in cells yields each projected row once.
 #[test]
 fn partitioned_projections_merge_across_cells() {
-    // (x, x mod 10) projected to its second column: x lies above the residue and stays a layer,
+    // (x, x mod 10) projected to its second column. x lies above the residue and stays a layer,
     // so a sink projects the rows of each cell, and the build drops the repeats across cells.
     let mut manager = TableManager::new();
     let table = manager.register("data", 2);
@@ -368,10 +372,10 @@ fn partitioned_projections_merge_across_cells() {
     assert_eq!(int_rows(&results.outputs[0]), expected);
 }
 
+/// A join that emits no layer, over a table large enough for cells,
+/// yields exactly one empty row, however many cells the machine runs.
 #[test]
 fn partitioned_nullary_joins_emit_one_row() {
-    // An existence check over a table large enough for cells:
-    // exactly one empty row, however many cells the machine runs.
     let mut manager = TableManager::new();
     let table = large_table(&mut manager, 70_000);
     let mut dictionary = Dictionary::new();
@@ -387,11 +391,10 @@ fn partitioned_nullary_joins_emit_one_row() {
     assert_eq!(results.outputs[0].arity(), 0);
 }
 
+/// A chain join over a table split into three subtables, with a repeated row,
+/// yields the rows of the join over the same rows stored as one block.
 #[test]
 fn joins_read_every_block() {
-    // The chain join over a table split into three subtables (with a
-    // repeated row) must match the join over the same rows stored as
-    // one block.
     let blocks: &[&[&[i64]]] = &[&[&[1, 2], &[2, 3]], &[&[3, 1], &[1, 2]], &[&[2, 2]]];
     let merged: &[&[i64]] = &[&[1, 2], &[2, 3], &[3, 1], &[2, 2]];
 
@@ -415,9 +418,9 @@ fn joins_read_every_block() {
     assert!(!results[0].is_empty());
 }
 
+/// One join reads both blocks of each of twenty loads of a table.
 #[test]
 fn a_join_reads_many_inputs_of_several_blocks_at_once() {
-    // Twenty atoms over a table of two blocks: one join reads both blocks of every input.
     let mut manager = TableManager::new();
     let data = add_table(&mut manager, 2, &[&[&[1, 2]], &[&[2, 1]]]);
     let mut dictionary = Dictionary::new();
@@ -435,11 +438,10 @@ fn a_join_reads_many_inputs_of_several_blocks_at_once() {
     assert_eq!((results.counts.joins, results.counts.blocks), (1, 40));
 }
 
+/// The union of delta ⋈ full and old ⋈ delta yields the rows of full ⋈ full
+/// that old ⋈ old lacks, over one table split into old and new rows.
 #[test]
 fn unions_assemble_seminaive_variants() {
-    // The semi-naive shape: delta ⋈ full united with old ⋈ delta
-    // equals full ⋈ full minus old ⋈ old — all from one stored
-    // table, split at the old/delta boundary.
     let old: &[&[i64]] = &[&[1, 2], &[2, 3]];
     let delta: &[&[i64]] = &[&[3, 1], &[2, 2]];
     let mut manager = TableManager::new();
@@ -472,10 +474,10 @@ fn unions_assemble_seminaive_variants() {
     );
 }
 
+/// R(a, b) minus T(b), with T split into two subtables,
+/// drops the rows that match either block.
 #[test]
 fn subtraction_covers_every_block() {
-    // R(a, b) minus T(b), with T split into two subtables: a match
-    // in either block drops the row.
     let mut manager = TableManager::new();
     let relation = add_table(&mut manager, 2, &[&[&[1, 2], &[1, 3], &[2, 2], &[2, 4]]]);
     let blocked = add_table(&mut manager, 1, &[&[&[2]], &[&[4]]]);
@@ -493,10 +495,10 @@ fn subtraction_covers_every_block() {
     assert_eq!(int_rows(&results.outputs[0]), vec![vec![1, 3]]);
 }
 
+/// A projection of edges to their targets reads the input with the kept marker first,
+/// and yields each target once.
 #[test]
 fn projections_stay_sorted_and_deduplicate() {
-    // Projecting edges to their targets: the input is read with the
-    // kept marker leading, and duplicates collapse.
     let mut manager = TableManager::new();
     let edge = add_table(&mut manager, 2, &[&[&[1, 2], &[3, 2], &[2, 7]], &[&[4, 7]]]);
     let mut dictionary = Dictionary::new();
@@ -511,11 +513,10 @@ fn projections_stay_sorted_and_deduplicate() {
     assert_eq!(int_rows(&results.outputs[0]), vec![vec![2], vec![7]]);
 }
 
+/// A materialized node builds a trie for each order it is read in,
+/// and a read through an alias reuses the trie of the translated order.
 #[test]
 fn intermediates_materialize_every_consumed_order() {
-    // One computed relation read three ways: canonically, reordered,
-    // and through an alias whose translated order reuses the
-    // reordered arrangement.
     let mut manager = TableManager::new();
     let edge = add_table(&mut manager, 2, &[&[&[1, 2], &[2, 3], &[3, 4]]]);
     let mut dictionary = Dictionary::new();
@@ -525,13 +526,13 @@ fn intermediates_materialize_every_consumed_order() {
     let edges = plan.load(edge, all(), vec![x, y]);
     let derived = joined(&mut plan, vec![edges], vec![x, y], 2);
 
-    // The alias reads (x, y) as (y, z): composition with itself.
+    // The alias reads (x, y) as (y, z), which composes the relation with itself.
     let successors = plan.alias(derived, vec![y, z]);
     let composed = joined(&mut plan, vec![derived, successors], vec![x, y, z], 3);
     plan.output(composed);
 
-    // A second consumer wants (y, x); a third reads the alias as
-    // (z, y), translating to the same (y, x) arrangement.
+    // A second consumer reads (y, x), and a third reads the alias as (z, y),
+    // which translates to the same order (y, x).
     let reversed = joined(&mut plan, vec![derived], vec![y, x], 2);
     plan.output(reversed);
     let alias_reversed = joined(&mut plan, vec![successors], vec![z, y], 2);
@@ -549,10 +550,9 @@ fn intermediates_materialize_every_consumed_order() {
     assert_eq!(int_rows(&results.outputs[1]), int_rows(&results.outputs[2]));
 }
 
+/// An aggregation reads a row that two subtables both contain only once.
 #[test]
 fn aggregates_unite_blocks_before_grouping() {
-    // The row (1, 4) recurs across subtables; the union collapses it
-    // before counting.
     let mut manager = TableManager::new();
     let data = add_table(
         &mut manager,
@@ -582,11 +582,12 @@ fn aggregates_unite_blocks_before_grouping() {
     );
 }
 
+/// A count without a group key counts the distinct combinations of its `per` columns,
+/// and the layout counts the stored rows directly only if those include every column.
 #[test]
 fn counts_tell_rows_apart_by_their_own_columns() {
-    // Over (x, y) holding (1, 2) and (1, 3): one distinct x, two distinct rows,
-    // and one distinct empty tuple. Without a group key, only the count over
-    // every column may count the stored rows directly; the layout decides that.
+    // The rows (1, 2) and (1, 3) of (x, y) have one distinct x,
+    // two distinct (x, y), and one empty combination.
     let mut manager = TableManager::new();
     let data = add_table(&mut manager, 2, &[&[&[1, 2], &[1, 3]]]);
     let mut dictionary = Dictionary::new();
@@ -619,9 +620,11 @@ fn counts_tell_rows_apart_by_their_own_columns() {
     }
 }
 
+/// An aggregation may group by a column that is not the input's first.
 #[test]
 fn group_keys_need_not_lead_the_input() {
-    // (a, b) grouped by b: per b, the distinct a, their sum, and the one empty tuple.
+    // (a, b) grouped by b. Per b, the number of distinct a, their sum,
+    // and the count without `per` columns, which is 1.
     let mut manager = TableManager::new();
     let data = add_table(&mut manager, 2, &[&[&[1, 5], &[2, 5], &[3, 6]]]);
     let mut dictionary = Dictionary::new();
@@ -647,9 +650,11 @@ fn group_keys_need_not_lead_the_input() {
     );
 }
 
+/// Expressions compile to a computed column and filters,
+/// and a column that an expression reads twice is one input.
 #[test]
 fn expressions_compile_to_specs() {
-    // next = a + 1, kept where next is b; a column read twice is one input.
+    // next = a + 1, kept where next is b.
     let mut manager = TableManager::new();
     let data = add_table(&mut manager, 2, &[&[&[1, 2], &[1, 3], &[2, 3]]]);
     let mut dictionary = Dictionary::new();
@@ -689,9 +694,11 @@ fn expressions_compile_to_specs() {
     );
 }
 
+/// An expression with more constants than an operand can address is refused,
+/// with the matching diagnostic.
 #[test]
 fn expressions_beyond_the_operand_limit_are_refused() {
-    /// The largest of `count` distinct constants, as maxima over groups of them.
+    /// Returns the largest of `count` distinct constants, as the maximum of maxima of groups.
     fn largest(count: usize) -> Expression {
         let fold = |operands: Vec<Expression>| {
             let count = u16::try_from(operands.len()).expect("a group fits an instruction");
@@ -718,6 +725,7 @@ fn expressions_beyond_the_operand_limit_are_refused() {
     assert_eq!(refused.diagnostic().code(), codes::EXPRESSION_TOO_LARGE);
 }
 
+/// A filter reads the layer its marker names.
 #[test]
 fn filters_read_layers_by_marker() {
     // The chain join keeping rows with y != 3.
@@ -748,10 +756,10 @@ fn filters_read_layers_by_marker() {
     assert_eq!(int_rows(&results.outputs[0]), vec![vec![1, 2, 3]]);
 }
 
+/// The evaluation errors of a filter are delivered with the results.
 #[test]
 fn evaluation_errors_are_delivered() {
-    // Comparing integers against a string errors once per row; the
-    // rows vanish but the counts arrive with the results.
+    // Comparing an integer with a string fails once per row.
     let mut manager = TableManager::new();
     let data = add_table(&mut manager, 1, &[&[&[1], &[2], &[3]]]);
     let mut dictionary = Dictionary::new();
@@ -779,6 +787,7 @@ fn evaluation_errors_are_delivered() {
     );
 }
 
+/// A join that does not emit its deepest layer yields each emitted row once.
 #[test]
 fn existence_layers_keep_results_distinct() {
     // Sources with several matching targets appear once.
@@ -798,6 +807,7 @@ fn existence_layers_keep_results_distinct() {
     assert_eq!(int_rows(&results.outputs[0]), vec![vec![1, 2]]);
 }
 
+/// A join that emits no layer yields one empty row if its input has rows, and none otherwise.
 #[test]
 fn nullary_outputs_answer_existence() {
     let mut manager = TableManager::new();
@@ -837,11 +847,12 @@ fn computation(
     ComputedColumnSpec::from_program(inputs, program, result)
 }
 
+/// Computed columns extend each row, and a projection can read them in another order.
 #[test]
 fn computed_columns_extend_rows() {
-    // The chain join computes s = x + z (recomputed per row) and
-    // d = x * 10 (reused while x is unchanged); a projection then
-    // consumes the results in a reordered layout.
+    // The chain join computes s = x + z, evaluated on each row,
+    // and d = x * 10, reused while x is unchanged.
+    // A projection then reads the results in another order.
     let mut manager = TableManager::new();
     let left = add_table(&mut manager, 2, &[&[&[1, 2], &[2, 3]]]);
     let right = add_table(&mut manager, 2, &[&[&[2, 7], &[3, 8], &[3, 9]]]);
@@ -890,6 +901,7 @@ fn computed_columns_extend_rows() {
     );
 }
 
+/// A computed string is added to the dictionary after the join.
 #[test]
 fn computed_strings_intern_after_the_join() {
     let mut dictionary = Dictionary::new();
@@ -931,10 +943,10 @@ fn computed_strings_intern_after_the_join() {
     );
 }
 
+/// A computed column that fails drops its row, and the error is counted.
 #[test]
 fn computed_errors_drop_rows_and_count() {
-    // Adding one to a string errors; the row vanishes, the count
-    // arrives, and the clean row survives.
+    // Adding one to a string fails.
     let mut dictionary = Dictionary::new();
     let broken = dictionary
         .encode(DataValue::string("oops").as_ref())
@@ -972,9 +984,10 @@ fn computed_errors_drop_rows_and_count() {
     );
 }
 
+/// A constant column over a table of two blocks extends a row that both blocks contain
+/// only once.
 #[test]
 fn computed_constants_over_several_blocks() {
-    // A constant column over a two-block table: a row both blocks hold is read once.
     let mut manager = TableManager::new();
     let data = add_table(&mut manager, 1, &[&[&[1], &[2]], &[&[2], &[3]]]);
     let mut dictionary = Dictionary::new();
@@ -1001,10 +1014,11 @@ fn computed_constants_over_several_blocks() {
     );
 }
 
+/// A computed column may read another,
+/// and a filter on a computed column drops the rows it rejects.
 #[test]
 fn computed_columns_chain_and_post_filters_prune() {
-    // ?s = ?a + 1, ?d = ?s * ?s (a computed input), keep ?d > 10 —
-    // the assignment-and-filter shape rule bodies compile into.
+    // s = a + 1, then d = s * s, which reads a computed column, then the filter d > 10.
     let mut manager = TableManager::new();
     let data = add_table(&mut manager, 1, &[&[&[1], &[2], &[3]]]);
     let mut dictionary = Dictionary::new();
@@ -1050,12 +1064,14 @@ fn computed_columns_chain_and_post_filters_prune() {
     );
 }
 
+/// A computed integer that overflows `i64` falls back to the generic interpreter,
+/// which widens it, and the integer form computes booleans.
 #[test]
 fn computed_integers_fall_back_where_they_outgrow_i64() {
-    // s = a + 1 runs the integer form, except where it overflows and
-    // the interpreter widens; d = s - 1 reads the wide result
-    // generically and lands back within `i64`; p = a > 0 is a
-    // boolean the integer form computes.
+    // s = a + 1 runs the integer form,
+    // except where it overflows and the interpreter widens the result.
+    // d = s - 1 reads the wide result in the interpreter, and returns within `i64`.
+    // p = a > 0 is a boolean that the integer form computes.
     let mut manager = TableManager::new();
     let data = add_table(&mut manager, 1, &[&[&[-3], &[i64::MAX]]]);
     let mut dictionary = Dictionary::new();
@@ -1114,6 +1130,7 @@ fn computed_integers_fall_back_where_they_outgrow_i64() {
     );
 }
 
+/// A filter that fails to evaluate drops its row, and the error is counted.
 #[test]
 fn post_filter_errors_drop_rows_and_count() {
     // A post-filter dividing by a computed zero: the erroring row
@@ -1153,10 +1170,9 @@ fn post_filter_errors_drop_rows_and_count() {
     );
 }
 
+/// A nondeterministic column is evaluated on every row, not once per prefix.
 #[test]
 fn nondeterministic_columns_evaluate_per_row() {
-    // A RAND column over three rows draws three values — the
-    // per-prefix memoization must not freeze it.
     let mut manager = TableManager::new();
     let data = add_table(&mut manager, 1, &[&[&[1], &[2], &[3]]]);
     let mut dictionary = Dictionary::new();
@@ -1181,6 +1197,8 @@ fn nondeterministic_columns_evaluate_per_row() {
     assert_eq!(draws.len(), 3, "every row draws its own value");
 }
 
+/// Building a computed column panics if it reads a marker its input lacks,
+/// if its program's arity does not match its inputs, or if its result marker is not fresh.
 #[test]
 fn computed_columns_are_validated() {
     let mut manager = TableManager::new();
@@ -1193,7 +1211,7 @@ fn computed_columns_are_validated() {
         computation(vec![input], vec![OpCode::Input(0)], Vec::new(), result)
     };
 
-    // A column projected away cannot feed a computation.
+    // A column projected away cannot be an input of a computation.
     let sources = plan.project(rows, vec![x]);
     assert_panics("input's markers", || plan.compute(sources, identity(y, r)));
     // The program arity must match the inputs.
@@ -1208,10 +1226,10 @@ fn computed_columns_are_validated() {
     assert_panics("fresh marker", || plan.compute(extended, identity(y, r)));
 }
 
+/// A marker that two inputs share stays a layer, although nothing reads it,
+/// so the join still requires their rows to agree on it.
 #[test]
 fn shared_existential_markers_stay_compared() {
-    // R and S both carry b, which nothing reads: b stays a layer,
-    // so the join still requires the two rows to agree on it.
     let mut manager = TableManager::new();
     let left = add_table(&mut manager, 2, &[&[&[1, 2], &[4, 5]]]);
     let right = add_table(&mut manager, 2, &[&[&[1, 3], &[4, 5]]]);
@@ -1231,10 +1249,10 @@ fn shared_existential_markers_stay_compared() {
     assert_eq!(int_rows(&results.outputs[0]), vec![vec![4]]);
 }
 
+/// A marker of only one input that nothing reads is not a layer,
+/// so the join never enumerates it, and its rows are distinct without it.
 #[test]
 fn private_markers_leave_the_descent() {
-    // A marker of only one input that nothing reads is no layer:
-    // the join never enumerates it, and results are distinct without it.
     let mut manager = TableManager::new();
     let edge = add_table(&mut manager, 2, &[&[&[1, 2], &[1, 3], &[2, 5]]]);
     let mut dictionary = Dictionary::new();
@@ -1252,6 +1270,7 @@ fn private_markers_leave_the_descent() {
     assert_eq!(int_rows(&results.outputs[0]), vec![vec![1], vec![2]]);
 }
 
+/// A projection needs no sink if the marker it drops has left the descent.
 #[test]
 fn leaving_markers_spare_the_sink() {
     // R(x, z) ⋈ S(x, y) in the order x, z, y, projected to (x, y).
@@ -1288,10 +1307,12 @@ fn leaving_markers_spare_the_sink() {
     }
 }
 
+/// Every input keeps a layer, even if nothing reads its markers,
+/// so the join still checks that the input has a row.
 #[test]
 fn every_input_keeps_a_layer() {
-    // R(x) ⋈ S(z) projected to x: nothing reads z, but S keeps it as a layer,
-    // since only a layer finds out whether S holds a row at all.
+    // R(x) ⋈ S(z) projected to x. Nothing reads z, but S keeps it as a layer,
+    // since only a layer finds out whether S has a row at all.
     let mut manager = TableManager::new();
     let r = add_table(&mut manager, 1, &[&[&[1], &[2]]]);
     let full = add_table(&mut manager, 1, &[&[&[7]]]);
@@ -1314,6 +1335,7 @@ fn every_input_keeps_a_layer() {
     }
 }
 
+/// A node that no output depends on is not executed.
 #[test]
 fn dead_nodes_are_skipped() {
     let mut manager = TableManager::new();
@@ -1323,8 +1345,7 @@ fn dead_nodes_are_skipped() {
     let mut plan = OperationPlan::new();
     let [a, b] = plan.markers();
     let live = plan.load(data, all(), vec![a]);
-    // The dead branch is never executed — its load would fail on the
-    // table's arity.
+    // The dead branch is never executed, since its load would fail on the table's arity.
     let dead = plan.load(data, all(), vec![a, b]);
     joined(&mut plan, vec![dead], vec![a, b], 2);
     plan.output(live);
@@ -1333,6 +1354,7 @@ fn dead_nodes_are_skipped() {
     assert_eq!(int_rows(&results.outputs[0]), vec![vec![1]]);
 }
 
+/// Each node constructor panics on a node that breaks one of its requirements.
 #[test]
 fn construction_rejects_malformed_nodes() {
     let mut manager = TableManager::new();
@@ -1351,7 +1373,7 @@ fn construction_rejects_malformed_nodes() {
     assert_panics("allocated", || plan.load(data, all(), vec![x, Marker(99)]));
     // Unknown input nodes.
     assert_panics("unknown node", || plan.project(NodeId(99), vec![x]));
-    // An alias must cover the input arity.
+    // An alias must rename every column of its input.
     assert_panics("rename every column", || plan.alias(rows, vec![z]));
     // Unions need inputs over one marker set.
     assert_panics("at least one input", || plan.union(Vec::new()));
@@ -1406,6 +1428,8 @@ fn construction_rejects_malformed_nodes() {
     assert_panics("only once", || plan.output(rows));
 }
 
+/// Executing a plan panics if a load does not cover the table's columns,
+/// or if its range does not align with the table's blocks.
 #[test]
 fn execution_validates_loads() {
     let mut manager = TableManager::new();
@@ -1433,11 +1457,11 @@ fn execution_validates_loads() {
     });
 }
 
+/// A plan laid out once yields the right rows for every range of its load,
+/// through the same layout and arena.
 #[test]
 fn layouts_are_reused_across_load_ranges() {
-    // The plan is built and laid out once, and each execution reads other revisions
-    // through the same layout and arena. The join reads the first load
-    // in a column order the table does not store yet.
+    // The join reads the first load in a column order the table does not store yet.
     let mut manager = TableManager::new();
     let edge = add_table(
         &mut manager,
@@ -1482,11 +1506,10 @@ fn layouts_are_reused_across_load_ranges() {
     assert_panics("only load nodes", || plan.set_load_range(paths, all()));
 }
 
+/// However the stored rows are split into subtables,
+/// a chain join delivers the rows of brute-force evaluation.
 #[test]
 fn random_block_splits_match_consolidated_joins() {
-    // The differential property of distribution: however the stored
-    // rows are split into subtables, the chain join delivers the
-    // rows of the consolidated join.
     let mut rng = StdRng::seed_from_u64(23);
     for round in 0..60 {
         let row_count = rng.gen_range(0..12);
@@ -1632,7 +1655,7 @@ fn random_operator(
             );
             plan.filter(node, spec)
         }
-        // A filter keeping the rows where one column is below another, read by the interpreter.
+        // A filter keeping the rows where one column is at most another, read by the interpreter.
         1 => {
             let first = pick(rng, relation);
             let second = pick(rng, relation);
@@ -1686,7 +1709,7 @@ fn random_operator(
             relation.markers.push(result);
             plan.compute(node, spec)
         }
-        // A subtraction of a stored relation over some columns and a private one.
+        // A subtraction of a stored relation over some columns, and possibly a column of its own.
         3 => {
             let mut shared: Vec<Marker> = Vec::new();
             for _ in 0..rng.gen_range(1..3) {
@@ -1734,13 +1757,12 @@ fn random_operator(
     }
 }
 
+/// A random chain of operators above a join, or above a union of joins,
+/// delivers the same rows in one unit as with every node an output,
+/// which makes each operator a unit of its own, and both match brute force.
 #[test]
 fn random_chains_match_their_operators_one_by_one() {
-    // The differential property of units: a chain of operators above a join,
-    // or above a union of joins, delivers the same rows fused into one unit
-    // as with every node an output, which makes each operator a unit of its own,
-    // and both match brute force.
-    // Where the chain projects a join's private marker away, the marker leaves the descent.
+    // Where the chain projects away a marker of only one input, the marker leaves the descent.
     let mut rng = StdRng::seed_from_u64(29);
     let mut fused_chains = 0;
     let mut pruned_descents = 0;
@@ -1830,11 +1852,12 @@ fn random_chains_match_their_operators_one_by_one() {
     );
 }
 
+/// A condition that a layer is the same term as a constant binds the layer,
+/// and its negation stays a filter.
 #[test]
 fn constants_are_looked_up() {
-    // ground(k) with k the same term as 7, beside data(a), which shares no marker with it:
-    // the layout looks k up under every a instead of enumerating ground,
-    // and a difference from the constant stays a filter.
+    // ground(k), with k the same term as 7, beside data(a), which shares no marker with it.
+    // The layout looks k up under every a instead of enumerating ground.
     let mut manager = TableManager::new();
     let data = add_table(&mut manager, 1, &[&[&[1], &[2]]]);
     let ground = add_table(&mut manager, 1, &[&[&[5], &[7]]]);
@@ -1871,10 +1894,10 @@ fn constants_are_looked_up() {
     }
 }
 
+/// A condition that a layer is the same term as an expression over shallower layers
+/// binds the layer, and the rows are those of the plain filter.
 #[test]
 fn bindings_are_looked_up() {
-    // next(b, c) with c the same term as a + 1, written as a filter:
-    // the layout recognizes the binding and looks c up, with the rows of the plain filter.
     let mut manager = TableManager::new();
     let data = add_table(&mut manager, 1, &[&[&[1], &[2], &[3]]]);
     let next = add_table(&mut manager, 2, &[&[&[10, 2], &[20, 3], &[30, 5]]]);
@@ -1926,11 +1949,10 @@ fn bindings_are_looked_up() {
     }
 }
 
+/// A join that two projections read materializes once,
+/// emitting the layers up to the deepest one either projection needs.
 #[test]
 fn shared_joins_emit_what_every_consumer_needs() {
-    // A join read by two projections materializes once,
-    // emitting the layers up to the deeper of the two,
-    // and each projection reads the result.
     let mut manager = TableManager::new();
     let edge = add_table(&mut manager, 2, &[&[&[1, 2], &[2, 3], &[2, 4]]]);
     let mut dictionary = Dictionary::new();
@@ -1957,10 +1979,9 @@ fn shared_joins_emit_what_every_consumer_needs() {
     assert_eq!(int_rows(&results.outputs[1]), vec![vec![2, 1]]);
 }
 
+/// A subtraction that compares a computed column runs over the materialized computed rows.
 #[test]
 fn subtractions_over_computed_columns_read_the_result() {
-    // The head shape (x, x + 1) minus the stored rows:
-    // the subtraction compares a computed column, so it runs over the computed rows' result.
     let mut manager = TableManager::new();
     let data = add_table(&mut manager, 1, &[&[&[1], &[2], &[3]]]);
     let stored = add_table(&mut manager, 2, &[&[&[2, 3]]]);
@@ -1988,10 +2009,11 @@ fn subtractions_over_computed_columns_read_the_result() {
     assert_eq!(int_rows(&results.outputs[0]), vec![vec![1, 2], vec![3, 4]]);
 }
 
+/// A computed constant over a relation without columns yields one row
+/// if the relation has the empty row, and none otherwise.
 #[test]
 fn computed_columns_extend_the_empty_row() {
-    // A relation without columns, read twice, holds the empty row where its input has a row;
-    // a computed constant over it yields one row, and nothing over an empty input.
+    // The projection to no column is read twice, as an output and by the computed column.
     let mut manager = TableManager::new();
     let data = add_table(&mut manager, 1, &[&[&[1], &[2]]]);
     let empty = manager.register("empty", 1);

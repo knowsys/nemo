@@ -1,6 +1,7 @@
-//! Program transformations: the pipeline stages a loaded program passes before compilation.
+//! Program transformations: the pipeline stages that a loaded program passes through before
+//! compilation.
 //!
-//! The stage here is the SPARQL rewrite of rules over `sparql` imports without a `where` clause.
+//! The only stage is the SPARQL rewrite (`sparql_rewrite`), which needs the `sparql` feature.
 
 #[cfg(feature = "sparql")]
 pub(super) mod sparql_rewrite;

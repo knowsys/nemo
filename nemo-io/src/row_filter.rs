@@ -1,26 +1,28 @@
-//! The row condition a reader applies before interning.
+//! Row conditions, which a reader applies to its rows before interning them.
 
 use nemo_physical::{
     function::{EvaluationContext, StackProgram},
     value::{DataValue, EvaluationError},
 };
 
-/// A condition over the columns a reader delivers:
-/// a stack program over some of the row's values, read in the listed order.
+/// A condition over the columns that a reader delivers.
 ///
-/// A row the program rejects is excluded,
-/// and a row it errors on is dropped like a row any condition errors on.
-/// Either way the row is counted and never interned, an error by its kind.
+/// The condition is a stack program whose inputs are some of the delivered columns,
+/// in the order of [inputs](Self::inputs).
+/// A row for which the condition is false is *excluded*,
+/// and a row on which its evaluation fails is dropped.
+/// Neither row is interned.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RowFilter {
-    /// The delivered columns feeding the program, in input order.
+    /// The delivered columns that are the program's inputs, in input order.
     inputs: Vec<usize>,
-    /// The condition.
+    /// The program that computes the condition.
     program: StackProgram,
 }
 
 impl RowFilter {
-    /// Creates a filter reading the given columns into a program.
+    /// Creates a condition that passes the delivered columns `inputs`, in this order,
+    /// to `program`.
     ///
     /// # Panics
     ///
@@ -44,8 +46,9 @@ impl RowFilter {
         &self.program
     }
 
-    /// Returns the condition's verdict on a delivered row, evaluated in the context:
-    /// its effective boolean value.
+    /// Returns the condition's effective boolean value for a delivered row.
+    ///
+    /// `context` is the evaluation context, such as the instant that `NOW()` reads.
     ///
     /// # Errors
     ///
@@ -73,6 +76,7 @@ mod tests {
 
     use crate::testing::greater_than_five;
 
+    /// A row passes if the condition holds for it, and fails otherwise.
     #[test]
     fn rows_pass_or_fail_the_condition() {
         let filter = greater_than_five();
@@ -92,6 +96,7 @@ mod tests {
         );
     }
 
+    /// A row on which the condition fails yields the error, and the next row is evaluated afresh.
     #[test]
     fn an_erroring_row_is_rejected_and_names_its_error() {
         let filter = greater_than_five();
@@ -109,6 +114,8 @@ mod tests {
         );
     }
 
+    /// Creating a condition whose program takes a different number of inputs than it has columns
+    /// panics.
     #[test]
     #[should_panic(expected = "exactly its input columns")]
     fn the_input_count_is_checked() {

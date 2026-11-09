@@ -2,13 +2,13 @@
 
 use crate::dictionary::store::{PairPool, content::BlobsRef};
 
-/// A store of structured values, tuples or maps,
-/// kept as pairs of a type blob and a content blob.
+/// A store of tuples or of maps, kept as pairs of a type blob and a content blob.
 ///
-/// The type blob, the shape and the label, is the frequent part,
-/// which all values of one shape share.
-/// A tuple's elements are the blob's elements;
-/// a map's are its key-value pairs, flattened in the map's canonical key order.
+/// The blobs are those of the [content](crate::dictionary::store::content) encoding.
+/// The type blob is the frequent part of the [PairPool],
+/// since all values with the same shape and label share it.
+/// The elements of a tuple are stored in order.
+/// The elements of a map are its keys and values, alternating, in the map's key order.
 pub(crate) struct StructureStore {
     /// The interned (type blob, content blob) pairs.
     pairs: PairPool,
@@ -33,13 +33,13 @@ impl StructureStore {
         self.pairs.frequents_len()
     }
 
-    /// Interns an encoded value and returns its index,
-    /// or `None` if the store cannot hold it.
+    /// Interns the blobs of a value and returns its index, or `None` if a blob is longer than
+    /// [LENGTH_LIMIT](crate::dictionary::Dictionary::LENGTH_LIMIT).
     pub(crate) fn intern(&mut self, type_blob: &[u8], content: &[u8]) -> Option<u64> {
         self.pairs.intern(type_blob, content)
     }
 
-    /// Returns the index of an encoded value, or `None` if it was never interned.
+    /// Returns the index of the value with the given blobs, or `None` if it was never interned.
     pub(crate) fn find(&self, type_blob: &[u8], content: &[u8]) -> Option<u64> {
         self.pairs.find(type_blob, content)
     }

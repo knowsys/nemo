@@ -1,19 +1,21 @@
-//! The type analysis: refined types over the compiled program.
+//! The type analysis: upper bounds on the types of the values in the compiled program's
+//! columns.
 //!
 //! A monotone fixpoint computes, per predicate column,
-//! an upper bound on the [types](Type) of value it can hold,
+//! an upper bound on the [types](Type) of the values that it can hold,
 //! with tuple and map types refined to their element types up to a fixed depth.
-//! Facts and import formats seed it, and rules propagate it:
-//! body variables intersect the columns they join, heads union what their rules can write.
+//! The facts and import formats give the initial types, and the rules propagate them:
+//! body variables intersect the columns that they join,
+//! and heads take the union of what their rules can write.
 //!
-//! The warnings are proofs against that over-approximation, so they carry no false positives:
-//! a rule whose body admits no value at some position *cannot* fire,
+//! The warnings are proofs against this over-approximation, so they have no false positives:
+//! a rule whose body no value can match at some position *cannot* fire,
 //! and the program still runs.
-//! The declarations are held to the same over-approximation from the other side:
-//! a program runs only if every value it can write into a declared column provably fits
-//! the declaration, and every labeled value it builds the `@type` of its label.
-//! A write that cannot fit violates the declaration;
-//! one that might not is not shown to fit; both are errors.
+//! The declarations are checked against the same over-approximation from the other side.
+//! A program runs only if every value that it can write into a declared column provably fits
+//! the declaration, and every labeled value that it builds fits the `@type` of its label.
+//! Both a write that cannot fit and a write that might not fit are errors:
+//! the first violates the declaration, and the second is not shown to fit it.
 
 mod columns;
 mod declarations;
@@ -44,32 +46,32 @@ use self::{
 
 pub(crate) use self::proofs::builtin_hint;
 
-/// What a rule looked like before compilation, as far as reporting needs it:
-/// its position, and what its variables were called.
+/// What the reports need to know of a rule as it was written:
+/// its position, and the names of its variables.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct RuleSourceInfo<'a> {
     /// The rule's source position.
     pub(crate) span: Option<Span>,
-    /// The variables' source names by [VariableId](super::compiled::VariableId).
+    /// The written name of each rule column, by [VariableId](super::compiled::VariableId).
     ///
-    /// The columns the normalization invented have none.
+    /// The columns that the compilation introduced have none.
     pub(crate) names: &'a [Option<String>],
 }
 
 /// A predicate's declared columns:
-/// the types a `@declare` states, and the names that let atoms fill columns by name.
+/// the types that a `@declare` states, and the names by which atoms can fill the columns.
 #[derive(Debug, Clone)]
 pub(crate) struct PredicateDeclaration {
-    /// The declared types, one per column, at refinement depth.
+    /// The declared types, one per kept column, refined up to the analysis's depth.
     pub(crate) types: Vec<Type>,
-    /// The declared column names, aligned with the types.
+    /// The declared column names, matching [types](Self::types) by index.
     pub(crate) names: Vec<Option<String>>,
     /// The declaration's source position.
     pub(crate) span: Option<Span>,
 }
 
 impl PredicateDeclaration {
-    /// Returns the position of the column a name labels.
+    /// Returns the position of the column with the given name.
     pub(crate) fn position(&self, label: &str) -> Option<usize> {
         self.names
             .iter()
@@ -82,7 +84,7 @@ impl PredicateDeclaration {
 pub(crate) struct Declared<'a> {
     /// The declared columns, by predicate name.
     pub(crate) predicates: &'a HashMap<String, PredicateDeclaration>,
-    /// The type each `@type` declares for its label, by resolved label.
+    /// The type that each `@type` declares for its label, by resolved label.
     pub(crate) labels: &'a LabelTypes,
 }
 
@@ -90,38 +92,41 @@ pub(crate) struct Declared<'a> {
 pub(crate) struct AnalysisInputs<'a> {
     /// The registered predicates by resolved name.
     pub(crate) predicates: &'a HashMap<String, Registered>,
-    /// The column type seeds per table: facts, import formats, and rows added later.
+    /// Per table, the initial column types from the facts, the import formats,
+    /// and the rows added later.
     pub(crate) seeds: &'a HashMap<TableId, Vec<Type>>,
     /// What the program declares.
     pub(crate) declared: Declared<'a>,
-    /// The import-fed predicates whose columns are not statically known.
+    /// The imported predicates whose column types are not known before loading,
+    /// and the `@input` predicates.
     pub(crate) open: &'a HashSet<String>,
-    /// What the loaders of import-fed predicates leave out.
+    /// What the loads of imported predicates leave out.
     pub(crate) plan: &'a ImportPlan,
-    /// The column types the program was analyzed with before a change,
-    /// if the analysis is of a change,
-    /// so that an error can say what the change widened.
+    /// The column types with which the program was analyzed before a change,
+    /// if the analysis is of a change.
+    ///
+    /// An error can then say which types the change widened.
     pub(crate) previous: Option<&'a HashMap<TableId, Vec<Type>>>,
 }
 
-/// What each table is called and how wide it is, for messages and
-/// declaration lookup.
+/// The name and the arity of each table, for messages and for looking up declarations.
 type TableNames<'a> = HashMap<TableId, (&'a str, usize)>;
 
-/// Returns the column of a predicate as the program writes it, counted from 0,
-/// that a column of its table holds:
-/// the same column, unless the loader leaves out columns no rule reads.
+/// Returns the position among the kept columns of a predicate, counted from 0,
+/// of the column of its table at `position`.
+///
+/// It is the same position, unless the load prunes columns.
 fn written_column(plan: &ImportPlan, predicate: &str, arity: usize, position: usize) -> usize {
     plan.stored_layout(predicate, arity)
         .kept_position(position)
         .unwrap_or(position)
 }
 
-/// Returns the column format that reads a declared type:
-/// the format named like the type, whose cells become exactly the type's values.
+/// Returns the column format in which a declared type is read:
+/// the format named like the type, which reads cells as exactly the type's values.
 ///
 /// A type without such a format, such as a union or a structure, is read as terms,
-/// which the declaration then refuses, since terms are not shown to fit it.
+/// and the declaration then refuses them, since terms are not shown to fit it.
 pub(crate) fn declared_format(declared: &Type) -> ValueFormat {
     if declared.tuple_shapes().is_some() || declared.map_shapes().is_some() {
         return ValueFormat::Term;
@@ -134,10 +139,10 @@ pub(crate) fn declared_format(declared: &Type) -> ValueFormat {
 
 /// What the analysis found.
 pub(crate) struct Analysis {
-    /// The types each table's columns can hold.
+    /// Per table, the types that each column can hold.
     pub(crate) column_types: HashMap<TableId, Vec<Type>>,
-    /// Per rule, the types each of its columns can hold once its conditions narrowed them,
-    /// or nothing for a rule that fetches from an endpoint.
+    /// Per rule, the types that each rule column can hold once the rule's conditions have
+    /// narrowed them, or nothing for a rule that fetches from an endpoint.
     pub(crate) rule_columns: Vec<Vec<Type>>,
     /// The warnings and errors, in rule order.
     pub(crate) findings: Vec<TypeFinding>,
@@ -151,13 +156,14 @@ pub(crate) struct TypeFinding {
     pub(crate) diagnostic: Diagnostic,
 }
 
-/// Runs the analysis, returning the inferred column types per table and per rule,
-/// and the findings:
-/// warnings for rules that provably cannot fire,
-/// and errors for provable violations of a declaration.
+/// Runs the analysis, and returns the inferred column types per table and per rule,
+/// with the findings.
 ///
+/// The findings are warnings for rules that provably cannot fire,
+/// and errors for declarations that the program is not shown to respect.
+/// `source` contains what the reports need of each rule, matching `rules` by index.
 /// A rule that fetches from an endpoint takes no part,
-/// since its import's columns are seeded with whatever an endpoint may return.
+/// since its import's columns start with every type that an endpoint may return.
 pub(crate) fn analyze(
     rules: &[CompiledRule],
     source: &[RuleSourceInfo<'_>],
@@ -187,7 +193,7 @@ pub(crate) fn analyze(
             .collect();
     grow_to_fixpoint(rules, &mut types, labels);
 
-    // The proofs, one report per rule.
+    // The proofs about each rule.
     let mut rules_columns = Vec::with_capacity(rules.len());
     for (index, (rule, source)) in rules.iter().zip(source).enumerate() {
         if rule.fetches() {
@@ -235,12 +241,12 @@ pub(crate) fn analyze(
     }
 }
 
-/// Returns the types each table's columns start from.
+/// Returns the types that each table's columns start from.
 ///
-/// An open predicate, a declared input or an import whose columns are not statically known,
-/// holds whatever its declaration allows, or anything at all without one.
-/// Everything else starts from its seeds and grows,
-/// labeled values with a `@type` taken as the label's type.
+/// An open predicate, which is an `@input` or an import whose column types are not known
+/// before loading, can hold whatever its declaration allows, or anything without one.
+/// Every other table starts from the column types of its facts and imports,
+/// in which a labeled value with a `@type` counts as the label's type.
 fn initial_types(
     predicates: &HashMap<String, Registered>,
     seeds: &HashMap<TableId, Vec<Type>>,
@@ -273,8 +279,8 @@ fn initial_types(
     types
 }
 
-/// Returns the problems of declarations not matching the columns their predicates are used
-/// with, in source order, so that the first problem reported is the first written.
+/// Returns the errors of declarations whose number of columns differs from their predicate's,
+/// in source order, so that the first error reported is the first one written.
 fn declared_arity_problems(
     predicates: &HashMap<String, Registered>,
     declarations: &HashMap<String, PredicateDeclaration>,
@@ -305,8 +311,8 @@ fn declared_arity_problems(
     problems
 }
 
-/// Grows the column types to the fixpoint: heads union what their rules can write,
-/// until nothing grows.
+/// Grows the column types to the fixpoint:
+/// each head takes the union of what its rules can write, until nothing grows.
 ///
 /// The refinement depth is capped, so the lattice is finite and this terminates.
 fn grow_to_fixpoint(
@@ -344,6 +350,8 @@ mod tests {
 
     use super::*;
 
+    /// Every declared type with a format of its own is read in that format,
+    /// and a union is read as terms.
     #[test]
     fn a_declared_type_reads_in_the_format_of_its_name() {
         for format in ValueFormat::ALL {
@@ -357,7 +365,7 @@ mod tests {
                 format.name()
             );
         }
-        // A union has no reading of its own.
+        // A union has no format of its own.
         let union = Type::of_domains(DomainSet::INTEGER | DomainSet::STRING);
         assert_eq!(declared_format(&union), ValueFormat::Term);
     }

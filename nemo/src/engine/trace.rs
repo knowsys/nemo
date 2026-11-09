@@ -1,6 +1,5 @@
-//! Tracing why facts hold:
-//! proof search over the stored derivations,
-//! and the derivation-structure queries behind the visual proof display.
+//! Tracing why facts hold: the proof search over the stored tables,
+//! and the derivation-structure queries of [trace::query](crate::trace::query).
 //!
 //! Both resolve the requested facts with [ground_facts](Engine::ground_facts).
 
@@ -29,7 +28,7 @@ impl Engine {
     }
 
     /// Resolves facts to their tables and values,
-    /// checked as a fact of the program is (name, arity, values).
+    /// with the checks that a fact of the program gets: its name, its arity and its values.
     ///
     /// Nothing is stored or registered.
     /// A fact is an error if its predicate is unknown, was introduced by a pipeline stage,
@@ -45,7 +44,7 @@ impl Engine {
             }
         }
         let state = std::mem::take(&mut self.translation);
-        // The facts are evaluated as the latest run evaluated its own.
+        // The facts are evaluated in the context of the latest run, as its own facts were.
         let context = self.contexts.latest();
         let (stores, setup) = self.translation_parts(translation::Purpose::Load, context);
         let mut translator = translation::Translator::new(stores, setup, state, Vec::new());
@@ -68,8 +67,8 @@ impl Engine {
         }
     }
 
-    /// Returns the canonical rendering of written constants,
-    /// evaluated as the translator evaluates constants of the program.
+    /// Returns written ground terms in canonical term syntax,
+    /// evaluated as the translator evaluates the constants of the program.
     ///
     /// A constant that fails to evaluate is left out.
     pub(super) fn render_constants(&mut self, constants: Vec<Term>) -> HashMap<Term, String> {
@@ -98,7 +97,7 @@ impl Engine {
             .collect()
     }
 
-    /// Checks that the engine can answer a trace: a program is loaded,
+    /// Checks that the engine can trace facts: a program is loaded,
     /// reasoning has processed every update, and the last run reached the fixpoint.
     pub(in crate::engine) fn traceable(&self) -> Result<(), Diagnostic> {
         if self.program.is_none() {

@@ -7,20 +7,20 @@
 //! [`double`](https://www.w3.org/TR/xmlschema11-2/#double).
 //!
 //! [Number] is the owned form of a number, and [NumberRef] is the borrowed view.
-//! Either holds an exact number as a [Decimal] or a [DecimalRef],
-//! and a floating one as a [Float] or a [Double].
+//! They store an exact number as a [Decimal] or a [DecimalRef],
+//! and a floating-point number as a [Float] or a [Double].
 //!
-//! Integers and decimals are *exact*: they share one value space,
-//! the integers being its integral values,
-//! and their arithmetic is exact and (practically) unbounded.
-//! Floats and doubles are *approximate*: each is an IEEE value space with one NaN.
-//! An operation on two numbers promotes them along the ladder
-//! integer, decimal, float, double to the smallest type holding both,
-//! as XPath's `op:numeric-*` functions do.
+//! Integers and decimals are *exact*.
+//! They share one value space, in which the integers are the integral values,
+//! and their arithmetic is exact up to the [length limit](Decimal) of numbers.
+//! Floats and doubles are *approximate*.
+//! Each is an IEEE 754 value space with a single NaN.
+//! An operation on two numbers first promotes both to the first type that can hold them,
+//! in the order integer, decimal, float, double, as XPath's `op:numeric-*` functions do.
 //!
-//! The domains are distinct, so `1`, `1.0f` and `1.0d` are three values,
-//! which XSD's value comparison [value_eq](NumberRef::value_eq) finds equal.
-//! `1.0` is `1`: an integral value is canonically an integer.
+//! The numeric domains are distinct, so `1`, `1.0f` and `1.0d` are three values.
+//! XSD's value comparison, [value_eq](NumberRef::value_eq), finds them equal.
+//! `1.0` is `1`, since an integral value is always an integer.
 //!
 //! # Example
 //!

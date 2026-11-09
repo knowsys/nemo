@@ -1,11 +1,11 @@
-//! Why a text is not a query an import can ask.
+//! The errors of [SparqlQuery::parse](super::SparqlQuery::parse).
 
 use std::fmt;
 
-/// Why a text is not a query an import can ask.
+/// The reason that [SparqlQuery::parse](super::SparqlQuery::parse) rejects a text.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum QueryError {
-    /// The base IRI the query is read against does not parse.
+    /// The base IRI that the query is resolved against does not parse.
     Base {
         /// The base as given.
         base: String,
@@ -19,7 +19,7 @@ pub enum QueryError {
     },
     /// The query is not a `SELECT`.
     ///
-    /// Only a `SELECT` has a projection, which is the imported table.
+    /// Only a `SELECT` has a projection, which is the result table.
     NotSelect,
 }
 

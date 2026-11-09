@@ -1,4 +1,4 @@
-//! Cell formats: how a textual field becomes a value.
+//! Cell formats: how the text of a cell is read as a value, and how a value is written as a cell.
 
 mod cell;
 
@@ -13,35 +13,44 @@ use nemo_physical::value::{DataValue, DomainSet, Iri, IriRef, NumberRef, ValueDo
 
 use crate::term::{self, LiteralSyntax};
 
-/// The interpretation of one input column's cells.
+/// The way the cells of one column are read and written.
 ///
-/// [Term](Self::Term) reads a cell in term syntax.
-/// The typed formats parse strictly: a cell that does not match makes its row malformed.
-///
-/// A format's name ([from_name](Self::from_name), [name](Self::name)) is the name of the type
-/// it reads, for the typed formats.
+/// [Term](Self::Term) reads a cell in term syntax, and [Skip](Self::Skip) does not read it.
+/// Every other format is *typed*: it reads only values of one type,
+/// and a cell that does not contain such a value makes its row malformed.
+/// The [name](Self::name) of a typed format is the name of its type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ValueFormat {
-    /// The cell in term syntax:
-    /// numbers in every spelling of the syntax (`+5`, `007`, `1E3`, `2.5f`, `0x1F`),
-    /// `"…"` as a plain string (with `@lang` and `^^<datatype>` typed forms and the escapes of the
-    /// syntax), `<…>` as an IRI, and anything else as a bare IRI constant,
-    /// or as a string where no IRI could hold the text.
+    /// A term in term syntax, read from the trimmed cell.
+    ///
+    /// - A number is read in any spelling of term syntax, such as `+5`, `007`, `1E3`, `2.5f` or
+    ///   `0x1F` ([DataValue::number_from_term_syntax]).
+    /// - `"…"` is a string, also in the forms `"…"@lang` and `"…"^^<datatype>`,
+    ///   with the escapes of term syntax resolved.
+    ///   An unknown escape keeps its backslash.
+    /// - `<…>` is an IRI.
+    /// - Any other text is an IRI, or a string if it is empty or not a valid IRI.
+    ///
+    /// A cell is invalid if its quote never closes, if the text after the closing quote is
+    /// neither a language tag nor a datatype, if the language tag or the typed literal is
+    /// invalid, or if the text in angle brackets is not a [valid](Iri::is_valid) IRI.
     Term,
-    /// The cell verbatim as a plain string.
+    /// The cell as it is, as a plain string.
     String,
-    /// The cell verbatim as an IRI, if it is a [valid](Iri::is_valid) one.
+    /// The cell as it is, as an IRI, if it is a [valid](Iri::is_valid) one.
     Iri,
-    /// An integer, compact or wide.
+    /// An integer of any size.
     Integer,
     /// A 64-bit floating point number in XSD's lexical form, as
-    /// [DataValue::typed_literal] reads an `xsd:double`: `INF`, `-INF` and
-    /// `NaN` included, other spellings of them not.
+    /// [DataValue::typed_literal] reads an `xsd:double`.
+    ///
+    /// The special values are spelled `INF`, `-INF` and `NaN` only.
     Double,
-    /// A decimal (integral values canonicalize to integers, oversized
-    /// ones to wide numbers).
+    /// A decimal number.
+    ///
+    /// An integral value is read as an integer.
     Decimal,
-    /// A number: an integer, a decimal, or a double, by its XSD lexical form.
+    /// A number, read as an integer, a decimal or a double, depending on its XSD lexical form.
     Number,
     /// A 32-bit floating point number in XSD's lexical form.
     Float,
@@ -61,17 +70,17 @@ pub enum ValueFormat {
     DayTimeDuration,
     /// A duration of months only in XSD's lexical form.
     ///
-    /// The zero duration is a dayTimeDuration, so `P0M` does not read as one.
+    /// The zero duration is a dayTimeDuration, so `P0M` is not read as a yearMonthDuration.
     YearMonthDuration,
-    /// The column is dropped.
+    /// A column that is not read.
     ///
     /// Its cells are never parsed and deliver no value.
-    /// It counts toward the file's width only.
+    /// The column only counts toward the number of columns in the file.
     Skip,
 }
 
 impl ValueFormat {
-    /// The accepted names, for diagnostics.
+    /// The names that [from_name](Self::from_name) accepts, for diagnostics.
     pub const NAMES: &str = "int, double, decimal, number, float, bool, string, langstring, iri, \
         datetime, date, time, duration, daytimeduration, yearmonthduration, term, skip";
 
@@ -96,7 +105,7 @@ impl ValueFormat {
         ValueFormat::Skip,
     ];
 
-    /// Returns the format a name names, or `None` for an unknown name.
+    /// Returns the format with the given name, or `None` for an unknown name.
     pub fn from_name(name: &str) -> Option<Self> {
         Some(match name {
             "int" => ValueFormat::Integer,
@@ -120,7 +129,7 @@ impl ValueFormat {
         })
     }
 
-    /// Returns the format's canonical name, which [from_name](Self::from_name) reads back.
+    /// Returns the format's name, which [from_name](Self::from_name) maps back to the format.
     pub fn name(&self) -> &'static str {
         match self {
             ValueFormat::Integer => "int",
@@ -143,10 +152,10 @@ impl ValueFormat {
         }
     }
 
-    /// Returns the domains a cell of the format can become: the type of what it reads.
+    /// Returns the domains of the values the format reads.
     ///
-    /// A typed format reads only values of its domains, a cell that becomes another one
-    /// being malformed, so the type holds without a check of the values read.
+    /// A typed format rejects a cell whose value would be of another domain,
+    /// so every value it reads is of these domains without a further check.
     pub fn domains(&self) -> DomainSet {
         match self {
             ValueFormat::Term => DomainSet::ANY,
@@ -154,7 +163,7 @@ impl ValueFormat {
             ValueFormat::Iri => DomainSet::IRI,
             ValueFormat::Integer => DomainSet::INTEGER,
             ValueFormat::Double => DomainSet::DOUBLE,
-            // Integral decimals canonicalize to integers.
+            // An integral decimal is read as an integer.
             ValueFormat::Decimal => DomainSet::EXACT,
             ValueFormat::Number => DomainSet::NUMERIC,
             ValueFormat::Float => DomainSet::FLOAT,
@@ -171,8 +180,8 @@ impl ValueFormat {
         }
     }
 
-    /// Returns the XSD datatype a typed format reads the lexical forms of,
-    /// or `None` for a format that reads otherwise.
+    /// Returns the XSD datatype whose lexical forms the format reads,
+    /// or `None` for a format that reads cells another way.
     fn datatype(&self) -> Option<&'static str> {
         Some(match self {
             ValueFormat::Integer => "http://www.w3.org/2001/XMLSchema#integer",
@@ -189,13 +198,13 @@ impl ValueFormat {
         })
     }
 
-    /// Parses one cell, or `None` if it does not match the format.
+    /// Parses one cell, or returns `None` if it does not match the format.
     pub fn parse(&self, cell: &str) -> Option<DataValue> {
         self.parse_cell(cell).map(CellValue::into_owned)
     }
 
-    /// Parses one cell as [parse](Self::parse) does, borrowing the text
-    /// of an IRI or a string that the cell holds as it is.
+    /// Parses one cell as [parse](Self::parse) does,
+    /// without copying an IRI or a string that appears in the cell unchanged.
     pub(crate) fn parse_cell<'a>(&self, cell: &'a str) -> Option<CellValue<'a>> {
         let value = match self {
             ValueFormat::Term => return Self::term(cell),
@@ -221,11 +230,12 @@ impl ValueFormat {
             .then_some(CellValue::Value(value))
     }
 
-    /// Serializes one cell for writing, or returns `None` if the value does not fit the format.
+    /// Returns the text of a value as a cell, or `None` if the value does not fit the format.
     ///
-    /// A writer drops (and counts) a row with a value that does not fit.
-    /// [Term](Self::Term) writes the cell text of [any_cell](Self::any_cell).
-    /// The typed formats write bare lexicals of their own domain only.
+    /// - [Term](Self::Term) writes any value, as [any_cell](Self::any_cell) does.
+    /// - A typed format writes only values of its own domains,
+    ///   as their lexical forms without a datatype.
+    /// - No value fits [Skip](Self::Skip).
     pub fn write(&self, value: nemo_physical::value::ValueRef<'_>) -> Option<String> {
         use nemo_physical::value::ValueRef;
         match (self, value) {
@@ -243,7 +253,7 @@ impl ValueFormat {
             {
                 Some(value.to_string())
             }
-            // A double takes the exponent form, which the reading tells from a decimal.
+            // A double is written in exponent form, so that it is not read back as a decimal.
             (ValueFormat::Number, ValueRef::Number(NumberRef::Double(value))) => {
                 let value = value.get();
                 Some(if value.is_nan() {
@@ -266,7 +276,7 @@ impl ValueFormat {
             (ValueFormat::LanguageString, ValueRef::LanguageString(_)) => {
                 Some(Self::any_cell(value))
             }
-            // The canonical lexical of a temporal value is its `Display`.
+            // The canonical lexical form of a temporal value is its `Display`.
             (ValueFormat::DateTime, ValueRef::DateTime(value)) => Some(value.to_string()),
             (ValueFormat::Date, ValueRef::Date(value)) => Some(value.to_string()),
             (ValueFormat::Time, ValueRef::Time(value)) => Some(value.to_string()),
@@ -280,18 +290,11 @@ impl ValueFormat {
         }
     }
 
-    /// Reads a cell in term syntax, or returns `None` for an invalid literal.
-    ///
-    /// - Numbers parse in every spelling of the
-    ///   [term syntax](DataValue::number_from_term_syntax).
-    /// - Quoted cells are strings, with `@lang` and `^^<datatype>` typed forms,
-    ///   their escapes resolved as the [term syntax](LiteralSyntax::TermSyntax) defines them.
-    /// - Angle-bracketed cells are IRIs, if [valid](Iri::is_valid).
-    /// - Bare cells are IRI constants rather than strings, if they could be IRIs.
+    /// Reads a cell in term syntax as [Term](Self::Term) describes,
+    /// or returns `None` for an invalid cell.
     ///
     /// The cell is trimmed first, which no other format does.
-    /// An invalid literal is a typed form that does not parse, an unknown escape,
-    /// a quote that never closes, or an invalid IRI in angle brackets.
+    /// Quoted literals are read in [term syntax](LiteralSyntax::TermSyntax).
     fn term(cell: &str) -> Option<CellValue<'_>> {
         let cell = cell.trim();
         if let Some(rest) = cell.strip_prefix('"') {
@@ -306,8 +309,8 @@ impl ValueFormat {
         if let Some(number) = DataValue::number_from_term_syntax(cell) {
             return Some(CellValue::Value(number));
         }
-        // Bare text is an IRI constant only if it could be one, so empty
-        // cells and cells holding what no IRI holds, as whitespace, stay strings.
+        // Bare text is an IRI only if it is a valid one.
+        // Empty cells and cells with whitespace stay strings.
         Some(
             if cell.is_empty() || cell.chars().any(char::is_whitespace) || !Iri::is_valid(cell) {
                 CellValue::String(cell)
@@ -317,16 +320,16 @@ impl ValueFormat {
         )
     }
 
-    /// Returns the cell text the `term` column format writes for a value,
-    /// before CSV-level quoting.
+    /// Returns the text of a value in term syntax, before the quoting of the DSV format.
     ///
-    /// - Integers and IRIs are bare.
-    /// - Strings are quoted, with escapes, and language strings tagged.
-    /// - Nulls are written `_:id`.
-    /// - Everything else is in canonical typed form.
+    /// - Integers and IRIs are written bare.
+    /// - Strings are quoted, with escapes, and language strings are also tagged.
+    /// - A null is written `_:` followed by its number.
+    /// - Tuples and maps are written in their own syntax, recursively.
+    /// - Every other value is written as a typed literal in its canonical lexical form.
     ///
-    /// An IRI whose bare text would read back as something else
-    /// (a number, a quoted literal, a string with whitespace) is written in angle brackets.
+    /// An IRI is written in angle brackets if its bare text would be read back as something
+    /// else, such as a number, a quoted literal, or a string with whitespace.
     pub fn any_cell(value: nemo_physical::value::ValueRef<'_>) -> String {
         use nemo_physical::value::ValueRef;
         let quote = |text: &str| {
@@ -366,7 +369,7 @@ impl ValueFormat {
             ValueRef::Boolean(value) => typed(&value.to_string()),
             ValueRef::Number(value) if value.domain() == ValueDomain::Integer => value.to_string(),
             ValueRef::Number(value) => typed(&value.to_string()),
-            // The canonical lexical of a temporal value is its `Display`.
+            // The canonical lexical form of a temporal value is its `Display`.
             ValueRef::DateTime(lexical) => typed(&lexical.to_string()),
             ValueRef::Date(lexical) => typed(&lexical.to_string()),
             ValueRef::Time(lexical) => typed(&lexical.to_string()),
@@ -375,13 +378,13 @@ impl ValueFormat {
             ValueRef::Other(literal) => {
                 format!("{}^^<{}>", quote(literal.lexical()), literal.datatype())
             }
-            // Structured values write the syntax they are written in,
+            // A structured value is written in its own syntax,
             // recursively: `(1, 2)`, `point(1, 2)`, `{a = 1}`.
             ValueRef::Tuple(tuple) => {
                 let elements: Vec<String> = tuple.elements().map(Self::any_cell).collect();
                 let label = tuple.label().map(Self::label_cell).unwrap_or_default();
-                // A one-element tuple keeps the comma that tells it from
-                // a parenthesized term.
+                // A one-element tuple keeps its comma,
+                // which distinguishes it from a parenthesized term.
                 let trailing = if elements.len() == 1 && tuple.label().is_none() {
                     ","
                 } else {
@@ -405,8 +408,10 @@ impl ValueFormat {
         }
     }
 
-    /// Returns the text of a structure's label, as term syntax writes it:
-    /// bare if it reads back as the label, in angle brackets otherwise.
+    /// Returns the text of a structured value's label in term syntax.
+    ///
+    /// The label is written bare if that text is read back as the label,
+    /// and in angle brackets otherwise.
     fn label_cell(label: &str) -> String {
         let label = IriRef::new(label);
         if label.writes_bare() {
@@ -416,10 +421,10 @@ impl ValueFormat {
         }
     }
 
-    /// Returns whether a bare cell holding the text reads back as an IRI with that text
-    /// under the [Term](Self::Term) interpretation.
+    /// Returns whether [Term](Self::Term) reads a cell that contains only the text
+    /// as an IRI with that text.
     ///
-    /// An IRI whose text does is written without angle brackets.
+    /// An IRI with such a text can be written without angle brackets.
     fn reads_as_iri(text: &str) -> bool {
         !text.is_empty()
             && !text.chars().any(char::is_whitespace)
@@ -440,6 +445,8 @@ impl Display for ValueFormat {
 mod tests {
     use super::*;
 
+    /// An IRI is written bare only if its bare text is read back as that IRI,
+    /// and in angle brackets otherwise.
     #[test]
     fn iris_that_would_not_read_back_bare_are_bracketed() {
         for (text, written) in [
@@ -460,6 +467,8 @@ mod tests {
         }
     }
 
+    /// Every format's name maps back to the format and is among the accepted names,
+    /// while `any` and `integer` name no format.
     #[test]
     fn names_round_trip_and_any_names_no_format() {
         for format in ValueFormat::ALL {
@@ -471,6 +480,7 @@ mod tests {
         assert_eq!(ValueFormat::Integer.to_string(), "int");
     }
 
+    /// Tuples and maps are written in their own syntax, recursively.
     #[test]
     fn structured_values_write_the_syntax_they_are_written_in() {
         use nemo_physical::value::{MapValue, TupleValue};
@@ -482,7 +492,7 @@ mod tests {
             rendered(tuple(vec![DataValue::integer(1), DataValue::integer(2)])),
             "(1, 2)"
         );
-        // The comma is what tells a one-element tuple from a
+        // The comma distinguishes a one-element tuple from a
         // parenthesized term.
         assert_eq!(rendered(tuple(vec![DataValue::integer(1)])), "(1,)");
         assert_eq!(
@@ -503,7 +513,7 @@ mod tests {
             // Pairs are stored sorted by key, so the rendering is canonical.
             "{host = \"localhost\", port = 8080}"
         );
-        // Nesting recurses.
+        // Nested values are written recursively.
         assert_eq!(
             rendered(tuple(vec![
                 DataValue::integer(1),
@@ -513,6 +523,8 @@ mod tests {
         );
     }
 
+    /// An IRI is read only if it is valid, and bare text that is not a valid IRI is read as a
+    /// string.
     #[test]
     fn iris_read_only_where_valid() {
         let read = |format: ValueFormat, cell: &str| format.parse(cell);
@@ -522,7 +534,7 @@ mod tests {
         assert_eq!(read(ValueFormat::Term, "<a>b>"), None);
         assert_eq!(read(ValueFormat::Iri, "http://e/a"), iri("http://e/a"));
         assert_eq!(read(ValueFormat::Iri, "a{b}"), None);
-        // Bare text no IRI could hold stays a string.
+        // Bare text that is not a valid IRI stays a string.
         assert_eq!(
             read(ValueFormat::Term, "a{b}"),
             Some(DataValue::string("a{b}"))
@@ -533,6 +545,8 @@ mod tests {
         );
     }
 
+    /// Term syntax reads a number in each of its spellings,
+    /// and reads other text that only looks numeric as an IRI.
     #[test]
     fn terms_read_numbers_as_programs_do() {
         let term = |cell: &str| ValueFormat::Term.parse(cell);
@@ -551,7 +565,7 @@ mod tests {
         ] {
             assert_eq!(term(cell), Some(value), "cell {cell:?}");
         }
-        // What a program reads as no number stays an IRI constant.
+        // Text that term syntax does not read as a number stays an IRI.
         for cell in [
             "+", "-.", "5.", ".5", "1e", "0x", "INF", "nan", "1.5.5", "2.5ff",
         ] {
@@ -559,6 +573,8 @@ mod tests {
         }
     }
 
+    /// The escapes of a quoted literal are resolved in strings, language strings and typed
+    /// literals.
     #[test]
     fn terms_resolve_the_escapes_of_quoted_literals() {
         let term = |cell: &str| ValueFormat::Term.parse(cell);
@@ -576,7 +592,7 @@ mod tests {
             term(r#""q\"uote"^^<http://example.org/t>"#),
             DataValue::other("http://example.org/t", r#"q"uote"#)
         );
-        // Character escapes resolve, and an unknown escape keeps its backslash, as in programs.
+        // Character escapes are resolved, and an unknown escape keeps its backslash.
         assert_eq!(
             term(r#""\u0041\U0001F600""#),
             Some(DataValue::string("A\u{1F600}"))
@@ -586,12 +602,14 @@ mod tests {
             term(r#""\d+ \user""#),
             Some(DataValue::string(r"\d+ \user"))
         );
-        // An unclosed literal and a tail that is neither a language tag nor a datatype are
-        // invalid.
+        // An unclosed literal is invalid, and so is a literal followed by text that is neither
+        // a language tag nor a datatype.
         assert_eq!(term(r#""abc"#), None);
         assert_eq!(term(r#""a"b"#), None);
     }
 
+    /// A typed format reads every lexical form of its type, canonical or not,
+    /// and nothing else.
     #[test]
     fn typed_formats_parse_leniently() {
         assert_eq!(
@@ -608,18 +626,19 @@ mod tests {
             ValueFormat::Double.parse("-INF"),
             Some(DataValue::double(f64::NEG_INFINITY))
         );
-        // Only XSD's spellings of the special values, as the cast takes them.
+        // Only XSD's spellings of the special values are read, and surrounding whitespace is
+        // rejected.
         for cell in ["inf", "nan", "Infinity", " 2.5"] {
             assert_eq!(ValueFormat::Double.parse(cell), None, "cell {cell:?}");
         }
-        // A declared column identifies by value, so non-canonical
-        // lexicals normalize instead of failing.
+        // A typed column stores values, not lexical forms, so a
+        // non-canonical lexical form is normalized rather than rejected.
         assert_eq!(
             ValueFormat::Decimal.parse("1.50"),
             Some(DataValue::decimal(15, -1).expect("representable"))
         );
         assert_eq!(ValueFormat::Decimal.parse("x"), None);
-        // Strings and IRIs are verbatim and distinct from numbers.
+        // Strings and IRIs are read verbatim, not as numbers.
         assert_eq!(ValueFormat::String.parse("5"), Some(DataValue::string("5")));
         assert_eq!(
             ValueFormat::Iri.parse("http://example.org/a"),
@@ -627,6 +646,7 @@ mod tests {
         );
     }
 
+    /// Every scalar type has a format that reads its lexical forms and rejects other text.
     #[test]
     fn every_scalar_type_has_a_strict_reading() {
         let reads = |format: ValueFormat, cell: &str| format.parse(cell);
@@ -683,7 +703,7 @@ mod tests {
             Some(ValueDomain::Double)
         );
         assert_eq!(reads(ValueFormat::Number, "five"), None);
-        // A language-tagged string, and nothing else.
+        // The language string format reads a language-tagged string, and nothing else.
         assert_eq!(
             reads(ValueFormat::LanguageString, "\"hello\"@en").map(|value| value.domain()),
             Some(ValueDomain::LanguageString)
@@ -692,6 +712,8 @@ mod tests {
         assert_eq!(reads(ValueFormat::LanguageString, "hello"), None);
     }
 
+    /// Writing a value that a format has read gives a cell that the format reads back as that
+    /// value.
     #[test]
     fn a_reading_reads_back_what_it_writes() {
         for (format, cell) in [

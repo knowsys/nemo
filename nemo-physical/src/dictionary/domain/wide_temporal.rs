@@ -19,13 +19,14 @@ pub(crate) type WideTimeStore = WideTemporalStore<Time>;
 /// The store of wide durations.
 pub(crate) type WideDurationStore = WideTemporalStore<Duration>;
 
-/// The store of one temporal type's wide values, kept as records without bytes:
+/// The store of the wide values of one temporal type:
 /// dateTimes, dates, times or durations.
 ///
-/// A temporal value is its own identity, so it is the record's header;
-/// the pool's arena stays empty, as the value has no variable part.
+/// A temporal value has a fixed size, so the whole value is the header of its record,
+/// and the record has no variable bytes.
+/// Two records are equal exactly if their values are equal.
 pub(crate) struct WideTemporalStore<T> {
-    /// The records.
+    /// The records, whose headers are the values.
     records: RecordPool<T>,
 }
 
@@ -42,8 +43,9 @@ impl<T: Copy + Eq + Hash> WideTemporalStore<T> {
         self.records.len()
     }
 
-    /// Interns a value and returns its index,
-    /// or `None` if the store cannot hold it.
+    /// Interns a value and returns its index.
+    ///
+    /// The result is never `None`, since the record of a temporal value has no bytes to store.
     pub(crate) fn intern(&mut self, value: T) -> Option<u64> {
         self.records.intern(value, &[])
     }

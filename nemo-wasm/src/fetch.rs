@@ -1,12 +1,14 @@
-//! Fetching the data a suspended engine method needs from the network.
+//! Fetching the data that a suspended engine method needs from the network.
 //!
-//! If a method is suspended,
-//! its requests go out through the global `fetch` (a window's, a worker's, or Node's),
-//! the failures the retry schedule allows are sent again,
-//! and the responses are passed to `resume`, until the method completes.
+//! The requests of a suspended method are sent through the global `fetch`,
+//! of a window, a worker or Node,
+//! and their responses are passed to [Engine::resume](nemo::engine::Engine::resume)
+//! until the method completes.
+//! Failed requests are retried, and partial results detected,
+//! as [Client::fetch_all](nemo::engine::remote::Client::fetch_all) requires of a client.
 //!
 //! No borrow of the engine is held while a request is out,
-//! so the engine still serves reads in the meantime.
+//! so the engine can still be read in the meantime.
 
 use std::{cell::RefCell, rc::Rc, sync::Arc, time::Duration};
 
@@ -22,32 +24,32 @@ use crate::engine::Inner;
 /// The number of requests in flight at once.
 const IN_FLIGHT: usize = 5;
 
-/// What one attempt at a request brought back.
+/// The outcome of one attempt to send a request.
 enum Sent {
-    /// The response body of a successful response.
+    /// The body of a successful response.
     Body(Vec<u8>),
-    /// An unsuccessful response: its status, its text, and its
-    /// `Retry-After` value.
+    /// A response with an error status.
     ErrorStatus {
         /// The response status.
         status: u16,
-        /// The response text.
+        /// The response body, as text.
         message: String,
         /// The `Retry-After` header, if the response has one.
         retry_after: Option<String>,
     },
-    /// A successful response holding only part of the result, as its status or headers say
-    /// ([Failure::of_partial_response]).
+    /// A successful response that contains only part of the result,
+    /// as [Failure::of_partial_response] finds from its status or headers.
     Partial(Failure),
-    /// No response came, for the reason `fetch` gives.
+    /// No response came, for the reason that `fetch` gives.
     Lost(String),
 }
 
-/// Calls a method on the engine, then fetches the requests it is suspended for and
-/// passes the responses to `resume`, until the method completes or fails, returning what it
-/// ends with.
+/// Runs `call`, which starts a method of the engine,
+/// and fetches the requests that the method is suspended for until it completes or fails.
 ///
-/// It clears the engine's busy mark, set before the call, as it ends.
+/// The responses go to [Engine::resume](nemo::engine::Engine::resume),
+/// at most [IN_FLIGHT] requests are out at once, and the result is the method's result.
+/// [driving](Inner::driving) must be set before, and is cleared when this ends.
 pub(crate) async fn drive(
     inner: Rc<RefCell<Inner>>,
     call: impl FnOnce(&mut Inner) -> Result<Progress, JsValue>,
@@ -76,8 +78,8 @@ pub(crate) async fn drive(
     }
 }
 
-/// Fetches one request, sending it again as the schedule says,
-/// and returns the response to pass to the engine: the body, or why there is none.
+/// Fetches one request, sending it again as `retry` says,
+/// and returns its response: the body, or the failure that prevented one.
 async fn fetch_retrying(request: &Request, retry: &Retry) -> Result<Arc<[u8]>, Failure> {
     let mut attempt = 0;
     loop {
@@ -102,7 +104,8 @@ async fn fetch_retrying(request: &Request, retry: &Retry) -> Result<Arc<[u8]>, F
     }
 }
 
-/// Sends one request through the global `fetch`.
+/// Sends one request through the global `fetch`,
+/// and returns a JavaScript error as a lost response.
 async fn send(request: &Request) -> Sent {
     match try_send(request).await {
         Ok(sent) => sent,
@@ -110,9 +113,9 @@ async fn send(request: &Request) -> Sent {
     }
 }
 
-/// Sends one request through the global `fetch`.
+/// Sends one request through the global `fetch`, and returns what came back.
 ///
-/// An error is the value JavaScript threw or rejected with.
+/// An error is the value that JavaScript threw or rejected with.
 async fn try_send(request: &Request) -> Result<Sent, JsValue> {
     let init = Object::new();
     Reflect::set(&init, &"method".into(), &request.method().into())?;
@@ -125,8 +128,8 @@ async fn try_send(request: &Request) -> Result<Sent, JsValue> {
         .collect();
     Reflect::set(&init, &"headers".into(), &headers)?;
     if let Some(form) = &request.form {
-        // `fetch` labels a `URLSearchParams` body as a form;
-        // a SPARQL endpoint takes a POST labeled otherwise for an update.
+        // `fetch` sends a `URLSearchParams` body with the content type of a form.
+        // A SPARQL endpoint would read a POST with another content type as an update.
         Reflect::set(&init, &"body".into(), &search_parameters(form)?)?;
     }
     let mut url = request.url.clone();
@@ -147,8 +150,8 @@ async fn try_send(request: &Request) -> Result<Sent, JsValue> {
     let code = status as u16;
     let headers = Reflect::get(&response, &"headers".into())?;
     if Reflect::get(&response, &"ok".into())?.is_truthy() {
-        // A browser shows a cross-origin response's own headers only if the server exposes
-        // them, so there a partial result may show by its status alone.
+        // Of a cross-origin response, a browser shows only the headers that the server
+        // exposes, so there a partial result may be recognizable by its status alone.
         let mut shown: Vec<(&str, String)> = Vec::new();
         for name in Failure::PARTIAL_RESPONSE_HEADERS {
             if let Some(value) = call_method(&headers, "get", &[name.into()])?.as_string() {
@@ -179,7 +182,7 @@ async fn try_send(request: &Request) -> Result<Sent, JsValue> {
     })
 }
 
-/// Returns name–value pairs as a global `URLSearchParams`, which URL-encodes them.
+/// Returns name-value pairs as a `URLSearchParams`, which URL-encodes them.
 fn search_parameters(pairs: &[(String, String)]) -> Result<JsValue, JsValue> {
     let entries: Array = pairs
         .iter()
@@ -189,7 +192,7 @@ fn search_parameters(pairs: &[(String, String)]) -> Result<JsValue, JsValue> {
     Reflect::construct(&constructor, &Array::of1(&entries))
 }
 
-/// Waits for the given time, on the global `setTimeout`.
+/// Waits for `wait`, using the global `setTimeout`.
 async fn sleep(wait: Duration) -> Result<(), JsValue> {
     let set_timeout = global_function("setTimeout")?;
     #[allow(clippy::cast_precision_loss)]
@@ -202,7 +205,7 @@ async fn sleep(wait: Duration) -> Result<(), JsValue> {
     JsFuture::from(waiting).await.map(drop)
 }
 
-/// Returns the value a JavaScript call returned, once settled if it is a promise.
+/// Returns a future of `value`, which resolves once the value settles if it is a promise.
 fn settled(value: JsValue) -> JsFuture {
     JsFuture::from(Promise::resolve(&value))
 }
@@ -222,7 +225,7 @@ fn call_method(object: &JsValue, name: &str, arguments: &[JsValue]) -> Result<Js
     Reflect::apply(&method, object, &arguments.iter().collect::<Array>())
 }
 
-/// Returns a value JavaScript threw, as a message.
+/// Returns the message of a value that JavaScript threw.
 fn describe(error: &JsValue) -> String {
     error
         .dyn_ref::<js_sys::Error>()

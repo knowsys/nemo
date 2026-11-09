@@ -1,10 +1,10 @@
-//! The check, in debug builds, that every value stored in a table lies within the types the
-//! analysis inferred for its columns.
+//! The check, in debug builds, that every value stored in a table lies within the types that
+//! the type analysis inferred for its columns.
 //!
-//! A program runs on the analysis's proof that every write fits its declarations,
+//! The engine relies on the analysis's proof that every write fits the declarations,
 //! so a stored value outside the inferred types is a bug in the analysis.
-//! Debug builds hold every stored block to the inferred types,
-//! and every stored value carrying a label with a `@type` to that type,
+//! Debug builds check every stored block against the inferred types,
+//! and every stored value with a label that has a `@type` against that type,
 //! so that every test that stores rows also tests the analysis.
 
 use std::collections::HashMap;
@@ -19,7 +19,7 @@ use nemo_physical::{
 use crate::engine::Engine;
 
 impl Engine {
-    /// Panics if a block of rows about to be stored in a table holds a value outside the
+    /// Panics if a block of rows about to be stored in a table contains a value outside the
     /// table's column types, or a labeled value outside the `@type` of its label.
     ///
     /// A table without column types, such as a scratch table, is not checked.
@@ -44,8 +44,8 @@ impl Engine {
         trie.for_each_row(|row| self.assert_stored_row(column_types, table, row));
     }
 
-    /// Panics if one row about to be stored in a table holds a value outside its column types,
-    /// or a labeled value outside the `@type` of its label.
+    /// Panics if one row about to be stored in a table contains a value outside its column
+    /// types, or a labeled value outside the `@type` of its label.
     fn assert_stored_row(
         &self,
         column_types: &HashMap<TableId, Vec<Type>>,
@@ -75,7 +75,7 @@ impl Engine {
     }
 }
 
-/// Returns whether every structure in a value that carries a label with a `@type` fits that type.
+/// Returns whether every tuple or map in a value whose label has a `@type` fits that type.
 fn fits_its_labels(value: ValueRef<'_>, labels: &LabelTypes) -> bool {
     let fits = |label: Option<&str>| {
         label

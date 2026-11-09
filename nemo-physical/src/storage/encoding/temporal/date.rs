@@ -1,4 +1,4 @@
-//! Payload encoding of [Tag::Date].
+//! The payload encoding of [Tag::Date].
 
 use crate::{
     storage::{
@@ -8,16 +8,16 @@ use crate::{
     value::Date,
 };
 
-/// The offset bits hold every offset code.
+/// A check that the offset field can store every offset code of a date.
 const _: () = assert!(Date::OFFSET_CODE_COUNT <= instant::OFFSET_CODES);
 
-/// A date encodes as the instant its day starts, then the code of its offset.
+/// A date is encoded as the instant at which its day starts, followed by the code of its offset.
 ///
-/// The instant counts minutes since the Unix epoch,
-/// which the payload holds for about ±4.3 billion years.
-/// Payloads order by instant, then by offset, as dates do.
+/// The instant is counted in minutes since the Unix epoch,
+/// which the payload can store for about ±4.3 billion years.
+/// Payloads are ordered by instant, then by offset, as dates are.
 ///
-/// A date beyond that range has no payload and lives in the dictionary.
+/// A date beyond that range has no payload, and the dictionary stores it.
 impl PayloadEncoding for Date {
     const TAG: Tag = Tag::Date;
     type Encoded = Option<u64>;
@@ -39,11 +39,12 @@ mod tests {
 
     use crate::testing::payload;
 
-    /// Parses the date of a lexical; panics on malformed input.
+    /// Returns the date of a lexical form, and panics if it is malformed.
     fn date(lexical: &str) -> Date {
         Date::from_lexical(lexical).expect(lexical)
     }
 
+    /// Every date with a payload decodes to itself, with or without an offset.
     #[test]
     fn encoding_round_trips() {
         for lexical in [
@@ -59,6 +60,7 @@ mod tests {
         }
     }
 
+    /// The order of the payloads is the term order of the dates.
     #[test]
     fn order_matches_term_order() {
         let ordered = [
@@ -81,6 +83,7 @@ mod tests {
         }
     }
 
+    /// A date beyond the range of the count field has no payload.
     #[test]
     fn the_payload_holds_dates_within_its_range() {
         assert_eq!(date("-13798000000-01-01").to_payload(), None);

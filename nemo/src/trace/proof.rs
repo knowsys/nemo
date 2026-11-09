@@ -2,9 +2,10 @@
 
 use crate::trace::{Derivation, TraceNode, TraceResponse, WrittenRule};
 
-/// A node of a [TraceResponse], to walk its derivation like a tree:
-/// its premises are the nodes they name, so a fact several derivations use is reached
-/// along each of them.
+/// A node of a [TraceResponse], for walking its derivation like a tree.
+///
+/// The premises of a proof are the proofs of the nodes that its derivation names,
+/// so a fact that several derivations use is reached along each of them.
 #[derive(Debug, Clone, Copy)]
 pub struct Proof<'a> {
     /// The response the node belongs to.
@@ -14,7 +15,7 @@ pub struct Proof<'a> {
 }
 
 impl<'a> Proof<'a> {
-    /// Creates the proof of a node of the response, by an id the response holds.
+    /// Creates the proof of the node with id `id`, which the response must have.
     pub(super) fn new(response: &'a TraceResponse, id: usize) -> Self {
         Self { response, id }
     }
@@ -46,7 +47,7 @@ impl<'a> Proof<'a> {
             .map(|derivation| &self.response.rules[derivation.rule])
     }
 
-    /// Returns the premises the fact was derived from, one per positive body literal.
+    /// Returns the premises that the fact was derived from, one per positive body literal.
     pub fn premises(&self) -> impl Iterator<Item = Proof<'a>> + 'a {
         let response = self.response;
         self.derivation()

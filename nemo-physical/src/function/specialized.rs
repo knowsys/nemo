@@ -1,5 +1,8 @@
-//! Stack programs with their specializations:
+//! Stack programs with their specializations,
 //! the [identity form](IdentityCondition) and the [integer form](IntegerProgram).
+//!
+//! A specialization evaluates a program on storage values directly,
+//! without decoding them into values.
 
 mod identity;
 mod integer;
@@ -14,17 +17,17 @@ use crate::function::StackProgram;
 /// A form of a stack program that evaluates on storage values directly.
 #[derive(Debug, Clone)]
 enum Specialization {
-    /// The identity form, which applies over columns of any tag.
+    /// The identity form, which applies to columns of any tag.
     Identity(IdentityCondition),
-    /// The integer form, which applies if every input reads integers only.
+    /// The integer form, which applies if every input reads a column of values
+    /// with the tag [Int](crate::storage::Tag::Int) only.
     Integer(IntegerProgram),
 }
 
 /// A stack program together with its specialization, if it has one.
 ///
-/// The program itself is always kept:
-/// the executor selects the integer form per run, from the tags of the columns its inputs read,
-/// and falls back to the program on the rows for which the integer form's semantics would diverge.
+/// The program itself is always kept, since the integer form applies only to columns
+/// of 64-bit integers, and only to the rows on which its semantics agree with the program's.
 #[derive(Debug, Clone)]
 pub(crate) struct SpecializedProgram {
     /// The program.
@@ -34,9 +37,9 @@ pub(crate) struct SpecializedProgram {
 }
 
 impl SpecializedProgram {
-    /// Creates the program with its specialization.
+    /// Creates the program with its specialization, if it has one.
     ///
-    /// The identity form takes precedence, since it applies over columns of any tag.
+    /// The identity form takes precedence, since it applies to columns of any tag.
     pub(crate) fn new(generic: StackProgram) -> Self {
         let specialization = generic
             .identity_specialization()

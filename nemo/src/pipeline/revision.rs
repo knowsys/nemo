@@ -2,7 +2,7 @@
 
 use crate::pipeline::StatementId;
 
-/// Identifies one revision of a pipeline's program.
+/// The id of one revision of a pipeline's program.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct RevisionId(u32);
 
@@ -21,9 +21,11 @@ impl RevisionId {
 /// One revision: the program as a list of live statement versions.
 #[derive(Debug)]
 pub(crate) struct ProgramRevision {
-    /// The revision this one was rewritten from, or `None` for loads.
+    /// The revision that this one was derived from, or `None` for a loaded revision.
+    ///
+    /// A merged revision is derived from its base.
     pub(crate) parent: Option<RevisionId>,
-    /// The stage that produced it, or `None` for loads.
+    /// The stage that produced it, or `None` for a loaded or merged revision.
     pub(crate) stage: Option<&'static str>,
     /// The live statements, in program order.
     pub(crate) statements: Vec<StatementId>,

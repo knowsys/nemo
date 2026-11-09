@@ -1,17 +1,16 @@
-//! The value bridge: one conversion table, both directions.
+//! The conversion of values between the engine and JavaScript, in both directions.
 //!
-//! Lossless primitives cross bare:
-//! strings, booleans, doubles as `number`, integers as `number` within ±2⁵³ and `BigInt`
-//! beyond.
-//! Everything else crosses as a **plain tagged object** with a `kind` discriminant,
-//! plain because results cross worker boundaries via `postMessage`,
-//! and plain objects are structured-cloneable while class instances are not.
-//! The tags keep term identity honest: an IRI never collides with the string of its characters.
+//! Strings and booleans become plain JavaScript values, a double becomes a `number`,
+//! and an integer becomes a `number` within ±2⁵³ and a `BigInt` beyond.
+//! Every other value becomes a **plain tagged object** with a `kind` field.
+//! The objects are plain because results are sent between workers with `postMessage`,
+//! which can clone plain objects but not class instances.
+//! The tags keep different terms apart: an IRI is never the string with its characters.
 //!
-//! Values passed to the engine take the same forms, with the one asymmetry JS forces:
-//! a bare `number` with an integral value is an *integer* term
-//! (an integral double is written `{kind: "double", value}`),
-//! since JS cannot tell `5` from `5.0`.
+//! Values passed to the engine use the same forms, with one difference that JavaScript forces:
+//! a `number` with an integral value within ±2⁵³ is an *integer*,
+//! since JavaScript does not distinguish `5` from `5.0`,
+//! and an integral double is written `{kind: "double", value}`.
 
 use js_sys::{Array, BigInt, Object, Reflect};
 use wasm_bindgen::prelude::*;
@@ -21,10 +20,10 @@ use nemo::values::{
     ValueRef,
 };
 
-/// The largest integer magnitude a JS `number` holds exactly.
+/// The magnitude up to which a JavaScript `number` holds every integer exactly.
 const SAFE_INTEGER: i64 = 1 << 53;
 
-/// Builds a tagged object from key–value pairs.
+/// Returns a tagged object of the kind `kind`, with the given fields.
 fn tagged(kind: &str, fields: &[(&str, JsValue)]) -> JsValue {
     let object = Object::new();
     let set = |key: &str, value: &JsValue| {
@@ -38,7 +37,7 @@ fn tagged(kind: &str, fields: &[(&str, JsValue)]) -> JsValue {
     object.into()
 }
 
-/// Converts an engine value into its JavaScript form, per the table.
+/// Converts an engine value into its JavaScript form.
 pub(crate) fn to_js(value: ValueRef<'_>) -> JsValue {
     match value {
         ValueRef::String(text) => JsValue::from_str(text),
@@ -98,7 +97,7 @@ pub(crate) fn to_js(value: ValueRef<'_>) -> JsValue {
 /// Converts an integer into a `number` within ±2⁵³, and a `BigInt` beyond.
 fn integer_to_js(value: DecimalRef<'_>) -> JsValue {
     match value.to_i64() {
-        // A range test: `abs` overflows on `i64::MIN`.
+        // A range test rather than `abs`, which overflows on `i64::MIN`.
         Some(integer) if (-SAFE_INTEGER..=SAFE_INTEGER).contains(&integer) =>
         {
             #[allow(clippy::cast_precision_loss)]
@@ -111,7 +110,7 @@ fn integer_to_js(value: DecimalRef<'_>) -> JsValue {
     }
 }
 
-/// Converts a tuple into an array, or a tagged object if it carries a label.
+/// Converts a tuple into an array, or into a tagged object if it has a label.
 fn tuple_to_js(tuple: TupleRef<'_>) -> JsValue {
     let elements: Array = tuple.elements().map(to_js).collect();
     match tuple.label() {
@@ -126,7 +125,7 @@ fn tuple_to_js(tuple: TupleRef<'_>) -> JsValue {
     }
 }
 
-/// Converts a map into a tagged object of its pairs, and its label if it carries one.
+/// Converts a map into a tagged object with its pairs, and with its label if it has one.
 fn map_to_js(map: MapRef<'_>) -> JsValue {
     let pairs: Array = map
         .pairs()
@@ -141,19 +140,21 @@ fn map_to_js(map: MapRef<'_>) -> JsValue {
     tagged("map", &fields)
 }
 
-/// Returns a conversion failure, described for a thrown error.
+/// Returns the error to throw for `what`, a value that does not convert.
 fn conversion_error(what: &str) -> JsValue {
     js_sys::Error::new(&format!("{what} does not convert to a Nemo term")).into()
 }
 
-/// Returns a field of a tagged object, as text.
+/// Returns the string field `key` of a tagged object, or an error if it has none.
 fn field(object: &JsValue, key: &str) -> Result<String, JsValue> {
     Reflect::get(object, &JsValue::from_str(key))?
         .as_string()
         .ok_or_else(|| conversion_error(&format!("an object without a string `{key}`")))
 }
 
-/// Converts a JavaScript value into an engine value, per the table.
+/// Converts a JavaScript value into an engine value.
+///
+/// Returns the error to throw for a value that does not convert.
 pub(crate) fn to_value(any: &JsValue) -> Result<DataValue, JsValue> {
     if let Some(text) = any.as_string() {
         return Ok(DataValue::string(text.as_str()));
@@ -162,9 +163,8 @@ pub(crate) fn to_value(any: &JsValue) -> Result<DataValue, JsValue> {
         return Ok(DataValue::boolean(value));
     }
     if let Some(value) = any.as_f64() {
-        // A JS number cannot tell 5 from 5.0: integral values are
-        // integer terms, and an integral double is written
-        // `{kind: "double", value}`.
+        // JavaScript does not distinguish 5 from 5.0, so an integral number becomes an
+        // integer, and an integral double must be written `{kind: "double", value}`.
         #[allow(clippy::cast_possible_truncation)]
         if value.fract() == 0.0 && value.abs() <= SAFE_INTEGER as f64 {
             return Ok(DataValue::integer(value as i64));
@@ -193,7 +193,9 @@ pub(crate) fn to_value(any: &JsValue) -> Result<DataValue, JsValue> {
     Err(conversion_error("this value"))
 }
 
-/// Converts a plain tagged object, by its `kind`.
+/// Converts a plain tagged object according to its `kind`.
+///
+/// A null does not convert, since no term denotes it.
 fn tagged_to_value(any: &JsValue) -> Result<DataValue, JsValue> {
     let kind = Reflect::get(any, &JsValue::from_str("kind"))?;
     let Some(kind) = kind.as_string() else {
@@ -237,14 +239,18 @@ fn tagged_to_value(any: &JsValue) -> Result<DataValue, JsValue> {
     }
 }
 
-/// Returns the numeric `value` field of a tagged number, which `what` names in the error.
+/// Returns the numeric `value` field of a tagged number.
+///
+/// `what` names the kind of number in the error.
 fn number_field(any: &JsValue, what: &str) -> Result<f64, JsValue> {
     Reflect::get(any, &JsValue::from_str("value"))?
         .as_f64()
         .ok_or_else(|| conversion_error(&format!("{what} without a numeric `value`")))
 }
 
-/// Converts the `lexical` field of a tagged value of the kind `what` names in the error.
+/// Converts the `lexical` field of a tagged value with `convert`.
+///
+/// `what` names the kind of value in the error.
 fn lexical_value(
     any: &JsValue,
     what: &str,
@@ -270,7 +276,9 @@ fn labeled_tuple_to_value(any: &JsValue) -> Result<DataValue, JsValue> {
     )))
 }
 
-/// Converts a tagged map, labeled if it carries a label.
+/// Converts a tagged map, with its label if it has one.
+///
+/// Fails for a map with a repeated key.
 fn map_to_value(any: &JsValue) -> Result<DataValue, JsValue> {
     let pairs = Reflect::get(any, &JsValue::from_str("pairs"))?
         .dyn_into::<Array>()

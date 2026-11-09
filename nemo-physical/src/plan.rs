@@ -1,12 +1,13 @@
 //! Operation plans: descriptions of database computations.
 //!
-//! An [OperationPlan] is a graph of nodes, each an operation producing a relation:
+//! An [OperationPlan] is a graph of nodes, each an operation producing a relation
+//! whose columns are named by [markers](Marker):
 //! - a [load](OperationPlan::load) reads a range of revisions of a stored table,
 //! - an [alias](OperationPlan::alias) renames the columns of a relation,
 //! - a [union](OperationPlan::union) unites relations,
-//! - a [join](OperationPlan::join) joins relations,
+//! - a [join](OperationPlan::join) joins relations on their shared markers,
 //! - a [filter](OperationPlan::filter) keeps the rows for which a condition holds,
-//! - a [computed column](OperationPlan::compute) extends every row by a program's result,
+//! - a [computed column](OperationPlan::compute) extends every row by a computed value,
 //! - a [subtraction](OperationPlan::subtract) drops the rows another relation matches,
 //! - a [projection](OperationPlan::project) keeps some of the columns of a relation,
 //! - an [aggregation](OperationPlan::aggregate) aggregates the rows of a relation by group.
@@ -47,11 +48,11 @@ use crate::{
     },
 };
 
-/// A plan of database operations, a graph of nodes.
+/// A plan of database operations: a graph of nodes, each producing a relation.
 ///
-/// Each constructor checks its node against the plan
-/// and panics if the node breaks a rule, as its `# Panics` section lists.
-/// Every constructor requires that a node id it is given names a node of this plan,
+/// Each node constructor checks the node against the plan,
+/// and panics if the node breaks one of the requirements its `# Panics` section lists.
+/// Every constructor requires that each node id it is given names a node of this plan,
 /// and that the markers of a new relation are allocated from this plan and pairwise distinct.
 ///
 /// # Example
@@ -156,12 +157,12 @@ impl OperationPlan {
         self.push(Node::Alias { input, markers })
     }
 
-    /// Adds a node representing the union of relations that carry one set of markers, each in any order.
+    /// Adds a node uniting relations that have the same set of markers, each in any order.
     ///
     /// # Panics
     ///
     /// Panics if there is no input, if an input is not a node of this plan,
-    /// or if the inputs carry different sets of markers.
+    /// or if the inputs have different sets of markers.
     pub fn union(&mut self, inputs: Vec<NodeId>) -> NodeId {
         let [first, rest @ ..] = inputs.as_slice() else {
             panic!("a union needs at least one input");
@@ -181,7 +182,7 @@ impl OperationPlan {
 
     /// Adds a node joining relations on their shared markers.
     ///
-    /// The argument `order` lists the markers of the results.
+    /// `order` lists the markers of the result, in the order the join binds them.
     ///
     /// # Panics
     ///
@@ -215,14 +216,13 @@ impl OperationPlan {
         })
     }
 
-    /// Adds a node extending every row of a relation by a computed column.
-    /// See [ComputedColumnSpec].
+    /// Adds a node extending every row of a relation by a [computed column](ComputedColumnSpec).
     ///
     /// # Panics
     ///
     /// Panics if the input is not a node of this plan,
     /// if the column reads a marker the input lacks,
-    /// or if its result marker is not allocated from this plan or not fresh to the input.
+    /// or if its result marker is not allocated from this plan or is one of the input's markers.
     pub fn compute(&mut self, input: NodeId, spec: ComputedColumnSpec) -> NodeId {
         let available = self.checked_markers(input);
         assert!(
@@ -247,9 +247,9 @@ impl OperationPlan {
 
     /// Adds a node dropping the rows of a relation that another relation matches.
     ///
-    /// A row is dropped if the subtracted relation holds a row
+    /// A row is dropped if the subtracted relation has a row
     /// that agrees with it on their shared markers.
-    /// The subtracted relation's other markers are existential.
+    /// The other markers of the subtracted relation are not compared.
     ///
     /// # Panics
     ///
@@ -299,7 +299,8 @@ impl OperationPlan {
     /// Panics if the input is not a node of this plan,
     /// if the group or an aggregate reads a marker the input lacks,
     /// if there is no aggregate,
-    /// or if a result marker is not allocated from this plan, repeats, or is not fresh to the input.
+    /// or if a result marker is not allocated from this plan, repeats,
+    /// or is one of the input's markers.
     pub fn aggregate(
         &mut self,
         input: NodeId,
@@ -386,14 +387,16 @@ impl OperationPlan {
         PlanLayout::new(self)
     }
 
-    /// Executes the plan with a layout of its current structure, see [execute](Self::execute).
+    /// Executes the plan with a layout of its current structure,
+    /// as [execute](Self::execute) does with a new layout and arena.
     ///
-    /// The arena holds the working memory of the joins.
-    /// Reusing one across executions keeps its memory allocated.
+    /// `arena` is where the joins allocate their working memory.
+    /// The execution does not reset it, so its allocations accumulate
+    /// until [reset](JoinArena::reset), which keeps the memory for the next executions.
     ///
     /// # Panics
     ///
-    /// Panics as [execute](Self::execute) does.
+    /// Panics in the cases that [execute](Self::execute) lists.
     pub fn execute_with_layout(
         &self,
         layout: &PlanLayout,
@@ -425,12 +428,12 @@ impl OperationPlan {
         self.nodes[node.index()].markers()
     }
 
-    /// Returns the node behind an id.
+    /// Returns the node with the given id.
     pub(crate) fn node(&self, node: NodeId) -> &Node {
         &self.nodes[node.index()]
     }
 
-    /// Returns the nodes, in topological order.
+    /// Returns the nodes in the order they were added, which is a topological order.
     pub(crate) fn nodes(&self) -> &[Node] {
         &self.nodes
     }
@@ -448,7 +451,7 @@ impl OperationPlan {
         id
     }
 
-    /// Checks that a node id belongs to this plan; panics otherwise.
+    /// Checks that a node id belongs to this plan, and panics if it does not.
     fn check_node(&self, node: NodeId) {
         assert!(
             node.index() < self.nodes.len(),
@@ -464,7 +467,7 @@ impl OperationPlan {
     }
 
     /// Returns markers as an order,
-    /// checking that they are allocated from this plan and pairwise distinct.
+    /// and panics unless they are allocated from this plan and pairwise distinct.
     fn checked_order(&self, markers: Vec<Marker>) -> MarkerOrder {
         assert!(
             markers.iter().all(|marker| marker.0 < self.next_marker),
@@ -481,8 +484,9 @@ impl OperationPlan {
         MarkerOrder::new(markers)
     }
 
-    /// Checks the inputs of a join against its order:
-    /// every input has a column, and the order lists exactly the inputs' markers.
+    /// Checks the inputs of a join against its order, and panics on a mismatch.
+    ///
+    /// Every input must have a column, and the order must list exactly the inputs' markers.
     fn check_join_inputs(&self, inputs: &[NodeId], order: &[Marker]) {
         assert!(!inputs.is_empty(), "a join needs at least one input");
         for &input in inputs {

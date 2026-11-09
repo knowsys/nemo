@@ -1,53 +1,58 @@
 //! The integer form of a program.
 //!
-//! The integer fragment is the part of the instruction set whose semantics
-//! over 64-bit integers and booleans coincide with the generic interpreter's:
-//! the comparisons, the connectives, and the checked sum, difference, product and negation.
-//! A program within the fragment, constants included, compiles into an [IntegerProgram],
-//! which evaluates over raw `i64`s without constructing values, dispatching on domains,
-//! or touching the dictionary.
-//! It applies to a row whose inputs all read integer-tagged columns.
+//! The integer fragment is the part of the instruction set
+//! whose semantics on 64-bit integers and booleans agree with those of the generic interpreter.
+//! It has the comparisons, the connectives,
+//! and the checked sum, difference, product and negation.
+//! A program within the fragment, with 64-bit integer constants only,
+//! compiles into an [IntegerProgram].
+//! The integer form evaluates on raw `i64`s, without constructing values,
+//! dispatching on domains or reading the dictionary.
+//! It applies to rows whose inputs all have the tag [Int](crate::storage::Tag::Int).
 //!
-//! If the semantics would diverge,
-//! at an intermediate that outgrows `i64` and becomes a wide integer generically,
-//! or at an operand pair the generic interpreter reports an error for,
-//! evaluation reports a fallback and the caller re-runs the row generically.
+//! On some rows the semantics would diverge,
+//! if an intermediate result outgrows `i64` and becomes a wide integer for the generic interpreter,
+//! or if the generic interpreter fails on a pair of operands.
+//! There, the evaluation of the integer form *falls back*: it returns `None`,
+//! and the row must be evaluated by the generic interpreter instead.
 
 use crate::{
     function::opcode::OpCode,
     value::{DataValue, ValueRef},
 };
 
-/// One instruction of an [IntegerProgram]; a constant carries its value.
+/// One instruction of an [IntegerProgram].
+///
+/// A constant instruction contains the constant's value.
 #[derive(Debug, Clone, Copy)]
 enum IntOp {
     /// Pushes a constant.
     Constant(i64),
-    /// Pushes a row input.
+    /// Pushes the input with the given index.
     Input(u16),
-    /// Pops two values of one kind; pushes whether they are equal.
+    /// Pops two values of one kind and pushes whether they are equal.
     Equal,
-    /// Pops two integers; pushes whether the first is smaller.
+    /// Pops two integers and pushes whether the first is smaller.
     Less,
-    /// Pops two integers; pushes whether the first is smaller or equal.
+    /// Pops two integers and pushes whether the first is smaller or equal.
     LessOrEqual,
-    /// Pops two integers; pushes whether the first is greater.
+    /// Pops two integers and pushes whether the first is greater.
     Greater,
-    /// Pops two integers; pushes whether the first is greater or equal.
+    /// Pops two integers and pushes whether the first is greater or equal.
     GreaterOrEqual,
-    /// Pops two integers; pushes their checked sum.
+    /// Pops two integers and pushes their checked sum.
     Add,
-    /// Pops two integers; pushes their checked difference.
+    /// Pops two integers and pushes their checked difference.
     Subtract,
-    /// Pops two integers; pushes their checked product.
+    /// Pops two integers and pushes their checked product.
     Multiply,
-    /// Pops an integer; pushes its checked negation.
+    /// Pops an integer and pushes its checked negation.
     Negate,
-    /// Pops two values; pushes their conjunction.
+    /// Pops two values and pushes the conjunction of their effective boolean values.
     And,
-    /// Pops two values; pushes their disjunction.
+    /// Pops two values and pushes the disjunction of their effective boolean values.
     Or,
-    /// Pops a value; pushes its negated truth.
+    /// Pops a value and pushes the negation of its effective boolean value.
     Not,
 }
 
@@ -61,7 +66,7 @@ pub(crate) enum IntegerValue {
 }
 
 impl IntegerValue {
-    /// Returns the effective boolean value; an integer is false exactly at zero.
+    /// Returns the effective boolean value, which for an integer is false exactly at zero.
     fn truth(self) -> bool {
         match self {
             IntegerValue::Integer(value) => value != 0,
@@ -69,8 +74,10 @@ impl IntegerValue {
         }
     }
 
-    /// Returns the integer, or `None` for a boolean,
-    /// whose use as a number is an error generically and a fallback here.
+    /// Returns the integer, or `None` for a boolean.
+    ///
+    /// The generic interpreter fails on a boolean used as a number,
+    /// so the integer form falls back.
     fn integer(self) -> Option<i64> {
         match self {
             IntegerValue::Integer(value) => Some(value),
@@ -79,20 +86,22 @@ impl IntegerValue {
     }
 }
 
-/// The integer form of a stack program; see the module documentation.
+/// The integer form of a stack program, which evaluates on 64-bit integers.
 #[derive(Debug, Clone)]
 pub(crate) struct IntegerProgram {
     /// The instructions, in evaluation order.
     operations: Vec<IntOp>,
-    /// The number of row inputs the program reads.
+    /// The number of inputs that the program reads from a row.
     inputs: usize,
 }
 
 impl IntegerProgram {
-    /// Compiles the integer form,
-    /// or `None` if an instruction or a constant lies outside the integer fragment.
+    /// Compiles the integer form of the program with the given instructions, constants
+    /// and number of inputs.
     ///
-    /// Division is outside: exact integers divide into decimals.
+    /// Returns `None` if an instruction or a constant lies outside the integer fragment.
+    /// Division lies outside it,
+    /// since the quotient of two integers is an exact number that may have a fraction.
     pub(crate) fn compile(
         operations: &[OpCode],
         constants: &[DataValue],
@@ -127,10 +136,12 @@ impl IntegerProgram {
         Some(Self { operations, inputs })
     }
 
-    /// Evaluates the program over one row of integers.
+    /// Evaluates the program on one row of integers, and returns its result.
     ///
-    /// `None` is the fallback: the row must be re-run on the generic interpreter,
-    /// because an intermediate outgrew `i64` or an operand pair lies outside the fragment.
+    /// `stack` is cleared first, so that one stack can serve many evaluations.
+    /// Returns `None` if the evaluation falls back,
+    /// because an intermediate result outgrew `i64` or a pair of operands lies outside the
+    /// fragment.
     pub(crate) fn evaluate(
         &self,
         stack: &mut Vec<IntegerValue>,
@@ -152,7 +163,8 @@ impl IntegerProgram {
                         (IntegerValue::Boolean(l), IntegerValue::Boolean(r)) => {
                             IntegerValue::Boolean(l == r)
                         }
-                        // A comparison across the kinds is an error generically.
+                        // An integer and a boolean are distinct terms but incomparable values,
+                        // so the generic interpreter decides.
                         _ => return None,
                     }
                 }
@@ -186,8 +198,10 @@ impl IntegerProgram {
         Some(stack.pop().expect("a validated program leaves one result"))
     }
 
-    /// Evaluates the program as a condition;
-    /// `None` is the fallback, as for [evaluate](Self::evaluate).
+    /// Evaluates the program as a condition,
+    /// and returns the effective boolean value of its result.
+    ///
+    /// Returns `None` if the evaluation falls back, as for [evaluate](Self::evaluate).
     pub(crate) fn filter(&self, stack: &mut Vec<IntegerValue>, inputs: &[i64]) -> Option<bool> {
         self.evaluate(stack, inputs).map(IntegerValue::truth)
     }
@@ -200,7 +214,8 @@ fn pop_pair(stack: &mut Vec<IntegerValue>) -> (IntegerValue, IntegerValue) {
     (left, right)
 }
 
-/// Applies an integer comparison; `None` on a boolean operand.
+/// Applies an integer comparison to the two operands on top of the stack,
+/// or returns `None` for a boolean operand.
 fn comparison(
     stack: &mut Vec<IntegerValue>,
     predicate: impl FnOnce(i64, i64) -> bool,
@@ -212,7 +227,8 @@ fn comparison(
     )))
 }
 
-/// Applies checked integer arithmetic; `None` on overflow or a boolean operand.
+/// Applies checked integer arithmetic to the two operands on top of the stack,
+/// or returns `None` on overflow or for a boolean operand.
 fn arithmetic(
     stack: &mut Vec<IntegerValue>,
     operation: impl FnOnce(i64, i64) -> Option<i64>,

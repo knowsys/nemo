@@ -1,5 +1,5 @@
-//! The query algebra behind imports:
-//! what a query's shape allows, and the places bindings and conditions enter it.
+//! Analyses of a query's algebra:
+//! what its shape allows, and where bindings and filters are added to it.
 
 use std::collections::HashSet;
 
@@ -11,31 +11,36 @@ use spargebra::{
 
 use super::SparqlQuery;
 
-/// What may be pushed into a query, decided from its algebra.
+/// The shape of a query, which says whether and where bindings and filters can be added to it.
 ///
-/// A `VALUES` block or a `FILTER` entering directly under the outermost projection
+/// A `VALUES` block or a `FILTER` added directly under the outermost projection
 /// selects among the query's final solutions.
-/// That is sound if the modifiers above the projection commute with selection
-/// (`DISTINCT`, `REDUCED` and `ORDER BY` do) and the solutions are one determined set.
-/// A `LIMIT` or `OFFSET` bounds the *whole* result,
-/// so a selection per request changes what the query means,
-/// and a `LIMIT` without `ORDER BY` is a nondeterministic choice
-/// that no union of restricted choices reproduces.
-/// A nondeterministic function or a `SAMPLE` aggregate has the same problem.
-/// Such queries are opaque: fetched whole, once, and never restricted or merged.
+/// That is sound if the modifiers above the projection commute with selection,
+/// as `DISTINCT`, `REDUCED` and `ORDER BY` do, and if the solutions are one determined set.
+/// - A `LIMIT` or `OFFSET` bounds the *whole* result,
+///   so a selection in each request changes what the query means.
+/// - A `LIMIT` without `ORDER BY` is a nondeterministic choice,
+///   which no union of restricted choices reproduces.
+/// - A nondeterministic function or a `SAMPLE` aggregate has the same problem.
+///
+/// Such queries are [opaque](Self::Opaque): they can be neither restricted nor merged.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum QueryShape {
-    /// A `SELECT` over a plain group pattern, which inlines into a merged query.
+    /// A `SELECT` over a plain group pattern, which can be inlined into a merged query.
     ///
-    /// It has no aggregation, no subquery, no slice, and no part that binds only some solutions.
+    /// It has no aggregation, no subquery, no `LIMIT` or `OFFSET`,
+    /// and no part that binds only some solutions.
     Pattern,
-    /// Aggregation or a subquery inside: bindings and conditions enter
-    /// above what the query computes, and a merge carries it whole, as
-    /// a subquery.
-    Complex,
-    /// No selection on the final solutions reproduces a restricted request.
+    /// A query with an aggregation, a subquery, or a part that binds only some solutions,
+    /// such as an `OPTIONAL`, a `UNION` or a `MINUS`.
     ///
-    /// The reason names the construct.
+    /// Bindings and filters are added above what the query computes,
+    /// and a merge includes the whole query as a subquery.
+    Complex,
+    /// A query for which no selection on the final solutions gives the result of a restricted
+    /// request.
+    ///
+    /// The string names the construct that makes the query opaque.
     Opaque(String),
 }
 
@@ -50,7 +55,7 @@ pub(super) fn shape(pattern: &GraphPattern) -> QueryShape {
     }
 }
 
-/// Returns why a query is opaque, if it is.
+/// Returns the construct that makes a query opaque, or `None` if the query is not opaque.
 fn opaque(pattern: &GraphPattern) -> Option<String> {
     let mut reason = None;
     visit_patterns(pattern, &mut |node| {
@@ -113,7 +118,7 @@ pub(super) fn strip_modifiers(pattern: &GraphPattern) -> &GraphPattern {
     }
 }
 
-/// Returns whether a `SELECT` query's pattern groups or holds a subquery
+/// Returns whether a `SELECT` query's pattern groups or has a subquery
 /// under its outermost projection.
 pub(super) fn computes_in_full(pattern: &GraphPattern) -> bool {
     let inner = match strip_modifiers(pattern) {
@@ -130,11 +135,11 @@ pub(super) fn computes_in_full(pattern: &GraphPattern) -> bool {
     found
 }
 
-/// Returns whether a pattern holds, anywhere inside,
-/// a projection or an aggregation (a subquery or a grouping),
-/// or a part whose variables only some solutions bind (an `OPTIONAL`, a `UNION`, a `MINUS`).
+/// Returns whether a pattern contains, anywhere inside, a subquery, a grouping,
+/// or a part whose variables only some solutions bind,
+/// such as an `OPTIONAL`, a `UNION` or a `MINUS`.
 ///
-/// A term substituted into such a part, or a variable shared into it,
+/// Substituting a term into such a part, or sharing a variable with it,
 /// would change what the query means,
 /// so the whole query enters a merge as a subquery instead.
 fn nests(pattern: &GraphPattern) -> bool {
@@ -154,15 +159,16 @@ fn nests(pattern: &GraphPattern) -> bool {
 
 /// Applies a rewrite directly under the outermost projection, keeping the modifiers above it.
 ///
-/// The rewrite applies under the `ORDER BY` the algebra keeps there,
-/// and under the filters at the top of the pattern,
-/// which a selection commutes with and whose `NOT EXISTS` forms must see what a `VALUES` block
-/// binds.
+/// The rewrite applies under the `ORDER BY` that the algebra keeps there,
+/// and under the filters at the top of the pattern.
+/// A selection commutes with these filters,
+/// and their `NOT EXISTS` forms must see what a `VALUES` block binds.
 /// A pattern without a projection is rewritten whole.
 pub(super) fn under_projection(
     pattern: GraphPattern,
     rewrite: impl FnOnce(GraphPattern) -> GraphPattern,
 ) -> GraphPattern {
+    /// Applies a rewrite under the filters at the top of a pattern.
     fn under_filters(
         pattern: GraphPattern,
         rewrite: impl FnOnce(GraphPattern) -> GraphPattern,
@@ -211,24 +217,24 @@ pub(super) fn under_projection(
 
 /// One `VALUES` block: rows of values over some of a query's projected columns.
 ///
-/// Each value goes out as its [ground terms](SparqlQuery::ground_terms),
+/// Each value is sent as its [ground terms](SparqlQuery::ground_terms),
 /// which the endpoint matches by its own notion of equal terms.
-/// A [SparqlReader](super::SparqlReader) told the block keeps only the solutions that match
-/// a row as Nemo compares values.
+/// A [SparqlReader](super::SparqlReader) given the block
+/// ([with_bindings](super::SparqlReader::with_bindings)) keeps only the solutions that match a
+/// row as Nemo compares values.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ValuesBlock {
-    /// The projected columns the rows bind, by position.
+    /// The positions of the projected columns that the rows bind.
     pub positions: Vec<usize>,
     /// The rows, one value per position.
     pub rows: Vec<Vec<DataValue>>,
 }
 
 impl ValuesBlock {
-    /// Returns the block as a pattern over the query's projected variables:
-    /// per row, one row for each combination of its values' ground terms,
-    /// one row for a row without integers, and `2^k` rows for a row with `k` integers.
-    /// A rendered query too long for the endpoint is split like any other.
+    /// Returns the block as a `VALUES` pattern over the query's projected variables.
     ///
+    /// Each row becomes one row for each combination of its values' ground terms:
+    /// one row for a row without integers, and `2^k` rows for a row with `k` integers.
     /// A row with a value that has no ground term, such as a null, is left out.
     pub(super) fn pattern(&self, variables: &[String]) -> GraphPattern {
         let mut bindings: Vec<Vec<Option<GroundTerm>>> = Vec::new();
@@ -260,10 +266,12 @@ impl ValuesBlock {
     }
 }
 
-/// Returns the variables every solution of a pattern binds:
-/// what its mandatory parts match,
-/// not what an `OPTIONAL`, one `UNION` branch, a `BIND` or a `VALUES` row may leave unbound.
+/// Returns the variables that every solution of a pattern binds.
+///
+/// They are the variables that its mandatory parts match, and not those that an `OPTIONAL`,
+/// one `UNION` branch, a `BIND` or a `VALUES` row may leave unbound.
 pub(super) fn always_bound(pattern: &GraphPattern) -> HashSet<String> {
+    /// Returns the variable in a term position, if there is one.
     fn term_variable(term: &TermPattern) -> Option<String> {
         match term {
             TermPattern::Variable(variable) => Some(variable.as_str().to_owned()),
@@ -342,11 +350,12 @@ pub(super) fn always_bound(pattern: &GraphPattern) -> HashSet<String> {
     }
 }
 
-/// Returns the variables every solution of a query's result binds:
-/// those its pattern always binds, and those the filters at its top require bound.
+/// Returns the variables that every solution of a query's result binds.
 ///
-/// Only the result has these filters applied: a block joined in under them, as
-/// [under_projection] places one, still meets solutions that leave such a variable unbound.
+/// They are the variables that its pattern always binds,
+/// and those that the filters at its top require to be bound.
+/// Only the result has passed these filters, so a block joined in under them,
+/// where [under_projection] places one, still meets solutions that leave such a variable unbound.
 pub(super) fn bound_in_results(pattern: &GraphPattern) -> HashSet<String> {
     match pattern {
         GraphPattern::Project { inner, .. }
@@ -362,7 +371,7 @@ pub(super) fn bound_in_results(pattern: &GraphPattern) -> HashSet<String> {
     }
 }
 
-/// Returns the variables a filter condition requires bound:
+/// Returns the variables that a filter condition requires to be bound:
 /// those of its `BOUND` conjuncts.
 fn required_bound(expression: &Expression) -> Vec<String> {
     match expression {
@@ -376,10 +385,12 @@ fn required_bound(expression: &Expression) -> Vec<String> {
     }
 }
 
-/// Returns the variables some solution of a pattern may bind:
-/// what any part of it matches or defines,
-/// not what only its filters mention, which no solution binds.
+/// Returns the variables that some solution of a pattern may bind.
+///
+/// They are the variables that any part of it matches or defines,
+/// and not those that only its filters mention, which no solution binds.
 pub(super) fn possibly_bound(pattern: &GraphPattern) -> HashSet<String> {
+    /// Returns the variable in a term position, if there is one.
     fn term_variable(term: &TermPattern) -> Option<String> {
         match term {
             TermPattern::Variable(variable) => Some(variable.as_str().to_owned()),
@@ -466,11 +477,11 @@ pub(super) fn possibly_bound(pattern: &GraphPattern) -> HashSet<String> {
     }
 }
 
-/// Returns a pattern as a group of its own, a subquery projecting every variable in scope.
+/// Returns a pattern as a group of its own: a subquery that projects every variable in scope.
 ///
-/// A pattern joined with the group then applies to its solutions as a whole,
-/// instead of merging into it:
-/// a filter written into the same group would apply after the join.
+/// A pattern joined with the group then applies to the group's solutions as a whole,
+/// instead of merging into it.
+/// A filter written into the same group would apply only after the join.
 pub(super) fn grouped(pattern: GraphPattern) -> GraphPattern {
     let mut variables: Vec<Variable> = Vec::new();
     pattern.on_in_scope_variable(|variable| {
@@ -484,8 +495,8 @@ pub(super) fn grouped(pattern: GraphPattern) -> GraphPattern {
     }
 }
 
-/// Visits every pattern node, the root first, `EXISTS` patterns inside
-/// expressions included.
+/// Visits every pattern node, the root first,
+/// including the patterns of `EXISTS` forms inside expressions.
 pub(super) fn visit_patterns<'a>(
     pattern: &'a GraphPattern,
     visit: &mut impl FnMut(&'a GraphPattern),
@@ -559,8 +570,8 @@ fn visit_expression_patterns<'a>(
     });
 }
 
-/// Visits every expression node of a pattern, patterns inside `EXISTS`
-/// forms included.
+/// Visits every expression node of a pattern,
+/// including those in the patterns of `EXISTS` forms.
 pub(super) fn visit_expressions<'a>(
     pattern: &'a GraphPattern,
     visit: &mut impl FnMut(&'a Expression),

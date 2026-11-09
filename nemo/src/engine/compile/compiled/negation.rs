@@ -1,4 +1,4 @@
-//! Negated body atoms, prepared for subtraction.
+//! Compiled negated body atoms.
 
 use nemo_physical::management::TableId;
 
@@ -6,33 +6,35 @@ use crate::engine::compile::compiled::RuleFilter;
 
 /// One negated body atom.
 ///
-/// A body match is dropped if the table holds a row agreeing on the shared columns and passing
-/// the filters, with the private columns existentially quantified inside the negation.
+/// A body match is dropped if the table has a row that agrees with it on the shared columns
+/// and satisfies the filters.
+/// The private columns of that row may have any value.
 #[derive(Debug)]
 pub(crate) struct NegatedAtom {
     /// The predicate's table.
     pub(crate) table: TableId,
-    /// The binding of each column.
+    /// Whether each stored column is shared or private.
     pub(crate) columns: Vec<NegatedColumn>,
-    /// The filters over this atom's own columns (constants, repetitions).
+    /// The filters over the atom's own columns, for constants and repeated variables.
     ///
-    /// Program inputs index into `columns`.
+    /// Their inputs are positions in [columns](Self::columns).
     pub(crate) filters: Vec<RuleFilter>,
 }
 
 /// One column of a negated atom.
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum NegatedColumn {
-    /// Bound to one of the rule's columns.
+    /// The column must equal this rule column.
     Shared(usize),
-    /// Private to the atom, existential inside the negation.
+    /// The column is private to the atom, so any value matches it.
     Private,
 }
 
 impl NegatedAtom {
     /// Returns whether no column is shared.
     ///
-    /// Such an atom is an emptiness guard, checked once per stratum and never subtracted.
+    /// Such an atom is a *guard*: it drops every body match if its table has a row
+    /// that satisfies the filters, and none otherwise.
     pub(crate) fn is_guard(&self) -> bool {
         !self
             .columns

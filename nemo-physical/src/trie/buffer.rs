@@ -1,6 +1,7 @@
-//! The row buffer: temporary storage for rows before they become a trie,
-//! with its [sorted](SortedRowBuffer) and [segmented](SegmentedRowBuffer) forms
-//! and the [runs](Run) a trie is built from.
+//! The row buffer, which stores rows before they become a trie.
+//!
+//! A row buffer also has a [sorted](SortedRowBuffer) and a [segmented](SegmentedRowBuffer)
+//! form, and the [runs](Run) that a trie is built from are borrowed from these.
 
 mod run;
 mod segmented;
@@ -43,7 +44,7 @@ impl RowBuffer {
         self.rows
     }
 
-    /// Returns whether the buffer holds no rows.
+    /// Returns whether the buffer has no rows.
     pub fn is_empty(&self) -> bool {
         self.rows == 0
     }
@@ -97,18 +98,20 @@ impl RowBuffer {
         SortedRowBuffer::new(self)
     }
 
-    /// Returns the rows as sorted without sorting them:
-    /// the caller produced them in storage order, which debug builds check.
+    /// Returns the rows as a sorted buffer, without sorting them.
+    ///
+    /// The rows must already be in storage order, which debug builds check.
     pub(crate) fn assume_sorted(self) -> SortedRowBuffer {
         debug_assert!(self.is_sorted(), "the rows were produced in storage order");
 
         SortedRowBuffer::new(self)
     }
 
-    /// Returns a buffer holding this buffer's columns in a new order,
-    /// sorted in that order: output column `target` is input column `order[target]`.
+    /// Returns a sorted buffer of this buffer's rows, with their columns in a new order.
     ///
+    /// Column `target` of the result is column `order[target]` of this buffer.
     /// `order` must be a permutation of the column indexes.
+    /// Panics if `order` does not have one entry per column.
     pub(crate) fn reordered_sorted(&self, order: &[usize]) -> SortedRowBuffer {
         assert_eq!(order.len(), self.arity, "the order must cover every column");
 
@@ -144,8 +147,8 @@ impl RowBuffer {
 
     /// Sorts row-major values of the given arity into storage order, in place.
     ///
-    /// Rows of up to eight values sort directly, as arrays.
-    /// Longer rows sort through a permutation of their indexes,
+    /// Rows of up to eight values are sorted directly, as arrays.
+    /// Longer rows are sorted through a permutation of their indexes,
     /// which moves each row once instead of at every swap.
     fn sort_rows(values: &mut [StorageValue], arity: usize) {
         match arity {
@@ -163,7 +166,7 @@ impl RowBuffer {
     }
 }
 
-/// Sorts row-major values whose rows hold `N` values, as one array per row.
+/// Sorts row-major values with `N` values per row, as one array per row.
 fn sort_arrays<const N: usize>(values: &mut [StorageValue]) {
     let (rows, rest) = values.as_chunks_mut::<N>();
     debug_assert!(rest.is_empty(), "the values are whole rows");
@@ -171,8 +174,8 @@ fn sort_arrays<const N: usize>(values: &mut [StorageValue]) {
     rows.sort_unstable();
 }
 
-/// Sorts row-major values of the given arity through a permutation of their indexes,
-/// applied in one pass over scratch.
+/// Sorts row-major values of the given arity by sorting a permutation of the row indexes,
+/// and then copies the rows into place in one pass through a scratch buffer.
 fn sort_by_permutation(values: &mut [StorageValue], arity: usize) {
     let rows = values.len() / arity;
     if rows <= 1 {
@@ -199,9 +202,10 @@ mod tests {
 
     use crate::testing::{assert_panics, int, int_buffer};
 
-    /// A buffer holding the columns in a new order, rows as they are:
-    /// output column `target` is input column `order[target]`,
-    /// what the sorted reordering is checked against.
+    /// Returns a buffer of the rows with their columns in a new order, without sorting them.
+    ///
+    /// Column `target` of the result is column `order[target]` of `buffer`.
+    /// The sorted reordering is checked against it.
     fn reorder(buffer: &RowBuffer, order: &[usize]) -> RowBuffer {
         let mut reordered = RowBuffer::new(buffer.arity);
         for index in 0..buffer.rows {
@@ -212,6 +216,7 @@ mod tests {
         reordered
     }
 
+    /// Pushing or appending rows of another arity panics.
     #[test]
     fn rows_must_have_the_buffer_arity() {
         let mut buffer = int_buffer(2, &[&[1, 2]]);
@@ -222,6 +227,7 @@ mod tests {
         assert_panics("buffer arity", || buffer.append(&other));
     }
 
+    /// Sorting orders rows by tag first and by payload second.
     #[test]
     fn sorting_orders_rows_by_tag_then_payload() {
         let mut buffer = RowBuffer::new(1);
@@ -243,6 +249,7 @@ mod tests {
         );
     }
 
+    /// Rows with an equal first column are ordered by their later columns.
     #[test]
     fn sorting_breaks_ties_by_later_columns() {
         let sorted = int_buffer(2, &[&[1, 9], &[1, 2], &[0, 7]]).into_sorted();
@@ -252,9 +259,10 @@ mod tests {
         );
     }
 
+    /// Rows of every arity are sorted as vectors of their values would be.
     #[test]
     fn rows_of_every_arity_sort_like_vectors() {
-        // Arities on both sides of the largest one sorted as arrays.
+        // The arities lie on both sides of the largest arity that is sorted as arrays.
         let mut rng = StdRng::seed_from_u64(5);
         for arity in 1..=10 {
             let rows: Vec<Vec<StorageValue>> = (0..rng.gen_range(0..60))
@@ -276,6 +284,7 @@ mod tests {
         }
     }
 
+    /// [is_sorted](RowBuffer::is_sorted) distinguishes sorted rows from unsorted ones.
     #[test]
     fn sortedness_is_found_by_a_scan() {
         let mut buffer = int_buffer(2, &[&[1, 2], &[2, 1]]);
@@ -288,6 +297,7 @@ mod tests {
         assert!(sorted.rows().is_sorted());
     }
 
+    /// A sorted reordering equals reordering the columns and then sorting.
     #[test]
     fn reordered_sorted_matches_reorder_then_sort() {
         let buffer = int_buffer(
@@ -307,6 +317,7 @@ mod tests {
         }
     }
 
+    /// A nullary buffer counts its rows.
     #[test]
     fn nullary_buffers_count_rows() {
         let mut buffer = RowBuffer::new(0);

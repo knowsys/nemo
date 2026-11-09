@@ -2,7 +2,7 @@
 //!
 //! A layer intersects the input columns mapped to it.
 //! Each column is read by a cursor restricted to the children of the node
-//! that the values bound at the shallower layers lead to,
+//! that the values chosen at the shallower layers lead to,
 //! and the layer's values are those in the range of every cursor.
 //! The column of an input stored in several blocks is read by the union of the blocks' cursors.
 
@@ -25,24 +25,24 @@ use crate::{
 /// The intersection is monomorphized per kind of cursor,
 /// and the positions of the cursors are its whole state, exhaustion included.
 /// Every node of a trie has children, so no cursor starts on an empty range
-/// unless it is clipped:
-/// emptiness is checked once per restart, not per value.
+/// unless it is clipped.
+/// So emptiness is checked once per restart, not per value.
 #[derive(Debug)]
 pub(crate) struct Intersection<'a, C: SeekCursor> {
     /// The intersected cursors, one per input column.
     cursors: BumpVec<'a, InputCursor<'a, C>>,
     /// The cursor the leapfrog moves next.
     active: usize,
-    /// Whether the next step must rewind the cursors first;
-    /// set when the layer is entered anew.
+    /// Whether the next step must rewind the cursors first,
+    /// which is set when the layer is entered again.
     fresh: bool,
 }
 
 impl<'a, C: SeekCursor> Intersection<'a, C> {
     /// Creates the intersection of the given cursors.
     ///
-    /// There is at least one cursor, and none over an empty column:
-    /// a layer over an empty column is [AnyLayer::Empty] instead,
+    /// There must be at least one cursor, and none over an empty column.
+    /// A layer over an empty column is [AnyLayer::Empty] instead,
     /// which keeps every range a cursor sees nonempty.
     pub(crate) fn new(cursors: BumpVec<'a, InputCursor<'a, C>>) -> Self {
         debug_assert!(!cursors.is_empty(), "an intersection needs cursors");
@@ -82,24 +82,25 @@ impl<'a, C: SeekCursor> Intersection<'a, C> {
     }
 
     /// Marks the intersection for a restart at the next step,
-    /// when its layer is entered anew.
+    /// when its layer is entered again.
     #[inline]
     pub(crate) fn mark_for_reset(&mut self) {
         self.fresh = true;
     }
 
-    /// Calls `found` with each block of a cursor's input that holds the value the intersection found,
-    /// and the position of the value in the block's column;
-    /// valid after a value was found.
+    /// Calls `found` with each block of a cursor's input that contains the value found,
+    /// and the position of the value in the block's column.
+    ///
+    /// It may be called only after the intersection found a value.
     #[inline]
     pub(crate) fn for_each_match(&self, cursor: usize, found: impl FnMut(usize, usize)) {
         self.cursors[cursor].for_each_match(found);
     }
 
-    /// Probes for exactly `target`, and returns it if every cursor holds it,
+    /// Probes for exactly `target`, and returns it if every cursor has it,
     /// leaving the cursors on it.
     ///
-    /// The probe consumes a pending restart either way.
+    /// The probe performs a pending restart in any case.
     /// Cursors only move forward, so a layer is probed at most once per descent.
     #[inline]
     pub(crate) fn seek_exact(&mut self, target: C::Value) -> Option<C::Value> {
@@ -152,7 +153,7 @@ impl<'a, C: SeekCursor> Intersection<'a, C> {
         }
     }
 
-    /// Rewinds every cursor whose restart is pending, and returns whether one was.
+    /// Rewinds every cursor if a restart is pending, and returns whether one was.
     #[inline]
     fn restart(&mut self) -> bool {
         if !self.fresh {
@@ -173,52 +174,55 @@ impl<'a, C: SeekCursor> Intersection<'a, C> {
 /// with whatever the layout of its columns needs to produce its values.
 ///
 /// The trait lets the join's driver be written once and monomorphized per kind of layer.
-/// The uniform layers run over raw payloads:
-/// they never widen a payload or touch a tag,
+/// The uniform layers work on raw payloads.
+/// They never widen a payload or read a tag,
 /// and [stamp](Self::stamp) makes a storage value only for an emitted row.
 pub(crate) trait JoinLayer<'a> {
-    /// The values the layer's leapfrog runs over.
+    /// The values the layer's intersection works on.
     type Value: Copy + PartialEq;
 
     /// Advances to the layer's next value and returns it,
     /// or returns `None` if the layer is exhausted.
     fn advance(&mut self) -> Option<Self::Value>;
 
-    /// Probes the layer for exactly the given value, and returns it if the layer holds it.
+    /// Probes the layer for exactly the given value, and returns it if the layer has it.
     ///
-    /// A bound layer descends this way, since its value is computed rather than enumerated.
+    /// The driver enters a bound layer this way, since its value is given, not enumerated.
     fn seek_exact(&mut self, value: StorageValue) -> Option<Self::Value>;
 
     /// Returns the storage value of one of the layer's values.
     fn stamp(&self, value: Self::Value) -> StorageValue;
 
-    /// Marks the layer for a restart, when it is entered anew.
+    /// Marks the layer for a restart, when it is entered again.
     fn mark_for_reset(&mut self);
 
     /// Withdraws the ranges of every block of a cursor's input,
-    /// before the blocks holding a value are given new ones.
+    /// before the blocks that contain a value are given new ones.
     fn clear_ranges(&mut self, cursor: usize);
 
     /// Restricts the cursor of one block of a cursor's input to a range of its column.
     fn set_range(&mut self, cursor: usize, block: usize, range: Range<usize>);
 
     /// Clips one of the layer's cursors to the values from `low` up to `high`, excluded,
-    /// in storage order; `None` leaves a side unbounded.
+    /// in storage order.
+    ///
+    /// `None` leaves a side unbounded.
     fn clip(&mut self, cursor: usize, low: Option<StorageValue>, high: Option<StorageValue>);
 
     /// Returns the number of cursors the layer intersects.
     fn cursors(&self) -> usize;
 
-    /// Calls `found` with each block of a cursor's input that holds the value the layer found,
-    /// and the position of the value in the block's column;
-    /// valid after a value was found.
+    /// Calls `found` with each block of a cursor's input that contains the value found,
+    /// and the position of the value in the block's column.
+    ///
+    /// It may be called only after the layer found a value.
     fn for_each_match(&self, cursor: usize, found: impl FnMut(usize, usize));
 }
 
-/// A layer over columns whose values share one tag, all of one payload width.
+/// A layer over columns whose values all share one tag, and which have one payload width.
 ///
-/// The leapfrog runs over the raw payloads,
-/// and the tag is stamped onto the emitted rows only.
+/// The intersection works on the raw payloads,
+/// and the tag is added to the emitted rows only.
 #[derive(Debug)]
 pub(crate) struct UniformLayer<'a, P: Payload> {
     /// The intersection of the payloads.
@@ -269,8 +273,8 @@ impl<'a, P: Payload> JoinLayer<'a> for UniformLayer<'a, P> {
 
     fn clip(&mut self, cursor: usize, low: Option<StorageValue>, high: Option<StorageValue>) {
         // A bound of another tag lies below or above every value of the layer,
-        // and a payload beyond the width lies above them.
-        // The side is then unbounded, or the range holds nothing,
+        // and a payload beyond the width lies above all of them.
+        // Such a bound either leaves its side unbounded or empties the range,
         // which a high bound at the smallest payload expresses.
         let nothing = P::narrow(0);
         let mut clip = Clip {
@@ -316,26 +320,27 @@ impl<'a, P: Payload> JoinLayer<'a> for UniformLayer<'a, P> {
 
 /// A layer over columns of any layout, dispatching on the layout per call.
 ///
-/// A join whose layers are not all 32-bit or all 64-bit runs on these.
+/// A join with hooks runs on these,
+/// and so does a join whose layers are neither all 32-bit nor all 64-bit uniform layers.
 #[derive(Debug)]
 pub(crate) enum AnyLayer<'a> {
     /// Columns whose values share one tag, all with 32-bit payloads.
     U32(UniformLayer<'a, u32>),
     /// Columns whose values share one tag, all with 64-bit payloads.
     U64(UniformLayer<'a, u64>),
-    /// Any other layout: the leapfrog compares full values.
+    /// Any other layout, where the intersection compares full values.
     Tagged(Intersection<'a, TaggedCursor<'a>>),
-    /// A layer that provably holds no value:
-    /// some input column is empty, or the tags of the columns differ.
+    /// A layer that provably has no value,
+    /// because some input column is empty or the shared tags of the columns differ.
     Empty,
 }
 
 impl<'a> AnyLayer<'a> {
-    /// Returns the layer over the given input columns,
-    /// each given as its column in every block of its input, in block order.
+    /// Returns the layer over the given input columns.
     ///
-    /// The layout of a column holds for every range of it,
-    /// so the kind of a layer holds for its lifetime.
+    /// Each input column is given as its column in every block of its input, in block order.
+    /// The layout of a column applies to every range of it,
+    /// so the kind of a layer stays fixed for its lifetime.
     /// A layer over an empty input column is empty,
     /// which keeps every range an intersection starts on nonempty.
     pub(crate) fn build(columns: &[&[ColumnView<'a>]], bump: &'a Bump) -> Self {
@@ -394,7 +399,7 @@ impl<'a> AnyLayer<'a> {
         }
     }
 
-    /// Returns whether the layer provably holds no value.
+    /// Returns whether the layer provably has no value.
     pub(crate) fn is_empty(&self) -> bool {
         matches!(self, AnyLayer::Empty)
     }
@@ -490,22 +495,24 @@ fn payload_cursor<P: Payload>(column: ColumnView<'_>) -> PayloadCursor<'_, P> {
     PayloadCursor::new(values)
 }
 
-/// The kind of layer a set of input columns makes.
+/// The kind of layer that a set of input columns forms.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum LayerKind {
-    /// Some input column is empty, or the tags of the input columns differ.
+    /// Some input column is empty, or the shared tags of the input columns differ.
     Empty,
     /// The values of every input column share one tag, and the columns share one width.
     Uniform(ColumnLayout),
-    /// Any other layout: the leapfrog compares full values.
+    /// Any other layout, where the intersection compares full values.
     Tagged,
 }
 
-/// Returns the kind of layer the input columns make, each given as its column in every block.
+/// Returns the kind of layer the input columns form,
+/// each given as its column in every block of its input.
 ///
-/// An input column is uniform if the columns of all its blocks with values
+/// An input column is uniform if the nonempty columns of all its blocks
 /// share one tag and one width.
-/// Its blocks may differ even if each is uniform, and the union then holds mixed values.
+/// Its blocks may each be uniform but differ from each other,
+/// and then their union mixes values.
 fn classify(columns: &[&[ColumnView<'_>]]) -> LayerKind {
     let mut shared: Option<ColumnLayout> = None;
     let mut same_tag = true;
@@ -604,6 +611,8 @@ mod tests {
         AnyLayer::build(&inputs, bump)
     }
 
+    /// A layer over an input of several blocks intersects like the merged column,
+    /// and ranges given to some blocks narrow the union to them.
     #[test]
     fn unions_of_blocks_intersect_like_their_merged_column() {
         let bump = Bump::new();
@@ -615,7 +624,7 @@ mod tests {
         assert!(matches!(layer, AnyLayer::U64(_)));
         assert_eq!(collect(&mut layer), ids(&[2, 4, 6]));
 
-        // The layer stands at 4 after two values; both blocks holding it descend.
+        // After two values, the layer is at 4, and both blocks that contain it report a match.
         layer.mark_for_reset();
         layer.advance();
         assert_eq!(layer.advance(), Some(StorageValue::term(4)));
@@ -637,10 +646,12 @@ mod tests {
         assert_eq!(collect(&mut layer), ids(&[2, 4]));
     }
 
+    /// An input whose blocks are uniform with different tags or widths
+    /// makes a layer that compares full values.
     #[test]
     fn unions_of_differently_tagged_blocks_compare_full_values() {
         let bump = Bump::new();
-        // One block of terms and one of integers: each is uniform, their union is not.
+        // One block of terms and one of integers. Each is uniform, but their union is not.
         let terms = [3u64, 5];
         let integers = [StorageValue::integer(7).payload];
         let blocks = [
@@ -683,6 +694,7 @@ mod tests {
         assert_eq!(collect(&mut layer), ids(&[1, 3, u64::from(u32::MAX) + 1]));
     }
 
+    /// A layer over three columns yields the values that all three have, again after a reset.
     #[test]
     fn intersections_leapfrog_multiple_columns() {
         let bump = Bump::new();
@@ -698,6 +710,7 @@ mod tests {
         assert_eq!(collect(&mut layer), ids(&[3, 5]));
     }
 
+    /// A layer over uniform 32-bit columns is a 32-bit uniform layer.
     #[test]
     fn u32_columns_use_the_u32_core() {
         let bump = Bump::new();
@@ -720,6 +733,7 @@ mod tests {
         assert_eq!(collect(&mut layer), ids(&[3, 5]));
     }
 
+    /// A layer over uniform columns of different tags is empty.
     #[test]
     fn mismatched_uniform_tags_are_provably_empty() {
         let bump = Bump::new();
@@ -738,6 +752,7 @@ mod tests {
         assert!(layer.is_empty());
     }
 
+    /// A layer over uniform columns of different widths compares full values.
     #[test]
     fn mixed_width_and_mixed_columns_fall_back_to_tagged() {
         let bump = Bump::new();
@@ -760,6 +775,7 @@ mod tests {
         assert_eq!(collect(&mut layer), ids(&[3, 5]));
     }
 
+    /// A layer over columns that mix tags intersects them across the tags.
     #[test]
     fn mixed_columns_intersect_across_tags() {
         let bump = Bump::new();
@@ -797,6 +813,7 @@ mod tests {
         );
     }
 
+    /// A layer with an empty input column yields no value.
     #[test]
     fn empty_columns_exhaust_immediately() {
         let bump = Bump::new();
@@ -806,6 +823,7 @@ mod tests {
         assert_eq!(layer.advance(), None);
     }
 
+    /// Ranges given to the cursors restrict the layer's values.
     #[test]
     fn ranges_restrict_the_intersection() {
         let bump = Bump::new();

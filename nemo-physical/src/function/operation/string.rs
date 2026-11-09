@@ -1,17 +1,14 @@
 //! String operations.
 //!
 //! A string operand is a plain string or a language-tagged string,
-//! and an operation that returns a part of its subject keeps the subject's tag.
-//! If an operation takes a second string, SPARQL's
-//! [argument compatibility](https://www.w3.org/TR/sparql12-query/#func-arg-compatibility) applies:
-//! the second is a plain string, or it carries the same tag as the subject.
+//! and the first string operand of an operation is its subject.
+//! Unless noted otherwise, an operation that returns the subject changed, or a part of it,
+//! keeps the subject's language tag.
 //!
 //! A character is a Unicode code point, as in
-//! [XPath](https://www.w3.org/TR/xpath-functions-31/#character-terminology):
-//! lengths and positions count code points, not grapheme clusters,
-//! and strings match code point by code point, without normalization.
-//! Case conversion follows Unicode's default mappings, whatever the language tag.
-//! Reversal, not a SPARQL function, keeps grapheme clusters whole.
+//! [XPath](https://www.w3.org/TR/xpath-functions-31/#character-terminology).
+//! Lengths and positions count code points, not grapheme clusters,
+//! and strings are matched code point by code point, without normalization.
 
 use unicode_segmentation::UnicodeSegmentation;
 
@@ -29,13 +26,15 @@ pub(super) fn text(value: ValueRef<'_>) -> Option<&str> {
     }
 }
 
-/// Returns the texts of a subject and a second string compatible with it,
-/// SPARQL's [argument compatibility](https://www.w3.org/TR/sparql12-query/#func-arg-compatibility):
-/// a plain second string, or one with the subject's language tag.
+/// Returns the texts of a subject and of a second string that is compatible with it,
+/// as SPARQL's
+/// [argument compatibility](https://www.w3.org/TR/sparql12-query/#func-arg-compatibility)
+/// requires.
 ///
-/// Any other kind of operand, or a tagged second string beside a plain subject,
-/// is a [TypeMismatch](EvaluationError::TypeMismatch);
-/// two tagged strings with different tags are [Malformed](EvaluationError::Malformed).
+/// The second string must be plain, or have the subject's language tag.
+/// Any other operand, or a tagged second string with a plain subject,
+/// is a [TypeMismatch](EvaluationError::TypeMismatch).
+/// Two tagged strings with different tags are [Malformed](EvaluationError::Malformed).
 fn compatible<'a>(
     subject: ValueRef<'a>,
     other: ValueRef<'a>,
@@ -55,7 +54,7 @@ fn compatible<'a>(
     Ok((subject_text, other_text))
 }
 
-/// Returns a text as a string of the subject's kind: tagged if the subject is.
+/// Returns a text as a string with the subject's language tag, if the subject has one.
 fn like(subject: ValueRef<'_>, text: String) -> StackValue<'static> {
     match subject {
         ValueRef::LanguageString(subject) => DataValue::language_string(text, subject.language())
@@ -79,12 +78,16 @@ pub(crate) fn length(value: ValueRef<'_>) -> StackValue<'static> {
 
 /// Converts a string to upper case,
 /// SPARQL's [`UCASE`](https://www.w3.org/TR/sparql12-query/#func-ucase).
+///
+/// The conversion follows Unicode's default mappings, whatever the language tag.
 pub(crate) fn upper_case(value: ValueRef<'_>) -> StackValue<'static> {
     transform(value, str::to_uppercase)
 }
 
 /// Converts a string to lower case,
 /// SPARQL's [`LCASE`](https://www.w3.org/TR/sparql12-query/#func-lcase).
+///
+/// The conversion follows Unicode's default mappings, whatever the language tag.
 pub(crate) fn lower_case(value: ValueRef<'_>) -> StackValue<'static> {
     transform(value, str::to_lowercase)
 }
@@ -92,12 +95,12 @@ pub(crate) fn lower_case(value: ValueRef<'_>) -> StackValue<'static> {
 /// Reverses a string by grapheme clusters,
 /// so that a combining mark stays on its base character.
 ///
-/// Not a SPARQL function.
+/// This is not a SPARQL function.
 pub(crate) fn reverse(value: ValueRef<'_>) -> StackValue<'static> {
     transform(value, |text| text.graphemes(true).rev().collect())
 }
 
-/// Applies a text function to a string, keeping its kind.
+/// Applies a text function to a string, keeping its language tag.
 fn transform(value: ValueRef<'_>, apply: impl FnOnce(&str) -> String) -> StackValue<'static> {
     match text(value) {
         Some(text) => like(value, apply(text)),
@@ -105,10 +108,10 @@ fn transform(value: ValueRef<'_>, apply: impl FnOnce(&str) -> String) -> StackVa
     }
 }
 
-/// Trims the whitespace of a string, Unicode's `White_Space` characters,
-/// with the given function: [str::trim], [str::trim_start] or [str::trim_end].
+/// Removes whitespace, Unicode's `White_Space` characters, from the ends of a string.
 ///
-/// Not a SPARQL function.
+/// `ends` is [str::trim], [str::trim_start] or [str::trim_end], and decides which ends.
+/// This is not a SPARQL function.
 pub(crate) fn trim(value: ValueRef<'_>, ends: impl FnOnce(&str) -> &str) -> StackValue<'static> {
     transform(value, |text| ends(text).to_owned())
 }
@@ -137,7 +140,7 @@ pub(crate) fn ends_with(subject: ValueRef<'_>, pattern: ValueRef<'_>) -> StackVa
     })
 }
 
-/// Applies a text predicate to a compatible pair of strings.
+/// Applies a text predicate to a subject and a [compatible] second string.
 fn predicate(
     subject: ValueRef<'_>,
     pattern: ValueRef<'_>,
@@ -151,7 +154,9 @@ fn predicate(
 
 /// Returns the part of a string before the first occurrence of another,
 /// SPARQL's [`STRBEFORE`](https://www.w3.org/TR/sparql12-query/#func-strbefore).
-/// If the other does not occur, the result is a plain empty string, whatever the subject's kind.
+///
+/// If the other string does not occur, the result is a plain empty string,
+/// even for a tagged subject.
 pub(crate) fn before(subject: ValueRef<'_>, pattern: ValueRef<'_>) -> StackValue<'static> {
     let (subject_text, pattern) = match compatible(subject, pattern) {
         Ok(texts) => texts,
@@ -166,7 +171,9 @@ pub(crate) fn before(subject: ValueRef<'_>, pattern: ValueRef<'_>) -> StackValue
 
 /// Returns the part of a string after the first occurrence of another,
 /// SPARQL's [`STRAFTER`](https://www.w3.org/TR/sparql12-query/#func-strafter).
-/// If the other does not occur, the result is a plain empty string, whatever the subject's kind.
+///
+/// If the other string does not occur, the result is a plain empty string,
+/// even for a tagged subject.
 pub(crate) fn after(subject: ValueRef<'_>, pattern: ValueRef<'_>) -> StackValue<'static> {
     let (subject_text, pattern) = match compatible(subject, pattern) {
         Ok(texts) => texts,
@@ -179,19 +186,21 @@ pub(crate) fn after(subject: ValueRef<'_>, pattern: ValueRef<'_>) -> StackValue<
     }
 }
 
-/// Returns the substring from a 1-based position to the end; see [substring_with].
+/// Returns the substring from a 1-based position to the end of the string,
+/// as [substring_with] does without a length.
 pub(crate) fn substring(subject: ValueRef<'_>, start: ValueRef<'_>) -> StackValue<'static> {
     window(subject, start, None)
 }
 
 /// Returns the substring of the characters at the 1-based positions
-/// from the start up to, excluding, the start plus the length,
-/// SPARQL's [`SUBSTR`](https://www.w3.org/TR/sparql12-query/#func-substr):
-/// XPath's [`fn:substring`](https://www.w3.org/TR/xpath-functions-31/#func-substring)
-/// over the integer positions SPARQL's signature admits.
+/// from `start` up to, but excluding, `start` plus `length`,
+/// SPARQL's [`SUBSTR`](https://www.w3.org/TR/sparql12-query/#func-substr).
 ///
-/// The range clamps to the string,
-/// so a start below 1 shortens the window rather than shifting it.
+/// This is XPath's
+/// [`fn:substring`](https://www.w3.org/TR/xpath-functions-31/#func-substring)
+/// restricted to the integer positions that SPARQL's signature allows.
+/// The positions are clamped to the string,
+/// so a start below 1 shortens the substring rather than shifting it.
 pub(crate) fn substring_with(
     subject: ValueRef<'_>,
     start: ValueRef<'_>,
@@ -200,7 +209,9 @@ pub(crate) fn substring_with(
     window(subject, start, Some(length))
 }
 
-/// Returns the substring of a window of positions, to the end or of a length.
+/// Returns the substring from `start` to the end, or of `length` characters if it is given.
+///
+/// A start or a length that is not an integer is a [TypeMismatch](EvaluationError::TypeMismatch).
 fn window(
     subject: ValueRef<'_>,
     start: ValueRef<'_>,
@@ -232,7 +243,7 @@ fn window(
     like(subject, taken)
 }
 
-/// Reads a position argument: an integer of any size, nothing else.
+/// Returns a position operand as a number if it is an integer of any size, and `None` otherwise.
 fn position(value: ValueRef<'_>) -> Option<NumberRef<'_>> {
     match value {
         ValueRef::Number(number) if number.is_integral() => Some(number),
@@ -240,12 +251,14 @@ fn position(value: ValueRef<'_>) -> Option<NumberRef<'_>> {
     }
 }
 
-/// Returns the end of a window, its start plus its length, saturated to 64 bits;
-/// a string is shorter than the range, so saturation selects the same characters.
+/// Returns the end of a substring, its start plus its length, saturated to 64 bits.
+///
+/// Every string is shorter than the 64-bit range, so saturation selects the same characters.
 fn window_end(start: NumberRef<'_>, length: NumberRef<'_>) -> Result<i64, EvaluationError> {
     match (start.to_i64(), length.to_i64()) {
         (Some(start), Some(length)) => Ok(start.saturating_add(length)),
-        // A wide start and length may still end within the string, so they add exactly.
+        // A wide start and a wide length may still end within the string,
+        // so they are added exactly.
         _ => match (start + length)?.as_ref() {
             ValueRef::Number(end) => Ok(saturated(end)),
             _ => unreachable!("a sum of integers is a number"),
@@ -264,8 +277,12 @@ fn saturated(value: NumberRef<'_>) -> i64 {
 }
 
 /// Returns the concatenation of strings,
-/// SPARQL's [`CONCAT`](https://www.w3.org/TR/sparql12-query/#func-concat):
-/// tagged if every operand carries the same tag, plain otherwise.
+/// SPARQL's [`CONCAT`](https://www.w3.org/TR/sparql12-query/#func-concat).
+///
+/// The result has the operands' language tag if they all have the same tag,
+/// and is a plain string otherwise.
+/// The first operand that is an error or not a string decides the result,
+/// its error or a [TypeMismatch](EvaluationError::TypeMismatch).
 pub(crate) fn concat(arguments: &[StackValue<'_>]) -> StackValue<'static> {
     let mut result = String::new();
     let mut tag: Option<Option<&str>> = None;
@@ -300,7 +317,7 @@ pub(crate) fn concat(arguments: &[StackValue<'_>]) -> StackValue<'static> {
 
 /// Returns the Levenshtein distance between two strings, in characters.
 ///
-/// Not a SPARQL function.
+/// The strings may have any language tags. This is not a SPARQL function.
 pub(crate) fn levenshtein(left: ValueRef<'_>, right: ValueRef<'_>) -> StackValue<'static> {
     let (Some(left), Some(right)) = (text(left), text(right)) else {
         return EvaluationError::TypeMismatch.into();
@@ -329,7 +346,9 @@ pub(crate) fn levenshtein(left: ValueRef<'_>, right: ValueRef<'_>) -> StackValue
 /// SPARQL's [`ENCODE_FOR_URI`](https://www.w3.org/TR/sparql12-query/#func-encode),
 /// XPath's [`fn:encode-for-uri`](https://www.w3.org/TR/xpath-functions-31/#func-encode-for-uri).
 ///
-/// The unreserved characters of RFC 3986 pass.
+/// The unreserved characters of RFC 3986 are kept,
+/// and every other byte of the string's UTF-8 encoding is percent-encoded.
+/// The result is a plain string.
 pub(crate) fn uri_encode(value: ValueRef<'_>) -> StackValue<'static> {
     let Some(text) = text(value) else {
         return EvaluationError::TypeMismatch.into();
@@ -347,9 +366,11 @@ pub(crate) fn uri_encode(value: ValueRef<'_>) -> StackValue<'static> {
     DataValue::string(encoded).into()
 }
 
-/// Percent-decodes a string; a malformed escape is an error.
+/// Percent-decodes a string, the inverse of [uri_encode].
 ///
-/// The inverse of [uri_encode]; not a SPARQL function.
+/// An escape that is not `%` followed by two hex digits,
+/// or decoded bytes that are not UTF-8, are [Malformed](EvaluationError::Malformed).
+/// The result is a plain string. This is not a SPARQL function.
 pub(crate) fn uri_decode(value: ValueRef<'_>) -> StackValue<'static> {
     let Some(text) = text(value) else {
         return EvaluationError::TypeMismatch.into();
@@ -360,7 +381,7 @@ pub(crate) fn uri_decode(value: ValueRef<'_>) -> StackValue<'static> {
     let mut position = 0;
     while position < bytes.len() {
         if bytes[position] == b'%' {
-            // An escape has hex digits only, where the standard parser would also take a sign.
+            // An escape has hex digits only, but `from_str_radix` would also accept a sign.
             let byte = text
                 .get(position + 1..position + 3)
                 .filter(|pair| pair.bytes().all(|digit| digit.is_ascii_hexdigit()))
@@ -391,7 +412,7 @@ mod tests {
         value::LanguageStringRef,
     };
 
-    /// The language-tagged string a value is, if it is one.
+    /// Returns the value as a language-tagged string, if it is one.
     fn tagged(value: &DataValue) -> Option<LanguageStringRef<'_>> {
         match value.as_ref() {
             ValueRef::LanguageString(value) => Some(value),
@@ -399,11 +420,13 @@ mod tests {
         }
     }
 
-    /// A language-tagged string.
+    /// Returns the text as a string tagged as English.
     fn english(text: &str) -> DataValue {
         DataValue::language_string(text, "en").expect("the tag is nonempty")
     }
 
+    /// Substrings follow XPath's `fn:substring` for integer positions of any size,
+    /// and a position that is not an integer is a type mismatch.
     #[test]
     fn substrings_follow_xpath() {
         let subject = DataValue::string("motor car");
@@ -422,16 +445,16 @@ mod tests {
         assert_eq!(from(&int(-3)), subject);
         assert_eq!(from(&int(i64::MIN)), subject);
         assert_eq!(from(&int(100)), DataValue::string(""));
-        // The window is the positions from the start up to the start
-        // plus the length: a start below 1 shortens it.
+        // The substring has the positions from the start up to the start plus the length,
+        // so a start below 1 shortens it.
         assert_eq!(with(&int(1), &int(5)), DataValue::string("motor"));
         assert_eq!(with(&int(0), &int(3)), DataValue::string("mo"));
         assert_eq!(with(&int(-2), &int(5)), DataValue::string("mo"));
         assert_eq!(with(&int(3), &int(-1)), DataValue::string(""));
         assert_eq!(with(&int(3), &int(i64::MAX)), DataValue::string("tor car"));
         assert_eq!(with(&int(i64::MIN), &int(i64::MAX)), DataValue::string(""));
-        // Positions are integers of any size, as SPARQL's signature has it,
-        // and a window's end is exact.
+        // Positions are integers of any size, as in SPARQL's signature,
+        // and the end of the substring is computed exactly.
         let (vast, minus_vast) = (
             number("100000000000000000000"),
             number("-100000000000000000000"),
@@ -455,6 +478,8 @@ mod tests {
         );
     }
 
+    /// A part of a tagged string keeps the tag, unless the second string does not occur,
+    /// and a second string with another tag is malformed.
     #[test]
     fn parts_keep_the_subjects_tag() {
         let subject = english("Hello, world");
@@ -468,7 +493,8 @@ mod tests {
 
         assert_eq!(part(before(subject.as_ref(), plain.as_ref())), en("Hello"));
         assert_eq!(part(after(subject.as_ref(), plain.as_ref())), en("world"));
-        // A miss is a plain empty string, an empty pattern a tagged match.
+        // A second string that does not occur gives a plain empty string,
+        // while the empty string occurs at the start and gives a tagged part.
         assert_eq!(
             value(after(subject.as_ref(), DataValue::string("x").as_ref())),
             DataValue::string("")
@@ -484,8 +510,7 @@ mod tests {
         assert_eq!(part(reverse(english("ab").as_ref())), en("ba"));
         assert_eq!(part(trim(english("  a ").as_ref(), str::trim)), en("a"));
 
-        // A pattern under another tag is incompatible, as for the
-        // predicates.
+        // A second string with another tag is incompatible, as for the predicates.
         let german = DataValue::language_string(", ", "de").expect("the tag is nonempty");
         assert_eq!(
             before(subject.as_ref(), german.as_ref()).as_result(),
@@ -497,6 +522,8 @@ mod tests {
         );
     }
 
+    /// A concatenation keeps the tag that all its operands share, is plain otherwise,
+    /// and fails for an operand that is not a string.
     #[test]
     fn concatenation_keeps_a_shared_tag_only() {
         let joined = |values: &[DataValue]| {
@@ -520,6 +547,7 @@ mod tests {
         );
     }
 
+    /// Reversal keeps grapheme clusters whole.
     #[test]
     fn reversal_keeps_grapheme_clusters_whole() {
         let reversed = |text: &str| value(reverse(DataValue::string(text).as_ref()));
@@ -532,6 +560,8 @@ mod tests {
         );
     }
 
+    /// Percent-decoding inverts percent-encoding,
+    /// and a malformed escape or a byte sequence that is not UTF-8 is malformed.
     #[test]
     fn percent_decoding_inverts_encoding() {
         let encoded = value(uri_encode(DataValue::string("a é/").as_ref()));

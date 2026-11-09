@@ -2,25 +2,22 @@
 
 use crate::parallel::Tasks;
 
-/// Runs the tasks, returning their results in task order.
+/// Runs `tasks.count()` tasks and returns their results in task order.
 ///
-/// The caller has cut its work into `tasks.count()` tasks
-/// and describes them by `run`,
-/// which computes the result of the task with the given index.
-/// `run` may be called from several worker threads at once,
-/// so it reads its input through shared references
-/// and writes nothing but its result.
-/// The results come back as one vector, the task at each index.
+/// `run` computes the result of the task with the given index.
+/// It may be called from several worker threads at once,
+/// so it reads its input through shared references and writes nothing but its result.
 ///
-/// When the tasks may not use the pool,
-/// they run one after another on the calling thread.
+/// If the tasks may not use the pool, they run one after another on the calling thread.
 /// Otherwise they are scheduled by work stealing:
 /// the calling thread joins the workers,
-/// and a worker that finishes early takes on tasks not yet started,
-/// so uneven tasks balance across the workers.
+/// and a worker that finishes early takes over tasks that have not started yet,
+/// so that uneven tasks are balanced across the workers.
 /// The call returns once every task has run.
 ///
-/// A panic in any task propagates to the caller.
+/// # Panics
+///
+/// A panic in any task is propagated out of this call.
 ///
 /// # Example
 ///
@@ -50,9 +47,11 @@ pub fn map_tasks<T: Send>(tasks: Tasks, run: impl Fn(usize) -> T + Sync) -> Vec<
         .collect()
 }
 
-/// Fills the result slots by binary splitting:
-/// each half is a stealable job,
+/// Fills the result slots by splitting them in halves.
+///
+/// Each half is a job that another worker can steal,
 /// so the pool balances the tasks however unevenly they run.
+/// `offset` is the index of the task of the first slot.
 fn fill<T: Send>(slots: &mut [Option<T>], offset: usize, run: &(impl Fn(usize) -> T + Sync)) {
     match slots {
         [] => {}
@@ -72,6 +71,7 @@ fn fill<T: Send>(slots: &mut [Option<T>], offset: usize, run: &(impl Fn(usize) -
 mod tests {
     use super::*;
 
+    /// The results come back in task order, for no task, one task and many tasks.
     #[test]
     fn tasks_come_back_in_order() {
         let squares = map_tasks(Tasks::of(37), |index| index * index);

@@ -14,25 +14,25 @@ use crate::{
     selection::RowSelection,
 };
 
-/// The most cells a run holds before it is handed on.
+/// The number of cells at which a run is full and is handed on for interning.
 const RUN_CELLS: usize = 1 << 14;
 
-/// The most bytes of text a run holds before it is handed on.
+/// The number of bytes of text at which a run is full and is handed on for interning.
 const RUN_TEXT: usize = 1 << 20;
 
-/// One parsed cell, in the form the thread owning the dictionary interns it from.
+/// One parsed cell, in the form from which the thread that owns the dictionary interns it.
 #[derive(Debug, Clone, Copy)]
 enum Cell {
-    /// A value with an inline encoding, encoded already.
+    /// A value with an inline encoding, already encoded.
     Inline(StorageValue),
-    /// An IRI, its text at this byte range of the run's text.
+    /// An IRI whose text is at this byte range of the run's text.
     Iri {
         /// Where the text starts.
         start: u32,
         /// Where the text ends.
         end: u32,
     },
-    /// A plain string, its text at this byte range of the run's text.
+    /// A plain string whose text is at this byte range of the run's text.
     String {
         /// Where the text starts.
         start: u32,
@@ -43,7 +43,7 @@ enum Cell {
     Owned(u32),
 }
 
-/// Where a run stood before a row was added, to take the row back.
+/// The lengths of a run's buffers before a row was added, for taking the row back.
 #[derive(Debug, Clone, Copy)]
 struct RowStart {
     /// The number of cells.
@@ -54,40 +54,44 @@ struct RowStart {
     owned: usize,
 }
 
-/// A run of one window's rows, parsed without a dictionary and awaiting interning.
+/// A run: rows parsed without a dictionary and awaiting interning.
 ///
-/// A window's parse hands its rows on in runs of bounded size,
+/// A parse of a resource, or of one [window](crate::load::ResourceBatch) of it,
+/// hands its rows on in runs of bounded size,
 /// and the runs are [interned](Self::encode_into) in the order they were parsed.
-/// Values with an inline encoding are encoded as they are parsed,
-/// IRIs and strings keep their text in one buffer of the run,
-/// and only values of other kinds are held as owned values.
+/// - Values with an inline encoding are encoded as they are parsed.
+/// - IRIs and strings keep their text in one buffer of the run.
+/// - Only values of other kinds are kept as owned values.
 #[derive(Debug)]
 pub(crate) struct Parsed {
-    /// The run's counts of dropped rows.
+    /// The run's counts of well-formed and dropped rows.
     ///
-    /// Its rows stay empty, since interning moves the run's rows into the load it joins.
+    /// Its rows stay empty, since the run keeps its rows in [cells](Self::cells)
+    /// until they are [interned](Self::encode_into).
     loaded: Loaded,
-    /// The cells of the admitted rows, row-major, the load's arity per row.
+    /// The cells of the admitted rows, row by row, with as many cells per row as the arity.
     cells: Vec<Cell>,
     /// The text of the IRI and string cells.
     text: String,
     /// The values of the cells of other kinds.
     owned: Vec<DataValue>,
-    /// The resource line of each admitted row.
+    /// The line in the resource of each admitted row.
     ///
-    /// These also count the rows, which the cells alone cannot for all-skip (nullary) resources.
+    /// This list also counts the rows, which the cells alone cannot do for arity zero.
     lines: Vec<u64>,
-    /// The values of the record being admitted, if a selection judges them.
+    /// A scratch buffer for the values of a record that the condition is evaluated on.
     values: Vec<DataValue>,
-    /// The lines the window consumed up to the end of this run,
-    /// set on the window's last run only.
+    /// The number of lines that the parse consumed, set on its last run only.
     ///
-    /// A following window of the same file counts its lines from here.
+    /// A following window of the same file continues its line numbers from here.
     pub(crate) consumed_lines: u64,
 }
 
 impl Parsed {
-    /// Creates an empty run of the given arity, its conditions evaluated in `context`.
+    /// Creates an empty run for rows of the given arity.
+    ///
+    /// `context` is the evaluation context of the selection's condition,
+    /// such as the instant its `NOW()` reads.
     pub(crate) fn new(arity: usize, context: EvaluationContext) -> Self {
         Self {
             loaded: Loaded::new(arity, context),
@@ -101,6 +105,8 @@ impl Parsed {
     }
 
     /// Empties the run for rows of the given arity, keeping its buffers.
+    ///
+    /// `context` is the evaluation context of the selection's condition, as for [new](Self::new).
     pub(crate) fn reset(&mut self, arity: usize, context: EvaluationContext) {
         self.loaded = Loaded::new(arity, context);
         self.cells.clear();
@@ -110,12 +116,12 @@ impl Parsed {
         self.consumed_lines = 0;
     }
 
-    /// Returns the well-formed rows the run has taken, admitted or not.
+    /// Returns the number of well-formed rows that the run has counted, admitted or not.
     pub(crate) fn well_formed(&self) -> u64 {
         self.loaded.well_formed
     }
 
-    /// Returns the bytes the run's buffers hold, which a reused run keeps.
+    /// Returns the size in bytes of the run's buffers, which a reused run keeps.
     pub(crate) fn bytes(&self) -> usize {
         self.cells.capacity() * size_of::<Cell>()
             + self.text.capacity()
@@ -128,9 +134,11 @@ impl Parsed {
         self.cells.len() >= RUN_CELLS || self.text.len() >= RUN_TEXT
     }
 
-    /// Adds one record of a resource read with the given options, the
-    /// rows of the selection admitted, or counts it as malformed or
-    /// dropped.
+    /// Adds one record, read with the given options,
+    /// if it is well-formed and the selection admits it.
+    ///
+    /// Otherwise, the record is counted as malformed, as excluded,
+    /// or under the kind of the error that the condition raised on it.
     pub(crate) fn push_record(
         &mut self,
         options: &DsvOptions,
@@ -145,8 +153,9 @@ impl Parsed {
         }
     }
 
-    /// Adds a record no selection judges: its cells go into the run as
-    /// they parse, without an owned value first.
+    /// Adds a record when there is no condition to evaluate.
+    ///
+    /// Its cells go into the run as they are parsed, without first becoming owned values.
     fn push_direct(&mut self, options: &DsvOptions, record: &csv::StringRecord, line: u64) {
         let start = self.row_start();
         let complete =
@@ -169,7 +178,7 @@ impl Parsed {
         }
     }
 
-    /// Adds a record the selection judges by its values, if it admits them.
+    /// Adds a record if it is well-formed and the selection's condition admits its values.
     fn push_selected(
         &mut self,
         options: &DsvOptions,
@@ -190,8 +199,8 @@ impl Parsed {
         self.values = values;
     }
 
-    /// Returns the current ends of the run's buffers, for taking back a row that turns out
-    /// malformed.
+    /// Returns the current lengths of the run's buffers,
+    /// for taking back a row that turns out to be malformed.
     fn row_start(&self) -> RowStart {
         RowStart {
             cells: self.cells.len(),
@@ -200,7 +209,7 @@ impl Parsed {
         }
     }
 
-    /// Takes back the cells added since `start`.
+    /// Removes the cells, text and owned values added since `start`.
     fn take_back(&mut self, start: RowStart) {
         self.cells.truncate(start.cells);
         self.text.truncate(start.text);
@@ -210,7 +219,8 @@ impl Parsed {
     /// Parses one cell by its format and adds it,
     /// or returns `false` if the format rejects the cell.
     ///
-    /// An IRI or a string the cell holds as it is goes into the run's text without an owned value.
+    /// An IRI or a string that appears in the cell unchanged goes into the run's text
+    /// without becoming an owned value.
     /// A skipped cell adds nothing.
     fn push_cell(&mut self, format: ValueFormat, cell: &str) -> bool {
         if format == ValueFormat::Skip {
@@ -225,8 +235,11 @@ impl Parsed {
         true
     }
 
-    /// Adds a parsed value: encoded if it has an inline encoding,
-    /// its text if it is an IRI or a string, and owned otherwise.
+    /// Adds a parsed value.
+    ///
+    /// The value is encoded if it has an inline encoding.
+    /// Otherwise, an IRI or a string keeps its text in the run's text,
+    /// and any other value is kept as an owned value.
     fn push_value(&mut self, value: DataValue) {
         let cell = match StorageValue::from_value(value.as_ref()) {
             Some(inline) => Some(Cell::Inline(inline)),
@@ -240,7 +253,7 @@ impl Parsed {
         self.cells.push(cell);
     }
 
-    /// Adds a cell whose text is its value, an IRI's or a string's.
+    /// Adds the cell of an IRI if `iri` is true, or of a string otherwise, with the given text.
     fn push_text(&mut self, text: &str, iri: bool) {
         let cell = match self.text_cell([text, ""], iri) {
             Some(cell) => cell,
@@ -250,8 +263,10 @@ impl Parsed {
         self.cells.push(cell);
     }
 
-    /// Appends the text, given in parts, and returns its cell,
-    /// or `None` if the run's text would outgrow the cell's offsets.
+    /// Appends a text, given in two parts, to the run's text,
+    /// and returns its cell, of an IRI if `iri` is true and of a string otherwise.
+    ///
+    /// Returns `None`, and appends nothing, if the text's offsets would not fit in 32 bits.
     fn text_cell(&mut self, parts: [&str; 2], iri: bool) -> Option<Cell> {
         let start = u32::try_from(self.text.len()).ok()?;
         let end = u32::try_from(self.text.len() + parts[0].len() + parts[1].len()).ok()?;
@@ -264,21 +279,24 @@ impl Parsed {
         })
     }
 
-    /// Keeps a value as it is and returns its cell.
+    /// Keeps a value as an owned value and returns its cell.
     fn owned_cell(&mut self, value: DataValue) -> Cell {
         let index = u32::try_from(self.owned.len()).expect("a run holds fewer than 2³² values");
         self.owned.push(value);
         Cell::Owned(index)
     }
 
-    /// Interns the run's rows into a running load,
-    /// the line numbers shifted by the lines earlier windows of the same file consumed.
-    /// A row with a value the dictionary cannot hold is malformed.
+    /// Interns the run's rows into `loaded`, the load being built, and adds the run's counts to
+    /// it.
+    ///
+    /// `base` is the number of lines that earlier windows of the same file consumed,
+    /// and is added to the run's line numbers.
+    /// A row with a value that the dictionary cannot hold is counted as malformed.
     pub(crate) fn encode_into(&self, loaded: &mut Loaded, dictionary: &mut Dictionary, base: u64) {
         let shifted = |line: u64| if line > 0 { line + base } else { 0 };
-        // The rows are stored first, in line order, after every earlier
-        // run's lines; the parse's first malformed line is merged after,
-        // since it may precede an encoding failure's.
+        // The rows are stored first, in line order, after the rows of every
+        // earlier run. The first malformed line of the parse is merged afterwards,
+        // since it may come before the line of a row that failed to encode.
         let arity = self.loaded.rows.arity();
         let mut row = Vec::with_capacity(arity);
         for (index, &line) in self.lines.iter().enumerate() {
@@ -315,7 +333,7 @@ impl Parsed {
         }
     }
 
-    /// Encodes one cell, or `None` if the dictionary cannot hold its value.
+    /// Encodes one cell, or returns `None` if the dictionary cannot hold its value.
     fn encode(&self, cell: Cell, dictionary: &mut Dictionary) -> Option<StorageValue> {
         let text = |start: u32, end: u32| &self.text[start as usize..end as usize];
         match cell {

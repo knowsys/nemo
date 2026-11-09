@@ -1,7 +1,4 @@
-//! Ground terms as SPARQL terms.
-//!
-//! A term is evaluated to its value, which `nemo_io` writes as the SPARQL terms an endpoint
-//! may hold it as.
+//! Ground terms of a rule as the SPARQL terms in which an endpoint may store their values.
 
 use nemo_io::sparql::spargebra::term::GroundTerm;
 use nemo_physical::value::DataValue;
@@ -12,19 +9,20 @@ use crate::{
 };
 
 impl RewriteContext {
-    /// Returns a ground term as the SPARQL terms an endpoint may hold it as
+    /// Returns a ground term as the SPARQL terms in which an endpoint may store its value
     /// ([ground_terms](nemo_io::sparql::SparqlQuery::ground_terms)),
-    /// or `None` if a query cannot carry it:
-    /// a term without a value, or a value without an RDF form.
+    /// or `None` if a query cannot contain it:
+    /// for a term without a value, or a value without an RDF form.
     pub(super) fn ground_terms(&self, kind: &TermKind) -> Option<Vec<GroundTerm>> {
         let terms = nemo_io::sparql::SparqlQuery::ground_terms(&self.value(kind)?);
         (!terms.is_empty()).then_some(terms)
     }
 
-    /// Returns the value of a ground term:
-    /// constants are resolved in the scope, parameters to their declared values.
+    /// Returns the value of a ground term.
     ///
-    /// Returns `None` for structured and non-ground terms.
+    /// Constants are resolved in the scope, and parameters to their declared values.
+    /// Returns `None` for any other term, such as a structured term, an operation or a blank
+    /// node.
     fn value(&self, kind: &TermKind) -> Option<DataValue> {
         match kind {
             TermKind::Constant(name) => Some(DataValue::iri(self.scope.resolve(name, None).ok()?)),

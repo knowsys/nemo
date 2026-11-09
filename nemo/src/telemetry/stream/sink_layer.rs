@@ -1,5 +1,4 @@
-//! The subscriber side of the telemetry stream: a `tracing` layer
-//! feeding an event sink.
+//! The subscriber side of the telemetry stream: a `tracing` layer that feeds an event sink.
 
 use std::sync::Arc;
 
@@ -14,25 +13,25 @@ use crate::telemetry::{
     stream::codec::{self, FieldCollector},
 };
 
-/// A layer decoding the events a [TracingSink](crate::telemetry::TracingSink) put on the stream,
-/// and handing them to a sink.
+/// A `tracing` layer that decodes the events that a
+/// [TracingSink](crate::telemetry::TracingSink) emitted, and passes them to a sink.
 ///
 /// With a [Recorder](crate::telemetry::Recorder) as its sink,
-/// a report is built from the same `tracing` stream that carries the log lines.
+/// a report can be built from the same `tracing` stream that contains the log lines.
 /// Compose it with [filter](Self::filter),
-/// so that it sees the telemetry target regardless of the level the other layers show.
+/// so that it receives the telemetry target whatever level the other layers show.
 pub struct SinkLayer {
-    /// Where decoded events go.
+    /// The sink that receives the decoded events.
     sink: Arc<dyn EventSink<EngineEvent>>,
 }
 
 impl SinkLayer {
-    /// Creates a layer feeding the sink.
+    /// Creates a layer that feeds `sink`.
     pub fn new(sink: Arc<dyn EventSink<EngineEvent>>) -> Self {
         Self { sink }
     }
 
-    /// Returns the per-layer filter selecting the telemetry stream.
+    /// Returns the per-layer filter that selects the telemetry target at trace level.
     pub fn filter() -> Targets {
         Targets::new().with_target(codec::TARGET, LevelFilter::TRACE)
     }
@@ -67,7 +66,7 @@ mod tests {
     use super::*;
     use crate::telemetry::TracingSink;
 
-    /// A sink keeping every event it is given.
+    /// A sink that keeps every event it is given.
     #[derive(Default)]
     struct Collecting(Mutex<Vec<EngineEvent>>);
 
@@ -77,9 +76,12 @@ mod tests {
         }
     }
 
-    /// One test for both subscribers: `tracing` caches callsite interest per
-    /// process across all live dispatchers, so the scenarios run in order,
-    /// the one not listening to the telemetry target first.
+    /// Events of every kind reach a listening layer's sink unchanged,
+    /// and a [TracingSink] is disabled while no layer listens to the telemetry target.
+    ///
+    /// Both scenarios are in one test, with the scenario without a listener first,
+    /// since `tracing` caches the interest of a callsite per process, across all live
+    /// dispatchers.
     #[test]
     fn events_survive_the_round_trip_through_tracing() {
         // A layer filtered to another target does not listen to the

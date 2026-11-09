@@ -1,4 +1,4 @@
-//! Terms: the contents of argument positions.
+//! Terms, the arguments of atoms, facts and other terms.
 
 mod aggregate;
 mod documentation;
@@ -18,24 +18,24 @@ use nemo_physical::value::{Decimal, Number, ValueRef};
 
 use crate::model::{Identifier, Span, fmt_list, span_ignoring_eq};
 
-/// The alternatives of a [Term].
+/// The kinds of [Term]s, with their contents.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TermKind {
     /// A variable.
     Variable(Variable),
-    /// A constant: a bare name, an IRI, a prefixed name, or a module-qualified name.
+    /// A constant, which is a bare name, an IRI, a prefixed name or a module-qualified name.
     Constant(Identifier),
-    /// A blank node `_:label`: a labeled null local to the program.
+    /// A blank node `_:label`, which is a null local to the program.
     ///
-    /// The engine creates one null per label per program when it loads the program,
-    /// so two mentions of `_:a` name the same unknown value,
-    /// and another program's `_:a` names a different one.
+    /// Loading a program creates one null per label,
+    /// so two mentions of `_:a` in a program name the same unknown value,
+    /// and `_:a` in another program names a different one.
     BlankNode(String),
     /// A plain string.
     String(String),
     /// A language-tagged string like `"hello"@en`.
     LanguageString {
-        /// The text content.
+        /// The text.
         text: String,
         /// The language tag, without the `@`.
         language: String,
@@ -44,50 +44,50 @@ pub enum TermKind {
     Boolean(bool),
     /// A number like `42`, `1.5`, `2.5f` or `2.5e3`.
     Number(Number),
-    /// A literal of an explicit datatype, like `"P1Y"^^xsd:duration`.
+    /// A literal with an explicit datatype, like `"P1Y"^^xsd:duration`.
     RdfLiteral {
         /// The lexical form.
         lexical: String,
-        /// The datatype.
+        /// The datatype's name.
         datatype: Identifier,
     },
     /// An uninterpreted function term like `pair(?x, ?y)`.
     Function {
-        /// The function name.
+        /// The function's name.
         name: Identifier,
         /// The argument terms.
         arguments: Vec<Term>,
-        /// The written argument names, aligned with the arguments,
-        /// `Some` if the application names its columns, as in `person(name: ?n)`.
+        /// The names of the arguments, one per argument,
+        /// if the term is written with named arguments, as in `person(name: ?n)`.
         ///
-        /// The parser reads an atom as a function term first, which is why the field exists.
-        /// A function term used as a value may not carry names.
+        /// The parser parses an atom as a function term first, which is why the field exists.
+        /// A function term used as a value may not have named arguments.
         labels: Option<Vec<String>>,
     },
     /// A tuple like `(1, 2)`.
     Tuple(Vec<Term>),
-    /// A map like `{a = 1, b = 2}`, optionally labeled: `point{x = 1}`.
+    /// A map like `{a = 1, b = 2}`, with an optional label, as in `point{x = 1}`.
     ///
-    /// The label must touch the brace,
+    /// The label must directly precede the brace,
     /// since a name followed by a space and a brace, like `csv { … }`,
-    /// starts a directive's options.
+    /// starts the options of a directive.
     Map {
-        /// The label naming the map's shape, if any.
+        /// The map's label, if it has one.
         label: Option<Identifier>,
-        /// The key–value pairs, as written.
+        /// The key-value pairs, in the order in which they are written.
         pairs: Vec<(Term, Term)>,
     },
     /// An application of a builtin operator.
     Operation(Operation),
-    /// An aggregate expression.
+    /// An aggregate, like `#sum(?v)`.
     Aggregate(Aggregate),
 }
 
-/// A term: the content of one argument position in an atom, fact, or
-/// enclosing term.
+/// A term, which is the content of one argument position
+/// in an atom, a fact or an enclosing term.
 #[derive(Debug, Clone)]
 pub struct Term {
-    /// What kind of term this is, including its content.
+    /// The kind of the term, with its content.
     pub kind: TermKind,
     /// The source position, or `None` for a component built programmatically.
     pub span: Option<Span>,
@@ -128,8 +128,7 @@ impl From<TermKind> for Term {
     }
 }
 
-/// Writes an argument list, introducing each argument by its label
-/// if the application names its columns.
+/// Writes a list of arguments, each preceded by its label if `labels` is given.
 pub(crate) fn fmt_labeled(
     f: &mut Formatter<'_>,
     terms: &[Term],
@@ -159,8 +158,9 @@ impl Display for Term {
                 write!(f, "@{language}")
             }
             TermKind::Boolean(value) => write!(f, "{value}"),
-            // The value's own term syntax: the suffix form of a float, or a typed
-            // literal for the values that have no numeric lexical.
+            // A number is written in the term syntax of its value:
+            // a float with its suffix,
+            // and a value without the form of a number literal as a typed literal.
             TermKind::Number(number) => write!(f, "{}", ValueRef::Number(number.as_ref())),
             TermKind::RdfLiteral { lexical, datatype } => {
                 fmt_string(f, lexical)?;
@@ -202,7 +202,7 @@ impl Display for Term {
     }
 }
 
-/// Writes a string in quoted, escaped form.
+/// Writes a string in quotes, with its backslashes and quotes escaped.
 fn fmt_string(f: &mut Formatter<'_>, string: &str) -> fmt::Result {
     write!(
         f,

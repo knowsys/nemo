@@ -9,64 +9,64 @@ use crate::engine::compile::compiled::{
 
 /// One rule, normalized for execution.
 ///
-/// Body atoms carry distinct variables (constants and repeated variables become filters),
-/// and assignments, expressions in the head or in an aggregate, head constants and
-/// repeated head variables become computed columns.
-/// The rule's columns are its variables, then its computed columns.
+/// - The variables of a body atom are distinct: constants and repeated variables become
+///   filters.
+/// - Assignments, expressions in the head or in an aggregate, head constants and repeated
+///   head variables become computed columns.
 #[derive(Debug)]
 pub(crate) struct CompiledRule {
-    /// Number of variables.
+    /// The number of variables.
     pub(crate) variables: usize,
-    /// The variables in the order the rule's joins bind them. Chosen
-    /// by [order](crate::engine::compile::order), a permutation of the variables.
+    /// The variables in the order in which the rule's joins bind them,
+    /// a permutation of the variables.
+    ///
+    /// [order](crate::engine::compile::order) chooses it.
     pub(crate) order: Vec<VariableId>,
     /// The positive body atoms.
     pub(crate) body: Vec<BodyAtom>,
-    /// The filter conditions over body variables.
+    /// The filters over rule columns.
     pub(crate) filters: Vec<RuleFilter>,
-    /// Body columns bound to expressions over other columns, probed
-    /// rather than enumerated during the join.
+    /// The body columns whose arguments are expressions over other columns.
     pub(crate) bindings: Vec<RuleBinding>,
-    /// The computed columns extending the join: assignments, expressions in the head or in an
-    /// aggregate, head constants and duplicated head variables.
+    /// The computed columns.
     ///
-    /// Computed column `k` is the rule's column `variables + k`.
+    /// Computed column `k` is rule column `variables + k`.
     pub(crate) computed: Vec<ComputedColumn>,
-    /// The negated body atoms, prepared for subtraction.
+    /// The negated body atoms.
     pub(crate) negated: Vec<NegatedAtom>,
-    /// The head atoms, over the rule's columns.
+    /// The head atoms.
     pub(crate) heads: Vec<HeadAtom>,
     /// The aggregate head, if the rule has one.
     pub(crate) aggregate: Option<CompiledAggregate>,
     /// The existential head, if the rule has `!`-variables.
     pub(crate) existential: Option<ExistentialHead>,
-    /// Whether a constant condition proved the rule can never fire.
+    /// Whether a constant condition proved that the rule never fires.
     pub(crate) never_fires: bool,
-    /// Whether any of the rule's programs calls a nondeterministic function (such as `RAND()`).
+    /// Whether any of the rule's programs calls a nondeterministic function, such as `RAND()`.
     ///
-    /// Such a rule must read *exact* delta windows:
-    /// re-reading a body row would compute a new value,
-    /// and head deduplication cannot remove a row that carries a fresh value.
-    /// Its last application is therefore kept as a wall,
-    /// a revision that consolidation does not merge across.
+    /// Such a rule must read [exact windows](Self::exact_windows),
+    /// since reading a body row again would compute a new value,
+    /// and deduplication against the head cannot remove a row with a fresh value.
     pub(crate) nondeterministic: bool,
     /// The engine step of the rule's last application, or 0 before the first.
     pub(crate) last_applied: u64,
-    /// The remote fetch this rule performs instead of a join,
-    /// for a SPARQL import with a `where` clause.
+    /// The fetch that the rule performs instead of a join,
+    /// if the rule is compiled from a SPARQL import with a `where` clause.
     ///
-    /// The body atoms are the atoms of the `where` clause, the head is the imported predicate.
+    /// The body atoms are then the atoms of the `where` clause,
+    /// and the head is the imported predicate.
     #[cfg(feature = "sparql")]
     pub(crate) fetch: Option<CompiledFetch>,
 }
 
 impl CompiledRule {
-    /// Returns whether the rule must read exact delta windows
-    /// rather than windows starting at a block boundary.
+    /// Returns whether the rule must read exact delta windows,
+    /// rather than windows that start at a block boundary.
     ///
-    /// This holds for a rule that calls a nondeterministic function
-    /// (re-reading a row would compute a new value)
-    /// and for a rule that fetches (re-reading a binding costs a request).
+    /// This is the case for a rule that calls a nondeterministic function,
+    /// since reading a row again would compute a new value.
+    /// It is also the case for a rule that fetches, since reading a binding again costs a
+    /// request.
     pub(crate) fn exact_windows(&self) -> bool {
         #[cfg(feature = "sparql")]
         if self.fetch.is_some() {
@@ -84,8 +84,9 @@ impl CompiledRule {
         false
     }
 
-    /// Creates a rule that does nothing: a placeholder holding a rule index for
-    /// one compiled later in the translation.
+    /// Creates a rule that does nothing.
+    ///
+    /// It keeps a rule index free for a rule that the translation compiles later.
     #[cfg(feature = "sparql")]
     pub(crate) fn inert() -> Self {
         Self {

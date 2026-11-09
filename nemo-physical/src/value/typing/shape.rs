@@ -1,13 +1,15 @@
-//! Shapes of structures, and the sets of them a [Type] refines a structured domain by.
+//! Shapes of tuples and maps,
+//! and the sets of shapes by which a [Type] refines a structured domain.
 //!
-//! A set is kept canonical, so that equal sets compare equal:
-//! - written-out shapes come first, ordered by outline (arity, or key set) and label,
-//!   and no two share both;
-//! - within one outline, a shape of unknown label takes in every other,
-//!   since it admits what they admit;
-//! - declared labels follow, ordered and once each,
-//!   and a written-out shape carrying one of them is dropped,
-//!   since every structure carrying a declared label fits its declaration.
+//! The *outline* of a written-out shape is its length for tuples, and its keys for maps.
+//! A set of shapes is kept in canonical form, so that equal sets compare equal:
+//! - Written-out shapes come first, ordered by outline and then by label.
+//!   Shapes with the same outline and label are merged into one,
+//!   and a shape with an unknown label absorbs the other shapes of its outline,
+//!   since it accepts every structure that they accept.
+//! - Declared labels come last, ordered and each once.
+//!   A written-out shape with one of these labels is dropped,
+//!   since every structure with a declared label fits its declaration.
 
 use std::cmp::Ordering;
 
@@ -16,51 +18,55 @@ use crate::value::{
     typing::{LabelBound, LabelTypes, Type},
 };
 
-/// One shape of the structures of a domain.
+/// A shape of the tuples or of the maps of a type.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Shape<S> {
-    /// The structures fitting a written-out shape.
+    /// The structures that fit a written-out shape.
     Structural(S),
-    /// The structures carrying a label whose type is declared.
+    /// The structures with a label whose type is declared.
     ///
-    /// Every such structure fits the declaration, which [LabelTypes] holds.
+    /// Every such structure fits the declared type, which [LabelTypes] contains.
     Declared(Box<str>),
 }
 
-/// What a written-out shape of tuples or maps provides to the sets of shapes.
+/// The operations that sets of shapes need from a written-out shape of tuples or maps.
 pub(crate) trait StructuralShape: Clone + PartialEq + Sized {
     /// The domain of the structures the shape describes.
     const DOMAIN: ValueDomain;
 
-    /// Returns what is known of the label.
+    /// Returns what is known about the label.
     fn label(&self) -> &LabelBound;
 
-    /// Returns the shapes a type refines this domain by, if it does.
+    /// Returns the shapes by which a type refines this domain, or `None` if it has none.
     fn of_type(datatype: &Type) -> Option<&[Shape<Self>]>;
 
-    /// Orders by outline, labels aside: by arity for tuples, by key set for maps.
+    /// Orders two shapes by outline, ignoring their labels.
     fn cmp_outline(&self, other: &Self) -> Ordering;
 
-    /// Returns the shape covering both, of the same outline, under this shape's label.
+    /// Returns a shape that accepts what both shapes accept, with this shape's label.
+    ///
+    /// Both shapes must have the same outline.
     fn merge(&self, other: &Self) -> Self;
 
-    /// Returns the shape of the structures both admit,
+    /// Returns the shape of the structures that both shapes accept,
     /// or `None` if no structure fits both.
     fn intersect(&self, other: &Self) -> Option<Self>;
 
-    /// Returns whether every component of this shape lies within the other's,
-    /// of the same outline.
+    /// Returns whether every component type of this shape is a subset of the other's.
+    ///
+    /// Both shapes must have the same outline.
     fn components_within(&self, other: &Self, labels: &LabelTypes) -> bool;
 
-    /// Returns the shape with its components trimmed below the given depth, at least one.
+    /// Returns the shape with its components cut off below the given depth,
+    /// which must be at least one.
     fn capped(&self, depth: usize) -> Self;
 
     /// Returns the shape with the declared labels in its components unfolded
-    /// through the given depth; see [Type::unfolded].
+    /// down to the given depth, as [Type::unfolded] does.
     fn unfolded(&self, labels: &LabelTypes, depth: usize) -> Self;
 }
 
-/// Returns the canonical set of the given shapes; see the module documentation.
+/// Returns the given shapes as a set in canonical form, as the module documentation describes.
 pub(super) fn normalized<S: StructuralShape>(
     shapes: impl IntoIterator<Item = Shape<S>>,
 ) -> Box<[Shape<S>]> {
@@ -103,10 +109,11 @@ pub(super) fn normalized<S: StructuralShape>(
         .collect()
 }
 
-/// Returns the union of the shapes of one domain,
-/// given whether each side holds the domain at all:
-/// a side without the domain contributes nothing,
-/// a side holding it without shapes takes in every shape.
+/// Returns the union of the shapes of one domain.
+///
+/// `left_domain` and `right_domain` say whether each side contains the domain at all.
+/// A side without the domain contributes nothing,
+/// and a side that contains the domain without shapes leaves the union without shapes.
 pub(super) fn union<S: StructuralShape>(
     left_domain: bool,
     left: Option<&[Shape<S>]>,
@@ -125,10 +132,13 @@ pub(super) fn union<S: StructuralShape>(
     }
 }
 
-/// Returns the intersection of the shapes of one domain,
-/// or `None` if `domains`, the domains both types hold, lack it:
-/// a side without shapes contributes nothing,
-/// and shapes that exclude each other remove the domain from `domains`.
+/// Returns the intersection of the shapes of one domain.
+///
+/// `domains` contains the domains of both types.
+/// Returns `None` if `domains` lacks the domain, or if neither side has shapes for it.
+/// A side without shapes leaves the shapes of the other side as they are.
+/// If every shape of one side excludes every shape of the other,
+/// the domain is removed from `domains`.
 pub(super) fn intersect<S: StructuralShape>(
     domains: &mut DomainSet,
     left: Option<&[Shape<S>]>,
@@ -155,10 +165,11 @@ pub(super) fn intersect<S: StructuralShape>(
     }
 }
 
-/// Returns the shape of the structures two shapes both admit, or `None` if none.
+/// Returns the shape of the structures that two shapes both accept,
+/// or `None` if there are none.
 ///
-/// A declared label met with a written-out shape that admits it stays the declared label,
-/// a bound on what both admit without reading the declaration.
+/// A declared label and a written-out shape that accepts the label give the declared label.
+/// This bounds what both accept without reading the declaration.
 fn meet<S: StructuralShape>(left: &Shape<S>, right: &Shape<S>) -> Option<Shape<S>> {
     match (left, right) {
         (Shape::Structural(left), Shape::Structural(right)) => {
@@ -175,10 +186,11 @@ fn meet<S: StructuralShape>(left: &Shape<S>, right: &Shape<S>) -> Option<Shape<S
     }
 }
 
-/// Returns the shapes of one domain trimmed to the given depth.
+/// Returns the shapes of one domain, cut off at the given depth.
 ///
-/// At depth zero only declared labels remain, since they refer rather than nest;
-/// a set holding a written-out shape is then just its domain.
+/// At depth zero only declared labels remain,
+/// since they refer to their declarations instead of nesting them.
+/// A set with a written-out shape then has no shapes, and the domain alone describes it.
 pub(super) fn capped<S: StructuralShape>(
     shapes: Option<&[Shape<S>]>,
     depth: usize,
@@ -202,8 +214,8 @@ pub(super) fn capped<S: StructuralShape>(
     )
 }
 
-/// Returns the shapes of one domain with their declared labels unfolded through the given depth;
-/// see [Type::unfolded].
+/// Returns the shapes of one domain with their declared labels unfolded down to the given
+/// depth, as [Type::unfolded] does.
 pub(super) fn unfolded<S: StructuralShape>(
     shapes: Option<&[Shape<S>]>,
     labels: &LabelTypes,
@@ -222,9 +234,9 @@ pub(super) fn unfolded<S: StructuralShape>(
     })))
 }
 
-/// Returns whether every structure the inner shapes admit, the outer ones admit too.
+/// Returns whether the outer shapes accept every structure that the inner shapes accept.
 ///
-/// No shapes means any structure of the domain.
+/// `None` stands for no shapes, which accept every structure of the domain.
 pub(super) fn within<S: StructuralShape>(
     inner: Option<&[Shape<S>]>,
     outer: Option<&[Shape<S>]>,
@@ -239,11 +251,11 @@ pub(super) fn within<S: StructuralShape>(
     }
 }
 
-/// Returns whether every structure one shape admits, another admits too.
+/// Returns whether `outer` accepts every structure that `inner` accepts.
 ///
-/// A declared label is compared by its declaration, which the labels give;
-/// a label they lack has a declaration no written-out shape is known to contain.
-/// Every step reads one level further into a written-out shape, so the comparison ends.
+/// A declared label is compared through its declared shape in `labels`.
+/// A label without a declaration there is not known to lie within any written-out shape.
+/// Each step reads one level further into a written-out shape, so the comparison ends.
 fn shape_within<S: StructuralShape>(
     inner: &Shape<S>,
     outer: &Shape<S>,

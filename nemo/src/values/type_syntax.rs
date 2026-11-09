@@ -1,6 +1,6 @@
-//! Types in the type syntax of Nemo declarations.
+//! Writing types in the type syntax of Nemo declarations.
 //!
-//! [TypeSyntax] displays a database [Type] the way a `@declare` writes it.
+//! [TypeSyntax] writes a database [Type] the way a `@declare` writes a column's type.
 
 use std::fmt::{self, Display, Formatter};
 
@@ -10,21 +10,22 @@ use nemo_physical::value::{
 
 use crate::model::BaseType;
 
-/// A [Type] displayed in the type syntax of Nemo declarations.
+/// A [Type], displayed in the type syntax of Nemo declarations.
 ///
 /// - A type is written as its domains, separated by `|`.
-/// - A tuple or map domain with shapes is written as those shapes
-///   instead of the word `tuple` or `map`,
-///   a declared label as its name.
-/// - A type with all four numeric domains is written as `number`.
+/// - A tuple or map domain with known shapes is written as those shapes,
+///   in place of the word `tuple` or `map`.
+///   The shape of a label whose type a `@type` declares is written as the label.
+/// - All four numeric domains together are written as `number`.
 /// - Integers are a subset of the decimals,
-///   so a type with both the integer and the decimal domain is written as `decimal`.
-/// - A type with all three duration domains is written as `duration`.
+///   so the integer and the decimal domain together are written as `decimal`.
+/// - All three duration domains together are written as `duration`.
+/// - The type of every value is written as `any`, and the empty type as `no value`.
 #[derive(Debug, Clone, Copy)]
 pub struct TypeSyntax<'a>(&'a Type);
 
 impl<'a> TypeSyntax<'a> {
-    /// Wraps a type for display.
+    /// Returns the display of the given type in declaration syntax.
     pub fn of(datatype: &'a Type) -> Self {
         Self(datatype)
     }
@@ -90,10 +91,10 @@ impl Display for TypeSyntax<'_> {
     }
 }
 
-/// Returns the word a domain is written as.
+/// Returns the word that a domain is written as.
 ///
-/// A domain that can be declared is written as its declaration keyword.
-/// Literals of other datatypes have no keyword, and are written as `other literal`.
+/// A domain that can be declared is written as its keyword in declarations.
+/// The domain of literals of other datatypes has no keyword, and is written as `other literal`.
 fn keyword(domain: ValueDomain) -> &'static str {
     match domain {
         ValueDomain::Iri => BaseType::Iri.name(),
@@ -119,9 +120,8 @@ fn keyword(domain: ValueDomain) -> &'static str {
 
 /// Writes a domain set by its keywords, separated by `|`.
 ///
-/// The four numeric domains together are written as one `number`,
-/// the integer and the decimal domain together as one `decimal`,
-/// and the three duration domains together as one `duration`.
+/// The domains are combined into `number`, `decimal` and `duration`
+/// as the doc of [TypeSyntax] lists.
 fn fmt_domains(f: &mut Formatter<'_>, domains: DomainSet) -> fmt::Result {
     if domains.is_empty() {
         return f.write_str("no value");
@@ -157,7 +157,9 @@ fn fmt_domains(f: &mut Formatter<'_>, domains: DomainSet) -> fmt::Result {
     Ok(())
 }
 
-/// Writes the label prefix of a structured shape, if it is exactly known.
+/// Writes the label of a tuple or map shape, if the shape has exactly one known label.
+///
+/// An unknown label and the absence of a label both write nothing.
 fn fmt_label(f: &mut Formatter<'_>, label: &LabelBound) -> fmt::Result {
     if let LabelBound::Exactly(Some(label)) = label {
         f.write_str(label)?;
@@ -165,7 +167,9 @@ fn fmt_label(f: &mut Formatter<'_>, label: &LabelBound) -> fmt::Result {
     Ok(())
 }
 
-/// Writes a tuple shape as `label(t1, t2)`, a single element trailed by a comma.
+/// Writes a tuple shape as `label(t1, t2)`.
+///
+/// A single element is followed by a comma, as in `(int,)`.
 fn fmt_tuple(f: &mut Formatter<'_>, shape: &TupleShape) -> fmt::Result {
     fmt_label(f, &shape.label)?;
     f.write_str("(")?;
@@ -183,11 +187,11 @@ fn fmt_tuple(f: &mut Formatter<'_>, shape: &TupleShape) -> fmt::Result {
 
 /// Writes a map shape as `label{key: t, ...}`.
 ///
-/// Keys are written briefly, for messages rather than for parsing back:
-/// - IRIs without angle brackets,
-/// - strings quoted,
-/// - integers as numbers,
-/// - other keys by their domain.
+/// Keys are written briefly, to be read in messages rather than parsed back:
+/// - an IRI without angle brackets,
+/// - a string in quotes,
+/// - an integer as a number,
+/// - any other key as its domain.
 fn fmt_map(f: &mut Formatter<'_>, shape: &MapShape) -> fmt::Result {
     fmt_label(f, &shape.label)?;
     f.write_str("{")?;
@@ -217,6 +221,8 @@ mod tests {
         TypeSyntax::of(&Type::of_domains(domains)).to_string()
     }
 
+    /// Each domain is written as its keyword,
+    /// and the empty and the full domain set are written as `no value` and `any`.
     #[test]
     fn domains_read_by_their_keywords() {
         assert_eq!(render(DomainSet::EMPTY), "no value");
@@ -228,6 +234,7 @@ mod tests {
         assert_eq!(render(DomainSet::of(ValueDomain::Null)), "null");
     }
 
+    /// The integer and the decimal domain together are written as `decimal`.
     #[test]
     fn the_decimal_halves_read_folded() {
         // A type with both the integer and the decimal domain is written as `decimal`.
@@ -245,6 +252,8 @@ mod tests {
         assert_eq!(render(DomainSet::DECIMAL), "decimal");
     }
 
+    /// The three duration domains together are written as `duration`,
+    /// and one of them alone is written as its own keyword.
     #[test]
     fn the_duration_domains_read_folded() {
         assert_eq!(render(DomainSet::DURATION), "duration");
@@ -255,6 +264,7 @@ mod tests {
         assert_eq!(render(DomainSet::DAY_TIME_DURATION), "daytimeduration");
     }
 
+    /// The four numeric domains together are written as `number`.
     #[test]
     fn the_numeric_domains_read_folded() {
         assert_eq!(render(DomainSet::NUMERIC), "number");
@@ -262,13 +272,15 @@ mod tests {
             render(DomainSet::NUMERIC.with(ValueDomain::String)),
             "string | number"
         );
-        // Short of all four, the decimal halves still fold.
+        // Without all four numeric domains, the integer and the decimal domain still combine.
         assert_eq!(
             render(DomainSet::EXACT.with(ValueDomain::Double)),
             "decimal | double"
         );
     }
 
+    /// A tuple shape is written as in a declaration, with a comma after a single element,
+    /// and a map domain without known shapes is written as `map`.
     #[test]
     fn shapes_read_as_declarations() {
         let point = DataValue::tuple(TupleValue::labeled(

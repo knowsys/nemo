@@ -3,6 +3,7 @@
 
 use super::*;
 
+/// A builtin's name in predicate position is refused with a label that says it is a builtin.
 #[test]
 fn a_builtin_call_in_predicate_position_says_so() {
     let (_, diagnostics) = Program::parse("log(?x) :- n(?x) .", FileId::new(0));
@@ -13,10 +14,12 @@ fn a_builtin_call_in_predicate_position_says_so() {
     );
 }
 
+/// A table that a stratum leaves final is merged into one block before a later stratum
+/// reads it.
 #[test]
 fn a_finished_table_merges_whole_before_later_strata_read_it() {
-    // `path` grows over several iterations; `reach` reads it in a later
-    // stratum, after nothing writes `path` any more.
+    // `path` grows over several iterations, and `reach` reads it in a later
+    // stratum, which does not write `path`.
     let source = "e(1, 2) . e(2, 3) . e(3, 4) . e(4, 5) . e(5, 6) .\n\
                   path(?x, ?y) :- e(?x, ?y) .\n\
                   path(?x, ?z) :- path(?x, ?y), e(?y, ?z) .\n\
@@ -31,6 +34,7 @@ fn a_finished_table_merges_whole_before_later_strata_read_it() {
     assert_eq!(count(&mut engine, "reach"), 5);
 }
 
+/// A predicate with more columns than a 16-bit number can count loads.
 #[test]
 fn a_predicate_wider_than_16_bits_of_columns_loads() {
     let wide = format!("p({}) .", vec!["1"; 70_000].join(", "));
@@ -41,6 +45,8 @@ fn a_predicate_wider_than_16_bits_of_columns_loads() {
     assert_eq!(count(&mut engine, "p"), 1);
 }
 
+/// A second `@base` with another IRI is an error for a load and for a check,
+/// labeled at both directives.
 #[test]
 fn a_second_base_iri_is_an_error() {
     let source = "
@@ -60,6 +66,7 @@ fn a_second_base_iri_is_an_error() {
     assert_eq!(problems[0].code(), codes::CONFLICTING_BASE, "{problems:?}");
 }
 
+/// Declaring the same `@base` again, in the program or in an extension, is no conflict.
 #[test]
 fn the_same_base_again_is_no_conflict() {
     let mut engine = run("
@@ -74,6 +81,8 @@ fn the_same_base_again_is_no_conflict() {
     assert_eq!(count(&mut engine, "https://example.org/q"), 1);
 }
 
+/// A rule with an unbound head variable fails the load,
+/// and so does a module-qualified name in a program that is not linked.
 #[test]
 fn unsafe_and_unsupported_rules_are_diagnosed() {
     let (program, _) = Program::parse("p(?x) :- q(?y) .", FileId::new(0));
@@ -85,10 +94,11 @@ fn unsafe_and_unsupported_rules_are_diagnosed() {
     assert!(engine.load(program).is_err());
 }
 
+/// A positive nullary body atom is refused as unsupported,
+/// while a negated one is a guard and runs.
 #[test]
 fn a_positive_nullary_body_atom_is_refused() {
-    // Joins read columns, so the atom is refused rather than crashing the join;
-    // a negated nullary atom is a guard and runs.
+    // Joins read columns, so the atom is refused rather than crashing the join.
     for source in ["z() . p(1) :- z() .", "z() . q(1) . p(?x) :- q(?x), z() ."] {
         let mut engine = Engine::new();
         let problem = engine.load(parse(source)).expect_err(source);
@@ -98,6 +108,8 @@ fn a_positive_nullary_body_atom_is_refused() {
     assert_eq!(rows(&mut engine, "p"), vec![vec!["1".to_string()]]);
 }
 
+/// A rule without positive body atoms fires once, adds no predicate to the listing,
+/// derives facts that trace to the rule alone, and fires once added by an extension.
 #[test]
 fn a_rule_without_positive_atoms_fires_once_and_hides_what_it_reads() {
     let mut engine = run("
@@ -131,6 +143,7 @@ fn a_rule_without_positive_atoms_fires_once_and_hides_what_it_reads() {
     assert_eq!(rows(&mut engine, "r"), vec![vec!["7".to_string()]]);
 }
 
+/// A rule without positive body atoms must still bind every variable.
 #[test]
 fn a_rule_without_positive_atoms_still_binds_every_variable() {
     let problem = Engine::new()
@@ -139,6 +152,8 @@ fn a_rule_without_positive_atoms_still_binds_every_variable() {
     assert_eq!(problem.code(), codes::UNSAFE_VARIABLE, "{problem:?}");
 }
 
+/// A nondeterministic function is called once per row,
+/// both in an assignment and in a ground condition.
 #[test]
 fn nondeterministic_assignments_draw_per_row() {
     let mut engine = run("
@@ -146,8 +161,8 @@ fn nondeterministic_assignments_draw_per_row() {
         drawn(?x, ?v) :- data(?x), ?v = STRUUID() .
         passed(?x) :- data(?x), RAND() >= 0.0d .
     ");
-    // Every row gets its own value; the ground condition is evaluated per
-    // row instead of folding at compile time.
+    // Every row gets its own value, and the ground condition is evaluated per
+    // row instead of being folded when the rule is compiled.
     let rows = rows(&mut engine, "drawn");
     assert_eq!(rows.len(), 3);
     let mut draws: Vec<&String> = rows.iter().map(|row| &row[1]).collect();
@@ -157,14 +172,15 @@ fn nondeterministic_assignments_draw_per_row() {
     assert_eq!(count(&mut engine, "passed"), 3);
 }
 
+/// A recursive rule that calls a nondeterministic function stores one row per input row.
 #[test]
 fn recursive_draws_happen_once_per_row() {
     // The rule calling `STRUUID()` sits in a recursive component, so its
     // predicate grows across iterations. A delta window that starts at a
     // block boundary before the rule's last application would read some
     // rows again, and every second read would call the function again,
-    // storing a second row the head deduplication cannot remove. Such a
-    // rule therefore reads exact windows: one value per row, always.
+    // storing a second row the head deduplication cannot remove. So such a
+    // rule reads exact windows, which gives one value per row.
     let mut engine = run("
         seed(1) .
         data(?x) :- seed(?x) .
@@ -176,6 +192,7 @@ fn recursive_draws_happen_once_per_row() {
     assert_eq!(count(&mut engine, "drawn"), 5);
 }
 
+/// A predicate negated within its own recursion fails the load.
 #[test]
 fn a_predicate_negated_within_its_own_recursion_is_refused() {
     let (program, _) = Program::parse("q(1) . p(?x) :- q(?x), ~p(?x) .", FileId::new(0));
@@ -183,6 +200,7 @@ fn a_predicate_negated_within_its_own_recursion_is_refused() {
     assert!(engine.load(program).is_err());
 }
 
+/// A condition that fails to evaluate on a row drops the row and counts an evaluation error.
 #[test]
 fn evaluation_errors_are_counted_not_silent() {
     let mut engine = run("
@@ -230,7 +248,7 @@ fn oversized_expressions_are_errors() {
 /// - Several heads read one shared result.
 /// - An aggregate and an existential check read units of their own.
 ///
-/// A shape that runs in more steps than these lost a fusion.
+/// A shape that runs in more units than these lost a fusion.
 #[test]
 fn rule_shapes_run_in_few_units() {
     let facts = "e(1, 2) . e(2, 3) . e(3, 4) . f(3) . g(3, 3) .";

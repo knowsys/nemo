@@ -1,4 +1,5 @@
-//! The parser state: a cursor over the token buffer, and the primitives the grammar reads it by.
+//! The parser's state, a cursor over the token buffer,
+//! and the basic operations that the grammar uses to read the buffer.
 
 use std::borrow::Cow;
 
@@ -10,32 +11,34 @@ use crate::{
     parser::lexer::{self, Token, TokenKind},
 };
 
-/// The parser state over one token buffer.
+/// The state of a parser over one token buffer.
+///
+/// The functions of the grammar are its methods, spread over the modules of the parser.
 pub(super) struct Parser<'a> {
-    /// The source text, for token content.
+    /// The source text that the spans of the tokens point into.
     source: &'a str,
     /// The token buffer, ending with [TokenKind::End].
     tokens: Vec<Token>,
-    /// The position of the next token.
+    /// The index of the next token in the buffer.
     position: usize,
-    /// The problems found so far.
+    /// The diagnostics reported so far.
     diagnostics: Vec<Diagnostic>,
-    /// How many terms the term parser is currently nested in.
+    /// The current nesting depth of terms.
     depth: usize,
-    /// What messages call the end of the token buffer.
+    /// The name of the end of the token buffer in messages, such as `the end of the input`.
     end: &'static str,
 }
 
-/// How deeply terms may nest.
+/// The deepest nesting of terms that the parser accepts.
 ///
-/// The term parser descends recursively,
+/// The term parser is recursive,
 /// so deeper nesting is reported as an error instead of overflowing the stack.
 pub(super) const MAX_NESTING: usize = 128;
 
 impl<'a> Parser<'a> {
     /// Creates a parser over a token buffer, starting at the given nesting depth.
     ///
-    /// `end` names the buffer's end for messages.
+    /// `end` is the name of the buffer's end in messages.
     fn over(source: &'a str, tokens: Vec<Token>, depth: usize, end: &'static str) -> Self {
         Self {
             source,
@@ -47,7 +50,8 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// Creates a parser over a source file, keeping its lexical problems.
+    /// Tokenizes a whole source text and creates a parser over its tokens,
+    /// keeping the diagnostics of the lexer.
     fn new(source: &'a str, file: FileId) -> Self {
         let (tokens, diagnostics) = lexer::tokenize(source, file);
         Self {
@@ -56,10 +60,12 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// Parses one piece that must span a whole token buffer.
+    /// Parses one item with `parse`, and requires the item to span the whole token buffer.
     ///
-    /// Returns the first lexical problem as the error, if there is one.
-    /// `end` names the buffer's end for messages.
+    /// `(tokens, diagnostics)` is the output of the lexer.
+    /// If the lexer reported a diagnostic, the first one is returned as the error.
+    /// `depth` is the nesting depth to start at, and `end` is the name of the buffer's end
+    /// in messages.
     fn whole<T>(
         source: &'a str,
         (tokens, diagnostics): (Vec<Token>, Vec<Diagnostic>),
@@ -78,11 +84,12 @@ impl<'a> Parser<'a> {
         Ok(parsed)
     }
 
-    /// Parses the statements of a whole source file.
+    /// Parses the statements of a whole source text.
     ///
-    /// A statement that fails becomes a diagnostic, and parsing resumes after it.
-    /// A statement that fails only because it reaches a token the lexer rejected
-    /// adds nothing to the lexer's diagnostic.
+    /// A statement that does not parse becomes a diagnostic,
+    /// and parsing resumes after the next ` .`.
+    /// A statement that fails only because it reaches a token that the lexer rejected
+    /// adds no diagnostic, since the lexer has already reported one.
     pub(super) fn program(source: &'a str, file: FileId) -> (Vec<Statement>, Vec<Diagnostic>) {
         let mut parser = Self::new(source, file);
         let mut statements = Vec::new();
@@ -102,7 +109,9 @@ impl<'a> Parser<'a> {
         (statements, parser.diagnostics)
     }
 
-    /// Parses one component that must span the whole input (file id 0).
+    /// Parses one component with `parse`, and requires it to span the whole input.
+    ///
+    /// The spans of the component and of the error have the file id 0.
     pub(super) fn component<T>(
         source: &str,
         parse: impl FnOnce(&mut Parser<'_>) -> Result<T, Diagnostic>,
@@ -116,11 +125,12 @@ impl<'a> Parser<'a> {
         )
     }
 
-    /// Parses an embedded expression at its absolute source region,
-    /// which is how the expressions of format strings re-enter the term grammar.
+    /// Parses the term that `span` covers in the source text,
+    /// such as an expression inside a format string.
     ///
-    /// The expression continues the current nesting,
-    /// so format strings nested in format strings meet the same limit as any other term.
+    /// The nesting depth continues from the current one,
+    /// so format strings nested in format strings meet the same [MAX_NESTING] limit
+    /// as any other term.
     pub(super) fn embedded(&self, span: Span) -> Result<Term, Diagnostic> {
         let slice = &self.source[span.start as usize..span.end as usize];
         Parser::whole(
@@ -132,10 +142,11 @@ impl<'a> Parser<'a> {
         )
     }
 
-    /// Parses a term at one more level of nesting,
-    /// returning an error past [MAX_NESTING] levels.
+    /// Runs `parse` one level of nesting deeper,
+    /// or returns an error if that level would exceed [MAX_NESTING].
     ///
-    /// Every recursive step of the term parser goes through here.
+    /// Every recursive step of the term parser must go through this function,
+    /// so that the limit holds.
     pub(super) fn nested<T>(
         &mut self,
         parse: impl FnOnce(&mut Self) -> Result<T, Diagnostic>,
@@ -150,7 +161,7 @@ impl<'a> Parser<'a> {
     }
 
     /// Returns the token `n` places after the next one,
-    /// or the final [End](TokenKind::End) where the buffer is shorter.
+    /// or the final [End](TokenKind::End) token if the buffer ends before it.
     pub(super) fn lookahead(&self, n: usize) -> &Token {
         &self.tokens[(self.position + n).min(self.tokens.len() - 1)]
     }
@@ -160,7 +171,7 @@ impl<'a> Parser<'a> {
         &self.lookahead(0).kind
     }
 
-    /// Returns the kind after the next token.
+    /// Returns the kind of the token after the next one.
     pub(super) fn peek_second(&self) -> &TokenKind {
         &self.lookahead(1).kind
     }
@@ -170,8 +181,8 @@ impl<'a> Parser<'a> {
         self.lookahead(0).span
     }
 
-    /// Returns the most recently consumed token's span,
-    /// which adjacency checks compare the next token against.
+    /// Returns the span of the most recently consumed token,
+    /// or of the first token if none has been consumed.
     pub(super) fn previous_span(&self) -> Span {
         self.tokens[self.position.saturating_sub(1)].span
     }
@@ -181,13 +192,17 @@ impl<'a> Parser<'a> {
         self.peek() == kind
     }
 
-    /// Returns whether the next token is the given bare word,
-    /// a contextual keyword the grammar reads only in its position.
+    /// Returns whether the next token is the given bare name.
+    ///
+    /// The grammar's contextual keywords, such as the `per` of an aggregate,
+    /// are bare names that it recognizes only in certain positions.
     pub(super) fn at_word(&self, word: &str) -> bool {
         self.at(&TokenKind::Ident) && self.text(self.lookahead(0)) == word
     }
 
     /// Consumes and returns the next token.
+    ///
+    /// At the final [End](TokenKind::End) token, the position stays where it is.
     pub(super) fn advance(&mut self) -> Token {
         let token = self.tokens[self.position].clone();
         if self.position + 1 < self.tokens.len() {
@@ -196,20 +211,23 @@ impl<'a> Parser<'a> {
         token
     }
 
-    /// Consumes the next token if it has the given kind.
+    /// Consumes and returns the next token if it has the given kind.
     pub(super) fn eat(&mut self, kind: &TokenKind) -> Option<Token> {
         self.at(kind).then(|| self.advance())
     }
 
-    /// Consumes the next token, requiring the given kind.
+    /// Consumes and returns the next token,
+    /// or returns an error if it does not have the given kind.
+    ///
+    /// `what` describes the expected token in the error.
     pub(super) fn expect(&mut self, kind: &TokenKind, what: &str) -> Result<Token, Diagnostic> {
         self.eat(kind).ok_or_else(|| self.unexpected(what))
     }
 
-    /// Consumes the given bare word, requiring it.
+    /// Consumes the next token, or returns an error if it is not the given bare name.
     ///
-    /// `what` describes the word in the error if the next token is not a word,
-    /// and `error` builds the error if it is a different word.
+    /// `what` describes the expected token in the error if the next token is not a bare name,
+    /// and `error` builds the error if it is a different name.
     pub(super) fn expect_word(
         &mut self,
         word: &str,
@@ -223,7 +241,7 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
-    /// Returns the source text of a token, less `front` bytes of markup before it and `back` after.
+    /// Returns the source text of a token without its first `front` and its last `back` bytes.
     fn slice(&self, token: &Token, front: usize, back: usize) -> &'a str {
         &self.source[token.span.start as usize + front..token.span.end as usize - back]
     }
@@ -238,14 +256,14 @@ impl<'a> Parser<'a> {
         &self.source[span.start as usize..span.end as usize]
     }
 
-    /// Returns the source text of a token, without its first marker character
-    /// (variable, directive, and aggregate names).
+    /// Returns the source text of a token without its first character,
+    /// such as the `?` of a variable or the `@` of a directive.
     pub(super) fn marked_text(&self, token: &Token) -> &'a str {
         self.slice(token, 1, 0)
     }
 
-    /// Returns the IRI an IRI token spells: its text without the angle brackets,
-    /// its character escapes decoded.
+    /// Returns the IRI of an IRI token,
+    /// which is its text without the angle brackets and with its escapes decoded.
     pub(super) fn iri_text(&self, token: &Token) -> Cow<'a, str> {
         Iri::unescape(self.slice(token, 1, 1))
     }
@@ -260,8 +278,7 @@ impl<'a> Parser<'a> {
         left.end == right.start
     }
 
-    /// Returns the span from a start position to the end of the last consumed
-    /// token.
+    /// Returns the span from the start of `start` to the end of the last consumed token.
     pub(super) fn span_from(&self, start: Span) -> Span {
         let end = self.tokens[self.position.saturating_sub(1)].span.end;
         Span {
@@ -271,11 +288,11 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// Returns a diagnostic for an unexpected token.
+    /// Returns the error that the next token is not the `expected` one.
     ///
-    /// A string is described by its kind rather than quoted, and any
-    /// other token only as far as [EXCERPT] shows it: a token can run
-    /// over lines or megabytes, and a message is one line.
+    /// The error describes a string or a format string by its kind,
+    /// and quotes any other token only as far as [excerpt] does.
+    /// A token can span many lines or megabytes, and a message is one line.
     pub(super) fn unexpected(&self, expected: &str) -> Diagnostic {
         let token = &self.tokens[self.position];
         let found = match &token.kind {
@@ -291,8 +308,7 @@ impl<'a> Parser<'a> {
         .at(Some(token.span))
     }
 
-    /// Skips to the next statement boundary: past the next ` .`, or to
-    /// the end of the input.
+    /// Skips past the next ` .` token, which ends a statement, or to the end of the input.
     fn recover(&mut self) {
         loop {
             match self.peek() {
@@ -309,12 +325,13 @@ impl<'a> Parser<'a> {
     }
 }
 
-/// How many characters of a token a message quotes.
+/// The maximum number of characters of a token that a message quotes.
 const EXCERPT: usize = 40;
 
-/// Returns the start of a token's text, as far as a message quotes it: its
-/// first line, cut at [EXCERPT] characters, with an ellipsis for what
-/// is left out.
+/// Returns the part of a token's text that a message quotes.
+///
+/// This is the first line of the text, cut at [EXCERPT] characters,
+/// with an ellipsis if anything is left out.
 pub(super) fn excerpt(text: &str) -> String {
     let line = text.lines().next().unwrap_or("");
     match line.char_indices().nth(EXCERPT) {

@@ -1,24 +1,29 @@
-//! The names of term syntax.
+//! The names of term syntax, which are written without quotes or brackets.
 
-/// A kind of name in term syntax, distinguished by what may precede it.
+/// A kind of name in term syntax.
 ///
-/// A name starts with a letter or `_` and continues with letters, digits, `_` and `%`.
-/// Letters are those of Turtle's and SPARQL's names, beyond ASCII,
-/// and so are the marks that may continue a name, such as combining accents.
-/// The kinds differ in what may start a name and in what may join two parts of one.
+/// The kinds differ in what may start a name and in what may join two parts of one,
+/// which depends on what precedes the name.
+/// A name starts with a letter or `_`, or also with a digit if it is [Local](Self::Local).
+/// It continues with letters, digits, `_` and `%`.
+/// The letters are those of Turtle's and SPARQL's names, which go beyond ASCII.
+/// A name may also continue with the marks of those names, such as combining accents.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NameKind {
-    /// A name that follows a marker character.
+    /// A name that follows a marker character, such as `?` or `@`.
     ///
-    /// Nothing joins two parts, so the name at the start of `x-1` is `x`.
+    /// No character joins two parts, so the name at the start of `x-1` is `x`.
     Marked,
-    /// A name without a marker, as `alice` or `my-lib`: a `-` joins two parts.
-    Bare,
-    /// A local name after a prefix and its `:`, or a blank node label after `_:`,
-    /// as in `wd:42`, `ex:v1.2` or `_:b.1`.
+    /// A name without a marker, such as `alice` or `my-lib`.
     ///
-    /// It may also start with a digit, and a `-` or a `.` joins two parts,
-    /// as in Turtle and SPARQL, so a name never ends with either.
+    /// A `-` joins two parts.
+    Bare,
+    /// A local name after a prefix and its `:`, or a blank node label after `_:`.
+    ///
+    /// Examples are the `42` of `wd:42`, the `v1.2` of `ex:v1.2` and the `b.1` of `_:b.1`.
+    /// As in Turtle and SPARQL, such a name may also start with a digit,
+    /// and a `-` or a `.` joins two parts.
+    /// So the name never ends with a `-` or a `.`.
     Local,
 }
 
@@ -26,7 +31,7 @@ impl NameKind {
     /// Returns the length in bytes of the longest name of this kind at the start of a text,
     /// or 0 if the text does not start with one.
     ///
-    /// A `-` or `.` joins two parts only where a letter, a digit, `_` or a mark follows it.
+    /// A `-` or `.` joins two parts only if a letter, a digit, `_` or a mark follows it.
     ///
     /// # Example
     ///
@@ -67,10 +72,10 @@ impl NameKind {
         !text.is_empty() && self.length(text) == text.len()
     }
 
-    /// Returns whether a character continues a name of any kind:
-    /// a letter, a digit, `_`, `%`, or a mark of Turtle's names.
+    /// Returns whether a character can continue a name of any kind.
     ///
-    /// A `%` continues a name as written, not as the start of an escape.
+    /// These characters are the letters, the digits, `_`, `%`, and the marks of Turtle's names.
+    /// A `%` is part of the name as written, and does not start an escape sequence.
     pub fn continues(character: char) -> bool {
         is_letter(character)
             || character.is_ascii_digit()
@@ -80,14 +85,14 @@ impl NameKind {
             )
     }
 
-    /// Returns whether a character starts a name of this kind.
+    /// Returns whether a character can start a name of this kind.
     fn starts(self, character: char) -> bool {
         is_letter(character)
             || character == '_'
             || (self == NameKind::Local && character.is_ascii_digit())
     }
 
-    /// Returns whether a character joins two parts of a name of this kind.
+    /// Returns whether a character can join two parts of a name of this kind.
     fn joins(self, character: char) -> bool {
         match self {
             NameKind::Marked => false,
@@ -97,7 +102,8 @@ impl NameKind {
     }
 }
 
-/// Returns whether a character is a letter of Turtle's and SPARQL's names (`PN_CHARS_BASE`).
+/// Returns whether a character is a letter in Turtle's and SPARQL's names,
+/// which their grammars call `PN_CHARS_BASE`.
 fn is_letter(character: char) -> bool {
     matches!(
         character,
@@ -122,6 +128,9 @@ fn is_letter(character: char) -> bool {
 mod tests {
     use super::*;
 
+    /// Each kind finds the longest name of its own rules at the start of a text.
+    ///
+    /// Each case lists the lengths in bytes for `Marked`, `Bare` and `Local`.
     #[test]
     fn names_follow_their_kind() {
         let cases = [
@@ -153,6 +162,7 @@ mod tests {
         }
     }
 
+    /// A text is a name of a kind only if the whole text is one name of that kind.
     #[test]
     fn a_name_is_admitted_whole() {
         assert!(NameKind::Bare.admits("café-1"));

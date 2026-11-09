@@ -1,5 +1,7 @@
 //! Batches of delimiter-separated resources, parsed in parallel and
 //! interned in resource order.
+//!
+//! A large resource is cut into *windows*, byte ranges that are parsed in parallel.
 
 use std::{
     fs::File,
@@ -24,65 +26,70 @@ use crate::{
     stream::compression,
 };
 
-/// The size a window aims for: a resource of at least twice this size splits into windows.
+/// The size a window aims for.
 ///
-/// One bulk file dominating a batch is the common case,
-/// and parallelism per resource alone leaves it on one thread.
-/// The runs of a window take up to eight times its text (narrow rows of short numbers),
-/// which [AHEAD_BYTES] holds whole.
+/// A resource of at least twice this size is cut into windows.
+/// The common case is a batch with one bulk file,
+/// which would stay on one thread if only whole resources were parsed in parallel.
+/// The runs of a window need up to eight times the size of its text, for narrow rows of short
+/// numbers, and [AHEAD_BYTES] has room for all of them.
 const WINDOW_BYTES: u64 = 2 * 1024 * 1024;
 
-/// The bytes of input a single window must hold before it parses on the worker pool.
+/// The size of input from which a batch of a single window is parsed on the worker pool.
 ///
-/// A smaller window parses on the calling thread.
+/// A batch of a single window with less input is parsed on the calling thread.
 const POOL_BYTES: u64 = 64 * 1024;
 
-/// The bytes of a window's runs a worker may hold ready before interning reaches them.
+/// The size of a window's runs that a worker may hold ready before they are interned.
 ///
 /// A parse that is further ahead waits.
-/// Interning takes the windows in order,
-/// so a window parses in parallel only as far as its runs fit here.
-/// The bound holds the runs of a [window](WINDOW_BYTES) whole.
+/// The windows are interned in order,
+/// so a window is parsed in parallel only as far as its runs fit within this bound.
+/// The bound has room for all runs of a [window](WINDOW_BYTES).
 const AHEAD_BYTES: usize = 16 * 1024 * 1024;
 
-/// The bytes of a whole resource's runs a worker may hold ready before interning reaches them.
+/// The size of a whole resource's runs that a worker may hold ready before they are interned.
 ///
-/// A whole resource has no bound on its size, so its runs cannot be held whole.
-/// A couple of runs keep its parse beside its interning.
+/// A resource that is not cut into windows has no bound on its size,
+/// so this bound cannot have room for all its runs.
+/// Room for a couple of runs keeps its parse running alongside its interning.
 const WHOLE_AHEAD_BYTES: usize = 4 * 1024 * 1024;
 
-/// One unit of parallel parsing: a resource, or a byte window of one.
+/// One unit of parallel parsing: a whole resource, or a window of one.
 #[derive(Debug)]
 struct Window {
-    /// The resource this window reads.
+    /// The index of the resource that this window reads.
     source: usize,
-    /// The window within the resource's windows, in file order.
+    /// The index of this window among the resource's windows, in file order.
     position: usize,
-    /// The byte range, `None` for the whole file (through the ordinary
-    /// open path, compression included).
+    /// The byte range, or `None` for the whole resource.
+    ///
+    /// A whole resource is opened as a reader opens a file, with decompression.
     range: Option<std::ops::Range<u64>>,
 }
 
-/// A batch of resources loaded together.
+/// A batch of delimiter-separated resources loaded together.
 ///
-/// Parsing and decoding run in parallel, window by window.
-/// A large unquoted plain file splits into byte windows at record boundaries,
-/// so one bulk resource keeps every worker busy.
+/// The resources are parsed in parallel, window by window.
+/// A large resource that is unquoted, uncompressed and without a row limit is cut into windows
+/// at record boundaries, so that one bulk resource keeps every worker busy.
 /// Each window hands its rows on in runs of bounded size,
 /// and the calling thread interns the runs into the dictionary as they arrive,
-/// in resource and window order.
-/// The dictionary so keeps one writer,
-/// and holds the terms in the order a sequential read would give them.
+/// in the order of the resources and their windows.
+/// So the dictionary has one writer,
+/// and receives the values in the order that a sequential read would give them.
+///
 /// A worker's parse waits once the runs it holds ahead of the interning reach a bound,
-/// so a batch holds that much per worker, however large its resources.
-/// The bound holds a window whole,
+/// so a batch keeps at most that much in memory per worker, however large its resources.
+/// The bound has room for a whole window,
 /// so the workers parse the windows after the one being interned in parallel.
-/// A batch of one small window parses on the calling thread, interning each run as it is parsed.
+/// A batch of one small window is parsed on the calling thread,
+/// which interns each run as it is parsed.
 #[derive(Debug)]
 pub struct ResourceBatch {
     /// The resources, loaded in order.
     sources: Vec<DsvResource>,
-    /// The window size, whose default suits bulk files.
+    /// The size a window aims for, which is [WINDOW_BYTES] unless a test changes it.
     window_bytes: u64,
 }
 
@@ -95,14 +102,15 @@ impl ResourceBatch {
         }
     }
 
-    /// Returns the windows of one resource: byte ranges cut at record boundaries,
-    /// or the whole resource if windowing cannot apply.
+    /// Returns the windows of the resource at `index`: byte ranges cut at record boundaries,
+    /// or the whole resource if it cannot be cut.
     ///
-    /// It cannot apply under quoting (a record boundary is then not a plain newline),
-    /// under compression (no seeking into a stream),
-    /// under a row limit (counted in the resource's order,
-    /// which windows parsed apart cannot share),
-    /// to small resources, or if a scan finds no boundary.
+    /// A resource is not cut
+    /// - under quoting, since a newline is then not always a record boundary,
+    /// - under compression, since a compressed stream cannot be read from its middle,
+    /// - under a row limit, which counts rows in the resource's order across all windows,
+    /// - if it is small, or
+    /// - if a scan finds no record boundary.
     fn windows(&self, index: usize) -> Vec<Window> {
         let whole = vec![Window {
             source: index,
@@ -156,7 +164,7 @@ impl ResourceBatch {
                     bounds.push(boundary)
                 }
                 Some(_) => {}
-                // No boundary in reach: keep what we have.
+                // No boundary within reach, so keep the windows found so far.
                 None => break,
             }
         }
@@ -175,8 +183,8 @@ impl ResourceBatch {
             .collect()
     }
 
-    /// Returns the bytes of input the batch reads:
-    /// the sizes of its files as they are stored, compressed or not, and of its bytes in memory.
+    /// Returns the size of the batch's input:
+    /// the stored sizes of its files, compressed or not, and the sizes of its bytes in memory.
     fn input_bytes(&self) -> u64 {
         self.sources
             .iter()
@@ -188,9 +196,9 @@ impl ResourceBatch {
             .sum()
     }
 
-    /// Parses one window, handing its runs to `emit`.
+    /// Parses one window and passes its runs to `emit`.
     ///
-    /// A failure to read the window is its last item.
+    /// If the window cannot be read, the failure is passed to `emit` after the runs.
     fn parse(
         &self,
         window: &Window,
@@ -199,7 +207,7 @@ impl ResourceBatch {
     ) {
         let source = &self.sources[window.source];
         let mut options = source.options.clone();
-        // Only the source's first window carries the header to skip.
+        // Only the first window of a resource contains the header to skip.
         options.ignore_headers = source.options.ignore_headers && window.position == 0;
         let reader = DsvReader::new(options);
         let mut deliver = |run: Parsed| emit(Ok(run));
@@ -215,8 +223,8 @@ impl ResourceBatch {
             (Resource::Bytes { bytes, .. }, range) => {
                 let slice: &[u8] = match range {
                     None => bytes,
-                    // Windowed bytes are never compressed (the windowing
-                    // guard), and the bounds came from this buffer.
+                    // Bytes cut into windows are never compressed, since `windows`
+                    // does not cut compressed ones, and the bounds came from this buffer.
                     Some(range) => {
                         let start = usize::try_from(range.start).expect("bytes are in memory");
                         let end = usize::try_from(range.end).expect("bytes are in memory");
@@ -235,9 +243,9 @@ impl ResourceBatch {
         }
     }
 
-    /// Loads every resource, delivering the loads in the batch's order.
+    /// Loads every resource, and returns the loads in the order of the batch.
     ///
-    /// The sources' conditions evaluate in the given context.
+    /// `context` is the evaluation context of the resources' conditions.
     ///
     /// # Errors
     ///
@@ -250,8 +258,8 @@ impl ResourceBatch {
         let windows: Vec<Window> = (0..self.sources.len())
             .flat_map(|index| self.windows(index))
             .collect();
-        // Several windows go to the pool whatever their size, so only a
-        // lone window's file is measured.
+        // Several windows go to the worker pool whatever their size, so only
+        // the input of a single window is measured.
         let tasks = if windows.len() > 1 || self.input_bytes() >= POOL_BYTES {
             Tasks::of(windows.len())
         } else {
@@ -263,9 +271,9 @@ impl ResourceBatch {
             .iter()
             .map(|source| Loaded::new(source.options.arity(), context))
             .collect();
-        // Lines the earlier windows of each source consumed, and the
-        // window being interned with the lines it consumed so far: a
-        // window's line numbers continue from its source's base.
+        // For each resource, the lines that its earlier windows consumed,
+        // and the window being interned with the lines it consumed so far.
+        // A window's line numbers continue from its resource's base.
         let mut bases = vec![0u64; self.sources.len()];
         let mut current: Option<(usize, u64)> = None;
         let mut failure = None;
@@ -303,15 +311,15 @@ impl ResourceBatch {
     }
 }
 
-/// Returns the first byte after the record boundary at or past `target`,
-/// found by scanning for a newline.
+/// Returns the position of the first byte after the first newline at or after `target`.
 ///
-/// Returns `None` if no newline is in reach (a record longer than the scan window)
-/// or the file cannot be read there.
+/// `size` is the size of the file.
+/// Returns `None` if no newline is within reach, as for a record longer than the scan,
+/// if the newline ends the file, or if the file cannot be read there.
 fn next_record_boundary(file: &mut File, target: u64, size: u64) -> Option<u64> {
     /// How far past the target a record boundary is looked for.
     const SCAN: u64 = 1 << 20;
-    /// The bytes one read of the scan takes.
+    /// The size of one read of the scan.
     const CHUNK: usize = 1 << 16;
 
     file.seek(SeekFrom::Start(target)).ok()?;

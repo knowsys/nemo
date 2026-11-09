@@ -4,12 +4,13 @@ use std::{fmt, num::ParseFloatError, str::FromStr};
 
 use crate::value::number::decimal::workspace;
 
-/// Returns the text of a finite floating-point number in XSD's canonical form for `xsd:double`
-/// and `xsd:float`: one digit before the point, at least one after, and an exponent,
-/// as `2.5E0`, `1.0E3`, `-1.0E-1` or `0.0E0`.
+/// Returns a finite floating-point number in XSD's canonical form
+/// for `xsd:double` and `xsd:float`.
 ///
-/// The digits are the shortest that read back as the value in its own precision,
-/// so a float's `0.1` is `1.0E-1`, not the digits of the double it widens to.
+/// The form has one digit before the point, at least one after it, and an exponent,
+/// such as `2.5E0`, `1.0E3`, `-1.0E-1` or `0.0E0`.
+/// The digits are the shortest that are read back as the value in its own precision.
+/// So the float `0.1` is written `1.0E-1`, not with the digits of the double it widens to.
 pub(crate) fn scientific(value: impl fmt::UpperExp) -> String {
     let formatted = format!("{value:E}");
     match formatted.split_once('E') {
@@ -20,12 +21,14 @@ pub(crate) fn scientific(value: impl fmt::UpperExp) -> String {
     }
 }
 
-/// Writes a finite floating-point number as XPath casts it to a string:
-/// - in plain digits if its magnitude is at least `0.000001` and below `1000000`,
-///   as `5.5`, `1000` or `0.001`, and zero as `0` or `-0`,
-/// - in XSD's [canonical scientific form](scientific) otherwise, as `1.0E100`.
+/// Writes a finite floating-point number as XPath casts it to a string.
 ///
-/// The digits are the shortest that read back as the value in its own precision.
+/// - A number whose magnitude is at least `0.000001` and below `1000000` is written in plain
+///   digits, such as `5.5`, `1000` or `0.001`, and zero is written `0` or `-0`.
+/// - Any other number is written in XSD's [canonical scientific form](scientific),
+///   such as `1.0E100`.
+///
+/// The digits are the shortest that are read back as the value in its own precision.
 pub(crate) fn write_float(
     f: &mut fmt::Formatter<'_>,
     value: impl fmt::Display + fmt::UpperExp + Into<f64> + Copy,
@@ -40,14 +43,14 @@ pub(crate) fn write_float(
 
 /// An `xsd:decimal` lexical form parsed into its significant digits.
 ///
-/// The digits carry no leading or trailing zeros,
-/// and the exponent places the last of them;
-/// the value is `digits * 10^exponent`.
+/// The digits have no leading or trailing zeros,
+/// and the exponent is the power of ten of the last digit.
+/// The value is `digits * 10^exponent`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Parsed {
     /// Zero.
     Zero,
-    /// Significant digits that fit a `u64`, held as a magnitude.
+    /// Significant digits that fit into a `u64`, stored as a number.
     Small {
         /// Whether the value is negative.
         negative: bool,
@@ -56,7 +59,7 @@ pub(crate) enum Parsed {
         /// The base-10 exponent of the last significant digit.
         exponent: i64,
     },
-    /// More significant digits than a `u64` holds.
+    /// More significant digits than fit into a `u64`.
     Big {
         /// Whether the value is negative.
         negative: bool,
@@ -68,15 +71,15 @@ pub(crate) enum Parsed {
 }
 
 impl Parsed {
-    /// Parses an `xsd:decimal` lexical form,
-    /// an optional sign, digits, an optional fraction,
-    /// which includes every `xsd:integer` lexical form.
+    /// Parses an `xsd:decimal` lexical form, or returns `None` for a malformed lexical form
+    /// or a value beyond the [length limit](crate::value::Decimal).
     ///
-    /// The digits are scanned into a `u64` in one pass;
-    /// only a value whose significant digits outgrow it allocates.
+    /// The form is an optional sign followed by digits with an optional point,
+    /// and has at least one digit.
+    /// Every `xsd:integer` lexical form also has this form.
     ///
-    /// Returns `None` on malformed input,
-    /// and for a value whose canonical form exceeds the length limit.
+    /// The digits are scanned into a `u64` in one pass,
+    /// and only a value with more significant digits than fit into it allocates.
     pub(crate) fn parse(lexical: &str) -> Option<Self> {
         let (negative, rest) = match lexical.as_bytes() {
             [b'+', ..] => (false, &lexical[1..]),
@@ -99,8 +102,8 @@ impl Parsed {
             return None;
         }
 
-        // The significant digits are the digits without leading and trailing zeros;
-        // the exponent tracks the position of the last one.
+        // The significant digits are the digits without leading and trailing zeros,
+        // and the exponent is the power of ten of the last of them.
         let digits = integer_part.bytes().chain(fraction_part.bytes());
         let total = integer_part.len() + fraction_part.len();
         let Some(first) = digits.clone().position(|byte| byte != b'0') else {
@@ -146,18 +149,19 @@ impl Parsed {
     }
 }
 
-/// The lexical forms of numbers:
-/// writing them, reading them as floating-point numbers, and recognizing their forms.
+/// Functions on the lexical forms of numbers:
+/// writing them, reading them as floating-point numbers, and recognizing them.
 pub(crate) struct Lexical;
 
 impl Lexical {
-    /// Writes the number `digits * 10^exponent` in canonical decimal notation:
-    /// plain digits for an integer,
-    /// `digits.digits` without trailing zeros otherwise,
-    /// and no leading zeros beyond the single one of `0.x`.
+    /// Writes the number `digits * 10^exponent` in canonical decimal notation.
     ///
-    /// `digits` are significant digits without sign and without leading or trailing zeros;
-    /// a lone `"0"` denotes zero and comes with exponent 0.
+    /// An integer is written in plain digits, and any other number as digits, a point and
+    /// digits, without trailing zeros.
+    /// No leading zeros are written except the single one of `0.x`.
+    ///
+    /// `digits` are significant digits without sign and without leading or trailing zeros.
+    /// A lone `"0"` stands for zero, and comes with exponent 0.
     pub(crate) fn write_canonical(
         target: &mut impl fmt::Write,
         digits: &str,
@@ -192,9 +196,10 @@ impl Lexical {
         Ok(())
     }
 
-    /// Returns the floating-point number nearest to the exact decimal `magnitude * 10^exponent`,
-    /// negated if `negative` says so,
-    /// infinite beyond the range of the type.
+    /// Returns the floating-point number of type `F` nearest to the exact decimal
+    /// `magnitude * 10^exponent`, negated if `negative` is true.
+    ///
+    /// The result is infinite beyond the range of `F`.
     pub(crate) fn nearest<F>(negative: bool, magnitude: impl fmt::Display, exponent: i64) -> F
     where
         F: FromStr<Err = ParseFloatError>,
@@ -205,7 +210,7 @@ impl Lexical {
             .expect("a mantissa with an exponent is a float literal")
     }
 
-    /// Returns whether a lexical has the XSD form of a finite float or double:
+    /// Returns whether a text has the XSD lexical form of a finite float or double,
     /// `[+-]? (digits [. digits*] | . digits) ([eE] [+-]? digits)?`.
     pub(crate) fn is_float_form(lexical: &str) -> bool {
         let digits = |text: &str| text.bytes().all(|byte| byte.is_ascii_digit());
@@ -228,10 +233,10 @@ impl Lexical {
             })
     }
 
-    /// Returns whether a lexical has the form of an unsigned decimal number literal of Nemo term syntax,
-    /// without its type suffix: `digits [. digits] ([eE] [+-]? digits)?`.
+    /// Returns whether a text has the form of an unsigned number literal of term syntax
+    /// without its suffix, `digits [. digits] ([eE] [+-]? digits)?`.
     ///
-    /// Unlike the XSD forms, digits are required on both sides of the point.
+    /// Unlike in the XSD forms, digits are required on both sides of the point.
     pub(crate) fn is_term_form(lexical: &str) -> bool {
         let digits =
             |text: &str| !text.is_empty() && text.bytes().all(|byte| byte.is_ascii_digit());
@@ -256,6 +261,8 @@ impl Lexical {
 mod tests {
     use super::*;
 
+    /// A decimal whose significant digits fit into a `u64` is parsed into a magnitude,
+    /// without its leading or trailing zeros.
     #[test]
     fn parse_scans_small_values_without_allocating() {
         assert_eq!(
@@ -287,6 +294,8 @@ mod tests {
         );
     }
 
+    /// A decimal with more significant digits than fit into a `u64`
+    /// is parsed into a string of its digits.
     #[test]
     fn parse_allocates_past_a_u64() {
         assert_eq!(
@@ -307,6 +316,7 @@ mod tests {
         );
     }
 
+    /// Malformed lexical forms and values beyond the length limit are rejected.
     #[test]
     fn parse_rejects_malformed_and_unbounded() {
         for lexical in ["", ".", "+", "-", "1.5.5", "1e5", " 1", "1 ", "--1", "0x1"] {
@@ -320,6 +330,7 @@ mod tests {
         assert!(Parsed::parse(&format!("0.{}1", "0".repeat(999_999))).is_none());
     }
 
+    /// Canonical writing places the point and the zeros that the exponent asks for.
     #[test]
     fn canonical_writing_places_the_point() {
         let written = |digits: &str, exponent: i64| {
@@ -334,6 +345,7 @@ mod tests {
         assert_eq!(written("0", 0), "0");
     }
 
+    /// The XSD lexical forms of finite floats are recognized, and other texts are not.
     #[test]
     fn float_forms_are_recognized() {
         for lexical in ["1", "-1.5", ".5", "5.", "1e5", "-1.5E-3", "+2"] {
@@ -345,6 +357,8 @@ mod tests {
         }
     }
 
+    /// A number form of term syntax needs digits on both sides of a point,
+    /// and has no sign or suffix.
     #[test]
     fn term_forms_need_digits_around_the_point() {
         for lexical in ["1", "007", "1.50", "1e5", "1.5E-3", "2e+0"] {

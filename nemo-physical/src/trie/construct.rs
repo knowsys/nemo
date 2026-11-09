@@ -1,15 +1,17 @@
-//! The construction of a trie's columns: from runs, and from tries.
+//! The construction of a trie's columns, from runs or from tries.
 //!
-//! Both constructions follow one recipe.
-//! The rows are cut into shards at bounds on the first-column value,
-//! each shard's column pieces build on a worker straight into column builders,
-//! and the pieces concatenate: no row is copied into an intermediate buffer.
-//! A cut between distinct first-column values keeps every first-column subtree
-//! inside one shard, so the pieces concatenate without a block spanning two.
-//! The constructions differ in how they sample the bounds and in how they build a shard:
-//! they are the two [shard sources](ShardSource), in [runs] and [tries].
-//! Both read rows through a [distinct] filter or a [merge] into the [builder]s;
-//! a trie enters a merge as a [row range](RowRange).
+//! Both constructions follow one recipe:
+//! 1. The rows are cut into *shards* at *bounds*, which are first-column values.
+//! 2. Each shard builds its *pieces* of the columns on a worker,
+//!    directly in column builders, without copying rows into an intermediate buffer.
+//! 3. The pieces are concatenated into the columns.
+//!
+//! A cut between distinct first-column values keeps the subtree of each first-column node
+//! inside one shard, so no block below the first column spans two pieces.
+//! The two constructions differ in how they sample the bounds and how they build a shard.
+//! They are the two [shard sources](ShardSource), in [runs] and [tries].
+//! Both pass the rows through a [distinct] filter or a [merge] into the [builder]s,
+//! and a trie enters a merge as a [row range](RowRange).
 
 mod builder;
 mod distinct;
@@ -28,33 +30,36 @@ use crate::{
     },
 };
 
-/// A source the columns of a trie are built from, shard by shard: runs, or tries to merge.
+/// A source of a trie's columns, built shard by shard: runs, or tries to merge.
 ///
-/// The sources differ in how they sample the bounds and in how they build a shard.
-/// [build](Self::build) is the recipe they share.
+/// The sources differ in how they sample the bounds and how they build a shard.
+/// [build](Self::build) is the recipe that they share.
 trait ShardSource: Sync {
     /// Returns the number of columns.
     fn arity(&self) -> usize;
 
-    /// Returns bounds cutting the rows into about the given number of shards:
-    /// distinct first-column values, in storage order.
+    /// Returns the bounds that cut the rows into about the given number of shards.
+    ///
+    /// The bounds are distinct first-column values, in storage order.
     fn bounds(&self, shards: usize) -> Vec<StorageValue>;
 
-    /// Builds the column pieces of the rows whose first-column value lies in `low..high`,
-    /// a side unbounded if `None`.
+    /// Builds the column pieces of the rows whose first-column value lies in `low..high`.
+    ///
+    /// A bound that is `None` leaves its side unbounded.
     fn build_shard(&self, low: Option<StorageValue>, high: Option<StorageValue>) -> Vec<Column>;
 
-    /// Builds the columns, cut into about as many shards as the given tasks:
-    /// each shard builds its column pieces on a task, and the pieces concatenate.
+    /// Builds the columns in about as many shards as the given tasks.
+    ///
+    /// Each shard builds its column pieces on a task, and the pieces are concatenated.
     fn build(&self, tasks: Tasks) -> Vec<Column> {
         let pieces = self.map_shards(tasks, |low, high| self.build_shard(low, high));
         Column::concat_shards(self.arity(), pieces)
     }
 
-    /// Runs a build per shard, cut into about as many shards as the given tasks,
-    /// each on a task, and returns the results in shard order.
+    /// Runs `build` for each shard, each on a task, and returns the results in shard order.
     ///
-    /// Without bounds there is one shard, unbounded on both sides.
+    /// The rows are cut into about as many shards as the given tasks.
+    /// Without bounds, there is one shard, unbounded on both sides.
     fn map_shards<P: Send>(
         &self,
         tasks: Tasks,
@@ -100,11 +105,11 @@ pub(super) fn from_runs(arity: usize, runs: &[Run<'_>]) -> Vec<Column> {
     Runs::new(arity, runs).build(Tasks::cut(rows * arity, rows))
 }
 
-/// Builds the columns of a trie merging the given tries,
-/// at least one and of one positive arity, so that each of their rows is held once.
+/// Builds the columns of the merge of the given tries, which contains each of their rows once.
 ///
-/// The sources stream through cursors straight into the column builders,
-/// so the peak memory is the sources plus the builders, never a row buffer.
+/// There must be at least one trie, and the tries must have one positive arity.
+/// The rows of the tries are read through cursors directly into the column builders,
+/// so the peak memory is the tries plus the builders, and never a row buffer.
 pub(super) fn from_tries(sources: &[&Trie]) -> Vec<Column> {
     let arity = sources[0].arity();
     debug_assert!(arity > 0, "nullary tries hold no columns to build");
@@ -116,8 +121,10 @@ pub(super) fn from_tries(sources: &[&Trie]) -> Vec<Column> {
     from_tries_in(sources, tasks_for(sources))
 }
 
-/// Returns the tasks to merge the tries on: as many as their values are worth,
-/// at most as many as the longest first column holds values.
+/// Returns the tasks for merging the tries.
+///
+/// The work is the number of values of the tries,
+/// and there are at most as many tasks as the longest first column has values.
 fn tasks_for(sources: &[&Trie]) -> Tasks {
     let total: usize = sources.iter().map(|source| source.row_count()).sum();
     let distinct = sources
@@ -128,15 +135,17 @@ fn tasks_for(sources: &[&Trie]) -> Tasks {
     Tasks::cut(total * sources[0].arity(), distinct)
 }
 
-/// Builds the columns as [from_tries] does,
-/// cut into about as many shards as the given tasks.
+/// Builds the columns as [from_tries] does, in about as many shards as the given tasks.
 pub(super) fn from_tries_in(sources: &[&Trie], tasks: Tasks) -> Vec<Column> {
     Tries::new(sources).build(tasks)
 }
 
-/// Builds the columns as [from_tries] does, and a value per row of the merge:
-/// `value(source, row)` of the earliest source holding the row,
-/// with the row's index in that source.
+/// Builds the columns as [from_tries] does, and a value for each row of the merge.
+///
+/// The value of a row is `value(source, row)`,
+/// where `source` is the first source in the list that contains the row,
+/// and `row` is the row's index in that source.
+/// The values are returned in the merge's row order.
 pub(super) fn from_tries_carrying<T: Send>(
     sources: &[&Trie],
     value: impl Fn(usize, usize) -> T + Sync,
@@ -166,9 +175,9 @@ pub(super) fn from_tries_carrying<T: Send>(
     (Column::concat_shards(arity, columns), carried)
 }
 
-/// Returns the number of distinct rows across the given tries,
-/// at least one and of one positive arity:
-/// the merge of [from_tries] without the build.
+/// Returns the number of distinct rows across the given tries, without building their merge.
+///
+/// There must be at least one trie, and the tries must have one positive arity.
 pub(super) fn count_distinct(sources: &[&Trie]) -> usize {
     let arity = sources[0].arity();
     debug_assert!(arity > 0, "nullary tries hold no rows to merge");
@@ -199,14 +208,14 @@ mod tests {
         tuning::Tuning,
     };
 
-    /// A random row of the arity, from a small value space so that rows repeat.
+    /// Returns a random row of the arity, with values below `span` so that rows repeat.
     fn random_row(rng: &mut StdRng, arity: usize, span: i64) -> Vec<StorageValue> {
         (0..arity)
             .map(|_| StorageValue::integer(rng.gen_range(0..span)))
             .collect()
     }
 
-    /// Sorted buffers of random rows and the distinct rows they hold.
+    /// Returns sorted buffers of random rows, and the distinct rows that they contain.
     fn random_runs(
         rng: &mut StdRng,
         arity: usize,
@@ -229,14 +238,14 @@ mod tests {
         (buffers, expected.into_iter().collect())
     }
 
-    /// Builds from the buffers as runs and enumerates the trie.
+    /// Builds a trie from the buffers as runs, and returns its rows.
     fn built(arity: usize, buffers: &[SortedRowBuffer]) -> Vec<Vec<StorageValue>> {
         let runs: Vec<Run<'_>> = buffers.iter().map(SortedRowBuffer::run).collect();
         rows(&Trie::from_runs(arity, &runs))
     }
 
-    /// Builds from the buffers as runs cut into the given number of shards,
-    /// whatever the machine, and enumerates the trie.
+    /// Builds a trie from the buffers as runs, in the given number of shards on any machine,
+    /// and returns its rows.
     fn built_in(
         arity: usize,
         buffers: &[SortedRowBuffer],
@@ -247,6 +256,7 @@ mod tests {
         rows(&Trie::from_columns(arity, columns))
     }
 
+    /// Overlapping runs with repeated rows build the trie of their distinct rows.
     #[test]
     fn overlapping_runs_with_repeats_build_the_distinct_rows() {
         let mut rng = StdRng::seed_from_u64(3);
@@ -258,10 +268,10 @@ mod tests {
         }
     }
 
+    /// Runs that follow one another build the trie of their distinct rows,
+    /// although a first-column value is in both runs and a row repeats where they meet.
     #[test]
     fn chained_runs_build_without_a_merge() {
-        // Disjoint runs in order, with a first-column value spanning
-        // two of them and a repeat at their seam.
         let mut a = RowBuffer::new(2);
         let mut b = RowBuffer::new(2);
         for row in [[1, 1], [1, 2], [2, 5]] {
@@ -277,12 +287,13 @@ mod tests {
         assert_eq!(built(2, &[a.into_sorted(), b.into_sorted()]), expected);
     }
 
+    /// Builds large enough to be cut into shards give the distinct rows,
+    /// for runs that follow one another and for overlapping runs, in any number of shards.
     #[test]
     fn large_builds_cross_into_shards() {
-        // Enough rows to cut into shards on a multi-threaded build, and
-        // cut into a fixed number of them on any machine: chained runs, then
-        // overlapping ones, each against the distinct rows they hold; the
-        // one-run build of the chained runs' concatenation agrees.
+        // The builds are large enough to be cut into shards on a machine with several threads,
+        // and they are also cut into fixed numbers of shards on any machine.
+        // The build of all rows of the runs that follow one another, as one run, agrees.
         let parallel_work = Tuning::get().parallel_work;
         let mut rng = StdRng::seed_from_u64(5);
         let mut chained = Vec::new();
@@ -318,10 +329,11 @@ mod tests {
         }
     }
 
+    /// A 64-bit payload in one shard gives the whole column the 64-bit layout.
     #[test]
     fn shards_agree_on_a_column_layout() {
-        // A 32-bit first column in every shard but the last, whose 64-bit
-        // payload widens the whole column across the pieces.
+        // Every shard but the last has a 32-bit first column,
+        // and the last shard has a payload beyond 32 bits.
         let mut buffer = RowBuffer::new(1);
         for value in 0..100_000u64 {
             buffer.push_row(&[StorageValue::term(value)]);

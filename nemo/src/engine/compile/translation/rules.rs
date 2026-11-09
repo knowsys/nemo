@@ -1,4 +1,4 @@
-//! Rules: compiling one into its normalized executable form.
+//! Rules: compiling a rule into its normalized form for execution.
 
 use std::collections::HashMap;
 
@@ -23,17 +23,17 @@ use crate::{
 
 /// A rule's compiled head: its ordinary atoms,
 /// its aggregate head if it has one,
-/// and its existential head if `!`-variables appear.
+/// and its existential head if it has `!`-variables.
 struct CompiledHead {
-    /// The head atoms over the rule's columns.
+    /// The ordinary head atoms.
     atoms: Vec<HeadAtom>,
     /// The aggregate head, if any.
     aggregate: Option<CompiledAggregate>,
-    /// The existential head (frontier, satisfaction check, and inserted atoms), if any.
+    /// The existential head, if any.
     existential: Option<ExistentialHead>,
 }
 
-/// Returns whether an atom's terms hold an aggregate anywhere.
+/// Returns whether an atom has an aggregate anywhere in its terms.
 fn aggregates(atom: &Atom) -> bool {
     let mut found = Vec::new();
     for term in &atom.terms {
@@ -44,9 +44,9 @@ fn aggregates(atom: &Atom) -> bool {
 
 /// Returns whether an existential variable is one of an atom's terms, or inside one.
 ///
-/// The scope of an aggregate lists the variables its contributions are told apart by,
-/// so an existential variable there is an error of the aggregate,
-/// not a value the rule creates.
+/// An existential variable in an aggregate's `per` list does not count,
+/// since that list names the variables that distinguish the aggregate's contributions.
+/// Such a variable is an error of the aggregate, not a value that the rule creates.
 fn creates_values(atom: &Atom) -> bool {
     atom.any_term(|term| {
         matches!(&term.kind, TermKind::Variable(variable)
@@ -55,7 +55,8 @@ fn creates_values(atom: &Atom) -> bool {
 }
 
 impl<'a> Translator<'a> {
-    /// Compiles one rule into its normalized executable form.
+    /// Compiles one rule into its normalized form for execution,
+    /// and returns it with the written names of its rule columns.
     pub(super) fn rule(
         &mut self,
         rule: &Rule,
@@ -70,8 +71,8 @@ impl<'a> Translator<'a> {
 
         let compiled = CompiledRule {
             variables: compiler.variables,
-            // Replaced once every rule is compiled; first-occurrence
-            // order until then.
+            // Replaced once every rule is compiled.
+            // Until then, the variables are in order of first occurrence.
             order: (0..compiler.variables).collect(),
             body: compiler.body,
             filters: compiler.filters,
@@ -115,13 +116,13 @@ fn nondeterministic(
 }
 
 impl RuleCompiler<'_, '_> {
-    /// Compiles a rule's body.
+    /// Compiles a rule's body, and returns its negated atoms.
     ///
     /// The positive atoms come first,
-    /// so that operations and negated atoms resolve against the full variable set wherever
-    /// they appear.
+    /// so that operations and negated atoms see every variable that the positive atoms bind,
+    /// wherever they are written.
     /// The conditions come next, then the negated atoms,
-    /// each with its columns split into those shared with the body and its own.
+    /// whose columns are split into those shared with the body and their own.
     fn body(&mut self, rule: &Rule) -> Result<Vec<NegatedAtom>, Diagnostic> {
         let mut operations = Vec::new();
         let mut written = Vec::new();
@@ -145,17 +146,18 @@ impl RuleCompiler<'_, '_> {
         Ok(negated)
     }
 
-    /// Resolves the body's conditions together with the equalities the atoms deferred.
+    /// Resolves the body's conditions together with the equalities that the atoms deferred.
     ///
-    /// A deferred column equality whose expression is fully atom-bound becomes a probing
-    /// binding.
-    /// A structured expression with unbound variables is a pattern,
-    /// and destructures into a shape guard plus equalities per position.
-    /// The rest join the operation fixpoint (their inputs may still be bound by assignments).
-    /// The guard precedes the position equalities,
-    /// so among filters at one layer it rejects a mismatched row before an accessor could
-    /// error on it.
-    /// Every operation carries what it stands for, for the filter it may become:
+    /// - A deferred equality whose expression reads only variables that the atoms bind
+    ///   becomes a binding.
+    /// - A structured expression with unbound variables is a pattern.
+    ///   It is destructured into a guard on its shape and one equality per position.
+    ///   The guard comes before the equalities, so that among the filters of one layer,
+    ///   it rejects a row of another shape before an accessor could fail on it.
+    /// - The other equalities join the operation fixpoint,
+    ///   since assignments may still bind their inputs.
+    ///
+    /// Every operation is passed on with the part of the rule's text that it comes from:
     /// a written condition, an expression argument, or a pattern.
     fn conditions(&mut self, operations: Vec<&crate::model::Operation>) -> Result<(), Diagnostic> {
         let deferred = std::mem::take(&mut self.deferred);
@@ -189,10 +191,11 @@ impl RuleCompiler<'_, '_> {
 
     /// Compiles a rule's head.
     ///
-    /// Every head atom of an existential rule joins the whole-head satisfaction check,
-    /// atoms without existential variables staying ordinary heads
-    /// (they fire for every delta match).
-    /// Otherwise at most one atom aggregates.
+    /// In a rule with existential variables, every head atom joins the satisfaction check of
+    /// the whole head.
+    /// The atoms without existential variables are also ordinary head atoms,
+    /// which receive a row for every new body match.
+    /// In any other rule, at most one atom may have aggregates.
     fn head(&mut self, rule: &Rule) -> Result<CompiledHead, Diagnostic> {
         let mut head = CompiledHead {
             atoms: Vec::new(),

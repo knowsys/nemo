@@ -1,8 +1,8 @@
-//! Macros constructing program components from Nemo-like syntax.
+//! Macros that build program components from syntax close to Nemo's.
 //!
-//! [term!](crate::term), [atom!](crate::atom), [fact!](crate::fact), and [rule!](crate::rule)
-//! accept a subset of Nemo syntax directly in Rust source,
-//! and expand to plain component construction:
+//! [term!](crate::term), [atom!](crate::atom), [fact!](crate::fact) and [rule!](crate::rule)
+//! accept a subset of Nemo syntax in Rust source,
+//! and expand to code that builds the components:
 //!
 //! ```
 //! use nemo::rule;
@@ -12,42 +12,47 @@
 //! let negated = rule!(orphan(?x) :- person(?x), ~has_parent(?x));
 //! ```
 //!
-//! # Limits of `macro_rules` here
+//! # Limits
 //!
-//! * **Global variables `$x` cannot be written**, since `$` introduces metavariables.
-//!   Interpolate them: `term!({ Term::global("x") })`.
-//! * **Full IRIs cannot appear in angle brackets**,
+//! * **Global variables `$x` cannot be written**, since `$` starts a metavariable in a macro.
+//!   Interpolate them instead, as in `term!({ Term::global("x") })`.
+//! * **Full IRIs cannot be written in angle brackets**,
 //!   since `//` starts a Rust comment before any macro runs.
-//!   Write `term!(iri "https://…")`.
-//! * **No operator precedence**: arithmetic nests to the right,
-//!   so `?a * ?b + ?c` is `?a * (?b + ?c)`. Parenthesize instead.
-//!   The left operand of an infix expression must be a variable, a literal, or parenthesized.
-//! * **Rust float literals are doubles**: `term!(3.5)` is a double, not an exact decimal,
-//!   since a float literal cannot carry the distinction.
-//!   Exact decimals interpolate via [Term::decimal](crate::model::Term::decimal),
-//!   or come from `parse`.
-//! * **Builtin names resolve at runtime** ([Term::apply](crate::model::Term::apply)),
-//!   and aggregate scope arguments are checked at runtime: a non-variable panics.
-//! * **Predicate names are Rust identifiers**:
-//!   keywords and hyphenated names need the builders or `parse`.
+//!   Write `term!(iri "https://…")` instead.
+//! * **Arithmetic has no operator precedence.**
+//!   It nests to the right, so `?a * ?b + ?c` is `?a * (?b + ?c)`,
+//!   and any other grouping needs parentheses.
+//!   The left operand of an infix operator must be a variable, a literal,
+//!   or a term in parentheses.
+//! * **Rust float literals are doubles.** `term!(3.5)` is a double, not an exact decimal,
+//!   since a Rust float literal cannot express the difference.
+//!   Exact decimals are interpolated from [Term::decimal](crate::model::Term::decimal),
+//!   or come from parsing.
+//! * **Only `#count`, `#min`, `#max` and `#sum` can be written, and a scope follows a comma.**
+//!   `term!(#sum(?v, ?w))` builds `#sum(?v per ?w)`, and `per` cannot be written.
+//! * **Some checks happen at run time.**
+//!   The names of builtins are recognized by [Term::apply](crate::model::Term::apply),
+//!   and a scope argument of an aggregate that is not a variable panics.
+//! * **Predicate names are Rust identifiers.**
+//!   A name that is a Rust keyword or contains a hyphen needs the builders or parsing.
 //!
-//! Expansions use only `$crate::…` and `::std::…` paths,
-//! so they are immune to shadowing at the call site.
+//! The expansions use only `$crate::…`, `::std::…` and `::core::…` paths,
+//! so that names at the call site cannot shadow them.
 
 use crate::model::{Aggregate, AggregateKind, Term, TermKind};
 
 impl Aggregate {
-    /// Creates an aggregate from macro arguments.
+    /// Creates an aggregate from the arguments that it is written with in a macro.
     ///
     /// The first term is the aggregated input,
-    /// and all further terms must be variables, which become the `per` scope.
-    /// No terms at all make the match count `#count()`.
+    /// and all further terms must be variables, which become the scope.
+    /// Without terms, the aggregate is `#count()`.
     ///
     /// # Panics
     ///
-    /// Panics on scope arguments that are not variables, and on an empty aggregate other than
-    /// `#count`, since `macro_rules` cannot check these at expansion time
-    /// (see the module documentation).
+    /// Panics for a scope argument that is not a variable,
+    /// and for an aggregate other than `#count` without terms,
+    /// since a `macro_rules` macro cannot check these when it expands.
     #[doc(hidden)]
     pub fn from_terms(kind: AggregateKind, mut terms: Vec<Term>) -> Aggregate {
         if terms.is_empty() {
@@ -67,34 +72,38 @@ impl Aggregate {
     }
 }
 
-/// Splits a token stream on top-level commas and applies the given macro
-/// to each piece, producing a `Vec` of the results. Internal.
+/// Splits a token stream at its top-level commas,
+/// and returns a `Vec` of the given macro applied to each piece.
+///
+/// It is internal to the macros of this module.
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __split_commas {
-    // Piece complete: apply the callback, then start the next piece.
+    // A piece is complete: apply the callback to it, and start the next piece.
     (@go $callback:ident [$($result:expr,)*] [$($piece:tt)+] , $($rest:tt)*) => {
         $crate::__split_commas!(@go $callback [$($result,)* $crate::$callback!($($piece)+),] [] $($rest)*)
     };
-    // Any other token: extend the current piece.
+    // Any other token extends the current piece.
     (@go $callback:ident [$($result:expr,)*] [$($piece:tt)*] $next:tt $($rest:tt)*) => {
         $crate::__split_commas!(@go $callback [$($result,)*] [$($piece)* $next] $($rest)*)
     };
-    // End of input with a final piece.
+    // The end of the input, after a final piece.
     (@go $callback:ident [$($result:expr,)*] [$($piece:tt)+]) => {
         ::std::vec![$($result,)* $crate::$callback!($($piece)+)]
     };
-    // End of input without a final piece (empty input or trailing comma).
+    // The end of the input without a final piece, after a trailing comma or for empty input.
     (@go $callback:ident [$($result:expr,)*] []) => {
         ::std::vec![$($result,)*]
     };
-    // Entry point: callback macro name followed by the tokens to split.
+    // The entry point: the name of the callback macro, followed by the tokens to split.
     ($callback:ident $($tokens:tt)*) => {
         $crate::__split_commas!(@go $callback [] [] $($tokens)*)
     };
 }
 
-/// Builds an aggregate term from comma-separated arguments. Internal.
+/// Builds an aggregate term from arguments separated by commas.
+///
+/// It is internal to the macros of this module.
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __aggregate {
@@ -108,7 +117,9 @@ macro_rules! __aggregate {
     }};
 }
 
-/// Builds an arithmetic operation term. Internal.
+/// Builds the term of an arithmetic operation.
+///
+/// It is internal to the macros of this module.
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __arithmetic {
@@ -120,21 +131,20 @@ macro_rules! __arithmetic {
     };
 }
 
-/// Constructs a [Term] from Nemo-like syntax.
+/// Builds a [Term] from syntax close to Nemo's.
 ///
-/// Supported forms:
+/// The supported forms are:
 /// * variables: `term!(?x)`, `term!(!v)`
 /// * bare names: `term!(alice)`, and prefixed names: `term!(foaf:Person)`
 /// * full IRIs, as string literals: `term!(iri "https://example.org/p")`
 /// * numbers and strings: `term!(42)`, `term!(-1)`, `term!(3.5)`, `term!("abc")`
-/// * function applications: `term!(pair(?x, 3))`,
-///   in which builtin names like `STRLEN` resolve to operations at runtime
-/// * aggregates: `term!(#sum(?v))`, `term!(#count(?x, ?d))`
-/// * arithmetic, right-nested without precedence: `term!(?s + 100)`
+/// * calls: `term!(pair(?x, 3))`, where the name of a builtin like `STRLEN` gives an operation
+/// * aggregates: `term!(#sum(?v))`, and `term!(#count(?x, ?d))` for `#count(?x per ?d)`
+/// * arithmetic, nested to the right without precedence: `term!(?s + 100)`
 /// * interpolation of any `Into<Term>` value: `term!({ computed })`
 #[macro_export]
 macro_rules! term {
-    // Escape hatch: interpolate any value convertible into a term.
+    // Interpolates any value that converts into a term.
     ({ $value:expr }) => {
         $crate::model::Term::from($value)
     };
@@ -143,7 +153,7 @@ macro_rules! term {
     (# min ( $($arguments:tt)+ )) => { $crate::__aggregate!(Min; $($arguments)+) };
     (# max ( $($arguments:tt)+ )) => { $crate::__aggregate!(Max; $($arguments)+) };
     (# sum ( $($arguments:tt)+ )) => { $crate::__aggregate!(Sum; $($arguments)+) };
-    // Full IRI as a string literal (angle brackets are unlexable).
+    // A full IRI as a string literal, since Rust cannot lex an IRI in angle brackets.
     (iri $iri:literal) => {
         $crate::model::Term::iri($iri)
     };
@@ -202,7 +212,7 @@ macro_rules! term {
     ($prefix:ident : $name:ident) => {
         $crate::model::Term::prefixed(stringify!($prefix), stringify!($name))
     };
-    // Function application: builtin names resolve at runtime.
+    // A call, in which the name of a builtin gives an operation at run time.
     ($name:ident ( $($arguments:tt)* )) => {{
         let arguments: ::std::vec::Vec<$crate::model::Term> =
             $crate::__split_commas!(term $($arguments)*);
@@ -218,8 +228,8 @@ macro_rules! term {
     };
 }
 
-/// Constructs an [Atom](crate::model::Atom) from Nemo-like syntax,
-/// e.g. `atom!(parent(?x, ?y))` or `atom!(ex:knows(?x, ?y))`.
+/// Builds an [Atom](crate::model::Atom) from syntax close to Nemo's,
+/// such as `atom!(parent(?x, ?y))` or `atom!(ex:knows(?x, ?y))`.
 #[macro_export]
 macro_rules! atom {
     // Prefixed predicate name.
@@ -242,8 +252,8 @@ macro_rules! atom {
     }};
 }
 
-/// Constructs a [Fact](crate::model::Fact) from Nemo-like syntax,
-/// e.g. `fact!(parent(alice, bob))`.
+/// Builds a [Fact](crate::model::Fact) from syntax close to Nemo's,
+/// such as `fact!(parent(alice, bob))`.
 #[macro_export]
 macro_rules! fact {
     ($($tokens:tt)+) => {
@@ -251,8 +261,9 @@ macro_rules! fact {
     };
 }
 
-/// Parses one body element of a rule: an atom, a negated atom, or a
-/// comparison. Internal.
+/// Builds one literal of a rule's body, which is an atom, a negated atom or a comparison.
+///
+/// It is internal to the macros of this module.
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __literal {
@@ -270,8 +281,8 @@ macro_rules! __literal {
     ($name:ident ( $($terms:tt)* )) => {
         $crate::model::Literal::Positive($crate::atom!($name ( $($terms)* )))
     };
-    // Comparison: split at the leftmost comparison operator. Rust lexes
-    // `!==` as `!=` followed by `=`, so its arm precedes the `!=` arm.
+    // A comparison is split at its leftmost comparison operator.
+    // Rust lexes `!==` as `!=` followed by `=`, so its arm comes before the arm of `!=`.
     (@compare [$($left:tt)+] == $($right:tt)+) => {
         $crate::__literal!(@operation ValueEqual [$($left)+] [$($right)+])
     };
@@ -296,31 +307,31 @@ macro_rules! __literal {
     (@compare [$($left:tt)+] < $($right:tt)+) => {
         $crate::__literal!(@operation Less [$($left)+] [$($right)+])
     };
-    // No operator found yet: extend the left side by one token.
+    // No operator is found yet, so the left side is extended by one token.
     (@compare [$($left:tt)*] $next:tt $($rest:tt)*) => {
         $crate::__literal!(@compare [$($left)* $next] $($rest)*)
     };
-    // Exhausted without finding a comparison operator.
+    // The tokens ended without a comparison operator.
     (@compare [$($left:tt)*]) => {
         ::core::compile_error!("body literal is neither an atom nor a comparison")
     };
-    // Assemble the comparison literal.
+    // Builds the comparison literal.
     (@operation $operator:ident [$($left:tt)+] [$($right:tt)+]) => {
         $crate::model::Literal::Operation($crate::model::Operation::new(
             $crate::model::Operator::$operator,
             ::std::vec![$crate::term!($($left)+), $crate::term!($($right)+)],
         ))
     };
-    // Everything that is not an atom: try as a comparison.
+    // Anything that is not an atom is tried as a comparison.
     ($($tokens:tt)+) => {
         $crate::__literal!(@compare [] $($tokens)+)
     };
 }
 
-/// Constructs a [Rule](crate::model::Rule) from Nemo-like syntax.
+/// Builds a [Rule](crate::model::Rule) from syntax close to Nemo's.
 ///
-/// Covers multiple head atoms, negation, comparisons, aggregates, and
-/// (right-nested) arithmetic:
+/// It covers several head atoms, negation, comparisons, aggregates,
+/// and arithmetic nested to the right:
 ///
 /// ```
 /// use nemo::rule;
@@ -331,26 +342,26 @@ macro_rules! __literal {
 /// ```
 #[macro_export]
 macro_rules! rule {
-    // Separator found: assemble the rule.
+    // The separator `:-` is found, so the rule is built.
     //
-    // Head and body cannot be captured in one pattern
-    // (`$($head:tt)+ :- …` is a local ambiguity at every `:`), hence
-    // the token-by-token scan below.
+    // Head and body cannot be captured in one pattern,
+    // since `$($head:tt)+ :- …` is a local ambiguity at every `:`.
+    // So these arms scan the tokens one by one.
     (@split [$($head:tt)+] :- $($body:tt)+) => {
         $crate::model::Rule::new(
             $crate::__split_commas!(atom $($head)+),
             $crate::__split_commas!(__literal $($body)+),
         )
     };
-    // No separator yet: extend the head by one token.
+    // No separator is found yet, so the head is extended by one token.
     (@split [$($head:tt)*] $next:tt $($rest:tt)*) => {
         $crate::rule!(@split [$($head)* $next] $($rest)*)
     };
-    // Exhausted without finding the separator.
+    // The tokens ended without the separator.
     (@split [$($head:tt)*]) => {
         ::core::compile_error!("rules require `:-` between head and body")
     };
-    // Entry point: scan for the leftmost `:-`.
+    // The entry point, which scans for the leftmost `:-`.
     ($($tokens:tt)+) => {
         $crate::rule!(@split [] $($tokens)+)
     };
@@ -362,6 +373,7 @@ mod tests {
 
     use crate::model::{Atom, Fact, Operation, Rule, Term, TermKind};
 
+    /// Each form of [term!](crate::term) builds the term that the matching constructor builds.
     #[test]
     fn every_term_form_builds_its_term() {
         assert_eq!(term!(?x), Term::var("x"));
@@ -378,6 +390,7 @@ mod tests {
         assert_eq!(term!(3.5), Term::double(3.5));
     }
 
+    /// A Rust value in braces is converted into a term.
     #[test]
     fn braces_interpolate_rust_values() {
         let value = 7;
@@ -386,16 +399,17 @@ mod tests {
         assert_eq!(term!({ global.clone() }), global);
     }
 
+    /// A call of a builtin's name builds an operation, and any other call a function term.
     #[test]
     fn builtins_resolve_functions_stay() {
         assert!(matches!(term!(pair(?x, 3)).kind, TermKind::Function { .. }));
         assert!(matches!(term!(STRLEN(?x)).kind, TermKind::Operation(_)));
     }
 
+    /// A component written with the macros equals the same component parsed from text.
     #[test]
     fn macros_agree_with_the_parser() {
-        // The same statement written as a macro and as source text must
-        // construct equal components (equality ignores spans).
+        // Equality ignores spans.
         let cases: Vec<(Rule, &str)> = vec![
             (
                 rule!(ancestor(?x, ?z) :- ancestor(?x, ?y), parent(?y, ?z)),
@@ -410,8 +424,7 @@ mod tests {
                 "orphan(?x) :- person(?x), ~has_parent(?x) .",
             ),
             (
-                // The macro's comma list is the `per` scope, spelled
-                // with the keyword in source text.
+                // The comma list of the macro is the scope, which source text writes with `per`.
                 rule!(total(?g, #sum(?v, ?g)) :- data(?g, ?v)),
                 "total(?g, #sum(?v per ?g)) :- data(?g, ?v) .",
             ),
@@ -444,6 +457,8 @@ mod tests {
         }
     }
 
+    /// A rule built with a [RuleBuilder](crate::model::RuleBuilder) equals the same rule parsed
+    /// from text.
     #[test]
     fn builders_agree_with_the_parser() {
         let built = Rule::builder()
@@ -457,11 +472,11 @@ mod tests {
         assert_eq!(built, parsed);
     }
 
+    /// A Rust float literal in a macro gives a double,
+    /// while the same number in source text is parsed as an exact decimal.
     #[test]
     fn float_literals_are_doubles_not_decimals() {
-        // A Rust float literal cannot carry the double/decimal
-        // distinction; the macro takes it as a double, while the same
-        // source text parses as an exact decimal.
+        // A Rust float literal cannot express the difference between a double and a decimal.
         assert!(matches!(
             term!(3.5).kind,
             TermKind::Number(Number::Double(_))

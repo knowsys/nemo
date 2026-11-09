@@ -1,13 +1,12 @@
-//! The live dashboard: a small HTTP/SSE server over a run's telemetry.
+//! The live dashboard: a small HTTP server that shows a run's telemetry.
 //!
-//! One thread accepts connections on the loopback interface,
-//! and each client gets a thread of its own.
-//! `GET /` serves the [report page](nemo::telemetry::ReportDocument::page) in live mode,
-//! seeded with the current document.
-//! `GET /events` is a server-sent-event stream that pushes a fresh document whenever the
-//! [Recorder] has changed, throttled to a few pushes per second.
-//! The engine's thread only ever touches the recorder,
-//! and serialization and writing stay here.
+//! It listens on the loopback interface, with one thread that accepts connections
+//! and one thread per connection.
+//! It serves the [report page](nemo::telemetry::ReportDocument::page) in live mode at `/`,
+//! and at `/events` a stream of server-sent events that sends the current report document
+//! whenever the [Recorder] changes.
+//! The engine's thread only writes to the recorder,
+//! and the serving threads build and send the documents.
 
 use std::{
     io::{BufRead, BufReader, ErrorKind, Read, Write},
@@ -19,41 +18,45 @@ use std::{
 
 use nemo::telemetry::{Recorder, ReportDocument, RunFacts};
 
-/// How often the event stream checks for changes.
+/// How often the event stream checks for changes, which limits how often it sends a document.
 const POLL: Duration = Duration::from_millis(250);
 
-/// Poll rounds between keep-alive comments on a quiet stream.
+/// The number of checks without a change after which the event stream sends a keep-alive
+/// comment.
 const KEEPALIVE_ROUNDS: u32 = 60;
 
-/// How long a connection may take to send its request, and a write may
-/// take to be accepted, before the client counts as gone: a silent
-/// socket frees its thread rather than holding it for as long as the
-/// socket stays open.
+/// The read and write timeout of a connection.
+///
+/// A client that sends no request, or accepts no write, for this long is treated as gone,
+/// so that a silent socket does not hold its thread for as long as it stays open.
 const PATIENCE: Duration = Duration::from_secs(10);
 
-/// The serving end of a live dashboard.
+/// A live dashboard, served by background threads.
 #[derive(Debug)]
 pub(crate) struct Dashboard {
-    /// The port actually bound.
+    /// The bound port, which differs from the requested one if that was 0.
     port: u16,
     /// The state shared with the serving threads.
     shared: Arc<Shared>,
 }
 
-/// What the serving threads read.
+/// The state that the serving threads share.
 #[derive(Debug)]
 struct Shared {
-    /// The document title, the run's program names.
+    /// The title of the report document, which lists the run's program paths.
     title: String,
-    /// The telemetry the engine writes into.
+    /// The recorder of the run's telemetry.
     recorder: Arc<Recorder>,
     /// The run facts, present once the run has finished.
     run: Mutex<Option<RunFacts>>,
 }
 
 impl Dashboard {
-    /// Binds the loopback port (0 picks a free one) and starts serving
-    /// the given recorder's telemetry.
+    /// Binds `port` on the loopback interface, or a free port for 0,
+    /// and starts serving the telemetry of `recorder`.
+    ///
+    /// `title` is the title of the report document.
+    /// Fails if the port cannot be bound.
     pub(crate) fn start(
         port: u16,
         title: String,
@@ -82,20 +85,21 @@ impl Dashboard {
         format!("http://127.0.0.1:{}", self.port)
     }
 
-    /// Hands over the finished run's facts, which the documents pushed from here on carry.
+    /// Stores the facts of the finished run, which the documents sent from then on include.
     pub(crate) fn finish(&self, run: RunFacts) {
         *lock(&self.shared.run) = Some(run);
     }
 }
 
-/// Returns the run facts under their lock.
+/// Locks the run facts.
 ///
-/// A poisoning panic elsewhere does not take the dashboard down.
+/// A panic in another thread that held the lock does not stop the dashboard.
 fn lock(run: &Mutex<Option<RunFacts>>) -> std::sync::MutexGuard<'_, Option<RunFacts>> {
     run.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-/// Renders the current document over the shared state.
+/// Builds the current report document from the shared state, and returns what `render`
+/// makes of it.
 fn current<T>(shared: &Shared, render: impl FnOnce(&ReportDocument<'_>) -> T) -> T {
     let run = lock(&shared.run);
     render(&ReportDocument {
@@ -107,7 +111,9 @@ fn current<T>(shared: &Shared, render: impl FnOnce(&ReportDocument<'_>) -> T) ->
 
 /// Serves one connection.
 ///
-/// Errors mean the client left, which is theirs to do.
+/// It responds by the request's path: the page at `/`, the event stream at `/events`,
+/// and `404 Not Found` elsewhere.
+/// An I/O error means that the client has gone, so it ends the connection without a report.
 fn serve(stream: TcpStream, shared: &Shared) {
     if stream.set_read_timeout(Some(PATIENCE)).is_err()
         || stream.set_write_timeout(Some(PATIENCE)).is_err()
@@ -123,7 +129,7 @@ fn serve(stream: TcpStream, shared: &Shared) {
         return;
     }
     let path = line.split_whitespace().nth(1).unwrap_or("/").to_string();
-    // The request headers matter to no route; drain them.
+    // No route uses the request headers, so they are read and dropped.
     loop {
         let mut header = String::new();
         match reader.read_line(&mut header) {
@@ -145,12 +151,12 @@ fn serve(stream: TcpStream, shared: &Shared) {
     }
 }
 
-/// Writes one complete `200 OK` response and closes.
+/// Writes a complete `200 OK` response with `body`, and closes the connection.
 fn respond(stream: TcpStream, content_type: &str, body: &str) -> std::io::Result<()> {
     respond_status(stream, "200 OK", content_type, body)
 }
 
-/// Writes one complete response and closes.
+/// Writes a complete response with `status` and `body`, and closes the connection.
 fn respond_status(
     mut stream: TcpStream,
     status: &str,
@@ -166,11 +172,12 @@ fn respond_status(
     stream.flush()
 }
 
-/// Streams documents as server-sent events until the client leaves:
-/// one immediately, then one whenever the telemetry has changed. The
-/// client's side of the connection (`peer`) is watched between pushes,
-/// so a client that hangs up is noticed within a poll round rather
-/// than at the next write.
+/// Sends report documents as server-sent events until the client leaves.
+///
+/// The first document is sent at once, and then a new one whenever the telemetry or the run
+/// facts have changed, which is checked every [POLL].
+/// `peer` is a second handle of the connection, which is read between the checks,
+/// so that a client that hangs up is noticed within one check rather than at the next write.
 fn stream_events(mut stream: TcpStream, mut peer: TcpStream, shared: &Shared) {
     if write!(
         stream,
@@ -186,8 +193,8 @@ fn stream_events(mut stream: TcpStream, mut peer: TcpStream, shared: &Shared) {
     let mut sent = None;
     let mut quiet_rounds = 0;
     loop {
-        // The version pairs the recorder's counter with whether the run
-        // facts have landed, so the closing push is never missed.
+        // The version pairs the recorder's counter with whether the run facts are stored,
+        // so that the document with the run facts is always sent.
         let version = (shared.recorder.version(), lock(&shared.run).is_some());
         if sent != Some(version) {
             sent = Some(version);
@@ -211,9 +218,9 @@ fn stream_events(mut stream: TcpStream, mut peer: TcpStream, shared: &Shared) {
                 }
             }
         }
-        // The poll interval is spent listening: an event stream's
-        // client sends nothing more, so the read ends with the round's
-        // timeout while the client is there, and at once when it left.
+        // The wait between checks is a read. The client of an event stream sends nothing
+        // more, so the read times out after `POLL` while the client is connected,
+        // and returns at once when it has left.
         match peer.read(&mut [0u8; 64]) {
             Ok(0) => return,
             Ok(_) => {}
@@ -231,7 +238,8 @@ mod tests {
 
     use nemo::telemetry::{EngineEvent, EventSink};
 
-    /// One request against a served path, read to the first body bytes.
+    /// Sends a `GET` request for `path` to the dashboard on `url_port`, and returns what it
+    /// reads until that contains `until`, the connection ends, or the read times out.
     fn fetch(url_port: u16, path: &str, until: &str) -> String {
         let mut stream = TcpStream::connect(("127.0.0.1", url_port)).expect("the server accepts");
         stream
@@ -253,6 +261,8 @@ mod tests {
         collected
     }
 
+    /// The dashboard serves the live page at `/`, documents with the run's facts at
+    /// `/events`, and `404 Not Found` elsewhere.
     #[test]
     fn the_dashboard_serves_the_page_and_the_stream() {
         let recorder = Arc::new(Recorder::new());

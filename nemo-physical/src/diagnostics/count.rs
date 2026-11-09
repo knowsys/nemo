@@ -4,11 +4,10 @@ use std::fmt;
 
 /// A count in a diagnostic message.
 ///
-/// It displays as its number, so a field holding it stays a number.
-/// With the alternate flag, it displays as the plural suffix
-/// of the noun it counts instead:
-/// in a message template, `{columns} column{columns:#}`
-/// reads `1 column` or `3 columns`.
+/// It is displayed as its number, so that a field with a count shows a number.
+/// With the alternate flag, it is displayed as the plural suffix of the noun that it counts
+/// instead, so that `{columns} column{columns:#}` in a message template
+/// gives `1 column` or `3 columns`.
 ///
 /// # Example
 ///

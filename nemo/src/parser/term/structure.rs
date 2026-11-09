@@ -1,4 +1,4 @@
-//! Structured terms: tuples and grouping parentheses, and maps.
+//! Parsing tuples, maps, and terms in parentheses.
 
 use nemo_physical::diagnostics::Diagnostic;
 
@@ -8,8 +8,10 @@ use crate::{
 };
 
 impl Parser<'_> {
-    /// Finishes a parenthesized term: grouping,
-    /// or a tuple if a comma follows the first element, or nothing does (the empty tuple).
+    /// Parses the rest of a term in parentheses, after its `(` at `start`.
+    ///
+    /// `()` is the empty tuple, and a single term in parentheses is that term.
+    /// A comma after the first element makes a tuple, so `(1,)` is a tuple of one element.
     pub(super) fn parenthesized(&mut self, start: Span) -> Result<Term, Diagnostic> {
         if self.eat(&TokenKind::ParenClose).is_some() {
             return Ok(self.spanned(start, TermKind::Tuple(Vec::new())));
@@ -24,7 +26,9 @@ impl Parser<'_> {
         Ok(self.spanned(start, TermKind::Tuple(elements)))
     }
 
-    /// Finishes a map term `{key = value, …}`, labeled if a name touched the opening brace.
+    /// Parses the rest of a map `{key = value, …}`, after its `{` at `start`.
+    ///
+    /// `label` is the name directly before the `{`, if there is one.
     pub(super) fn map(
         &mut self,
         start: Span,

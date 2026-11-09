@@ -1,5 +1,5 @@
-//! Term helpers: tests on a term's form, pattern desugaring, and the
-//! evaluation of ground terms into values.
+//! Helpers for terms: tests of a term's form, the desugaring of patterns,
+//! and the evaluation of ground terms into values.
 
 use std::collections::BTreeSet;
 
@@ -14,8 +14,8 @@ use crate::{
     model::{Aggregate, Operation, Operator, Span, Term, TermKind, VariableKind, Walk},
 };
 
-/// Collects the aggregate subterms of a term, recursively,
-/// through operations and structures alike, but not into an aggregate.
+/// Collects the aggregates inside a term, through operations and structures alike,
+/// but not inside an aggregate.
 pub(super) fn collect_aggregates<'t>(term: &'t Term, into: &mut Vec<&'t Aggregate>) {
     match &term.kind {
         TermKind::Aggregate(aggregate) => into.push(aggregate),
@@ -27,7 +27,7 @@ pub(super) fn collect_aggregates<'t>(term: &'t Term, into: &mut Vec<&'t Aggregat
     }
 }
 
-/// Collects the global-variable names a term reads.
+/// Collects the names of the parameters that a term reads.
 pub(super) fn collect_globals<'t>(term: &'t Term, into: &mut Vec<&'t str>) {
     into.extend(
         term.variables()
@@ -37,16 +37,16 @@ pub(super) fn collect_globals<'t>(term: &'t Term, into: &mut Vec<&'t str>) {
     );
 }
 
-/// Returns whether a term calls a nondeterministic function
-/// (`RAND`, `UUID`, `STRUUID`, or `NOW`) anywhere inside,
-/// so that no two evaluations of it need agree.
+/// Returns whether a term calls a
+/// [nondeterministic](crate::model::Operator::is_nondeterministic) function anywhere inside,
+/// so that two evaluations of it may disagree.
 pub(super) fn is_volatile(term: &Term) -> bool {
     term.any_term(|term| {
         matches!(&term.kind, TermKind::Operation(operation) if operation.operator.is_nondeterministic())
     })
 }
 
-/// Collects the blank-node labels a component mentions.
+/// Collects the blank node labels that a component mentions.
 pub(super) fn collect_blank_nodes<'t>(component: &'t impl Walk, into: &mut Vec<&'t str>) {
     component.walk(&mut |term| {
         if let TermKind::BlankNode(label) = &term.kind {
@@ -63,8 +63,8 @@ pub(super) fn mentions(component: &impl Walk, kind: VariableKind) -> bool {
         .any(|variable| variable.kind == kind)
 }
 
-/// Returns whether a term is or contains a variable a pattern binds or skips: a
-/// universal or an anonymous one.
+/// Returns whether a term is or contains a variable that a pattern binds or skips,
+/// which is a universal or an anonymous variable.
 fn has_pattern_variables(term: &Term) -> bool {
     mentions(term, VariableKind::Universal) || mentions(term, VariableKind::Anonymous)
 }
@@ -77,15 +77,15 @@ pub(super) fn is_structured(term: &Term) -> bool {
     )
 }
 
-/// Returns whether a term is a pattern: a structured value with variables in
-/// it, which a body atom matches by destructuring.
+/// Returns whether a term is a pattern, a structured value with variables in it,
+/// which a body atom matches by destructuring.
 pub(super) fn is_pattern(term: &Term) -> bool {
     is_structured(term) && has_pattern_variables(term)
 }
 
-/// Returns a pattern length or position as an integer term.
+/// Returns the length of a pattern, or a position in it, as an integer term.
 ///
-/// Arities stay far below what an `i64` holds.
+/// Arities stay far below the largest `i64`.
 fn integer(value: usize) -> Term {
     Term::integer(i64::try_from(value).expect("arities fit an i64"))
 }
@@ -102,20 +102,20 @@ fn applied(operator: Operator, arguments: Vec<Term>, span: Option<Span>) -> Term
     }
 }
 
-/// Desugars a structured body argument into a pattern over its column variable.
+/// Desugars a structured body argument, `pattern`, into operations over `target`,
+/// its column variable, and adds them to `synthesized`.
 ///
-/// One guard condition proves the whole shape, reading nothing but the column variable:
-/// domains, lengths, labels, ground parts, and key membership, nested structures included.
-/// A mismatched row is an ordinary non-match, not an evaluation error,
-/// since a false conjunct absorbs the errors the accessors raise on a wrong shape
+/// The first operation is a guard: one condition that proves the whole shape,
+/// and reads nothing but the column variable.
+/// It tests domains, lengths, labels, ground parts and keys, nested structures included.
+/// A row of another shape is an ordinary non-match, not an evaluation error,
+/// since a false conjunct absorbs the errors that the accessors raise on a wrong shape
 /// (`And(false, error)` is false).
 /// Since the guard proves the whole shape, the extractions cannot fail.
 ///
-/// Each variable position becomes an equality between the term written there and a chain of
-/// accessor calls.
-/// The operation fixpoint makes it an assignment if it binds a fresh variable,
-/// and a filter if the variable is already bound.
-/// Matching is exact: a map pattern names every key its rows hold.
+/// Then each variable position adds an equality between the term written there and a chain
+/// of accessor calls on the column variable.
+/// Matching is exact: a map pattern must name every key of the maps that it matches.
 pub(super) fn destructure(
     target: &Term,
     pattern: &Term,
@@ -136,7 +136,7 @@ pub(super) fn destructure(
     Ok(())
 }
 
-/// Collects the conditions that prove a value at the access term has a pattern's shape
+/// Collects the conditions that prove that the value of `access` has a pattern's shape
 /// (see [destructure]).
 fn shape_conditions(
     access: Term,
@@ -233,12 +233,13 @@ fn shape_conditions(
     Ok(())
 }
 
-/// Returns the shape conditions one position of a pattern contributes.
+/// Collects the shape conditions that one position of a pattern contributes.
 ///
+/// `key` is the position's index or key, and `subterm` is the term written there.
 /// A ground part is checked in place,
-/// and a nested pattern recurses through a chained access.
-/// A variable or expression position contributes nothing,
-/// since its value is the extraction's concern.
+/// and a nested pattern adds its own conditions through a chained access.
+/// A position with variables contributes nothing,
+/// since its value is the concern of the [extractions].
 fn position_conditions(
     access: &Term,
     key: Term,
@@ -261,9 +262,10 @@ fn position_conditions(
     Ok(())
 }
 
-/// Synthesizes the value equalities of a pattern's variable positions (see [destructure]).
+/// Adds to `synthesized` the equalities of a pattern's variable positions
+/// (see [destructure]).
 ///
-/// It runs after [shape_conditions] proved the pattern well-formed, so it cannot fail.
+/// It runs after [shape_conditions] has accepted the pattern, so it cannot fail.
 fn extractions(access: Term, pattern: &Term, synthesized: &mut Vec<Operation>) {
     let positions: Vec<(Term, &Term)> = match &pattern.kind {
         TermKind::Tuple(elements) => elements
@@ -284,7 +286,7 @@ fn extractions(access: Term, pattern: &Term, synthesized: &mut Vec<Operation>) {
     };
     for (key, subterm) in positions {
         if !(has_pattern_variables(subterm)) {
-            // A ground part: the guard already checked it.
+            // The guard already checked a ground part.
             continue;
         }
         if matches!(&subterm.kind, TermKind::Variable(variable)
@@ -307,7 +309,7 @@ fn extractions(access: Term, pattern: &Term, synthesized: &mut Vec<Operation>) {
 }
 
 impl<'a> Translator<'a> {
-    /// Evaluates the ground terms a structured value is built from.
+    /// Evaluates the ground terms that a structured value is built from.
     fn elements(&self, terms: &[Term]) -> Result<Vec<DataValue>, Diagnostic> {
         terms.iter().map(|term| self.evaluate(term)).collect()
     }
@@ -346,9 +348,9 @@ impl<'a> Translator<'a> {
             TermKind::Tuple(elements) => {
                 Ok(DataValue::tuple(TupleValue::new(self.elements(elements)?)))
             }
-            // A function term is a labeled tuple: `point(1, 2)` names
-            // the shape its elements have, by position. Named columns
-            // belong to atoms, whose declaration resolves them.
+            // A function term is a labeled tuple: `point(1, 2)` names the shape of its
+            // elements by position. Named arguments belong to atoms,
+            // whose declaration resolves them.
             TermKind::Function {
                 name,
                 arguments,
@@ -378,7 +380,7 @@ impl<'a> Translator<'a> {
                 Ok(DataValue::map(map.expect("a map of distinct keys builds")))
             }
             TermKind::Operation(operation) => {
-                // A ground expression evaluates right here.
+                // A ground expression is evaluated here.
                 let mut builder = StackProgramBuilder::default();
                 builder.operation(self, VariableScope::Ground, operation)?;
                 let program = builder.finish(term.span)?;
@@ -403,8 +405,8 @@ impl<'a> Translator<'a> {
     /// Returns the error for the first ground key of a map that repeats an earlier one,
     /// labeled at the repetition, or `None` if no ground key repeats.
     ///
-    /// Keys calling a nondeterministic function are not compared,
-    /// since no two evaluations of them need agree.
+    /// Keys that call a nondeterministic function are not compared,
+    /// since two evaluations of them may disagree.
     pub(super) fn repeated_key(
         &self,
         pairs: &[(Term, Term)],

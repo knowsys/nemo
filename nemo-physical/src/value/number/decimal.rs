@@ -1,9 +1,11 @@
 //! Exact numbers, owned and borrowed.
 //!
-//! A value is held in one of three cases by the range it lies in:
-//! an integer within the 64-bit range, a [compact](Compact) non-integral decimal,
-//! or a [wide](Wide) number beyond both.
-//! The [workspaces](workspace) compute with them.
+//! Each value is stored in one of three representations, chosen by its range:
+//! - an integer within the 64-bit range;
+//! - a [compact](Compact) decimal that is not integral;
+//! - a [wide](Wide) number beyond both.
+//!
+//! Arithmetic computes in the [workspaces](workspace).
 
 mod arithmetic;
 pub(crate) mod bitwise;
@@ -24,16 +26,22 @@ pub(crate) use wide::{Wide, WideRef};
 
 use arithmetic::big;
 
-/// An owned [`xsd:decimal`](https://www.w3.org/TR/xmlschema11-2/#decimal) value, an exact number,
-/// of which the [`xsd:integer`](https://www.w3.org/TR/xmlschema11-2/#integer) values are the integral ones.
+/// An owned [`xsd:decimal`](https://www.w3.org/TR/xmlschema11-2/#decimal) value,
+/// an exact number.
+///
+/// Its integral values are the [`xsd:integer`](https://www.w3.org/TR/xmlschema11-2/#integer)
+/// values.
 /// Its borrowed view is [DecimalRef].
 ///
-/// An integral value is always an integer: `1.0` is `1`.
-/// The order is by domain, the integers first, then by value.
+/// An integral value is always an integer, so `1.0` is `1`.
+/// Values are ordered by domain, the integers first, and then by value.
+///
+/// The canonical form of a value has at most 1,000,000 characters, not counting its sign.
+/// This is the *length limit* of numbers: creating a value or computing one fails beyond it.
 #[derive(Clone)]
 pub struct Decimal(Repr);
 
-/// The case that holds an owned exact number, by the range of its value.
+/// The representation of an owned exact number, chosen by the range of its value.
 #[derive(Clone)]
 enum Repr {
     /// An integer within the 64-bit range.
@@ -44,12 +52,12 @@ enum Repr {
     Wide(Wide),
 }
 
-/// Compile-time check of the size target for owned exact numbers.
+/// Checks at compile time that an owned exact number occupies at most 24 bytes.
 const _: () = assert!(size_of::<Decimal>() <= 24);
 
 impl Decimal {
     /// Creates the number `mantissa * 10^exponent`,
-    /// or `None` for a value whose canonical form exceeds the length limit of numbers.
+    /// or `None` for a value beyond the length limit.
     ///
     /// # Example
     ///
@@ -61,7 +69,7 @@ impl Decimal {
     /// assert_eq!(Decimal::new(1500, -2), Some(Decimal::from(15)));
     /// ```
     pub fn new(mantissa: i128, exponent: i64) -> Option<Self> {
-        // The common results are integers within the 64-bit range.
+        // Most values are integers within the 64-bit range, which need no normalization.
         if exponent == 0
             && let Ok(integer) = i64::try_from(mantissa)
         {
@@ -92,9 +100,9 @@ impl Decimal {
     }
 
     /// Creates a number from an `xsd:decimal` lexical form,
-    /// which includes every `xsd:integer` lexical form,
-    /// or `None` for malformed input
-    /// and for a value whose canonical form exceeds the length limit of numbers.
+    /// or `None` for a malformed lexical form or a value beyond the length limit.
+    ///
+    /// Every `xsd:integer` lexical form is also an `xsd:decimal` lexical form.
     pub fn from_lexical(lexical: &str) -> Option<Self> {
         match Parsed::parse(lexical)? {
             Parsed::Zero => Some(Self(Repr::Int(0))),
@@ -131,7 +139,8 @@ impl From<i64> for Decimal {
 }
 
 impl From<workspace::Big> for Decimal {
-    /// Routes a workspace value, which is bounded already, to its case.
+    /// Converts a workspace value, which is within the length limit,
+    /// into the representation for its range.
     fn from(value: workspace::Big) -> Self {
         if let Some(integer) = value.to_i64() {
             return Self(Repr::Int(integer));
@@ -179,26 +188,29 @@ impl fmt::Debug for Decimal {
 
 impl fmt::Display for Decimal {
     /// Writes the canonical `xsd:decimal` lexical form,
-    /// which for an integral value is the `xsd:integer` form.
+    /// which is the `xsd:integer` lexical form for an integral value.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.as_ref())
     }
 }
 
-/// A borrowed [`xsd:decimal`](https://www.w3.org/TR/xmlschema11-2/#decimal) value, an exact number,
-/// of which the [`xsd:integer`](https://www.w3.org/TR/xmlschema11-2/#integer) values are the integral ones.
-/// Its owned form is [Decimal].
+/// A borrowed [`xsd:decimal`](https://www.w3.org/TR/xmlschema11-2/#decimal) value,
+/// an exact number.
 ///
-/// An integral value is always an integer: `1.0` is `1`.
-/// The order is by domain, the integers first, then by value.
+/// Its integral values are the [`xsd:integer`](https://www.w3.org/TR/xmlschema11-2/#integer)
+/// values.
+/// Its owned form is [Decimal], which also states the length limit of numbers.
+///
+/// An integral value is always an integer, so `1.0` is `1`.
+/// Values are ordered by domain, the integers first, and then by value.
 #[derive(Clone, Copy)]
 pub struct DecimalRef<'a>(pub(crate) ReprRef<'a>);
 
-/// The case that holds a borrowed exact number, by the range of its value.
+/// The representation of a borrowed exact number, chosen by the range of its value.
 ///
-/// Every value has one case:
+/// Every value has exactly one representation:
 /// an integer within the 64-bit range is never wide,
-/// and a decimal within the compact range never either.
+/// and neither is a decimal within the compact range.
 #[derive(Clone, Copy)]
 pub(crate) enum ReprRef<'a> {
     /// An integer within the 64-bit range.
@@ -247,7 +259,7 @@ impl<'a> DecimalRef<'a> {
     }
 
     /// Returns the value as a 64-bit integer,
-    /// or `None` for a fraction and beyond the 64-bit range.
+    /// or `None` for a value that is not integral or lies beyond the 64-bit range.
     pub fn to_i64(self) -> Option<i64> {
         match self.0 {
             ReprRef::Int(value) => Some(value),
@@ -257,7 +269,7 @@ impl<'a> DecimalRef<'a> {
     }
 
     /// Returns the value as a 128-bit integer,
-    /// or `None` for a fraction and beyond the 128-bit range.
+    /// or `None` for a value that is not integral or lies beyond the 128-bit range.
     pub fn to_i128(self) -> Option<i128> {
         match self.0 {
             ReprRef::Int(value) => Some(i128::from(value)),
@@ -284,7 +296,7 @@ impl<'a> DecimalRef<'a> {
         }
     }
 
-    /// Clones the viewed value into an owned [Decimal].
+    /// Returns an owned copy of the value.
     pub fn to_owned(self) -> Decimal {
         Decimal(match self.0 {
             ReprRef::Int(value) => Repr::Int(value),
@@ -304,8 +316,8 @@ impl<'a> DecimalRef<'a> {
         }
     }
 
-    /// Returns the order of this value against a double by mathematical value,
-    /// or `None` for the NaN.
+    /// Compares this value with a double by their mathematical values,
+    /// or returns `None` if the double is NaN.
     pub(crate) fn floating_cmp(self, floating: f64) -> Option<Ordering> {
         if floating.is_nan() {
             return None;
@@ -318,16 +330,17 @@ impl<'a> DecimalRef<'a> {
             });
         }
 
-        // The nearest double rises with the value, so where it differs from the double,
-        // it orders the two; where it is the double, their exact values decide.
+        // The nearest double never decreases as the value grows.
+        // So if it differs from the double, it orders the two,
+        // and otherwise their exact values decide.
         let nearest = self.to_f64();
         if nearest != floating {
             return nearest.partial_cmp(&floating);
         }
         Some(match self.0 {
-            // An integer whose nearest double it is makes the double integral:
-            // below 2^53 the two are equal, from 2^53 on every double is an integer.
-            // The cast is exact, and at most 2^63 fits.
+            // If the double is the nearest double of an integer, the double is integral too.
+            // Below 2^53 the two are equal, and from 2^53 on every double is an integer.
+            // So the cast is exact, and its magnitude of at most 2^63 fits into an `i128`.
             #[allow(clippy::cast_possible_truncation)]
             ReprRef::Int(value) => i128::from(value).cmp(&(floating as i128)),
             _ => big(self).cmp(&workspace::Big::from_finite_double(floating)),
@@ -343,7 +356,7 @@ impl From<i64> for DecimalRef<'_> {
 
 impl PartialEq for DecimalRef<'_> {
     fn eq(&self, other: &Self) -> bool {
-        // The cases are disjoint by value, so only like cases can be equal.
+        // Each value has one representation, so only values in the same one can be equal.
         match (self.0, other.0) {
             (ReprRef::Int(left), ReprRef::Int(right)) => left == right,
             (ReprRef::Compact(left), ReprRef::Compact(right)) => left == right,
@@ -366,7 +379,7 @@ impl Ord for DecimalRef<'_> {
                 left.cmp(&right)
             }
             // A wide integer lies beyond the 64-bit range,
-            // so its sign alone places it against a compact one.
+            // so its sign alone orders it against a 64-bit integer.
             (ReprRef::Int(_), ReprRef::Wide(right)) if right.is_integral() => {
                 if right.is_negative() {
                     Ordering::Greater
@@ -381,8 +394,8 @@ impl Ord for DecimalRef<'_> {
                     Ordering::Greater
                 }
             }
-            // A compact and a wide decimal meet rarely; the signs settle what they can,
-            // and the workspace compares the rest exactly.
+            // A compact and a wide decimal are rarely compared.
+            // Their signs decide if they differ, and the workspace compares the rest exactly.
             (ReprRef::Compact(_), ReprRef::Wide(right)) if !right.is_integral() => {
                 self.cmp_signs_then_values(*other)
             }
@@ -414,7 +427,7 @@ impl DecimalRef<'_> {
 
 impl Hash for DecimalRef<'_> {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        // The cases are disjoint by value, so each hashes its own form.
+        // Each value has one representation, so each representation hashes its own form.
         match self.0 {
             ReprRef::Int(value) => value.hash(state),
             ReprRef::Compact(value) => value.hash(state),
@@ -432,7 +445,7 @@ impl fmt::Debug for DecimalRef<'_> {
 
 impl fmt::Display for DecimalRef<'_> {
     /// Writes the canonical `xsd:decimal` lexical form,
-    /// which for an integral value is the `xsd:integer` form.
+    /// which is the `xsd:integer` lexical form for an integral value.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.0 {
             ReprRef::Int(value) => write!(f, "{value}"),
@@ -446,32 +459,33 @@ impl fmt::Display for DecimalRef<'_> {
 mod tests {
     use super::*;
 
-    /// Parses a well-formed lexical.
+    /// Returns the value of a well-formed lexical form.
     fn value(lexical: &str) -> Decimal {
         Decimal::from_lexical(lexical).expect("well-formed")
     }
 
-    /// Returns whether a value is held in the wide case and integral.
+    /// Returns whether a value is an integer in the wide representation.
     fn is_wide_integer(value: &Decimal) -> bool {
         matches!(&value.0, Repr::Wide(wide) if wide.as_ref().is_integral())
     }
 
+    /// Creating a value stores it in the representation for its range.
     #[test]
     fn construction_routes_to_the_case_that_holds_the_value() {
-        // Non-integral: a compact decimal.
+        // A value that is not integral is a compact decimal.
         assert!(matches!(
             Decimal::new(15, -1),
             Some(Decimal(Repr::Compact(_)))
         ));
 
-        // Integral in the 64-bit range: an integer.
+        // An integral value within the 64-bit range is a 64-bit integer.
         assert_eq!(Decimal::new(1500, -2), Some(Decimal::from(15)));
         assert_eq!(
             Decimal::new(i128::from(i64::MIN), 0),
             Some(Decimal::from(i64::MIN))
         );
 
-        // Integral beyond the 64-bit range: a wide integer.
+        // An integral value beyond the 64-bit range is a wide integer.
         let big = Decimal::new(5, 30).expect("bounded");
         assert!(is_wide_integer(&big));
         assert_eq!(big, value("5000000000000000000000000000000"));
@@ -480,34 +494,36 @@ mod tests {
             Some(value("9223372036854775808"))
         );
 
-        // A compact mantissa with an extreme exponent: a wide decimal.
+        // A compact mantissa with an extreme exponent is a wide decimal.
         let tiny = Decimal::new(15, -300).expect("bounded");
         assert!(matches!(tiny.0, Repr::Wide(_)));
         assert!(!is_wide_integer(&tiny));
         assert_eq!(Decimal::new(1, i64::from(i32::MAX)), None);
     }
 
+    /// Parsing a lexical form gives the same value as creating it from mantissa and exponent.
     #[test]
     fn lexical_construction_agrees_with_direct_construction() {
         assert_eq!(value("42"), Decimal::from(42));
         assert_eq!(Some(value("-1.50")), Decimal::new(-15, -1));
         assert_eq!(value("-9223372036854775808"), Decimal::from(i64::MIN));
 
-        // Exponent notation is a float form, not a decimal one.
+        // Exponent notation is a lexical form of floats, not of decimals.
         assert_eq!(Decimal::from_lexical("1e5"), None);
 
-        // Seventeen digits are wide, whatever the arrival.
+        // A decimal with seventeen digits is wide, however it is created.
         let wide = value("1.2345678901234567");
         assert!(matches!(wide.0, Repr::Wide(_)));
         assert_eq!(Some(wide), Decimal::new(12_345_678_901_234_567, -16));
 
-        // A wide integer arrives normalized from either side.
+        // A wide integer is normalized, however it is created.
         assert_eq!(
             Some(value("100000000000000000000000000000")),
             Decimal::new(1, 29)
         );
     }
 
+    /// An integer converts to `i64` or `i128` exactly if it lies within the type's range.
     #[test]
     fn integers_convert_within_their_range() {
         assert_eq!(value("42").as_ref().to_i64(), Some(42));
@@ -545,6 +561,8 @@ mod tests {
         assert_eq!(value("1.5").as_ref().to_i128(), None);
     }
 
+    /// The integers come before the decimals that are not integral,
+    /// and each group is ordered by value.
     #[test]
     fn integers_order_before_the_other_decimals() {
         let ordered = [
@@ -564,6 +582,7 @@ mod tests {
         }
     }
 
+    /// A value in each representation is unchanged by a round trip through its view.
     #[test]
     fn views_round_trip() {
         for value in [

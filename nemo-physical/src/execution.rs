@@ -1,28 +1,29 @@
-//! The execution of database operations over tries: joins, and the consumers of their rows.
+//! The execution of database operations over tries: joins, and the sinks that consume their rows.
 //!
-//! A join combines inputs and chooses one value per layer.
-//! An input is stored in one trie or several, and the tries it is stored in are its *blocks*,
-//! whose rows together make up the input.
-//! The values of a layer are those that every input column mapped to it holds
-//! below the values bound at the shallower layers.
-//! The leading layers are emitted as the join's rows.
-//! The deeper layers only establish that a matching row exists.
-//! A join may carry hooks, which decide whether a value found at a layer stands:
+//! A join combines inputs and chooses one value per *layer*.
+//! An input is stored in one trie or several, its *blocks*,
+//! and its rows are the rows of all its blocks together.
+//! At each layer, the join chooses a value that every input column mapped to the layer has
+//! below the values chosen at the shallower layers.
+//! The leading layers are *emitted*: their values form the join's rows.
+//! The deeper layers only check that a matching row exists.
+//! A join may have *hooks*, which decide whether to keep a value found at a layer:
 //! - a subtracted input drops the rows it matches,
 //! - a filter drops the rows on which a condition over some layers does not hold,
-//! - a bound layer takes the value a program computes from the shallower layers.
+//! - a bound layer has a single value, a constant or one that a
+//!   [program](crate::function::StackProgram) computes from the shallower layers.
 //!
 //! A join yields its rows in storage order, each once,
-//! with the shallowest layer that changed since the previous row.
-//! Its rows thus form a sorted run, which a trie is built from without sorting,
-//! and a change at one of the leading layers marks the start of a group.
+//! together with the shallowest layer that changed since the previous row.
+//! So its rows form a sorted run, from which a trie is built without sorting,
+//! and a change at one of the leading layers marks the start of a *group*.
 //!
-//! A join too large for one thread is split into cells, which run on the worker pool.
+//! A join too large for one thread is split into *cells*, which run on the worker pool.
 //!
-//! The module follows the rows:
-//! the shapes describe what a join and the consumers of its rows compute,
+//! The module is organized along the rows.
+//! The shapes describe what a join and the sinks of its rows compute,
 //! the join produces the rows, sequentially or in cells,
-//! and the sinks consume them: evaluating programs on them, projecting or aggregating them.
+//! and the sinks consume them, by evaluating programs on them, projecting or aggregating them.
 
 mod join;
 mod partition;

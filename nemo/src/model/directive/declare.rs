@@ -1,10 +1,11 @@
-//! Predicate type declarations.
+//! Type declarations, for the columns of predicates and the elements of labeled structures,
+//! and the type expressions that they contain.
 
 use std::fmt::{self, Display, Formatter};
 
 use crate::model::{Identifier, Span, fmt_list, span_ignoring_eq};
 
-/// The base types of column declarations.
+/// The base types of type expressions, each written as a keyword such as `int`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BaseType {
     /// Any value.
@@ -15,27 +16,27 @@ pub enum BaseType {
     LanguageString,
     /// An IRI.
     Iri,
-    /// An integer of any size, the `xsd:integer` value space.
+    /// An integer of any size, from the value space of `xsd:integer`.
     Int,
     /// A 64-bit floating point number.
     Double,
     /// A 32-bit floating point number.
     Float,
-    /// A decimal number.
+    /// A decimal number, integers included.
     Decimal,
-    /// Any number: an integer, a decimal, a float, or a double.
+    /// Any number: an integer, a decimal, a float or a double.
     Number,
-    /// A dateTime instant.
+    /// An instant, given by a date and a time of day.
     DateTime,
     /// A calendar day.
     Date,
     /// A time of day.
     Time,
-    /// Any duration: a dayTimeDuration, a yearMonthDuration, or one with months and seconds.
+    /// Any duration: one without months, one with months but no seconds, or one with both.
     Duration,
     /// A duration without months.
     DayTimeDuration,
-    /// A duration of months only.
+    /// A duration with months but no seconds.
     YearMonthDuration,
     /// A boolean.
     Bool,
@@ -73,7 +74,7 @@ impl BaseType {
         }
     }
 
-    /// Returns the base type a declaration keyword names, or `None` for any other name.
+    /// Returns the base type that a keyword names, or `None` for any other name.
     pub fn from_name(name: &str) -> Option<Self> {
         Some(match name {
             "any" => BaseType::Any,
@@ -106,19 +107,19 @@ impl Display for BaseType {
     }
 }
 
-/// What a structured type says about its label.
+/// What a tuple or map type says about the label of its values.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TypeLabel {
-    /// Exactly no label: `(int, int)`, `{ host: string }`.
+    /// No label, as in `(int, int)` or `{ host: string }`.
     Unlabeled,
-    /// Any label, or none: `_(int, int)`, `_{ host: string }`.
+    /// Any label or none, as in `_(int, int)` or `_{ host: string }`.
     Anonymous,
-    /// Exactly this label: `point(int, int)`, `point{ x: int }`.
+    /// Exactly this label, as in `point(int, int)` or `point{ x: int }`.
     Named(Identifier),
 }
 
 impl TypeLabel {
-    /// Writes the label prefix a structured type carries.
+    /// Writes the label that a tuple or map type is written with, if there is one.
     fn fmt_prefix(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             TypeLabel::Unlabeled => Ok(()),
@@ -128,31 +129,30 @@ impl TypeLabel {
     }
 }
 
-/// A type expression, mirroring the value syntax recursively.
+/// A type expression, which is written like the values that it describes.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TypeExpression {
     /// A base type like `string`.
     Base(BaseType),
-    /// A reference to a type `@type` declares, by its label.
+    /// A type that a `@type` directive declares, referred to by its label.
     Named(Identifier),
-    /// A tuple type like `(string, int)`, `point(double, double)`, or
-    /// `_(int, int)`.
+    /// A tuple type like `(string, int)`, `point(double, double)` or `_(int, int)`.
     Tuple {
         /// What the type says about the label.
         label: TypeLabel,
-        /// The field types.
+        /// The types of the elements.
         fields: Vec<TypeExpression>,
     },
-    /// A map type like `{ host: string, port: int }`, labeled forms
-    /// included.
+    /// A map type like `{ host: string, port: int }`, with or without a label.
     Map {
         /// What the type says about the label.
         label: TypeLabel,
-        /// The fields by key name.
+        /// The fields, each the name of a key with the type of its value.
         fields: Vec<(String, TypeExpression)>,
     },
-    /// A union type like `iri | null`: the values of any of its members,
-    /// of which there are at least two.
+    /// A union type like `iri | null`, which has the values of all its members.
+    ///
+    /// A union has at least two members.
     Union(Vec<TypeExpression>),
 }
 
@@ -191,7 +191,7 @@ impl Display for TypeExpression {
     }
 }
 
-/// One declared column: an optional name and its type.
+/// A column declaration, which is a type with an optional name, such as `name: string`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ColumnDeclaration {
     /// The column's name, if declared.
@@ -209,13 +209,13 @@ impl Display for ColumnDeclaration {
     }
 }
 
-/// A type declaration: `@type point(double, double) .`.
+/// A type declaration, such as `@type point(double, double) .`.
 ///
 /// It declares the element types of every `point(…)` value,
 /// and makes `point` usable as a type.
 #[derive(Debug, Clone)]
 pub struct TypeDirective {
-    /// The declared type: a tuple or map type whose label is the declared name.
+    /// The declared type, which is a tuple or map type labeled with the declared name.
     pub definition: TypeExpression,
     /// The source position, or `None` for a component built programmatically.
     pub span: Option<Span>,
@@ -229,13 +229,12 @@ impl Display for TypeDirective {
     }
 }
 
-/// A predicate declaration:
-/// `@declare person(name: string, birth: datetime) .`.
+/// A predicate declaration, such as `@declare person(name: string, birth: datetime) .`.
 #[derive(Debug, Clone)]
 pub struct DeclareDirective {
     /// The declared predicate.
     pub predicate: Identifier,
-    /// The columns, fixing the arity.
+    /// The columns, which fix the arity.
     pub columns: Vec<ColumnDeclaration>,
     /// The source position, or `None` for a component built programmatically.
     pub span: Option<Span>,

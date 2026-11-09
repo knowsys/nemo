@@ -29,13 +29,13 @@ use crate::{
 };
 
 impl<'a> Translator<'a> {
-    /// Checks a new declaration against the values its predicate's table already stores,
-    /// by the table's seeded column types.
+    /// Checks a new declaration against the values that its predicate's table already stores,
+    /// as the column types of the stored facts and imports describe them.
     ///
     /// A declaration that excludes stored values is an error,
-    /// since those values can no longer be rejected.
-    /// The seeds are per stored column, and the declaration per column as written,
-    /// so a column the loader leaves out stores nothing to check.
+    /// since those values are stored and cannot be rejected any more.
+    /// The stored types describe the delivered columns, and the declaration the kept columns,
+    /// so a column that the load leaves out stores nothing to check.
     pub(super) fn check_declaration_against_store(
         &self,
         name: &str,
@@ -70,8 +70,11 @@ impl<'a> Translator<'a> {
         Ok(())
     }
 
-    /// Resolves the parameter declarations to a fixpoint, since one may read another, in any
-    /// order.
+    /// Resolves the parameter declarations to a fixpoint,
+    /// since a parameter's value may read other parameters, declared in any order.
+    ///
+    /// Fails for a parameter declared twice or without a value, for a value that reads an
+    /// undefined parameter or is outside its declared type, and for a cycle of parameters.
     pub(super) fn resolve_parameters(
         &mut self,
         mut pending: Vec<&ParameterDirective>,
@@ -167,6 +170,8 @@ impl<'a> Translator<'a> {
     }
 
     /// Evaluates the guard bindings of a directive.
+    ///
+    /// Fails for a variable bound twice.
     pub(super) fn guard_bindings(
         &self,
         guards: &[(String, Term)],
@@ -181,8 +186,8 @@ impl<'a> Translator<'a> {
         Ok(bindings)
     }
 
-    /// Evaluates a directive option value to one ground value, with the
-    /// guard bindings in scope.
+    /// Evaluates the value of a directive's option to one ground value,
+    /// with the guard bindings in scope.
     pub(super) fn option_value(
         &self,
         term: &Term,
@@ -199,12 +204,13 @@ impl<'a> Translator<'a> {
             .map_err(|_| TranslationError::OptionUnevaluable.at(term.span))
     }
 
-    /// Returns the type a type expression admits.
+    /// Returns the type that a type expression describes.
     ///
-    /// Labels and map keys resolve against the program's prefixes and base,
+    /// Labels and map keys are resolved against the program's prefixes and base,
     /// like the values checked against them.
-    /// A `decimal` column includes integers, because integral decimals canonicalize to them.
-    /// A name a `@type` declares stands for the values carrying it, by the label,
+    /// A `decimal` column includes integers,
+    /// since the canonical form of a decimal with an integer value is an integer.
+    /// A name that a `@type` declares stands for the values with that label,
     /// so a recursive declaration needs no unfolding.
     /// Writing out the shape of such a label is an error, since its name is the type.
     pub(super) fn declared_type(
@@ -276,8 +282,10 @@ impl<'a> Translator<'a> {
         })
     }
 
-    /// Returns the type a `@type` definition declares for its label:
-    /// its shape written out, whose fields name other declared labels by their labels.
+    /// Returns the type that a `@type` definition declares for its label,
+    /// which is its shape written out.
+    ///
+    /// A field whose type is another declared label refers to it by name.
     pub(super) fn definition_type(
         &self,
         definition: &TypeExpression,
@@ -321,6 +329,8 @@ impl<'a> Translator<'a> {
     }
 
     /// Returns the type of the maps of a written-out map type.
+    ///
+    /// Fails for a key written twice.
     fn map_type(
         &self,
         label: &crate::model::TypeLabel,
@@ -349,7 +359,7 @@ impl<'a> Translator<'a> {
         Ok(Type::map(shape))
     }
 
-    /// Returns the label bound a declared structured type states.
+    /// Returns the bound on the label that a declared structured type states.
     fn declared_label(
         &self,
         label: &crate::model::TypeLabel,
@@ -364,11 +374,11 @@ impl<'a> Translator<'a> {
         })
     }
 
-    /// Records a `@type` directive: the element types every value built with the label must
-    /// have, and a name for later type expressions.
+    /// Records a `@type` directive, which declares the element types of every value with its
+    /// label, and a name for type expressions.
     ///
-    /// Definitions are validated once every `@type` directive is recorded,
-    /// so they may reference each other in any order.
+    /// The definitions are validated once every `@type` directive is recorded,
+    /// so they may refer to each other in any order.
     pub(super) fn type_directive(&mut self, directive: &TypeDirective) -> Result<(), Diagnostic> {
         use crate::model::TypeLabel;
 
@@ -395,7 +405,8 @@ impl<'a> Translator<'a> {
         }
         let name = self.resolve(identifier, directive.span)?;
         match self.type_definitions.get(&name) {
-            // Every instance of a module declares the module's types again, alike.
+            // Every instance of a module declares the module's types again,
+            // with the same definitions.
             Some((definition, _)) if *definition == directive.definition => Ok(()),
             Some(_) => Err(TranslationError::DuplicateType {
                 name: identifier.to_string(),
@@ -409,7 +420,7 @@ impl<'a> Translator<'a> {
         }
     }
 
-    /// Returns the resolved label a `@type` directive declares, if it names one.
+    /// Returns the resolved label that a `@type` directive declares, if it names one.
     pub(super) fn defined_label(&self, directive: &TypeDirective) -> Option<String> {
         use crate::model::TypeLabel;
 
@@ -426,13 +437,14 @@ impl<'a> Translator<'a> {
         }
     }
 
-    /// Returns the type `@type` declares for a label, or `None` if the label has no `@type`.
+    /// Returns the type that `@type` declares for a label, or `None` if the label has no
+    /// `@type`.
     fn label_type(&self, label: &str) -> Option<&Type> {
         self.label_types.get(label)
     }
 
-    /// Checks a ground value, recursively, against the element types `@type` declares for its
-    /// labels.
+    /// Checks a ground value and its parts against the element types that `@type` declares
+    /// for their labels.
     ///
     /// A fact or constant that violates them is an error.
     pub(super) fn check_value_types(
@@ -476,11 +488,13 @@ impl<'a> Translator<'a> {
         Ok(())
     }
 
-    /// Checks what is statically known of a non-ground labeled tuple construction
-    /// against the type `@type` declares for its label:
-    /// that it is a tuple, its length, and its ground elements.
+    /// Checks a labeled tuple that a term builds from variables against the type that `@type`
+    /// declares for its label, as far as the tuple is known before evaluation.
     ///
-    /// Variable elements are checked at the declared columns their values flow into.
+    /// The label's type must be a tuple of the same length,
+    /// and the ground elements must be within their declared types.
+    /// The elements with variables are checked at the declared columns that their values
+    /// reach.
     pub(super) fn check_tuple_construction(
         &self,
         label: &str,
@@ -521,9 +535,12 @@ impl<'a> Translator<'a> {
         Ok(())
     }
 
-    /// Checks what is statically known of a non-ground labeled map construction
-    /// against the type `@type` declares for its label:
-    /// that it is a map, its number of entries, and its ground keys and values.
+    /// Checks a labeled map that a term builds from variables against the type that `@type`
+    /// declares for its label, as far as the map is known before evaluation.
+    ///
+    /// The label's type must be a map with the same number of entries,
+    /// every ground key must be one of its keys,
+    /// and the ground values must be within their declared types.
     pub(super) fn check_map_construction(
         &self,
         label: &str,
@@ -576,8 +593,11 @@ impl<'a> Translator<'a> {
         Ok(())
     }
 
-    /// Records a `@declare` directive: the column types the type analysis
-    /// checks facts, imports, and rule heads against.
+    /// Records a `@declare` directive, and returns its resolved predicate.
+    ///
+    /// The type analysis checks facts, imports and rule heads against the declared column
+    /// types.
+    /// Fails for a second declaration of the predicate.
     pub(super) fn declare_directive(
         &mut self,
         declare: &DeclareDirective,
@@ -610,10 +630,12 @@ impl<'a> Translator<'a> {
         Ok(name)
     }
 
-    /// Resolves named arguments to their declared positions, returning the terms in
-    /// declaration order.
+    /// Resolves named arguments to their declared positions,
+    /// and returns the terms in declaration order.
     ///
-    /// A column a body atom leaves out becomes an anonymous variable.
+    /// `labels` are the names of the arguments in `terms`,
+    /// and `body` says whether the atom is in a rule body.
+    /// A column that a body atom leaves out becomes an anonymous variable.
     /// Leaving one out anywhere else is an error, since a fact or a head gives every column a
     /// value.
     pub(super) fn positional_terms(
@@ -677,9 +699,10 @@ impl<'a> Translator<'a> {
             .collect()
     }
 
-    /// Adds a hint to a problem with named arguments where a label is a declared prefix
-    /// and its value reads as a local name, as in `wd: 42`,
-    /// which a space makes a named argument rather than a prefixed name.
+    /// Adds a hint to a problem with named arguments if a label is a declared prefix
+    /// and its value is a valid local name, as in `wd: 42`.
+    ///
+    /// The space makes such an argument a named argument rather than a prefixed name.
     fn hint_prefixed_name(
         &self,
         problem: Diagnostic,
@@ -687,8 +710,8 @@ impl<'a> Translator<'a> {
         terms: &[Term],
     ) -> Diagnostic {
         let mistaken = labels.iter().zip(terms).find_map(|(label, term)| {
-            // The local name is the term as written: a number's value is written in another
-            // form, `7` for `007`, which names another IRI.
+            // The local name is the term as written, since a number's value may be written in
+            // another form, such as `7` for `007`, which would name another IRI.
             let local = match &term.kind {
                 TermKind::Number(_) | TermKind::Constant(Identifier::Bare(_)) => term
                     .span
@@ -754,12 +777,14 @@ impl<'a> Translator<'a> {
         Ok(Some(rule))
     }
 
-    /// Records an `@input` directive: a predicate that a `@use` of the program binds
-    /// to a predicate of the using program.
+    /// Records an `@input` directive, which names a predicate that a `@use` of the program
+    /// binds to a predicate of the using program.
     ///
-    /// Its columns, if given, declare it like a `@declare`.
-    /// It is marked open, since it may hold anything its column types allow.
+    /// Returns the resolved predicate if the directive declares columns,
+    /// which declare the predicate like a `@declare`.
+    /// The predicate is marked open, since it may contain anything that its column types allow.
     /// A second `@input` of the same predicate is refused, as linking refuses it in a module.
+    /// `preloaded` says whether the directive's statement was already loaded.
     pub(super) fn input_directive(
         &mut self,
         input: &InputDirective,
@@ -794,10 +819,9 @@ impl<'a> Translator<'a> {
             }
             declared = Some(name.clone());
         }
-        // Running the program directly leaves the input unbound, which
-        // earns a warning. A check looks at a module on its own, whose
-        // inputs are bound later, and a preloaded statement was warned
-        // about already, so neither warns.
+        // Running the program directly leaves the input unbound, which gets a warning.
+        // A check looks at a module on its own, whose inputs are bound later,
+        // and a preloaded statement was already warned about, so neither warns.
         if self.purpose != Purpose::Check && !preloaded {
             self.warn(
                 TranslationError::InputUnsupplied {
@@ -827,8 +851,8 @@ fn parameter_span(term: &Term, name: &str) -> Option<Span> {
     }
 }
 
-/// Returns a parameter on a cycle among parameters that cannot be resolved,
-/// each of which reads another of them.
+/// Returns a parameter on a cycle among the `pending` parameters,
+/// which cannot be resolved since each of them reads another of them.
 ///
 /// # Panics
 ///
@@ -857,8 +881,8 @@ fn parameter_on_cycle<'p>(pending: &[&'p ParameterDirective]) -> &'p ParameterDi
     current
 }
 
-/// Returns the one written-out shape a label's declared type has, of tuples or of maps,
-/// or `None` if it declares the other kind.
+/// Returns the one written-out shape of a label's declared type, of tuples or of maps,
+/// or `None` if the type has no single written-out shape of that kind.
 fn written_out<S>(shapes: Option<&[Shape<S>]>) -> Option<&S> {
     match shapes? {
         [Shape::Structural(shape)] => Some(shape),

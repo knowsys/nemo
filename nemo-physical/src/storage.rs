@@ -1,21 +1,21 @@
-//! Tagged order-preserving storage values.
+//! Storage values, the tagged and order-preserving form in which tries store values.
 //!
-//! A [StorageValue] represents a single value as it is stored in a node of a [trie](crate::trie::Trie).
-//! Conceptually, it is a pair of a [Tag], identifying the type of the value,
+//! A [StorageValue] is a single value as it is stored in a node of a
+//! [trie](crate::trie::Trie).
+//! Conceptually, it is a pair of a [Tag], which identifies the type of the value,
 //! and a 32-bit or 64-bit payload.
-//! It encodes primitive values directly,
-//! or contains an index into one of the stores of the [dictionary](crate::dictionary::Dictionary)
-//! for everything else.
+//! It encodes an *inline* value directly in its payload,
+//! and for every other value it contains an index into one of the stores of the
+//! [dictionary](crate::dictionary::Dictionary).
 //!
-//! The payload encoding of each primitive type preserves order:
+//! The payload encoding of each inline type preserves order:
 //! comparing two payloads of the same tag as unsigned integers
-//! compares the values they encode.
-//! Ordering by tag first and by payload second
-//! gives the "storage order",
+//! compares the values that they encode.
+//! Ordering by tag first and by payload second gives the *storage order*,
 //! the total order in which tries keep their values.
 //! It is neither the term order of the [values](crate::value), another total order,
 //! nor their value order, [value_cmp](crate::value::ValueRef::value_cmp), which is partial.
-//! A primitive value that its type's encoding cannot represent
+//! A value of an inline type that the encoding cannot represent
 //! is stored in the dictionary under the wide tag of its domain.
 
 pub(crate) mod encoding;

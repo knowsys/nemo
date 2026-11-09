@@ -1,12 +1,12 @@
-//! The variables of rules and terms, as the rewrite reads them:
-//! which universal variables a term, a literal, or a rule mentions,
+//! The variables of rules and terms, as the rewrite reads them,
 //! and helpers over lists of variable names.
 
 use std::collections::{HashMap, HashSet};
 
 use crate::model::{Rule, Term, Variable, VariableKind, Walk};
 
-/// Returns the universal variables a rule, literal or term mentions, nested terms included.
+/// Returns the universal variables that a rule, literal or term mentions,
+/// nested terms included.
 pub(super) fn universal(component: &impl Walk) -> Vec<String> {
     component
         .variables()
@@ -16,12 +16,13 @@ pub(super) fn universal(component: &impl Walk) -> Vec<String> {
         .collect()
 }
 
-/// Returns every universal variable a rule mentions.
+/// Returns every universal variable that a rule mentions.
 pub(super) fn universal_variables(rule: &Rule) -> HashSet<String> {
     universal(rule).into_iter().collect()
 }
 
-/// Returns the universal variables a rule joins on: those more than one body literal mentions.
+/// Returns the universal variables that a rule joins on:
+/// those that more than one body literal mentions.
 pub(super) fn joined_variables(rule: &Rule) -> HashSet<String> {
     let mut counts: HashMap<String, usize> = HashMap::new();
     for literal in &rule.body {
@@ -44,7 +45,7 @@ pub(super) fn shares(left: &[String], right: &[String]) -> bool {
     left.iter().any(|variable| right.contains(variable))
 }
 
-/// Adds the variables to a list, in first-occurrence order.
+/// Adds to a list, in order, the variables that it does not contain yet.
 pub(super) fn extend_unique(variables: &mut Vec<String>, more: impl IntoIterator<Item = String>) {
     for variable in more {
         if !variables.contains(&variable) {
@@ -53,7 +54,7 @@ pub(super) fn extend_unique(variables: &mut Vec<String>, more: impl IntoIterator
     }
 }
 
-/// Returns variable terms for names.
+/// Returns the universal variables with the given names, as terms.
 pub(super) fn variable_terms(names: &[String]) -> Vec<Term> {
     names
         .iter()
@@ -61,8 +62,10 @@ pub(super) fn variable_terms(names: &[String]) -> Vec<Term> {
         .collect()
 }
 
-/// Returns a variable name private to one atom instance, a stem and a number,
-/// different from every variable the rule mentions.
+/// Returns a variable name private to one atom instance.
+///
+/// The name is `stem` followed by the next value of `counter`
+/// for which the name differs from every variable in `rule_variables`.
 pub(super) fn private_name(
     rule_variables: &HashSet<String>,
     stem: &str,

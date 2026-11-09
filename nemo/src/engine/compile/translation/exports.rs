@@ -1,5 +1,5 @@
-//! Export directives: resolving them into specifications, and the
-//! checks that need every predicate's arity.
+//! Export directives: resolving them into export specifications,
+//! and the checks that need every predicate's arity.
 
 #[cfg(feature = "parquet")]
 use nemo_io::compression::Compression;
@@ -16,8 +16,10 @@ use crate::{
     model::{ExportDirective, Identifier},
 };
 
-/// Returns the error for an RDF export whose predicate's arity does not fit the serialization,
-/// which takes three columns, or four with the graph first.
+/// Returns the error for an RDF export whose predicate's arity does not fit the serialization.
+///
+/// A serialization of triples needs three columns, and one of quads needs four,
+/// with the graph first.
 pub(crate) fn rdf_export_arity(
     variant: RdfVariant,
     predicate: &str,
@@ -38,7 +40,7 @@ pub(crate) fn rdf_export_arity(
 impl<'a> Translator<'a> {
     /// Resolves one export directive into its specification.
     ///
-    /// The arity checks wait for [validate_exports](Self::validate_exports).
+    /// The arity checks happen later, in [validate_exports](Self::validate_exports).
     pub(super) fn export_directive(&mut self, export: &ExportDirective) -> Result<(), Diagnostic> {
         let predicate = self.resolve(&export.predicate, export.span)?;
         let Identifier::Bare(name) = &export.format else {
@@ -59,7 +61,8 @@ impl<'a> Translator<'a> {
     }
 
     /// Returns the specification of an export directive in a format,
-    /// or `None` for a Parquet export a check accepts in a build without the feature.
+    /// or `None` for a Parquet export that a check accepts in a build without the `parquet`
+    /// feature.
     fn export_spec(
         &mut self,
         export: &ExportDirective,
@@ -117,8 +120,8 @@ impl<'a> Translator<'a> {
                 }
             }
             FileFormat::Parquet => {
-                // A check accepts what this build cannot write;
-                // the program may be meant for one that can.
+                // A check accepts what this build cannot write,
+                // since the program may be meant for a build that can.
                 #[cfg(not(feature = "parquet"))]
                 return if self.purpose == super::Purpose::Check {
                     Ok(None)
@@ -148,9 +151,10 @@ impl<'a> Translator<'a> {
         Ok(Some(spec))
     }
 
-    /// Runs the export checks that need every predicate's arity:
-    /// an RDF export takes three columns, or four with the graph first,
-    /// and the `format` option of a DSV export lists one column format per column.
+    /// Runs the export checks that need every predicate's arity.
+    ///
+    /// An RDF export needs three columns, or four for quads,
+    /// and the `format` option of a DSV export must list one format per column.
     pub(super) fn validate_exports(&mut self) -> Result<(), Diagnostic> {
         let mut problems = Vec::new();
         for (spec, &span) in self.exports.iter().zip(&self.export_spans) {

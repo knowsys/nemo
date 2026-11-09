@@ -1,8 +1,9 @@
 //! The value types of the engine's API.
 //!
-//! The types that name the values in [Engine](crate::engine::Engine) results
-//! and in [ExportSpec](crate::engine::ExportSpec) fields are re-exported here,
-//! so they can be used without depending on `nemo-physical` or `nemo-io`.
+//! The types of the values in [Engine](crate::engine::Engine) results
+//! and of the fields of an [ExportSpec](crate::engine::ExportSpec) are re-exported here,
+//! so that a user of the engine does not need to depend on `nemo-physical` or `nemo-io`.
+//! [TypeSyntax] writes a [Type] in the syntax of type declarations.
 //!
 //! ```
 //! use nemo::values::{

@@ -1,5 +1,4 @@
-//! The constructs only linking resolves, which a loaded program cannot
-//! hold.
+//! The constructs that only linking resolves, so that a loaded program never contains them.
 
 use std::fmt::{self, Display, Formatter};
 
@@ -7,9 +6,8 @@ use nemo_physical::diagnostics::Diagnostic;
 
 use crate::model::{Directive, Identifier, IdentifierRole, Span, Statement};
 
-/// A construct of the surface language that linking resolves
-/// ([link](crate::engine::Engine::link)), so that a loaded program never
-/// holds it.
+/// A construct of the rule language that [linking](crate::engine::Engine::link) resolves,
+/// so that a loaded program never contains it.
 ///
 /// A commit panics when it finishes if its stage wrote one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -21,7 +19,7 @@ pub(crate) enum UnlinkedConstruct {
 }
 
 impl UnlinkedConstruct {
-    /// Every construct linking resolves.
+    /// Every construct that linking resolves.
     pub(crate) const ALL: [UnlinkedConstruct; 2] =
         [UnlinkedConstruct::Use, UnlinkedConstruct::QualifiedName];
 
@@ -63,12 +61,14 @@ mod tests {
 
     use crate::testing::parse;
 
-    /// The statements of a program text.
+    /// Returns the statements of a program text.
     fn statements(source: &str) -> Vec<Statement> {
         let program = parse(source);
         program.statements
     }
 
+    /// A `@use` directive and a module-qualified name are found in the statements that contain
+    /// them, and only there.
     #[test]
     fn constructs_are_found_wherever_they_occur() {
         let found = statements("@use lib as lib .\np(?x) :- lib::q(?x) .\np(?x) :- q(?x) .");

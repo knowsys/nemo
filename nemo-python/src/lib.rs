@@ -1,10 +1,11 @@
 //! Python bindings for the Nemo rule engine.
 //!
-//! The module is `nmo`, thin over the `nemo` crate's embedding API.
-//! [Program] parses and inspects.
-//! [Engine] loads, reasons (GIL released, Ctrl-C honoured),
-//! and reads results back through one defined conversion table.
-//! Failures raise a registered exception hierarchy carrying structured diagnostics.
+//! The Python module is `nmo`, a thin layer over the API of the `nemo` crate.
+//! [Program] parses and inspects a program.
+//! [Engine] loads programs, reasons, and reads the results,
+//! converting values between the engine and Python as the `values` module describes.
+//! Reasoning releases the GIL and can be interrupted with Ctrl-C.
+//! A failure raises an exception of the module's own hierarchy, with structured diagnostics.
 
 #[cfg(feature = "arrow")]
 mod arrow;
@@ -20,7 +21,11 @@ pub use errors::{Diagnostic, Label};
 pub use program::Program;
 pub use values::{Float32, Iri, Labeled, LanguageString, Literal, Null};
 
-/// Returns the `nmo` module: every class and exception registered by name.
+/// Python bindings for the Nemo rule engine.
+///
+/// `Program` parses and inspects a program, and `Engine` loads programs, reasons,
+/// and reads the results.
+/// A failure of the engine raises `NemoError` or its subclass `DiagnosticsError`.
 #[pymodule(name = "nmo")]
 fn nemo_python(py: Python<'_>, module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<Program>()?;

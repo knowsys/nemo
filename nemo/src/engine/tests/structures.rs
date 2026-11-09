@@ -1,12 +1,13 @@
-//! Structured values: the errors building and reading them reports,
+//! Structured values: the errors that building and reading them report,
 //! and structures around nondeterministic calls.
 
 use super::*;
 
+/// An accessor outside a pattern fails for a wrong operand with a counted evaluation error,
+/// while a pattern just does not match.
 #[test]
 fn an_accessor_outside_a_pattern_errors_and_is_counted() {
-    // Direct accessor use asserts the shape: a wrong operand is a
-    // counted evaluation error, unlike a pattern's silent non-match.
+    // `5` is not a tuple, and `(1, 2)` has no element 9.
     let mut engine = run("
         t(5) . u((1, 2)) .
         q(?x) :- t(?t), ?x = ?t[0] .
@@ -19,6 +20,7 @@ fn an_accessor_outside_a_pattern_errors_and_is_counted() {
     assert_eq!(errors.count(EvaluationError::Missing), 1);
 }
 
+/// A variable in the key of a map pattern is reported as unsupported.
 #[test]
 fn a_variable_in_a_map_patterns_key_is_an_error() {
     let program = parse("q(?k) :- p({?k = 1}) .");
@@ -29,6 +31,8 @@ fn a_variable_in_a_map_patterns_key_is_an_error() {
     assert_eq!(problem.code(), codes::UNSUPPORTED, "{problem:?}");
 }
 
+/// A map that a rule builds with the same key twice is dropped and counted as malformed,
+/// once per row.
 #[test]
 fn a_map_built_with_one_key_twice_is_dropped_and_counted() {
     let mut engine = run("
@@ -44,6 +48,7 @@ fn a_map_built_with_one_key_twice_is_dropped_and_counted() {
     );
 }
 
+/// A map constant that names a key twice fails the load.
 #[test]
 fn a_map_naming_a_key_twice_is_rejected() {
     let program = parse("bad({a = 1, a = 2}) .");

@@ -34,11 +34,11 @@ impl Execution<'_> {
         self.materialize(aggregate.node, Runs::of(rows), &mut context.accounting)
     }
 
-    /// Returns the number of distinct rows across the blocks as the single row of a count,
+    /// Returns a single row with the number of distinct rows across the blocks,
     /// or no row for an empty input, as a scan does.
     ///
     /// A trie's rows are distinct,
-    /// and several blocks count through the streaming merge without building anything.
+    /// and the rows of several blocks are counted by a streaming merge, which builds nothing.
     fn count_rows(blocks: &[&Trie], accounting: &mut Accounting) -> SortedRowBuffer {
         let begun = Stopwatch::start();
         let count = match blocks {

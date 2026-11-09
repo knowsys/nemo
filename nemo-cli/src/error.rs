@@ -1,4 +1,4 @@
-//! The kinds of problems the command line reports.
+//! The kinds of problems that the command line itself reports.
 
 use nemo_physical::{diagnostic_kinds, diagnostics::Count};
 
@@ -46,9 +46,9 @@ diagnostic_kinds! {
                explain "`--param` sets a parameter that the program does not declare.",
                hint "declare the parameter with `@parameter` before setting it";
         ExportCollision {
-            /// What would write the file, as `` `p` and `q` ``.
+            /// The writers of the file, as `` `p` and `q` ``.
             claimants: String,
-            /// The file, as the export directory names it.
+            /// The file's name, relative to the export directory.
             file: String,
         } => EXPORT_COLLISION = 908, error, "{claimants} would both be written to `{file}`",
                explain "Two exports, or an export and the HTML report, would write the same \

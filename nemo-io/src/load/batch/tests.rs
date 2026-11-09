@@ -1,5 +1,5 @@
-//! Batches agree with sequential reads: windows, byte sources, line
-//! numbers, declared types, conditions, and limits.
+//! Tests that batches agree with sequential reads: windows, bytes in memory, line
+//! numbers, column formats, conditions, and limits.
 
 use super::*;
 
@@ -17,10 +17,10 @@ use crate::{
     testing::{TempDirectory, greater_than_five},
 };
 
+/// Three files loaded as a batch are interned as the same values that sequential reads give,
+/// in the order of the files.
 #[test]
 fn batches_match_sequential_reads() {
-    // Three files loaded as a batch must intern to the same values a
-    // sequential read produces, in source order.
     let temporary = TempDirectory::new();
     let directory = temporary.path();
     let contents = ["x,1\nshared,2\n", "shared,3\n", "y,4\nx,5\n"];
@@ -60,10 +60,10 @@ fn batches_match_sequential_reads() {
     }
 }
 
+/// Bytes in memory load as a streaming read of the same content does,
+/// also when they are cut into windows and parsed in parallel.
 #[test]
 fn byte_sources_match_file_reads() {
-    // The same content loads identically whether it comes from disk
-    // or from memory, windowed and in parallel included.
     let content: String = (0..500)
         .map(|index| format!("name-{index}\t{index}\n"))
         .collect();
@@ -98,11 +98,11 @@ fn byte_sources_match_file_reads() {
     );
 }
 
+/// A batch keeps the row count of a resource whose columns are all skipped,
+/// as a streaming read does.
 #[test]
 fn all_skip_sources_keep_their_record_count_in_batches() {
-    // A nullary source (every column skipped) carries its rows only
-    // as a count; the batch path must preserve it like the
-    // streaming path does.
+    // A resource of arity zero has its rows only as a count.
     let temporary = TempDirectory::new();
     let directory = temporary.path();
     let path = directory.join("nemo_io_batch_skip.csv");
@@ -123,11 +123,10 @@ fn all_skip_sources_keep_their_record_count_in_batches() {
     assert_eq!(batched[1].rows.len(), 2);
 }
 
+/// A batch loads a wide value as a streaming read does.
 #[test]
 fn batches_and_streams_agree_on_wide_values() {
-    // Line 2's dateTime lies beyond the inline instant range and
-    // takes the wide store; the batch path must load it like the
-    // streaming path does.
+    // Line 2's dateTime lies beyond the compact instant range, so it is wide.
     let temporary = TempDirectory::new();
     let directory = temporary.path();
     let path = directory.join("nemo_io_batch_wide_value.csv");
@@ -151,10 +150,10 @@ fn batches_and_streams_agree_on_wide_values() {
     assert_eq!(batched[0].rows.len(), streamed.rows.len());
 }
 
+/// A file cut into many windows, several per worker,
+/// loads the same rows in the same order as a sequential read.
 #[test]
 fn windowed_batches_match_sequential_reads() {
-    // A file forced into many windows, several per worker,
-    // must load the same rows in the same order a straight read produces.
     let temporary = TempDirectory::new();
     let directory = temporary.path();
     let path = directory.join("nemo_io_windowed.tsv");
@@ -189,10 +188,10 @@ fn windowed_batches_match_sequential_reads() {
     );
 }
 
+/// A malformed row deep in a later window is reported at its line in the file,
+/// not in its window.
 #[test]
 fn windowed_malformed_rows_keep_their_global_lines() {
-    // A malformed row deep in a later window must be reported at
-    // its line in the file, not in its window.
     let temporary = TempDirectory::new();
     let directory = temporary.path();
     let path = directory.join("nemo_io_windowed_malformed.tsv");
@@ -218,15 +217,16 @@ fn windowed_malformed_rows_keep_their_global_lines() {
     assert_eq!(loaded[0].first_malformed, Some(401));
 }
 
+/// A batch counts malformed and excluded rows as a streaming read does.
 #[test]
 fn rows_are_counted_alike_in_both_paths() {
     use nemo_physical::function::{OpCode, StackProgram};
 
     use crate::row_filter::RowFilter;
 
-    // Column 1 reads as `int`, and the filter keeps rows with column 1
-    // above 5. Line 2 does not read as an integer and line 3 is short,
-    // so both are malformed; line 4 fails the filter.
+    // Column 1 is read as `int`, and the condition keeps rows with column 1
+    // above 5. Line 2 is not an integer and line 3 is short,
+    // so both are malformed. Line 4 fails the condition.
     let temporary = TempDirectory::new();
     let directory = temporary.path();
     let path = directory.join("nemo_io_counted_alike.csv");
@@ -264,11 +264,11 @@ e,9
     }
 }
 
+/// A row on which the condition fails with an error is dropped and counted under the error's
+/// kind, not as excluded, in a batch as in a streaming read.
 #[test]
 fn an_erroring_condition_is_counted_by_its_kind_in_both_paths() {
-    // Line 2's column 1 is a string the condition cannot compare
-    // with a number: the row is dropped as a rule's filter would
-    // drop it, and counted under that error kind, not as excluded.
+    // Line 2's column 1 is a string the condition cannot compare with a number.
     let temporary = TempDirectory::new();
     let directory = temporary.path();
     let path = directory.join("nemo_io_filter_errors.csv");
@@ -294,13 +294,12 @@ fn an_erroring_condition_is_counted_by_its_kind_in_both_paths() {
     }
 }
 
+/// A resource with a limit stays one window, so its rows and counts match a sequential read,
+/// whatever the number of cores.
 #[test]
 fn limited_sources_read_as_one_window_and_count_like_the_streaming_reader() {
-    // A limit counts rows in source order, which windows parsed
-    // apart cannot share. A limited source stays one window, so its
-    // rows and its skipped-row counts match a straight read whatever
-    // the machine's core count, with the condition dropping rows and
-    // a malformed line among the first rows.
+    // A limit counts rows in the resource's order, which windows parsed separately cannot do.
+    // The condition drops rows, and there are malformed lines among the first rows.
     let temporary = TempDirectory::new();
     let directory = temporary.path();
     let path = directory.join("nemo_io_limited.tsv");
@@ -331,8 +330,8 @@ fn limited_sources_read_as_one_window_and_count_like_the_streaming_reader() {
         .read_path(&path, &mut sequential_dictionary, EvaluationContext::now())
         .expect("the source reads");
 
-    // The first 200 well-formed rows are `0..200` (the six below the
-    // condition's bound dropped), past two malformed lines.
+    // The first 200 well-formed rows are 0 to 199, past two malformed lines,
+    // and the condition drops the six of them that are not above 5.
     assert_eq!(sequential.rows.len(), 194);
     assert_eq!((sequential.excluded, sequential.malformed), (6, 2));
     assert_eq!(windowed[0].rows.len(), sequential.rows.len());
@@ -345,6 +344,8 @@ fn limited_sources_read_as_one_window_and_count_like_the_streaming_reader() {
     );
 }
 
+/// Wherever the windows and runs fall, a batch interns the same values as a sequential read,
+/// in the same order, so even the raw storage values agree, and it reports the same lines.
 #[test]
 fn runs_intern_like_a_straight_read() {
     use std::io::Write;
@@ -352,10 +353,7 @@ fn runs_intern_like_a_straight_read() {
     use flate2::write::GzEncoder;
 
     // Enough rows for several runs per window and enough bytes for
-    // the pool, with malformed rows in the first and in a later run:
-    // wherever the windows and runs fall, the batch must intern the
-    // values a straight read interns, in the same order, so that even
-    // the raw storage values agree, and report the same lines.
+    // the pool, with malformed rows in the first and in a later run.
     let temporary = TempDirectory::new();
     let directory = temporary.path();
     let mut content = String::new();
@@ -426,6 +424,7 @@ fn runs_intern_like_a_straight_read() {
     }
 }
 
+/// A missing file fails a read and a batch.
 #[test]
 fn missing_files_are_reported() {
     let temporary = TempDirectory::new();

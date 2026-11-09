@@ -1,25 +1,24 @@
-//! Proof search: grounded backward derivation over the stored tables.
+//! Proof search: a grounded backward search for derivations over the stored tables.
 //!
-//! The search first asks the fact's table for the revision it added the fact at.
-//! If that revision was loaded (extensional), the fact is a leaf.
-//! Otherwise, the application log names the rule application of that step, which wrote it.
-//! Its rule body is grounded by the fact's values,
-//! and evaluated again as an ordinary operation plan over the data from before the application
-//! to find a witness, whose premises are then proven in turn.
-//!
+//! The search first asks the fact's table at which revision it added the fact.
+//! If that revision belongs to loaded data, the fact is a leaf.
+//! Otherwise, the application log names the rule application of that step, which wrote the
+//! fact.
+//! The rule's body is grounded by the fact's values and evaluated again,
+//! as an ordinary operation plan over the data from before the application.
+//! Each row that this evaluation finds is a *witness*,
+//! with a value for every variable of the rule,
+//! and the premises of a witness are proven in turn.
 //! The premises of a witness were all added before the fact,
-//! so the search never meets a cycle and remembers every outcome.
+//! so the search never meets a cycle, and it can remember every outcome.
 //!
 //! The submodules:
 //!
 //! - [search] finds proofs over the compiled program.
-//! - [fetch] proves facts fetched from an endpoint by a bound import.
+//! - `fetch` proves the facts that a bound import fetched from an endpoint.
 //! - [lift] maps each proof onto the written program.
-//! - [response] converts it to the [crate::trace] protocol types.
-//! - [parts] traces every row of predicates, handing the response out in parts.
-//!
-//! A [BatchedTrace] keeps what its batches of facts have in common,
-//! so that they add up to one response in which each fact is proven and listed once.
+//! - [response] converts the lifted proofs to the types of [crate::trace].
+//! - [parts] traces every row of some predicates, and hands the response out in parts.
 
 #[cfg(feature = "sparql")]
 mod fetch;
@@ -44,7 +43,7 @@ use crate::{
     trace::{TracePart, TraceResponse, TracedFact, VERSION},
 };
 
-/// One proven fact with its explanation.
+/// One proven fact, with how it holds.
 #[derive(Debug)]
 struct ProofNode {
     /// The fact's table.
@@ -62,37 +61,39 @@ enum Explanation {
     Loaded,
     /// The fact follows from the premises by a rule instance.
     Derived {
-        /// The rule's index.
+        /// The index of the rule in the compiled program.
         rule: usize,
-        /// The engine step of the producing application,
-        /// or the revision the fact was added at if the application log has no entry for it.
+        /// The engine step of the application that derived the fact,
+        /// or the revision at which the fact was added if the application log has no entry
+        /// for it.
         step: u64,
-        /// The witness: the rule's combined row
-        /// (the variables in the rule's order, then computed columns),
-        /// or empty for an aggregate node without a witness row.
+        /// The witness, which is the rule's combined row,
+        /// with the variables in the rule's order and then the computed columns.
+        ///
+        /// It is empty for an aggregate node without a witness row.
         witness: Vec<StorageValue>,
         /// The positive premises.
         premises: Vec<Rc<ProofNode>>,
         /// For an aggregate rule, the number of distinct contributions
         /// the group's first aggregate ranged over.
         matches: Option<usize>,
-        /// Whether a head column calls a nondeterministic function
-        /// (such as `RAND()` or `STRUUID()`), whose value the search cannot reproduce.
+        /// Whether a head column calls a nondeterministic function, such as `RAND()`,
+        /// whose value the search cannot reproduce.
         nondeterministic: bool,
     },
 }
 
-/// What a trace keeps from one batch of facts to the next:
-/// the facts proven, the facts lifted with their nodes, and the rules listed.
+/// A trace in batches, which keeps what one batch of facts has in common with the next.
 ///
-/// The batches add up to one response, in which each fact is proven and listed once.
+/// It keeps the facts proven, the facts lifted with their nodes, and the rules listed,
+/// so that the batches add up to one response in which each fact is proven and listed once.
 #[derive(Debug, Default)]
 struct BatchedTrace {
-    /// The outcome of every fact the search met.
+    /// The outcome of every fact that the search met.
     outcomes: search::Outcomes,
     /// The facts lifted, with their nodes.
     graph: LiftedGraph,
-    /// The position of each rule listed, by its statement.
+    /// The position in the response of each rule listed so far, by its statement.
     listed: HashMap<StatementId, usize>,
 }
 
@@ -141,8 +142,7 @@ impl BatchedTrace {
     }
 }
 
-/// Traces the resolved facts against the engine's stores, returning the
-/// protocol response.
+/// Traces the resolved facts against the engine's stores, and returns the response.
 pub(crate) fn run(
     engine: &mut Engine,
     facts: Vec<(TableId, Vec<DataValue>)>,

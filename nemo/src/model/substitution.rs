@@ -1,15 +1,16 @@
-//! Substitutions: variables replaced by terms.
+//! Substitutions, which replace variables by terms.
 
 use std::collections::HashMap;
 
 use crate::model::{Term, TermKind, Variable, Walk};
 
-/// A substitution: the terms that replace variables.
+/// A substitution, which maps variables to the terms that replace them.
 ///
-/// Applied to a component, it replaces every occurrence of a variable it maps by that
-/// variable's term, which takes the span of the occurrence it replaces.
-/// A variable an aggregate's scope names is renamed if it maps to a variable,
-/// and kept otherwise.
+/// Applied to a component, it replaces every occurrence of a mapped variable
+/// by the variable's term.
+/// The term gets the span of the occurrence that it replaces, if the occurrence has one.
+/// A variable in the scope of an aggregate is renamed if it maps to a variable,
+/// and kept otherwise, since a scope contains only variables.
 ///
 /// # Example
 ///
@@ -34,13 +35,12 @@ impl Substitution {
         Self::default()
     }
 
-    /// Maps a variable to a term, returning the term it was mapped to
-    /// before.
+    /// Maps a variable to a term, and returns the term it was mapped to before, if any.
     pub fn insert(&mut self, variable: Variable, term: Term) -> Option<Term> {
         self.replacements.insert(variable, term)
     }
 
-    /// Returns the term a variable is mapped to.
+    /// Returns the term that a variable is mapped to, or `None` if it is not mapped.
     pub fn get(&self, variable: &Variable) -> Option<&Term> {
         self.replacements.get(variable)
     }
@@ -50,13 +50,12 @@ impl Substitution {
         self.replacements.is_empty()
     }
 
-    /// Returns the mapped variables with their terms, in no particular
-    /// order.
+    /// Returns the mapped variables with their terms, in no particular order.
     pub fn iter(&self) -> impl Iterator<Item = (&Variable, &Term)> {
         self.replacements.iter()
     }
 
-    /// Replaces the mapped variables of a component.
+    /// Replaces the mapped variables in a component.
     pub fn apply(&self, component: &mut impl Walk) {
         if self.replacements.is_empty() {
             return;
@@ -99,6 +98,8 @@ mod tests {
 
     use crate::model::Rule;
 
+    /// Every occurrence is replaced exactly once, so a replacement is not substituted again,
+    /// and the scope of an aggregate is renamed too.
     #[test]
     fn substitution_replaces_every_occurrence_once() {
         let mut rule =
@@ -122,6 +123,7 @@ mod tests {
         );
     }
 
+    /// A replacement gets the span of the occurrence that it replaces.
     #[test]
     fn replacements_take_the_span_of_the_occurrence() {
         let mut term = Term::parse("?x").expect("the term parses");

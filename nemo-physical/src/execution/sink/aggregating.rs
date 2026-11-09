@@ -3,12 +3,12 @@
 //! An aggregation groups the rows by their leading layers
 //! and computes any number of aggregates per group, in one pass.
 //! The join's rows arrive sorted, so the rows of a group are adjacent,
-//! and the changed layer the join hands over marks where a group starts.
-//! As in SPARQL, a group on which an aggregate fails gives no row.
+//! and the changed layer the join passes with each row marks where a group starts.
+//! As in SPARQL, a group for which an aggregate fails yields no row.
 //!
 //! Aggregation runs in two phases.
 //! The [Aggregator] collects the groups as a join drains into it,
-//! while the join may still hold the dictionary.
+//! while the join may still borrow the dictionary.
 //! [Encoding](AggregatedRows::encode) then adds the results to the dictionary.
 
 mod accumulator;
@@ -27,11 +27,13 @@ use crate::{
 /// How an aggregate reads each of its identities once per group.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Deduplication {
-    /// The group key and the identity are exactly the leading layers, this many:
-    /// the rows arrive sorted and distinct,
-    /// so a row starts a new identity exactly if it opens a group or changes within them.
+    /// The group key and the identity together cover exactly this many leading layers.
+    ///
+    /// The rows arrive sorted and distinct, so a row has a new identity
+    /// exactly if it starts a group or changes one of these layers.
     Prefix(usize),
-    /// The identity lies elsewhere; a set remembers the identities read in the group.
+    /// The identity has layers beyond such a prefix,
+    /// so a set records the identities read in the group.
     Set,
 }
 
@@ -59,31 +61,33 @@ impl Deduplication {
 /// and per aggregate its result or the error it failed with.
 type Group = (Vec<StorageValue>, Vec<Result<DataValue, EvaluationError>>);
 
-/// The sink aggregating a join's rows, as its [shape](AggregationShape) specifies.
+/// The sink that aggregates a join's rows, as its [shape](AggregationShape) specifies.
 ///
-/// A join drains into the aggregator, which collects each group's key and results;
-/// [finish](Self::finish) hands over the groups for encoding.
+/// A join drains into the aggregator, which collects each group's key and results.
+/// [finish](Self::finish) returns the groups for encoding.
 #[derive(Debug)]
 pub(crate) struct Aggregator<'a> {
     /// The shape of the aggregation.
     shape: AggregationShape<'a>,
     /// Per aggregate, how it reads each identity once.
     deduplication: Vec<Deduplication>,
-    /// The dictionary the values decode through.
+    /// The dictionary the values are decoded through.
     dictionary: &'a Dictionary,
     /// The groups collected so far, in the join's order.
     groups: Vec<Group>,
-    /// The key and the accumulators of the current group; `None` before the first row.
+    /// The key and the accumulators of the current group, or `None` before the first row.
     current: Option<(Vec<StorageValue>, Vec<Accumulator>)>,
-    /// Per aggregate that needs one, the identities read in the current group.
+    /// Per aggregate, the set of identities read in the current group,
+    /// for the aggregates that need one.
     seen: Vec<Option<RowSet>>,
-    /// The scratch for the identity of a row.
+    /// The buffer for the identity of a row.
     identity: Vec<StorageValue>,
 }
 
 impl<'a> Aggregator<'a> {
-    /// Creates the aggregator of a shape over joins emitting `emitted` layers;
-    /// the values decode through the dictionary.
+    /// Creates the aggregator of a shape over joins that emit `emitted` layers.
+    ///
+    /// The values are decoded through `dictionary`.
     ///
     /// # Panics
     ///
@@ -126,11 +130,11 @@ impl<'a> Aggregator<'a> {
         }
     }
 
-    /// Ends the aggregation, and returns the groups collected.
+    /// Ends the aggregation, and returns the collected groups.
     ///
-    /// A join without rows gives no groups:
-    /// a row for the empty group, as SPARQL gives for an ungrouped count,
-    /// is up to the caller.
+    /// A join without rows yields no group.
+    /// So an aggregation without a group key yields no row over an empty input,
+    /// where SPARQL yields one, such as a count of 0.
     pub(crate) fn finish(mut self) -> AggregatedRows {
         self.close_group();
 
@@ -170,7 +174,7 @@ impl RowSink for Aggregator<'_> {
             ..
         } = self;
 
-        // The first row of a group is a fresh identity even where no layer tells identities apart.
+        // The first row of a group has a new identity, even if no layer distinguishes identities.
         let opens_group = current.is_none();
         let (_, accumulators) = current.get_or_insert_with(|| {
             let fresh = shape
@@ -222,13 +226,14 @@ pub(crate) struct AggregatedRows {
 }
 
 impl AggregatedRows {
-    /// Encodes the groups into result rows, adding the results to the dictionary,
-    /// and returns the rows with the errors counted per kind.
+    /// Encodes the groups into result rows, adding the results to the dictionary.
     ///
-    /// A group with a failed aggregate gives no row, and its error is counted.
+    /// Returns the rows, and the errors counted by kind.
+    /// A group with a failed aggregate yields no row,
+    /// and the error of its first failed aggregate is counted.
     /// So does a group with a result the dictionary cannot represent,
     /// counted as [unsupported](EvaluationError::Unsupported).
-    /// The groups arrive distinct and in key order, so the rows are sorted.
+    /// The groups are distinct and in key order, so the rows are sorted.
     pub(crate) fn encode(self, dictionary: &mut Dictionary) -> (SortedRowBuffer, ErrorCounts) {
         let mut buffer = RowBuffer::new(self.arity);
         let mut errors = ErrorCounts::default();
@@ -267,6 +272,8 @@ mod tests {
 
     use crate::execution::AggregateKind;
 
+    /// An aggregate reads its identities without a set
+    /// if its group key and identity cover a prefix of the layers.
     #[test]
     fn identities_leading_the_rows_need_no_set() {
         let aggregate = |input, per: &[usize]| AggregateShape {
@@ -293,7 +300,7 @@ mod tests {
             Deduplication::of(&aggregate(0, &[0]), 1),
             Deduplication::Prefix(1)
         );
-        // A gap after the group key leaves identities apart.
+        // A layer skipped after the group key needs a set.
         assert_eq!(Deduplication::of(&aggregate(2, &[]), 1), Deduplication::Set);
         assert_eq!(Deduplication::of(&aggregate(1, &[]), 0), Deduplication::Set);
     }

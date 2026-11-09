@@ -1,24 +1,24 @@
-//! The curves the recorder keeps over a run, rule applications and iterations against time,
-//! and how they stay bounded.
+//! The curves that the recorder keeps over a run, of rule applications and iterations against
+//! time, and how they stay bounded.
 
-/// An entry of a curve: stamped, and mergeable with a later entry into
-/// one that covers both.
+/// An entry of a curve, which has a stamp and can be merged with a later entry
+/// into one that covers both.
 pub(super) trait CurveEntry: Copy {
     /// Returns the stamp, in nanoseconds since the recorder started.
     fn at(&self) -> u64;
 
-    /// Returns this entry and a later one as one.
+    /// Returns this entry and a later one, merged into one.
     fn merged(self, later: Self) -> Self;
 }
 
-/// One timeline entry: one rule application, or several merged adjacent ones.
+/// One entry of the timeline, for one rule application or for several adjacent ones merged.
 #[derive(Debug, Clone, Copy)]
 pub(super) struct TimelinePoint {
-    /// Stamp of the (last merged) application's end.
+    /// The stamp of the end of the last application.
     pub(super) at: u64,
-    /// New rows across the merged applications.
+    /// The number of new rows that the applications derived.
     pub(super) derived: u64,
-    /// Wall time across the merged applications.
+    /// The wall time of the applications, summed.
     pub(super) duration: u64,
 }
 
@@ -36,18 +36,19 @@ impl CurveEntry for TimelinePoint {
     }
 }
 
-/// One finished iteration, or several merged adjacent ones.
+/// One entry of the iteration curve, for one finished iteration or for several adjacent ones
+/// merged.
 #[derive(Debug, Clone, Copy)]
 pub(super) struct IterationPoint {
-    /// Stamp of the (last merged) iteration's end.
+    /// The stamp of the end of the last iteration.
     pub(super) at: u64,
-    /// The stratum of the last merged iteration.
+    /// The stratum of the last iteration.
     pub(super) stratum: u64,
-    /// New rows across the merged iterations.
+    /// The number of new rows that the iterations derived.
     pub(super) derived: u64,
-    /// Stored rows after the last merged iteration.
+    /// The number of stored rows after the last iteration.
     pub(super) total: u64,
-    /// Bytes after the last merged iteration.
+    /// The bytes in use after the last iteration.
     pub(super) memory: u64,
 }
 
@@ -69,8 +70,8 @@ impl CurveEntry for IterationPoint {
 
 /// A curve over the run whose size stays bounded.
 ///
-/// Once it holds `CAP` entries, consecutive entries within one time window merge,
-/// so its size stays bounded however long the run is,
+/// Once it has `CAP` entries, consecutive entries within one time window are merged.
+/// So its size stays bounded however long the run is,
 /// while it still covers the whole run.
 #[derive(Debug)]
 pub(super) struct BoundedCurve<T, const CAP: usize> {
@@ -94,9 +95,9 @@ impl<T: CurveEntry, const CAP: usize> BoundedCurve<T, CAP> {
     pub(super) fn push(&mut self, entry: T) {
         self.entries.push(entry);
         if self.entries.len() >= CAP {
-            // The window is the span of stamps so far divided by `CAP / 2`,
-            // and never shrinks. Derived from the span alone, it grows only
-            // as fast as the run does.
+            // The window is the span of the stamps so far divided by `CAP / 2`,
+            // and it never shrinks. Since it depends only on the span,
+            // it grows only as fast as the run does.
             self.window = self.window.max(entry.at() / (CAP as u64 / 2)).max(1);
             self.coarsen();
         }
@@ -107,15 +108,14 @@ impl<T: CurveEntry, const CAP: usize> BoundedCurve<T, CAP> {
         &self.entries
     }
 
-    /// Coarsens the curve in place:
-    /// consecutive entries whose stamps share a time window merge into one.
+    /// Coarsens the curve in place, by merging consecutive entries whose stamps share a time
+    /// window.
     ///
-    /// Early entries only ever merge with their own neighborhood,
+    /// An early entry only ever merges with its neighbors,
     /// so the curve keeps covering the whole run.
-    ///
     /// With the window at `span / (cap / 2)`,
-    /// at most `cap / 2 + 1` windows exist over the stamps seen so far,
-    /// so the curve at its cap at least halves.
+    /// the stamps seen so far fall into at most `cap / 2 + 1` windows,
+    /// so a curve at its cap shrinks to at most `cap / 2 + 1` entries.
     fn coarsen(&mut self) {
         let entries = &mut self.entries;
         let window = self.window;
@@ -136,7 +136,7 @@ impl<T: CurveEntry, const CAP: usize> BoundedCurve<T, CAP> {
 mod tests {
     use super::*;
 
-    /// A bare stamp as an entry: merging keeps the later one.
+    /// A bare stamp as an entry, which keeps the later stamp when merged.
     impl CurveEntry for u64 {
         fn at(&self) -> u64 {
             *self
@@ -147,6 +147,7 @@ mod tests {
         }
     }
 
+    /// Coarsening merges consecutive entries in the same window, and only those.
     #[test]
     fn coarsening_merges_within_windows_only() {
         // 1, 2, 3 share window 0, 11 and 12 share window 1, and 25

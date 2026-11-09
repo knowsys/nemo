@@ -1,21 +1,22 @@
-//! What the builtins do, as an editor shows it to someone writing a program:
-//! the ways to call each, and what it computes.
+//! Short documentation of the builtins, for an editor to show to someone writing a program.
 
 use crate::model::{AggregateKind, Operator};
 
-/// What a builtin operator or aggregate does.
+/// The documentation of a builtin operator or aggregate.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BuiltinDocumentation {
-    /// The ways to call it, one per line, in the type syntax of declarations:
-    /// `STRLEN(text: string) -> int`, or `number + number -> number` for an infix operator.
+    /// The ways to call the builtin, one signature per entry, in the type syntax of
+    /// declarations.
     ///
-    /// A trailing `…` repeats the argument before it.
+    /// Examples are `STRLEN(text: string) -> int`,
+    /// and `number + number -> number` for an infix operator.
+    /// A trailing `…` means that the argument before it may be repeated.
     pub signatures: &'static [&'static str],
-    /// What it computes, in a sentence or two.
+    /// What the builtin computes, in a sentence or two.
     pub summary: &'static str,
 }
 
-/// Returns the documentation of a builtin.
+/// Returns the documentation with the given signatures and summary.
 const fn doc(signatures: &'static [&'static str], summary: &'static str) -> BuiltinDocumentation {
     BuiltinDocumentation {
         signatures,
@@ -24,7 +25,7 @@ const fn doc(signatures: &'static [&'static str], summary: &'static str) -> Buil
 }
 
 impl Operator {
-    /// Returns what the builtin does, as an editor shows it.
+    /// Returns the documentation of the builtin.
     pub fn documentation(&self) -> BuiltinDocumentation {
         match self {
             Operator::Equal => doc(
@@ -567,7 +568,7 @@ impl Operator {
 }
 
 impl AggregateKind {
-    /// Returns what the aggregate does, as an editor shows it.
+    /// Returns the documentation of the aggregate.
     pub fn documentation(&self) -> BuiltinDocumentation {
         match self {
             AggregateKind::Count => doc(

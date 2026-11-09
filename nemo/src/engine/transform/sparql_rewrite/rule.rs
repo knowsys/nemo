@@ -32,30 +32,35 @@ fn named(names: &HashMap<String, String>, variable: &str) -> String {
 pub(super) struct RuleRewrite {
     /// Per replaced component, what replaces it, in order.
     pub(super) replacements: Vec<ComponentReplacement>,
-    /// The rewritten rule, or `None` if the rule folded into the import of its one replacement.
+    /// The rewritten rule,
+    /// or `None` if the rule was folded into the import of its one replacement.
     pub(super) rule: Option<Rule>,
-    /// The candidate imports the rule read, the rewrite's other provenance sources.
+    /// The candidate imports that the rule read,
+    /// which are sources of the added statements besides the rule.
     pub(super) imports: Vec<StatementId>,
 }
 
-/// One component's replacement: the bound import replacing its atoms,
-/// with its binding rules and declaration.
+/// What replaces one component: the bound import that replaces its atoms,
+/// with its binding rules and its declaration.
 pub(super) struct ComponentReplacement {
-    /// The binding rules restricting the import's requests.
+    /// The binding rules, whose rows restrict the import's requests.
     pub(super) bindings: Vec<Rule>,
-    /// The declaration copied from the candidates.
+    /// The declaration copied from the candidates, if there is one.
     pub(super) declaration: Option<DeclareDirective>,
     /// The bound import.
     pub(super) import: ImportDirective,
-    /// The literals defining the import's rows, from the atoms it replaces.
+    /// The literals that define the import's rows, made from the atoms that it replaces.
     pub(super) definition: Vec<Literal>,
-    /// The body positions of the atoms the import replaces.
+    /// The body positions of the atoms that the import replaces.
     pub(super) positions: Vec<usize>,
 }
 
 impl RewriteContext {
-    /// Rewrites one rule, taking fresh names from the commit,
-    /// or returns `None` if rewriting would not reduce what the rule fetches.
+    /// Rewrites one rule, with fresh names from the commit,
+    /// or returns `None` if the rule stays as written.
+    ///
+    /// A rule stays as written if rewriting would not reduce what it fetches,
+    /// or if it uses named arguments.
     pub(super) fn rewrite(&mut self, rule: &Rule, commit: &mut Commit<'_>) -> Option<RuleRewrite> {
         // Named arguments are resolved only at translation, so the stage
         // leaves rules using them alone.
@@ -78,32 +83,34 @@ impl RewriteContext {
 pub(super) struct RuleRewriter<'a, 'c> {
     /// What the stage knows of the program.
     pub(super) context: &'a mut RewriteContext,
-    /// The commit fresh names are taken from.
+    /// The commit from which fresh names are taken.
     commit: &'a mut Commit<'c>,
     /// The rule.
     pub(super) rule: &'a Rule,
-    /// Every universal variable the rule mentions, from which private variable names must differ.
+    /// Every universal variable that the rule mentions,
+    /// from which private variable names must differ.
     variables: HashSet<String>,
-    /// The universal variables the rule joins on.
+    /// The universal variables that the rule joins on,
+    /// with the fresh variables of the computed arguments.
     joined: HashSet<String>,
     /// The universal variables of the head.
     head_variables: HashSet<String>,
-    /// How many candidate queries have been instantiated,
-    /// the suffix telling each instance's private variables apart.
+    /// The number of candidate queries instantiated so far,
+    /// which is the suffix that distinguishes each instance's private variables.
     instances: usize,
     /// The replacements of the components replaced so far, in order.
     pub(super) replacements: Vec<ComponentReplacement>,
     /// The candidate imports read so far.
     imports: Vec<StatementId>,
-    /// Per replaced component, the literal replacing it,
+    /// Per replaced component, the literal that replaces it,
     /// with the position of the component's first atom.
     literals: Vec<(usize, Literal)>,
-    /// The body positions of the atoms the literals replace.
+    /// The body positions of the atoms that the literals replace.
     removed: HashSet<usize>,
 }
 
 impl<'a, 'c> RuleRewriter<'a, 'c> {
-    /// Begins rewriting a rule in a context.
+    /// Creates the rewrite of a rule in a context.
     fn new(context: &'a mut RewriteContext, commit: &'a mut Commit<'c>, rule: &'a Rule) -> Self {
         Self {
             context,
@@ -128,11 +135,11 @@ impl<'a, 'c> RuleRewriter<'a, 'c> {
         }
     }
 
-    /// Runs the rewrite:
-    /// the remote atoms are resolved and grouped,
-    /// every component whose replacement reduces what it fetches is replaced,
-    /// and the rule is assembled over the replacing literals.
+    /// Runs the rewrite.
     ///
+    /// The remote atoms are resolved and grouped,
+    /// every component whose replacement reduces what it fetches is replaced,
+    /// and the rule is assembled over the literals that replace the components.
     /// Returns `None` if nothing is replaced, or if a component's query cannot be composed.
     /// The rule then goes to translation as written.
     fn run(mut self) -> Option<RuleRewrite> {
@@ -165,12 +172,13 @@ impl<'a, 'c> RuleRewriter<'a, 'c> {
             {
                 overlapping.clear();
             }
-            // A plain atom sharing no variable with a local group would
+            // A plain atom that shares no variable with a local group would
             // fetch the same rows as the candidate import, so it stays.
             if component.plain(&remote) && overlapping.is_empty() {
                 continue;
             }
-            // Nothing to select: a query needs a variable.
+            // A component without variables has nothing to select,
+            // and a query needs a variable.
             let Some(projected) = self.projection(&atoms, &variables) else {
                 continue;
             };
@@ -182,12 +190,14 @@ impl<'a, 'c> RuleRewriter<'a, 'c> {
         Some(self.finish())
     }
 
-    /// Returns what a component must project:
-    /// those of its variables the rest of the rule reads,
-    /// the head and the body outside the component,
-    /// and its computed arguments, which the rule compares with their terms.
+    /// Returns the variables that a component's query must project.
     ///
-    /// Returns its first variable if the rest reads none, and `None` if it has none at all.
+    /// These are the component's variables that the rest of the rule reads,
+    /// in the head or in the body outside the component,
+    /// and the fresh variables of its computed arguments,
+    /// which the rule compares with their terms.
+    /// If the rest of the rule reads none, the projection is the component's first variable,
+    /// and the result is `None` if the component has no variable.
     fn projection(&self, atoms: &[&RemoteAtom], variables: &[String]) -> Option<Vec<String>> {
         let mut elsewhere = self.head_variables.clone();
         for (position, literal) in self.rule.body.iter().enumerate() {
@@ -212,10 +222,11 @@ impl<'a, 'c> RuleRewriter<'a, 'c> {
         variables.first().map(|variable| vec![variable.clone()])
     }
 
-    /// Replaces a component:
-    /// composes its query, makes the binding rules of the groups sharing variables with it,
-    /// forms the bound import, and records the literal reading the import in place of the atoms.
+    /// Replaces a component.
     ///
+    /// It composes the component's query, makes the binding rules of the `overlapping`
+    /// groups, forms the bound import,
+    /// and records the literal that reads the import in place of the atoms.
     /// Returns `None` if the query cannot be composed.
     fn replace(
         &mut self,
@@ -288,9 +299,11 @@ impl<'a, 'c> RuleRewriter<'a, 'c> {
         Some(())
     }
 
-    /// Returns a replaced atom as the import's definition reads it:
-    /// a computed argument as its fresh variable,
-    /// and positive if the component is read negatively, as the import holds what it matches.
+    /// Returns a replaced atom as the import's definition reads it.
+    ///
+    /// A computed argument becomes its fresh variable.
+    /// The atom is positive if the component is read negatively,
+    /// since the import contains what the atom matches.
     fn defining_literal(&self, atom: &RemoteAtom, negative: bool) -> Literal {
         let (Literal::Positive(written) | Literal::Negative(written)) =
             &self.rule.body[atom.position]
@@ -309,11 +322,11 @@ impl<'a, 'c> RuleRewriter<'a, 'c> {
         }
     }
 
-    /// Returns a component's query: the atoms' patterns instantiated and joined,
-    /// the absorbed negated atoms added as `FILTER NOT EXISTS` conditions,
-    /// projected onto the variables the rest of the rule reads.
+    /// Returns a component's query: the atoms' patterns, instantiated and joined,
+    /// with the absorbed negated atoms added as `FILTER NOT EXISTS` conditions,
+    /// and projected onto the `projected` variables.
     ///
-    /// The query of a component read negatively is its one atom's own pattern.
+    /// The query of a component that the rule reads negatively is its one atom's own pattern.
     /// The query of a single atom keeps its dataset.
     fn query(&mut self, atoms: &[&RemoteAtom], projected: &[String]) -> Option<SparqlQuery> {
         let names = self.query_names(atoms);
@@ -327,9 +340,8 @@ impl<'a, 'c> RuleRewriter<'a, 'c> {
             }
         }
         if composition.joins_nothing() {
-            // Without a positive pattern, the exclusion built above is
-            // unused: the query is the atom's own pattern, instantiated
-            // again.
+            // Without a positive pattern, the exclusion built above is unused,
+            // and the query is the atom's own pattern, instantiated again.
             composition = Composition::default();
             composition.join(self.instantiate(atoms[0], &names)?);
         }
@@ -343,10 +355,11 @@ impl<'a, 'c> RuleRewriter<'a, 'c> {
         composition.select(&projected, dataset)
     }
 
-    /// Returns the names a component's query gives rule variables other than their own:
-    /// a query that [keeps its names](SparqlQuery::keeps_names) names each variable
-    /// as it names the column binding it.
+    /// Returns the names that a component's query gives to rule variables,
+    /// where they differ from the variables' own names.
     ///
+    /// A query that [keeps its names](SparqlQuery::keeps_names) names each variable
+    /// as it names the column that binds the variable.
     /// Such a query stands alone, so no other instance's names can clash with these.
     fn query_names(&self, atoms: &[&RemoteAtom]) -> HashMap<String, String> {
         let mut names = HashMap::new();
@@ -364,8 +377,11 @@ impl<'a, 'c> RuleRewriter<'a, 'c> {
         names
     }
 
-    /// Returns an atom's candidate query instantiated at the atom under the query's names,
-    /// its private variables numbered differently from every other instance's.
+    /// Returns an atom's candidate query instantiated at the atom,
+    /// with the rule variables named by `names`.
+    ///
+    /// The instance's private variables are numbered differently from those of every other
+    /// instance.
     fn instantiate(
         &mut self,
         atom: &RemoteAtom,
@@ -394,10 +410,11 @@ impl<'a, 'c> RuleRewriter<'a, 'c> {
     }
 
     /// Assembles the rewrite: the rule over the new imports,
-    /// each replacement at the position of its component's first atom.
+    /// with each replacing literal at the position of its component's first atom.
     ///
-    /// A rule that only copies one bound import into a head predicate no other rule writes
-    /// assembles no rule, since the import then defines the head predicate itself.
+    /// A rule that only copies one bound import into a head predicate that no other rule
+    /// writes is folded, and no rule is assembled, since the import then defines the head
+    /// predicate itself.
     fn finish(mut self) -> RuleRewrite {
         let mut body = Vec::with_capacity(self.rule.body.len());
         for (position, literal) in self.rule.body.iter().enumerate() {

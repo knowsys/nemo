@@ -31,7 +31,8 @@ pub(crate) struct MemberLayout {
     pub(crate) subtracted: Vec<SubtractedLayout>,
     /// The filters checked in the descent, reading layers by index.
     pub(crate) filters: Vec<FilterShape>,
-    /// The layers whose values a program computes from layers above them, looked up in the descent.
+    /// The layers bound to a constant or to a value computed from shallower layers,
+    /// which the descent looks up instead of enumerating them.
     pub(crate) bound_layers: Vec<BoundLayerShape>,
     /// What becomes of the emitted rows.
     pub(crate) delivery: Delivery,
@@ -42,8 +43,9 @@ pub(crate) struct MemberLayout {
 pub(crate) enum Delivery {
     /// The emitted rows are the unit's rows.
     Direct,
-    /// Programs evaluate on each emitted row:
-    /// computed columns extend it, and post-filters may drop it.
+    /// A row stage evaluates programs on each emitted row.
+    ///
+    /// Computed columns extend the row, and post-filters may drop it.
     RowStage(RowStageShape),
     /// The emitted rows pass through a projection that merges or reorders them.
     Sink(ProjectionShape),
@@ -74,15 +76,19 @@ pub(super) struct UnitColumns {
     /// Whether a sink projects the emitted rows to the base markers.
     ///
     /// A unit needs a sink if its projection merges rows.
-    /// It also needs one if it delivers base markers other than the leading layers in order,
-    /// unless a row stage needs the rows in the drain's order.
+    /// It also needs one if it has a projection and delivers base markers
+    /// other than the leading layers, in order,
+    /// unless a row stage needs the rows in the order the join emits them.
     /// In that case the builds reorder the rows instead.
     pub(super) sink: bool,
 }
 
 impl UnitColumns {
-    /// Decides the columns of a unit from its members' chains, which agree on their top,
-    /// the layers the members descend through, and the markers of the top the consumers need.
+    /// Decides the columns of a unit.
+    ///
+    /// `chains` are the members' chains, which agree on their top,
+    /// `layers` are the layers the members descend through,
+    /// and `needed` are the markers of the top that the consumers need.
     pub(super) fn new(chains: &[Chain], layers: &MarkerOrder, needed: &[Marker]) -> Self {
         let chain = &chains[0];
         let base = MarkerOrder::new(chain.delivered_base(needed));
@@ -139,7 +145,7 @@ impl UnitColumns {
 
 impl LayoutBuilder<'_> {
     /// Lays out one member of a unit, a join of the given inputs running the given chain
-    /// over the unit's layers, and requires what it reads.
+    /// over the unit's layers, and records the orders it reads.
     pub(super) fn member(
         &mut self,
         inputs: &[NodeId],
@@ -210,9 +216,9 @@ impl LayoutBuilder<'_> {
     }
 }
 
-/// Returns a relation's layer markers with their layers, sorted by layer,
-/// and the order in which a join reads the relation:
-/// its layer markers in layer order, then its other markers.
+/// Returns the markers of a relation that `layer_of` maps to a layer, with their layers,
+/// sorted by layer, and the order in which a join reads the relation:
+/// those markers in layer order, then its other markers.
 fn aligned(
     markers: &[Marker],
     layer_of: impl Fn(&Marker) -> Option<usize>,
@@ -241,8 +247,9 @@ fn aligned(
 /// A filter requiring a layer to be the same term as a constant,
 /// or as an expression over shallower layers, becomes a bound layer:
 /// the join looks up that value instead of enumerating the layer.
-/// Each layer is bound at most once, to a constant if it can be, since a constant needs no
-/// evaluation per descent; a further binding stays a filter.
+/// Each layer is bound at most once, to a constant if it can be,
+/// since a constant needs no evaluation per descent.
+/// A further binding stays a filter.
 fn descent_conditions(
     conditions: &[ChainCondition<Marker>],
     layer_of: impl Fn(&Marker) -> Option<usize>,
@@ -309,7 +316,7 @@ fn row_programs(
     let mut computed: Vec<ComputedShape> = Vec::with_capacity(computations.len());
     for computation in computations {
         let inputs: Vec<RowInput> = computation.inputs.iter().map(row_input).collect();
-        // Staleness and volatility reach through computed inputs.
+        // A column that reads a computed column inherits its deepest layer and its volatility.
         let deepest = inputs
             .iter()
             .filter_map(|input| match *input {

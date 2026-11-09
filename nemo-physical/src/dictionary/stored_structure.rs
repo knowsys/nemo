@@ -5,20 +5,20 @@ use crate::{
     value::ValueRef,
 };
 
-/// A tuple or map stored in a dictionary, read in place:
-/// its label, and its elements, each decoded when it is read.
+/// A tuple or map stored in a dictionary, read in place.
 ///
-/// A map's elements are its keys and values, alternating, in key order.
+/// Each element is decoded when it is read.
+/// The elements of a map are its keys and values, alternating, in key order.
 #[derive(Clone, Copy)]
 pub(crate) struct StoredStructure<'a> {
-    /// The dictionary the elements decode through.
+    /// The dictionary that decodes the elements.
     dictionary: &'a Dictionary,
     /// The blobs of the entry.
     blobs: BlobsRef<'a>,
 }
 
 impl<'a> StoredStructure<'a> {
-    /// Creates the reader of an entry's blobs.
+    /// Creates a reader of an entry's blobs.
     pub(super) fn new(dictionary: &'a Dictionary, blobs: BlobsRef<'a>) -> Self {
         Self { dictionary, blobs }
     }

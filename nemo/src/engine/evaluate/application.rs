@@ -1,4 +1,10 @@
-//! Rule application: one semi-naive step as an operation plan.
+//! Rule application: applying a rule once, semi-naively, through an operation plan.
+//!
+//! A rule's *delta window* is the range of revisions stored since its last application.
+//! For each body atom, one semi-naive *variant* of the rule's join reads the delta window
+//! of that atom, which is the variant's *delta atom*.
+//! A rule's plan is built once, as a [PlanSkeleton],
+//! and its loads are set to new revision ranges before each application.
 
 use nemo_physical::{
     dictionary::Dictionary,
@@ -30,7 +36,7 @@ use crate::{
 pub(crate) struct LoggedApplication {
     /// The rule's index in the compiled program.
     pub(crate) rule: u32,
-    /// The engine step of the application.
+    /// The step of the application, which is the revision it stored its rows at.
     pub(crate) step: u64,
 }
 
@@ -38,11 +44,11 @@ pub(crate) struct LoggedApplication {
 /// statistics.
 #[derive(Debug, Default)]
 pub(crate) struct Applied {
-    /// The fresh rows per head table, as tries.
+    /// The new rows per head table, as tries.
     pub(crate) outputs: Vec<(TableId, Trie)>,
     /// The evaluation errors, counted per kind.
     pub(crate) errors: ErrorCounts,
-    /// The execution's phase accounting.
+    /// The time the execution spent in each phase.
     pub(crate) timings: PhaseTimings,
     /// The execution's work counters.
     pub(crate) counts: WorkCounts,
@@ -54,15 +60,15 @@ pub(crate) struct Applied {
 /// reported as telemetry.
 ///
 /// It records whether the delta atom binds the order's first variable,
-/// and how its block compares with the smallest block among the atoms that do.
+/// and how many rows the delta atom reads compared with the fewest rows that an atom binding
+/// that variable reads.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct VariantObservation {
-    /// The variant: the body position of its delta atom.
+    /// The variant, given as the body position of its delta atom.
     pub variant: usize,
-    /// Rows of the delta atom's block.
+    /// The number of rows that the delta atom reads.
     pub delta_rows: u64,
-    /// Rows of the smallest block among the atoms binding the order's
-    /// first variable.
+    /// The fewest rows that one of the atoms binding the order's first variable reads.
     pub leading_rows: u64,
     /// Whether the delta atom binds the order's first variable.
     pub delta_leads: bool,
@@ -74,25 +80,25 @@ struct VariantLoads {
     /// The variant's loads, as a range of indices into the skeleton's
     /// loads.
     loads: std::ops::Range<usize>,
-    /// Index into the skeleton's loads of the delta atom's load.
+    /// The index of the delta atom's load among the skeleton's loads.
     delta: usize,
-    /// Indices of the loads of atoms binding the order's first variable.
+    /// The indices of the loads of the atoms that bind the order's first variable.
     leading: Vec<usize>,
 }
 
-/// How a skeleton load's revision range derives from the rule's delta
-/// window at application time.
+/// How the revision range of a skeleton's load follows from the rule's delta window
+/// at each application.
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum RangeRole {
     /// Everything before the rule's last application.
     Before,
-    /// The delta since the rule's last application.
+    /// The revisions since the rule's last application.
     Delta,
     /// Everything up to the present.
     Full,
 }
 
-/// A load node of a skeleton, with its table and range derivation.
+/// A load node of a skeleton, with its table and its range role.
 type LoadNode = (NodeId, TableId, RangeRole);
 
 /// The plan skeletons of a program's rules, by rule index,
@@ -134,12 +140,12 @@ pub(crate) struct PlanSkeleton {
     plan: OperationPlan,
     /// Its cached layout.
     layout: PlanLayout,
-    /// The load nodes to retarget, with their tables and range
-    /// derivations.
+    /// The load nodes whose ranges are set before each application,
+    /// with their tables and range roles.
     loads: Vec<LoadNode>,
-    /// Per semi-naive variant, the loads an observation compares.
+    /// Per semi-naive variant, the loads that an observation compares.
     variants: Vec<VariantLoads>,
-    /// The scratch its joins build in, reused across applications.
+    /// The scratch memory its joins build in, reused across applications.
     arena: JoinArena,
     /// Per head, its table and plan output index.
     targets: Vec<(TableId, usize)>,
@@ -147,13 +153,14 @@ pub(crate) struct PlanSkeleton {
     probe: Option<ExistentialProbe>,
 }
 
-/// Applies one rule at the given engine step,
-/// evaluating its filters and computed columns in `context`.
+/// Applies one rule at the given step.
 ///
 /// Returns the derived rows per head table, without the rows already stored,
 /// and the evaluation-error counts.
+/// The filters and computed columns are evaluated in `context`,
+/// and `observe` asks for one [VariantObservation] per variant.
 ///
-/// Each application sets the loads' revision ranges to the rule's delta window
+/// Each application sets the loads' revision ranges for the rule's delta window
 /// and executes the [skeleton](PlanSkeleton) again.
 /// On the first application the delta window covers everything,
 /// so every variant except the first reads an empty "before" range and does no work.
@@ -166,8 +173,8 @@ pub(crate) fn apply(
     context: EvaluationContext,
     observe: bool,
 ) -> Applied {
-    // An aggregate rule always reads everything: its groups recompute
-    // whole, and the head dedup drops what is already stored.
+    // An aggregate rule always reads everything, since its groups are computed whole.
+    // The head deduplication drops what is already stored.
     let last = if rule.aggregate.is_some() {
         Revision(0)
     } else {
@@ -175,12 +182,12 @@ pub(crate) fn apply(
     };
     let now = Revision(step);
     // A delta window starts at the table's block boundary at or before
-    // the rule's last application. The rows this adds are derived again
-    // and removed by the head deduplication, and consolidation need not
+    // the rule's last application. The rows it reads again are derived again
+    // and removed by the head deduplication, so consolidation need not
     // keep a block boundary at every rule's last application. A rule
     // that calls a nondeterministic function (such as `RAND()`) would
-    // compute new values for the rows it reads again, so it reads exact
-    // windows, and its last application stays a wall (a revision
+    // compute new values for the rows it reads again. So it reads exact
+    // windows, and its last application stays a wall (a revision that
     // consolidation does not merge across).
     let snapping = !rule.exact_windows();
     let aggregating = rule.aggregate.is_some();
@@ -189,8 +196,8 @@ pub(crate) fn apply(
     skeleton.arena.reset();
     let ranges = skeleton.retarget(last, now, snapping, aggregating, manager);
 
-    // The observation reads block sizes only, before the run; an
-    // aggregate rule has one degenerate variant and nothing to compare.
+    // The observation reads only the row counts of the ranges, before the execution.
+    // An aggregate rule has a single variant, so there is nothing to compare.
     let observations = if observe && !aggregating {
         skeleton.observe(&ranges, manager)
     } else {
@@ -219,8 +226,10 @@ impl PlanSkeleton {
     }
 
     /// Sets every load's revision range for the rule's delta window `last..now`,
-    /// returning the ranges by load.
+    /// and returns the ranges by load.
     ///
+    /// With `snapping`, the window starts at each table's block boundary at or before `last`.
+    /// For an aggregate rule (`aggregating`), no variant is emptied as described below.
     /// A variant with an empty input derives nothing.
     /// If any of its loads reads no rows in its range, every one of its loads reads an empty
     /// range, so the plan neither prepares the column orders its atoms would need nor runs its
@@ -298,10 +307,10 @@ impl PlanSkeleton {
     }
 }
 
-/// Returns the prefix of the join order covering the markers an aggregation reads,
-/// if its leading `groups` markers are exactly the join order's first markers.
+/// Returns the shortest prefix of the join order `order` that covers the markers in `read`,
+/// if the first `groups` markers of `read` are the first markers of `order`.
 ///
-/// Returns `None` if they are not, or if a marker read is not in the order.
+/// Returns `None` if they are not, or if a marker in `read` is not in the order.
 fn join_order_prefix(order: &[Marker], read: &[Marker], groups: usize) -> Option<Vec<Marker>> {
     if !order.starts_with(&read[..groups]) {
         return None;
@@ -367,7 +376,7 @@ struct PlanSkeletonBuilder<'r> {
 }
 
 impl<'r> PlanSkeletonBuilder<'r> {
-    /// Opens a plan with the rule's markers.
+    /// Starts a plan with the rule's markers.
     fn new(rule: &'r CompiledRule) -> Self {
         let mut plan = OperationPlan::new();
         let space = BodySpace::new(&mut plan, rule);
@@ -468,7 +477,7 @@ impl<'r> PlanSkeletonBuilder<'r> {
     }
 
     /// Adds one head target: the node projected to the head's columns, in
-    /// the head's order, without the rows the head table stores.
+    /// the head's order, without the rows that the head table stores.
     fn target(&mut self, node: NodeId, table: TableId, head_markers: Vec<Marker>) {
         let existing = self.plan.load(table, unpatched(), head_markers.clone());
         self.loads.push((existing, table, RangeRole::Full));
@@ -487,11 +496,9 @@ impl<'r> PlanSkeletonBuilder<'r> {
 
     /// Adds the aggregate head.
     ///
-    /// The body result is projected to the group columns and every aggregate's scope columns,
-    /// aggregated per group in one pass, extended by the post expressions,
+    /// The body result is aggregated per group as [CompiledAggregate] describes,
+    /// extended by the post programs (see [aggregate_post](Self::aggregate_post)),
     /// and deduplicated against the stored head like any other head.
-    /// Each aggregate takes one contribution per distinct row of its own scope columns
-    /// in the shared projection.
     fn aggregate_head(&mut self, derived: NodeId) {
         let rule = self.rule;
         let Some(aggregate) = &rule.aggregate else {
@@ -546,7 +553,7 @@ impl<'r> PlanSkeletonBuilder<'r> {
     ///
     /// If the group columns lead the join order,
     /// the projection keeps the join order up to the deepest column read instead.
-    /// A prefix of the join's rows stays sorted, so no re-sort is needed,
+    /// Rows projected to a prefix of the join order stay sorted, so they need no new sort,
     /// and the aggregation's set deduplicates the contributions
     /// whose scope columns do not directly follow the group columns.
     ///
@@ -584,9 +591,11 @@ impl<'r> PlanSkeletonBuilder<'r> {
         }
     }
 
-    /// Returns the post expressions over an aggregation's output,
-    /// computed columns whose markers extend the output order,
-    /// or the aggregation itself if there are none.
+    /// Returns an aggregation's output with the aggregate's
+    /// [post programs](CompiledAggregate::post) computed above it.
+    ///
+    /// Each is a computed column whose marker is appended to `output_markers`.
+    /// Without post programs, the aggregation itself is returned.
     fn aggregate_post(
         &mut self,
         aggregated: NodeId,
@@ -642,9 +651,11 @@ impl<'r> PlanSkeletonBuilder<'r> {
         Some(ExistentialProbe::Frontier(self.plan.output(unsatisfied)))
     }
 
-    /// Returns the satisfaction check of the existential head: the check atoms
-    /// joined in the order of the frontier, then the existential markers
-    /// (after any inputs given), projected to the leading `emitted` markers.
+    /// Returns the satisfaction check of the existential head.
+    ///
+    /// The check atoms are joined after `inputs`, in the order of the frontier markers
+    /// and then the existential markers,
+    /// and the result is projected to the first `emitted` markers of that order.
     fn satisfaction(
         &mut self,
         mut inputs: Vec<NodeId>,
@@ -677,8 +688,8 @@ impl<'r> PlanSkeletonBuilder<'r> {
     /// Returns the load of one satisfaction-check atom.
     ///
     /// Frontier and existential columns bind their shared markers.
-    /// Repetitions and constants take fresh markers, appended to the join order and constrained
-    /// by filters.
+    /// Repetitions and constants get fresh markers, which are appended to `order`
+    /// and constrained by filters added to `filters`.
     fn check_load(
         &mut self,
         atom: &ExistentialAtom,
@@ -723,8 +734,8 @@ impl<'r> PlanSkeletonBuilder<'r> {
     }
 }
 
-/// Collects an execution's outputs into per-table rows,
-/// creating fresh nulls for the unsatisfied frontier tuples of the existential head.
+/// Collects an execution's outputs into rows per table,
+/// and creates fresh nulls for the unsatisfied frontier tuples of the existential head.
 fn deliver(
     rule: &CompiledRule,
     skeleton: &PlanSkeleton,
@@ -763,7 +774,7 @@ fn deliver(
 }
 
 /// Creates one fresh null per existential variable per unsatisfied tuple,
-/// and returns the rows of the insert atoms.
+/// and returns the rows of the atoms that the existential head inserts.
 ///
 /// Fresh nulls cannot collide, so no deduplication is needed.
 fn mint(

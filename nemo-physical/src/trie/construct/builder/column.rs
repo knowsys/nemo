@@ -1,5 +1,5 @@
-//! The column builder: values arrive in storage order, block by block,
-//! into storage of a layout decided up front.
+//! The column builder, which receives a column's values in storage order, block by block,
+//! into storage of a layout decided in advance.
 
 use crate::{
     storage::StorageValue,
@@ -10,41 +10,45 @@ use crate::{
     },
 };
 
-/// The exact sizing of one column from a pass over the rows it will hold:
-/// the [kind scan](KindScan) over every value,
-/// and the value and block counts over the distinct rows.
+/// The exact size and layout of one column, from a pass over its rows.
+///
+/// It combines a [kind scan](KindScan) over every value
+/// with the counts of values and blocks over the distinct rows.
 #[derive(Debug, Default, Clone)]
 pub(crate) struct ColumnScan {
     /// The kind scan over the values.
     scan: KindScan,
-    /// The distinct values so far.
+    /// The number of values so far, counted over the distinct rows.
     values: usize,
-    /// The blocks so far.
+    /// The number of blocks so far.
     blocks: usize,
 }
 
 impl ColumnScan {
-    /// Accounts one value, distinct or not.
+    /// Adds one value to the kind scan, whether its row is distinct or not.
     #[inline]
     pub(crate) fn add(&mut self, value: StorageValue) {
         self.scan.add(value);
     }
 
-    /// Accounts one distinct row by the change it makes at this column.
+    /// Counts the value and the block that a distinct row adds to this column,
+    /// as `change` says.
+    ///
+    /// `column` is the index of this column.
     #[inline]
     pub(crate) fn count(&mut self, change: RowChange, column: usize) {
         self.values += usize::from(change.takes_value(column));
         self.blocks += usize::from(change.opens_block(column));
     }
 
-    /// Returns the builder of the column the scan sized.
+    /// Returns a builder for the column that the scan sized.
     pub(crate) fn builder(&self) -> ColumnBuilder {
         ColumnBuilder::new(self.scan.kind(), self.values, self.blocks)
     }
 }
 
-/// A builder of one column: its values arrive in storage order and block by block
-/// into a column of a layout decided up front.
+/// A builder of one column, which receives the values in storage order, block by block,
+/// into a column of a layout decided in advance.
 #[derive(Debug)]
 pub(crate) struct ColumnBuilder {
     /// The column so far, whose intervals lack the closing sentinel
@@ -56,8 +60,8 @@ impl ColumnBuilder {
     /// Creates a builder for a column of the given kind
     /// with room for `values` values in `blocks` blocks.
     ///
-    /// Exact counts build without a reallocation;
-    /// a bound leaves unused capacity that [finish](Self::finish) gives back.
+    /// Exact counts build the column without a reallocation.
+    /// Counts that are only bounds leave unused capacity, which [finish](Self::finish) releases.
     /// `values` also bounds the interval offsets, which decides their width.
     pub(crate) fn new(kind: ColumnKind, values: usize, blocks: usize) -> Self {
         let intervals = Intervals::with_capacity(values, blocks);
@@ -82,7 +86,7 @@ impl ColumnBuilder {
         Self { column }
     }
 
-    /// Builds the single-block column of the given values, in the kind they take.
+    /// Builds a column of one block with the given values, in the kind that they need.
     #[cfg(test)]
     pub(super) fn single_block(values: &[StorageValue]) -> Column {
         let mut builder = Self::new(ColumnKind::of(values.iter().copied()), values.len(), 1);
@@ -93,7 +97,7 @@ impl ColumnBuilder {
         builder.finish()
     }
 
-    /// Returns the block start offsets so far.
+    /// Returns the intervals so far, for changing them.
     fn intervals_mut(&mut self) -> &mut Intervals {
         match &mut self.column {
             Column::U32 { intervals, .. }
@@ -102,7 +106,7 @@ impl ColumnBuilder {
         }
     }
 
-    /// Opens a new block; the values that follow belong to the next node above.
+    /// Opens a new block, so that the values that follow belong to the next node above.
     pub(super) fn open_block(&mut self) {
         let offset = self.column.len();
         self.intervals_mut().push(offset);
@@ -110,11 +114,12 @@ impl ColumnBuilder {
 
     /// Appends a value to the current block.
     ///
-    /// The value must fit the layout the builder was created with.
+    /// The value must fit the layout that the builder was created with.
     ///
     /// # Panics
     ///
-    /// Panics if the value does not fit the layout the builder was created with.
+    /// Panics if the payload does not fit a 32-bit layout.
+    /// Debug builds also panic for a tag other than the layout's tag.
     pub(super) fn push(&mut self, value: StorageValue) {
         match &mut self.column {
             Column::U32 { values, tag, .. } => {
@@ -138,8 +143,7 @@ impl ColumnBuilder {
         }
     }
 
-    /// Finishes the column, closing the last block
-    /// and giving back the capacity a bound left unused.
+    /// Finishes the column, which closes the last block and releases the unused capacity.
     pub(super) fn finish(mut self) -> Column {
         let offset = self.column.len();
         let intervals = self.intervals_mut();
@@ -165,6 +169,8 @@ mod tests {
 
     use crate::storage::{Tag, Tag32};
 
+    /// A column of one tag with a 32-bit type and payloads within 32 bits has the 32-bit
+    /// layout.
     #[test]
     fn uniform_small_columns_take_32_bits() {
         let column = ColumnBuilder::single_block(&[
@@ -190,6 +196,7 @@ mod tests {
         ));
     }
 
+    /// A payload beyond 32 bits, or a tag with a 64-bit type, gives the 64-bit layout.
     #[test]
     fn payloads_and_tags_beyond_32_bits_take_64_bits() {
         let large = ColumnBuilder::single_block(&[StorageValue::term(u64::from(u32::MAX) + 1)]);
@@ -199,6 +206,7 @@ mod tests {
         assert!(matches!(integers, Column::U64 { tag: Tag::Int, .. }));
     }
 
+    /// Several tags, or no values, give the mixed layout.
     #[test]
     fn several_tags_mix() {
         let column =
@@ -211,6 +219,7 @@ mod tests {
         assert_eq!(empty.intervals().blocks(), 0);
     }
 
+    /// A builder created with larger counts releases the unused capacity when it finishes.
     #[test]
     fn bounded_builds_finish_with_exact_memory() {
         let mut builder = ColumnBuilder::new(ColumnKind::U64(Tag::Int), 1000, 100);

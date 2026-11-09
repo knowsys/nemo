@@ -1,11 +1,9 @@
-//! The comparisons: term identity, value equality, the value order and its extrema.
+//! The comparisons: term identity, value equality, the value order and the extrema.
 //!
-//! Value equality and order are [ValueRef]'s own,
-//! [value_eq](ValueRef::value_eq) and [value_cmp](ValueRef::value_cmp),
-//! with the semantics of SPARQL's
-//! [operator mapping](https://www.w3.org/TR/sparql12-query/#OperatorMapping);
-//! this module wraps them for the stack and adds the predicates and extrema over them.
-//! Term identity is a different relation, the [PartialEq] of [ValueRef] itself.
+//! Value equality and the value order are [value_eq](ValueRef::value_eq)
+//! and [value_cmp](ValueRef::value_cmp), which follow SPARQL's
+//! [operator mapping](https://www.w3.org/TR/sparql12-query/#OperatorMapping).
+//! Term identity is a different relation, the [PartialEq] of [ValueRef].
 
 use std::cmp::Ordering;
 
@@ -15,26 +13,25 @@ use crate::{
 };
 
 /// Returns whether two values are the same term,
-/// the identity relation of joins and duplicate elimination,
 /// SPARQL's [`sameTerm`](https://www.w3.org/TR/sparql12-query/#func-sameTerm).
 ///
-/// Values of different domains are simply distinct, so no input is an error.
+/// This is the identity of joins and of duplicate elimination.
+/// Values of different domains are distinct, so no operands make an error.
 pub(crate) fn same(left: ValueRef<'_>, right: ValueRef<'_>) -> StackValue<'static> {
     (left == right).into()
 }
 
-/// Returns whether two values are equal, SPARQL's `=` operator:
-/// its typed rows of the operator mapping, and
-/// [`sameValue`](https://www.w3.org/TR/sparql12-query/#func-sameValue) beyond them;
-/// see [ValueRef::value_eq].
+/// Returns whether two values are equal, SPARQL's `=` operator,
+/// as [value_eq](ValueRef::value_eq) decides.
 pub(crate) fn equal(left: ValueRef<'_>, right: ValueRef<'_>) -> StackValue<'static> {
     left.value_eq(right).into()
 }
 
-/// Returns the order of two values as `-1`, `0`, or `1`;
-/// an undefined order is an error.
+/// Returns the order of two values as `-1`, `0` or `1`.
 ///
-/// Not a SPARQL operator; the three-way form of the ordering predicates below.
+/// An undefined order, as for NaN, is an [Incomparable](EvaluationError::Incomparable) error.
+/// This is not a SPARQL operator,
+/// but the three-way form of the ordering predicates such as [less].
 pub(crate) fn signum(left: ValueRef<'_>, right: ValueRef<'_>) -> StackValue<'static> {
     match left.value_cmp(right) {
         Ok(Some(ordering)) => ValueRef::Number(NumberRef::Decimal((ordering as i64).into())).into(),
@@ -43,31 +40,32 @@ pub(crate) fn signum(left: ValueRef<'_>, right: ValueRef<'_>) -> StackValue<'sta
     }
 }
 
-/// Returns the greatest of numeric operands; see [extremum].
+/// Returns the greatest of numeric operands, as [extremum] describes.
 pub(crate) fn maximum(values: &[StackValue<'_>]) -> StackValue<'static> {
     extremum(values, Ordering::Greater)
 }
 
-/// Returns the least of numeric operands; see [extremum].
+/// Returns the least of numeric operands, as [extremum] describes.
 pub(crate) fn minimum(values: &[StackValue<'_>]) -> StackValue<'static> {
     extremum(values, Ordering::Less)
 }
 
-/// Returns the extremum of numeric operands in the given direction,
+/// Returns the extremum of numeric operands in the direction `prefer`,
 /// XPath's [`fn:max`](https://www.w3.org/TR/xpath-functions-31/#func-max)
-/// and [`fn:min`](https://www.w3.org/TR/xpath-functions-31/#func-min) over numbers:
-/// the operands are promoted to the smallest type holding all of them,
-/// and the result is the extreme one,
-/// or NaN if one is among them.
+/// and [`fn:min`](https://www.w3.org/TR/xpath-functions-31/#func-min) on numbers.
 ///
-/// An error propagates, and a non-number is an error.
+/// The operands are promoted to the smallest numeric type that holds all of them,
+/// and the result is the extreme one, or NaN if one of them is NaN.
+/// If an operand is an error or not a number, the first such operand decides the result,
+/// its error or a [TypeMismatch](EvaluationError::TypeMismatch).
+/// No operands at all are a [TypeMismatch](EvaluationError::TypeMismatch) too.
 ///
 /// If equal values are distinct terms, such as the two zeros, the term order decides.
-/// XPath leaves this to the implementation,
-/// and the term order keeps the result independent of the order of the operands.
+/// XPath leaves this choice to the implementation,
+/// and the term order makes the result independent of the order of the operands.
 fn extremum(values: &[StackValue<'_>], prefer: Ordering) -> StackValue<'static> {
-    // The numeric domains are declared in the order of the ladder,
-    // so the smallest type holding every operand is the greatest of their domains.
+    // The numeric domains are declared in promotion order, from integers to doubles,
+    // so the smallest type that holds every operand is the greatest of their domains.
     let mut common = ValueDomain::Integer;
 
     for value in values {
@@ -86,7 +84,7 @@ fn extremum(values: &[StackValue<'_>], prefer: Ordering) -> StackValue<'static> 
         };
         let number = number.promote_to(common);
 
-        // The NaN is the extremum in either direction.
+        // NaN is the extremum in either direction.
         if number.is_nan() {
             return ValueRef::Number(number).to_owned().into();
         }
@@ -94,7 +92,8 @@ fn extremum(values: &[StackValue<'_>], prefer: Ordering) -> StackValue<'static> 
         best = Some(match best {
             None => number,
             Some(current) => {
-                // Equal values that are distinct terms, the two zeros, fall to the term order.
+                // Equal values that are distinct terms, such as the two zeros,
+                // are ordered by the term order.
                 let ordering = number
                     .value_cmp(current)
                     .map(|ordering| ordering.then_with(|| number.cmp(&current)));
@@ -114,10 +113,11 @@ fn extremum(values: &[StackValue<'_>], prefer: Ordering) -> StackValue<'static> 
     }
 }
 
-/// Applies an ordering predicate, the `<` family of SPARQL's
-/// [operator mapping](https://www.w3.org/TR/sparql12-query/#OperatorMapping).
+/// Applies an ordering predicate of SPARQL's
+/// [operator mapping](https://www.w3.org/TR/sparql12-query/#OperatorMapping),
+/// such as `<`, to the order of two values.
 ///
-/// An undefined order, at a NaN operand, makes every predicate false,
+/// An undefined order, as for a NaN operand, makes every predicate false,
 /// as in IEEE 754 and
 /// [`op:numeric-less-than`](https://www.w3.org/TR/xpath-functions-31/#func-numeric-less-than).
 fn ordering_predicate(

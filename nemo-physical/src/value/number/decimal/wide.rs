@@ -1,4 +1,7 @@
 //! Exact numbers beyond the compact ranges, owned and borrowed.
+//!
+//! The *compact ranges* are the 64-bit range of integers
+//! and the [compact](super::Compact) range of decimals.
 
 use std::{cmp::Ordering, fmt, sync::Arc};
 
@@ -6,20 +9,22 @@ use num_bigint::{BigUint, Sign};
 
 use crate::value::number::{decimal::workspace, lexical::Lexical};
 
-/// A borrowed [`xsd:decimal`](https://www.w3.org/TR/xmlschema11-2/#decimal) value beyond the compact ranges:
-/// an integer outside the 64-bit range,
-/// or a non-integral decimal with more significant digits, or a smaller magnitude,
-/// than a [Compact](super::Compact) holds.
+/// A borrowed [`xsd:decimal`](https://www.w3.org/TR/xmlschema11-2/#decimal) value
+/// beyond the compact ranges.
+///
+/// It is an integer outside the 64-bit range, or a decimal that is not integral
+/// and has more significant digits, or a smaller magnitude,
+/// than a [Compact](super::Compact) can hold.
 /// Its owned form is [Wide].
 ///
-/// An integral value is an [`xsd:integer`](https://www.w3.org/TR/xmlschema11-2/#integer).
+/// An integral value is an [`xsd:integer`](https://www.w3.org/TR/xmlschema11-2/#integer) value.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct WideRef<'a> {
     /// Whether the value is negative.
     negative: bool,
     /// The base-10 exponent.
     exponent: i64,
-    /// The magnitude of the mantissa, little-endian, without trailing zero bytes.
+    /// The magnitude of the mantissa in little-endian bytes, without trailing zero bytes.
     magnitude: &'a [u8],
 }
 
@@ -41,13 +46,13 @@ impl<'a> WideRef<'a> {
         self.negative
     }
 
-    /// Returns whether the value denotes an integer.
+    /// Returns whether the value is an integer.
     pub(crate) fn is_integral(self) -> bool {
         self.exponent >= 0
     }
 
     /// Returns the base-10 exponent of the value written as `mantissa * 10^exponent`,
-    /// the mantissa not divisible by ten.
+    /// with a mantissa that is not divisible by ten.
     pub(crate) fn exponent(self) -> i64 {
         self.exponent
     }
@@ -63,7 +68,7 @@ impl<'a> WideRef<'a> {
     }
 
     /// Returns the value as a 128-bit integer,
-    /// or `None` for a fraction and beyond the 128-bit range.
+    /// or `None` for a value that is not integral or lies beyond the 128-bit range.
     pub(crate) fn to_i128(self) -> Option<i128> {
         if !self.is_integral() || self.magnitude.len() > 16 {
             return None;
@@ -91,7 +96,7 @@ impl<'a> WideRef<'a> {
         Lexical::nearest(self.negative, self.mantissa_magnitude(), self.exponent)
     }
 
-    /// Clones the view into an owned [Wide].
+    /// Returns an owned copy of the value.
     pub(crate) fn to_owned(self) -> Wide {
         Wide(Arc::new(Record {
             negative: self.negative,
@@ -110,7 +115,7 @@ impl fmt::Debug for WideRef<'_> {
 
 impl fmt::Display for WideRef<'_> {
     /// Writes the canonical `xsd:decimal` lexical form,
-    /// which for an integral value is the `xsd:integer` form.
+    /// which is the `xsd:integer` lexical form for an integral value.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.negative {
             f.write_str("-")?;
@@ -139,8 +144,8 @@ impl PartialOrd for WideRef<'_> {
 impl WideRef<'_> {
     /// Compares the magnitudes of two values.
     ///
-    /// Equal exponents compare the mantissas directly;
-    /// the workspace aligns everything else.
+    /// With equal exponents, the mantissas are compared directly.
+    /// Otherwise the big workspace aligns them.
     fn cmp_magnitude(self, other: Self) -> Ordering {
         if self.exponent == other.exponent {
             return cmp_magnitude(self.magnitude, other.magnitude);
@@ -151,45 +156,49 @@ impl WideRef<'_> {
     }
 }
 
-/// Compares two canonical little-endian magnitudes by value:
-/// the longer one is larger,
-/// and equal lengths compare from the most significant byte down.
+/// Compares two canonical little-endian magnitudes by value.
+///
+/// The longer one is larger,
+/// and two of equal length are compared from the most significant byte down.
 pub(crate) fn cmp_magnitude(left: &[u8], right: &[u8]) -> Ordering {
     left.len()
         .cmp(&right.len())
         .then_with(|| left.iter().rev().cmp(right.iter().rev()))
 }
 
-/// Returns the canonical little-endian bytes of a magnitude:
-/// no trailing zero bytes, and a single zero byte for zero.
+/// Returns the canonical little-endian bytes of a magnitude,
+/// which have no trailing zero bytes, except the single zero byte of zero.
 pub(crate) fn magnitude_bytes(magnitude: &BigUint) -> Box<[u8]> {
     magnitude.to_bytes_le().into_boxed_slice()
 }
 
-/// An owned [`xsd:decimal`](https://www.w3.org/TR/xmlschema11-2/#decimal) value beyond the compact ranges:
-/// an integer outside the 64-bit range,
-/// or a non-integral decimal with more significant digits, or a smaller magnitude,
-/// than a [Compact](super::Compact) holds.
+/// An owned [`xsd:decimal`](https://www.w3.org/TR/xmlschema11-2/#decimal) value
+/// beyond the compact ranges.
+///
+/// It is an integer outside the 64-bit range, or a decimal that is not integral
+/// and has more significant digits, or a smaller magnitude,
+/// than a [Compact](super::Compact) can hold.
 /// Its borrowed view is [WideRef].
 ///
-/// An integral value is an [`xsd:integer`](https://www.w3.org/TR/xmlschema11-2/#integer).
+/// An integral value is an [`xsd:integer`](https://www.w3.org/TR/xmlschema11-2/#integer) value.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Wide(Arc<Record>);
 
-/// The record behind a [Wide].
+/// The parts of a [Wide], behind its shared pointer.
 #[derive(Debug, PartialEq, Eq)]
 struct Record {
     /// Whether the value is negative.
     negative: bool,
     /// The base-10 exponent.
     exponent: i64,
-    /// The magnitude of the mantissa, little-endian, without trailing zero bytes.
+    /// The magnitude of the mantissa in little-endian bytes, without trailing zero bytes.
     magnitude: Box<[u8]>,
 }
 
 impl Wide {
-    /// Creates the owned form of a workspace value, which is normalized and bounded already,
-    /// or `None` for a value the compact cases hold.
+    /// Creates the owned form of a workspace value,
+    /// which is normalized and within the length limit,
+    /// or returns `None` for a value within the compact ranges.
     pub(crate) fn new(value: &workspace::Big) -> Option<Self> {
         if value.to_i64().is_some() || value.to_compact().is_some() {
             return None;
@@ -220,13 +229,14 @@ mod tests {
     use num_bigint::BigInt;
 
     impl Wide {
-        /// Returns the value as a big integer, or `None` for a fraction.
+        /// Returns the value as a big integer, or `None` if it is not integral.
         fn to_bigint(&self) -> Option<BigInt> {
             workspace::Big::from_wide(self.as_ref()).to_bigint()
         }
     }
 
-    /// Parses the owned wide form of a number lexical.
+    /// Returns the owned wide form of a lexical form,
+    /// which must denote a value beyond the compact ranges.
     fn wide(lexical: &str) -> Wide {
         let (digits, exponent) = match lexical.split_once('.') {
             Some((integer, fraction)) => (
@@ -241,6 +251,7 @@ mod tests {
         Wide::new(&value).expect("beyond the compact ranges")
     }
 
+    /// A value within the compact ranges has no wide form.
     #[test]
     fn the_compact_ranges_are_refused() {
         let integer =
@@ -259,6 +270,8 @@ mod tests {
         assert!(fraction(15, -300).is_some());
     }
 
+    /// A wide integer stores its normalized mantissa and exponent,
+    /// and the same digits as a fraction are a different value.
     #[test]
     fn integral_values_store_the_normalized_record() {
         let power = wide("1000000000000000000000000000000");
@@ -281,6 +294,8 @@ mod tests {
         assert_eq!(fraction.to_bigint(), None);
     }
 
+    /// A wide value is written in canonical form, converts to the nearest double,
+    /// and is unchanged by a round trip through its view.
     #[test]
     fn views_render_and_round_trip() {
         let value = wide("-123456789012345678901");
@@ -299,6 +314,7 @@ mod tests {
         assert_eq!(copy.as_ref(), value.as_ref());
     }
 
+    /// Wide values are ordered by value.
     #[test]
     fn order_is_the_value_order() {
         let ordered = [

@@ -1,13 +1,12 @@
-//! Stratification: grouping rules so that negated predicates are final.
+//! Stratification: grouping rules into strata, so that every predicate that a stratum negates
+//! or aggregates over is complete before the stratum is evaluated.
 //!
-//! The dependency graph has one node per rule
-//! and an edge from a deriving rule to each consumer of its head predicate,
-//! labeled by how the consumer reads it: positively, or through negation.
-//! Strongly connected components become strata.
-//! A negative edge inside a component means a predicate is negated within its own recursion,
-//! and the program is not stratified.
-//! Components are emitted in dependency order, ties broken by the smallest contained rule
-//! index.
+//! The dependency graph has one node per rule,
+//! and an edge from each rule that derives a predicate to each rule whose body reads it.
+//! An edge is *negative* if the reading rule negates the predicate or has an aggregate head.
+//! The strongly connected components of the graph are the strata.
+//! A negative edge inside a component means that a predicate is negated or aggregated within
+//! its own recursion, and the program is not stratified.
 
 use std::collections::HashMap;
 
@@ -15,8 +14,12 @@ use nemo_physical::{diagnostics::Diagnostic, management::TableId};
 
 use crate::{diagnostics::TranslationError, engine::compile::compiled::CompiledRule, model::Span};
 
-/// Returns the strata of the compiled rules, or the diagnostic for an
-/// unstratifiable program (labeled with an offending rule's span).
+/// Returns the strata of the compiled rules, as lists of rule indices in dependency order.
+///
+/// Strata that do not depend on each other are ordered by their smallest rule index.
+/// `spans` contains the source position of each rule.
+/// Fails for a program that is not stratified,
+/// with a label on a rule that negates or aggregates over its own recursion.
 pub(crate) fn stratify(
     rules: &[CompiledRule],
     spans: &[Option<Span>],
@@ -26,8 +29,8 @@ pub(crate) fn stratify(
         return Ok(Vec::new());
     }
 
-    // Deriving rules per predicate: ordinary heads, aggregate heads,
-    // and existential insert atoms alike.
+    // The rules that derive each predicate,
+    // through ordinary heads, aggregate heads or existential insert atoms.
     let mut derived_by: HashMap<TableId, Vec<usize>> = HashMap::new();
     for (index, rule) in rules.iter().enumerate() {
         for head in &rule.heads {
@@ -43,9 +46,9 @@ pub(crate) fn stratify(
         }
     }
 
-    // Edges deriving → consuming, with negativeness. An aggregate
-    // rule's inputs must be finished like negated ones, so its positive
-    // dependencies count as negative.
+    // The edges from each deriving rule to the reading rules, with whether they are negative.
+    // The predicates that an aggregate rule reads must be complete, like negated ones,
+    // so its positive dependencies count as negative.
     let mut edges: Vec<Vec<(usize, bool)>> = vec![Vec::new(); count];
     for (consumer, rule) in rules.iter().enumerate() {
         let aggregating = rule.aggregate.is_some();
@@ -63,7 +66,7 @@ pub(crate) fn stratify(
 
     let components = condense(&edges);
 
-    // A negative edge within one component negates through recursion.
+    // A negative edge within one component negates or aggregates through recursion.
     let mut component_of = vec![0usize; count];
     for (index, component) in components.iter().enumerate() {
         for &rule in component {
@@ -94,15 +97,18 @@ pub(crate) fn stratify(
     Ok(components)
 }
 
-/// Returns the strongly connected components of the rule graph,
-/// in dependency order (producers before consumers),
-/// ties broken by the smallest contained rule index.
+/// Returns the strongly connected components of the rule graph in dependency order,
+/// so that each component comes after the components that derive what it reads.
 ///
-/// The rules are sorted within each component.
+/// `edges` lists, per rule, the rules that read what it derives,
+/// each with whether the edge is negative.
+/// Components that do not depend on each other are ordered by their smallest rule index,
+/// and the rules within each component are sorted.
 fn condense(edges: &[Vec<(usize, bool)>]) -> Vec<Vec<usize>> {
     let components = tarjan(edges);
 
-    // Kahn's algorithm over the condensation, smallest-rule-first.
+    // Kahn's algorithm over the graph of components,
+    // which picks the ready component with the smallest rule first.
     let count = components.len();
     let mut component_of = vec![0usize; edges.len()];
     for (index, component) in components.iter().enumerate() {
@@ -143,8 +149,9 @@ fn condense(edges: &[Vec<(usize, bool)>]) -> Vec<Vec<usize>> {
     ordered
 }
 
-/// Returns the strongly connected components by Tarjan's algorithm, iteratively,
-/// the rules sorted within each component.
+/// Returns the strongly connected components, with the rules sorted within each component.
+///
+/// It runs Tarjan's algorithm without recursion.
 fn tarjan(edges: &[Vec<(usize, bool)>]) -> Vec<Vec<usize>> {
     let count = edges.len();
     let mut index = vec![usize::MAX; count];
@@ -158,7 +165,7 @@ fn tarjan(edges: &[Vec<(usize, bool)>]) -> Vec<Vec<usize>> {
         if index[root] != usize::MAX {
             continue;
         }
-        // The explicit DFS frame: node and next edge position.
+        // The frames of the depth-first search, each a node and the position of its next edge.
         let mut frames: Vec<(usize, usize)> = vec![(root, 0)];
         while let Some(&mut (node, ref mut position)) = frames.last_mut() {
             if *position == 0 {
@@ -178,7 +185,8 @@ fn tarjan(edges: &[Vec<(usize, bool)>]) -> Vec<Vec<usize>> {
                 continue;
             }
 
-            // The node is finished: close its component at the root.
+            // The node is finished. If it is the root of a component, the component is
+            // complete.
             if low[node] == index[node] {
                 let mut component = Vec::new();
                 loop {
@@ -214,6 +222,7 @@ mod tests {
         condense(&edges)
     }
 
+    /// Components come in dependency order, and a cycle is one component.
     #[test]
     fn components_come_in_dependency_order() {
         // 2 → 0 → 1 with a cycle 0 ↔ 3.
@@ -221,6 +230,7 @@ mod tests {
         assert_eq!(strata, vec![vec![2], vec![0, 3], vec![1]]);
     }
 
+    /// Components that do not depend on each other are ordered by their smallest rule.
     #[test]
     fn independent_components_order_by_smallest_rule() {
         let strata = components(4, &[(3, 1)]);

@@ -13,8 +13,9 @@ use crate::{
     value::{DataValue, ValueRef},
 };
 
-/// An owned tuple of data values with an optional label,
-/// written `(2, 3)` or `rect(2, 3)` in term syntax.
+/// An owned tuple of data values with an optional label.
+///
+/// Term syntax writes it as `(2, 3)` or `rect(2, 3)`.
 /// Its borrowed view is [TupleRef].
 #[derive(Debug, Clone)]
 pub struct TupleValue {
@@ -51,7 +52,7 @@ impl TupleValue {
         &self.elements
     }
 
-    /// Returns the element at the 0-based index, if the tuple is that long.
+    /// Returns the element at the 0-based index, or `None` if the tuple is not that long.
     pub fn element(&self, index: usize) -> Option<&DataValue> {
         self.elements.get(index)
     }
@@ -99,25 +100,27 @@ impl Hash for TupleValue {
 }
 
 impl fmt::Display for TupleValue {
-    /// Writes the tuple in term syntax, its elements in canonical form.
+    /// Writes the tuple in canonical term syntax.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.as_ref())
     }
 }
 
-/// A borrowed tuple of data values with an optional label,
-/// written `(2, 3)` or `rect(2, 3)` in term syntax.
+/// A borrowed tuple of data values with an optional label.
+///
+/// Term syntax writes it as `(2, 3)` or `rect(2, 3)`.
 /// Its owned form is [TupleValue].
 #[derive(Clone, Copy)]
 pub struct TupleRef<'a>(Backing<'a>);
 
-/// Where a [TupleRef] reads its tuple.
+/// The storage that a [TupleRef] reads its tuple from.
 #[derive(Clone, Copy)]
 enum Backing<'a> {
     /// An owned tuple.
     Owned(&'a TupleValue),
-    /// An entry of a dictionary's tuple store, read in place:
-    /// an element is decoded when it is read.
+    /// An entry of a dictionary's tuple store, which is read in place.
+    ///
+    /// Each element is decoded when it is read.
     Stored {
         /// The dictionary that stores the tuple.
         dictionary: &'a Dictionary,
@@ -129,7 +132,7 @@ enum Backing<'a> {
 impl<'a> TupleRef<'a> {
     /// Creates the view of an entry of a dictionary's tuple store.
     ///
-    /// The store must hold the entry.
+    /// The store must contain the entry.
     pub(crate) fn stored(dictionary: &'a Dictionary, index: u64) -> Self {
         Self(Backing::Stored { dictionary, index })
     }
@@ -155,7 +158,7 @@ impl<'a> TupleRef<'a> {
         self.len() == 0
     }
 
-    /// Returns the element at the 0-based index, if the tuple is that long.
+    /// Returns the element at the 0-based index, or `None` if the tuple is not that long.
     pub fn element(self, index: usize) -> Option<ValueRef<'a>> {
         match self.0 {
             Backing::Owned(tuple) => tuple.element(index).map(DataValue::as_ref),
@@ -180,7 +183,7 @@ impl<'a> TupleRef<'a> {
         }
     }
 
-    /// Clones the viewed tuple into an owned [TupleValue].
+    /// Returns an owned copy of the tuple.
     pub fn to_owned(self) -> TupleValue {
         match self.0 {
             Backing::Owned(tuple) => tuple.clone(),
@@ -191,8 +194,8 @@ impl<'a> TupleRef<'a> {
         }
     }
 
-    /// Returns the index of the viewed tuple in a dictionary's tuple store,
-    /// if the view reads it from there.
+    /// Returns the index of the tuple in the tuple store of `dictionary`,
+    /// or `None` if the view does not read the tuple from that store.
     pub(crate) fn index_in(self, dictionary: &Dictionary) -> Option<u64> {
         match self.0 {
             Backing::Stored {
@@ -206,7 +209,8 @@ impl<'a> TupleRef<'a> {
 
 impl PartialEq for TupleRef<'_> {
     fn eq(&self, other: &Self) -> bool {
-        // One dictionary stores one tuple once.
+        // A dictionary stores each tuple only once,
+        // so two entries of one store are equal exactly if their indices are.
         if let (
             Backing::Stored { dictionary, index },
             Backing::Stored {
@@ -228,7 +232,8 @@ impl PartialEq for TupleRef<'_> {
 impl Eq for TupleRef<'_> {}
 
 impl Ord for TupleRef<'_> {
-    /// Orders by label, an unlabeled tuple first, then by the elements in order.
+    /// Orders tuples by label, with unlabeled tuples first,
+    /// and then lexicographically by their elements.
     fn cmp(&self, other: &Self) -> Ordering {
         self.label()
             .cmp(&other.label())
@@ -259,14 +264,17 @@ impl fmt::Debug for TupleRef<'_> {
 }
 
 impl fmt::Display for TupleRef<'_> {
-    /// Writes the tuple in term syntax, its elements in canonical form.
+    /// Writes the tuple in canonical term syntax.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.write_term(f, true)
     }
 }
 
 impl TupleRef<'_> {
-    /// Writes the tuple in term syntax, the IRIs that read back bare written bare if `bare`.
+    /// Writes the tuple in term syntax.
+    ///
+    /// `bare` says whether an IRI, including the label, may be written without angle brackets,
+    /// as for [ValueRef::write_term].
     pub(crate) fn write_term(&self, f: &mut fmt::Formatter<'_>, bare: bool) -> fmt::Result {
         if let Some(label) = self.label() {
             super::write_label(f, label, bare)?;
@@ -278,8 +286,8 @@ impl TupleRef<'_> {
             }
             element.write_term(f, bare)?;
         }
-        // A one-element tuple keeps the comma
-        // that tells it from a parenthesized term.
+        // An unlabeled tuple with one element is written with a trailing comma,
+        // which distinguishes it from a term in parentheses.
         if self.len() == 1 && self.label().is_none() {
             f.write_str(",")?;
         }
@@ -291,7 +299,7 @@ impl TupleRef<'_> {
 enum Elements<'a> {
     /// The elements of an owned tuple.
     Owned(slice::Iter<'a, DataValue>),
-    /// The elements of a stored tuple, by position.
+    /// The elements of a stored tuple, read by position.
     Stored {
         /// The stored tuple.
         structure: StoredStructure<'a>,

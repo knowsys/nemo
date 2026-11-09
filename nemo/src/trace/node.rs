@@ -4,15 +4,15 @@ use serde::{Deserialize, Serialize};
 
 use crate::model::Identifier;
 
-/// One node of a [TraceResponse](crate::trace::TraceResponse): a fact,
-/// loaded or derived by a rule from premises.
+/// One node of a [TraceResponse](crate::trace::TraceResponse),
+/// which is a fact that was loaded or that a rule derived from premises.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TraceNode {
     /// The fact, in term syntax.
     ///
-    /// If the run never had a value at a position, the written term appears there instead:
-    /// a variable, or `_`.
+    /// Where no value was computed at a position, the written term appears there instead,
+    /// which is a variable or `_`.
     pub fact: String,
     /// How a rule derived the fact,
     /// or `None` for a fact that was loaded or that an import's endpoint returned.
@@ -21,9 +21,12 @@ pub struct TraceNode {
 }
 
 impl TraceNode {
-    /// Returns the instantiated rule that derives the fact as one line,
-    /// given the facts of its premises, or the fact alone if no rule derives it.
+    /// Returns the rule instance that derives the fact, as one line,
+    /// or the fact alone if no rule derives it.
     ///
+    /// `premises` are the facts of the node's premises, in order.
+    /// The line lists them, then the negated premises,
+    /// and notes the number of matches of an aggregate.
     /// [trace_predicates](crate::engine::Engine::trace_predicates) shows an example.
     pub fn inference<'a>(&self, premises: impl IntoIterator<Item = &'a str>) -> String {
         let Some(derivation) = &self.derivation else {
@@ -54,7 +57,7 @@ pub struct Derivation {
     pub rule: usize,
     /// The engine step of the application that derived the fact.
     ///
-    /// Steps order the engine's writes to the store, and step 0 holds the loaded facts.
+    /// Steps order the engine's writes to the stored tables, and step 0 is the loaded facts.
     /// If the engine kept no record of the application,
     /// this is the step at which the fact was stored.
     pub step: u64,
@@ -64,17 +67,20 @@ pub struct Derivation {
     /// The positive premises, by node id, one per positive body literal of the rule,
     /// or none for an aggregate summarized without a witness.
     pub premises: Vec<usize>,
-    /// The negated premises: patterns that hold by *absence* in the saturated lower stratum,
-    /// in term syntax (`_` marks columns private to the negation).
+    /// The negated premises, in term syntax.
+    ///
+    /// Each is a pattern that holds because no fact matches it once the lower strata are
+    /// saturated.
+    /// A variable that only the negated literal mentions stays as written.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub absences: Vec<String>,
-    /// For an aggregate rule: the group evidence, summarized.
+    /// For an aggregate rule, the summary of the group.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub aggregate: Option<AggregateSummary>,
-    /// Whether the rule uses a nondeterministic function (such as `RAND()`).
+    /// Whether a head column of the rule calls a nondeterministic function, such as `RAND()`.
     ///
-    /// The values such functions returned cannot be reproduced,
-    /// so the premises explain the fact up to the values from nondeterministic functions.
+    /// The value that such a function returned cannot be reproduced,
+    /// so the premises explain the fact except for that column.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub nondeterministic: bool,
 }
@@ -85,23 +91,24 @@ pub struct Derivation {
 pub struct VariableBinding {
     /// The variable, with its `?`.
     pub variable: String,
-    /// The bound value, in canonical rendering.
+    /// The bound value, in canonical term syntax.
     pub value: String,
 }
 
-/// The group evidence of an aggregate node.
+/// The summary of the group of an aggregate node.
 ///
-/// The body matches are summarized rather than inlined,
-/// and the derivation-structure queries ([query](crate::trace::query)) expand them on demand.
+/// The body matches of the group are counted rather than listed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AggregateSummary {
-    /// The number of distinct contributions the aggregate counted in this group.
+    /// The number of distinct contributions that the group's first aggregate ranged over.
     pub matches: usize,
 }
 
-/// Returns a fact in term syntax from its predicate and its terms,
-/// the predicate in angle brackets where its name does not read back bare.
+/// Returns a fact in term syntax from its predicate and its terms.
+///
+/// The predicate is written in angle brackets if its name would not be parsed back as a bare
+/// name.
 pub(crate) fn fact_text(predicate: &str, terms: &[String]) -> String {
     let predicate = Identifier::bare(predicate.to_owned());
     format!("{predicate}({})", terms.join(", "))

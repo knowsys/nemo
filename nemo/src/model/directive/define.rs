@@ -1,13 +1,14 @@
-//! Derived builtin definitions.
+//! Definitions of functions by expressions.
 
 use std::fmt::{self, Display, Formatter};
 
 use crate::model::{Identifier, Span, Term, Variable, fmt_list, span_ignoring_eq};
 
-/// A derived builtin: `@define hypot(?x, ?y) = SQRT(…) .`.
+/// A definition of a function by an expression, such as `@define hypot(?x, ?y) = SQRT(…) .`.
 ///
 /// The body is a single expression over the parameters and existing builtins.
-/// The engine ignores the directive when it loads the program, and warns about it.
+/// An [Engine](crate::engine::Engine) ignores the directive when it loads the program,
+/// and warns about it.
 #[derive(Debug, Clone)]
 pub struct DefineDirective {
     /// The defined name.

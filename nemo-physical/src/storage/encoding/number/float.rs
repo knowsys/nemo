@@ -1,13 +1,14 @@
-//! Payload encoding of [Tag::Float].
+//! The payload encoding of [Tag::Float].
 
 use crate::{
     storage::{Tag, encoding::PayloadEncoding},
     value::Float,
 };
 
-/// Floats encode as their term order key,
-/// which covers the XSD 1.1 value space with its one NaN,
+/// A float is encoded as its [order key](Float::order_key), whose order is the term order,
 /// in the low 32 bits of the payload.
+///
+/// The encoding covers the value space of XSD 1.1, which has one NaN.
 impl PayloadEncoding for Float {
     const TAG: Tag = Tag::Float;
     type Encoded = u64;

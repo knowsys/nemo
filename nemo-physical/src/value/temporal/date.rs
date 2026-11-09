@@ -9,34 +9,35 @@ use crate::value::temporal::{
     instant::{self, Instant},
 };
 
-/// An [`xsd:date`](https://www.w3.org/TR/xmlschema11-2/#date) value:
-/// a calendar day and the timezone offset it was written with, or no offset for a local day.
+/// An [`xsd:date`](https://www.w3.org/TR/xmlschema11-2/#date) value,
+/// a calendar day and the timezone offset that it was written with.
 ///
-/// Equality, order and hashing are term identity:
-/// the same day in different offsets are distinct values.
-/// The order is by the instant the day starts, a local day read as UTC,
-/// then by offset, with no offset last.
-/// XSD's value comparison is [value_eq](Self::value_eq) and [value_cmp](Self::value_cmp).
+/// A local day has no offset.
+/// Equality, order and hashing follow term identity,
+/// so the same day in different offsets gives distinct values.
+/// The values are ordered by the instant at which the day starts, with a local day read as UTC,
+/// and then by offset, with no offset last.
+/// XSD's comparison by value is [value_eq](Self::value_eq) and [value_cmp](Self::value_cmp).
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Date(Instant);
 
-/// The value takes 24 bytes at 8-byte alignment.
+/// Checks at compile time that a value occupies 24 bytes at 8-byte alignment.
 const _: () = assert!(size_of::<Date>() == 24 && align_of::<Date>() == 8);
 
 impl Date {
-    /// Creates the date of the instant a day starts.
+    /// Creates the date from the instant at which its day starts.
     pub(super) fn from_instant(instant: Instant) -> Self {
         Self(instant)
     }
 
     /// Parses an `xsd:date` lexical form,
-    /// or `None` for malformed input and for a value beyond the value space.
+    /// or returns `None` for a malformed lexical form or a value beyond the value space.
     pub fn from_lexical(lexical: &str) -> Option<Self> {
         Instant::from_lexical::<LibraryDate>(lexical).map(Self)
     }
 
-    /// Creates the date of calendar components,
-    /// or `None` for components that do not name a day or for a value beyond the value space.
+    /// Creates the date with the given calendar fields,
+    /// or `None` for fields that name no day or a value beyond the value space.
     pub fn from_components(
         year: i64,
         month: u8,
@@ -66,7 +67,8 @@ impl Date {
         self.0.to_library::<LibraryDate>().day()
     }
 
-    /// Returns the timezone offset the value was written with, or `None` for an unzoned value.
+    /// Returns the timezone offset that the value was written with,
+    /// or `None` for an unzoned value.
     pub fn offset(self) -> Option<TimezoneOffset> {
         self.0.offset()
     }
@@ -77,22 +79,23 @@ impl Date {
     }
 
     /// Returns the dateTime of a time of day on this day, `fn:dateTime`,
-    /// or `None` if both carry an offset and the offsets differ,
-    /// or the result is beyond the value space.
+    /// or `None` if both values have offsets and the offsets differ,
+    /// or if the result is beyond the value space.
     ///
-    /// The result carries the offset that is present, if any.
+    /// The result has the offset of whichever value has one.
     pub fn at(self, time: Time) -> Option<DateTime> {
         self.0.at(time.instant()).map(DateTime::from_instant)
     }
 
-    /// Returns whether two values are equal in XSD's value space:
-    /// both zoned or both unzoned, and starting at the same instant.
+    /// Returns whether two values are equal by value.
+    ///
+    /// They are if both are zoned or both are unzoned, and their days start at the same instant.
     pub fn value_eq(self, other: Self) -> bool {
         self.0.value_eq(other.0)
     }
 
-    /// Returns the order of two values in XSD's value space,
-    /// or `None` for a zoned and an unzoned value whose starts are within fourteen hours.
+    /// Returns the order of two values by value,
+    /// or `None` for a zoned and an unzoned value whose days start at most fourteen hours apart.
     pub fn value_cmp(self, other: Self) -> Option<Ordering> {
         self.0.value_cmp(other.0)
     }
@@ -100,9 +103,9 @@ impl Date {
     /// Returns the value adjusted to another offset, `fn:adjust-date-to-timezone`,
     /// or `None` beyond the value space.
     ///
-    /// Given an offset, a zoned value becomes the day on which its start falls in the new offset,
-    /// and an unzoned value keeps its day and takes the offset.
-    /// Given `None`, the value keeps its day and drops its offset.
+    /// With an offset, a zoned value becomes the day on which its start falls in the new
+    /// offset, and an unzoned value keeps its day and gets the offset.
+    /// With `None`, the value keeps its day and loses its offset.
     pub fn adjust(self, offset: Option<TimezoneOffset>) -> Option<Self> {
         self.0.adjust::<LibraryDate>(offset).map(Self)
     }
@@ -111,9 +114,9 @@ impl Date {
     /// `op:add-yearMonthDuration-to-date` and `op:add-dayTimeDuration-to-date`,
     /// or `None` beyond the value space.
     ///
-    /// The months are added first, clamping the day to the month's length,
-    /// then the seconds.
-    /// The result is the day the sum falls on.
+    /// The months are added first, with the day clamped to the length of the month,
+    /// and then the seconds.
+    /// The result is the day on which the sum falls.
     pub fn checked_add(self, duration: Duration) -> Option<Self> {
         self.0.checked_add::<LibraryDate>(duration).map(Self)
     }
@@ -125,39 +128,41 @@ impl Date {
         self.0.checked_sub::<LibraryDate>(duration).map(Self)
     }
 
-    /// Returns the time from the start of an earlier day to the start of this one, `op:subtract-dates`,
-    /// or `None` if one value is zoned and the other not.
+    /// Returns the time from the start of an earlier day to the start of this one,
+    /// `op:subtract-dates`, or `None` if one value is zoned and the other is not.
     pub fn duration_since(self, earlier: Self) -> Option<Duration> {
         self.0.duration_since::<LibraryDate>(earlier.0)
     }
 }
 
-/// The hooks of the compact representations.
+/// Conversions to and from the compact representation of dates.
 impl Date {
-    /// The number of offset codes, the unzoned mark included.
+    /// The number of offset codes, including the mark of an unzoned value.
     pub(crate) const OFFSET_CODE_COUNT: u64 = instant::OFFSET_CODE_COUNT;
 
-    /// The attoseconds of a minute.
+    /// The number of attoseconds in a minute.
     const ATTOSECONDS_PER_MINUTE: i128 = 60 * instant::ATTOSECONDS_PER_SECOND;
 
-    /// The Unix epoch in attoseconds of the instant.
+    /// The Unix epoch, in attoseconds since `0001-01-01T00:00:00Z`.
     const UNIX_EPOCH: i128 = instant::UNIX_EPOCH_SECONDS * instant::ATTOSECONDS_PER_SECOND;
 
-    /// Creates the date whose day starts a number of minutes after the Unix epoch, UTC,
-    /// written with a timezone offset.
+    /// Creates the date whose day starts `minutes` minutes after the Unix epoch, UTC,
+    /// and which was written with `offset`.
     pub(crate) fn from_unix_minutes(minutes: i64, offset: Option<TimezoneOffset>) -> Self {
         Self(Instant::new(Self::attoseconds(minutes), offset))
     }
 
-    /// Creates the date whose day starts a number of minutes after the Unix epoch, UTC,
-    /// written with the offset of a raw code, or `None` if the code is not one.
+    /// Creates the date whose day starts `minutes` minutes after the Unix epoch, UTC,
+    /// and whose offset has the given raw code,
+    /// or `None` if the code is not an offset code.
     pub(crate) fn from_minutes_and_code(minutes: i64, offset_code: u64) -> Option<Self> {
         Instant::from_code(Self::attoseconds(minutes), offset_code).map(Self)
     }
 
-    /// Returns the minutes from the Unix epoch, UTC, to the instant the day starts.
+    /// Returns the minutes from the Unix epoch, UTC, to the instant at which the day starts.
     ///
-    /// Every date has them: a day starts on a whole minute, as offsets are whole minutes,
+    /// They are defined for every date:
+    /// a day starts on a whole minute, since offsets are whole minutes,
     /// and the value space spans fewer minutes than the 64-bit range.
     pub(crate) fn unix_minutes(self) -> i64 {
         let since_unix_epoch = self.0.attoseconds() - Self::UNIX_EPOCH;
@@ -171,7 +176,8 @@ impl Date {
         self.0.offset_code()
     }
 
-    /// Returns the attoseconds of the instant a number of minutes after the Unix epoch.
+    /// Returns the attoseconds since `0001-01-01T00:00:00Z`
+    /// of the instant `minutes` minutes after the Unix epoch.
     fn attoseconds(minutes: i64) -> i128 {
         Self::UNIX_EPOCH + i128::from(minutes) * Self::ATTOSECONDS_PER_MINUTE
     }
@@ -197,11 +203,12 @@ mod tests {
 
     use crate::testing::zoned;
 
-    /// Parses the date of a lexical; panics on malformed input.
+    /// Returns the date of a lexical form, and panics for a malformed one.
     fn date(lexical: &str) -> Date {
         Date::from_lexical(lexical).expect(lexical)
     }
 
+    /// A canonical lexical form is written back unchanged, and `+00:00` is written as `Z`.
     #[test]
     fn canonical_lexicals_round_trip() {
         for lexical in [
@@ -221,6 +228,7 @@ mod tests {
         assert_eq!(date("2024-03-01+00:00").to_string(), "2024-03-01Z");
     }
 
+    /// Malformed lexical forms and values beyond the value space are rejected.
     #[test]
     fn malformed_lexicals_are_refused() {
         for lexical in [
@@ -240,6 +248,8 @@ mod tests {
         }
     }
 
+    /// A date is created from calendar fields and returns them,
+    /// and fields that name no day are rejected.
     #[test]
     fn components_build_and_read_values() {
         let value = Date::from_components(2024, 3, 1, zoned(330)).expect("valid");
@@ -258,6 +268,7 @@ mod tests {
         assert_eq!(Date::from_components(i64::MIN, 1, 1, None), None);
     }
 
+    /// A date gives the dateTime at which it starts, and joins with a time into a dateTime.
     #[test]
     fn days_start_and_join_with_times() {
         let time = |lexical: &str| Time::from_lexical(lexical).expect(lexical);
@@ -307,6 +318,7 @@ mod tests {
         }
     }
 
+    /// Dates are compared by value as XSD defines it.
     #[test]
     fn value_comparison_follows_xsd() {
         assert!(date("2024-03-01Z").value_eq(date("2024-03-01+00:00")));
@@ -327,6 +339,8 @@ mod tests {
         );
     }
 
+    /// The term order sorts dates by the instant at which they start,
+    /// with an unzoned date after the zoned ones at the same instant.
     #[test]
     fn order_is_by_start_with_unzoned_last() {
         let ordered = [
@@ -345,6 +359,7 @@ mod tests {
         }
     }
 
+    /// Adjusting a date to an offset gives the results of the examples of XPath.
     #[test]
     fn adjusting_follows_xpath() {
         let adjusted = |lexical: &str, offset: Option<TimezoneOffset>| {
@@ -363,6 +378,7 @@ mod tests {
         );
     }
 
+    /// Date arithmetic gives the results of the examples of XPath.
     #[test]
     fn arithmetic_follows_xpath() {
         let duration = |lexical: &str| Duration::from_lexical(lexical).expect(lexical);

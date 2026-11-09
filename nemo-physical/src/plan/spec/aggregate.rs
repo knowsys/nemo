@@ -1,12 +1,12 @@
-//! Specification of the aggregation operation.
+//! The specification of an aggregate.
 
 use crate::plan::{Marker, spec::AggregateFunction};
 
 /// One aggregate of an [aggregation](crate::plan::OperationPlan::aggregate).
 ///
-/// Within each group, the aggregate reads each distinct tuple
-/// of its function's columns and its `per` columns once:
-/// `Sum(v)` per `[w]` adds a value once for every `w` it occurs with.
+/// Within each group, the aggregate reads each distinct combination of values
+/// of its function's columns and its `per` columns once.
+/// For example, `Sum(v)` per `[w]` adds a value once for every `w` it occurs with.
 ///
 /// # Example
 ///
@@ -49,15 +49,17 @@ use crate::plan::{Marker, spec::AggregateFunction};
 pub struct AggregateColumnSpec {
     /// The function, with the columns it reads.
     pub(crate) function: AggregateFunction,
-    /// The markers that, beside the function's columns, tell the rows it reads apart.
+    /// The markers that, beside the function's columns, distinguish the rows it reads.
     pub(crate) per: Vec<Marker>,
     /// The fresh marker naming the result column.
     pub(crate) result: Marker,
 }
 
 impl AggregateColumnSpec {
-    /// Creates an aggregate reading each distinct value of its function's columns once per group,
-    /// named by a fresh marker.
+    /// Creates an aggregate that reads each distinct combination of values
+    /// of its function's columns once per group.
+    ///
+    /// `result` is the fresh marker naming the result column.
     pub fn new(function: AggregateFunction, result: Marker) -> Self {
         Self {
             function,
@@ -66,7 +68,7 @@ impl AggregateColumnSpec {
         }
     }
 
-    /// Returns the aggregate reading each distinct tuple
+    /// Returns the aggregate that reads each distinct combination of values
     /// of its function's columns and the given columns once per group.
     pub fn per(self, per: Vec<Marker>) -> Self {
         Self { per, ..self }

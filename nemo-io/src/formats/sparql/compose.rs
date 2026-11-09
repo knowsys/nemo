@@ -1,21 +1,10 @@
-//! Composing queries: instantiating a query at an atom, joining several into one,
+//! Composing queries: instantiating a query, joining several instances into one query,
 //! and projecting the result.
 //!
-//! An atom is a list of [bindings](Binding), one per projected variable of a query.
-//! An instantiation renames the projected variables to the atom's variables,
-//! substitutes the atom's constants if the pattern can hold a term,
-//! and renames every other variable apart per instance,
-//! so two instances of one query share nothing but what their atoms share.
-//! - A [pattern-shaped](QueryShape::Pattern) query inlines.
-//! - A [complex](QueryShape::Complex) one enters as a subquery,
-//!   its constants joined in as single-row `VALUES` blocks,
-//!   which SPARQL's bottom-up subquery semantics makes sound.
-//! - An [opaque](QueryShape::Opaque) query is never instantiated.
-//!
-//! A query that [keeps its names](SparqlQuery::keeps_names) renames nothing:
-//! its other variables keep their names, its constants bind through `VALUES` blocks,
-//! and the caller binds its projected variables to their own names.
-//! It cannot share a composition with another instance.
+//! An *instance* of a query binds each of its projected variables
+//! to a [binding](Binding): another variable or a constant.
+//! Two instances of one query share nothing but what their bindings share.
+//! A [Composition] joins instances into one query.
 
 use std::collections::{HashMap, HashSet};
 
@@ -37,7 +26,8 @@ pub enum Binding {
     Variable(String),
     /// A constant, as the terms an endpoint may hold it as
     /// ([ground_terms](SparqlQuery::ground_terms)), any of which matches.
-    /// There is usually one.
+    ///
+    /// There is usually one term.
     Constant(Vec<GroundTerm>),
 }
 
@@ -51,20 +41,35 @@ enum Replacement {
 }
 
 impl SparqlQuery {
-    /// Instantiates a query at an atom, given one binding per projected variable,
-    /// in projection order.
+    /// Instantiates the query, given one binding per projected variable, in projection order.
     ///
-    /// `suffix` tells this instance's private variables apart from other instances',
-    /// and `reserved` names the variables they must avoid as well, the atom's own.
-    /// A projected variable bound to a variable in `joined`, one the atom's context joins on,
-    /// is required bound:
-    /// a solution leaving it unbound (an `OPTIONAL` that did not match)
+    /// The instance renames the projected variables to the variables they are bound to,
+    /// substitutes the bound constants where the pattern can hold a term,
+    /// and renames every other variable apart,
+    /// so that it shares nothing with another instance but what their bindings share.
+    /// - A [pattern-shaped](QueryShape::Pattern) query is inlined.
+    /// - A [complex](QueryShape::Complex) query enters as a subquery,
+    ///   with its constants joined in as `VALUES` blocks, one row per term.
+    ///   SPARQL's bottom-up semantics of subqueries makes this sound.
+    ///
+    /// A query that [keeps its names](SparqlQuery::keeps_names) renames nothing:
+    /// its other variables keep their names, and its constants are bound through `VALUES`
+    /// blocks.
+    /// Its projected variables must be bound to their own names,
+    /// and it cannot share a composition with another instance.
+    ///
+    /// `suffix` distinguishes this instance's private variables from those of other instances,
+    /// and `reserved` names the variables that they must avoid as well,
+    /// such as those that the bindings of every instance use.
+    /// A projected variable bound to a variable in `joined`,
+    /// which the instance shares with the rest of the composition, is required to be bound.
+    /// A solution that leaves it unbound, as an `OPTIONAL` that did not match does,
     /// would join with anything in SPARQL,
-    /// while the null it becomes in the result joins with nothing.
+    /// while Nemo reads the unbound variable as a null, which joins with nothing.
     ///
-    /// Returns the query's pattern under the projection (or the whole query as a subquery),
-    /// ready to join,
-    /// or `None` for a binding to a name that is not a valid SPARQL variable name.
+    /// Returns the query's pattern under the projection, or the whole query as a subquery,
+    /// ready to join.
+    /// Returns `None` for a binding to a name that is not a valid SPARQL variable name.
     ///
     /// # Panics
     ///
@@ -117,9 +122,9 @@ impl SparqlQuery {
 
         let mut pattern = inner.clone();
         rename_pattern(&mut pattern, &mut map);
-        // The guards sit in a group of their own (inside the subquery a
-        // complex query enters as, or one made for them), so they apply
-        // to the solutions before anything joins them.
+        // The guards are placed in a group of their own, either inside the
+        // subquery that a complex query becomes or in a group made for them,
+        // so that they apply to the solutions before anything is joined with them.
         let guard = conjunction(required.into_iter().map(Expression::Bound));
         if shape == QueryShape::Complex {
             if let Some(expr) = guard {
@@ -148,8 +153,10 @@ impl SparqlQuery {
     }
 }
 
-/// Returns a pattern joined with one `VALUES` block per constant,
-/// each binding the variable in the constant's place to the constant's terms, one row per term.
+/// Returns a pattern joined with one `VALUES` block per constant.
+///
+/// Each block binds the variable in the constant's place to the constant's terms,
+/// one row per term.
 fn join_values(
     pattern: GraphPattern,
     values: Vec<(String, Variable, Vec<GroundTerm>)>,
@@ -201,8 +208,7 @@ fn filter(pattern: GraphPattern, conditions: Vec<Expression>) -> GraphPattern {
         })
 }
 
-/// A query under composition:
-/// the patterns it joins, and the patterns that must have no match.
+/// A query being composed from patterns that it joins and patterns that must have no match.
 #[derive(Debug, Default)]
 pub struct Composition {
     /// The patterns joined, in order.
@@ -212,12 +218,12 @@ pub struct Composition {
 }
 
 impl Composition {
-    /// Adds a pattern the query joins.
+    /// Adds a pattern to join.
     pub fn join(&mut self, pattern: GraphPattern) {
         self.joined.push(pattern);
     }
 
-    /// Adds a pattern that must have no match, a `FILTER NOT EXISTS`.
+    /// Adds a pattern that must have no match, written as a `FILTER NOT EXISTS`.
     pub fn exclude(&mut self, pattern: GraphPattern) {
         self.absent.push(pattern);
     }
@@ -228,8 +234,8 @@ impl Composition {
     }
 
     /// Returns a `SELECT` of the given variables over the joined patterns,
-    /// filtered by the absences,
-    /// with a dataset clause if the one query it came from had one.
+    /// filtered by the patterns that must have no match,
+    /// with the given dataset clause if there is one.
     ///
     /// Returns `None` if nothing is joined, or if a name is not a valid SPARQL variable name.
     pub fn select(
@@ -257,19 +263,19 @@ impl Composition {
     }
 }
 
-/// How one instance names the variables its bindings do not name.
+/// How one instance names the variables that its bindings do not name.
 struct Instance<'a> {
-    /// What tells this instance's variables apart from other instances'.
+    /// The suffix that distinguishes this instance's variables from those of other instances.
     suffix: &'a str,
-    /// The names the instance's variables must avoid.
+    /// The names that the instance's variables must avoid.
     reserved: &'a HashSet<String>,
     /// Whether the query [keeps its names](SparqlQuery::keeps_names).
     keeps_names: bool,
 }
 
 impl Instance<'_> {
-    /// Returns a variable's name in this instance:
-    /// its own if the query keeps its names, otherwise renamed [apart].
+    /// Returns a private variable's name in this instance:
+    /// its own name if the query keeps its names, and otherwise the name that [apart] gives.
     fn private(&self, name: &str) -> Variable {
         if self.keeps_names {
             Variable::new_unchecked(name)
@@ -279,31 +285,33 @@ impl Instance<'_> {
     }
 }
 
-/// How an instance binds the projected variables: the replacement of
-/// each, the `VALUES` rows binding constants outside the pattern (each
-/// with the projected variable it stands for), and the variables a
-/// solution must bind to count.
+/// How an instance binds the projected variables.
 struct Rebinding {
-    /// Per projected variable, what replaces it.
+    /// For each projected variable, what replaces it.
     replacements: HashMap<String, Replacement>,
-    /// The constants bound by a `VALUES` block outside, to their terms.
+    /// The constants bound by a `VALUES` block outside the pattern:
+    /// for each, the projected variable's name, the variable in its place, and the terms.
     values: Vec<(String, Variable, Vec<GroundTerm>)>,
-    /// The variables a solution must bind to count.
+    /// The variables that a solution must bind to count.
     required: Vec<Variable>,
 }
 
 /// Decides how an instance binds each projected variable.
 ///
-/// If a constant cannot replace the variable,
-/// because the pattern defines it or a literal would sit in a predicate or graph position,
-/// or because the constant has more than one term,
-/// the instance keeps a variable and binds it by a `VALUES` block outside,
-/// a row per term.
-/// A subquery always does, and so does a query keeping its names,
-/// since a service may refer to a variable its pattern does not mention.
+/// A constant replaces its variable, unless
+/// - the pattern defines the variable,
+/// - a literal would end up in a predicate or graph position,
+/// - the constant has more than one term,
+/// - the query is complex and enters as a subquery, or
+/// - the query keeps its names, since a service may refer to a variable that its pattern does
+///   not mention.
+///
+/// Then the instance keeps a variable, and binds it by a `VALUES` block outside the pattern,
+/// with one row per term.
 /// A constant bound that way must not meet a solution that leaves its variable unbound,
-/// since the row would join with it and fabricate a match,
-/// so such a variable is required, like a joined one the pattern may leave unbound.
+/// since the row would join with that solution and create a false match.
+/// So such a variable is required to be bound,
+/// like a joined variable that the pattern may leave unbound.
 ///
 /// Returns `None` for a binding to a name that is not a valid SPARQL variable name.
 fn rebinding(
@@ -362,7 +370,7 @@ fn rebinding(
     Some(rebinding)
 }
 
-/// Returns a query's selection pattern.
+/// Returns a query's graph pattern.
 fn query_pattern(query: &SparqlQuery) -> &GraphPattern {
     match query.query() {
         Query::Select { pattern, .. } => pattern,
@@ -370,10 +378,10 @@ fn query_pattern(query: &SparqlQuery) -> &GraphPattern {
     }
 }
 
-/// Returns a variable's name in one instance: the name with the instance's suffix,
-/// which no source query uses.
+/// Returns a variable's name in one instance: the name followed by `_` and the instance's
+/// suffix.
 ///
-/// The name is lengthened if it is a reserved name after all.
+/// If that name is reserved, underscores are appended until it is not.
 fn apart(name: &str, suffix: &str, reserved: &HashSet<String>) -> Variable {
     let mut apart = format!("{name}_{suffix}");
     while reserved.contains(&apart) {
@@ -382,8 +390,9 @@ fn apart(name: &str, suffix: &str, reserved: &HashSet<String>) -> Variable {
     Variable::new_unchecked(apart)
 }
 
-/// Returns the variables a pattern defines rather than matches
-/// (`BIND`, `VALUES`, grouping, and nested projections), which no term can replace.
+/// Returns the variables that a pattern defines rather than matches, which no term can replace.
+///
+/// They are the variables of `BIND`, `VALUES`, grouping and nested projections.
 fn defined_variables(pattern: &GraphPattern) -> HashSet<String> {
     let mut defined = HashSet::new();
     algebra::visit_patterns(pattern, &mut |node| match node {
@@ -418,7 +427,7 @@ fn defined_variables(pattern: &GraphPattern) -> HashSet<String> {
     defined
 }
 
-/// Returns the variables in a predicate or graph-name position,
+/// Returns the variables in a predicate, graph-name or service-name position,
 /// which only an IRI can fill.
 fn node_position_variables(pattern: &GraphPattern) -> HashSet<String> {
     let mut positions = HashSet::new();
@@ -445,7 +454,7 @@ fn node_position_variables(pattern: &GraphPattern) -> HashSet<String> {
     positions
 }
 
-/// Renames every variable of a pattern in place.
+/// Replaces every variable of a pattern in place, as `map` says.
 fn rename_pattern(pattern: &mut GraphPattern, map: &mut impl FnMut(&Variable) -> Replacement) {
     match pattern {
         GraphPattern::Bgp { patterns } => {
@@ -540,17 +549,17 @@ fn rename_pattern(pattern: &mut GraphPattern, map: &mut impl FnMut(&Variable) ->
     }
 }
 
-/// Renames a variable that must stay a variable.
+/// Renames a variable in a position that defines it, where it must stay a variable.
 ///
-/// [instantiate](SparqlQuery::instantiate)'s check rules out a term replacement here,
-/// so such a replacement keeps the name.
+/// [rebinding] replaces no variable that the pattern defines by a term,
+/// so a term replacement here leaves the name unchanged.
 fn rename_variable(variable: &mut Variable, map: &mut impl FnMut(&Variable) -> Replacement) {
     if let Replacement::Variable(renamed) = map(variable) {
         *variable = renamed;
     }
 }
 
-/// Renames a term position.
+/// Replaces the variable in a term position, if there is one.
 fn rename_term(term: &mut TermPattern, map: &mut impl FnMut(&Variable) -> Replacement) {
     if let TermPattern::Variable(variable) = term {
         *term = match map(variable) {
@@ -561,7 +570,7 @@ fn rename_term(term: &mut TermPattern, map: &mut impl FnMut(&Variable) -> Replac
     }
 }
 
-/// Renames a predicate or graph-name position.
+/// Replaces the variable in a predicate or graph-name position, if there is one.
 fn rename_node(node: &mut NamedNodePattern, map: &mut impl FnMut(&Variable) -> Replacement) {
     if let NamedNodePattern::Variable(variable) = node {
         match map(variable) {
@@ -569,13 +578,13 @@ fn rename_node(node: &mut NamedNodePattern, map: &mut impl FnMut(&Variable) -> R
             Replacement::Term(GroundTerm::NamedNode(named)) => {
                 *node = NamedNodePattern::NamedNode(named);
             }
-            // Excluded by the pre-check: a literal cannot be a predicate or graph name.
+            // `rebinding` rules this out, since a literal cannot be a predicate or graph name.
             Replacement::Term(GroundTerm::Literal(_)) => {}
         }
     }
 }
 
-/// Renames every variable of an expression.
+/// Replaces every variable of an expression, as `map` says.
 fn rename_expression(expression: &mut Expression, map: &mut impl FnMut(&Variable) -> Replacement) {
     match expression {
         Expression::NamedNode(_) | Expression::Literal(_) => {}
@@ -635,20 +644,20 @@ fn rename_expression(expression: &mut Expression, map: &mut impl FnMut(&Variable
 mod tests {
     use super::*;
 
-    /// A named-node constant.
+    /// Returns a binding to a named-node constant.
     fn iri(iri: &str) -> Binding {
         Binding::Constant(vec![GroundTerm::NamedNode(
             spargebra::term::NamedNode::new_unchecked(iri),
         )])
     }
 
-    /// Creates a binding to another variable.
+    /// Returns a binding to a variable.
     fn var(name: &str) -> Binding {
         Binding::Variable(String::from(name))
     }
 
-    /// The parsed generic triple query.
-    /// Returns the `SELECT` of the variables over the joined patterns, the absent ones excluded.
+    /// Returns the `SELECT` of the variables over the joined patterns,
+    /// with the absent patterns excluded.
     fn composed(
         joined: Vec<GraphPattern>,
         absent: Vec<GraphPattern>,
@@ -665,10 +674,12 @@ mod tests {
         composition.select(&variables, None)
     }
 
+    /// Returns the parsed generic triple query.
     fn triples() -> SparqlQuery {
         SparqlQuery::parse("SELECT ?s ?p ?o WHERE { ?s ?p ?o }", None, []).expect("valid")
     }
 
+    /// Two instances of one query join through the variables their bindings share.
     #[test]
     fn instances_of_one_query_join_through_the_rule_variables() {
         let first = triples()
@@ -695,6 +706,7 @@ mod tests {
         assert_eq!(query.variables(), ["e", "next"]);
     }
 
+    /// Each instance renames its private variables apart, and substitutes its constants.
     #[test]
     fn private_variables_rename_apart_and_constants_substitute() {
         let query = SparqlQuery::parse(
@@ -721,6 +733,7 @@ mod tests {
         assert!(text.contains("?z_2 = ?y"), "{text}");
     }
 
+    /// A complex query enters as a subquery, with its constants bound through `VALUES` blocks.
     #[test]
     fn complex_queries_enter_as_subqueries_with_values_for_constants() {
         let query = SparqlQuery::parse(
@@ -744,13 +757,14 @@ mod tests {
         let text = merged.text();
         assert!(text.contains("GROUP BY ?x"), "{text}");
         assert!(text.contains("VALUES ( ?n_1 )"), "{text}");
-        // The subquery is kept whole: re-parsing keeps the outer
-        // projection and the aggregation inside.
+        // The subquery is kept whole: parsing the text again gives the outer
+        // projection, with the aggregation inside.
         let reparsed = SparqlQuery::parse(text, None, []).expect("parses");
         assert_eq!(reparsed.variables(), ["x"]);
         assert_eq!(reparsed.shape(), QueryShape::Complex);
     }
 
+    /// A literal bound to a predicate variable is bound through a `VALUES` block.
     #[test]
     fn a_literal_predicate_is_bound_through_values() {
         let literal = Binding::Constant(vec![GroundTerm::Literal(
@@ -772,6 +786,8 @@ mod tests {
         );
     }
 
+    /// A query calling a service keeps its variable names,
+    /// and binds its constants through `VALUES` blocks.
     #[test]
     fn a_query_calling_a_service_renames_nothing() {
         let query = SparqlQuery::parse(
@@ -794,12 +810,13 @@ mod tests {
             .expect("instantiates");
         let merged = composed(vec![instance], Vec::new(), &["qidLabel"]).expect("selects");
         let text = merged.text();
-        // The constant binds the variable the service labels, which keeps its name,
-        // as does the private one.
+        // The constant binds the variable that the service labels, which keeps its name,
+        // and so does the private variable `?o`.
         assert!(text.contains("?qid <urn:p> ?o ."), "{text}");
         assert!(text.contains("VALUES ( ?qid )"), "{text}");
     }
 
+    /// Instantiating an opaque query panics.
     #[test]
     #[should_panic(expected = "opaque query")]
     fn opaque_queries_do_not_instantiate() {
@@ -808,6 +825,8 @@ mod tests {
         query.instantiate(&[var("x")], "1", &HashSet::new(), &HashSet::new());
     }
 
+    /// A binding to a variable name that SPARQL does not allow, or a selection of one,
+    /// composes nothing.
     #[test]
     fn variables_with_names_invalid_in_sparql_do_not_compose() {
         let bindings = [var("x"), var("y"), var("z")];
@@ -823,6 +842,7 @@ mod tests {
         assert!(composed(vec![pattern], Vec::new(), &["x-y"]).is_none());
     }
 
+    /// An excluded pattern becomes a `FILTER NOT EXISTS`.
     #[test]
     fn negation_becomes_not_exists() {
         let instance = triples()

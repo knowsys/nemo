@@ -1,26 +1,26 @@
-//! The table manager: the tables of one database instance.
+//! The table manager, which stores the tables of one database instance.
 //!
-//! A table holds rows of one arity, added in batches.
-//! Each batch occupies a [Revision] of the table.
-//! A table keeps its rows in subtables,
-//! each holding the rows of one range of revisions, its block.
+//! A table contains rows of one arity, which are added in batches.
+//! Each batch is added at a [Revision] of the table.
+//! A table keeps its rows in *subtables*,
+//! each of which contains the rows of one range of revisions, its *block*.
 //!
-//! A subtable stores its rows in arrangements: one [trie](Trie) per column order,
-//! a [ColumnOrder] of the table's columns.
-//! It starts with the order its rows arrived in, which is one order for all batches of a table,
-//! and builds arrangements in further orders on request, each from the closest one it stores.
-//! The arrangements are the indexes of the table.
-//! A subtable also knows the revision each of its rows was added at.
+//! A subtable stores its rows in *arrangements*, one [trie](Trie) per [ColumnOrder].
+//! Its first arrangement is in the order in which its rows arrived,
+//! which is the same for all batches of a table.
+//! Arrangements in other orders are built on request, each from the closest stored one.
+//! The arrangements serve as the indexes of the table.
+//! A subtable also records the revision at which each of its rows was added.
 //!
-//! A read addresses a range of revisions and a column order,
-//! and takes the arrangements in that order of the subtables whose blocks lie within it,
-//! as a union.
-//! A range must align with the blocks: no block may straddle one of its ends.
-//! Consolidation merges adjacent subtables into one, so that reads cover fewer arrangements.
-//! A wall is a revision no merge crosses:
-//! the subtables before it and those from it on stay apart, so a read may still start there.
-//! The walls divide a table into compartments,
-//! and within each a [MergePolicy] chooses the subtables to merge.
+//! A read names a range of revisions and a column order.
+//! It reads the union of the arrangements in that order of the subtables whose blocks lie
+//! within the range.
+//! A range must *align* with the blocks, so that no block straddles one of its ends.
+//!
+//! *Consolidation* merges adjacent subtables into one, so that reads cover fewer arrangements.
+//! A *wall* is a revision that no merge crosses, so that a read can still start or end there.
+//! The walls divide a table into *compartments*,
+//! and within each compartment, a [MergePolicy] chooses the subtables to merge.
 
 mod column_order;
 mod policy;
@@ -44,10 +44,10 @@ use crate::{
 
 /// The tables of one database instance.
 ///
-/// A table is addressed by the [TableId] its registration returns,
+/// A table is identified by the [TableId] that [register](Self::register) returns,
 /// and the id of a dropped table is not reused.
-/// Every method that takes a table id panics if the id is unknown or dropped:
-/// if this manager did not register it, or has dropped the table since.
+/// Every method that takes a table id panics if the id is unknown or dropped,
+/// that is, if this manager did not register it or has dropped the table since.
 ///
 /// # Example
 ///
@@ -70,7 +70,7 @@ use crate::{
 ///     manager.add_rows(edge, Revision(revision), ColumnOrder::identity(2), rows);
 /// }
 ///
-/// // A read by the second column first needs an arrangement in that order,
+/// // A read with the second column first needs an arrangement in that order,
 /// // which each of the two subtables builds.
 /// let swapped = ColumnOrder::new(&[1, 0]).expect("a permutation");
 /// let all = Revision(0)..Revision(3);
@@ -85,12 +85,11 @@ use crate::{
 /// ```
 #[derive(Debug, Default)]
 pub struct TableManager {
-    /// The tables, indexed by their ids; a dropped table leaves `None`.
+    /// The tables, indexed by their ids, with `None` for a dropped table.
     tables: Vec<Option<Table>>,
 }
 
-/// The work of building arrangements:
-/// the number of arrangements built, and the rows written to build them.
+/// The work of building arrangements.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct ArrangementWork {
     /// The number of arrangements built.
@@ -117,8 +116,8 @@ impl TableManager {
 
     /// Returns a manager with the same tables under the same ids, without their rows.
     ///
-    /// The tables registered with the copy get ids this manager has not given out,
-    /// so a dry run can register tables beside the existing ones.
+    /// A table registered with the copy gets an id after the copied ones,
+    /// the same id that this manager would give next.
     pub fn without_rows(&self) -> Self {
         let tables = self
             .tables
@@ -150,10 +149,10 @@ impl TableManager {
         self.table(table).arity
     }
 
-    /// Stores a batch of rows, its columns laid out in `order`,
-    /// as a new subtable at the given revision,
+    /// Stores a batch of rows as a new subtable at the given revision,
     /// and returns the number of distinct rows stored.
     ///
+    /// `order` is the column order of the rows.
     /// The rows need not be sorted or distinct.
     ///
     /// # Panics
@@ -169,20 +168,20 @@ impl TableManager {
         self.add_trie(table, revision, order, Trie::from_buffer(rows))
     }
 
-    /// Stores a trie, its columns laid out in `order`,
-    /// as a new subtable at the given revision,
+    /// Stores a trie as a new subtable at the given revision,
     /// and returns the number of rows stored.
     ///
+    /// `order` is the column order of the trie.
     /// An empty trie stores nothing.
-    /// A revision holds one subtable,
-    /// so the tries of one batch are [merged](Trie::merge) before they are added.
+    /// A batch becomes one subtable at one revision,
+    /// so the tries of one batch must be [merged](Trie::merge) before they are added.
     ///
     /// # Panics
     ///
     /// Panics if the table is unknown or dropped (see [TableManager]),
     /// if the order or the trie does not match the table's arity,
-    /// or if the trie is nonempty and its revision does not follow the table's blocks
-    /// or its order differs from the order of the batches the table holds.
+    /// or if the trie is nonempty and either its revision is below the end of the table's last
+    /// block, or its order differs from the order of the table's earlier batches.
     pub fn add_trie(
         &mut self,
         table: TableId,
@@ -195,9 +194,9 @@ impl TableManager {
 
     /// Builds the arrangements in the given column order
     /// that the subtables within a range lack,
-    /// and returns the work that took.
+    /// and returns the work done.
     ///
-    /// Each is built from the closest arrangement its subtable stores.
+    /// Each arrangement is built from the closest arrangement that its subtable stores.
     ///
     /// # Panics
     ///
@@ -223,7 +222,7 @@ impl TableManager {
         work
     }
 
-    /// Returns the number of distinct column orders the table's subtables store.
+    /// Returns the number of distinct column orders that the table's subtables store.
     ///
     /// # Panics
     ///
@@ -232,8 +231,10 @@ impl TableManager {
         self.table(table).stored_orders()
     }
 
-    /// Returns the tries of the subtables within a range, arranged in the given column order,
-    /// in ascending revision order, to be read as their union.
+    /// Returns the tries in the given column order of the subtables within a range,
+    /// in ascending revision order.
+    ///
+    /// The rows within the range are the union of the rows of the tries.
     ///
     /// # Panics
     ///
@@ -247,9 +248,9 @@ impl TableManager {
         tries
     }
 
-    /// Appends the tries of [tries](Self::tries) to a list, panicking as it does.
+    /// Appends the tries that [tries](Self::tries) returns to `into`, and panics as it does.
     ///
-    /// A reader that gathers the tries of several tables thus fills one list.
+    /// This lets the tries of several tables be gathered in one list.
     pub(crate) fn tries_into<'s>(
         &'s self,
         table: TableId,
@@ -260,11 +261,11 @@ impl TableManager {
         self.table(table).tries_into(range, order, into);
     }
 
-    /// Visits the rows of the tries of [tries](Self::tries) from the given position on,
-    /// until the visitor breaks or the rows end.
+    /// Visits the rows of the tries that [tries](Self::tries) returns,
+    /// starting at a position, until `visit` breaks or the rows end.
     ///
-    /// The position counts the rows of the tries one after the other.
-    /// A paged reader thus resumes at the position where it stopped.
+    /// `start` counts the rows of the tries one after the other,
+    /// so a read in pages can resume where it stopped.
     ///
     /// # Panics
     ///
@@ -299,9 +300,9 @@ impl TableManager {
         }
     }
 
-    /// Returns the number of rows the subtables within a range hold.
+    /// Returns the number of rows of the subtables within a range.
     ///
-    /// A row held by several subtables counts once for each.
+    /// A row that several subtables contain is counted once for each.
     ///
     /// # Panics
     ///
@@ -311,11 +312,12 @@ impl TableManager {
         self.table(table).row_count(range)
     }
 
-    /// Returns the revision the row was added at, the earliest if several batches added it,
-    /// or `None` if the table does not hold it.
+    /// Returns the revision at which the row was added,
+    /// or `None` if the table does not contain it.
     ///
-    /// The row's columns are in the order the table's batches arrive in.
-    /// Consolidation keeps the revisions of the rows it merges.
+    /// If several batches added the row, the earliest revision is returned.
+    /// The row's columns must be in the order in which the table's batches arrive.
+    /// Consolidation keeps the revisions of the rows that it merges.
     ///
     /// # Panics
     ///
@@ -334,12 +336,13 @@ impl TableManager {
         self.table(table).blocks().collect()
     }
 
-    /// Returns the nearest revision at or below the given one that aligns with the table's blocks:
-    /// the revision itself, unless it lies strictly inside a block,
-    /// and the start of that block otherwise.
+    /// Returns the nearest revision at or below the given one that aligns with the table's
+    /// blocks.
     ///
-    /// A reader that tolerates reading some rows twice starts its ranges there,
-    /// so that consolidation need not keep its exact split points.
+    /// That is the revision itself, unless it lies strictly inside a block,
+    /// and the start of that block otherwise.
+    /// A read that may see some rows twice can start its range there,
+    /// so that its exact start need not be a wall.
     ///
     /// # Panics
     ///
@@ -348,12 +351,11 @@ impl TableManager {
         self.table(table).aligned_floor(revision)
     }
 
-    /// Returns the revision of the latest batch the table holds,
-    /// or `None` if it holds no rows.
+    /// Returns the revision of the latest batch in the table,
+    /// or `None` if the table has no rows.
     ///
-    /// Consolidation leaves it unchanged.
-    /// A reader that remembers the revision it read up to
-    /// thus tells whether the table holds rows it has not read.
+    /// Consolidation leaves it unchanged,
+    /// so comparing it with an earlier result tells whether rows were added since.
     ///
     /// # Panics
     ///
@@ -362,17 +364,16 @@ impl TableManager {
         self.table(table).last_added()
     }
 
-    /// Returns the next merge the policy proposes,
+    /// Returns the next merge that the policy proposes,
     /// as a range of revisions for [consolidate](Self::consolidate),
     /// or `None` if it proposes none.
     ///
-    /// No proposal crosses one of the walls.
-    /// If the policy would merge in several places, the newest comes first.
-    ///
+    /// No proposal crosses a wall.
+    /// If the policy would merge in several places, the newest merge comes first.
     /// A merge changes what the policy proposes next,
-    /// so the caller consolidates each proposal and asks again until none is left,
+    /// so each proposal is consolidated before the next one is planned,
     /// as [consolidate_with](Self::consolidate_with) does.
-    /// That ends, since a proposal covers at least two subtables and merges them into one.
+    /// This ends, since a proposal covers at least two subtables and merges them into one.
     ///
     /// # Panics
     ///
@@ -387,17 +388,17 @@ impl TableManager {
     }
 
     /// Merges the subtables within a range into one,
-    /// and returns the number of rows it holds.
+    /// and returns the number of rows of the merged subtable.
     ///
     /// The merged subtable stores every column order that all the merged subtables store,
-    /// so a read finds the orders it needed before the merge,
-    /// and the merge writes its rows once per such order.
+    /// so a read finds the orders that it needed before the merge.
+    /// The merge writes its rows once for each such order.
     /// The merged subtables are dropped.
     ///
     /// # Panics
     ///
     /// Panics if the table is unknown or dropped (see [TableManager]),
-    /// or if the range does not align with the table's blocks or holds none of them.
+    /// or if the range does not align with the table's blocks or contains none of them.
     pub fn consolidate(&mut self, table: TableId, range: Range<Revision>) -> usize {
         tracing::trace!(
             table = table.index(),
@@ -410,9 +411,9 @@ impl TableManager {
     }
 
     /// Merges the subtables of a table as the policy proposes, until it proposes nothing,
-    /// and returns the number of rows the merges wrote.
+    /// and returns the total number of rows of the subtables that the merges produced.
     ///
-    /// No merge crosses one of the walls.
+    /// No merge crosses a wall.
     ///
     /// # Panics
     ///
@@ -432,7 +433,7 @@ impl TableManager {
     }
 
     /// Drops the subtables within a range,
-    /// and returns the number of rows they held.
+    /// and returns the number of rows that they contained.
     ///
     /// # Panics
     ///
@@ -453,12 +454,14 @@ impl TableManager {
         assert!(slot.is_some(), "unknown or dropped table id");
     }
 
-    /// Returns the allocated bytes of every table's arrangements.
+    /// Returns the allocated bytes of the arrangements and row revisions of all tables.
     pub fn memory_bytes(&self) -> usize {
         self.tables.iter().flatten().map(Table::memory_bytes).sum()
     }
 
-    /// Returns the table behind an id; panics if it is unknown or dropped.
+    /// Returns the table with the given id.
+    ///
+    /// Panics if the id is unknown or dropped.
     fn table(&self, table: TableId) -> &Table {
         self.tables
             .get(table.index())
@@ -466,7 +469,9 @@ impl TableManager {
             .expect("unknown or dropped table id")
     }
 
-    /// Returns the table behind an id for changing it; panics if it is unknown or dropped.
+    /// Returns the table with the given id, for changing it.
+    ///
+    /// Panics if the id is unknown or dropped.
     fn table_mut(&mut self, table: TableId) -> &mut Table {
         self.tables
             .get_mut(table.index())
@@ -503,6 +508,7 @@ mod tests {
         rows
     }
 
+    /// Added rows are stored without repeats, and an empty batch stores nothing.
     #[test]
     fn added_rows_deduplicate() {
         let mut manager = TableManager::new();
@@ -528,6 +534,7 @@ mod tests {
         assert_eq!(manager.row_count(table, range), 2);
     }
 
+    /// Adding rows panics for the wrong arity, an earlier revision, or another column order.
     #[test]
     fn added_rows_need_the_arity_and_a_later_revision() {
         let mut manager = TableManager::new();
@@ -556,6 +563,7 @@ mod tests {
         });
     }
 
+    /// Every row reports the revision at which it was first added, before and after a merge.
     #[test]
     fn rows_keep_their_revisions_through_consolidation() {
         let mut manager = TableManager::new();
@@ -584,7 +592,7 @@ mod tests {
             assert_eq!(revision_of(&manager, row), revision);
         }
 
-        // A merge keeps them, and a row added twice keeps the earlier revision,
+        // A merge keeps the revisions, and a row added twice keeps the earlier one,
         // whatever other orders the subtables store.
         let swapped = ColumnOrder::new(&[1, 0]).expect("a permutation");
         manager.ensure_order(table, Revision(0)..Revision(5), &swapped);
@@ -595,6 +603,7 @@ mod tests {
         }
     }
 
+    /// Looking up a row of the wrong arity panics.
     #[test]
     fn a_looked_up_row_needs_the_tables_arity() {
         let mut manager = TableManager::new();
@@ -611,6 +620,7 @@ mod tests {
         }
     }
 
+    /// A read that starts at a position inside one subtable continues into the next one.
     #[test]
     fn paged_reads_resume_across_subtables() {
         let mut manager = TableManager::new();
@@ -638,6 +648,8 @@ mod tests {
         assert_eq!(page, vec![2, 3]);
     }
 
+    /// [consolidate_with](TableManager::consolidate_with) merges until the policy proposes
+    /// nothing, and no merge crosses a wall.
     #[test]
     fn consolidation_runs_until_the_policy_proposes_nothing() {
         let mut manager = TableManager::new();
@@ -652,8 +664,8 @@ mod tests {
             );
         }
 
-        // The wall at revision 3 keeps two compartments of two rows each,
-        // each merged once.
+        // The wall at revision 3 leaves two compartments of two rows each,
+        // and each compartment is merged once.
         let rewritten = manager.consolidate_with(table, &[Revision(3)], MergePolicy::Whole);
         assert_eq!(rewritten, 4);
         assert_eq!(
@@ -666,6 +678,7 @@ mod tests {
         assert_eq!(rewritten, 0);
     }
 
+    /// A dropped table's id stays unknown, while the other tables keep their ids.
     #[test]
     fn dropped_tables_keep_their_ids() {
         let mut manager = TableManager::new();
@@ -686,6 +699,7 @@ mod tests {
         assert_eq!(manager.memory_bytes(), 0);
     }
 
+    /// A copy without rows keeps the ids, names and arities of the tables, but not their rows.
     #[test]
     fn a_copy_without_rows_keeps_the_ids() {
         let mut manager = TableManager::new();
@@ -703,7 +717,7 @@ mod tests {
         assert_panics("dropped", || copy.name(first).len());
         assert_eq!((copy.name(second), copy.arity(second)), ("b", 2));
         assert_eq!(copy.row_count(second, Revision(0)..Revision(2)), 0);
-        // A table registered with the copy takes an id beside the copied ones.
+        // A table registered with the copy gets the id that the original would give next.
         assert_eq!(copy.register("c", 1), manager.register("c", 1));
     }
 }

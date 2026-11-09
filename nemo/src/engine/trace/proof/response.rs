@@ -1,5 +1,4 @@
-//! The response: lifted proofs converted to the [crate::trace] protocol types,
-//! over the written program.
+//! The response: the lifted proofs, converted to the types of [crate::trace].
 
 use std::collections::HashMap;
 
@@ -18,17 +17,20 @@ use crate::{
     },
 };
 
-/// Builds the protocol response from lifted proofs.
+/// The builder of a trace response from lifted proofs,
+/// which also renders stored values and written terms.
 pub(crate) struct Responder<'a> {
     /// The traced engine.
     engine: &'a Engine,
-    /// The canonical rendering of each written constant the proofs
-    /// hold, for the constants that evaluate.
+    /// The canonical term syntax of each written ground term in the proofs that evaluates.
     canonical_constants: HashMap<Term, String>,
 }
 
 impl<'a> Responder<'a> {
-    /// Prepares the responder.
+    /// Creates a responder.
+    ///
+    /// `canonical_constants` contains written ground terms in canonical term syntax,
+    /// as [render_constants](crate::engine::Engine::render_constants) returns them.
     pub(crate) fn new(engine: &'a Engine, canonical_constants: HashMap<Term, String>) -> Self {
         Self {
             engine,
@@ -45,7 +47,7 @@ impl<'a> Responder<'a> {
         fact_text(self.engine.manager.name(table), &terms)
     }
 
-    /// Returns a stored value in canonical rendering.
+    /// Returns a stored value in canonical term syntax.
     pub(crate) fn rendered(&self, value: StorageValue) -> String {
         let value = self
             .engine
@@ -55,8 +57,10 @@ impl<'a> Responder<'a> {
         self.engine.term_text(value)
     }
 
-    /// Returns the text of a lifted cell: a value or an evaluated constant in canonical
-    /// rendering, a variable as written.
+    /// Returns the text of a lifted cell.
+    ///
+    /// A value and an evaluated ground term are in canonical term syntax,
+    /// and any other term is as written.
     fn cell(&self, cell: &LiftedCell) -> String {
         match cell {
             LiftedCell::Value(value) => self.engine.term_text(value.as_ref()),
@@ -64,8 +68,9 @@ impl<'a> Responder<'a> {
         }
     }
 
-    /// Returns the text of a written term: an evaluated constant in canonical rendering,
-    /// anything else as written.
+    /// Returns the text of a written term.
+    ///
+    /// An evaluated ground term is in canonical term syntax, and any other term is as written.
     pub(crate) fn term(&self, term: &Term) -> String {
         self.canonical_constants
             .get(term)
@@ -79,8 +84,11 @@ impl<'a> Responder<'a> {
         fact_text(predicate, &terms)
     }
 
-    /// Takes the batch's nodes out of the graph as the part of a response they make,
-    /// listing the rules they apply that `listed` does not hold, by statement.
+    /// Takes the batch's nodes out of the graph, as the part of a response that they make.
+    ///
+    /// `listed` gives the position of each rule listed so far, by its statement.
+    /// The part lists the rules that the nodes apply and that are not in `listed` yet,
+    /// and adds them to `listed`.
     pub(super) fn part(
         &self,
         graph: &mut LiftedGraph,
@@ -138,7 +146,8 @@ impl<'a> Responder<'a> {
         TracePart { nodes, rules }
     }
 
-    /// Returns the requested facts, given by table and decoded values, each with its node.
+    /// Returns the requested facts, given by table and decoded values,
+    /// each with its node in `roots`.
     pub(super) fn traced(
         &self,
         facts: &[(TableId, Vec<DataValue>)],
@@ -155,7 +164,7 @@ impl<'a> Responder<'a> {
     }
 }
 
-/// Returns a span as a protocol source position.
+/// Returns a span as a [SourceLocation], or `None` if its file is not registered.
 fn source_location(engine: &Engine, span: Span) -> Option<SourceLocation> {
     let (line, column) = engine.pipeline.line_column(span)?;
     Some(SourceLocation {
@@ -167,12 +176,12 @@ fn source_location(engine: &Engine, span: Span) -> Option<SourceLocation> {
     })
 }
 
-/// Returns the rule reference of a written statement: its id, text, `#[name]`,
-/// source, and the `@use` that instantiated it.
+/// Returns a written statement as a [WrittenRule],
+/// with its id, text, `#[name]`, source, and the `@use` directives that instantiated it.
 ///
 /// # Panics
 ///
-/// Panics for a statement the written program does not hold.
+/// Panics for a statement that is not in the written program.
 pub(crate) fn written_rule(engine: &Engine, statement: StatementId) -> WrittenRule {
     let pipeline = &engine.pipeline;
     let written = pipeline.statement(statement);

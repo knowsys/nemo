@@ -5,10 +5,10 @@
 //! Beneath it:
 //! - the [driver] descends through the layers,
 //! - each layer is an [intersection] of [cursors](input) over the input columns,
-//! - the cursor over an input column is the [cursor] over the column of its one block,
+//! - the cursor over an input column is the [cursor] over the column of its only block,
 //!   or the [union] of the cursors over the column of each of its blocks,
-//! - the [hooks] decide whether a value found at a layer stands,
-//! - the working state comes from an [arena](JoinArena).
+//! - the [hooks] decide whether to keep a value found at a layer,
+//! - the working state is allocated in an [arena](JoinArena).
 //!
 //! A [template](JoinTemplate) builds the joins of one shape over different inputs.
 
@@ -45,25 +45,25 @@ use crate::{
 
 /// The core a join runs on, monomorphized for the layout of its layers and for its hooks.
 ///
-/// The variants differ widely in size, and the enum lives on the stack:
-/// an allocation per join would cost more than the space.
+/// The variants differ widely in size, but the enum stays on the stack,
+/// since an allocation per join would cost more than the space it saves.
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
 enum Core<'a> {
-    /// No hooks; each layer holds values of a single tag, with 32-bit payloads.
+    /// A join without hooks over [uniform layers](UniformLayer) of 32-bit payloads.
     U32(Driver<'a, UniformLayer<'a, u32>, NoHooks>),
-    /// No hooks; each layer holds values of a single tag, with 64-bit payloads.
+    /// A join without hooks over [uniform layers](UniformLayer) of 64-bit payloads.
     U64(Driver<'a, UniformLayer<'a, u64>, NoHooks>),
-    /// No hooks, over any other layout; each layer dispatches on its own.
+    /// A join without hooks over any other layers, each of which dispatches on its layout.
     Mixed(Driver<'a, AnyLayer<'a>, NoHooks>),
-    /// Hooks, over any layout.
+    /// A join with hooks, over any layers.
     Hooked(Driver<'a, AnyLayer<'a>, FullHooks<'a>>),
-    /// Some layer is provably empty, so the join has no rows.
+    /// A join without rows, since an input has no rows or a layer is provably empty.
     Empty,
 }
 
-/// Evaluates an expression on the core a join runs on,
-/// or the given stand-in for the empty join.
+/// Evaluates an expression on the core of a join,
+/// or returns the given value for the empty join.
 macro_rules! dispatch {
     ($core:expr, $name:ident => $body:expr, $empty:expr) => {
         match $core {
@@ -88,8 +88,8 @@ macro_rules! dispatch {
 /// The hooks of a join are its subtracted inputs, its filters and its bound layers.
 /// The join selects its core once, when it is built,
 /// so that the loop over the rows does not dispatch:
-/// - a join without hooks whose layers each hold values of a single tag
-///   runs over the raw payloads, and stamps the tags onto the emitted rows only,
+/// - a join without hooks whose layers are all uniform, at one payload width,
+///   works on the raw payloads, and adds the tags to the emitted rows only,
 /// - any other join without hooks dispatches per layer on the layer's layout,
 /// - only a join with hooks pays for checking them.
 #[derive(Debug)]
@@ -99,12 +99,12 @@ pub(crate) struct TrieJoin<'a> {
 }
 
 impl<'a> TrieJoin<'a> {
-    /// Creates the join of a shape,
-    /// over the blocks of each of its inputs, which the shape's input columns index,
-    /// and one trie per subtracted input of the shape, in the same order.
+    /// Creates the join of a shape.
     ///
-    /// A shape with filters or bound layers decodes values through the dictionary,
-    /// and its programs evaluate in the context.
+    /// `inputs` has the blocks of each input, indexed as the shape's input columns index them.
+    /// `subtracted` has one trie per subtracted input of the shape, in the same order.
+    /// A join with filters or bound layers decodes values through `dictionary`,
+    /// and its programs evaluate in `context`.
     ///
     /// # Panics
     ///
@@ -128,9 +128,10 @@ impl<'a> TrieJoin<'a> {
         Self::with_trusted_shape(shape, inputs, subtracted, dictionary, context, arena)
     }
 
-    /// Creates the join of a shape taken to be valid
-    /// and to fit the inputs and the dictionary it is given; see [new](Self::new).
+    /// Creates the join of a shape without validating it.
     ///
+    /// The arguments are those of [new](Self::new).
+    /// The shape must be valid and fit what the join is given.
     /// Only debug builds check the fit.
     pub(crate) fn with_trusted_shape(
         shape: JoinShape<'a>,
@@ -175,13 +176,13 @@ impl<'a> TrieJoin<'a> {
         }
     }
 
-    /// Clips a layer to the values from `low` up to `high`, excluded, in storage order;
-    /// `None` leaves a side unbounded.
+    /// Clips a layer to the values from `low` up to `high`, excluded, in storage order.
     ///
+    /// `None` leaves a side unbounded.
     /// Joins clipped to disjoint ranges yield disjoint parts of the result,
-    /// which is how a join is partitioned across workers.
+    /// which is how a join is split into [cells](crate::execution::Cells).
     /// The clip applies to every range of children the layer enters,
-    /// and must precede the drain.
+    /// and must be set before the [drain](Self::drain).
     pub(crate) fn clip_layer(
         &mut self,
         layer: usize,
@@ -194,7 +195,7 @@ impl<'a> TrieJoin<'a> {
     /// Returns the evaluation errors counted so far, by kind.
     ///
     /// A filter or bound layer whose program fails on a row drops the row,
-    /// and the row is counted here.
+    /// and the failure is counted here.
     pub(crate) fn evaluation_errors(&self) -> ErrorCounts {
         match &self.core {
             Core::Hooked(core) => core.hooks().errors(),
@@ -208,7 +209,7 @@ impl<'a> TrieJoin<'a> {
         dispatch!(&mut self.core, core => core.drain(sink), ())
     }
 
-    /// Returns whether a filter runs its integer form.
+    /// Returns whether the filter of the given index runs its integer form.
     #[cfg(test)]
     pub(crate) fn filter_uses_integer_form(&self, index: usize) -> bool {
         match &self.core {
@@ -217,7 +218,8 @@ impl<'a> TrieJoin<'a> {
         }
     }
 
-    /// Returns whether a filter is decided on storage values.
+    /// Returns whether the filter of the given index is decided by its identity form,
+    /// on storage values.
     #[cfg(test)]
     pub(crate) fn filter_uses_identity_form(&self, index: usize) -> bool {
         match &self.core {
@@ -227,8 +229,8 @@ impl<'a> TrieJoin<'a> {
     }
 }
 
-/// Returns, per input, where each of its columns is intersected, in column order:
-/// the layer, and the index of the column's cursor there.
+/// Returns, per input and column, where the column is intersected:
+/// its layer, and the index of its cursor in that layer.
 fn column_occurrences<'a>(
     shape: &JoinShape<'a>,
     input_count: usize,
@@ -254,7 +256,7 @@ fn column_occurrences<'a>(
 /// Builds, for each layer of the shape, the intersection over the input columns mapped to it.
 ///
 /// Per layer and cursor, it also builds the link to the cursor over the input's next column,
-/// if that column is mapped.
+/// if the shape maps that column.
 /// When the layer finds a value, the link restricts that cursor to the value's children.
 fn build_layers<'a>(
     shape: &JoinShape<'a>,
@@ -268,7 +270,7 @@ fn build_layers<'a>(
     let depth = shape.layers.len();
     let mut layers = BumpVec::with_capacity_in(depth, bump);
     let mut links = BumpVec::with_capacity_in(depth, bump);
-    // One buffer of input columns serves every layer.
+    // One buffer of input columns is reused for every layer.
     let mut columns = BumpVec::new_in(bump);
 
     for layer in shape.layers {

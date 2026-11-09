@@ -1,31 +1,30 @@
-//! Term ids and their lane layout.
+//! Term ids and their layout.
 //!
-//! A term id packs the [TermLane] of a term and its index,
-//! the dense number its store assigned,
-//! into one `u64`: the payload of a [Term](crate::storage::Tag::Term) storage value.
-//! The lane takes the high bits and the index the low ones,
-//! so the ids of one lane form a contiguous range.
-//! Two regimes keep the ids small:
-//! while the index fits 29 bits the id fits 32, and a column of such ids takes 32 bits a value;
-//! beyond, the lane moves to the top bits of the `u64`.
+//! A term id packs the [TermLane] of a term and the term's index in its store into one `u64`,
+//! which is the payload of a [Term](crate::storage::Tag::Term) storage value.
+//! The layout has two *regimes*, which keep the ids small:
+//! - while the index fits in 29 bits, the lane is in the three bits above it,
+//!   so the id fits in 32 bits and a column of such ids needs 32 bits per value;
+//! - beyond, the lane is in the top three bits of the `u64`.
+//!
+//! In each regime, the ids of one lane form a contiguous range.
 
-/// The number of low bits holding the index in the 32-bit regime.
+/// The number of low bits that hold the index in the 32-bit regime.
 const SHIFT_32: u32 = 29;
 
-/// The number of low bits holding the index in the 64-bit regime.
+/// The number of low bits that hold the index in the 64-bit regime.
 const SHIFT_64: u32 = 61;
 
-/// The first index that no longer fits the 32-bit regime.
+/// The smallest index that does not fit the 32-bit regime.
 const LIMIT_32: u64 = 1 << SHIFT_32;
 
-/// The lane of a term: the kind of term, whose ids form one contiguous range.
+/// The lane of a term, which is its kind of term.
 ///
-/// These are the kinds of RDF term that meet in one column of real data,
-/// which is why they share the one [Term](crate::storage::Tag::Term) tag
-/// and split its payload space into lanes.
-/// The discriminants are the lane numbers, three bits each.
-/// Zero is no lane, which keeps every id nonzero and the two regimes disjoint;
-/// two numbers are spare.
+/// Real data mixes these kinds in the same columns,
+/// so they share the [Term](crate::storage::Tag::Term) tag and split its payloads into lanes.
+/// The discriminants are the lane numbers, which take three bits.
+/// Zero is not a lane, which keeps every id nonzero and the two regimes disjoint.
+/// The numbers 6 and 7 are spare.
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum TermLane {
@@ -35,15 +34,15 @@ pub(crate) enum TermLane {
     String = 2,
     /// Language-tagged strings.
     LanguageString = 3,
-    /// Literals of unsupported datatypes.
+    /// Literals of datatypes without native support.
     Other = 4,
-    /// Labeled nulls.
+    /// Nulls, fresh or labeled.
     Null = 5,
 }
 
 impl TermLane {
     /// Returns the lane with the given number,
-    /// or `None` for a number that is no lane.
+    /// or `None` for a number that is not a lane.
     fn from_number(number: u64) -> Option<Self> {
         match number {
             1 => Some(TermLane::Iri),
@@ -56,12 +55,12 @@ impl TermLane {
     }
 }
 
-/// A term id: a lane and an index packed into one `u64`.
+/// A term id, which packs a lane and an index into one `u64`.
 ///
-/// The layout is `lane << 29 | index` while the index fits 29 bits,
+/// The layout is `lane << 29 | index` while the index fits in 29 bits,
 /// and `lane << 61 | index` beyond.
-/// The regimes cannot collide because no lane is zero:
-/// an id of the 32-bit regime is below 2³², one of the 64-bit regime at or above 2⁶¹.
+/// The regimes cannot collide because no lane is zero.
+/// An id of the 32-bit regime is below 2³², and an id of the 64-bit regime is at least 2⁶¹.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct TermId(u64);
 
@@ -76,8 +75,8 @@ impl TermId {
         self.0
     }
 
-    /// Packs a lane and an index,
-    /// choosing the regime by the magnitude of the index.
+    /// Packs a lane and an index into an id,
+    /// in the regime that the size of the index requires.
     pub(crate) fn compose(lane: TermLane, index: u64) -> Self {
         let number = lane as u64;
 
@@ -89,10 +88,10 @@ impl TermId {
         }
     }
 
-    /// Splits this id into its lane and index,
-    /// or `None` for a malformed id:
-    /// one whose lane number is no lane,
-    /// or a 64-bit encoding of an index that fits the 32-bit regime.
+    /// Splits this id into its lane and index, or returns `None` for a malformed id.
+    ///
+    /// An id is malformed if its lane number is not a lane,
+    /// or if it is in the 64-bit regime with an index that fits the 32-bit regime.
     pub(crate) fn decompose(self) -> Option<(TermLane, u64)> {
         if self.0 < 1 << 32 {
             let index = self.0 & (LIMIT_32 - 1);
@@ -123,6 +122,7 @@ mod tests {
         TermLane::Null,
     ];
 
+    /// Every lane with indexes of both regimes is decomposed back from its id.
     #[test]
     fn lanes_round_trip() {
         for lane in LANES {
@@ -134,6 +134,7 @@ mod tests {
         }
     }
 
+    /// An id fits in a `u32` exactly if its index is below [LIMIT_32].
     #[test]
     fn ids_of_the_32_bit_regime_fit_a_u32() {
         for lane in LANES {
@@ -142,10 +143,10 @@ mod tests {
         }
     }
 
+    /// Within a lane, ids are ordered like their indexes,
+    /// and the lanes of one regime do not interleave.
     #[test]
     fn lanes_are_contiguous_and_ordered() {
-        // Within a lane, id order is index order;
-        // the lanes of one regime do not interleave.
         let early = TermId::compose(TermLane::String, 0).raw();
         let late = TermId::compose(TermLane::String, LIMIT_32 - 1).raw();
 
@@ -153,6 +154,7 @@ mod tests {
         assert!(late < TermId::compose(TermLane::LanguageString, 0).raw());
     }
 
+    /// Malformed ids are not decomposed, and the smallest id of a lane is.
     #[test]
     fn malformed_ids_are_rejected() {
         // Lane number zero in both regimes, a spare lane number,

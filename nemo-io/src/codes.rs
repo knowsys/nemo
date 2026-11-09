@@ -11,7 +11,7 @@ use crate::error::IoError;
 pub use crate::error::codes::*;
 
 /// The registry of every code the IO layer reports,
-/// the physical layer's included.
+/// including the codes of the physical layer.
 pub static REGISTRY: LazyLock<Registry> = LazyLock::new(|| {
     Registry::new()
         .with_registry(&nemo_physical::diagnostics::REGISTRY)

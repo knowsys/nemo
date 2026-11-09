@@ -1,4 +1,4 @@
-//! A set of rows emptied per group.
+//! A set of rows that is emptied for every group.
 
 use std::hash::BuildHasher;
 
@@ -9,21 +9,25 @@ use crate::storage::StorageValue;
 /// A set of rows of one width, emptied at the start of every group.
 ///
 /// The rows lie back to back in one buffer,
-/// and an open-addressed table holds their offsets.
-/// Each slot also carries the number of the group that wrote it,
+/// and an open-addressing hash table stores their offsets.
+/// Each slot also stores the number of the group that wrote it,
 /// so a new group empties the set in constant time.
 #[derive(Debug)]
 pub(crate) struct RowSet {
-    /// The number of values per row;
-    /// a set of empty rows holds the empty row at most once per group.
+    /// The number of values per row.
+    ///
+    /// A set of rows of width 0 contains the empty row at most once per group.
     width: usize,
-    /// The open-addressed slots: per slot,
-    /// the number of the group that wrote it above the row's offset in `rows`.
+    /// The slots of the hash table.
+    ///
+    /// A slot stores the number of the group that wrote it in its high bits,
+    /// and the row's offset in `rows` in its low bits.
     slots: Vec<u64>,
     /// The rows of the current group, back to back.
     rows: Vec<StorageValue>,
-    /// The number of the current group;
-    /// a slot of another group is free, and 0 marks a slot never written.
+    /// The number of the current group.
+    ///
+    /// A slot of another group is free, and group 0 marks a slot that was never written.
     group: u64,
     /// The number of rows in the current group.
     len: usize,
@@ -32,15 +36,15 @@ pub(crate) struct RowSet {
 }
 
 impl RowSet {
-    /// The number of low bits of a slot holding the row's offset in `rows`.
+    /// The number of low bits of a slot that store the row's offset in `rows`.
     ///
-    /// A group reaches the limit only with 2^40 values in its rows, 16 TiB.
+    /// A group reaches this limit only with 2^40 values in its rows, which take 16 TiB.
     const OFFSET_BITS: u32 = 40;
 
     /// The mask selecting the offset of a slot.
     const OFFSET_MASK: u64 = (1 << Self::OFFSET_BITS) - 1;
 
-    /// The number of groups a slot can tell apart before the group number wraps.
+    /// The number of groups a slot can distinguish before the group number wraps.
     const GROUPS: u64 = 1 << (u64::BITS - Self::OFFSET_BITS);
 
     /// Creates an empty set of rows of the given width.
@@ -60,7 +64,9 @@ impl RowSet {
         self.width
     }
 
-    /// Starts a new group, emptying the set in constant time.
+    /// Starts a new group, which empties the set.
+    ///
+    /// This takes constant time, except when the group number wraps.
     pub(crate) fn begin_group(&mut self) {
         self.rows.clear();
         self.len = 0;
@@ -72,9 +78,9 @@ impl RowSet {
         }
     }
 
-    /// Inserts a row, and returns whether the current group did not hold it yet.
+    /// Inserts a row, and returns whether the current group did not contain it yet.
     ///
-    /// Panics if the rows of one group reach 2^40 values.
+    /// Panics if the rows of the current group already have 2^40 values or more.
     pub(crate) fn insert(&mut self, row: &[StorageValue]) -> bool {
         debug_assert_eq!(row.len(), self.width);
 
@@ -84,7 +90,7 @@ impl RowSet {
 
         let mask = self.slots.len() - 1;
 
-        // Masked into the table: truncation cannot reach past it.
+        // Only the bits under the mask are kept, so truncating the hash loses nothing.
         #[allow(clippy::cast_possible_truncation)]
         let mut slot = self.build.hash_one(row) as usize & mask;
 
@@ -114,7 +120,7 @@ impl RowSet {
         }
     }
 
-    /// Doubles the table, re-slotting the rows of the current group.
+    /// Doubles the table, and reinserts the rows of the current group.
     fn grow(&mut self) {
         let capacity = self.slots.len() * 2;
         let mut slots = vec![0; capacity];
@@ -128,7 +134,7 @@ impl RowSet {
             let offset = Self::offset(entry);
             let row = &self.rows[offset..offset + self.width];
 
-            // Masked into the table: truncation cannot reach past it.
+            // Only the bits under the mask are kept, so truncating the hash loses nothing.
             #[allow(clippy::cast_possible_truncation)]
             let mut slot = self.build.hash_one(row) as usize & mask;
             while Self::group_of(slots[slot]) == self.group {
@@ -146,7 +152,7 @@ impl RowSet {
         entry >> Self::OFFSET_BITS
     }
 
-    /// Returns the offset in `rows` a slot holds.
+    /// Returns the offset in `rows` that a slot stores.
     #[inline]
     fn offset(entry: u64) -> usize {
         // An offset indexes `rows`, so it fits a `usize`.
@@ -162,6 +168,7 @@ mod tests {
 
     use crate::testing::int;
 
+    /// A row set drops a repeated row within a group, and accepts it again in a new group.
     #[test]
     fn row_sets_dedup_within_a_group_and_reset_between() {
         let mut set = RowSet::new(2);
@@ -172,6 +179,7 @@ mod tests {
         assert!(set.insert(&[int(1), int(2)]));
     }
 
+    /// A row set keeps its rows when its table grows.
     #[test]
     fn row_sets_survive_growth() {
         let mut set = RowSet::new(1);
@@ -183,6 +191,8 @@ mod tests {
         }
     }
 
+    /// When the group number wraps, the slots of earlier groups are cleared,
+    /// rather than read as the current group's.
     #[test]
     fn row_sets_wipe_their_slots_when_the_group_number_wraps() {
         let mut set = RowSet::new(1);
@@ -192,11 +202,12 @@ mod tests {
         set.group = RowSet::GROUPS - 1;
         set.begin_group();
         assert_eq!(set.group, 1);
-        // The slot of the first group was wiped, not taken as current.
+        // The slot of the first group was cleared, not read as the current group's.
         assert!(set.insert(&[int(1)]));
         assert!(!set.insert(&[int(1)]));
     }
 
+    /// A set of rows of width 0 accepts the empty row once per group.
     #[test]
     fn zero_width_sets_admit_one_row_per_group() {
         let mut set = RowSet::new(0);

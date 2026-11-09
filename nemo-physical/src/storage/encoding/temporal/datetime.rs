@@ -1,4 +1,4 @@
-//! Payload encoding of [Tag::DateTime].
+//! The payload encoding of [Tag::DateTime].
 
 use crate::{
     storage::{
@@ -8,17 +8,17 @@ use crate::{
     value::DateTime,
 };
 
-/// The offset bits hold every offset code.
+/// A check that the offset field can store every offset code of a dateTime.
 const _: () = assert!(DateTime::OFFSET_CODE_COUNT <= instant::OFFSET_CODES);
 
-/// A dateTime encodes as its instant, then the code of its offset.
+/// A dateTime is encoded as its instant, followed by the code of its offset.
 ///
-/// The instant counts milliseconds since the Unix epoch,
-/// which the payload holds for about ±71 000 years.
-/// Payloads order by instant, then by offset, as dateTimes do.
+/// The instant is counted in milliseconds since the Unix epoch,
+/// which the payload can store for about ±71 000 years.
+/// Payloads are ordered by instant, then by offset, as dateTimes are.
 ///
-/// A dateTime finer than a millisecond or farther out
-/// has no payload and lives in the dictionary.
+/// A dateTime with a fraction finer than a millisecond, or one farther from the epoch,
+/// has no payload, and the dictionary stores it.
 impl PayloadEncoding for DateTime {
     const TAG: Tag = Tag::DateTime;
     type Encoded = Option<u64>;
@@ -43,14 +43,15 @@ mod tests {
         value::TimezoneOffset,
     };
 
-    /// The bias of the payload's count, one past its largest count.
+    /// The bias of the count field, which is one more than its largest count.
     const INSTANT_BIAS: i64 = 1 << (instant::COUNT.width() - 1);
 
-    /// A dateTime at the given milliseconds since the Unix epoch.
+    /// Returns the dateTime at the given number of milliseconds since the Unix epoch.
     fn at(millis: i64, offset: Option<TimezoneOffset>) -> DateTime {
         DateTime::from_unix_millis(millis, offset)
     }
 
+    /// Every dateTime with a payload decodes to itself, at the ends of the range too.
     #[test]
     fn encoding_round_trips() {
         let values = [
@@ -67,6 +68,7 @@ mod tests {
         }
     }
 
+    /// The order of the payloads is the term order of the dateTimes.
     #[test]
     fn order_matches_term_order() {
         let ordered = [
@@ -88,6 +90,7 @@ mod tests {
         }
     }
 
+    /// A dateTime has a payload only for whole milliseconds within the range of the count field.
     #[test]
     fn the_payload_holds_milliseconds_in_range() {
         for millis in [INSTANT_BIAS, -INSTANT_BIAS - 1, i64::MAX, i64::MIN] {
@@ -97,8 +100,8 @@ mod tests {
         assert!(at(INSTANT_BIAS - 1, zoned(0)).to_payload().is_some());
         assert!(at(-INSTANT_BIAS, zoned(0)).to_payload().is_some());
 
-        // Milliseconds within the range have a payload; a finer fraction or a
-        // farther instant does not.
+        // Whole milliseconds within the range have a payload,
+        // and a finer fraction or an instant farther out does not.
         let has_payload = |lexical: &str| {
             DateTime::from_lexical(lexical)
                 .expect(lexical)

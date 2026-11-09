@@ -7,20 +7,20 @@ use crate::value::{
     typing::{LabelBound, LabelTypes, Shape, Type, shape::StructuralShape},
 };
 
-/// The shape of maps: label, and value types under an exact key set.
+/// A written-out shape of maps: a bound on their label, and a value type for each of their keys.
+///
+/// The maps of the shape have exactly the keys of the shape.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MapShape {
-    /// What is known of the label.
+    /// What is known about the label.
     pub label: LabelBound,
-    /// The value types by key, sorted by key in term order,
-    /// the order map pairs are stored in.
+    /// The value type for each key, sorted by key in term order, as the pairs of a map are.
     pairs: Vec<(DataValue, Type)>,
 }
 
 impl MapShape {
-    /// Creates the shape of maps with the given label bound and value types by key,
-    /// sorting the pairs by key,
-    /// or `None` if two pairs share a key.
+    /// Creates the shape of maps with the given label bound and a value type for each key,
+    /// or `None` if two pairs have the same key.
     pub fn new(label: LabelBound, pairs: Vec<(DataValue, Type)>) -> Option<Self> {
         let mut pairs = pairs;
         pairs.sort_by(|(left, _), (right, _)| left.cmp(right));
@@ -30,12 +30,12 @@ impl MapShape {
         Some(Self { label, pairs })
     }
 
-    /// Returns the value types by key, sorted by key in term order.
+    /// Returns the value type for each key, sorted by key in term order.
     pub fn pairs(&self) -> &[(DataValue, Type)] {
         &self.pairs
     }
 
-    /// Returns the value type at a key, if the shape holds it.
+    /// Returns the value type for a key, or `None` if the shape has no such key.
     pub fn value_at(&self, key: ValueRef<'_>) -> Option<&Type> {
         self.pairs
             .binary_search_by(|(stored, _)| stored.as_ref().cmp(&key))
@@ -43,9 +43,9 @@ impl MapShape {
             .map(|index| &self.pairs[index].1)
     }
 
-    /// Returns whether both shapes hold exactly the same keys.
+    /// Returns whether both shapes have exactly the same keys.
     ///
-    /// Pairs are sorted by key, so this is a positional comparison.
+    /// The pairs are sorted by key, so the keys are compared position by position.
     fn same_keys(&self, other: &Self) -> bool {
         self.cmp_outline(other).is_eq()
     }

@@ -1,5 +1,5 @@
-//! The text summary of a run on the error stream, as much of it as the
-//! report level asks for.
+//! The text summary of a run, printed to the error stream in as much detail as the report
+//! level selects.
 
 use std::{collections::HashSet, time::Duration};
 
@@ -15,16 +15,18 @@ use crate::{
     run::{Run, Times},
 };
 
-/// Rules the timing report lists, the longest-running first.
+/// The number of rules in the summary's table of rule times, which lists the longest-running
+/// rules first.
 const RULES_LISTED: usize = 20;
 
 impl Run<'_> {
-    /// Prints what the run did to the error stream, as much of it as was asked for.
+    /// Prints the summary of the run to the error stream,
+    /// in as much detail as the report level selects.
     ///
-    /// The standard output stays the data's.
+    /// Standard output is left for the data.
     pub(super) fn summarize(&self, engine: &Engine, times: Times, recorder: Option<&Recorder>) {
         let level = self.arguments.reporting();
-        // The JSON document is the whole of that level's reporting.
+        // At the JSON level, the JSON document is the only report.
         if level == Report::None || level == Report::Json {
             return;
         }
@@ -61,8 +63,8 @@ impl Run<'_> {
         self.counts(engine, level);
     }
 
-    /// Prints the rules that took the most time, with what they did,
-    /// the per-rule view of the HTML report, in text.
+    /// Prints the [RULES_LISTED] applied rules that took the most time,
+    /// each with its time, applications, derived facts and dropped rows.
     fn rules(recorder: &Recorder) {
         let mut rules = recorder.rules();
         rules.retain(|rule| rule.applications > 0);
@@ -78,8 +80,8 @@ impl Run<'_> {
             "time", "applied", "derived", "dropped"
         );
         for rule in rules {
-            // One line per rule: a long rule reads truncated, and every
-            // line break within it is one space.
+            // Each rule takes one line, so its whitespace is collapsed to single spaces,
+            // and a long rule is truncated.
             let text: String = rule.text.split_whitespace().collect::<Vec<_>>().join(" ");
             let text: String = if text.chars().count() > 72 {
                 text.chars().take(69).chain("...".chars()).collect()
@@ -96,13 +98,13 @@ impl Run<'_> {
         }
     }
 
-    /// Prints how many facts each of the program's outputs holds,
-    /// or every predicate under the full report.
+    /// Prints the number of facts of each of the program's [outputs](Engine::outputs).
+    ///
+    /// It lists every predicate instead if the report level prints times,
+    /// or if the run writes or prints the extensional predicates.
     fn counts(&self, engine: &Engine, level: Report) {
         let mut predicates = engine.predicates();
         if !level.times() && !self.arguments.selects_extensional() {
-            // The program's outputs: what it declares `@output` or
-            // exports, or every derived predicate where it declares neither.
             let outputs: HashSet<String> = engine.outputs().into_iter().collect();
             predicates.retain(|info| outputs.contains(&info.name));
         }
@@ -110,8 +112,8 @@ impl Run<'_> {
             return;
         }
 
-        // IRI predicates are long, and of no fixed length: the counts
-        // line up behind whatever this run happens to hold.
+        // IRI predicates can be long, so the column of counts starts after the longest name
+        // of this run.
         let width = predicates
             .iter()
             .map(|info| info.name.len())
@@ -121,9 +123,9 @@ impl Run<'_> {
         eprintln!();
         for info in &predicates {
             let predicate = &info.name;
-            // The run has already succeeded; a predicate whose rows
-            // cannot be counted is reported, not fatal, and one the
-            // engine does not store whole has no count to show.
+            // The run has already succeeded, so a predicate whose rows cannot be counted is
+            // reported without failing the run. A predicate that the engine does not store
+            // whole has no count, and is left out.
             match engine.count(predicate) {
                 Ok(count) => eprintln!("{predicate:<width$}{:>12}", separated(count as u64)),
                 Err(problem) if problem.code() == NOT_STORED_WHOLE => {}
@@ -132,7 +134,7 @@ impl Run<'_> {
         }
     }
 
-    /// Prints the split of the reasoning time, and how much work it was.
+    /// Prints how the reasoning time splits into phases, and counts of the work done.
     fn phases(engine: &Engine) {
         let timings = engine.timings();
         let milliseconds = |nanoseconds: u64| nanoseconds as f64 / 1e6;
@@ -173,7 +175,7 @@ fn separated(count: u64) -> String {
     grouped
 }
 
-/// Returns a duration in the unit that reads best, as `412 ms` or `1.24 s`.
+/// Returns a duration as text in a unit that suits its size, as `412 ms` or `1.24 s`.
 fn readable(duration: Duration) -> String {
     let seconds = duration.as_secs_f64();
     if seconds < 0.01 {
@@ -194,6 +196,7 @@ fn readable(duration: Duration) -> String {
 mod tests {
     use super::*;
 
+    /// A count is written with a comma between groups of three digits.
     #[test]
     fn counts_group_their_digits_in_threes() {
         assert_eq!(separated(0), "0");
@@ -202,6 +205,8 @@ mod tests {
         assert_eq!(separated(1_234_567), "1,234,567");
     }
 
+    /// A duration is written in milliseconds, in seconds, or in minutes and seconds,
+    /// with fewer decimals the larger it is.
     #[test]
     fn durations_take_the_unit_that_reads_best() {
         assert_eq!(readable(Duration::from_micros(1_700)), "1.7 ms");

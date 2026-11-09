@@ -1,5 +1,8 @@
 //! Loading, extending, reloading and checking a program,
-//! and adding rows through [import_rows](crate::engine::Engine::import_rows) after a load.
+//! and adding rows to a loaded program through [import_rows](crate::engine::Engine::import_rows).
+//!
+//! A loading method first *stages* its program: it adds the program to the pipeline as the
+//! written revision, and runs the pipeline stages over it.
 
 mod reload;
 
@@ -29,8 +32,8 @@ use crate::{
     pipeline::{NameScope, RevisionId, Stages, StatementId},
 };
 
-/// A program staged in the pipeline: the written revision, as loaded,
-/// and the revision the pipeline stages made of it.
+/// A program staged in the pipeline: its written revision,
+/// and the revision that the pipeline stages made of it.
 #[derive(Debug, Clone, Copy)]
 pub(super) struct Staged {
     /// The written revision.
@@ -55,8 +58,9 @@ impl Default for EngineStages {
     }
 }
 
-/// Fails for a program that is not linked: its `@use` directives are for
-/// [link](Engine::link) to instantiate.
+/// Fails for a program that is not linked, which is a program with a `@use` directive.
+///
+/// [link](Engine::link) instantiates these directives.
 fn expect_linked(program: &Program) -> Result<(), Diagnostic> {
     let using = program
         .statements
@@ -89,9 +93,9 @@ impl Engine {
             ));
         }
 
-        // Rows added through `import_rows` before the program join it as
-        // facts, so they pass the same declaration checks and seed the
-        // type analysis like the program's own facts.
+        // The rows added through `import_rows` before the load are added to the program as
+        // facts, so that they pass the same declaration checks and seed the type analysis
+        // as the program's own facts do.
         let mut program = program;
         let imported_rows = self.unloaded_rows.len();
         program.statements.append(&mut self.unloaded_rows);
@@ -116,10 +120,11 @@ impl Engine {
 
     /// Translates a staged first program and stores its data.
     ///
-    /// The translation is prepared first, which registers and stores nothing.
-    /// If it needs remote resources not fetched yet, the load is suspended for them,
-    /// keeping the prepared translation state, and commits from it once every response is in.
-    /// The reports from `already` on are rewritten to refer to the written program.
+    /// The translation is first prepared, which registers and stores nothing.
+    /// If it needs remote resources that are not fetched yet, the load is suspended for them
+    /// with the prepared translation state, and commits from that state once every response
+    /// is in.
+    /// The reports from index `already` on are rewritten to refer to the written program.
     pub(super) fn load_staged(
         &mut self,
         mut load: SuspendedLoad,
@@ -161,8 +166,8 @@ impl Engine {
         let (state, facts) = translator.finish();
         match requests {
             Ok(missing) if !missing.is_empty() => {
-                // The preparation registered and stored nothing: the load is suspended with its
-                // state.
+                // The preparation registered and stored nothing,
+                // so the load is suspended with its state.
                 self.pipeline
                     .present_reports(already, |report| written.present(report));
                 load.prepared = Some(state);
@@ -215,8 +220,10 @@ impl Engine {
         Ok(Progress::Done)
     }
 
-    /// Loads a linked program into the pipeline as the written program,
+    /// Stages a program: adds it to the pipeline as the written revision,
     /// and runs the pipeline stages over it.
+    ///
+    /// Fails for a program that is not linked, and for a problem a stage reports.
     pub(super) fn stage(&mut self, program: Program) -> Result<Staged, Diagnostic> {
         expect_linked(&program)?;
         let written = self.pipeline.load(program);
@@ -225,7 +232,7 @@ impl Engine {
     }
 
     /// Returns the pipeline stages that changed a staged program, in order,
-    /// or none if the revision compiled holds the written statements unchanged.
+    /// or none if the compiled revision has the same statements as the written one.
     pub(super) fn rewriting_stages(&self, staged: &Staged) -> Vec<&'static str> {
         let same = |left: RevisionId, right: RevisionId| {
             let ids = |revision| self.pipeline.statements(revision).map(|(id, _)| id);
@@ -246,15 +253,17 @@ impl Engine {
         stages
     }
 
-    /// Translates a written program as its load would, reading no data and storing nothing,
+    /// Translates a written program as its load would, but reads no data and stores nothing,
     /// so that its problems are reported against the statements as written.
     ///
     /// The translation starts from the given state and registered predicates,
-    /// and `preloaded` marks the statements whose data is already stored.
-    /// The analysis of the program, and its strata, are proved over these statements.
-    /// The pipeline stages rewrite the program afterwards,
-    /// and the translation of what they made then reports only what reading finds.
-    /// A check reads the parameters without a value as inputs (see [rewrite_unvalued]).
+    /// and `preloaded` says, per statement, whether its data is already stored.
+    /// `purpose` is [Purpose::Validate] or [Purpose::Check].
+    /// The type analysis and the stratification are thus checked on the written statements.
+    /// The translation of the program that the pipeline stages made of them then reports only
+    /// what reading the data finds.
+    /// For a check, the parameters without a value are first rewritten into inputs
+    /// (see [rewrite_unvalued]).
     ///
     /// Returns the compiled program and the predicates registered for it.
     pub(super) fn translate_written(
@@ -271,7 +280,7 @@ impl Engine {
             .map(|(id, statement)| (id, statement.clone()))
             .collect();
         let statements = if purpose == Purpose::Check {
-            // The rewrite may leave statements out, which `preloaded` would no longer match.
+            // The rewrite may leave statements out, so `preloaded` would not match them.
             debug_assert!(preloaded.is_empty(), "a check preloads nothing");
             rewrite_unvalued(statements)
         } else {
@@ -285,13 +294,14 @@ impl Engine {
         Ok((compiled, scratch.into_predicates()))
     }
 
-    /// Stages an extension: checks that it is linked and changes no `@base`, prefix, or
-    /// parameter of the loaded program, and appends it to the loaded revision.
+    /// Stages an extension: checks it, and appends it to `held`, the loaded revision.
     ///
+    /// The check fails for an extension that is not linked,
+    /// or that changes the `@base`, a prefix or a parameter of the loaded program.
     /// The pipeline stages then run over the whole program without rewriting the loaded
-    /// statements, so a rule of the extension that reads a loaded import is rewritten
-    /// with the loaded program in view, and the names the stages introduce are new
-    /// to the whole program.
+    /// statements.
+    /// So a rule of the extension that reads a loaded import is rewritten with the loaded
+    /// program in view, and the names that the stages introduce are new to the whole program.
     fn stage_extension(
         &mut self,
         program: Program,
@@ -314,10 +324,12 @@ impl Engine {
         Ok(Staged { written, revision })
     }
 
-    /// Brings back the SPARQL imports without a `where` clause that the `sparql` stage removed
+    /// Restores the SPARQL imports without a `where` clause that the `sparql` stage removed
     /// from the loaded program because no rule read them, so that the extension's rules can
     /// read them.
     ///
+    /// `held` is the loaded revision, and `merged` the revision with the extension appended.
+    /// Returns the revision with the restored imports, or `merged` if there are none.
     /// The stage removes them again if they stay unread.
     #[cfg(feature = "sparql")]
     fn revive_sparql_imports(&mut self, held: RevisionId, merged: RevisionId) -> RevisionId {
@@ -347,8 +359,10 @@ impl Engine {
 
     /// Undoes what a failed or suspended translation registered.
     ///
-    /// Every table that exists now but did not before, of a predicate or the scratch table of a
-    /// bound import, is dropped, and the predicate map returns to what it was.
+    /// `predicates` and `state` are the registered predicates and the translation state from
+    /// before the translation.
+    /// Every table registered since, for a predicate or as the scratch table of a bound import,
+    /// is dropped, and the registered predicates are reset to `predicates`.
     fn forget_registrations(
         &mut self,
         predicates: &HashMap<String, Registered>,
@@ -401,8 +415,9 @@ impl Engine {
         self.extend_staged(load, already)
     }
 
-    /// Translates the written program of a staged extension as [extend_staged](Self::extend_staged)
-    /// translates the program the stages made of it, reading no data and storing nothing.
+    /// Translates the written program of a staged extension as
+    /// [extend_staged](Self::extend_staged) translates the program that the stages made of it,
+    /// but reads no data and stores nothing.
     fn translate_written_extension(&mut self, staged: &Staged) -> Result<(), Diagnostic> {
         let held_written = self
             .written
@@ -426,11 +441,11 @@ impl Engine {
 
     /// Translates a staged extension and stores its data.
     ///
-    /// The translation is prepared first, which registers and stores nothing,
+    /// The translation is first prepared, which registers and stores nothing,
     /// so the loaded program stays as it is while the extension is suspended for remote
-    /// resources not fetched yet. It commits from the prepared translation state once every
-    /// response is in.
-    /// The reports from `already` on are rewritten to refer to the written program.
+    /// resources that are not fetched yet.
+    /// It commits from the prepared translation state once every response is in.
+    /// The reports from index `already` on are rewritten to refer to the written program.
     pub(super) fn extend_staged(
         &mut self,
         mut load: SuspendedLoad,
@@ -452,9 +467,9 @@ impl Engine {
         preloaded.resize(statements.len(), false);
         let stages = self.rewriting_stages(&load.staged);
 
-        // The state derived from statements is rebuilt from the full list.
-        // The state derived from data keeps what skipped facts and unread
-        // imports cannot derive again.
+        // The part of the state that statements determine is rebuilt from the full list of
+        // statements. The part that stored data determines is kept,
+        // since the facts and imports that are not read again cannot rebuild it.
         let state = match load.prepared.take() {
             Some(state) => state,
             None => {
@@ -527,7 +542,8 @@ impl Engine {
         Ok(Progress::Done)
     }
 
-    /// Stores an extension's facts and imports as one fresh extensional block.
+    /// Stores the rows of an extension's facts and imports at one new revision,
+    /// as an extensional block of each table that gains rows.
     fn store_extension(&mut self, facts: HashMap<TableId, RowBuffer>) {
         let revision = Revision(self.step);
         let mut grew = false;
@@ -548,15 +564,15 @@ impl Engine {
         }
     }
 
-    /// Carries each old rule's semi-naive progress into the extended program.
+    /// Copies the semi-naive progress of each loaded rule into the extended program.
     ///
-    /// The old statements are a prefix of the merged list, so the old rules keep their indices
-    /// and the step of their last application,
+    /// The loaded statements come first in the merged program,
+    /// so the loaded rules keep their indices and the step of their last application,
     /// and semi-naive evaluation continues where it left off.
     /// A new rule may add facts to its head predicates for the first time.
     /// Their tables are conservatively marked as gaining input facts,
-    /// so derived facts that depend on them through negation or aggregation are dropped and
-    /// derived again.
+    /// so the derived facts that depend on them through negation or aggregation are dropped
+    /// and derived again.
     fn adopt_extension(&mut self, compiled: &mut CompiledProgram, old: &CompiledProgram) {
         for (rule, previous) in compiled.rules.iter_mut().zip(&old.rules) {
             rule.last_applied = previous.last_applied;
@@ -569,10 +585,10 @@ impl Engine {
     }
 
     /// Checks that an extension changes no `@base`, prefix, or parameter of the loaded
-    /// program, which would change the meaning of statements already loaded or values
-    /// already stored.
+    /// program, which would change the meaning of the loaded statements or the stored values.
     ///
-    /// Returns an error for the first such directive.
+    /// `addition` is the revision that contains the extension alone.
+    /// Returns an error for the first directive that would change one.
     fn check_extension(&self, addition: RevisionId) -> Result<(), Diagnostic> {
         for (_, statement) in self.pipeline.statements(addition) {
             let Statement::Directive(directive) = statement else {
@@ -622,10 +638,11 @@ impl Engine {
     /// Adds rows given through [import_rows](Engine::import_rows) to a predicate:
     /// as facts of the program before a load, and as a new revision after one.
     ///
-    /// After a load, the program was analyzed with the types its columns could hold.
-    /// Rows within the target's inferred types keep that analysis;
-    /// rows that widen them are kept only if the whole program, analyzed again,
-    /// still keeps every declaration, and the call is refused otherwise.
+    /// The loaded program was analyzed with the types that its columns could hold.
+    /// If the rows stay within the inferred types of the predicate's columns,
+    /// that analysis still holds.
+    /// If they widen these types, the whole program is analyzed again,
+    /// and the rows are added only if the program still keeps every declaration.
     pub(in crate::engine) fn admit_rows(
         &mut self,
         predicate: &str,
@@ -644,8 +661,8 @@ impl Engine {
         let (table, _) = self.written_predicate(predicate).map_err(|unknown| {
             unknown.with_hint("first `extend()` the program with statements that use it")
         })?;
-        // Each row is checked as a fact of the program is (declarations,
-        // the element types `@type` declares, encoding), against the kept
+        // Each row is checked like a fact of the program (declarations,
+        // the element types that `@type` declares, encoding), against the kept
         // translation state. A refused call leaves the seeds as they were.
         let seeds_before = self.translation.seeds.get(&table).cloned();
         let state = std::mem::take(&mut self.translation);
@@ -716,8 +733,10 @@ impl Engine {
         Ok(())
     }
 
-    /// Returns whether everything a table's seeds allow lies within its inferred column types,
+    /// Returns whether a table's seeds lie within its inferred column types,
     /// so that the analysis the program was loaded with still holds.
+    ///
+    /// The seeds are the column types that the table's input rows give it.
     fn seeds_within_inferred(&self, table: TableId) -> bool {
         let (Some(program), Some(seeds)) = (&self.program, self.translation.seeds.get(&table))
         else {
@@ -731,7 +750,7 @@ impl Engine {
         })
     }
 
-    /// Puts back a table's seeds as they were before a refused call.
+    /// Restores a table's seeds to what they were before a refused call.
     fn restore_seeds(&mut self, table: TableId, seeds: Option<Vec<Type>>) {
         match seeds {
             Some(seeds) => {
@@ -743,9 +762,10 @@ impl Engine {
         }
     }
 
-    /// Analyzes the loaded program again over the kept translation state,
-    /// returning the inferred column types,
-    /// or the first error of a declaration the program is no longer shown to keep.
+    /// Analyzes the loaded program again over the kept translation state.
+    ///
+    /// Returns the inferred column types,
+    /// or the error for the first declaration that the analysis cannot show the program keeps.
     fn reanalyze(&self) -> Result<HashMap<TableId, Vec<Type>>, Diagnostic> {
         let program = self
             .program
@@ -787,8 +807,8 @@ impl Engine {
         }
     }
 
-    /// Returns a row given through [import_rows](crate::engine::Engine::import_rows) as fact
-    /// terms, or an error for a row holding a null.
+    /// Returns a row given through [import_rows](crate::engine::Engine::import_rows) as the
+    /// terms of a fact, or an error for a row that contains a null.
     fn row_terms(predicate: &str, row: &[DataValue]) -> Result<Vec<Term>, Diagnostic> {
         let terms: Option<Vec<Term>> = row.iter().map(Term::value).collect();
         terms.ok_or_else(|| {
@@ -799,7 +819,8 @@ impl Engine {
         })
     }
 
-    /// Carries a program text through registration, parsing, linking, and a loading method.
+    /// Registers, parses and links a program text, and passes the result to `call`
+    /// (see [ingest](Engine::ingest)).
     pub(in crate::engine) fn ingest_text(
         &mut self,
         name: impl Into<String>,
@@ -821,7 +842,8 @@ impl Engine {
             .map_err(|failed| vec![failed])
     }
 
-    /// Carries a program text through registration, parsing, linking, and a check.
+    /// Registers, parses, links and checks a program text
+    /// (see [check_source](Engine::check_source)).
     pub(in crate::engine) fn check_text(
         &mut self,
         name: impl Into<String>,
@@ -849,12 +871,12 @@ impl Engine {
         CheckReport::new(diagnostics, types)
     }
 
-    /// Runs the check: the pipeline stages, whose own problems it reports,
-    /// and a translation of the program as written into scratch stores,
-    /// returning the types its analysis inferred.
+    /// Runs a check: stages the program,
+    /// and translates the written program into scratch stores.
     ///
-    /// Errors that end a check early are returned as `Err`:
-    /// the engine holds a program, or the program is not linked.
+    /// Returns the types that the translation's type analysis inferred.
+    /// Fails for a problem that ends the check early:
+    /// the engine holds a program, the program is not linked, or a pipeline stage fails.
     pub(in crate::engine) fn check_inner(
         &mut self,
         program: Program,

@@ -4,13 +4,19 @@ use std::{fmt, sync::Arc};
 
 use crate::value::reference::write_quoted;
 
-/// An owned [language-tagged string](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string),
-/// a text with a [BCP 47](https://www.rfc-editor.org/rfc/rfc5646) language tag:
-/// the literals of `rdf:langString`.
+/// An owned
+/// [language-tagged string](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string),
+/// a text with a [BCP 47](https://www.rfc-editor.org/rfc/rfc5646) language tag.
+///
+/// These are the literals of `rdf:langString`.
 /// Its borrowed view is [LanguageStringRef].
 ///
-/// Tags are case-insensitive and kept lowercase:
-/// `"a"@EN` and `"a"@en` are one value.
+/// Tags are case-insensitive and are stored in lowercase,
+/// so `"a"@EN` and `"a"@en` are the same value.
+///
+/// A tag is *well-formed* if it consists of subtags separated by single hyphens.
+/// Each subtag has one to eight ASCII letters or digits, and the first one has only letters.
+/// This is looser than the grammar of BCP 47.
 #[derive(Clone)]
 pub struct LanguageString(Arc<Parts>);
 
@@ -23,10 +29,8 @@ struct Parts {
 }
 
 impl LanguageString {
-    /// Creates a language-tagged string, lowercasing the tag,
-    /// or `None` for a tag that is not well-formed:
-    /// subtags of one to eight ASCII letters or digits separated by single hyphens,
-    /// the first of letters only.
+    /// Creates a language-tagged string with the tag in lowercase,
+    /// or `None` for a tag that is not well-formed.
     pub fn new(text: impl Into<Box<str>>, language: &str) -> Option<Self> {
         if !well_formed_tag(language) {
             return None;
@@ -96,20 +100,22 @@ impl fmt::Debug for LanguageString {
 }
 
 impl fmt::Display for LanguageString {
-    /// Writes the term syntax `"text"@tag`,
-    /// the text quoted with `\` and `"` escaped.
+    /// Writes the value in term syntax as `"text"@tag`,
+    /// with `\`, `"` and line breaks escaped in the text.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.as_ref())
     }
 }
 
-/// A borrowed [language-tagged string](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string),
-/// a text with a [BCP 47](https://www.rfc-editor.org/rfc/rfc5646) language tag:
-/// the literals of `rdf:langString`.
-/// Its owned form is [LanguageString].
+/// A borrowed
+/// [language-tagged string](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string),
+/// a text with a [BCP 47](https://www.rfc-editor.org/rfc/rfc5646) language tag.
 ///
-/// Tags are case-insensitive and kept lowercase:
-/// `"a"@EN` and `"a"@en` are one value.
+/// These are the literals of `rdf:langString`.
+/// Its owned form is [LanguageString], which also says which tags are well-formed.
+///
+/// Tags are case-insensitive and are stored in lowercase,
+/// so `"a"@EN` and `"a"@en` are the same value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct LanguageStringRef<'a> {
     /// The text content.
@@ -119,12 +125,11 @@ pub struct LanguageStringRef<'a> {
 }
 
 impl<'a> LanguageStringRef<'a> {
-    /// Creates a view over a text and a tag in canonical form,
-    /// or `None` for a tag that is not well-formed (see [LanguageString::new])
-    /// or not lowercase.
+    /// Creates a view of a text and a language tag,
+    /// or `None` for a tag that is not [well-formed](LanguageString) or not in lowercase.
     ///
-    /// A view cannot lowercase without copying.
-    /// [LanguageString::new] takes tags of any case.
+    /// A view cannot lowercase the tag without copying it.
+    /// [LanguageString::new] accepts tags in any case.
     pub fn new(text: &'a str, language: &'a str) -> Option<Self> {
         let canonical =
             well_formed_tag(language) && !language.bytes().any(|byte| byte.is_ascii_uppercase());
@@ -132,7 +137,7 @@ impl<'a> LanguageStringRef<'a> {
         canonical.then_some(Self { text, language })
     }
 
-    /// Creates a view over a text and a tag known to be canonical.
+    /// Creates a view of a text and a language tag that is well-formed and in lowercase.
     pub(crate) fn from_parts(text: &'a str, language: &'a str) -> Self {
         debug_assert!(
             Self::new(text, language).is_some(),
@@ -152,7 +157,7 @@ impl<'a> LanguageStringRef<'a> {
         self.language
     }
 
-    /// Clones the viewed value into an owned [LanguageString].
+    /// Returns an owned copy of the value.
     pub fn to_owned(self) -> LanguageString {
         LanguageString(Arc::new(Parts {
             text: self.text.into(),
@@ -162,17 +167,15 @@ impl<'a> LanguageStringRef<'a> {
 }
 
 impl fmt::Display for LanguageStringRef<'_> {
-    /// Writes the term syntax `"text"@tag`,
-    /// the text quoted with `\` and `"` escaped.
+    /// Writes the value in term syntax as `"text"@tag`,
+    /// with `\`, `"` and line breaks escaped in the text.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write_quoted(f, self.text)?;
         write!(f, "@{}", self.language)
     }
 }
 
-/// Returns whether a language tag is well-formed enough to be a term:
-/// subtags of one to eight ASCII letters or digits separated by single hyphens,
-/// the first of letters only.
+/// Returns whether a language tag is well-formed, as [LanguageString] defines it.
 fn well_formed_tag(tag: &str) -> bool {
     let mut subtags = tag.split('-');
     let Some(primary) = subtags.next() else {
@@ -192,6 +195,7 @@ fn well_formed_tag(tag: &str) -> bool {
 mod tests {
     use super::*;
 
+    /// A tag is stored in lowercase, and a tag that is not well-formed is rejected.
     #[test]
     fn tags_are_lowercased_and_checked() {
         let upper = LanguageString::new("hello", "EN-US").expect("tag is well-formed");
@@ -216,6 +220,7 @@ mod tests {
         }
     }
 
+    /// A view accepts only well-formed tags in lowercase.
     #[test]
     fn views_take_canonical_tags_only() {
         assert!(LanguageStringRef::new("hello", "en-us").is_some());
@@ -223,6 +228,7 @@ mod tests {
         assert_eq!(LanguageStringRef::new("hello", "en--us"), None);
     }
 
+    /// A view and an owned value of the same text and tag are equal and are written alike.
     #[test]
     fn views_agree_with_their_owners() {
         let owned = LanguageString::new("say \"hi\"", "en").expect("tag is well-formed");

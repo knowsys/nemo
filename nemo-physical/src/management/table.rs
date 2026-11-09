@@ -1,4 +1,4 @@
-//! Tables: the rows of one table, held by subtables, each in one or more arrangements.
+//! Tables, which keep their rows in subtables.
 
 use std::ops::Range;
 
@@ -24,14 +24,14 @@ impl TableId {
     }
 }
 
-/// A table: its rows, held by subtables in ascending order of their blocks.
+/// A table, whose rows are stored in subtables.
 #[derive(Debug)]
 pub(super) struct Table {
     /// The table's name, for reports and diagnostics.
     pub(super) name: String,
     /// The number of columns.
     pub(super) arity: usize,
-    /// The subtables, whose blocks are disjoint and ascend.
+    /// The subtables, whose blocks are disjoint and in ascending order.
     subtables: Vec<Subtable>,
 }
 
@@ -45,13 +45,14 @@ impl Table {
         }
     }
 
-    /// Stores a trie, its columns laid out in `order`, as a new subtable at the given revision,
+    /// Stores a trie as a new subtable at the given revision,
     /// and returns the number of rows stored.
     ///
+    /// `order` is the column order of the trie.
     /// An empty trie stores nothing.
-    /// Panics if the order or the trie does not match the table's arity,
-    /// or if a nonempty trie's revision does not follow the blocks of the table's subtables,
-    /// or its order differs from theirs.
+    /// Panics if the order or the trie does not match the table's arity.
+    /// For a nonempty trie, it also panics if the revision is below the end of the last block,
+    /// or if the order differs from the order of the earlier batches.
     pub(super) fn add(&mut self, revision: Revision, order: ColumnOrder, trie: Trie) -> usize {
         assert!(
             order.arity() == self.arity && trie.arity() == self.arity,
@@ -78,7 +79,7 @@ impl Table {
     }
 
     /// Builds the arrangements in the given column order
-    /// that the subtables within a range lack, and returns the work that took.
+    /// that the subtables within a range lack, and returns the work done.
     ///
     /// Panics if the order does not match the table's arity,
     /// or if the range does not align with the table's blocks.
@@ -106,7 +107,7 @@ impl Table {
         work
     }
 
-    /// Returns the number of distinct column orders the subtables store.
+    /// Returns the number of distinct column orders that the subtables store.
     pub(super) fn stored_orders(&self) -> usize {
         let mut orders: Vec<&ColumnOrder> = Vec::new();
         for order in self.subtables.iter().flat_map(Subtable::orders) {
@@ -118,7 +119,7 @@ impl Table {
         orders.len()
     }
 
-    /// Appends the tries of the subtables within a range, arranged in the given order, to a list.
+    /// Appends to `into` the tries in the given order of the subtables within a range.
     ///
     /// Panics if the range does not align with the table's blocks,
     /// or if a subtable within it does not store the order.
@@ -135,7 +136,7 @@ impl Table {
         }));
     }
 
-    /// Returns the number of rows the subtables within a range hold.
+    /// Returns the number of rows of the subtables within a range.
     ///
     /// Panics if the range does not align with the table's blocks.
     pub(super) fn row_count(&self, range: Range<Revision>) -> usize {
@@ -145,9 +146,10 @@ impl Table {
             .sum()
     }
 
-    /// Returns the earliest revision the row was added at, if the table holds it.
+    /// Returns the earliest revision at which the row was added,
+    /// or `None` if the table does not contain it.
     ///
-    /// The row's columns are in the order the table's batches arrive in.
+    /// The row's columns must be in the order in which the table's batches arrive.
     /// Panics if the row does not match the table's arity.
     pub(super) fn revision_of(&self, row: &[StorageValue]) -> Option<Revision> {
         assert_eq!(
@@ -174,16 +176,19 @@ impl Table {
             .map_or(revision, |subtable| subtable.range.start)
     }
 
-    /// Returns the revision of the latest batch the subtables hold,
-    /// which is the last revision of the last block.
+    /// Returns the revision of the latest batch in the subtables,
+    /// which is the last revision of the last block,
+    /// or `None` if there are no subtables.
     pub(super) fn last_added(&self) -> Option<Revision> {
         self.subtables
             .last()
             .map(|subtable| Revision(subtable.range.end.0 - 1))
     }
 
-    /// Returns the next merge the policy proposes,
-    /// within the compartments the walls divide the table into, the newest first.
+    /// Returns the next merge that the policy proposes, or `None` if it proposes none.
+    ///
+    /// The policy plans each compartment between the walls on its own,
+    /// the newest compartment first.
     pub(super) fn plan_consolidation(
         &self,
         walls: &[Revision],
@@ -202,7 +207,7 @@ impl Table {
     /// Merges the subtables within a range into one,
     /// and returns the number of rows it holds.
     ///
-    /// Panics if the range does not align with the table's blocks, or holds no subtable.
+    /// Panics if the range does not align with the table's blocks, or contains no subtable.
     pub(super) fn consolidate(&mut self, range: Range<Revision>) -> usize {
         let within = self.within(&range);
         let merged = Subtable::merge(&self.subtables[within.clone()]);
@@ -214,7 +219,7 @@ impl Table {
     }
 
     /// Drops the subtables within a range,
-    /// and returns the number of rows they held.
+    /// and returns the number of rows that they contained.
     ///
     /// Panics if the range does not align with the table's blocks.
     pub(super) fn drop_rows(&mut self, range: Range<Revision>) -> usize {
@@ -311,6 +316,8 @@ mod tests {
         merged
     }
 
+    /// An order is built once, from the stored arrangement,
+    /// and a read in an order that was not built panics.
     #[test]
     fn orders_are_built_from_the_stored_copy() {
         let mut table = table(2);
@@ -352,6 +359,8 @@ mod tests {
         assert_eq!(table.stored_orders(), 2);
     }
 
+    /// An order that shares a prefix with the stored one is built sorted,
+    /// although only the groups of that prefix are sorted.
     #[test]
     fn an_order_sharing_a_prefix_sorts_within_its_groups() {
         let mut table = table(3);
@@ -371,6 +380,8 @@ mod tests {
         );
     }
 
+    /// A range that splits a block panics,
+    /// and the aligned floor of a revision inside a block is the block's start.
     #[test]
     fn ranges_must_align_with_blocks() {
         let mut table = table(1);
@@ -379,7 +390,7 @@ mod tests {
         table.add(Revision(2), order.clone(), int_trie(1, &[&[2]]));
         table.consolidate(Revision(1)..Revision(3));
 
-        // The merged block spans revisions 1 and 2; a range may not split it.
+        // The merged block spans revisions 1 and 2, and a range may not split it.
         assert_panics("align", || table.row_count(Revision(0)..Revision(2)));
         assert_panics("align", || table.row_count(Revision(2)..Revision(2)));
         assert_eq!(table.row_count(Revision(3)..Revision(3)), 0);
@@ -388,11 +399,13 @@ mod tests {
             vec![vec![1], vec![2]]
         );
 
-        // A revision inside the block reads from the block's start.
+        // The aligned floor of a revision inside the block is the block's start.
         assert_eq!(table.aligned_floor(Revision(2)), Revision(1));
         assert_eq!(table.aligned_floor(Revision(3)), Revision(3));
     }
 
+    /// A merge keeps every order that all merged subtables store,
+    /// and keeps a row of several subtables once.
     #[test]
     fn consolidation_merges_every_shared_order() {
         let mut table = table(2);
@@ -415,6 +428,8 @@ mod tests {
         );
     }
 
+    /// The revision of the last batch ignores an empty batch,
+    /// stays the same through a merge, and changes with a drop.
     #[test]
     fn the_last_batch_survives_merges_and_follows_drops() {
         let mut table = table(1);
@@ -437,6 +452,8 @@ mod tests {
         );
     }
 
+    /// [Whole](MergePolicy::Whole) merges each compartment into one subtable,
+    /// the newest compartment first.
     #[test]
     fn the_whole_merge_leaves_one_subtable_per_compartment() {
         let mut table = table(1);
@@ -455,6 +472,8 @@ mod tests {
         );
     }
 
+    /// [Doubling](MergePolicy::Doubling) takes older subtables into the merge
+    /// while they have no more rows than the merge has gathered, within the walls.
     #[test]
     fn the_doubling_schedule_cascades_within_walls() {
         let mut table = table(1);
@@ -465,20 +484,19 @@ mod tests {
             table.add(Revision(index as u64 + 1), order.clone(), int_trie(1, rows));
         }
 
-        // Without walls the cascade swallows everything:
-        // 2 <= 2, then 4 <= 4.
+        // Without walls, every block is taken: 2 rows against 2, then 4 rows against 4.
         assert_eq!(
             table.plan_consolidation(&[], MergePolicy::Doubling),
             Some(Revision(1)..Revision(4))
         );
-        // A wall at revision 2 keeps the first block apart;
-        // the compartment behind it merges.
+        // A wall at revision 2 keeps the first block apart,
+        // and the compartment after the wall is merged.
         assert_eq!(
             table.plan_consolidation(&[Revision(2)], MergePolicy::Doubling),
             Some(Revision(2)..Revision(4))
         );
-        // A wall at revision 3 leaves compartments of 4 + 2 and 2 rows:
-        // neither merges.
+        // A wall at revision 3 leaves a compartment of 4 + 2 rows and one of 2 rows.
+        // Neither is merged, since the 4 rows are more than 2.
         assert_eq!(
             table.plan_consolidation(&[Revision(3)], MergePolicy::Doubling),
             None
@@ -491,6 +509,9 @@ mod tests {
         );
     }
 
+    /// [TwoLevel](MergePolicy::TwoLevel) merges new batches into the suffix
+    /// until the rewritten rows reach the leader's rows, and then merges the suffix into the
+    /// leader, so that reads stay at most two subtables wide.
     #[test]
     fn the_two_level_schedule_keeps_reads_two_blocks_wide() {
         let mut table = table(1);
@@ -501,20 +522,20 @@ mod tests {
             table.add(Revision(revision), order.clone(), int_trie(1, rows));
         };
 
-        // A lone block proposes nothing.
+        // A single block gives no proposal.
         add(
             &mut table,
             &[&[1], &[2], &[3], &[4], &[5], &[6], &[7], &[8], &[9]],
         );
         assert_eq!(table.plan_consolidation(&[], MergePolicy::TwoLevel), None);
 
-        // A single block behind the leader has nothing to merge with.
+        // A single block after the leader has nothing to merge with.
         add(&mut table, &[&[10]]);
         assert_eq!(table.plan_consolidation(&[], MergePolicy::TwoLevel), None);
 
-        // Every further batch merges the suffix,
-        // and each merge adds the rows it wrote to the suffix's account: 2 rows, then 3.
-        // The leader stays out of it while the account is below its 9 rows.
+        // Every further batch is merged into the suffix,
+        // and each merge adds the rows it wrote to the suffix's rewritten rows: 2, then 3.
+        // The leader is left alone while these are fewer than its 9 rows.
         for batch in [&[11], &[12]] {
             add(&mut table, &[batch]);
             let merges = consolidate_fully(&mut table, &[], MergePolicy::TwoLevel);
@@ -523,8 +544,8 @@ mod tests {
             assert_eq!(width(&table, &order), 2, "reads stay two blocks wide");
         }
 
-        // The next batch takes the account of 5 rows plus the merge it owes, 4 more,
-        // past the leader's 9 rows: the suffix folds into the leader.
+        // After the next batch, the 5 rewritten rows and the 4 rows of the suffix's pending merge
+        // reach the leader's 9 rows, so the suffix is merged into the leader.
         // One proposal does it, so the suffix's rows are written once.
         add(&mut table, &[&[13]]);
         assert_eq!(
@@ -534,7 +555,8 @@ mod tests {
         assert_eq!(table.row_count(Revision(0)..Revision(100)), 13);
         assert_eq!(width(&table, &order), 1);
 
-        // Walls keep the schedule apart like any other.
+        // With a wall before the two new batches, they form a compartment of their own,
+        // whose suffix of one subtable has nothing to merge with.
         add(&mut table, &[&[20]]);
         add(&mut table, &[&[21]]);
         assert_eq!(
@@ -543,6 +565,8 @@ mod tests {
         );
     }
 
+    /// After [TwoLevel](MergePolicy::TwoLevel) merges a suffix into its leader behind a wall,
+    /// the compartment counts rewritten rows anew.
     #[test]
     fn a_fold_behind_a_wall_settles_its_compartments_account() {
         let mut table = table(1);
@@ -552,12 +576,13 @@ mod tests {
             revision += 1;
             table.add(Revision(revision), order.clone(), int_trie(1, rows));
         };
-        // A block that a wall keeps apart,
-        // so that the compartment behind it leads from the second block.
+        // A wall keeps the first block apart,
+        // so the compartment after the wall has the second block as its leader.
         let walls = [Revision(2)];
         add(&mut table, &[&[0]]);
 
-        // The same cycle as without the wall: suffix merges, then the fold.
+        // The same cycle as without the wall:
+        // merges into the suffix, and then the merge into the leader.
         add(
             &mut table,
             &[&[1], &[2], &[3], &[4], &[5], &[6], &[7], &[8], &[9]],
@@ -572,8 +597,8 @@ mod tests {
             vec![Revision(2)..Revision(7)]
         );
 
-        // The fold settled the compartment's account:
-        // the next batches merge the suffix alone, and the walled block stays apart.
+        // After that merge, the new suffix starts without rewritten rows:
+        // the next batches only merge the suffix, and the first block stays apart.
         add(&mut table, &[&[14]]);
         assert_eq!(
             consolidate_fully(&mut table, &walls, MergePolicy::TwoLevel),

@@ -1,11 +1,11 @@
-//! Nondeterministic values: randomness and UUIDs.
+//! Random numbers and UUIDs.
 //!
-//! Every evaluation draws fresh from the thread's generator of `rand`,
-//! which the platform's entropy seeds, in the browser JavaScript's crypto API,
-//! so a program with one of these instructions
-//! is [nondeterministic](crate::function::StackProgram::is_nondeterministic).
-//! The run's instant is no draw: it comes from the
-//! [context](crate::function::EvaluationContext).
+//! Every evaluation draws new random bits from the thread-local generator of the `rand` crate,
+//! which is seeded from the platform's entropy.
+//! A program with one of these operations is therefore
+//! [nondeterministic](crate::function::StackProgram::is_nondeterministic).
+//! The instant of [Now](crate::function::OpCode::Now) is not random:
+//! it comes from the [evaluation context](crate::function::EvaluationContext).
 
 use crate::{function::StackValue, value::DataValue};
 
@@ -15,11 +15,11 @@ pub(crate) fn random() -> StackValue<'static> {
     DataValue::double(rand::random::<f64>()).into()
 }
 
-/// Returns a fresh UUID of version 4, 122 random bits, as text.
+/// Returns a fresh UUID of version 4, with 122 random bits, as text.
 fn uuid_text() -> String {
     let mut bits = rand::random::<u128>();
 
-    // The version nibble and the two variant bits of RFC 9562.
+    // Set the version nibble and the two variant bits of RFC 9562.
     bits = (bits & !(0xf << 76)) | (0x4 << 76);
     bits = (bits & !(0x3 << 62)) | (0x2 << 62);
     let hex = format!("{bits:032x}");
@@ -50,6 +50,8 @@ pub(crate) fn uuid_string() -> StackValue<'static> {
 mod tests {
     use super::*;
 
+    /// A UUID has the groups, the version and the variant of version 4,
+    /// and two UUIDs differ.
     #[test]
     fn uuids_have_the_version_4_layout() {
         for _ in 0..8 {

@@ -1,6 +1,8 @@
-//! Stack programs: compiled expressions and their interpreter,
-//! with the [values](StackValue) on the stack, the [context](EvaluationContext) of a run,
-//! and the [bindings](StackProgram::binding) a program can express.
+//! Stack programs and their interpreter.
+//!
+//! The module also defines the [values](StackValue) on the stack,
+//! the [context](EvaluationContext) that a program is evaluated in,
+//! and the [bindings](StackProgram::binding) that a program can express.
 
 mod binding;
 mod context;
@@ -21,35 +23,36 @@ use crate::{
     value::{DataValue, EvaluationError, LabelTypes, Type, ValueRef},
 };
 
-/// A compiled expression:
-/// a flat sequence of [instructions](OpCode) evaluated over a value stack,
-/// reading a row of input values and leaving one result.
+/// A compiled expression, a flat sequence of [instructions](OpCode) that work on a stack of values.
 ///
-/// Construction validates the stack and the index bounds,
-/// so evaluation never checks.
+/// A program reads one row of input values and its own constants, and leaves one result.
+/// [new](Self::new) checks that the instructions use the stack correctly
+/// and refer only to constants and inputs that exist, so that evaluation needs no checks.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StackProgram {
     /// The instructions, in evaluation order.
     operations: Vec<OpCode>,
-    /// The constants the instructions reference.
+    /// The constants that the [Constant](OpCode::Constant) instructions refer to.
     constants: Vec<DataValue>,
-    /// The number of row inputs the program reads.
+    /// The number of inputs that the program reads from a row.
     inputs: usize,
-    /// The largest stack depth evaluation reaches.
+    /// The largest stack depth that an evaluation reaches.
     stack_bound: usize,
 }
 
 impl StackProgram {
-    /// The most constants, and the most inputs, one program may read:
-    /// an instruction addresses them by a 16-bit index.
+    /// The largest number of constants, and of inputs, that one program can refer to.
+    ///
+    /// An instruction refers to a constant or an input by a 16-bit index.
     pub const OPERAND_LIMIT: usize = u16::MAX as usize + 1;
 
-    /// Creates a validated program.
+    /// Creates a program from its instructions, its constants and its number of inputs.
     ///
     /// # Panics
     ///
-    /// Panics if the instructions underflow the stack or leave more or less than one result,
-    /// or if they reference a constant or an input beyond the given ones.
+    /// Panics if an instruction pops more values than the stack has,
+    /// if the instructions do not leave exactly one result,
+    /// or if they refer to a constant or an input that does not exist.
     pub fn new(operations: Vec<OpCode>, constants: Vec<DataValue>, inputs: usize) -> Self {
         let mut depth = 0usize;
         let mut stack_bound = 0;
@@ -81,43 +84,44 @@ impl StackProgram {
         }
     }
 
-    /// Returns the number of row inputs the program reads.
+    /// Returns the number of inputs that the program reads from a row.
     pub fn inputs(&self) -> usize {
         self.inputs
     }
 
-    /// Returns whether the program's result is not fixed by its inputs:
-    /// it draws randomness or a UUID, or reads the run's instant.
+    /// Returns whether the program's result is not determined by its inputs.
     ///
-    /// Its results can then neither be memoized nor folded into constants.
+    /// This is the case if the program draws a random number or a UUID,
+    /// or reads the instant of its [context](EvaluationContext).
+    /// The results of such a program can neither be memoized nor folded into constants.
     pub fn is_nondeterministic(&self) -> bool {
         self.operations
             .iter()
             .any(|operation| operation.is_nondeterministic())
     }
 
-    /// Returns the largest stack depth evaluation reaches:
-    /// the capacity to give the caller-owned stack.
+    /// Returns the largest stack depth that an evaluation reaches.
+    ///
+    /// A stack of this capacity is never reallocated by [evaluate](Self::evaluate).
     pub fn stack_bound(&self) -> usize {
         self.stack_bound
     }
 
-    /// Returns the constant at an index, as a stack value borrowing it.
+    /// Returns the constant with the given index, as a stack value that borrows it.
     fn constant(&self, index: u16) -> StackValue<'_> {
         self.constants[usize::from(index)].as_ref().into()
     }
 
-    /// Evaluates the program over one row of inputs,
-    /// which must be as many as [inputs](Self::inputs),
-    /// in the [context](EvaluationContext) of the run.
+    /// Evaluates the program on one row of inputs, and returns its result.
     ///
-    /// The result may be an [error value](StackValue::Error):
-    /// the caller decides whether that drops the row, and counts it.
-    /// The stack is cleared and reused.
+    /// `inputs` must have as many values as [inputs](Self::inputs) says.
+    /// `context` supplies the instant that [Now](OpCode::Now) returns.
+    /// `stack` is cleared first, so that one stack can serve many evaluations.
     ///
-    /// Debug builds also hold every instruction's result
-    /// to what [inference](Self::infer) promises for its operands,
-    /// and panic if the two disagree.
+    /// The result is an [error value](StackValue::Error) if the evaluation fails.
+    ///
+    /// In debug builds, the result of every instruction is checked against what
+    /// [inference](Self::infer) predicts from its operands, and a mismatch panics.
     pub fn evaluate<'a>(
         &'a self,
         context: EvaluationContext,
@@ -127,10 +131,9 @@ impl StackProgram {
         debug_assert_eq!(inputs.len(), self.inputs, "the row must match the program");
         stack.clear();
 
-        // One flat match over the instruction set, so the loop branches once per instruction.
-        // The arms name the operation family's function,
-        // and the helpers that pop the operands (`unary`, `binary`, `fold`, ...)
-        // hold the stack discipline.
+        // One flat match over the instruction set, so that the loop branches once per instruction.
+        // Each arm names the function of an operation family,
+        // and the helpers (`unary`, `binary`, `fold`, ...) pop the operands and push the result.
         for &operation in &self.operations {
             #[cfg(debug_assertions)]
             let promise = infer::Promise::of(operation, stack);
@@ -268,14 +271,15 @@ impl StackProgram {
         stack.pop().expect("a validated program leaves one result")
     }
 
-    /// Evaluates the program as a condition:
-    /// the effective boolean value of its result.
+    /// Evaluates the program as a condition,
+    /// and returns the [effective boolean value](ValueRef::effective_boolean_value) of its result.
+    ///
+    /// The parameters are those of [evaluate](Self::evaluate).
     ///
     /// # Errors
     ///
-    /// Returns the error that makes the row undecidable:
-    /// the error of the evaluation, or a [TypeMismatch](EvaluationError::TypeMismatch)
-    /// for a result without an effective boolean value.
+    /// Returns the error of the evaluation, or a [TypeMismatch](EvaluationError::TypeMismatch)
+    /// if the result has no effective boolean value.
     pub fn filter<'a>(
         &'a self,
         context: EvaluationContext,
@@ -286,16 +290,17 @@ impl StackProgram {
         result.as_result()?.effective_boolean_value()
     }
 
-    /// Evaluates the program abstractly:
-    /// for inputs holding the given [types](Type), what the result can hold on success,
-    /// and the exact value if the constants and shapes pin one down.
+    /// Evaluates the program on types instead of values,
+    /// and returns what is known of the result of a successful evaluation.
     ///
-    /// An input beyond the given slice is taken as unknown.
-    /// The labels give the types declared for the labels the input types refer to.
+    /// `inputs` gives the [Type] of each input, and an input beyond the slice may have any value.
+    /// `labels` gives the types declared for the labels that these types refer to.
     ///
-    /// The answer over-approximates what [evaluate](Self::evaluate) can produce,
+    /// The result is the exact value if the constants and the input types determine it,
+    /// and a bound otherwise.
+    /// It over-approximates what [evaluate](Self::evaluate) can produce,
     /// so an empty bound proves that the program fails on every row,
-    /// and an exact `false` that no row passes it as a condition.
+    /// and an exact `false` proves that no row satisfies it as a condition.
     pub fn infer(&self, inputs: &[Type], labels: &LabelTypes) -> Inferred {
         let mut stack: Vec<Inferred> = Vec::with_capacity(self.stack_bound);
 
@@ -308,7 +313,7 @@ impl StackProgram {
                     Inferred::Bound(inputs.get(usize::from(index)).cloned().unwrap_or(Type::ANY))
                 }
                 other => {
-                    // Construction validated the stack discipline.
+                    // The program is validated, so the stack has the operands.
                     let arguments = stack.split_off(stack.len() - other.pops());
                     infer::transfer(other, &arguments, labels)
                 }
@@ -319,34 +324,36 @@ impl StackProgram {
         stack.pop().expect("a validated program leaves one result")
     }
 
-    /// Narrows the types of the inputs to those that can yield an outcome:
-    /// for inputs holding the given [types](Type), what they can hold
-    /// if the program evaluates to a value of a type, or to a condition that holds.
+    /// Returns the types of the inputs narrowed to the values for which the program can yield
+    /// `outcome`.
     ///
-    /// An input beyond the given slice is taken as unknown and not narrowed.
+    /// `inputs` and `labels` are as for [infer](Self::infer),
+    /// and the result has one type for each type in `inputs`.
     ///
-    /// The answer over-approximates, like [infer](Self::infer),
+    /// The result over-approximates like the one of [infer](Self::infer),
     /// so an input narrowed to the empty type proves that no row yields the outcome.
     pub fn narrow(&self, inputs: &[Type], labels: &LabelTypes, outcome: &Outcome) -> Vec<Type> {
         narrow::narrow(&self.operations, &self.constants, inputs, labels, outcome)
     }
 
-    /// Compiles the integer form of this program,
-    /// or returns `None` if an instruction or a constant lies outside the integer fragment.
-    /// See [IntegerProgram].
+    /// Compiles the [integer form](IntegerProgram) of this program.
+    ///
+    /// Returns `None` if an instruction or a constant lies outside the integer fragment.
     pub(super) fn integer_specialization(&self) -> Option<IntegerProgram> {
         IntegerProgram::compile(&self.operations, &self.constants, self.inputs)
     }
 
-    /// Recognizes the identity form of this program,
-    /// or returns `None` if it does more than compare two terms for identity.
-    /// See [IdentityCondition].
+    /// Recognizes the [identity form](IdentityCondition) of this program.
+    ///
+    /// Returns `None` if the program does more than compare two terms for identity.
     pub(super) fn identity_specialization(&self) -> Option<IdentityCondition> {
         IdentityCondition::recognize(&self.operations, &self.constants)
     }
 }
 
-/// Pops one operand, propagates a pending error, applies the operation.
+/// Pops one operand and pushes the result of the operation on it.
+///
+/// If the operand is an error, that error is the result.
 fn unary<'a>(
     stack: &mut Vec<StackValue<'a>>,
     operation: impl FnOnce(ValueRef<'_>) -> StackValue<'static>,
@@ -360,8 +367,9 @@ fn unary<'a>(
     stack.push(result);
 }
 
-/// Pops two operands, propagates a pending error, the left one first,
-/// applies the operation.
+/// Pops two operands and pushes the result of the operation on them.
+///
+/// If an operand is an error, that error is the result, the left operand's if both are errors.
 fn binary<'a>(
     stack: &mut Vec<StackValue<'a>>,
     operation: impl FnOnce(ValueRef<'_>, ValueRef<'_>) -> StackValue<'static>,
@@ -377,8 +385,9 @@ fn binary<'a>(
     stack.push(result);
 }
 
-/// Pops three operands, propagates a pending error, the leftmost first,
-/// applies the operation.
+/// Pops three operands and pushes the result of the operation on them.
+///
+/// If operands are errors, the error of the first of them is the result.
 fn ternary<'a>(
     stack: &mut Vec<StackValue<'a>>,
     operation: impl FnOnce(ValueRef<'_>, ValueRef<'_>, ValueRef<'_>) -> StackValue<'static>,
@@ -395,8 +404,10 @@ fn ternary<'a>(
     stack.push(result);
 }
 
-/// Pops two operands and applies a connective to them as they are,
-/// errors included, which three-valued logic can decide against.
+/// Pops two operands and pushes the result of a connective on them.
+///
+/// The connective receives the operands as they are, errors included,
+/// since three-valued logic can decide a result despite an error.
 fn connective<'a>(
     stack: &mut Vec<StackValue<'a>>,
     operation: impl FnOnce(&StackValue<'a>, &StackValue<'a>) -> StackValue<'static>,
@@ -407,10 +418,10 @@ fn connective<'a>(
     stack.push(operation(&left, &right));
 }
 
-/// Pops `operands` values and applies the operation to them as a slice,
+/// Pops `operands` values and pushes the result of the operation on them,
 /// for the variadic instructions.
 ///
-/// Each operand's error is the operation's to propagate.
+/// The operation receives the operands as a slice, errors included, and propagates errors itself.
 fn fold<'a>(
     stack: &mut Vec<StackValue<'a>>,
     operands: impl Into<usize>,
@@ -423,8 +434,10 @@ fn fold<'a>(
     stack.push(result);
 }
 
-/// Pops like [fold], with a label operand beneath the `elements`,
-/// for the labeled structure constructors.
+/// Pops `elements` values and the label below them,
+/// and pushes the result of the operation on them, for the labeled structure instructions.
+///
+/// As in [fold], the operation receives the operands as they are, errors included.
 fn labeled<'a>(
     stack: &mut Vec<StackValue<'a>>,
     elements: impl Into<usize>,
@@ -438,11 +451,12 @@ fn labeled<'a>(
     stack.push(result);
 }
 
-/// Pops one operand like [unary], for an accessor whose result may borrow from it:
-/// a component of a borrowed structure comes back borrowed,
-/// which the `'static` results of the other helpers cannot express.
+/// Pops one operand and pushes the result of an accessor on it,
+/// which may borrow from the operand.
 ///
-/// The operand arrives as it is, error included.
+/// A component of a borrowed structure is returned borrowed,
+/// which the `'static` results of the other helpers cannot express.
+/// The accessor receives the operand as it is, error included.
 fn unary_borrowed<'a>(
     stack: &mut Vec<StackValue<'a>>,
     operation: impl FnOnce(&StackValue<'a>) -> StackValue<'a>,
@@ -453,8 +467,10 @@ fn unary_borrowed<'a>(
     stack.push(result);
 }
 
-/// Pops two operands like [binary], for an accessor whose result may borrow from them;
-/// see [unary_borrowed].
+/// Pops two operands and pushes the result of an accessor on them,
+/// which may borrow from the operands.
+///
+/// As in [unary_borrowed], the accessor receives the operands as they are, errors included.
 fn binary_borrowed<'a>(
     stack: &mut Vec<StackValue<'a>>,
     operation: impl FnOnce(&StackValue<'a>, &StackValue<'a>) -> StackValue<'a>,
@@ -470,10 +486,13 @@ fn binary_borrowed<'a>(
     stack.push(result);
 }
 
-/// Pops the operands of a pattern instruction,
-/// the flags if the instruction carries them, and the replacement for a replacement,
-/// propagates a pending error, the subject's first,
-/// and applies the match or the replacement.
+/// Pops the operands of [Matches](OpCode::Matches) or [Replace](OpCode::Replace),
+/// and pushes the result of the match or the replacement.
+///
+/// `flags` says whether the instruction has a flags operand,
+/// and `replace` whether it is a replacement.
+/// If operands are errors, the result is the first error
+/// in the order subject, pattern, flags, replacement.
 fn regex<'a>(stack: &mut Vec<StackValue<'a>>, flags: bool, replace: bool) {
     let flags = flags.then(|| stack.pop().expect("the program is validated"));
     let replacement = replace.then(|| stack.pop().expect("the program is validated"));

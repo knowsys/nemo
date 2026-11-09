@@ -1,28 +1,29 @@
-//! Tokens: the lexer's output and the parser's input.
+//! Tokens, which the lexer produces and the parser reads.
 
 use crate::model::{Span, VariableKind};
 
 /// The kinds of tokens.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(in crate::parser) enum TokenKind {
-    /// A bare name like `parent`.
+    /// A bare name like `parent`, or the local name after the colon of a prefixed name.
     Ident,
-    /// A variable, with its kind marker consumed.
+    /// A variable, including the marker that gives its kind, like `?x`.
     Variable(VariableKind),
-    /// A directive keyword with its `@`, like `@prefix`.
+    /// A directive's name with its `@`, like `@prefix`.
     At,
-    /// An aggregate name with its `#`, like `#sum`.
+    /// An aggregate's name with its `#`, like `#sum`.
     Hash,
-    /// An IRI in angle brackets, whose content is the token text without the brackets.
+    /// An IRI in angle brackets.
+    ///
+    /// The IRI is the token's text without the brackets, with escapes decoded.
     Iri,
-    /// A blank node `_:label`, whose label is the token text after the `_:`.
+    /// A blank node `_:label`, whose label is the token's text after the `_:`.
     BlankNode,
-    /// A number literal (integer, decimal, or exponent form).
+    /// A number literal, such as `42`, `1.5`, `2e10`, `0xFF` or `1.5f`.
     Number,
-    /// A string literal, carrying its value with the escapes processed.
+    /// A string literal, with its value, in which escapes are decoded.
     String(String),
-    /// A format string `f"…"`: literal text pieces (escapes processed)
-    /// interleaved with embedded expressions, kept as source regions.
+    /// A format string `f"…"`, with its parts.
     FString(Vec<FStringPart>),
     /// `(`
     ParenOpen,
@@ -80,18 +81,19 @@ pub(in crate::parser) enum TokenKind {
     Slash,
     /// `^^`
     Carets,
-    /// `@lang` directly after a string literal.
+    /// A language tag like `@en`, directly after a string literal.
     LanguageTag,
-    /// A character sequence no token matches.
+    /// A text that the lexer rejected and reported a diagnostic for.
     Error,
     /// The end of the input.
     End,
 }
 
 impl TokenKind {
-    /// Returns whether a token of this kind ends the term before it rather than starting one:
-    /// a closing bracket, a `,`, the end of a statement or of the input,
-    /// or an operator that only stands between two terms, such as `=` or `*`.
+    /// Returns whether a token of this kind ends the term before it, rather than starting one.
+    ///
+    /// These are the closing brackets, `,`, `.`, the arrows of rules, the end of the input,
+    /// and the operators that only stand between two terms, such as `=`, `*` or `^^`.
     pub(in crate::parser) fn ends_term(&self) -> bool {
         matches!(
             self,
@@ -119,20 +121,20 @@ impl TokenKind {
     }
 }
 
-/// One piece of a format string.
+/// One part of a format string.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(in crate::parser) enum FStringPart {
-    /// Literal text, escapes processed.
+    /// Literal text, with escapes decoded.
     Text(String),
-    /// An embedded expression's source region (inside the braces).
+    /// The span of an embedded expression, without its braces.
     Expression(Span),
 }
 
-/// One token: its kind and source region.
+/// One token of the source text.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(in crate::parser) struct Token {
     /// The token's kind.
     pub(in crate::parser) kind: TokenKind,
-    /// The token's source region.
+    /// The token's location in the source text.
     pub(in crate::parser) span: Span,
 }

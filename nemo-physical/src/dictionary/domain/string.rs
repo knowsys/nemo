@@ -21,8 +21,8 @@ impl StringStore {
         self.pool.len()
     }
 
-    /// Interns a string and returns its index,
-    /// or `None` if the store cannot hold it.
+    /// Interns a string and returns its index, or `None` if it is longer than
+    /// [LENGTH_LIMIT](crate::dictionary::Dictionary::LENGTH_LIMIT).
     pub(crate) fn intern(&mut self, string: &str) -> Option<u64> {
         self.pool.intern(string.as_bytes())
     }
@@ -35,8 +35,8 @@ impl StringStore {
     /// Returns the string with the given index, borrowed from the store,
     /// or `None` for an unknown index.
     pub(crate) fn get(&self, index: u64) -> Option<&str> {
-        // SAFETY: the pool is fed by `intern` alone,
-        // which stores the bytes of a `&str`.
+        // SAFETY: only `intern` adds strings to the pool,
+        // and it stores the bytes of a `&str`.
         self.pool
             .get(index)
             .map(|bytes| unsafe { std::str::from_utf8_unchecked(bytes) })

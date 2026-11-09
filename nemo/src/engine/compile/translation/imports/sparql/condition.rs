@@ -1,34 +1,22 @@
-//! Pushed conditions as SPARQL expressions:
-//! the row condition the filter pass decided for a SPARQL-fed predicate,
-//! translated for the endpoint to apply,
-//! if every operator in it has a SPARQL meaning that excludes no row the condition keeps,
-//! under the assumptions the rewrite makes of an endpoint
-//! (see [sparql_rewrite](crate::engine::transform::sparql_rewrite)).
+//! The translation of an import's condition into a SPARQL expression, for the endpoint to
+//! apply.
 //!
-//! The local filter applies to the delivered rows as well, so an expression may keep more:
-//! wherever Nemo keeps a row, the expression must hold, neither false nor an error.
+//! A condition is translated only if every operator in it has a SPARQL meaning that excludes
+//! no row that the condition keeps, under the assumptions that the rewrite makes of an
+//! endpoint (see [sparql_rewrite](crate::engine::transform::sparql_rewrite)).
+//! The load still applies the whole condition to the delivered rows,
+//! so an expression may keep more rows than the condition does:
+//! wherever Nemo keeps a row, the expression must hold, and be neither false nor an error.
 //!
-//! An identity goes out in one of three forms:
-//! - With a constant at the top of the condition, as a `VALUES` block
-//!   ([sparql_values](Translator::sparql_values)), as bindings do: the constant's terms
-//!   ([ground_terms](SparqlQuery::ground_terms)), which the endpoint matches as terms,
-//!   through its indexes.
-//! - Elsewhere in a positive position, as SPARQL's `=`, never `sameTerm`, which QLever does not
-//!   implement. There `=` holds wherever Nemo's identity does, and finds every spelling of a
-//!   number, boolean or dateTime, except at a NaN, which is never `=` to itself.
-//! - Under a negation, only with an IRI, where `=` is the identity and never fails.
-//!   With a literal, `=` would hold for more (the double `3.0E0` is `=` to the integer 3, a
-//!   different value to Nemo) and fail on literals it cannot compare.
-//!
-//! Where Nemo reads a value differently from its term:
-//! - Regardless of the data, the translation follows Nemo: it reads language tags in lower
-//!   case.
-//! - For a number, which Nemo and stores, or stores among themselves, read differently,
-//!   the expression keeps the rows for the local filter.
-//!   Nemo reads Wikidata's `"3.0"^^xsd:decimal`, and `"03"^^xsd:int`, as the integer 3, whose
-//!   `STR` is `"3"` and whose `DATATYPE` is `xsd:integer`, and the lexical form of a double is
-//!   the one stored for some stores (`"2.5E0"`) and the store's own writing of the number for
-//!   others (Oxigraph writes `"2.5"`).
+//! Nemo may read a value differently from its term:
+//! - Nemo reads language tags in lower case, and the translation follows Nemo.
+//! - Nemo and the stores read numbers differently, and so do the stores among themselves.
+//!   Nemo reads `"3.0"^^xsd:decimal` and `"03"^^xsd:int` as the integer 3,
+//!   whose `STR` is `"3"` and whose `DATATYPE` is `xsd:integer`.
+//!   A store may give a double the lexical form that it stored (`"2.5E0"`),
+//!   or its own writing of the number, as Oxigraph gives `"2.5"`.
+//!   So an expression that reads the lexical form or the datatype of a number keeps the
+//!   row, and leaves the decision to the load.
 
 use nemo_io::sparql::{
     SparqlQuery, ValuesBlock,
@@ -44,16 +32,19 @@ use crate::{
     model::{Operation, Operator, Term, TermKind, VariableKind},
 };
 
-/// Where a subexpression sits: what the expression around it needs of it.
+/// What the expression around a subexpression needs of it,
+/// which depends on where the subexpression sits.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Polarity {
-    /// Under an even number of negations: it must hold wherever Nemo's holds.
+    /// Under an even number of negations,
+    /// where it must hold wherever Nemo's condition holds.
     Positive,
-    /// Under an odd number of negations: it must be false wherever Nemo's is,
-    /// never an error.
+    /// Under an odd number of negations,
+    /// where it must be false, and never an error, wherever Nemo's condition is false.
     Negative,
-    /// Inside another operator's argument: it must hold exactly where Nemo's holds,
-    /// and be false exactly where Nemo's is.
+    /// Inside an argument of another operator,
+    /// where it must hold exactly where Nemo's condition holds, and be false exactly where it
+    /// is false.
     Exact,
 }
 
@@ -69,13 +60,15 @@ impl Polarity {
 }
 
 impl Translator<'_> {
-    /// Returns a condition that is the identity of a delivered column with a constant,
-    /// at the top of a conjunct, as a `VALUES` block over the column's projected variable,
+    /// Returns a condition that requires a delivered column to be identical to a constant
+    /// as a `VALUES` block over the column's projected variable,
     /// or `None` for any other condition.
     ///
-    /// The block binds the column to the constant's terms, as bindings do
-    /// ([with_values](SparqlQuery::with_values)).
-    /// `delivered`, one flag per projected variable, maps delivered columns to them.
+    /// The block binds the variable to the constant's terms
+    /// ([ground_terms](SparqlQuery::ground_terms)),
+    /// as [with_values](SparqlQuery::with_values) does for bindings,
+    /// and the endpoint matches them as terms, through its indexes.
+    /// `delivered` has one flag per projected variable, which says whether it is delivered.
     pub(super) fn sparql_values(
         &self,
         condition: &Operation,
@@ -108,20 +101,22 @@ impl Translator<'_> {
     }
 
     /// Returns the condition as a SPARQL expression over the query's projected variables,
-    /// or `None` if some part of it has no SPARQL form (then only the local filter applies).
+    /// or `None` if some part of it has no SPARQL form.
     ///
-    /// A condition reading the lexical form or the datatype of a value (`STR`, `DATATYPE`)
-    /// also keeps the rows where that value is a number (see the module documentation).
+    /// Without an expression, only the load applies the condition.
+    /// A condition that reads the lexical form or the datatype of a value (`STR`, `DATATYPE`)
+    /// also keeps the rows where that value is a number, as the module documentation explains.
     ///
     /// The variable `column N` refers to delivered column `N`.
-    /// `delivered`, one flag per projected variable, maps it back to its projected variable.
+    /// `variables` are the projected variables,
+    /// and `delivered` has one flag per projected variable, which says whether it is delivered.
     pub(super) fn sparql_condition(
         &self,
         condition: &Operation,
         variables: &[String],
         delivered: &[bool],
     ) -> Option<Expression> {
-        // Delivered position → projected variable.
+        // The projected variable of each delivered column.
         let delivered: Vec<&String> = variables
             .iter()
             .zip(delivered)
@@ -145,9 +140,11 @@ impl Translator<'_> {
         )
     }
 
-    /// Returns an operation in the given position as an expression,
-    /// adding to `lexical_reads` the arguments whose lexical form or datatype it reads (see
-    /// [sparql_condition](Self::sparql_condition)).
+    /// Returns an operation at a position of the given polarity as an expression,
+    /// and adds to `lexical_reads` the arguments whose lexical form or datatype it reads
+    /// (see [sparql_condition](Self::sparql_condition)).
+    ///
+    /// `delivered` contains the projected variable of each delivered column.
     fn sparql_expression(
         &self,
         operation: &Operation,
@@ -174,8 +171,13 @@ impl Translator<'_> {
             (arguments.len() == arity).then_some(Expression::FunctionCall(function, arguments))
         };
         match operation.operator {
-            // Nemo's identity as SPARQL's `=`: with an IRI anywhere, with another constant
-            // only where `=` may hold for more (see the module documentation).
+            // Nemo's identity becomes SPARQL's `=`, never `sameTerm`,
+            // which some stores do not implement, such as QLever.
+            // With an IRI, `=` is the identity, in any position.
+            // With another constant, `=` holds wherever Nemo's identity does,
+            // and matches every spelling of a number, boolean or dateTime,
+            // except a NaN, which is never `=` to itself.
+            // So it is used only in a positive position.
             Operator::Equal => {
                 let [left, right] = <[Expression; 2]>::try_from(arguments).ok()?;
                 let exact = is_iri(&left) || is_iri(&right);
@@ -185,7 +187,10 @@ impl Translator<'_> {
                     && !is_nan(&right);
                 (exact || covering).then(|| Expression::Equal(Box::new(left), Box::new(right)))
             }
-            // A negated identity, which only an IRI makes exact.
+            // A negated identity is translated only with an IRI.
+            // With a literal, `=` would hold for more, since the double `3.0E0` is `=` to
+            // the integer 3, a different value to Nemo,
+            // and `=` fails on literals that it cannot compare.
             Operator::Unequal => {
                 let [left, right] = <[Expression; 2]>::try_from(arguments).ok()?;
                 (is_iri(&left) || is_iri(&right)).then(|| {
@@ -278,18 +283,17 @@ impl Translator<'_> {
             Operator::Round => call(Function::Round, 1, arguments),
             Operator::Ceil => call(Function::Ceil, 1, arguments),
             Operator::Floor => call(Function::Floor, 1, arguments),
-            // Everything else (Nemo's own builtins, regular expressions,
-            // whose syntax differs, structures, and the type tests whose
-            // values come from several datatypes, such as an integer from
-            // `xsd:int` or an integral `xsd:decimal`) has no SPARQL form
-            // that excludes the same rows, so only the local filter
-            // applies.
+            // Every other operator has no SPARQL form that excludes the same rows,
+            // so only the load applies it.
+            // These are Nemo's own builtins, regular expressions, whose syntax differs,
+            // structures, and the type tests of values that come from several datatypes,
+            // such as an integer from `xsd:int` or from an integral `xsd:decimal`.
             _ => None,
         }
     }
 
-    /// Returns an argument term as an expression: a column pseudo-variable, a
-    /// nested operation, or a ground term.
+    /// Returns an argument term as an expression,
+    /// for the variable of a delivered column, a nested operation, or a ground term.
     fn sparql_argument(
         &self,
         term: &Term,
@@ -322,7 +326,7 @@ impl Translator<'_> {
     }
 }
 
-/// Returns the number of the delivered column a pseudo-variable `column N` refers to,
+/// Returns the number `N` of the delivered column that a variable `column N` refers to,
 /// or `None` for any other term.
 fn column_number(term: &Term) -> Option<usize> {
     match &term.kind {
@@ -361,12 +365,12 @@ fn term_expression(term: GroundTerm) -> Option<Expression> {
     })
 }
 
-/// Returns the test that a literal has one of the given XSD datatypes, by their local names:
-/// `isLiteral(x) && (datatype(x) = xsd:t || …)`.
+/// Returns the test that a value is a literal with one of the given XSD datatypes,
+/// which are given by their local names: `isLiteral(x) && (datatype(x) = xsd:t || …)`.
 ///
 /// The literal test comes first, so that the test is false on an IRI or a blank node
-/// rather than an error, as the local type test is.
-/// `=` of two IRIs is their identity, and never an error, so the test is exact in any position.
+/// rather than an error, like Nemo's own type test.
+/// `=` of two IRIs is their identity and never an error, so the test is exact in any position.
 fn datatype_test(arguments: Vec<Expression>, datatypes: &[&str]) -> Option<Expression> {
     let [value] = <[Expression; 1]>::try_from(arguments).ok()?;
     let datatype = Expression::FunctionCall(Function::Datatype, vec![value.clone()]);
@@ -386,7 +390,8 @@ fn datatype_test(arguments: Vec<Expression>, datatypes: &[&str]) -> Option<Expre
     ))
 }
 
-/// Returns a connective folded over its operands.
+/// Returns the operands combined with a binary connective from left to right,
+/// or `None` if there are none.
 fn fold(
     build: fn(Box<Expression>, Box<Expression>) -> Expression,
     arguments: Vec<Expression>,

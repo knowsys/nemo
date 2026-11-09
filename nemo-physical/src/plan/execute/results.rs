@@ -9,10 +9,9 @@ pub struct PlanResults {
     ///
     /// [add_trie](crate::management::TableManager::add_trie) stores such a trie as it is.
     pub outputs: Vec<Trie>,
-    /// The evaluation errors of all operations,
-    /// counted by kind.
+    /// The evaluation errors of all operations, counted by kind.
     ///
-    /// Every erroring row was dropped.
+    /// Every row with an error was dropped.
     /// The counts are per evaluation, not per row:
     /// a value evaluated again in another join, or in another cell, counts again.
     /// So they report the kinds of errors and their magnitude, not exact row counts.
@@ -25,16 +24,18 @@ pub struct PlanResults {
 
 /// The wall-clock nanoseconds of plan executions, by phase.
 ///
-/// Callers add up the timings of many executions.
+/// The timings of several executions add up with [absorb](Self::absorb).
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct PhaseTimings {
     /// Building the column orders of stored tables the loads read.
     pub order: u64,
     /// Running the joins, sequentially or in cells.
     pub join: u64,
-    /// Building the joins: their cursors and hooks.
+    /// Building the joins that run sequentially, their cursors and hooks.
     ///
-    /// It is part of `join`, and the rest of that phase is the descent.
+    /// It is part of [join](Self::join), and the rest of that phase is the descent.
+    /// The joins of cells and of aggregations are built within [join](Self::join),
+    /// without a timing of their own.
     pub setup: u64,
     /// Sorting, deduplicating and concatenating result rows.
     pub merge: u64,
@@ -67,7 +68,7 @@ pub struct WorkCounts {
     /// The joins executed, one per member of a unit,
     /// including those over an input without rows.
     pub joins: u64,
-    /// The blocks collected across all joins, joined and subtracted alike.
+    /// The blocks collected across all joins, both joined and subtracted ones.
     pub blocks: u64,
     /// The rows collected for materializing nodes, before the builds drop the repeats.
     pub rows: u64,
@@ -79,8 +80,8 @@ pub struct WorkCounts {
     /// The allocated bytes of the largest row buffer seen,
     /// whether it collected a node's rows or a cell's.
     ///
-    /// The accounting of the stored tables cannot show this peak.
-    /// Cells running at once can hold more than any single buffer.
+    /// The memory accounting of the stored tables does not include this peak.
+    /// Cells that run at the same time can together use more memory than any single buffer.
     pub buffer_bytes: u64,
 }
 

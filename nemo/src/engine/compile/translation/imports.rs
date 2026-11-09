@@ -1,15 +1,13 @@
-//! Import directives: the collected imports, executed once every predicate's arity is known,
-//! and what every format shares.
+//! Import directives: executing the collected imports once every predicate's arity is known.
 //!
-//! Every format shares:
-//! - the checks an import passes before its format's own,
-//! - opening the bytes registered or fetched under a resource name,
-//! - registering the table an import loads into and seeding its column types,
-//! - reporting the rows a load dropped.
+//! Each format has its own submodule, and this module has what they share:
+//! - the checks that an import passes before its format's own;
+//! - opening the bytes registered or fetched under a resource name;
+//! - registering the table that an import loads into, and recording its column types;
+//! - reporting the rows that a load dropped.
 //!
-//! Each format has its own submodule.
-//! [prefetch] fetches the remote resources before any import reads.
-//! The directive options are evaluated in [options](super::options).
+//! [prefetch] fetches the remote resources before the imports read their data,
+//! and [options](super::options) evaluates the directive options.
 
 mod dsv;
 mod json;
@@ -45,11 +43,11 @@ use crate::{
     values::TypeSyntax,
 };
 
-/// One import awaiting execution.
+/// One import directive awaiting execution.
 pub(super) struct PendingImport {
-    /// The receiving predicate, resolved.
+    /// The resolved predicate that receives the rows.
     pub(super) predicate: String,
-    /// The column variables named after the predicate, if any.
+    /// The names of the predicate's columns, if the directive gives them (`q(?x, ?y)`).
     pub(super) variables: Vec<String>,
     /// The format.
     pub(super) format: FileFormat,
@@ -57,35 +55,38 @@ pub(super) struct PendingImport {
     pub(super) options: Vec<(Term, Term)>,
     /// The guard bindings.
     pub(super) guards: Vec<(String, Term)>,
-    /// The binding atoms of the `where` clause, empty for an import without one.
+    /// The atoms of the `where` clause, or empty for an import without them.
     pub(super) bindings: Vec<Atom>,
-    /// The conditions of the `where` clause, empty for an import without one.
+    /// The conditions of the `where` clause, or empty for an import without them.
     pub(super) conditions: Vec<Operation>,
     /// The directive's source position.
     pub(super) span: Option<Span>,
     /// The position of the directive among the translated statements,
-    /// under which its remote resource, if it reads one, is fetched.
+    /// by which its remote resource is fetched, if it reads one.
     pub(super) statement: usize,
-    /// Whether the import's data is already stored: its options are validated
-    /// and the predicate registers, but nothing is read.
+    /// Whether the import's data is already stored.
+    ///
+    /// Its options are then validated and its predicate is registered, but nothing is read.
     pub(super) preloaded: bool,
-    /// The rule index reserved for a bound import's fetch rule.
+    /// The rule index reserved for the fetch rule of an import with atoms in its `where`
+    /// clause.
     #[cfg_attr(not(feature = "sparql"), allow(dead_code))]
     pub(super) rule_index: usize,
 }
 
-/// The rows a reader dropped from one resource as malformed, reported as a warning.
+/// The malformed rows that a reader dropped from one resource,
+/// which are reported as a warning.
 pub(crate) struct DroppedRows<'a> {
-    /// The resource read.
+    /// The name of the resource.
     pub(crate) resource: &'a str,
-    /// Rows that did not fit the format.
+    /// The number of malformed rows.
     pub(crate) malformed: u64,
     /// The line of the first malformed row, if the reader knows it.
     pub(crate) first_malformed: Option<u64>,
 }
 
 impl DroppedRows<'_> {
-    /// Reports the drops to the pipeline, or nothing if nothing was dropped.
+    /// Reports the dropped rows to the pipeline as a warning, if there are any.
     pub(crate) fn report(&self, pipeline: &mut Pipeline) {
         if self.malformed == 0 {
             return;
@@ -103,8 +104,9 @@ impl DroppedRows<'_> {
     }
 }
 
-/// Why an import failed: its directive, which a translation reading no data finds as well,
-/// or reading its data.
+/// Why an import failed: because of its directive, or while reading its data.
+///
+/// A translation that reads no data also finds the problems of the directive.
 pub(super) enum ImportFailure {
     /// The directive is at fault: its options, guards, columns, or declaration.
     Directive(Diagnostic),
@@ -113,13 +115,15 @@ pub(super) enum ImportFailure {
 }
 
 impl From<Diagnostic> for ImportFailure {
-    /// Takes a problem as the directive's, which it is unless reading found it.
+    /// Treats a problem as the directive's, which it is unless it was found while reading.
     fn from(problem: Diagnostic) -> Self {
         ImportFailure::Directive(problem)
     }
 }
 
-/// Returns the resource an import names, which every format but SPARQL needs.
+/// Returns the resource that an import names, or fails if it names none.
+///
+/// Every format except SPARQL needs a resource.
 fn required_resource(
     resource: Option<String>,
     import: &PendingImport,
@@ -134,11 +138,11 @@ fn required_resource(
 }
 
 impl<'a> Translator<'a> {
-    /// Returns the path a relative resource names, for a directive at the given span.
+    /// Returns the path that a relative resource names, for a directive at `span`.
     ///
-    /// The resource joins the engine's import directory if one is set,
-    /// and the directory of the file the directive was written in otherwise,
-    /// or the working directory for a directive without a file.
+    /// The resource is relative to the engine's import directory if one is set.
+    /// Otherwise it is relative to the directory of the file that contains the directive,
+    /// or to the working directory for a directive without a file.
     pub(super) fn resource_path(&self, span: Option<Span>, resource: &str) -> PathBuf {
         let directory = match self.import_directory {
             Some(directory) => directory.to_path_buf(),
@@ -156,15 +160,16 @@ impl<'a> Translator<'a> {
 
     /// Executes the collected imports.
     ///
-    /// Rows load through the declared column formats (`term` by default)
-    /// and join the predicate's facts.
-    /// Malformed rows are skipped, counted, and reported.
-    /// DSV imports resolve their options in directive order, then load as one batch.
-    /// Other formats load one by one.
+    /// The rows are read in the formats of their columns, and are added to the predicate's
+    /// facts.
+    /// Malformed rows are skipped, counted and reported.
+    /// The DSV imports resolve their options in directive order, and are then loaded as one
+    /// batch.
+    /// The other formats are loaded one by one.
     pub(super) fn execute_imports(&mut self) -> Result<(), Diagnostic> {
         let mut imports = std::mem::take(&mut self.imports);
-        // The remote resources were fetched before the translation committed,
-        // and their bytes are taken first, before anything reads.
+        // The remote resources were fetched before the translation was committed,
+        // and their bytes are taken out before any import reads.
         let fetched = self.prefetch(&mut imports)?;
         let mut batch = Vec::new();
         for (import, fetched) in imports.iter().zip(fetched) {
@@ -186,19 +191,19 @@ impl<'a> Translator<'a> {
                 Err(ImportFailure::Reading(problem)) => return Err(problem),
             }
         }
-        // A translation reading no data validates the options above.
+        // A translation that reads no data only validates the options, as the loop did.
         if !self.purpose.reads() {
             return Ok(());
         }
         self.load_dsv_batch(batch)
     }
 
-    /// Runs the checks every import passes before its format's own.
+    /// Runs the checks that every import passes before its format's own.
     ///
-    /// - An `@input` predicate is bound by a `@use` of the program,
+    /// - A `@use` of the program binds an `@input` predicate,
     ///   so importing into it is an error.
-    /// - Column variables and binding atoms refer to a SPARQL query's projection,
-    ///   which no other format has.
+    /// - The atoms of a `where` clause bind the variables of a SPARQL query's projection,
+    ///   so they are an error in an import of any other format.
     fn admissible(&self, import: &PendingImport) -> Result<(), Diagnostic> {
         if self.inputs.contains(&import.predicate) {
             return Err(TranslationError::ImportIntoInput {
@@ -215,9 +220,10 @@ impl<'a> Translator<'a> {
         Ok(())
     }
 
-    /// Returns the registered bytes behind a resource name, opened as a stream
-    /// (gzip unwrapped by name),
-    /// or `None` if the resource is not registered and reads from the filesystem instead.
+    /// Returns the bytes registered under a resource name, opened as a stream,
+    /// or `None` if no bytes are registered under it.
+    ///
+    /// The stream is decompressed according to `compression` and the name.
     fn registered_stream(
         &self,
         resource: &str,
@@ -228,9 +234,9 @@ impl<'a> Translator<'a> {
             .map(|bytes| compression.open_bytes(bytes.clone(), resource))
     }
 
-    /// Returns the bytes an import reads if they are not on the filesystem,
-    /// registered under the resource name or fetched, opened as a stream,
-    /// or `None` for a file.
+    /// Returns the bytes that an import reads, opened as a stream,
+    /// if they are registered under the resource name or were `fetched`,
+    /// and `None` for a file.
     fn source_stream(
         &self,
         resource: &str,
@@ -241,10 +247,12 @@ impl<'a> Translator<'a> {
             .or_else(|| fetched.map(|bytes| compression.open_bytes(bytes, resource)))
     }
 
-    /// Registers the table an import loads into,
-    /// given the types the reader produces per kept column,
-    /// and seeds its column types with those of the delivered columns,
-    /// narrowed to the rows the conditions of its `where` clause keep.
+    /// Registers the table that an import loads into, and records the types of its delivered
+    /// columns.
+    ///
+    /// `kept_types` contains the type that the reader produces for each kept column.
+    /// The recorded types are narrowed to the rows that the conditions of the import's `where`
+    /// clause keep, and the types are checked against the predicate's declaration.
     fn register_import(
         &mut self,
         import: &PendingImport,
@@ -270,8 +278,8 @@ impl<'a> Translator<'a> {
         Ok(table)
     }
 
-    /// Returns the types of an import's delivered columns
-    /// narrowed to the rows the conditions of its `where` clause keep.
+    /// Returns `column_types`, the types of an import's delivered columns,
+    /// narrowed to the rows that the conditions of its `where` clause keep.
     fn narrowed_by_conditions(
         &self,
         import: &PendingImport,
@@ -293,12 +301,15 @@ impl<'a> Translator<'a> {
         Ok(column_types)
     }
 
-    /// Returns the conditions of an import's `where` clause, conjoined,
-    /// over the `column N` pseudo-variables of the delivered columns,
+    /// Returns the conjunction of the conditions of an import's `where` clause,
     /// or `None` if it has none.
     ///
-    /// The import's column variables name its source columns, one each,
-    /// and a condition may read only those the import delivers.
+    /// The import's variables name its source columns, one each,
+    /// and a condition may read only the delivered ones.
+    /// In the returned condition, delivered column `N` is the variable `column N`.
+    /// Fails if the import names another number of columns than its source has,
+    /// or names a column twice, or if a condition reads an unknown variable or a skipped
+    /// column.
     fn own_condition(
         &self,
         import: &PendingImport,
@@ -371,10 +382,12 @@ impl<'a> Translator<'a> {
         Ok(conjoin(conditions))
     }
 
-    /// Returns the condition an import's rows must pass, over its delivered columns:
-    /// the conditions of its `where` clause and the condition the import plan pushed for its
-    /// predicate, conjoined, as the operation it compiles from and as a row filter;
-    /// `None` if there is neither.
+    /// Returns the condition that an import's rows must satisfy, over its delivered columns,
+    /// or `None` if there is none.
+    ///
+    /// It is the conjunction of the conditions of the import's `where` clause
+    /// and the condition that the import plan has for its predicate.
+    /// It is returned both as written and compiled to a row filter.
     pub(super) fn import_condition(
         &self,
         import: &PendingImport,
@@ -389,8 +402,8 @@ impl<'a> Translator<'a> {
         Ok(Some((condition, RowFilter::new(inputs, program))))
     }
 
-    /// Returns what a reader delivers of an import under a layout:
-    /// the delivered columns, and the rows that pass the [import_condition](Self::import_condition).
+    /// Returns the selection of an import under a layout: its delivered columns,
+    /// and the rows that satisfy its [import_condition](Self::import_condition).
     pub(super) fn import_selection(
         &self,
         import: &PendingImport,
@@ -403,12 +416,13 @@ impl<'a> Translator<'a> {
         Ok(selection)
     }
 
-    /// Records what an import can write into a table's columns, and checks it against a
-    /// declaration.
+    /// Records the types that an import can write to a table's columns,
+    /// and checks them against the predicate's declaration.
     ///
-    /// The formats are the type of what an import reads, and no row is checked as it loads,
-    /// so a column whose format reads a value its declared type does not contain is an error.
-    /// `checked` holds a type per kept column, `column_types` one per delivered column.
+    /// The formats give the type of what an import reads, and no row is checked as it is
+    /// loaded.
+    /// So a column whose format can produce a value outside its declared type is an error.
+    /// `checked` contains a type per kept column, and `column_types` one per delivered column.
     fn seed_import(
         &mut self,
         import: &PendingImport,
@@ -424,7 +438,7 @@ impl<'a> Translator<'a> {
             {
                 if !column_type.is_subset(declared, &self.label_types) {
                     let kind = TypeSyntax::of(column_type).to_string();
-                    // Only a delimited format reads a column as a chosen type.
+                    // Only a DSV format can read a column in a chosen format.
                     let hint = if import.format.is_dsv() {
                         String::from(
                             "read the column in the format named like its declared type, or \
@@ -458,8 +472,7 @@ impl<'a> Translator<'a> {
         Ok(())
     }
 
-    /// Takes a load's rows into a table's fact buffer, reporting the
-    /// rows dropped along the way.
+    /// Adds a load's rows to a table's fact buffer, and reports the rows that the load dropped.
     fn absorb(&mut self, table: TableId, arity: usize, loaded: Loaded, resource: &str) {
         DroppedRows {
             resource,
@@ -483,8 +496,8 @@ impl<'a> Translator<'a> {
                 });
         }
 
-        // The first rows a table receives become its fact buffer as they
-        // are; later ones join it.
+        // The first rows that a table receives become its fact buffer as they are,
+        // and later rows are added to it.
         match self.facts.entry(table) {
             Entry::Vacant(entry) if loaded.rows.arity() == arity => {
                 entry.insert(loaded.rows);

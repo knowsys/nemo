@@ -15,34 +15,37 @@ use crate::{
     },
 };
 
-/// A borrowed data value, e.g., an IRI, a string, a number, a dateTime, a structured value,
-/// or a value of any other [domain](ValueDomain).
+/// A borrowed data value, such as an IRI, a string, a number, a dateTime or a tuple.
+///
 /// Its owned form is [DataValue].
 #[derive(Debug, Clone, Copy)]
 pub enum ValueRef<'a> {
-    /// An [IRI](https://www.w3.org/TR/rdf11-concepts/#section-IRIs), an RDF resource.
+    /// An [IRI](https://www.w3.org/TR/rdf11-concepts/#section-IRIs), which names an RDF resource.
     Iri(IriRef<'a>),
-    /// A plain string, the value of an [`xsd:string`](https://www.w3.org/TR/xmlschema11-2/#string) literal.
+    /// A plain string,
+    /// the value of an [`xsd:string`](https://www.w3.org/TR/xmlschema11-2/#string) literal.
     String(&'a str),
-    /// A [language-tagged string](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string),
+    /// A
+    /// [language-tagged string](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string),
     /// the value of an `rdf:langString` literal.
     LanguageString(LanguageStringRef<'a>),
-    /// A boolean, the value of an [`xsd:boolean`](https://www.w3.org/TR/xmlschema11-2/#boolean) literal.
+    /// A boolean,
+    /// the value of an [`xsd:boolean`](https://www.w3.org/TR/xmlschema11-2/#boolean) literal.
     Boolean(bool),
     /// A number of any numeric domain.
     Number(NumberRef<'a>),
-    /// An instant with an optional timezone,
+    /// An instant with an optional timezone offset,
     /// the value of an [`xsd:dateTime`](https://www.w3.org/TR/xmlschema11-2/#dateTime) literal.
     DateTime(DateTime),
-    /// A calendar day with an optional timezone,
+    /// A calendar day with an optional timezone offset,
     /// the value of an [`xsd:date`](https://www.w3.org/TR/xmlschema11-2/#date) literal.
     Date(Date),
-    /// A time of day with an optional timezone,
+    /// A time of day with an optional timezone offset,
     /// the value of an [`xsd:time`](https://www.w3.org/TR/xmlschema11-2/#time) literal.
     Time(Time),
     /// A duration of any of the three duration domains,
     /// the value of an [`xsd:duration`](https://www.w3.org/TR/xmlschema11-2/#duration) literal
-    /// or of one of its derived types.
+    /// or of a literal of a datatype derived from it.
     Duration(Duration),
     /// A labeled null, identified by its id.
     Null(u64),
@@ -51,12 +54,12 @@ pub enum ValueRef<'a> {
     /// A map, a structured value with no RDF counterpart.
     Map(MapRef<'a>),
     /// A [literal](https://www.w3.org/TR/rdf11-concepts/#section-Graph-Literal)
-    /// of a datatype this crate has no native representation for.
+    /// of a datatype without native support in this crate.
     Other(OtherLiteralRef<'a>),
 }
 
 impl<'a> ValueRef<'a> {
-    /// Returns the semantic domain of this value.
+    /// Returns the domain of this value.
     pub fn domain(self) -> ValueDomain {
         match self {
             ValueRef::Iri(_) => ValueDomain::Iri,
@@ -76,7 +79,7 @@ impl<'a> ValueRef<'a> {
     }
 
     /// Returns the datatype IRI of this value,
-    /// or `None` for the non-literal domains (see [ValueDomain::datatype_iri]).
+    /// or `None` for a value that is not a literal, such as an IRI, a null or a tuple.
     pub fn datatype_iri(self) -> Option<&'a str> {
         match self {
             ValueRef::Other(literal) => Some(literal.datatype()),
@@ -84,10 +87,11 @@ impl<'a> ValueRef<'a> {
         }
     }
 
-    /// Returns the number of a null, counting the nulls its dictionary minted from 0,
-    /// as `_:0` writes it, or `None` for any other value.
+    /// Returns the number that is written after `_:` for a null,
+    /// or `None` for any other value.
     ///
-    /// A null id the dictionary did not mint numbers itself.
+    /// The nulls that a [Dictionary](crate::dictionary::Dictionary) creates are numbered from 0.
+    /// A null whose id no dictionary created is numbered by its id.
     pub fn null_number(self) -> Option<u64> {
         let ValueRef::Null(id) = self else {
             return None;
@@ -99,10 +103,11 @@ impl<'a> ValueRef<'a> {
     }
 
     /// Returns the effective boolean value of this value,
-    /// SPARQL's [EBV](https://www.w3.org/TR/sparql12-query/#ebv).
+    /// as SPARQL defines its [EBV](https://www.w3.org/TR/sparql12-query/#ebv).
     ///
-    /// A boolean is itself, and a number is false exactly at zero and the NaN.
-    /// A plain or language-tagged string is false exactly if it is empty.
+    /// - A boolean is its own effective boolean value.
+    /// - A number is false exactly if it is zero or NaN.
+    /// - A plain or language-tagged string is false exactly if it is empty.
     ///
     /// # Errors
     ///
@@ -123,24 +128,31 @@ impl<'a> ValueRef<'a> {
         }
     }
 
-    /// Clones the viewed value into an owned [DataValue].
+    /// Returns an owned copy of the value.
     ///
-    /// This allocates for the borrowed content.
-    /// Cloning a [DataValue] is cheaper if one exists.
+    /// This allocates for the borrowed content,
+    /// so cloning an existing [DataValue] is cheaper.
     pub fn to_owned(self) -> DataValue {
         DataValue::from_ref(self)
     }
 
-    /// Returns whether two values are equal.
+    /// Returns whether two values are equal by value.
     ///
-    /// Following SPARQL's `sameValue`, values of different domains
-    /// that cannot be compared numerically are unequal if at least one is an IRI or a null.
+    /// - Numbers of all numeric domains are compared by value, so `1` equals `1.0d`.
+    /// - DateTimes, dates and times are compared by value, across timezone offsets.
+    /// - Durations are equal if they are the same value, whatever their domains.
+    /// - Any other two values of the same domain are equal if they are the same term.
+    ///   Two distinct ones are unequal, except two literals of a datatype without dedicated
+    ///   support, which cannot be compared.
+    /// - Two values of different domains are unequal if one of them is an IRI or a null.
+    ///
+    /// This follows SPARQL's `sameValue`.
     ///
     /// # Errors
     ///
     /// Returns [Incomparable](EvaluationError::Incomparable)
-    /// for other values of different domains that cannot be compared numerically,
-    /// and for two distinct literals of unknown datatypes.
+    /// for any other two values of different domains,
+    /// and for two distinct literals of datatypes without native support.
     pub fn value_eq(self, other: Self) -> Result<bool, EvaluationError> {
         match (self, other) {
             (ValueRef::Number(left), ValueRef::Number(right)) => return Ok(left.value_eq(right)),
@@ -173,15 +185,17 @@ impl<'a> ValueRef<'a> {
         Err(EvaluationError::Incomparable)
     }
 
-    /// Returns the order of two values, `op:numeric-less-than` and its kin,
-    /// or `None` if the domain leaves it undefined:
-    /// for a NaN operand, and for a zoned beside an unzoned dateTime, date or time.
+    /// Returns the order of two values by value, as XPath's `op:numeric-less-than` and its kin
+    /// define it, or `None` if the order is undefined.
     ///
-    /// Numbers of any numeric domain order by value, strings by code point,
-    /// and booleans with `false` first.
-    /// DateTimes, dates and times order by XSD's partial order,
-    /// and durations by length if they [share a kind](Duration::shares_kind).
-    /// Tuples of one shape, with the same label and arity, order elementwise.
+    /// - Numbers of all numeric domains are ordered by value.
+    /// - Strings are ordered by code point, and `false` comes before `true`.
+    /// - DateTimes, dates and times are ordered by XSD's partial order.
+    /// - Durations are ordered by length if they [share a kind](Duration::shares_kind).
+    /// - Tuples with the same label and length are ordered element by element.
+    ///
+    /// The order is undefined for a NaN,
+    /// and for a zoned and an unzoned dateTime, date or time that are too close to be ordered.
     ///
     /// # Errors
     ///
@@ -214,7 +228,8 @@ impl<'a> ValueRef<'a> {
     }
 }
 
-/// Returns the numbers two values hold, or a type mismatch.
+/// Returns the two values as numbers,
+/// or [TypeMismatch](EvaluationError::TypeMismatch) if one of them is not a number.
 fn numbers<'a>(
     left: ValueRef<'a>,
     right: ValueRef<'a>,
@@ -236,9 +251,9 @@ impl Add for ValueRef<'_> {
     /// - of a dateTime, date or time and a duration, in either order,
     ///   `op:add-dayTimeDuration-to-dateTime` and its kin.
     ///
-    /// A time takes a dayTimeDuration only.
-    /// A dateTime or date also takes a duration with both months and seconds,
-    /// which XSD's addition defines and XPath leaves out.
+    /// A time can only be moved by a dayTimeDuration.
+    /// A dateTime or a date can also be moved by a duration with both months and seconds:
+    /// XSD defines this addition, but XPath leaves it out.
     ///
     /// # Errors
     ///
@@ -268,14 +283,14 @@ impl Sub for ValueRef<'_> {
     /// - of two durations that share a kind, `op:subtract-dayTimeDurations` and its kin;
     /// - of a dateTime, date or time and a duration,
     ///   `op:subtract-dayTimeDuration-from-dateTime` and its kin;
-    /// - of two dateTimes, two dates or two times, a dayTimeDuration,
+    /// - of two dateTimes, two dates or two times, which is a dayTimeDuration,
     ///   `op:subtract-dateTimes` and its kin.
     ///
     /// # Errors
     ///
     /// Returns the errors of [addition](ValueRef::add),
     /// and [Incomparable](EvaluationError::Incomparable)
-    /// for a zoned and an unzoned point in time, which have no distance.
+    /// for a zoned and an unzoned dateTime, date or time, which have no distance.
     fn sub(self, other: Self) -> Self::Output {
         let distance = |duration: Option<Duration>| {
             duration
@@ -305,9 +320,11 @@ impl Sub for ValueRef<'_> {
 impl Mul for ValueRef<'_> {
     type Output = Result<DataValue, EvaluationError>;
 
-    /// Returns the product of two numbers, `op:numeric-multiply`,
-    /// or of a duration and a number, in either order,
-    /// `op:multiply-dayTimeDuration` and `op:multiply-yearMonthDuration`.
+    /// Returns the product of two values:
+    ///
+    /// - of two numbers, `op:numeric-multiply`;
+    /// - of a duration and a number, in either order,
+    ///   `op:multiply-dayTimeDuration` and `op:multiply-yearMonthDuration`.
     ///
     /// # Errors
     ///
@@ -333,7 +350,7 @@ impl Div for ValueRef<'_> {
     ///
     /// - of two numbers, `op:numeric-divide`;
     /// - of a duration and a number, `op:divide-dayTimeDuration` and its kin;
-    /// - of two durations that share a kind, a decimal,
+    /// - of two durations that share a kind, which is a decimal,
     ///   `op:divide-dayTimeDuration-by-dayTimeDuration` and its kin.
     ///
     /// # Errors
@@ -356,7 +373,7 @@ impl Div for ValueRef<'_> {
 impl Rem for ValueRef<'_> {
     type Output = Result<DataValue, EvaluationError>;
 
-    /// Returns the remainder of integer division, `op:numeric-mod`.
+    /// Returns the remainder of the division of two integers, `op:numeric-mod`.
     ///
     /// # Errors
     ///
@@ -385,19 +402,20 @@ impl Neg for ValueRef<'_> {
 }
 
 impl fmt::Display for ValueRef<'_> {
-    /// Writes the value in canonical Nemo term syntax:
-    /// IRIs in angle brackets,
-    /// strings quoted with `\`, `"` and line breaks escaped,
-    /// floats and doubles with their `f` and `d` suffixes,
-    /// or as typed literals when not finite,
-    /// dates, times, durations and unsupported datatypes as typed literals,
-    /// and structured values recursively.
+    /// Writes the value in canonical term syntax.
     ///
-    /// One value has one rendering, and distinct values render distinctly.
-    /// Every rendering re-parses as a term denoting this value,
-    /// except a null, which renders as `_:id` in the syntax of data, not of programs.
+    /// - An IRI is written without angle brackets if it [writes bare](IriRef::writes_bare),
+    ///   and in angle brackets otherwise.
+    /// - A string is quoted, with `\`, `"` and line breaks escaped.
+    /// - A finite float or double is written with its suffix `f` or `d`.
+    /// - An infinite float or double, a NaN, a dateTime, a date, a time, a duration,
+    ///   and a literal of a datatype without native support are written as typed literals.
+    /// - A null is written `_:` followed by its [number](Self::null_number).
+    /// - A tuple or a map is written in its own syntax, recursively.
     ///
-    /// An IRI that reads back bare is written bare;
+    /// Each value has one written form, and distinct values have distinct written forms.
+    /// Every written form is read back as a term that denotes this value, except that of a null:
+    /// `_:` followed by a number is read as a blank node, which does not identify this null.
     /// [bracketed](Self::bracketed) writes every IRI in angle brackets.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.write_term(f, true)
@@ -416,16 +434,21 @@ impl fmt::Display for BracketedValue<'_> {
 
 impl<'a> ValueRef<'a> {
     /// Returns the value in term syntax with every IRI in angle brackets,
-    /// structure labels and map keys included,
-    /// the form that reads back as the same value under a base IRI,
-    /// which makes a bare name relative to it.
+    /// including the IRIs in tuples and maps and their labels.
+    ///
+    /// This form is read back as the same value even under a base IRI,
+    /// which would make a bare name relative to the base.
     pub fn bracketed(self) -> impl fmt::Display + 'a {
         BracketedValue(self)
     }
 }
 
 impl ValueRef<'_> {
-    /// Writes the value in term syntax, the IRIs that read back bare written bare if `bare`.
+    /// Writes the value in term syntax.
+    ///
+    /// If `bare` is true, an IRI that [writes bare](IriRef::writes_bare)
+    /// is written without angle brackets.
+    /// Otherwise every IRI is written in angle brackets.
     pub(super) fn write_term(self, f: &mut fmt::Formatter<'_>, bare: bool) -> fmt::Result {
         match self {
             ValueRef::Iri(iri) if bare && iri.writes_bare() => write!(f, "{iri}"),
@@ -457,8 +480,9 @@ impl ValueRef<'_> {
         }
     }
 
-    /// Writes a value of a native datatype as a typed literal:
-    /// its canonical lexical form, quoted, and the datatype of its domain.
+    /// Writes the value as a typed literal of the datatype of its domain.
+    ///
+    /// `lexical` displays the value's canonical lexical form, such as the value itself.
     fn write_typed(self, f: &mut fmt::Formatter<'_>, lexical: impl fmt::Display) -> fmt::Result {
         let datatype = self
             .datatype_iri()
@@ -468,9 +492,11 @@ impl ValueRef<'_> {
     }
 }
 
-/// Returns the sum or the difference of two durations that share a kind,
-/// the error of a pair that does not,
-/// or [Overflow](EvaluationError::Overflow) beyond the value space.
+/// Returns the result of `combine`, the sum or the difference, for two durations.
+///
+/// Fails with [TypeMismatch](EvaluationError::TypeMismatch) for durations that do not
+/// [share a kind](Duration::shares_kind),
+/// and with [Overflow](EvaluationError::Overflow) for a result beyond the value space.
 fn durations(
     left: Duration,
     right: Duration,
@@ -484,9 +510,9 @@ fn durations(
         .ok_or(EvaluationError::Overflow)
 }
 
-/// Returns a dateTime, date or time moved by a duration;
-/// a time moves by a dayTimeDuration only.
+/// Returns a dateTime, date or time moved by a duration.
 ///
+/// A time can only be moved by a dayTimeDuration.
 /// Fails with [TypeMismatch](EvaluationError::TypeMismatch) for any other operand,
 /// and with [Overflow](EvaluationError::Overflow) for a result beyond the value space.
 fn shifted(point: ValueRef<'_>, duration: Duration) -> Result<DataValue, EvaluationError> {
@@ -501,9 +527,9 @@ fn shifted(point: ValueRef<'_>, duration: Duration) -> Result<DataValue, Evaluat
     shifted.ok_or(EvaluationError::Overflow)
 }
 
-/// Writes a string in quoted form,
-/// escaping the quote and the escape character themselves, and the line breaks,
-/// so that the text reads back exactly, line endings included.
+/// Writes a string in double quotes, with `\`, `"` and the line breaks `\n` and `\r` escaped.
+///
+/// The text is then read back exactly, line endings included.
 pub(super) fn write_quoted(f: &mut fmt::Formatter<'_>, text: &str) -> fmt::Result {
     f.write_str("\"")?;
     for character in text.chars() {
@@ -534,7 +560,7 @@ impl Ord for ValueRef<'_> {
             (ValueRef::Tuple(left), ValueRef::Tuple(right)) => left.cmp(right),
             (ValueRef::Map(left), ValueRef::Map(right)) => left.cmp(right),
             (ValueRef::Other(left), ValueRef::Other(right)) => left.cmp(right),
-            // The term order across domains is their declaration order.
+            // Values of different domains are ordered by their domains.
             _ => self.domain().cmp(&other.domain()),
         }
     }
@@ -547,7 +573,7 @@ impl PartialOrd for ValueRef<'_> {
 }
 
 impl PartialEq for ValueRef<'_> {
-    /// Compares by term identity, agreeing with [Ord].
+    /// Returns whether two values are the same term, in agreement with [Ord].
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (ValueRef::Iri(left), ValueRef::Iri(right)) => left == right,
@@ -599,32 +625,35 @@ mod tests {
 
     use EvaluationError::{DivisionByZero, Incomparable, Malformed, Overflow, TypeMismatch};
 
-    /// Returns the value of a typed literal in the XSD namespace;
-    /// panics on a lexical the datatype does not accept.
+    /// Returns the value of a typed literal in the XSD namespace.
+    ///
+    /// Panics for a lexical form that the datatype does not accept.
     fn typed(datatype: &str, lexical: &str) -> DataValue {
         DataValue::typed_literal(&format!("{}{datatype}", xsd::NAMESPACE), lexical).expect(lexical)
     }
 
-    /// Returns a dateTime value.
+    /// Returns the dateTime with the given lexical form.
     fn datetime(lexical: &str) -> DataValue {
         typed("dateTime", lexical)
     }
 
-    /// Returns a date value.
+    /// Returns the date with the given lexical form.
     fn date(lexical: &str) -> DataValue {
         typed("date", lexical)
     }
 
-    /// Returns a time value.
+    /// Returns the time with the given lexical form.
     fn time(lexical: &str) -> DataValue {
         typed("time", lexical)
     }
 
-    /// Returns a duration value.
+    /// Returns the duration with the given lexical form.
     fn duration(lexical: &str) -> DataValue {
         typed("duration", lexical)
     }
 
+    /// [bracketed](ValueRef::bracketed) writes every IRI in angle brackets,
+    /// including labels and map keys, where `Display` writes bare names without them.
     #[test]
     fn bracketed_values_write_every_iri_in_brackets() {
         use crate::value::{MapValue, TupleValue};
@@ -645,9 +674,10 @@ mod tests {
         );
     }
 
+    /// Adding or subtracting a duration moves a dateTime, date or time as XPath's operators do.
     #[test]
     fn points_in_time_move_by_durations() {
-        // The examples of XPath's operators.
+        // The examples of the specification of XPath's operators.
         assert_eq!(
             &datetime("2000-10-30T11:12:00") + &duration("P1Y2M"),
             Ok(datetime("2001-12-30T11:12:00"))
@@ -689,7 +719,7 @@ mod tests {
             Ok(time("22:10:00-05:00"))
         );
 
-        // Addition commutes; a time moves by no months.
+        // Addition commutes, and a time cannot be moved by months.
         assert_eq!(
             &duration("P1Y2M") + &date("2000-10-30"),
             Ok(date("2001-12-30"))
@@ -698,6 +728,7 @@ mod tests {
         assert_eq!(&duration("P1M") - &date("2000-10-30"), Err(TypeMismatch));
     }
 
+    /// The difference of two dateTimes, two dates or two times is the duration between them.
     #[test]
     fn points_in_time_are_durations_apart() {
         assert_eq!(
@@ -725,7 +756,8 @@ mod tests {
             Ok(duration("-PT23H59M59S"))
         );
 
-        // Without an implicit timezone, a zoned and an unzoned value have no distance.
+        // Without an implicit timezone offset,
+        // a zoned and an unzoned value have no distance.
         assert_eq!(
             &date("2000-10-30Z") - &date("1999-11-28"),
             Err(Incomparable)
@@ -736,6 +768,8 @@ mod tests {
         );
     }
 
+    /// Durations of one kind are added, subtracted, multiplied and divided as XPath's operators
+    /// do, and durations of different kinds are not combined.
     #[test]
     fn durations_combine_within_a_kind() {
         // The examples of XPath's operators.
@@ -767,7 +801,7 @@ mod tests {
             Ok(duration("PT17H40M7S"))
         );
 
-        // The zero duration is of either kind, and the result of a sum to zero.
+        // The zero duration shares a kind with every duration, and is the result of a sum to zero.
         assert_eq!(&duration("P1M") - &duration("P1M"), Ok(duration("PT0S")));
         assert_eq!(&duration("PT0S") + &duration("P1M"), Ok(duration("P1M")));
         assert_eq!(&duration("P1M") + &duration("PT1S"), Err(TypeMismatch));
@@ -775,9 +809,11 @@ mod tests {
         assert_eq!(&duration("PT1S") / &duration("PT0S"), Err(DivisionByZero));
     }
 
+    /// Multiplying or dividing a duration by a number is exact and rounds halves up,
+    /// and fails for a factor or divisor that leaves no finite duration.
     #[test]
     fn durations_scale_exactly_and_round_halves_up() {
-        // A double counts as its shortest decimal, 2.1, not the binary value near it.
+        // A double is used as its shortest decimal form, 2.1, not as its exact binary value.
         assert_eq!(
             &DataValue::double(2.1) * &duration("PT2H10M"),
             Ok(duration("PT4H33M"))
@@ -809,6 +845,7 @@ mod tests {
         );
     }
 
+    /// Dates, times and durations are compared by value, as XPath's comparison operators do.
     #[test]
     fn dates_times_and_durations_compare_by_value() {
         // The examples of XPath's equality operators.
@@ -852,6 +889,7 @@ mod tests {
         );
     }
 
+    /// The arithmetic operators compute on numbers, and fail with the error that names the cause.
     #[test]
     fn arithmetic_names_its_errors() {
         let int = DataValue::integer;
@@ -870,9 +908,10 @@ mod tests {
         assert_eq!(&int(3) * &int(i64::MAX), Ok(number("27670116110564327421")));
     }
 
+    /// Floating-point arithmetic results in infinities and NaN instead of failing.
     #[test]
     fn floating_arithmetic_stays_in_its_value_space() {
-        // A zero divisor and an overflow are values, as XPath's `op:numeric-*` define them.
+        // A zero divisor and an overflow give values, as XPath's `op:numeric-*` define them.
         assert_eq!(
             &DataValue::double(1.0) / &DataValue::float(0.0),
             Ok(DataValue::double(f64::INFINITY))
@@ -891,6 +930,8 @@ mod tests {
         );
     }
 
+    /// Value equality compares numbers and dateTimes by value, finds an IRI unequal to a literal,
+    /// and cannot compare literals of unrelated domains.
     #[test]
     fn equality_follows_rdf_term_equal() {
         let int = DataValue::integer;
@@ -909,12 +950,15 @@ mod tests {
         );
         assert_eq!(DataValue::iri("a").value_eq(&int(1)), Ok(false));
         assert_eq!(DataValue::string("1").value_eq(&int(1)), Err(Incomparable));
-        // Literals of unknown datatypes: equal as terms, or undecided.
+        // Literals of a datatype without native support are equal if they are the same term,
+        // and cannot be compared otherwise.
         let other = |lexical| DataValue::other("http://example.org/t", lexical).expect("other");
         assert_eq!(other("a").value_eq(&other("a")), Ok(true));
         assert_eq!(other("a").value_eq(&other("b")), Err(Incomparable));
     }
 
+    /// Values are ordered by value within numbers, strings and booleans,
+    /// a NaN leaves the order undefined, and unrelated domains cannot be compared.
     #[test]
     fn order_is_defined_within_domains() {
         let int = DataValue::integer;
@@ -931,6 +975,7 @@ mod tests {
         assert_eq!(int(1).value_cmp(&DataValue::string("1")), Err(Incomparable));
     }
 
+    /// A literal has the IRI of its datatype, and an IRI has no datatype.
     #[test]
     fn values_name_their_datatype() {
         assert_eq!(

@@ -1,17 +1,7 @@
-//! JSON documents as node/edge triples.
+//! JSON: reading documents as node/edge triples, and writing rows as arrays.
 //!
-//! A document becomes a ternary table `(node, key, value)`.
-//! Every JSON value, scalar, array or object, at any depth, is a node with an opaque integer id.
-//! The root is `0`, and ids are unique, their particular assignment unspecified.
-//! - A scalar carries `(id, <type>, "…")` and `(id, <value>, v)` triples, and `null` only the
-//!   type triple.
-//! - An array edges to its elements under integer indices.
-//! - An object edges to its members under plain-string keys.
-//!
-//! The pseudo-keys `<type>` and `<value>` are IRIs,
-//! so a JSON key literally named `type`, a plain string, never collides with them.
-//! Numbers keep their exactness:
-//! an integer is an integer (wide beyond 64 bits), and a fraction or exponent form a double.
+//! A document is read as a table of triples `(node, key, value)`,
+//! with one node for every JSON value in it.
 
 use std::{
     collections::{BTreeMap, VecDeque},
@@ -34,7 +24,20 @@ use crate::{
     written::{Writer, Written},
 };
 
-/// A reader of JSON documents, decoding them into node/edge triples.
+/// A reader of JSON documents, which decodes a document into node/edge triples.
+///
+/// Every JSON value at any depth, scalar, array or object, is a node with an integer id.
+/// The root is `0`, and the other ids are unique, but which node gets which id is unspecified.
+/// - Every node has a triple `(id, <type>, "…")` that names its kind:
+///   `null`, `bool`, `number`, `string`, `array` or `object`.
+/// - A scalar other than `null` has a triple `(id, <value>, v)`.
+/// - An array has an edge to each element, with the element's integer index as the key.
+/// - An object has an edge to each member, with the member's key as a plain string.
+///
+/// The keys `<type>` and `<value>` are IRIs,
+/// so they never collide with a JSON key such as `type`, which is read as a plain string.
+/// An integer is read exactly, even beyond 64 bits,
+/// and a number with a fraction or an exponent is read as a double.
 ///
 /// # Example
 ///
@@ -48,8 +51,8 @@ use crate::{
 ///     .read(document.as_bytes(), &mut dictionary, EvaluationContext::now())
 ///     .expect("the document reads");
 ///
-/// // The object edges to its two members, and each scalar member carries its
-/// // type and its value: 2 + 2 * 2 triples, and the object's own type triple.
+/// // The object has an edge to each of its two members, and each member has a type
+/// // and a value triple: 2 + 2 * 2 triples, plus the object's own type triple.
 /// assert_eq!(loaded.rows.len(), 7);
 /// ```
 #[derive(Debug, Clone, Default)]
@@ -59,14 +62,14 @@ pub struct JsonReader {
 }
 
 impl JsonReader {
-    /// Creates a reader delivering every triple whole.
+    /// Creates a reader that delivers every triple with all its columns.
     pub fn new() -> Self {
         Self {
             selection: RowSelection::default(),
         }
     }
 
-    /// Creates a reader delivering the selected columns and rows.
+    /// Creates a reader that delivers the columns and rows of a selection.
     pub fn with_selection(selection: RowSelection) -> Self {
         Self { selection }
     }
@@ -113,21 +116,22 @@ impl Reader for JsonReader {
     }
 }
 
-/// The triples a document's nodes become, loaded as they are produced.
+/// The triples of a document's nodes, loaded as they are produced.
 struct Triples<'a> {
-    /// What the reader delivers of each triple.
+    /// The selection that the reader applies to each triple.
     selection: &'a RowSelection,
     /// The rows loaded so far.
     loaded: Loaded,
-    /// The kept values of the triple at hand.
+    /// The delivered values of the current triple.
     kept: Vec<DataValue>,
-    /// The encoded values of the triple at hand.
+    /// A scratch buffer for the encoded values of the current triple.
     encoded: Vec<StorageValue>,
 }
 
 impl<'a> Triples<'a> {
-    /// Creates an empty collection of triples under a selection,
-    /// whose condition evaluates in `context`.
+    /// Creates an empty collection of triples under a selection.
+    ///
+    /// `context` is the evaluation context of the selection's condition.
     fn new(selection: &'a RowSelection, context: EvaluationContext) -> Self {
         Self {
             selection,
@@ -139,7 +143,8 @@ impl<'a> Triples<'a> {
 
     /// Loads one triple.
     ///
-    /// Every JSON value is representable, so no triple is malformed.
+    /// A triple with a value that the dictionary cannot hold, such as a very long string,
+    /// is counted as malformed.
     fn push(&mut self, dictionary: &mut Dictionary, triple: [&DataValue; 3]) {
         self.kept.clear();
         self.kept.extend(
@@ -153,9 +158,10 @@ impl<'a> Triples<'a> {
             .take(&self.kept, self.selection, dictionary, &mut self.encoded, 0);
     }
 
-    /// Loads the triples of a document, breadth first:
-    /// each node's type, its value if it is a scalar,
-    /// and an edge to each child, which takes the next free id.
+    /// Loads the triples of a document, breadth first.
+    ///
+    /// For each node, it loads the node's type, its value if it is a scalar other than `null`,
+    /// and an edge to each child, which gets the next free id.
     fn walk(&mut self, document: Node, dictionary: &mut Dictionary) {
         let key_type = DataValue::iri("type");
         let key_value = DataValue::iri("value");
@@ -214,11 +220,11 @@ impl<'a> Triples<'a> {
     }
 }
 
-/// A parsed document.
+/// A parsed JSON value, which is a node of a document.
 ///
 /// `serde_json`'s own tree converts every number as it parses,
 /// so an integer beyond 64 bits would arrive as a double.
-/// The reader builds its own, keeping such integers as written.
+/// The reader builds this tree instead, which keeps such integers as written.
 #[derive(Debug)]
 enum Node {
     /// `null`.
@@ -229,9 +235,10 @@ enum Node {
     Number(Number),
     /// A string.
     String(String),
-    /// An array, its elements in order.
+    /// An array, with its elements in order.
     Array(Vec<Node>),
-    /// An object, its members by key, in the order the members' ids are assigned in.
+    /// An object, with its members sorted by key, which is the order in which they get their
+    /// ids.
     ///
     /// If a key repeats, its last value counts.
     Object(BTreeMap<String, Node>),
@@ -251,20 +258,20 @@ impl Node {
     }
 }
 
-/// A JSON number as the reader keeps it.
+/// A parsed JSON number.
 #[derive(Debug)]
 enum Number {
     /// An integer within 64 bits.
     Integer(i64),
     /// An integer beyond 64 bits, as written.
     Big(String),
-    /// A fraction or exponent form.
+    /// A number with a fraction or an exponent.
     Double(f64),
 }
 
 impl Number {
-    /// Returns the number's value: integers exact, wide beyond 64 bits,
-    /// and fraction and exponent forms as doubles.
+    /// Returns the number's value:
+    /// the exact integer, or a double for a number with a fraction or an exponent.
     fn value(&self) -> DataValue {
         match self {
             Number::Integer(value) => DataValue::integer(*value),
@@ -276,11 +283,11 @@ impl Number {
     }
 }
 
-/// The number literals of a document in document order, found by a scan that skips strings.
+/// The number literals of a document, in document order, found by a scan that skips strings.
 ///
-/// The parser's data model hands a number over already converted.
-/// The text of one that does not fit its integer types is taken from here as the parser reaches
-/// it, since the parser reads the document in order, one number at a time.
+/// The parser hands a number over already converted.
+/// The text of a number that does not fit the parser's integer types is taken from this scan
+/// when the parser reaches the number, since the parser reads the document in order.
 struct NumberLiterals<'a> {
     /// The document.
     document: &'a [u8],
@@ -297,7 +304,7 @@ impl<'a> NumberLiterals<'a> {
         }
     }
 
-    /// Skips the string opening at the current quote, escapes included.
+    /// Skips the string that opens at the current quote, including its escapes.
     fn skip_string(&mut self) {
         self.position += 1;
         while let Some(&byte) = self.document.get(self.position) {
@@ -335,7 +342,7 @@ impl<'a> Iterator for NumberLiterals<'a> {
     }
 }
 
-/// Deserializes one node, taking the text of a number beyond the
+/// The deserializer of one node, which takes the text of a number beyond the
 /// parser's integer types from the document's literals.
 struct NodeSeed<'a, 'b> {
     /// The document's number literals, positioned at the next one the
@@ -380,10 +387,10 @@ impl<'de> Visitor<'de> for NodeSeed<'_, '_> {
     }
 
     fn visit_f64<E: serde::de::Error>(self, value: f64) -> Result<Node, E> {
-        // An integer literal the parser could only hand over as a double
-        // keeps its text if the text denotes this number, which
-        // guards the scan's alignment with the parse.
-        // The parser's conversion of a long literal is not correctly rounded,
+        // An integer literal that the parser can only hand over as a double
+        // keeps its text if the text denotes this number. The check guards
+        // against the scan getting out of step with the parse.
+        // The parser does not round a long literal correctly,
         // so the two may differ in the last places.
         let literal = self.literals.next().filter(|literal| {
             !literal
@@ -429,15 +436,17 @@ impl<'de> Visitor<'de> for NodeSeed<'_, '_> {
     }
 }
 
-/// A writer serializing rows as a JSON array of row arrays.
+/// A writer of rows as a JSON array of row arrays.
 ///
-/// A value with a native JSON type is written natively:
-/// integers and finite doubles as numbers, booleans as booleans, plain strings as strings.
-/// Everything else is written as its [any_cell](crate::format::ValueFormat::any_cell) string,
-/// the export form DSV shares.
-/// This is an interchange form, not one that reads back:
-/// the node/edge triples of the JSON reader describe a document to reason over,
-/// and are no writer's inverse.
+/// A value with a matching JSON type is written as that type:
+/// - integers within 64 bits and finite doubles as numbers,
+/// - booleans as booleans,
+/// - plain strings as strings.
+///
+/// Every other value is written as a string,
+/// the text that [any_cell](crate::format::ValueFormat::any_cell) gives for it.
+/// The output is meant for other programs, and is not read back as rows:
+/// the [JsonReader] reads any document as node/edge triples.
 #[derive(Debug, Clone, Default)]
 pub struct JsonWriter {
     /// The stream compression.
@@ -509,7 +518,7 @@ fn cell(value: &DataValue) -> serde_json::Value {
 mod tests {
     use super::*;
 
-    /// The `<value>` of every scalar node of a document, by node id.
+    /// Returns the `<value>` of every scalar node of a document, by node id.
     fn values(text: &str) -> BTreeMap<i64, DataValue> {
         let mut dictionary = Dictionary::new();
         let loaded = JsonReader::new()
@@ -529,6 +538,8 @@ mod tests {
             .collect()
     }
 
+    /// A document's scalars are read as values of their JSON types,
+    /// and a document cut short is an error.
     #[test]
     fn documents_read_as_typed_scalars() {
         let text = r#"{"name": "alice", "age": 42, "half": 0.5, "on": true, "none": null}"#;
@@ -550,6 +561,8 @@ mod tests {
         );
     }
 
+    /// An integer beyond 64 bits is read exactly,
+    /// and a number with a fraction or an exponent as a double.
     #[test]
     fn integers_beyond_sixty_four_bits_stay_exact() {
         let big = |lexical: &str| DataValue::decimal_from_lexical(lexical).expect("well-formed");
@@ -565,10 +578,12 @@ mod tests {
         assert_eq!(values[&6], DataValue::integer(0));
         assert_eq!(values[&7], DataValue::double(2.5));
         assert_eq!(values[&8], DataValue::string("1e400"));
-        // Past an escaped string, the scan is still aligned.
+        // After an escaped string, the scan is still in step with the parse.
         assert_eq!(values[&10], big("100000000000000000000"));
     }
 
+    /// A long integer is read exactly,
+    /// even though the parser's double for it is off in the last places.
     #[test]
     fn long_integers_stay_exact_whatever_the_parser_rounds() {
         // The parser converts these to doubles a few units off the correctly rounded value.

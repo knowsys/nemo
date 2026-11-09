@@ -1,23 +1,24 @@
 //! The wire form of events on the `tracing` stream, and its decoding.
 //!
-//! Each engine event is one `tracing` event, its data as flat named fields under the [TARGET]
-//! target.
+//! Each engine event is one `tracing` event under the [TARGET] target,
+//! with its data as flat named fields.
 //! The field names are defined here and nowhere else.
 
 use tracing::Level;
 
 use crate::telemetry::EngineEvent;
 
-/// The `tracing` target every telemetry event carries, by which subscribers select the stream.
+/// The `tracing` target of every telemetry event, by which subscribers select the telemetry
+/// stream.
 pub const TARGET: &str = "nemo::telemetry";
 
-/// The most numeric fields one event carries (a rule application's).
+/// The largest number of numeric fields of one event, which is that of a rule application.
 #[cfg(feature = "subscriber")]
 const SLOTS: usize = 18;
 
 /// Emits an event on the `tracing` stream at trace level.
 ///
-/// The `kind` field names the variant, and the other fields carry its data by name.
+/// The field `kind` names the variant, and the other fields contain its data, by name.
 /// Nothing is built if no subscriber listens to the target.
 pub(crate) fn emit(event: &EngineEvent) {
     match event {
@@ -132,28 +133,27 @@ pub(crate) fn emit(event: &EngineEvent) {
     }
 }
 
-/// The visitor collecting a `tracing` event's fields for decoding.
+/// The visitor that collects the fields of a `tracing` event for decoding.
 ///
-/// Fields arrive in the order [emit] declares them,
-/// so the numeric ones land in slots by position.
-/// No names are matched.
-/// The `kind` field names the variant,
-/// and the one text field (a resource or an endpoint) is copied,
-/// the only allocation per event.
+/// Fields arrive in the order in which [emit] declares them,
+/// so the numeric fields are stored in slots by position, and no names are matched.
+/// The field `kind` names the variant.
+/// The one text field, a resource or an endpoint, is copied,
+/// which is the only allocation per event.
 #[cfg(feature = "subscriber")]
 #[derive(Debug, Default)]
 pub(crate) struct FieldCollector {
-    /// The variant, once the `kind` field arrived.
+    /// The variant, once the field `kind` has arrived.
     kind: Option<EventKind>,
     /// The text field, if the variant has one.
     text: Option<String>,
-    /// The numeric fields, flags as `0`/`1`, in arrival order.
+    /// The numeric fields in arrival order, with flags as `0` or `1`.
     numbers: [u64; SLOTS],
-    /// How many numeric fields arrived.
+    /// The number of numeric fields stored.
     count: usize,
 }
 
-/// The variants, as the `kind` field names them.
+/// The variants of [EngineEvent], as the field `kind` names them.
 #[cfg(feature = "subscriber")]
 #[derive(Debug, Clone, Copy)]
 enum EventKind {
@@ -177,7 +177,8 @@ enum EventKind {
 
 #[cfg(feature = "subscriber")]
 impl EventKind {
-    /// Returns the variant a `kind` field names.
+    /// Returns the variant that a value of the field `kind` names, or `None` for an unknown
+    /// name.
     fn parse(name: &str) -> Option<Self> {
         Some(match name {
             "imported" => EventKind::Imported,
@@ -195,7 +196,7 @@ impl EventKind {
 
 #[cfg(feature = "subscriber")]
 impl FieldCollector {
-    /// Takes one numeric field.
+    /// Stores one numeric field in the next slot, if one is left.
     fn number(&mut self, value: u64) {
         if self.count < SLOTS {
             self.numbers[self.count] = value;
@@ -205,9 +206,9 @@ impl FieldCollector {
 
     /// Rebuilds the event from the collected fields.
     ///
-    /// Returns `None` if the fields do not form an event:
-    /// if the event comes from another producer on the `tracing` target,
-    /// or if its fields are laid out differently than this version of nemo emits them.
+    /// Returns `None` if the fields do not form an event,
+    /// such as for an event of another producer on the `tracing` target,
+    /// or for fields laid out differently than [emit] lays them out.
     pub(crate) fn decode(self) -> Option<EngineEvent> {
         let n = &self.numbers;
         let count = |value: u64| usize::try_from(value).ok();

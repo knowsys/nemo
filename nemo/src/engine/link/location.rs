@@ -1,5 +1,11 @@
-//! Where a module name leads: the name resolved against the directory of the file
-//! containing the `@use`, or against a module root.
+//! Where a module name leads.
+//!
+//! A `@use` names its module rather than locating it:
+//! `lib::tc` is the file `lib/tc.rls` next to the file that contains the `@use`,
+//! each leading `super` goes one directory up,
+//! and a name that begins with a module root names a file inside the root's directory.
+//! A location's *tree* is the directory it is relative to:
+//! the directory of a module root, or of the program that contains the outermost `@use`.
 
 use std::{
     collections::HashMap,
@@ -14,9 +20,10 @@ pub(super) struct Location {
     /// The module root it lies in,
     /// or `None` for the tree around the program containing the outermost `@use`.
     pub(super) root: Option<String>,
-    /// How many directories above the program's directory it lies, zero inside a root.
+    /// How many directories above the program's directory it lies, which is zero inside a
+    /// root.
     pub(super) parents: usize,
-    /// The directories below, then, for a module, its name.
+    /// The directories below that, followed by the module's name for a module.
     pub(super) segments: Vec<String>,
 }
 
@@ -74,8 +81,7 @@ impl Location {
         Ok(location)
     }
 
-    /// Returns the directory the location's tree lies in:
-    /// its root's, or the program's.
+    /// Returns the location's tree: its root's directory, or `program`.
     ///
     /// # Panics
     ///
@@ -91,7 +97,7 @@ impl Location {
         }
     }
 
-    /// Returns the path of the module file at this location, whose tree lies in `tree`.
+    /// Returns the path of the module file at this location, given the location's `tree`.
     pub(super) fn file(&self, tree: &Path) -> PathBuf {
         let mut path = self.directory().path(tree);
         if let Some(name) = self.segments.last() {
@@ -100,7 +106,7 @@ impl Location {
         path
     }
 
-    /// Returns the path of the directory at this location, whose tree lies in `tree`.
+    /// Returns the path of the directory at this location, given the location's `tree`.
     pub(super) fn path(&self, tree: &Path) -> PathBuf {
         let mut path = tree.to_path_buf();
         for _ in 0..self.parents {

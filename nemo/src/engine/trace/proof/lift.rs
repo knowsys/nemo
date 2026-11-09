@@ -1,20 +1,20 @@
 //! Lifting a proof onto the written program.
 //!
 //! The search finds proofs over the statements of the compiled program.
-//! A node derived by a statement a pipeline stage created is *lifted*:
-//! mapped back onto the input rule the statement replaces, one stage at a time,
+//! A node derived by a statement that a pipeline stage created is *lifted*:
+//! it is mapped back onto the input rule that the statement replaces, one stage at a time,
 //! until its statement belongs to the written program.
 //!
-//! - Its premises follow the literal correspondence recorded for the stage.
-//!   A premise over a predicate the stage introduced is replaced by the premises of its
+//! - Its premises follow the literal correspondence that the stage recorded.
+//!   A premise over a predicate that the stage introduced is replaced by the premises of its
 //!   definition.
-//!   A premise over a predicate an import evaluates at its endpoint is replaced by *remote*
-//!   leaves: facts queried at the endpoint instead of stored.
-//! - Its assignment becomes the input rule's:
-//!   each input variable takes the value of the term it became, if the evaluation computed one.
+//!   A premise over a predicate that an import evaluates at its endpoint is replaced by
+//!   *remote* leaves, which are facts queried at the endpoint instead of stored.
+//! - Its assignment becomes the input rule's assignment.
+//!   Each input variable gets the value of the term it became, if the evaluation computed one.
 //!
 //! A column whose value the evaluation never computed becomes the written term at its position,
-//! and so does a constant of a written atom, which the responder evaluates.
+//! and so does a constant of a written atom, which the [responder](super::Responder) evaluates.
 //!
 //! The lifted proofs of one response form a [graph](LiftedGraph) with one node per fact.
 
@@ -75,37 +75,38 @@ pub(crate) enum LiftedProof {
     Derived {
         /// The written statement.
         statement: StatementId,
-        /// The engine step of the producing application.
+        /// The engine step of the application that derived the fact.
         step: u64,
-        /// The values the evaluation computed for the statement's variables,
-        /// in the order the statement mentions them.
+        /// The values that the evaluation computed for the statement's variables,
+        /// in the order in which the statement mentions them.
         assignment: Vec<(Variable, LiftedCell)>,
         /// One premise per positive literal, in order, by its id in the graph,
         /// or none for a summarized aggregate.
         premises: Vec<usize>,
-        /// Per negated literal, its predicate and columns.
+        /// The predicate and columns of each negated literal.
         absences: Vec<(String, Vec<LiftedCell>)>,
         /// For an aggregate, the number of distinct contributions
         /// the group's first aggregate ranged over.
         matches: Option<usize>,
-        /// Whether the statement calls a nondeterministic function
-        /// (such as `RAND()` or `STRUUID()`), whose value the search cannot reproduce.
+        /// Whether a head column calls a nondeterministic function, such as `RAND()`,
+        /// whose value the search cannot reproduce.
         nondeterministic: bool,
     },
 }
 
-/// A stored fact as lifted, which the graph lifts once.
+/// The key of a lifted stored fact, by which the graph lifts each fact once.
 #[derive(Debug, PartialEq, Eq, Hash)]
 struct LiftedKey {
     /// The fact's table.
     table: TableId,
     /// The fact's row.
     row: Vec<StorageValue>,
-    /// The terms of the written literal the fact was widened to, if its import drops columns.
+    /// The terms of the written literal that the fact was widened to,
+    /// if its import drops columns.
     widened: Option<Vec<Term>>,
 }
 
-/// A fact queried at an endpoint, which the graph lists once.
+/// The key of a fact queried at an endpoint, by which the graph lists each such fact once.
 #[derive(Debug, PartialEq, Eq, Hash)]
 struct RemoteKey {
     /// The fact's predicate.
@@ -114,9 +115,9 @@ struct RemoteKey {
     terms: Vec<LiftedCell>,
 }
 
-/// The lifted proofs of one response: one node per fact,
-/// each after the nodes of its premises, which its derivation names by id.
+/// The lifted proofs of one response, with one node per fact.
 ///
+/// Each node comes after the nodes of its premises, which its derivation names by id.
 /// The nodes are lifted in batches and taken out after each,
 /// and the ids continue from batch to batch.
 #[derive(Debug, Default)]
@@ -132,13 +133,14 @@ pub(crate) struct LiftedGraph {
 }
 
 impl LiftedGraph {
-    /// Adds a node, returning its id.
+    /// Adds a node, and returns its id.
     fn push(&mut self, node: LiftedNode) -> usize {
         self.nodes.push(node);
         self.first + self.nodes.len() - 1
     }
 
-    /// Returns the id of the leaf of a fact queried at an endpoint, added on first sight.
+    /// Returns the id of the leaf of a fact queried at an endpoint,
+    /// and adds the leaf the first time.
     fn remote_leaf(&mut self, predicate: String, terms: Vec<LiftedCell>) -> usize {
         let key = RemoteKey { predicate, terms };
         if let Some(&id) = self.remote.get(&key) {
@@ -159,7 +161,7 @@ impl LiftedGraph {
         std::mem::take(&mut self.nodes)
     }
 
-    /// Collects the written constants of the batch's nodes, for the responder to evaluate.
+    /// Returns the written ground terms of the batch's nodes, which the responder evaluates.
     pub(crate) fn constants(&self) -> Vec<Term> {
         let constant = |cell: &LiftedCell| match cell {
             LiftedCell::Term(term) if term.is_ground() => Some(term.clone()),
@@ -195,27 +197,29 @@ enum Premise {
     Remote,
 }
 
-/// A node derived by one statement, on its way to the written program.
+/// The derivation of a node by one statement, while it is lifted onto the written program.
 #[derive(Debug)]
 struct StageDerivation {
     /// The statement deriving the node.
     statement: StatementId,
-    /// The rule whose positive literals the premises match: the statement's
-    /// own, an import's view, or a bound import's binding atoms.
+    /// The rule whose positive literals the premises match.
+    ///
+    /// It is the statement's own rule, an import's view,
+    /// or the rule that a bound import's binding atoms form.
     rule: Rule,
-    /// The values the evaluation computed for the rule's variables.
+    /// The values that the evaluation computed for the rule's variables.
     assignment: HashMap<Variable, LiftedCell>,
-    /// Per literal of the rule, the premise matching it,
+    /// The premise that matches each literal of the rule,
     /// or `None` for a negated literal, a condition,
-    /// or a positive literal a summarized aggregate leaves out.
+    /// or a positive literal that a summarized aggregate leaves out.
     premises: Vec<Option<Premise>>,
-    /// The engine step of the producing application.
+    /// The engine step of the application that derived the node.
     step: u64,
     /// For an aggregate, the number of distinct contributions
     /// the group's first aggregate ranged over.
     matches: Option<usize>,
-    /// Whether the statement calls a nondeterministic function
-    /// (such as `RAND()` or `STRUUID()`), whose value the search cannot reproduce.
+    /// Whether a head column calls a nondeterministic function, such as `RAND()`,
+    /// whose value the search cannot reproduce.
     nondeterministic: bool,
 }
 
@@ -229,19 +233,20 @@ pub(crate) struct Lifter<'a> {
     manager: &'a TableManager,
     /// The dictionary, for decoding.
     dictionary: &'a Dictionary,
-    /// The translation state, for names, declarations and the import
-    /// plan.
+    /// The translation state, for names, declarations and the import plan.
     state: &'a TranslationState,
-    /// Per predicate a stage defined, by resolved name, whether an import evaluates it,
-    /// in which case its facts' premises are remote.
+    /// For each predicate that a stage defined, by resolved name, whether an import evaluates
+    /// it.
+    ///
+    /// The premises of the facts of a predicate that an import evaluates are remote.
     definitions: HashMap<String, bool>,
-    /// Per predicate, the import that replaces a written rule deriving it.
+    /// For each predicate, the import that replaces a written rule deriving it.
     replacing: HashMap<String, StatementId>,
 }
 
 impl<'a> Lifter<'a> {
-    /// Prepares the lifting over a loaded engine, collecting what the
-    /// pipeline stages declared while producing its compiled program.
+    /// Prepares the lifting over a loaded engine,
+    /// and collects what the pipeline stages declared while they produced its compiled program.
     pub(crate) fn new(engine: &'a Engine) -> Self {
         let program = engine.program.as_ref().expect("a proof needs a program");
         let mut lifter = Self {
@@ -265,14 +270,14 @@ impl<'a> Lifter<'a> {
         lifter
     }
 
-    /// Lifts the proof of a traced fact into the graph, returning its node's id.
+    /// Lifts the proof of a traced fact into the graph, and returns its node's id.
     pub(crate) fn lift(&self, node: &ProofNode, graph: &mut LiftedGraph) -> usize {
         self.lift_at(node, None, graph)
     }
 
-    /// Lifts a proof node into the graph, unless it is there, returning its node's id.
+    /// Lifts a proof node into the graph unless it is there already, and returns its node's id.
     ///
-    /// `at` holds the terms of the written literal the node is a premise of, if any,
+    /// `at` contains the terms of the written literal that the node is a premise of, if any,
     /// in declaration order.
     fn lift_at(&self, node: &ProofNode, at: Option<&[Term]>, graph: &mut LiftedGraph) -> usize {
         let widened = at.filter(|written| written.len() > node.row.len());
@@ -410,9 +415,10 @@ impl<'a> Lifter<'a> {
         }
     }
 
-    /// Returns the derivation of a fact delivered by an import that replaces a rule:
-    /// its view's head takes the fact's columns, and every
-    /// positive literal of the view is remote.
+    /// Returns the derivation of a fact delivered by an import that replaces a rule.
+    ///
+    /// The variables in the head of the import's view are bound to the fact's columns,
+    /// and every positive literal of the view is remote.
     fn replacing_derivation(
         &self,
         statement: StatementId,
@@ -460,7 +466,7 @@ impl<'a> Lifter<'a> {
         derivation
     }
 
-    /// Lifts a derivation one stage back, onto the input rule its statement replaces.
+    /// Lifts a derivation one stage back, onto the input rule that its statement replaces.
     fn step_back(
         &self,
         derivation: StageDerivation,
@@ -510,9 +516,9 @@ impl<'a> Lifter<'a> {
     }
 
     /// Returns the derivation of the definition unfolded at a literal,
-    /// its proof node lifted onto the defining statement.
+    /// with its proof node lifted onto the defining statement.
     ///
-    /// Returns `None` for a definition an import evaluates,
+    /// Returns `None` for a definition that an import evaluates,
     /// and if no derived proof node matches the literal.
     fn instance(&self, derivation: &StageDerivation, position: usize) -> Option<StageDerivation> {
         let atom = derivation.rule.body[position].atom()?;
@@ -533,9 +539,10 @@ impl<'a> Lifter<'a> {
     /// Returns the value of a term of an unfolded rule,
     /// or `None` if the evaluation never computed it.
     ///
-    /// A variable of the rule takes it from the derivation's assignment,
-    /// a variable a definition renamed apart (`name~path`) from that definition's instance,
-    /// and a constant is as written.
+    /// - A variable of the rule gets its value from the derivation's assignment.
+    /// - A variable that a definition renamed apart, as `name~path`,
+    ///   gets its value from the instance of that definition.
+    /// - A ground term stays as written.
     fn evaluate(&self, term: &Term, derivation: &StageDerivation) -> Option<LiftedCell> {
         if term.is_ground() {
             return Some(LiftedCell::Term(term.clone()));
@@ -564,8 +571,8 @@ impl<'a> Lifter<'a> {
             .cloned()
     }
 
-    /// Completes a derivation at a written statement: its premises lifted into the graph,
-    /// its negated literals instantiated.
+    /// Completes a derivation at a written statement into a node,
+    /// with its premises lifted into the graph and its negated literals instantiated.
     fn finish(
         &self,
         derivation: StageDerivation,
@@ -627,8 +634,10 @@ impl<'a> Lifter<'a> {
             .to_owned()
     }
 
-    /// Widens a stored row to the written literal's width, for a predicate
-    /// whose import drops columns: each dropped column takes the literal's term.
+    /// Widens a stored row to the width of the written literal `at`,
+    /// for a predicate whose import drops columns.
+    ///
+    /// Each dropped column becomes the literal's term at its position.
     fn widen(
         &self,
         predicate: &str,
@@ -657,8 +666,8 @@ impl<'a> Lifter<'a> {
     }
 }
 
-/// Returns the rule a bound import's fetch applies: the import's atom
-/// derived from its binding atoms.
+/// Returns the rule that a bound import's fetch applies,
+/// which derives the import's atom from its binding atoms.
 fn binding_rule(import: &ImportDirective) -> Rule {
     let atom = Atom::new(
         import.predicate.clone(),
@@ -680,8 +689,8 @@ fn binding_rule(import: &ImportDirective) -> Rule {
 
 /// Returns the cells of written terms under an assignment.
 ///
-/// A variable takes its value if the evaluation computed one, and stays as written otherwise.
-/// A compound term, such as `STRLANG(?org, "en")`, takes the values of its variables
+/// A variable becomes its value if the evaluation computed one, and stays as written otherwise.
+/// A compound term, such as `STRLANG(?org, "en")`, gets the values of its variables
 /// if the evaluation computed all of them, so the responder can evaluate it.
 fn instantiate(terms: &[Term], assignment: &HashMap<Variable, LiftedCell>) -> Vec<LiftedCell> {
     terms
@@ -696,8 +705,8 @@ fn instantiate(terms: &[Term], assignment: &HashMap<Variable, LiftedCell>) -> Ve
         .collect()
 }
 
-/// Returns a written term with the values of its variables in their place,
-/// or the term as written unless that makes it ground.
+/// Returns a written term with the values of its variables in their place if that makes it
+/// ground, and the term as written otherwise.
 fn substituted(term: &Term, assignment: &HashMap<Variable, LiftedCell>) -> Term {
     if term.is_ground() {
         return term.clone();
@@ -721,9 +730,11 @@ fn substituted(term: &Term, assignment: &HashMap<Variable, LiftedCell>) -> Term 
     }
 }
 
-/// Returns the known part of an assignment, in the order the rule
-/// mentions its universal variables: its positive literals first, then
-/// the rest of its body, then its head.
+/// Returns the known part of an assignment,
+/// in the order in which the rule mentions its universal variables.
+///
+/// The variables of the positive literals come first, then those of the rest of the body,
+/// then those of the head.
 fn ordered(rule: &Rule, assignment: &HashMap<Variable, LiftedCell>) -> Vec<(Variable, LiftedCell)> {
     let positives = rule
         .body

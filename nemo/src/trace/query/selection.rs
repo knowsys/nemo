@@ -2,12 +2,12 @@
 
 use serde::{Deserialize, Serialize};
 
-/// Which facts of a node a query selects, and which slice of them the
-/// response carries (nev: `TableQueryBaseTableEntries`).
+/// Which facts of a node a query selects, and which slice of them the response contains
+/// (nev: `TableQueryBaseTableEntries`).
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EntriesQuery {
-    /// The facts the node is restricted to, unconstrained if empty.
+    /// The facts that the node is restricted to, or no restriction if empty.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub queries: Vec<EntryQuery>,
     /// The slice of the node's facts to return, or all of them if absent.
@@ -19,10 +19,11 @@ pub struct EntriesQuery {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum EntryQuery {
-    /// A stored fact by its entry id, the only way to select a fact holding a null.
+    /// A stored fact, by its entry id.
+    ///
+    /// This is the only way to select a fact that contains a null.
     Entry(usize),
-    /// A ground fact by its terms in term syntax, separated by commas:
-    /// `a, "b", 3`.
+    /// A ground fact, by its terms in term syntax, separated by commas, such as `a, "b", 3`.
     Terms(String),
 }
 
@@ -31,8 +32,8 @@ pub enum EntryQuery {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Pagination {
-    /// The position of the first fact, in the node's fact set.
+    /// The position of the slice's first fact among the node's facts.
     pub start: usize,
-    /// How many facts at most.
+    /// The largest number of facts in the slice.
     pub count: usize,
 }

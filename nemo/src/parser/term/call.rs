@@ -1,4 +1,5 @@
-//! Names in term position: builtin calls, function terms, constants, and their argument lists.
+//! Parsing the terms that start with a name: builtin calls, function terms, labeled maps
+//! and constants, with the argument lists of calls and function terms.
 
 use nemo_physical::diagnostics::Diagnostic;
 
@@ -9,8 +10,10 @@ use crate::{
 };
 
 impl Parser<'_> {
-    /// Finishes a name in term position: a call (builtin or function
-    /// term), a boolean keyword, or a plain constant.
+    /// Parses the rest of a term that starts with the name `identifier` at `start`.
+    ///
+    /// The term is a call of a builtin, a function term, a map labeled with the name,
+    /// a boolean `true` or `false`, or the name alone as a constant.
     pub(super) fn applied(
         &mut self,
         identifier: Identifier,
@@ -26,8 +29,9 @@ impl Parser<'_> {
             }
         }
 
-        // A name touching `{` labels a map. A space between them,
-        // as in a directive's `csv { … }`, makes it an option block.
+        // A name directly before `{` labels a map.
+        // With a space between them, as in the `csv { … }` of a directive,
+        // the braces enclose options instead, and the name is a constant.
         if self.at(&TokenKind::BraceOpen) && Self::adjacent(self.previous_span(), self.peek_span())
         {
             if let Identifier::Bare(name) = &identifier
@@ -47,8 +51,8 @@ impl Parser<'_> {
         }
         let (arguments, labels) = self.argument_list()?;
 
-        // A bare name from the operator catalogue is a builtin call;
-        // everything else is an uninterpreted function term.
+        // A bare name of a builtin makes a call of the builtin.
+        // Any other name makes a function term.
         if let Identifier::Bare(name) = &identifier
             && let Some(operator) = Operator::from_name(name)
         {
@@ -74,11 +78,14 @@ impl Parser<'_> {
         ))
     }
 
-    /// Parses a call's arguments up to the closing `)`:
-    /// terms, each optionally introduced by a `label:` naming the column it fills.
+    /// Parses the arguments of a call through the closing `)`, and returns them with their
+    /// labels.
     ///
-    /// Naming is all or nothing,
-    /// since a half-named atom would leave the reader guessing which columns the rest mean.
+    /// An argument is a term, optionally preceded by a label `name:`,
+    /// which names the column that the argument fills.
+    /// Either every argument has a label or none has, and the labels are `None` if none has.
+    /// In an atom with only some labels,
+    /// the reader would have to guess which columns the other arguments fill.
     fn argument_list(&mut self) -> Result<(Vec<Term>, Option<Vec<String>>), Diagnostic> {
         let start = self.peek_span();
         let mut labels = Vec::new();
@@ -97,8 +104,8 @@ impl Parser<'_> {
         }
         if named < labels.len() {
             let mut problem = ParseError::MixedArguments.at(Some(self.span_from(start)));
-            // Among named arguments, a prefixed name most likely lacks the space that would
-            // make it a named argument too.
+            // Among named arguments, an argument that is a prefixed name most likely lacks
+            // the space that would make it a named argument too.
             let prefixed = labels
                 .iter()
                 .zip(&terms)
@@ -120,11 +127,12 @@ impl Parser<'_> {
         Ok((terms, Some(labels.into_iter().flatten().collect())))
     }
 
-    /// Takes an argument's `label:` if the next tokens are one:
-    /// a name and a `:` that are not the start of a prefixed name.
+    /// Consumes and returns the label of an argument,
+    /// if the next tokens are a name and a `:` that do not start a prefixed name.
     ///
-    /// A prefixed name's prefix touches its `:`, and the `:` touches the local name,
-    /// as in `xsd:integer` or `wd:42`, or ends the term, as in `ex:` or `ex: = ?x`.
+    /// In a prefixed name, the prefix directly touches its `:`.
+    /// The `:` directly touches the local name, as in `xsd:integer` or `wd:42`,
+    /// or ends the term, as in `ex:` or `ex: = ?x`.
     /// A `+` or `-` after the `:` starts the value of a named argument, as in `ex: +1`.
     fn argument_label(&mut self) -> Option<String> {
         let (name, colon, second) = (self.lookahead(0), self.lookahead(1), self.lookahead(2));

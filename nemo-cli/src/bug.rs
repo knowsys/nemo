@@ -1,9 +1,8 @@
-//! The report of a bug in Nemo: a panic, shown as an internal error.
+//! Reporting a panic as an internal error.
 //!
-//! A panic means that Nemo broke a promise of its own, not that the program
-//! or its data are wrong. The run reports it like any other diagnostic,
-//! with the note asking the user to report the bug, and exits with 101,
-//! the exit code of a panic.
+//! A panic means a bug in Nemo, not a problem with the program or its data.
+//! It is shown like any other diagnostic, with a note that asks the user to report the bug,
+//! and the process exits with 101, the exit code of a panic.
 
 use std::{
     backtrace::{Backtrace, BacktraceStatus},
@@ -15,13 +14,14 @@ use nemo_physical::diagnostics::Diagnostic;
 
 /// Installs the panic hook that reports a panic as an internal error.
 ///
-/// The run's thread still unwinds, and the process exits with 101.
+/// The hook only writes the report to the error stream, and the panicking thread still
+/// unwinds.
 pub(crate) fn report_panics() {
     panic::set_hook(Box::new(|info| eprint!("{}", report(info))));
 }
 
 /// Returns the report of a panic:
-/// the rendered internal error, followed by a backtrace if `RUST_BACKTRACE` asks for one.
+/// the rendered internal error, followed by a backtrace if `RUST_BACKTRACE` enables one.
 fn report(info: &PanicHookInfo<'_>) -> String {
     let backtrace = Backtrace::capture();
     let shown = backtrace.status() == BacktraceStatus::Captured;
@@ -39,9 +39,10 @@ fn report(info: &PanicHookInfo<'_>) -> String {
     report
 }
 
-/// Returns the internal error reporting a panic with the given message,
-/// at the given source location of Nemo if it is known.
+/// Returns the internal error that reports a panic with `message`.
 ///
+/// `location` is the place in Nemo's source where it panicked, if it is known,
+/// and `backtrace` is whether a backtrace is shown.
 /// Without a backtrace, a hint says how to get one.
 fn internal_error(message: &str, location: Option<String>, backtrace: bool) -> Diagnostic {
     let mut diagnostic = Diagnostic::internal(message);
@@ -61,6 +62,8 @@ mod tests {
 
     use nemo_physical::diagnostics::Code;
 
+    /// A panic is reported as an internal error with its message, its location,
+    /// and a hint on getting a backtrace, which is left out if a backtrace is shown.
     #[test]
     fn panics_report_as_internal_errors() {
         let diagnostic = internal_error(
@@ -79,7 +82,7 @@ mod tests {
         );
         assert!(shown.contains("RUST_BACKTRACE=1"), "{shown}");
 
-        // With a backtrace shown, the hint goes.
+        // With a backtrace shown, there is no hint.
         let traced = internal_error("boom", None, true);
         assert!(traced.hints().is_empty());
     }

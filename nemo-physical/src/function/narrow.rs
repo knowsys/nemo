@@ -1,13 +1,9 @@
-//! Narrowing: what the outcome of an evaluation tells about its inputs.
+//! Narrowing, which derives what the outcome of an evaluation tells of its inputs.
 //!
-//! An evaluation whose outcome is required, a condition that holds or a value it yields,
-//! narrows the types its inputs can have to those that make the outcome possible.
-//! Narrowing works back from the outcome through the program's expression tree:
-//! - an instruction's [signature](super::OpCode::signature)
-//!   bounds its operands by the overloads that can yield the required result;
-//! - the domain tests, the negation, the connectives, the identity,
-//!   and the reads of a structure's label, length and keys narrow beyond that;
-//! - a structure built to fit a shape requires each of its fields to fit the shape's field.
+//! Given a required outcome, a condition that holds or a value of a given type,
+//! narrowing restricts the types of the inputs to the values that make the outcome possible.
+//! It works back from the outcome through the program's expression tree,
+//! as [Tree::narrow] describes.
 //!
 //! Every step keeps what may succeed, so narrowing over-approximates like inference,
 //! and an input narrowed to the empty type proves that no row yields the outcome.
@@ -23,20 +19,20 @@ use crate::{
     },
 };
 
-/// What an evaluation is assumed to have yielded, which [narrowing](super::StackProgram::narrow)
-/// works back from.
+/// The outcome that an evaluation is required to have,
+/// which [narrowing](super::StackProgram::narrow) works back from.
 #[derive(Debug, Clone)]
 pub enum Outcome {
     /// A value of the type.
     Within(Type),
-    /// A value whose effective boolean value is true: a condition that held.
+    /// A value whose effective boolean value is true, as for a condition that holds.
     Holds,
 }
 
 /// What one node of the expression tree must yield.
 #[derive(Debug, Clone)]
 enum Required {
-    /// A value as the knowledge describes.
+    /// A value that the knowledge allows.
     Value(Inferred),
     /// A value whose effective boolean value is true.
     True,
@@ -59,7 +55,7 @@ impl Required {
         Required::Value(Inferred::Bound(datatype))
     }
 
-    /// Returns the type of the values the requirement allows.
+    /// Returns the type of the values that the requirement allows.
     fn bound(&self) -> Type {
         match self {
             Required::Value(known) => known.bound().into_owned(),
@@ -67,7 +63,7 @@ impl Required {
         }
     }
 
-    /// Returns the effective boolean value the requirement fixes, if it fixes one.
+    /// Returns the effective boolean value that the requirement fixes, if it fixes one.
     fn truth(&self) -> Option<bool> {
         match self {
             Required::True => Some(true),
@@ -81,19 +77,24 @@ impl Required {
 }
 
 /// The expression tree of a program, with what inference knows of each node.
+///
+/// A node is an instruction, identified by its position in the program,
+/// and its operands are the nodes that pushed them.
 struct Tree<'a> {
     /// The instruction of each node.
     operations: &'a [OpCode],
     /// The operand nodes of each node, in operand order.
     operands: Vec<Vec<usize>>,
-    /// What each node yields if it succeeds.
+    /// What inference knows of the result of each node.
     known: Vec<Inferred>,
     /// The types declared for labels.
     labels: &'a LabelTypes,
 }
 
-/// Returns the input types narrowed to those that can yield the outcome;
-/// see the module documentation.
+/// Returns the input types narrowed to the values for which the program can yield `outcome`.
+///
+/// `operations` and `constants` make up the program.
+/// The other parameters are those of [StackProgram::narrow](super::StackProgram::narrow).
 pub(super) fn narrow(
     operations: &[OpCode],
     constants: &[DataValue],
@@ -105,7 +106,7 @@ pub(super) fn narrow(
     let mut known: Vec<Inferred> = Vec::with_capacity(operations.len());
     let mut stack: Vec<usize> = Vec::new();
     for (node, &operation) in operations.iter().enumerate() {
-        // Construction validated the stack discipline.
+        // The program is validated, so the stack has the operands.
         let popped = stack.split_off(stack.len() - operation.pops());
         known.push(match operation {
             OpCode::Constant(index) => Inferred::Exact(constants[usize::from(index)].clone()),
@@ -139,7 +140,17 @@ pub(super) fn narrow(
 }
 
 impl Tree<'_> {
-    /// Returns the inputs narrowed to those that let a node meet a requirement.
+    /// Returns the inputs narrowed to the values that let a node meet a requirement.
+    ///
+    /// - An input node narrows its input to the type that the requirement allows.
+    /// - The negation, the connectives, the domain test and the identity narrow their operands
+    ///   by the truth that the requirement fixes, if it fixes one.
+    /// - Every other node narrows its operands to the overloads of its
+    ///   [signature](OpCode::signature) that can meet the requirement.
+    ///   A node that builds a structure also narrows each operand to the matching field
+    ///   of the required shapes, see [fields](Self::fields).
+    ///   A node that reads the label, the length or the key membership of a structure
+    ///   narrows the structure further, see [refined](Self::refined).
     fn narrow(&self, node: usize, required: &Required, inputs: Vec<Type>) -> Vec<Type> {
         let operands = &self.operands[node];
         match self.operations[node] {
@@ -158,9 +169,8 @@ impl Tree<'_> {
                 };
                 self.narrow(operands[0], &operand, inputs)
             }
-            // A connective can succeed whatever one operand holds,
-            // so only a fixed truth narrows: all operands of a true conjunction hold,
-            // and one of a true disjunction.
+            // A connective can succeed whatever one operand is, so only a fixed truth narrows.
+            // All operands of a true conjunction are true, and one operand of a true disjunction.
             OpCode::And => match required.truth() {
                 Some(true) => operands.iter().fold(inputs, |inputs, &operand| {
                     self.narrow(operand, &Required::True, inputs)
@@ -194,7 +204,7 @@ impl Tree<'_> {
                 }
                 None => inputs,
             },
-            // Identical terms share a type, and an exact side gives the other its value.
+            // Identical terms have the same type, and an exact operand gives the other its value.
             OpCode::Same => match required.truth() {
                 Some(true) => {
                     let (left, right) = (operands[0], operands[1]);
@@ -221,14 +231,16 @@ impl Tree<'_> {
         }
     }
 
-    /// Returns, for a node that builds a structure,
-    /// the type each field operand must have for the structure to meet the requirement:
-    /// the union of that field's types over the requirement's shapes the structure can fit.
+    /// Returns the type that each field operand of a node that builds a structure must have
+    /// for the structure to meet the requirement.
     ///
-    /// A tuple fits a shape of its arity whose label admits its own;
-    /// a map, one with its keys under that label, if its keys are known.
-    /// Returns `None` for any other node,
-    /// and where the requirement says nothing of the structure's shape.
+    /// The type of a field is the union of the field's types
+    /// over the required shapes that the structure can fit.
+    /// A tuple fits a shape of its arity whose label allows the tuple's label.
+    /// A map fits a shape with exactly its keys whose label allows the map's label.
+    ///
+    /// Returns `None` for a node that builds no structure,
+    /// if the requirement has no shapes, and if the label or a key of a map is not exact.
     fn fields(
         &self,
         node: usize,
@@ -308,8 +320,9 @@ impl Tree<'_> {
         }
     }
 
-    /// Returns the inputs narrowed by the signature of a node's instruction:
-    /// each operand to the domains of the overloads that can meet the requirement.
+    /// Returns the inputs narrowed by the signature of a node's instruction.
+    ///
+    /// Each operand is narrowed to the domains of the overloads that can meet the requirement.
     fn generic(
         &self,
         node: usize,
@@ -333,9 +346,11 @@ impl Tree<'_> {
             })
     }
 
-    /// Returns the type a node's structure operand narrows to beyond the signature:
-    /// by an exact label, length, or key membership the requirement fixes;
-    /// `None` if it knows nothing more.
+    /// Returns the type that the structure operand of a [Label](OpCode::Label),
+    /// [Length](OpCode::Length) or [HasKey](OpCode::HasKey) node narrows to beyond the signature.
+    ///
+    /// The requirement must fix the label, the length or the key membership exactly.
+    /// Returns `None` for any other node, and if the requirement fixes nothing.
     fn refined(&self, node: usize, operation: OpCode, required: &Required) -> Option<Type> {
         if !matches!(operation, OpCode::Label | OpCode::Length | OpCode::HasKey) {
             return None;
@@ -371,10 +386,11 @@ impl Tree<'_> {
         }
     }
 
-    /// Returns the structures of a type that carry the label a label read yields:
-    /// an IRI names it, the empty string stands for none.
+    /// Returns the structures of a type that have the label that [Label](OpCode::Label) yields.
     ///
-    /// A label with a declared type gives that type, whatever was known before.
+    /// `label` is an IRI that names the label, or the empty string for no label,
+    /// and any other value selects no structure.
+    /// A label with a declared type gives that declared type, whatever was known before.
     fn labeled(&self, structure: &Type, label: &DataValue) -> Type {
         let label: Option<Box<str>> = match label.as_ref() {
             ValueRef::Iri(iri) => Some(iri.to_string().into()),
@@ -412,7 +428,8 @@ impl Tree<'_> {
 
     /// Returns the structures of a type with the given number of elements or pairs.
     ///
-    /// Without tuple shapes, the length gives one: any tuple of that arity.
+    /// If the type has tuples without shapes, the length gives them one,
+    /// the shape of any tuple of that arity.
     fn of_length(&self, structure: &Type, length: usize) -> Type {
         let selected = self.select(
             structure,
@@ -440,7 +457,10 @@ impl Tree<'_> {
         selected
     }
 
-    /// Returns the structures of a type whose maps hold a key, or lack it.
+    /// Returns the structures of a type whose maps have the key if `held` is true,
+    /// or lack it otherwise.
+    ///
+    /// Tuples are kept.
     fn keyed(&self, structure: &Type, key: ValueRef<'_>, held: bool) -> Type {
         self.select(
             structure,
@@ -454,10 +474,12 @@ impl Tree<'_> {
         )
     }
 
-    /// Returns the structures of a type whose shapes a selection keeps, possibly changed.
+    /// Returns the structures of a type whose shapes the selection keeps, possibly changed.
     ///
+    /// `tuple` and `map` return the kept form of a written-out shape, or `None` to drop it,
+    /// and `declared` returns whether to keep the declared shape of a label.
     /// A structured domain without shapes is kept whole,
-    /// since what the selection asks of a shape cannot be asked of it.
+    /// since the selection cannot be applied to it.
     fn select(
         &self,
         structure: &Type,

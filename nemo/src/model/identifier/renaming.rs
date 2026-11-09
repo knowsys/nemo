@@ -1,18 +1,16 @@
-//! Renaming the identifiers of a statement, each visited in place.
+//! Renaming the names in a statement, in place.
 //!
-//! What a name means depends on its role:
-//! - A predicate name belongs to the program's namespace.
-//! - A constant, a structure label, or a datatype means the same in every module.
-//! - A format name is matched by its spelling.
+//! A walk visits every name of a statement together with its *role*,
+//! which says what the name means:
+//! - a predicate name belongs to the program's namespace;
+//! - a constant, a structure label or a datatype means the same in every module;
+//! - a format name is matched by its spelling.
 //!
-//! Module instantiation renames names by their role.
-//! One walk visits every name and passes its role along.
-//!
-//! Global variables and blank-node labels are visited too, each through a separate method.
-//! Module instantiation renames them like predicates, but neither is an [Identifier].
-//!
-//! A renaming that returns `None` leaves the name unchanged,
-//! so the same walk also answers read-only questions without allocating.
+//! An [IdentifierRenaming] decides what each name becomes,
+//! and returns `None` to leave a name unchanged,
+//! so the same walk can also inspect the names without allocating.
+//! The walk also visits the names of global variables and the labels of blank nodes,
+//! which are not [Identifier]s, through separate methods.
 
 use nemo_physical::diagnostics::Diagnostic;
 
@@ -21,22 +19,24 @@ use crate::model::{
     Term, TermKind, TypeExpression, TypeLabel, VariableKind,
 };
 
-/// The role of a name in a statement, which decides how module instantiation renames it.
+/// The role of a name in a statement, which says what the name means.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum IdentifierRole {
-    /// A predicate, which module instantiation renames into the instance's namespace.
+    /// A name in the program's namespace, such as a predicate or a `@define`d function.
     Predicate,
-    /// A value (a constant, a structure's label, a datatype),
-    /// which means the same thing in every module.
+    /// A value, such as a constant, a structure's label or a datatype,
+    /// which means the same in every module.
     Value,
-    /// A name the engine matches by spelling, like the `csv` of an
-    /// import: not a name in the program's namespace at all.
+    /// A name that is matched by its spelling, like the `csv` of an import,
+    /// and that is not in the program's namespace.
     Reserved,
 }
 
-/// What a walk does with each name it finds.
+/// Decides what each name that a walk visits becomes.
 pub(crate) trait IdentifierRenaming {
-    /// Returns what an identifier becomes, or `None` to leave it.
+    /// Returns what an identifier with the given role becomes, or `None` to leave it unchanged.
+    ///
+    /// `span` is the location of the component that contains the identifier, if it is known.
     fn identifier(
         &mut self,
         identifier: &Identifier,
@@ -44,13 +44,13 @@ pub(crate) trait IdentifierRenaming {
         span: Option<Span>,
     ) -> Result<Option<Identifier>, Diagnostic>;
 
-    /// Returns what a global variable's name becomes, or `None` to leave it.
+    /// Returns what a global variable's name becomes, or `None` to leave it unchanged.
     fn global(&mut self, name: &str) -> Option<String> {
         let _ = name;
         None
     }
 
-    /// Returns what a blank node's label becomes, or `None` to leave it.
+    /// Returns what a blank node's label becomes, or `None` to leave it unchanged.
     fn blank(&mut self, label: &str) -> Option<String> {
         let _ = label;
         None
@@ -73,7 +73,9 @@ where
 }
 
 impl Statement {
-    /// Rewrites every name of the statement.
+    /// Renames every name of the statement with `rename`.
+    ///
+    /// Returns the first error that `rename` returns.
     pub(crate) fn rename_identifiers(
         &mut self,
         rename: &mut impl IdentifierRenaming,
@@ -83,7 +85,9 @@ impl Statement {
 }
 
 impl Term {
-    /// Rewrites every name inside the term.
+    /// Renames every name inside the term with `rename`.
+    ///
+    /// Returns the first error that `rename` returns.
     pub(crate) fn rename_identifiers(
         &mut self,
         rename: &mut impl IdentifierRenaming,
@@ -92,7 +96,7 @@ impl Term {
     }
 }
 
-/// Rewrites every name of a statement.
+/// Renames every name of a statement.
 fn statement(
     statement: &mut Statement,
     rename: &mut impl IdentifierRenaming,
@@ -115,7 +119,7 @@ fn statement(
     }
 }
 
-/// Rewrites one identifier in place, leaving it unchanged if the renaming returns `None`.
+/// Renames one identifier in place, and leaves it unchanged if the renaming returns `None`.
 fn set(
     identifier: &mut Identifier,
     rename: &mut impl IdentifierRenaming,
@@ -128,7 +132,7 @@ fn set(
     Ok(())
 }
 
-/// Rewrites the names of a rule.
+/// Renames the names of a rule.
 fn rule(rule: &mut Rule, rename: &mut impl IdentifierRenaming) -> Result<(), Diagnostic> {
     for attribute in &mut rule.attributes {
         self::attribute(attribute, rename)?;
@@ -145,7 +149,7 @@ fn rule(rule: &mut Rule, rename: &mut impl IdentifierRenaming) -> Result<(), Dia
     Ok(())
 }
 
-/// Rewrites the names of a rule attribute.
+/// Renames the names of a rule's attribute.
 ///
 /// An attribute's name, like `name` in `#[name("…")]`, is a keyword of the language,
 /// so it is [reserved](IdentifierRole::Reserved).
@@ -166,7 +170,7 @@ fn attribute(
     Ok(())
 }
 
-/// Rewrites the names of an atom: its predicate, then its arguments.
+/// Renames the names of an atom: its predicate, then the names inside its arguments.
 fn atom(atom: &mut Atom, rename: &mut impl IdentifierRenaming) -> Result<(), Diagnostic> {
     set(
         &mut atom.predicate,
@@ -180,7 +184,7 @@ fn atom(atom: &mut Atom, rename: &mut impl IdentifierRenaming) -> Result<(), Dia
     Ok(())
 }
 
-/// Rewrites the names inside a term.
+/// Renames the names inside a term.
 fn term(term: &mut Term, rename: &mut impl IdentifierRenaming) -> Result<(), Diagnostic> {
     let span = term.span;
     match &mut term.kind {
@@ -189,9 +193,9 @@ fn term(term: &mut Term, rename: &mut impl IdentifierRenaming) -> Result<(), Dia
             set(datatype, rename, IdentifierRole::Value, span)?
         }
         // A function term is a labeled tuple, which is a value.
-        // A call to a `@define`d builtin is written the same way.
-        // Telling the two apart needs the defines, which this walk does not know.
-        // Column labels are not names to rewrite.
+        // A call of a `@define`d function is written the same way,
+        // and distinguishing the two needs the defines, which this walk does not know.
+        // The labels of named arguments are column names, which are not renamed.
         TermKind::Function {
             name, arguments, ..
         } => {
@@ -236,7 +240,7 @@ fn term(term: &mut Term, rename: &mut impl IdentifierRenaming) -> Result<(), Dia
     Ok(())
 }
 
-/// Rewrites the names inside an operation's arguments.
+/// Renames the names inside an operation's arguments.
 fn operation(
     operation: &mut Operation,
     rename: &mut impl IdentifierRenaming,
@@ -247,8 +251,8 @@ fn operation(
     Ok(())
 }
 
-/// Rewrites the names inside an aggregate: its input, and the
-/// variables scoping what it aggregates over.
+/// Renames the names inside an aggregate's input and value,
+/// and the names of the global variables in its scope.
 fn aggregate(
     aggregate: &mut Aggregate,
     rename: &mut impl IdentifierRenaming,
@@ -269,11 +273,12 @@ fn aggregate(
     Ok(())
 }
 
-/// Rewrites the names of a directive.
+/// Renames the names of a directive.
 ///
-/// A directive's format name and option keys are matched by spelling,
-/// not resolved as program names: the format is visited as
-/// [reserved](IdentifierRole::Reserved) and the keys are not visited at all.
+/// A directive's format name and option keys are matched by their spelling,
+/// and are not resolved as program names.
+/// So the format is visited as [reserved](IdentifierRole::Reserved),
+/// and the keys are not visited at all.
 fn directive(
     directive: &mut Directive,
     rename: &mut impl IdentifierRenaming,
@@ -341,8 +346,8 @@ fn directive(
             }
         }
         Directive::Type(declaration) => {
-            // The declared type's label and every name inside it are
-            // value names, rewritten by the datatype walk.
+            // The label of the declared type and every name inside it are values,
+            // which `datatype` renames.
             datatype(&mut declaration.definition, rename)?;
         }
         Directive::Input(input) => {
@@ -385,15 +390,17 @@ fn directive(
                 term(value, rename)?;
             }
         }
-        // `@base`, `@prefix`, and `@use` name IRIs, prefixes, and files,
+        // `@base`, `@prefix` and `@use` name IRIs, prefixes and modules,
         // not program names.
         Directive::Base(_) | Directive::Prefix(_) | Directive::Use(_) => {}
     }
     Ok(())
 }
 
-/// Rewrites the names inside a declared type expression: a structured
-/// type's label names a value's shape.
+/// Renames the names inside a type expression,
+/// which are the names of declared types and the labels of tuple and map types.
+///
+/// All of them are [values](IdentifierRole::Value).
 fn datatype(
     datatype: &mut TypeExpression,
     rename: &mut impl IdentifierRenaming,
@@ -424,7 +431,7 @@ fn datatype(
     Ok(())
 }
 
-/// Rewrites a structured type's label, if it names one.
+/// Renames the label of a tuple or map type, if the label is a name.
 fn type_label(
     label: &mut TypeLabel,
     rename: &mut impl IdentifierRenaming,

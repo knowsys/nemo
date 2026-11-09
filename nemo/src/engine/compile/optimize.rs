@@ -1,13 +1,14 @@
-//! The optimization passes: what the compiler does to a program beyond translating it.
+//! The optimization passes, which reduce the work of loading and evaluating a program
+//! without changing what its rules derive.
 //!
-//! Passes leave what the rules derive unchanged, so tracing need not reverse them.
-//!
-//! Passes run at two points.
-//! *Import passes* run over the resolved statements before any rule compiles or import
-//! executes, and decide the [ImportPlan]:
-//! what each import-fed predicate's loader may leave out because no rule can observe it.
-//! *Program passes* run over the compiled rules after their join orders are chosen and before
-//! stratification.
+//! Since what the rules derive stays the same, tracing does not need to reverse the passes.
+//! There are two kinds of passes:
+//! - *Import passes* run over the resolved statements before any rule is compiled or any
+//!   import is executed.
+//!   They compute the [ImportPlan]: what the load of each imported predicate may leave out
+//!   because no rule can observe it.
+//! - *Program passes* run over the compiled rules after their join orders are chosen and
+//!   before stratification.
 //!
 //! What is left out is never read.
 //! A pruned column's cells are never parsed or checked against the declaration.
@@ -15,8 +16,8 @@
 //! (and derived from), where a load without pruning would have dropped and reported it.
 //! The rows the rules read are the same, but error counts and warnings may differ.
 //!
-//! [retain_imports](crate::engine::Engine::retain_imports) drops the import passes,
-//! for tables that must be stored as their files hold them.
+//! [retain_imports](crate::engine::Engine::retain_imports) turns the import passes off,
+//! for tables that must be stored as their files contain them.
 //! The program passes always run.
 
 mod filter_pushdown;
@@ -37,12 +38,13 @@ use crate::{
     model::Span,
 };
 
-/// A pass over the program's imports, deciding what loaders may leave out (see [ImportPlan]).
+/// An import pass, which decides what the loads of imported predicates may leave out
+/// (see [ImportPlan]).
 pub(crate) trait ImportPass: std::fmt::Debug + Send + Sync {
     /// Returns the pass's name, for logs.
     fn name(&self) -> &'static str;
 
-    /// Refines the plan from the surveyed program.
+    /// Records in `plan` what the loads may leave out, as the pass finds it in `survey`.
     fn run(
         &self,
         survey: &ImportSurvey,
@@ -51,14 +53,14 @@ pub(crate) trait ImportPass: std::fmt::Debug + Send + Sync {
     ) -> Result<(), Diagnostic>;
 }
 
-/// A pass over the compiled rules.
+/// A program pass, which rewrites the compiled rules.
 pub(crate) trait ProgramPass: std::fmt::Debug + Send + Sync {
     /// Returns the pass's name, for logs.
     fn name(&self) -> &'static str;
 
-    /// Rewrites the rules in place, adding diagnostics for the user to `reports`.
+    /// Rewrites the rules in place, and adds the diagnostics for the user to `reports`.
     ///
-    /// `spans` holds the source position of each rule, if known.
+    /// `spans` contains the source position of each rule, if it is known.
     fn run(
         &self,
         rules: &mut [CompiledRule],
@@ -67,7 +69,7 @@ pub(crate) trait ProgramPass: std::fmt::Debug + Send + Sync {
     );
 }
 
-/// The passes one engine runs, in order.
+/// The passes that an engine runs, in order.
 #[derive(Debug)]
 pub(crate) struct OptimizationPasses {
     /// The import passes, or none to store every import whole.
@@ -77,8 +79,10 @@ pub(crate) struct OptimizationPasses {
 }
 
 impl Default for OptimizationPasses {
-    /// Returns the standard passes: projection then filter pushdown into
-    /// imports, constant folding over rules.
+    /// Returns the standard passes.
+    ///
+    /// The import passes are projection pushdown and then filter pushdown,
+    /// and the program pass is constant folding.
     fn default() -> Self {
         Self {
             imports: vec![
@@ -91,7 +95,7 @@ impl Default for OptimizationPasses {
 }
 
 impl OptimizationPasses {
-    /// Runs the import passes over a surveyed program into a fresh plan.
+    /// Runs the import passes over a surveyed program, and returns the plan they compute.
     pub(crate) fn plan_imports(
         &self,
         survey: &ImportSurvey,
@@ -105,8 +109,8 @@ impl OptimizationPasses {
         Ok(plan)
     }
 
-    /// Runs the program passes over compiled rules, returning their
-    /// diagnostics for the user.
+    /// Runs the program passes over the compiled rules,
+    /// and returns their diagnostics for the user.
     pub(crate) fn rewrite(
         &self,
         rules: &mut [CompiledRule],

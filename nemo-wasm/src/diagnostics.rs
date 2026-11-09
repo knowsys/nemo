@@ -1,44 +1,44 @@
-//! Diagnostics as plain JavaScript data, and thrown errors.
+//! Diagnostics as plain JavaScript data, and the errors that the bindings throw.
 
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
 
 use nemo::diagnostics::render::{ResolvedDiagnostic, SourceTexts};
 
-/// One resolved label of a diagnostic (see [Diagnostic]).
+/// A label of a [Diagnostic]: its message, and the place it points at if that is known.
 #[derive(Debug, Serialize)]
 pub(crate) struct Label {
     /// The label's message.
     pub message: String,
-    /// The name of the source the span points into, if known.
+    /// The name of the source that the label points into, if it is known.
     pub source: Option<String>,
-    /// The 1-based line, if the span could be located.
+    /// The line, counted from 1, if the place is known.
     pub line: Option<u32>,
-    /// The 1-based column (in characters), if the span could be located.
+    /// The column, in characters and counted from 1, if the place is known.
     pub column: Option<u32>,
 }
 
-/// One diagnostic as plain data,
-/// which `check` returns and thrown errors carry on their `diagnostics` property.
+/// A diagnostic as plain data, the form in which the bindings give diagnostics to
+/// JavaScript.
 #[derive(Debug, Serialize)]
 pub(crate) struct Diagnostic {
     /// The stable code, like `"N0204"`.
     pub code: String,
-    /// `"error"` or `"warning"`.
+    /// The severity, `"error"` or `"warning"`.
     pub severity: String,
-    /// The headline message.
+    /// The main message.
     pub message: String,
-    /// The labels, resolved against the run's sources.
+    /// The labels, with the places they point at.
     pub labels: Vec<Label>,
     /// Additional notes.
     pub notes: Vec<String>,
-    /// Hints toward a fix.
+    /// Hints on how to fix the problem.
     pub hints: Vec<String>,
-    /// The full plain rendering, snippets included.
+    /// The full rendering, with source snippets and without colors.
     pub rendered: String,
 }
 
-/// Resolves a diagnostic against the sources of its run.
+/// Returns a diagnostic as plain data, with the places of its labels found in `sources`.
 pub(crate) fn resolve(
     diagnostic: &nemo::diagnostics::Diagnostic,
     sources: &SourceTexts,
@@ -64,8 +64,11 @@ pub(crate) fn resolve(
     }
 }
 
-/// Returns a diagnostic with the hints of the browser engine,
-/// where the engine's hints name calls the browser engine lacks or spells differently.
+/// Returns a diagnostic whose hints name the methods of the JavaScript API.
+///
+/// The hints of [NO_CLIENT](nemo::codes::NO_CLIENT) and
+/// [METHOD_SUSPENDED](nemo::codes::METHOD_SUSPENDED) name engine methods that the bindings
+/// lack or name differently, so they are replaced.
 fn with_browser_hints(diagnostic: nemo::diagnostics::Diagnostic) -> nemo::diagnostics::Diagnostic {
     let code = diagnostic.code();
     if code == nemo::codes::NO_CLIENT {
@@ -87,11 +90,12 @@ pub(crate) fn to_js(diagnostics: &[Diagnostic]) -> JsValue {
     serde_wasm_bindgen::to_value(diagnostics).expect("plain data serializes")
 }
 
-/// Returns a thrown `Error` whose message is the rendering and whose
-/// `diagnostics` property carries the structured entries.
+/// Returns the `Error` to throw for the diagnostics of a failed call.
 ///
-/// The hints that name calls of the engine the browser engine lacks or spells differently
-/// are replaced by the browser engine's own.
+/// The error's message joins the renderings of the diagnostics,
+/// and its `diagnostics` property lists them as plain data.
+/// Hints that name engine methods the bindings lack or name differently are replaced,
+/// as [with_browser_hints] does.
 pub(crate) fn throw(
     diagnostics: Vec<nemo::diagnostics::Diagnostic>,
     sources: &SourceTexts,

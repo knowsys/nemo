@@ -1,19 +1,19 @@
-//! Tests of linking: modules computing over their inputs, composing, and keeping their
+//! Tests of linking: modules that compute over their inputs, compose, and keep their
 //! names private.
 
 use super::{files::identity, *};
 
 use crate::{engine::Engine, model::Program, testing::TempDirectory};
 
-/// Runs a program whose modules are supplied in memory, under the
-/// names their `@use`s write.
+/// Links, loads and reasons over a program whose modules are given in memory,
+/// under the names that their `@use`s write.
 fn run(program: &str, modules: &[(&str, &str)]) -> Result<Engine, Diagnostic> {
     let mut engine = load(program, modules)?;
     engine.reason()?;
     Ok(engine)
 }
 
-/// Links and loads a program whose modules are supplied in memory.
+/// Links and loads a program whose modules are given in memory.
 fn load(program: &str, modules: &[(&str, &str)]) -> Result<Engine, Diagnostic> {
     let mut engine = Engine::new();
     for (name, text) in modules {
@@ -31,7 +31,8 @@ fn load(program: &str, modules: &[(&str, &str)]) -> Result<Engine, Diagnostic> {
     Ok(engine)
 }
 
-/// Links, loads, and reasons over a program in an engine holding module roots and texts.
+/// Links, loads, and reasons over a program in an engine with registered module roots and
+/// texts.
 fn run_in(mut engine: Engine, program: &str) -> Result<Engine, Diagnostic> {
     let file = engine
         .add_source("main.rls", program)
@@ -67,7 +68,7 @@ fn directory_with(files: &[(&str, &str)]) -> TempDirectory {
     directory
 }
 
-/// A module over one input that passes it to the module `name`
+/// Returns a module over one input that passes the input to the module `name`
 /// and offers what that module derives.
 fn forwarding(name: &str) -> String {
     format!(
@@ -84,7 +85,7 @@ fn count(engine: &Engine, predicate: &str) -> usize {
     }
 }
 
-/// A module with a name it does not make public.
+/// A module with a name that it does not offer.
 const SECRETIVE: &str = "
     @input edge .
     @output reach .
@@ -100,6 +101,8 @@ const CLOSURE: &str = "
     reach(?x, ?z) :- reach(?x, ?y), edge(?y, ?z) .
 ";
 
+/// A warning about a rule of a module used twice is reported for each instance,
+/// labeled with the instance's alias.
 #[test]
 fn a_warning_in_a_module_used_twice_names_each_instance() {
     let engine = load(
@@ -136,6 +139,7 @@ dead(?x) :- w(?x), v(?x) .",
     );
 }
 
+/// A reference to a name that a module does not offer fails.
 #[test]
 fn a_name_a_module_keeps_to_itself_cannot_be_reached() {
     let problem = run(
@@ -160,6 +164,8 @@ fn a_name_a_module_keeps_to_itself_cannot_be_reached() {
     assert_eq!(problem.field("name"), Some("hidden"));
 }
 
+/// A program that writes a module's renamed name as an IRI, to read or to write it,
+/// fails as using an owned name, even for a name the module offers.
 #[test]
 fn a_private_name_cannot_be_reached_by_writing_it_either() {
     // Writing the renamed name as an IRI would otherwise read what
@@ -195,6 +201,8 @@ fn a_private_name_cannot_be_reached_by_writing_it_either() {
     assert_eq!(injected.field("alias"), Some("t"));
 }
 
+/// A name that a prefix expands into a module's namespace fails as an owned name,
+/// whatever the prefix is called.
 #[test]
 fn a_prefix_cannot_form_a_module_name_either() {
     // The check is on what a name *resolves* to: a prefix whose
@@ -227,6 +235,8 @@ fn a_prefix_cannot_form_a_module_name_either() {
     assert_eq!(renamed.field("alias"), Some("t"));
 }
 
+/// A `@base` inside a module's namespace makes the bare names of the program fail as owned
+/// names.
 #[test]
 fn a_base_cannot_put_the_program_inside_a_module() {
     // A `@base` moves every bare name of the file at once, which
@@ -245,11 +255,12 @@ fn a_base_cannot_put_the_program_inside_a_module() {
     assert_eq!(problem.field("alias"), Some("t"));
 }
 
+/// A predicate that a `@use` binds is checked for ownership like any other name that the
+/// using program writes.
 #[test]
 fn what_a_use_passes_in_is_owned_like_anything_else() {
-    // A predicate a `@use` binds is a name of the using program, and
-    // binding another module's input to a module's private name reads
-    // it just as surely as mentioning it in a rule.
+    // Binding another module's input to a module's private name reads
+    // that name just as surely as mentioning it in a rule.
     let problem = load(
         "
         link(1, 2) .
@@ -270,10 +281,11 @@ fn what_a_use_passes_in_is_owned_like_anything_else() {
     assert_eq!(problem.field("alias"), Some("t"));
 }
 
+/// A module parameter without a default value, which the `@use` gives no value, is an error.
 #[test]
 fn a_module_parameter_without_a_value_is_an_error() {
-    // A module's globals are its own, so nothing outside could ever
-    // supply one, which makes a defaultless parameter a dead end.
+    // A module's parameters are its own, so only the `@use` can give one a value,
+    // and this `@use` gives none.
     let problem = run(
         "@use needy {} as n .",
         &[(
@@ -290,6 +302,7 @@ fn a_module_parameter_without_a_value_is_an_error() {
     assert_eq!(problem.field("name"), Some("limit"));
 }
 
+/// A value binding of a `@use` for a parameter that the module does not declare is an error.
 #[test]
 fn a_value_binding_must_name_a_declared_parameter() {
     let problem = run(
@@ -308,6 +321,7 @@ fn a_value_binding_must_name_a_declared_parameter() {
     assert_eq!(problem.field("name"), Some("nonsense"));
 }
 
+/// A module that declares an input twice is an error.
 #[test]
 fn an_input_declared_twice_is_an_error() {
     let problem = run(
@@ -325,6 +339,8 @@ r(?x, ?y) :- edge(?x, ?y) .",
     assert_eq!(problem.field("predicate"), Some("edge"));
 }
 
+/// A module's import is resolved against the module's directory,
+/// not against the engine's import directory.
 #[test]
 fn a_modules_import_does_not_take_the_using_programs_base() {
     // The module writes `data.csv`. Whatever directory the program is
@@ -360,6 +376,7 @@ fn a_modules_import_does_not_take_the_using_programs_base() {
     );
 }
 
+/// A module that writes a name of a module it uses fails as using an owned name.
 #[test]
 fn a_module_cannot_write_the_names_of_the_module_it_uses() {
     let problem = load(
@@ -387,6 +404,8 @@ fn a_module_cannot_write_the_names_of_the_module_it_uses() {
     assert_eq!(problem.field("alias"), Some("sub"));
 }
 
+/// The error for an owned name notes what the name, as the file writes it, resolves to,
+/// unless it is written as it resolves.
 #[test]
 fn an_owned_name_is_quoted_as_the_file_writes_it() {
     // Inside a module, the note names the prefixed name the module wrote.
@@ -428,6 +447,7 @@ fn an_owned_name_is_quoted_as_the_file_writes_it() {
     assert!(problem.notes().is_empty(), "{problem:?}");
 }
 
+/// A module cannot read a parameter of the using program.
 #[test]
 fn a_module_cannot_read_the_using_programs_globals() {
     let problem = run(
@@ -454,6 +474,7 @@ fn a_module_cannot_read_the_using_programs_globals() {
     assert_eq!(problem.field("name"), Some("s::limit"));
 }
 
+/// A module that uses itself is an error.
 #[test]
 fn a_module_that_uses_itself_is_an_error() {
     let problem = run(
@@ -477,6 +498,7 @@ fn a_module_that_uses_itself_is_an_error() {
     assert_eq!(problem.field("module"), Some("loop"));
 }
 
+/// An input bound to the module's own offer of that input is an error.
 #[test]
 fn an_input_bound_to_its_own_offer_is_a_cycle() {
     // The module offers its input, which the `@use` binds to that very offer,
@@ -494,6 +516,7 @@ fn an_input_bound_to_its_own_offer_is_a_cycle() {
     assert_eq!(problem.field("name"), Some("inp"));
 }
 
+/// Two instances whose inputs are bound to each other's offers are an error.
 #[test]
 fn inputs_bound_to_each_others_offers_are_a_cycle() {
     let problem = run(
@@ -508,6 +531,7 @@ fn inputs_bound_to_each_others_offers_are_a_cycle() {
     assert_eq!(problem.code(), crate::codes::PASSED_IN_CYCLE, "{problem:?}");
 }
 
+/// A `@use` that leaves an input of the module unbound is an error.
 #[test]
 fn every_parameter_must_be_bound() {
     let problem = run("@use tc {} as t .", &[("tc", CLOSURE)]).expect_err("`edge` is unbound");
@@ -515,6 +539,7 @@ fn every_parameter_must_be_bound() {
     assert_eq!(problem.field("inputs"), Some("`edge`"));
 }
 
+/// A qualified name in a program without a `@use` is reported as a name without modules.
 #[test]
 fn a_reference_to_no_module_is_reported_as_one() {
     // Without a `@use`, linking changes nothing,
@@ -528,6 +553,8 @@ fn a_reference_to_no_module_is_reported_as_one() {
     assert_eq!(problem.field("module"), Some("nope"));
 }
 
+/// A reference to an alias that the program does not declare is an error that lists the
+/// aliases in use.
 #[test]
 fn a_reference_to_an_alias_the_program_does_not_have_is_reported() {
     let problem = run(
@@ -550,10 +577,10 @@ fn a_reference_to_an_alias_the_program_does_not_have_is_reported() {
     );
 }
 
+/// A module text registered with [add_module](Engine::add_module) is read instead of a file.
 #[test]
 fn a_module_registered_in_memory_is_used_instead_of_the_disk() {
-    // Nothing is on disk here at all: the module text is registered
-    // through `add_module`.
+    // Nothing is on disk here at all.
     let engine = run(
         "
         link(1, 2) . link(2, 3) .
@@ -565,6 +592,7 @@ fn a_module_registered_in_memory_is_used_instead_of_the_disk() {
     assert_eq!(count(&engine, "t::reach"), 3);
 }
 
+/// The name of a module file drops `.` steps and separates the parts by `/`.
 #[test]
 fn the_identity_of_a_path_ignores_the_steps_that_lead_nowhere() {
     assert_eq!(identity(Path::new("./tc.rls")), "tc.rls");
@@ -581,9 +609,9 @@ fn the_identity_of_a_path_ignores_the_steps_that_lead_nowhere() {
     );
 }
 
+/// A module's import of a relative resource reads the file next to the module.
 #[test]
 fn a_modules_import_reads_from_where_the_module_is() {
-    // The module writes `data.csv`, which refers to the file next to it.
     let mut engine = Engine::new();
     engine
         .add_module(
@@ -611,6 +639,7 @@ fn a_modules_import_reads_from_where_the_module_is() {
     );
 }
 
+/// A chain of modules deeper than [MAX_DEPTH] is an error.
 #[test]
 fn a_module_chain_deeper_than_the_limit_is_an_error() {
     let mut engine = Engine::new();
@@ -639,6 +668,7 @@ fn a_module_chain_deeper_than_the_limit_is_an_error() {
     );
 }
 
+/// A name that a module offers but never writes is reported with a warning.
 #[test]
 fn a_public_name_the_module_never_writes_is_reported() {
     let engine = run(
@@ -660,6 +690,7 @@ fn a_public_name_the_module_never_writes_is_reported() {
     );
 }
 
+/// A name that a module offers but only reads is reported as never written.
 #[test]
 fn a_public_name_the_module_only_reads_is_reported() {
     // Reading a predicate does not fill it.
@@ -682,6 +713,7 @@ fn a_public_name_the_module_only_reads_is_reported() {
     );
 }
 
+/// The names that a module used twice offers but never writes are reported once.
 #[test]
 fn a_module_used_twice_reports_its_unwritten_names_once() {
     let engine = run(
@@ -700,6 +732,7 @@ fn a_module_used_twice_reports_its_unwritten_names_once() {
     assert_eq!(reports, 1, "{:?}", engine.reports());
 }
 
+/// The error for unbound inputs names them as a `@use` binds them, not as they resolve.
 #[test]
 fn inputs_are_listed_as_a_use_binds_them() {
     // The module's base makes `edge` an IRI, but a `@use` still binds it as `edge`.
@@ -716,6 +749,7 @@ fn inputs_are_listed_as_a_use_binds_them() {
     assert_eq!(problem.field("inputs"), Some("`edge`"));
 }
 
+/// A module that declares two base IRIs is an error.
 #[test]
 fn a_module_with_two_base_iris_is_an_error() {
     let problem = load(
@@ -733,6 +767,7 @@ fn a_module_with_two_base_iris_is_an_error() {
     );
 }
 
+/// Loading a program that is not linked fails, with the `@use` labeled.
 #[test]
 fn an_unlinked_program_is_an_error() {
     let mut engine = Engine::new();
@@ -748,6 +783,7 @@ fn an_unlinked_program_is_an_error() {
     assert_eq!(problem.labels().len(), 1, "the `@use` is labeled");
 }
 
+/// Linking returns a program without a `@use` unchanged.
 #[test]
 fn a_program_without_modules_links_to_itself() {
     let mut engine = Engine::new();
@@ -756,6 +792,7 @@ fn a_program_without_modules_links_to_itself() {
     assert_eq!(linked, program);
 }
 
+/// A warning about a rule of a nested module is labeled with every enclosing instance.
 #[test]
 fn a_warning_in_a_nested_module_names_every_instance() {
     let engine = load(
@@ -796,6 +833,7 @@ dead(?x) :- w(?x), v(?x) .",
     );
 }
 
+/// The error for a missing module with a hyphen in its name notes the file looked for.
 #[test]
 fn a_missing_hyphenated_module_is_named_by_its_file() {
     let problem = run("@use my-lib {} as m .", &[]).expect_err("there is no module");
@@ -808,6 +846,7 @@ fn a_missing_hyphenated_module_is_named_by_its_file() {
     );
 }
 
+/// Outside a module root, `super` can lead above the program's directory.
 #[test]
 fn super_can_lead_above_the_programs_directory() {
     // Within the program's tree nothing bounds `super`, so a module
@@ -823,6 +862,7 @@ fn super_can_lead_above_the_programs_directory() {
     assert_eq!(count(&engine, "t::reach"), 1);
 }
 
+/// A module root's modules can be named from a module in another directory.
 #[test]
 fn a_root_names_its_modules_from_anywhere() {
     let mut engine = Engine::new();
@@ -843,6 +883,8 @@ fn a_root_names_its_modules_from_anywhere() {
     assert_eq!(count(&engine, "t::reach"), 3);
 }
 
+/// A module name of a single part names the module next to the program, even if it is the
+/// name of a root.
 #[test]
 fn a_single_name_never_names_a_root() {
     let mut engine = Engine::new();
@@ -857,6 +899,7 @@ fn a_single_name_never_names_a_root() {
     assert_eq!(count(&engine, "q"), 1);
 }
 
+/// A `super` step that leads out of a module root is an error.
 #[test]
 fn super_cannot_lead_out_of_a_root() {
     let mut engine = Engine::new();
@@ -875,6 +918,8 @@ fn super_cannot_lead_out_of_a_root() {
     assert_eq!(problem.field("root"), Some("shared"));
 }
 
+/// A module name that begins with a root is an error where a directory of the root's name
+/// lies next to the `@use`.
 #[test]
 fn a_root_and_a_directory_of_its_name_are_ambiguous() {
     let mut engine = Engine::new();
@@ -896,6 +941,8 @@ fn a_root_and_a_directory_of_its_name_are_ambiguous() {
     assert_eq!(problem.field("root"), Some("shared"));
 }
 
+/// A module root must be named by one plain name other than `super`,
+/// and a registered module text by a module name.
 #[test]
 fn a_root_is_named_by_one_plain_name() {
     let mut engine = Engine::new();
@@ -911,6 +958,7 @@ fn a_root_is_named_by_one_plain_name() {
     assert_eq!(problem.code(), crate::codes::EXPECTED, "{problem:?}");
 }
 
+/// Registering a module text again under the same name replaces the text.
 #[test]
 fn registering_a_module_again_replaces_its_text() {
     let mut engine = Engine::new();
@@ -928,6 +976,7 @@ fn registering_a_module_again_replaces_its_text() {
     assert_eq!(count(&engine, "answer"), 2);
 }
 
+/// The error for a missing module names it as written and notes the path looked for.
 #[test]
 fn a_missing_module_is_named_as_written_and_located_by_its_path() {
     let problem = run("@use lib::missing {} as m .", &[]).expect_err("there is no module");
@@ -942,6 +991,8 @@ fn a_missing_module_is_named_as_written_and_located_by_its_path() {
     );
 }
 
+/// A module name finds a file only if every part matches a directory or the file exactly,
+/// case included, and a directory is not a module.
 #[test]
 fn module_names_match_file_names_exactly() {
     let temporary = directory_with(&[("lib/tc.rls", CLOSURE), ("graph/x.rls", "")]);
@@ -980,6 +1031,7 @@ fn module_names_match_file_names_exactly() {
     );
 }
 
+/// A module root reads its modules from its directory on disk.
 #[test]
 fn a_root_reads_its_modules_from_its_directory() {
     let library = directory_with(&[

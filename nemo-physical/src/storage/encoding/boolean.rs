@@ -1,8 +1,8 @@
-//! Payload encoding of [Tag::Bool].
+//! The payload encoding of [Tag::Bool].
 
 use crate::storage::{Tag, encoding::PayloadEncoding};
 
-/// Booleans encode as 0 for `false` and 1 for `true`.
+/// A boolean is encoded as 0 for `false` and 1 for `true`.
 impl PayloadEncoding for bool {
     const TAG: Tag = Tag::Bool;
     type Encoded = u64;
@@ -21,6 +21,7 @@ impl PayloadEncoding for bool {
 mod tests {
     use super::*;
 
+    /// A boolean decodes to itself, and `false` is encoded below `true`.
     #[test]
     fn encoding_round_trips_in_order() {
         assert!(false.to_payload() < true.to_payload());

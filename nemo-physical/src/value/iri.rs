@@ -12,8 +12,10 @@ use std::{
 use crate::value::{Escape, NameKind};
 
 /// An owned [IRI](https://www.w3.org/TR/rdf11-concepts/#section-IRIs),
-/// the name of an RDF resource, in the form of
-/// [RFC 3987](https://www.rfc-editor.org/rfc/rfc3987).
+/// the name of an RDF resource.
+///
+/// Its text should have the form of [RFC 3987](https://www.rfc-editor.org/rfc/rfc3987),
+/// but this is not checked.
 /// Its borrowed view is [IriRef].
 #[derive(Clone)]
 pub struct Iri(Arc<str>);
@@ -24,11 +26,12 @@ impl Iri {
         Self(iri.into())
     }
 
-    /// Returns whether a text is an IRI as SPARQL's grammar writes one in angle brackets,
-    /// its [IRIREF](https://www.w3.org/TR/sparql11-query/#rIRIREF):
-    /// no whitespace, no control character, and none of ``<>"{}|^`\``.
+    /// Returns whether a text can be written between angle brackets in SPARQL,
+    /// as an [IRIREF](https://www.w3.org/TR/sparql11-query/#rIRIREF).
     ///
-    /// Term syntax writes such an IRI, and reads it back.
+    /// Such a text contains no character up to and including the space,
+    /// and none of ``<>"{}|^`\``.
+    /// In term syntax, such a text between angle brackets denotes the IRI with that text.
     pub fn is_valid(text: &str) -> bool {
         !text.chars().any(|character| {
             character <= ' '
@@ -39,10 +42,11 @@ impl Iri {
         })
     }
 
-    /// Returns the text an IRI written between angle brackets spells:
-    /// its character escapes `\uXXXX` and `\UXXXXXXXX` decoded, as Turtle and SPARQL decode them.
+    /// Returns the text of the IRI that `written` denotes between angle brackets,
+    /// with its character escapes decoded.
     ///
-    /// Any other backslash stays as written.
+    /// The character escapes are `\uXXXX` and `\UXXXXXXXX`, as in Turtle and SPARQL.
+    /// Any other backslash is kept as written.
     ///
     /// # Example
     ///
@@ -158,25 +162,26 @@ impl fmt::Display for Iri {
 }
 
 /// A borrowed [IRI](https://www.w3.org/TR/rdf11-concepts/#section-IRIs),
-/// the name of an RDF resource, in the form of
-/// [RFC 3987](https://www.rfc-editor.org/rfc/rfc3987).
+/// the name of an RDF resource.
+///
 /// Its owned form is [Iri].
 ///
-/// The view holds the IRI in two segments:
-/// the [namespace](Self::namespace), up to and including the last `/` or `#`,
-/// and the [local part](Self::local) after it.
-/// [to_cow](Self::to_cow) returns the whole text,
-/// and equality and order are those of the whole text, not of the segments.
+/// The view stores the IRI in two segments, which need not be adjacent in memory:
+/// - the [namespace](Self::namespace), the text up to and including the last `/` or `#`;
+/// - the [local part](Self::local), the text after it.
+///
+/// Equality and order are those of the whole text, which [to_cow](Self::to_cow) returns.
+/// Every view splits its IRI at the same place, so equal texts have equal segments.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct IriRef<'a> {
-    /// The text up to and including the last `/` or `#`; possibly empty.
+    /// The text up to and including the last `/` or `#`, which is empty if there is none.
     namespace: &'a str,
-    /// The text after the namespace; free of `/` and `#`.
+    /// The text after the namespace, which contains no `/` or `#`.
     local: &'a str,
 }
 
 impl<'a> IriRef<'a> {
-    /// Creates a view of an IRI, finding its split point.
+    /// Creates a view of an IRI, split after its last `/` or `#`.
     pub fn new(iri: &'a str) -> Self {
         let point = iri.rfind(['/', '#']).map_or(0, |position| position + 1);
         Self {
@@ -185,7 +190,8 @@ impl<'a> IriRef<'a> {
         }
     }
 
-    /// Creates a view from segments already split at the canonical point.
+    /// Creates a view from its two segments,
+    /// which must be split where [new](Self::new) splits their IRI.
     pub(crate) fn from_parts(namespace: &'a str, local: &'a str) -> Self {
         debug_assert!(
             !local.contains(['/', '#'])
@@ -200,7 +206,7 @@ impl<'a> IriRef<'a> {
         self.namespace
     }
 
-    /// Returns the local segment following the namespace.
+    /// Returns the local part, the text after the namespace.
     pub fn local(self) -> &'a str {
         self.local
     }
@@ -216,7 +222,7 @@ impl<'a> IriRef<'a> {
     }
 
     /// Returns the text of the IRI,
-    /// borrowed when it lies in one segment and joined otherwise.
+    /// which is borrowed if one segment is empty and joined otherwise.
     pub fn to_cow(self) -> Cow<'a, str> {
         if self.namespace.is_empty() {
             Cow::Borrowed(self.local)
@@ -227,7 +233,7 @@ impl<'a> IriRef<'a> {
         }
     }
 
-    /// Clones the viewed IRI into an owned [Iri].
+    /// Returns an owned copy of the IRI.
     pub fn to_owned(self) -> Iri {
         match self.to_cow() {
             Cow::Borrowed(text) => Iri::new(text),
@@ -235,8 +241,7 @@ impl<'a> IriRef<'a> {
         }
     }
 
-    /// Compares two IRIs by the bytes of their whole text,
-    /// read across the seams of both without joining the segments.
+    /// Compares the whole texts of two IRIs byte by byte, without joining their segments.
     fn cmp_text(left: IriRef<'_>, right: IriRef<'_>) -> Ordering {
         let mut left = [left.namespace.as_bytes(), left.local.as_bytes()];
         let mut right = [right.namespace.as_bytes(), right.local.as_bytes()];
@@ -249,7 +254,7 @@ impl<'a> IriRef<'a> {
                 right = [right[1], &[]];
             }
 
-            // An empty head is now an exhausted side.
+            // After the shift, an empty first segment means that the side has no bytes left.
             let length = left[0].len().min(right[0].len());
             if length == 0 {
                 return left[0].len().cmp(&right[0].len());
@@ -283,20 +288,23 @@ impl PartialOrd for IriRef<'_> {
 }
 
 impl<'a> IriRef<'a> {
-    /// Returns whether term syntax writes this IRI without angle brackets:
-    /// it is a [bare name](NameKind::Bare), which reads back as the IRI it spells,
-    /// as `alice` or `item-1` do.
+    /// Returns whether term syntax writes this IRI without angle brackets.
     ///
-    /// `_`, `true` and `false` read as something else and keep their brackets.
+    /// This holds for an IRI that is a [bare name](NameKind::Bare), such as `alice` or `item-1`,
+    /// since a bare name is read back as the IRI with its text.
+    /// `_`, `true` and `false` have another meaning in term syntax, so they keep their brackets.
     pub fn writes_bare(self) -> bool {
         self.namespace.is_empty()
             && !matches!(self.local, "_" | "true" | "false")
             && NameKind::Bare.admits(self.local)
     }
 
-    /// Returns the IRI in angle brackets, as term syntax writes it so that it reads back:
-    /// a `>`, a space or an ASCII control character, `DEL` included, as a character escape
-    /// `\u…`, and a `\` that would start one as `\u005C`.
+    /// Returns the IRI in angle brackets, as term syntax writes it.
+    ///
+    /// Some characters are written as a character escape `\u…`,
+    /// so that the text is read back as this IRI:
+    /// - `>`, the space, and the ASCII control characters, including `DEL`;
+    /// - a `\` that is followed by `u` or `U`, which is written `\u005C`.
     ///
     /// # Example
     ///
@@ -358,6 +366,8 @@ mod tests {
 
     use std::hash::{BuildHasher, RandomState};
 
+    /// Term syntax writes an IRI without brackets exactly if it is a bare name
+    /// other than `_`, `true` and `false`.
     #[test]
     fn bare_names_write_without_brackets() {
         for bare in ["alice", "Q42", "_x", "item-1", "my-lib-2", "a%20b"] {
@@ -381,6 +391,7 @@ mod tests {
         }
     }
 
+    /// A view splits its IRI after the last `/` or `#`, or keeps it whole without either.
     #[test]
     fn views_split_at_the_canonical_point() {
         let view = IriRef::new("http://example.org/a#b");
@@ -401,6 +412,8 @@ mod tests {
         assert!(IriRef::new("").is_empty());
     }
 
+    /// A view of a text, a view of its segments and the owned IRI are equal,
+    /// hash alike and have the same text.
     #[test]
     fn views_agree_with_their_parts_and_owners() {
         let text = "http://example.org/a";
@@ -420,6 +433,7 @@ mod tests {
         assert_eq!(owned.len(), view.len());
     }
 
+    /// Views are ordered by the bytes of their whole text, wherever their segments split.
     #[test]
     fn order_is_the_order_of_the_text() {
         let texts = [

@@ -1,31 +1,18 @@
-//! Parameters without a value, as a check of a program reads them.
+//! Parameters without a value, as a check of a program treats them.
 //!
 //! A program may leave a parameter for whoever runs it to supply, as `@parameter $limit: int .`
 //! does, and a module leaves one for each `@use` of it.
 //! A check looks at the program on its own and has no value for such a parameter,
-//! so it reads the parameter as an input instead:
-//! a one-column predicate holding any value of the parameter's declared type,
-//! as an `@input` predicate holds any rows its declaration allows.
-//! Every statement reading the parameter is then checked as for any value it may take.
+//! so it treats the parameter as an input instead:
+//! a one-column predicate that may contain any value of the parameter's declared type,
+//! as an `@input` predicate may contain any rows its declaration allows.
+//! Every statement that reads the parameter is then checked as for any value it may take.
+//! Before the check translates the program, [rewrite_unvalued] rewrites its statements
+//! to this end, with *hidden* predicates and variables.
 //!
-//! Before the check translates the program, its statements are rewritten:
-//! - The parameter's directive becomes an `@input` of a hidden predicate,
-//!   typed by the parameter's declared type, or untyped if it declares none.
-//! - A rule reading the parameter reads a hidden variable instead,
-//!   which an extra body atom over that predicate binds.
-//! - A fact reading the parameter becomes such a rule.
-//! - An import reading the parameter becomes an untyped `@input` of its predicate,
-//!   since what the import would read is unknown.
-//!   The other imports into that predicate are left out, as the input already holds any value.
-//! - An export reading the parameter is left out.
-//!
-//! A parameter whose value reads a parameter without a value has none either.
-//! A parameter declared twice is left as written, for translation to refuse.
 //! The hidden names begin with a NUL byte, which no program can write,
 //! and the places that name a program's variables and predicates leave them out:
 //! the compiler's `source_names` and `written_name`, and `InferredTypes::of_check`.
-//! The rewritten statements keep their ids, and their terms their source positions,
-//! so diagnostics point at the program as written.
 
 use std::collections::{HashMap, HashSet};
 
@@ -39,7 +26,23 @@ use crate::{
 };
 
 /// Rewrites the statements of a program for its check, each with its id,
-/// so that its parameters without a value read as inputs (see the module documentation).
+/// so that its parameters without a value are treated as inputs.
+///
+/// - The parameter's directive becomes an `@input` of a hidden predicate,
+///   typed by the parameter's declared type, or untyped if it declares none.
+/// - A rule that reads the parameter reads a hidden variable instead,
+///   which an extra body atom over that predicate binds.
+/// - A fact that reads the parameter becomes such a rule.
+/// - An import that reads the parameter becomes an untyped `@input` of its predicate,
+///   since what the import would read is unknown.
+///   The other imports into that predicate are left out,
+///   since the input may already contain any value.
+/// - An export that reads the parameter is left out.
+///
+/// A parameter whose value reads a parameter without a value has none either.
+/// A parameter declared twice is left as written, for translation to refuse.
+/// The rewritten statements keep their ids, and their terms their source positions,
+/// so that diagnostics point at the program as written.
 pub(in crate::engine) fn rewrite_unvalued(
     statements: Vec<(StatementId, Statement)>,
 ) -> Vec<(StatementId, Statement)> {
@@ -58,8 +61,8 @@ pub(in crate::engine) fn rewrite_unvalued(
         .collect()
 }
 
-/// Returns the predicates of the imports reading a parameter without a value,
-/// which the check reads as inputs.
+/// Returns the predicates of the imports that read a parameter without a value,
+/// which the check treats as inputs.
 fn input_predicates(
     statements: &[(StatementId, Statement)],
     unvalued: &HashSet<String>,
@@ -76,7 +79,8 @@ fn input_predicates(
 }
 
 /// Returns the names of the parameters without a value:
-/// those declaring none, and those whose value reads one without a value.
+/// those that declare none, and those whose value reads one without a value.
+///
 /// A name declared more than once is left out.
 fn unvalued_parameters(statements: &[(StatementId, Statement)]) -> HashSet<String> {
     let mut declared: HashMap<&str, Vec<&ParameterDirective>> = HashMap::new();
@@ -120,7 +124,7 @@ fn reads(component: &impl Walk, parameters: &HashSet<String>) -> bool {
     component.any_term(|term| global(term).is_some_and(|name| parameters.contains(name)))
 }
 
-/// Returns the parameter a term is, if it is one.
+/// Returns the name of the parameter that a term is, if it is one.
 fn global(term: &Term) -> Option<&str> {
     match &term.kind {
         TermKind::Variable(variable) if variable.kind == VariableKind::Global => {
@@ -132,7 +136,7 @@ fn global(term: &Term) -> Option<&str> {
 
 /// Returns a statement as the check reads it, or `None` if the check leaves it out.
 ///
-/// `as_inputs` are the predicates the check reads as inputs (see [input_predicates]),
+/// `as_inputs` are the predicates the check treats as inputs (see [input_predicates]),
 /// and `given` those given their `@input` so far.
 fn rewrite_statement(
     statement: Statement,
@@ -182,13 +186,14 @@ fn rewrite_statement(
             Some(Statement::Rule(rewrite_rule(rule, unvalued)))
         }
         Statement::Directive(Directive::Export(_)) => None,
-        // What else reads the parameter is an `@define`, kept for translation to ignore
-        // with a warning, as a load does. Linking expanded every `@use`.
+        // Any other statement that reads the parameter is an `@define`, which is kept for
+        // translation to ignore with a warning, as a load does.
+        // Linking expanded every `@use`, so none is left.
         statement => Some(statement),
     }
 }
 
-/// Returns a rule reading hidden variables in place of the parameters without a value,
+/// Returns a rule that reads hidden variables in place of the parameters without a value,
 /// each bound by an extra body atom over the parameter's hidden predicate.
 fn rewrite_rule(mut rule: Rule, unvalued: &HashSet<String>) -> Rule {
     let mut read: Vec<String> = Vec::new();
@@ -216,7 +221,7 @@ fn rewrite_rule(mut rule: Rule, unvalued: &HashSet<String>) -> Rule {
     rule
 }
 
-/// Returns the hidden predicate a parameter without a value reads as, `\0$name`.
+/// Returns the hidden predicate that replaces a parameter without a value, `\0$name`.
 ///
 /// The NUL byte hides it, and the `$` keeps it apart from the compiler's hidden names,
 /// such as `\0unit` from a parameter named `unit`.
@@ -224,7 +229,8 @@ fn hidden_predicate(name: &str) -> Identifier {
     Identifier::Iri(format!("\u{0}${name}"))
 }
 
-/// Returns the hidden variable a rule reads a parameter without a value as, `\0$name`.
+/// Returns the hidden variable through which a rule reads a parameter without a value,
+/// `\0$name`.
 ///
 /// The NUL byte hides it, and the `$` keeps it apart from the compiler's hidden variables,
 /// such as `\0expression0` from a parameter named `expression0`.

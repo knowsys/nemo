@@ -1,17 +1,19 @@
-//! Types: sets of domains refined by the shapes of structured values.
+//! Types: sets of domains, refined by the shapes of tuples and maps.
 //!
-//! A [Type] is an upper bound on the values a place can hold:
-//! a [DomainSet], refined by what is known of the insides of its structured domains.
-//! A structured domain is refined by a set of [shapes](Shape),
-//! one of which every value of that domain the place can hold fits.
-//! A shape is written out, as a [TupleShape] or a [MapShape],
-//! or it is the type declared for a label, referred to by the label.
+//! A [Type] is an upper bound on the values that a *place*,
+//! such as a column or the result of an expression, can hold.
+//! It is a [DomainSet], refined by what is known about the inside of tuples and maps.
+//! A structured domain is refined by a set of [shapes](Shape):
+//! every value of that domain that the place can hold fits one of them.
+//! A shape is either written out, as a [TupleShape] or a [MapShape],
+//! or it is the type declared for a label, and refers to that type by the label.
 //!
-//! Written-out shapes nest up to [Type::DEPTH];
-//! below that, a structure's inside is just its domain,
-//! which keeps the lattice of types finite while recursion builds ever deeper values.
-//! A declared label is never unfolded, so a recursive declaration needs no depth;
-//! [LabelTypes] holds what the labels stand for.
+//! Written-out shapes nest up to [Type::DEPTH] levels.
+//! Below that, a structure is described by its domain alone.
+//! This keeps the lattice of types finite,
+//! so that a fixpoint computation over types ends even if it builds ever deeper values.
+//! A declared label is never unfolded, so a recursive declaration needs no depth limit.
+//! [LabelTypes] contains the types declared for labels.
 
 mod domain_set;
 mod label_bound;
@@ -29,14 +31,17 @@ pub use map_shape::MapShape;
 pub use shape::Shape;
 pub use tuple_shape::TupleShape;
 
-/// An upper bound on the values a place can hold:
-/// the possible domains, with optional shape refinements for the structured ones.
+/// An upper bound on the values that a place,
+/// such as a column or the result of an expression, can hold.
 ///
-/// The refinements over-approximate like the domains do.
-/// Present shapes bound every tuple, or map, the place can hold,
-/// and absent ones say nothing beyond the domain.
+/// A type consists of the possible domains, and of optional shapes for tuples and maps.
+/// Like the domains, the shapes over-approximate:
+/// - If there are shapes for tuples, every tuple that the place can hold fits one of them,
+///   and likewise for maps.
+/// - If there are none, nothing is known beyond the domain.
+///
 /// A domain that is not possible has no shapes.
-/// The empty type describes a place no value can reach.
+/// The empty type describes a place that no value can reach.
 ///
 /// # Example
 ///
@@ -62,33 +67,34 @@ pub use tuple_shape::TupleShape;
 pub struct Type {
     /// The possible domains.
     domains: DomainSet,
-    /// The shapes every possible tuple fits one of, if known.
+    /// The shapes of which every possible tuple fits one,
+    /// or `None` if nothing is known about the tuples.
     tuples: Option<Box<[Shape<TupleShape>]>>,
-    /// The shapes every possible map fits one of, if known.
+    /// The shapes of which every possible map fits one,
+    /// or `None` if nothing is known about the maps.
     maps: Option<Box<[Shape<MapShape>]>>,
 }
 
 impl Type {
-    /// How deep written-out shapes nest:
-    /// a structure this many levels in is described by its domain alone.
+    /// The number of levels to which written-out shapes nest.
     ///
-    /// This bounds the height of the lattice,
-    /// which is what lets a fixpoint over types terminate
-    /// while recursion builds ever deeper structures.
+    /// A structure this many levels deep is described by its domain alone.
+    /// This bounds the height of the lattice of types,
+    /// so that a fixpoint computation over types ends even if it builds ever deeper structures.
     pub const DEPTH: usize = 3;
 
-    /// The empty type: no value can be here.
+    /// The empty type, which contains no value.
     pub const EMPTY: Self = Self::of_domains(DomainSet::EMPTY);
 
-    /// Every value: nothing is known.
+    /// The type of every value, of a place about which nothing is known.
     pub const ANY: Self = Self::of_domains(DomainSet::ANY);
 
-    /// Creates the type of exactly one domain, unrefined.
+    /// Creates the type of all values of one domain, without shapes.
     pub const fn of(domain: ValueDomain) -> Self {
         Self::of_domains(DomainSet::of(domain))
     }
 
-    /// Creates the type of a domain set, unrefined.
+    /// Creates the type of all values of a set of domains, without shapes.
     pub const fn of_domains(domains: DomainSet) -> Self {
         Self {
             domains,
@@ -97,7 +103,7 @@ impl Type {
         }
     }
 
-    /// Creates the type holding exactly the tuples of a shape.
+    /// Creates the type of exactly the tuples that fit a shape.
     pub fn tuple(shape: TupleShape) -> Self {
         Self {
             domains: DomainSet::TUPLE,
@@ -106,7 +112,7 @@ impl Type {
         }
     }
 
-    /// Creates the type holding exactly the maps of a shape.
+    /// Creates the type of exactly the maps that fit a shape.
     pub fn map(shape: MapShape) -> Self {
         Self {
             domains: DomainSet::MAP,
@@ -115,12 +121,14 @@ impl Type {
         }
     }
 
-    /// Creates the type of the values of a label's declared type:
-    /// the tuples, or the maps, carrying the label.
+    /// Creates the type of the tuples or the maps with the given label,
+    /// which fit the type declared for the label.
+    ///
+    /// `domain` says whether the type contains tuples or maps.
     ///
     /// # Panics
     ///
-    /// Panics if the domain is neither the tuple nor the map domain.
+    /// Panics if `domain` is neither the tuple nor the map domain.
     pub fn declared(label: &str, domain: ValueDomain) -> Self {
         match domain {
             ValueDomain::Tuple => Self {
@@ -137,13 +145,15 @@ impl Type {
         }
     }
 
-    /// Computes the precise type of one value:
-    /// its domain, refined through its structure down to [DEPTH](Self::DEPTH).
+    /// Returns the most precise type of one value.
+    ///
+    /// It is the value's domain, refined by the value's structure down to
+    /// [DEPTH](Self::DEPTH) levels.
     pub fn of_value(value: ValueRef<'_>) -> Self {
         Self::of_value_within(value, Self::DEPTH)
     }
 
-    /// Computes [of_value](Self::of_value) with the remaining refinement depth.
+    /// Returns the type of [of_value](Self::of_value), refined down to `depth` more levels.
     fn of_value_within(value: ValueRef<'_>, depth: usize) -> Self {
         if depth == 0 {
             return Self::of(value.domain());
@@ -174,11 +184,11 @@ impl Type {
 
     /// Returns whether a value belongs to this type.
     ///
-    /// The domain decides for a scalar.
-    /// A tuple or map must also fit one of the shapes its domain is refined by, if it is,
-    /// through every level the shape describes;
-    /// for a declared label, through the declaration the labels give,
-    /// or by the label alone if they lack it.
+    /// A value that is not a tuple or a map belongs to the type if its domain does.
+    /// A tuple or a map must also fit one of the shapes of its domain, if there are any,
+    /// at every level that the shape describes.
+    /// For a declared label, the value must have the label,
+    /// and must fit the type that `labels` declares for it, if there is one.
     pub fn admits(&self, value: ValueRef<'_>, labels: &LabelTypes) -> bool {
         if !self.domains.contains(value.domain()) {
             return false;
@@ -227,11 +237,12 @@ impl Type {
         }
     }
 
-    /// Returns this type with its written-out shapes trimmed to the given depth.
+    /// Returns this type with its written-out shapes cut off at the given depth.
     ///
-    /// A shape composed from already refined element types
-    /// is trimmed to stay inside [DEPTH](Self::DEPTH).
-    /// Declared labels refer rather than nest, so they stay at any depth.
+    /// A shape built from element types that are refined already may nest deeper than
+    /// [DEPTH](Self::DEPTH), and this cuts it back.
+    /// A declared label refers to its declaration instead of nesting it,
+    /// so it stays at any depth.
     pub fn capped(&self, depth: usize) -> Self {
         Self {
             domains: self.domains,
@@ -240,12 +251,13 @@ impl Type {
         }
     }
 
-    /// Returns this type with every declared label replaced by its declaration,
-    /// through the given number of levels of structure.
+    /// Returns this type with every declared label replaced by its declared shape,
+    /// down to the given number of levels.
     ///
-    /// Intersection meets a declared label with a written-out shape without reading the
-    /// declaration, so a proof that two types share no value unfolds them first.
-    /// A label the declarations lack, or one below the depth, stays a label.
+    /// [intersect](Self::intersect) does not read declarations,
+    /// so it keeps a declared label that a written-out shape accepts.
+    /// To show that two types share no value, unfold both first.
+    /// A label without a declaration in `labels`, or one below the depth, stays a label.
     pub fn unfolded(&self, labels: &LabelTypes, depth: usize) -> Self {
         Self {
             domains: self.domains,
@@ -259,33 +271,32 @@ impl Type {
         self.domains
     }
 
-    /// Returns the shapes every possible tuple fits one of,
-    /// if the tuple domain is possible and refined.
+    /// Returns the shapes of which every possible tuple fits one,
+    /// or `None` if the tuple domain is not possible or has no shapes.
     pub fn tuple_shapes(&self) -> Option<&[Shape<TupleShape>]> {
         self.tuples.as_deref()
     }
 
-    /// Returns the shapes every possible map fits one of,
-    /// if the map domain is possible and refined.
+    /// Returns the shapes of which every possible map fits one,
+    /// or `None` if the map domain is not possible or has no shapes.
     pub fn map_shapes(&self) -> Option<&[Shape<MapShape>]> {
         self.maps.as_deref()
     }
 
-    /// Returns whether no value can be here.
+    /// Returns whether the type contains no value.
     pub fn is_empty(&self) -> bool {
         self.domains.is_empty()
     }
 
-    /// Returns whether the types can share a value.
-    ///
-    /// If both refine a structured domain, incompatible shapes exclude it.
+    /// Returns whether the two types may share a value, as [intersect](Self::intersect) finds.
     pub fn intersects(&self, other: &Self) -> bool {
         !self.intersect(other).is_empty()
     }
 
-    /// Returns the values in both types:
-    /// the domains intersect,
-    /// and a structured domain survives only if some of the shapes can agree.
+    /// Returns the type of the values in both types.
+    ///
+    /// Its domains are the domains of both types,
+    /// except a structured domain whose shapes on one side all exclude those on the other.
     pub fn intersect(&self, other: &Self) -> Self {
         let mut domains = self.domains & other.domains;
         let tuples = shape::intersect(
@@ -302,10 +313,10 @@ impl Type {
         }
     }
 
-    /// Returns the values in either type.
+    /// Returns the type of the values in either type.
     ///
-    /// The domains unite, and so do the shapes of a structured domain,
-    /// unless one side holds the domain without shapes.
+    /// Its domains and shapes are those of either type,
+    /// except that a structured domain without shapes in one type has no shapes in the result.
     pub fn union(&self, other: &Self) -> Self {
         let has = |datatype: &Self, domain| datatype.domains.contains(domain);
         Self {
@@ -325,11 +336,11 @@ impl Type {
         }
     }
 
-    /// Returns whether every value of this type is a value of the other,
-    /// reading declared labels through the given declarations.
+    /// Returns whether every value of this type is shown to be a value of the other.
     ///
-    /// The answer is a proof: `false` where containment is not shown,
-    /// as for a declared label the labels lack.
+    /// Declared labels are read through `labels`.
+    /// The result is conservative: it is `false` wherever the containment cannot be shown,
+    /// as for a declared label that `labels` has no type for.
     pub fn is_subset(&self, other: &Self, labels: &LabelTypes) -> bool {
         self.domains.is_subset(other.domains)
             && (!self.domains.contains(ValueDomain::Tuple)

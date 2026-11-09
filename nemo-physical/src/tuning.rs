@@ -1,26 +1,25 @@
-//! Thresholds that decide how the physical layer runs its operations.
+//! Thresholds that decide how this crate runs its operations in parallel.
 //!
-//! Executing an operation plan proceeds in phases,
+//! Executing an operation plan proceeds in [phases](crate::parallel),
 //! steps whose work the worker threads can share.
-//! Each phase estimates its work as the number of values it will visit or write.
+//! Each phase estimates its work as the number of values that it will visit or write.
 //! From that estimate, [parallel_work](Tuning::parallel_work),
 //! [work_per_task](Tuning::work_per_task) and [tasks_per_thread](Tuning::tasks_per_thread)
 //! decide whether the phase runs on the calling thread
 //! or is cut into tasks for the worker pool, and into how many.
 //!
-//! The thresholds are gathered here with their defaults,
-//! and a host may [set](Tuning::set) its own once per process.
+//! The thresholds have defaults, and [set](Tuning::set) replaces them once per process.
 
 use std::sync::OnceLock;
 
-/// The thresholds the physical layer runs with.
+/// The thresholds that this crate runs with.
 ///
 /// # Example
 ///
 /// ```
 /// use nemo_physical::tuning::Tuning;
 ///
-/// // A host that wants fewer, larger tasks sets its tuning once, at startup.
+/// // For fewer, larger tasks, set the tuning once, at startup.
 /// let tuning = Tuning {
 ///     work_per_task: 1 << 14,
 ///     ..Tuning::default()
@@ -36,21 +35,20 @@ use std::sync::OnceLock;
 pub struct Tuning {
     /// The work below which a phase runs whole on the calling thread.
     ///
-    /// Handing a phase to the worker pool has a cost that is amortized
+    /// Handing a phase to the worker pool has a cost that pays off
     /// only when the phase takes several times as long.
     pub parallel_work: usize,
-    /// The least work a task holds
-    /// when a phase is cut up for the worker pool.
+    /// The least work of a task when a phase is cut into tasks for the worker pool.
     ///
-    /// A phase past `parallel_work` is cut into its work divided by this
-    /// many tasks.
+    /// A phase with at least `parallel_work` work is cut into its work divided by this number
+    /// of tasks, up to the limit of [tasks_per_thread](Self::tasks_per_thread).
     pub work_per_task: usize,
-    /// The most tasks per worker thread a phase is cut into.
+    /// The largest number of tasks per worker thread that a phase is cut into.
     ///
-    /// Cut into one task per thread, a phase would last as long as its
-    /// heaviest task, but the tasks are uneven.
-    /// Several tasks per thread let a worker that finishes early
-    /// take up the tasks nobody has started yet.
+    /// With one task per thread, a phase would last as long as its heaviest task,
+    /// and the tasks are uneven.
+    /// With several tasks per thread, a worker that finishes early
+    /// can take up the tasks that no worker has started yet.
     pub tasks_per_thread: usize,
 }
 
@@ -68,11 +66,10 @@ impl Default for Tuning {
 static TUNING: OnceLock<Tuning> = OnceLock::new();
 
 impl Tuning {
-    /// Sets this tuning for the whole process.
+    /// Sets this tuning for the whole process, and returns whether it took effect.
     ///
-    /// Takes effect only before the first phase reads the tuning
-    /// and returns whether it did.
-    /// The [default](Self::default) applies otherwise.
+    /// It takes effect only if no tuning was set before and no phase has read the tuning yet.
+    /// Otherwise, the tuning that is in effect stays.
     pub fn set(self) -> bool {
         TUNING.set(self).is_ok()
     }

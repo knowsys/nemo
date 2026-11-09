@@ -4,34 +4,37 @@ use std::hash::{Hash, Hasher};
 
 use crate::dictionary::store::{pool::StringPool, record::RecordPool};
 
-/// The index of a frequent part while it fits 32 bits: the header of a record of the 32-bit regime.
+/// The index of a frequent part as a record header, while every frequent index fits 32 bits.
 ///
-/// It hashes as the `u64` it widens to,
-/// so the hashes a pool kept stay valid when its headers widen.
+/// It hashes like the `u64` it widens to,
+/// so the hashes that a pool kept stay valid when its headers are widened.
 #[derive(Clone, Copy, PartialEq, Eq)]
 struct Index32(u32);
 
 impl Hash for Index32 {
+    /// Hashes the index as a `u64`.
     fn hash<S: Hasher>(&self, state: &mut S) {
         state.write_u64(u64::from(self.0));
     }
 }
 
-/// The records of a [PairPool]: a frequent part's index beside the rare bytes.
+/// The records of a [PairPool], each of a frequent part's index and the rare bytes.
 enum Records {
-    /// Headers hold frequent indexes below 2³².
+    /// Records with `u32` headers, while every frequent index is below 2³².
     U32(RecordPool<Index32>),
-    /// Headers hold any frequent index.
+    /// Records with `u64` headers.
     U64(RecordPool<u64>),
 }
 
-/// An interning pool of byte-string pairs whose first part repeats across many entries:
-/// the namespace of an IRI, the language of a string, the datatype of a literal,
-/// the type blob of a structured value.
+/// An interning pool of pairs of byte strings,
+/// whose first part, the *frequent* part, repeats across many entries.
 ///
-/// The frequent part is interned once in a [StringPool],
-/// and an entry is a record of its index beside the rare bytes,
-/// so the repeated part costs its index per entry instead of its bytes.
+/// Examples of frequent parts are the namespace of an IRI, the language of a string,
+/// the datatype of a literal, and the type blob of a structured value.
+/// The second part of a pair is its *rare* part.
+/// Each frequent part is interned once in a [StringPool],
+/// and an entry is a record of the frequent part's index and the rare bytes.
+/// So each entry stores an index instead of the bytes of its frequent part.
 /// A read borrows both parts.
 pub(crate) struct PairPool {
     /// The distinct frequent parts.
@@ -64,7 +67,7 @@ impl PairPool {
     }
 
     /// Interns a pair and returns its index,
-    /// or `None` if a pool cannot hold it.
+    /// or `None` if a part is longer than [Arena::LENGTH_LIMIT](super::arena::Arena::LENGTH_LIMIT).
     pub(crate) fn intern(&mut self, frequent: &[u8], rare: &[u8]) -> Option<u64> {
         let frequent = self.frequents.intern(frequent)?;
 
@@ -77,7 +80,7 @@ impl PairPool {
         }
     }
 
-    /// Rebuilds the records in the 64-bit regime and returns them.
+    /// Rebuilds the records with `u64` headers and returns them.
     fn widen(&mut self) -> &mut RecordPool<u64> {
         if let Records::U32(records) = &mut self.records {
             let old = std::mem::replace(records, RecordPool::new());
@@ -137,6 +140,8 @@ mod tests {
 
     use super::*;
 
+    /// Pairs with the same frequent part share one stored copy of it,
+    /// and every pair is read back unchanged.
     #[test]
     fn pairs_share_frequent_parts() {
         let mut pool = PairPool::new();
@@ -162,6 +167,7 @@ mod tests {
         );
     }
 
+    /// Equal rare parts with different frequent parts are distinct pairs.
     #[test]
     fn equal_rare_bytes_under_different_frequents_are_distinct() {
         let mut pool = PairPool::new();
@@ -173,6 +179,7 @@ mod tests {
         assert_eq!(pool.find(b"c", b"x"), None);
     }
 
+    /// An [Index32] has the same hash as the `u64` it widens to.
     #[test]
     fn indexes_hash_as_the_u64_they_widen_to() {
         let build = DefaultHashBuilder::default();
@@ -184,8 +191,11 @@ mod tests {
         }
     }
 
-    /// The regime switch cannot be reached by interning 2³² frequent parts in a test,
-    /// so the rebuild is driven directly at the point a pool would perform it.
+    /// Records widened to `u64` headers still find and read every pair,
+    /// and the next pair continues the numbering.
+    ///
+    /// A test cannot intern 2³² frequent parts to reach the switch,
+    /// so it widens the records directly.
     #[test]
     fn widened_records_keep_every_pair() {
         let mut pool = PairPool::new();

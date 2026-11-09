@@ -1,4 +1,4 @@
-//! The print path: the results as facts on the standard output.
+//! Printing the results to standard output as facts.
 
 use std::io::{BufWriter, Write};
 
@@ -12,21 +12,20 @@ use crate::{
 };
 
 impl Run<'_> {
-    /// Prints the results to standard output, one fact per row in term syntax,
-    /// so what a run prints reads back as a program.
+    /// Prints the results to standard output as facts in term syntax, one per row,
+    /// so that the printed text parses back as a program.
     ///
-    /// The print mode picks the predicates by role.
-    /// Bare, the export mode picks them as it does for files,
-    /// except that `keep` prints the program's outputs:
-    /// what it declares `@output` or exports, or every derived predicate if it declares neither.
-    /// A program a run only looks at declares what it is about, it does not name files.
+    /// `mode` selects the predicates by role, except for [Mode::Keep],
+    /// with which the export mode selects them as it does for files.
+    /// If the export mode is [Mode::Keep] too, the program's [outputs](Engine::outputs)
+    /// are printed as well, since a program whose results are printed declares the
+    /// predicates it is about with `@output` rather than with exports.
     pub(super) fn print(&self, engine: &mut Engine, mode: Mode) -> Result<(), Diagnostic> {
         let selection = Selection::of(match mode {
             Mode::Keep => self.arguments.export,
             mode => mode,
         });
-        // The outputs, then what the selection reaches, each predicate
-        // once.
+        // The outputs come first, then the selected predicates, each predicate once.
         let mut predicates: Vec<String> = match selection {
             Selection::Declared => engine.outputs(),
             _ => Vec::new(),
@@ -44,13 +43,13 @@ impl Run<'_> {
         let stdout = std::io::stdout().lock();
         let mut out = BufWriter::new(stdout);
         for predicate in &predicates {
-            // A declared predicate no statement used holds no table:
-            // nothing to print, as its export is an empty file.
+            // A declared predicate that no statement uses has no table. Nothing is printed
+            // for it, just as its export writes an empty file.
             if engine.predicate(predicate).is_none() {
                 continue;
             }
-            // Names and values print as the program reads them back,
-            // so that a printed fact can be traced as printed.
+            // Names and values are written as the program would parse them,
+            // so that a printed fact can be passed to `--trace` as it is.
             let name = engine.predicate_text(predicate);
             let mut cursor = engine.cursor(predicate)?;
             while !cursor.is_done() {

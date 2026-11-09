@@ -1,8 +1,8 @@
 //! Units: laying out the nodes that execute together.
 //!
 //! A unit is a base with a chain of single-input operators above it.
-//! The base is a join, the joins a union unites, or a relation read as a join of one input;
-//! these joins are the unit's members.
+//! The base is a join, the joins a union unites, or a relation read as a join of one input.
+//! These joins are the unit's members.
 //! Each member runs the whole chain, sorted into stages:
 //! - the descent checks filters and subtractions while the join binds its layers,
 //! - the row stage evaluates computed columns and the remaining filters on each emitted row,
@@ -16,7 +16,7 @@
 //! Over a load, an alias, an aggregation, or a node that other nodes read as well,
 //! it is the base of a unit: the relation read as a join of one input.
 //! Over a node its unit absorbs, it is an operator of the chain:
-//! a projection to its order, which reorders the markers and drops some.
+//! a projection to its order, which reorders the markers.
 
 use crate::plan::{
     Marker, MarkerOrder, NodeId,
@@ -40,11 +40,11 @@ pub(crate) struct UnitLayout {
 /// The base of a unit, as the walk down from its top finds it.
 #[derive(Debug, Clone)]
 enum UnitBase {
-    /// A join, or the joins a union unites, each with its own operators below the union, bottom-up.
+    /// A join, or the joins a union unites.
     Members {
         /// The union, if the members are its inputs.
         union: Option<NodeId>,
-        /// The joins, each with its own operators.
+        /// The joins, each with its own operators below the union, bottom-up.
         members: Vec<(NodeId, Vec<NodeId>)>,
     },
     /// A relation read as a join of one input.
@@ -52,10 +52,11 @@ enum UnitBase {
 }
 
 impl LayoutBuilder<'_> {
-    /// Lays out the unit whose top is the given node and requires what it reads,
+    /// Lays out the unit whose top is the given node, records the orders it reads,
     /// and returns whether the node is a unit's top.
     ///
-    /// Every operator is. A union is only if its inputs are joins a unit can run,
+    /// Every operator is a unit's top.
+    /// A union is one only if a unit can run its inputs as members,
     /// and passes their blocks through otherwise.
     pub(super) fn lay_out_unit(&mut self, top: NodeId) -> bool {
         let Some((mut base, mut operators)) = self.find_base(top) else {
@@ -76,8 +77,9 @@ impl LayoutBuilder<'_> {
                 }
                 Ok((chains, layers)) if consistent(&chains) => break (chains, layers),
                 // Members whose chains differ cannot write into one set of runs.
-                // Without operators above it, the union is the top and passes its members through;
-                // otherwise the operators read it as a relation, materialized by a unit of its own.
+                // Without operators above it, the union passes its inputs through.
+                // Otherwise the operators read the union as a relation,
+                // which a unit of its own materializes.
                 Ok(_) if operators.is_empty() => return false,
                 Ok(_) => {
                     let below = chain_input(self.plan.node(operators[0]));
@@ -96,7 +98,7 @@ impl LayoutBuilder<'_> {
     /// Finds the base of the unit with the given top, and the operators above it, bottom-up.
     ///
     /// Walks down while the next node is read by the chain alone and can run inside it.
-    /// Returns `None` for a union whose inputs the unit cannot run.
+    /// Returns `None` if the top is a union whose inputs a unit cannot run as members.
     fn find_base(&self, top: NodeId) -> Option<(UnitBase, Vec<NodeId>)> {
         let mut operators = Vec::new();
         let mut cursor = top;
@@ -138,9 +140,9 @@ impl LayoutBuilder<'_> {
 
     /// Returns whether a node can run inside the unit of its only consumer.
     ///
-    /// Only a node consumed once, by a node of the same unit, may execute inside that unit.
-    /// An operator always can, a union if a unit can run its members,
-    /// and a load, an alias or an aggregation never does.
+    /// A node can if it has exactly one consumer, which is not a declared output,
+    /// and if it is an operator, or a union whose inputs a unit can run as members.
+    /// A load, an alias or an aggregation never runs inside a unit.
     fn absorbable(&self, node: NodeId) -> bool {
         if !self.exclusive(node) {
             return false;
@@ -152,19 +154,21 @@ impl LayoutBuilder<'_> {
         }
     }
 
-    /// Returns whether a node that another node reads has no other consumer:
-    /// it is live, read once, and not declared an output.
+    /// Returns whether a node that another node reads has no other consumer.
+    ///
+    /// That is, the node is live, read once, and not declared an output.
     fn exclusive(&self, node: NodeId) -> bool {
         self.live[node.index()] && self.consumers[node.index()] == 1
     }
 
-    /// Returns the members of a union a unit can run, each a join with its own operators, bottom-up,
-    /// or `None` if it cannot.
+    /// Returns the members of a union, each a join with its own operators, bottom-up,
+    /// or `None` if a unit cannot run the union's inputs as members.
     ///
-    /// Every input must be a join in the same order, below operators only the union reads,
+    /// Every input must be a join in the same order, below operators that only the union reads,
     /// and those operators must form one unit with the join.
-    /// They do so over the join's whole order if they do over fewer layers,
-    /// since fewer layers can only spare a projection from merging rows.
+    /// The check sorts them over every layer of the join's order.
+    /// They then also form one unit over the fewer layers a unit may descend through,
+    /// since fewer layers can only keep a projection from merging rows.
     fn union_members(&self, union: NodeId) -> Option<Vec<(NodeId, Vec<NodeId>)>> {
         let Node::Union { inputs, .. } = self.plan.node(union) else {
             unreachable!("members are found under unions");
@@ -211,8 +215,8 @@ impl LayoutBuilder<'_> {
         Some(members)
     }
 
-    /// Returns whether a node is a join or a chain operator that only its consumer reads,
-    /// as a member of a union is walked down.
+    /// Returns whether a node is a join or a chain operator without another consumer,
+    /// for walking down a member of a union.
     fn exclusive_operator(&self, node: NodeId) -> bool {
         self.exclusive(node)
             && matches!(
@@ -225,8 +229,9 @@ impl LayoutBuilder<'_> {
             )
     }
 
-    /// Sorts the chain of every member and chooses the layers the members descend through,
-    /// or returns the position among the operators of the lowest cut any member needs.
+    /// Sorts the chain of every member, and chooses the layers the members descend through.
+    ///
+    /// Fails with the position, among `operators`, of the lowest cut that any member needs.
     fn sort_chains(
         &self,
         top: NodeId,
@@ -259,8 +264,9 @@ impl LayoutBuilder<'_> {
                     match Chain::sort(self.plan, chain_base, all) {
                         Ok(chain) => chains.push(chain),
                         Err(position) => {
-                            // A member's own operators sorted over every layer when the member was found,
-                            // so they sort over the unit's layers as well: the cut lies among the shared operators.
+                            // A member's own operators sorted over every layer
+                            // when the member was found, so they sort over the unit's layers
+                            // as well, and the cut lies among the shared operators.
                             debug_assert!(
                                 position >= local.len(),
                                 "a member's own operators form one unit with its join"
@@ -278,18 +284,22 @@ impl LayoutBuilder<'_> {
         }
     }
 
-    /// Chooses the layers the members of a unit descend through, given each member's operators:
+    /// Chooses the layers the members of a unit descend through:
     /// the order of their joins, without the markers that leave the descent.
     ///
+    /// `chained` has each member's operators, bottom-up.
     /// A marker leaves the descent if nothing in the unit reads it,
-    /// and if in every member exactly one input carries it,
-    /// as that input's deepest marker in the order.
+    /// and if in every member
+    /// - exactly one input has the marker,
+    /// - the marker is that input's deepest marker among those that have not left,
+    /// - and that input has a shallower marker too.
+    ///
     /// The markers are decided from the deepest up,
     /// so a marker leaves only after its input's deeper markers have left.
     ///
     /// The join never binds a marker that left.
-    /// Wherever a row continues the bound values, the input's trie holds a value below them,
-    /// and the input is read with the same leading columns as with the marker bound.
+    /// Wherever a row continues the bound values, the input's trie has a value below them,
+    /// so the input is read with the same leading columns as with the marker bound.
     fn descent_layers(
         &self,
         members: &[(NodeId, Vec<NodeId>)],
@@ -351,12 +361,12 @@ impl LayoutBuilder<'_> {
     }
 
     /// Chooses the layers of a join of one input over a relation:
-    /// the markers the chain uses, those its projections keep leading.
+    /// the markers the chain uses, with those its projections keep first.
     ///
     /// The last projection's kept markers come first, in its order,
-    /// then those each earlier projection keeps besides.
-    /// Without a projection, the top's first required order leads instead,
-    /// so the unit's rows arrive in the order its first consumer reads.
+    /// then those that each earlier projection keeps besides.
+    /// Without a projection, the top's first required order comes first instead,
+    /// so that the unit's rows arrive in the order its first consumer reads.
     /// The other markers the chain uses follow, in the relation's order.
     fn relation_layers(
         &self,
@@ -386,8 +396,9 @@ impl LayoutBuilder<'_> {
         }
         lead(markers, &mut layers);
 
-        // A unit reading nothing of its relation still needs a layer to find out whether a row exists,
-        // unless the relation has no column; then its only possible row is the empty one.
+        // A unit that reads no column of its relation still needs a layer
+        // to find out whether a row exists, unless the relation has no column.
+        // Then its only possible row is the empty one.
         if layers.is_empty()
             && let Some(&first) = markers.first()
         {
@@ -397,7 +408,7 @@ impl LayoutBuilder<'_> {
         MarkerOrder::new(layers)
     }
 
-    /// Marks the nodes a unit runs below its top, which execute with it.
+    /// Marks the nodes that a unit runs below its top as absorbed.
     fn absorb(&mut self, base: &UnitBase, operators: &[NodeId]) {
         for &operator in operators {
             self.absorbed[operator.index()] = true;
@@ -416,7 +427,7 @@ impl LayoutBuilder<'_> {
     }
 
     /// Lays out a unit from its sorted chains and the layers its members descend through,
-    /// requires what its members read, and records what it materializes.
+    /// records the orders its members read, and records what it materializes.
     fn unit(
         &mut self,
         top: NodeId,
@@ -450,10 +461,10 @@ impl LayoutBuilder<'_> {
     }
 }
 
-/// Returns the input of an operator a chain can run:
-/// a filter, a computed column, a subtraction, a projection, or a join of one input.
+/// Returns the input of a chain operator, or `None` for any other node.
 ///
-/// No other node is a chain operator, a join of several inputs included.
+/// The chain operators are filters, computed columns, subtractions, projections,
+/// and joins of one input.
 fn chain_input(node: &Node) -> Option<NodeId> {
     match node {
         Node::Filter { input, .. }
@@ -468,7 +479,7 @@ fn chain_input(node: &Node) -> Option<NodeId> {
     }
 }
 
-/// Returns whether the chains of a unit's members produce their rows alike,
+/// Returns whether the chains of a unit's members produce their rows the same way,
 /// so that their runs build one relation.
 fn consistent(chains: &[Chain]) -> bool {
     let [first, rest @ ..] = chains else {

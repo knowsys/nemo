@@ -1,17 +1,20 @@
-//! The derivation-structure queries of the explanation view, over the written program.
+//! The evaluation of the derivation-structure queries of [trace::query](crate::trace::query).
 //!
-//! One evaluation serves both kinds.
-//! A *shaped* request (`tableEntriesForTreeNodes`) is answered by the valid/filter two-pass:
-//! bottom-up, each node's fact set is what its subtree's constraints allow,
-//! and top-down, each set shrinks to what participates in a surviving parent derivation.
-//! An *expanded* request (`treeForTable`) is grown by the server,
-//! one rule per node as long as a single rule derives the node's whole fact set.
+//! One evaluation serves both kinds of request.
+//! A *shaped* request (`tableEntriesForTreeNodes`) is evaluated in two passes:
+//! - The *valid* pass, bottom-up, gives each node the facts that the constraints of its
+//!   subtree allow.
+//! - The *filter* pass, top-down, shrinks each node's set to the facts that take part in a
+//!   surviving derivation of its parent.
+//!
+//! An *expanded* request (`treeForTable`) is grown by the server, one rule per node,
+//! as long as a single rule derives the node's whole fact set.
 //!
 //! The request names rules and literals of the written program.
 //! It is mapped onto a tree over the compiled program, which the passes evaluate,
 //! and the response maps the results back onto the written nodes.
-//! Node sets are materialized as intermediate tables with ordinary operation plans,
-//! and dropped when the query ends.
+//! The fact sets are computed with ordinary operation plans and stored as intermediate tables,
+//! which are dropped when the query ends.
 //!
 //! The submodules:
 //!
@@ -55,15 +58,15 @@ use crate::{
     },
 };
 
-/// The depth bound of a server-side expansion.
+/// The largest depth of a server-side expansion.
 ///
-/// A recursive program's derivation structure is unbounded.
+/// The derivations of a recursive program can be arbitrarily deep.
 const MAX_DEPTH: usize = 32;
 
-/// The bound on the nodes of a server-side expansion.
+/// The largest number of nodes of a server-side expansion.
 ///
 /// A node with two recursive premises doubles the tree on every level,
-/// so the depth bound alone admits exponentially many nodes.
+/// so the depth bound alone allows exponentially many nodes.
 const MAX_NODES: usize = 1024;
 
 /// The query evaluation over one engine's stores.
@@ -78,15 +81,14 @@ struct QueryEvaluation<'a> {
     ///
     /// Every stored row's revision lies below it.
     now: u64,
-    /// The context rule bodies evaluate in: the latest reasoning run's.
+    /// The evaluation context of rule bodies, which is that of the latest reasoning run.
     ///
-    /// A table that several runs derived holds rows computed at several instants
-    /// (as `NOW()` reads them), and a query over all of them evaluates at the last.
+    /// A table that several runs derived contains rows computed at several instants,
+    /// as `NOW()` returns them, and a query over all of them evaluates at the last.
     context: EvaluationContext,
-    /// Every intermediate table this query created, for the final
-    /// cleanup.
+    /// Every intermediate table that this query created, which are dropped when it ends.
     scratch: Vec<TableId>,
-    /// Grounded term selectors, per node over the compiled program.
+    /// The grounded term selectors of each node over the compiled program.
     grounded: HashMap<usize, Vec<Vec<DataValue>>>,
 }
 
@@ -95,11 +97,11 @@ struct QueryEvaluation<'a> {
 enum TreeShape<'a> {
     /// The server expands it from the root.
     Expanded,
-    /// The request gives it: the root's expansion, if any.
+    /// The request gives it, as the root's expansion, if any.
     Given(Option<&'a QueryChildren>),
 }
 
-/// Answers a `treeForTable` query against a reasoned engine.
+/// Answers a `treeForTable` query against an engine at the fixpoint.
 pub(crate) fn tree_for_table(
     engine: &mut Engine,
     query: TreeForTableQuery,
@@ -117,7 +119,7 @@ pub(crate) fn tree_for_table(
     )
 }
 
-/// Answers a `tableEntriesForTreeNodes` query against a reasoned engine.
+/// Answers a `tableEntriesForTreeNodes` query against an engine at the fixpoint.
 pub(crate) fn table_entries_for_tree_nodes(
     engine: &mut Engine,
     query: TableEntriesForTreeNodesQuery,
@@ -136,8 +138,10 @@ pub(crate) fn table_entries_for_tree_nodes(
     )
 }
 
-/// Runs a query against a reasoned engine.
+/// Evaluates a query against an engine at the fixpoint.
 ///
+/// `predicate` and `entries` give the root's predicate and selection,
+/// and `shape` says how the tree takes its shape.
 /// `answer` builds the response from the assembled nodes.
 fn run<T>(
     engine: &mut Engine,
@@ -157,8 +161,8 @@ fn run<T>(
     };
     arenas.build(&context(engine, &listings), predicate, entries, expansion)?;
 
-    // Term selectors are checked as a fact of the program is, like traced
-    // facts. Entry selectors resolve against the stored order later.
+    // Term selectors get the checks of a fact of the program, as traced facts do.
+    // Entry selectors are resolved against the stored order later.
     let grounded = request::ground_selectors(engine, &arenas.compiled)?;
 
     let program = engine
@@ -205,8 +209,8 @@ fn run<T>(
     result
 }
 
-/// Looks up every predicate a written rule negates: the table and arity
-/// of one the engine stores with all its columns, and the error of any other.
+/// Returns, for every predicate that a written rule negates,
+/// its table and arity if the engine stores it whole, and the error otherwise.
 fn listings(engine: &Engine) -> HashMap<String, Result<(TableId, usize), Diagnostic>> {
     let written = engine
         .written
@@ -218,7 +222,7 @@ fn listings(engine: &Engine) -> HashMap<String, Result<(TableId, usize), Diagnos
             continue;
         };
         for atom in negated_literals(rule) {
-            // Keyed by the resolved name, which the expansion looks listings up by.
+            // The key is the resolved name, by which the expansion looks up listings.
             let name = engine
                 .translation
                 .resolve(&atom.predicate)
@@ -255,9 +259,12 @@ fn context<'a>(
 }
 
 impl QueryEvaluation<'_> {
-    /// Evaluates the whole tree:
-    /// the valid sets bottom-up, then the top-down filtering of a given shape or the expansion
-    /// by the server, and the listings last, each over its own selection.
+    /// Evaluates the whole tree.
+    ///
+    /// The valid sets are computed bottom-up.
+    /// Then a given shape is filtered top-down, or the server expands the tree if `expand` is
+    /// true.
+    /// The listings come last, each over its own selection.
     fn evaluate(
         &mut self,
         arenas: &mut QueryArenas,
@@ -275,8 +282,8 @@ impl QueryEvaluation<'_> {
             self.valid(&mut arenas.compiled, listing)?;
             arenas.compiled[listing].filtered = arenas.compiled[listing].valid;
         }
-        // Everything the response will read is stored in identity
-        // order; the assembly then borrows the engine immutably.
+        // Everything that the response reads is arranged in identity order now,
+        // so that the assembly can borrow the engine immutably.
         let identity: HashSet<TableId> = arenas
             .compiled
             .iter()
@@ -286,8 +293,8 @@ impl QueryEvaluation<'_> {
                     .flatten()
             })
             .collect();
-        // Every table's rows lie before `now`: the scratch tables' at
-        // revision 0, which `now` exceeds.
+        // Every table's rows lie before `now`.
+        // The rows of the scratch tables are at revision 0, which is below `now`.
         for table in identity {
             let arity = self.manager.arity(table);
             self.manager.ensure_order(
@@ -299,8 +306,8 @@ impl QueryEvaluation<'_> {
         Ok(())
     }
 
-    /// Stores a plan's output trie as a fresh intermediate table of the
-    /// given arity.
+    /// Stores a plan's output trie as a new intermediate table of the given arity,
+    /// and returns the table.
     fn store(&mut self, arity: usize, rows: Trie) -> TableId {
         let table = self
             .manager
@@ -311,8 +318,8 @@ impl QueryEvaluation<'_> {
         table
     }
 
-    /// Returns a load of a node's current fact set: its table when
-    /// unconstrained, the given intermediate otherwise.
+    /// Returns a load of a node's current fact set,
+    /// which is `table` if `set` is `None`, and the intermediate table `set` otherwise.
     fn set_load(
         &self,
         plan: &mut OperationPlan,
@@ -326,7 +333,8 @@ impl QueryEvaluation<'_> {
         }
     }
 
-    /// Returns the row count of a node's fact set.
+    /// Returns the number of rows of a node's fact set, given as for
+    /// [set_load](Self::set_load).
     fn count(&self, table: TableId, set: Option<TableId>) -> usize {
         match set {
             Some(set) => self.manager.row_count(set, Revision(0)..Revision(1)),

@@ -1,4 +1,4 @@
-//! The engine-side holder of an installed event sink.
+//! The engine's holder of its installed event sink.
 
 use std::sync::Arc;
 
@@ -11,19 +11,19 @@ use crate::telemetry::{EngineEvent, EventSink};
 pub(crate) struct SinkSlot(Option<Arc<dyn EventSink<EngineEvent>>>);
 
 impl SinkSlot {
-    /// Installs a sink, which the events emitted from here on reach.
+    /// Installs a sink, which receives the events emitted from then on.
     pub(crate) fn install(&mut self, sink: Arc<dyn EventSink<EngineEvent>>) {
         self.0 = Some(sink);
     }
 
-    /// Returns whether emitted events reach a sink.
+    /// Returns whether a sink is installed and [enabled](EventSink::enabled).
     ///
-    /// Events that are expensive to build are built only if this holds.
+    /// Events that are expensive to build are built only if this is true.
     pub(crate) fn enabled(&self) -> bool {
         self.0.as_ref().is_some_and(|sink| sink.enabled())
     }
 
-    /// Hands one event to the installed sink, if any.
+    /// Passes one event to the installed sink, if any.
     pub(crate) fn record(&self, event: &EngineEvent) {
         if let Some(sink) = &self.0 {
             sink.record(event);

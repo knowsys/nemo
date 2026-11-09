@@ -1,4 +1,4 @@
-//! The shape every reader of a format shares.
+//! The trait that every reader of a format implements.
 
 use std::{io::Read, path::Path};
 
@@ -10,11 +10,13 @@ use crate::{
     stream::compression::{Compression, open},
 };
 
-/// A reader of one format: rows from a byte stream, interned into a dictionary.
+/// A reader of one format, which reads rows from a byte stream and interns their values into a
+/// dictionary.
 ///
-/// A format's reader reads a stream, and the trait reads a file the same way.
-/// The condition of the reader's selection evaluates in the context the read is given,
-/// so its `NOW()` is that context's instant.
+/// Each format implements [read](Self::read) for a stream,
+/// and the trait provides [read_path](Self::read_path) for a file.
+/// The condition of the reader's selection is evaluated in the `context` that a read is given,
+/// so its `NOW()` is the instant of that context.
 pub trait Reader {
     /// Returns the compression the reader expects of a file.
     fn compression(&self) -> Compression;
@@ -23,7 +25,7 @@ pub trait Reader {
     ///
     /// # Errors
     ///
-    /// Returns an error if the stream cannot be read or does not hold the format.
+    /// Returns an error if the stream cannot be read or is not in the format.
     fn read(
         &self,
         source: impl Read,
@@ -31,8 +33,10 @@ pub trait Reader {
         context: EvaluationContext,
     ) -> Result<Loaded, Diagnostic>;
 
-    /// Reads all rows of a file as [read](Self::read) does,
-    /// decompressing it as [compression](Self::compression) says or its bytes are compressed.
+    /// Reads all rows of a file as [read](Self::read) does.
+    ///
+    /// The file is decompressed as [compression](Self::compression) says,
+    /// which under [Compression::Auto] means if its name ends in `.gz`.
     ///
     /// # Errors
     ///

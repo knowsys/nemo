@@ -1,11 +1,15 @@
 //! Semi-naive evaluation to the fixpoint.
 //!
 //! Each stratum is evaluated in iterations.
-//! An iteration applies every active rule of the stratum once,
-//! and the stratum is done after an iteration that derives nothing.
+//! An iteration applies every *active* rule of the stratum once,
+//! which is every rule that can fire in the stratum.
+//! The stratum is done after an iteration that derives nothing.
 //! Between iterations, the tables' revision blocks are consolidated.
-//! A run suspends if a bound SPARQL import needs data from the network,
-//! and resumes at the application it was suspended in.
+//!
+//! The rule of a bound SPARQL import is a *fetch rule*:
+//! its application queries the endpoint instead of joining.
+//! A run is suspended if a fetch rule needs data from the network,
+//! and continues at the rule application where it was suspended.
 
 use std::collections::HashMap;
 
@@ -41,15 +45,15 @@ use crate::{
     },
 };
 
-/// The suspended fetch in a build without the `sparql` feature.
+/// The type of a suspended fetch in a build without the `sparql` feature.
 ///
-/// The type is uninhabited, since no application suspends without the feature.
+/// The type is uninhabited, since no application is suspended without the feature.
 #[cfg(not(feature = "sparql"))]
 #[derive(Debug)]
 pub(in crate::engine) enum PendingFetch {}
 
-/// A reasoning run suspended until the requests of a fetch have responses:
-/// the suspended fetch, and the position from which the run resumes.
+/// A run suspended until the requests of a fetch have responses:
+/// the suspended fetch, and the position from which the run continues.
 #[derive(Debug)]
 pub(in crate::engine) struct SuspendedReasoning {
     /// The stratum the run was in.
@@ -58,9 +62,9 @@ pub(in crate::engine) struct SuspendedReasoning {
     active: Vec<usize>,
     /// The position of the suspended application among the active rules.
     next: usize,
-    /// The step the iteration began at.
+    /// The step at which the iteration began.
     iteration_start: u64,
-    /// The rows the iteration stored before the run was suspended.
+    /// The number of rows that the iteration stored before the run was suspended.
     derived: usize,
     /// The run's evaluation context.
     context: EvaluationContext,
@@ -97,11 +101,11 @@ impl SuspendedReasoning {
     }
 }
 
-/// The requests one fetch rule made during a run,
-/// those that failed and were skipped under `on_error = warn`,
-/// and the rows of the responses that were not valid solutions.
+/// The tally of one fetch rule's requests during a run.
 ///
-/// They are reported when the run ends, one warning of each kind per import.
+/// It counts the requests, those that failed and were skipped under `on_error = warn`,
+/// and the rows of the responses that were not valid solutions.
+/// They are reported when the run ends, with one warning of each kind per import.
 #[derive(Debug)]
 #[cfg_attr(not(feature = "sparql"), expect(dead_code))]
 pub(in crate::engine) struct FetchTally {
@@ -111,33 +115,34 @@ pub(in crate::engine) struct FetchTally {
     predicate: String,
     /// The directive's source position.
     span: Option<Span>,
-    /// Requests made.
+    /// The number of requests sent.
     sent: u64,
-    /// Requests that failed.
+    /// The number of requests that failed.
     failed: u64,
-    /// The binding combinations the failed requests carried.
+    /// The number of binding combinations that the failed requests carried.
     unasked: u64,
     /// Why the first failed request failed.
     first: Option<String>,
-    /// Rows in the responses that were not valid solutions.
+    /// The number of rows in the responses that were not valid solutions.
     malformed: u64,
-    /// Binding rows left out for holding a blank node an endpoint returned.
+    /// The number of binding rows left out because they contain a blank node that an endpoint
+    /// returned.
     blank_bindings: u64,
 }
 
 /// How a rule application ended.
-// The outcome passes once per application, unboxed, since boxing it would allocate for every
-// application.
+// The outcome is returned once per application, unboxed,
+// since boxing it would allocate for every application.
 #[allow(clippy::large_enum_variant)]
 enum ApplicationOutcome {
-    /// Applied, with its result.
+    /// The rule was applied, with this result.
     Applied(Applied),
-    /// Suspended until its requests have responses.
+    /// The application is suspended until the requests of this fetch have responses.
     #[cfg_attr(not(feature = "sparql"), expect(dead_code))]
     Suspended(Box<PendingFetch>),
 }
 
-/// How an application ended within an iteration.
+/// How an application, and the storing of its rows, ended within an iteration.
 enum StoreOutcome {
     /// It stored this many rows.
     Stored(usize),
@@ -162,18 +167,18 @@ enum IterationOutcome {
 
 /// How the iterations of a run ended.
 enum RunOutcome {
-    /// At the fixpoint.
+    /// The run reached the fixpoint.
     Fixpoint,
-    /// Cancelled before it.
+    /// The run was cancelled before the fixpoint.
     Cancelled,
-    /// Suspended until the requests of a fetch have responses.
+    /// The run is suspended until the requests of a fetch have responses.
     Suspended(SuspendedReasoning),
 }
 
 /// Returns an application's nonempty outputs grouped by table.
 ///
-/// The outputs of heads deriving into one table are merged before storing,
-/// since a table takes one batch per revision.
+/// The outputs of the heads that derive into one table are merged before they are stored,
+/// since a table accepts one batch per revision.
 fn group_per_table(outputs: Vec<(TableId, Trie)>) -> HashMap<TableId, Vec<Trie>> {
     let mut per_table: HashMap<TableId, Vec<Trie>> = HashMap::new();
     for (table, trie) in outputs {
@@ -186,10 +191,11 @@ fn group_per_table(outputs: Vec<(TableId, Trie)>) -> HashMap<TableId, Vec<Trie>>
 
 impl Engine {
     /// Applies one rule at a step:
-    /// a join for an ordinary rule, a fetch from the endpoint for a bound import's rule.
+    /// a join for an ordinary rule, and a fetch from the endpoint for a fetch rule.
     ///
-    /// A fetch suspends until its requests have responses,
-    /// and continues from the suspended fetch passed in `suspended`.
+    /// A fetch is suspended until its requests have responses.
+    /// `suspended` is the suspended fetch to continue, if any.
+    /// `observe` asks for observations of the semi-naive variants, for telemetry.
     fn apply_rule(
         &mut self,
         rule: &mut CompiledRule,
@@ -329,8 +335,9 @@ impl Engine {
         debug_assert!(tallies.is_empty(), "only a fetch tallies");
     }
 
-    /// Ends a run discarded while it was suspended, as a cancellation ends one:
-    /// reports what its fetches skipped, against the written program.
+    /// Ends a run that was discarded while it was suspended, as a cancellation ends one.
+    ///
+    /// It reports what the run's fetches skipped, against the written program.
     pub(in crate::engine) fn end_discarded_run(&mut self) {
         let already = self.pipeline.reports().len();
         self.report_fetch_tallies();
@@ -340,12 +347,13 @@ impl Engine {
         }
     }
 
-    /// Reasons to the fixpoint (see [reason](Self::reason)).
+    /// Starts or continues a run, until the fixpoint, a cancellation or a suspension
+    /// (see [reason](Self::reason)).
     pub(in crate::engine) fn reason_to_fixpoint(&mut self) -> Result<Progress, Diagnostic> {
         let Some(mut program) = self.program.take() else {
             return Err(EngineError::NoProgram.diagnostic());
         };
-        // A suspended reasoning run resumes where it was suspended. A suspended
+        // A suspended run continues where it was suspended. A suspended
         // loading method refused the run before it got here.
         let resumed = match self.suspension.take() {
             Some(Suspension::Reason(suspended)) => Some(suspended),
@@ -356,7 +364,8 @@ impl Engine {
             }
         };
         self.fixpoint = false;
-        // A new run evaluates at the instant its facts were loaded at, if any were.
+        // A new run evaluates in the context that a loading method chose since the last run,
+        // if one did.
         let context = match &resumed {
             Some(suspended) => suspended.context,
             None => self
@@ -408,10 +417,11 @@ impl Engine {
         Ok(Progress::Done)
     }
 
-    /// Runs the strata to the fixpoint: stratum by stratum,
-    /// iterations over the stratum's active rules until one derives nothing,
-    /// consolidating the store between iterations.
-    /// A resumed run begins at the application it was suspended in.
+    /// Evaluates the strata in order, each to its fixpoint.
+    ///
+    /// A stratum is evaluated in iterations over its active rules until one derives nothing,
+    /// and the store is consolidated between iterations.
+    /// A continued run begins at the application where it was suspended.
     /// Returns how the run ended.
     fn iterate_strata(
         &mut self,
@@ -420,15 +430,15 @@ impl Engine {
         context: EvaluationContext,
         resumed: Option<SuspendedReasoning>,
     ) -> Result<RunOutcome, Diagnostic> {
-        // The token is cleared where a public method starts or resumes a run, not here:
-        // one `reason()` resumes its run after every fetch, and a cancellation arriving
+        // The token is cleared where a public method starts or continues a run, not here.
+        // One `reason()` continues its run after every fetch, and a cancellation that arrives
         // in between must stop it.
         tracing::info!(strata = strata.len(), step = self.step, "reasoning");
         let finished = Self::finished_tables(program, strata);
         let first = resumed.as_ref().map_or(0, |suspended| suspended.stratum);
         let mut resumed = resumed;
         for (stratum_index, stratum) in strata.iter().enumerate().skip(first) {
-            // A resumed stratum keeps its active rules, and continues its
+            // A continued stratum keeps its active rules, and continues its
             // iteration at the suspended application.
             let (active, mut entry) = match resumed.take() {
                 Some(suspended) => {
@@ -494,8 +504,8 @@ impl Engine {
         Ok(RunOutcome::Fixpoint)
     }
 
-    /// Returns, per stratum, the tables it leaves final for the later strata:
-    /// those it writes, no later stratum writes, and a later stratum reads.
+    /// Returns, per stratum, the tables that it leaves final for the later strata:
+    /// the tables that it writes and a later stratum reads, but no later stratum writes.
     fn finished_tables(program: &CompiledProgram, strata: &[Vec<usize>]) -> Vec<Vec<TableId>> {
         let mut last_writer: HashMap<TableId, usize> = HashMap::new();
         let mut last_reader: HashMap<TableId, usize> = HashMap::new();
@@ -524,10 +534,10 @@ impl Engine {
         finished
     }
 
-    /// Returns the rules of a stratum that can fire in it.
+    /// Returns the active rules of a stratum, which are the rules that can fire in it.
     ///
-    /// Guard atoms, the negated atoms sharing no variable with their rule, are checked once here,
-    /// since their predicates do not change within the stratum.
+    /// Guard atoms, which are the negated atoms that share no variable with their rule,
+    /// are checked once here, since their predicates do not change within the stratum.
     fn activate(
         &mut self,
         program: &CompiledProgram,
@@ -563,7 +573,7 @@ impl Engine {
     /// Runs one iteration over a stratum's active rules from the given position on.
     ///
     /// The first application continues the suspended fetch in `suspended`, if given.
-    /// Returns the rows the iteration stored, and how it ended.
+    /// Returns the number of rows that the iteration stored, and how it ended.
     fn run_iteration(
         &mut self,
         program: &mut CompiledProgram,
@@ -604,13 +614,13 @@ impl Engine {
         })
     }
 
-    /// Applies one rule at the current step and stores what it derived,
-    /// returning the number of rows stored,
-    /// or the suspended application whose requests need responses,
-    /// which does not advance the step.
+    /// Applies one rule at the current step and stores what it derived.
     ///
+    /// Returns the number of rows stored,
+    /// or the suspended fetch whose requests need responses.
+    /// A suspended application does not advance the step.
     /// A body without new rows since the rule's last application derives nothing,
-    /// so its delta window advances without building a plan.
+    /// so the rule's delta window advances without building a plan.
     fn apply_and_store(
         &mut self,
         rule: &mut CompiledRule,
@@ -661,7 +671,7 @@ impl Engine {
         let storing = begun.nanos();
         self.timings.store += storing;
         if stored > 0 {
-            // The tracing log: which rule wrote this revision.
+            // Log which rule wrote this revision, for tracing.
             self.applications.push(application::LoggedApplication {
                 rule: u32::try_from(index).unwrap_or(u32::MAX),
                 step,
@@ -688,10 +698,10 @@ impl Engine {
     }
 
     /// Stores an application's outputs at its step, one batch per table,
-    /// returning the number of rows stored.
+    /// and returns the number of rows stored.
     ///
-    /// A table that gains rows is charged the application's `applied` nanoseconds
-    /// plus the time spent storing into it.
+    /// `applied` is the time the application took, in nanoseconds.
+    /// A table that gains rows is charged this time, plus the time spent storing into it.
     fn store_grouped(
         &mut self,
         step: u64,
@@ -742,18 +752,21 @@ impl Engine {
         });
     }
 
-    /// Consolidates after an iteration, merging the revision blocks the two-level policy proposes.
+    /// Consolidates the tables after an iteration,
+    /// merging the revision blocks that the two-level policy proposes.
     ///
-    /// Since delta windows start at block boundaries,
-    /// only the start of the iteration that just ran must stay a wall (a revision no merge
-    /// crosses).
+    /// A [wall](nemo_physical::management::MergePolicy) is a revision that no merge crosses.
+    /// Delta windows start at block boundaries,
+    /// so besides the walls of [exact_walls](Self::exact_walls),
+    /// only the start of the iteration that just ran must stay a wall.
     /// Every rule's next delta begins at or after it,
     /// so at most the rows of one iteration are derived again,
-    /// and the blocks the iteration added may merge freely.
+    /// and the blocks that the iteration added may merge freely.
     ///
-    /// The two-level policy keeps every growing table at most two blocks wide between walls,
-    /// since a join reads every block of its inputs, each through a cursor of its own,
-    /// at the price of merges that rewrite more rows than doubling ones do.
+    /// The [two-level policy](nemo_physical::management::MergePolicy::TwoLevel) is chosen
+    /// since it keeps few blocks between walls,
+    /// and a join reads every block of its inputs, each through a cursor of its own.
+    /// The price is merges that rewrite more rows than doubling merges do.
     fn consolidate(&mut self, program: &CompiledProgram, iteration_start: u64) {
         let begun = Stopwatch::start();
         let mut walls = Self::exact_walls(program);
@@ -769,14 +782,14 @@ impl Engine {
         self.timings.consolidate += begun.nanos();
     }
 
-    /// Consolidates after a stratum,
-    /// merging each table the stratum leaves final into one block between each pair of adjacent
-    /// walls.
+    /// Consolidates after a stratum:
+    /// merges each table that the stratum leaves final into one block between each pair of
+    /// adjacent walls.
     ///
     /// During the stratum, the two-level policy keeps a growing table several blocks wide,
     /// so that its merges stay cheap.
-    /// A table no later stratum writes is not merged again,
-    /// and every later read of it costs per block.
+    /// A table that no later stratum writes is not merged again,
+    /// and every later read of it pays for each of its blocks.
     fn finish(&mut self, program: &CompiledProgram, tables: &[TableId]) {
         let begun = Stopwatch::start();
         let walls = Self::exact_walls(program);
@@ -786,10 +799,10 @@ impl Engine {
         self.timings.consolidate += begun.nanos();
     }
 
-    /// Returns the last applications of the rules that read exact windows,
+    /// Returns the steps of the last applications of the rules that read exact windows,
     /// which consolidation keeps as walls.
     ///
-    /// Rules that fetch, or call a nondeterministic function (such as `RAND()`),
+    /// Fetch rules, and rules that call a nondeterministic function (such as `RAND()`),
     /// must not read a row twice.
     /// So the block boundary at their last application must survive every merge in every
     /// stratum, since a later stratum's rule reads this stratum's tables from its own last
@@ -807,8 +820,8 @@ impl Engine {
     /// never merging across the given walls or the boundaries of the table's extensional blocks.
     ///
     /// The boundaries of extensional blocks are always walls,
-    /// so input facts never merge with derived rows,
-    /// which keeps them separable for recovery and reload.
+    /// so that input facts never merge with derived rows,
+    /// and the derived rows can be dropped alone.
     fn consolidate_table(&mut self, table: TableId, walls: &[Revision], policy: MergePolicy) {
         let mut walls = walls.to_vec();
         for block in self.extensional.get(&table).into_iter().flatten() {

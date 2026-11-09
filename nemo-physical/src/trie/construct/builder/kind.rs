@@ -1,25 +1,27 @@
-//! The column kind: the storage a column takes, decided before its values arrive.
+//! The column kind, which is the layout of a column, decided before its values arrive.
 
 use crate::{
     storage::{StorageValue, Tag, Tag32},
     trie::ColumnView,
 };
 
-/// The kind of storage a column takes, decided before its values arrive,
-/// from a scan of the values it will hold or from the kinds of the columns it merges,
-/// so that every value is stored in its final form and the storage is sized once.
+/// The layout of a column, decided before its values arrive.
+///
+/// The kind is decided from a scan of the column's values,
+/// or from the layouts of the columns that it merges.
+/// So every value is stored in its final form, and the storage is sized once.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ColumnKind {
-    /// One tag with a 32-bit encoding, every payload within 32 bits.
+    /// One tag with a 32-bit type, and every payload within 32 bits.
     U32(Tag32),
-    /// One tag, with the tag or some payload needing 64 bits.
+    /// One tag, whose type or some payload needs 64 bits.
     U64(Tag),
     /// Several tags, or no values at all.
     Mixed,
 }
 
 impl ColumnKind {
-    /// Returns the kind of a column holding the given values.
+    /// Returns the kind of a column with the given values.
     #[cfg(test)]
     pub(super) fn of(values: impl Iterator<Item = StorageValue>) -> Self {
         let mut scan = KindScan::default();
@@ -29,9 +31,11 @@ impl ColumnKind {
         scan.kind()
     }
 
-    /// Returns the kind of a column merging the given columns:
-    /// uniform if every nonempty column shares one tag,
-    /// 32-bit if all of them are, mixed otherwise.
+    /// Returns the kind of a column that merges the given columns.
+    ///
+    /// The kind has one tag if every nonempty column has that same tag,
+    /// and it is 32-bit if all of those columns are.
+    /// Otherwise, and if every column is empty, it is mixed.
     pub(crate) fn merged<'a>(columns: impl Iterator<Item = ColumnView<'a>>) -> Self {
         // The tag seen so far and, while every column was 32-bit, its 32-bit form.
         let mut seen: Option<(Tag, Option<Tag32>)> = None;
@@ -56,8 +60,9 @@ impl ColumnKind {
     }
 }
 
-/// The running statistics a [ColumnKind] is decided from:
-/// whether the values share one tag, and the largest payload.
+/// The running statistics from which a [ColumnKind] is decided.
+///
+/// They record whether the values share one tag, and the largest payload.
 #[derive(Debug, Default, Clone)]
 pub(crate) struct KindScan {
     /// The tags seen so far.
@@ -79,7 +84,7 @@ enum TagState {
 }
 
 impl KindScan {
-    /// Accounts one value.
+    /// Adds one value to the statistics.
     pub(crate) fn add(&mut self, value: StorageValue) {
         self.max_payload = self.max_payload.max(value.payload);
         self.tags = match self.tags {
@@ -89,7 +94,7 @@ impl KindScan {
         };
     }
 
-    /// Returns the kind the values seen so far take.
+    /// Returns the kind of a column with the values seen so far.
     pub(crate) fn kind(&self) -> ColumnKind {
         match self.tags {
             TagState::Empty | TagState::Mixed => ColumnKind::Mixed,
@@ -109,6 +114,7 @@ mod tests {
 
     use crate::trie::{column::Column, construct::builder::ColumnBuilder};
 
+    /// A merged kind widens to 64 bits or to mixed as needed, and ignores empty columns.
     #[test]
     fn merged_layouts_widen_as_needed() {
         let column32 = ColumnBuilder::single_block(&[StorageValue::term(1)]);

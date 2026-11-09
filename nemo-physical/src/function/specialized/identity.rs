@@ -1,27 +1,28 @@
 //! The identity form of a program.
 //!
-//! A program that only asks whether two terms are identical, or that they are not,
-//! is decided on their storage values:
-//! interning is canonical, so identical terms have identical storage values.
-//! The executor then neither decodes the inputs nor runs the interpreter,
-//! whatever the tags of the columns they read.
-//! Identity never errors, so the form and the program cannot disagree.
+//! A program that only asks whether two terms are identical, or whether they differ,
+//! can be decided on their storage values,
+//! since interning is canonical and gives identical terms identical storage values.
+//! This needs neither decoding the inputs nor running the interpreter,
+//! whatever the tags of the columns that the inputs read.
+//! The identity test never fails, so the form and the program always agree.
 
 use crate::{function::opcode::OpCode, value::DataValue};
 
 /// What an [IdentityCondition] compares its input with.
 #[derive(Debug, Clone)]
 pub(crate) enum IdentityOperand {
-    /// Another row input.
+    /// Another input, by its index.
     Input(usize),
     /// A constant.
     Constant(DataValue),
 }
 
-/// The identity form of a stack program; see the module documentation.
+/// The identity form of a stack program,
+/// the condition that an input is, or is not, the same term as another input or a constant.
 #[derive(Debug, Clone)]
 pub(crate) struct IdentityCondition {
-    /// The row input compared.
+    /// The index of the compared input.
     pub(crate) input: usize,
     /// What the input is compared with.
     pub(crate) operand: IdentityOperand,
@@ -30,8 +31,9 @@ pub(crate) struct IdentityCondition {
 }
 
 impl IdentityCondition {
-    /// Recognizes the identity form of a program,
-    /// or `None` if the program does more than compare two terms for identity.
+    /// Recognizes the identity form of the program with the given instructions and constants.
+    ///
+    /// Returns `None` if the program does more than compare two terms for identity.
     pub(crate) fn recognize(operations: &[OpCode], constants: &[DataValue]) -> Option<Self> {
         let (comparison, negated) = match operations {
             [comparison @ .., OpCode::Same, OpCode::Not] => (comparison, true),

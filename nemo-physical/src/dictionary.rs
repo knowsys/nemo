@@ -1,26 +1,28 @@
-//! The dictionary: the stores of values that do not fit inline.
+//! The dictionary, which stores the values that a storage value cannot encode in its payload.
 //!
-//! A value whose payload encoding cannot be stored in a trie directly
-//! is represented by an entry in one of the stores.
+//! A value is *inline* if a [StorageValue] encodes it directly in its payload.
+//! Every other value is represented by an *entry* in one of the dictionary's stores.
 //! A store numbers its entries densely in insertion order, and that number is the entry's
 //! *index*.
-//! Usually the [tag](Tag) of the storage value identifies the store and the payload is the index.
-//! The *terms*, which are IRIs, strings, language-tagged strings, other literals and nulls,
-//! share the one [Term](Tag::Term) tag instead, since they meet in the same columns of real data.
-//! Their payload is a *term id*, which packs the term's *lane*, the kind of term, with its index.
+//! Usually the [tag](Tag) of the storage value identifies the store, and the payload is the
+//! index.
+//! The *terms* (IRIs, strings, language-tagged strings, other literals and nulls) share the
+//! [Term](Tag::Term) tag instead, since real data mixes them in the same columns.
+//! The payload of a term is its *term id*, which packs the term's *lane*, its kind of term,
+//! together with its index.
 //!
-//! A null is minted [fresh](Dictionary::fresh_null), distinct from every other value,
-//! or by a [label](Dictionary::labeled_null) within a [LabelScope]:
-//! within one open scope, a label names one null.
+//! A null is either minted [fresh](Dictionary::fresh_null), distinct from every other value,
+//! or named by a [label](Dictionary::labeled_null) within a [LabelScope].
+//! Within one open scope, a label names one null.
 //!
-//! Two levels sit beneath the [Dictionary]:
-//! the domain stores, which know how each kind of value splits into stored bytes,
-//! and the store mechanisms, arenas, interning pools and blob encodings,
-//! that keep those bytes.
+//! Two layers sit beneath the [Dictionary]:
+//! - the domain stores, which know how each kind of value is split into bytes;
+//! - the store mechanisms that keep those bytes: arenas, interning pools, and the blob encoding
+//!   of structured values.
 //!
-//! Reads borrow from the stores and allocate nothing:
-//! a structured value is read in place, each element decoded when it is read.
-//! Reads may share the dictionary across threads, writes take it exclusively.
+//! Reads borrow from the stores and allocate nothing.
+//! A structured value is read in place, and each element is decoded when it is read.
+//! Reads can share the dictionary across threads, while writes need exclusive access.
 
 mod domain;
 mod labels;
@@ -57,10 +59,12 @@ use crate::{
 
 /// The dictionary of one database instance.
 ///
-/// [encode](Self::encode) and [decode](Self::decode) translate between values and [StorageValue]s,
-/// choosing the inline payload whenever one exists and a store entry otherwise,
+/// [encode](Self::encode) and [decode](Self::decode) translate between values and
+/// [StorageValue]s.
+/// A value is encoded inline whenever it can be, and as a store entry otherwise,
 /// so that no value has two representations.
-/// [probe](Self::probe) finds the representation a value already has.
+/// [probe](Self::probe) finds the representation that a value already has,
+/// without adding an entry.
 ///
 /// # Example
 ///
@@ -97,15 +101,17 @@ pub struct Dictionary {
     strings: StringStore,
     /// The language-tagged strings.
     language_strings: LanguageStringStore,
-    /// The literals of unsupported datatypes.
+    /// The literals of datatypes without native support.
     others: OtherStore,
-    /// The number of nulls minted so far; a null has no stored content.
+    /// The number of nulls minted so far.
+    ///
+    /// A null's index is its position in minting order, and a null stores no content.
     nulls: u64,
     /// The labels of nulls, by scope, and which scope minted each null.
     null_labels: NullLabels,
     /// The integers beyond the 64-bit range.
     wide_integers: WideDecimalStore,
-    /// The decimals beyond the compact range.
+    /// The decimals beyond the compact range that are not integers.
     wide_decimals: WideDecimalStore,
     /// The dateTimes beyond the compact range.
     wide_datetimes: WideDateTimeStore,
@@ -121,19 +127,23 @@ pub struct Dictionary {
     maps: StructureStore,
 }
 
-// Reads share the dictionary across the worker threads.
+// Checks at compile time that the dictionary is `Send` and `Sync`,
+// since reads share it across worker threads.
 const _: () = {
     const fn shared<T: Send + Sync>() {}
     shared::<Dictionary>();
 };
 
 impl Dictionary {
-    /// The longest byte string a store holds:
-    /// a value with a longer part, such as the text of a term, has no representation.
+    /// The length in bytes of the longest byte string that a store can hold.
+    ///
+    /// A value with a longer part, such as the text of a term, cannot be encoded.
     pub const LENGTH_LIMIT: usize = Arena::LENGTH_LIMIT;
 
-    /// The most elements a structured value holds:
-    /// its content blob is a stored byte string.
+    /// The largest number of elements of a tuple or map that can be encoded.
+    ///
+    /// The payloads of its elements are stored together as one byte string,
+    /// which must stay within [LENGTH_LIMIT](Self::LENGTH_LIMIT).
     pub const ELEMENT_LIMIT: usize = Self::LENGTH_LIMIT / content::ELEMENT_SIZE;
 
     /// Creates an empty dictionary.
@@ -156,14 +166,16 @@ impl Dictionary {
         }
     }
 
-    /// Encodes a value into its storage representation:
-    /// the inline payload if one exists,
-    /// and the entry of its store otherwise, interned if it was not before.
+    /// Encodes a value as a storage value, adding a store entry if the value needs one.
     ///
-    /// Returns `None` for a value that has no representation:
-    /// a null this dictionary did not mint,
-    /// a value with a part longer than [LENGTH_LIMIT](Self::LENGTH_LIMIT),
-    /// or a structure of more than [ELEMENT_LIMIT](Self::ELEMENT_LIMIT) elements.
+    /// An inline value is encoded in the payload.
+    /// Any other value is encoded as its store entry, which is added if it does not exist yet.
+    ///
+    /// Returns `None` for a value that cannot be encoded:
+    /// - a null that this dictionary did not mint;
+    /// - a value with a part longer than [LENGTH_LIMIT](Self::LENGTH_LIMIT);
+    /// - a tuple or map with more than [ELEMENT_LIMIT](Self::ELEMENT_LIMIT) elements,
+    ///   or with an element that cannot be encoded.
     pub fn encode(&mut self, value: ValueRef<'_>) -> Option<StorageValue> {
         if let Some(inline) = StorageValue::from_value(value) {
             return Some(inline);
@@ -228,9 +240,10 @@ impl Dictionary {
         Some(stored)
     }
 
-    /// Returns the storage representation a value already has,
-    /// the inline payload or its existing store entry,
-    /// or `None` for a value that occurs in no stored table.
+    /// Returns the storage value that represents a value, without adding a store entry.
+    ///
+    /// Returns `None` for a value that needs a store entry and has none.
+    /// No stored table can contain such a value.
     pub fn probe(&self, value: ValueRef<'_>) -> Option<StorageValue> {
         if let Some(inline) = StorageValue::from_value(value) {
             return Some(inline);
@@ -293,8 +306,10 @@ impl Dictionary {
         Some(stored)
     }
 
-    /// Returns the storage value of a stored tuple or map read from this dictionary,
-    /// which its view knows without a lookup, or `None` for any other value.
+    /// Returns the storage value of a tuple or map that was read from this dictionary,
+    /// or `None` for any other value.
+    ///
+    /// Such a value is a view of its entry and knows the entry's index, so no lookup is needed.
     pub(crate) fn entry_of(&self, value: ValueRef<'_>) -> Option<StorageValue> {
         match value {
             ValueRef::Tuple(tuple) => tuple
@@ -308,11 +323,11 @@ impl Dictionary {
     }
 
     /// Decodes a storage value into the value it represents,
-    /// borrowed from the dictionary if it is a store entry,
-    /// or returns `None` for an entry this dictionary never produced.
+    /// or returns `None` for an entry that this dictionary does not have.
     ///
-    /// A stored tuple or map decodes to a view of its entry,
-    /// which decodes an element when it is read.
+    /// A value with a store entry is borrowed from the dictionary.
+    /// A tuple or map is decoded to a view of its entry, which decodes each element when it is
+    /// read.
     pub fn decode(&self, value: StorageValue) -> Option<ValueRef<'_>> {
         match value.tag {
             Tag::Term => self.term_value(TermId::from_raw(value.payload)),
@@ -349,12 +364,14 @@ impl Dictionary {
     }
 
     /// Mints a fresh null, distinct from every existing value,
-    /// and returns its id, the one [ValueRef::Null] carries.
+    /// and returns its id for [ValueRef::Null].
     pub fn fresh_null(&mut self) -> u64 {
         self.mint_null(None)
     }
 
-    /// Mints a null, by a label of a scope or fresh.
+    /// Mints a null and returns its id.
+    ///
+    /// `scope` is the scope whose label names the null, or `None` for a fresh null.
     fn mint_null(&mut self, scope: Option<LabelScope>) -> u64 {
         let index = self.nulls;
         self.nulls += 1;
@@ -364,11 +381,12 @@ impl Dictionary {
     }
 
     /// Returns the open shared label scope with the given name,
-    /// opened if no open shared scope has it.
+    /// and opens one if there is none.
     ///
-    /// Within a scope a label names one null:
-    /// all calls naming a shared scope share it until it is [closed](Self::close_label_scope).
-    /// A [fresh](Self::fresh_label_scope) scope of the same name is never returned.
+    /// Within a scope, a label names one null.
+    /// All calls with the same name return the same scope until it is
+    /// [closed](Self::close_label_scope).
+    /// A [fresh](Self::fresh_label_scope) scope with the same name is never returned.
     ///
     /// # Example
     ///
@@ -383,13 +401,14 @@ impl Dictionary {
     /// let again = dictionary.shared_label_scope("source");
     /// assert_eq!(dictionary.labeled_null(again, "b0"), first);
     ///
-    /// // Another scope's label names another null, which reports its scope.
+    /// // The same label in another scope names another null.
+    /// // A labeled null reports the name of its scope.
     /// let other = dictionary.fresh_label_scope("source");
     /// assert_ne!(dictionary.labeled_null(other, "b0"), first);
     /// assert_eq!(dictionary.null_scope_name(first), Some("source"));
     ///
-    /// // A closed scope forgets its labels: the scope opened next under its name
-    /// // mints anew, and the old null stays a value.
+    /// // A closed scope forgets its labels. The next scope opened with its name mints new
+    /// // nulls, and the old null can still be encoded.
     /// dictionary.close_label_scope(shared);
     /// let reopened = dictionary.shared_label_scope("source");
     /// assert_ne!(dictionary.labeled_null(reopened, "b0"), first);
@@ -402,22 +421,25 @@ impl Dictionary {
         self.null_labels.shared(name)
     }
 
-    /// Opens a label scope that no other call returns.
+    /// Opens a new label scope, which no other call returns.
     ///
-    /// The name only reports which scope minted a null ([null_scope_name](Self::null_scope_name)).
+    /// The name serves only to report which scope minted a null,
+    /// through [null_scope_name](Self::null_scope_name).
     /// The scope stays open until it is [closed](Self::close_label_scope).
     pub fn fresh_label_scope(&mut self, name: &str) -> LabelScope {
         self.null_labels.fresh(name)
     }
 
-    /// Closes a label scope: its labels are forgotten, and the nulls they named stay values.
+    /// Closes a label scope, which forgets its labels.
     ///
+    /// The nulls that the labels named can still be encoded.
     /// Closing a closed scope does nothing.
     pub fn close_label_scope(&mut self, scope: LabelScope) {
         self.null_labels.close(scope);
     }
 
-    /// Returns the null a label names in an open scope, minted on first sight.
+    /// Returns the id of the null that a label names in an open scope,
+    /// and mints the null if the label names none yet.
     ///
     /// # Panics
     ///
@@ -431,7 +453,8 @@ impl Dictionary {
         id
     }
 
-    /// Returns the null a label names in an open scope, or `None` if it names none yet.
+    /// Returns the id of the null that a label names in an open scope,
+    /// or `None` if the label names none yet.
     ///
     /// # Panics
     ///
@@ -440,8 +463,10 @@ impl Dictionary {
         self.null_labels.find(scope, label)
     }
 
-    /// Returns the name of the scope in which a label named the null of the given id,
-    /// open or closed, or `None` for a null minted fresh and for any other id.
+    /// Returns the name of the scope whose label named the null with the given id,
+    /// or `None` for a fresh null and for an id that is not a null of this dictionary.
+    ///
+    /// The scope may be open or closed.
     pub fn null_scope_name(&self, id: u64) -> Option<&str> {
         match TermId::from_raw(id).decompose() {
             Some((TermLane::Null, index)) if index < self.nulls => self.null_labels.scope_of(index),
@@ -449,7 +474,9 @@ impl Dictionary {
         }
     }
 
-    /// Returns the number of entries in the store behind a tag, or zero for an inline tag.
+    /// Returns the number of entries in the store of a tag, or zero for an inline tag.
+    ///
+    /// The count for [Term](Tag::Term) covers all terms, nulls included.
     pub fn stored(&self, tag: Tag) -> u64 {
         match tag {
             Tag::Term => {
@@ -529,10 +556,11 @@ impl Dictionary {
         }
     }
 
-    /// Returns the type and content blobs of a structured value
-    /// whose elements `represent` translates into storage values,
-    /// or `None` for a structure of more than [ELEMENT_LIMIT](Self::ELEMENT_LIMIT) elements
-    /// or with an element that has no representation.
+    /// Returns the type blob and the content blob of a tuple or map,
+    /// or `None` if it has more than [ELEMENT_LIMIT](Self::ELEMENT_LIMIT) elements
+    /// or `represent` returns `None` for an element.
+    ///
+    /// `represent` translates each element into its storage value.
     fn blobs<'v>(
         label: Option<&str>,
         elements: impl IntoIterator<Item = ValueRef<'v>>,
@@ -548,7 +576,7 @@ impl Dictionary {
     ///
     /// # Panics
     ///
-    /// Panics for an index the tuple store does not hold.
+    /// Panics if the tuple store has no entry with this index.
     pub(crate) fn stored_tuple(&self, index: u64) -> StoredStructure<'_> {
         let blobs = self.tuples.get(index).expect("a view reads a stored tuple");
         StoredStructure::new(self, blobs)
@@ -558,7 +586,7 @@ impl Dictionary {
     ///
     /// # Panics
     ///
-    /// Panics for an index the map store does not hold.
+    /// Panics if the map store has no entry with this index.
     pub(crate) fn stored_map(&self, index: u64) -> StoredStructure<'_> {
         let blobs = self.maps.get(index).expect("a view reads a stored map");
         StoredStructure::new(self, blobs)
@@ -594,9 +622,8 @@ impl fmt::Debug for Dictionary {
 
 /// The allocated memory of a dictionary in bytes, by store.
 ///
-/// The numbers cover what a store has allocated,
-/// the arenas with their unused chunk tails, the lookup tables and the entry lists,
-/// not just the payload bytes.
+/// Each number covers everything that a store has allocated, not just the bytes of its values.
+/// This includes the unused tails of arena chunks, the lookup tables and the entry lists.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DictionaryMemory {
     /// The bytes of the IRI store.
@@ -619,9 +646,9 @@ pub struct DictionaryMemory {
     pub wide_times: usize,
     /// The bytes of the wide duration store.
     pub wide_durations: usize,
-    /// The bytes of the tuple store, excluding the materialized values.
+    /// The bytes of the tuple store.
     pub tuples: usize,
-    /// The bytes of the map store, excluding the materialized values.
+    /// The bytes of the map store.
     pub maps: usize,
     /// The bytes of the null labels, of their scopes, and of the record of which scope minted
     /// each null.
@@ -655,7 +682,7 @@ mod tests {
 
     use crate::value::{DataValue, IriRef, MapValue, TupleValue, datatype::xsd, number::decimal};
 
-    /// Asserts that a value round-trips through encode and decode.
+    /// Asserts that a value is decoded back from its encoding, and returns the encoding.
     fn assert_round_trip(dictionary: &mut Dictionary, value: &DataValue) -> StorageValue {
         let encoded = dictionary
             .encode(value.as_ref())
@@ -667,6 +694,7 @@ mod tests {
         encoded
     }
 
+    /// Values of every kind, inline or stored, are decoded back from their encodings.
     #[test]
     fn values_round_trip_across_stores() {
         let mut dictionary = Dictionary::new();
@@ -693,6 +721,8 @@ mod tests {
         }
     }
 
+    /// Encoding a value twice returns the same entry,
+    /// and a probe finds the entry only after it was added.
     #[test]
     fn encoding_is_idempotent() {
         let mut dictionary = Dictionary::new();
@@ -713,6 +743,7 @@ mod tests {
         assert_eq!(dictionary.decode(first), Some(owned.as_ref()));
     }
 
+    /// Integers and compact decimals are encoded inline, without a store entry.
     #[test]
     fn inline_values_bypass_the_dictionary() {
         let mut dictionary = Dictionary::new();
@@ -733,6 +764,8 @@ mod tests {
         );
     }
 
+    /// A value beyond the compact range is stored under the wide tag of its domain,
+    /// and encoding it again finds the same entry.
     #[test]
     fn wide_values_take_their_tags_and_keep_their_identity() {
         let mut dictionary = Dictionary::new();
@@ -797,7 +830,7 @@ mod tests {
         for (name, value, tag) in cases {
             let encoded = assert_round_trip(&mut dictionary, &value);
             assert_eq!(encoded.tag, tag, "{name}");
-            // Interned twice, one entry.
+            // Encoding and probing the value again find the same entry.
             assert_eq!(dictionary.encode(value.as_ref()), Some(encoded), "{name}");
             assert_eq!(dictionary.probe(value.as_ref()), Some(encoded), "{name}");
         }
@@ -810,10 +843,10 @@ mod tests {
         assert_eq!(dictionary.stored(Tag::WideDuration), 2);
     }
 
+    /// A typed literal of a supported datatype is encoded as its value,
+    /// so that the value has only one entry.
     #[test]
     fn identity_never_splits_between_literal_and_value() {
-        // A typed literal and its value are one entry; `other` refuses the
-        // datatypes that would let the lexical form become a second one.
         let mut dictionary = Dictionary::new();
         let big = DataValue::decimal_from_lexical("123456789012345678901").expect("well-formed");
         let literal = DataValue::typed_literal(
@@ -826,6 +859,8 @@ mod tests {
             dictionary.encode(big.as_ref()),
             dictionary.encode(literal.as_ref())
         );
+        // An other literal of a supported datatype, which would be a second entry,
+        // cannot be built.
         assert!(
             DataValue::other(
                 "http://www.w3.org/2001/XMLSchema#integer",
@@ -834,7 +869,8 @@ mod tests {
             .is_none()
         );
 
-        // An unsupported datatype with the same lexical is a term of its own.
+        // A literal of a datatype without native support, with the same lexical form,
+        // is a term of its own.
         let other = DataValue::other("http://example.org/unit", "123456789012345678901")
             .expect("datatype is unsupported");
         let encoded = assert_round_trip(&mut dictionary, &other);
@@ -844,6 +880,8 @@ mod tests {
         assert_eq!(dictionary.stored(Tag::WideInt), 1);
     }
 
+    /// Fresh nulls are distinct and can be encoded,
+    /// and a null that this dictionary did not mint cannot.
     #[test]
     fn nulls_are_minted_fresh_and_foreign_nulls_are_rejected() {
         let mut dictionary = Dictionary::new();
@@ -859,13 +897,15 @@ mod tests {
         assert_round_trip(&mut dictionary, &value);
         assert_eq!(dictionary.stored(Tag::Term), 2);
 
-        // A null this dictionary never minted, and an id that is no null.
+        // A null that this dictionary never minted, and an id that is not a null.
         let foreign = TermId::compose(TermLane::Null, 99).raw();
         assert_eq!(dictionary.encode(ValueRef::Null(foreign)), None);
         assert_eq!(dictionary.probe(ValueRef::Null(foreign)), None);
         assert_eq!(dictionary.encode(ValueRef::Null(0)), None);
     }
 
+    /// Within an open scope a label names one null,
+    /// and every labeled null reports the name of its scope.
     #[test]
     fn labels_name_one_null_per_open_scope() {
         let mut dictionary = Dictionary::new();
@@ -877,7 +917,7 @@ mod tests {
         assert_eq!(dictionary.find_labeled_null(program, "b"), None);
         assert_ne!(a, existential);
 
-        // Two fresh scopes of one name, as two reads of one document, never share a null.
+        // Two fresh scopes with the same name never share a null.
         let first = dictionary.fresh_label_scope("data.ttl");
         let second = dictionary.fresh_label_scope("data.ttl");
         let in_first = dictionary.labeled_null(first, "a");
@@ -887,8 +927,8 @@ mod tests {
         // A shared scope is found by its name until it closes.
         assert_eq!(dictionary.shared_label_scope("program"), program);
 
-        // Every null reports the scope that minted it by a label, after it closed too,
-        // interleaved with fresh nulls.
+        // Every labeled null reports the name of its scope, also after the scope is closed,
+        // and the fresh nulls minted between them report none.
         let later = dictionary.fresh_null();
         dictionary.close_label_scope(first);
         dictionary.close_label_scope(second);
@@ -909,10 +949,11 @@ mod tests {
         assert_ne!(reopened, program);
         assert_ne!(dictionary.labeled_null(reopened, "a"), a);
 
-        // A labeled null encodes like any other.
+        // A labeled null is encoded like any other null.
         assert_round_trip(&mut dictionary, &DataValue::null(a));
     }
 
+    /// Naming a null in a closed scope panics.
     #[test]
     #[should_panic(expected = "only while it is open")]
     fn a_closed_scope_names_nothing() {
@@ -922,6 +963,8 @@ mod tests {
         dictionary.labeled_null(scope, "a");
     }
 
+    /// Tuples and maps, nested ones included, are decoded back from their encodings,
+    /// and values of one shape share one type blob.
     #[test]
     fn structured_values_round_trip_and_share_shapes() {
         let mut dictionary = Dictionary::new();
@@ -958,7 +1001,7 @@ mod tests {
         assert_eq!(dictionary.stored(Tag::Tuple), 3);
         assert_eq!(dictionary.tuples.shape_count(), 2);
 
-        // Probing finds what is there and nothing else.
+        // A probe finds the existing entries and nothing else.
         assert_eq!(
             dictionary.probe(sibling.as_ref()),
             Some(StorageValue::new(Tag::Tuple, 2))
@@ -970,6 +1013,8 @@ mod tests {
         assert_round_trip(&mut dictionary, &empty);
     }
 
+    /// A decoded map is a view of its entry that reads its elements in place,
+    /// and it behaves like the owned map.
     #[test]
     fn stored_structures_are_read_in_place() {
         let mut dictionary = Dictionary::new();
@@ -1012,7 +1057,7 @@ mod tests {
         assert_eq!(dictionary.probe(ValueRef::Tuple(nested)), Some(inner_entry));
         assert_eq!(dictionary.entry_of(inner.as_ref()), None);
 
-        // A view and its owned value compare, hash and print alike.
+        // A view and its owned value are equal, have equal hashes and print the same.
         let state = RandomState::new();
         assert_eq!(ValueRef::Tuple(nested), inner.as_ref());
         assert_eq!(
@@ -1022,12 +1067,13 @@ mod tests {
         assert_eq!(ValueRef::Map(view).to_string(), map.to_string());
         assert_eq!(ValueRef::Map(view).to_owned(), map);
 
-        // A view of another dictionary encodes element by element.
+        // Another dictionary encodes the view element by element.
         let mut other = Dictionary::new();
         let entry = other.encode(ValueRef::Map(view)).expect("fits");
         assert_eq!(other.decode(entry).map(ValueRef::to_owned), Some(map));
     }
 
+    /// A storage value without an entry in the dictionary is not decoded.
     #[test]
     fn unknown_entries_do_not_decode() {
         let dictionary = Dictionary::new();
@@ -1043,9 +1089,10 @@ mod tests {
         assert_eq!(dictionary.decode(StorageValue::new(Tag::Tuple, 0)), None);
     }
 
+    /// Every store reports more bytes once it holds a value,
+    /// and the total is the sum of the stores' bytes.
     #[test]
     fn memory_reporting_covers_all_stores() {
-        // One value for each store, and each store reports the bytes it took.
         let empty = Dictionary::new().memory();
         let mut dictionary = Dictionary::new();
         let values = [
@@ -1071,7 +1118,7 @@ mod tests {
         let scope = dictionary.shared_label_scope("document");
         dictionary.labeled_null(scope, "b0");
 
-        // Destructured whole, so that a new store cannot go unchecked.
+        // The memory is destructured completely, so that a new store cannot be left unchecked.
         let memory = dictionary.memory();
         let DictionaryMemory {
             iris,

@@ -1,4 +1,7 @@
-//! The instruction set of stack programs, with the [signature](OpCode::signature) of every instruction.
+//! The instruction set of stack programs.
+//!
+//! Every instruction has a [signature](OpCode::signature),
+//! the domains of the operands that it accepts and of the results that it yields.
 
 mod signature;
 
@@ -10,93 +13,110 @@ use crate::{
 /// One instruction of a [StackProgram](super::StackProgram).
 ///
 /// An instruction pops its operands off the stack and pushes one result.
-/// Every instruction is total over the stack it finds:
-/// an operand it cannot use makes the result an evaluation error.
-/// There is no inequality instruction:
-/// [Not](Self::Not) over [Equal](Self::Equal) is SPARQL's `!=`,
-/// since errors propagate through the negation and the NaN stays unequal to itself,
-/// and [Not](Self::Not) over [Same](Self::Same) negates the identity.
+/// Every instruction accepts any operands,
+/// and an operand that it cannot use makes the result an evaluation error.
 ///
-/// A parameter carries what varies as data under one computation:
-/// how many operands a fold pops, whether an optional operand is present,
-/// which domains a test accepts.
-/// Operations that compute differently are instructions of their own,
-/// as the digests and the trims are.
+/// There is no instruction for inequality.
+/// [Not](Self::Not) applied to [Equal](Self::Equal) gives SPARQL's `!=`,
+/// since an error propagates through the negation and NaN stays unequal to itself.
+/// [Not](Self::Not) applied to [Same](Self::Same) negates the identity.
+///
+/// A parameter of an instruction is data that varies within one computation:
+/// the number of operands of a variadic instruction, whether an optional operand is present,
+/// or the domains that a test accepts.
+/// Operations that compute differently are separate instructions,
+/// such as the digests and the trims.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OpCode {
     /// Pushes the program constant with the given index.
     Constant(u16),
-    /// Pushes the row input with the given index.
+    /// Pushes the input with the given index, a value of the row.
     Input(u16),
 
     /// Pops two values and pushes whether they are the same term.
     ///
-    /// This is the equality of joins and duplicates, and it never errors.
+    /// This is the equality of joins and of duplicate elimination, and it never yields an error.
     Same,
-    /// Pops two values and pushes whether they are equal:
-    /// numerically for numbers, by instant for dateTimes, dates and times,
-    /// by length for durations, by term identity otherwise.
+    /// Pops two values and pushes whether they are equal,
+    /// as [value_eq](crate::value::ValueRef::value_eq) decides.
+    ///
+    /// Unlike for [Same](Self::Same), numbers are equal if they have the same value,
+    /// so that the integer `1` equals the double `1.0d`.
     Equal,
     /// Pops two values and pushes whether the first is smaller.
+    ///
+    /// The order is the one of [value_cmp](crate::value::ValueRef::value_cmp).
+    /// If it is undefined, as for NaN, the result is false.
     Less,
-    /// Pops two values and pushes whether the first is smaller or equal.
+    /// Pops two values and pushes whether the first is smaller or equal, as for [Less](Self::Less).
     LessOrEqual,
-    /// Pops two values and pushes whether the first is greater.
+    /// Pops two values and pushes whether the first is greater, as for [Less](Self::Less).
     Greater,
-    /// Pops two values and pushes whether the first is greater or equal.
+    /// Pops two values and pushes whether the first is greater or equal, as for [Less](Self::Less).
     GreaterOrEqual,
-    /// Pops two values and pushes -1, 0, or 1 by their order.
+    /// Pops two values and pushes `-1`, `0` or `1`,
+    /// as the first is smaller than, equal to, or greater than the second.
+    ///
+    /// The order is the one of [Less](Self::Less).
+    /// If it is undefined, as for NaN,
+    /// the result is an [Incomparable](crate::value::EvaluationError::Incomparable) error.
     Compare,
-    /// Pops the given number of numbers and pushes the largest.
+    /// Pops the given number of numbers and pushes the largest,
+    /// in the smallest numeric type that holds all of them.
     Maximum(u16),
-    /// Pops the given number of numbers and pushes the smallest.
+    /// Pops the given number of numbers and pushes the smallest,
+    /// in the smallest numeric type that holds all of them.
     Minimum(u16),
 
-    /// Pops two values and pushes their sum:
-    /// of two numbers, of two durations, or of a point in time and a duration.
+    /// Pops two numbers, two durations, or a point in time and a duration,
+    /// and pushes their sum.
     Add,
-    /// Pops two values and pushes their difference:
-    /// of two numbers, of two durations, of a point in time and a duration,
-    /// or of two points in time, a duration.
-    Subtract,
-    /// Pops two values and pushes their product:
-    /// of two numbers, or of a duration and a number.
-    Multiply,
-    /// Pops two values and pushes their quotient:
-    /// of two numbers, of a duration and a number, or of two durations, a decimal.
+    /// Pops two numbers, two durations, a point in time and a duration, or two points in time,
+    /// and pushes their difference.
     ///
-    /// Exact integers divide into decimals, as in SPARQL.
+    /// The difference of two points in time is a dayTimeDuration.
+    Subtract,
+    /// Pops two numbers, or a duration and a number, and pushes their product.
+    Multiply,
+    /// Pops two numbers, a duration and a number, or two durations, and pushes their quotient.
+    ///
+    /// The quotient of two integers is a decimal, as in SPARQL, rather than a truncated integer.
+    /// The quotient of two durations is an exact number.
     Divide,
     /// Pops a number and pushes its negation.
     Negate,
     /// Pops a number and pushes its absolute value.
     Absolute,
-    /// Pops a number and pushes it rounded to the nearest integer value,
-    /// within its own domain.
+    /// Pops a number and pushes it rounded to the nearest integer value, with halves rounded up.
+    ///
+    /// A float stays a float and a double a double, and an exact number becomes an integer.
     Round,
-    /// Pops a number and pushes it rounded up to the nearest integer value,
-    /// within its own domain.
+    /// Pops a number and pushes it rounded up to the nearest integer value.
+    ///
+    /// A float stays a float and a double a double, and an exact number becomes an integer.
     Ceiling,
-    /// Pops a number and pushes it rounded down to the nearest integer value,
-    /// within its own domain.
+    /// Pops a number and pushes it rounded down to the nearest integer value.
+    ///
+    /// A float stays a float and a double a double, and an exact number becomes an integer.
     Floor,
     /// Pops two numbers and pushes the first raised to the second.
     Power,
-    /// Pops a number and a base and pushes the logarithm.
+    /// Pops a number and a base, and pushes the logarithm of the number to that base.
     Logarithm,
-    /// Pops a number and pushes its sine.
+    /// Pops an angle in radians and pushes its sine.
     Sine,
-    /// Pops a number and pushes its cosine.
+    /// Pops an angle in radians and pushes its cosine.
     Cosine,
-    /// Pops a number and pushes its tangent.
+    /// Pops an angle in radians and pushes its tangent.
     Tangent,
     /// Pops a number and pushes its square root.
     SquareRoot,
-    /// Pops two integers and pushes the remainder of their division.
+    /// Pops two integers and pushes the remainder of their division,
+    /// which has the sign of the first.
     Remainder,
     /// Pops two integers and pushes the first shifted left by the second.
     ShiftLeft,
-    /// Pops two integers and pushes the first shifted right arithmetically.
+    /// Pops two integers and pushes the first shifted right by the second, keeping its sign.
     ShiftRight,
     /// Pops the given number of integers and pushes their bitwise and.
     BitAnd(u16),
@@ -107,13 +127,13 @@ pub enum OpCode {
     /// Pops the given number of numbers and pushes their Łukasiewicz t-norm.
     Lukasiewicz(u16),
 
-    /// Pops two values and pushes their conjunction,
-    /// three-valued over effective boolean values.
+    /// Pops two values and pushes the conjunction of their effective boolean values,
+    /// in three-valued logic.
     And,
-    /// Pops two values and pushes their disjunction,
-    /// three-valued over effective boolean values.
+    /// Pops two values and pushes the disjunction of their effective boolean values,
+    /// in three-valued logic.
     Or,
-    /// Pops a value and pushes the negated effective boolean value.
+    /// Pops a value and pushes the negation of its effective boolean value.
     Not,
 
     /// Pops a value and pushes whether its domain is in the set.
@@ -122,22 +142,25 @@ pub enum OpCode {
     ///
     /// Only a literal has one.
     Datatype,
-    /// Pops a value and pushes its canonical form as a plain string:
-    /// strings quoted, typed literals with their datatype.
+    /// Pops a value and pushes its canonical form as a plain string.
+    ///
+    /// Strings are quoted,
+    /// and every literal other than a string or an exact number is written with its datatype.
     Canonical,
     /// Pops a value and pushes its lexical form as a plain string.
     ///
     /// A language string yields its text.
     Lexical,
-    /// Pops a literal and pushes its language tag,
-    /// the empty string if it has none.
+    /// Pops a literal and pushes its language tag, or the empty string if it has none.
     Language,
-    /// Pops a plain string and a tag and pushes the tagged string.
+    /// Pops a plain string and a tag, and pushes the string tagged with that language.
     StringLanguage,
-    /// Pops a tag and a range and pushes whether the tag matches the range:
-    /// case-insensitive subtag prefixes, `*` for any nonempty tag.
+    /// Pops a language tag and a language range, and pushes whether the tag matches the range.
+    ///
+    /// A range matches the tags that start with it, ignoring case and up to whole subtags,
+    /// and `*` matches every nonempty tag.
     LanguageMatches,
-    /// Pops a lexical and a datatype IRI and pushes the typed literal.
+    /// Pops a lexical form and a datatype IRI, and pushes the typed literal.
     TypedLiteral,
     /// Pops a value and pushes it cast to an integer.
     CastInteger,
@@ -180,9 +203,9 @@ pub enum OpCode {
     StartsWith,
     /// Pops two strings and pushes whether the first ends with the second.
     EndsWith,
-    /// Pops two strings and pushes the part of the first before the second.
+    /// Pops two strings and pushes the part of the first before the first occurrence of the second.
     StringBefore,
-    /// Pops two strings and pushes the part of the first after the second.
+    /// Pops two strings and pushes the part of the first after the first occurrence of the second.
     StringAfter,
     /// Pops a string and a 1-based start and pushes the substring from there.
     Substring,
@@ -196,16 +219,16 @@ pub enum OpCode {
     UriEncode,
     /// Pops a string and pushes it percent-decoded.
     UriDecode,
-    /// Pops a string and a pattern, and flags if the field says so,
-    /// and pushes whether the pattern matches.
+    /// Pops a string, a pattern and possibly flags,
+    /// and pushes whether the pattern matches somewhere in the string.
     Matches {
-        /// Whether a flags argument is popped too.
+        /// Whether a flags operand is popped too.
         flags: bool,
     },
-    /// Pops a string, a pattern, and a replacement, and flags if the field says so,
-    /// and pushes the string with the matches replaced.
+    /// Pops a string, a pattern, a replacement and possibly flags,
+    /// and pushes the string with every match of the pattern replaced.
     Replace {
-        /// Whether a flags argument is popped too.
+        /// Whether a flags operand is popped too.
         flags: bool,
     },
     /// Pops a string and pushes its MD5 digest in lowercase hex.
@@ -222,16 +245,16 @@ pub enum OpCode {
     /// Pops the given number of values and pushes them as a tuple,
     /// in the order they were pushed.
     Tuple(u16),
-    /// Pops the given number of values and then a label below them,
-    /// and pushes them as a tuple carrying that label.
+    /// Pops the given number of values and the label below them,
+    /// and pushes the values as a tuple with that label.
     LabeledTuple(u16),
-    /// Pops the given number of key–value pairs, each key pushed before its value,
+    /// Pops the given number of key-value pairs, each key pushed before its value,
     /// and pushes them as a map.
     ///
-    /// A key given twice is an error.
+    /// A key given twice is a [Malformed](crate::value::EvaluationError::Malformed) error.
     Map(u16),
-    /// Pops the given number of key–value pairs and then a label below them,
-    /// and pushes them as a map carrying that label.
+    /// Pops the given number of key-value pairs and the label below them,
+    /// and pushes the pairs as a map with that label.
     LabeledMap(u16),
     /// Pops a structure and a key,
     /// and pushes the tuple's element at the 0-based integer index, or the map's value at the key.
@@ -243,38 +266,43 @@ pub enum OpCode {
     /// Pops a structure and pushes its label as an IRI,
     /// or the empty string if it has none.
     Label,
-    /// Pops a map and pushes its keys as a tuple,
-    /// in the canonical term order the map stores them in.
+    /// Pops a map and pushes its keys as a tuple, in term order.
     Keys,
-    /// Pops a map and a key and pushes whether the map holds the key.
+    /// Pops a map and a key, and pushes whether the map has the key.
     HasKey,
-    /// Pops a tuple of plain strings and a separator and pushes the strings joined by it.
+    /// Pops a tuple of plain strings and a separator, and pushes the strings joined by it.
     JoinStrings,
-    /// Pops a plain string and a separator and pushes the tuple of the parts the separator's
-    /// occurrences cut the string into, the parts before the first and after the last included.
+    /// Pops a plain string and a separator,
+    /// and pushes the tuple of the parts between the occurrences of the separator.
+    ///
+    /// The parts before the first and after the last occurrence are included, even if empty.
     SplitString,
 
-    /// Pops a dateTime, date or duration and pushes its year, or its whole years.
+    /// Pops a dateTime, date or duration and pushes its year,
+    /// or the whole years of a duration.
     Year,
-    /// Pops a dateTime, date or duration and pushes its month, or its months beyond the years.
+    /// Pops a dateTime, date or duration and pushes its month,
+    /// or the months of a duration beyond its whole years.
     Month,
-    /// Pops a dateTime, date or duration and pushes its day, or its whole days.
+    /// Pops a dateTime, date or duration and pushes its day,
+    /// or the whole days of a duration.
     Day,
     /// Pops a dateTime, time or duration and pushes its hours.
     Hours,
     /// Pops a dateTime, time or duration and pushes its minutes.
     Minutes,
     /// Pops a dateTime, time or duration and pushes its seconds,
-    /// a decimal if fractional.
+    /// an exact number that may have a fraction.
     Seconds,
-    /// Pops a dateTime, date, or time and pushes its timezone as a plain string,
-    /// empty if absent.
+    /// Pops a dateTime, date or time and pushes its timezone as a plain string,
+    /// or the empty string if it has none.
     TimezoneString,
-    /// Pops a dateTime, date, or time and pushes its timezone as an `xsd:dayTimeDuration`,
-    /// an error if absent.
+    /// Pops a dateTime, date or time and pushes its timezone as a dayTimeDuration.
+    ///
+    /// A value without a timezone is a [Missing](crate::value::EvaluationError::Missing) error.
     TimezoneDuration,
-    /// Pops a dateTime, date, or time and a dayTimeDuration,
-    /// and pushes the value adjusted to the timezone the duration names.
+    /// Pops a dateTime, date or time and a dayTimeDuration,
+    /// and pushes the value adjusted to the timezone that the duration gives.
     Adjust,
 
     /// Pushes a random double in `[0, 1)`.
@@ -283,14 +311,15 @@ pub enum OpCode {
     UuidIri,
     /// Pushes a fresh UUID as a plain string.
     UuidString,
-    /// Pushes the run's instant as an `xsd:dateTime` value,
-    /// SPARQL's [`NOW`](https://www.w3.org/TR/sparql12-query/#func-now).
-    /// The instant is the same for every evaluation of one run.
+    /// Pushes the instant of the [evaluation context](crate::function::EvaluationContext)
+    /// as a dateTime, SPARQL's [`NOW`](https://www.w3.org/TR/sparql12-query/#func-now).
+    ///
+    /// The instant is the same for every evaluation in one context.
     Now,
 }
 
 impl OpCode {
-    /// Returns the instruction's [Signature]: the domains it accepts and yields.
+    /// Returns the [Signature] of the instruction, the domains that it accepts and yields.
     pub(crate) fn signature(self) -> Signature {
         use DomainSet as D;
         use Overload::{Keeps, Plain, Promoted, Shared};
@@ -360,7 +389,7 @@ impl OpCode {
                 Plain(&[D::FLOAT], D::FLOAT),
                 Plain(&[EXACT_OR_DOUBLE], D::DOUBLE),
             ]),
-            // An exact base under an integral, non-negative exponent stays exact,
+            // An exact base with a non-negative integer exponent stays exact,
             // and every other power is a double.
             OpCode::Power => Fixed(&[
                 Plain(&[D::INTEGER, INTEGER_OR_FLOATING], INTEGER_OR_DOUBLE),
@@ -401,8 +430,8 @@ impl OpCode {
             OpCode::LanguageMatches => Fixed(&[Plain(&[D::STRING, D::STRING], D::BOOLEAN)]),
             // The datatype decides the result's domain.
             OpCode::TypedLiteral => Fixed(&[Plain(&[D::ANY, D::ANY], D::ANY)]),
-            // A cast also reads lexical forms,
-            // so whether it succeeds is a question of the value, not of its domain.
+            // A cast also parses lexical forms,
+            // so whether it succeeds depends on the value, not only on its domain.
             OpCode::CastInteger => Fixed(&[Plain(&[D::ANY], D::INTEGER)]),
             OpCode::CastFloat => Fixed(&[Plain(&[D::ANY], D::FLOAT)]),
             OpCode::CastDouble => Fixed(&[Plain(&[D::ANY], D::DOUBLE)]),
@@ -412,7 +441,8 @@ impl OpCode {
             OpCode::CastTime => Fixed(&[Plain(&[D::ANY], D::TIME)]),
             OpCode::CastDuration => Fixed(&[Plain(&[D::ANY], D::DURATION)]),
             OpCode::CastDayTimeDuration => Fixed(&[Plain(&[D::ANY], D::DAY_TIME_DURATION)]),
-            // The zero duration is a dayTimeDuration.
+            // The result is a yearMonthDuration,
+            // except for the zero duration, which is a dayTimeDuration.
             OpCode::CastYearMonthDuration => Fixed(&[Plain(&[D::ANY], D::ORDERED_DURATION)]),
 
             OpCode::StringLength => Fixed(&[Plain(&[D::STRINGLIKE], D::INTEGER)]),
@@ -423,13 +453,13 @@ impl OpCode {
             | OpCode::Trim
             | OpCode::TrimStart
             | OpCode::TrimEnd => Fixed(&[Keeps(&[D::STRINGLIKE], 0)]),
-            // The second string is plain or carries the tag of the first.
+            // The second string is plain or has the tag of the first.
             OpCode::Contains | OpCode::StartsWith | OpCode::EndsWith => Fixed(&[
                 Plain(&[D::STRING, D::STRING], D::BOOLEAN),
                 Plain(&[D::LANGUAGE_STRING, D::STRINGLIKE], D::BOOLEAN),
             ]),
             // A part of a tagged string is tagged,
-            // but a miss yields a plain empty string.
+            // but if the second string does not occur, the result is a plain empty string.
             OpCode::StringBefore | OpCode::StringAfter => Fixed(&[
                 Plain(&[D::STRING, D::STRING], D::STRING),
                 Plain(&[D::LANGUAGE_STRING, D::STRINGLIKE], D::STRINGLIKE),
@@ -467,7 +497,7 @@ impl OpCode {
                 operand: D::ANY,
                 result: D::TUPLE,
             },
-            // A labeled structure pops its label below its content.
+            // The label of a labeled structure lies below its content on the stack.
             OpCode::LabeledTuple(count) => Each {
                 leading: &[STRINGLIKE_OR_IRI],
                 count: usize::from(count),
@@ -513,14 +543,17 @@ impl OpCode {
         }
     }
 
-    /// Returns how many values the instruction pops, as its [signature](Self::signature) states;
-    /// every instruction pushes one.
+    /// Returns how many values the instruction pops, as its [signature](Self::signature) states.
+    ///
+    /// Every instruction pushes one value.
     pub(crate) fn pops(self) -> usize {
         self.signature().pops()
     }
 
-    /// Returns whether the instruction's result is not fixed by its operands:
-    /// randomness, a UUID, or the run's instant.
+    /// Returns whether the instruction's result is not determined by its operands.
+    ///
+    /// This is the case for the instructions that draw a random number or a UUID,
+    /// and for [Now](Self::Now), which reads the evaluation context.
     pub(crate) fn is_nondeterministic(self) -> bool {
         matches!(
             self,
@@ -529,12 +562,12 @@ impl OpCode {
     }
 }
 
-// The unions the signature table names beyond those of [DomainSet].
+// The unions of domains that the signatures use beyond those of `DomainSet`.
 
-/// The domains that order within themselves:
-/// strings, booleans, dateTimes, dates, times, and tuples.
+/// The domains whose values can be ordered against other values of the same domain.
 ///
-/// Numbers and durations also order across their domains.
+/// They are the plain strings, booleans, dateTimes, dates, times and tuples.
+/// Numbers and durations can also be ordered across their domains.
 const ORDERED: DomainSet = DomainSet::STRING
     .with(ValueDomain::Boolean)
     .with(ValueDomain::DateTime)
@@ -545,7 +578,7 @@ const ORDERED: DomainSet = DomainSet::STRING
 /// The floats and the doubles.
 const FLOATING: DomainSet = DomainSet::FLOAT.union(DomainSet::DOUBLE);
 
-/// The integers, the floats and the doubles: the exponents an exact power may stay exact under.
+/// The integers, the floats and the doubles.
 const INTEGER_OR_FLOATING: DomainSet = DomainSet::INTEGER.union(FLOATING);
 
 /// The integers and the doubles.
@@ -554,7 +587,8 @@ const INTEGER_OR_DOUBLE: DomainSet = DomainSet::INTEGER.union(DomainSet::DOUBLE)
 /// The exact numbers and the doubles.
 const EXACT_OR_DOUBLE: DomainSet = DomainSet::EXACT.union(DomainSet::DOUBLE);
 
-/// The IRIs and the nulls, which `=` finds unequal to a value of any other domain.
+/// The IRIs and the nulls, which [Equal](OpCode::Equal) finds unequal to a value of any other
+/// domain.
 const IRI_OR_NULL: DomainSet = DomainSet::IRI.with(ValueDomain::Null);
 
 /// The strings, plain and language-tagged, and the IRIs.

@@ -1,11 +1,14 @@
-//! The arithmetic over exact numbers:
-//! the operations run in the `i128` workspace and continue in the big one where it runs out.
+//! Arithmetic on exact numbers.
 //!
-//! The operators are the `std::ops` traits with a [Result] output,
-//! and every failure is one of three:
-//! a [DivisionByZero](EvaluationError::DivisionByZero) for a zero divisor,
-//! an [Overflow](EvaluationError::Overflow) for a result past the length limit of numbers,
-//! and a [TypeMismatch](EvaluationError::TypeMismatch) for the remainder of a non-integer.
+//! An operation computes in the `i128` workspace where the result fits,
+//! and continues in the big workspace otherwise.
+//!
+//! The operators are the `std::ops` traits with a [Result] output.
+//! An operation fails in one of three ways:
+//! - with [DivisionByZero](EvaluationError::DivisionByZero) for a zero divisor;
+//! - with [Overflow](EvaluationError::Overflow) for a result past the length limit of numbers;
+//! - with [TypeMismatch](EvaluationError::TypeMismatch) for a remainder of a value
+//!   that is not an integer.
 
 use std::ops::{Add, Div, Mul, Neg, Rem, Sub};
 
@@ -74,7 +77,7 @@ impl Mul for DecimalRef<'_> {
     fn mul(self, other: Self) -> Self::Output {
         bounded(match operands(self, other) {
             Operands::Int(left, right) => Decimal::new(i128::from(left) * i128::from(right), 0),
-            // Two compact mantissas multiply within the workspace.
+            // Two compact mantissas are multiplied in the `i128` workspace if the product fits.
             Operands::Fixed(left, right) => match left.mantissa().checked_mul(right.mantissa()) {
                 Some(product) => Decimal::new(product, left.exponent() + right.exponent()),
                 None => big_binary(left, right, workspace::Big::mul),
@@ -90,7 +93,7 @@ impl Div for DecimalRef<'_> {
     /// Returns the quotient, `op:numeric-divide`.
     ///
     /// The quotient is exact if it terminates within the scale,
-    /// and rounded half to even at it otherwise.
+    /// and is rounded half to even at the scale otherwise.
     /// The scale is the largest of eighteen significant digits, eighteen fraction digits,
     /// and the fraction digits of either operand.
     ///
@@ -133,7 +136,8 @@ impl Div for DecimalRef<'_> {
 impl Rem for DecimalRef<'_> {
     type Output = Result<Decimal, EvaluationError>;
 
-    /// Returns the remainder of integer division with the dividend's sign, `op:numeric-mod`.
+    /// Returns the remainder of the division of two integers, which has the sign of the
+    /// dividend, `op:numeric-mod`.
     ///
     /// # Errors
     ///
@@ -209,7 +213,7 @@ impl DecimalRef<'_> {
         .expect("the absolute value keeps the length")
     }
 
-    /// Returns the nearest integer, halves toward positive infinity, `fn:round`.
+    /// Returns the nearest integer, with halves rounded toward positive infinity, `fn:round`.
     pub fn round(self) -> Decimal {
         self.to_integral(Rounding::Nearest)
     }
@@ -224,7 +228,7 @@ impl DecimalRef<'_> {
         self.to_integral(Rounding::Down)
     }
 
-    /// Returns the value taken to an integer by the given rounding.
+    /// Returns the value rounded to an integer by `rounding`.
     pub(crate) fn to_integral(self, rounding: Rounding) -> Decimal {
         if self.is_integral() {
             return self.to_owned();
@@ -257,27 +261,27 @@ forward_binary!(Div, div);
 forward_binary!(Rem, rem);
 
 impl Decimal {
-    /// Returns the value raised to a power. See [DecimalRef::pow].
+    /// Returns the value raised to a power, as [DecimalRef::pow] does.
     pub fn pow(&self, power: u32) -> Result<Decimal, EvaluationError> {
         self.as_ref().pow(power)
     }
 
-    /// Returns the absolute value. See [DecimalRef::abs].
+    /// Returns the absolute value, as [DecimalRef::abs] does.
     pub fn abs(&self) -> Decimal {
         self.as_ref().abs()
     }
 
-    /// Returns the nearest integer. See [DecimalRef::round].
+    /// Returns the nearest integer, as [DecimalRef::round] does.
     pub fn round(&self) -> Decimal {
         self.as_ref().round()
     }
 
-    /// Returns the smallest integer not below the value. See [DecimalRef::ceil].
+    /// Returns the smallest integer not below the value, as [DecimalRef::ceil] does.
     pub fn ceil(&self) -> Decimal {
         self.as_ref().ceil()
     }
 
-    /// Returns the largest integer not above the value. See [DecimalRef::floor].
+    /// Returns the largest integer not above the value, as [DecimalRef::floor] does.
     pub fn floor(&self) -> Decimal {
         self.as_ref().floor()
     }
@@ -301,17 +305,17 @@ impl Neg for Decimal {
     }
 }
 
-/// A pair of exact numbers in their smallest common workspace.
+/// Two exact numbers in the smallest workspace that can represent both.
 enum Operands {
     /// Both are integers within the 64-bit range.
     Int(i64, i64),
-    /// Both are of the compact ranges, at least one a decimal.
+    /// Both lie within the compact ranges, and at least one is a compact decimal.
     Fixed(workspace::Fixed, workspace::Fixed),
     /// At least one is wide.
     Big(workspace::Big, workspace::Big),
 }
 
-/// Brings two exact numbers into their smallest common workspace.
+/// Returns two exact numbers in the smallest workspace that can represent both.
 fn operands(left: DecimalRef<'_>, right: DecimalRef<'_>) -> Operands {
     if let (ReprRef::Int(left), ReprRef::Int(right)) = (left.0, right.0) {
         return Operands::Int(left, right);
@@ -328,7 +332,8 @@ pub(super) fn big(value: DecimalRef<'_>) -> workspace::Big {
     workspace::Big::from_decimal(value)
 }
 
-/// Returns a result the value space admits, or the overflow it refused.
+/// Returns the result, or [Overflow](EvaluationError::Overflow) for `None`,
+/// which stands for a result beyond the length limit.
 fn bounded(result: Option<Decimal>) -> Result<Decimal, EvaluationError> {
     result.ok_or(EvaluationError::Overflow)
 }
@@ -347,7 +352,8 @@ fn big_binary(
     .map(Decimal::from)
 }
 
-/// Adds or subtracts two aligned mantissas whose sum outgrew the workspace.
+/// Adds or subtracts two aligned mantissas in the big workspace,
+/// for a result that does not fit into the `i128` workspace.
 #[cold]
 fn big_sum(left: i128, right: i128, exponent: i64, subtract: bool) -> Option<Decimal> {
     big_binary(
@@ -361,7 +367,8 @@ fn big_sum(left: i128, right: i128, exponent: i64, subtract: bool) -> Option<Dec
     )
 }
 
-/// Divides two workspace values, in the big workspace if the scaled numerator outgrows it.
+/// Divides two `i128` workspace values,
+/// in the big workspace if the scaled numerator does not fit.
 fn fixed_quotient(left: workspace::Fixed, right: workspace::Fixed) -> Option<Decimal> {
     match left.quotient(right) {
         Some(quotient) => Decimal::new(quotient.mantissa(), quotient.exponent()),
@@ -369,7 +376,7 @@ fn fixed_quotient(left: workspace::Fixed, right: workspace::Fixed) -> Option<Dec
     }
 }
 
-/// Takes a decimal to an integer in the big workspace.
+/// Rounds a decimal to an integer in the big workspace.
 #[cold]
 fn big_integral(value: DecimalRef<'_>, rounding: Rounding) -> Decimal {
     let value = big(value);
@@ -384,11 +391,12 @@ fn big_integral(value: DecimalRef<'_>, rounding: Rounding) -> Decimal {
 mod tests {
     use super::*;
 
-    /// Parses a well-formed lexical.
+    /// Returns the value of a well-formed lexical form.
     fn value(lexical: &str) -> Decimal {
         Decimal::from_lexical(lexical).expect("well-formed")
     }
 
+    /// The operators on exact numbers give exact results.
     #[test]
     fn operators_stay_exact() {
         let (seven, two) = (value("7"), value("2"));
@@ -408,6 +416,7 @@ mod tests {
         assert_eq!(value("2.5").floor(), value("2"));
     }
 
+    /// The operators fail with the error that names the cause.
     #[test]
     fn operators_name_their_errors() {
         let zero = value("0");

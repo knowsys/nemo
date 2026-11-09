@@ -1,25 +1,12 @@
-//! Fetch rules: bound SPARQL imports, applied once per iteration like the other rules.
+//! Fetch rules: the rules of bound SPARQL imports, applied once per iteration like the other
+//! rules.
 //!
 //! A bound import `@import q(?x, ?y) from sparql { … } where b(?x), c(?y)`
-//! compiles to a rule whose body atoms are the binding atoms and whose head is `q`.
+//! compiles to a rule whose body atoms are the *binding atoms* and whose head is `q`.
 //! Applying it queries the endpoint instead of joining.
-//!
-//! The evaluation is semi-naive.
-//! Each application sends one family of requests per binding atom `j`, made of
-//! the rows of atom `j` new since the last application,
-//! the rows of the atoms before it as of the last application,
-//! and the rows of the atoms after it as of now.
-//! So every combination of binding rows is queried exactly once,
-//! and over all applications the requests cover every binding the binding atoms derive.
-//! A solution row is also fetched once, which keeps the nulls created for its blank nodes stable.
-//! Each atom's rows are sent as one `VALUES` block per request, in pages,
-//! and the solutions are deduplicated against the head table and stored as derived rows.
-//! Each value goes out as its canonical terms (an integer also as a decimal),
-//! which the endpoint matches as terms,
-//! and only the solutions matching a row of each block as Nemo compares values are kept
-//! (the policy is the [rewrite stage's](crate::engine::transform::sparql_rewrite)).
-//! A binding row holding a null fetches nothing, since no query can name a blank node.
-//! Rows holding an endpoint's blank node are counted and reported.
+//! The values of the binding atoms' rows are sent as [ValuesBlock]s of the query,
+//! and the solutions become the head's new rows.
+//! The evaluation is semi-naive, as for the other rules (see [requests]).
 //!
 //! The engine does not send the requests itself.
 //! An application whose requests have no responses yet is suspended as a [PendingFetch],
@@ -53,25 +40,27 @@ use crate::{
     model::OnError,
 };
 
-/// The query length beyond which a request is built again with a binding page half as wide.
+/// The query length in bytes beyond which a request is built again with a binding page half as
+/// wide.
 ///
-/// It stays well under the size of a POST body endpoints accept.
+/// It stays well under the size of a POST body that endpoints accept.
 const QUERY_CHAR_LIMIT: usize = 500_000;
 
-/// The `VALUES` blocks one request carries.
+/// The `VALUES` blocks of one request.
 ///
 /// If the endpoint finds the request too large, or cuts its response off, its widest block is
 /// halved.
 type ValuesBlocks = Vec<ValuesBlock>;
 
-/// Per binding atom, its rows of bound values, as a family of requests carries them.
+/// Per binding atom, its rows of bound values, as a family of requests sends them.
 type BindingRows = Vec<Vec<Vec<DataValue>>>;
 
-/// The requests of one fetch application, each with the `VALUES` blocks it carries.
+/// The requests of one fetch application, each with its `VALUES` blocks.
 struct ApplicationRequests {
     /// The requests.
     requests: Vec<(Request, ValuesBlocks)>,
-    /// The new binding rows left out for holding a blank node an endpoint returned.
+    /// The number of new binding rows left out because they contain a blank node that an
+    /// endpoint returned.
     blank_bindings: u64,
 }
 
@@ -79,59 +68,61 @@ struct ApplicationRequests {
 struct FamilyBindings {
     /// Per binding atom, its rows.
     rows: BindingRows,
-    /// The new keys of the pivot atom left out for holding a blank node an endpoint returned.
+    /// The number of new keys of the pivot atom left out because they contain a blank node
+    /// that an endpoint returned.
     blank_bindings: u64,
 }
 
 /// What one fetch application did beyond deriving rows.
 #[derive(Debug, Default, Clone)]
 pub(super) struct Fetched {
-    /// Requests made, the halves of split ones included.
+    /// The number of requests made, including the halves of split requests.
     pub(super) requests: u64,
-    /// Solution rows received, before deduplication.
+    /// The number of solution rows received, before deduplication.
     pub(super) rows: u64,
-    /// Rows in the responses that were not valid solutions.
+    /// The number of rows in the responses that were not valid solutions.
     pub(super) malformed: u64,
-    /// The solution rows a condition pushed into the import could not evaluate,
-    /// counted per kind.
+    /// The number of solution rows on which a condition pushed into the import failed,
+    /// per error kind.
     ///
     /// They are dropped, as the rule would have dropped them.
     pub(super) errors: ErrorCounts,
-    /// Requests that failed, under `on_error = warn`.
+    /// The number of requests that failed and were skipped under `on_error = warn`.
     pub(super) failed: u64,
-    /// The binding combinations the failed requests carried, which are
+    /// The number of binding combinations that the failed requests carried, which are
     /// not queried again.
     pub(super) unasked: u64,
     /// Why the first failed request failed.
     pub(super) first_failure: Option<String>,
-    /// New binding rows left out because they hold a blank node an endpoint returned,
-    /// which no query can name.
+    /// The number of new binding rows left out because they contain a blank node that an
+    /// endpoint returned, which no query can name.
     pub(super) blank_bindings: u64,
 }
 
 /// A fetch application suspended until its requests have responses:
 /// the rule, the step of the application,
-/// and the requests, each with the `VALUES` blocks it carries.
+/// and the requests, each with its `VALUES` blocks.
 #[derive(Debug)]
 pub(in crate::engine) struct PendingFetch {
     /// The rule's index.
     pub(in crate::engine) rule: usize,
     /// The step of the application.
     pub(in crate::engine) step: u64,
-    /// The requests.
+    /// The requests, each with its `VALUES` blocks.
     pub(in crate::engine) slots: RequestSlots<ValuesBlocks>,
-    /// Requests made so far, the halves of split ones included.
+    /// The number of requests made so far, including the halves of split requests.
     made: u64,
-    /// New binding rows left out for holding an endpoint's blank node.
+    /// The number of new binding rows left out because they contain a blank node that an
+    /// endpoint returned.
     blank_bindings: u64,
 }
 
 /// How a fetch application ended: applied, or suspended until its requests have responses.
 #[derive(Debug)]
 pub(super) enum FetchOutcome {
-    /// Applied, with what it derived and what it did.
+    /// The rule was applied, with what it derived and what it did.
     Applied(Box<Applied>, Fetched),
-    /// Suspended until these requests have responses.
+    /// The application is suspended until the requests of this pending fetch have responses.
     Suspended(PendingFetch),
 }
 
@@ -141,11 +132,14 @@ pub(super) enum FetchOutcome {
 /// and the solutions become the head table's new rows,
 /// without the rows it already stores.
 ///
-/// The first time, the application builds its requests and suspends until they have responses.
-/// Resumed with them, it splits the requests the endpoint found too large or cut off,
-/// suspends again for the halves, and reads the other responses.
+/// The first time, the application builds its requests and is suspended until they have
+/// responses.
+/// When it continues with them (`resumed`), it splits the requests that the endpoint could not
+/// respond to in full (see [split_too_large](PendingFetch::split_too_large)),
+/// is suspended again for the halves, and then reads every response.
 /// A failed request fails the application, or, under `on_error = warn`, is counted and skipped.
-/// The import's conditions evaluate in the run's context.
+/// The import's conditions are evaluated in `context`, the run's context.
+/// `index` is the rule's index, and `ids` the last request id given, which this advances.
 #[expect(clippy::too_many_arguments, reason = "the parts of one application")]
 pub(super) fn apply(
     rule: &CompiledRule,
@@ -215,9 +209,9 @@ pub(super) fn apply(
         return Ok(FetchOutcome::Applied(Box::new(applied), fetched));
     }
 
-    // Deduplicate against the head: the batch is stored in the scratch
-    // table at this step, and its difference to the stored rows is what
-    // the application derived.
+    // Deduplicate against the head. The batch is stored in the scratch
+    // table at this step, and what the application derived is the batch
+    // minus the stored rows.
     let fresh = subtract_stored(
         fetch.scratch,
         head.table,
@@ -237,14 +231,17 @@ pub(super) fn apply(
 }
 
 impl PendingFetch {
-    /// Replaces every request the endpoint could not answer whole by two requests,
-    /// each with one half of its widest `VALUES` block:
-    /// one it found too large (413, 414),
-    /// one whose response it cut off partway, typically at its time limit,
-    /// and one it responded to only in part, saying so in its status or headers
-    /// ([Failure::of_partial_response](nemo_io::remote::Failure::of_partial_response)).
+    /// Replaces every request that the endpoint could not respond to in full by two requests,
+    /// each with one half of its widest `VALUES` block.
     ///
-    /// A request whose blocks are single rows keeps its response.
+    /// The endpoint could not respond to a request in full if:
+    /// - it found the request too large (status 413 or 414),
+    /// - it cut the response off partway, typically at its time limit, or
+    /// - it responded only in part, and said so in its status or headers
+    ///   ([Failure::of_partial_response](nemo_io::remote::Failure::of_partial_response)).
+    ///
+    /// A request whose blocks all have a single row keeps its response.
+    /// `ids` is the last request id given, which this advances.
     fn split_too_large(&mut self, fetch: &CompiledFetch, ids: &mut u64) {
         let slots = std::mem::take(&mut self.slots.0);
         for slot in slots {
@@ -284,13 +281,18 @@ impl PendingFetch {
 
 /// Returns the requests of one application.
 ///
-/// There is one family of requests per binding atom,
-/// with that atom reading its delta since the rule's last application,
-/// the atoms before it reading their rows as of that application,
-/// and the atoms after it reading their rows as of now.
+/// There is one *family* of requests per binding atom, which is the family's *pivot*.
+/// The pivot reads its delta since the rule's last application,
+/// the atoms before it read their rows as of that application,
+/// and the atoms after it read their rows as of now.
+/// So every combination of binding rows is queried exactly once,
+/// and over all applications, the requests cover every binding that the binding atoms derive.
+/// A solution row is thus fetched once too,
+/// which keeps the nulls created for its blank nodes stable.
 /// A family with an empty input sends no request.
 ///
-/// Also returns how many new binding rows were left out for holding an endpoint's blank node.
+/// It also counts the new binding rows left out because they contain a blank node that an
+/// endpoint returned.
 fn requests(
     rule: &CompiledRule,
     fetch: &CompiledFetch,
@@ -342,6 +344,8 @@ fn requests(
 /// read through the fetch's selection into one batch of the head's arity,
 /// with the fetch's statistics.
 ///
+/// Only the solutions that match a request's binding rows, as Nemo compares values, are kept
+/// ([with_bindings](nemo_io::sparql::SparqlReader::with_bindings)).
 /// A failed request, or a response that cannot be read, fails the application,
 /// unless the import sets `on_error = warn`.
 fn solutions(
@@ -359,8 +363,6 @@ fn solutions(
         ..Fetched::default()
     };
     for slot in pending.slots.0 {
-        // The endpoint may match a binding more loosely than Nemo compares values,
-        // so the reader keeps only the solutions that match one.
         let reader = sparql::SparqlReader::new(written, fetch.selection.clone())
             .with_bindings(&slot.key)
             .with_endpoint_blank_nodes();
@@ -398,7 +400,7 @@ fn solutions(
     Ok((buffer, fetched))
 }
 
-/// Returns the number of binding combinations a request queries:
+/// Returns the number of binding combinations that a request queries:
 /// the product of its blocks' row counts.
 fn combinations(blocks: &ValuesBlocks) -> u64 {
     blocks.iter().fold(1u64, |product, block| {
@@ -406,25 +408,27 @@ fn combinations(blocks: &ValuesBlocks) -> u64 {
     })
 }
 
-/// Returns the request querying the bindings of some `VALUES` blocks.
+/// Returns the request that queries the bindings of the given `VALUES` blocks.
 fn request_for(fetch: &CompiledFetch, blocks: &[ValuesBlock]) -> Request {
     request_with(fetch, &render(fetch, blocks))
 }
 
-/// Returns the fetch's query with some `VALUES` blocks.
+/// Returns the text of the fetch's query with the given `VALUES` blocks.
 fn render(fetch: &CompiledFetch, blocks: &[ValuesBlock]) -> String {
-    // Translation only binds queries that are not opaque.
+    // Translation binds only queries that are not opaque, as `with_values` requires.
     fetch.query.with_values(blocks).text().to_owned()
 }
 
-/// Returns the request sending a rendered query to the fetch's endpoint.
+/// Returns the request that sends a rendered query to the fetch's endpoint.
 fn request_with(fetch: &CompiledFetch, text: &str) -> Request {
     let mut request = Request::sparql(&fetch.endpoint, text);
     request.headers.extend(fetch.headers.iter().cloned());
     request
 }
 
-/// Returns the rows of a batch not stored in the head table.
+/// Returns the rows of a batch that the head table does not store before `step`.
+///
+/// The batch is added to the `scratch` table at `step`, where it stays.
 fn subtract_stored(
     scratch: TableId,
     head: TableId,
@@ -446,11 +450,12 @@ fn subtract_stored(
     Ok(std::mem::take(&mut results.outputs[output]))
 }
 
-/// Returns one binding atom's rows within a revision range,
-/// under the atom's own constraints (its constants and repetitions),
-/// as a plan output in the atom's column order.
+/// Adds the rows of one binding atom within a revision range to the plan as an output,
+/// and returns the output's index.
 ///
-/// The endpoint joins the atoms, the plan does not.
+/// The rows are in the atom's column order, under the atom's own constraints
+/// (its constants and repetitions).
+/// The endpoint joins the atoms, not the plan.
 fn atom_rows(
     plan: &mut OperationPlan,
     space: &BodySpace<'_>,
@@ -464,16 +469,18 @@ fn atom_rows(
 }
 
 /// Returns, per binding atom, the distinct rows of its bound columns within its revision range,
-/// as values that have ground terms.
+/// decoded into values.
 ///
-/// A row holding a null in a bound column is left out,
-/// since no SPARQL query can name a blank node.
+/// A row's *key* is its values in the bound columns.
+/// A row with a value that has no ground term, such as a null, is left out,
+/// since no SPARQL query can name it.
 /// The pivot atom reads its delta,
-/// and a key of it that already existed before the delta is left out too,
+/// and a key that the pivot already had before the delta is left out too,
 /// since an earlier application queried it already.
 ///
-/// Also returns how many of the pivot's new keys were left out for holding a blank node an
-/// endpoint returned. Across a run, each key is new to one application only.
+/// It also counts the pivot's new keys that were left out because they contain a blank node
+/// that an endpoint returned.
+/// Across a run, each key is new to one application only.
 fn binding_rows(
     rule: &CompiledRule,
     fetch: &CompiledFetch,
@@ -552,11 +559,12 @@ fn binding_rows(
     })
 }
 
-/// Returns the requests querying one family of bindings:
-/// every atom's rows split into pages, one request per combination of pages,
-/// each page a `VALUES` block.
+/// Returns the requests that query one family of bindings.
 ///
-/// If a rendered query is too long, the widest page is halved and the requests are built again.
+/// Every atom's rows are split into pages, each page is a `VALUES` block,
+/// and there is one request per combination of pages.
+/// If a rendered query is longer than [QUERY_CHAR_LIMIT],
+/// the widest page is halved and the requests are built again.
 fn paged_requests(
     fetch: &CompiledFetch,
     rows: &[Vec<Vec<DataValue>>],

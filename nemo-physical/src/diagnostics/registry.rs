@@ -1,5 +1,4 @@
-//! The registry documenting diagnostic codes,
-//! e.g. for looking up the additional information for errors.
+//! The registry of the documentation of diagnostic codes.
 
 use std::{collections::HashMap, sync::LazyLock};
 
@@ -15,13 +14,13 @@ pub struct CodeEntry {
     pub code: Code,
     /// The name of the kind, as declared.
     pub name: &'static str,
-    /// The message template, its `{field}` placeholders unfilled.
+    /// The message template, with its `{field}` placeholders not filled in.
     pub summary: &'static str,
     /// The explanation of the kind.
     pub explanation: &'static str,
-    /// The note every diagnostic of the kind carries, if any.
+    /// The note that every diagnostic of the kind has, if there is one.
     pub note: Option<&'static str>,
-    /// The hint every diagnostic of the kind carries, if any.
+    /// The hint that every diagnostic of the kind has, if there is one.
     pub hint: Option<&'static str>,
 }
 
@@ -46,12 +45,11 @@ impl CodeEntry {
     }
 }
 
-/// The note every internal error carries.
+/// The note that every internal error has.
 pub(crate) const INTERNAL_NOTE: &str = "this is a bug in Nemo, not in your program; please report it at \
      https://github.com/knowsys/nemo/issues";
 
-/// The entries of the codes without a kind:
-/// the internal error alone.
+/// The entries of the codes that belong to no declared kind, which is only the internal error.
 const ENTRIES: &[CodeEntry] = &[CodeEntry::new(
     Code::INTERNAL,
     "Internal",
@@ -63,16 +61,18 @@ const ENTRIES: &[CodeEntry] = &[CodeEntry::new(
     None,
 )];
 
-/// The registry of every error or warning this layer reports.
+/// The registry of every error and warning that this crate reports.
 pub static REGISTRY: LazyLock<Registry> = LazyLock::new(|| {
     Registry::new()
         .with_entries(ENTRIES)
         .with_kinds::<PlanError>()
 });
 
-/// The documentation of every diagnostic that is reported, looked up by code.
+/// The documentation of diagnostic codes, looked up by code.
 ///
-/// This is used to show the explanation of an error, e.g. in a log or on a web page.
+/// It provides the explanation of a code, for example to show in a log or on a web page.
+/// Two different entries never share a code:
+/// adding an entry with the code of a different entry in the registry panics.
 ///
 /// # Example
 ///
@@ -117,7 +117,7 @@ impl Registry {
         self
     }
 
-    /// Adds the entries of the kinds an enum declares.
+    /// Adds the entries of the kinds that the enum `K` declares.
     pub fn with_kinds<K: DiagnosticKind>(self) -> Self {
         self.with_entries(K::ENTRIES)
     }
@@ -130,10 +130,9 @@ impl Registry {
         self
     }
 
-    /// Adds one entry.
+    /// Adds one entry, which is kept once if it is added again.
     ///
-    /// The same entry added again is kept once,
-    /// a different one under its code is refused.
+    /// Panics if the registry has a different entry with the same code.
     fn insert(&mut self, entry: &'static CodeEntry) {
         match self.entries.get(&entry.code) {
             Some(previous) if *previous != entry => {

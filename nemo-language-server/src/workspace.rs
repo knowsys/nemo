@@ -4,13 +4,13 @@ use std::{collections::HashMap, path::PathBuf};
 
 use crate::document::Document;
 
-/// The open documents, by the URI the editor addresses them with.
+/// The open documents, keyed by the URIs that the editor uses for them.
 ///
-/// The server keeps no other state: a document is parsed when it
-/// changes and read from here for everything else.
+/// The server keeps no other state: a document is parsed when it changes,
+/// and every request reads it from here.
 #[derive(Debug, Default)]
 pub(crate) struct Workspace {
-    /// The documents.
+    /// The documents, by URI.
     documents: HashMap<String, Document>,
 }
 
@@ -20,10 +20,13 @@ impl Workspace {
         Self::default()
     }
 
-    /// Takes in a document's text, parsing and checking it,
-    /// for an open as much as for an edit, which differ only in what the editor sent.
+    /// Stores the text of an opened or edited document, parses and checks it,
+    /// and returns the document.
     ///
-    /// The other open documents are what its `@use`s resolve to before the disk is read.
+    /// A `@use` in the document reads another open document's text, if there is one,
+    /// rather than the file on disk.
+    /// If the text does not parse, the document keeps the types of its previous text,
+    /// as [inherit_types](Document::inherit_types) describes.
     pub(crate) fn set(&mut self, uri: impl Into<String>, text: String) -> &Document {
         let uri = uri.into();
         let document = {
@@ -45,7 +48,7 @@ impl Workspace {
             .expect("the document was just inserted")
     }
 
-    /// Drops a closed document.
+    /// Removes a closed document.
     pub(crate) fn remove(&mut self, uri: &str) {
         self.documents.remove(uri);
     }
@@ -56,9 +59,11 @@ impl Workspace {
     }
 }
 
-/// Returns the filesystem path of a `file://` URI, escapes decoded,
-/// or `None` for any other scheme, or for a file on another machine,
-/// for which the document has no directory to resolve its modules against.
+/// Returns the file system path of a `file://` URI, with its escapes decoded.
+///
+/// Returns `None` for another scheme, for a file on another machine, or for a malformed
+/// escape.
+/// A document without a path has no directory relative to which its modules are found.
 fn file_path(uri: &str) -> Option<PathBuf> {
     let rest = uri.strip_prefix("file://")?;
     let slash = rest.find('/')?;
@@ -67,8 +72,8 @@ fn file_path(uri: &str) -> Option<PathBuf> {
         return None;
     }
     let decoded = percent_decode(path)?;
-    // A Windows drive path arrives as `/c:/…`; the leading slash is the
-    // URI's, not the path's.
+    // A Windows drive path arrives as `/c:/…`, where the leading slash belongs to the URI,
+    // not to the path.
     let bytes = decoded.as_bytes();
     if bytes.len() >= 3 && bytes[1].is_ascii_alphabetic() && bytes[2] == b':' {
         return Some(PathBuf::from(&decoded[1..]));
@@ -76,8 +81,10 @@ fn file_path(uri: &str) -> Option<PathBuf> {
     Some(PathBuf::from(decoded))
 }
 
-/// Decodes `%xx` escapes as UTF-8 bytes,
-/// or returns `None` if an escape is malformed, so that a path is never guessed.
+/// Decodes the `%xx` escapes of a text as UTF-8 bytes.
+///
+/// Returns `None` if an escape is malformed or the result is not UTF-8,
+/// so that a path is never guessed.
 fn percent_decode(text: &str) -> Option<String> {
     let bytes = text.as_bytes();
     let mut decoded = Vec::with_capacity(bytes.len());
@@ -102,6 +109,8 @@ fn percent_decode(text: &str) -> Option<String> {
 mod tests {
     use super::*;
 
+    /// Setting a document's text again replaces its index, and removing the document closes
+    /// it.
     #[test]
     fn a_document_is_reparsed_when_it_changes() {
         let mut workspace = Workspace::new();
@@ -125,10 +134,11 @@ mod tests {
         assert!(workspace.get("file:///a.rls").is_none());
     }
 
+    /// A `@use` resolves to an open document whose file does not exist on disk.
     #[test]
     fn a_use_resolves_to_an_open_document() {
-        // Neither file exists on disk: the module is the buffer the
-        // editor holds, and the using document checks against that.
+        // Neither file exists on disk. The module is the text that the editor holds,
+        // and the document that uses it is checked against that text.
         let mut workspace = Workspace::new();
         workspace.set(
             "file:///nowhere/tc.rls",
@@ -146,6 +156,7 @@ mod tests {
         );
     }
 
+    /// A local `file://` URI resolves to its decoded path, and any other URI to no path.
     #[test]
     fn file_uris_resolve_to_paths() {
         assert_eq!(

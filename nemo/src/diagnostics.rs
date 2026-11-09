@@ -1,8 +1,8 @@
-//! The diagnostics the engine's public API reports.
+//! The diagnostics that the engine's public API reports.
 //!
 //! The diagnostic types of the physical and IO layers are re-exported here,
-//! so a dependency on this crate suffices to handle them.
-//! Codes are listed per layer in [codes](crate::codes) and its physical and IO counterparts,
+//! so that a dependency on this crate suffices to handle them.
+//! The codes are constants in [codes](crate::codes),
 //! and [codes::REGISTRY](crate::codes::REGISTRY) documents every code an engine reports.
 //! [render] renders diagnostics as text for people.
 //!
@@ -15,12 +15,13 @@
 //! assert_eq!(report.severity(), Severity::Error);
 //! ```
 //!
-//! Within the crate, problems are declared as kinds:
-//! one enum per stage, each variant a kind with the data its message needs,
-//! and every diagnostic is built from one.
-//! Two diagnostic fields are shared by many kinds:
-//! the [resource](AboutResource) a problem is about, defined by the IO layer,
-//! and the [predicate](AboutPredicate) a problem is about, defined here.
+//! Within the crate, problems are declared as *kinds*.
+//! Each stage has one enum of kinds,
+//! and each variant is a kind with the data that its message needs.
+//! Every diagnostic is built from a kind.
+//! Many kinds share two fields of a diagnostic:
+//! - the [resource](AboutResource) that a problem is about, defined by the IO layer;
+//! - the [predicate](AboutPredicate) that a problem is about, defined here.
 
 pub(crate) mod engine;
 pub(crate) mod modules;
@@ -40,18 +41,20 @@ pub(crate) use self::{
     translation::TranslationError, types::TypeError,
 };
 
-/// The name of the field naming the predicate a problem is about.
+/// The name of the diagnostic field that names the predicate a problem is about.
 const PREDICATE: &str = "predicate";
 
 /// Diagnostics that name the predicate they are about.
 ///
-/// The predicate is the field named `predicate`,
-/// declared on a kind, or added to a diagnostic raised by a lower layer.
+/// The predicate is the diagnostic's field `predicate`.
+/// Either the diagnostic's kind declares that field,
+/// or [with_predicate](Self::with_predicate) adds it, for example to a diagnostic of a lower
+/// layer.
 pub trait AboutPredicate: Sized {
     /// Names the predicate the problem is about.
     fn with_predicate(self, predicate: impl Into<String>) -> Self;
 
-    /// Returns the predicate the problem is about, if named.
+    /// Returns the predicate the problem is about, or `None` if none is named.
     fn predicate(&self) -> Option<&str>;
 }
 

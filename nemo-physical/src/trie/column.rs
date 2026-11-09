@@ -1,6 +1,7 @@
-//! The column: the values of one level of a trie and their block boundaries,
-//! with the borrowed [view](ColumnView) of the values
-//! and the [intervals](Intervals) that hold the boundaries.
+//! The column, which stores the values of one level of a trie and their block boundaries.
+//!
+//! The values are read through a borrowed [view](ColumnView),
+//! and the boundaries are kept in [intervals](Intervals).
 
 mod intervals;
 mod view;
@@ -9,16 +10,18 @@ pub(crate) use self::{intervals::Intervals, view::ColumnView};
 
 use crate::storage::{Tag, Tag32};
 
-/// A trie column: the values of one level in a single vector,
-/// sorted by tag and then payload within each block, and the block boundaries.
+/// A trie column, which stores the values of one level in a single vector, and the block
+/// boundaries.
 ///
-/// A column has one of three layouts.
-/// A 32-bit column holds values of one tag whose payloads fit 32 bits.
-/// A 64-bit column holds values of one tag whose payloads fit 64 bits.
-/// Mixed columns hold values of more than one tag, or no values at all.
+/// Within each block, the values are sorted by tag and then by payload.
+/// A column has one of three layouts:
+/// - a 32-bit column has values of one tag with a 32-bit type, whose payloads all fit in
+///   32 bits;
+/// - a 64-bit column has values of one tag, with 64-bit payloads;
+/// - a mixed column has values of more than one tag, or no values at all.
 #[derive(Debug)]
 pub(super) enum Column {
-    /// A uniformly tagged column whose payloads fit 32 bits.
+    /// A column of one tag with a 32-bit type, whose payloads fit in 32 bits.
     U32 {
         /// The order-preserving 32-bit payloads.
         values: Vec<u32>,
@@ -27,7 +30,7 @@ pub(super) enum Column {
         /// The block boundaries.
         intervals: Intervals,
     },
-    /// A uniformly tagged column with 64-bit payloads.
+    /// A column of one tag, with 64-bit payloads.
     U64 {
         /// The order-preserving 64-bit payloads.
         values: Vec<u64>,
@@ -36,8 +39,7 @@ pub(super) enum Column {
         /// The block boundaries.
         intervals: Intervals,
     },
-    /// A column holding values of more than one tag;
-    /// an empty column is this layout's degenerate case.
+    /// A column with values of more than one tag, or with no values.
     Mixed {
         /// The order-preserving 64-bit payloads.
         values: Vec<u64>,

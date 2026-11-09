@@ -4,11 +4,12 @@ use std::fmt::{self, Display, Formatter};
 
 use crate::model::{Literal, Span, Statement, span_ignoring_eq};
 
-/// A Nemo program: a sequence of statements.
+/// A Nemo program, which is a sequence of statements.
 ///
 /// # Example
 ///
-/// A program parsed from text equals the one built from components, spans aside:
+/// A program parsed from text equals the same program built from components,
+/// since equality ignores spans:
 ///
 /// ```
 /// use nemo::{
@@ -46,7 +47,7 @@ pub struct Program {
 span_ignoring_eq!(Program: statements);
 
 impl Program {
-    /// Creates a program from its statements.
+    /// Creates a program from its statements, without a source position.
     pub fn new(statements: Vec<Statement>) -> Self {
         Self {
             statements,
@@ -54,11 +55,12 @@ impl Program {
         }
     }
 
-    /// Returns the predicates the program's atoms name (its facts, rule heads, and body atoms),
-    /// each with its number of columns, sorted and without repeats.
+    /// Returns the predicates of the program's facts and of the atoms of its rules,
+    /// each with its arity, sorted and without repeats.
     ///
-    /// Directives name predicates without terms and are left out.
-    /// A predicate written with two different arities appears twice.
+    /// Each predicate is named as it is written, without resolving prefixes.
+    /// The predicates of directives are left out.
+    /// A predicate written with two different arities appears once for each.
     pub fn predicates(&self) -> Vec<(String, usize)> {
         let mut predicates = Vec::new();
         for statement in &self.statements {
@@ -102,6 +104,8 @@ mod tests {
 
     use crate::model::FileId;
 
+    /// The predicates are those of facts and of the atoms of rules, negated ones included,
+    /// and the predicates of directives are left out.
     #[test]
     fn predicates_are_those_the_atoms_name() {
         let (program, diagnostics) = Program::parse(

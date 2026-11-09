@@ -1,4 +1,4 @@
-//! Specification of the computed column operation.
+//! The specification of a computed column.
 
 use crate::{
     function::StackProgram,
@@ -8,9 +8,10 @@ use crate::{
 /// A computed column: a computed value appended to every row of the input.
 #[derive(Debug, Clone)]
 pub struct ComputedColumnSpec {
-    /// The markers feeding the program, in program input order.
+    /// The markers whose values are the program's inputs, in order.
     ///
-    /// Without inputs, the column computes a constant value.
+    /// A column without inputs has the same value on every row,
+    /// unless its program is nondeterministic.
     pub(crate) inputs: Vec<Marker>,
     /// The program computing the value.
     pub(crate) program: StackProgram,
@@ -19,12 +20,14 @@ pub struct ComputedColumnSpec {
 }
 
 impl ComputedColumnSpec {
-    /// Creates the column holding an expression's value, named by a fresh marker.
+    /// Creates the column of an expression's value.
+    ///
+    /// `result` is the fresh marker naming the column.
     ///
     /// # Errors
     ///
     /// Returns [ExpressionTooLarge](PlanError::ExpressionTooLarge)
-    /// if the expression reads more columns or constants than an instruction addresses.
+    /// if the expression reads more columns or constants than an instruction can address.
     ///
     /// # Panics
     ///
@@ -35,12 +38,14 @@ impl ComputedColumnSpec {
         Ok(Self::from_program(inputs, program, result))
     }
 
-    /// Creates the column holding a compiled program's value
-    /// over the given markers, in program input order, named by a fresh marker.
+    /// Creates the column of a compiled program's value.
+    ///
+    /// `inputs` are the markers whose values are the program's inputs, in order,
+    /// and `result` is the fresh marker naming the column.
     ///
     /// # Panics
     ///
-    /// Panics if the program reads a different number of inputs than markers are given.
+    /// Panics if the program has a different number of inputs than `inputs` has markers.
     pub fn from_program(inputs: Vec<Marker>, program: StackProgram, result: Marker) -> Self {
         assert_eq!(
             program.inputs(),

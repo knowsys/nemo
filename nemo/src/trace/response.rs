@@ -4,16 +4,16 @@ use serde::{Deserialize, Serialize};
 
 use crate::trace::{Proof, TraceNode, WrittenRule};
 
-/// The response to a [trace](crate::engine::Engine::trace) request:
-/// the requested facts, and the derivations of those that hold, as one graph.
+/// The response to a [trace](crate::engine::Engine::trace) request,
+/// with the requested facts and the derivations of those that hold, as one graph.
 ///
 /// Each node is a fact, and its id is its position in [nodes](Self::nodes).
-/// A derived node names its premises by id, and every premise comes before the nodes it
-/// supports,
-/// so a fact several derivations use is a single node.
-/// Rules are listed once, and a derivation names its rule by its position in
-/// [rules](Self::rules).
-/// [proof](Self::proof) walks a requested fact's derivation like a tree.
+/// A fact that several derivations use is a single node.
+/// A derived node names its premises by id,
+/// and every premise comes before the nodes that it supports.
+/// Each rule is listed once,
+/// and a derivation names its rule by its position in [rules](Self::rules).
+/// [proof](Self::proof) walks the derivation of a requested fact like a tree.
 ///
 /// # Example
 ///
@@ -44,7 +44,8 @@ use crate::trace::{Proof, TraceNode, WrittenRule};
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TraceResponse {
-    /// The protocol version.
+    /// The version of the response format, which is [VERSION](crate::trace::VERSION)
+    /// for the responses of this build.
     pub version: u32,
     /// The requested facts, in request order.
     pub facts: Vec<TracedFact>,
@@ -54,7 +55,7 @@ pub struct TraceResponse {
     pub rules: Vec<WrittenRule>,
 }
 
-/// One requested fact and its outcome.
+/// One requested fact, with its node if it holds.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TracedFact {

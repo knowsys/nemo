@@ -19,11 +19,13 @@ use crate::{
 
 /// A module file as one instantiation reads it.
 pub(super) struct InstantiatedModule {
-    /// Where the module lies, which its own `@use`s resolve against.
+    /// Where the module lies.
+    ///
+    /// Its own `@use`s are resolved against the directory of this location.
     pub(super) location: Location,
     /// The path of its file.
     path: PathBuf,
-    /// The directory its own `@import`s resolve against.
+    /// The directory that its own `@import`s are resolved against.
     directory: PathBuf,
     /// Its statements, as parsed.
     pub(super) statements: Vec<Statement>,
@@ -42,6 +44,9 @@ pub(super) struct InstantiatedModule {
 impl InstantiatedModule {
     /// Creates a module as the given `@use` instantiates it,
     /// inside the `namespace` of the using program or module.
+    ///
+    /// Fails for a problem with the module's `@base` or `@input` directives,
+    /// or with the bindings of the `@use`.
     pub(super) fn new(
         location: Location,
         path: PathBuf,
@@ -100,6 +105,8 @@ impl InstantiatedModule {
     ///
     /// Its `@input`, `@output`, `@use`, `@base`, and `@prefix` directives
     /// are consumed by the instantiation and not copied into the using program.
+    /// The relative resources of its imports are made absolute
+    /// (see [anchor_import_resources]).
     pub(super) fn own_statements(
         &self,
         renaming: &mut InstanceRenaming<'_>,
@@ -174,8 +181,10 @@ impl InstantiatedModule {
         Ok(())
     }
 
-    /// Reports the names the module offers but never writes,
-    /// which give the using program an always empty predicate without explanation.
+    /// Reports the names that the module offers but never writes.
+    ///
+    /// Without the warning, the using program would get an always empty predicate without
+    /// explanation.
     pub(super) fn report_unwritten(
         &self,
         pipeline: &mut Pipeline,
@@ -205,7 +214,7 @@ impl InstantiatedModule {
             names: names.join(", "),
         }
         .diagnostic();
-        // The `@output` directives offering a name that is never written.
+        // Label the `@output` directives that offer a name that is never written.
         let mut offered = false;
         for statement in &self.statements {
             let Statement::Directive(Directive::Output(output)) = statement else {
@@ -256,6 +265,7 @@ impl InstantiatedModule {
 ///
 /// A file without `@input` directives is a module without inputs,
 /// so any file is usable.
+/// Fails for an input that does not resolve, and for an input declared twice.
 fn inputs(
     statements: &[Statement],
     scope: &NameScope,
@@ -279,6 +289,9 @@ fn inputs(
 
 /// Returns the input bindings of a `@use`, from each input's resolved name to
 /// the predicate it is bound to.
+///
+/// Fails for a binding of a name that is not an input, for an input bound twice,
+/// and for an input left unbound.
 fn bindings(
     directive: &UseDirective,
     inputs: &[(String, Identifier)],

@@ -1,23 +1,28 @@
 //! Escape sequences of term syntax.
 
-/// An escape sequence of term syntax, read after its backslash:
-/// the character it encodes, and its length.
+/// A decoded escape sequence of term syntax.
+///
+/// An escape sequence is a backslash followed by the characters that encode one character.
+/// The functions here read the text that follows the backslash.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Escape {
-    /// The character the escape encodes.
+    /// The character that the escape sequence encodes.
     pub character: char,
-    /// The length in bytes of the escape after its backslash.
+    /// The length in bytes of the escape sequence, without its backslash.
     pub length: usize,
 }
 
 impl Escape {
-    /// Reads the escape of a quoted string at the start of a text, the text after its backslash:
-    /// `\\`, `\"`, `\'`, `\n`, `\t`, `\r`, `\f`, and the character escapes `\uXXXX` and
-    /// `\UXXXXXXXX` of Turtle and SPARQL.
+    /// Reads an escape sequence of a quoted string from the start of `after`,
+    /// the text that follows the backslash.
     ///
-    /// Returns `None` for anything else, whose backslash stays as written,
-    /// so that `"\d+"` reaches a regular expression as written.
-    /// So does `\b`, a word boundary in a regular expression, which Turtle reads as a backspace.
+    /// The escape sequences are `\\`, `\"`, `\'`, `\n`, `\t`, `\r`, `\f`,
+    /// and the character escapes `\uXXXX` and `\UXXXXXXXX` of Turtle and SPARQL.
+    ///
+    /// Returns `None` for any other text, whose backslash then stands for itself.
+    /// This keeps a pattern such as `"\d+"` intact for a regular expression.
+    /// It also holds for `\b`, which Turtle reads as a backspace,
+    /// so that it stays a word boundary in a regular expression.
     ///
     /// # Example
     ///
@@ -47,11 +52,12 @@ impl Escape {
         })
     }
 
-    /// Reads the character escape `\uXXXX` or `\UXXXXXXXX` at the start of a text,
-    /// the text after its backslash: the only escape an IRI has.
+    /// Reads a character escape `\uXXXX` or `\UXXXXXXXX` from the start of `after`,
+    /// the text that follows the backslash.
     ///
-    /// Returns `None` for anything else,
-    /// including a `\u` without the hexadecimal digits of a character.
+    /// These are the only escape sequences of an IRI.
+    /// Returns `None` for any other text,
+    /// including a `\u` or `\U` whose hexadecimal digits are missing or encode no character.
     pub fn in_iri(after: &str) -> Option<Self> {
         let width = match after.as_bytes().first()? {
             b'u' => 4,
@@ -74,6 +80,8 @@ impl Escape {
 mod tests {
     use super::*;
 
+    /// Each escape sequence is read as its character and length,
+    /// and an incomplete or unknown one is not read at all.
     #[test]
     fn escapes_read_their_characters_and_lengths() {
         let read = |after| Escape::in_string(after).map(|escape| (escape.character, escape.length));

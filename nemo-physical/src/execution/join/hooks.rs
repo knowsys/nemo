@@ -1,11 +1,8 @@
 //! The hooks of a join: its subtracted inputs, filters and bound layers.
 //!
-//! At every layer, the driver asks the hooks whether a value found there stands.
-//! A join without hooks runs with [NoHooks].
-//! [FullHooks] holds the state of the others:
-//! - the cursors of the subtracted inputs,
-//! - the filters, each an identity over storage values or a program with its evaluation buffers,
-//! - the binders, which hold or compute the single value of a bound layer.
+//! At every layer, the driver asks the hooks whether the layer is bound to a value,
+//! and whether to keep a value found there.
+//! A join without hooks runs with [NoHooks], and any other join with [FullHooks].
 
 use bumpalo::{Bump, collections::Vec as BumpVec};
 
@@ -24,20 +21,21 @@ use crate::{
     value::{ErrorCounts, ValueRef},
 };
 
-/// A column of a subtracted input, following the descent.
+/// A column of a subtracted input, whose cursor follows the join's descent.
 #[derive(Debug)]
 struct SubtractedColumn<'a> {
     /// The cursor over the column.
     cursor: TaggedCursor<'a>,
-    /// The intervals of the input's next column, if that is mapped.
+    /// The intervals of the input's next column, if the subtracted input maps it.
     child_intervals: Option<&'a Intervals>,
-    /// Whether every previous column matched the current row,
-    /// which is when this column constrains it.
+    /// Whether every earlier column of the input matched the current row,
+    /// so that this column constrains the row.
     armed: bool,
 }
 
-/// A subtracted input, with its state following the descent:
-/// a match of its last mapped column drops the value found at that layer.
+/// The state of a subtracted input during the join's descent.
+///
+/// A match of its last column drops the value found at that column's layer.
 #[derive(Debug)]
 struct SubtractionState<'a> {
     /// The mapped columns, in trie order.
@@ -52,7 +50,7 @@ struct ProgramState<'a> {
     /// The layers the program reads, in the order of its inputs.
     inputs: &'a [usize],
     /// The integer form of the program,
-    /// selected if every layer it reads holds integers only.
+    /// selected if every layer it reads has integers only.
     integer: Option<&'a IntegerProgram>,
     /// The evaluation stack of the generic interpreter, reused.
     stack: Vec<StackValue<'a>>,
@@ -65,8 +63,9 @@ struct ProgramState<'a> {
 }
 
 impl<'a> ProgramState<'a> {
-    /// Creates the state of a program over the given layers,
-    /// with its integer form if every layer allows it.
+    /// Creates the state of a program over the given layers.
+    ///
+    /// `integer` is the program's integer form, if it is selected.
     fn new(
         program: &'a StackProgram,
         inputs: &'a [usize],
@@ -77,9 +76,9 @@ impl<'a> ProgramState<'a> {
             program,
             inputs,
             integer,
-            // The generic stack is allocated up front only where it is the only path:
-            // allocating both stacks for every join costs,
-            // and the integer form rarely falls back.
+            // The generic stack is allocated up front only if there is no integer form.
+            // Allocating both stacks for every join is costly,
+            // and the integer form rarely falls back to the generic interpreter.
             stack: if integer.is_some() {
                 Vec::new()
             } else {
@@ -91,9 +90,10 @@ impl<'a> ProgramState<'a> {
         }
     }
 
-    /// Runs the integer form over the row through one of its entry points,
-    /// such as [IntegerProgram::evaluate];
-    /// `None` if the form is not selected, or falls back.
+    /// Runs the integer form on the row through `run`,
+    /// one of its entry points such as [IntegerProgram::evaluate].
+    ///
+    /// Returns `None` if the integer form is not selected, or if it falls back.
     fn run_integers<T>(
         &mut self,
         row: &[StorageValue],
@@ -111,8 +111,10 @@ impl<'a> ProgramState<'a> {
         run(program, &mut self.integer_stack, &self.integer_values)
     }
 
-    /// Runs the generic interpreter over the row through one of its entry points,
-    /// such as [StackProgram::evaluate], its inputs decoded through the dictionary.
+    /// Runs the program on the row through `run`,
+    /// one of the generic interpreter's entry points such as [StackProgram::evaluate].
+    ///
+    /// The inputs are decoded through the dictionary.
     fn run_values<T>(
         &mut self,
         row: &[StorageValue],
@@ -143,11 +145,14 @@ enum IdentityTarget {
     /// The value of another layer.
     Layer(usize),
     /// The storage value of a constant,
-    /// or `None` for a constant no storage value represents, which no layer holds.
+    /// or `None` for a constant without a storage value, which no layer has.
     Constant(Option<StorageValue>),
 }
 
-/// The identity form of a filter, over the layers it reads; see [IdentityCondition].
+/// The identity form of a filter, with layers in place of the condition's inputs.
+///
+/// It compares the storage value of a layer with that of another layer or a constant,
+/// as [IdentityCondition] describes.
 #[derive(Debug, Clone, Copy)]
 struct IdentityFilter {
     /// The layer compared.
@@ -159,8 +164,9 @@ struct IdentityFilter {
 }
 
 impl IdentityFilter {
-    /// Creates the identity form of a condition over the layers its inputs read,
-    /// looking up the storage value of a constant in the dictionary.
+    /// Creates the identity form of a condition whose input `i` reads layer `inputs[i]`.
+    ///
+    /// The storage value of a constant is looked up in the dictionary.
     fn new(condition: &IdentityCondition, inputs: &[usize], dictionary: &Dictionary) -> Self {
         let target = match &condition.operand {
             IdentityOperand::Input(input) => IdentityTarget::Layer(inputs[*input]),
@@ -190,7 +196,7 @@ impl IdentityFilter {
 /// A filter, with its evaluation state.
 #[derive(Debug)]
 enum FilterState<'a> {
-    /// A filter decided on storage values.
+    /// A filter decided by its identity form, on storage values.
     Identity(IdentityFilter),
     /// A filter evaluated by its program.
     Program(ProgramState<'a>),
@@ -201,50 +207,53 @@ enum FilterState<'a> {
 struct BinderState<'a> {
     /// The layer's value.
     value: BinderValue<'a>,
-    /// Whether the layer's value is still unconsumed in the current descent.
+    /// Whether the current descent into the layer has not probed for its value yet.
     pending: bool,
 }
 
-/// The value of a bound layer, as its binder holds it.
+/// The value of a bound layer, as its binder stores it.
 #[derive(Debug)]
 enum BinderValue<'a> {
     /// The storage value of a constant,
-    /// or `None` for a constant no storage value represents, which no layer holds.
+    /// or `None` for a constant without a storage value, which no layer has.
     Constant(Option<StorageValue>),
     /// The program computing the value, with its evaluation state.
     Computed(ProgramState<'a>),
 }
 
-/// What a layer's binder dictates for the descent.
+/// What the driver does at a layer, as the layer's binder decides.
 #[derive(Debug, Clone, Copy)]
 pub(super) enum Bind {
     /// The layer is not bound, and enumerates its intersection.
     Free,
-    /// The layer's value, to probe for.
+    /// The layer's value, which the driver probes for.
     Value(StorageValue),
-    /// Nothing matches:
-    /// the value was consumed, the evaluation failed,
-    /// or no stored value represents the constant or the result.
+    /// Nothing matches at the layer, because the descent already probed for the value,
+    /// its evaluation failed, or the value has no storage value.
     Dead,
 }
 
 /// The hooks of a join, over the type `V` of the values its layers find.
 ///
 /// The driver is generic over the hooks,
-/// so a join without hooks runs with [NoHooks] and its checks vanish.
+/// so a join without hooks runs with [NoHooks], whose checks compile to nothing.
 pub(super) trait Hooks<V> {
-    /// Returns whether the hooks at a layer admit a value found there;
-    /// the row holds the value at that layer.
+    /// Returns whether the hooks at a layer accept a value found there.
+    ///
+    /// `row` has the value at that layer, and the values of the shallower layers.
     fn admit(&mut self, layer: usize, value: V, row: &[V]) -> bool;
 
     /// Prepares the hooks of a layer for a descent from above.
     fn enter_layer(&mut self, layer: usize);
 
-    /// Returns what the binder of a layer dictates, consuming its value.
+    /// Returns what the driver does at a layer, as the layer's binder decides.
+    ///
+    /// A bound layer gives its value once per descent, and [Bind::Dead] after that.
     fn bind(&mut self, layer: usize, row: &[V]) -> Bind;
 }
 
-/// The hooks of a join without subtracted inputs, filters or bound layers: none.
+/// The hooks of a join without subtracted inputs, filters or bound layers,
+/// which accept every value.
 #[derive(Debug)]
 pub(super) struct NoHooks;
 
@@ -264,6 +273,10 @@ impl<V> Hooks<V> for NoHooks {
 }
 
 /// The hooks of a join with subtracted inputs, filters or bound layers.
+///
+/// They keep the cursors of the subtracted inputs,
+/// the filters with their evaluation state,
+/// and the binders, which store or compute the single value of a bound layer.
 #[derive(Debug)]
 pub(super) struct FullHooks<'a> {
     /// The subtracted inputs.
@@ -273,19 +286,21 @@ pub(super) struct FullHooks<'a> {
     subtracted_at_layer: BumpVec<'a, BumpVec<'a, (usize, usize)>>,
     /// The filters.
     filters: BumpVec<'a, FilterState<'a>>,
-    /// Per layer, the filters checked there: at the deepest layer each reads.
+    /// Per layer, the indices of the filters checked there,
+    /// which are those whose deepest input is that layer.
     filters_at_layer: BumpVec<'a, BumpVec<'a, usize>>,
     /// The binders of the bound layers.
     binders: BumpVec<'a, BinderState<'a>>,
-    /// Per layer, its binder, if the layer is bound.
+    /// Per layer, the index of its binder, if the layer is bound.
     binder_at_layer: BumpVec<'a, Option<usize>>,
-    /// The dictionary the programs decode their inputs through;
+    /// The dictionary the programs decode their inputs through,
     /// present if there are filters or binders.
     dictionary: Option<&'a Dictionary>,
     /// The context the programs evaluate in.
     context: EvaluationContext,
-    /// The evaluation errors counted per kind;
-    /// the rows they occurred on were dropped.
+    /// The evaluation errors counted so far, by kind.
+    ///
+    /// The rows they occurred on were dropped.
     errors: ErrorCounts,
 }
 
@@ -329,8 +344,8 @@ impl Hooks<StorageValue> for FullHooks<'_> {
         {
             return Bind::Value(StorageValue::integer(result));
         }
-        // The integer form is not selected, fell back, or its result is not an integer:
-        // the generic interpreter decides.
+        // The integer form is not selected, fell back, or gave no integer,
+        // so the generic interpreter decides.
 
         let dictionary = self
             .dictionary
@@ -349,11 +364,11 @@ impl Hooks<StorageValue> for FullHooks<'_> {
 }
 
 impl<'a> FullHooks<'a> {
-    /// Returns the hooks of a shape over the blocks of the inputs it joins,
-    /// indexed as the shape indexes the inputs,
-    /// or `None` for a shape without hooks.
+    /// Returns the hooks of a shape, or `None` for a shape without hooks.
     ///
-    /// The programs decode their inputs through the dictionary and evaluate in the context.
+    /// `inputs` has the blocks of each input, indexed as the shape indexes the inputs,
+    /// and `subtracted` has one trie per subtracted input.
+    /// The programs decode their inputs through `dictionary` and evaluate in `context`.
     pub(super) fn build(
         shape: &JoinShape<'a>,
         inputs: &[&[&'a Trie]],
@@ -384,26 +399,30 @@ impl<'a> FullHooks<'a> {
         })
     }
 
-    /// Returns the evaluation errors counted so far, per kind.
+    /// Returns the evaluation errors counted so far, by kind.
     pub(super) fn errors(&self) -> ErrorCounts {
         self.errors
     }
 
-    /// Returns whether a filter runs its integer form.
+    /// Returns whether the filter of the given index runs its integer form.
     #[cfg(test)]
     pub(super) fn filter_uses_integer_form(&self, index: usize) -> bool {
         matches!(&self.filters[index], FilterState::Program(state) if state.integer.is_some())
     }
 
-    /// Returns whether a filter is decided on storage values.
+    /// Returns whether the filter of the given index is decided by its identity form,
+    /// on storage values.
     #[cfg(test)]
     pub(super) fn filter_uses_identity_form(&self, index: usize) -> bool {
         matches!(self.filters[index], FilterState::Identity(_))
     }
 
-    /// Compares a value with the subtracted columns at a layer,
-    /// arms or disarms the columns after them,
-    /// and returns whether some subtracted input matches the row on every mapped column.
+    /// Returns whether a value found at a layer completes a match of some subtracted input.
+    ///
+    /// The value is compared with each armed subtracted column at the layer.
+    /// A hit arms the input's next column, restricted to the hit's children,
+    /// and a miss disarms it.
+    /// A hit on an input's last column is a match of the whole input.
     fn blocked(&mut self, layer: usize, value: StorageValue) -> bool {
         let mut blocked = false;
         for entry in 0..self.subtracted_at_layer[layer].len() {
@@ -414,8 +433,8 @@ impl<'a> FullHooks<'a> {
                 && subtraction.columns[column].cursor.seek(value) == Some(value);
 
             if column + 1 < subtraction.columns.len() {
-                // A column constrains the row only where the columns before it matched;
-                // a miss disarms the rest, since each column passes its state on.
+                // A column constrains the row only if the columns before it matched.
+                // A miss disarms the next column, and through it every later one.
                 subtraction.columns[column + 1].armed = hit;
                 if hit {
                     let position = subtraction.columns[column].cursor.position();
@@ -433,8 +452,9 @@ impl<'a> FullHooks<'a> {
         blocked
     }
 
-    /// Returns whether the row passes the filters checked at a layer;
-    /// a failed evaluation is counted and rejects the row.
+    /// Returns whether the row passes the filters checked at a layer.
+    ///
+    /// A failed evaluation is counted, and rejects the row.
     fn passes_filters(&mut self, layer: usize, row: &[StorageValue]) -> bool {
         for entry in 0..self.filters_at_layer[layer].len() {
             let filter = self.filters_at_layer[layer][entry];
@@ -446,8 +466,11 @@ impl<'a> FullHooks<'a> {
         true
     }
 
-    /// Returns whether the row passes a filter:
-    /// by its identity form, else by its integer form if selected, else by its program.
+    /// Returns whether the row passes a filter.
+    ///
+    /// The identity form decides if the filter has one.
+    /// Otherwise the integer form decides if it is selected and does not fall back.
+    /// In every other case, the generic interpreter decides.
     fn evaluate_filter(&mut self, index: usize, row: &[StorageValue]) -> bool {
         let state = match &mut self.filters[index] {
             FilterState::Identity(identity) => return identity.holds(row),
@@ -457,8 +480,8 @@ impl<'a> FullHooks<'a> {
         if let Some(pass) = state.run_integers(row, IntegerProgram::filter) {
             return pass;
         }
-        // The integer form is not selected, or fell back where an intermediate outgrew `i64`:
-        // the generic interpreter decides.
+        // The integer form is not selected, or fell back because an intermediate value
+        // outgrew `i64`, so the generic interpreter decides.
 
         let dictionary = self
             .dictionary
@@ -473,7 +496,7 @@ impl<'a> FullHooks<'a> {
     }
 }
 
-/// Returns the cursors of the subtracted inputs,
+/// Returns the states of the subtracted inputs,
 /// and per layer the pairs of input and column index compared there.
 fn subtractions<'a>(
     shape: &JoinShape<'a>,
@@ -507,7 +530,7 @@ fn subtractions<'a>(
 }
 
 /// Returns the states of the filters,
-/// and per layer the filters checked there: at the deepest layer each reads.
+/// and per layer the filters checked there, each at the deepest layer it reads.
 ///
 /// The constants of the identity forms are looked up in the dictionary here, once.
 fn filter_hooks<'a>(
@@ -552,7 +575,7 @@ fn filter_hooks<'a>(
     (filters, filters_at_layer)
 }
 
-/// Returns the binders of the bound layers, and per layer its binder.
+/// Returns the binders of the bound layers, and per layer the index of its binder.
 ///
 /// The constants are looked up in the dictionary here, once.
 fn binder_hooks<'a>(
@@ -590,9 +613,11 @@ fn binder_hooks<'a>(
     (binders, binder_at_layer)
 }
 
-/// Returns a program's integer form if the inputs allow it:
-/// if every column intersected at a layer the program reads holds integers only,
-/// in every block of its input.
+/// Returns a program's integer form if the inputs allow it, or `None`.
+///
+/// `layers` are the layers the program reads, and `integer` is its integer form, if it has one.
+/// The inputs allow the integer form if, at every layer the program reads,
+/// every intersected column has integers only, in every block of its input.
 fn integer_form<'a>(
     shape: &JoinShape<'a>,
     inputs: &[&[&'a Trie]],

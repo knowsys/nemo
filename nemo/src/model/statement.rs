@@ -1,4 +1,4 @@
-//! Top-level statements.
+//! Statements, the top-level parts of a program.
 
 use std::fmt::{self, Display, Formatter};
 

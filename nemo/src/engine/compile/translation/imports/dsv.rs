@@ -1,5 +1,5 @@
-//! Delimiter-separated imports: a directive resolved into its options, table, and column
-//! formats, and the batched load of the DSV imports of one translation.
+//! DSV imports: resolving a directive into its options, table and column formats,
+//! and loading the DSV imports of one translation as one batch.
 
 use std::sync::Arc;
 
@@ -23,12 +23,11 @@ use crate::{
     },
 };
 
-/// One delimiter-separated import with its options resolved, awaiting the
-/// batched load.
+/// One DSV import with its options resolved, awaiting the batched load.
 pub(super) struct PreparedDsv {
-    /// The file and its reading options.
+    /// The resource and its reading options.
     source: DsvResource,
-    /// The receiving table.
+    /// The table that receives the rows.
     table: TableId,
     /// The table's arity.
     arity: usize,
@@ -36,8 +35,8 @@ pub(super) struct PreparedDsv {
     resource: String,
 }
 
-/// Returns the name a source of registered or piped bytes reports under: the
-/// resource name, or standard input for the empty one.
+/// Returns the name under which a source of registered or fetched bytes is reported:
+/// the resource name, or `<stdin>` for the empty name, which stands for standard input.
 fn source_name(resource: &str) -> String {
     if resource.is_empty() {
         String::from("<stdin>")
@@ -47,12 +46,12 @@ fn source_name(resource: &str) -> String {
 }
 
 impl<'a> Translator<'a> {
-    /// Resolves one delimiter-separated import for the batched load:
-    /// the evaluated options, the registered table,
-    /// and the column formats with the pruned columns skipped (see
-    /// [execute_imports](Self::execute_imports)).
+    /// Resolves one DSV import for the [batched load](Self::load_dsv_batch):
+    /// its evaluated options, its registered table, and its column formats.
     ///
-    /// Returns `None` for an empty file into an unused predicate, or a preloaded import.
+    /// Returns `None` if nothing fixes the number of columns,
+    /// such as for an empty file into a predicate without other uses,
+    /// and for a preloaded import.
     pub(super) fn prepare_dsv(
         &mut self,
         import: &PendingImport,
@@ -66,9 +65,10 @@ impl<'a> Translator<'a> {
         else {
             return Ok(None);
         };
-        // The columns no rule reads are only checked at parse, not delivered
-        // (see the projection pass), so that they still decide which rows are well-formed.
-        // The plan is indexed by the kept columns, the ones the directive does not skip itself.
+        // The pruned columns are only checked while parsing, and not delivered
+        // (see `DsvOptions::checked_only`), so that they still decide which rows are
+        // well-formed.
+        // The plan's positions are among the kept columns, which the directive does not skip.
         let kept = formats
             .iter()
             .map(|format| !matches!(format, ValueFormat::Skip))
@@ -89,7 +89,7 @@ impl<'a> Translator<'a> {
             .map(|format| Type::of_domains(format.domains()))
             .collect();
         let table = self.register_import(import, kept_types, &layout)?;
-        // A preloaded import's rows are already stored; nothing to load.
+        // A preloaded import's rows are already stored, so there is nothing to load.
         if import.preloaded {
             return Ok(None);
         }
@@ -118,15 +118,17 @@ impl<'a> Translator<'a> {
         }))
     }
 
-    /// Returns the column formats of a delimiter-separated import, per source column,
-    /// or `None` if nothing fixes the width.
+    /// Returns the column formats of a DSV import, one per source column,
+    /// or `None` if nothing fixes the number of columns.
     ///
     /// - The directive's `format` option fixes them,
     ///   with each `term` replaced by the format of its column's declared type, if declared.
-    /// - Otherwise a `@declare` fixes them: each column reads in the format of its declared type.
-    /// - Otherwise column variables fix the width, and every column reads as `term`.
-    /// - Otherwise the predicate's registration or the file gives the width,
-    ///   and every column reads as `term`.
+    /// - Otherwise a `@declare` fixes them:
+    ///   each column is read in the format of its declared type.
+    /// - Otherwise the directive's column names fix the number of columns,
+    ///   and every column is read as `term`.
+    /// - Otherwise the predicate's registration or the file gives the number of columns,
+    ///   and every column is read as `term`.
     fn dsv_formats(
         &mut self,
         import: &PendingImport,
@@ -158,7 +160,7 @@ impl<'a> Translator<'a> {
     /// Returns the directive's column formats,
     /// with each `term` replaced by the format of its column's declared type, if declared.
     ///
-    /// The declaration is indexed by the kept columns, in order.
+    /// The declaration's positions are among the kept columns.
     fn typed_formats(&self, mut formats: Vec<ValueFormat>, predicate: &str) -> Vec<ValueFormat> {
         let Some(declaration) = self.declarations.get(predicate) else {
             return formats;
@@ -178,12 +180,12 @@ impl<'a> Translator<'a> {
         formats
     }
 
-    /// Returns the kept width of an import without formats or declaration,
+    /// Returns the number of kept columns of an import without formats or declaration,
     /// or `None` if nothing fixes it.
     ///
-    /// The width comes from the predicate's registration by its other uses,
-    /// or else from sniffing the file, which a translation reading no data does not do.
-    /// Without a width the predicate stays unregistered and is marked open,
+    /// The number comes from the predicate's registration by its other uses,
+    /// or else from sniffing the file, which a translation that reads no data does not do.
+    /// Without it, the predicate stays unregistered and is marked open,
     /// since its data could be any value.
     fn dsv_width(
         &mut self,
@@ -219,8 +221,8 @@ impl<'a> Translator<'a> {
                     .map_err(ImportFailure::Reading)?;
                 match sniffed {
                     Some(arity) => arity,
-                    // An empty file into an unused predicate: no rows and
-                    // no width, so nothing to register.
+                    // An empty file into a predicate without other uses has no rows and no
+                    // width, so there is nothing to register.
                     None => {
                         self.open.insert(import.predicate.clone());
                         return Ok(None);
@@ -228,16 +230,16 @@ impl<'a> Translator<'a> {
                 }
             }
         };
-        // A pruned predicate registers its delivered columns only; the
-        // file is still the kept width.
+        // The table of a pruned predicate has only the delivered columns,
+        // but the file still has every kept column.
         Ok(Some(
             self.plan.stored_layout(&import.predicate, arity).kept(),
         ))
     }
 
-    /// Loads the prepared delimiter-separated imports of this translation as one batch.
+    /// Loads the prepared DSV imports of this translation as one batch.
     ///
-    /// The rows join their tables' facts.
+    /// The rows are added to their tables' facts.
     pub(super) fn load_dsv_batch(&mut self, batch: Vec<PreparedDsv>) -> Result<(), Diagnostic> {
         if batch.is_empty() {
             return Ok(());

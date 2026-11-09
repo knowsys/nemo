@@ -1,6 +1,7 @@
-//! What the editor shows about the name under the cursor:
-//! a predicate's signature and where its rows come from, a variable's type,
-//! what a builtin computes, and a value label's declaration.
+//! The hover text of the name under the cursor.
+//!
+//! It shows a predicate's signature and where its rows come from, a variable's type,
+//! what a builtin or an aggregate computes, and a value label's declaration.
 
 use nemo::{
     model::{BuiltinDocumentation, Span, VariableKind},
@@ -12,8 +13,8 @@ use crate::{
     symbols::{Mention, Occurrence, Origin},
 };
 
-/// Returns the Markdown describing what a byte offset sits in, with the span it describes,
-/// or `None` if nothing there has a description.
+/// Returns the hover text, in Markdown, of what is at a byte offset, with the span it
+/// describes, or `None` if there is nothing to describe there.
 pub(crate) fn describe(document: &Document, offset: u32) -> Option<(String, Span)> {
     let symbols = document.symbols();
     if let Some(mentioned) = symbols.mention_at(offset) {
@@ -23,10 +24,12 @@ pub(crate) fn describe(document: &Document, offset: u32) -> Option<(String, Span
     Some((predicate(document, occurrence), occurrence.span))
 }
 
-/// Describes a predicate: its signature, where its rows come from, and its documentation.
+/// Returns the hover text of a predicate: its signature, where its rows come from,
+/// and its documentation.
 ///
-/// A declared predicate's signature is its declaration,
-/// any other's the types the check inferred for its columns.
+/// The signature of a declared predicate is its declaration.
+/// Any other predicate's signature lists the column types that the check inferred,
+/// if they are known.
 fn predicate(document: &Document, occurrence: &Occurrence) -> String {
     let name = &occurrence.name;
     let documentation = document.documentation(name);
@@ -44,8 +47,8 @@ fn predicate(document: &Document, occurrence: &Occurrence) -> String {
         },
     };
     let mut text = format!("{}\n\n{}", code(&signature), role(document, name));
-    // The comment above the declaration documents the predicate;
-    // without one, the comments above the statements that derive it do.
+    // The comment above the declaration documents the predicate.
+    // Without one, the comments above the statements that derive it do.
     let comments = match documentation.and_then(|documentation| documentation.comment.as_ref()) {
         Some(comment) => std::slice::from_ref(comment),
         None => document.comments(name),
@@ -57,7 +60,7 @@ fn predicate(document: &Document, occurrence: &Occurrence) -> String {
     text
 }
 
-/// Returns where a predicate's rows come from, and whether the program writes it out,
+/// Returns where a predicate's rows come from, and whether it is an output of the program,
 /// as `facts · imported from csv · derived · output`.
 fn role(document: &Document, name: &str) -> String {
     let symbols = document.symbols();
@@ -95,14 +98,16 @@ fn role(document: &Document, name: &str) -> String {
     parts.join(" · ")
 }
 
-/// Describes a variable, a builtin, an aggregate or a value label,
-/// or returns `None` for one there is nothing to say about,
-/// such as a variable whose type no check has inferred.
+/// Returns the hover text of a variable, a builtin, an aggregate or a value label,
+/// or `None` if there is nothing to say about it.
+///
+/// There is nothing to say, for example, about a variable whose type is not known,
+/// about a parameter, or about a value label that no `@type` declares.
 fn mention(document: &Document, mention: &Mention) -> Option<String> {
     match mention {
         Mention::Variable(variable, rule) => {
             let datatype = match variable.kind {
-                // An existential variable stands for a value the rule invents.
+                // An existential variable stands for a null that the rule creates.
                 VariableKind::Existential => String::from("null"),
                 VariableKind::Universal => {
                     let rule = document.slice(*rule);
@@ -127,7 +132,7 @@ fn mention(document: &Document, mention: &Mention) -> Option<String> {
     }
 }
 
-/// Describes a builtin: the ways to call it, and what it computes.
+/// Returns the hover text of a builtin or an aggregate: its signatures, and what it computes.
 fn builtin(documentation: &BuiltinDocumentation) -> String {
     format!(
         "{}\n\n{}",
@@ -136,14 +141,14 @@ fn builtin(documentation: &BuiltinDocumentation) -> String {
     )
 }
 
-/// Returns source text as a Nemo code block.
+/// Returns source text as a Markdown code block of Nemo code.
 fn code(source: &str) -> String {
     let wall = fence(source);
     format!("{wall}nemo\n{source}\n{wall}")
 }
 
-/// Returns a code fence longer than the longest run of backticks the text it encloses
-/// contains, which keeps the text from closing it.
+/// Returns a code fence of at least three backticks that is longer than the longest run of
+/// backticks in `text`, so that the text cannot close it.
 fn fence(text: &str) -> String {
     let mut longest = 0;
     let mut run = 0;
@@ -158,6 +163,7 @@ fn fence(text: &str) -> String {
 mod tests {
     use super::*;
 
+    /// A fence has three backticks, or one more than the longest run of backticks in the text.
     #[test]
     fn a_fence_outlasts_the_backticks_it_encloses() {
         assert_eq!(fence("p(1)"), "```");

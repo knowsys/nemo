@@ -1,15 +1,16 @@
 //! The logical layer of the Nemo rule engine.
 //!
-//! This crate implements the Nemo language (parser, rule model, program transformations),
-//! reasoning (normalization, planning, semi-naive execution), and tracing,
-//! on top of the [`nemo_physical`] database layer and the [`nemo_io`] adapters.
-//! It is the crate to depend on to use Nemo as a library.
+//! This crate implements the Nemo rule language (its parser, the program model,
+//! and the program transformations), reasoning (normalization, planning and semi-naive
+//! evaluation), and tracing.
+//! It builds on the [`nemo_physical`] database layer and the [`nemo_io`] format adapters,
+//! and it is the crate to depend on to use Nemo as a library.
 //!
-//! The engine sends the requests of the remote data a program needs through a
-//! [client](engine::remote::Client): the HTTP client of the `http` feature by default,
-//! or one set with [set_client](engine::Engine::set_client).
-//! The `start_*` methods of the [Engine](engine::Engine) send nothing:
-//! they return the requests, and [resume](engine::Engine::resume) takes the responses
+//! The engine sends its requests for remote data through a [client](engine::remote::Client).
+//! A new engine uses the HTTP client of the `http` feature, if the crate is built with it,
+//! and [set_client](engine::Engine::set_client) replaces the client.
+//! The `start_*` methods of the [Engine](engine::Engine) send nothing.
+//! They return the pending requests, and [resume](engine::Engine::resume) accepts the responses
 //! (see [engine::remote]).
 
 pub mod codes;

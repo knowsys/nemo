@@ -3,9 +3,10 @@
 //! [cursor](crate::engine::Engine::cursor) opens a [PredicateCursor],
 //! and [read_chunk](crate::engine::Engine::read_chunk) advances it
 //! by one bounded, owned [RowChunk] at a time.
-//! The cursor holds no borrow of the engine, since each read borrows it briefly and returns.
+//! The cursor holds no borrow of the engine, since each read borrows the engine only while it
+//! runs.
 //! So the cursor can be kept as plain data where Rust borrows cannot be held,
-//! as in the Python and JavaScript bindings,
+//! such as in bindings to other languages,
 //! and memory stays bounded by the read budget rather than the predicate's size.
 
 pub(super) mod export;
@@ -21,10 +22,10 @@ use nemo_physical::{
 
 /// A cursor over one predicate's stored rows, in storage order.
 ///
-/// A cursor is plain data:
-/// the predicate's revision range and row count are fixed when the cursor is opened.
-/// A read fails for a cursor whose table has changed since it was opened,
-/// rather than return rows that no longer match the table.
+/// A cursor is plain data, which holds no borrow of the engine.
+/// The predicate's revision range and row count are fixed when the cursor is opened.
+/// A read fails for a cursor whose table changed after the cursor was opened,
+/// since its remaining rows would no longer match the table.
 ///
 /// # Example
 ///
@@ -53,18 +54,19 @@ use nemo_physical::{
 pub struct PredicateCursor {
     /// The table read.
     pub(crate) table: TableId,
-    /// The revision range fixed at opening.
+    /// The revision range, fixed when the cursor is opened.
     pub(crate) range: Range<Revision>,
-    /// The columns per row.
+    /// The number of columns per row.
     pub(crate) arity: usize,
-    /// Rows already delivered.
+    /// The number of rows already delivered.
     pub(crate) position: usize,
-    /// The total row count at opening, which guards against invalidation.
+    /// The number of rows when the cursor was opened, which detects a change of the table.
     pub(crate) rows: usize,
-    /// The table's revision blocks at opening, the other guard against invalidation.
+    /// The table's revision blocks when the cursor was opened,
+    /// which also detect a change of the table.
     ///
     /// A position counts rows block by block,
-    /// and a consolidation or a drop numbers them anew without changing the count.
+    /// and a consolidation or a drop can number them anew without changing the count.
     pub(crate) blocks: Vec<Range<Revision>>,
 }
 
@@ -72,12 +74,12 @@ impl PredicateCursor {
     /// The default number of rows per read.
     pub const BUDGET: usize = 1 << 16;
 
-    /// Returns the rows delivered so far.
+    /// Returns the number of rows delivered so far.
     pub fn position(&self) -> usize {
         self.position
     }
 
-    /// Returns the rows not yet delivered.
+    /// Returns the number of rows not yet delivered.
     pub fn remaining(&self) -> usize {
         self.rows - self.position
     }
@@ -117,9 +119,10 @@ impl PredicateCursor {
 /// ```
 #[derive(Debug, Clone)]
 pub struct RowChunk {
-    /// The columns, every vector holding one value per row.
+    /// The columns, each with one value per row.
     columns: Vec<Vec<DataValue>>,
-    /// The number of rows, carried apart so that nullary predicates (no columns) count their row.
+    /// The number of rows, stored apart from the columns so that a chunk of a nullary
+    /// predicate (without columns) counts its row.
     rows: usize,
 }
 
@@ -145,7 +148,7 @@ impl RowChunk {
         self.rows
     }
 
-    /// Returns whether the chunk holds no rows.
+    /// Returns whether the chunk has no rows.
     pub fn is_empty(&self) -> bool {
         self.rows == 0
     }
@@ -156,11 +159,20 @@ impl RowChunk {
     }
 
     /// Returns the values of one column, one per row.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `index` is not below the [arity](Self::arity).
     pub fn column(&self, index: usize) -> &[DataValue] {
         &self.columns[index]
     }
 
     /// Returns one row, gathered across the columns.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `index` is not below the number of rows ([len](Self::len)),
+    /// unless the chunk has no columns.
     pub fn row(&self, index: usize) -> Vec<DataValue> {
         self.columns
             .iter()
@@ -170,8 +182,8 @@ impl RowChunk {
 
     /// Returns the rows in order.
     ///
-    /// Each is gathered across the columns,
-    /// so consumers thinking in columns should prefer [column](Self::column).
+    /// Each row is gathered across the columns,
+    /// so code that works with columns should use [column](Self::column) instead.
     pub fn rows(&self) -> impl Iterator<Item = Vec<DataValue>> + '_ {
         (0..self.rows).map(|index| self.row(index))
     }

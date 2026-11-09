@@ -1,15 +1,16 @@
 //! Routing written literals forward, into the compiled program.
 //!
 //! A query names written statements, and the children of its nodes are at written literals.
-//! A pipeline stage that rewrote a statement moved its literals:
-//! into the rule that replaces it, into the rule defining a predicate the stage introduced,
-//! or into the view of an import.
-//! A *route* follows a literal through every stage's recorded correspondence
-//! to the literal it became in the final revision.
-//! That is a literal of a statement of the compiled program, reached through *hops*:
-//! literals that read a predicate a stage introduced, each leading into its definition.
-//! For a literal over a predicate an import evaluates at its endpoint,
-//! the route ends at the literal reading the import's predicate.
+//! A pipeline stage that rewrote a statement moved its literals,
+//! into the rule that replaces it, into the definition of a predicate that the stage
+//! introduced, or into the view of an import.
+//! A *route* follows a literal through the correspondence that each stage recorded,
+//! to the literal it became in the final revision, which is a literal of the compiled program.
+//! On the way, the route passes *hops*,
+//! which are literals that read a predicate a stage introduced, each leading into its
+//! definition.
+//! For a literal over a predicate that an import evaluates at its endpoint,
+//! the route ends at the literal that reads the import's predicate.
 
 use std::collections::{HashMap, HashSet};
 
@@ -22,14 +23,14 @@ use crate::{
 /// The literal a written literal became in the compiled program, and the way there.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct Route {
-    /// The literals on the way, each reading a predicate a stage introduced
+    /// The hops on the way, each a literal that reads a predicate which a stage introduced
     /// and the engine evaluates.
     ///
     /// The next literal is in that predicate's definition.
     pub(super) hops: Vec<(StatementId, usize)>,
     /// The literal the route ends at.
     pub(super) last: (StatementId, usize),
-    /// Whether the last literal reads a predicate an import evaluates at its endpoint,
+    /// Whether the last literal reads a predicate that an import evaluates at its endpoint,
     /// whose rows the written literal is matched against.
     pub(super) remote: bool,
 }
@@ -37,7 +38,7 @@ pub(super) struct Route {
 /// How a written statement runs.
 #[derive(Debug, Clone, Copy)]
 pub(super) enum Realization {
-    /// A compiled rule derives its facts.
+    /// The compiled rule with the given index derives its facts.
     Rule(usize),
     /// An import that replaces the statement delivers them.
     Import(StatementId),
@@ -49,12 +50,12 @@ pub(super) struct Router<'a> {
     pipeline: &'a Pipeline,
     /// The translation state, for resolving names.
     state: &'a TranslationState,
-    /// Per statement a later stage rewrote, the statement that replaces it.
+    /// For each statement that a later stage rewrote, the statement that replaces it.
     later: HashMap<StatementId, StatementId>,
-    /// Per predicate a stage defined, by resolved name, the defining
-    /// statement and whether an import evaluates it.
+    /// For each predicate that a stage defined, by resolved name,
+    /// the defining statement and whether an import evaluates it.
     definitions: HashMap<String, (StatementId, bool)>,
-    /// Per statement of the compiled program, its compiled rule.
+    /// The index of the compiled rule of each statement of the compiled program.
     compiled: HashMap<StatementId, usize>,
 }
 
@@ -124,15 +125,16 @@ impl<'a> Router<'a> {
         self.compiled.get(&current).copied().map(Realization::Rule)
     }
 
-    /// Returns the compiled rule of a statement of the compiled program.
+    /// Returns the index of the compiled rule of a statement of the compiled program.
     pub(super) fn compiled(&self, statement: StatementId) -> usize {
         self.compiled[&statement]
     }
 
-    /// Returns the route to the literal a literal of a statement became in the final revision.
+    /// Returns the route to the literal that a literal of a statement became in the final
+    /// revision.
     ///
-    /// The literal is given by its path in the statement's rule: a literal, then,
-    /// inside each definition unfolded on the way, a literal of that definition.
+    /// The literal is given by its [path](crate::pipeline::LiteralPath) in the statement's
+    /// rule.
     pub(super) fn route(&self, statement: StatementId, path: &[usize]) -> Route {
         let (&position, rest) = path.split_first().expect("paths are not empty");
         let base = match self.later.get(&statement) {
@@ -173,8 +175,8 @@ impl<'a> Router<'a> {
         }
     }
 
-    /// Returns the definition of the predicate a literal of a statement
-    /// reads, and whether an import evaluates it.
+    /// Returns the definition of the predicate that a literal of a statement reads,
+    /// and whether an import evaluates it.
     fn definition_at(
         &self,
         statement: StatementId,
@@ -224,8 +226,8 @@ impl<'a> Router<'a> {
         }
     }
 
-    /// Returns the compiled body atom a positive literal of a statement's
-    /// rule compiled into: its position among the positive literals.
+    /// Returns the index of the compiled body atom that a positive literal of a statement's
+    /// rule became, which is its position among the positive literals.
     pub(super) fn atom_of(&self, statement: StatementId, literal: usize) -> usize {
         let rule = self.rule(statement).expect("routes end at rule literals");
         rule.body[..literal]
@@ -234,15 +236,14 @@ impl<'a> Router<'a> {
             .count()
     }
 
-    /// Returns the resolved name of the predicate a literal of a
-    /// statement reads.
+    /// Returns the resolved name of the predicate that a literal of a statement reads.
     pub(super) fn predicate_at(&self, statement: StatementId, literal: usize) -> Option<String> {
         let atom = self.rule(statement)?.body[literal].atom()?;
         self.state.resolve(&atom.predicate)
     }
 }
 
-/// Returns, per written column, the column of a view's rows that holds it,
+/// Returns, for each written column, the column of a view's rows that contains it,
 /// or the written term if none does.
 ///
 /// Columns are matched by the variable's name, since the stages copy literals as written.

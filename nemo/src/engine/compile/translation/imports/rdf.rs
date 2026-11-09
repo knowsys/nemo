@@ -1,5 +1,5 @@
-//! RDF imports: a serialization's statements into a predicate of the
-//! variant's arity.
+//! RDF imports: loading the statements of an RDF serialization into a predicate
+//! with three columns, or four for quads.
 
 use std::sync::Arc;
 
@@ -22,9 +22,11 @@ use crate::{
     },
 };
 
-/// Returns the types an RDF import's columns hold:
-/// the graph (quads, first) and the subject are IRIs or blank-node nulls,
-/// the predicate an IRI, the object anything.
+/// Returns the types of the columns of an RDF import with `arity` columns.
+///
+/// The graph, which comes first in quads, and the subject are IRIs or the nulls of blank
+/// nodes.
+/// The predicate is an IRI, and the object can be anything.
 fn column_types(arity: usize) -> Vec<Type> {
     let node = Type::of_domains(DomainSet::IRI.with(ValueDomain::Null));
     let mut types = vec![node; arity.saturating_sub(2)];
@@ -35,9 +37,11 @@ fn column_types(arity: usize) -> Vec<Type> {
 
 impl<'a> Translator<'a> {
     /// Returns the label scope of a resource's blank nodes in this translation,
-    /// opened on first use: every import of the resource in one loading call reads the same
-    /// document, so they agree on its blank nodes,
-    /// while the next call reads the resource anew, which may have changed.
+    /// and opens it on first use.
+    ///
+    /// Every import of the resource in one translation reads the same document,
+    /// so the imports agree on its blank nodes.
+    /// The next translation reads the resource again, which may have changed in between.
     fn document_scope(&mut self, resource: &str) -> LabelScope {
         if let Some(scope) = self.documents.get(resource) {
             return *scope;
@@ -59,8 +63,8 @@ impl<'a> Translator<'a> {
         let directive = self.plain_directive(import.format, &import.options, &bindings, true)?;
         let resource = required_resource(directive.resource, import)?;
         let variant = self.rdf_variant(import.format, Some(&resource), import.span)?;
-        // The directive's `format` keeps or skips source columns, and
-        // the plan prunes among the kept; the reader reads only the rest.
+        // The directive's `format` keeps or skips source columns,
+        // the plan prunes some of the kept ones, and the reader delivers only the rest.
         let kept = term_columns(
             FileFormat::Rdf(Some(variant)),
             directive.formats.as_deref(),

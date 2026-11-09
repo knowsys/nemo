@@ -1,17 +1,19 @@
-//! The parser: source text into program components.
+//! The parser, which turns source text into program components.
 //!
-//! A hand-written lexer turns the whole input into a token buffer once,
-//! every byte of the input ending up in a token.
-//! A recursive descent parser with Pratt expression parsing consumes the buffer linearly.
-//! It decides by peeking at the next tokens and never backtracks.
-//! The program parser recovers per statement:
-//! a broken statement becomes a diagnostic, the parser resumes after the next ` .`,
-//! and every other statement still parses.
+//! A hand-written lexer first turns the whole input into a buffer of tokens.
+//! Every byte of the input other than whitespace and comments belongs to a token,
+//! and a text that the lexer rejects becomes an error token.
+//! A recursive descent parser, with Pratt parsing for operators,
+//! then reads the buffer from start to end.
+//! It decides what to parse by looking at the next tokens, and it never backtracks.
+//! The parser of a whole program recovers from errors statement by statement.
+//! A statement that does not parse becomes a diagnostic, the parser resumes after the next ` .`,
+//! and the other statements still parse.
 //!
-//! The public surface is `parse` on the components.
-//! [Program::parse] returns the program with all diagnostics.
-//! The component forms ([Rule], [Fact], [Atom], [Term], [Statement], [ModuleName])
-//! parse one component that must span the whole input.
+//! The public interface of the parser is the `parse` function of each component type.
+//! [Program::parse] returns the program together with all diagnostics.
+//! The other `parse` functions ([Rule], [Fact], [Atom], [Term], [Statement], [ModuleName])
+//! parse one component, which must span the whole input, and fail at its first problem.
 
 mod combinators;
 mod cursor;
@@ -30,10 +32,11 @@ use crate::{
 };
 
 impl Program {
-    /// Parses a whole source file.
+    /// Parses a whole source text into a program, and returns it with the diagnostics.
     ///
     /// A statement that does not parse becomes a diagnostic,
-    /// and every statement that parses is returned in the program.
+    /// and the program contains every statement that parses.
+    /// `file` identifies the source text in the spans of the components and diagnostics.
     pub fn parse(source: &str, file: FileId) -> (Program, Vec<Diagnostic>) {
         let (statements, diagnostics) = Parser::program(source, file);
         (Program::new(statements), diagnostics)
@@ -56,7 +59,8 @@ impl Rule {
     ///
     /// # Errors
     ///
-    /// Returns the first problem with the input, or an error if the statement is not a rule.
+    /// Returns the first problem with the input, or an error if the input is another kind of
+    /// statement.
     pub fn parse(source: &str) -> Result<Self, Diagnostic> {
         match Statement::parse(source)? {
             Statement::Rule(rule) => Ok(rule),
@@ -70,7 +74,8 @@ impl Fact {
     ///
     /// # Errors
     ///
-    /// Returns the first problem with the input, or an error if the statement is not a fact.
+    /// Returns the first problem with the input, or an error if the input is another kind of
+    /// statement.
     pub fn parse(source: &str) -> Result<Self, Diagnostic> {
         match Statement::parse(source)? {
             Statement::Fact(fact) => Ok(fact),
@@ -78,14 +83,18 @@ impl Fact {
         }
     }
 
-    /// Parses one fact written with or without its terminator.
+    /// Parses one fact spanning the whole input, with or without its closing ` .`.
     ///
-    /// Facts given on a command line or through a language binding
-    /// often leave out the closing ` .`.
+    /// Whitespace around the fact is ignored.
+    /// A fact written outside a program, such as on a command line,
+    /// often leaves out the closing ` .`.
     ///
     /// # Errors
     ///
-    /// Returns the first problem with the input, or an error if the statement is not a fact.
+    /// Returns the first problem with the input, or an error if the input is another kind of
+    /// statement.
+    /// If the input ends where the parser expected more, the error says so,
+    /// even though the parser was given the input with ` .` appended.
     pub fn parse_loose(source: &str) -> Result<Self, Diagnostic> {
         let text = source.trim();
         let statement = if text.ends_with('.') {
@@ -101,8 +110,9 @@ impl Fact {
     }
 }
 
-/// Returns the error for a statement that parses but is not of the `expected` kind,
-/// quoting the start of its text.
+/// Returns the error for a statement that parses but is not of the `expected` kind.
+///
+/// The error quotes the start of the statement's text.
 fn other_statement(expected: &str, source: &str) -> Diagnostic {
     ParseError::Expected {
         expected: expected.to_owned(),
@@ -111,9 +121,13 @@ fn other_statement(expected: &str, source: &str) -> Diagnostic {
     .diagnostic()
 }
 
-/// Returns the problem of a text of the given length parsed with ` .` appended,
-/// where the appended terminator, found in place of something else,
-/// is reported as the end of the text that was given.
+/// Returns the error for a text that was parsed with ` .` appended to it.
+///
+/// `problem` is the error of the parse, and `length` is the length of the text before
+/// the ` .` was appended.
+/// If the parser found the appended ` .` where it expected something else,
+/// the returned error says that it found the end of the input instead, without a location.
+/// Any other error is returned unchanged.
 fn at_end_of_text(problem: Diagnostic, length: usize) -> Diagnostic {
     let at_terminator = problem
         .labels()
@@ -157,7 +171,7 @@ impl Term {
 }
 
 impl ModuleName {
-    /// Parses one module name spanning the whole input, as a `@use` writes it.
+    /// Parses one module name spanning the whole input, written as in a `@use` directive.
     ///
     /// # Errors
     ///

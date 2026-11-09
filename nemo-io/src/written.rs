@@ -1,4 +1,4 @@
-//! The shape every writer of a format shares, and the outcome it reports.
+//! The trait that every writer of a format implements, and the outcome of a write.
 
 use std::{io::Write, path::Path};
 
@@ -9,9 +9,10 @@ use crate::{
     stream::compression::{Compression, create},
 };
 
-/// A writer of one format: rows serialized onto a byte stream.
+/// A writer of one format, which serializes rows onto a byte stream.
 ///
-/// A format's writer writes a stream, and the trait writes a file the same way.
+/// Each format implements [write](Self::write) for a stream,
+/// and the trait provides [write_path](Self::write_path) for a file.
 pub trait Writer {
     /// Returns the compression the writer applies to a file.
     fn compression(&self) -> Compression;
@@ -27,8 +28,10 @@ pub trait Writer {
         rows: impl IntoIterator<Item = &'a [DataValue]>,
     ) -> Result<Written, Diagnostic>;
 
-    /// Writes rows to a file as [write](Self::write) does, creating its parent directories,
-    /// and compressing as [compression](Self::compression) says or the file is named `.gz`.
+    /// Writes rows to a file as [write](Self::write) does, and creates its parent directories.
+    ///
+    /// The file is compressed as [compression](Self::compression) says,
+    /// which under [Compression::Auto] means if its name ends in `.gz`.
     ///
     /// # Errors
     ///
@@ -45,12 +48,13 @@ pub trait Writer {
     }
 }
 
-/// The outcome of one write: how many rows landed, and how many were
-/// dropped because a cell did not fit its declared format or the
-/// serialization has no form for it.
+/// The outcome of one write: how many rows were written, and how many were dropped.
+///
+/// A row is dropped if one of its values does not fit its column's format,
+/// or if the serialization has no form for the value.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Written {
-    /// Number of rows written.
+    /// The number of rows written.
     pub rows: u64,
     /// The number of rows dropped.
     pub dropped: u64,

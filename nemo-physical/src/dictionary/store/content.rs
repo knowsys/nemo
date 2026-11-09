@@ -1,26 +1,28 @@
 //! The blob encoding of structured values.
 //!
 //! A structured value is stored as two byte strings:
-//! - a *type blob*: the element count, one tag byte per element,
-//!   and the label if there is one, which all values of one shape share;
-//! - a *content blob*: one payload of [ELEMENT_SIZE] bytes per element.
+//! - the *type blob* contains the element count, one tag byte per element,
+//!   and the label if there is one;
+//! - the *content blob* contains one payload of [ELEMENT_SIZE] bytes per element.
 //!
-//! The split lets the many same-shaped tuples of a dataset share one interned type blob.
-//! [Blobs] builds the two byte strings, and [BlobsRef] reads an element out of them in place.
+//! The *shape* of a value is its element count and the tags of its elements.
+//! All values with the same shape and label have the same type blob,
+//! so the many tuples of one shape in a dataset can share one stored type blob.
+//! [Blobs] builds the two byte strings, and [BlobsRef] reads elements from them in place.
 
 use crate::storage::{StorageValue, Tag};
 
-/// The bytes a content blob stores per element: one storage payload.
+/// The number of bytes that a content blob stores per element, the size of one payload.
 pub(crate) const ELEMENT_SIZE: usize = size_of::<u64>();
 
 /// The byte offset of the tag bytes within a type blob,
-/// behind the element count and the label flag.
+/// after the four bytes of the element count and the byte of flags.
 const HEADER_SIZE: usize = 5;
 
-/// The flag marking a type blob that carries a label.
+/// The flag that marks a type blob with a label.
 const HAS_LABEL: u8 = 1;
 
-/// The two blobs a structured value is stored as.
+/// The two blobs that store a structured value.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Blobs {
     /// The type blob: the element count, the tags, and the label.
@@ -30,10 +32,13 @@ pub(crate) struct Blobs {
 }
 
 impl Blobs {
-    /// Builds the blobs of a structured value from its label and its encoded elements.
+    /// Builds the blobs of a structured value from its label and the storage values of its
+    /// elements.
     ///
-    /// The element count must fit the header's 32 bits,
-    /// which the dictionary's element limit ensures.
+    /// # Panics
+    ///
+    /// Panics if there are 2³² elements or more,
+    /// which [ELEMENT_LIMIT](crate::dictionary::Dictionary::ELEMENT_LIMIT) excludes.
     pub(crate) fn build(label: Option<&str>, elements: &[StorageValue]) -> Self {
         let count = u32::try_from(elements.len())
             .expect("the dictionary refuses structures beyond its element limit");
@@ -56,8 +61,9 @@ impl Blobs {
     }
 }
 
-/// The blobs of a structured value, read in place:
-/// the label, and the tag and the payload of each element.
+/// The blobs of a structured value, read in place.
+///
+/// It reads the label, and the tag and the payload of each element, without copying.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct BlobsRef<'a> {
     /// The label, if the value has one.
@@ -72,7 +78,7 @@ impl<'a> BlobsRef<'a> {
     /// Parses a type blob and a content blob,
     /// or returns `None` for malformed blobs.
     ///
-    /// The blobs that [build](Blobs::build) builds parse.
+    /// Every pair of blobs that [build](Blobs::build) returns is parsed successfully.
     pub(crate) fn parse(type_blob: &'a [u8], content: &'a [u8]) -> Option<Self> {
         let count = u32::from_le_bytes(type_blob.get(0..4)?.try_into().ok()?) as usize;
         let flags = *type_blob.get(4)?;
@@ -102,8 +108,10 @@ impl<'a> BlobsRef<'a> {
         })
     }
 
-    /// Reads blobs that [build](Blobs::build) built, without validating them,
-    /// in time independent of their size.
+    /// Reads blobs that [build](Blobs::build) returned, without validating them.
+    ///
+    /// It runs in constant time, independent of the size of the blobs.
+    /// Debug builds check that the blobs parse.
     pub(crate) fn trusted(type_blob: &'a [u8], content: &'a [u8]) -> Self {
         debug_assert!(
             Self::parse(type_blob, content).is_some(),
@@ -113,7 +121,7 @@ impl<'a> BlobsRef<'a> {
         let count = u32::from_le_bytes(type_blob[0..4].try_into().expect("the count is four bytes"))
             as usize;
         let rest = &type_blob[HEADER_SIZE + count..];
-        // SAFETY: `build` writes the label of a labeled value from a `&str`.
+        // SAFETY: `build` copies the label from a `&str`, so its bytes are valid UTF-8.
         let label =
             (type_blob[4] & HAS_LABEL != 0).then(|| unsafe { std::str::from_utf8_unchecked(rest) });
 
@@ -149,7 +157,8 @@ impl<'a> BlobsRef<'a> {
 mod tests {
     use super::*;
 
-    /// Builds blobs and reads them back, asserting a round trip.
+    /// Asserts that blobs built from a label and elements are read back unchanged,
+    /// both by [BlobsRef::parse] and by [BlobsRef::trusted].
     fn round_trip(label: Option<&str>, elements: &[StorageValue]) {
         let Blobs { type_blob, content } = Blobs::build(label, elements);
 
@@ -166,6 +175,8 @@ mod tests {
         }
     }
 
+    /// Blobs with and without a label, the empty label and no elements included,
+    /// are read back unchanged.
     #[test]
     fn blobs_round_trip() {
         round_trip(None, &[]);
@@ -177,6 +188,8 @@ mod tests {
         round_trip(Some(""), &[StorageValue::integer(-1)]);
     }
 
+    /// Values with the same shape and label have the same type blob
+    /// and different content blobs.
     #[test]
     fn same_shape_yields_the_same_type_blob() {
         let Blobs {
@@ -198,6 +211,8 @@ mod tests {
         assert_ne!(first_content, second_content);
     }
 
+    /// [BlobsRef::parse] rejects truncated blobs, invalid tags, a wrong content length,
+    /// and trailing bytes without the label flag.
     #[test]
     fn malformed_blobs_are_rejected() {
         assert!(BlobsRef::parse(&[], &[]).is_none());
@@ -205,7 +220,7 @@ mod tests {
         assert!(BlobsRef::parse(&[1, 0, 0, 0, 0], &[0; 8]).is_none());
         // An invalid tag byte.
         assert!(BlobsRef::parse(&[1, 0, 0, 0, 0, 200], &[0; 8]).is_none());
-        // A content length mismatch.
+        // A content blob shorter than one payload.
         assert!(BlobsRef::parse(&[1, 0, 0, 0, 0, 2], &[0; 4]).is_none());
         // Trailing bytes without the label flag.
         assert!(BlobsRef::parse(&[0, 0, 0, 0, 0, b'x'], &[]).is_none());

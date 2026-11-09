@@ -4,7 +4,7 @@
 //! An execution
 //! 1. has the table manager build the column orders the loads read,
 //! 2. runs the layout's steps in topological order, each materializing one node,
-//! 3. hands over the tries of the declared outputs.
+//! 3. returns the tries of the declared outputs.
 //!
 //! A unit or an aggregation collects its rows as sorted runs
 //! and builds one trie from them for each column order its consumers read.
@@ -42,7 +42,7 @@ pub(crate) struct Execution<'a> {
     plan: &'a OperationPlan,
     /// The plan's layout.
     plan_layout: &'a PlanLayout,
-    /// The tables, with every column order the loads read built.
+    /// The tables, in which every column order the loads read has been built.
     manager: &'a TableManager,
     /// Per node, its materialized result, filled in topological order.
     results: Vec<Option<Materialized>>,
@@ -52,7 +52,7 @@ pub(crate) struct Execution<'a> {
 /// the dictionary, the evaluation context, the arena of the sequential joins, and the accounting.
 #[derive(Debug)]
 struct StepContext<'a> {
-    /// The dictionary, shared with the joins while they run and exclusive between them.
+    /// The dictionary, which the joins borrow while they run, and which changes only between them.
     dictionary: &'a mut Dictionary,
     /// The context the plan's programs evaluate in.
     evaluation: EvaluationContext,
@@ -72,7 +72,7 @@ struct Materialized {
 }
 
 impl<'a> Execution<'a> {
-    /// Runs a plan by its layout; see [OperationPlan::execute].
+    /// Runs a plan with its layout, as [OperationPlan::execute] describes.
     pub(crate) fn run(
         plan: &'a OperationPlan,
         plan_layout: &'a PlanLayout,
@@ -101,7 +101,7 @@ impl<'a> Execution<'a> {
             };
             execution.results[step.node().index()] = Some(materialized);
 
-            // The results this step was the last to read are done.
+            // Release the results this step was the last to read.
             for done in &plan_layout.released[position] {
                 execution.results[done.index()] = None;
             }
@@ -113,12 +113,12 @@ impl<'a> Execution<'a> {
         context.accounting.into_results(outputs)
     }
 
-    /// Prepares the execution of a plan:
-    /// has the manager build every column order of a stored table the plan reads,
-    /// and counts the arrangements built.
+    /// Prepares the execution of a plan.
     ///
+    /// The manager builds every column order of a stored table that a live load reads,
+    /// and the arrangements built are counted.
     /// This is the only phase of an execution that changes the manager.
-    /// It panics as [OperationPlan::execute] does.
+    /// It panics in the cases that [OperationPlan::execute] lists.
     fn new(
         plan: &'a OperationPlan,
         plan_layout: &'a PlanLayout,
@@ -205,8 +205,8 @@ impl<'a> Execution<'a> {
         }
     }
 
-    /// Materializes a load, alias or union declared as an output:
-    /// its blocks merged into one trie in its canonical order.
+    /// Materializes a load, alias or union declared as an output,
+    /// by merging its blocks into one trie in its canonical order.
     fn concatenated(
         &self,
         node: NodeId,
@@ -230,8 +230,8 @@ impl<'a> Execution<'a> {
         accounting.timings.merge += begun.nanos();
         accounting.counts.rows += trie.row_count() as u64;
 
-        // Consumers read such a node as blocks, never as a trie;
-        // the trie is the output's alone.
+        // Consumers read such a node as blocks, never as a trie,
+        // so only the output uses the trie.
         Materialized {
             tries: vec![trie],
             output: Some(0),

@@ -1,4 +1,4 @@
-//! Common declared rewrites, each made of a few rewrite declarations.
+//! Shorthands for common declared rewrites, each made of a few rewrite declarations.
 
 use std::collections::HashSet;
 
@@ -11,18 +11,18 @@ use crate::{
 };
 
 impl Commit<'_> {
-    /// Folds literals of a rule into a rule of their own.
+    /// Folds the literals at the positions `literals` of a rule into a rule of their own.
     ///
-    /// `name(x̄) :- literals .` defines the new predicate,
-    /// with `x̄` the literals' universal variables that the rest of the rule uses.
+    /// The new predicate is defined by `name(x̄) :- literals .`,
+    /// where `x̄` are the universal variables of the literals that the rest of the rule uses.
     /// The rule uses `name(x̄)` at the position of the first literal.
     /// Returns the defining rule and the rule that replaces the input.
     ///
     /// # Panics
     ///
-    /// Panics if `rule` is not a live rule the stage may rewrite, if a
-    /// position names no literal of it, or if the defining rule would
-    /// read a variable none of its positive literals binds.
+    /// Panics if `rule` is not a live rule that the stage may rewrite,
+    /// if `literals` is empty or names a position that the rule's body does not have,
+    /// or if the defining rule's head would have a variable that only negated literals mention.
     pub fn fold(
         &mut self,
         rule: StatementId,
@@ -69,19 +69,23 @@ impl Commit<'_> {
         (defining, replacing)
     }
 
-    /// Replaces literals of a rule by an atom over a new import that computes them.
+    /// Replaces the literals at the positions `literals` of a rule
+    /// by an atom over a new import that computes them.
     ///
+    /// The atom is the import's predicate over its column variables.
     /// The import's view is the rule `atom :- literals .`,
     /// and the rule uses the atom at the position of the first literal.
-    /// A single negated literal `~a` is extracted as an import of `a`, used negated.
-    /// `sources` are further statements the import was composed from.
+    /// A single negated literal `~a` is extracted as an import of `a`, which the rule uses
+    /// negated.
+    /// `sources` are further statements that the import was composed from.
     /// Returns the import and the rule that replaces the input.
     ///
     /// # Panics
     ///
-    /// Panics if `rule` is not a live rule the stage may rewrite, if a
-    /// position names no literal of it, if several literals are all
-    /// negated, or for the reasons [define_import](Self::define_import) lists.
+    /// Panics if `rule` is not a live rule that the stage may rewrite,
+    /// if `literals` is empty or names a position that the rule's body does not have,
+    /// if several literals are extracted and all of them are negated,
+    /// or for the reasons that [define_import](Self::define_import) lists.
     pub fn extract(
         &mut self,
         rule: StatementId,
@@ -139,15 +143,14 @@ impl Commit<'_> {
 
     /// Replaces a rule, in place, by an import that computes the rule's head from its whole body.
     ///
-    /// The import's predicate is the head's,
-    /// and its view is the rule (see [define_import](Self::define_import)).
-    /// `sources` are further statements the import was composed from.
+    /// The import's predicate is the head's predicate,
+    /// and its view is the rule, as for [define_import](Self::define_import).
+    /// `sources` are further statements that the import was composed from.
     ///
     /// # Panics
     ///
-    /// Panics if `rule` is not a live rule the stage may rewrite, or if
-    /// its head is not the import's atom of distinct universal
-    /// variables.
+    /// Panics if `rule` is not a live rule that the stage may rewrite,
+    /// or if its head is not the import's atom of distinct universal variables.
     pub fn extract_rule(
         &mut self,
         rule: StatementId,
@@ -157,16 +160,18 @@ impl Commit<'_> {
         self.replace_by_import(rule, import, sources)
     }
 
-    /// Adds a filter rule that copies the given literals of `rule` (the rule keeps them)
-    /// and returns its head atom, for an import's `where` clause.
+    /// Adds a filter rule that copies the literals at the positions `literals` of `rule`,
+    /// and returns the filter's head atom.
     ///
-    /// The filter rule is `name(variables) :- literals .`.
+    /// The filter rule is `name(variables) :- literals .`, and `rule` keeps the copied literals.
+    /// The head atom can restrict the matches of another statement,
+    /// such as in an import's `where` clause.
     ///
     /// # Panics
     ///
-    /// Panics if `rule` is not a live rule the stage may rewrite, if a
-    /// position names no literal of it, or for the reasons [define_filter](Self::define_filter)
-    /// lists.
+    /// Panics if `rule` is not a live rule that the stage may rewrite,
+    /// if `literals` is empty or names a position that the rule's body does not have,
+    /// or for the reasons that [define_filter](Self::define_filter) lists.
     pub fn define_filter_from(
         &mut self,
         rule: StatementId,
@@ -192,12 +197,15 @@ impl Commit<'_> {
         atom
     }
 
-    /// Replaces a rule by its instance under a substitution, recording
-    /// each replaced occurrence for diagnostics.
+    /// Replaces a rule by its instance under a substitution, and records each replaced
+    /// occurrence.
+    ///
+    /// The records let [Pipeline::refine](crate::pipeline::Pipeline::refine)
+    /// point a diagnostic at the definitions of the substituted values.
     ///
     /// # Panics
     ///
-    /// Panics if `rule` is not a live rule the stage may rewrite.
+    /// Panics if `rule` is not a live rule that the stage may rewrite.
     pub fn substitute(&mut self, rule: StatementId, substitution: &Substitution) -> StatementId {
         self.expect_rule(rule);
         let Statement::Rule(mut rewritten) = self.statement(rule).clone() else {
@@ -222,8 +230,13 @@ impl Commit<'_> {
         self.replace_rule_substituted(rule, rewritten, literals, substituted)
     }
 
-    /// Returns a rule the stage may rewrite with the given positions of
-    /// its body, sorted and without repeats.
+    /// Returns a copy of the rule `rule`, and the positions `literals` sorted and without
+    /// repeats.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `rule` is not a rule,
+    /// or if `literals` is empty or names a position that the rule's body does not have.
     fn literals_of(&self, rule: StatementId, literals: &[usize]) -> (Rule, Vec<usize>) {
         self.expect_rule(rule);
         let Statement::Rule(input) = self.statement(rule).clone() else {
@@ -243,9 +256,9 @@ impl Commit<'_> {
         (input, positions)
     }
 
-    /// Returns a rule's body with the literals at the given positions
-    /// replaced by one literal at the position of the first of them,
-    /// and the path of each literal of the rule.
+    /// Returns a rule's body with the literals at `positions` replaced by `replacement`
+    /// at the position of the first of them,
+    /// and the path of each literal of the rule in the new body.
     fn body_with(
         &self,
         rule: &Rule,

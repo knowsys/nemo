@@ -1,6 +1,6 @@
-//! The fresh statements a rewrite makes: the binding rules,
-//! the bound import with the declaration it copies from the candidates,
-//! and the folding of a copying rule into its import.
+//! The fresh statements that a rewrite makes: the binding rules,
+//! the bound import with the declaration that it copies from the candidates,
+//! and the folding of a rule that only copies its import.
 
 use nemo_io::sparql::{SparqlQuery, compose::Binding};
 
@@ -18,11 +18,12 @@ use crate::{
 };
 
 impl RuleRewriter<'_, '_> {
-    /// Returns the binding rule of a local group sharing variables with a component,
-    /// and the atom the import is bound by.
+    /// Returns the binding rule of a local group that shares variables with a component,
+    /// and the atom that binds the import.
     ///
     /// The rule defines a fresh predicate over the shared variables by copies of the group's
     /// literals, followed by the computations of its computed arguments.
+    /// `stem` starts the fresh predicate's name, and `variables` are the component's variables.
     pub(super) fn binding_rule(
         &mut self,
         stem: &str,
@@ -55,10 +56,12 @@ impl RuleRewriter<'_, '_> {
         (Rule::new(vec![atom.clone()], body), atom)
     }
 
-    /// Returns the bound import replacing a component: the first atom's
-    /// directive under a fresh predicate, with the projected columns,
-    /// the composed query in place of the source's `query`, `format`,
-    /// and `base` options, and the binding atoms.
+    /// Returns the bound import that replaces a component.
+    ///
+    /// It is the directive of `source`, the component's first atom,
+    /// under the fresh predicate `name` and with the `projected` columns.
+    /// The composed query replaces the source's `query`, `format` and `base` options,
+    /// and `bindings` are the atoms of its `where` clause.
     pub(super) fn bound_import(
         &self,
         source: &RemoteAtom,
@@ -83,8 +86,9 @@ impl RuleRewriter<'_, '_> {
     }
 
     /// Folds the rule into its one bound import if the rule only copies that import into its
-    /// head, returning whether it folded.
+    /// head, and returns whether it folded.
     ///
+    /// `body` is the rewritten rule's body.
     /// The import then defines the head predicate directly,
     /// and the copied declaration moves to the head predicate,
     /// unless the head predicate has a declaration of its own.
@@ -129,10 +133,12 @@ impl RuleRewriter<'_, '_> {
 }
 
 impl RewriteContext {
-    /// Returns the declaration a fresh import copies from the candidate imports it replaces:
-    /// per projected variable, the column declared at the atom position binding it.
+    /// Returns the declaration that a fresh import copies from the candidate imports that it
+    /// replaces: per projected variable, the column declared at the atom position that binds
+    /// it.
     ///
-    /// Returns `None` unless every projected variable is bound at declared positions only,
+    /// `name` is the fresh import's predicate.
+    /// Returns `None` unless every projected variable is bound only at declared positions,
     /// which all declare the same type.
     pub(super) fn declaration_for(
         &self,

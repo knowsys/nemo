@@ -1,4 +1,4 @@
-//! The name grammar: bare, prefixed, and module-qualified names, IRIs, and module names.
+//! Parsing names: bare, prefixed and module-qualified names, IRIs, and module names.
 
 use nemo_physical::diagnostics::Diagnostic;
 
@@ -9,8 +9,14 @@ use crate::{
 };
 
 impl Parser<'_> {
-    /// Parses a name: bare, prefixed (`pre:name`, adjacent, or `pre:` ending the term),
-    /// qualified (`alias::name`), or a full IRI.
+    /// Parses a name.
+    ///
+    /// A name is one of:
+    /// - a bare name, such as `parent`;
+    /// - a prefixed name `pre:name` without spaces, `:name` with the empty prefix,
+    ///   or `pre:` alone at the end of a term;
+    /// - a qualified name `alias::name`;
+    /// - a full IRI in angle brackets.
     pub(super) fn identifier(&mut self) -> Result<Identifier, Diagnostic> {
         if self.at(&TokenKind::Iri) {
             let token = self.advance();
@@ -40,9 +46,11 @@ impl Parser<'_> {
                 }
                 return Err(self.unexpected("a name directly after the `:`"));
             }
-            // A `:` that ends the term leaves the local name empty: `ex:` names the prefix's IRI.
-            // In an argument list, `ex: +1` is a named argument before this is reached;
-            // anywhere else, a `+` or `-` after the `:` is the operator.
+            // A `:` at the end of a term leaves the local name empty,
+            // so that `ex:` names the IRI of the prefix.
+            // In an argument list, `ex: +1` is a named argument,
+            // whose label is consumed before this point.
+            // Anywhere else, a `+` or `-` after the `:` is an operator.
             let second = self.peek_second();
             if second.ends_term() || matches!(second, TokenKind::Plus | TokenKind::Minus) {
                 self.advance();
@@ -63,7 +71,10 @@ impl Parser<'_> {
         Ok(Identifier::Bare(self.text(&first).to_owned()))
     }
 
-    /// Parses a module name: `super` steps, then names, all separated by `::`.
+    /// Parses a module name, such as `super::util::pairs`.
+    ///
+    /// A module name is any number of `super`, followed by one or more names,
+    /// all separated by `::`.
     pub(super) fn module_name(&mut self) -> Result<ModuleName, Diagnostic> {
         let mut name = ModuleName {
             parents: 0,

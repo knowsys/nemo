@@ -1,13 +1,8 @@
-//! The options of import and export directives, evaluated.
+//! The evaluation of the options of import and export directives:
+//! the options that every format shares, the column formats, and the RDF variant.
 //!
-//! This module evaluates:
-//! - the resource, compression, request headers, failure behavior, and row limit every format
-//!   takes,
-//! - the column formats,
-//! - the RDF variant a format name and a resource name resolve to.
-//!
-//! The option list of a directive is parsed in one of two ways:
-//! one for the delimiter-separated formats, one for the rest.
+//! A directive's option list is parsed in one of two ways,
+//! one for the DSV formats and one for the other formats.
 
 use std::collections::HashMap;
 
@@ -28,7 +23,9 @@ use crate::{
     model::{Identifier, OnError, Span, Term, TermKind},
 };
 
-/// Returns a `limit` option value as a row count.
+/// Returns the value of a `limit` option as a row count.
+///
+/// Fails for a value that is not a nonnegative integer.
 fn row_limit(value: ValueRef<'_>, span: Option<Span>) -> Result<u64, Diagnostic> {
     match value {
         ValueRef::Number(count) if count.is_integral() && !count.is_negative() => Ok(count
@@ -42,7 +39,9 @@ fn row_limit(value: ValueRef<'_>, span: Option<Span>) -> Result<u64, Diagnostic>
     }
 }
 
-/// Returns the name of a directive option of the named format, which is a bare keyword.
+/// Returns the name of a directive's option, which must be a bare keyword.
+///
+/// `format` names the directive's format, for the error.
 pub(super) fn option_name<'k>(key: &'k Term, format: &str) -> Result<&'k str, Diagnostic> {
     match &key.kind {
         TermKind::Constant(Identifier::Bare(name)) => Ok(name.as_str()),
@@ -62,7 +61,8 @@ pub(super) fn iri_or_string(value: ValueRef<'_>) -> Option<String> {
     }
 }
 
-/// Returns the value of an `on_error` option, a bare keyword matched without evaluation.
+/// Returns the value of an `on_error` option, which is a bare keyword, matched without
+/// evaluation.
 pub(super) fn on_error(value: &Term) -> Result<OnError, Diagnostic> {
     OnError::from_term(value).ok_or_else(|| {
         TranslationError::UnknownOptionValue {
@@ -74,8 +74,8 @@ pub(super) fn on_error(value: &Term) -> Result<OnError, Diagnostic> {
     })
 }
 
-/// Returns whether a text is a valid HTTP header name: a token of letters, digits, and the
-/// symbols HTTP allows in one.
+/// Returns whether a text is a valid HTTP header name,
+/// which is a token of letters, digits and the symbols that HTTP allows in a token.
 fn is_header_name(name: &str) -> bool {
     !name.is_empty()
         && name
@@ -83,16 +83,17 @@ fn is_header_name(name: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&byte))
 }
 
-/// Returns whether a text is a header value an HTTP request can carry:
-/// printable ASCII characters and tabs.
+/// Returns whether a text is a header value that an HTTP request can send,
+/// which consists of printable ASCII characters and tabs.
 fn is_header_value(value: &str) -> bool {
     value
         .chars()
         .all(|character| character == '\t' || (' '..='~').contains(&character))
 }
 
-/// Returns one request header, checked to be one HTTP can carry,
-/// with the spans of its name and its value as written.
+/// Returns one HTTP header, checked to be one that a request can send.
+///
+/// `name_span` and `value_span` are the positions of its name and its value, for the errors.
 fn header(
     name: String,
     value: ValueRef<'_>,
@@ -108,12 +109,13 @@ fn header(
     }
 }
 
-/// Returns, per column of a source of terms (RDF statements, SPARQL solutions),
+/// Returns, per column of a source of terms, such as RDF statements or SPARQL solutions,
 /// whether a `format` option keeps it.
 ///
-/// `term` keeps and `skip` drops.
+/// `term` keeps a column and `skip` drops it.
 /// No other format applies, since the source writes the terms itself.
-/// `span` is the position of the `format` option's value.
+/// `columns` is the source's number of columns,
+/// and `span` is the position of the `format` option's value.
 pub(super) fn term_columns(
     format: FileFormat,
     formats: Option<&[ValueFormat]>,
@@ -144,28 +146,29 @@ pub(super) fn term_columns(
         .collect()
 }
 
-/// The options every format's directive takes, as far as the format accepts them:
-/// the data's resource, how the stream is compressed,
-/// the request headers and what a failed fetch does, and the row limit.
+/// The options that every format's directive may have, as far as the format accepts them.
+///
+/// These are the data's resource, the compression of the stream, the HTTP headers,
+/// what a failed fetch does, and the row limit.
 struct ResourceDirectiveOptions {
-    /// The declared resource, if any.
+    /// The resource, if given.
     resource: Option<String>,
     /// The stream compression.
     compression: Compression,
-    /// Request headers for a remote resource.
+    /// The HTTP headers for a remote resource.
     headers: Vec<(String, String)>,
     /// The position of the `http_headers` option, if given.
     headers_span: Option<Span>,
-    /// What a failed fetch of a remote resource does, if declared.
+    /// What a failed fetch of a remote resource does, if given.
     on_error: Option<OnError>,
     /// The position of the `on_error` option, if given.
     on_error_span: Option<Span>,
-    /// At most this many rows, if declared.
+    /// The largest number of rows, if given.
     limit: Option<u64>,
 }
 
 impl ResourceDirectiveOptions {
-    /// Creates options with nothing declared: automatic compression, every row.
+    /// Creates options with nothing given, which means automatic compression and every row.
     fn new() -> Self {
         Self {
             resource: None,
@@ -178,10 +181,10 @@ impl ResourceDirectiveOptions {
         }
     }
 
-    /// Takes an option whose value is a keyword, matched before any evaluation,
-    /// if it is one of these and the format accepts it.
+    /// Records an option whose value is a keyword, matched without evaluation,
+    /// if it is one of these options and the format accepts it.
     ///
-    /// Returns `Ok(false)` for an option of another kind.
+    /// Returns `Ok(false)` for any other option.
     fn take_keyword(
         &mut self,
         key: &Term,
@@ -197,9 +200,9 @@ impl ResourceDirectiveOptions {
         Ok(true)
     }
 
-    /// Takes an evaluated option if it is one of these and the format accepts it.
+    /// Records an evaluated option if it is one of these options and the format accepts it.
     ///
-    /// Returns `Ok(false)` for an option of another kind.
+    /// Returns `Ok(false)` for any other option.
     fn take(
         &mut self,
         name: &str,
@@ -232,7 +235,7 @@ impl ResourceDirectiveOptions {
         Ok(true)
     }
 
-    /// Checks that request headers and failure behavior are given for a remote resource only.
+    /// Checks that the HTTP headers and `on_error` are given only for a remote resource.
     fn check_remote(&self) -> Result<(), Diagnostic> {
         let remote = self
             .resource
@@ -252,11 +255,11 @@ impl ResourceDirectiveOptions {
 pub(super) struct DsvDirectiveOptions {
     /// The column delimiter.
     pub(super) delimiter: u8,
-    /// The format name (also the default file extension).
+    /// The format's name, which is also the default file extension.
     pub(super) extension: String,
-    /// The declared resource, if any.
+    /// The resource, if given.
     pub(super) resource: Option<String>,
-    /// The declared column formats, if any.
+    /// The column formats of the `format` option, if given.
     pub(super) formats: Option<Vec<ValueFormat>>,
     /// Whether `"` quotes fields.
     pub(super) quoting: bool,
@@ -264,29 +267,32 @@ pub(super) struct DsvDirectiveOptions {
     pub(super) ignore_headers: bool,
     /// The stream compression.
     pub(super) compression: Compression,
-    /// At most this many rows, if declared.
+    /// The largest number of rows, if given.
     pub(super) limit: Option<u64>,
 }
 
 /// The evaluated options of a JSON, RDF, or Parquet directive.
 pub(super) struct PlainDirectiveOptions {
-    /// The declared resource, if any.
+    /// The resource, if given.
     pub(super) resource: Option<String>,
-    /// The declared base IRI, if the format takes one.
+    /// The base IRI, if given and the format accepts one.
     pub(super) base: Option<String>,
     /// The stream compression.
     pub(super) compression: Compression,
-    /// At most this many rows, if the format takes a limit.
+    /// The largest number of rows, if given and the format accepts a limit.
     pub(super) limit: Option<u64>,
-    /// The declared column formats, if the format takes them.
+    /// The column formats of the `format` option, if given and the format accepts them.
     pub(super) formats: Option<Vec<ValueFormat>>,
     /// The position of the `format` option's value, if given.
     pub(super) formats_span: Option<Span>,
 }
 
 impl<'a> Translator<'a> {
-    /// Parses a DSV directive's format name and options,
-    /// the option values evaluating with the guard bindings in scope.
+    /// Parses the format name and options of a DSV directive,
+    /// of an import if `reading` is set and of an export otherwise.
+    ///
+    /// The option values are evaluated with the guard `bindings` in scope.
+    /// `span` is the directive's position, for a missing delimiter.
     pub(super) fn dsv_directive(
         &self,
         format: FileFormat,
@@ -318,8 +324,7 @@ impl<'a> Translator<'a> {
                 }
                 .at(key.span));
             }
-            // The column formats are keywords, matched without
-            // evaluation. Every other option value evaluates to one value.
+            // The column formats are keywords, matched without evaluation.
             if name == "format" {
                 formats = Some(self.column_formats(value)?);
                 continue;
@@ -337,7 +342,7 @@ impl<'a> Translator<'a> {
                 continue;
             }
             match (name, evaluated.as_ref()) {
-                // `csv` and `tsv` name their delimiters.
+                // The format names `csv` and `tsv` fix their delimiters.
                 ("delimiter", _) if format != FileFormat::Dsv => {
                     return Err(TranslationError::unknown_option(name, format.name())
                         .at(key.span)
@@ -390,8 +395,8 @@ impl<'a> Translator<'a> {
     /// Parses the options of a JSON, RDF, or Parquet directive, of an import if `reading` is
     /// set and of an export otherwise.
     ///
-    /// Option values evaluate with the guard bindings in scope,
-    /// and an option outside the accepted set is an error.
+    /// The option values are evaluated with the guard `bindings` in scope,
+    /// and an option that the format does not accept is an error.
     pub(super) fn plain_directive(
         &self,
         format: FileFormat,
@@ -406,7 +411,8 @@ impl<'a> Translator<'a> {
         let mut formats_span = None;
         for (key, value) in options {
             let name = option_name(key, format.name())?;
-            // An option about fetching, which this format's imports take.
+            // An option about fetching, which this format's imports accept,
+            // is an error in an export.
             if !reading
                 && format.options(true).headers
                 && matches!(name, "http_headers" | "on_error")
@@ -463,7 +469,8 @@ impl<'a> Translator<'a> {
     ///
     /// A key written as a bare name is the header name as written,
     /// since the program's base and prefixes apply to the names of values, not to headers.
-    /// A value given otherwise, as a parameter holding a map, evaluates first.
+    /// A value given in another way, such as a parameter whose value is a map,
+    /// is evaluated first.
     pub(super) fn header_option(
         &self,
         value: &Term,
@@ -520,9 +527,9 @@ impl<'a> Translator<'a> {
     }
 
     /// Returns the variant of an RDF format,
-    /// resolving the generic `rdf` format by the resource's extension.
+    /// and resolves the generic `rdf` format by the resource's extension.
     ///
-    /// Returns an error if the generic format has no resource to resolve by,
+    /// Fails if the generic format has no resource to resolve by,
     /// or if the extension names no variant.
     pub(super) fn rdf_variant(
         &self,
@@ -542,8 +549,8 @@ impl<'a> Translator<'a> {
             .ok_or_else(|| TranslationError::RdfExtensionUnknown.at(span))
     }
 
-    /// Parses a `format` option value: a column format name, or a tuple
-    /// of them.
+    /// Parses the value of a `format` option, which is a column format name or a tuple of
+    /// them.
     pub(super) fn column_formats(&self, value: &Term) -> Result<Vec<ValueFormat>, Diagnostic> {
         let single = |term: &Term| -> Result<ValueFormat, Diagnostic> {
             let TermKind::Constant(Identifier::Bare(name)) = &term.kind else {

@@ -4,54 +4,69 @@ use crate::value::datatype::{rdf, xsd};
 
 /// The domain of a data value.
 ///
-/// Domains partition the value space:
-/// values of different domains are always distinct terms.
-/// The classification is semantic, not representational.
-/// For example, a number might be stored as a decimal internally,
-/// but if it is integral it belongs to the [Self::Integer] domain,
-/// not [Self::Decimal].
+/// The domains partition the values:
+/// two values of different domains are always distinct terms.
+/// The domain of a value depends on the value, not on how it is represented.
+/// For example, an integral number that is stored as a decimal
+/// belongs to the [Integer](Self::Integer) domain, not to [Decimal](Self::Decimal).
 ///
-/// The domains are ordered as declared, which is their order in the term order:
+/// The domains are ordered as declared, and this is their order in the term order:
 /// every value of an earlier domain is below every value of a later one.
-/// Nulls come first and IRIs before literals,
-/// as in SPARQL's [ORDER BY](https://www.w3.org/TR/sparql11-query/#modOrderBy),
-/// whose order `#min` and `#max` take.
+/// Nulls come first and IRIs come before literals,
+/// as in SPARQL's [ORDER BY](https://www.w3.org/TR/sparql11-query/#modOrderBy).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ValueDomain {
     /// Labeled nulls.
     Null,
-    /// [IRIs](https://www.w3.org/TR/rdf11-concepts/#section-IRIs), the RDF resources.
+    /// [IRIs](https://www.w3.org/TR/rdf11-concepts/#section-IRIs), which name RDF resources.
     Iri,
-    /// Plain strings, the [`xsd:string`](https://www.w3.org/TR/xmlschema11-2/#string) value space.
+    /// Plain strings,
+    /// the [`xsd:string`](https://www.w3.org/TR/xmlschema11-2/#string) value space.
     String,
     /// [Language-tagged strings](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string),
     /// the `rdf:langString` value space.
     LanguageString,
-    /// Booleans, the [`xsd:boolean`](https://www.w3.org/TR/xmlschema11-2/#boolean) value space.
+    /// Booleans,
+    /// the [`xsd:boolean`](https://www.w3.org/TR/xmlschema11-2/#boolean) value space.
     Boolean,
-    /// The integral values of the [`xsd:decimal`](https://www.w3.org/TR/xmlschema11-2/#decimal) value space,
-    /// which is the [`xsd:integer`](https://www.w3.org/TR/xmlschema11-2/#integer) value space.
+    /// The integral values of the
+    /// [`xsd:decimal`](https://www.w3.org/TR/xmlschema11-2/#decimal) value space.
+    ///
+    /// They form the [`xsd:integer`](https://www.w3.org/TR/xmlschema11-2/#integer) value space.
     Integer,
-    /// The non-integral values of the [`xsd:decimal`](https://www.w3.org/TR/xmlschema11-2/#decimal) value space.
+    /// The values of the [`xsd:decimal`](https://www.w3.org/TR/xmlschema11-2/#decimal)
+    /// value space that are not integral.
     Decimal,
-    /// 32-bit floating point numbers, the [`xsd:float`](https://www.w3.org/TR/xmlschema11-2/#float) value space.
+    /// 32-bit floating-point numbers,
+    /// the [`xsd:float`](https://www.w3.org/TR/xmlschema11-2/#float) value space.
     Float,
-    /// 64-bit floating point numbers, the [`xsd:double`](https://www.w3.org/TR/xmlschema11-2/#double) value space.
+    /// 64-bit floating-point numbers,
+    /// the [`xsd:double`](https://www.w3.org/TR/xmlschema11-2/#double) value space.
     Double,
-    /// Instants with an optional timezone, the [`xsd:dateTime`](https://www.w3.org/TR/xmlschema11-2/#dateTime) value space.
+    /// Instants with an optional timezone offset,
+    /// the [`xsd:dateTime`](https://www.w3.org/TR/xmlschema11-2/#dateTime) value space.
     DateTime,
-    /// Calendar days with an optional timezone, the [`xsd:date`](https://www.w3.org/TR/xmlschema11-2/#date) value space.
+    /// Calendar days with an optional timezone offset,
+    /// the [`xsd:date`](https://www.w3.org/TR/xmlschema11-2/#date) value space.
     Date,
-    /// Times of day with an optional timezone, the [`xsd:time`](https://www.w3.org/TR/xmlschema11-2/#time) value space.
+    /// Times of day with an optional timezone offset,
+    /// the [`xsd:time`](https://www.w3.org/TR/xmlschema11-2/#time) value space.
     Time,
-    /// The durations without months,
-    /// the [`xsd:dayTimeDuration`](https://www.w3.org/TR/xmlschema11-2/#dayTimeDuration) value space.
+    /// The durations without months, the
+    /// [`xsd:dayTimeDuration`](https://www.w3.org/TR/xmlschema11-2/#dayTimeDuration)
+    /// value space.
     DayTimeDuration,
-    /// The durations of months only, the zero duration excluded,
-    /// the rest of the [`xsd:yearMonthDuration`](https://www.w3.org/TR/xmlschema11-2/#yearMonthDuration) value space.
+    /// The durations that have months but no seconds.
+    ///
+    /// These are the values of the
+    /// [`xsd:yearMonthDuration`](https://www.w3.org/TR/xmlschema11-2/#yearMonthDuration)
+    /// value space except the zero duration, which is a [DayTimeDuration](Self::DayTimeDuration).
     YearMonthDuration,
-    /// The durations with both months and seconds,
-    /// the rest of the [`xsd:duration`](https://www.w3.org/TR/xmlschema11-2/#duration) value space.
+    /// The durations that have both months and seconds.
+    ///
+    /// These are the values of the
+    /// [`xsd:duration`](https://www.w3.org/TR/xmlschema11-2/#duration) value space
+    /// that belong to neither of the other two duration domains.
     Duration,
     /// Tuples, optionally labeled.
     Tuple,
@@ -85,8 +100,8 @@ impl ValueDomain {
         Self::Other,
     ];
 
-    /// Returns the datatype IRI of the literals in this domain
-    /// and `None` for a domain without a fixed one.
+    /// Returns the datatype IRI of the literals in this domain,
+    /// or `None` for a domain without a single datatype.
     pub fn datatype_iri(self) -> Option<&'static str> {
         match self {
             ValueDomain::String => Some(xsd::STRING),
@@ -115,6 +130,7 @@ impl ValueDomain {
 mod tests {
     use super::*;
 
+    /// [ValueDomain::ALL] lists every domain, each at the position of its discriminant.
     #[test]
     fn all_lists_every_domain_at_its_discriminant() {
         for (position, domain) in ValueDomain::ALL.into_iter().enumerate() {

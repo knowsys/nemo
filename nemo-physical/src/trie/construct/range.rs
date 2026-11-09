@@ -19,13 +19,16 @@ pub(super) struct RowRange<'a> {
 }
 
 impl<'a> RowRange<'a> {
-    /// Creates the range of every row of the trie at the given index among the tries merged.
+    /// Creates the range of all rows of a trie.
+    ///
+    /// `source_index` is the index of the trie among the tries merged.
     pub(super) fn all(trie: &'a Trie, source_index: usize) -> Self {
         Self::between(trie, 0..trie.row_count(), source_index)
     }
 
-    /// Creates the range of the rows with indices in the given range
-    /// of the trie at the given index among the tries merged.
+    /// Creates the range of the rows of a trie with indices in the given range.
+    ///
+    /// `source_index` is the index of the trie among the tries merged.
     pub(super) fn between(trie: &'a Trie, range: Range<usize>, source_index: usize) -> Self {
         Self {
             cursor: RowCursor::new(trie, range.start),
@@ -39,8 +42,9 @@ impl<'a> RowRange<'a> {
         self.source_index
     }
 
-    /// Returns the index of the current row in the trie;
-    /// valid while the range [has a row](RowSource::has_row).
+    /// Returns the index of the current row in the trie.
+    ///
+    /// It is valid while the range [has a row](RowSource::has_row).
     pub(super) fn index(&self) -> usize {
         self.cursor.index()
     }
@@ -66,6 +70,7 @@ mod tests {
 
     use crate::testing::int_trie;
 
+    /// A range visits only the rows with indices in it.
     #[test]
     fn ranges_stop_at_their_end() {
         let trie = int_trie(3, &[[1, 1, 2], [1, 2, 2], [2, 1, 1], [2, 1, 4]]);

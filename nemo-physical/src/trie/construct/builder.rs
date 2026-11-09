@@ -1,10 +1,11 @@
-//! The builders: a trie's columns, built from its distinct rows in storage order
+//! The builders, which build a trie's columns from its distinct rows in storage order,
 //! into storage that already has each column's final layout.
 //!
-//! Each column's [kind](ColumnKind) is decided before its values arrive,
-//! a [column builder](ColumnBuilder) of that kind takes the values block by block,
-//! and the [trie builder](TrieBuilder) feeds the column builders one row at a time.
-//! The columns built for consecutive shards of one trie [concatenate](Column::concat_shards).
+//! Each column's [kind](ColumnKind) is decided before its values arrive.
+//! A [column builder](ColumnBuilder) of that kind receives the values block by block,
+//! and the [trie builder](TrieBuilder) passes the rows to the column builders one at a time.
+//! The columns built for consecutive shards of one trie are
+//! [concatenated](Column::concat_shards).
 
 mod column;
 mod concat;
@@ -17,17 +18,17 @@ pub(super) use self::{
 
 use crate::{storage::StorageValue, trie::column::Column};
 
-/// How a row differs from the one built before it:
-/// the first column whose value changed.
+/// How a row differs from the row built before it, given as the first column whose value
+/// changed.
 ///
-/// From the changed column on, each column takes the row's value,
-/// and each column below it opens a block first, as the node above it is new.
-/// The first row has no predecessor and changes everywhere.
+/// From the changed column on, each column receives the row's value.
+/// Each column below the changed one first opens a block, since the node above it is new.
+/// The first row has no predecessor and changes in every column.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum RowChange {
     /// The first row.
     First,
-    /// A row differing from its predecessor from this column on.
+    /// A row that differs from its predecessor from this column on.
     At(usize),
 }
 
@@ -41,7 +42,7 @@ impl RowChange {
         }
     }
 
-    /// Returns whether the column takes the row's value.
+    /// Returns whether the column receives the row's value.
     #[inline]
     pub(super) fn takes_value(self, column: usize) -> bool {
         match self {
@@ -51,7 +52,7 @@ impl RowChange {
     }
 }
 
-/// The builders of a trie's columns, fed one distinct row at a time.
+/// The builders of a trie's columns, which receive one distinct row at a time.
 #[derive(Debug)]
 pub(super) struct TrieBuilder {
     /// The builder of each column.
@@ -66,7 +67,9 @@ impl TrieBuilder {
         }
     }
 
-    /// Feeds a row, which must differ from the row before it as `change` says.
+    /// Passes a row to the column builders.
+    ///
+    /// The row must differ from the row before it as `change` says.
     #[inline]
     pub(super) fn push_row(&mut self, row: &[StorageValue], change: RowChange) {
         for (column, builder) in self.columns.iter_mut().enumerate() {
@@ -95,9 +98,11 @@ mod tests {
 
     use crate::storage::Tag;
 
+    /// A column opens a block for each node of the column above.
     #[test]
     fn rows_open_blocks_below_their_change() {
-        // Rows (1,1), (1,2), (2,2): column 1 opens a block per column-0 node.
+        // The rows are (1,1), (1,2) and (2,2), so column 1 opens a block for each node of
+        // column 0.
         let rows = [[1, 1], [1, 2], [2, 2]].map(|row| row.map(StorageValue::integer));
         let mut builder = TrieBuilder::new(
             (0..2).map(|column| ColumnBuilder::new(ColumnKind::U64(Tag::Int), 3, column + 1)),

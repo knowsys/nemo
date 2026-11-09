@@ -1,24 +1,24 @@
-//! Body elements of rules.
+//! Literals, the elements of a rule's body.
 
 use std::fmt::{self, Display, Formatter};
 
 use crate::model::{Atom, Operation};
 
-/// A body element of a [Rule](crate::model::Rule).
+/// A literal, which is one element of the body of a [Rule](crate::model::Rule).
 ///
-/// Carries no span of its own: the wrapped component does.
+/// A literal has no span of its own, since the component it wraps has one.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Literal {
     /// An atom that must hold.
     Positive(Atom),
-    /// An atom that must not hold.
+    /// An atom that must not hold, written with `~`.
     Negative(Atom),
-    /// A constraint expressed by an operation, like `?age >= 18`.
+    /// An operation that must hold, like `?age >= 18`.
     Operation(Operation),
 }
 
 impl Literal {
-    /// Returns the atom of a positive or a negated literal, or `None` for a constraint.
+    /// Returns the atom of a positive or a negated literal, or `None` for an operation.
     pub fn atom(&self) -> Option<&Atom> {
         match self {
             Literal::Positive(atom) | Literal::Negative(atom) => Some(atom),

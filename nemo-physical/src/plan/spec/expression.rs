@@ -9,10 +9,10 @@ use crate::{
 
 /// An expression over the columns of a relation.
 ///
-/// It names columns by marker and holds its constants in place.
-/// An application is well-formed if it takes one operand per value its instruction pops,
-/// and if its instruction is neither [Input](OpCode::Input) nor [Constant](OpCode::Constant):
-/// columns and constants take their place.
+/// It names columns by marker, and contains its constants.
+/// An application is well-formed if it has one operand per value its instruction pops,
+/// and if its instruction is neither [Input](OpCode::Input) nor [Constant](OpCode::Constant),
+/// since columns and constants replace those instructions.
 ///
 /// # Example
 ///
@@ -63,31 +63,32 @@ pub enum Expression {
 }
 
 impl Expression {
-    /// Returns the value of a column.
+    /// Returns the expression for the value of a column.
     pub fn column(marker: Marker) -> Self {
         Self::Column(marker)
     }
 
-    /// Returns a constant.
+    /// Returns the expression for a constant.
     pub fn constant(value: DataValue) -> Self {
         Self::Constant(value)
     }
 
-    /// Returns an instruction applied to the values of its operands.
+    /// Returns the expression that applies an instruction to the values of its operands.
     pub fn apply(operation: OpCode, operands: impl IntoIterator<Item = Expression>) -> Self {
         Self::Apply(operation, operands.into_iter().collect())
     }
 
     /// Compiles the expression into a program,
-    /// and returns the markers feeding it, in program input order, with the program.
+    /// and returns the markers of the program's inputs, in order, with the program.
     ///
-    /// Returns [ExpressionTooLarge](PlanError::ExpressionTooLarge)
-    /// if the expression reads more columns or constants than an instruction addresses.
+    /// Fails with [ExpressionTooLarge](PlanError::ExpressionTooLarge)
+    /// if the expression reads more columns or constants than an instruction can address.
     ///
     /// # Panics
     ///
     /// Panics if an application's operands do not match what its instruction pops,
-    /// or if an applied instruction reads an input or a constant itself.
+    /// or if an application's instruction is [Input](OpCode::Input) or
+    /// [Constant](OpCode::Constant).
     pub(super) fn compile(&self) -> Result<(Vec<Marker>, StackProgram), PlanError> {
         let mut operations = Vec::new();
         let mut constants = Vec::new();
@@ -100,8 +101,10 @@ impl Expression {
         Ok((inputs, program))
     }
 
-    /// Emits the instructions of the expression, postorder,
-    /// registering each column on first sight and each constant as it comes.
+    /// Emits the instructions of the expression in postorder.
+    ///
+    /// A column becomes an input where it first occurs,
+    /// and every occurrence of a constant is added to the constants.
     fn emit(
         &self,
         operations: &mut Vec<OpCode>,
@@ -146,8 +149,9 @@ impl Expression {
     }
 }
 
-/// Returns an index as an instruction addresses it,
-/// or [ExpressionTooLarge](PlanError::ExpressionTooLarge) beyond that.
+/// Returns an index as an instruction operand,
+/// or fails with [ExpressionTooLarge](PlanError::ExpressionTooLarge)
+/// for an index beyond the operand range.
 fn operand(index: usize) -> Result<u16, PlanError> {
     u16::try_from(index).map_err(|_| PlanError::ExpressionTooLarge {
         limit: StackProgram::OPERAND_LIMIT,

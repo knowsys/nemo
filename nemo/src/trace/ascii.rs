@@ -5,7 +5,8 @@ use std::{collections::HashSet, fmt};
 use crate::trace::{Proof, TraceResponse};
 
 impl TraceResponse {
-    /// Renders every requested fact that holds as an ASCII tree of its derivation,
+    /// Renders every requested fact that holds as a tree of its derivation,
+    /// drawn with box-drawing characters,
     /// and every fact that does not hold as a note, indented as a tree's root.
     ///
     /// A derived fact shown before, in the same tree or an earlier one,
@@ -27,7 +28,7 @@ impl TraceResponse {
 }
 
 impl fmt::Display for Proof<'_> {
-    /// Writes the instantiated rule that derives the fact, as one line,
+    /// Writes the rule instance that derives the fact, as one line,
     /// or the fact alone if no rule derives it.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let premises = self.premises().map(|premise| premise.fact());
@@ -36,6 +37,9 @@ impl fmt::Display for Proof<'_> {
 }
 
 /// Writes one node and, unless it was shown before, its premises, with box-drawing prefixes.
+///
+/// `lead` prefixes the node's own line, and `descent` prefixes the lines of its premises.
+/// `shown` contains the derived nodes shown so far.
 fn ascii_node(
     proof: Proof<'_>,
     lead: &str,

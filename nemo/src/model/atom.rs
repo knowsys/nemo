@@ -4,17 +4,17 @@ use std::fmt::{self, Display, Formatter};
 
 use crate::model::{Identifier, Span, Term, span_ignoring_eq, term::fmt_labeled};
 
-/// An atom: a predicate applied to argument terms.
+/// An atom, which is a predicate applied to terms, such as `parent(?x, ?y)`.
 #[derive(Debug, Clone)]
 pub struct Atom {
     /// The predicate.
     pub predicate: Identifier,
     /// The argument terms.
     pub terms: Vec<Term>,
-    /// The written column names, aligned with the terms,
-    /// `Some` for an atom naming its columns, as in `person(name: ?n)`.
+    /// The names of the columns that the terms fill, one per term,
+    /// if the atom is written with named arguments, as in `person(name: ?n)`.
     ///
-    /// Each name must be a column name declared for the predicate, by `@declare` or `@input`.
+    /// Each name must be a column name that `@declare` or `@input` declares for the predicate.
     pub labels: Option<Vec<String>>,
     /// The source position, or `None` for a component built programmatically.
     pub span: Option<Span>,

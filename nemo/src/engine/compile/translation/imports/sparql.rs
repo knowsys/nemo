@@ -1,10 +1,10 @@
-//! SPARQL imports: a query's solutions,
-//! fetched into a predicate of the projection's width at load time,
-//! or during reasoning for a bound import (one with a `where` clause).
+//! SPARQL imports: loading a query's solutions into a predicate with one column per projected
+//! variable.
 //!
-//! A bound import compiles into a fetch rule (`fetch`).
-//! A condition the filter pass pushed onto the import is added to the query
-//! if it has a SPARQL form (`condition`).
+//! An import without atoms in its `where` clause is fetched at load time.
+//! A *bound import*, one with atoms in its `where` clause,
+//! is fetched during reasoning by its fetch rule (`fetch`).
+//! The import's condition is added to the query as far as it has a SPARQL form (`condition`).
 
 #[cfg(feature = "sparql")]
 mod condition;
@@ -31,25 +31,26 @@ use crate::{
 pub(super) struct SparqlImportSpec {
     /// The endpoint URL.
     pub(super) endpoint: String,
-    /// The validated query to send, with any pushed condition added.
+    /// The validated query to send,
+    /// with the import's condition added as far as it has a SPARQL form.
     pub(super) query: nemo_io::sparql::SparqlQuery,
-    /// The query text as the directive writes it, without any pushed condition,
+    /// The query text as the directive writes it, without the import's condition,
     /// preceded by a `BASE` clause if a base IRI applies to it.
     ///
     /// The import's resource is named after it,
-    /// so that solutions added through [add_resource](crate::engine::Engine::add_resource) and
-    /// the load reading them agree on the name. The parsed query cannot name it: parsing names
-    /// some variables and blank nodes at random.
+    /// so that the solutions added through
+    /// [add_resource](crate::engine::Engine::add_resource) and the load that reads them agree
+    /// on the name.
+    /// The parsed query cannot give the name, since parsing names some variables and blank
+    /// nodes at random.
     pub(super) written_query: String,
-    /// Request headers, applied to the fetch.
+    /// The HTTP headers sent with each request.
     pub(super) headers: Vec<(String, String)>,
-    /// The projection's columns as the directive keeps and the plan
-    /// prunes them.
+    /// The layout of the projection's columns, which the directive keeps and the plan prunes.
     pub(super) layout: crate::engine::compile::layout::ColumnLayout,
-    /// At most this many binding rows per atom per request of a bound
-    /// import.
+    /// The largest number of rows of one atom that a request of a bound import sends.
     pub(super) page_size: usize,
-    /// What a failed request does.
+    /// What happens when a request fails.
     pub(super) on_error: crate::model::OnError,
 }
 
@@ -64,40 +65,42 @@ struct SparqlDirectiveOptions {
     query: Option<String>,
     /// The query's source position, or the directive's.
     query_span: Option<crate::model::Span>,
-    /// Request headers.
+    /// The HTTP headers.
     headers: Vec<(String, String)>,
-    /// The base IRI the query resolves against, if given.
+    /// The base IRI against which the query is resolved, if given.
     base: Option<String>,
     /// The base IRI's source position, if given.
     base_span: Option<crate::model::Span>,
-    /// The declared column formats, if given.
+    /// The column formats of the `format` option, if given.
     formats: Option<Vec<nemo_io::format::ValueFormat>>,
     /// The column formats' source position, if given.
     formats_span: Option<crate::model::Span>,
-    /// The binding rows per atom per request of a bound import.
+    /// The largest number of rows of one atom that a request of a bound import sends.
     page_size: usize,
-    /// What a failed request does.
+    /// What happens when a request fails.
     on_error: crate::model::OnError,
 }
 
-/// The binding rows per atom one request of a bound import carries unless the `page` option
-/// sets another number.
+/// The largest number of rows of one atom that a request of a bound import sends,
+/// unless the `page` option sets another number.
 ///
-/// The number stays within what public endpoints accept in one `VALUES` block.
+/// The number is assumed to stay within what common endpoints accept in one `VALUES` block.
 #[cfg(feature = "sparql")]
 const DEFAULT_PAGE_SIZE: usize = 10_000;
 
 #[cfg(feature = "sparql")]
 impl SparqlImportSpec {
-    /// Returns the request fetching this import's solutions.
+    /// Returns the request that fetches this import's solutions.
     pub(super) fn request(&self) -> nemo_io::remote::Request {
         let mut request = self.query.request(&self.endpoint);
         request.headers.extend(self.headers.iter().cloned());
         request
     }
 
-    /// Returns the resource name this import's solutions are registered under:
-    /// the endpoint with the query, so that two queries to one endpoint get different names.
+    /// Returns the resource name under which this import's solutions are registered.
+    ///
+    /// It is the endpoint with the query, so that two queries to one endpoint get different
+    /// names.
     pub(super) fn resource(&self) -> String {
         format!("{}?query={}", self.endpoint, self.written_query)
     }
@@ -105,9 +108,10 @@ impl SparqlImportSpec {
 
 #[cfg(feature = "sparql")]
 impl<'a> Translator<'a> {
-    /// Executes one SPARQL import,
-    /// whose query's solutions, fetched at load time, are the predicate's rows
-    /// (see [execute_imports](Self::execute_imports)).
+    /// Executes one SPARQL import (see [execute_imports](Self::execute_imports)).
+    ///
+    /// The query's solutions, fetched at load time, become the predicate's rows.
+    /// A bound import is compiled into its fetch rule instead, and reads nothing at load.
     pub(super) fn sparql_import(
         &mut self,
         import: &PendingImport,
@@ -129,13 +133,13 @@ impl<'a> Translator<'a> {
             }
         }
         let source_width = spec.layout.source_width();
-        // The selection checks that the columns named after the predicate
-        // align with the query's projection, bound or not.
+        // Building the selection checks that the columns named after the predicate
+        // match the query's projection, for a bound import too.
         let selection = self.import_selection(import, &spec.layout)?;
         let table =
             self.register_import(import, vec![Type::ANY; spec.layout.kept()], &spec.layout)?;
-        // A bound import fetches during reasoning, like a rule: nothing
-        // is read at load, in any mode.
+        // A bound import fetches during reasoning, like a rule,
+        // so nothing is read at load, whatever the translation's purpose.
         if !import.bindings.is_empty() {
             let (rule, names) = self.bound_sparql_import(import, &spec, table, selection)?;
             self.fetch_rules.push((import.rule_index, rule, names));
@@ -157,9 +161,9 @@ impl<'a> Translator<'a> {
         Ok(())
     }
 
-    /// Returns the resolved options of a SPARQL import: its endpoint, its
-    /// validated query with the pushed condition, its column layout,
-    /// and the request headers.
+    /// Returns the resolved options of a SPARQL import: its endpoint,
+    /// its validated query with the import's condition, its column layout,
+    /// and the HTTP headers.
     pub(super) fn sparql_import_spec(
         &self,
         import: &PendingImport,
@@ -189,7 +193,7 @@ impl<'a> Translator<'a> {
                 .map(|(name, iri)| (name.as_str(), iri.as_str())),
         )
         .map_err(|error| match error {
-            // A base the directive gives is its option's fault.
+            // An error in a base that the directive gives is the fault of the `base` option.
             nemo_io::sparql::QueryError::Base { reason, .. } if options.base.is_some() => {
                 TranslationError::option_type("base", "an absolute IRI")
                     .at(options.base_span.or(import.span))
@@ -200,8 +204,8 @@ impl<'a> Translator<'a> {
             }
             .at(options.query_span),
         })?;
-        // Checked before anything is fetched: the solutions of such a
-        // query have no columns to import.
+        // This is checked before anything is fetched,
+        // since the solutions of a query without a projection have no columns to import.
         if query.arity() == 0 {
             return Err(TranslationError::SparqlNoProjection.at(options.query_span));
         }
@@ -231,8 +235,7 @@ impl<'a> Translator<'a> {
         })
     }
 
-    /// Evaluates a SPARQL directive's options, the guard bindings in
-    /// scope.
+    /// Evaluates a SPARQL directive's options, with the guard bindings in scope.
     fn sparql_options(&self, import: &PendingImport) -> Result<SparqlDirectiveOptions, Diagnostic> {
         use nemo_physical::value::ValueRef;
 
@@ -320,14 +323,16 @@ impl<'a> Translator<'a> {
         Ok(options)
     }
 
-    /// Returns the query with the condition an import's rows must pass, if there is one:
-    /// the conditions of its `where` clause and the one the filter pass pushed.
+    /// Returns the query with the parts of an import's condition that have a SPARQL form
+    /// added.
     ///
-    /// The endpoint applies each conjunct of the condition that has a SPARQL form,
-    /// an identity of a column with a constant as a `VALUES` block, any other as a filter,
-    /// and the local filter applies all of it regardless.
+    /// `condition` is the [import_condition](Self::import_condition), if there is one.
+    /// A conjunct that requires a column to be identical to a constant is added as a `VALUES`
+    /// block, and any other conjunct with a SPARQL form as a filter.
+    /// The load still applies the whole condition to the rows it receives.
     /// The condition refers to delivered columns,
-    /// which the layout maps back to the projection's positions.
+    /// which `layout` maps back to positions in the projection.
+    /// An opaque query is returned unchanged.
     fn pushed_query(
         &self,
         condition: Option<&crate::model::Operation>,
@@ -343,8 +348,6 @@ impl<'a> Translator<'a> {
         let delivered = layout.delivered_columns();
         let mut conjuncts = Vec::new();
         condition.conjuncts(&mut conjuncts);
-        // An identity of a column with a constant joins in as a `VALUES` block,
-        // every other conjunct with a SPARQL form as a filter.
         let mut blocks = Vec::new();
         let mut expressions = Vec::new();
         for conjunct in conjuncts {
@@ -373,11 +376,11 @@ impl<'a> Translator<'a> {
 
 #[cfg(not(feature = "sparql"))]
 impl<'a> Translator<'a> {
-    /// Returns an error for a SPARQL import in a run of a build without the `sparql` feature,
+    /// Returns an error for a SPARQL import in a build without the `sparql` feature,
     /// rather than misreading it.
     ///
-    /// A check accepts what this build cannot validate,
-    /// since the program may be meant for a build that can.
+    /// A check accepts the import and marks its predicate open,
+    /// since the program may be meant for a build that can validate it.
     pub(super) fn sparql_import(
         &mut self,
         import: &PendingImport,

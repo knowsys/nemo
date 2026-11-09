@@ -1,7 +1,9 @@
-//! Numeric operations: the numeric functions under the error policy of the builtins.
+//! Numeric operations: arithmetic, rounding, powers, logarithms, trigonometry and bitwise
+//! operations.
 //!
-//! The operations are delegated to [ValueRef].
-//! Its four arithmetic operators also compute with durations and points in time.
+//! The four arithmetic operations are those of [ValueRef],
+//! which also compute with durations and points in time.
+//! The shifts, the bitwise operations and the Łukasiewicz t-norm have no counterpart in SPARQL.
 
 #[cfg(doc)]
 use std::ops::{Add, Div, Mul, Sub};
@@ -14,22 +16,23 @@ use crate::{
     },
 };
 
-/// Adds two numbers, two durations, or a duration to a point in time; see [ValueRef::add].
+/// Adds two numbers, two durations, or a point in time and a duration,
+/// as [ValueRef::add] defines.
 pub(crate) fn add(left: ValueRef<'_>, right: ValueRef<'_>) -> StackValue<'static> {
     (left + right).into()
 }
 
-/// Subtracts the second value from the first; see [ValueRef::sub].
+/// Subtracts the second value from the first, as [ValueRef::sub] defines.
 pub(crate) fn subtract(left: ValueRef<'_>, right: ValueRef<'_>) -> StackValue<'static> {
     (left - right).into()
 }
 
-/// Multiplies two numbers, or a duration by a number; see [ValueRef::mul].
+/// Multiplies two numbers, or a duration and a number, as [ValueRef::mul] defines.
 pub(crate) fn multiply(left: ValueRef<'_>, right: ValueRef<'_>) -> StackValue<'static> {
     (left * right).into()
 }
 
-/// Divides the first value by the second; see [ValueRef::div].
+/// Divides the first value by the second, as [ValueRef::div] defines.
 pub(crate) fn divide(left: ValueRef<'_>, right: ValueRef<'_>) -> StackValue<'static> {
     (left / right).into()
 }
@@ -39,33 +42,42 @@ pub(crate) fn negate(value: ValueRef<'_>) -> StackValue<'static> {
     (-value).into()
 }
 
-/// Returns the absolute value of a number, SPARQL's `ABS`,
-/// [`fn:abs`](https://www.w3.org/TR/xpath-functions-31/#func-abs).
+/// Returns the absolute value of a number,
+/// SPARQL's `ABS` and XPath's [`fn:abs`](https://www.w3.org/TR/xpath-functions-31/#func-abs).
 pub(crate) fn absolute(value: ValueRef<'_>) -> StackValue<'static> {
     unary(value, NumberRef::abs)
 }
 
-/// Rounds a number to the nearest integer value, halves toward positive infinity,
-/// SPARQL's `ROUND`, [`fn:round`](https://www.w3.org/TR/xpath-functions-31/#func-round).
+/// Rounds a number to the nearest integer value, with halves rounded toward positive infinity,
+/// SPARQL's `ROUND` and XPath's
+/// [`fn:round`](https://www.w3.org/TR/xpath-functions-31/#func-round).
 ///
-/// The result stays in the number's domain: an integer stays an integer, a float a float.
+/// A float stays a float and a double a double, and an exact number becomes an integer.
 pub(crate) fn round(value: ValueRef<'_>) -> StackValue<'static> {
     unary(value, NumberRef::round)
 }
 
-/// Rounds a number up to the nearest integer value within its own domain,
-/// SPARQL's `CEIL`, [`fn:ceiling`](https://www.w3.org/TR/xpath-functions-31/#func-ceiling).
+/// Rounds a number up to the nearest integer value,
+/// SPARQL's `CEIL` and XPath's
+/// [`fn:ceiling`](https://www.w3.org/TR/xpath-functions-31/#func-ceiling).
+///
+/// A float stays a float and a double a double, and an exact number becomes an integer.
 pub(crate) fn ceiling(value: ValueRef<'_>) -> StackValue<'static> {
     unary(value, NumberRef::ceil)
 }
 
-/// Rounds a number down to the nearest integer value within its own domain,
-/// SPARQL's `FLOOR`, [`fn:floor`](https://www.w3.org/TR/xpath-functions-31/#func-floor).
+/// Rounds a number down to the nearest integer value,
+/// SPARQL's `FLOOR` and XPath's
+/// [`fn:floor`](https://www.w3.org/TR/xpath-functions-31/#func-floor).
+///
+/// A float stays a float and a double a double, and an exact number becomes an integer.
 pub(crate) fn floor(value: ValueRef<'_>) -> StackValue<'static> {
     unary(value, NumberRef::floor)
 }
 
-/// Applies a function of the number type to a number.
+/// Applies a method of [NumberRef] to a number.
+///
+/// Any other value is a [TypeMismatch](EvaluationError::TypeMismatch).
 fn unary<'a>(
     value: ValueRef<'a>,
     operation: impl FnOnce(NumberRef<'a>) -> DataValue,
@@ -78,10 +90,11 @@ fn unary<'a>(
 
 /// Raises the first number to the second.
 ///
-/// An exact base under a non-negative integer exponent computes exactly;
-/// every other pair computes as doubles,
-/// as [`math:pow`](https://www.w3.org/TR/xpath-functions-31/#func-math-pow) does throughout,
-/// under an integer exponent as IEEE's `pown`.
+/// An exact base with a non-negative integer exponent gives an exact result.
+/// Every other pair is computed with doubles, as XPath's
+/// [`math:pow`](https://www.w3.org/TR/xpath-functions-31/#func-math-pow) does for all numbers.
+/// With an integer exponent, the result follows IEEE's `pown`,
+/// so an odd power keeps the sign of the base.
 pub(crate) fn power(base: ValueRef<'_>, exponent: ValueRef<'_>) -> StackValue<'static> {
     let (ValueRef::Number(base), ValueRef::Number(exponent)) = (base, exponent) else {
         return EvaluationError::TypeMismatch.into();
@@ -108,8 +121,11 @@ pub(crate) fn power(base: ValueRef<'_>, exponent: ValueRef<'_>) -> StackValue<'s
 
 /// Raises an exact base to a non-negative integer exponent, exactly.
 ///
-/// Beyond an exponent of 32 bits only the bases 0, 1 and -1 stay within the length limit,
-/// and their powers repeat with the exponent's parity.
+/// For an exponent beyond 32 bits,
+/// only the bases 0, 1 and -1 have powers within the
+/// [length limit of numbers](crate::value::Decimal),
+/// and their powers depend only on whether the exponent is odd.
+/// Any other base is then an [Overflow](EvaluationError::Overflow).
 fn exact_power(base: NumberRef<'_>, exponent: NumberRef<'_>) -> Result<DataValue, EvaluationError> {
     if let Some(power) = exponent
         .to_i64()
@@ -124,10 +140,10 @@ fn exact_power(base: NumberRef<'_>, exponent: NumberRef<'_>) -> Result<DataValue
     }
 }
 
-/// Returns the logarithm of the first number in the base of the second, as a double.
+/// Returns the logarithm of the first number to the base of the second, as a double.
 ///
 /// XPath's [`math:log`](https://www.w3.org/TR/xpath-functions-31/#func-math-log)
-/// is the natural logarithm alone; this takes the base explicitly.
+/// is only the natural logarithm, while this operation accepts the base as an operand.
 pub(crate) fn logarithm(left: ValueRef<'_>, right: ValueRef<'_>) -> StackValue<'static> {
     let (ValueRef::Number(left), ValueRef::Number(right)) = (left, right) else {
         return EvaluationError::TypeMismatch.into();
@@ -156,12 +172,12 @@ pub(crate) fn square_root(value: ValueRef<'_>) -> StackValue<'static> {
     floating_unary(value, f64::sqrt)
 }
 
-/// Applies a floating-point function to a number:
-/// a float stays a float, every other number computes as a double.
+/// Applies a floating-point function to a number.
 ///
+/// A float stays a float, and every other number is computed as a double.
 /// The functions are those of XPath's
 /// [`math` namespace](https://www.w3.org/TR/xpath-functions-31/#trigonometry),
-/// which compute as doubles throughout.
+/// which computes with doubles for all numbers.
 fn floating_unary(value: ValueRef<'_>, apply: impl Fn(f64) -> f64) -> StackValue<'static> {
     let ValueRef::Number(value) = value else {
         return EvaluationError::TypeMismatch.into();
@@ -171,7 +187,7 @@ fn floating_unary(value: ValueRef<'_>, apply: impl Fn(f64) -> f64) -> StackValue
 
     match value {
         NumberRef::Float(_) => {
-            // The float's own precision is what the operand had.
+            // The result keeps the precision of the float operand.
             #[allow(clippy::cast_possible_truncation)]
             DataValue::float(result as f32)
         }
@@ -180,27 +196,28 @@ fn floating_unary(value: ValueRef<'_>, apply: impl Fn(f64) -> f64) -> StackValue
     .into()
 }
 
-/// Returns the remainder of integer division, with the sign of the dividend,
+/// Returns the remainder of an integer division, which has the sign of the dividend,
 /// XPath's [`op:numeric-mod`](https://www.w3.org/TR/xpath-functions-31/#func-numeric-mod)
-/// restricted to integers.
+/// for integers.
 pub(crate) fn remainder(left: ValueRef<'_>, right: ValueRef<'_>) -> StackValue<'static> {
     (left % right).into()
 }
 
-/// Shifts the first integer's bits left by the second, `x * 2^n`; see [DecimalRef::shift_left].
-///
-/// The shifts, the bitwise connectives, and the t-norm below have no SPARQL counterpart.
+/// Shifts the bits of the first integer left by the second, `x * 2^n`,
+/// as [DecimalRef::shift_left] computes.
 pub(crate) fn shift_left(left: ValueRef<'_>, right: ValueRef<'_>) -> StackValue<'static> {
     exact_binary(left, right, DecimalRef::shift_left)
 }
 
-/// Shifts the first integer's bits right by the second, keeping the sign, `⌊x / 2^n⌋`;
-/// see [DecimalRef::shift_right].
+/// Shifts the bits of the first integer right by the second, keeping the sign, `⌊x / 2^n⌋`,
+/// as [DecimalRef::shift_right] computes.
 pub(crate) fn shift_right(left: ValueRef<'_>, right: ValueRef<'_>) -> StackValue<'static> {
     exact_binary(left, right, DecimalRef::shift_right)
 }
 
-/// Applies a binary operation of exact numbers to two of them.
+/// Applies an operation on two exact numbers.
+///
+/// An operand that is not an exact number is a [TypeMismatch](EvaluationError::TypeMismatch).
 fn exact_binary<'a>(
     left: ValueRef<'a>,
     right: ValueRef<'a>,
@@ -229,7 +246,11 @@ pub(crate) fn bit_xor(values: &[StackValue<'_>]) -> StackValue<'static> {
     bitwise(values, Bitwise::Xor)
 }
 
-/// Folds a bitwise connective over integers; see [DecimalRef::bitwise].
+/// Folds a bitwise operation over integers, as [DecimalRef::bitwise] computes it for two.
+///
+/// The first operand that is an error or not an integer decides the result,
+/// its error or a [TypeMismatch](EvaluationError::TypeMismatch).
+/// No operands at all are a [TypeMismatch](EvaluationError::TypeMismatch) too.
 fn bitwise(values: &[StackValue<'_>], connective: Bitwise) -> StackValue<'static> {
     let mut folded: Option<Decimal> = None;
     for value in values {
@@ -254,8 +275,9 @@ fn bitwise(values: &[StackValue<'_>], connective: Bitwise) -> StackValue<'static
 
 /// Returns the Łukasiewicz t-norm of numbers, `max(0, a₁ + … + aₙ - (n - 1))`, as a double.
 ///
-/// The n-ary form does not depend on the order of the arguments, also outside [0, 1],
-/// where folding the binary t-norm would.
+/// The n-ary form does not depend on the order of the operands, even outside `[0, 1]`,
+/// where folding the binary t-norm would depend on it.
+/// No operands at all are a [TypeMismatch](EvaluationError::TypeMismatch).
 pub(crate) fn lukasiewicz(values: &[StackValue<'_>]) -> StackValue<'static> {
     if values.is_empty() {
         return EvaluationError::TypeMismatch.into();
@@ -270,10 +292,10 @@ pub(crate) fn lukasiewicz(values: &[StackValue<'_>]) -> StackValue<'static> {
         }
     }
 
-    // A count of arguments is far below the precision of a double.
+    // A count of operands is far below the precision limit of a double.
     #[allow(clippy::cast_precision_loss)]
     let excess = sum - (values.len() - 1) as f64;
-    // A NaN fails the comparison and stays.
+    // NaN fails the comparison and is returned.
     DataValue::double(if excess < 0.0 { 0.0 } else { excess }).into()
 }
 
@@ -283,6 +305,8 @@ mod tests {
 
     use crate::testing::number;
 
+    /// Exact arithmetic fails with the error of its cause,
+    /// while floating-point arithmetic returns an infinity or NaN instead of failing.
     #[test]
     fn the_policy_names_the_errors() {
         let apply = |operation: fn(ValueRef<'_>, ValueRef<'_>) -> StackValue<'static>,
@@ -297,7 +321,7 @@ mod tests {
             apply(divide, &int(1), &int(0)),
             Err(EvaluationError::DivisionByZero)
         );
-        // A floating zero divisor is no error: the quotient is an infinity or the NaN.
+        // A floating-point zero divisor is no error, and the quotient is an infinity or NaN.
         assert_eq!(
             apply(divide, &DataValue::double(1.0), &int(0)),
             Ok(DataValue::double(f64::INFINITY))
@@ -326,7 +350,7 @@ mod tests {
             ),
             Ok(DataValue::double(f64::INFINITY))
         );
-        // A negative exponent leaves the exact path for the doubles.
+        // A negative exponent makes the power a double.
         assert_eq!(
             apply(power, &int(2), &DataValue::integer(-3)),
             Ok(DataValue::double(0.125))
@@ -338,6 +362,8 @@ mod tests {
         );
     }
 
+    /// A power of an exact base is exact,
+    /// and any other power follows `pown`, even for an exponent that no double holds.
     #[test]
     fn powers_are_exact_for_exact_bases_and_pown_otherwise() {
         let apply = |base: &DataValue, exponent: &DataValue| {
@@ -351,8 +377,8 @@ mod tests {
         assert_eq!(apply(&number("1.5"), &int(2)), Ok(number("2.25")));
         assert_eq!(apply(&number("-0.5"), &int(3)), Ok(number("-0.125")));
 
-        // Beyond an exponent of 32 bits only 0, 1 and -1 stay within the length limit,
-        // at any width of the exponent.
+        // For an exponent beyond 32 bits, only the bases 0, 1 and -1 stay within the length limit,
+        // however wide the exponent is.
         let wide_odd = number("100000000000000000001");
         assert_eq!(apply(&int(1), &int(5_000_000_000)), Ok(int(1)));
         assert_eq!(apply(&int(0), &int(5_000_000_000)), Ok(int(0)));
@@ -363,8 +389,8 @@ mod tests {
         );
         assert_eq!(apply(&int(2), &wide_odd), Err(EvaluationError::Overflow));
 
-        // A floating base under an odd exponent keeps its sign, as `pown` has it,
-        // also where no double holds the exponent.
+        // A floating-point base with an odd exponent keeps its sign, as in `pown`,
+        // even where no double holds the exponent exactly.
         let odd = int(9_007_199_254_740_993);
         assert_eq!(apply(&double(-1.0), &odd), Ok(double(-1.0)));
         assert_eq!(apply(&double(-2.0), &odd), Ok(double(f64::NEG_INFINITY)));
@@ -376,6 +402,8 @@ mod tests {
         );
     }
 
+    /// Floating-point results follow IEEE 754, a float stays a float,
+    /// and negating the smallest 64-bit integer gives a wide integer.
     #[test]
     fn floating_results_follow_ieee() {
         let apply = |operation: fn(ValueRef<'_>) -> StackValue<'static>, value: &DataValue| {

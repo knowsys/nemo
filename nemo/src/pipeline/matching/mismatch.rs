@@ -12,9 +12,9 @@ use crate::{
 pub(crate) enum CorrespondenceMismatch {
     /// The rules have different numbers of head atoms.
     HeadCount {
-        /// The input rule's number.
+        /// The input rule's number of head atoms.
         input: usize,
-        /// The new rule's number.
+        /// The new rule's number of head atoms.
         new: usize,
     },
     /// A head atom of the new rule does not match the input rule's.
@@ -24,16 +24,14 @@ pub(crate) enum CorrespondenceMismatch {
         /// The new rule's head atom.
         atom: Atom,
     },
-    /// The stage gave another number of literal paths than the input rule
-    /// has body literals.
+    /// The stage gave another number of literal paths than the input rule has body literals.
     PathCount {
         /// The input rule's number of body literals.
         input: usize,
         /// The number of paths.
         paths: usize,
     },
-    /// A literal of the input rule does not match the literal at its
-    /// path.
+    /// A literal of the input rule does not match the literal at its path.
     PathLiteral {
         /// The input rule's literal.
         pattern: Literal,
@@ -44,7 +42,7 @@ pub(crate) enum CorrespondenceMismatch {
     },
     /// A path is empty.
     EmptyPath,
-    /// A path names a position the new rule's body does not have.
+    /// A path names a position that the new rule's body does not have.
     NoBodyLiteral {
         /// The position.
         position: usize,
@@ -54,8 +52,7 @@ pub(crate) enum CorrespondenceMismatch {
         /// The operation's literal.
         literal: Literal,
     },
-    /// A path unfolds an atom over a predicate the commit did not
-    /// define.
+    /// A path unfolds an atom over a predicate that the commit did not define.
     NotDefined {
         /// The atom.
         atom: Atom,
@@ -65,15 +62,14 @@ pub(crate) enum CorrespondenceMismatch {
         /// The negated literal.
         literal: Literal,
     },
-    /// A path names a position the unfolded definition does not have.
+    /// A path names a position that the unfolded definition does not have.
     NoDefinitionLiteral {
         /// The atom over the defined predicate.
         atom: Atom,
         /// The position.
         position: usize,
     },
-    /// An atom over a defined predicate has another number of terms than
-    /// the definition's head.
+    /// An atom over a defined predicate has another number of terms than the definition's head.
     DefinitionArity {
         /// The atom.
         atom: Atom,

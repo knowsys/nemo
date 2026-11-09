@@ -5,7 +5,7 @@ use std::{ops::Deref, vec};
 use crate::{management::ColumnOrder, plan::Marker};
 
 /// A sequence of pairwise distinct markers:
-/// the columns of a relation, or an order in which a consumer reads them.
+/// the columns of a relation, or an order in which a relation is read.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct MarkerOrder(Vec<Marker>);
 
@@ -28,10 +28,10 @@ impl MarkerOrder {
         self.0.iter().position(|&candidate| candidate == marker)
     }
 
-    /// Returns the column order that lays out columns carrying these markers in the given order:
-    /// entry `i` is the column of the order's marker `i`.
+    /// Returns the column order that lays out columns named by these markers in the given order.
     ///
-    /// The given order rearranges these markers.
+    /// Entry `i` of the result is the position, in this order, of the given order's marker `i`.
+    /// The given order must rearrange these markers.
     pub(crate) fn column_order_to(&self, order: &[Marker]) -> ColumnOrder {
         let positions: Vec<usize> = self.positions(order).collect();
 
@@ -41,12 +41,13 @@ impl MarkerOrder {
     /// Translates an order over these markers into one over the markers of `to`,
     /// replacing each marker by the marker at its position in `to`.
     ///
-    /// An alias translates an order over its markers into one over its input's this way.
+    /// For an alias, this translates an order over its markers
+    /// into one over its input's markers.
     pub(crate) fn translate(&self, order: &[Marker], to: &[Marker]) -> MarkerOrder {
         self.positions(order).map(|position| to[position]).collect()
     }
 
-    /// Returns the markers of this order that lie among the given ones, in this order's sequence.
+    /// Returns the markers of this order that are among the given ones, in this order.
     pub(crate) fn restricted_to(&self, kept: &[Marker]) -> MarkerOrder {
         self.0
             .iter()
@@ -55,7 +56,7 @@ impl MarkerOrder {
             .collect()
     }
 
-    /// Returns the positions of the given markers, each one of these.
+    /// Returns the positions in this order of the given markers, which must all be in it.
     fn positions<'a>(&'a self, markers: &'a [Marker]) -> impl Iterator<Item = usize> + 'a {
         markers.iter().map(|&marker| {
             self.position(marker)

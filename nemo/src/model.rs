@@ -1,12 +1,14 @@
 //! The components of Nemo programs.
 //!
+//! A *component* is a part of a program, such as a [Term], an [Atom], a [Rule] or a whole
+//! [Program].
 //! Components are plain owned data.
-//! Their only positional information is an optional [Span],
-//! which the parser sets and which is `None` for a component built programmatically.
-//! Structural equality and hashing ignore spans.
+//! The only source location a component stores is an optional [Span].
+//! The parser sets it, and it is `None` for a component built programmatically.
+//! Equality and hashing ignore spans.
 //!
-//! Every `Display` implementation produces valid Nemo syntax,
-//! and statements print with their terminating ` .`.
+//! Every `Display` implementation writes valid Nemo syntax,
+//! and a statement is written with its terminating ` .`.
 
 mod atom;
 mod attribute;
@@ -23,7 +25,7 @@ mod substitution;
 mod term;
 mod walk;
 
-/// Source positions of components: a source text and a byte range in it.
+/// Source locations, which the parser stores in the components it builds.
 pub use nemo_physical::diagnostics::{FileId, Span};
 
 pub use self::{
@@ -57,10 +59,11 @@ pub(crate) use self::{
 
 use std::fmt::{self, Display, Formatter};
 
-/// Implements [PartialEq], [Eq], and [Hash](std::hash::Hash) for a component type
-/// over the listed fields, leaving out its `span`.
+/// Implements [PartialEq], [Eq] and [Hash](std::hash::Hash) for a component type
+/// from the listed fields.
 ///
-/// Every component's equality comes from this macro,
+/// The list leaves out the component's `span`.
+/// Every component with a span gets its equality from this macro,
 /// so two components are equal exactly if their contents are,
 /// whether they were parsed or built programmatically.
 macro_rules! span_ignoring_eq {

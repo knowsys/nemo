@@ -1,5 +1,5 @@
-//! Bound SPARQL imports (imports with a `where` clause): compiling one into the fetch rule
-//! the engine evaluates during reasoning.
+//! Bound SPARQL imports: compiling one into the fetch rule that is evaluated during
+//! reasoning.
 
 use std::collections::{HashMap, HashSet};
 
@@ -23,10 +23,11 @@ use crate::{
     model::{Atom, TermKind, VariableKind},
 };
 
-/// Returns, per column variable named after the predicate,
-/// its position in the query's projection, which the binding atoms refer to.
+/// Returns the position in the query's projection of each column that the import names,
+/// which the atoms of the `where` clause refer to.
 ///
-/// Every column must be named.
+/// Every column must be named, and `source_width`, the number of projected variables,
+/// is part of the error if none is.
 /// A name given twice was refused when the import's columns were checked.
 fn column_positions(
     import: &PendingImport,
@@ -49,14 +50,16 @@ fn column_positions(
 }
 
 impl<'a> Translator<'a> {
-    /// Compiles a bound import into its fetch rule.
+    /// Compiles a bound import into its fetch rule,
+    /// and returns the rule with the written names of its rule columns.
     ///
-    /// The binding atoms are the body (constants and repetitions normalizing as in any rule),
+    /// The atoms of the `where` clause are the body,
+    /// in which constants and repeated variables are normalized as in any rule,
     /// and the import's table is the head.
-    /// The fetch records which delivered column of each atom binds which column of the query.
-    /// The engine evaluates the rule by fetching instead of joining.
-    /// Otherwise it is stratified and evaluated like any other rule,
-    /// including after `extend` adds facts.
+    /// The fetch records which stored column of each atom binds which projected variable.
+    /// The rule fetches instead of joining,
+    /// and is otherwise stratified and evaluated like any other rule,
+    /// also after [extend](crate::engine::Engine::extend) adds facts.
     pub(super) fn bound_sparql_import(
         &mut self,
         import: &PendingImport,
@@ -80,8 +83,8 @@ impl<'a> Translator<'a> {
             "binding atoms hold no expressions"
         );
 
-        // The head: the delivered columns, each its column variable's
-        // id, bound by a binding atom or fresh if no atom binds it.
+        // The head has the delivered columns, each the id of its column's variable,
+        // which an atom binds, or which is fresh if no atom binds it.
         let mut columns = Vec::with_capacity(spec.layout.delivered());
         for (column, variable) in import.variables.iter().enumerate() {
             if spec.layout.delivers(column) {
@@ -92,12 +95,11 @@ impl<'a> Translator<'a> {
 
         let compiled = CompiledRule {
             variables: compiler.variables,
-            // A fetch rule joins nothing, and its order stays the
-            // identity: the fetch records each match's variable values
-            // by variable id, and the proof search reads them back the
-            // same way. The order chooser never sees a fetch rule, since
-            // fetch rules move to their reserved rule indices after it
-            // has run.
+            // A fetch rule joins nothing, and its order stays the identity,
+            // since the fetch records each match's values by variable id,
+            // and the proof search reads them back the same way.
+            // The order chooser never sees a fetch rule,
+            // since fetch rules move to their reserved rule indices after it has run.
             order: (0..compiler.variables).collect(),
             body: compiler.body,
             filters: compiler.filters,
@@ -126,11 +128,11 @@ impl<'a> Translator<'a> {
         Ok((compiled, names))
     }
 
-    /// Returns the scratch table a bound import's fetches deduplicate through, of the head's
-    /// arity.
+    /// Returns the scratch table with `arity` columns,
+    /// through which a bound import's fetches deduplicate their rows.
     ///
-    /// It persists across translations,
-    /// and one of another arity (after a `reload` projected the import differently) is replaced.
+    /// It persists across translations, and one of another arity is replaced,
+    /// as after a [reload](crate::engine::Engine::reload) that projects the import differently.
     fn fetch_scratch(&mut self, predicate: &str, arity: usize) -> Result<TableId, Diagnostic> {
         let kept = match self.scratch.get(predicate) {
             Some(&scratch) if self.manager.arity(scratch) == arity => Some(scratch),
@@ -152,13 +154,14 @@ impl<'a> Translator<'a> {
 }
 
 impl RuleCompiler<'_, '_> {
-    /// Compiles one binding atom of a bound import as a body atom,
-    /// and records what each of its delivered columns is for the fetch,
-    /// read off the atom before the compiler normalizes it.
+    /// Compiles one atom of a bound import's `where` clause as a body atom,
+    /// and returns how the fetch reads each of the atom's stored columns.
     ///
-    /// A variable repeated within the atom binds its column once,
-    /// since a `VALUES` block names each variable once,
-    /// and the compiler's identity filter keeps the repetition's meaning.
+    /// The columns are read off the atom before the compiler normalizes it.
+    /// A variable repeated within the atom binds its projected variable at its first column
+    /// only, since a `VALUES` block names each variable once,
+    /// and the compiler's identity filter keeps the meaning of the repetition.
+    /// `positions` contains the position in the projection of each named column.
     fn binding_atom(
         &mut self,
         atom: &Atom,

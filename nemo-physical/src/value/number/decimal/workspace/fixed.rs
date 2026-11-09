@@ -12,11 +12,11 @@ use crate::value::number::{
 
 /// An exact number `mantissa * 10^exponent` in the `i128` workspace.
 ///
-/// This is the workspace of the arithmetic over compact operands,
-/// integers and compact decimals alike;
-/// every operation that would outgrow it says so with `None`,
-/// and the caller continues in the [big workspace](Big).
-/// A workspace value is not normalized unless [normalized](Self::normalized) was applied.
+/// This is the workspace of the arithmetic on operands within the compact ranges,
+/// integers and compact decimals alike.
+/// An operation whose result would not fit returns `None`,
+/// so that the computation can continue in the [big workspace](Big).
+/// A workspace value is normalized only after [normalized](Self::normalized).
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Fixed {
     /// The mantissa.
@@ -31,8 +31,8 @@ impl Fixed {
         Self { mantissa, exponent }
     }
 
-    /// Creates the workspace form of an exact number of the compact ranges;
-    /// `None` for a wide one.
+    /// Creates the workspace form of an exact number within the compact ranges,
+    /// or returns `None` for a wide one.
     pub(crate) fn of(value: DecimalRef<'_>) -> Option<Self> {
         match value.0 {
             ReprRef::Int(value) => Some(Self::new(i128::from(value), 0)),
@@ -54,8 +54,9 @@ impl Fixed {
         self.exponent
     }
 
-    /// Returns the value with the mantissa's trailing zeros folded into the exponent;
-    /// zero is uniquely `(0, 0)`.
+    /// Returns the value with the trailing zeros of the mantissa moved into the exponent.
+    ///
+    /// Zero becomes `(0, 0)`.
     pub(crate) fn normalized(self) -> Self {
         if self.mantissa == 0 {
             return Self::new(0, 0);
@@ -71,7 +72,7 @@ impl Fixed {
         value
     }
 
-    /// Returns the number of decimal digits of the mantissa's magnitude; one for zero.
+    /// Returns the number of decimal digits of the mantissa's magnitude, which is one for zero.
     pub(crate) fn digits(self) -> i64 {
         i64::from(
             self.mantissa
@@ -81,8 +82,8 @@ impl Fixed {
         )
     }
 
-    /// Returns the mantissas of two values aligned to their smaller exponent, and that exponent,
-    /// or `None` if an aligned mantissa outgrows the workspace.
+    /// Returns the mantissas of two values scaled to their smaller exponent, and that exponent,
+    /// or `None` if a scaled mantissa does not fit into the workspace.
     pub(crate) fn align(self, other: Self) -> Option<(i128, i128, i64)> {
         let exponent = self.exponent.min(other.exponent);
         let scale = |value: Self| {
@@ -95,10 +96,10 @@ impl Fixed {
         Some((scale(self)?, scale(other)?, exponent))
     }
 
-    /// Compares two values of the compact ranges exactly.
+    /// Compares two values within the compact ranges exactly.
     ///
-    /// Both mantissas have at most nineteen digits,
-    /// so values at the same position of the leading digit align within the workspace.
+    /// Both mantissas have at most nineteen digits, so two values whose leading digits are at
+    /// the same position can be aligned within the workspace.
     pub(crate) fn cmp(self, other: Self) -> Ordering {
         let left_sign = self.mantissa.signum();
         let right_sign = other.mantissa.signum();
@@ -128,10 +129,10 @@ impl Fixed {
         }
     }
 
-    /// Returns the value taken to an integer by the given rounding,
-    /// or `None` if the fraction's power of ten outgrows the workspace.
+    /// Returns the value rounded to an integer by `rounding`,
+    /// or `None` if the result or a power of ten on the way does not fit into the workspace.
     ///
-    /// The mantissa splits into quotient and remainder at that power,
+    /// The mantissa is divided by the power of ten of the fraction into quotient and remainder,
     /// and the rounding decides whether the quotient moves one away from zero.
     pub(crate) fn to_integral(self, rounding: Rounding) -> Option<i128> {
         if self.exponent >= 0 {
@@ -145,8 +146,8 @@ impl Fixed {
         let (quotient, remainder) = (magnitude / divisor, magnitude % divisor);
 
         let away = match rounding {
-            // The divisor is a positive power of ten, hence even;
-            // a half goes up, which is away from zero only for a positive value.
+            // The divisor is a positive power of ten, so it is even and has an exact half.
+            // A half is rounded up, which is away from zero only for a positive value.
             Rounding::Nearest if negative => remainder > divisor / 2,
             Rounding::Nearest => remainder >= divisor / 2,
             Rounding::Up => !negative && remainder != 0,
@@ -157,10 +158,11 @@ impl Fixed {
         Some(if negative { -integral } else { integral })
     }
 
-    /// Returns the quotient of two values, the divisor nonzero,
-    /// at the scale and rounding of the [big workspace](Big::div).
+    /// Returns the quotient of two values,
+    /// at the scale and with the rounding of the [big workspace](Big::div).
     ///
-    /// Returns `None` if the scaled numerator or the quotient outgrows the workspace.
+    /// The divisor must not be zero.
+    /// Returns `None` if the scaled numerator or the quotient does not fit into the workspace.
     pub(crate) fn quotient(self, other: Self) -> Option<Self> {
         debug_assert!(other.mantissa != 0);
         if self.mantissa == 0 {
@@ -193,6 +195,8 @@ impl Fixed {
 mod tests {
     use super::*;
 
+    /// Normalization moves the trailing zeros of the mantissa into the exponent,
+    /// and makes zero `(0, 0)`.
     #[test]
     fn normalization_folds_trailing_zeros() {
         let normalized = |mantissa, exponent| {
@@ -206,6 +210,7 @@ mod tests {
         assert_eq!(normalized(7, 0), (7, 0));
     }
 
+    /// Alignment scales to the smaller exponent, and fails if a scaled mantissa does not fit.
     #[test]
     fn alignment_bails_out_of_the_workspace() {
         let (left, right, exponent) = Fixed::new(15, -1).align(Fixed::new(2, 0)).expect("aligns");
@@ -214,6 +219,7 @@ mod tests {
         assert_eq!(Fixed::new(1, 0).align(Fixed::new(1, -40)), None);
     }
 
+    /// Values within the compact ranges are compared exactly.
     #[test]
     fn comparison_is_exact() {
         let cmp = |l: (i128, i64), r: (i128, i64)| Fixed::new(l.0, l.1).cmp(Fixed::new(r.0, r.1));
@@ -228,6 +234,8 @@ mod tests {
         assert_eq!(cmp((i128::from(i64::MIN), 0), (-1, -240)), Ordering::Less);
     }
 
+    /// Rounding and division give the results of the big workspace,
+    /// or `None` for a result that does not fit.
     #[test]
     fn rounding_and_division_work_in_the_workspace() {
         assert_eq!(Fixed::new(25, -1).to_integral(Rounding::Nearest), Some(3));
@@ -249,7 +257,7 @@ mod tests {
         assert_eq!(quotient((2, 0), (3, 0)), (666_666_666_666_666_667, -18));
         assert_eq!(quotient((-2, 0), (3, 0)), (-666_666_666_666_666_667, -18));
         assert_eq!(quotient((7, 0), (-2, 0)), (-3_500_000_000_000_000_000, -18));
-        // Halves round to even: 1 / 2^26 and 3 / 2^26 both end in ...5 past the scale.
+        // Halves are rounded to even: 1 / 2^26 and 3 / 2^26 both have a 5 just beyond the scale.
         assert_eq!(
             quotient((1, 0), (1 << 26, 0)),
             (149_011_611_938_476_562, -25)
@@ -258,7 +266,7 @@ mod tests {
             quotient((3, 0), (1 << 26, 0)),
             (447_034_835_815_429_688, -25)
         );
-        // The integer part is never short, and the fraction has eighteen digits.
+        // The integer part is never cut short, and the fraction has eighteen digits.
         assert_eq!(
             quotient((10_000_000_000_000_000_000, 0), (3, 0)),
             (3_333_333_333_333_333_333_333_333_333_333_333_333, -18)

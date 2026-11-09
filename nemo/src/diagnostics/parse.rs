@@ -1,10 +1,9 @@
-//! The kinds of problems the parser reports.
+//! The kinds of problems that the parser reports.
 
 use nemo_physical::diagnostic_kinds;
 
 diagnostic_kinds! {
-    /// A problem in a program's text: the lexer or the parser could not
-    /// read what was written.
+    /// A problem in the text of a program that keeps the lexer or the parser from reading it.
     pub enum ParseError {
         Expected { expected: String, found: String }
             => EXPECTED = 202, error, "expected {expected}, found {found}",

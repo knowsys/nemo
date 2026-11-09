@@ -1,12 +1,12 @@
-//! The exception hierarchy, and diagnostics as Python data.
+//! The exceptions of the `nmo` module, and diagnostics as Python data.
 //!
-//! A failure of the engine raises `NemoError` or a subclass,
-//! a value that does not convert raises `ValueError` or `TypeError`,
-//! and a panic, a bug in Nemo, raises pyo3's `PanicException`.
-//! Diagnostics cross as structured [Diagnostic] values
-//! (code, severity, message, resolved locations),
-//! with the terminal rendering as their string form,
-//! so that nothing is flattened to an opaque message.
+//! - A failure of the engine raises `NemoError` or a subclass.
+//! - A value that does not convert raises `ValueError` or `TypeError`.
+//! - A panic, which is a bug in Nemo, raises pyo3's `PanicException`.
+//!
+//! Diagnostics are passed to Python as structured [Diagnostic] values,
+//! with their code, severity, message and the places they point at,
+//! and the string form of a diagnostic is its rendering as a terminal shows it.
 
 use pyo3::{create_exception, exceptions::PyValueError, prelude::*};
 
@@ -26,28 +26,29 @@ create_exception!(
     "A failure with structured diagnostics: `diagnostics` holds them."
 );
 
-/// Returns a `ValueError` for a value that does not convert.
+/// Returns a `ValueError` with `message`, for a value that does not convert.
 pub(crate) fn value_error(message: impl Into<String>) -> PyErr {
     PyValueError::new_err(message.into())
 }
 
-/// One resolved label of a diagnostic:
-/// its message, and its location if it is known.
+/// A label of a diagnostic: its message, and the place it points at if that is known.
 #[pyclass(frozen, get_all, skip_from_py_object, module = "nmo")]
 #[derive(Debug, Clone)]
 pub struct Label {
     /// The label's message.
     pub message: String,
-    /// The name of the source the span points into, if known.
+    /// The name of the source that the label points into, if it is known.
     pub source: Option<String>,
-    /// The 1-based line, if the span could be located.
+    /// The line, counted from 1, if the place is known.
     pub line: Option<u32>,
-    /// The 1-based column (in characters), if the span could be located.
+    /// The column, in characters and counted from 1, if the place is known.
     pub column: Option<u32>,
 }
 
 #[pymethods]
 impl Label {
+    /// Returns the label as `Label("message", source:line:column)`,
+    /// or as `Label("message")` if its place is not known.
     fn __repr__(&self) -> String {
         match (&self.source, self.line, self.column) {
             (Some(source), Some(line), Some(column)) => {
@@ -58,39 +59,42 @@ impl Label {
     }
 }
 
-/// One diagnostic, as plain data: code, severity, message, labels, notes, hints,
-/// and the rendered terminal form as its string.
+/// A diagnostic as plain data.
+///
+/// Its string form is its full rendering, as a terminal shows it.
 #[pyclass(frozen, get_all, skip_from_py_object, module = "nmo")]
 #[derive(Debug, Clone)]
 pub struct Diagnostic {
     /// The stable code, like `"N0204"`.
     pub code: String,
-    /// `"error"` or `"warning"`.
+    /// The severity, `"error"` or `"warning"`.
     pub severity: String,
-    /// The headline message.
+    /// The main message.
     pub message: String,
-    /// The labels, resolved against the run's sources.
+    /// The labels, with the places they point at.
     pub labels: Vec<Label>,
     /// Additional notes.
     pub notes: Vec<String>,
-    /// Hints toward a fix.
+    /// Hints on how to fix the problem.
     pub hints: Vec<String>,
-    /// The full rendering (snippets included), plain.
+    /// The full rendering, with source snippets and without colors.
     pub rendered: String,
 }
 
 #[pymethods]
 impl Diagnostic {
+    /// Returns the full rendering.
     fn __str__(&self) -> &str {
         &self.rendered
     }
 
+    /// Returns the diagnostic as `Diagnostic(code, "message")`.
     fn __repr__(&self) -> String {
         format!("Diagnostic({}, {:?})", self.code, self.message)
     }
 }
 
-/// Resolves a diagnostic against the sources of its run.
+/// Returns a diagnostic as Python data, with the places of its labels found in `sources`.
 pub(crate) fn resolve(
     diagnostic: &nemo::diagnostics::Diagnostic,
     sources: &SourceTexts,
@@ -116,8 +120,11 @@ pub(crate) fn resolve(
     }
 }
 
-/// Returns a diagnostic with the module's hints, where the engine's hints name calls the
-/// module lacks: it has no `resume`, so a suspended run continues with `reason()`.
+/// Returns a diagnostic whose hints name only methods that the Python module has.
+///
+/// The module has no `resume`, and a run that is suspended for data from the network
+/// continues with `reason()`.
+/// So the hint of [METHOD_SUSPENDED](nemo::codes::METHOD_SUSPENDED) is replaced.
 fn with_python_hints(diagnostic: nemo::diagnostics::Diagnostic) -> nemo::diagnostics::Diagnostic {
     if diagnostic.code() == nemo::codes::METHOD_SUSPENDED {
         diagnostic
@@ -128,10 +135,12 @@ fn with_python_hints(diagnostic: nemo::diagnostics::Diagnostic) -> nemo::diagnos
     }
 }
 
-/// Raises the diagnostics of a failed call: their renderings form the
-/// message, and all of them are attached as `diagnostics`.
+/// Returns the `DiagnosticsError` for the diagnostics of a failed call.
 ///
-/// The hints that name calls of the engine the module lacks are replaced by its own.
+/// The error's message joins the renderings of the diagnostics,
+/// and its `diagnostics` attribute lists them.
+/// Hints that name engine methods the module lacks are replaced, as [with_python_hints] does.
+/// If the attribute cannot be set, the error of setting it is returned instead.
 pub(crate) fn raise(
     py: Python<'_>,
     diagnostics: Vec<nemo::diagnostics::Diagnostic>,

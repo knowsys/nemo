@@ -1,24 +1,11 @@
-//! Regular-expression matching and replacement:
+//! Regular-expression matching and replacement,
 //! SPARQL's [`REGEX`](https://www.w3.org/TR/sparql12-query/#func-regex) and
-//! [`REPLACE`](https://www.w3.org/TR/sparql12-query/#func-replace),
-//! which are XPath's [`fn:matches`](https://www.w3.org/TR/xpath-functions-31/#func-matches) and
-//! [`fn:replace`](https://www.w3.org/TR/xpath-functions-31/#func-replace).
+//! [`REPLACE`](https://www.w3.org/TR/sparql12-query/#func-replace).
 //!
-//! A pattern is written in the `fancy-regex` dialect, backreferences included,
-//! rather than XPath's regular expression syntax.
-//! XPath's [flags](https://www.w3.org/TR/xpath-functions-31/#flags) apply:
-//! `i` for case-insensitive matching, `s` for a dot matching a line break,
-//! `m` for anchors matching at line breaks,
-//! `x` for whitespace in the pattern ignored (the engine's verbose mode,
-//! which also reads `#` comments),
-//! and `q` for a pattern, and a replacement, taken literally.
-//! A replacement reads `$n` as a capture group and `\$` and `\\` as `$` and `\`.
-//! An unknown flag or an invalid pattern or replacement is malformed;
-//! a pattern too large to compile, or a subject the engine gives up on, overflows.
-//!
-//! Compiled patterns are cached per thread by their final source,
-//! so a constant pattern compiles once per evaluation thread rather than once per row.
-//! The cache is bounded and starts over when full.
+//! These are XPath's [`fn:matches`](https://www.w3.org/TR/xpath-functions-31/#func-matches)
+//! and [`fn:replace`](https://www.w3.org/TR/xpath-functions-31/#func-replace),
+//! except that a pattern is written in the syntax of the `fancy-regex` crate,
+//! backreferences included, rather than in XPath's syntax.
 
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
@@ -30,29 +17,40 @@ use crate::{
 };
 
 thread_local! {
-    /// The compiled patterns of this thread, by final source.
+    /// The compiled patterns of this thread, by their source with the inline flags.
+    ///
+    /// A constant pattern is thus compiled once per thread rather than once per row.
+    /// The cache is cleared when it reaches [COMPILED_BOUND] patterns.
     static COMPILED: RefCell<HashMap<String, Rc<Regex>>> = RefCell::new(HashMap::new());
 }
 
-/// The most patterns the cache holds before it starts over.
+/// The number of patterns at which the cache is cleared.
 const COMPILED_BOUND: usize = 256;
 
-/// The parsed flags of a pattern operation.
+/// The flags of a pattern operation,
+/// XPath's [flags](https://www.w3.org/TR/xpath-functions-31/#flags).
+///
+/// - `i` makes the matching ignore case.
+/// - `s` makes a dot also match a line break.
+/// - `m` makes the anchors also match at line breaks.
+/// - `x` makes the pattern ignore whitespace.
+///   This is the verbose mode of `fancy-regex`, which also skips `#` comments.
+/// - `q` makes the pattern and the replacement literal.
 struct Flags {
-    /// Case-insensitive matching.
+    /// Whether the matching ignores case.
     insensitive: bool,
-    /// A dot matches a line break too.
+    /// Whether a dot also matches a line break.
     dot_all: bool,
-    /// The anchors match at line breaks too.
+    /// Whether the anchors also match at line breaks.
     multi_line: bool,
-    /// Whitespace in the pattern is ignored.
+    /// Whether whitespace in the pattern is ignored.
     extended: bool,
-    /// The pattern, and a replacement, taken literally.
+    /// Whether the pattern and the replacement are taken literally.
     literal: bool,
 }
 
 impl Flags {
-    /// Parses a flags string; `None` for an unknown flag.
+    /// Parses a string of flags, or returns `None` for an unknown flag.
     fn parse(flags: &str) -> Option<Self> {
         let mut parsed = Self {
             insensitive: false,
@@ -74,9 +72,10 @@ impl Flags {
         Some(parsed)
     }
 
-    /// Returns the engine's inline form of the matching flags,
-    /// empty if none is set.
-    /// A literal pattern has no whitespace to ignore.
+    /// Returns the matching flags in the inline syntax of `fancy-regex`, such as `(?im)`,
+    /// or the empty string if none is set.
+    ///
+    /// A literal pattern has no whitespace to ignore, so it never gets `x`.
     fn inline(&self) -> String {
         let letters = [
             (self.insensitive, 'i'),
@@ -98,9 +97,9 @@ impl Flags {
     }
 }
 
-/// The operands of a pattern operation, read from their values.
+/// The operands of a pattern operation, checked, and with the pattern compiled.
 struct Operands<'a> {
-    /// The text the pattern is applied to.
+    /// The text that the pattern is applied to.
     subject: &'a str,
     /// The compiled pattern.
     regex: Rc<Regex>,
@@ -109,9 +108,10 @@ struct Operands<'a> {
 }
 
 impl<'a> Operands<'a> {
-    /// Reads the operands: a string subject, a plain-string pattern,
-    /// and plain-string flags if given.
+    /// Checks the operands and compiles the pattern.
     ///
+    /// The subject must be a string,
+    /// and the pattern and the flags, if they are given, must be plain strings.
     /// An operand of another kind is a [TypeMismatch](EvaluationError::TypeMismatch),
     /// an unknown flag is [Malformed](EvaluationError::Malformed),
     /// and a pattern that does not compile fails as [compile] says.
@@ -141,11 +141,12 @@ impl<'a> Operands<'a> {
     }
 }
 
-/// Returns the regex of a pattern under flags, from the cache if it is there.
+/// Returns a pattern compiled with the given flags, from the cache if it is there.
 ///
-/// A pattern beyond the engine's size or nesting limits
-/// is an [Overflow](EvaluationError::Overflow);
-/// any other one that does not compile is [Malformed](EvaluationError::Malformed).
+/// A literal pattern is escaped before it is compiled.
+/// A pattern beyond the size or nesting limits of `fancy-regex`
+/// is an [Overflow](EvaluationError::Overflow),
+/// and any other pattern that does not compile is [Malformed](EvaluationError::Malformed).
 fn compile(pattern: &str, flags: &Flags) -> Result<Rc<Regex>, EvaluationError> {
     let mut source = flags.inline();
     if flags.literal {
@@ -178,7 +179,9 @@ fn compile(pattern: &str, flags: &Flags) -> Result<Rc<Regex>, EvaluationError> {
 
 /// Returns whether a pattern matches somewhere in a string.
 ///
-/// A subject the engine gives up on is an [Overflow](EvaluationError::Overflow).
+/// `flags` is the flags operand, if the instruction has one.
+/// If `fancy-regex` gives up on the subject, for example after too much backtracking,
+/// the result is an [Overflow](EvaluationError::Overflow).
 pub(crate) fn matches(
     subject: ValueRef<'_>,
     pattern: ValueRef<'_>,
@@ -194,11 +197,15 @@ pub(crate) fn matches(
     }
 }
 
-/// Replaces every match of a pattern in a string,
-/// the replacement read as XPath's `fn:replace` reads it:
-/// `$n` for a capture group, `\$` and `\\` for a literal `$` and `\`.
+/// Replaces every match of a pattern in a string.
 ///
+/// The replacement has the syntax of XPath's `fn:replace`, as [expansion] describes,
+/// unless the flags make it literal.
+/// A replacement that is not a plain string is a [TypeMismatch](EvaluationError::TypeMismatch),
+/// and a malformed one is [Malformed](EvaluationError::Malformed).
 /// The subject's language tag is kept.
+/// If `fancy-regex` gives up on the subject,
+/// the result is an [Overflow](EvaluationError::Overflow).
 pub(crate) fn replace(
     subject: ValueRef<'_>,
     pattern: ValueRef<'_>,
@@ -214,7 +221,7 @@ pub(crate) fn replace(
     };
 
     let replaced = if operands.flags.literal {
-        // A literal replacement: `$` has no meaning.
+        // In a literal replacement, `$` has no meaning.
         operands
             .regex
             .try_replacen(operands.subject, 0, fancy_regex::NoExpand(replacement))
@@ -226,7 +233,7 @@ pub(crate) fn replace(
             .regex
             .try_replacen(operands.subject, 0, expansion.as_str())
     };
-    // The engine may give up on a subject, as it does for matching.
+    // `fancy-regex` may give up on a subject, as for matching.
     let Ok(replaced) = replaced else {
         return EvaluationError::Overflow.into();
     };
@@ -239,14 +246,18 @@ pub(crate) fn replace(
     }
 }
 
-/// Translates an XPath replacement string, for a pattern with `groups` capture groups,
-/// into the expansion syntax of `fancy-regex`,
-/// or returns `None` if it is malformed:
-/// a `$` not followed by a digit, or a `\` not followed by `$` or `\`.
+/// Translates an XPath replacement string into the expansion syntax of `fancy-regex`,
+/// for a pattern with `groups` capture groups.
 ///
-/// A `$` reads its digits as one number;
-/// one that names no group drops its last digit, kept as a literal, while it is above 9,
-/// and one of at most 9 that names no group stands for nothing.
+/// In the replacement, `$n` stands for a capture group,
+/// and `\$` and `\\` stand for a literal `$` and `\`.
+/// Returns `None` for a malformed replacement,
+/// with a `$` not followed by a digit, or a `\` not followed by `$` or `\`.
+///
+/// The digits after a `$` are read as one number.
+/// While that number names no group and is above 9,
+/// its last digit is moved out of it and written as a literal digit.
+/// A number of at most 9 that names no group stands for the empty string.
 fn expansion(replacement: &str, groups: usize) -> Option<String> {
     let mut expanded = String::with_capacity(replacement.len());
     let mut characters = replacement.chars().peekable();
@@ -291,7 +302,7 @@ fn expansion(replacement: &str, groups: usize) -> Option<String> {
 mod tests {
     use super::*;
 
-    /// Whether a pattern under flags matches a subject.
+    /// Returns whether a pattern with flags matches a subject.
     fn holds(subject: &str, pattern: &str, flags: &str) -> Result<bool, EvaluationError> {
         let (subject, pattern, flags) = (
             DataValue::string(subject),
@@ -303,6 +314,7 @@ mod tests {
             .map(|value| value == ValueRef::Boolean(true))
     }
 
+    /// The flags are XPath's, and an unknown flag is malformed.
     #[test]
     fn the_flags_are_xpaths() {
         assert_eq!(holds("a\nb", "a.b", ""), Ok(false));
@@ -317,6 +329,7 @@ mod tests {
         assert_eq!(holds("abc", "a.c", "g"), Err(EvaluationError::Malformed));
     }
 
+    /// An invalid pattern is malformed, and a pattern with a language tag is a type mismatch.
     #[test]
     fn an_invalid_pattern_is_malformed() {
         assert_eq!(holds("a", "(", ""), Err(EvaluationError::Malformed));
@@ -330,7 +343,7 @@ mod tests {
         );
     }
 
-    /// The result of replacing a pattern in a subject.
+    /// Returns the result of replacing a pattern in a subject.
     fn replaced(
         subject: &str,
         pattern: &str,
@@ -354,6 +367,7 @@ mod tests {
         })
     }
 
+    /// A replacement has XPath's syntax of group references and escapes.
     #[test]
     fn replacements_read_xpaths_syntax() {
         assert_eq!(
@@ -362,7 +376,7 @@ mod tests {
         );
         assert_eq!(replaced("abc", "(b)", "$1x"), Ok("abxc".into()));
         assert_eq!(replaced("abc", "b", "[$0]"), Ok("a[b]c".into()));
-        // Digits beyond the groups are literal; a single digit naming no group is nothing.
+        // Digits beyond the groups are literal, and a single digit that names no group is nothing.
         assert_eq!(replaced("abc", "(b)", "$10"), Ok("ab0c".into()));
         assert_eq!(replaced("abc", "(b)", "$2"), Ok("ac".into()));
         assert_eq!(replaced("abc", "(b)", "$05"), Ok("ac".into()));
@@ -372,10 +386,11 @@ mod tests {
         assert_eq!(replaced("ab", "b", r"\n"), Err(EvaluationError::Malformed));
     }
 
+    /// A subject on which `fancy-regex` gives up is an overflow, for matching and for replacing.
     #[test]
     fn a_subject_the_engine_gives_up_on_overflows() {
-        // Backtracking explodes on the backreference, which the engine reports
-        // instead of matching.
+        // The backreference makes the backtracking explode,
+        // which `fancy-regex` reports instead of matching.
         let subject = format!("{}!", "a".repeat(42));
         assert_eq!(
             replaced(&subject, r"^(a+)+\1$", "x"),

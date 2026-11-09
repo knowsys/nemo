@@ -1,11 +1,11 @@
 //! The bitwise operations on integers.
 //!
-//! An integer reads as its two's complement of unbounded width:
-//! a negative integer has infinitely many leading one bits.
-//! So the operations are exact on every integer, as the arithmetic is,
+//! An integer is treated as its two's complement of unbounded width,
+//! so a negative integer has infinitely many leading one bits.
+//! The operations are therefore exact on every integer, as the arithmetic is,
 //! and agree with their 64-bit counterparts wherever those do not overflow.
 //! A shift left is a multiplication by a power of two,
-//! a shift right a division by one, rounded down.
+//! and a shift right is a division by a power of two, rounded down.
 //! An unsigned shift has no meaning at unbounded width, so there is none.
 
 use num_bigint::{BigInt, Sign};
@@ -40,7 +40,7 @@ impl DecimalRef<'_> {
         if let Some(value) = self.to_i64()
             && places < 64
         {
-            // A 64-bit integer shifted by fewer than 64 places fits 127 bits.
+            // A 64-bit integer shifted by fewer than 64 places fits into 127 bits.
             let shifted = i128::from(value) << places;
             return Ok(Decimal::new(shifted, 0).expect("127 bits are within the length limit"));
         }
@@ -58,8 +58,9 @@ impl DecimalRef<'_> {
         from_integer(value << places)
     }
 
-    /// Returns the integer shifted right by a number of places, `⌊self / 2^places⌋`:
-    /// the bits shifted out are dropped, and the sign fills in.
+    /// Returns the integer shifted right by a number of places, `⌊self / 2^places⌋`.
+    ///
+    /// The bits shifted out are dropped, and copies of the sign bit fill in.
     ///
     /// # Errors
     ///
@@ -69,7 +70,7 @@ impl DecimalRef<'_> {
     pub(crate) fn shift_right(self, places: DecimalRef<'_>) -> Result<Decimal, EvaluationError> {
         let places = shift_places(places)?;
         if let Some(value) = self.to_i64() {
-            // Beyond 63 places, every bit left is the sign.
+            // After 63 places or more, only copies of the sign bit remain.
             return Ok(Decimal::from(value >> places.min(63)));
         }
 
@@ -82,7 +83,7 @@ impl DecimalRef<'_> {
         from_integer(value >> places)
     }
 
-    /// Returns the bitwise connective of two integers.
+    /// Returns the result of a bitwise connective on two integers.
     ///
     /// # Errors
     ///
@@ -110,11 +111,11 @@ impl DecimalRef<'_> {
     }
 }
 
-/// Returns the number of places of a shift: a non-negative integer,
-/// saturated to 64 bits, since a shift that far exhausts or overflows any value.
+/// Returns the number of places of a shift as a `u64`, saturated at `u64::MAX`.
 ///
-/// A number that is not an integer is a [TypeMismatch](EvaluationError::TypeMismatch),
-/// a negative integer [Malformed](EvaluationError::Malformed).
+/// The saturation is safe, since a shift that far clears or overflows any value.
+/// Fails with [TypeMismatch](EvaluationError::TypeMismatch) for a number that is not an
+/// integer, and with [Malformed](EvaluationError::Malformed) for a negative integer.
 fn shift_places(places: DecimalRef<'_>) -> Result<u64, EvaluationError> {
     if !places.is_integral() {
         return Err(EvaluationError::TypeMismatch);
@@ -127,7 +128,8 @@ fn shift_places(places: DecimalRef<'_>) -> Result<u64, EvaluationError> {
         .map_or(u64::MAX, |places| places.cast_unsigned()))
 }
 
-/// Returns an integer as a big integer, or a type mismatch for any other number.
+/// Returns an integer as a big integer,
+/// or [TypeMismatch](EvaluationError::TypeMismatch) for any other number.
 fn integer(value: DecimalRef<'_>) -> Result<BigInt, EvaluationError> {
     if !value.is_integral() {
         return Err(EvaluationError::TypeMismatch);
@@ -135,7 +137,8 @@ fn integer(value: DecimalRef<'_>) -> Result<BigInt, EvaluationError> {
     Ok(big(value).to_bigint().expect("an integer has no fraction"))
 }
 
-/// Returns a big integer as a value, or the overflow past the length limit of numbers.
+/// Returns a big integer as a value,
+/// or [Overflow](EvaluationError::Overflow) beyond the length limit of numbers.
 fn from_integer(value: BigInt) -> Result<Decimal, EvaluationError> {
     workspace::Big::new(value, 0)
         .map(Decimal::from)
@@ -151,13 +154,13 @@ mod tests {
         value::{DataValue, NumberRef, ValueRef},
     };
 
-    /// A 64-bit integer value.
+    /// Returns the value of a 64-bit integer.
     fn int(value: i64) -> DataValue {
         DataValue::integer(value)
     }
 
-    /// Applies an operation to two values' exact views,
-    /// with the type mismatch of the builtins for any other value.
+    /// Applies an operation to the exact numbers of two values,
+    /// and fails with a type mismatch if either value is not an exact number.
     fn apply(
         operation: impl Fn(DecimalRef<'_>, DecimalRef<'_>) -> Result<Decimal, EvaluationError>,
         left: &DataValue,
@@ -172,6 +175,8 @@ mod tests {
         }
     }
 
+    /// A shift left multiplies exactly by a power of two, and fails for a result beyond the
+    /// length limit, for negative places and for an operand that is not an integer.
     #[test]
     fn shifts_left_are_exact() {
         let left = |value: &DataValue, places: &DataValue| {
@@ -186,7 +191,7 @@ mod tests {
             Ok(number("36893488147419103232"))
         );
         assert_eq!(left(&int(0), &number("100000000000000000000")), Ok(int(0)));
-        // Past the length limit, before computing.
+        // A result beyond the length limit is refused before it is computed.
         assert_eq!(
             left(&int(1), &int(10_000_000)),
             Err(EvaluationError::Overflow)
@@ -195,7 +200,7 @@ mod tests {
             left(&int(1), &number("100000000000000000000")),
             Err(EvaluationError::Overflow)
         );
-        // Only integers, and no negative places.
+        // Only integers can be shifted, and not by a negative number of places.
         assert_eq!(left(&int(1), &int(-1)), Err(EvaluationError::Malformed));
         assert_eq!(
             left(&number("1.5"), &int(1)),
@@ -207,6 +212,7 @@ mod tests {
         );
     }
 
+    /// A shift right divides by a power of two and rounds down.
     #[test]
     fn shifts_right_round_down() {
         let right = |value: &DataValue, places: &DataValue| {
@@ -230,6 +236,7 @@ mod tests {
         );
     }
 
+    /// The connectives treat integers as two's complements of unbounded width.
     #[test]
     fn connectives_read_twos_complement() {
         let and = |left: &DataValue, right: &DataValue| {

@@ -1,4 +1,4 @@
-//! The stores of exact numbers beyond the compact ranges.
+//! The store of wide numbers: integers beyond 64 bits, or decimals beyond the compact range.
 
 use crate::{dictionary::store::RecordPool, value::number::decimal};
 
@@ -11,14 +11,11 @@ struct Header {
     exponent: i64,
 }
 
-/// A store of wide decimals,
-/// kept as records of their sign, exponent and magnitude bytes.
+/// A store of wide decimals, kept as records of their sign, exponent and magnitude bytes.
 ///
-/// Identity is the value: the parts are normalized,
-/// so equal records are equal values,
-/// and a read borrows them straight into the [decimal::WideRef] view.
-/// The dictionary keeps one store per tag,
-/// the wide integers apart from the other wide decimals.
+/// The parts of a [decimal::WideRef] are canonical,
+/// so two records are equal exactly if their values are equal.
+/// A read borrows the magnitude bytes into a [decimal::WideRef] without copying.
 pub(crate) struct WideDecimalStore {
     /// The (header, magnitude) records.
     records: RecordPool<Header>,
@@ -37,8 +34,8 @@ impl WideDecimalStore {
         self.records.len()
     }
 
-    /// Interns a wide decimal and returns its index,
-    /// or `None` if the store cannot hold it.
+    /// Interns a wide decimal and returns its index, or `None` if its magnitude is longer than
+    /// [LENGTH_LIMIT](crate::dictionary::Dictionary::LENGTH_LIMIT) bytes.
     pub(crate) fn intern(&mut self, value: decimal::WideRef<'_>) -> Option<u64> {
         self.records.intern(Self::header(value), value.magnitude())
     }

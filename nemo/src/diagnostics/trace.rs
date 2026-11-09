@@ -1,9 +1,9 @@
-//! The kinds of problems tracing reports.
+//! The kinds of problems that tracing reports.
 
 use nemo_physical::{diagnostic_kinds, diagnostics::Count};
 
 diagnostic_kinds! {
-    /// A tracing request that cannot be answered as posed.
+    /// A problem that keeps the engine from tracing a fact or from serving a trace query.
     pub enum TraceError {
         PendingUpdates
             => PENDING_UPDATES = 209, error,

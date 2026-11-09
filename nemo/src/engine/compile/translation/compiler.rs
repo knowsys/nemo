@@ -1,7 +1,7 @@
-//! The per-rule compiler: body atoms, negation, heads, aggregates, and
-//! the operation fixpoint, which resolves body operations into assignments and filters.
+//! The compiler of one rule: its body atoms, negated atoms, heads and aggregates.
 //!
-//! A rule's columns are its variables, then its computed columns.
+//! The *operation fixpoint* resolves the body's operations into assignments and filters.
+//! The compiler refers to values by [rule column](crate::engine::compile::compiled).
 
 use std::collections::HashMap;
 
@@ -31,12 +31,14 @@ use crate::{
     },
 };
 
-/// The hidden predicate holding the one row a rule body without positive atoms reads.
+/// The hidden predicate with one row, which a rule body without positive atoms reads.
 ///
 /// Its name begins with a NUL byte, which no program can write.
 const UNIT: &str = "\u{0}unit";
 
-/// Returns the unsafe-rule diagnostic for a variable the body does not bind.
+/// Returns the diagnostic of an unsafe rule, for a variable that the body does not bind.
+///
+/// `role` says what the variable is used as, such as a head variable.
 fn unsafe_variable(role: &str, variable: &str, span: Option<Span>) -> Diagnostic {
     TranslationError::UnsafeVariable {
         role: role.to_owned(),
@@ -45,24 +47,25 @@ fn unsafe_variable(role: &str, variable: &str, span: Option<Span>) -> Diagnostic
     .at(span)
 }
 
-/// The per-rule compilation state.
+/// The state of the compilation of one rule.
 pub(super) struct RuleCompiler<'a, 'b> {
-    /// The enclosing translator.
+    /// The translator that compiles the rule.
     pub(super) translator: &'b mut Translator<'a>,
-    /// Variable ids by name, in first-occurrence order.
+    /// The rule column of each variable, by name.
     pub(super) names: HashMap<String, VariableId>,
-    /// Number of variables assigned so far.
+    /// The number of variables so far.
     pub(super) variables: usize,
     /// The body atoms compiled so far.
     pub(super) body: Vec<BodyAtom>,
     /// The filters compiled so far.
     pub(super) filters: Vec<RuleFilter>,
-    /// The probing bindings compiled so far.
+    /// The bindings compiled so far.
     pub(super) bindings: Vec<RuleBinding>,
     /// The computed columns compiled so far.
     pub(super) computed: Vec<ComputedColumn>,
-    /// Equalities synthesized for expression arguments of body atoms,
-    /// becoming bindings or joining the operation fixpoint.
+    /// The equalities created for the expression arguments of body atoms.
+    ///
+    /// Each of them becomes a binding, or joins the operation fixpoint.
     pub(super) deferred: Vec<Operation>,
     /// Whether a constant condition proved the rule can never fire.
     pub(super) never_fires: bool,
@@ -85,11 +88,14 @@ impl<'a, 'b> RuleCompiler<'a, 'b> {
     }
 }
 
-/// Returns the post programs of an aggregate head (its expressions around an aggregate)
-/// over the aggregation's output rows `(group…, results…)`.
+/// Returns the post programs of an aggregate head,
+/// with their inputs mapped to positions in a row of the aggregation's output.
 ///
-/// Each input is remapped from its rule column to its position in the group,
-/// and the expression's own aggregate result to its position after the group columns.
+/// Such a row has the group columns followed by the aggregates' results.
+/// An input that is a rule column is mapped to its position in the group,
+/// and [AGGREGATE_RESULT] to the position of the result of the expression's own aggregate.
+/// `raw_posts` contains, per post program, the index of its aggregate,
+/// its inputs as rule columns, and the program.
 fn post_columns(
     raw_posts: Vec<(usize, Vec<usize>, StackProgram)>,
     group: &[usize],
@@ -101,8 +107,8 @@ fn post_columns(
                 .into_iter()
                 .map(|id| {
                     if id == AGGREGATE_RESULT {
-                        // The sentinel names this expression's own
-                        // aggregate within `(group…, results…)`.
+                        // The placeholder stands for the result of this expression's own
+                        // aggregate.
                         group.len() + result
                     } else {
                         group
@@ -118,12 +124,13 @@ fn post_columns(
 }
 
 impl RuleCompiler<'_, '_> {
-    /// Returns the variables' source names by column of the given width,
-    /// for the type analysis's messages.
+    /// Returns the written name of each of the first `width` rule columns,
+    /// for the messages of the type analysis.
     ///
-    /// A column the normalization invented has `None`
-    /// (its name begins with a NUL byte, which no program can write),
-    /// and a name can also belong to a computed column.
+    /// A column without a written name has `None`.
+    /// Such columns include those of hidden variables,
+    /// whose names begin with a NUL byte, which no program can write.
+    /// A name can also belong to a computed column, for a variable that an assignment binds.
     pub(super) fn source_names(&self, width: usize) -> Vec<Option<String>> {
         let mut names = vec![None; width];
         for (name, &variable) in &self.names {
@@ -139,12 +146,12 @@ impl RuleCompiler<'_, '_> {
 
     /// Compiles a positive body atom.
     ///
-    /// Constants and repeated variables normalize into fresh variables plus identity filters,
+    /// A constant or a repeated variable becomes a fresh variable with an identity filter,
     /// since a repeated variable or a constant in an atom means term identity (`=`),
     /// not value equality.
     pub(super) fn body_atom(&mut self, atom: &Atom) -> Result<(), Diagnostic> {
-        // A join reads columns, and a nullary atom has none;
-        // negated nullary atoms are guards and do not come here.
+        // A join reads columns, and a nullary atom has none.
+        // Negated nullary atoms are guards, which `negated_atom` compiles.
         if atom.terms.is_empty() {
             return Err(unsupported("a positive nullary body atom", atom.span));
         }
@@ -156,8 +163,8 @@ impl RuleCompiler<'_, '_> {
 
         let mut variables = Vec::with_capacity(layout.delivered());
         for (position, term) in atom.terms.iter().enumerate() {
-            // A pruned column is not stored; its term is anonymous in
-            // every occurrence, so there is nothing to bind.
+            // A pruned column is not stored, and no rule reads its term,
+            // so there is nothing to bind.
             if layout.is_pruned(position) {
                 continue;
             }
@@ -168,8 +175,10 @@ impl RuleCompiler<'_, '_> {
         Ok(())
     }
 
-    /// Adds the atom a body without positive atoms reads: the one row of a hidden table,
-    /// so that the body's conditions evaluate once.
+    /// Adds the atom that a body without positive atoms reads, which matches the one row of a
+    /// hidden table.
+    ///
+    /// So the body's conditions are evaluated once.
     pub(super) fn unit_atom(&mut self) -> Result<(), Diagnostic> {
         let unit = Fact::new(Identifier::Iri(UNIT.to_owned()), vec![Term::integer(0)]);
         self.translator.fact(&unit)?;
@@ -182,8 +191,9 @@ impl RuleCompiler<'_, '_> {
         Ok(())
     }
 
-    /// Returns the variable one term of a positive body atom binds,
-    /// given the variables the atom's earlier columns bind.
+    /// Returns the variable that one term of a positive body atom binds.
+    ///
+    /// `earlier` contains the variables that the atom's earlier columns bind.
     fn body_column(
         &mut self,
         term: &Term,
@@ -195,8 +205,8 @@ impl RuleCompiler<'_, '_> {
                 if !earlier.contains(&id) {
                     return Ok(id);
                 }
-                // A repeated variable within one atom: a fresh column
-                // variable constrained identical.
+                // A variable repeated within one atom gets a fresh column variable,
+                // which must be identical to the first occurrence.
                 let fresh = self.fresh();
                 self.equality_filter(
                     vec![fresh, id],
@@ -206,12 +216,12 @@ impl RuleCompiler<'_, '_> {
                 );
                 Ok(fresh)
             }
-            // Each `_` is its own never-read column variable.
+            // Each `_` gets its own fresh variable, which nothing reads.
             TermKind::Variable(variable) if variable.kind == VariableKind::Anonymous => {
                 Ok(self.fresh())
             }
             TermKind::Variable(variable) if variable.kind == VariableKind::Global => {
-                // A parameter reads as a constant column.
+                // A parameter becomes a column constrained to its value.
                 let value = self.translator.global(&variable.name, term.span)?;
                 Ok(self.constant_column(value, term.span))
             }
@@ -220,11 +230,10 @@ impl RuleCompiler<'_, '_> {
                 term.span,
             )),
             _ if mentions(term, VariableKind::Universal) || is_pattern(term) => {
-                // An expression argument (or a pattern whose only
-                // variables are anonymous): the column reads through
-                // a fresh named variable constrained equal to the
-                // expression once the operation fixpoint has bound
-                // its inputs, or destructured, if it is a pattern.
+                // An expression argument, or a pattern whose only variables are anonymous.
+                // The column gets a fresh named variable, and a deferred equality with the
+                // term constrains it. An expression is compared once the operation
+                // fixpoint has bound its inputs, and a pattern is destructured.
                 let name = format!("\u{0}expression{}", self.deferred.len());
                 let id = self.variable(&name);
                 self.deferred.push(Operation {
@@ -241,8 +250,7 @@ impl RuleCompiler<'_, '_> {
                 Ok(id)
             }
             _ => {
-                // A ground term: a fresh column variable constrained to
-                // the constant.
+                // A ground term gets a fresh column variable constrained to its value.
                 let value = self.translator.evaluate(term)?;
                 Ok(self.constant_column(value, term.span))
             }
@@ -263,11 +271,13 @@ impl RuleCompiler<'_, '_> {
 
     /// Compiles a negated body atom.
     ///
-    /// Bound variables become shared columns,
-    /// and everything else is private to the atom (existential inside the negation).
-    /// Constants and repetitions turn into filters over the atom's own columns.
-    /// An unbound variable is local to a single negated literal,
-    /// and `foreign` carries the ones earlier literals used.
+    /// A variable that the positive body binds becomes a shared column,
+    /// and every other column is private to the atom.
+    /// Constants and repeated variables become filters over the atom's own columns.
+    /// A variable that the positive body does not bind is local to one negated atom,
+    /// so using it in two of them is an error.
+    /// `foreign` contains the local variables of the earlier negated atoms,
+    /// with the positions of their atoms.
     pub(super) fn negated_atom(
         &mut self,
         atom: &Atom,
@@ -281,15 +291,15 @@ impl RuleCompiler<'_, '_> {
 
         let mut negated = NegatedColumns::default();
         for (position, term) in atom.terms.iter().enumerate() {
-            // A pruned column is not stored; its term is anonymous in
-            // every occurrence, so there is nothing to bind.
+            // A pruned column is not stored, and no rule reads its term,
+            // so there is nothing to bind.
             if layout.is_pruned(position) {
                 continue;
             }
             let column = self.negated_column(term, &mut negated, foreign)?;
             negated.columns.push(column);
         }
-        // This literal's own variables are now foreign to later ones.
+        // This atom's local variables are foreign to the later negated atoms.
         for (name, _) in negated.local {
             foreign.insert(name, atom.span);
         }
@@ -301,12 +311,12 @@ impl RuleCompiler<'_, '_> {
         })
     }
 
-    /// Returns the column one term of a negated atom stands for,
-    /// adding the filters it needs over the atom's own columns.
+    /// Returns the kind of column that one term of a negated atom stands for,
+    /// and adds the filters that it needs over the atom's own columns.
     ///
-    /// Filters and first occurrences are indexed by the *delivered* columns
-    /// (the columns gathered so far),
-    /// which pruning can shift left of the atom's term positions (the kept columns).
+    /// Filters and first occurrences refer to delivered columns, the columns gathered so far.
+    /// Pruning can make a term's delivered position smaller than its position among the kept
+    /// columns.
     fn negated_column(
         &mut self,
         term: &Term,
@@ -322,8 +332,8 @@ impl RuleCompiler<'_, '_> {
                             negated.shared_at.insert(id, position);
                             NegatedColumn::Shared(id)
                         }
-                        // A repeated bound variable: the later occurrence
-                        // constrains equal, privately.
+                        // A bound variable written again: the later occurrence is a private
+                        // column that must be identical to the first.
                         Some(&first) => {
                             negated
                                 .filters
@@ -355,8 +365,8 @@ impl RuleCompiler<'_, '_> {
                 unsupported("an existential variable in a negated atom", term.span),
             ),
             _ => {
-                // A ground term (a parameter included): a private column
-                // constrained to it.
+                // A ground term, or a parameter, becomes a private column constrained to its
+                // value.
                 let value = self.translator.evaluate(term)?;
                 negated.filters.push(RuleFilter {
                     inputs: vec![position],
@@ -372,9 +382,12 @@ impl RuleCompiler<'_, '_> {
         }
     }
 
-    /// Compiles one atom of an existential head: universal variables
-    /// join the frontier, existential variables index in first-sight
-    /// order, everything else is a ground value.
+    /// Compiles one atom of an existential head.
+    ///
+    /// Universal variables join the frontier, existential variables are numbered in order of
+    /// first mention, and every other term is a constant.
+    /// The head's atoms share `frontier` and `existentials`, the numbers of the existential
+    /// variables by name.
     pub(super) fn existential_atom(
         &mut self,
         atom: &Atom,
@@ -410,9 +423,9 @@ impl RuleCompiler<'_, '_> {
                 }
                 _ => {
                     let value = self.translator.evaluate(term)?;
-                    // Encoded here, so that a constant the store cannot
-                    // hold is an error at its span rather than at the
-                    // first row the head creates.
+                    // The constant is encoded here, so that a constant that the dictionary
+                    // cannot hold is an error at its position,
+                    // rather than at the first row that the head creates.
                     self.translator
                         .dictionary
                         .encode(value.as_ref())
@@ -425,11 +438,13 @@ impl RuleCompiler<'_, '_> {
         Ok(ExistentialAtom { table, columns })
     }
 
-    /// Compiles an aggregate-carrying head atom: other positions form
-    /// the group (expressions become computed group keys), the
-    /// aggregate's input, value, and scope variables resolve to rule
-    /// columns, and expressions around the aggregate become post
-    /// programs over the aggregation's output.
+    /// Compiles a head atom with aggregates.
+    ///
+    /// The positions without an aggregate form the group,
+    /// and an expression there becomes a computed group column.
+    /// The input, value and scope variables of each aggregate resolve to rule columns,
+    /// and an expression around an aggregate becomes a post program over the aggregation's
+    /// output.
     pub(super) fn aggregate_head(&mut self, atom: &Atom) -> Result<CompiledAggregate, Diagnostic> {
         let table = self
             .translator
@@ -503,7 +518,7 @@ impl RuleCompiler<'_, '_> {
     /// Checks an aggregate head's functions against its group.
     ///
     /// No aggregate may aggregate a group variable written in the rule.
-    /// `#count()` counts contributions, which the body variables tell apart,
+    /// `#count()` counts contributions, which the body variables distinguish,
     /// so it needs a body with variables.
     fn check_aggregate(
         &self,
@@ -531,8 +546,8 @@ impl RuleCompiler<'_, '_> {
         Ok(())
     }
 
-    /// Returns an ordinary position of an aggregate head as a rule column:
-    /// a group variable, or an expression that becomes a computed group key.
+    /// Returns the rule column of a position of an aggregate head without an aggregate:
+    /// the column of a group variable, or a computed column for an expression.
     fn group_column(&mut self, term: &Term) -> Result<usize, Diagnostic> {
         match &term.kind {
             TermKind::Variable(variable) if variable.kind == VariableKind::Universal => {
@@ -555,9 +570,9 @@ impl RuleCompiler<'_, '_> {
         }
     }
 
-    /// Returns the name of the variable written in the rule that binds a column,
+    /// Returns the written name of a variable that binds a rule column,
     /// or `None` if only a hidden variable binds it,
-    /// as a check binds a parameter without a value.
+    /// such as the variable that a check binds to a parameter without a value.
     fn written_name(&self, column: usize) -> Option<String> {
         self.names
             .iter()
@@ -565,9 +580,10 @@ impl RuleCompiler<'_, '_> {
             .map(|(name, _)| name.clone())
     }
 
-    /// Compiles the parts of an aggregate expression: the function, the
-    /// aggregated column (an input expression becomes a computed
-    /// column), and the scope columns.
+    /// Compiles the parts of an aggregate: the function, the aggregated column,
+    /// and the scope columns.
+    ///
+    /// An input expression becomes a computed column.
     fn aggregate_parts(
         &mut self,
         aggregate: &Aggregate,
@@ -582,7 +598,8 @@ impl RuleCompiler<'_, '_> {
             Some(term) => Some(self.aggregate_column(term)?),
         };
         if aggregate.legacy_list {
-            // The legacy comma list means the same; the keyword says it.
+            // A scope list after a comma means the same as one after `per`,
+            // but the keyword makes it explicit.
             let mut warning = TranslationError::LegacyScopeList.diagnostic();
             if let Some(span) = aggregate.span {
                 warning = warning.with_label(span, "write `per` before the variables");
@@ -601,12 +618,13 @@ impl RuleCompiler<'_, '_> {
                     aggregate.span,
                 ));
             };
-            // Repeats (including the input itself) refine nothing.
+            // A repeated variable, or the input itself, adds nothing to the scope.
             if input != Some(id) && value != Some(id) && !scope.contains(&id) {
                 scope.push(id);
             }
         }
-        // `#count()` counts the body matches: every body variable identifies a contribution.
+        // `#count()` counts the body matches, so all body variables together identify a
+        // contribution.
         let scope = (!aggregate.counts_matches()).then_some(scope);
         Ok(CompiledAggregateFunction {
             kind,
@@ -616,8 +634,8 @@ impl RuleCompiler<'_, '_> {
         })
     }
 
-    /// Resolves one aggregate operand to a rule column: a bound
-    /// variable directly, an expression as a computed column.
+    /// Returns the rule column of one operand of an aggregate:
+    /// the variable's column for a bound variable, and a computed column for an expression.
     fn aggregate_column(&mut self, term: &Term) -> Result<usize, Diagnostic> {
         match &term.kind {
             TermKind::Variable(variable) if variable.kind == VariableKind::Universal => {
@@ -638,9 +656,9 @@ impl RuleCompiler<'_, '_> {
         }
     }
 
-    /// Compiles a head atom over the rule's columns.
+    /// Compiles a head atom over rule columns.
     ///
-    /// Constants and repeated columns become computed columns.
+    /// Constants, parameters, expressions and repeated variables become computed columns.
     pub(super) fn head_atom(&mut self, atom: &Atom) -> Result<HeadAtom, Diagnostic> {
         let table = self
             .translator
@@ -657,7 +675,7 @@ impl RuleCompiler<'_, '_> {
                         return Err(unsafe_variable("head variable", &variable.name, term.span));
                     };
                     if columns.contains(&id) {
-                        // A repeated head column: computed copy.
+                        // A variable repeated in the head atom becomes a computed copy.
                         self.computed_column(vec![id], vec![OpCode::Input(0)], Vec::new())
                     } else {
                         id
@@ -667,7 +685,7 @@ impl RuleCompiler<'_, '_> {
                     return Err(TranslationError::AnonymousAsValue.at(term.span));
                 }
                 TermKind::Variable(variable) if variable.kind == VariableKind::Global => {
-                    // A parameter is a computed constant column.
+                    // A parameter becomes a computed column with its value.
                     let value = self.translator.global(&variable.name, term.span)?;
                     self.computed_column(Vec::new(), vec![OpCode::Constant(0)], vec![value])
                 }
@@ -681,10 +699,10 @@ impl RuleCompiler<'_, '_> {
                 | TermKind::Tuple(_)
                 | TermKind::Map { .. }
                 | TermKind::Function { .. } => {
-                    // A head expression: a computed column over its
-                    // bound variables. A ground one folds to a constant,
-                    // unless it calls a nondeterministic function (such as
-                    // `RAND()`), which is evaluated per row.
+                    // A head expression becomes a computed column over its variables.
+                    // A ground expression is evaluated once, to a constant,
+                    // unless it calls a nondeterministic function such as `RAND()`,
+                    // which is evaluated per row.
                     let (inputs, program) =
                         self.compile_term(term, VariableScope::Rule(&self.names))?;
                     if inputs.is_empty() && !program.is_nondeterministic() {
@@ -695,7 +713,7 @@ impl RuleCompiler<'_, '_> {
                     }
                 }
                 _ => {
-                    // A ground head term: computed constant column.
+                    // A ground term becomes a computed column with its value.
                     let value = self.translator.evaluate(term)?;
                     self.computed_column(Vec::new(), vec![OpCode::Constant(0)], vec![value])
                 }
@@ -705,12 +723,14 @@ impl RuleCompiler<'_, '_> {
         Ok(HeadAtom { table, columns })
     }
 
-    /// Resolves the body operations.
+    /// Resolves the body's operations by the operation fixpoint.
     ///
-    /// An equality binding one fresh variable to an expression over bound ones is an
-    /// assignment, a computed column.
-    /// Assignments resolve to a fixpoint in body order, so chains work in any order.
-    /// Everything else is a filter, standing for the part of the rule's text its origin names.
+    /// An equality between an unbound variable and an expression over bound variables is an
+    /// [assignment](Self::assignment), which becomes a computed column.
+    /// The operations are passed over in body order until a pass finds no further assignment,
+    /// so a chain of assignments may be written in any order.
+    /// Every other operation becomes a filter,
+    /// which comes from the part of the rule's text that its origin in `pending` names.
     pub(super) fn operations(
         &mut self,
         mut pending: Vec<(&Operation, FilterOrigin)>,
@@ -736,9 +756,8 @@ impl RuleCompiler<'_, '_> {
         Ok(())
     }
 
-    /// Compiles a deferred column equality into a probing binding if
-    /// every variable of its expression is atom-bound. Returns whether
-    /// it did.
+    /// Compiles a deferred equality into a binding if the body atoms bind every variable of
+    /// its expression, and returns whether it did.
     pub(super) fn binding(&mut self, operation: &Operation) -> Result<bool, Diagnostic> {
         let target = &operation.arguments[0];
         let expression = &operation.arguments[1];
@@ -762,14 +781,15 @@ impl RuleCompiler<'_, '_> {
         Ok(true)
     }
 
-    /// Compiles an operation as an assignment if it is one: an
-    /// equality with one side a fresh variable and every variable of
-    /// the other side bound. Returns whether it did.
+    /// Compiles an operation as an assignment if it is one, and returns whether it did.
+    ///
+    /// An assignment is an equality with an unbound universal variable on one side,
+    /// and only bound variables on the other side.
     fn assignment(&mut self, operation: &Operation) -> Result<bool, Diagnostic> {
         if operation.operator != Operator::Equal || operation.arguments.len() != 2 {
             return Ok(false);
         }
-        // Either side may be the fresh variable.
+        // Either side may be the unbound variable.
         for (target, expression) in [(0usize, 1usize), (1, 0)] {
             let target = &operation.arguments[target];
             let expression = &operation.arguments[expression];
@@ -793,7 +813,8 @@ impl RuleCompiler<'_, '_> {
 
     /// Returns whether every variable of a term is bound.
     ///
-    /// A parameter stands for its value and is bound throughout.
+    /// A parameter stands for its value, so it is always bound.
+    /// A term with an aggregate is never bound.
     fn bound(&self, term: &Term) -> bool {
         !term.any_term(|term| match &term.kind {
             TermKind::Variable(variable) => match variable.kind {
@@ -808,8 +829,9 @@ impl RuleCompiler<'_, '_> {
 
     /// Compiles a body operation into a filter over bound variables.
     ///
-    /// A ground condition compiles like any other, and the constant-folding pass evaluates it
-    /// once.
+    /// A ground condition is compiled like any other,
+    /// and the constant folding of the [program passes](crate::engine::compile::optimize)
+    /// evaluates it once.
     fn filter(&mut self, operation: &Operation, origin: FilterOrigin) -> Result<(), Diagnostic> {
         let mut builder = StackProgramBuilder::default();
         builder.operation(
@@ -827,8 +849,10 @@ impl RuleCompiler<'_, '_> {
         Ok(())
     }
 
-    /// Compiles a term in a scope over the rule's variables: the
-    /// variables feeding the program, in input order, and the program.
+    /// Compiles a term into a program, and returns the columns that feed the program,
+    /// in input order, with the program.
+    ///
+    /// `scope` decides which variables the term may read.
     fn compile_term(
         &self,
         term: &Term,
@@ -840,7 +864,7 @@ impl RuleCompiler<'_, '_> {
         Ok((inputs, builder.finish(term.span)?))
     }
 
-    /// Returns the id of a named variable, assigned on first sight.
+    /// Returns the id of a named variable, and assigns a fresh one on first use.
     pub(super) fn variable(&mut self, name: &str) -> VariableId {
         if let Some(&id) = self.names.get(name) {
             return id;
@@ -857,7 +881,7 @@ impl RuleCompiler<'_, '_> {
         id
     }
 
-    /// Records an equality filter from raw program parts.
+    /// Records an equality filter, given the parts of its program.
     fn equality_filter(
         &mut self,
         inputs: Vec<VariableId>,
@@ -874,8 +898,7 @@ impl RuleCompiler<'_, '_> {
         });
     }
 
-    /// Records a computed column from raw program parts, returning its
-    /// rule column.
+    /// Records a computed column, given the parts of its program, and returns its rule column.
     fn computed_column(
         &mut self,
         inputs: Vec<VariableId>,
@@ -887,15 +910,15 @@ impl RuleCompiler<'_, '_> {
         self.computed_program(inputs, program)
     }
 
-    /// Records a computed column from a compiled program, returning its
-    /// rule column.
+    /// Records a computed column with a compiled program, and returns its rule column.
     fn computed_program(&mut self, inputs: Vec<VariableId>, program: StackProgram) -> usize {
         self.computed.push(ComputedColumn { inputs, program });
         self.variables + self.computed.len() - 1
     }
 }
 
-/// The columns of a negated atom gathered so far, and what compiling them needs.
+/// The columns of a negated atom gathered so far,
+/// and what the compilation of the remaining columns needs.
 #[derive(Default)]
 struct NegatedColumns {
     /// The columns, by delivered position.
@@ -904,12 +927,12 @@ struct NegatedColumns {
     filters: Vec<RuleFilter>,
     /// Per bound variable, the delivered position of its first occurrence.
     shared_at: HashMap<VariableId, usize>,
-    /// Per variable of the literal's own, the delivered position of its first occurrence.
+    /// Per local variable of the atom, the delivered position of its first occurrence.
     local: HashMap<String, usize>,
 }
 
-/// Returns the filter constraining two of a negated atom's columns identical,
-/// for a variable written again at the given position.
+/// Returns the filter that requires two columns of a negated atom to be identical,
+/// for a variable written again at delivered position `position`.
 fn equal_columns(first: usize, position: usize, span: Option<Span>) -> RuleFilter {
     RuleFilter {
         inputs: vec![first, position],

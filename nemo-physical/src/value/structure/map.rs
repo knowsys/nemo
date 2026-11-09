@@ -13,14 +13,14 @@ use crate::{
     value::{DataValue, ValueRef},
 };
 
-/// An owned map from data values to data values with an optional label,
-/// written `{host = "localhost"}` or `server{host = "localhost"}` in term syntax.
+/// An owned map from data values to data values with an optional label.
+///
+/// Term syntax writes it as `{host = "localhost"}` or `server{host = "localhost"}`.
 /// Its borrowed view is [MapRef].
 ///
-/// Keys are unique, and the pairs are in key order.
-///
+/// The keys are unique, and the pairs are sorted by key in term order.
 /// The constructors sort the pairs,
-/// so maps with the same pairs are equal however they were built.
+/// so maps with the same pairs are equal however they were created.
 #[derive(Debug, Clone)]
 pub struct MapValue {
     /// The map's label, if any.
@@ -31,13 +31,13 @@ pub struct MapValue {
 
 impl MapValue {
     /// Creates an unlabeled map from key-value pairs,
-    /// or `None` if two pairs share a key.
+    /// or `None` if two pairs have the same key.
     pub fn new(pairs: impl IntoIterator<Item = (DataValue, DataValue)>) -> Option<Self> {
         Self::build(None, pairs)
     }
 
     /// Creates a labeled map from key-value pairs,
-    /// or `None` if two pairs share a key.
+    /// or `None` if two pairs have the same key.
     pub fn labeled(
         label: impl Into<Box<str>>,
         pairs: impl IntoIterator<Item = (DataValue, DataValue)>,
@@ -45,7 +45,8 @@ impl MapValue {
         Self::build(Some(label.into()), pairs)
     }
 
-    /// Sorts the pairs by key and rejects duplicate keys.
+    /// Creates a map from key-value pairs, sorted by key,
+    /// or returns `None` if two pairs have the same key.
     fn build(
         label: Option<Box<str>>,
         pairs: impl IntoIterator<Item = (DataValue, DataValue)>,
@@ -72,7 +73,7 @@ impl MapValue {
         &self.pairs
     }
 
-    /// Returns the value at the key, if the map holds it.
+    /// Returns the value for the key, or `None` if the map has no such key.
     pub fn get(&self, key: ValueRef<'_>) -> Option<&DataValue> {
         self.pairs
             .binary_search_by(|pair| pair.0.as_ref().cmp(&key))
@@ -123,27 +124,29 @@ impl Hash for MapValue {
 }
 
 impl fmt::Display for MapValue {
-    /// Writes the map in term syntax, its keys and values in canonical form.
+    /// Writes the map in canonical term syntax.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.as_ref())
     }
 }
 
-/// A borrowed map from data values to data values with an optional label,
-/// written `{host = "localhost"}` or `server{host = "localhost"}` in term syntax.
+/// A borrowed map from data values to data values with an optional label.
+///
+/// Term syntax writes it as `{host = "localhost"}` or `server{host = "localhost"}`.
 /// Its owned form is [MapValue].
 ///
-/// Keys are unique, and the pairs are in key order.
+/// The keys are unique, and the pairs are sorted by key in term order.
 #[derive(Clone, Copy)]
 pub struct MapRef<'a>(Backing<'a>);
 
-/// Where a [MapRef] reads its map.
+/// The storage that a [MapRef] reads its map from.
 #[derive(Clone, Copy)]
 enum Backing<'a> {
     /// An owned map.
     Owned(&'a MapValue),
-    /// An entry of a dictionary's map store, read in place:
-    /// a key or a value is decoded when it is read.
+    /// An entry of a dictionary's map store, which is read in place.
+    ///
+    /// Each key or value is decoded when it is read.
     Stored {
         /// The dictionary that stores the map.
         dictionary: &'a Dictionary,
@@ -155,7 +158,7 @@ enum Backing<'a> {
 impl<'a> MapRef<'a> {
     /// Creates the view of an entry of a dictionary's map store.
     ///
-    /// The store must hold the entry.
+    /// The store must contain the entry.
     pub(crate) fn stored(dictionary: &'a Dictionary, index: u64) -> Self {
         Self(Backing::Stored { dictionary, index })
     }
@@ -172,7 +175,7 @@ impl<'a> MapRef<'a> {
     pub fn len(self) -> usize {
         match self.0 {
             Backing::Owned(map) => map.len(),
-            // A stored map's elements are its keys and values, alternating.
+            // A stored map's elements are its keys and values, in alternation.
             Backing::Stored { dictionary, index } => dictionary.stored_map(index).len() / 2,
         }
     }
@@ -182,7 +185,7 @@ impl<'a> MapRef<'a> {
         self.len() == 0
     }
 
-    /// Returns the value at the key, if the map holds it.
+    /// Returns the value for the key, or `None` if the map has no such key.
     pub fn get(self, key: ValueRef<'_>) -> Option<ValueRef<'a>> {
         match self.0 {
             Backing::Owned(map) => map.get(key).map(DataValue::as_ref),
@@ -221,11 +224,11 @@ impl<'a> MapRef<'a> {
         }
     }
 
-    /// Clones the viewed map into an owned [MapValue].
+    /// Returns an owned copy of the map.
     pub fn to_owned(self) -> MapValue {
         match self.0 {
             Backing::Owned(map) => map.clone(),
-            // The stored pairs are in key order and their keys unique already.
+            // The stored pairs are already in key order, with unique keys.
             Backing::Stored { .. } => MapValue {
                 label: self.label().map(Box::from),
                 pairs: self
@@ -236,8 +239,8 @@ impl<'a> MapRef<'a> {
         }
     }
 
-    /// Returns the index of the viewed map in a dictionary's map store,
-    /// if the view reads it from there.
+    /// Returns the index of the map in the map store of `dictionary`,
+    /// or `None` if the view does not read the map from that store.
     pub(crate) fn index_in(self, dictionary: &Dictionary) -> Option<u64> {
         match self.0 {
             Backing::Stored {
@@ -251,7 +254,8 @@ impl<'a> MapRef<'a> {
 
 impl PartialEq for MapRef<'_> {
     fn eq(&self, other: &Self) -> bool {
-        // One dictionary stores one map once.
+        // A dictionary stores each map only once,
+        // so two entries of one store are equal exactly if their indices are.
         if let (
             Backing::Stored { dictionary, index },
             Backing::Stored {
@@ -271,7 +275,8 @@ impl PartialEq for MapRef<'_> {
 impl Eq for MapRef<'_> {}
 
 impl Ord for MapRef<'_> {
-    /// Orders by label, an unlabeled map first, then by the pairs in key order.
+    /// Orders maps by label, with unlabeled maps first,
+    /// and then lexicographically by their pairs in key order.
     fn cmp(&self, other: &Self) -> Ordering {
         self.label()
             .cmp(&other.label())
@@ -302,14 +307,17 @@ impl fmt::Debug for MapRef<'_> {
 }
 
 impl fmt::Display for MapRef<'_> {
-    /// Writes the map in term syntax, its keys and values in canonical form.
+    /// Writes the map in canonical term syntax.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.write_term(f, true)
     }
 }
 
 impl MapRef<'_> {
-    /// Writes the map in term syntax, the IRIs that read back bare written bare if `bare`.
+    /// Writes the map in term syntax.
+    ///
+    /// `bare` says whether an IRI, including the label, may be written without angle brackets,
+    /// as for [ValueRef::write_term].
     pub(crate) fn write_term(&self, f: &mut fmt::Formatter<'_>, bare: bool) -> fmt::Result {
         if let Some(label) = self.label() {
             super::write_label(f, label, bare)?;
@@ -331,11 +339,11 @@ impl MapRef<'_> {
 enum Pairs<'a> {
     /// The pairs of an owned map.
     Owned(slice::Iter<'a, (DataValue, DataValue)>),
-    /// The pairs of a stored map, by position.
+    /// The pairs of a stored map, read by position.
     Stored {
         /// The stored map.
         structure: StoredStructure<'a>,
-        /// The positions of the pairs not yet read.
+        /// The indices of the pairs not yet read.
         pairs: Range<usize>,
     },
 }
@@ -373,6 +381,8 @@ impl ExactSizeIterator for Pairs<'_> {}
 mod tests {
     use super::*;
 
+    /// Maps with the same pairs are equal in whatever order the pairs are given,
+    /// and a key given twice is rejected.
     #[test]
     fn maps_canonicalize_pair_order() {
         let key_a = DataValue::string("a");

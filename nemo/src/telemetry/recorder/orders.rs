@@ -5,34 +5,36 @@ use crate::telemetry::NamedCount;
 
 /// Statistics of semi-naive variants, compared with their rules' variable orders.
 ///
-/// They count how often the delta atom was a leading atom.
-/// If it was not, they compare the rows the delta atom read with those of the smallest
+/// A leading atom is a body atom that binds the first variable of the rule's order.
+/// The statistics count how often the delta atom was a leading atom.
+/// If it was not, they compare the rows that the delta atom read with those of the smallest
 /// leading atom.
 #[derive(Debug, Default, Clone, Copy)]
 pub(super) struct VariantOrderStats {
-    /// Variants observed.
+    /// The number of variants observed.
     pub(super) variants: u64,
-    /// Variants whose delta atom was a leading atom.
+    /// The number of variants whose delta atom was a leading atom.
     delta_led: u64,
-    /// Variants whose delta atom read no rows.
+    /// The number of variants whose delta atom was not a leading atom and read no rows.
     ///
     /// The join stops before reading any other atom, so the order cost nothing.
     delta_empty: u64,
-    /// Variants whose delta atom was not a leading atom
+    /// The number of variants whose delta atom was not a leading atom
     /// and read fewer rows than the smallest leading atom.
     delta_smaller: u64,
-    /// Of those, variants whose smallest leading atom read at least four times
+    /// The number of those variants whose smallest leading atom read at least four times
     /// as many rows as the delta atom.
     delta_much_smaller: u64,
-    /// The rows the smallest leading atoms read in total,
+    /// The number of rows that the smallest leading atoms read in total,
     /// over the variants whose delta atom read rows but was not a leading atom.
     led_rows: u64,
-    /// The rows the delta atoms read in total, over the same variants.
+    /// The number of rows that the delta atoms read in total, over the same variants.
     delta_rows: u64,
 }
 
 impl VariantOrderStats {
-    /// Accounts one variant.
+    /// Counts one variant, given the numbers of a
+    /// [VariantObserved](crate::telemetry::EngineEvent::VariantObserved) event.
     pub(super) fn observe(&mut self, delta_rows: u64, leading_rows: u64, delta_leads: bool) {
         self.variants += 1;
         if delta_leads {
@@ -53,7 +55,7 @@ impl VariantOrderStats {
         }
     }
 
-    /// Returns the statistics as the snapshot keys them, in order.
+    /// Returns the statistics under the keys of the snapshot, in order.
     pub(super) fn rows(&self) -> [NamedCount; 7] {
         [
             ("variants", self.variants),

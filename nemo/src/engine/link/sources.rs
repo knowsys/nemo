@@ -24,7 +24,8 @@ impl ModuleSources {
     /// Returns the registered module texts by location.
     ///
     /// A name is resolved as a `@use` in the program resolves it,
-    /// so whether it begins with a root is decided by the roots declared now.
+    /// so whether it begins with a root is decided by the roots declared at the time of the
+    /// call.
     pub(super) fn texts(&self) -> HashMap<Location, Arc<str>> {
         self.texts
             .iter()
@@ -37,7 +38,7 @@ impl ModuleSources {
 }
 
 impl Engine {
-    /// Registers a module text under the name a `@use` in the program writes for it,
+    /// Registers a module text under the name that a `@use` in the program writes for it,
     /// such as `lib::tc`, or `shared::tc` for a module in the root `shared`.
     ///
     /// A `@use` of the module, in the program or in another module, reads this text

@@ -1,10 +1,6 @@
-//! Parquet import and export: the standard columnar file format, through Arrow.
+//! Parquet, the standard columnar file format, read and written through Arrow.
 //!
-//! Import reads the way Parquet is built to be read, seeking:
-//! the footer first, then record batches.
-//! Export projects rows onto Arrow arrays with the [interchange mapping](crate::arrow)
-//! and writes one batch.
-//! The format compresses internally, so no stream compression applies.
+//! Parquet has its own compression, so no stream compression applies.
 
 use std::{fs::File, path::Path};
 
@@ -23,13 +19,18 @@ use crate::{
     written::Written,
 };
 
-/// A reader of Parquet files, decoding record batches into the physical layer's row buffers.
+/// A reader of Parquet files, which decodes record batches into row buffers.
 ///
-/// Arrow columns map onto values:
-/// integers of every width onto integers, floats onto floats and doubles,
-/// strings (dictionary-encoded ones included) onto strings, and booleans onto booleans.
-/// A row with a null cell is malformed, and counted, since a table cell has no "missing".
-/// A column of any other type fails the read with an error naming the type.
+/// It reads a file rather than a stream, since Parquet is read by seeking:
+/// first the footer, then the record batches.
+/// The columns' Arrow types are read as values:
+/// - integers of every width as integers,
+/// - 32-bit and 64-bit floats as floats and doubles,
+/// - strings, including dictionary-encoded ones, as strings,
+/// - booleans as booleans.
+///
+/// A column of any other type fails the read with an error that names the type.
+/// A row with a null cell is malformed and counted, since a value cannot be missing in a table.
 #[derive(Debug, Clone, Default)]
 pub struct ParquetReader {
     /// The columns delivered and the rows admitted.
@@ -37,16 +38,16 @@ pub struct ParquetReader {
 }
 
 impl ParquetReader {
-    /// Creates a reader delivering every column and row.
+    /// Creates a reader that delivers every column and admits every row.
     pub fn new() -> Self {
         Self {
             selection: RowSelection::default(),
         }
     }
 
-    /// Creates a reader delivering the selected columns and rows.
+    /// Creates a reader that delivers the columns and rows of a selection.
     ///
-    /// A dropped column still decides whether a row is well-formed,
+    /// A column that is not delivered still decides whether a row is well-formed,
     /// but it is read from the file only if its statistics allow a null.
     pub fn with_selection(selection: RowSelection) -> Self {
         Self { selection }
@@ -56,7 +57,7 @@ impl ParquetReader {
     ///
     /// # Errors
     ///
-    /// Returns an error if the file cannot be opened or holds no Parquet schema.
+    /// Returns an error if the file cannot be opened or has no Parquet schema.
     pub fn arity(path: impl AsRef<Path>) -> Result<usize, Diagnostic> {
         let path = path.as_ref();
         let file = File::open(path).map_err(|error| IoError::unreadable(path, &error))?;
@@ -65,14 +66,14 @@ impl ParquetReader {
         Ok(builder.schema().fields().len())
     }
 
-    /// Reads all rows of a file, interning values as they arrive.
+    /// Reads all rows of a file, interning the values as they arrive.
     ///
-    /// The selection's condition evaluates in the given context.
+    /// `context` is the evaluation context of the selection's condition.
     ///
     /// # Errors
     ///
     /// Returns an error if the file cannot be opened or read as Parquet,
-    /// or if a column has a type outside the mapping.
+    /// or if a column has a type that the reader does not support.
     pub fn read_path(
         &self,
         path: impl AsRef<Path>,
@@ -83,8 +84,9 @@ impl ParquetReader {
         let file = File::open(path).map_err(|error| IoError::unreadable(path, &error))?;
         let mut builder = ParquetRecordBatchReaderBuilder::try_new(file)
             .map_err(|error| IoError::unreadable(path, error))?;
-        // Every column decides whether a row is well-formed, the ones not delivered included,
-        // so a column outside the mapping fails the file whatever is read of it.
+        // Every column decides whether a row is well-formed, including the columns that are not
+        // delivered, so a column of an unsupported type fails the file even if it is not
+        // delivered.
         if let Some(outside) = builder
             .schema()
             .fields()
@@ -97,7 +99,7 @@ impl ParquetReader {
         {
             return Err(unsupported_type(path, outside));
         }
-        // A column that is not delivered is read only if it may hold a null,
+        // A column that is not delivered is read only if it may have a null,
         // which makes its row malformed.
         let width = builder.schema().fields().len();
         let delivered: Vec<bool> = (0..width)
@@ -122,7 +124,7 @@ impl ParquetReader {
             let batch = batch.map_err(|error| IoError::unreadable(path, error))?;
             let arity = delivered.iter().filter(|&&delivered| delivered).count();
             let loaded = loaded.get_or_insert_with(|| Loaded::new(arity, context));
-            // Dictionary-encoded columns read through their value type.
+            // Dictionary-encoded columns are read as their value type.
             let columns: Vec<arrow::array::ArrayRef> = batch
                 .columns()
                 .iter()
@@ -163,12 +165,15 @@ impl ParquetReader {
     }
 }
 
-/// A writer of Parquet files over the [interchange
-/// mapping](crate::arrow): column types are inferred over the whole
-/// result, mixed columns become text.
+/// A writer of Parquet files, which maps columns onto Arrow arrays as [ColumnKind] describes.
+///
+/// Each column's type is inferred from all rows written,
+/// and a column with values of different kinds becomes text.
+/// All rows are written as one record batch.
 #[derive(Debug, Clone, Default)]
 pub struct ParquetWriter {
-    /// The number of columns of the rows, which a file of no rows still declares.
+    /// The number of columns of the rows, which the schema of a file without rows still
+    /// declares.
     arity: usize,
 }
 
@@ -183,6 +188,10 @@ impl ParquetWriter {
     /// # Errors
     ///
     /// Returns an error if the target cannot be written.
+    ///
+    /// # Panics
+    ///
+    /// Panics if a row is shorter than the first.
     pub fn write<'a>(
         &self,
         target: impl std::io::Write + Send,
@@ -229,6 +238,10 @@ impl ParquetWriter {
     /// # Errors
     ///
     /// Returns an error if the file cannot be created or written.
+    ///
+    /// # Panics
+    ///
+    /// Panics if a row is shorter than the first, as [write](Self::write) does.
     pub fn write_path<'a>(
         &self,
         path: impl AsRef<Path>,
@@ -244,7 +257,7 @@ impl ParquetWriter {
     }
 }
 
-/// Returns whether a column of the given Arrow type imports, as [ParquetReader] describes.
+/// Returns whether a column of the given Arrow type can be read, as [ParquetReader] describes.
 fn supported(data_type: &DataType) -> bool {
     matches!(
         data_type,
@@ -265,9 +278,9 @@ fn supported(data_type: &DataType) -> bool {
     )
 }
 
-/// Returns the value of one cell, by the column's Arrow type, or `None` for a null cell.
+/// Returns the value of one cell, read by the column's Arrow type, or `None` for a null cell.
 ///
-/// The column's type was [checked](supported) before.
+/// The column's type must be [supported].
 fn cell(column: &dyn Array, row: usize) -> Option<DataValue> {
     if column.is_null(row) {
         return None;
@@ -321,8 +334,8 @@ fn cell(column: &dyn Array, row: usize) -> Option<DataValue> {
                 .value(row);
             match i64::try_from(value) {
                 Ok(value) => DataValue::integer(value),
-                // Beyond the signed range: the wide integer, through its
-                // lexical.
+                // Beyond the signed range, the value is read as a wide integer
+                // from its lexical form.
                 Err(_) => return DataValue::decimal_from_lexical(&value.to_string()),
             }
         }
@@ -344,10 +357,10 @@ fn cell(column: &dyn Array, row: usize) -> Option<DataValue> {
     Some(value)
 }
 
-/// Returns whether a column of a file may hold a null cell:
-/// unless every row group's statistics count none.
+/// Returns whether a column of a file may have a null cell.
 ///
-/// The columns are flat, so a column's position is its leaf's.
+/// Returns `false` only if the statistics of every row group count no null in the column.
+/// The columns are flat, so a column's position is the position of its leaf.
 fn may_hold_nulls(metadata: &parquet::file::metadata::ParquetMetaData, position: usize) -> bool {
     metadata.row_groups().iter().any(|group| {
         group
@@ -358,7 +371,7 @@ fn may_hold_nulls(metadata: &parquet::file::metadata::ParquetMetaData, position:
     })
 }
 
-/// Returns the error for a column type outside the mapping.
+/// Returns the error for a column of an unsupported type.
 fn unsupported_type(path: &Path, data_type: &DataType) -> Diagnostic {
     let resource = path.display().to_string();
     IoError::UnsupportedArrowType {
@@ -373,9 +386,9 @@ fn unsupported_type(path: &Path, data_type: &DataType) -> Diagnostic {
 mod tests {
     use super::*;
 
-    /// A written file reads back:
-    /// native columns keep their values, the two float domains apart,
-    /// and a mixed column goes through text.
+    /// A written file is read back:
+    /// columns of one kind keep their values, with floats and doubles apart,
+    /// and a column of mixed kinds goes through text.
     #[test]
     fn written_parquet_reads_back() {
         let rows: Vec<Vec<DataValue>> = vec![
@@ -416,11 +429,12 @@ mod tests {
         assert_eq!(cell(1, 1), DataValue::double(1.5));
         assert_eq!(cell(0, 2), DataValue::string("plain"));
         assert_eq!(cell(0, 3), DataValue::float(0.25));
-        // The mixed third column went through text: the IRI reads back
-        // as its bare form, a string.
+        // The mixed third column went through text, so the IRI is read back
+        // as a string of its text.
         assert_eq!(cell(1, 2), DataValue::string("http://example.org/a"));
     }
 
+    /// A null in a column that is not delivered still makes its row malformed.
     #[test]
     fn a_column_left_out_still_decides_whether_a_row_is_well_formed() {
         use std::sync::Arc;
@@ -465,6 +479,7 @@ mod tests {
         assert_eq!(loaded.rows.arity(), 1);
     }
 
+    /// A file written without rows keeps the writer's number of columns.
     #[test]
     fn a_file_without_rows_keeps_its_columns() {
         let path = std::env::temp_dir().join(format!(

@@ -1,36 +1,38 @@
 //! Dates, times and durations.
 //!
-//! The types here are the XSD datatypes
+//! The types here represent the XSD datatypes
 //! [`dateTime`](https://www.w3.org/TR/xmlschema11-2/#dateTime),
 //! [`date`](https://www.w3.org/TR/xmlschema11-2/#date),
 //! [`time`](https://www.w3.org/TR/xmlschema11-2/#time) and
 //! [`duration`](https://www.w3.org/TR/xmlschema11-2/#duration),
-//! with the timezone offset they share.
+//! and the timezone offset that they share.
 //!
-//! A dateTime, a date and a time are each an *instant*, a point on the timeline,
-//! together with the *timezone offset* the value was written with.
-//! A *zoned* value carries an offset and denotes one instant.
-//! An *unzoned* value carries none: it is a local time
-//! whose instant is not known closer than the fourteen hours an offset can reach either way.
-//! A date is the instant its day starts; a time is the instant of that time of day
-//! on the reference day `1972-12-31`, the date
-//! [XSD fills in](https://www.w3.org/TR/xmlschema11-2/#theSevenPropertyModel)
+//! A dateTime, a date and a time each consist of an *instant*, a point on the timeline,
+//! and the *timezone offset* that the value was written with, if any.
+//! A *zoned* value has an offset and denotes one instant.
+//! An *unzoned* value has no offset.
+//! It is a local time, and its instant is known only to within fourteen hours,
+//! the largest offset in either direction.
+//! The instant of a date is the start of its day.
+//! The instant of a time is that time of day on the *reference day* `1972-12-31`,
+//! the date that [XSD fills in](https://www.w3.org/TR/xmlschema11-2/#theSevenPropertyModel)
 //! for a value without one.
-//! A duration is a number of months and a number of seconds, of one sign.
+//! A duration is a number of months and a number of seconds, which never have opposite signs.
 //!
 //! The offset as written is part of a value,
 //! so `2024-01-01T00:00:00Z` and `2024-01-01T01:00:00+01:00` are distinct values.
-//! XSD's value comparison, [value_eq](DateTime::value_eq) and [value_cmp](DateTime::value_cmp),
-//! finds those two equal, and orders a zoned and an unzoned value
-//! only when they are more than fourteen hours apart.
-//! A duration's identity is its value, so durations have no separate value equality,
+//! XSD's comparison by value, [value_eq](DateTime::value_eq) and
+//! [value_cmp](DateTime::value_cmp), finds those two equal.
+//! It orders a zoned and an unzoned value only if they are more than fourteen hours apart.
+//! A duration's identity is its value, so durations have no separate equality by value,
 //! and their [value_cmp](Duration::value_cmp) is partial.
 //!
-//! Every type reads every XSD lexical form with `from_lexical`
-//! and writes the canonical form with `Display`:
-//! `24:00:00` rolls over to the next day, `+00:00` prints as `Z`,
-//! and trailing zeros of a fraction drop.
-//! The value space carries eighteen fraction digits and years to about ±5.4 trillion.
+//! Each type parses every XSD lexical form with its `from_lexical`,
+//! and writes the canonical form with `Display`.
+//! For example, `24:00:00` becomes the start of the next day, `+00:00` is written as `Z`,
+//! and the trailing zeros of a fraction are dropped.
+//! The value space has eighteen fraction digits of a second,
+//! and years up to about 5.4 trillion in either direction.
 //!
 //! # Example
 //!

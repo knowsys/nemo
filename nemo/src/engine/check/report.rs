@@ -5,12 +5,12 @@ use nemo_physical::diagnostics::Diagnostic;
 use super::InferredTypes;
 
 /// What a [check](crate::engine::Engine::check) of a program reports:
-/// the problems it found, and the types the analysis inferred.
+/// the problems it found, and the types that the type analysis inferred.
 #[derive(Debug, Clone, Default)]
 pub struct CheckReport {
     /// What the check reported, warnings included.
     diagnostics: Vec<Diagnostic>,
-    /// The types the analysis inferred, if the check got that far.
+    /// The types that the type analysis inferred, if the check got that far.
     types: Option<InferredTypes>,
 }
 
@@ -25,12 +25,12 @@ impl CheckReport {
         &self.diagnostics
     }
 
-    /// Returns what the check reported, warnings included, dropping the types.
+    /// Returns what the check reported, warnings included, without the types.
     pub fn into_diagnostics(self) -> Vec<Diagnostic> {
         self.diagnostics
     }
 
-    /// Returns the types the analysis inferred,
+    /// Returns the types that the type analysis inferred,
     /// or `None` if the check ended before the analysis ran.
     ///
     /// A check continues past a statement that does not translate,

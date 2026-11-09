@@ -1,4 +1,4 @@
-//! Variables of rules and defined builtins.
+//! Variables, which appear in rules, in parameter declarations and in function definitions.
 
 use std::fmt::{self, Display, Formatter};
 
@@ -9,16 +9,16 @@ pub enum VariableKind {
     Universal,
     /// An existentially quantified variable, written `!name`.
     Existential,
-    /// A global variable bound to a parameter, written `$name`.
+    /// A global variable, which a `@parameter` declares, written `$name`.
     Global,
-    /// A nameless placeholder, written `_`, each occurrence its own variable.
+    /// A placeholder without a name, written `_`, whose every occurrence is a distinct variable.
     Anonymous,
 }
 
 impl VariableKind {
-    /// Returns the marker character prefixing variables of this kind.
+    /// Returns the marker that variables of this kind start with.
     ///
-    /// An anonymous variable is nothing but its marker.
+    /// An anonymous variable consists of its marker alone.
     pub fn prefix(&self) -> char {
         match self {
             VariableKind::Universal => '?',
@@ -29,16 +29,16 @@ impl VariableKind {
     }
 }
 
-/// A variable: universal, existential, global, or anonymous.
+/// A variable, which is universal, existential, global or anonymous.
 ///
-/// Carries no span of its own: variables occur wrapped in a
-/// [Term](crate::model::Term) (or in the `per` scope of an
-/// [Aggregate](crate::model::Aggregate)), which carries it.
+/// A variable has no span of its own, since it always appears inside a component
+/// that has one, such as a [Term](crate::model::Term)
+/// or the scope of an [Aggregate](crate::model::Aggregate).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Variable {
     /// The kind of the variable.
     pub kind: VariableKind,
-    /// The name, without the kind marker.
+    /// The name, without the marker of the kind.
     pub name: String,
 }
 

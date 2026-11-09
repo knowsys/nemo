@@ -1,8 +1,8 @@
-//! Term-level operations: type checks, datatypes, lexical forms,
-//! language handling, and casts.
+//! Operations on terms: domain tests, datatypes, lexical forms, language tags and casts.
 //!
-//! A literal is a value of an RDF datatype:
-//! any value but an IRI, a null, a tuple or a map.
+//! A *literal* is a value of an RDF datatype, such as a string, a number or a dateTime.
+//! The other values are not literals: IRIs and nulls are the RDF terms without a datatype,
+//! and tuples and maps have no counterpart in RDF.
 
 use std::{fmt, num::IntErrorKind};
 
@@ -14,8 +14,9 @@ use crate::{
     },
 };
 
-/// Returns whether the domain of a value is in the set,
-/// the test behind the type checks, for example
+/// Returns whether the domain of a value is in `domains`.
+///
+/// This is the test behind type checks such as
 /// SPARQL's [`isIRI`](https://www.w3.org/TR/sparql12-query/#func-isIRI),
 /// [`isNUMERIC`](https://www.w3.org/TR/sparql12-query/#func-isNumeric)
 /// and [`isBLANK`](https://www.w3.org/TR/sparql12-query/#func-isBlank).
@@ -26,7 +27,7 @@ pub(crate) fn in_domains(value: ValueRef<'_>, domains: DomainSet) -> StackValue<
 /// Returns the datatype IRI of a literal,
 /// SPARQL's [`DATATYPE`](https://www.w3.org/TR/sparql12-query/#func-datatype).
 ///
-/// Any other value has none.
+/// Any other value has none, which is a [TypeMismatch](EvaluationError::TypeMismatch).
 pub(crate) fn datatype(value: ValueRef<'_>) -> StackValue<'static> {
     match value.datatype_iri() {
         Some(datatype) => DataValue::iri(datatype).into(),
@@ -37,12 +38,14 @@ pub(crate) fn datatype(value: ValueRef<'_>) -> StackValue<'static> {
 /// Returns the lexical form of a value as a plain string,
 /// SPARQL's [`STR`](https://www.w3.org/TR/sparql12-query/#func-str).
 ///
-/// - a language string yields its text,
-/// - a double or a float the form XPath casts it to a string as (`"5.5"`, `"1.0E100"`),
-/// - every other literal its canonical lexical form,
-/// - an IRI its text.
+/// - A language string yields its text.
+/// - A double or a float yields the text of XPath's cast to a string,
+///   such as `"5.5"` or `"1.0E100"`.
+/// - Every other literal yields its canonical lexical form.
+/// - An IRI yields its text.
 ///
-/// Nulls and structures have none.
+/// Nulls and structures have no lexical form,
+/// which is a [TypeMismatch](EvaluationError::TypeMismatch).
 pub(crate) fn lexical(value: ValueRef<'_>) -> StackValue<'static> {
     let text = match value {
         ValueRef::String(text) => text.to_owned(),
@@ -60,11 +63,15 @@ pub(crate) fn lexical(value: ValueRef<'_>) -> StackValue<'static> {
     DataValue::string(text).into()
 }
 
-/// Returns the canonical form of a value as a plain string:
-/// a string quoted and escaped, a language string with its tag,
-/// an IRI and an exact number bare, every other literal with its datatype.
+/// Returns the canonical form of a value as a plain string, the value written out in full.
 ///
-/// Not a SPARQL function: the term as term syntax writes it.
+/// - A string is quoted and escaped, and a language string also has its tag.
+/// - An IRI and an exact number are written bare.
+/// - A null is written `_:` followed by its number.
+/// - Every other literal is written as its quoted lexical form with its datatype.
+///
+/// This is not a SPARQL function.
+/// Structures have no canonical form, which is a [TypeMismatch](EvaluationError::TypeMismatch).
 pub(crate) fn canonical(value: ValueRef<'_>) -> StackValue<'static> {
     let text = match value {
         ValueRef::String(text) => quote(text),
@@ -91,8 +98,8 @@ pub(crate) fn canonical(value: ValueRef<'_>) -> StackValue<'static> {
     DataValue::string(text).into()
 }
 
-/// Returns the typed literal of a value of a native datatype:
-/// its lexical form, quoted, and the datatype of its domain.
+/// Returns a value of a native datatype written as a typed literal,
+/// its quoted lexical form with the datatype of its domain.
 fn typed(value: ValueRef<'_>, lexical: impl fmt::Display) -> String {
     let datatype = value
         .datatype_iri()
@@ -118,10 +125,10 @@ fn quote(text: &str) -> String {
 }
 
 /// Returns the language tag of a literal,
-/// SPARQL's [`LANG`](https://www.w3.org/TR/sparql12-query/#func-lang):
-/// the tag of a language-tagged string, the empty string for every other literal.
+/// SPARQL's [`LANG`](https://www.w3.org/TR/sparql12-query/#func-lang).
 ///
-/// Any other value has none.
+/// A literal other than a language-tagged string has the empty tag.
+/// Any other value has no tag, which is a [TypeMismatch](EvaluationError::TypeMismatch).
 pub(crate) fn language(value: ValueRef<'_>) -> StackValue<'static> {
     match value {
         ValueRef::LanguageString(value) => DataValue::string(value.language()).into(),
@@ -130,9 +137,10 @@ pub(crate) fn language(value: ValueRef<'_>) -> StackValue<'static> {
     }
 }
 
-/// Tags a plain string with a language,
-/// SPARQL's [`STRLANG`](https://www.w3.org/TR/sparql12-query/#func-strlang);
-/// an empty or otherwise invalid tag is malformed.
+/// Returns a plain string tagged with a language,
+/// SPARQL's [`STRLANG`](https://www.w3.org/TR/sparql12-query/#func-strlang).
+///
+/// An empty or otherwise invalid tag is [Malformed](EvaluationError::Malformed).
 pub(crate) fn string_language(text: ValueRef<'_>, tag: ValueRef<'_>) -> StackValue<'static> {
     match (text, tag) {
         (ValueRef::String(text), ValueRef::String(tag)) => {
@@ -145,12 +153,13 @@ pub(crate) fn string_language(text: ValueRef<'_>, tag: ValueRef<'_>) -> StackVal
     }
 }
 
-/// Returns whether a language tag matches a range,
-/// SPARQL's [`langMatches`](https://www.w3.org/TR/sparql12-query/#func-langMatches),
-/// the basic filtering of RFC 4647:
-/// `*` matches any nonempty tag,
-/// otherwise the range must be a case-insensitive subtag prefix;
-/// an empty tag or range matches nothing.
+/// Returns whether a language tag matches a language range,
+/// SPARQL's [`langMatches`](https://www.w3.org/TR/sparql12-query/#func-langMatches).
+///
+/// This is the basic filtering of RFC 4647.
+/// The range `*` matches every nonempty tag,
+/// and any other range matches the tags that start with it, ignoring case and up to whole subtags.
+/// An empty tag or range matches nothing.
 pub(crate) fn language_matches(tag: ValueRef<'_>, range: ValueRef<'_>) -> StackValue<'static> {
     let (ValueRef::String(tag), ValueRef::String(range)) = (tag, range) else {
         return EvaluationError::TypeMismatch.into();
@@ -173,11 +182,11 @@ pub(crate) fn language_matches(tag: ValueRef<'_>, range: ValueRef<'_>) -> StackV
     matches.into()
 }
 
-/// Creates a typed literal from a lexical and a datatype IRI,
-/// SPARQL's [`STRDT`](https://www.w3.org/TR/sparql12-query/#func-strdt),
-/// normalized as [DataValue::typed_literal] normalizes it.
+/// Returns the typed literal of a lexical form and a datatype IRI,
+/// SPARQL's [`STRDT`](https://www.w3.org/TR/sparql12-query/#func-strdt).
 ///
-/// A lexical that is not one of the datatype is malformed.
+/// The value is normalized as [DataValue::typed_literal] normalizes it.
+/// A lexical form that the datatype does not accept is [Malformed](EvaluationError::Malformed).
 pub(crate) fn typed_literal(lexical: ValueRef<'_>, datatype: ValueRef<'_>) -> StackValue<'static> {
     let ValueRef::String(lexical) = lexical else {
         return EvaluationError::TypeMismatch.into();
@@ -195,19 +204,21 @@ pub(crate) fn typed_literal(lexical: ValueRef<'_>, datatype: ValueRef<'_>) -> St
 /// Casts a value to an integer,
 /// XPath's [cast to `xs:integer`](https://www.w3.org/TR/xpath-functions-31/#casting-to-integer).
 ///
-/// A number drops its fraction, toward zero;
-/// the NaN is malformed, and an infinity overflows.
-/// A boolean counts.
-/// A string, or a literal of a datatype without native support,
-/// reads as the lexical form of an `xsd:integer`,
-/// or as a binary, octal or hexadecimal numeral under a `0b`, `0o` or `0x` prefix.
+/// - A number drops its fraction, rounding toward zero.
+///   NaN is [Malformed](EvaluationError::Malformed),
+///   and an infinity is an [Overflow](EvaluationError::Overflow).
+/// - A boolean becomes `1` or `0`.
+/// - A string, or a literal of a datatype without native support,
+///   is parsed as the lexical form of an `xsd:integer`,
+///   or as a binary, octal or hexadecimal numeral with a `0b`, `0o` or `0x` prefix.
+///
 /// An integer beyond 64 bits stays exact as a wide integer.
 pub(crate) fn cast_integer(value: ValueRef<'_>) -> StackValue<'static> {
     match value {
         ValueRef::Number(number) if number.is_integral() => value.to_owned().into(),
         ValueRef::Number(NumberRef::Float(value)) => integral_double(value.to_f64()).into(),
         ValueRef::Number(NumberRef::Double(value)) => integral_double(value.get()).into(),
-        // A fractional decimal: the integer on its zero side.
+        // A decimal with a fraction rounds toward zero.
         ValueRef::Number(number) if number.is_negative() => number.ceil().into(),
         ValueRef::Number(number) => number.floor().into(),
         ValueRef::Boolean(value) => DataValue::integer(i64::from(value)).into(),
@@ -215,12 +226,12 @@ pub(crate) fn cast_integer(value: ValueRef<'_>) -> StackValue<'static> {
     }
 }
 
-/// Returns the integer a text denotes:
-/// the value of an `xsd:integer` lexical form,
-/// or of a numeral of at most 127 bits in binary, octal or hexadecimal
-/// under a `0b`, `0o` or `0x` prefix.
+/// Returns the integer that a text denotes,
+/// either as an `xsd:integer` lexical form or as a numeral with a `0b`, `0o` or `0x` prefix.
 ///
-/// A numeral beyond 127 bits overflows; any other text is malformed.
+/// A numeral is binary, octal or hexadecimal, and it has at most 127 bits.
+/// A numeral beyond 127 bits is an [Overflow](EvaluationError::Overflow),
+/// and any other text is [Malformed](EvaluationError::Malformed).
 fn integer_from_text(text: &str) -> Result<DataValue, EvaluationError> {
     let radix = match text.get(..2) {
         Some("0b") => 2,
@@ -229,7 +240,7 @@ fn integer_from_text(text: &str) -> Result<DataValue, EvaluationError> {
         _ => return DataValue::integer_from_lexical(text).ok_or(EvaluationError::Malformed),
     };
 
-    // A numeral has digits only, where the standard parser would also take a sign.
+    // A numeral has digits only, but `from_str_radix` would also accept a sign.
     let digits = &text[2..];
     if digits.starts_with(['+', '-']) {
         return Err(EvaluationError::Malformed);
@@ -242,11 +253,12 @@ fn integer_from_text(text: &str) -> Result<DataValue, EvaluationError> {
     DataValue::decimal(value, 0).ok_or(EvaluationError::Overflow)
 }
 
-/// Returns the integer term of a double without its fraction, toward zero:
-/// the 64-bit integer if it fits, the wide integer beyond,
-/// since an integral double prints its digits exactly.
+/// Returns a double without its fraction, rounded toward zero, as an integer.
 ///
-/// The NaN is malformed, and an infinity overflows.
+/// The integer is a 64-bit integer if it fits, and a wide integer otherwise,
+/// which is exact since an integral double prints all its digits.
+/// NaN is [Malformed](EvaluationError::Malformed),
+/// and an infinity is an [Overflow](EvaluationError::Overflow).
 fn integral_double(value: f64) -> Result<DataValue, EvaluationError> {
     if value.is_nan() {
         return Err(EvaluationError::Malformed);
@@ -256,11 +268,11 @@ fn integral_double(value: f64) -> Result<DataValue, EvaluationError> {
     }
 
     let value = value.trunc();
-    // Doubles hold the ends of the 64-bit range exactly,
-    // so the check excludes every value the cast would saturate at.
+    // The bounds of the 64-bit range are exact doubles,
+    // so the check excludes every value at which the cast would saturate.
     let bound = -(i64::MIN as f64);
     if (-bound..bound).contains(&value) {
-        // The range check leaves the cast nothing to truncate.
+        // After the range check, the cast loses nothing.
         #[allow(clippy::cast_possible_truncation)]
         let integer = value as i64;
         Ok(DataValue::integer(integer))
@@ -270,11 +282,11 @@ fn integral_double(value: f64) -> Result<DataValue, EvaluationError> {
 }
 
 /// Casts a value to a 64-bit float,
-/// XPath's [cast to `xs:double`](https://www.w3.org/TR/xpath-functions-31/#casting-to-double):
-/// a number to the nearest double, a boolean to one or zero.
+/// XPath's [cast to `xs:double`](https://www.w3.org/TR/xpath-functions-31/#casting-to-double).
 ///
+/// A number becomes the nearest double, and a boolean becomes `1` or `0`.
 /// A string, or a literal of a datatype without native support,
-/// reads as the lexical form of an `xsd:double`.
+/// is parsed as the lexical form of an `xsd:double`.
 pub(crate) fn cast_double(value: ValueRef<'_>) -> StackValue<'static> {
     let value = match value {
         ValueRef::Number(value) => Ok(Double::new(value.to_f64())),
@@ -285,8 +297,9 @@ pub(crate) fn cast_double(value: ValueRef<'_>) -> StackValue<'static> {
 }
 
 /// Casts a value to a 32-bit float,
-/// XPath's [cast to `xs:float`](https://www.w3.org/TR/xpath-functions-31/#casting-to-float),
-/// as [cast_double] casts to a double.
+/// XPath's [cast to `xs:float`](https://www.w3.org/TR/xpath-functions-31/#casting-to-float).
+///
+/// The cases are those of [cast_double], with floats instead of doubles.
 pub(crate) fn cast_float(value: ValueRef<'_>) -> StackValue<'static> {
     let value = match value {
         ValueRef::Number(value) => Ok(Float::new(value.to_f32())),
@@ -296,11 +309,12 @@ pub(crate) fn cast_float(value: ValueRef<'_>) -> StackValue<'static> {
     value.map(DataValue::float).into()
 }
 
-/// Casts a string to an IRI, SPARQL's [`IRI`](https://www.w3.org/TR/sparql12-query/#func-iri);
-/// an IRI passes through.
+/// Casts a string to an IRI, SPARQL's [`IRI`](https://www.w3.org/TR/sparql12-query/#func-iri),
+/// and returns an IRI unchanged.
 ///
-/// A string that is not an IRI, as one with a space, is malformed.
-/// A relative IRI stays unresolved: the base IRI is not known here.
+/// A string that is not a [valid](Iri::is_valid) IRI, such as one with a space,
+/// is [Malformed](EvaluationError::Malformed).
+/// A relative IRI stays unresolved, since no base IRI is known here.
 pub(crate) fn cast_iri(value: ValueRef<'_>) -> StackValue<'static> {
     match value {
         ValueRef::Iri(_) => value.to_owned().into(),
@@ -315,7 +329,7 @@ pub(crate) fn cast_iri(value: ValueRef<'_>) -> StackValue<'static> {
 ///
 /// A date becomes the start of its day, in its own timezone.
 /// A string, or a literal of a datatype without native support,
-/// reads as the lexical form of an `xsd:dateTime`.
+/// is parsed as the lexical form of an `xsd:dateTime`.
 pub(crate) fn cast_datetime(value: ValueRef<'_>) -> StackValue<'static> {
     let datetime = match value {
         ValueRef::DateTime(value) => Ok(value),
@@ -328,10 +342,10 @@ pub(crate) fn cast_datetime(value: ValueRef<'_>) -> StackValue<'static> {
 /// Casts a value to a date,
 /// XPath's [cast to `xs:date`](https://www.w3.org/TR/xpath-functions-31/#casting-to-datetimes).
 ///
-/// A dateTime becomes its day, in its own timezone;
-/// one whose day starts beyond the value space overflows.
+/// A dateTime becomes its day, in its own timezone.
+/// A dateTime whose day starts outside the value space is an [Overflow](EvaluationError::Overflow).
 /// A string, or a literal of a datatype without native support,
-/// reads as the lexical form of an `xsd:date`.
+/// is parsed as the lexical form of an `xsd:date`.
 pub(crate) fn cast_date(value: ValueRef<'_>) -> StackValue<'static> {
     let date = match value {
         ValueRef::Date(value) => Ok(value),
@@ -346,7 +360,7 @@ pub(crate) fn cast_date(value: ValueRef<'_>) -> StackValue<'static> {
 ///
 /// A dateTime becomes its time of day, in its own timezone.
 /// A string, or a literal of a datatype without native support,
-/// reads as the lexical form of an `xsd:time`.
+/// is parsed as the lexical form of an `xsd:time`.
 pub(crate) fn cast_time(value: ValueRef<'_>) -> StackValue<'static> {
     let time = match value {
         ValueRef::Time(value) => Ok(value),
@@ -359,9 +373,9 @@ pub(crate) fn cast_time(value: ValueRef<'_>) -> StackValue<'static> {
 /// Casts a value to a duration,
 /// XPath's [cast to `xs:duration`](https://www.w3.org/TR/xpath-functions-31/#casting-to-durations).
 ///
-/// A duration of any of the three duration domains passes through.
+/// A duration of any of the three duration domains is returned unchanged.
 /// A string, or a literal of a datatype without native support,
-/// reads as the lexical form of an `xsd:duration`.
+/// is parsed as the lexical form of an `xsd:duration`.
 pub(crate) fn cast_duration(value: ValueRef<'_>) -> StackValue<'static> {
     let duration = match value {
         ValueRef::Duration(value) => Ok(value),
@@ -375,7 +389,7 @@ pub(crate) fn cast_duration(value: ValueRef<'_>) -> StackValue<'static> {
 ///
 /// A duration drops its months.
 /// A string, or a literal of a datatype without native support,
-/// reads as the lexical form of an `xsd:dayTimeDuration`.
+/// is parsed as the lexical form of an `xsd:dayTimeDuration`.
 pub(crate) fn cast_day_time_duration(value: ValueRef<'_>) -> StackValue<'static> {
     let duration = match value {
         ValueRef::Duration(value) => {
@@ -391,7 +405,7 @@ pub(crate) fn cast_day_time_duration(value: ValueRef<'_>) -> StackValue<'static>
 ///
 /// A duration drops its seconds.
 /// A string, or a literal of a datatype without native support,
-/// reads as the lexical form of an `xsd:yearMonthDuration`.
+/// is parsed as the lexical form of an `xsd:yearMonthDuration`.
 pub(crate) fn cast_year_month_duration(value: ValueRef<'_>) -> StackValue<'static> {
     let duration = match value {
         ValueRef::Duration(value) => Ok(Duration::from_months(value.total_months())),
@@ -400,10 +414,11 @@ pub(crate) fn cast_year_month_duration(value: ValueRef<'_>) -> StackValue<'stati
     duration.map(DataValue::duration).into()
 }
 
-/// Returns the text a cast reads as a lexical form:
-/// a string's own, or the lexical form of a literal of a datatype without native support.
+/// Returns the text that a cast parses as a lexical form.
 ///
-/// Any other value has none, a [TypeMismatch](EvaluationError::TypeMismatch).
+/// This is the text of a string,
+/// or the lexical form of a literal of a datatype without native support.
+/// Any other value is a [TypeMismatch](EvaluationError::TypeMismatch).
 fn lexical_form(value: ValueRef<'_>) -> Result<&str, EvaluationError> {
     match value {
         ValueRef::String(text) => Ok(text),
@@ -412,8 +427,10 @@ fn lexical_form(value: ValueRef<'_>) -> Result<&str, EvaluationError> {
     }
 }
 
-/// Reads the lexical form of a value with the parser of a cast's target type;
-/// a text the parser refuses is [Malformed](EvaluationError::Malformed).
+/// Parses the lexical form of a value with `parser`, the parser of a cast's target type.
+///
+/// A text that the parser rejects is [Malformed](EvaluationError::Malformed),
+/// and a value without a lexical form to parse is a [TypeMismatch](EvaluationError::TypeMismatch).
 fn parse<T>(
     value: ValueRef<'_>,
     parser: impl FnOnce(&str) -> Option<T>,
@@ -430,6 +447,8 @@ mod tests {
         value::{DecimalRef, MapValue, TupleValue, datatype::rdf, number::decimal},
     };
 
+    /// DateTimes, dates, times and durations cast into each other,
+    /// and a string is parsed as a lexical form of the target type.
     #[test]
     fn temporal_values_cast_across_their_types() {
         let typed = |datatype: &str, lexical: &str| {
@@ -460,7 +479,7 @@ mod tests {
         );
         assert_eq!(value(cast_duration(duration.as_ref())), duration);
 
-        // Strings read as lexical forms of the target type.
+        // A string is parsed as a lexical form of the target type.
         let string = |text| DataValue::string(text);
         assert_eq!(
             value(cast_date(string("2024-03-01").as_ref())),
@@ -487,6 +506,8 @@ mod tests {
         );
     }
 
+    /// A number casts to the integer without its fraction,
+    /// which is a wide integer beyond 64 bits.
     #[test]
     fn integral_floats_cast_beyond_64_bits() {
         let double = |value: f64| DataValue::double(value);
@@ -507,8 +528,8 @@ mod tests {
             value(cast_integer(float(1e20).as_ref())),
             number("100000002004087734272")
         );
-        // The ends of the 64-bit range: the integer below, the wide
-        // integer from there on.
+        // At the ends of the 64-bit range, -2^63 is a 64-bit integer,
+        // and 2^63 is a wide integer.
         assert_eq!(
             value(cast_integer(double(-9_223_372_036_854_775_808.0).as_ref())),
             DataValue::integer(i64::MIN)
@@ -517,7 +538,7 @@ mod tests {
             value(cast_integer(double(9_223_372_036_854_775_808.0).as_ref())),
             number("9223372036854775808")
         );
-        // A fraction drops toward zero; the NaN is malformed, and an infinity overflows.
+        // A fraction is dropped toward zero, NaN is malformed, and an infinity overflows.
         assert_eq!(
             value(cast_integer(double(1.5).as_ref())),
             DataValue::integer(1)
@@ -544,6 +565,8 @@ mod tests {
         );
     }
 
+    /// A cast fails as malformed for a text that is not a lexical form of the target type,
+    /// and as a type mismatch for a value without a lexical form.
     #[test]
     fn a_cast_tells_an_unreadable_text_from_a_value_without_one() {
         let string = |text| DataValue::string(text);
@@ -574,7 +597,7 @@ mod tests {
             Some(EvaluationError::Overflow)
         );
 
-        // A value with no lexical form to read has the wrong type.
+        // A value without a lexical form to parse has the wrong type.
         let tagged = DataValue::language_string("1", "en").expect("the tag is valid");
         for value in [tagged, DataValue::iri("http://example.org/a")] {
             assert_eq!(
@@ -585,6 +608,7 @@ mod tests {
         }
     }
 
+    /// An invalid language tag, and a lexical form that the datatype rejects, are malformed.
     #[test]
     fn invalid_tags_and_lexicals_are_malformed() {
         let string = |text| DataValue::string(text);
@@ -602,6 +626,8 @@ mod tests {
         );
     }
 
+    /// Literals have datatypes and language tags, the empty tag if they are untagged,
+    /// and IRIs, nulls and structures have neither.
     #[test]
     fn datatypes_and_tags_belong_to_literals() {
         let tagged = DataValue::language_string("a", "en").expect("the tag is nonempty");
@@ -641,6 +667,8 @@ mod tests {
         }
     }
 
+    /// A language range matches the tags that start with it up to whole subtags,
+    /// `*` matches every nonempty tag, and an empty tag or range matches nothing.
     #[test]
     fn language_ranges_match_subtag_prefixes() {
         let matches = |tag: &str, range: &str| {
@@ -656,6 +684,7 @@ mod tests {
         assert_eq!(matches("en", ""), DataValue::boolean(false));
     }
 
+    /// A dateTime has its lexical form, and a canonical form with its datatype.
     #[test]
     fn datetimes_have_lexical_forms() {
         let datetime = DataValue::datetime_from_lexical("2024-03-01T12:30:05Z").expect("valid");
@@ -669,6 +698,7 @@ mod tests {
         );
     }
 
+    /// The canonical form of a boolean is a typed literal.
     #[test]
     fn booleans_have_canonical_forms() {
         assert_eq!(
@@ -677,6 +707,8 @@ mod tests {
         );
     }
 
+    /// A decimal casts to the nearest double and to the nearest float,
+    /// the float without a detour through the double.
     #[test]
     fn decimals_cast_to_the_nearest_double_and_float() {
         let decimal = |mantissa, exponent| {
@@ -688,14 +720,17 @@ mod tests {
         assert_eq!(value(cast_double(decimal(7, -1))), DataValue::double(0.7));
         assert_eq!(value(cast_float(decimal(3, -1))), DataValue::float(0.3));
 
-        // Just above the midpoint of two floats, where the nearest double lies:
-        // through the double, the tie would go down to the even float.
+        // The decimal lies just above the midpoint of two floats,
+        // and its nearest double is that midpoint.
+        // A cast through the double would round the tie down to the even float.
         assert_eq!(
             value(cast_float(decimal(4_686_748_743_057_251, -15))),
             DataValue::float(4.686_749)
         );
     }
 
+    /// A string casts to the typed literal of its text,
+    /// and a numeral with a radix prefix casts to an integer of up to 127 bits.
     #[test]
     fn strings_cast_as_literals() {
         let cast = |operation: fn(ValueRef<'_>) -> StackValue<'static>, text: &str| {
@@ -705,7 +740,7 @@ mod tests {
                 .map(ValueRef::to_owned)
         };
 
-        // A string reads as the lexical form of a literal of the target datatype.
+        // A string is parsed as the lexical form of a literal of the target datatype.
         for text in [
             "5",
             "+5",
@@ -749,7 +784,7 @@ mod tests {
             DataValue::other(format!("{}gYear", xsd::NAMESPACE), "2023").expect("not native");
         assert_eq!(value(cast_integer(year.as_ref())), DataValue::integer(2023));
 
-        // Beside the literals, the numerals under a radix prefix, up to 127 bits.
+        // Besides lexical forms, numerals with a radix prefix of up to 127 bits are accepted.
         assert_eq!(cast(cast_integer, "0b101001"), Some(DataValue::integer(41)));
         assert_eq!(cast(cast_integer, "0o52"), Some(DataValue::integer(42)));
         assert_eq!(cast(cast_integer, "0x2B"), Some(DataValue::integer(43)));

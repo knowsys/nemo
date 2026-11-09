@@ -5,12 +5,13 @@ use std::{fmt, sync::Arc};
 use crate::value::{IriRef, datatype::Datatype, reference::write_quoted};
 
 /// An owned [literal](https://www.w3.org/TR/rdf11-concepts/#section-Graph-Literal)
-/// of a datatype this crate has no native representation for,
-/// kept as its lexical form and its datatype IRI.
+/// of a datatype without native support in this crate.
+///
+/// The literal is stored as its lexical form and its datatype IRI.
 /// Its borrowed view is [OtherLiteralRef].
 ///
-/// The datatypes [DataValue::typed_literal](crate::value::DataValue::typed_literal) parses
-/// have no such literals: their literals are the values they denote.
+/// The datatypes that [DataValue::typed_literal](crate::value::DataValue::typed_literal) parses
+/// have no such literals, since their literals become the values they denote.
 #[derive(Clone)]
 pub struct OtherLiteral(Arc<Parts>);
 
@@ -24,7 +25,7 @@ struct Parts {
 
 impl OtherLiteral {
     /// Creates a literal from its datatype IRI and lexical form,
-    /// or `None` for a native datatype.
+    /// or `None` for a datatype with dedicated support, such as `xsd:integer`.
     pub fn new(datatype: impl Into<Box<str>>, lexical: impl Into<Box<str>>) -> Option<Self> {
         let datatype = datatype.into();
 
@@ -90,20 +91,21 @@ impl fmt::Debug for OtherLiteral {
 }
 
 impl fmt::Display for OtherLiteral {
-    /// Writes the term syntax `"lexical"^^<datatype>`,
-    /// the lexical form quoted with `\` and `"` escaped.
+    /// Writes the literal in term syntax as `"lexical"^^<datatype>`,
+    /// with `\`, `"` and line breaks escaped in the lexical form.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.as_ref())
     }
 }
 
 /// A borrowed [literal](https://www.w3.org/TR/rdf11-concepts/#section-Graph-Literal)
-/// of a datatype this crate has no native representation for,
-/// kept as its lexical form and its datatype IRI.
+/// of a datatype without native support in this crate.
+///
+/// The literal is stored as its lexical form and its datatype IRI.
 /// Its owned form is [OtherLiteral].
 ///
-/// The datatypes [DataValue::typed_literal](crate::value::DataValue::typed_literal) parses
-/// have no such literals: their literals are the values they denote.
+/// The datatypes that [DataValue::typed_literal](crate::value::DataValue::typed_literal) parses
+/// have no such literals, since their literals become the values they denote.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct OtherLiteralRef<'a> {
     /// The datatype IRI.
@@ -113,15 +115,15 @@ pub struct OtherLiteralRef<'a> {
 }
 
 impl<'a> OtherLiteralRef<'a> {
-    /// Creates a view over a datatype IRI and a lexical form,
-    /// or `None` for a native datatype (see [OtherLiteral::new]).
+    /// Creates a view of a datatype IRI and a lexical form,
+    /// or `None` for a datatype with dedicated support.
     pub fn new(datatype: &'a str, lexical: &'a str) -> Option<Self> {
         Datatype::of(datatype)
             .is_other()
             .then_some(Self { datatype, lexical })
     }
 
-    /// Creates a view over a datatype known not to be native.
+    /// Creates a view of a lexical form and a datatype IRI without dedicated support.
     pub(crate) fn from_parts(datatype: &'a str, lexical: &'a str) -> Self {
         debug_assert!(
             Datatype::of(datatype).is_other(),
@@ -140,7 +142,7 @@ impl<'a> OtherLiteralRef<'a> {
         self.lexical
     }
 
-    /// Clones the viewed value into an owned [OtherLiteral].
+    /// Returns an owned copy of the literal.
     pub fn to_owned(self) -> OtherLiteral {
         OtherLiteral(Arc::new(Parts {
             datatype: self.datatype.into(),
@@ -150,8 +152,8 @@ impl<'a> OtherLiteralRef<'a> {
 }
 
 impl fmt::Display for OtherLiteralRef<'_> {
-    /// Writes the term syntax `"lexical"^^<datatype>`,
-    /// the lexical form quoted with `\` and `"` escaped.
+    /// Writes the literal in term syntax as `"lexical"^^<datatype>`,
+    /// with `\`, `"` and line breaks escaped in the lexical form.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write_quoted(f, self.lexical)?;
         write!(f, "^^{}", IriRef::new(self.datatype).bracketed())
@@ -164,6 +166,7 @@ mod tests {
 
     use crate::value::datatype::{rdf, xsd};
 
+    /// A literal of a datatype with dedicated support cannot be created.
     #[test]
     fn native_datatypes_are_refused() {
         let xsd = |local: &str| format!("{}{local}", xsd::NAMESPACE);
@@ -178,6 +181,8 @@ mod tests {
         assert!(OtherLiteralRef::new("http://example.org/unit", "5cm").is_some());
     }
 
+    /// A view and an owned literal of the same datatype and lexical form are equal
+    /// and are written alike.
     #[test]
     fn views_agree_with_their_owners() {
         let owned = OtherLiteral::new("http://example.org/unit", "5cm").expect("not native");

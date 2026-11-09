@@ -1,5 +1,4 @@
-//! Reading a predicate back: whole, paged through a cursor, or
-//! counted.
+//! Reading a predicate's stored rows through a cursor.
 
 use nemo_physical::{
     diagnostics::Diagnostic,
@@ -13,6 +12,8 @@ use crate::{
 
 impl Engine {
     /// Opens a cursor over a predicate stored whole.
+    ///
+    /// Fails as [whole_predicate](Self::whole_predicate) does.
     pub(in crate::engine) fn open_cursor(
         &self,
         predicate: &str,
@@ -31,7 +32,9 @@ impl Engine {
         })
     }
 
-    /// Decodes the next rows of a current cursor into a chunk.
+    /// Decodes the next rows of a cursor, at most `budget` of them, into a chunk.
+    ///
+    /// Fails for a cursor that is not [current](Self::is_current).
     pub(in crate::engine) fn decode_chunk(
         &mut self,
         cursor: &mut PredicateCursor,

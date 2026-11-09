@@ -1,14 +1,14 @@
-//! Payload encoding of [Tag::Int].
+//! The payload encoding of [Tag::Int].
 
 use crate::storage::{
     Tag,
     encoding::{PayloadEncoding, bit_field::BitField},
 };
 
-/// The field holding the integer, spanning the whole payload.
+/// The field of the integer, which spans the whole payload.
 const INTEGER: BitField = BitField::new(0..64);
 
-/// Signed integers encode as a biased field spanning the whole payload,
+/// A 64-bit integer is encoded as a biased field that spans the whole payload,
 /// which maps `i64::MIN..=i64::MAX` in order onto `0..=u64::MAX`.
 impl PayloadEncoding for i64 {
     const TAG: Tag = Tag::Int;
@@ -29,6 +29,7 @@ impl PayloadEncoding for i64 {
 mod tests {
     use super::*;
 
+    /// The encoding of integers preserves their order.
     #[test]
     fn encoding_preserves_order() {
         let values = [i64::MIN, -100, -1, 0, 1, 100, i64::MAX];
@@ -37,6 +38,7 @@ mod tests {
         }
     }
 
+    /// Every integer decodes to itself.
     #[test]
     fn encoding_round_trips() {
         for value in [i64::MIN, -42, 0, 42, i64::MAX] {

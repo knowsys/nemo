@@ -1,17 +1,17 @@
 //! The Nemo language server.
 //!
-//! It implements the Language Server Protocol:
-//! parse and check diagnostics with their codes, an outline of a file's statements,
-//! navigation over predicates (what derives one, what reads it, and what it looks like),
-//! completion, hover, rename, and formatting.
+//! It implements these features of the Language Server Protocol:
+//! - the diagnostics of parsing and checking, with their codes;
+//! - an outline of a file's statements;
+//! - navigation over predicates, to the statements that derive one and those that read it;
+//! - hover, highlights, completion, inlay hints, rename and formatting.
 //!
-//! The protocol shell is [Server].
-//! Everything it responds with comes from the `workspace`, `document`, `symbols` and `hover`
-//! modules,
-//! which know nothing about the protocol and can be driven from a test.
+//! [Server] implements the protocol.
+//! Its responses come from the `workspace`, `document`, `symbols`, `hover` and `format`
+//! modules, which know nothing about the protocol and can be tested without it.
 //! The binary serves one session over standard input and output.
-//! In a browser, where there is no process, the [service] is driven
-//! through the page's own message loop.
+//! In a browser, which has no process with standard streams, the [service] is driven
+//! through the page's messages.
 
 mod document;
 mod format;
@@ -28,9 +28,11 @@ pub use tower_lsp_server::{
 
 pub use crate::server::Server;
 
-/// Returns the language service and the socket carrying what the server sends on its own
-/// (diagnostics, logs), ready for any transport:
-/// the binary frames it over standard streams, a browser over messages.
+/// Returns the language service, and the socket for what the server sends on its own
+/// initiative, such as diagnostics and log messages.
+///
+/// Both can be connected to any transport, such as standard input and output,
+/// or a browser's messages.
 pub fn service() -> (LspService<Server>, ClientSocket) {
     LspService::new(Server::new)
 }

@@ -5,7 +5,8 @@
 use super::*;
 
 /// A predicate's role follows from where its rows come from: rules, input facts, or both.
-/// A predicate only ever read is given, holding nothing.
+///
+/// A predicate that is only read counts as extensional, and has no facts.
 #[test]
 fn a_predicates_role_follows_where_its_rows_come_from() {
     let mut engine = Engine::new();
@@ -53,6 +54,9 @@ fn a_predicates_role_follows_where_its_rows_come_from() {
     );
 }
 
+/// A cancellation from before a run is cleared when the run starts,
+/// and one during a run stops it at a rule boundary, after which a later run continues to the
+/// same fixpoint.
 #[test]
 fn cancellation_stops_at_a_boundary_and_resumes() {
     let mut source = String::new();
@@ -77,7 +81,7 @@ fn cancellation_stops_at_a_boundary_and_resumes() {
 
     // A concurrent cancellation lands at a rule boundary or after the
     // fixpoint. Either way the engine ends at the same fixpoint,
-    // resuming if it was cancelled. (Moving the engine into the thread
+    // continuing if it was cancelled. (Moving the engine into the thread
     // is also the compile-time proof that it is `Send`.)
     let mut engine = load();
     let token = engine.cancel_token();
@@ -94,6 +98,8 @@ fn cancellation_stops_at_a_boundary_and_resumes() {
     assert_eq!(count(&mut engine, "path"), 61 * 60 / 2);
 }
 
+/// A cursor delivers a predicate's rows in bounded chunks, the same rows as reading them at
+/// once, and delivers empty chunks once it is exhausted.
 #[test]
 fn cursors_page_through_the_rows() {
     let mut engine = run("
@@ -130,6 +136,8 @@ fn cursors_page_through_the_rows() {
     );
 }
 
+/// The telemetry events of a run record that it reached the fixpoint,
+/// how many facts it derived, and the rules it applied.
 #[test]
 fn telemetry_events_account_for_the_run() {
     use crate::telemetry::Recorder;
@@ -158,6 +166,7 @@ fn telemetry_events_account_for_the_run() {
     assert!(snapshot.contains("reach(?x, ?y)"), "{snapshot}");
 }
 
+/// The file name of an export under gzip compression ends with `.gz`, which is added once.
 #[test]
 fn a_gzipped_export_says_so_in_its_name() {
     use nemo_io::compression::Compression;
@@ -178,7 +187,7 @@ fn a_gzipped_export_says_so_in_its_name() {
         specification(Some("mine.csv"), Compression::Gzip).file_name(),
         "mine.csv.gz"
     );
-    // A name that already says it is not said twice.
+    // A name that already ends with `.gz` does not get it twice.
     assert_eq!(
         specification(Some("mine.csv.gz"), Compression::Gzip).file_name(),
         "mine.csv.gz"
@@ -186,6 +195,7 @@ fn a_gzipped_export_says_so_in_its_name() {
     assert_eq!(specification(None, Compression::Auto).file_name(), "p.csv");
 }
 
+/// An export directive with an option that only applies to reading fails the load.
 #[test]
 fn an_export_rejects_the_options_that_describe_reading() {
     for (format, option) in [
@@ -233,8 +243,8 @@ fn cursors_notice_later_work_on_their_table() {
     assert_eq!(refusal.code(), codes::CURSOR_INVALIDATED, "{refusal:?}");
 }
 
-/// A run stopped short of the fixpoint leaves nothing to explain: a
-/// trace fails until reasoning has run to the end.
+/// A trace fails until a run has reached the fixpoint,
+/// both before any run and after a cancelled one.
 #[test]
 fn traces_fail_on_a_store_short_of_the_fixpoint() {
     let mut source = String::new();
@@ -246,8 +256,8 @@ fn traces_fail_on_a_store_short_of_the_fixpoint() {
     let mut engine = Engine::new();
     engine.load(program).expect("the program loads");
     let fact = Fact::parse("path(0, 60) .").expect("a fact");
-    // Before any run, and after a cancelled one, the store is no
-    // fixpoint; after a completed one it is.
+    // Before any run and after a cancelled one, the stored facts are not at the
+    // fixpoint, and after a completed run they are.
     let refusal = engine
         .trace(std::slice::from_ref(&fact))
         .expect_err("nothing ran yet");
@@ -273,8 +283,8 @@ fn traces_fail_on_a_store_short_of_the_fixpoint() {
     assert!(response.proof(0).is_some());
 }
 
-/// A diagnostic naming a predicate a stage introduced names the written
-/// literals it replaces instead.
+/// A diagnostic that names a predicate a stage introduced names the written
+/// literals that the predicate replaces instead.
 #[cfg(feature = "sparql")]
 #[test]
 fn diagnostics_name_the_literals_a_hidden_predicate_replaces() {
@@ -304,9 +314,10 @@ fn diagnostics_name_the_literals_a_hidden_predicate_replaces() {
     assert_eq!(presented.message(), "a rule reads the literals `anc(?c)`");
 }
 
-/// A program's outputs are what it declares `@output` or exports; one
-/// declaring neither has every predicate rules derive as an output, as old
-/// nemo had, so its imports are trimmed as in any other program.
+/// A program's outputs are the predicates it declares `@output` or exports.
+///
+/// A program that declares neither has every derived predicate as an output,
+/// so its imports are loaded partially as in any other program.
 #[test]
 fn outputs_are_declared_or_derived() {
     let data = [("p.csv", "1,x\n2,y\n")];
@@ -323,10 +334,11 @@ fn outputs_are_declared_or_derived() {
     );
     assert_eq!(undeclared.outputs(), ["q"]);
     assert_eq!(count(&mut undeclared, "q"), 2);
-    // The import is no output: only the column the rule reads is stored.
+    // The import is not an output, so only the column that the rule reads is stored.
     assert_eq!(stored(&undeclared, "p"), (2, 1));
 }
 
+/// [ingest](Engine::ingest) registers, parses, links and loads a program text.
 #[test]
 fn a_program_text_is_carried_through_a_loading_method() {
     let mut engine = Engine::new();
@@ -343,6 +355,8 @@ fn a_program_text_is_carried_through_a_loading_method() {
     );
 }
 
+/// A text that does not parse fails with the parser's errors, whose spans point into the
+/// registered text, and nothing is loaded.
 #[test]
 fn a_text_with_errors_fails_with_what_parsing_reported() {
     let mut engine = Engine::new();
@@ -365,11 +379,12 @@ fn a_text_with_errors_fails_with_what_parsing_reported() {
     assert!(engine.predicates().is_empty(), "nothing loaded");
 }
 
+/// [check_source](Engine::check_source) reports both the parser's errors and the check's,
+/// and loads nothing.
 #[test]
 fn a_check_collects_what_parsing_and_the_engine_report() {
     let mut engine = Engine::new();
-    // One statement does not parse, the other is unsafe: both are
-    // reported, and nothing loads.
+    // One statement does not parse, and the other is unsafe.
     let reported = engine.check_source("test.rls", "p(1 .\nq(?x, ?y) :- p(?x) .\n");
     let codes: Vec<String> = reported
         .diagnostics()
@@ -414,8 +429,8 @@ fn a_run_evaluates_at_the_instant_its_facts_were_loaded_at() {
     );
 }
 
-/// A loading call that fails, or is suspended and discarded, leaves the choice of the instant
-/// to the next loading call, while a failed call after a successful one keeps that one's.
+/// A loading method that fails, or is suspended and discarded, leaves the choice of the
+/// instant to the next one, while a failure after a successful load keeps the load's instant.
 #[test]
 fn only_a_successful_loading_call_chooses_the_instant() {
     let missing = || parse("@import p from csv { resource = \"no-such-file.csv\" } .");

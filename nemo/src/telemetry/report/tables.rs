@@ -1,7 +1,7 @@
-//! The tables of the engine's accounting: the time plan execution spent, and the work it counted.
+//! The tables of the engine's accounting: the time that plan execution spent,
+//! and the work that it counted.
 //!
-//! They list the rows in the order and under the names all reports use:
-//! the keys of the JSON documents and the labels of the text summary.
+//! The tables list the rows in the order and under the names that all reports use.
 
 use nemo_physical::plan::{PhaseTimings, WorkCounts};
 use serde::{Serialize, Serializer, ser::SerializeMap};
@@ -24,20 +24,23 @@ impl Serialize for NamedCounts<'_> {
     }
 }
 
-/// The phase table: the time plan execution spent, phase by phase.
+/// The phase table, which lists the time that plan execution spent, phase by phase.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PhaseTable(Vec<NamedCount>);
 
 impl PhaseTable {
-    /// Returns the phases of plan execution, and its total.
+    /// Returns the table of the phases of plan execution, followed by its total.
     pub(crate) fn of_execution(timings: &PhaseTimings) -> Self {
         let mut rows = Self::named(timings);
         rows.push(("total", timings.total));
         Self(rows)
     }
 
-    /// Returns the phases of a whole run: plan execution's, what it spent outside
-    /// the named phases, and the engine's stages around it.
+    /// Returns the table of the phases of a whole run.
+    ///
+    /// It lists the phases of plan execution, the time spent outside them (`glue`),
+    /// the rest of the rule applications (`plan`), and the storing and consolidating around
+    /// them.
     pub fn of_run(timings: &EngineTimings) -> Self {
         let execution = &timings.execution;
         let mut rows = Self::named(execution);
@@ -50,7 +53,7 @@ impl PhaseTable {
         Self(rows)
     }
 
-    /// Returns the phases the executor names, in order.
+    /// Returns the phases that the executor names, in order.
     ///
     /// `setup` is measured within `join`.
     fn named(timings: &PhaseTimings) -> Vec<NamedCount> {
@@ -64,8 +67,10 @@ impl PhaseTable {
         ]
     }
 
-    /// Returns what plan execution spent in no named phase: block lookup,
-    /// projections, result assembly.
+    /// Returns the time that plan execution spent outside the named phases,
+    /// such as in block lookup, projections and result assembly.
+    ///
+    /// `setup` is left out of the sum, since it is measured within `join`.
     fn glue(timings: &PhaseTimings) -> u64 {
         timings.total.saturating_sub(
             timings.order + timings.join + timings.merge + timings.build + timings.encode,
@@ -78,20 +83,20 @@ impl PhaseTable {
     }
 }
 
-/// The work table: what plan execution counted, the peak buffer last.
+/// The work table, which lists what plan execution counted, with the peak buffer size last.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct WorkTable(Vec<NamedCount>);
 
 impl WorkTable {
-    /// Returns the counters of plan execution.
+    /// Returns the table of the counters of plan execution.
     pub(crate) fn of_execution(counts: &WorkCounts) -> Self {
         let mut rows = Self::counted(counts);
         rows.push(("buffer", counts.buffer_bytes));
         Self(rows)
     }
 
-    /// Returns the counters of a whole run: plan execution's, then the engine's
-    /// around it.
+    /// Returns the table of the counters of a whole run:
+    /// those of plan execution, then the engine's own.
     pub(crate) fn of_run(timings: &EngineTimings) -> Self {
         let mut rows = Self::counted(&timings.counts);
         rows.extend([
@@ -102,7 +107,7 @@ impl WorkTable {
         Self(rows)
     }
 
-    /// Returns the counters the executor keeps, in order.
+    /// Returns the counters that the executor keeps, in order.
     fn counted(counts: &WorkCounts) -> Vec<NamedCount> {
         vec![
             ("joins", counts.joins),
@@ -123,8 +128,8 @@ impl WorkTable {
 mod tests {
     use super::*;
 
-    /// An accounting with every number distinct, so a row swapped with
-    /// another shows.
+    /// Returns an accounting with every number distinct, so that a row swapped with another
+    /// shows.
     fn timings() -> EngineTimings {
         EngineTimings {
             execution: PhaseTimings {
@@ -152,11 +157,12 @@ mod tests {
         }
     }
 
+    /// A run's phase table adds the glue, the plan, and the storing and consolidating
+    /// to the phases of plan execution.
     #[test]
     fn the_run_phases_add_the_glue_and_the_engine_stages() {
         let table = PhaseTable::of_run(&timings());
-        // The glue leaves `setup` out of the sum: it is measured within
-        // `join`.
+        // The glue leaves `setup` out of the sum, since it is measured within `join`.
         assert_eq!(
             table.rows(),
             [
@@ -174,6 +180,7 @@ mod tests {
         );
     }
 
+    /// The phase table of plan execution ends with its total.
     #[test]
     fn the_execution_phases_end_with_their_total() {
         let table = PhaseTable::of_execution(&timings().execution);
@@ -181,6 +188,8 @@ mod tests {
         assert_eq!(table.rows()[6], ("total", 100));
     }
 
+    /// Both work tables end with the peak buffer size,
+    /// and the run's table adds the engine's counters before it.
     #[test]
     fn the_work_tables_keep_the_buffer_last() {
         let execution = WorkTable::of_execution(&timings().counts);

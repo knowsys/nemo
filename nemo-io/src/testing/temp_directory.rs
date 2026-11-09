@@ -13,6 +13,7 @@ impl TempDirectory {
     /// Creates an empty directory that no other test uses,
     /// in this process or in another one.
     pub(crate) fn new() -> Self {
+        /// The number of directories this process created so far.
         static CREATED: AtomicUsize = AtomicUsize::new(0);
         let path = std::env::temp_dir().join(format!(
             "nemo-test-{}-{}",

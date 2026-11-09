@@ -1,11 +1,11 @@
-//! The trait consumers of telemetry events implement.
+//! The trait of the sinks that consume telemetry events.
 
-/// A consumer of telemetry events of type `E`.
+/// A sink that consumes telemetry events of type `E`.
 ///
-/// Sinks take shared references
-/// so that parallel workers can emit without coordination.
-/// Stateful sinks manage their own interior mutability.
-/// Emitters hold a sink as a trait object.
+/// A sink records events through a shared reference,
+/// so that parallel workers can emit events without coordination.
+/// A sink with state manages its own interior mutability.
+/// The trait is dyn-compatible, so that emitters can hold a sink as a trait object.
 ///
 /// # Example
 ///

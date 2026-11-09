@@ -1,6 +1,7 @@
-//! The response: every written node's entries with ids and pagination,
-//! its written rule neighborhoods, and its expansion,
-//! flat for a shaped request and nested for an expanded one.
+//! The response: the facts of every written node with their entry ids and slice,
+//! the written rules around its predicate, and its expansion.
+//!
+//! The nodes are a flat list for a shaped request, and a tree for an expanded one.
 
 use std::{
     collections::{HashMap, HashSet},
@@ -28,8 +29,8 @@ use crate::{
     },
 };
 
-/// Returns the written constants a response renders: the written
-/// columns of remote facts.
+/// Returns the written ground terms that a response renders,
+/// which are the written columns of remote facts.
 pub(super) fn constants(arenas: &QueryArenas) -> Vec<Term> {
     let mut constants = Vec::new();
     for node in &arenas.written {
@@ -43,7 +44,7 @@ pub(super) fn constants(arenas: &QueryArenas) -> Vec<Term> {
     constants
 }
 
-/// The part of the response both query kinds return for one written node.
+/// The part of the response that both kinds of query return for one written node.
 struct NodeAnswer {
     /// The node's predicate.
     predicate: String,
@@ -57,7 +58,7 @@ struct NodeAnswer {
     possible_rules_below: Vec<QueryRule>,
 }
 
-/// Builds the answers of one query's nodes.
+/// The assembly of the answers of one query's nodes.
 pub(super) struct ResponseAssembly<'a> {
     /// The queried engine.
     engine: &'a Engine,
@@ -126,10 +127,10 @@ impl<'a> ResponseAssembly<'a> {
         }
     }
 
-    /// Returns one written node's answer:
-    /// its facts, sliced, with their entry ids if they are stored, plus the rule neighborhoods.
+    /// Returns one written node's answer: the slice of its facts,
+    /// with their entry ids if they are stored, and the rules around its predicate.
     ///
-    /// A listing has no neighborhoods, since no rule reads or writes it as a premise.
+    /// A listing has no rules around it, since no rule reads or writes it as a premise.
     fn answer(&self, node: &WrittenNode) -> NodeAnswer {
         let (start, count) = match node.pagination {
             Some(page) => (page.start, page.count),
@@ -166,7 +167,7 @@ impl<'a> ResponseAssembly<'a> {
         }
     }
 
-    /// Returns the rules reading a predicate, one per head atom of each.
+    /// Returns the rules that read a predicate, once with each of their head atoms.
     fn rules_above(&self, statements: &[StatementId]) -> Vec<QueryRule> {
         let mut seen = HashSet::new();
         statements
@@ -182,7 +183,7 @@ impl<'a> ResponseAssembly<'a> {
             .collect()
     }
 
-    /// Returns the rules writing a predicate, by the head atoms that do.
+    /// Returns the rules that write a predicate, once with each head atom that writes it.
     fn rules_below(&self, writers: &[(StatementId, usize)]) -> Vec<QueryRule> {
         let mut seen = HashSet::new();
         writers
@@ -192,9 +193,10 @@ impl<'a> ResponseAssembly<'a> {
             .collect()
     }
 
-    /// Returns a written rule around one head atom: a rule statement, or a bound
-    /// import, whose predicate is its head and whose binding atoms its
-    /// body.
+    /// Returns a written rule with one of its head atoms.
+    ///
+    /// The rule is a rule statement or a bound import.
+    /// A bound import's predicate is its head, and its binding atoms are its body.
     fn rule(&self, statement: StatementId, head: usize) -> QueryRule {
         let written = self.engine.pipeline.statement(statement);
         let (relevant, body) = match written {
@@ -240,8 +242,8 @@ impl<'a> ResponseAssembly<'a> {
         }
     }
 
-    /// Returns a written atom: its predicate's resolved name behind a prefix,
-    /// and its terms as written, by position.
+    /// Returns a written atom, with its predicate's resolved name after `prefix`,
+    /// and its terms as written, in declaration order.
     fn atom(&self, atom: &Atom, prefix: &str) -> PredicateWithParameters {
         PredicateWithParameters {
             name: format!("{prefix}{}", self.name(&atom.predicate)),
@@ -273,8 +275,8 @@ impl<'a> ResponseAssembly<'a> {
         }
     }
 
-    /// Returns the stored facts of a node over the compiled program in a slice (start and count),
-    /// with their entry ids per predicate, and their total.
+    /// Returns the facts of a node over the compiled program in the slice given by `start`
+    /// and `count`, with their entry ids, and the total number of the node's facts.
     fn stored_entries(
         &self,
         compiled: usize,
@@ -300,11 +302,11 @@ impl<'a> ResponseAssembly<'a> {
         (entries, total)
     }
 
-    /// Returns the facts of a remote literal, in a slice (start and count),
-    /// and their total.
+    /// Returns the facts of a remote literal in the slice given by `start` and `count`,
+    /// and the total number of its facts.
     ///
-    /// These are the leaf's rows instantiated at the written literal, each once.
-    /// They are not stored, so they carry no entry ids.
+    /// The facts are the leaf's rows instantiated at the written literal, each once.
+    /// They are not stored, so they have no entry ids.
     fn remote_entries(
         &self,
         leaf: usize,
@@ -340,8 +342,7 @@ impl<'a> ResponseAssembly<'a> {
         (entries, total)
     }
 
-    /// Returns a node's facts in the set's stored order, from `start`, at most
-    /// `count` of them.
+    /// Returns at most `count` rows of the set, in identity order, from position `start` on.
     fn page_rows(
         &self,
         set: TableId,
@@ -367,8 +368,8 @@ impl<'a> ResponseAssembly<'a> {
         rows
     }
 
-    /// Returns the entry ids of a page's rows: positions in the predicate's own
-    /// enumeration, assigned by one walk.
+    /// Returns the entry ids of the rows of a slice,
+    /// which are their positions among the rows of the predicate's table, found in one walk.
     fn entry_ids(
         &self,
         table: TableId,

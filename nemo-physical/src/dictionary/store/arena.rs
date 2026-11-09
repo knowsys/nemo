@@ -2,14 +2,13 @@
 
 /// The size of an arena chunk in bytes.
 ///
-/// A byte string that does not fit the tail of a chunk leaves the tail unused.
-/// A string longer than a chunk gets a chunk of its own size.
+/// A longer byte string gets a chunk of its own size.
 const CHUNK_SIZE: usize = 64 * 1024;
 
 /// The location of a byte string within an [Arena].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Extent {
-    /// The index of the chunk holding the bytes.
+    /// The index of the chunk that contains the bytes.
     chunk: u32,
     /// The byte offset within the chunk.
     offset: u32,
@@ -21,19 +20,20 @@ pub(crate) struct Extent {
 ///
 /// The bytes live in chunks that are never reallocated,
 /// so a stored byte string keeps its address for the arena's lifetime,
-/// which lets the dictionary hand out borrowed reads.
-/// A byte string that does not fit the tail of the last chunk opens a new one,
-/// sized to the string if it exceeds a whole chunk.
+/// and reads can borrow it.
+/// A byte string that does not fit into the rest of the last chunk starts a new chunk,
+/// and that rest stays unused.
 pub(crate) struct Arena {
-    /// The chunks; only the last one receives new bytes.
+    /// The chunks, of which only the last one receives new bytes.
     chunks: Vec<Box<[u8]>>,
     /// The number of bytes used in the last chunk.
     used: usize,
 }
 
 impl Arena {
-    /// The longest byte string the arena stores:
-    /// the length of a [Extent] has 32 bits.
+    /// The length of the longest byte string that the arena can store.
+    ///
+    /// The length of an [Extent] has 32 bits.
     pub(crate) const LENGTH_LIMIT: usize = u32::MAX as usize;
 
     /// Creates an empty arena.
@@ -49,7 +49,7 @@ impl Arena {
     pub(crate) fn store(&mut self, bytes: &[u8]) -> Option<Extent> {
         let length = u32::try_from(bytes.len()).ok()?;
         if length == 0 {
-            // The empty byte string needs no chunk; `get` resolves it directly.
+            // The empty byte string needs no chunk, and `get` returns it without reading one.
             return Some(Extent {
                 chunk: 0,
                 offset: 0,
@@ -83,7 +83,7 @@ impl Arena {
         })
     }
 
-    /// Returns the bytes at a location the arena returned from [store](Self::store).
+    /// Returns the bytes at a location that [store](Self::store) returned.
     pub(crate) fn get(&self, extent: Extent) -> &[u8] {
         if extent.length == 0 {
             return &[];
@@ -103,6 +103,7 @@ impl Arena {
 mod tests {
     use super::*;
 
+    /// Stored byte strings, the empty one included, are read back unchanged.
     #[test]
     fn stored_bytes_are_retrievable() {
         let mut arena = Arena::new();
@@ -115,12 +116,13 @@ mod tests {
         assert_eq!(arena.get(world), b"world");
     }
 
+    /// Byte strings are read back unchanged after later strings started new chunks.
     #[test]
     fn chunk_transitions_keep_earlier_spans_valid() {
         let mut arena = Arena::new();
         let first = arena.store(b"first").expect("fits");
 
-        // Several chunk transitions, including oversize chunks.
+        // Each string is longer than a chunk, so each one starts a chunk of its own size.
         let big = vec![7u8; CHUNK_SIZE + 100];
         let extents: Vec<Extent> = (0..5).map(|_| arena.store(&big).expect("fits")).collect();
 

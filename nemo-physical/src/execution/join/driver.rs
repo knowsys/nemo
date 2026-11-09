@@ -1,12 +1,12 @@
 //! The driver: the loop descending through a join's layers,
 //! monomorphized over the kind of layer and the hooks.
 //!
-//! The driver fills a row with one value per layer, outermost first.
-//! At the current layer it finds the next value the hooks admit,
+//! The driver fills a row with one value per layer, shallowest first.
+//! At the current layer it finds the next value that the hooks accept,
 //! restricts the deeper cursors to that value's children, and descends.
 //! When a layer is exhausted, it returns to the layer above.
-//! A row is complete once the deepest layer has a value;
-//! the driver then resumes at the deepest emitted layer,
+//! A row is complete once the deepest layer has a value.
+//! The driver then resumes at the deepest emitted layer,
 //! since the layers after it only established that the row exists.
 
 use bumpalo::{Bump, collections::Vec as BumpVec};
@@ -25,8 +25,8 @@ use crate::{
 
 /// A link from a cursor to the cursor over the next column of its input, at a deeper layer.
 ///
-/// In each block of the input, the position of a match indexes the intervals of the next column,
-/// which give the range that block's next cursor is restricted to.
+/// In each block of the input, the position of the found value indexes the intervals
+/// of the next column, which give the range of that block's cursor over the next column.
 #[derive(Debug, Clone, Copy)]
 pub(super) struct NextLink<'a> {
     /// The intervals of the input's next column, one per block of the input, in block order.
@@ -40,7 +40,7 @@ pub(super) struct NextLink<'a> {
 /// The loop of a join, monomorphized over the kind of layer `L` and the hooks `H`.
 #[derive(Debug)]
 pub(super) struct Driver<'a, L: JoinLayer<'a>, H> {
-    /// The layers, outermost first.
+    /// The layers, shallowest first.
     layers: BumpVec<'a, L>,
     /// Per layer and cursor, the link to the cursor over the input's next column, if any.
     links: BumpVec<'a, BumpVec<'a, Option<NextLink<'a>>>>,
@@ -48,17 +48,19 @@ pub(super) struct Driver<'a, L: JoinLayer<'a>, H> {
     hooks: H,
     /// The number of leading layers emitted as result rows.
     emitted: usize,
-    /// The values of the current, possibly partial, row in the layers' own type:
-    /// payloads for the uniform layers.
+    /// The values of the current, possibly partial, row in the layers' own type,
+    /// which is the payload type for the uniform layers.
     row: BumpVec<'a, L::Value>,
-    /// The emitted values of the current row as storage values;
-    /// a layer's value is stamped when it changes, never per candidate.
+    /// The emitted values of the current row, as storage values.
+    ///
+    /// A layer's storage value is written when the row's value there changes,
+    /// not for every candidate value.
     emitted_row: BumpVec<'a, StorageValue>,
-    /// The layer the driver acts on next;
-    /// the depth of the join right after a row was completed.
+    /// The layer the driver acts on next,
+    /// which is the number of layers right after a row was completed.
     current_layer: usize,
-    /// The shallowest layer that found a value since the last row;
-    /// `usize::MAX` while none did.
+    /// The shallowest layer that found a value since the last row,
+    /// or `usize::MAX` if none did.
     pending_changed: usize,
     /// The shallowest layer whose value changed in the current row.
     changed: usize,
@@ -69,7 +71,7 @@ pub(super) struct Driver<'a, L: JoinLayer<'a>, H> {
 impl<'a, L: JoinLayer<'a>, H: Hooks<L::Value>> Driver<'a, L, H> {
     /// Creates the driver over the given layers.
     ///
-    /// `filler` is any value; it fills the row until the layers write it.
+    /// `filler` is any value, which fills the row until the layers write their values.
     pub(super) fn new(
         layers: BumpVec<'a, L>,
         links: BumpVec<'a, BumpVec<'a, Option<NextLink<'a>>>>,
@@ -95,13 +97,13 @@ impl<'a, L: JoinLayer<'a>, H: Hooks<L::Value>> Driver<'a, L, H> {
             changed: 0,
             exhausted: false,
         };
-        // The run is the one descent into the first layer.
+        // The first layer is entered once, for the whole join.
         driver.hooks.enter_layer(0);
         driver
     }
 
-    /// Clips every cursor of a layer to a range of values;
-    /// see [TrieJoin::clip_layer](super::TrieJoin::clip_layer).
+    /// Clips every cursor of a layer to a range of values,
+    /// as [TrieJoin::clip_layer](super::TrieJoin::clip_layer) describes.
     pub(super) fn clip_layer(
         &mut self,
         layer: usize,
@@ -121,8 +123,8 @@ impl<'a, L: JoinLayer<'a>, H: Hooks<L::Value>> Driver<'a, L, H> {
 
         let depth = self.layers.len();
         if self.current_layer == depth {
-            // Resuming at the deepest emitted layer makes the rows distinct:
-            // the layers after it only established that the last row exists.
+            // Resuming at the deepest emitted layer keeps the rows distinct,
+            // since the layers after it only established that the last row exists.
             let Some(deepest) = self.emitted.checked_sub(1) else {
                 self.exhausted = true;
                 return false;
@@ -139,8 +141,8 @@ impl<'a, L: JoinLayer<'a>, H: Hooks<L::Value>> Driver<'a, L, H> {
                     self.current_layer += 1;
 
                     if self.current_layer < depth {
-                        // Entered from above: the layer's intersection and
-                        // its hooks restart within their new ranges.
+                        // The layer is entered from above, so its intersection
+                        // and its hooks restart within their new ranges.
                         self.layers[self.current_layer].mark_for_reset();
                         self.hooks.enter_layer(self.current_layer);
                     }
@@ -160,8 +162,8 @@ impl<'a, L: JoinLayer<'a>, H: Hooks<L::Value>> Driver<'a, L, H> {
         self.changed = std::mem::replace(&mut self.pending_changed, usize::MAX);
         debug_assert!(self.changed < depth, "a row was reached without a value");
 
-        // Stamp the changed layers of the emitted row;
-        // the shallower ones keep their values from the previous row.
+        // Write the storage values of the changed emitted layers.
+        // The shallower layers keep their values from the previous row.
         for layer in self.changed..self.emitted {
             self.emitted_row[layer] = self.layers[layer].stamp(self.row[layer]);
         }
@@ -174,11 +176,11 @@ impl<'a, L: JoinLayer<'a>, H: Hooks<L::Value>> Driver<'a, L, H> {
         &self.hooks
     }
 
-    /// Advances a layer to its next value the hooks admit,
-    /// and writes it into the row, where the filters read it;
-    /// `None` if the layer is exhausted.
+    /// Advances a layer to its next value that the hooks accept,
+    /// and writes the value into the row, where the filters read it.
     ///
-    /// A bound layer probes for its computed value instead, once per descent.
+    /// Returns `None` if the layer is exhausted.
+    /// A bound layer probes for its value instead, once per descent.
     #[inline]
     fn next_admissible(&mut self, layer: usize) -> Option<()> {
         match self.hooks.bind(layer, &self.row) {
@@ -203,8 +205,8 @@ impl<'a, L: JoinLayer<'a>, H: Hooks<L::Value>> Driver<'a, L, H> {
     /// Restricts the cursors linked from a layer's cursors
     /// to the children of the nodes where the layer found its value.
     ///
-    /// Of an input stored in several blocks, only the blocks holding the value get ranges,
-    /// and the others are skipped in the subtree.
+    /// For an input stored in several blocks, only the blocks that contain the value get ranges,
+    /// and the others are skipped below the value.
     #[inline]
     fn propagate_ranges(&mut self, layer: usize) {
         // Links lead to strictly deeper layers.

@@ -1,11 +1,13 @@
-//! The kinds of problems translation reports: a program that parses but
-//! cannot be compiled, loaded, or written out as written.
+//! The kinds of problems that translation reports.
+//!
+//! They concern programs that parse but cannot be compiled, imported or exported as written.
 
 use nemo_physical::{diagnostic_kinds, diagnostics::Count};
 
 diagnostic_kinds! {
-    /// A problem translation found in a parsed program:
-    /// names, rules, values, declarations, and directives that do not fit together.
+    /// A problem that translation found in a parsed program.
+    ///
+    /// It concerns names, rules, values, declarations or directives that do not fit together.
     pub enum TranslationError {
         Unsupported { what: String }
             => UNSUPPORTED = 203, error, "{what} is not supported",
@@ -481,7 +483,10 @@ diagnostic_kinds! {
 }
 
 impl TranslationError {
-    /// Creates the kind of a directive option holding a value of the wrong type.
+    /// Creates the kind for a directive option whose value has the wrong type.
+    ///
+    /// `option` is the option's name, and `expected` describes the values it accepts,
+    /// such as "a string".
     pub(crate) fn option_type(option: &str, expected: &str) -> Self {
         Self::OptionValueType {
             option: option.to_owned(),
@@ -489,7 +494,7 @@ impl TranslationError {
         }
     }
 
-    /// Creates the kind of a directive option the named format does not take.
+    /// Creates the kind for a directive option that the format named `format` does not accept.
     pub(crate) fn unknown_option(option: &str, format: &str) -> Self {
         Self::UnknownOption {
             option: option.to_owned(),

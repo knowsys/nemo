@@ -1,5 +1,7 @@
-//! Helpers shared by the unit tests: programs and rules parsed from
-//! source, engines reasoned to their fixpoint, and temporary directories.
+//! Helpers shared by the unit tests.
+//!
+//! They parse programs and rules, run programs to their fixpoint, and create temporary
+//! directories.
 
 mod temp_directory;
 
@@ -10,19 +12,21 @@ use crate::{
     model::{FileId, Program, Rule},
 };
 
-/// Parses a program, panicking on diagnostics.
+/// Parses a program, and panics if parsing reports any diagnostic.
 pub(crate) fn parse(source: &str) -> Program {
     let (program, diagnostics) = Program::parse(source, FileId::new(0));
     assert!(diagnostics.is_empty(), "{source}: {diagnostics:?}");
     program
 }
 
-/// Parses a rule, panicking on a problem.
+/// Parses a rule, and panics if the text is not a rule.
 pub(crate) fn rule(text: &str) -> Rule {
     Rule::parse(text).expect("the rule parses")
 }
 
-/// Parses, loads, and reasons a program to its fixpoint.
+/// Returns a new engine that has loaded the program in `source` and reasoned to the fixpoint.
+///
+/// Panics if parsing, loading or reasoning fails.
 pub(crate) fn run(source: &str) -> Engine {
     let mut engine = Engine::new();
     engine.load(parse(source)).expect("the program loads");
@@ -30,7 +34,7 @@ pub(crate) fn run(source: &str) -> Engine {
     engine
 }
 
-/// Returns the engine's predicates as name and arity.
+/// Returns the name and arity of each of the engine's predicates.
 pub(crate) fn arities(engine: &Engine) -> Vec<(String, usize)> {
     engine
         .predicates()
@@ -39,7 +43,7 @@ pub(crate) fn arities(engine: &Engine) -> Vec<(String, usize)> {
         .collect()
 }
 
-/// Returns the engine's predicates as name and role.
+/// Returns the name and role of each of the engine's predicates.
 pub(crate) fn roles(engine: &Engine) -> Vec<(String, PredicateRole)> {
     engine
         .predicates()

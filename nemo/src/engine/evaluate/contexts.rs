@@ -1,13 +1,13 @@
-//! The evaluation contexts of the reasoning runs,
-//! kept for the explanations that re-execute their applications.
+//! The evaluation contexts of the runs,
+//! kept so that tracing can execute their rule applications again.
 
 use nemo_physical::function::EvaluationContext;
 
-/// The evaluation context of each reasoning run, by the step of its first application.
+/// The evaluation context of each run, by the step of its first rule application.
 ///
-/// Every `NOW()` in one run returns the same instant, and each run has its own.
-/// An explanation re-executes an application in the context of the run that performed it,
-/// so its functions return the values they returned then.
+/// Every `NOW()` in one run returns the same instant, and each run has its own context.
+/// Tracing executes a rule application again in the context of the run that performed it,
+/// so that its functions return the values they returned then.
 #[derive(Debug, Default)]
 pub(crate) struct RunContexts(Vec<(u64, EvaluationContext)>);
 
@@ -63,6 +63,7 @@ mod tests {
         ))
     }
 
+    /// A step is given the context of the last run that began at or before it.
     #[test]
     fn a_step_reads_the_context_of_its_run() {
         let mut runs = RunContexts::default();
@@ -75,6 +76,7 @@ mod tests {
         assert_eq!(runs.latest(), at(20));
     }
 
+    /// A run that applied nothing is replaced by the next run, which begins at the same step.
     #[test]
     fn a_run_without_applications_is_replaced_by_the_next() {
         let mut runs = RunContexts::default();

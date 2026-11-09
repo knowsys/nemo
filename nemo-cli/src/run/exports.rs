@@ -1,4 +1,5 @@
-//! The export path: what the run writes out, and the files it must not write.
+//! Settling the exports of a run: which predicates it writes, and which files it must not
+//! write.
 
 use std::collections::HashMap;
 
@@ -15,23 +16,26 @@ use crate::{
     run::{Run, document::REPORT_PAGE, selection::Selection, stdout_conflict},
 };
 
-/// The example a hint about an export's file shows.
+/// An export with a file of its own, which hints about an export's file show as an example.
 const OWN_FILE: &str = "`@export p to csv { resource = \"p.csv\" } .`";
 
-/// What writes a file into the export directory.
+/// A writer of a file in the export directory.
 #[derive(Debug, Clone, Copy)]
 enum Claimant<'a> {
-    /// The export of the predicate.
+    /// The export of the named predicate.
     Export(&'a str),
     /// The HTML report.
     Report,
 }
 
 impl Run<'_> {
-    /// Returns what the run writes out, settled as soon as the program has
-    /// loaded: a run that must not overwrite an export file or the HTML
-    /// report fails at once rather than after the work. Printing writes no
-    /// export files, so only the report is checked then.
+    /// Returns the exports of the run, checked before reasoning.
+    ///
+    /// The run fails here rather than after the work if an export would write to standard
+    /// output beside the JSON report, if two exports, or an export and the HTML report,
+    /// would write the same file, or if one of them would replace an existing file without
+    /// `--overwrite`.
+    /// A run that prints its results has no exports, so only the HTML report is checked then.
     pub(super) fn exports(
         &self,
         engine: &Engine,
@@ -57,13 +61,13 @@ impl Run<'_> {
         Ok(specifications)
     }
 
-    /// Returns what the run writes out, as the export mode asks:
-    /// the declared exports the selection reaches, as written,
-    /// then the predicates it adds as comma-separated values.
+    /// Returns the exports of the predicates that the export mode selects.
     ///
-    /// What the program says about a predicate it exports still holds,
-    /// since a role-driven selection adds the rest, it does not overrule what was written.
-    /// What the selection skips is reported once.
+    /// These are the program's exports of the selected predicates, as declared,
+    /// followed by an export to comma-separated values for each selected predicate without one.
+    /// A selection by role only adds exports, so a declared export is kept as written.
+    /// The predicates that the selection skips are reported in one warning.
+    /// With `--gzip`, every export is compressed.
     fn specifications(&self, engine: &Engine) -> Vec<ExportSpec> {
         let reached = Selection::of(self.arguments.export).reaches(engine);
         if let Some(warning) = reached.warning() {
@@ -89,16 +93,16 @@ impl Run<'_> {
         }
         if self.arguments.gzip {
             for specification in &mut specifications {
-                // The name follows from the compression, so saying it is
-                // gzipped is the whole of it.
+                // The file name follows from the compression, so setting the compression is
+                // enough.
                 specification.compression = Compression::Gzip;
             }
         }
         specifications
     }
 
-    /// Checks that no two exports, nor an export and the HTML report, write into one file,
-    /// and that none of them writes over an existing file unless the run was told to.
+    /// Checks that no two exports, and no export and the HTML report, write the same file,
+    /// and that none of them replaces an existing file without `--overwrite`.
     fn vacancy(&self, specifications: &[ExportSpec], level: Report) -> Result<(), Diagnostic> {
         let mut taken: HashMap<String, Claimant<'_>> = HashMap::new();
         if level == Report::Html {
@@ -106,17 +110,16 @@ impl Run<'_> {
             self.unclaimed(REPORT_PAGE, None)?;
         }
         for specification in specifications {
-            // Standard output is not a file: nothing to collide with or
-            // to protect.
+            // An export to standard output writes no file, so it cannot share a file with
+            // another writer or replace one.
             if specification.is_stdout() {
                 continue;
             }
             let name = specification.file_name();
             let predicate = specification.predicate.as_str();
-            // Two writers sharing a file would leave whichever was
-            // written first with nothing to show for it. This holds
-            // even under --overwrite: it permits replacing an earlier
-            // run's output, not discarding this one's.
+            // If two writers shared a file, the output written first would be lost.
+            // This is an error even with `--overwrite`, which allows replacing the output of
+            // an earlier run, but not the output of this one.
             if let Some(other) = taken.insert(file_key(&name), Claimant::Export(predicate)) {
                 return Err(collision(other, predicate, &name));
             }
@@ -125,9 +128,11 @@ impl Run<'_> {
         Ok(())
     }
 
-    /// Returns an error if a file of the export directory exists already
-    /// and the run was not told to replace it,
-    /// naming the predicate whose export would write it, if one would.
+    /// Returns an error if the file `name` already exists in the export directory
+    /// and `--overwrite` is not given.
+    ///
+    /// `predicate` is the predicate whose export would write the file,
+    /// or `None` for the HTML report.
     fn unclaimed(&self, name: &str, predicate: Option<&str>) -> Result<(), Diagnostic> {
         if self.arguments.overwrite {
             return Ok(());
@@ -147,8 +152,8 @@ impl Run<'_> {
     }
 }
 
-/// Returns the error for an export of the given predicate
-/// that would write the file an earlier claimant writes.
+/// Returns the error for an export of `predicate` that would write `file`,
+/// which `earlier` already writes.
 fn collision(earlier: Claimant<'_>, predicate: &str, file: &str) -> Diagnostic {
     let (claimants, hint) = match earlier {
         Claimant::Report => (
@@ -172,9 +177,10 @@ fn collision(earlier: Claimant<'_>, predicate: &str, file: &str) -> Diagnostic {
     .with_hint(hint)
 }
 
-/// Returns the key under which two export file names reach the same file:
-/// `.` segments dropped, `..` segments resolved,
-/// and the case folded on platforms whose file systems ignore it by default.
+/// Returns a key that is the same for two export file names that name the same file.
+///
+/// The key drops `.` segments and resolves `..` segments.
+/// On Windows and macOS, whose file systems ignore case by default, it is also lowercased.
 fn file_key(name: &str) -> String {
     let mut segments: Vec<&str> = Vec::new();
     for segment in name.split(['/', '\\']) {

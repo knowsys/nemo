@@ -1,6 +1,8 @@
-//! The grouping of a rule's body: its atoms over candidate imports,
-//! resolved for composing queries, the local literals grouped by shared variables,
-//! and the remote atoms grouped into components, each replaced by one query.
+//! The grouping of a rule's body for the rewrite.
+//!
+//! A *remote atom* is an atom over a candidate import, and every other literal is *local*.
+//! The local literals form groups by shared variables,
+//! and the remote atoms form *components*, each of which one query replaces.
 
 use std::collections::HashSet;
 
@@ -14,19 +16,21 @@ use crate::{
     model::{Literal, Operator, Rule, Term, TermKind, VariableKind},
 };
 
-/// One atom of a rule over a candidate import, resolved for composing.
+/// One atom of a rule over a candidate import, resolved for composing queries.
 pub(super) struct RemoteAtom {
     /// The atom's position in the body.
     pub(super) position: usize,
-    /// The candidate it reads.
+    /// The name of the candidate import that the atom reads.
     pub(super) candidate: String,
-    /// What each argument binds.
+    /// The binding of each argument: a variable or a constant.
     pub(super) bindings: Vec<Binding>,
-    /// The universal variables the atom mentions, in order.
+    /// The universal variables that the atom mentions, in order of first mention,
+    /// with the fresh variables of its computed arguments.
     pub(super) variables: Vec<String>,
-    /// Whether the atom's arguments are distinct variables only, anonymous ones included,
-    /// in which case it reads the candidate import's one fetch, whose unread columns the
-    /// import plan prunes, rather than a fetch of its own.
+    /// Whether the atom's arguments are only distinct variables, anonymous ones included.
+    ///
+    /// Such an atom reads the candidate import's one fetch,
+    /// whose unread columns the import plan prunes, rather than a fetch of its own.
     pub(super) plain: bool,
     /// Whether the rule reads the atom negatively.
     pub(super) negated: bool,
@@ -34,40 +38,42 @@ pub(super) struct RemoteAtom {
     pub(super) computed: Vec<ComputedArgument>,
 }
 
-/// An argument of a remote atom computed from rule variables, as `STRLANG(?org, "en")`.
+/// An argument of a remote atom computed from rule variables, such as `STRLANG(?org, "en")`.
 ///
-/// The query sees a fresh variable in its place,
-/// which a local group binding the term's variables computes, so the import is bound by it.
+/// The query sees a fresh variable in its place.
+/// A local group that binds the term's variables computes the argument,
+/// and so binds the import.
 #[derive(Debug, Clone)]
 pub(super) struct ComputedArgument {
     /// The argument's position in the atom.
     pub(super) position: usize,
-    /// The fresh variable standing for the argument.
+    /// The fresh variable that stands for the argument.
     pub(super) variable: String,
     /// The written term.
     pub(super) term: Term,
 }
 
-/// A group of local body literals sharing variables,
+/// A group of local body literals that share variables,
 /// which becomes a binding predicate if it shares a variable with a component.
 pub(super) struct LocalGroup {
     /// The literals' body positions.
     pub(super) positions: Vec<usize>,
-    /// The computed arguments the group computes, after its literals.
+    /// The computed arguments that the group computes, after its literals.
     pub(super) computed: Vec<ComputedArgument>,
-    /// The universal variables the group mentions or computes, in first-occurrence order.
+    /// The universal variables that the group mentions or computes, in order of first mention.
     pub(super) variables: Vec<String>,
 }
 
 impl LocalGroup {
-    /// Groups the local literals: the positive atoms by shared variables,
-    /// then each other literal or computed argument into the first group binding all it reads,
-    /// until none joins any more.
+    /// Groups the local literals at `positions`, and the `computed` arguments.
     ///
-    /// An assignment, an equality of a variable no positive local atom binds,
+    /// The positive atoms are grouped by shared variables.
+    /// Then each other literal and each computed argument joins the first group that binds
+    /// everything it reads, repeatedly, until no more of them join.
+    /// An assignment, which is an equality with a variable that no positive local atom binds,
     /// reads only its other side, and its group then binds its variable too.
-    /// A computed argument is assigned to its fresh variable likewise.
-    /// A literal no group binds fully belongs to no group and stays in the rule.
+    /// A computed argument is assigned to its fresh variable in the same way.
+    /// A literal that no group binds fully belongs to no group, and stays in the rule.
     pub(super) fn all(
         rule: &Rule,
         positions: &[usize],
@@ -117,7 +123,7 @@ impl LocalGroup {
         groups
     }
 
-    /// Returns the first group binding every variable.
+    /// Returns the first group that binds every one of the variables.
     fn binding<'a>(groups: &'a mut [LocalGroup], variables: &[String]) -> Option<&'a mut Self> {
         groups.iter_mut().find(|group| {
             variables
@@ -134,7 +140,7 @@ impl LocalGroup {
                 continue;
             };
             let variables = universal(atom);
-            // Merge every group sharing a variable into one.
+            // Every group that shares a variable with the atom is merged with it.
             let mut merged = LocalGroup {
                 positions: vec![position],
                 computed: Vec::new(),
@@ -157,8 +163,10 @@ impl LocalGroup {
     }
 }
 
-/// Returns the variable an equality assigns and the term it assigns to it:
-/// one side is a universal variable outside `bound` the other side does not mention.
+/// Returns the variable that an equality assigns, and the term that it assigns to it.
+///
+/// The variable is one side of the equality:
+/// a universal variable outside `bound` that the other side does not mention.
 fn assignment<'a>(literal: &'a Literal, bound: &HashSet<String>) -> Option<(&'a str, &'a Term)> {
     let Literal::Operation(operation) = literal else {
         return None;
@@ -183,20 +191,21 @@ fn assignment<'a>(literal: &'a Literal, bound: &HashSet<String>) -> Option<(&'a 
         })
 }
 
-/// The remote atoms one query replaces:
-/// positive atoms over one endpoint connected by shared variables,
-/// with the negated atoms they absorbed as `FILTER NOT EXISTS` conditions,
-/// or a single negated atom no component absorbed, which the rule reads negatively.
+/// The remote atoms that one query replaces.
+///
+/// A component is one of these:
+/// - positive atoms over one endpoint, connected by shared variables,
+///   with the negated atoms that they absorbed as `FILTER NOT EXISTS` conditions;
+/// - a single negated atom that no component absorbed, which the rule reads negatively.
 pub(super) struct RemoteComponent {
     /// The positive atoms, as indices into the rule's remote atoms.
     pub(super) members: Vec<usize>,
-    /// The absorbed negated atoms, likewise.
+    /// The absorbed negated atoms, as indices into the rule's remote atoms.
     pub(super) absorbed: Vec<usize>,
 }
 
 impl RemoteComponent {
-    /// Returns the component's atoms: its members, then the negations it
-    /// absorbed.
+    /// Returns the component's atoms: its members, then the negated atoms that it absorbed.
     pub(super) fn atoms<'a>(&self, remote: &'a [RemoteAtom]) -> Vec<&'a RemoteAtom> {
         self.members
             .iter()
@@ -205,14 +214,13 @@ impl RemoteComponent {
             .collect()
     }
 
-    /// Returns whether the rule reads the component negatively:
-    /// it is a single negated atom no component absorbed.
+    /// Returns whether the rule reads the component negatively,
+    /// which is the case for a single negated atom that no component absorbed.
     pub(super) fn negative(&self) -> bool {
         self.members.is_empty()
     }
 
-    /// Returns the variables of the component's atoms, in first-occurrence
-    /// order.
+    /// Returns the variables of the component's atoms, in order of first mention.
     pub(super) fn variables(&self, remote: &[RemoteAtom]) -> Vec<String> {
         let mut variables = Vec::new();
         for atom in self.atoms(remote) {
@@ -245,12 +253,14 @@ impl RewriteContext {
 
     /// Resolves the atoms of a rule over candidate imports, in body order.
     ///
-    /// An operation a positive atom has as an argument is [computed](ComputedArgument).
+    /// An operation with variables as the argument of a positive atom becomes a
+    /// [computed argument](ComputedArgument).
+    /// `rule_variables` contains the rule's variables, which the fresh variables avoid.
     ///
-    /// Returns `None` if one cannot be composed,
-    /// since its arity is not the query's (translation reports it),
-    /// a constant of it has no SPARQL form,
-    /// or it is negated and has an argument that is neither a variable nor a constant.
+    /// Returns `None` if one of the atoms cannot be composed:
+    /// if its arity is not the query's, which translation reports,
+    /// if one of its constants has no SPARQL form,
+    /// or if it is negated and has an argument that is neither a variable nor ground.
     /// The rule then goes to translation as written.
     pub(super) fn remote_atoms(
         &self,
@@ -323,10 +333,13 @@ impl RewriteContext {
         Some(remote)
     }
 
-    /// Groups the remote atoms into components, each replaced by one query:
-    /// the positive atoms connected by endpoint and shared variables,
-    /// merged where a negated atom shares variables with several components,
-    /// with each negated atom absorbed by a component that binds all its variables.
+    /// Groups the remote atoms into components, each of which one query replaces.
+    ///
+    /// The positive atoms of one endpoint that are connected by shared variables form a
+    /// component.
+    /// The components that share variables with one negated atom are merged,
+    /// and each negated atom is absorbed by a component that binds all its variables.
+    /// `groups` are the rule's local groups.
     pub(super) fn components(
         &self,
         remote: &[RemoteAtom],
@@ -338,7 +351,7 @@ impl RewriteContext {
     }
 
     /// Returns the positive atoms grouped by endpoint and shared variables,
-    /// each component's members in the order they were reached.
+    /// with each component's members in the order in which they were reached.
     ///
     /// An atom whose query [stands alone](CandidateImport::stands_alone) forms a component of
     /// its own.
@@ -382,7 +395,7 @@ impl RewriteContext {
 
     /// Merges the components that share variables with one negated atom of their endpoint.
     ///
-    /// The query holding a `FILTER NOT EXISTS` must bind every variable it refers to.
+    /// The query that contains a `FILTER NOT EXISTS` must bind every variable it refers to.
     /// In a query of its own, the negated atom could only be fetched unrestricted.
     fn bridge(&self, components: &mut Vec<RemoteComponent>, remote: &[RemoteAtom]) {
         loop {
@@ -414,9 +427,10 @@ impl RewriteContext {
     }
 
     /// Absorbs each negated atom into the first component of its endpoint that binds all its
-    /// variables, through its members or the local groups sharing variables with them.
+    /// variables, through its members or the local groups that share variables with them.
     ///
-    /// A negated atom no component absorbs becomes a component of its own, read negatively.
+    /// A negated atom that no component absorbs becomes a component of its own,
+    /// which the rule reads negatively.
     fn absorb(
         &self,
         mut components: Vec<RemoteComponent>,
@@ -459,9 +473,11 @@ impl RewriteContext {
         components
     }
 
-    /// Returns the local groups a component is bound by: those sharing a variable with it.
+    /// Returns the local groups that bind a component: those that share a variable with it.
     ///
-    /// A component read negatively is not bound by a group that depends on the rule's head,
+    /// `variables` are the component's variables.
+    /// A component that the rule reads negatively is not bound by a group that depends on the
+    /// rule's head,
     /// since the fetch would then be in a negative cycle with the rule,
     /// and the program could not be stratified.
     /// Such a group keeps its variables local.

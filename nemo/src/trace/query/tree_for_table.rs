@@ -4,8 +4,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::trace::query::{EntriesQuery, MetaInformation, QueryRule, TableEntries};
 
-/// The `treeForTable` query: facts of one predicate whose derivation
+/// The `treeForTable` query, which selects facts of one predicate whose derivation
 /// the server expands (nev: `TreeForTableQuery`).
+///
+/// The server keeps expanding a node as long as one written rule derives all of its facts.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TreeForTableQuery {
@@ -27,11 +29,11 @@ pub struct TreeForTableResponse {
     pub table_entries: TableEntries,
     /// How long deriving the node's predicate took.
     pub meta_information: MetaInformation,
-    /// The rules that read the node's predicate, one per head atom.
+    /// The rules that read the node's predicate, once with each of their head atoms.
     pub possible_rules_above: Vec<QueryRule>,
-    /// The rules whose head atoms write the node's predicate.
+    /// The rules that write the node's predicate, once with each head atom that writes it.
     pub possible_rules_below: Vec<QueryRule>,
-    /// The rule application expanding the node, absent if the tree stops here.
+    /// The expansion of the node, or none if the tree ends here.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub child_information: Option<TreeChildren>,
 }
@@ -43,6 +45,6 @@ pub struct TreeForTableResponse {
 pub struct TreeChildren {
     /// The rule, with the head atom that derives the node's facts.
     pub rule: QueryRule,
-    /// The children: the positive premises, then the negated ones.
+    /// The children, one per positive body literal, then one per negated literal.
     pub children: Vec<TreeForTableResponse>,
 }

@@ -1,10 +1,8 @@
-//! The model: printing as Nemo syntax, equality, and resolving builtin
-//! names.
+//! Tests of the model: display in Nemo syntax, equality, and the names of builtins.
 
 use super::*;
 
-/// Bare names carry percent-encoding, as the lexer reads them, and
-/// render bare again.
+/// A bare name keeps its percent-encoding when it is parsed, and is displayed bare again.
 #[test]
 fn percent_encoded_bare_names_render_bare() {
     let term = Term::parse("Hello%20World").expect("parses");
@@ -12,8 +10,8 @@ fn percent_encoded_bare_names_render_bare() {
     assert_eq!(Term::parse(&term.to_string()).expect("re-parses"), term);
 }
 
-/// A name with `-` between its parts renders bare, and one the lexer would
-/// split at a `-` in angle brackets.
+/// A name with `-` between its parts is displayed bare,
+/// and a name that the lexer would split at a `-` is displayed in angle brackets.
 #[test]
 fn hyphenated_names_render_bare_where_they_read_back() {
     for name in ["my-lib", "item-1", "a-_b"] {
@@ -26,8 +24,8 @@ fn hyphenated_names_render_bare_where_they_read_back() {
     }
 }
 
-/// A predicate whose name reads as something else before a `(` renders in angle brackets,
-/// in a program and in a traced fact alike.
+/// A predicate whose name would be parsed as something else before a `(`
+/// is displayed in angle brackets, both in a program and in a traced fact.
 #[test]
 fn predicates_named_like_builtins_render_in_brackets() {
     for name in ["strlen", "STRLEN", "_", "true", "http://example.org/edge"] {
@@ -42,8 +40,8 @@ fn predicates_named_like_builtins_render_in_brackets() {
     );
 }
 
-/// The special floating values render as XSD spells them, which the
-/// typed-literal readers accept back.
+/// The special floating-point values are displayed as XSD writes them,
+/// in typed literals that can be read back.
 #[test]
 fn special_doubles_render_as_typed_literals() {
     assert_eq!(
@@ -56,16 +54,17 @@ fn special_doubles_render_as_typed_literals() {
     );
 }
 
-/// A universal variable term.
+/// Returns a universal variable term.
 fn var(name: &str) -> Term {
     Term::variable(Variable::universal(name))
 }
 
-/// An atom over a bare predicate name.
+/// Returns an atom with a bare predicate name.
 fn atom(predicate: &str, terms: Vec<Term>) -> Atom {
     Atom::new(Identifier::bare(predicate), terms)
 }
 
+/// Terms and rules that differ only in their spans are equal.
 #[test]
 fn equality_ignores_spans() {
     let spanned = Term {
@@ -91,6 +90,7 @@ fn equality_ignores_spans() {
     assert_eq!(rule, spanned_rule);
 }
 
+/// A rule is displayed in Nemo syntax, with each attribute on a line before it.
 #[test]
 fn rules_display_as_nemo_syntax() {
     let mut rule = Rule::new(
@@ -120,6 +120,7 @@ fn rules_display_as_nemo_syntax() {
     );
 }
 
+/// Each kind of term is displayed in Nemo syntax.
 #[test]
 fn terms_display_every_constant_form() {
     let cases: Vec<(Term, &str)> = vec![
@@ -199,6 +200,8 @@ fn terms_display_every_constant_form() {
     }
 }
 
+/// A nested infix operation is put in parentheses where precedence requires it,
+/// and a call is displayed with the builtin's name.
 #[test]
 fn operations_parenthesize_nested_infix() {
     let sum = Term::new(TermKind::Operation(Operation::new(
@@ -212,6 +215,7 @@ fn operations_parenthesize_nested_infix() {
     assert_eq!(call.to_string(), "STRLEN(?s)");
 }
 
+/// An aggregate is displayed with its scope after `per`, if it has one.
 #[test]
 fn aggregates_display_their_scope() {
     let scoped = Aggregate::new(AggregateKind::Sum, var("v")).per(vec![Variable::universal("g")]);
@@ -227,6 +231,7 @@ fn aggregates_display_their_scope() {
     );
 }
 
+/// [Term::apply] gives an operation only for the name of a builtin.
 #[test]
 fn applications_resolve_known_builtins_only() {
     assert!(matches!(
@@ -240,6 +245,7 @@ fn applications_resolve_known_builtins_only() {
     assert_eq!(Operator::from_name("SUM"), Some(Operator::Add));
 }
 
+/// Each kind of directive is displayed in Nemo syntax.
 #[test]
 fn directives_display_as_nemo_syntax() {
     let cases: Vec<(Directive, &str)> = vec![
@@ -377,6 +383,7 @@ fn directives_display_as_nemo_syntax() {
     }
 }
 
+/// A program is displayed with one statement per line.
 #[test]
 fn programs_display_line_per_statement() {
     let program = Program::new(vec![
@@ -395,6 +402,7 @@ fn programs_display_line_per_statement() {
     );
 }
 
+/// All NaN doubles are the same term, while `0.0` and `-0.0` are different terms.
 #[test]
 fn doubles_canonicalize_nan() {
     assert_eq!(Term::double(f64::NAN), Term::double(-f64::NAN));

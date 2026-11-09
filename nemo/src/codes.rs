@@ -1,20 +1,21 @@
 //! The diagnostic codes of the logical layer,
-//! and the registry documenting every code an engine can report.
+//! and the registry that documents every code an engine can report.
 //!
-//! Codes are stable, public identifiers: tooling and tests match on them,
-//! and the `# Errors` sections of the public API name them.
-//! There is one constant per kind, named after it,
-//! with the stage added where two stages have a kind of the same name (`MODULES_TOO_DEEP`).
-//! The numbers group by stage:
-//! - parsing from `N0210`, and `N0202`,
-//! - translation from `N0250`, and `N0203` and `N0204`,
-//! - modules from `N0400`,
-//! - types from `N0450`, and `N0205`,
-//! - the engine from `N0480`, and `N0206` to `N0208`,
-//! - tracing from `N0500`, and `N0209`.
+//! Codes are stable, public identifiers, so that tools and tests can match on them.
+//! The `# Errors` sections of the public API name them.
+//! Each kind has one constant, named after the kind.
+//! Where two stages have kinds of the same name, the constant of one of them also names its
+//! stage, as in `MODULES_TOO_DEEP`.
+//! The numbers are grouped by stage:
+//! - parsing: from `N0210`, and `N0202`;
+//! - translation: from `N0250`, and `N0203` and `N0204`;
+//! - modules: from `N0400`;
+//! - types: from `N0450`, and `N0205`;
+//! - the engine: from `N0480`, and `N0206` to `N0208`;
+//! - tracing: from `N0500`, and `N0209`.
 //!
-//! The IO layer's `N01xx` and the physical layer's `N0001` and `N0002` lie below,
-//! and the command line's `N09xx` above.
+//! The lower numbers belong to the IO layer (`N01xx`) and the physical layer (`N0001` and
+//! `N0002`), and `N09xx` is left to the front ends.
 
 use std::sync::LazyLock;
 
@@ -30,8 +31,9 @@ pub use crate::diagnostics::{
 };
 pub use nemo_io::codes::*;
 
-/// The registry of every code an engine can report:
-/// the codes of the IO and physical layers, and those of this crate.
+/// The registry of every code an engine can report.
+///
+/// It contains the codes of the IO and physical layers, and those of this crate.
 pub static REGISTRY: LazyLock<Registry> = LazyLock::new(|| {
     Registry::new()
         .with_registry(&nemo_io::codes::REGISTRY)
@@ -49,7 +51,8 @@ mod tests {
 
     use nemo_physical::diagnostics::Code;
 
-    /// Every code has an explanation, and the registry finds the codes of every layer.
+    /// Every code has an explanation without runs of spaces,
+    /// and the registry finds the codes of every layer.
     ///
     /// Building the registry already rejects a code documented twice.
     #[test]
@@ -61,7 +64,8 @@ mod tests {
                 entry.code,
                 entry.name
             );
-            // A line break in the literal without a `\` keeps the next line's indentation.
+            // A line break in a string literal without a `\` before it keeps the indentation
+            // of the next line.
             assert!(
                 !entry.explanation.contains("  "),
                 "{} ({}) has a run of spaces in its explanation",

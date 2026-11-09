@@ -1,14 +1,13 @@
-//! Remote resources: requests as plain data, their responses and failures,
-//! the [Client] that sends them, and a blocking client.
+//! Remote resources: the requests for them, their responses, and the clients that send the
+//! requests.
 //!
 //! Readers do not fetch.
-//! A remote resource is described by a [request](Request),
-//! and its [response](Response) is either the body's bytes or a [Failure].
-//! A [Client] sends requests: the blocking client behind the `http` feature is one,
-//! retrying on the [Retry] schedule.
-//! A browser sends them through `fetch`, and an async runtime through a client of its own.
-//! Recognizing a remote resource and building its request need no feature,
-//! so every build can say what it would fetch.
+//! A remote resource is described by a [Request], which is plain data,
+//! and its [Response] is either the body's bytes or a [Failure].
+//! A [Client] sends requests.
+//! The crate has a blocking HTTP client behind the `http` feature,
+//! and other clients can send requests by other means, such as a browser's `fetch`.
+//! Building a request needs no feature, so every build can say what it would fetch.
 
 #[cfg(feature = "http")]
 mod blocking;
@@ -25,29 +24,31 @@ use crate::{AboutResource, error::IoError};
 
 /// One HTTP request for a resource's bytes.
 ///
-/// A request is plain data, so it builds, and validates, without the `http` feature that sends it.
+/// A request is plain data, so it can be built and inspected without the `http` feature.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Request {
-    /// The URL fetched.
+    /// The URL to fetch.
     pub url: String,
     /// Additional request headers, applied in order.
     pub headers: Vec<(String, String)>,
-    /// The `Accept` value, if a format has a preference.
+    /// The value of the `Accept` header, or `None` for no preference.
     pub accept: Option<&'static str>,
-    /// Extra query parameters, appended URL-encoded.
+    /// Extra query parameters, appended to the URL in URL-encoded form.
     pub parameters: Vec<(String, String)>,
-    /// Form fields, whose presence makes the request a POST.
+    /// The fields of a form, or `None` for no form.
+    ///
+    /// A request with a form is a POST.
     pub form: Option<Vec<(String, String)>>,
 }
 
 impl Request {
-    /// Returns whether a resource name addresses a remote resource, an `http` or `https` URL,
-    /// whose bytes a request fetches.
+    /// Returns whether a resource name is an `http` or `https` URL, which names a remote
+    /// resource.
     pub fn is_remote(resource: &str) -> bool {
         resource.starts_with("http://") || resource.starts_with("https://")
     }
 
-    /// Creates a plain GET for a URL.
+    /// Creates a GET request for a URL, without headers, parameters or form.
     pub fn get(url: impl Into<String>) -> Self {
         Self {
             url: url.into(),
@@ -58,34 +59,36 @@ impl Request {
         }
     }
 
-    /// Returns the HTTP method the request travels as:
-    /// a POST if it carries a form, and a GET otherwise.
+    /// Returns the HTTP method of the request: POST if it has a form, and GET otherwise.
     pub fn method(&self) -> &'static str {
         if self.form.is_some() { "POST" } else { "GET" }
     }
 }
 
-/// Why a request got no body:
-/// the response's status if a response came, and what the transport or the response said.
+/// The reason a request got no body.
 ///
-/// A failure is final, so a request is retried before its failure is reported.
-/// Only a request too large for the server, or one it responded to only in part,
-/// is sent again, in smaller pieces, if it can be split.
+/// A failure has the response's status, if a response came,
+/// and what the transport or the response said.
+/// A failure is final, since a [Client] retries a request before it responds with one.
+/// [smaller_may_succeed](Self::smaller_may_succeed) says whether a smaller request may succeed
+/// instead.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Failure {
     /// The HTTP status, if a response came.
     pub status: Option<u16>,
     /// The transport's reason, or an excerpt of the response body.
     pub message: String,
-    /// Whether a response came but held only part of the result, as its status or headers
-    /// said ([of_partial_response](Self::of_partial_response)): its body is not taken,
-    /// so no partial result imports.
+    /// Whether a response came, but its status or headers said that it contains only part of
+    /// the result ([of_partial_response](Self::of_partial_response)).
+    ///
+    /// Such a failure has no body, so no partial result is read.
     pub partial: bool,
 }
 
 impl Failure {
-    /// Creates the failure of a response outside the success range,
-    /// with an excerpt of what it said.
+    /// Creates the failure of a response with a status outside the success range.
+    ///
+    /// `message` is an excerpt of the response body.
     pub fn response(status: u16, message: impl Into<String>) -> Self {
         Self {
             status: Some(status),
@@ -94,7 +97,8 @@ impl Failure {
         }
     }
 
-    /// Creates the failure of no response: no connection, a timeout, a broken transfer.
+    /// Creates the failure of a request that got no response,
+    /// for example because there was no connection, a timeout, or a broken transfer.
     pub fn transport(message: impl Into<String>) -> Self {
         Self {
             status: None,
@@ -113,24 +117,24 @@ impl Failure {
         }
     }
 
-    /// The response headers [of_partial_response](Self::of_partial_response) reads,
-    /// for a client that collects them first.
+    /// The response headers that [of_partial_response](Self::of_partial_response) reads,
+    /// for a client that must collect headers in advance.
     pub const PARTIAL_RESPONSE_HEADERS: [&'static str; 3] =
         ["X-SQL-State", "X-SQL-Message", "X-SPARQL-MaxRows"];
 
-    /// Returns the failure of a successful response that holds only part of its result,
-    /// if its status or headers say so, or `None` for a whole one.
+    /// Returns the failure of a successful response that contains only part of its result,
+    /// or `None` if the response is whole.
     ///
-    /// SPARQL defines no way to say so, and a store that stops at its time or row limit
-    /// responds with what it has. Virtuoso, behind DBpedia and many other endpoints, says it:
-    /// - status 206 for an "anytime" result cut at its time limit,
-    ///   or `X-SQL-State` (with `X-SQL-Message`) where it responds with 200,
-    /// - `X-SPARQL-MaxRows` for a result that reached its row limit (`ResultSetMaxRows`,
-    ///   10 000 rows at DBpedia), which it cuts without an error.
+    /// `status` is the response's status,
+    /// and `header` returns the value of a response header by its name, regardless of case.
     ///
-    /// `header` returns a response header's value by its name, regardless of case.
-    /// An HTTP client calls this for every successful response and fails the request with
-    /// the failure it returns, so that no partial result is read as a whole one.
+    /// SPARQL defines no way to mark a partial result,
+    /// and a store that stops at its time or row limit responds with what it has.
+    /// So this reads the signals of one store, Virtuoso, which serves DBpedia:
+    /// - status 206, for an "anytime" result cut off at its time limit,
+    /// - `X-SQL-State`, with `X-SQL-Message`, for such a result sent with status 200,
+    /// - `X-SPARQL-MaxRows`, for a result cut off without an error at its row limit
+    ///   (`ResultSetMaxRows`).
     pub fn of_partial_response<'a>(
         status: u16,
         header: impl Fn(&str) -> Option<&'a str>,
@@ -154,14 +158,18 @@ impl Failure {
         matches!(self.status, Some(413 | 414))
     }
 
-    /// Returns whether a smaller request may succeed:
-    /// the server found the request [too large](Self::too_large),
-    /// or responded to it only in part, stopped by its time or row limit.
+    /// Returns whether a smaller request may succeed.
+    ///
+    /// That is the case if the server found the request [too large](Self::too_large),
+    /// or if it responded only in part, stopped by its time or row limit.
     pub fn smaller_may_succeed(&self) -> bool {
         self.too_large() || self.partial
     }
 
-    /// Returns the diagnostic of this failure, for the URL fetched.
+    /// Returns the diagnostic of this failure to fetch `url`.
+    ///
+    /// It is a [PARTIAL_RESULT](crate::codes::PARTIAL_RESULT) for a partial response,
+    /// and an [UNFETCHABLE](crate::codes::UNFETCHABLE) otherwise.
     pub fn diagnostic(&self, url: &str) -> Diagnostic {
         let url = url.to_owned();
         let error = if self.partial {
@@ -200,18 +208,18 @@ impl std::fmt::Display for Failure {
     }
 }
 
-/// The response to a request: the body's bytes, or the [Failure] that prevented one.
+/// The response to a request: either the body's bytes, or the [Failure] that prevented them.
 pub type Response = Result<Arc<[u8]>, Failure>;
 
-/// What sends the requests of a method that needs data from the network.
+/// A sender of requests, which collects their responses.
 ///
-/// The `BlockingClient` behind the `http` feature sends them over HTTP.
-/// Another client can respond to them from a cache or from fixtures,
-/// or send them through a proxy or with credentials.
+/// The `BlockingClient` behind the `http` feature sends requests over HTTP.
+/// Another client can respond from a cache or from fixtures,
+/// or send requests through a proxy or with credentials.
 ///
 /// # Example
 ///
-/// A client responding from fixtures:
+/// A client that responds from fixtures:
 ///
 /// ```
 /// use std::sync::Arc;
@@ -241,7 +249,12 @@ pub type Response = Result<Arc<[u8]>, Failure>;
 pub trait Client {
     /// Sends several requests, and returns one response per request, in order.
     ///
-    /// Returns `None` if `cancelled` turned true before every response came.
+    /// Returns `None` if `cancelled` returns true before all responses have arrived.
+    ///
+    /// A client retries a request before it responds with a [Failure].
+    /// If [Failure::of_partial_response] finds a successful response partial,
+    /// the client responds with that failure instead, so that no partial result is read as a
+    /// whole one.
     fn fetch_all(
         &self,
         requests: &[Request],
@@ -253,6 +266,8 @@ pub trait Client {
 mod tests {
     use super::*;
 
+    /// A failure shows the response's status and message,
+    /// and says whether a smaller request may succeed.
     #[test]
     fn failures_show_the_status_and_message_of_the_response() {
         assert_eq!(
@@ -281,6 +296,8 @@ mod tests {
         assert!(!Failure::response(500, "").smaller_may_succeed());
     }
 
+    /// A partial response is recognized by its status 206 or by its headers,
+    /// and a response with neither is whole.
     #[test]
     fn partial_responses_are_told_by_status_and_headers() {
         let none = |_: &str| None;

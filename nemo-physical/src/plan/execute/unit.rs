@@ -20,7 +20,7 @@ use crate::{
 impl Execution<'_> {
     /// Materializes a unit.
     ///
-    /// Each member's join reads every block of its inputs, and all fill one set of runs.
+    /// Each member's join reads every block of its inputs, and all members fill one set of runs.
     /// Computed values are added to the dictionary once every member has run.
     pub(super) fn unit(&self, unit: &UnitLayout, context: &mut StepContext<'_>) -> Materialized {
         let materialization = self.plan_layout.materializations[unit.top.index()]
@@ -41,11 +41,11 @@ impl Execution<'_> {
 /// The rows a unit collects while the joins of its members run.
 #[derive(Debug)]
 struct UnitRows<'a> {
-    /// The finished rows.
+    /// The completed rows.
     ///
-    /// The runs arrive sorted and distinct, as segments and cells do,
-    /// unless a sink leaves a sequential segment out of order;
-    /// one final sort of the buffer covers that.
+    /// Each segment and each cell is a sorted run of distinct rows,
+    /// unless a sink left a sequential segment out of order,
+    /// which one final sort of the buffer fixes.
     runs: Runs,
     /// The rows awaiting their computed values, each with the row stage that collected them.
     pending: Vec<(&'a RowStageShape, PendingRows)>,
@@ -64,10 +64,10 @@ impl<'a> UnitRows<'a> {
     }
 
     /// Runs a member's join over the blocks of its inputs,
-    /// in cells if it is large enough, and takes its rows as the member's delivery says.
+    /// in cells if it is large enough, and collects its rows as the member's delivery says.
     ///
     /// Each block of a subtracted relation is subtracted on its own,
-    /// so a row matching any of them is dropped, as matching the union of the blocks drops it.
+    /// which drops the rows that match any block, as subtracting the whole relation does.
     fn run_member(
         &mut self,
         member: &'a MemberLayout,
@@ -80,7 +80,7 @@ impl<'a> UnitRows<'a> {
         accounting.counts.joins += 1;
         accounting.counts.blocks += blocks.count() as u64;
 
-        // A relation without columns holds the empty row or nothing, and no join reads it.
+        // A relation without columns has the empty row or nothing, so it is read without a join.
         if member.layers.is_empty() {
             let holds = blocks.inputs[0].iter().any(|block| !block.is_empty());
             if let Delivery::RowStage(stage) = &member.delivery {
@@ -118,7 +118,7 @@ impl<'a> UnitRows<'a> {
         }
     }
 
-    /// Runs a member's join in cells and takes their rows as the delivery says.
+    /// Runs a member's join in cells, and collects their rows as the delivery says.
     fn run_cells<'j>(
         &mut self,
         cells: &Cells,
@@ -145,10 +145,12 @@ impl<'a> UnitRows<'a> {
                     .extend(collected.into_iter().map(|rows| (stage, rows)));
             }
             Delivery::Sink(projection) => {
-                // The cells partition emitted layers, so a projection whose group prefix
-                // covers them never splits a group of rows across cells, and each cell
-                // sorts its own rows on its worker where the projection is no identity.
-                // Rows a projection without such a prefix repeats across cells are left to the build.
+                // Each cell sorts its own rows on its worker,
+                // unless the projection keeps the leading layers in order,
+                // which leaves the rows sorted.
+                // The cells partition emitted layers,
+                // so if the group prefix covers those, no two cells produce the same row.
+                // Otherwise a row may repeat across cells, and the build drops the repeats.
                 let drain = |join: &mut TrieJoin<'_>| {
                     let mut buffer = RowBuffer::new(projection.columns.len());
                     let mut scratch = ProjectionScratch::new(projection);
@@ -178,8 +180,8 @@ impl<'a> UnitRows<'a> {
         }
     }
 
-    /// Runs a member's join sequentially, built in the arena,
-    /// and takes its rows as the delivery says.
+    /// Runs a member's join sequentially, building it in the arena,
+    /// and collects its rows as the delivery says.
     fn run_sequentially<'j>(
         &mut self,
         inputs: &[&[&'j Trie]],
@@ -207,11 +209,13 @@ impl<'a> UnitRows<'a> {
                     join.drain(&mut ProjectingSink::new(projection, &mut scratch, out));
                 });
 
-                // The segment of an identity projection arrives sorted.
-                // Any other leaves its rows in order by the group prefix alone,
-                // and sorting within the groups, many and small, makes the segment a run.
+                // The segment of a projection that keeps the leading layers in order
+                // arrives sorted.
+                // Any other projection leaves its rows sorted by the group prefix only,
+                // and sorting within the groups, which are many and small,
+                // makes the segment a run.
                 // Without a group prefix there is no order to build on,
-                // and the final sort covers the segment.
+                // so the final sort covers the segment.
                 if projection.group_prefix < projection.columns.len() {
                     let begun = Stopwatch::start();
                     if projection.group_prefix == 0 {
@@ -227,9 +231,9 @@ impl<'a> UnitRows<'a> {
 
     /// Returns the runs once every member has run.
     ///
-    /// The buffer is sorted if a sink left it out of order,
-    /// and the rows awaiting their computed values are encoded,
-    /// now that the dictionary is no longer shared.
+    /// The buffer is sorted if a sink left it out of order.
+    /// No join borrows the dictionary at this point,
+    /// so the rows awaiting their computed values are encoded.
     fn finish(self, context: &mut StepContext<'_>) -> Runs {
         let Self {
             mut runs,
@@ -243,8 +247,8 @@ impl<'a> UnitRows<'a> {
             context.accounting.timings.merge += begun.nanos();
         }
 
-        // Each collection encodes into a segment of its own:
-        // extending distinct, sorted rows keeps them a run.
+        // Each collection is encoded into a segment of its own, which is a run,
+        // since extending distinct, sorted rows keeps them distinct and sorted.
         for (stage, rows) in pending {
             let begun = Stopwatch::start();
             let errors = rows.encode(&stage.delivered, context.dictionary, runs.begin_segment());
@@ -256,9 +260,10 @@ impl<'a> UnitRows<'a> {
     }
 }
 
-/// Runs the cells of a join, each through `run` on its join,
-/// accounts for their time and evaluation errors,
-/// and returns what each cell delivered, in cell order.
+/// Runs the cells of a join, applying `run` to each cell's join,
+/// and returns the results in cell order.
+///
+/// The time and the evaluation errors of the cells are added to `accounting`.
 fn in_cells<T: Send>(
     cells: &Cells,
     template: JoinTemplate<'_>,
@@ -274,8 +279,10 @@ fn in_cells<T: Send>(
     delivered
 }
 
-/// Builds a join in the arena, runs it through `drain`,
-/// and accounts for its time, its setup included, and its evaluation errors.
+/// Builds a join in the arena, applies `drain` to it, and returns the result.
+///
+/// The time of the join, its setup included, and its evaluation errors
+/// are added to `accounting`.
 fn sequentially<'j, T>(
     template: JoinTemplate<'j>,
     inputs: &[&[&'j Trie]],
@@ -294,7 +301,7 @@ fn sequentially<'j, T>(
     drained
 }
 
-/// Drains a join through a row stage, and returns the rows it kept.
+/// Drains a join into the evaluator of a row stage, and returns the rows it kept.
 fn evaluated(
     stage: &RowStageShape,
     join: &mut TrieJoin<'_>,

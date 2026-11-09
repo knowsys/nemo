@@ -1,9 +1,9 @@
 //! Proving a fact that a bound import's fetch rule stored.
 //!
-//! Such a fact is one solution the endpoint returned
+//! Such a fact is one solution that the endpoint returned
 //! for a request built from one binding row per binding atom.
 //! Each binding row is rebuilt from the fact's values at the bound columns,
-//! the atom's constants, and any row added before the fetch that matches at the free columns.
+//! the atom's constants, and some row added before the fetch that matches at the free columns.
 //! These rows are the premises, and the endpoint is not queried again.
 
 use std::rc::Rc;
@@ -62,8 +62,8 @@ impl ProofSearch<'_> {
         };
         let delivered = delivered_positions(fetch);
 
-        // The witness: every variable's value, from the fact and the
-        // binding rows; the order is the variables' own.
+        // The witness has every variable's value, from the fact and the binding rows,
+        // in the order of the variables.
         let mut witness = vec![candidate.row[0]; rule.variables];
         for (&column, &value) in head.columns.iter().zip(candidate.row) {
             witness[column] = value;
@@ -91,10 +91,11 @@ impl ProofSearch<'_> {
         Ok(Some(candidate.derived(witness, premises, None, false)))
     }
 
-    /// Returns the binding row of one atom behind the fact:
-    /// the bound columns from the fact, the constants as stored,
-    /// and the free columns from a row added before the step that agrees with them.
+    /// Returns the binding row of one binding atom behind the fact.
     ///
+    /// The bound columns come from the fact, and the constants from the dictionary.
+    /// The free columns come from a row added before the step that agrees with the other
+    /// columns.
     /// Returns `None` if no row added before the step agrees,
     /// or if a constant of the atom is not in the dictionary.
     fn binding_premise(
@@ -111,7 +112,8 @@ impl ProofSearch<'_> {
                 FetchColumn::Bound(position) => delivered[*position].map(|at| row[at]),
                 FetchColumn::Constant(value) => match self.dictionary.probe(value.as_ref()) {
                     Some(value) => Some(value),
-                    // A constant not in the dictionary is in no row: the atom never matched.
+                    // A constant that is not in the dictionary is in no row,
+                    // so the atom never matched.
                     None => return Ok(None),
                 },
                 FetchColumn::Free => None,
@@ -127,7 +129,8 @@ impl ProofSearch<'_> {
         self.any_row(table, &known, step)
     }
 
-    /// Returns some row of a table added before the step that agrees with the known columns.
+    /// Returns some row of a table that was added before the step
+    /// and agrees with the columns that `known` has a value for.
     fn any_row(
         &mut self,
         table: TableId,

@@ -9,14 +9,15 @@ use crate::execution::join::cursor::{Clip, SeekCursor};
 /// A cursor over the union of one column in several blocks of an input.
 ///
 /// Each block has a cursor of its own,
-/// and the union stands at the smallest value any of them stands at.
-/// A value that several blocks hold is read once,
+/// and the union points at the smallest value that any of them points at.
+/// A value that several blocks contain is read once,
 /// so the union reads like one sorted column without repeats.
 ///
 /// When the join descends below a value,
-/// only the blocks holding it are given ranges below it, and the union reads only those:
-/// a block lacking the value costs nothing in its subtree.
-/// A union reading a single block moves that block's cursor alone.
+/// only the blocks that contain the value are given ranges below it,
+/// and the union reads only those.
+/// So a block without the value costs nothing below it.
+/// A union that reads a single block moves only that block's cursor.
 #[derive(Debug)]
 pub(crate) struct UnionCursor<'a, C: SeekCursor> {
     /// The cursors over the column of each block, in block order.
@@ -24,14 +25,14 @@ pub(crate) struct UnionCursor<'a, C: SeekCursor> {
     /// The blocks the union reads: those given a range since the ranges were last cleared,
     /// or every block before the first clear.
     reading: BumpVec<'a, usize>,
-    /// The value the union stands at, the smallest one among the cursors of the blocks it
-    /// reads, or `None` once every one of them is exhausted.
+    /// The value the union points at, which is the smallest value
+    /// that the cursors of the read blocks point at, or `None` once all of them are exhausted.
     current: Option<C::Value>,
 }
 
 impl<'a, C: SeekCursor> UnionCursor<'a, C> {
-    /// Creates the union of the given block cursors, reading every block,
-    /// and standing at their smallest value.
+    /// Creates the union of the given block cursors,
+    /// which reads every block and points at their smallest value.
     pub(crate) fn new(cursors: BumpVec<'a, C>, bump: &'a Bump) -> Self {
         let mut union = Self {
             reading: BumpVec::from_iter_in(0..cursors.len(), bump),
@@ -49,9 +50,9 @@ impl<'a, C: SeekCursor> UnionCursor<'a, C> {
         self.reading.clear();
     }
 
-    /// Restricts the cursor of one block to a range, and adds the block to those the union
-    /// reads. The union takes the change into account at its next [rewind](Self::rewind).
+    /// Restricts the cursor of one block to a range, and adds the block to those the union reads.
     ///
+    /// The union reads the new range from its next [rewind](Self::rewind) on.
     /// A block is added at most once between two clears.
     #[inline]
     pub(crate) fn set_range(&mut self, block: usize, range: Range<usize>) {
@@ -86,15 +87,16 @@ impl<'a, C: SeekCursor> UnionCursor<'a, C> {
         self.current.is_some()
     }
 
-    /// Returns the value the union stands at;
-    /// valid while the union [has a current value](Self::has_current).
+    /// Returns the value the union points at.
+    ///
+    /// Panics if the union [has no current value](Self::has_current).
     #[inline]
     pub(crate) fn current_value(&self) -> C::Value {
         self.current
             .expect("the union is read only while it has a current value")
     }
 
-    /// Calls `found` with each block the union reads whose cursor stands at the union's value,
+    /// Calls `found` with each read block whose cursor points at the union's value,
     /// and that cursor's position in the block's column, in the order the blocks were added.
     #[inline]
     pub(crate) fn for_each_match(&self, mut found: impl FnMut(usize, usize)) {
@@ -122,7 +124,7 @@ impl<'a, C: SeekCursor> UnionCursor<'a, C> {
     }
 
     /// Moves forward to the first value at or above `target` and returns it,
-    /// or returns `None` if no block the union reads holds such a value.
+    /// or returns `None` if no block the union reads has such a value.
     #[inline]
     pub(crate) fn seek(&mut self, target: C::Value) -> Option<C::Value> {
         let current = self.current?;
@@ -136,8 +138,8 @@ impl<'a, C: SeekCursor> UnionCursor<'a, C> {
         self.move_blocks(|value| value < target, |cursor| cursor.seek(target))
     }
 
-    /// Moves the cursor of each block the union reads whose value is `stale` by `step`,
-    /// and stands the union at the smallest value those cursors then stand at.
+    /// Moves the cursor of each read block whose value is `stale` by `step`,
+    /// and points the union at the smallest value that the cursors then point at.
     #[inline]
     fn move_blocks(
         &mut self,
@@ -166,7 +168,7 @@ impl<'a, C: SeekCursor> UnionCursor<'a, C> {
         smallest
     }
 
-    /// Stands the union at the smallest value among the cursors of the blocks it reads.
+    /// Points the union at the smallest value that the cursors of the read blocks point at.
     #[inline]
     fn settle(&mut self) {
         self.current = self
@@ -198,7 +200,7 @@ mod tests {
         )
     }
 
-    /// Returns the blocks standing at the union's value, with their positions.
+    /// Returns the blocks pointing at the union's value, with their positions.
     fn matches(cursor: &UnionCursor<'_, PayloadCursor<'_, u32>>) -> Vec<(usize, usize)> {
         let mut matches = Vec::new();
         cursor.for_each_match(|block, position| matches.push((block, position)));
@@ -217,6 +219,8 @@ mod tests {
         values
     }
 
+    /// A union reads each value of its blocks once, in order,
+    /// and reports every block that contains the value it points at.
     #[test]
     fn unions_read_each_value_once_in_order() {
         let bump = Bump::new();
@@ -227,7 +231,7 @@ mod tests {
 
         cursor.rewind();
         assert_eq!(cursor.seek(3), Some(4));
-        // Every block holding the value stands at it.
+        // Every block that contains the value points at it.
         assert_eq!(matches(&cursor), [(0, 1), (1, 1), (2, 0)]);
         assert_eq!(cursor.seek(5), Some(6));
         // A seek below the union's value leaves it in place.
@@ -238,6 +242,7 @@ mod tests {
         assert!(matches(&cursor).is_empty());
     }
 
+    /// After its ranges are cleared, a union reads only the blocks given new ranges.
     #[test]
     fn only_the_blocks_given_ranges_are_read() {
         let bump = Bump::new();
@@ -248,7 +253,7 @@ mod tests {
         cursor.rewind();
         assert_eq!(values(&mut cursor), [3, 4, 5, 6]);
 
-        // A union reading a single block moves its cursor alone, seeks included.
+        // A union that reads a single block moves only that block's cursor, in seeks too.
         cursor.clear_ranges();
         cursor.set_range(1, 1..3);
         cursor.rewind();
@@ -267,6 +272,7 @@ mod tests {
         assert_eq!(cursor.seek(1), None);
     }
 
+    /// A clip narrows the cursor of every block.
     #[test]
     fn clips_narrow_every_block() {
         let bump = Bump::new();

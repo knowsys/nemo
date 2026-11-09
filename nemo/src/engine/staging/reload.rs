@@ -1,8 +1,10 @@
-//! Reloading: a changed program over the engine's stored data.
+//! Reloading: replacing the loaded program by a changed one, keeping the stored data that the
+//! change does not affect.
 //!
-//! The statements are diffed against the loaded ones,
-//! the predicates whose definitions changed are rebuilt from their extensional blocks,
-//! and everything else is kept.
+//! The new statements are compared with the loaded ones.
+//! The predicates whose defining statements changed are *rebuilt*:
+//! their tables are dropped, and the new program loads them anew.
+//! Every other predicate keeps its input facts and loses its derived facts.
 
 use std::collections::{HashMap, HashSet};
 
@@ -30,43 +32,42 @@ use crate::{
     model::{Directive, Identifier, Program, Statement},
 };
 
-/// What must be rebuilt, according to a reload's diff of the statements.
+/// What a reload must rebuild, according to its comparison of the statements.
 struct RebuildScope {
-    /// Everything: a changed directive can change the meaning of any value.
+    /// Whether every predicate is rebuilt, since a changed directive can change the meaning
+    /// of any value.
     all: bool,
     /// Otherwise, the predicates whose defining statements changed.
     predicates: HashSet<String>,
 }
 
-/// How a reload's translation ended: done, or prepared and in need of the remote
-/// resources these requests fetch.
+/// How a reload's translation ended: done, or prepared and suspended for remote resources.
 enum TranslationOutcome<T> {
-    /// Translated.
+    /// The translation is done, with this result.
     Done(T),
-    /// Prepared, with the engine as it was, and in need of these requests.
+    /// The translation is prepared, with the engine as it was,
+    /// and needs the responses to these requests.
     Missing(Vec<ResourceRequest>),
 }
 
-/// What a reload's translation leaves to apply:
-/// the new program, its fact rows, the tables of the rebuilt predicates,
-/// and the extensional blocks before the translation.
-///
-/// The rows added through [import_rows](crate::engine::Engine::import_rows) in these blocks
-/// are reported when their tables are dropped.
+/// What a reload's translation leaves to apply to the engine.
 struct Retranslated {
-    /// The new program.
+    /// The new compiled program.
     compiled: CompiledProgram,
-    /// Its fact rows, by table.
+    /// The rows of the new program's facts and imports, by table.
     facts: HashMap<TableId, RowBuffer>,
-    /// The rebuilt predicates' old tables, the scratch tables of bound imports
-    /// included.
+    /// The old tables of the rebuilt predicates,
+    /// including the scratch tables of bound imports.
     replaced: Vec<(String, TableId)>,
-    /// The extensional blocks before the translation.
+    /// The extensional blocks from before the translation.
+    ///
+    /// They show which of the old tables hold rows added through
+    /// [import_rows](crate::engine::Engine::import_rows).
     extensional: HashMap<TableId, Vec<ExtensionalBlock>>,
 }
 
-/// Removes the predicates a reload rebuilds from a translation state and the registered
-/// predicates, returning their tables, the scratch tables of bound imports included.
+/// Removes the predicates named in `names` from a translation state and the registered
+/// predicates, and returns their tables, including the scratch tables of bound imports.
 fn unregister_from(
     state: &mut TranslationState,
     predicates: &mut HashMap<String, Registered>,
@@ -87,9 +88,10 @@ fn unregister_from(
     replaced
 }
 
-/// Returns, per statement, whether its data is already stored:
-/// a fact or an import of a predicate that stays registered,
-/// its predicate name resolved by the translation state from before the reload.
+/// Returns, per statement, whether its data is already stored,
+/// which holds for a fact or an import of a predicate that stays registered.
+///
+/// The predicate names are resolved by `state`, the translation state from before the reload.
 fn preloaded(
     statements: &[Statement],
     state: &TranslationState,
@@ -135,8 +137,8 @@ impl Engine {
     }
 
     /// Translates the written program of a staged replacement as
-    /// [reload_staged](Self::reload_staged) first translates the program the stages made of it,
-    /// reading no data and storing nothing.
+    /// [reload_staged](Self::reload_staged) first translates the program that the stages made
+    /// of it, but reads no data and stores nothing.
     fn translate_written_reload(&mut self, staged: &super::Staged) -> Result<(), Diagnostic> {
         let held = self.revision.expect("a loaded program has a revision");
         let rebuild = self.rebuild_by_diff(
@@ -173,11 +175,11 @@ impl Engine {
 
     /// Translates a staged replacement and rebuilds the stored data.
     ///
-    /// The translation is prepared first, which registers and stores nothing.
-    /// If it needs remote resources not fetched yet, the reload is suspended for them
+    /// The translation is first prepared, which registers and stores nothing.
+    /// If it needs remote resources that are not fetched yet, the reload is suspended for them
     /// with the loaded program as it was, and commits from the prepared translation state
     /// once every response is in.
-    /// The reports from `already` on are rewritten to refer to the written program.
+    /// The reports from index `already` on are rewritten to refer to the written program.
     pub(in crate::engine) fn reload_staged(
         &mut self,
         mut load: SuspendedLoad,
@@ -238,15 +240,16 @@ impl Engine {
         Ok(Progress::Done)
     }
 
-    /// Returns what a reload rebuilds, from the diff of the old and the new statements.
+    /// Returns what a reload rebuilds, by comparing the old and the new statements.
     ///
-    /// The diff compares rendered statements.
-    /// Term syntax parses back, so two statements are the same if they render the same,
-    /// ignoring their spans.
-    /// A statement whose renderings occur as often in the old as in the new program is
-    /// unchanged.
+    /// The comparison is between rendered statements.
+    /// A rendered statement parses back to the same statement,
+    /// so two statements are the same, apart from their spans, if they render the same.
+    /// A statement is unchanged if its rendering occurs as often in the old program as in
+    /// the new one.
     /// A predicate is rebuilt if a statement defining it changed,
-    /// and everything is rebuilt if a changed directive can change the meaning of any value.
+    /// and every predicate is rebuilt if a changed directive can change the meaning of any
+    /// value, or if a changed statement names a predicate that cannot be resolved.
     fn rebuild_by_diff(
         &self,
         old_statements: &[Statement],
@@ -281,7 +284,7 @@ impl Engine {
             }
             match statement {
                 Statement::Fact(fact) => touch(&fact.predicate, &mut rebuild),
-                // Rules recompile from the new program regardless.
+                // Rules are compiled from the new program anyway.
                 Statement::Rule(_) => {}
                 Statement::Directive(directive) => match directive {
                     Directive::Import(import) => touch(&import.predicate, &mut rebuild),
@@ -296,10 +299,11 @@ impl Engine {
         rebuild
     }
 
-    /// Unregisters the predicates a reload rebuilds, so that the new program registers them anew,
-    /// returning their old tables, the scratch tables of bound imports included.
+    /// Unregisters the predicates named in `names`, so that the new program registers them
+    /// anew, and returns their old tables, including the scratch tables of bound imports.
     ///
-    /// The old tables are dropped only if the reload succeeds.
+    /// It also forgets the extensional blocks of these tables.
+    /// The old tables themselves are dropped only if the reload succeeds.
     fn unregister(&mut self, names: &[String]) -> Vec<(String, TableId)> {
         let replaced = unregister_from(&mut self.translation, &mut self.predicates, names);
         for (_, table) in &replaced {
@@ -308,20 +312,20 @@ impl Engine {
         replaced
     }
 
-    /// Translates the reloaded program against the kept predicates,
-    /// whose facts and imports are preloaded: their rows are kept, and their files are not read
-    /// again.
+    /// Translates the new program against the kept predicates,
+    /// whose facts and imports are preloaded:
+    /// their rows are kept, and their resources are not read again.
     ///
     /// A kept import may have been stored without columns or rows that the new rules read.
     /// The translation then fails with [PRUNING_INSTABILITY](crate::codes::PRUNING_INSTABILITY)
-    /// for it,
-    /// and is repeated with that predicate rebuilt as well.
-    /// A failed translation restores the previous state,
-    /// and so does a prepared one that needs remote resources not fetched yet:
-    /// the load then keeps the prepared translation state and the predicates rebuilt so far,
+    /// for its predicate, and is repeated with that predicate rebuilt as well.
+    /// A failed translation restores the previous state.
+    /// So does a prepared translation that needs remote resources that are not fetched yet.
+    /// `load` then keeps the prepared translation state and the predicates rebuilt so far,
     /// and the next call commits from them.
-    /// Remote resources are read from those the load fetched, which a repetition reads again.
-    /// `previous` holds the column types the replaced program was analyzed with,
+    /// The remote resources are read from those that `load` fetched,
+    /// and a repetition reads them again.
+    /// `previous` gives the column types the replaced program was analyzed with,
     /// and `stages` the pipeline stages that made the program.
     #[expect(clippy::too_many_arguments, reason = "the parts of one reload")]
     fn reload_translation(
@@ -417,10 +421,11 @@ impl Engine {
         }
     }
 
-    /// Returns whether a reload's translation failed because a stored import no longer covers
+    /// Returns whether a reload's translation failed because a stored import does not cover
     /// what the new rules read ([PRUNING_INSTABILITY](crate::codes::PRUNING_INSTABILITY)),
-    /// for a predicate not rebuilt yet,
-    /// adding it to those to rebuild.
+    /// for a predicate that is not rebuilt yet.
+    ///
+    /// If so, the predicate is added to `unstable`, the predicates to rebuild for this reason.
     fn unstable_import(problem: &Diagnostic, unstable: &mut HashSet<String>) -> bool {
         problem.code() == codes::PRUNING_INSTABILITY
             && problem
@@ -428,9 +433,11 @@ impl Engine {
                 .is_some_and(|name| unstable.insert(name.to_owned()))
     }
 
-    /// Returns the registered predicates a reload rebuilds:
-    /// every one if the diff requires it, else the changed ones
-    /// and those whose stored import no longer covers what the rules read.
+    /// Returns the registered predicates that a reload rebuilds.
+    ///
+    /// They are every registered predicate if `rebuild` says so.
+    /// Otherwise, they are the changed predicates and those in `unstable`,
+    /// whose stored import does not cover what the new rules read.
     fn rebuilt_predicates(
         &self,
         rebuild: &RebuildScope,
@@ -448,11 +455,12 @@ impl Engine {
             .collect()
     }
 
-    /// Drops the replaced tables, and returns every kept table to its extensional rows.
+    /// Drops the replaced tables, and the derived rows of every kept table.
     ///
-    /// The rows added through [import_rows](crate::engine::Engine::import_rows) that the
-    /// replaced tables held cannot be reproduced from statements, so dropping them is reported
-    /// with a warning.
+    /// `extensional` gives the extensional blocks from before the reload.
+    /// The rows that were added through [import_rows](crate::engine::Engine::import_rows) to a
+    /// replaced table cannot be reproduced from statements,
+    /// so dropping them is reported with a warning.
     fn replace_store(
         &mut self,
         replaced: Vec<(String, TableId)>,
@@ -480,7 +488,8 @@ impl Engine {
         }
     }
 
-    /// Stores a reloaded program's data as a new extensional block.
+    /// Stores the rows of the new program's facts and imports at one new revision,
+    /// as an extensional block of each table that gains rows.
     fn store_reloaded(&mut self, facts: HashMap<TableId, RowBuffer>) {
         let revision = Revision(self.step.max(1));
         let mut grew = false;

@@ -1,4 +1,4 @@
-//! The diagnostic, representing a reported error or warning.
+//! Diagnostics, the reported errors and warnings.
 
 use std::fmt;
 
@@ -7,7 +7,7 @@ use crate::diagnostics::{Code, DiagnosticKind, Span, registry::INTERNAL_NOTE};
 /// How severe a diagnostic is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Severity {
-    /// A problem the operation recovered from.
+    /// A problem that the operation recovered from.
     Warning,
     /// A problem that fails the operation.
     Error,
@@ -22,10 +22,10 @@ impl fmt::Display for Severity {
     }
 }
 
-/// A message pointing at a range of a source text.
+/// A message that points at a range of a source text.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Label {
-    /// The range the message points at.
+    /// The range that the message points at.
     pub span: Span,
     /// The message shown at the range.
     pub message: String,
@@ -70,11 +70,11 @@ struct Details {
     code: Code,
     /// How severe the problem is.
     severity: Severity,
-    /// The message saying what happened, complete on its own.
+    /// The message that says what happened, complete on its own.
     message: String,
-    /// The messages pointing at ranges of source texts.
+    /// The messages that point at ranges of source texts.
     labels: Vec<Label>,
-    /// The named values of the problem, each name once.
+    /// The named values of the problem, with each name at most once.
     fields: Vec<Field>,
     /// The notes explaining the problem.
     notes: Vec<String>,
@@ -93,18 +93,18 @@ impl Diagnostic {
         Self::new(code, Severity::Warning, message)
     }
 
-    /// Creates the error a host reports a caught panic as:
-    /// a bug in Nemo itself, not in the program or its data.
+    /// Creates an internal error, which reports a bug in Nemo itself
+    /// rather than a problem of its input.
     ///
-    /// It carries a note asking the user to report the bug.
+    /// It is the error for a caught panic,
+    /// and it has a note that asks the user to report the bug.
     /// Library code panics instead of returning it.
     pub fn internal(message: impl Into<String>) -> Self {
         Self::error(Code::INTERNAL, message).with_note(INTERNAL_NOTE)
     }
 
-    /// Creates the diagnostic a kind reports:
-    /// its code, severity and message, its fields,
-    /// and the note and hint of the kind.
+    /// Creates the diagnostic of a kind,
+    /// with the kind's code, severity, message, fields, note and hint.
     pub fn from_kind(kind: &impl DiagnosticKind) -> Self {
         let mut diagnostic = Self::new(kind.code(), kind.severity(), kind.message());
         diagnostic.0.fields = kind.fields();
@@ -132,7 +132,7 @@ impl Diagnostic {
         }))
     }
 
-    /// Adds a message pointing at a range of a source text.
+    /// Adds a message that points at a range of a source text.
     pub fn with_label(mut self, span: Span, message: impl Into<String>) -> Self {
         self.0.labels.push(Label {
             span,
@@ -166,17 +166,17 @@ impl Diagnostic {
         self
     }
 
-    /// Removes the hints, for a layer above that gives hints of its own.
+    /// Removes the hints, so that other hints can replace them.
     pub fn without_hints(mut self) -> Self {
         self.0.hints.clear();
         self
     }
 
-    /// Rewrites every text the diagnostic shows: its message, its labels'
-    /// messages, its field values, its notes, and its hints.
+    /// Rewrites every text that the diagnostic shows:
+    /// its message, the messages of its labels, the values of its fields, its notes and its hints.
     ///
-    /// A layer above uses it to show its own names for what the
-    /// diagnostic's text names.
+    /// `rewrite` returns the new form of a text,
+    /// for example with other names for the things that it names.
     pub fn map_text(mut self, mut rewrite: impl FnMut(&str) -> String) -> Self {
         let details = &mut *self.0;
         details.message = rewrite(&details.message);
@@ -192,7 +192,7 @@ impl Diagnostic {
         self
     }
 
-    /// Returns the code naming the kind of problem.
+    /// Returns the code that names the kind of problem.
     pub fn code(&self) -> Code {
         self.0.code
     }
@@ -202,12 +202,12 @@ impl Diagnostic {
         self.0.severity
     }
 
-    /// Returns the message saying what happened.
+    /// Returns the message that says what happened.
     pub fn message(&self) -> &str {
         &self.0.message
     }
 
-    /// Returns the messages pointing at ranges of source texts.
+    /// Returns the messages that point at ranges of source texts.
     pub fn labels(&self) -> &[Label] {
         &self.0.labels
     }
@@ -265,6 +265,7 @@ mod tests {
 
     use crate::diagnostics::{FileId, Span};
 
+    /// Mapping the text rewrites the message, the labels, the fields, the notes and the hints.
     #[test]
     fn mapping_text_reaches_every_text() {
         let span = Span {
@@ -285,6 +286,7 @@ mod tests {
         assert_eq!(diagnostic.hints(), ["renbme `b`"]);
     }
 
+    /// Removing the hints lets new hints replace them.
     #[test]
     fn a_layer_above_replaces_the_hints() {
         let diagnostic = Diagnostic::error(Code::new(1), "refused")

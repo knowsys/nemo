@@ -1,5 +1,5 @@
 //! The proofs that a rule's writes fit what the program declares:
-//! the `@declare` columns they go into, and the `@type` of the labels they build.
+//! the `@declare` of the columns they go into, and the `@type` of the labels they build.
 
 use std::collections::HashMap;
 
@@ -26,12 +26,15 @@ use crate::{
     values::TypeSyntax,
 };
 
-/// Adds the errors of a live rule writing values not shown to fit a declaration to `problems`:
-/// values not within the `@declare` of the column they go into,
-/// or labeled values not within the `@type` of their label.
+/// Adds to `problems` an error for each write of a rule that may fire
+/// whose values are not shown to fit a declaration.
 ///
-/// A write that shares no value with the declaration violates it outright;
-/// one that shares some is not shown to fit, and its error says where the values come from.
+/// These are values outside the `@declare` of the column they go into,
+/// and labeled values outside the `@type` of their label.
+/// A write that shares no value with the declaration violates it outright,
+/// and a write that shares some values is not shown to fit.
+/// The error says where the values come from.
+/// `columns` contains the types of the rule's columns, and `types` those of the tables.
 pub(super) fn declaration_violations(
     rule: &CompiledRule,
     source: RuleSourceInfo<'_>,
@@ -90,8 +93,8 @@ pub(super) fn declaration_violations(
                 if let Some(origin) = origin {
                     problem = context.explain_column(problem, origin, column, false);
                 }
-                // If a non-tuple was declared and a tuple labeled close to a
-                // builtin's name arrives, the label was probably meant as a call.
+                // If the declared type has no tuples, and a tuple arrives whose label is close
+                // to a builtin's name, the label was probably meant as a call.
                 if !column.domains().contains(ValueDomain::Tuple)
                     && let Some(hint) = builtin_hint(written)
                 {
@@ -103,8 +106,8 @@ pub(super) fn declaration_violations(
             return;
         }
         if let Some(problem) = construction_problem(written, labels, source.span) {
-            // The labeled values must fit their labels' types, which the
-            // written type with every such label taken as its type states.
+            // The labeled values must fit their labels' types, so the required type is the
+            // written type with every such label taken as its type.
             // A construction outside its label's type gets no hint,
             // since no condition makes it fit.
             let hinting = problem.code() != codes::RULE_BUILDS_OUTSIDE_TYPE;
@@ -118,37 +121,37 @@ pub(super) fn declaration_violations(
     });
 }
 
-/// What explaining a rule's write needs:
-/// the rule, what its columns can hold, and the types the analysis inferred.
+/// What the explanation of a rule's write needs:
+/// the rule, the types of its columns, and the types that the analysis inferred.
 struct WriteContext<'a> {
     /// The rule.
     rule: &'a CompiledRule,
-    /// What the rule looked like before compilation.
+    /// What the reports need to know of the rule as it was written.
     source: RuleSourceInfo<'a>,
-    /// The types each of the rule's columns can hold.
+    /// The types that each of the rule's columns can hold.
     columns: &'a [Type],
     /// What the analysis reads besides the rules.
     inputs: &'a AnalysisInputs<'a>,
     /// The inferred column types per table.
     types: &'a HashMap<TableId, Vec<Type>>,
-    /// What each table is called and how wide it is.
+    /// The name and the arity of each table.
     table_names: &'a TableNames<'a>,
 }
 
 impl WriteContext<'_> {
-    /// Adds to a problem where a written column's values come from that a required type does
-    /// not contain, and a hint that establishes the type.
+    /// Adds to a problem where the values of rule column `column` come from that `required`
+    /// does not contain, and a hint at a condition that establishes the type.
     ///
-    /// For a variable, that is the body column it is read from.
-    /// For a computed value, it is each input the expression reads that is not shown to be
-    /// what the expression needs to yield the required type,
-    /// with hints only if the inputs that are proves the result.
+    /// For a variable, the note names the body column that the variable is read from.
+    /// For a computed column, there is a note for each input that is not shown to be what the
+    /// expression needs to produce the required type.
+    /// The hints come only if inputs of the needed types are enough to make the result fit.
     fn explain(&self, problem: Diagnostic, column: usize, required: &Type) -> Diagnostic {
         self.explain_column(problem, column, required, true)
     }
 
     /// Adds to a problem the [explanation](Self::explain) of one column,
-    /// with hints only if `hinting`.
+    /// with hints only if `hinting` is set.
     fn explain_column(
         &self,
         mut problem: Diagnostic,
@@ -181,7 +184,7 @@ impl WriteContext<'_> {
         }
         let computed = &rule.computed[column - rule.variables];
         let held = read(self.columns, &computed.inputs);
-        // What the expression needs of each input, whatever the input holds,
+        // What the expression needs of each input, whatever the input can hold,
         // and whether inputs narrowed to that make the result fit.
         let open = vec![Type::ANY; held.len()];
         let needed = computed
@@ -201,8 +204,8 @@ impl WriteContext<'_> {
         };
         let sufficient = fits(&narrowed);
         if !sufficient {
-            // What the expression may need does not make it fit, so look for
-            // one input whose type test does.
+            // The needed types do not make the result fit,
+            // so look for one input whose type test does.
             for (position, &input) in computed.inputs.iter().enumerate() {
                 for (domains, ..) in &ESTABLISHING {
                     let tested = narrowed[position].intersect(&Type::of_domains(*domains));
@@ -227,13 +230,14 @@ impl WriteContext<'_> {
     }
 }
 
-/// Returns the note on where a written column's values come from that a declared type does
-/// not contain: the first body column a variable is read from whose type is not within it,
-/// and what that column held before the change analyzed, if it then fit.
+/// Returns the note on where the values of a written rule column come from that `declared`
+/// does not contain.
 ///
+/// For a variable, the note names the first body column that the variable is read from
+/// whose type is not within the declared type.
+/// It also gives the type that this column had before the analyzed change, if that type fit.
 /// Returns `None` for a computed column, whose expression gives its values,
-/// and for a variable every body column of which lies within the declared type,
-/// whose values the rule's conditions or bindings did not narrow enough.
+/// and for a variable whose body columns all lie within the declared type.
 fn origin_note(
     rule: &CompiledRule,
     source: RuleSourceInfo<'_>,
@@ -280,8 +284,8 @@ fn origin_note(
     })
 }
 
-/// The type tests a hint offers for a declared type, by the domains the type holds,
-/// with the conversion into it where one is sure to yield it.
+/// The type tests that a hint can offer, each with the domains that it keeps,
+/// and with the conversion into these domains where one is sure to produce them.
 const ESTABLISHING: [(DomainSet, &str, Option<&str>); 18] = [
     (DomainSet::INTEGER, "ISINTEGER", Some("INT")),
     (DomainSet::EXACT, "ISDECIMAL", None),
@@ -310,14 +314,17 @@ const ESTABLISHING: [(DomainSet, &str, Option<&str>); 18] = [
 /// Returns the hint for a variable written where it is not shown to fit a required type:
 /// a condition that keeps only values of that type, and a conversion into it if one exists.
 ///
-/// The condition keeps at least the values of the required type the variable can hold
-/// and at most the values of the required type:
-/// the test of the required type itself if it is one,
-/// else the first test of the table that lies between the two,
-/// else tests combined with `OR` that cover what the variable can hold of the type.
+/// The condition keeps at least the values of the required type that the variable can hold,
+/// and at most the values of the required type.
+/// It is the first of these that exists:
+/// - the test of the required type itself;
+/// - the first test of [ESTABLISHING] whose domains lie between the two;
+/// - tests combined with `OR` that cover what the variable can hold of the type.
+///
 /// A label with a declared type is tested by its label.
-/// Returns `None` for a variable the normalization invented, which has no name,
-/// and for a required type no condition establishes.
+/// `held` is the type of the variable at rule column `column`.
+/// Returns `None` for a variable without a written name,
+/// and for a required type that no condition establishes.
 fn establishing_hint(
     source: RuleSourceInfo<'_>,
     column: usize,
@@ -360,7 +367,7 @@ fn establishing_hint(
             None => format!("add a condition such as `{test}(?{name})`"),
         });
     }
-    // No one test fits: cover what the variable can hold of the type with several.
+    // No single test fits, so several tests cover what the variable can hold of the type.
     let mut covered = DomainSet::EMPTY;
     let mut tests = Vec::new();
     for (domains, test, _) in &ESTABLISHING {
@@ -373,14 +380,13 @@ fn establishing_hint(
         .then(|| format!("add a condition such as `OR({})`", tests.join(", ")))
 }
 
-/// Returns the error, at the given position, for the first labeled structure a type describes
-/// that is not shown to fit the `@type` of its label,
-/// or `None` if every one fits.
+/// Returns the error, at `span`, for the first labeled structure that a type describes
+/// and that is not shown to fit the `@type` of its label, or `None` if every one fits.
 ///
-/// Every written-out shape carrying a label with a `@type` is checked against that type,
+/// Every written-out shape with a label that has a `@type` is checked against that type,
 /// and the check goes on into the fields of every written-out shape.
-/// A label's type that the shape cannot meet is violated outright;
-/// one it can meet is not shown to fit.
+/// A shape that cannot meet its label's type violates it outright,
+/// and a shape that can meet it is not shown to fit.
 fn construction_problem(
     written: &Type,
     labels: &LabelTypes,
@@ -445,12 +451,12 @@ fn construction_problem(
     None
 }
 
-/// Returns a type with every written-out shape that carries a label with a `@type`
-/// taken as that label's type, inside nested shapes too.
+/// Returns a type in which every written-out shape with a label that has a `@type`
+/// is replaced by that label's type, in nested shapes too.
 ///
 /// A construction of such a label that is not shown to fit its `@type` is an error,
-/// so for a program that runs, the values carrying the label are exactly its type.
-/// This keeps recursive constructions finite.
+/// so in a program that runs, the values with the label are exactly those of its type.
+/// The replacement keeps the types of recursive constructions finite.
 pub(super) fn nominal(written: &Type, labels: &LabelTypes) -> Type {
     let domains = written.domains();
     let mut result = Type::of_domains(domains & DomainSet::STRUCTURED.complement());

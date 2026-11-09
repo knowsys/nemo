@@ -1,4 +1,4 @@
-//! Payload encoding of [Tag::Time].
+//! The payload encoding of [Tag::Time].
 
 use crate::{
     storage::{
@@ -8,17 +8,17 @@ use crate::{
     value::Time,
 };
 
-/// The offset bits hold every offset code.
+/// A check that the offset field can store every offset code of a time.
 const _: () = assert!(Time::OFFSET_CODE_COUNT <= instant::OFFSET_CODES);
 
-/// A time encodes as its instant, then the code of its offset.
+/// A time is encoded as its instant, followed by the code of its offset.
 ///
-/// The instant counts nanoseconds from `1972-12-31T00:00:00Z`,
+/// The instant is counted in nanoseconds from `1972-12-31T00:00:00Z`,
 /// the start of the [reference day](Time) of times.
-/// A time lies within fourteen hours of that day, far inside the payload's range.
-/// Payloads order by instant, then by offset, as times do.
+/// A time lies within fourteen hours of that day, far inside the range of the payload.
+/// Payloads are ordered by instant, then by offset, as times are.
 ///
-/// A time finer than a nanosecond has no payload and lives in the dictionary.
+/// A time with a fraction finer than a nanosecond has no payload, and the dictionary stores it.
 impl PayloadEncoding for Time {
     const TAG: Tag = Tag::Time;
     type Encoded = Option<u64>;
@@ -40,11 +40,12 @@ mod tests {
 
     use crate::testing::payload;
 
-    /// Parses the time of a lexical; panics on malformed input.
+    /// Returns the time of a lexical form, and panics if it is malformed.
     fn time(lexical: &str) -> Time {
         Time::from_lexical(lexical).expect(lexical)
     }
 
+    /// Every time with a payload decodes to itself, at the ends of the day too.
     #[test]
     fn encoding_round_trips() {
         for lexical in [
@@ -59,6 +60,7 @@ mod tests {
         }
     }
 
+    /// The order of the payloads is the term order of the times.
     #[test]
     fn order_matches_term_order() {
         let ordered = [
@@ -78,6 +80,7 @@ mod tests {
         }
     }
 
+    /// A time has a payload only for whole nanoseconds.
     #[test]
     fn the_payload_holds_nanoseconds() {
         assert!(time("12:00:00.123456789Z").to_payload().is_some());

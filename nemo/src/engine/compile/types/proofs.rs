@@ -1,5 +1,5 @@
-//! The proofs that a rule can never fire, and the hint a type conflict earns
-//! where a label is close to a builtin's name.
+//! The proofs that a rule can never fire,
+//! and the hint for a type conflict in which a label is close to a builtin's name.
 
 use std::collections::HashMap;
 
@@ -21,8 +21,8 @@ use crate::{
     values::TypeSyntax,
 };
 
-/// One reason a rule can never fire, and the position of what it is about,
-/// if that is more precise than the rule.
+/// One reason why a rule can never fire,
+/// with the position of what it is about, if that is more precise than the rule's.
 struct Proof {
     /// The position of what the reason is about.
     span: Option<Span>,
@@ -42,23 +42,24 @@ impl Proof {
 
 /// What the proofs that a rule can never fire read besides the rule.
 pub(super) struct ProofContext<'a> {
-    /// What the rule looked like before compilation.
+    /// What the reports need to know of the rule as it was written.
     pub(super) source: RuleSourceInfo<'a>,
     /// The inferred column types per table.
     pub(super) types: &'a HashMap<TableId, Vec<Type>>,
-    /// What each table is called and how wide it is.
+    /// The name and the arity of each table.
     pub(super) table_names: &'a TableNames<'a>,
-    /// The type each `@type` declares for its label.
+    /// The type that each `@type` declares for its label.
     pub(super) labels: &'a LabelTypes,
-    /// What the loaders of import-fed predicates leave out.
+    /// What the loads of imported predicates leave out.
     pub(super) plan: &'a ImportPlan,
 }
 
-/// Returns the warning for a rule that provably never fires, its proofs as labels and notes,
-/// or `None` if no proof exists.
+/// Returns the warning for a rule that provably never fires, with its proofs as labels and
+/// notes, or `None` if no proof exists.
 ///
-/// The proofs are told in the columns the joins give, before the conditions narrow them.
-/// Only if those prove nothing does a column the conditions narrow to nothing prove it.
+/// The proofs are told in terms of the `columns` that the joins give,
+/// before the conditions narrow them.
+/// Only if those prove nothing does a variable whose `narrowed` type is empty prove it.
 pub(super) fn never_fires_warning(
     rule: &CompiledRule,
     context: &ProofContext<'_>,
@@ -102,15 +103,15 @@ pub(super) fn never_fires_warning(
             None => warning.with_note(proof.text.clone()),
         };
     }
-    // A dead rule holding a tuple labeled close to a builtin's name
-    // probably misspells the builtin, so offer it as a hint.
+    // A rule that never fires and has a tuple labeled close to a builtin's name
+    // probably misspells the builtin, so the builtin is offered as a hint.
     if let Some(hint) = columns.iter().find_map(builtin_hint) {
         warning = warning.with_hint(hint);
     }
     Some(warning)
 }
 
-/// Returns the proofs that a rule can never fire, empty if none exists.
+/// Returns the proofs that a rule can never fire, or none if there is no proof.
 fn rule_proofs(rule: &CompiledRule, context: &ProofContext<'_>, columns: &[Type]) -> Vec<Proof> {
     let mut proofs = Vec::new();
 
@@ -119,8 +120,8 @@ fn rule_proofs(rule: &CompiledRule, context: &ProofContext<'_>, columns: &[Type]
             proofs.push(variable_proof(rule, context, variable));
         }
     }
-    // The columns a dead pattern tests: what is extracted from them
-    // follows from the pattern and is not reported again.
+    // The columns that a pattern that never matches tests.
+    // What is extracted from them follows from the pattern, and is not reported again.
     let mut dead_patterns: Vec<VariableId> = Vec::new();
     for filter in &rule.filters {
         if filter.inputs.iter().any(|&input| columns[input].is_empty()) {
@@ -131,8 +132,8 @@ fn rule_proofs(rule: &CompiledRule, context: &ProofContext<'_>, columns: &[Type]
             .iter()
             .map(|&input| columns[input].clone())
             .collect();
-        // An exact result decides the condition outright, which is
-        // how a pattern guard against a known shape is proven dead.
+        // An exact result decides the condition outright, which is how
+        // a pattern's guard against a known shape is proven never to hold.
         let outcome = match filter.program.infer(&inputs, context.labels) {
             Inferred::Exact(exact) => match exact.as_ref().effective_boolean_value() {
                 Ok(true) => continue,
@@ -156,10 +157,10 @@ fn rule_proofs(rule: &CompiledRule, context: &ProofContext<'_>, columns: &[Type]
         proofs.push(filter_proof(rule, context, filter, &inputs, &outcome));
     }
     for (index, computed) in rule.computed.iter().enumerate() {
-        // A computed column is reported only if all its inputs can hold
-        // values, since empty inputs are reported for their own
-        // variables. Filters are reported first: a dead pattern explains
-        // more than the empty extractions that follow from it.
+        // A computed column is reported only if all its inputs can hold values,
+        // since empty inputs are reported for their own variables.
+        // Filters are reported first, since a pattern that never matches
+        // explains more than the empty extractions that follow from it.
         let column = rule.variables + index;
         if columns[column].is_empty()
             && computed
@@ -198,7 +199,7 @@ fn rule_proofs(rule: &CompiledRule, context: &ProofContext<'_>, columns: &[Type]
     proofs
 }
 
-/// How a filter proven dead fails every row.
+/// How a filter that provably never holds fails every row.
 enum Outcome {
     /// It is always false.
     False,
@@ -209,7 +210,9 @@ enum Outcome {
 }
 
 /// Returns why a filter fails every row,
-/// told as the part of the rule's text the filter stands for.
+/// told in terms of the part of the rule's text that the filter comes from.
+///
+/// `inputs` contains the types of the filter's inputs.
 fn filter_proof(
     rule: &CompiledRule,
     context: &ProofContext<'_>,
@@ -265,8 +268,8 @@ fn filter_proof(
     Proof::at(filter.origin.span(), text)
 }
 
-/// Returns the predicate and the column as written (from 0) that a body variable is read from,
-/// or `None` if no positive atom reads it.
+/// Returns the predicate and the kept column, counted from 0, that a body variable is read
+/// from, or `None` if no positive atom binds it.
 fn atom_column<'a>(
     rule: &CompiledRule,
     context: &ProofContext<'a>,
@@ -282,8 +285,10 @@ fn atom_column<'a>(
     })
 }
 
-/// Returns why a variable admits no value:
+/// Returns why a variable can have no value:
 /// the first atom column at which the intersection of its types becomes empty.
+///
+/// If no atom column empties it, the expression of its binding can never be computed.
 fn variable_proof(rule: &CompiledRule, context: &ProofContext<'_>, variable: usize) -> Proof {
     let source = context.source;
     let name = source_name(source, variable);
@@ -320,7 +325,7 @@ fn variable_proof(rule: &CompiledRule, context: &ProofContext<'_>, variable: usi
             running = narrowed;
         }
     }
-    // The atoms agree, so an expression bound to the column admits no value.
+    // The atoms agree, so the expression bound to the column can have no value.
     match name {
         Some(name) => Proof::at(None, format!("{name} can never be computed")),
         None => {
@@ -334,8 +339,8 @@ fn variable_proof(rule: &CompiledRule, context: &ProofContext<'_>, variable: usi
     }
 }
 
-/// Returns a rule variable's source name, written as a variable,
-/// or `None` if the normalization invented it.
+/// Returns the written name of a rule column, formatted as a variable,
+/// or `None` if it has none.
 fn source_name(source: RuleSourceInfo<'_>, variable: usize) -> Option<String> {
     source
         .names
@@ -344,14 +349,14 @@ fn source_name(source: RuleSourceInfo<'_>, variable: usize) -> Option<String> {
         .map(|name| format!("`?{name}`"))
 }
 
-/// Returns how messages name a rule's variable: by its source name,
-/// or as a joined value if the normalization invented it.
+/// Returns how messages name a rule column:
+/// by its written name, or as a joined value if it has none.
 pub(super) fn variable_name(source: RuleSourceInfo<'_>, variable: usize) -> String {
     source_name(source, variable).unwrap_or_else(|| String::from("a joined value"))
 }
 
-/// Returns a hint if a type conflict involves a labeled tuple whose label is one edit from a
-/// builtin's name.
+/// Returns a hint if a type conflict involves a labeled tuple whose label is one edit away
+/// from a builtin's name and has at least three characters.
 ///
 /// `loh(?x)` where a number was expected is probably a misspelled `LOG(?x)`.
 /// The hint is given only for a conflict,
@@ -366,8 +371,7 @@ pub(crate) fn builtin_hint(written: &Type) -> Option<String> {
     ))
 }
 
-/// Returns the first exactly-known tuple label in a type, shapes searched
-/// recursively.
+/// Returns the first exactly known tuple label in a type, searching nested shapes too.
 fn tuple_label(written: &Type) -> Option<&str> {
     written
         .tuple_shapes()?

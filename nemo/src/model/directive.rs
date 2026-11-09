@@ -1,4 +1,4 @@
-//! Directives: the `@`-statements configuring a program.
+//! Directives, the statements that start with `@` and configure a program.
 
 mod declare;
 mod define;
@@ -26,34 +26,34 @@ use std::fmt::{self, Display, Formatter};
 
 use crate::model::{Identifier, Span, Variable, fmt_list, span_ignoring_eq};
 
-/// A directive statement.
+/// A directive, which is a statement that starts with `@`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Directive {
-    /// `@base <iri> .`, the base IRI relative names resolve against.
+    /// `@base <iri> .`, which sets the IRI that bare names are relative to.
     Base(BaseDirective),
-    /// `@prefix pre: <iri> .`, a name prefix declaration.
+    /// `@prefix pre: <iri> .`, which declares a prefix for names.
     Prefix(PrefixDirective),
-    /// `@import p from format { … } .`, a source of a predicate's rows.
+    /// `@import p from format { … } .`, which loads rows of a predicate.
     Import(ImportDirective),
-    /// `@export p to format { … } .`, a target for a predicate's rows.
+    /// `@export p to format { … } .`, which writes the rows of a predicate.
     Export(ExportDirective),
-    /// `@output p, q .`, the predicates the file makes available:
-    /// the program's output when run, and what a `@use` of the file can refer to.
+    /// `@output p, q .`, which lists the predicates that the file makes available.
     Output(OutputDirective),
-    /// `@input p(…) .`, a predicate whose rows come from the program that `@use`s the file,
-    /// or from the API.
+    /// `@input p(…) .`, which declares a predicate whose rows come from outside the file.
     Input(InputDirective),
-    /// `@declare p(…) .`, a predicate's column types.
+    /// `@declare p(…) .`, which declares the column types of a predicate.
     Declare(DeclareDirective),
-    /// `@type point(double, double) .`, the element types of every `point(…)` value.
+    /// `@type point(double, double) .`, which declares the element types of every `point(…)`
+    /// value.
     Type(TypeDirective),
-    /// `@parameter $x: string = "a" .`, a global parameter, optionally typed and defaulted.
+    /// `@parameter $x: string = "a" .`, which declares a global parameter,
+    /// with an optional type and an optional default value.
     Parameter(ParameterDirective),
-    /// `@use lib::tc { input = actual, $x = 5 } as alias .`, a module instantiation.
+    /// `@use lib::tc { input = actual, $x = 5 } as alias .`, which instantiates a module.
     Use(UseDirective),
-    /// `@define f(?x) = … .`, a derived builtin.
+    /// `@define f(?x) = … .`, which defines a function by an expression.
     Define(DefineDirective),
-    /// `@extern f(any) -> double .`, an externally registered builtin.
+    /// `@extern f(any) -> double .`, which declares a function defined outside the program.
     Extern(ExternDirective),
 }
 
@@ -114,7 +114,7 @@ impl Display for Directive {
     }
 }
 
-/// The base-IRI declaration: `@base <iri> .`.
+/// A base IRI declaration, `@base <iri> .`.
 #[derive(Debug, Clone)]
 pub struct BaseDirective {
     /// The base IRI.
@@ -131,7 +131,7 @@ impl Display for BaseDirective {
     }
 }
 
-/// A prefix declaration: `@prefix pre: <iri> .`.
+/// A prefix declaration, `@prefix pre: <iri> .`.
 #[derive(Debug, Clone)]
 pub struct PrefixDirective {
     /// The declared prefix, without the colon.
@@ -150,15 +150,15 @@ impl Display for PrefixDirective {
     }
 }
 
-/// An output declaration: `@output p, q .`.
+/// An output declaration, `@output p, q .`.
 ///
-/// It lists the predicates the file makes available:
-/// - Run directly, the program outputs these predicates.
-/// - Instantiated by a `@use`, the file makes them available as `alias::name`,
-///   and keeps every other predicate private to the instantiation.
+/// It lists the predicates that the file makes available:
+/// - A program that is run directly outputs these predicates.
+/// - A module that a `@use` instantiates makes them available as `alias::name`,
+///   and keeps its other predicates private to the instance.
 #[derive(Debug, Clone)]
 pub struct OutputDirective {
-    /// The predicates the file makes available.
+    /// The predicates that the file makes available.
     pub predicates: Vec<Identifier>,
     /// The source position, or `None` for a component built programmatically.
     pub span: Option<Span>,
@@ -174,7 +174,7 @@ impl Display for OutputDirective {
     }
 }
 
-/// A global-parameter declaration: `@parameter $x: string = "a" .`.
+/// A declaration of a global parameter, `@parameter $x: string = "a" .`.
 #[derive(Debug, Clone)]
 pub struct ParameterDirective {
     /// The declared global variable.

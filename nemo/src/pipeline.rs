@@ -1,38 +1,27 @@
 //! The program pipeline: statement versions, revisions, and provenance.
 //!
-//! A [Pipeline] owns an append-only arena of statement versions,
-//! and a sequence of [revisions](RevisionId), each a list of live statements.
-//! Transformations rewrite one revision into the next by calling the methods of a [Commit].
-//! *Keeping a statement is the default*:
-//! statements leave a revision only by explicit removal,
-//! so forgetting one cannot silently delete it.
-//! Rules, facts and imports change only through declared rewrites,
-//! which say how each new statement relates to the revision it came from,
-//! and which the commit records.
+//! A [Pipeline] keeps every *statement version* in an append-only arena.
+//! A *revision* of the program is a list of statement versions, which are *live* in it.
+//! A *pipeline stage* ([Transformation]) rewrites one revision into the next through a [Commit].
+//! Keeping a statement is the default,
+//! so a statement leaves a revision only if a commit removes or replaces it.
+//! Rules, facts and imports change only through *declared rewrites*,
+//! which say how each new statement relates to the revision it came from.
 //!
-//! The [Commit] methods record provenance as they run.
-//! Every statement version knows the provenance edge that created it.
-//! An edge leads from the versions a change read to the versions it created,
-//! any number on either side, and carries the stage's name and what the stage declared.
-//! Diagnostics use the edges to find a statement's nearest source span,
-//! and [refine](Pipeline::refine) uses them to point at the definitions of substituted values.
-//! A new statement without a span takes the span of its first source.
-//!
-//! Transformations are [named stages](Transformation),
-//! applied in the order of a [stage list](Stages),
-//! which also takes stages added with [insert_before](Stages::insert_before).
-//! [Applying](Pipeline::apply) the list skips the stages a revision has already been through.
-//! A stage lists the stages that must run before it.
-//! No stage may write a `@use` directive or a module-qualified name,
-//! since linking resolves those before the pipeline runs.
+//! A commit records every change as a *provenance edge*,
+//! which leads from the statement versions that the change read to the versions it created.
+//! Through the edges, a statement version without a span finds the span of its nearest
+//! ancestor, and a diagnostic can [point](Pipeline::refine) at the definitions of the values
+//! that a stage substituted.
 //!
 //! An *extension* is a list of statements added to a loaded program
 //! with [Engine::extend](crate::engine::Engine::extend).
-//! The stages run over it without rewriting the statements of the loaded program.
+//! The stages run over it without rewriting the statements of the loaded program,
+//! which are *frozen*.
 //!
-//! The pipeline also registers the source texts spans point into.
-//! A module instance is registered as a source of its own, recording the `@use` that made it,
-//! so a span says which instance a statement belongs to.
+//! The pipeline also registers the source texts that spans point into.
+//! A module instance is registered as a source of its own,
+//! so that a span says which instance a statement belongs to.
 
 mod commit;
 mod construct;
@@ -65,10 +54,10 @@ use crate::{
     pipeline::{provenance::ProvenanceEdge, revision::ProgramRevision, sources::SourceFile},
 };
 
-/// Identifies one statement version in a pipeline's arena.
+/// The id of one statement version in a pipeline's arena.
 ///
-/// Ids are stable forever: superseded and removed versions stay
-/// addressable, which is what lets provenance point at them.
+/// An id stays valid for the pipeline's lifetime.
+/// Replaced and removed versions stay in the arena, so that provenance edges can point at them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct StatementId(u32);
 
@@ -79,22 +68,24 @@ impl StatementId {
     }
 }
 
-/// The program pipeline: the arena of statement versions, the revisions listing
-/// them, the provenance connecting them, the source texts, and the report sink.
+/// The program pipeline.
+///
+/// It keeps the arena of statement versions, the revisions, the provenance edges,
+/// the registered source texts, and the reports.
 #[derive(Debug, Default)]
 pub struct Pipeline {
-    /// The source texts spans point into.
+    /// The registered source texts, by file id.
     files: Vec<SourceFile>,
-    /// Every statement version ever committed.
+    /// Every statement version, by id, including the replaced and removed ones.
     statements: Vec<Statement>,
-    /// Per statement version, the edge that created it,
-    /// and `None` for the loaded originals, the roots of provenance.
+    /// For each statement version, the index of the edge that created it,
+    /// or `None` for a loaded statement.
     created_by: Vec<Option<usize>>,
-    /// The provenance edges.
+    /// The provenance edges, by index.
     edges: Vec<ProvenanceEdge>,
-    /// The revisions, in creation order.
+    /// The revisions, by id, in the order they were created.
     revisions: Vec<ProgramRevision>,
-    /// The accumulated reports (warnings and non-fatal errors).
+    /// The reports collected so far: warnings and non-fatal errors.
     reports: Vec<Diagnostic>,
 }
 
@@ -104,7 +95,9 @@ impl Pipeline {
         Self::default()
     }
 
-    /// Loads a program as a new revision, whose statements become provenance roots.
+    /// Adds a program as a new revision without a parent.
+    ///
+    /// Its statements have no provenance edge, so they are the roots of provenance.
     pub fn load(&mut self, program: Program) -> RevisionId {
         let statements = program
             .statements
@@ -118,7 +111,7 @@ impl Pipeline {
         })
     }
 
-    /// Returns the statement version behind an id, superseded and removed ones included.
+    /// Returns the statement version with the given id, even a replaced or removed one.
     pub fn statement(&self, id: StatementId) -> &Statement {
         &self.statements[id.index()]
     }
@@ -134,7 +127,7 @@ impl Pipeline {
             .map(|&id| (id, self.statement(id)))
     }
 
-    /// Returns the program of a revision, cloned out of the arena.
+    /// Returns a copy of the program of a revision.
     pub fn program(&self, revision: RevisionId) -> Program {
         Program::new(
             self.statements(revision)
@@ -143,11 +136,12 @@ impl Pipeline {
         )
     }
 
-    /// Appends the live statements of one revision to another's, as a new revision of the base.
+    /// Returns a new revision with the live statements of `base`, followed by those of
+    /// `extension`.
     ///
-    /// This is how an extension joins a loaded program.
-    /// Both sides keep their provenance,
-    /// and the stages the base has been through count as run for the result.
+    /// The new revision's parent is `base`,
+    /// so the stages that `base` has been through count as run for it.
+    /// The statements of both revisions keep their provenance.
     pub fn merge(&mut self, base: RevisionId, extension: RevisionId) -> RevisionId {
         let mut statements = self.revisions[base.index()].statements.clone();
         statements.extend_from_slice(&self.revisions[extension.index()].statements);
@@ -158,16 +152,18 @@ impl Pipeline {
         })
     }
 
-    /// Starts a commit rewriting a revision under the given stage name.
+    /// Starts a commit that rewrites the revision `base` under the stage name `stage`.
     pub fn commit(&mut self, base: RevisionId, stage: &'static str) -> Commit<'_> {
         Commit::new(self, base, stage, 0)
     }
 
-    /// Applies every stage of the list that the revision has not been through yet, in list order,
-    /// returning the resulting revision.
+    /// Applies the stages of a list that a revision has not been through yet,
+    /// and returns the resulting revision.
     ///
-    /// A stage returning an error aborts the run, and its partial commit creates no revision.
-    /// The accumulated [reports](Self::reports) remain.
+    /// The stages run in list order.
+    /// A stage that returns an error aborts the application,
+    /// and its unfinished commit creates no revision.
+    /// The [reports](Self::reports) collected so far remain.
     ///
     /// # Errors
     ///
@@ -175,8 +171,9 @@ impl Pipeline {
     ///
     /// # Panics
     ///
-    /// Panics if a stage runs before a stage it requires,
-    /// or writes a construct a loaded program cannot hold.
+    /// Panics if a stage runs before a stage that it requires,
+    /// or if a stage breaks a rule of [Commit],
+    /// such as by writing a construct that a loaded program cannot contain.
     pub fn apply(&mut self, stages: &Stages, base: RevisionId) -> Result<RevisionId, Diagnostic> {
         let mut current = base;
         for stage in stages.entries() {
@@ -188,11 +185,12 @@ impl Pipeline {
         Ok(current)
     }
 
-    /// Applies every stage of the list over a revision whose leading
-    /// `frozen` statements went through them already,
-    /// such as an extension appended to a loaded program.
+    /// Applies every stage of a list to a revision whose first `frozen` statements
+    /// have been through the stages already,
+    /// such as a loaded program merged with an extension.
     ///
     /// Every stage runs, and none may rewrite the frozen statements.
+    /// A stage that returns an error aborts the application, as in [apply](Self::apply).
     pub(crate) fn extend(
         &mut self,
         stages: &Stages,
@@ -206,8 +204,9 @@ impl Pipeline {
         Ok(current)
     }
 
-    /// Runs one stage over a revision, checking the stages it requires
-    /// first.
+    /// Runs one stage over a revision, after checking that the stages it requires have run.
+    ///
+    /// The first `frozen` statements of `base` are frozen in the stage's commit.
     fn run(
         &mut self,
         stage: &dyn Transformation,
@@ -226,8 +225,8 @@ impl Pipeline {
         Ok(commit.finish())
     }
 
-    /// Returns the revisions leading to one: its loaded root first, the
-    /// revision itself last.
+    /// Returns the chain of revisions that leads to a revision,
+    /// from its loaded root to the revision itself.
     pub(crate) fn lineage(&self, revision: RevisionId) -> Vec<RevisionId> {
         let mut chain = Vec::new();
         let mut current = Some(revision);
@@ -239,13 +238,12 @@ impl Pipeline {
         chain
     }
 
-    /// Returns the stage that produced a revision, or `None` for a loaded one.
+    /// Returns the stage that produced a revision, or `None` for a loaded or merged revision.
     pub fn stage(&self, revision: RevisionId) -> Option<&'static str> {
         self.revisions[revision.index()].stage
     }
 
-    /// Returns whether a revision (or one of its ancestors) was produced by the
-    /// named stage.
+    /// Returns whether a revision or one of its ancestors was produced by the named stage.
     pub(crate) fn ran(&self, revision: RevisionId, stage: &str) -> bool {
         let mut current = Some(revision);
         while let Some(revision) = current {
@@ -258,8 +256,10 @@ impl Pipeline {
         false
     }
 
-    /// Returns the provenance roots of a statement version: the loaded originals
-    /// it derives from (itself, if it is one), in first-seen order.
+    /// Returns the loaded statements that a statement version derives from,
+    /// in depth-first order.
+    ///
+    /// A loaded statement derives from itself.
     #[cfg(test)]
     pub(crate) fn origins(&self, statement: StatementId) -> Vec<StatementId> {
         let mut pending = vec![statement];
@@ -278,8 +278,10 @@ impl Pipeline {
         roots
     }
 
-    /// Returns the nearest source span of a statement version: its own, or the
-    /// closest one on its provenance ancestry.
+    /// Returns the span of a statement version, or if it has none,
+    /// the first span found among the versions it derives from.
+    ///
+    /// The versions it derives from are searched depth first.
     pub(crate) fn source_span(&self, statement: StatementId) -> Option<Span> {
         let mut pending = vec![statement];
         let mut seen = Vec::new();
@@ -298,7 +300,9 @@ impl Pipeline {
         None
     }
 
-    /// Interns a statement version into the arena.
+    /// Adds a statement version to the arena, and returns its id.
+    ///
+    /// `edge` is the index of the edge that created it, or `None` for a loaded statement.
     pub(crate) fn intern(&mut self, statement: Statement, edge: Option<usize>) -> StatementId {
         let id = StatementId(
             u32::try_from(self.statements.len()).expect("statement counts stay below u32"),
@@ -308,16 +312,17 @@ impl Pipeline {
         id
     }
 
-    /// Records a provenance edge, returning its index.
+    /// Records a provenance edge, and returns its index.
     pub(crate) fn record_edge(&mut self, edge: ProvenanceEdge) -> usize {
         self.edges.push(edge);
         self.edges.len() - 1
     }
 
-    /// Returns the rewrite declaration the stage that created a statement version made about it,
+    /// Returns the rewrite declaration made about a statement version when it was created,
     /// with the versions it derives from.
     ///
-    /// Returns `None` for a loaded original, and for a version made without a rewrite declaration.
+    /// Returns `None` for a loaded statement,
+    /// and for a version created without a rewrite declaration.
     pub(crate) fn declaration(
         &self,
         statement: StatementId,
@@ -327,23 +332,23 @@ impl Pipeline {
     }
 
     /// Returns the index of the edge that created a statement version,
-    /// or `None` for a loaded original.
+    /// or `None` for a loaded statement.
     pub(crate) fn creating_edge(&self, statement: StatementId) -> Option<usize> {
         self.created_by[statement.index()]
     }
 
-    /// Returns the edge behind an index, mutably (to fill in targets and
-    /// rewrite declarations).
+    /// Returns the edge with the given index mutably,
+    /// so that its targets and rewrite declaration can be filled in.
     pub(crate) fn edge_mut(&mut self, edge: usize) -> &mut ProvenanceEdge {
         &mut self.edges[edge]
     }
 
-    /// Returns the live statement list of a revision.
+    /// Returns the ids of the live statements of a revision, in program order.
     pub(crate) fn revision_statements(&self, revision: RevisionId) -> &[StatementId] {
         &self.revisions[revision.index()].statements
     }
 
-    /// Appends a revision, returning its id.
+    /// Appends a revision, and returns its id.
     pub(crate) fn push_revision(&mut self, revision: ProgramRevision) -> RevisionId {
         let id = RevisionId::new(
             u32::try_from(self.revisions.len()).expect("revision counts stay below u32"),

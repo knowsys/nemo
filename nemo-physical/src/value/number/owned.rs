@@ -1,4 +1,4 @@
-//! Owned numbers with canonicalizing construction.
+//! Owned numbers, which their constructors bring into canonical form.
 
 use std::{
     cmp::Ordering,
@@ -11,47 +11,46 @@ use crate::value::{
     number::{Decimal, Double, Float, NumberRef, lexical::Lexical},
 };
 
-/// An owned number of any of the four numeric domains:
-/// integer, decimal, float and double.
+/// An owned number of one of the four numeric domains: integer, decimal, float or double.
+///
 /// Its borrowed view is [NumberRef].
 ///
-/// The domains are distinct: `1`, `1.0f` and `1.0d` are three values,
+/// The domains are distinct, so `1`, `1.0f` and `1.0d` are three values,
 /// while `1.0` is the integer `1`.
-/// XSD's value comparison, under which the three are equal,
+/// XSD's comparison by value, under which the three are equal,
 /// is [value_eq](NumberRef::value_eq) and [value_cmp](NumberRef::value_cmp).
 ///
-/// The arithmetic promotes the operands along the ladder
-/// integer, decimal, float, double to the smallest type holding both.
+/// Arithmetic first promotes both operands to the first type that can hold them,
+/// in the order integer, decimal, float, double.
 #[derive(Clone)]
 pub enum Number {
-    /// An exact number, an `xsd:decimal` value;
-    /// the integers are its integral values.
+    /// An exact number, an `xsd:decimal` value, which is an integer if it is integral.
     Decimal(Decimal),
-    /// A 32-bit float, an `xsd:float` value.
+    /// A 32-bit floating-point number, an `xsd:float` value.
     Float(Float),
-    /// A 64-bit float, an `xsd:double` value.
+    /// A 64-bit floating-point number, an `xsd:double` value.
     Double(Double),
 }
 
-/// Compile-time check of the size target for owned numbers.
+/// Checks at compile time that an owned number occupies at most 24 bytes.
 const _: () = assert!(size_of::<Number>() <= 24);
 
 impl Number {
-    /// Creates a number from a number literal of Nemo term syntax,
-    /// or `None` for any other lexical
-    /// and for a value whose canonical form exceeds the length limit of numbers.
+    /// Creates a number from a number literal of term syntax, or `None` for any other text
+    /// and for a value beyond the [length limit](Decimal) of numbers.
     ///
-    /// The literal is an optional sign, then either a radix form,
-    /// `0b`, `0o` or `0x` and digits of that base within the 128-bit range,
-    /// or digits with an optional fraction and exponent
-    /// and an optional `f`/`F` (float) or `d`/`D` (double) suffix.
-    /// Without a suffix, a literal with an exponent is a double
-    /// and one without is exact, read like [Decimal::from_lexical].
+    /// A number literal is an optional sign followed by one of:
+    /// - a radix form: `0b`, `0o` or `0x`, and digits of that base within the 128-bit range;
+    /// - digits with an optional fraction and an optional exponent,
+    ///   and an optional suffix `f` or `F` for a float, or `d` or `D` for a double.
+    ///
+    /// Without a suffix, a literal with an exponent is a double,
+    /// and a literal without one is exact and parsed as [Decimal::from_lexical] parses it.
     pub fn from_term_syntax(lexical: &str) -> Option<Self> {
         let negative = lexical.starts_with('-');
         let unsigned = lexical.strip_prefix(['+', '-']).unwrap_or(lexical);
 
-        // Radix forms first, as hexadecimal digits include `d`, `e` and `f`.
+        // The radix forms come first, since hexadecimal digits include `d`, `e` and `f`.
         let radix = match unsigned.get(..2) {
             Some("0b") => Some(2),
             Some("0o") => Some(8),
@@ -68,7 +67,7 @@ impl Number {
                 .map(Self::Decimal);
         }
 
-        // The standard parsers read the validated form, sign included.
+        // Once the form is validated, the standard parsers read the text, sign included.
         let (body, suffix) = match unsigned.as_bytes().last() {
             Some(&suffix @ (b'f' | b'F' | b'd' | b'D')) => (
                 &lexical[..lexical.len() - 1],
@@ -102,7 +101,7 @@ impl Number {
         self.as_ref().domain()
     }
 
-    /// Returns the borrowed view of this value, the input to builtin evaluation.
+    /// Returns the borrowed view of this value.
     pub fn as_ref(&self) -> NumberRef<'_> {
         match self {
             Number::Decimal(value) => NumberRef::Decimal(value.as_ref()),
@@ -140,8 +139,7 @@ impl Hash for Number {
 
 impl fmt::Debug for Number {
     /// Writes the value in its canonical form,
-    /// a float with the `f` and a double with the `d` suffix of the term syntax,
-    /// so that the domain shows.
+    /// with the suffix `f` for a float and `d` for a double, so that the domain shows.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", self.as_ref())
     }
@@ -158,6 +156,7 @@ impl fmt::Display for Number {
 mod tests {
     use super::*;
 
+    /// A number literal of term syntax becomes a value of the domain that its form indicates.
     #[test]
     fn term_syntax_picks_the_domain() {
         let number = |lexical| Number::from_term_syntax(lexical).expect("well-formed");
@@ -177,6 +176,8 @@ mod tests {
         assert_eq!(Number::from_term_syntax("0x"), None);
     }
 
+    /// A number of each representation is unchanged by a round trip through its view,
+    /// and keeps its domain.
     #[test]
     fn views_round_trip() {
         let values = [

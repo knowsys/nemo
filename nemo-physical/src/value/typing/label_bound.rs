@@ -1,19 +1,20 @@
-//! What is known about a structure's label.
+//! Bounds on the label of a tuple or a map.
 
-/// What is known about a structure's label.
+/// What is known about the label of a tuple or a map.
 ///
-/// The order puts [Unknown](LabelBound::Unknown) first,
-/// which is what lets a set of shapes merge every shape of one outline into an unknown-label one.
+/// [Unknown](LabelBound::Unknown) comes first in the order.
+/// So among sorted shapes with the same length or keys, a shape with an unknown label
+/// comes first, and can absorb the others.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum LabelBound {
-    /// Nothing: any label, or none.
+    /// Nothing is known: the structure may have any label, or none.
     Unknown,
-    /// Exactly this label, or exactly no label for `None`.
+    /// The structure has exactly this label, or no label for `None`.
     Exactly(Option<Box<str>>),
 }
 
 impl LabelBound {
-    /// Returns whether a structure's label lies within the bound.
+    /// Returns whether a structure with the given label lies within the bound.
     pub fn admits(&self, label: Option<&str>) -> bool {
         match self {
             LabelBound::Unknown => true,
@@ -26,7 +27,7 @@ impl LabelBound {
         matches!(other, LabelBound::Unknown) || self == other
     }
 
-    /// Returns the bounds together: the tighter one,
+    /// Returns the bound that both bounds allow, which is the tighter one,
     /// or `None` if they exclude each other.
     pub(super) fn intersect(&self, other: &Self) -> Option<Self> {
         match (self, other) {

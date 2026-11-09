@@ -2,54 +2,72 @@
 
 use std::fmt;
 
-/// Why an operation on values failed.
+/// The reason why an operation on values failed.
 ///
-/// Following SPARQL error semantics, an evaluation error is a *value*:
-/// it propagates through most operations,
-/// and a row whose condition evaluates to an error is filtered out.
+/// Following SPARQL's error semantics, an evaluation error is treated like a value.
+/// It propagates through most operations,
+/// and a row whose filter condition evaluates to an error is dropped.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum EvaluationError {
-    /// An operand has a type the operation is not defined on,
-    /// so that no value of that type would do:
-    /// a number where a string is required, an IRI for `DATATYPE`,
-    /// durations of different kinds, a decimal where an integer is required.
+    /// An operand has a type that the operation is not defined on.
+    ///
+    /// No value of that type would be accepted. Examples:
+    /// - a number where a string is required;
+    /// - an IRI where a literal is required;
+    /// - two durations of different kinds;
+    /// - a decimal where an integer is required.
     TypeMismatch,
-    /// Two values were compared, for their order or for value equality,
-    /// that cannot be compared:
-    /// values of unrelated types, a NaN in a three-way comparison,
-    /// a zoned and an unzoned point in time, tuples of different shapes,
-    /// two distinct literals of an unknown datatype.
+    /// Two values that cannot be compared were compared, by order or by value equality.
+    ///
+    /// Examples:
+    /// - values of unrelated types;
+    /// - a NaN in a three-way comparison;
+    /// - a zoned and an unzoned dateTime that are too close to be ordered;
+    /// - tuples of different shapes;
+    /// - two distinct literals of a datatype without native support.
     Incomparable,
-    /// A division by zero without an infinity to stand for the result:
-    /// of exact numbers, or of a duration.
+    /// A division by zero where no infinity can stand for the result,
+    /// as for exact numbers and for durations.
     DivisionByZero,
-    /// A computation exceeded a limit:
-    /// a number beyond the length limit of numbers,
-    /// a point in time or a duration beyond its value space,
-    /// an infinity where a finite value is required,
-    /// or a match beyond the limits of the regular-expression engine.
+    /// A computation exceeded a limit.
+    ///
+    /// Examples:
+    /// - a number beyond the length limit of numbers;
+    /// - a dateTime or a duration beyond its value space;
+    /// - an infinity where a finite value is required;
+    /// - a match beyond the limits of the regular-expression engine.
     Overflow,
-    /// The result is a value that has no storage representation,
+    /// The result is a value that cannot be stored,
     /// such as a string beyond the dictionary's length limit.
     Unsupported,
-    /// An operand has a type the operation accepts, but a value it does not,
-    /// alone or together with the other operands:
-    /// a string that is not a lexical form of a cast's target type,
-    /// an invalid pattern, flag or language tag, a NaN factor,
-    /// a timezone out of range, a map key given twice, an empty separator to split a string at.
+    /// An operand has a type that the operation accepts, but a value that it does not accept,
+    /// either alone or together with the other operands.
+    ///
+    /// Examples:
+    /// - a string that is not a lexical form of a cast's target type;
+    /// - an invalid pattern, flag or language tag;
+    /// - a NaN factor for a duration;
+    /// - a timezone offset out of range;
+    /// - a key given twice for a map;
+    /// - an empty separator for splitting a string.
     Malformed,
-    /// A value lacks the component that was asked for:
-    /// an index out of range, a key the map does not hold,
-    /// the timezone of a point in time without one.
+    /// A value lacks the component that was asked for.
+    ///
+    /// Examples:
+    /// - an index out of range;
+    /// - a key that the map does not contain;
+    /// - the timezone offset of a dateTime without one.
     Missing,
 }
 
 impl EvaluationError {
-    /// The number of error kinds, whose discriminants are `0..COUNT`
-    /// (for per-kind counters).
+    /// The number of error kinds.
+    ///
+    /// Every kind's [index](Self::index) is below it,
+    /// so that counters per kind fit in an array of this length.
     pub const COUNT: usize = 7;
 
-    /// Every kind in [index](Self::index) order.
+    /// Every kind, in the order of their [indices](Self::index).
     pub const ALL: [Self; Self::COUNT] = [
         EvaluationError::TypeMismatch,
         EvaluationError::Incomparable,
@@ -60,7 +78,7 @@ impl EvaluationError {
         EvaluationError::Missing,
     ];
 
-    /// Returns the kind's index.
+    /// Returns the kind's index, which is below [COUNT](Self::COUNT) and differs for every kind.
     pub fn index(self) -> usize {
         match self {
             EvaluationError::TypeMismatch => 0,

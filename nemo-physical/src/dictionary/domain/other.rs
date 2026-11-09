@@ -1,11 +1,12 @@
-//! The store of literals of unsupported datatypes.
+//! The store of literals of datatypes without native support.
 
 use crate::dictionary::store::PairPool;
 
-/// The store of literals whose datatype this crate has no value for,
-/// kept as (datatype IRI, lexical form) pairs.
+/// The store of literals of datatypes without native support,
+/// kept as pairs of the datatype IRI and the lexical form.
 ///
-/// The datatype is the frequent part.
+/// A datatype is unsupported if this crate has no value type for it.
+/// The datatype is the frequent part of the [PairPool].
 pub(crate) struct OtherStore {
     /// The interned (datatype, lexical form) pairs.
     pairs: PairPool,
@@ -24,8 +25,8 @@ impl OtherStore {
         self.pairs.len()
     }
 
-    /// Interns a literal and returns its index,
-    /// or `None` if the store cannot hold it.
+    /// Interns a literal and returns its index, or `None` if a part is longer than
+    /// [LENGTH_LIMIT](crate::dictionary::Dictionary::LENGTH_LIMIT).
     pub(crate) fn intern(&mut self, datatype: &str, lexical: &str) -> Option<u64> {
         self.pairs.intern(datatype.as_bytes(), lexical.as_bytes())
     }
@@ -38,8 +39,8 @@ impl OtherStore {
     /// Returns the datatype and the lexical form of the entry with the given index,
     /// borrowed from the store, or `None` for an unknown index.
     pub(crate) fn get(&self, index: u64) -> Option<(&str, &str)> {
-        // SAFETY: the pool is fed by `intern` alone,
-        // which stores the bytes of `&str`s.
+        // SAFETY: only `intern` adds pairs to the pool,
+        // and it stores the bytes of `&str`s.
         self.pairs.get(index).map(|(datatype, lexical)| unsafe {
             (
                 std::str::from_utf8_unchecked(datatype),

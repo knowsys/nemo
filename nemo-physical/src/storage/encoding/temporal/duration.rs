@@ -1,4 +1,4 @@
-//! Payload encoding of [Tag::Duration].
+//! The payload encoding of [Tag::Duration].
 
 use crate::{
     storage::{
@@ -8,46 +8,46 @@ use crate::{
     value::{Duration, ValueDomain},
 };
 
-/// The field holding the kind of the duration, its domain, in the top bits.
+/// The field of the kind of the duration, which is its domain, in the top bits.
 const KIND: BitField = BitField::new(62..64);
 
-/// The field holding the milliseconds of a dayTimeDuration, below the kind.
+/// The field of the milliseconds of a dayTimeDuration, below the kind.
 const DAY_TIME_MILLIS: BitField = BitField::new(0..62);
 
-/// The field holding the months of a yearMonthDuration, below the kind.
+/// The field of the months of a yearMonthDuration, below the kind.
 const YEAR_MONTH_MONTHS: BitField = BitField::new(0..62);
 
-/// The field holding the months of a duration with both months and seconds, below the kind.
+/// The field of the months of a duration with both months and seconds, below the kind.
 const MIXED_MONTHS: BitField = BitField::new(42..62);
 
-/// The field holding the milliseconds of a duration with both months and seconds,
+/// The field of the milliseconds of a duration with both months and seconds,
 /// below its months.
 const MIXED_MILLIS: BitField = BitField::new(0..42);
 
-/// The kind of a dayTimeDuration, the lowest in the order of the domains.
+/// The kind of a dayTimeDuration, the first in the order of the domains.
 const DAY_TIME: u64 = 0;
 
 /// The kind of a yearMonthDuration.
 const YEAR_MONTH: u64 = 1;
 
-/// The kind of a duration with both months and seconds, the highest.
+/// The kind of a duration with both months and seconds, the last in the order of the domains.
 const MIXED: u64 = 2;
 
-/// A duration encodes as its kind, then the fields of that kind.
+/// A duration is encoded as its kind, followed by the fields of that kind.
 ///
-/// The kind takes the top two bits, in the order of the domains.
-/// The 62 bits below it hold:
+/// The kind is in the top two bits, in the order of the domains.
+/// The 62 bits below it contain
 ///
-/// - for a dayTimeDuration, its milliseconds, about ±73 million years;
+/// - for a dayTimeDuration, its milliseconds, for about ±73 million years;
 /// - for a yearMonthDuration, its months;
-/// - for a duration with both, its months in the high 20 bits, about ±43 000 years,
-///   and its milliseconds in the low 42, about ±69 years.
+/// - for a duration with both, its months in the high 20 bits, for about ±43 000 years,
+///   and its milliseconds in the low 42 bits, for about ±69 years.
 ///
 /// Each field is biased,
-/// so payloads order by kind, then by months, then by seconds, as durations do.
+/// so that payloads are ordered by kind, then by months, then by seconds, as durations are.
 ///
-/// A duration finer than a millisecond, or beyond its fields,
-/// has no payload and lives in the dictionary.
+/// A duration with a fraction finer than a millisecond, or beyond the range of its fields,
+/// has no payload, and the dictionary stores it.
 impl PayloadEncoding for Duration {
     const TAG: Tag = Tag::Duration;
     type Encoded = Option<u64>;
@@ -90,11 +90,12 @@ mod tests {
 
     use crate::testing::payload;
 
-    /// Parses the duration of a lexical; panics on malformed input.
+    /// Returns the duration of a lexical form, and panics if it is malformed.
     fn duration(lexical: &str) -> Duration {
         Duration::from_lexical(lexical).expect(lexical)
     }
 
+    /// Every duration with a payload decodes to itself, of each kind and sign.
     #[test]
     fn encoding_round_trips() {
         for lexical in [
@@ -112,6 +113,7 @@ mod tests {
         }
     }
 
+    /// The order of the payloads is the term order of the durations, by kind first.
     #[test]
     fn order_matches_term_order() {
         let ordered = [
@@ -139,6 +141,7 @@ mod tests {
         }
     }
 
+    /// A duration has a payload only for whole milliseconds within the ranges of its fields.
     #[test]
     fn the_payload_holds_milliseconds_within_its_fields() {
         assert_eq!(duration("PT0.0001S").to_payload(), None);

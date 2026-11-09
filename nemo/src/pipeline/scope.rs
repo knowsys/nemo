@@ -1,10 +1,9 @@
-//! The name scope of one file: what its `@base` and `@prefix`
-//! declarations resolve its names against.
+//! The name scope of one file, which its `@base` and `@prefix` directives declare.
 //!
-//! Names resolve in the file they are written in, before translation
-//! resolves them for the composed program: a module's declarations apply
-//! to the module alone. A linked program has one scope, since instance
-//! statements carry resolved names.
+//! A name is resolved in the file that it is written in,
+//! so the declarations of a module apply to that module alone.
+//! A linked program has one scope,
+//! since the statements of its module instances contain resolved names.
 
 use std::collections::HashMap;
 
@@ -18,17 +17,18 @@ use crate::{
 /// The name scope of one file.
 #[derive(Debug, Clone, Default)]
 pub(crate) struct NameScope {
-    /// The base IRI relative names extend, if declared.
+    /// The base IRI that bare names are appended to, if one is declared.
     base: Option<String>,
-    /// The declared prefixes.
+    /// The declared prefixes, mapped to their IRIs.
     prefixes: HashMap<String, String>,
 }
 
 impl NameScope {
-    /// Returns the scope a file's directives describe.
+    /// Returns the scope that the directives among `statements` declare.
     ///
-    /// The first `@base` counts.
-    /// [check_base](Self::check_base) returns an error for a different second one.
+    /// The first `@base` counts,
+    /// and [check_base](Self::check_base) rejects a later one with a different IRI.
+    /// A later `@prefix` for the same prefix replaces an earlier one.
     pub(crate) fn of(statements: &[Statement]) -> Self {
         let mut scope = Self::default();
         for statement in statements {
@@ -54,7 +54,7 @@ impl NameScope {
     /// # Errors
     ///
     /// Returns [ConflictingBase](TranslationError::ConflictingBase) at the first `@base`
-    /// whose IRI differs from an earlier one, pointing at the first `@base` too.
+    /// whose IRI differs from the first one, with a label at the first one.
     pub(crate) fn check_base(statements: &[Statement]) -> Result<(), Diagnostic> {
         let mut bases = statements.iter().filter_map(|statement| match statement {
             Statement::Directive(Directive::Base(directive)) => Some(directive),
@@ -79,13 +79,17 @@ impl NameScope {
         self.base.as_deref()
     }
 
-    /// Returns the declared prefixes.
+    /// Returns the declared prefixes, mapped to their IRIs.
     #[cfg(feature = "sparql")]
     pub(crate) fn prefixes(&self) -> &HashMap<String, String> {
         &self.prefixes
     }
 
-    /// Returns the absolute name an identifier stands for in this scope.
+    /// Returns the absolute name that an identifier stands for in this scope.
+    ///
+    /// A bare name is appended to the base IRI, if one is declared.
+    /// Fails for a prefix that the scope does not declare, and for a module-qualified name,
+    /// with a diagnostic at `span`.
     pub(crate) fn resolve(
         &self,
         identifier: &Identifier,

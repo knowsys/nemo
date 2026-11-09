@@ -6,21 +6,20 @@ use nemo_physical::diagnostics::Diagnostic;
 
 use crate::pipeline::Commit;
 
-/// A program transformation: one named stage rewriting a revision
-/// through a [Commit].
+/// A pipeline stage: a named program transformation that rewrites a revision through a
+/// [Commit].
 ///
 /// A stage names the stages that must have run before it.
-/// The pipeline checks this as it runs, so a stage list in the wrong order
-/// panics at the first stage whose required stage is missing.
-/// What a stage writes stays in the language of a loaded program:
-/// no `@use` and no module-qualified name, which only linking resolves.
-/// Warnings go to the pipeline's report sink, and errors abort the stage.
+/// The pipeline checks this as it runs,
+/// so a stage list in the wrong order panics at the first stage whose required stage is missing.
+/// What a stage writes stays in the language of a loaded program,
+/// so it contains no `@use` directive and no module-qualified name, which only linking resolves.
+/// A stage reports warnings through [Commit::report], and an error aborts the stage.
 pub trait Transformation: Send + Sync {
     /// Returns the stage's unique name.
     fn name(&self) -> &'static str;
 
-    /// Returns the names of the stages that must have run before this
-    /// one.
+    /// Returns the names of the stages that must have run before this one.
     fn requires(&self) -> &'static [&'static str] {
         &[]
     }
@@ -29,8 +28,7 @@ pub trait Transformation: Send + Sync {
     ///
     /// # Errors
     ///
-    /// Returns a diagnostic for a problem in the program that keeps the
-    /// stage from rewriting it.
+    /// Returns a diagnostic for a problem in the program that keeps the stage from rewriting it.
     fn apply(&self, commit: &mut Commit<'_>) -> Result<(), Diagnostic>;
 }
 
@@ -120,6 +118,10 @@ impl Stages {
     }
 
     /// Returns the position of the named stage.
+    ///
+    /// # Panics
+    ///
+    /// Panics if no stage has the name.
     fn position(&self, name: &str) -> usize {
         self.entries
             .iter()

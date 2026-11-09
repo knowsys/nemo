@@ -26,8 +26,9 @@ fn too_many_arguments(operator: Operator, span: Option<Span>) -> Diagnostic {
     .at(span)
 }
 
-/// Returns the argument-count diagnostic of a builtin application,
-/// `expected` naming the accepted counts with their noun, as `1 argument`.
+/// Returns the diagnostic of a builtin applied to the wrong number of arguments.
+///
+/// `expected` names the accepted counts with their noun, such as `1 argument`.
 fn argument_count(
     operator: Operator,
     expected: &str,
@@ -42,8 +43,9 @@ fn argument_count(
     .at(span)
 }
 
-/// Returns a count of arguments with its noun, as `1 argument` or `2 or 3 arguments`,
-/// `last` being the count the noun agrees with.
+/// Returns a count of arguments with its noun, such as `1 argument` or `2 or 3 arguments`.
+///
+/// `last` is the count that the noun agrees with.
 fn arguments_noun(count: &str, last: usize) -> String {
     if last == 1 {
         format!("{count} argument")
@@ -52,40 +54,42 @@ fn arguments_noun(count: &str, last: usize) -> String {
     }
 }
 
-/// The variable scope a compiled expression reads from.
+/// The variables that a compiled expression may read.
 #[derive(Clone, Copy)]
 pub(super) enum VariableScope<'s> {
-    /// A rule body or head: variables resolve to bound rule variables.
+    /// A rule body or head, where variables resolve to the rule columns of bound variables.
     Rule(&'s HashMap<String, VariableId>),
-    /// A ground context (facts): variables cannot appear.
+    /// A ground context, such as a fact, where no variable may appear.
     Ground,
-    /// An aggregate head expression: like [Rule](Self::Rule), with the
-    /// aggregate subterm reading as [AGGREGATE_RESULT].
+    /// An expression around an aggregate in the head, like [Rule](Self::Rule),
+    /// where the aggregate itself is read as [AGGREGATE_RESULT].
     AggregateHead(&'s HashMap<String, VariableId>),
-    /// A directive option value: variables read the guard bindings as
-    /// constants.
+    /// The value of a directive's option,
+    /// where variables read the values of the guard bindings as constants.
     Bindings(&'s HashMap<String, DataValue>),
 }
 
-/// How a builtin takes its arguments, and the code applying them once
-/// they are on the stack.
+/// How a builtin accepts its arguments,
+/// and the instructions that apply it once the arguments are on the stack.
 enum BuiltinForm {
-    /// A fixed number of arguments, then the codes.
+    /// A fixed number of arguments, followed by the instructions.
     Fixed(usize, &'static [OpCode]),
-    /// The given number of arguments, or one more as an option, with the code for each count.
+    /// The given number of arguments, or one more as an option,
+    /// with the instruction for each count.
     Optional(usize, OpCode, OpCode),
-    /// Any number of arguments, at least one, folded pairwise under one code,
-    /// as the named forms of the infix operators are.
+    /// At least one argument, combined pairwise by one instruction,
+    /// as in the named forms of the infix operators.
     ///
-    /// A single argument takes the other codes instead.
+    /// A single argument gets the other instructions instead.
     Folded(OpCode, &'static [OpCode]),
-    /// Any number of arguments, at least the given count, with the code carrying the count.
+    /// At least the given number of arguments,
+    /// with an instruction that contains the number of arguments.
     Counted(usize, fn(u16) -> OpCode),
 }
 
 use BuiltinForm::{Counted, Fixed, Folded, Optional};
 
-/// Returns the table of builtins: how each takes its arguments.
+/// Returns how a builtin accepts its arguments.
 fn builtin_form(operator: Operator) -> BuiltinForm {
     match operator {
         Operator::Equal => Fixed(2, &[OpCode::Same]),
@@ -96,8 +100,8 @@ fn builtin_form(operator: Operator) -> BuiltinForm {
         Operator::GreaterEq => Fixed(2, &[OpCode::GreaterOrEqual]),
         Operator::Less => Fixed(2, &[OpCode::Less]),
         Operator::LessEq => Fixed(2, &[OpCode::LessOrEqual]),
-        // A single number is its own sum and product: the maximum of one
-        // operand passes a number and rejects anything else.
+        // A single number is its own sum and product,
+        // and the maximum of one operand passes a number and rejects anything else.
         Operator::Add => Folded(OpCode::Add, &[OpCode::Maximum(1)]),
         Operator::Subtract => Fixed(2, &[OpCode::Subtract]),
         Operator::Multiply => Folded(OpCode::Multiply, &[OpCode::Maximum(1)]),
@@ -231,14 +235,15 @@ const fn in_domain(domain: ValueDomain) -> OpCode {
     OpCode::InDomains(DomainSet::of(domain))
 }
 
-/// Compiles a model operation tree into a stack program, postorder.
+/// The builder of a stack program from a term or an operation,
+/// which emits the instructions in postorder.
 #[derive(Default)]
 pub(super) struct StackProgramBuilder {
     /// The instructions emitted so far.
     pub(super) operations: Vec<OpCode>,
     /// The constants collected so far.
     pub(super) constants: Vec<DataValue>,
-    /// The variables feeding the program, in input order.
+    /// The columns that feed the program, in input order.
     pub(super) inputs: Vec<VariableId>,
     /// Whether the constants or the inputs outgrew what an instruction addresses.
     ///
@@ -255,10 +260,10 @@ impl StackProgramBuilder {
         self.operations.push(OpCode::Constant(operand));
     }
 
-    /// Returns an operand index as an instruction addresses it.
+    /// Returns an operand index as an instruction stores it.
     ///
-    /// An index beyond the limit marks the overflow and is replaced by the largest operand,
-    /// and the expression is an error before its program could run.
+    /// An index beyond the limit sets [overflow](Self::overflow) and is replaced by the
+    /// largest operand, so that the expression is an error before its program can run.
     fn operand(&mut self, index: usize) -> u16 {
         u16::try_from(index).unwrap_or_else(|_| {
             self.overflow = true;
@@ -266,7 +271,7 @@ impl StackProgramBuilder {
         })
     }
 
-    /// Emits a read of a program input, registered on first sight.
+    /// Emits a read of the input for column `id`, which is added to the inputs on first use.
     fn input(&mut self, id: VariableId) {
         let input = match self.inputs.iter().position(|&existing| existing == id) {
             Some(position) => position,
@@ -279,7 +284,9 @@ impl StackProgramBuilder {
         self.operations.push(OpCode::Input(operand));
     }
 
-    /// Emits the instruction building a structure of the given size.
+    /// Emits the instruction that builds a structure of `size` elements.
+    ///
+    /// Fails for a structure too large for an instruction.
     fn structure(
         &mut self,
         make: fn(u16) -> OpCode,
@@ -291,7 +298,7 @@ impl StackProgramBuilder {
         Ok(())
     }
 
-    /// Emits the code of one term.
+    /// Emits the instructions of one term.
     pub(super) fn term(
         &mut self,
         translator: &Translator<'_>,
@@ -302,8 +309,8 @@ impl StackProgramBuilder {
             TermKind::Variable(variable) => self.variable(translator, scope, variable, term.span),
             TermKind::Operation(operation) => self.operation(translator, scope, operation),
             TermKind::Aggregate(aggregate) => match scope {
-                // The result of the (single) aggregate reads as a
-                // pseudo-input; the caller remaps it.
+                // The result of the expression's single aggregate is read as the
+                // placeholder input `AGGREGATE_RESULT`.
                 VariableScope::AggregateHead(_) => {
                     self.input(AGGREGATE_RESULT);
                     Ok(())
@@ -320,9 +327,10 @@ impl StackProgramBuilder {
         }
     }
 
-    /// Emits the code of a variable: a parameter reads as a constant,
-    /// a rule variable as an input, and a guard variable as the
-    /// binding it stands for.
+    /// Emits the instructions of a variable.
+    ///
+    /// A parameter is read as a constant, a rule variable as an input,
+    /// and a guard variable as the value that it is bound to.
     fn variable(
         &mut self,
         translator: &Translator<'_>,
@@ -351,8 +359,8 @@ impl StackProgramBuilder {
                     Ok(())
                 }
                 VariableScope::Rule(names) | VariableScope::AggregateHead(names) => {
-                    // Assignment resolution ran first, so a variable still
-                    // unbound here cannot be bound at all.
+                    // The operation fixpoint ran first,
+                    // so a variable that is still unbound here cannot be bound at all.
                     let Some(&id) = names.get(&variable.name) else {
                         return Err(TranslationError::UnsafeVariable {
                             role: String::from("variable"),
@@ -373,10 +381,11 @@ impl StackProgramBuilder {
         }
     }
 
-    /// Emits the code of a structured term:
-    /// the constant it evaluates to if it is ground,
-    /// and code building it per row if it is not,
-    /// or if it calls a nondeterministic function (such as `RAND()`).
+    /// Emits the instructions of a structured term.
+    ///
+    /// A ground term becomes the constant that it evaluates to.
+    /// A term that is not ground, or that calls a nondeterministic function such as `RAND()`,
+    /// is built per row.
     fn structured(
         &mut self,
         translator: &Translator<'_>,
@@ -416,7 +425,7 @@ impl StackProgramBuilder {
                 self.structure(OpCode::LabeledTuple, arguments.len(), term.span)
             }
             TermKind::Map { label, pairs } => {
-                // Keys known now are checked now, as for a ground map.
+                // The keys that are already known are checked now, as for a ground map.
                 if let Some(problem) = translator.repeated_key(pairs, term.span) {
                     return Err(problem);
                 }
@@ -440,8 +449,10 @@ impl StackProgramBuilder {
         }
     }
 
-    /// Emits the code of one operation: the arguments postorder, then
-    /// the operator's code from the [table](builtin_form).
+    /// Emits the instructions of one operation:
+    /// those of its arguments, then the operator's, as [builtin_form] gives them.
+    ///
+    /// Fails for a wrong number of arguments.
     pub(super) fn operation(
         &mut self,
         translator: &Translator<'_>,
@@ -511,7 +522,7 @@ impl StackProgramBuilder {
         Ok(())
     }
 
-    /// Emits the code of arguments, in order.
+    /// Emits the instructions of the arguments, in order.
     fn arguments(
         &mut self,
         translator: &Translator<'_>,
@@ -524,7 +535,9 @@ impl StackProgramBuilder {
         Ok(())
     }
 
-    /// Finishes the program of the expression at the given span.
+    /// Finishes the program of the expression at `span`.
+    ///
+    /// Fails if the expression has more constants or inputs than an instruction can address.
     pub(super) fn finish(self, span: Option<Span>) -> Result<StackProgram, Diagnostic> {
         if self.overflow {
             return Err(TranslationError::ExpressionTooLarge {

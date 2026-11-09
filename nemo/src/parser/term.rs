@@ -1,4 +1,7 @@
-//! The term grammar: Pratt parsing for expressions.
+//! Parsing terms, with Pratt parsing for operators.
+//!
+//! Each infix operator has a *binding power*, and an operator with a higher binding power
+//! binds more tightly, as `*` does compared to `+`.
 
 mod aggregate;
 mod call;
@@ -12,15 +15,18 @@ use crate::{
     parser::{cursor::Parser, lexer::TokenKind},
 };
 
-/// The binding power a plain term starts from: arithmetic, but no comparison,
-/// whose `=` separates map pairs and options instead.
+/// The minimum binding power of a plain term,
+/// which allows arithmetic operators but no comparisons.
 const PLAIN: u8 = power(Operator::Add);
 
-/// The binding power of a prefix minus, tighter than every infix operator.
+/// The binding power of a prefix minus, which binds more tightly than every infix operator.
 const PREFIX: u8 = power(Operator::Multiply) + 1;
 
-/// Returns an infix operator's binding power, shared with the display
-/// through [Operator::precedence].
+/// Returns the binding power of an infix operator.
+///
+/// This is the operator's [precedence](Operator::precedence),
+/// which the display of operations uses too, so that parsing and display agree.
+/// Panics for an operator that is not infix.
 const fn power(operator: Operator) -> u8 {
     match operator.precedence() {
         Some(power) => power,
@@ -28,7 +34,8 @@ const fn power(operator: Operator) -> u8 {
     }
 }
 
-/// Returns the infix operator a token starts, with its binding power.
+/// Returns the infix operator of a token with its binding power,
+/// or `None` if the token is not an infix operator.
 fn binding_power(kind: &TokenKind) -> Option<(Operator, u8)> {
     let operator = match kind {
         TokenKind::Equal => Operator::Equal,
@@ -49,32 +56,36 @@ fn binding_power(kind: &TokenKind) -> Option<(Operator, u8)> {
 }
 
 impl Parser<'_> {
-    /// Parses a full term (expression).
+    /// Parses a term, comparisons included.
     pub(super) fn term(&mut self) -> Result<Term, Diagnostic> {
         self.term_with_power(0)
     }
 
-    /// Parses a term without comparison operators,
-    /// the form map pairs and option lists use, whose `=` separates rather than compares.
+    /// Parses a term without comparisons at its top level.
+    ///
+    /// A `=` after the term is left unconsumed,
+    /// so that it can separate a key from its value, as in a map pair `key = value`.
     pub(super) fn plain_term(&mut self) -> Result<Term, Diagnostic> {
         self.term_with_power(PLAIN)
     }
 
-    /// Parses a term whose operators bind at least as tightly as `minimum`.
-    ///
-    /// This is the Pratt loop: every token is consumed exactly once.
+    /// Parses a term whose infix operators have at least the binding power `minimum`,
+    /// one level of nesting deeper.
     fn term_with_power(&mut self, minimum: u8) -> Result<Term, Diagnostic> {
         self.nested(|parser| parser.term_at(minimum))
     }
 
-    /// Runs the Pratt loop one level of nesting in, returning the term it parses.
+    /// Parses a term whose infix operators have at least the binding power `minimum`,
+    /// at the current nesting depth.
+    ///
+    /// This is the loop of Pratt parsing, which consumes every token exactly once.
     fn term_at(&mut self, minimum: u8) -> Result<Term, Diagnostic> {
         let start = self.peek_span();
         let mut left = self.primary()?;
 
-        // Postfix component access binds tighter than every infix
-        // operator (`?t[0] + 1` indexes first) and chains left to
-        // right: `?t[1][0]` reads element 0 of element 1.
+        // Component access `[…]` binds more tightly than every infix operator,
+        // so `?t[0] + 1` indexes first.
+        // It chains from left to right, so `?t[1][0]` is element 0 of element 1.
         while self.eat(&TokenKind::BracketOpen).is_some() {
             let index = self.term()?;
             self.expect(&TokenKind::BracketClose, "`]` closing the component access")?;
@@ -100,9 +111,10 @@ impl Parser<'_> {
         Ok(left)
     }
 
-    /// Parses one primary term: a constant, variable, call, aggregate,
-    /// tuple, map, parenthesized term, prefixed negation, or signed
-    /// number.
+    /// Parses one primary term, which is a term without infix operators at its top level.
+    ///
+    /// This is a constant, a variable, a call, an aggregate, a tuple, a map,
+    /// a term in parentheses, a negated term, or a signed number.
     fn primary(&mut self) -> Result<Term, Diagnostic> {
         let start = self.peek_span();
         match self.peek().clone() {
@@ -119,7 +131,7 @@ impl Parser<'_> {
                 let operand = self.term_with_power(PREFIX)?;
                 Ok(self.negated(operand, start))
             }
-            // A plus is only ever the sign of a number literal.
+            // A prefix `+` is only allowed as the sign of a number literal.
             TokenKind::Plus => {
                 self.advance();
                 let token = self.expect(&TokenKind::Number, "a number after the `+` sign")?;

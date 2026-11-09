@@ -1,4 +1,4 @@
-//! Type expressions and the column declarations made of them.
+//! Parsing type expressions, and the column declarations that contain them.
 
 use nemo_physical::diagnostics::Diagnostic;
 
@@ -8,13 +8,14 @@ use crate::{
 };
 
 impl Parser<'_> {
-    /// Parses column declarations up to and including the closing `)`,
-    /// `closing` naming it for the message.
+    /// Parses column declarations through the closing `)`.
+    ///
+    /// `closing` describes the `)` in the error if it is missing.
     pub(super) fn columns(&mut self, closing: &str) -> Result<Vec<ColumnDeclaration>, Diagnostic> {
         self.list(&TokenKind::ParenClose, closing, Self::column)
     }
 
-    /// Parses one column declaration: an optional `name:` and a type.
+    /// Parses one column declaration, which is a type with an optional `name:` before it.
     fn column(&mut self) -> Result<ColumnDeclaration, Diagnostic> {
         let name = if self.at(&TokenKind::Ident) && self.peek_second() == &TokenKind::Colon {
             let token = self.advance();
@@ -42,8 +43,12 @@ impl Parser<'_> {
         Ok(TypeExpression::Union(members))
     }
 
-    /// Parses one type of a union: a base type, a tuple type (unlabeled,
-    /// labeled, or `_`-labeled), or a map type (likewise).
+    /// Parses one member of a union of types.
+    ///
+    /// A member is a base type, the name of a type declared with `@type`,
+    /// or a tuple or map type.
+    /// A tuple or map type has no label, a label as in `point(…)`,
+    /// or the label `_`, as in `_(…)`, which allows any label.
     fn type_member(&mut self) -> Result<TypeExpression, Diagnostic> {
         if let Some(shaped) = self.shaped_type(TypeLabel::Unlabeled)? {
             return Ok(shaped);
@@ -51,7 +56,7 @@ impl Parser<'_> {
 
         let token = self.expect(&TokenKind::Ident, "a type")?;
         let name = self.text(&token);
-        // `_` states a shape without constraining the label.
+        // `_` gives a shape without restricting the label.
         let label = if name == "_" {
             TypeLabel::Anonymous
         } else {
@@ -69,8 +74,10 @@ impl Parser<'_> {
         })
     }
 
-    /// Parses a tuple type's fields in parentheses or a map type's fields in braces,
-    /// under the given label, if either opens next.
+    /// Parses the fields of a tuple type in parentheses, or of a map type in braces,
+    /// with the given label.
+    ///
+    /// Returns `None` if neither `(` nor `{` is next.
     fn shaped_type(&mut self, label: TypeLabel) -> Result<Option<TypeExpression>, Diagnostic> {
         if self.eat(&TokenKind::ParenOpen).is_some() {
             let fields = self.list(

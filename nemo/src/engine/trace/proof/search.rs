@@ -37,10 +37,10 @@ use crate::{
 /// One candidate application of a rule, to explain one fact.
 #[derive(Debug, Clone, Copy)]
 pub(super) struct CandidateApplication<'f> {
-    /// The rule's index.
+    /// The index of the rule in the compiled program.
     pub(super) rule: usize,
     /// The engine step of the application,
-    /// or the revision the fact was added at if the application log has no entry for it.
+    /// or the revision at which the fact was added if the application log has no entry for it.
     pub(super) step: u64,
     /// The fact's table.
     pub(super) table: TableId,
@@ -49,7 +49,7 @@ pub(super) struct CandidateApplication<'f> {
 }
 
 impl CandidateApplication<'_> {
-    /// Returns the proof node deriving the fact by this application.
+    /// Returns the proof node that derives the fact by this application.
     pub(super) fn derived(
         &self,
         witness: Vec<StorageValue>,
@@ -72,8 +72,8 @@ impl CandidateApplication<'_> {
     }
 }
 
-/// The outcome of every fact a search met, by table and row:
-/// its proof, or `None` if it has none.
+/// The outcome of every fact that a search met, by table and row,
+/// which is the fact's proof, or `None` if it has none.
 pub(super) type Outcomes = HashMap<(TableId, Vec<StorageValue>), Option<Rc<ProofNode>>>;
 
 /// The proof search over one engine's stores.
@@ -86,21 +86,23 @@ pub(super) struct ProofSearch<'a> {
     pub(super) program: &'a CompiledProgram,
     /// The application log, ascending by step.
     applications: &'a [LoggedApplication],
-    /// The context each reasoning run evaluated in.
+    /// The evaluation context of each reasoning run.
     pub(super) contexts: &'a RunContexts,
-    /// Per table, its extensional blocks.
+    /// The extensional blocks of each table, which contain loaded data.
     extensional: &'a HashMap<TableId, Vec<ExtensionalBlock>>,
     /// The engine's current step.
     ///
     /// Every stored row's revision lies below it.
     pub(super) now: u64,
-    /// The proven and refuted facts, kept beyond the search.
+    /// The outcomes of the facts met so far, which outlive the search.
     outcomes: &'a mut Outcomes,
 }
 
 impl<'a> ProofSearch<'a> {
     /// Returns a search over the engine's stores,
-    /// which remembers its outcomes beside those of earlier searches.
+    /// which adds its outcomes to `outcomes`, beside those of earlier searches.
+    ///
+    /// Fails if no program is loaded.
     pub(super) fn over(
         engine: &'a mut Engine,
         outcomes: &'a mut Outcomes,
@@ -173,7 +175,7 @@ impl<'a> ProofSearch<'a> {
             .is_some_and(|added| added.0 < step)
     }
 
-    /// Returns whether one of the table's extensional blocks holds a revision.
+    /// Returns whether a revision lies in one of the table's extensional blocks.
     fn is_extensional(&self, table: TableId, revision: Revision) -> bool {
         self.extensional
             .get(&table)
@@ -182,11 +184,12 @@ impl<'a> ProofSearch<'a> {
             .any(|extensional| extensional.range.contains(&revision))
     }
 
-    /// Returns the candidate applications for a fact added at a derived revision:
-    /// the logged application of that step, which wrote the fact.
+    /// Returns the candidate applications for a fact added at a derived revision,
+    /// each as a rule index and a step.
     ///
-    /// If the log holds no such application (it can be out of date after the engine recovers
-    /// from a program update), every rule writing the table is a candidate, at the revision.
+    /// The candidate is the logged application of that step, which wrote the fact.
+    /// The log can lack that application after the engine recovers from a program update.
+    /// Then every rule that writes the table and can fire is a candidate, at the revision.
     fn candidates(&self, table: TableId, revision: Revision) -> Vec<(usize, u64)> {
         let program = self.program;
         let at = self
@@ -221,8 +224,9 @@ impl<'a> ProofSearch<'a> {
             return Ok(known.clone());
         }
 
-        // The revision the fact was added at decides the outcome: none means the fact is not
-        // stored, an extensional one means a leaf, and a derived one names the application.
+        // The revision at which the fact was added decides the outcome.
+        // Without one, the fact is not stored. An extensional revision makes the fact a leaf,
+        // and a derived one names the application.
         let mut proven = None;
         if let Some(revision) = self.manager.revision_of(table, row) {
             if self.is_extensional(table, revision) {
@@ -253,8 +257,8 @@ impl<'a> ProofSearch<'a> {
 
     /// Attempts to explain the fact by one candidate application.
     ///
-    /// Each head of the rule that writes the fact's table (an ordinary head or an existential
-    /// insert) grounds the body by the fact's values.
+    /// Each head of the rule that writes the fact's table, an ordinary head or an existential
+    /// insert, grounds the body by the fact's values.
     /// The first grounding with a witness whose premises are all proven wins.
     fn attempt(
         &mut self,
@@ -316,7 +320,7 @@ impl<'a> ProofSearch<'a> {
     /// Attempts to explain a fact of an aggregate head.
     ///
     /// The group columns ground the body, and the group's contributions are counted.
-    /// A min or max result also carries the premises of the witness row achieving it,
+    /// A min or max result also has the premises of the witness row that achieves it,
     /// if they are all proven.
     fn attempt_aggregate(
         &mut self,
@@ -350,8 +354,8 @@ impl<'a> ProofSearch<'a> {
         }
         let positions = combined_positions(rule);
 
-        // The evidence summary: the number of distinct contributions
-        // the first aggregate ranged over within this group.
+        // The summary of the group is the number of distinct contributions
+        // that the first aggregate ranged over within it.
         let matches = match aggregate.functions.first() {
             Some(spec) => {
                 let scope = scope_columns(rule, spec);
@@ -368,7 +372,7 @@ impl<'a> ProofSearch<'a> {
             None => witnesses.len(),
         };
 
-        // A min/max result names a witness row: the one achieving it.
+        // A min or max result names a witness row, the one that achieves it.
         let keep = results.iter().find_map(|&(spec_index, target)| {
             let spec = &aggregate.functions[spec_index];
             matches!(spec.kind, AggregateKind::Min | AggregateKind::Max)
@@ -377,8 +381,8 @@ impl<'a> ProofSearch<'a> {
                 .map(|input| (positions[input], target))
         });
 
-        // The group exists even if no single witness is fully proven
-        // (or none is called for): the summary explains it.
+        // The group exists even if no witness is fully proven, or none is needed,
+        // and the summary explains it.
         let proven = self.prove_witnesses(candidate, &witnesses, false, keep, Some(matches))?;
         Ok(Some(proven.unwrap_or_else(|| {
             candidate.derived(Vec::new(), Vec::new(), Some(matches), false)
@@ -388,8 +392,9 @@ impl<'a> ProofSearch<'a> {
     /// Tries the witnesses in order, proving each one's premises,
     /// until one witness is fully proven.
     ///
-    /// `keep` admits only the rows holding the given value at the given position,
-    /// and `matches` is attached as the aggregate summary.
+    /// `keep`, if given, keeps only the witnesses that have the given value at the given
+    /// position.
+    /// `matches` becomes the aggregate summary of the proof.
     fn prove_witnesses(
         &mut self,
         candidate: &CandidateApplication<'_>,
@@ -431,9 +436,10 @@ impl<'a> ProofSearch<'a> {
     }
 
     /// Runs the rule's body grounded by the head fact over the data before the application step,
-    /// returning every witness:
-    /// distinct combined rows (the variables in the rule's order, then computed columns).
+    /// and returns every witness.
     ///
+    /// A witness is a distinct combined row,
+    /// with the variables in the rule's order and then the computed columns.
     /// Each premise of a witness was added before the step,
     /// so a premise is always older than the fact it supports.
     fn witnesses(
@@ -444,8 +450,9 @@ impl<'a> ProofSearch<'a> {
     ) -> Vec<Vec<StorageValue>> {
         let joined = self.joined(rule_index, grounding, step);
 
-        // A read ending inside a block also holds rows added from the step on;
-        // a body table read up to the step exactly holds none.
+        // A read that ends inside a block also returns rows added from the step on,
+        // so the premises from such a read are checked.
+        // A body table read up to exactly the step returns no such rows.
         let rule = &self.program.rules[rule_index];
         let positions = combined_positions(rule);
         let checked: Vec<_> = rule
@@ -472,18 +479,17 @@ impl<'a> ProofSearch<'a> {
         witnesses
     }
 
-    /// Runs the rule's body grounded by the head fact,
-    /// each body table read up to the end of the block holding the step,
-    /// returning the distinct combined rows.
+    /// Runs the rule's body grounded by the head fact, and returns the distinct combined rows.
+    ///
+    /// Each body table is read up to the end of the block that contains the step.
     fn joined(&mut self, rule_index: usize, grounding: &[(usize, DataValue)], step: u64) -> Trie {
         let program = self.program;
         let rule = &program.rules[rule_index];
         let mut plan = OperationPlan::new();
         let space = BodySpace::new(&mut plan, rule);
 
-        // One join over all body atoms, each restricted to the data
-        // before the application (rounded up to its table's blocks);
-        // the grounding holds the head fact's values.
+        // One join over all body atoms, each restricted to the data before the application,
+        // rounded up to its table's blocks. The grounding contains the head fact's values.
         let mut inputs = Vec::with_capacity(rule.body.len());
         for atom in &rule.body {
             let end = self.aligned_end(atom.table, step);
@@ -494,8 +500,8 @@ impl<'a> ProofSearch<'a> {
         // application time.
         let (node, _) = space.subtract_negations(&mut plan, node, Revision(0)..Revision(self.now));
 
-        // The body evaluates as it did at the application: `NOW()` reads
-        // the instant its run began at.
+        // The body is evaluated as it was at the application,
+        // so `NOW()` returns the instant at which that run began.
         let output = plan.output(node);
         let context = self.contexts.at(step);
         let mut results = plan.execute(self.manager, self.dictionary, context);
@@ -503,9 +509,9 @@ impl<'a> ProofSearch<'a> {
     }
 }
 
-/// Returns the grounding of a rule's body by one ordinary head writing the
-/// fact, and whether a column was left out of it for calling a nondeterministic function
-/// (such as `RAND()` or `STRUUID()`).
+/// Returns the grounding of a rule's body by one ordinary head that writes the fact,
+/// and whether a column was left out of it because it calls a nondeterministic function,
+/// such as `RAND()`.
 ///
 /// Such a value cannot be reproduced,
 /// so the premises explain the fact except for that column.
@@ -530,11 +536,11 @@ fn head_grounding(
     (grounding, nondeterministic)
 }
 
-/// Returns the grounding of a rule's body by one existential insert writing the fact.
+/// Returns the grounding of a rule's body by one existential insert that writes the fact.
 ///
-/// Returns `None` if the insert cannot have written the fact.
-/// Frontier columns ground the body, existential columns must hold consistent nulls,
+/// Frontier columns ground the body, existential columns must contain consistent nulls,
 /// and constants must match.
+/// Returns `None` if the insert cannot have written the fact.
 fn insert_grounding(
     existential: &ExistentialHead,
     insert: &ExistentialAtom,

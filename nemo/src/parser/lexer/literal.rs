@@ -1,4 +1,4 @@
-//! String and format-string literals, which share one body scanner.
+//! Lexing string literals and format strings, whose bodies are read the same way.
 
 use nemo_physical::value::{Escape, NameKind};
 
@@ -8,21 +8,22 @@ use crate::{
     parser::lexer::{FStringPart, Lexer, TokenKind},
 };
 
-/// What one step through a literal's body met.
+/// The result of one step through the body of a literal.
 enum LiteralStep {
-    /// Content, taken into the text.
+    /// Content, which was added to the text.
     Content,
-    /// The closing quotes, consumed.
+    /// The closing quotes, which were consumed.
     Closed,
     /// The end of the input, before any closing quotes.
     Unterminated,
 }
 
 impl Lexer<'_> {
-    /// Returns whether three quotes open the literal at the current position,
-    /// past its first quote: the multiline form, closed by three quotes.
+    /// Returns whether the literal is multiline, which means that it opens with three quotes
+    /// and closes with three quotes.
     ///
-    /// The two further quotes are consumed.
+    /// The current position must be after the literal's first quote.
+    /// If two more quotes follow, they are consumed.
     fn opens_multiline(&mut self) -> bool {
         let multiline = self.peek() == Some(b'"') && self.peek_at(1) == Some(b'"');
         if multiline {
@@ -31,18 +32,19 @@ impl Lexer<'_> {
         multiline
     }
 
-    /// Returns whether the quote at the current position closes the multiline
-    /// form: two more follow it.
+    /// Returns whether the quote at the current position closes a multiline literal,
+    /// which it does if two more quotes follow it.
     fn closes_multiline(&self) -> bool {
         self.peek_at(1) == Some(b'"') && self.peek_at(2) == Some(b'"')
     }
 
-    /// Consumes an escape sequence, its backslash at the current position, into the text,
-    /// as [Escape::in_string] reads it.
+    /// Consumes the escape sequence whose backslash is at the current position,
+    /// and adds the character that it stands for to `text`.
     ///
-    /// An escape it does not read passes through verbatim,
-    /// since the backslash may be meant for a later consumer
-    /// (regular expressions, replacement patterns).
+    /// [Escape::in_string] decodes the escape.
+    /// A backslash that does not start an escape it decodes is kept in the text,
+    /// since the text may be interpreted later, for example as a regular expression,
+    /// where the backslash matters.
     fn escape(&mut self, text: &mut String) {
         self.position += 1;
         match Escape::in_string(&self.source[self.position..]) {
@@ -54,12 +56,13 @@ impl Lexer<'_> {
         }
     }
 
-    /// Takes one step through the body of a string or format string into its text:
-    /// a character, an escape, a line break, an inner quote of the multiline form,
-    /// or the closing quotes.
+    /// Takes one step through the body of a string or format string,
+    /// and adds what it reads to `text`.
     ///
-    /// Source line endings normalize, since a line break in a literal
-    /// means the text, not the file's encoding of it.
+    /// A step reads a character, an escape, a quote inside a multiline literal,
+    /// or the closing quotes.
+    /// A `\r` before `\n` is dropped, so that a line break in a literal is `\n`
+    /// however the file encodes line breaks.
     fn literal_step(&mut self, multiline: bool, text: &mut String) -> LiteralStep {
         let Some(byte) = self.peek() else {
             return LiteralStep::Unterminated;
@@ -83,9 +86,10 @@ impl Lexer<'_> {
         LiteralStep::Content
     }
 
-    /// Consumes a string literal, processing escapes.
+    /// Consumes a string literal that starts at `start`, decodes its escapes,
+    /// and emits its token.
     ///
-    /// Three quotes open the multiline form, closed by three quotes, as for format strings.
+    /// Three quotes open a multiline literal, which closes with three quotes.
     pub(super) fn string(&mut self, start: usize) {
         self.position += 1;
         let multiline = self.opens_multiline();
@@ -105,12 +109,14 @@ impl Lexer<'_> {
         }
     }
 
-    /// Consumes a format string, from the opening quote.
+    /// Consumes a format string whose `f` is at `start` and whose opening quote is at the
+    /// current position, and emits its token.
     ///
-    /// Text pieces read as string literals do, plus `{{` and `}}` for literal braces.
-    /// `{…}` captures an embedded expression's source region, and braces nest.
-    /// A stray `}` is reported where it stands, and the literal still runs to its closing quotes,
-    /// as an error token.
+    /// The text parts are read as in a string literal, and `{{` and `}}` stand for braces.
+    /// `{…}` encloses an embedded expression, whose span becomes a part,
+    /// and braces inside the expression nest.
+    /// A stray `}` is reported at its position.
+    /// The format string then still extends to its closing quotes, but becomes an error token.
     pub(super) fn format_string(&mut self, start: usize) {
         self.position += 1;
         let multiline = self.opens_multiline();
@@ -166,11 +172,12 @@ impl Lexer<'_> {
         }
     }
 
-    /// Consumes an embedded expression, from its opening brace at the
-    /// current position through the brace closing it (braces nest):
-    /// the source region between them. `None` for one the input ends
-    /// inside, reported as an unterminated format string starting at
-    /// `start`.
+    /// Consumes an embedded expression, from its opening brace at the current position
+    /// through its closing brace, and returns the span between the braces.
+    ///
+    /// Braces inside the expression nest, and braces inside its string literals are skipped.
+    /// Returns `None` if the input ends inside the expression,
+    /// and reports an unterminated format string that starts at `start`.
     fn embedded_expression(&mut self, start: usize) -> Option<Span> {
         self.position += 1;
         let expression = self.position;
@@ -181,7 +188,9 @@ impl Lexer<'_> {
                     self.error(start, ParseError::UnterminatedFormatString);
                     return None;
                 }
-                // A brace inside a string of the expression closes nothing.
+                // A brace inside a string literal of the expression closes nothing.
+                // A quote directly after an `f` that does not end a longer name
+                // opens a format string.
                 Some(b'"') => {
                     let format = self.position > expression
                         && self.bytes[self.position - 1] == b'f'
@@ -210,11 +219,13 @@ impl Lexer<'_> {
         Some(region)
     }
 
-    /// Steps over a string or format string inside an embedded expression,
-    /// from its opening quote through its closing quotes,
-    /// the expressions of a format string included.
-    /// Returns `false` for one the input ends inside,
-    /// reported as an unterminated format string starting at `start`.
+    /// Consumes a string literal or format string inside an embedded expression,
+    /// from its opening quote through its closing quotes.
+    ///
+    /// `format` says whether it is a format string,
+    /// whose own embedded expressions are then consumed too.
+    /// Returns `false` if the input ends inside the literal,
+    /// and reports an unterminated format string that starts at `start`.
     fn skip_literal(&mut self, start: usize, format: bool) -> bool {
         self.position += 1;
         let multiline = self.opens_multiline();

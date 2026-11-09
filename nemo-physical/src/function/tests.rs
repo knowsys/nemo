@@ -9,19 +9,19 @@ use crate::{
     },
 };
 
-/// Builds a program, asserting well-formedness.
+/// Returns a validated program, and panics if it is not valid.
 fn program(operations: Vec<OpCode>, constants: Vec<DataValue>, inputs: usize) -> StackProgram {
     StackProgram::new(operations, constants, inputs)
 }
 
-/// Evaluates a program over a row, returning an owned outcome.
+/// Evaluates a program on a row, and returns its result as an owned value or the error.
 fn outcome(program: &StackProgram, inputs: &[ValueRef<'_>]) -> Result<DataValue, EvaluationError> {
     let mut stack = Vec::new();
     let result = program.evaluate(EvaluationContext::now(), &mut stack, inputs);
     result.as_result().map(ValueRef::to_owned)
 }
 
-/// Applies one binary operation to two values.
+/// Returns the result of one binary instruction on two values.
 fn apply(
     operation: OpCode,
     left: &DataValue,
@@ -35,16 +35,18 @@ fn apply(
     outcome(&compiled, &[left.as_ref(), right.as_ref()])
 }
 
-/// Shorthand for integer values.
+/// Returns an integer value.
 fn int(value: i64) -> DataValue {
     DataValue::integer(value)
 }
 
-/// Shorthand for compact decimals.
+/// Returns the decimal `mantissa * 10^exponent`.
 fn dec(mantissa: i128, exponent: i64) -> DataValue {
     DataValue::decimal(mantissa, exponent).expect("value is representable")
 }
 
+/// Tuples and maps are built from the operands on the stack,
+/// a key given twice is malformed, and an error among the operands is the result.
 #[test]
 fn structures_are_built_from_the_stack() {
     use crate::value::{MapValue, TupleValue};
@@ -60,7 +62,7 @@ fn structures_are_built_from_the_stack() {
         Ok(DataValue::tuple(TupleValue::new(vec![int(1), int(2)])))
     );
 
-    // point(?0), the label sitting below the elements it names.
+    // point(?0), with the label below the elements on the stack.
     let compiled = program(
         vec![
             OpCode::Constant(0),
@@ -88,7 +90,7 @@ fn structures_are_built_from_the_stack() {
         ))
     );
 
-    // {?0 = 1, ?0 = 2} — one key twice describes no map.
+    // {?0 = 1, ?0 = 2}: a key given twice describes no map.
     let compiled = program(
         vec![
             OpCode::Input(0),
@@ -105,7 +107,7 @@ fn structures_are_built_from_the_stack() {
         Err(EvaluationError::Malformed)
     );
 
-    // An error in a part is an error in the whole.
+    // An error in an element is the result.
     let compiled = program(
         vec![
             OpCode::Input(0),
@@ -122,6 +124,8 @@ fn structures_are_built_from_the_stack() {
     );
 }
 
+/// The accessors read the components, the length, the label and the keys of a structure,
+/// and fail for a value that is not one.
 #[test]
 fn accessors_read_components() {
     use crate::value::{DomainSet, MapValue, TupleValue};
@@ -135,9 +139,8 @@ fn accessors_read_components() {
             .expect("the keys differ"),
     );
 
-    // GET: a tuple's element at a 0-based index, a map's value at a
-    // key; an absent component is Missing, a wrong operand a type
-    // mismatch.
+    // GET reads the element of a tuple at a 0-based index, and the value of a map at a key.
+    // An absent component is missing, and a wrong operand is a type mismatch.
     let get = |structure: &DataValue, key: &DataValue| apply(OpCode::Get, structure, key);
     assert_eq!(get(&tuple, &int(0)), Ok(int(7)));
     assert_eq!(get(&tuple, &int(1)), Ok(DataValue::string("x")));
@@ -154,8 +157,8 @@ fn accessors_read_components() {
     );
     assert_eq!(get(&int(5), &int(0)), Err(EvaluationError::TypeMismatch));
 
-    // GET reaches into a structure built earlier in the same
-    // program — an owned intermediate, cloned rather than borrowed.
+    // GET also reads a structure built earlier in the same program,
+    // whose component is cloned rather than borrowed.
     let built = program(
         vec![
             OpCode::Input(0),
@@ -181,8 +184,8 @@ fn accessors_read_components() {
         Err(EvaluationError::TypeMismatch)
     );
 
-    // LABEL is total over structures: the label as an IRI, or the
-    // empty string where there is none.
+    // LABEL gives every structure a result,
+    // the label as an IRI, or the empty string if there is none.
     let label = program(vec![OpCode::Input(0), OpCode::Label], vec![], 1);
     assert_eq!(
         outcome(&label, &[tuple.as_ref()]),
@@ -194,8 +197,7 @@ fn accessors_read_components() {
         Err(EvaluationError::TypeMismatch)
     );
 
-    // KEYS lists a map's keys in the canonical term order they are
-    // stored in.
+    // KEYS lists the keys of a map in term order.
     let keys = program(vec![OpCode::Input(0), OpCode::Keys], vec![], 1);
     assert_eq!(
         outcome(&keys, &[map.as_ref()]),
@@ -246,6 +248,8 @@ fn accessors_read_components() {
     );
 }
 
+/// Splitting a string gives the tuple of its parts, joining the parts gives the string back,
+/// and an empty separator is malformed.
 #[test]
 fn strings_split_into_tuples_and_join_back() {
     use crate::value::TupleValue;
@@ -277,13 +281,15 @@ fn strings_split_into_tuples_and_join_back() {
     );
 }
 
+/// Inference of the accessors follows the domains and shapes of the operands,
+/// and a known shape makes a length exact.
 #[test]
 fn accessor_inference_follows_the_operand_types() {
     use crate::value::{DomainSet, LabelBound, TupleShape, Type, ValueDomain};
 
-    // A string key can never index a tuple; a possible unrefined
-    // map takes any key. With a shape, an exact key projects the
-    // element type.
+    // A string key never indexes a tuple,
+    // and an element of a tuple without shapes may be any value.
+    // With a shape, an exact key selects the type of one element.
     let get = |structure: Type, key: Type| {
         program(
             vec![OpCode::Input(0), OpCode::Input(1), OpCode::Get],
@@ -311,14 +317,14 @@ fn accessor_inference_follows_the_operand_types() {
     )
     .infer(std::slice::from_ref(&pair), &LabelTypes::NONE);
     assert_eq!(projected.into_bound(), string);
-    // A variable key gives the union of the elements.
+    // A key that is not exact gives the union of the types of the elements.
     assert_eq!(
         get(pair.clone(), integer.clone()).domains(),
         DomainSet::INTEGER.with(ValueDomain::String)
     );
 
-    // A known shape makes the length exact — which is what proves
-    // `LENGTH(?t) = 3` false against an arity-2 column.
+    // A known shape makes the length exact,
+    // which proves false the condition that a pair has length 3.
     let length = program(vec![OpCode::Input(0), OpCode::Length], vec![], 1);
     assert!(
         length
@@ -355,8 +361,7 @@ fn accessor_inference_follows_the_operand_types() {
     .infer(std::slice::from_ref(&pair), &LabelTypes::NONE);
     assert_eq!(dead.exact().cloned(), Some(DataValue::boolean(false)));
 
-    // The guard's conjunction folds through: the whole condition is
-    // exactly false, absorbing nothing real.
+    // The conjunction with a domain test that holds is exactly false too.
     let guard = program(
         vec![
             OpCode::Input(0),
@@ -374,6 +379,7 @@ fn accessor_inference_follows_the_operand_types() {
     assert_eq!(guard.exact().cloned(), Some(DataValue::boolean(false)));
 }
 
+/// A domain test is exactly true or false where the operand's domains decide it.
 #[test]
 fn domain_tests_are_exact_where_the_kinds_decide() {
     use crate::value::{DomainSet, Type};
@@ -396,6 +402,8 @@ fn domain_tests_are_exact_where_the_kinds_decide() {
     assert_eq!(exact(integer | iri), None);
 }
 
+/// A condition that holds narrows its inputs through domain tests, negations, comparisons,
+/// connectives and identities.
 #[test]
 fn a_holding_condition_narrows_its_inputs() {
     use crate::value::{DomainSet, Type};
@@ -465,6 +473,7 @@ fn a_holding_condition_narrows_its_inputs() {
     );
 }
 
+/// A required result type narrows the inputs of an evaluation.
 #[test]
 fn an_evaluation_narrows_its_inputs_to_the_result() {
     use crate::value::{DomainSet, Type};
@@ -483,6 +492,7 @@ fn an_evaluation_narrows_its_inputs_to_the_result() {
     assert_eq!(narrowed[0].domains(), DomainSet::EXACT);
 }
 
+/// A required label or length narrows a structure to the shapes that have it.
 #[test]
 fn structure_reads_narrow_by_label_and_length() {
     use crate::value::{DomainSet, LabelBound, Shape, TupleShape, Type, ValueDomain};
@@ -503,18 +513,18 @@ fn structure_reads_narrow_by_label_and_length() {
         vec![DataValue::iri("point")],
         1,
     );
-    // Of the shapes, the one carrying the label stays.
+    // Of the shapes, the one with the label stays.
     let either = labeled("point", 2).union(&labeled("size", 2));
     let narrowed = label_is.narrow(&[either], &LabelTypes::NONE, &Outcome::Holds);
     assert_eq!(narrowed[0], labeled("point", 2));
 
-    // A label with a declared type gives that type, even to any value.
+    // A label with a declared type gives that type, even to an input that may be any value.
     let mut labels = LabelTypes::default();
     labels.declare("point", labeled("point", 2));
     let narrowed = label_is.narrow(&[Type::ANY], &labels, &Outcome::Holds);
     assert_eq!(narrowed[0], Type::declared("point", ValueDomain::Tuple));
 
-    // A length gives an unrefined tuple domain its arity.
+    // A length gives tuples without shapes a shape of that arity.
     let length_is = program(
         vec![
             OpCode::Input(0),
@@ -537,6 +547,7 @@ fn structure_reads_narrow_by_label_and_length() {
     assert_eq!(shape.label, LabelBound::Unknown);
 }
 
+/// The extrema accept only numbers, in evaluation and in inference.
 #[test]
 fn extrema_are_numeric() {
     use crate::value::{DomainSet, Type, ValueDomain};
@@ -554,8 +565,8 @@ fn extrema_are_numeric() {
         outcome(&maximum, &[ValueRef::String("a"), ValueRef::String("b")]),
         Err(EvaluationError::TypeMismatch)
     );
-    // The inference agrees: strings have no extremum, and the
-    // extremum of exact numbers is one of them.
+    // Inference agrees: strings have no extremum,
+    // and the extremum of exact numbers is exact.
     let string = Type::of(ValueDomain::String);
     assert!(
         maximum
@@ -573,6 +584,8 @@ fn extrema_are_numeric() {
     );
 }
 
+/// The extrema promote their operands to the smallest common type,
+/// and their result does not depend on the order of the operands.
 #[test]
 fn extrema_promote_to_the_smallest_common_type() {
     use crate::value::{DomainSet, Type};
@@ -580,8 +593,8 @@ fn extrema_promote_to_the_smallest_common_type() {
     let (maximum, minimum) = (OpCode::Maximum(2), OpCode::Minimum(2));
     let (float, double) = (DataValue::float, DataValue::double);
 
-    // The extreme operand takes the common type, as in `fn:max((1, 0.5e0))`;
-    // exact numbers keep their domain.
+    // The extreme operand is promoted to the common type, as in `fn:max((1, 0.5e0))`,
+    // and exact numbers keep their domain.
     assert_eq!(apply(maximum, &int(1), &double(0.5)), Ok(double(1.0)));
     assert_eq!(apply(maximum, &int(0), &double(-1.5)), Ok(double(0.0)));
     assert_eq!(apply(minimum, &int(1), &float(0.5)), Ok(float(0.5)));
@@ -608,7 +621,7 @@ fn extrema_promote_to_the_smallest_common_type() {
         Ok(double(-0.0))
     );
 
-    // The inference follows the ladder.
+    // Inference follows the promotion order.
     let promoted = |left: DomainSet, right: DomainSet| {
         program(vec![OpCode::Input(0), OpCode::Input(1), maximum], vec![], 2)
             .infer(
@@ -626,13 +639,14 @@ fn extrema_promote_to_the_smallest_common_type() {
     assert_eq!(promoted(integer | doubles, integer), integer | doubles);
 }
 
+/// NaN is both the maximum and the minimum, in the common type of the operands.
 #[test]
 fn the_nan_is_both_extrema() {
     let nan = DataValue::double(f64::NAN);
 
     assert_eq!(apply(OpCode::Maximum(2), &int(1), &nan), Ok(nan.clone()));
     assert_eq!(apply(OpCode::Minimum(2), &nan, &int(1)), Ok(nan.clone()));
-    // The NaN takes the common type too.
+    // NaN is promoted to the common type too.
     assert_eq!(
         apply(
             OpCode::Minimum(2),
@@ -648,6 +662,8 @@ fn the_nan_is_both_extrema() {
     );
 }
 
+/// Creating a program panics if it underflows the stack, does not leave exactly one result,
+/// or refers to a constant or an input that does not exist.
 #[test]
 fn malformed_programs_are_rejected() {
     assert_panics("underflows", || {
@@ -667,6 +683,7 @@ fn malformed_programs_are_rejected() {
     });
 }
 
+/// Integer arithmetic is exact, and a result beyond 64 bits is a wide integer.
 #[test]
 fn integer_arithmetic_is_exact() {
     assert_eq!(apply(OpCode::Add, &int(2), &int(3)), Ok(int(5)));
@@ -674,7 +691,7 @@ fn integer_arithmetic_is_exact() {
     assert_eq!(apply(OpCode::Divide, &int(6), &int(3)), Ok(int(2)));
     assert_eq!(apply(OpCode::Divide, &int(7), &int(2)), Ok(dec(35, -1)));
 
-    // Results beyond i64 become wide integers instead of overflowing.
+    // A result beyond `i64` becomes a wide integer instead of overflowing.
     let above = apply(OpCode::Add, &int(i64::MAX), &int(1)).expect("no error");
     assert_eq!(
         above,
@@ -691,6 +708,8 @@ fn integer_arithmetic_is_exact() {
     );
 }
 
+/// The quotient of exact numbers is a decimal, division by an exact zero fails,
+/// and floating-point division follows IEEE.
 #[test]
 fn division_of_exact_numbers_yields_decimals() {
     // A non-terminating quotient is rounded at eighteen digits.
@@ -702,7 +721,7 @@ fn division_of_exact_numbers_yields_decimals() {
         apply(OpCode::Divide, &int(1), &int(0)),
         Err(EvaluationError::DivisionByZero)
     );
-    // Floats divide and overflow as IEEE does, without error.
+    // Floating-point numbers divide and overflow as in IEEE 754, without an error.
     assert_eq!(
         apply(
             OpCode::Divide,
@@ -729,6 +748,7 @@ fn division_of_exact_numbers_yields_decimals() {
     );
 }
 
+/// Arithmetic promotes its operands to their smallest common type.
 #[test]
 fn promotion_takes_the_smallest_common_type() {
     assert_eq!(apply(OpCode::Add, &int(1), &dec(15, -1)), Ok(dec(25, -1)));
@@ -750,6 +770,7 @@ fn promotion_takes_the_smallest_common_type() {
     );
 }
 
+/// Decimal arithmetic is exact, and an integral result is an integer.
 #[test]
 fn decimal_arithmetic_stays_exact() {
     assert_eq!(apply(OpCode::Add, &dec(15, -1), &dec(25, -1)), Ok(int(4)));
@@ -757,8 +778,8 @@ fn decimal_arithmetic_stays_exact() {
         apply(OpCode::Multiply, &dec(1, -10), &dec(1, -10)),
         Ok(dec(1, -20))
     );
-    // A product needing more than 16 mantissa digits becomes a wide
-    // decimal, exactly.
+    // A product that needs more mantissa digits than a compact decimal has
+    // becomes a wide decimal, exactly.
     let product = apply(
         OpCode::Multiply,
         &dec(1_234_567_890_123_456, -4),
@@ -771,7 +792,7 @@ fn decimal_arithmetic_stays_exact() {
     ));
 }
 
-/// A wide number from its canonical lexical.
+/// Returns the number of a canonical lexical form, and panics if the number is not wide.
 fn big(lexical: &str) -> DataValue {
     let value = DataValue::decimal_from_lexical(lexical).expect("well-formed");
     assert!(
@@ -784,12 +805,13 @@ fn big(lexical: &str) -> DataValue {
     value
 }
 
-/// Applies a unary operation to one value.
+/// Returns the result of one unary instruction on a value.
 fn apply_unary(operation: OpCode, value: &DataValue) -> Result<DataValue, EvaluationError> {
     let program = program(vec![OpCode::Input(0), operation], vec![], 1);
     outcome(&program, &[value.as_ref()])
 }
 
+/// Arithmetic on wide numbers is exact, and a result within 64 bits is a 64-bit integer.
 #[test]
 fn wide_number_arithmetic_is_exact() {
     let big_int = big("123456789012345678901");
@@ -799,7 +821,7 @@ fn wide_number_arithmetic_is_exact() {
         apply(OpCode::Add, &big_int, &int(1)),
         Ok(big("123456789012345678902"))
     );
-    // A result back within 64 bits is the integer term.
+    // A result within 64 bits is a 64-bit integer again.
     assert_eq!(
         apply(OpCode::Subtract, &big_int, &big("123456789012345678900")),
         Ok(int(1))
@@ -845,7 +867,7 @@ fn wide_number_arithmetic_is_exact() {
         Err(EvaluationError::TypeMismatch)
     );
 
-    // Floating operands approximate, as for every exact number.
+    // With a floating-point operand, a wide number is approximated, as every exact number is.
     assert_eq!(
         apply(OpCode::Add, &big_int, &DataValue::double(0.5)),
         Ok(DataValue::double(1.2345678901234568e20))
@@ -863,9 +885,11 @@ fn wide_number_arithmetic_is_exact() {
     );
 }
 
+/// Exact arithmetic whose intermediate results outgrow `i128` gives exact wide numbers,
+/// up to the [length limit of numbers](crate::value::Decimal).
 #[test]
 fn compact_workspace_overflow_upgrades_to_wide_numbers() {
-    // Aligning far-apart decimals outgrows the i128 workspace.
+    // Aligning far-apart decimals outgrows the `i128` intermediate.
     assert_eq!(
         apply(OpCode::Add, &dec(1, -1), &dec(1, -40)),
         Ok(big("0.1000000000000000000000000000000000000001"))
@@ -874,7 +898,7 @@ fn compact_workspace_overflow_upgrades_to_wide_numbers() {
         apply(OpCode::Subtract, &dec(1, -1), &dec(1, -40)),
         Ok(big("0.0999999999999999999999999999999999999999"))
     );
-    // Scaling a numerator for its integer digits does too.
+    // So does scaling a numerator to keep the integer digits of the quotient.
     assert_eq!(
         apply(OpCode::Divide, &int(7_000_000_000_000_000_000), &dec(3, -1)),
         Ok(big("23333333333333333333.333333333333333333"))
@@ -885,7 +909,7 @@ fn compact_workspace_overflow_upgrades_to_wide_numbers() {
             "33333333333333333333333333333333333333333333333333.33333333333333333333333333333333333333333333333333"
         ))
     );
-    // Powers grow past the workspace.
+    // So do powers.
     assert_eq!(
         apply(OpCode::Power, &int(2), &int(200)),
         Ok(big(
@@ -896,12 +920,12 @@ fn compact_workspace_overflow_upgrades_to_wide_numbers() {
         apply(OpCode::Power, &big("100000000000000000000"), &int(2)),
         Ok(big("10000000000000000000000000000000000000000"))
     );
-    // A negative exponent leaves the exact path for the doubles.
+    // A negative exponent makes the power a double.
     assert_eq!(
         apply(OpCode::Power, &big("100000000000000000000"), &int(-1)),
         Ok(DataValue::double(1e-20))
     );
-    // The big workspace is bounded.
+    // Wide numbers are bounded by the length limit of numbers.
     let huge = apply(OpCode::Power, &int(10), &int(100_000)).expect("within the limit");
     assert_eq!(
         apply(OpCode::Power, &huge, &int(20)),
@@ -909,6 +933,7 @@ fn compact_workspace_overflow_upgrades_to_wide_numbers() {
     );
 }
 
+/// Wide numbers round, cast and test their domain as compact numbers do.
 #[test]
 fn wide_numbers_round_and_cast_like_compact_ones() {
     use crate::value::DomainSet;
@@ -971,6 +996,7 @@ fn wide_numbers_round_and_cast_like_compact_ones() {
     );
 }
 
+/// Inference folds operations on wide constants into an exact result.
 #[test]
 fn big_constants_fold() {
     let program = program(
@@ -985,31 +1011,34 @@ fn big_constants_fold() {
     );
 }
 
+/// Identity never fails, and values of different domains are distinct terms.
 #[test]
 fn identity_is_total_and_per_domain() {
     let truth = |result: Result<DataValue, EvaluationError>| {
         result.map(|value| value == DataValue::boolean(true))
     };
 
-    // Numerically equal values of different domains are distinct
-    // terms; value equality (`==`) is where they meet.
+    // Numerically equal values of different domains are distinct terms,
+    // and only value equality finds them equal.
     assert_eq!(
         truth(apply(OpCode::Same, &int(1), &DataValue::double(1.0))),
         Ok(false)
     );
     assert_eq!(truth(apply(OpCode::Same, &int(1), &int(1))), Ok(true));
-    // Identity never errors — a mixed literal pair is simply
-    // distinct, where `==` reports an error.
+    // Identity never fails, and two literals of different domains are distinct,
+    // where value equality fails.
     assert_eq!(
         truth(apply(OpCode::Same, &int(1), &DataValue::string("1"))),
         Ok(false)
     );
-    // The canonical NaN is one term identical to itself, though `==`
-    // follows IEEE and denies it.
+    // The canonical NaN is one term, identical to itself,
+    // though value equality follows IEEE and finds it unequal to itself.
     let nan = DataValue::double(f64::NAN);
     assert_eq!(truth(apply(OpCode::Same, &nan, &nan)), Ok(true));
 }
 
+/// Comparisons compare values, numbers across their domains,
+/// and fail for values without an order.
 #[test]
 fn comparisons_follow_value_semantics() {
     let truth = |result: Result<DataValue, EvaluationError>| {
@@ -1053,7 +1082,7 @@ fn comparisons_follow_value_semantics() {
         Ok(true)
     );
 
-    // Terms without an order or comparable values.
+    // Values without an order between them, or without comparable values, are incomparable.
     let iri = DataValue::iri("http://example.org/a");
     assert_eq!(
         apply(OpCode::Less, &iri, &int(1)),
@@ -1067,10 +1096,11 @@ fn comparisons_follow_value_semantics() {
     assert_eq!(truth(apply(OpCode::Equal, &iri, &int(1))), Ok(false));
 }
 
+/// DateTimes compare by their instant, whatever their timezone offsets.
 #[test]
 fn datetime_comparison_uses_the_instant_only() {
-    // The same instant under different offsets: equal values (XSD),
-    // distinct terms (identity).
+    // The same instant with different offsets gives equal values, as in XSD,
+    // but distinct terms.
     let utc = DataValue::datetime_from_lexical("1970-01-01T00:00:00Z").expect("valid");
     let shifted = DataValue::datetime_from_lexical("1970-01-01T02:00:00+02:00").expect("valid");
     assert_ne!(utc, shifted);
@@ -1080,6 +1110,8 @@ fn datetime_comparison_uses_the_instant_only() {
     );
 }
 
+/// Arithmetic on points in time and durations evaluates,
+/// and inference gives the domains of its results.
 #[test]
 fn temporal_arithmetic_evaluates_and_infers_its_kinds() {
     use crate::value::{DomainSet, Type, ValueDomain};
@@ -1162,6 +1194,8 @@ fn temporal_arithmetic_evaluates_and_infers_its_kinds() {
     );
 }
 
+/// The connectives are three-valued: a deciding operand wins over an error,
+/// and otherwise the error is the result.
 #[test]
 fn logic_is_three_valued() {
     let filter = |operations: Vec<OpCode>, inputs: &[ValueRef<'_>]| {
@@ -1172,7 +1206,7 @@ fn logic_is_three_valued() {
     let error_producing = vec![OpCode::Input(0), OpCode::Input(1), OpCode::Less];
     let iri = DataValue::iri("http://example.org/a");
 
-    // Or(true, error) is true; And(false, error) is false.
+    // Or(true, error) is true, and And(false, error) is false.
     let mut or_program = error_producing.clone();
     or_program.extend([OpCode::Input(2), OpCode::Or]);
     assert_eq!(
@@ -1213,8 +1247,7 @@ fn logic_is_three_valued() {
         Err(EvaluationError::Incomparable)
     );
 
-    // Not propagates errors; != via Not(Equal) makes NaN unequal to
-    // itself.
+    // Not(Equal), SPARQL's `!=`, makes NaN unequal to itself.
     let not_equal = vec![
         OpCode::Input(0),
         OpCode::Input(1),
@@ -1233,6 +1266,7 @@ fn logic_is_three_valued() {
     );
 }
 
+/// A condition is the effective boolean value of its result, as in SPARQL.
 #[test]
 fn effective_boolean_values_follow_sparql() {
     let filter_one = |value: ValueRef<'_>| {
@@ -1253,6 +1287,8 @@ fn effective_boolean_values_follow_sparql() {
     assert_eq!(filter_one(iri.as_ref()), Err(EvaluationError::TypeMismatch));
 }
 
+/// String operations count characters, keep language tags,
+/// and require compatible language tags.
 #[test]
 fn string_operations_work_on_characters() {
     let length = program(vec![OpCode::Input(0), OpCode::StringLength], vec![], 1);
@@ -1267,8 +1303,8 @@ fn string_operations_work_on_characters() {
         Ok(DataValue::language_string("HELLO", "en").expect("tag is nonempty"))
     );
 
-    // Language compatibility: a plain pattern always fits, a tagged
-    // pattern only under the same tag.
+    // A plain second string is always compatible,
+    // and a tagged one only with the same tag.
     assert_eq!(
         apply(OpCode::Contains, &tagged, &DataValue::string("ell")),
         Ok(DataValue::boolean(true))
@@ -1305,6 +1341,7 @@ fn string_operations_work_on_characters() {
     );
 }
 
+/// Inference accepts the same pairs of strings as evaluation.
 #[test]
 fn string_pairs_infer_as_the_evaluator_takes_them() {
     use crate::value::{DomainSet, Type, ValueDomain};
@@ -1322,7 +1359,7 @@ fn string_pairs_infer_as_the_evaluator_takes_them() {
     let text = DataValue::string("motor car");
     let english = DataValue::language_string("motor car", "en").expect("tag is nonempty");
 
-    // The second string of a pair is plain or carries the tag of the first.
+    // The second string of a pair is plain or has the tag of the first.
     assert_eq!(kinds(OpCode::Contains, tagged, plain), DomainSet::BOOLEAN);
     assert!(kinds(OpCode::Contains, plain, tagged).is_empty());
     assert_eq!(
@@ -1335,7 +1372,8 @@ fn string_pairs_infer_as_the_evaluator_takes_them() {
         Err(EvaluationError::TypeMismatch)
     );
 
-    // A part of a tagged string is tagged, and a miss is a plain empty string.
+    // A part of a tagged string is tagged,
+    // and a second string that does not occur gives a plain empty string.
     assert_eq!(
         kinds(OpCode::StringAfter, tagged, tagged),
         DomainSet::STRINGLIKE
@@ -1354,6 +1392,8 @@ fn string_pairs_infer_as_the_evaluator_takes_them() {
     assert!(kinds(OpCode::LanguageMatches, plain, tagged).is_empty());
 }
 
+/// The integer form agrees with the generic interpreter,
+/// and falls back where an intermediate result outgrows `i64`.
 #[test]
 fn integer_specialization_matches_the_generic_interpreter() {
     // ((a + b) * 2 < c) or (a = 5)
@@ -1397,8 +1437,8 @@ fn integer_specialization_matches_the_generic_interpreter() {
         assert_eq!(generic, fast, "row {row:?}");
     }
 
-    // If an intermediate outgrows i64, the integer form asks for the
-    // generic fallback, which carries the sum on as a wide integer.
+    // If an intermediate result outgrows `i64`, the integer form falls back,
+    // and the generic interpreter computes the sum as a wide integer.
     let overflowing = [i64::MAX, 1, 0];
     assert_eq!(specialized.filter(&mut integer_stack, &overflowing), None);
     let values: Vec<ValueRef<'_>> = overflowing
@@ -1411,6 +1451,8 @@ fn integer_specialization_matches_the_generic_interpreter() {
     );
 }
 
+/// The identity form is recognized for an identity of two inputs, or of an input and a constant,
+/// possibly negated, and for nothing else.
 #[test]
 fn identity_specialization_recognizes_bare_identities() {
     let iri = DataValue::iri("a");
@@ -1449,6 +1491,7 @@ fn identity_specialization_recognizes_bare_identities() {
     assert!(recognize(computed, 2).is_none());
 }
 
+/// A program with an instruction or a constant outside the integer fragment has no integer form.
 #[test]
 fn programs_outside_the_integer_fragment_do_not_specialize() {
     let division = program(
@@ -1466,10 +1509,12 @@ fn programs_outside_the_integer_fragment_do_not_specialize() {
     assert!(stringly.integer_specialization().is_none());
 }
 
+/// A binding is recognized with the compared input on either side,
+/// and it inverts the shifted equality.
 #[test]
 fn bindings_are_recognized_on_either_side() {
-    // c = a + 1 over inputs (c, a), and a + 1 = c over inputs (a, c),
-    // both bind the compared input to the expression over the other.
+    // Both c = a + 1 on inputs (c, a) and a + 1 = c on inputs (a, c)
+    // bind the compared input to the expression over the other input.
     let increment = |first: u16| vec![OpCode::Input(first), OpCode::Constant(0), OpCode::Add];
     let one = vec![DataValue::integer(1)];
 
@@ -1486,11 +1531,13 @@ fn bindings_are_recognized_on_either_side() {
     assert_eq!(compared, 1);
     assert_eq!(expression, program(increment(0), one.clone(), 1));
 
-    // The inverse of shifting.
+    // A binding inverts the shifted equality.
     let shifted = program(increment(0), one.clone(), 1).shifted_equality();
     assert_eq!(shifted.binding().map(|(compared, _)| compared), Some(0));
 }
 
+/// A constant binding is recognized with the constant on either side,
+/// and only for an identity that is not negated.
 #[test]
 fn constant_bindings_are_recognized_on_either_side() {
     let one = vec![DataValue::integer(1)];
@@ -1503,7 +1550,8 @@ fn constant_bindings_are_recognized_on_either_side() {
     let right = binding(vec![OpCode::Constant(0), OpCode::Input(1), OpCode::Same], 2);
     assert_eq!(right, Some((1, DataValue::integer(1))));
 
-    // Difference cannot be looked up, nor can value equality or another input.
+    // A negated identity cannot be decided by a lookup,
+    // and neither can value equality or an identity with another input.
     let negated = vec![
         OpCode::Input(0),
         OpCode::Constant(0),
@@ -1517,11 +1565,12 @@ fn constant_bindings_are_recognized_on_either_side() {
     assert_eq!(binding(inputs, 2), None);
 }
 
+/// An identity with a bare input or a constant, an expression that reads the compared input,
+/// reads no input or draws a random number, and value equality are no bindings.
 #[test]
 fn identities_and_draws_are_no_bindings() {
-    // A bare input is the identity form's, and a constant a constant binding;
-    // an expression reading the compared input, reading no input, or drawing is no binding;
-    // value equality cannot be looked up.
+    // A bare input belongs to the identity form, and a constant to a constant binding.
+    // Value equality cannot be decided by a lookup.
     let none = |operations: Vec<OpCode>, inputs: usize| {
         assert!(
             program(operations.clone(), vec![DataValue::integer(1)], inputs)

@@ -54,7 +54,7 @@ fn chain_shape(emitted: usize, subtracted: Vec<SubtractedShape<'static>>) -> Own
     chain_shape_with(emitted, subtracted, vec![])
 }
 
-/// Returns the chain shape with filters.
+/// Returns the chain shape with the given filters.
 fn chain_shape_with(
     emitted: usize,
     subtracted: Vec<SubtractedShape<'static>>,
@@ -96,8 +96,8 @@ fn complete_graph() -> Trie {
     trie(2, &edges)
 }
 
-/// A sink collecting the rows of a join,
-/// which checks each row's changed layer against the previous row.
+/// A sink that collects the rows of a join,
+/// and checks each row's changed layer against the previous row.
 #[derive(Debug, Default)]
 struct Collected(Vec<Vec<StorageValue>>);
 
@@ -115,7 +115,7 @@ impl RowSink for Collected {
 }
 
 /// Returns the rows of a join, draining it,
-/// and checks its changed layer against the rows.
+/// and checks the changed layer of each row against the rows.
 fn collect(join: &mut TrieJoin<'_>) -> Vec<Vec<StorageValue>> {
     let mut collected = Collected::default();
     join.drain(&mut collected);
@@ -133,6 +133,7 @@ fn storage_rows(rows: &[&[i64]]) -> Vec<Vec<StorageValue>> {
         .collect()
 }
 
+/// A chain join emits every combination of matching rows, in storage order.
 #[test]
 fn chain_joins_emit_every_matching_row() {
     let arena = JoinArena::new();
@@ -147,6 +148,7 @@ fn chain_joins_emit_every_matching_row() {
     );
 }
 
+/// A triangle join over the complete graph on four nodes finds its four triangles.
 #[test]
 fn triangle_joins_find_every_triangle() {
     let arena = JoinArena::new();
@@ -157,6 +159,8 @@ fn triangle_joins_find_every_triangle() {
     assert_eq!(collect(&mut join).len(), 4);
 }
 
+/// Empty blocks add no rows,
+/// and an input without blocks, or with only empty ones, leaves the join without rows.
 #[test]
 fn inputs_without_rows_leave_no_rows() {
     let arena = JoinArena::new();
@@ -196,11 +200,11 @@ fn random_blocks(rng: &mut StdRng, arity: usize, rows: &[Vec<StorageValue>]) -> 
     blocks.iter().map(|rows| trie(arity, rows)).collect()
 }
 
+/// A join over inputs split into blocks at random yields the rows of the join
+/// over each input in one trie, for data that exercises all three join cores,
+/// and with every hook that reads the inputs' columns.
 #[test]
 fn joins_over_blocks_match_joins_over_their_union() {
-    // Each input split into blocks at random, against the same input in one trie,
-    // across data that exercises all three join cores,
-    // and with every hook that reads the inputs' columns.
     let mut rng = StdRng::seed_from_u64(37);
     let dictionary = Dictionary::new();
     for round in 0..300 {
@@ -221,7 +225,7 @@ fn joins_over_blocks_match_joins_over_their_union() {
             chain_shape(1, vec![]),
             chain_shape(3, subtraction),
         ];
-        // Programs over integers only: in the third mode, every value is an integer.
+        // Programs over integers only, since in the third mode every value is an integer.
         if mode == 2 {
             let condition = hook(
                 vec![2, 0],
@@ -256,10 +260,12 @@ fn joins_over_blocks_match_joins_over_their_union() {
     }
 }
 
+/// A triangle join over an input split into blocks yields the rows of the join
+/// over the input in one trie.
 #[test]
 fn triangles_over_blocks_match_triangles_over_their_union() {
-    // The triangle reads its input three times, linking layer 0 to layer 2 for the third:
-    // a descent that skips a layer must restrict every block.
+    // The triangle reads its input three times, and links layer 0 to layer 2 for the third.
+    // So a descent that skips a layer must restrict every block.
     let mut rng = StdRng::seed_from_u64(41);
     let shape = triangle_shape();
     for round in 0..200 {
@@ -282,10 +288,10 @@ fn triangles_over_blocks_match_triangles_over_their_union() {
     }
 }
 
+/// A join column may mix terms and integers.
 #[test]
 fn join_columns_may_mix_tags() {
     let arena = JoinArena::new();
-    // The join column mixes terms and integers.
     let left = trie(
         2,
         &[
@@ -307,20 +313,22 @@ fn join_columns_may_mix_tags() {
     assert_eq!(collect(&mut join).len(), 5);
 }
 
+/// A join that does not emit its last layer yields each emitted row once,
+/// however many matches the row has.
 #[test]
 fn existence_suffixes_deduplicate() {
     let arena = JoinArena::new();
-    // R(a, b) with three matching c's in S: emitting only (a, b) must
-    // yield each pair once, not three times.
+    // R(a, b), with three matching c in S for (1, 2).
     let left = int_trie(2, &[&[1, 2], &[1, 5]]);
     let right = int_trie(2, &[&[2, 7], &[2, 8], &[2, 9]]);
     let shape = chain_shape(2, vec![]);
     let mut join = join(&shape, &[&left, &right], &[], None, &arena);
 
-    // (1, 5) has no S-match and is filtered by the existence check.
+    // (1, 5) has no match in S, so the existence check drops it.
     assert_eq!(collect(&mut join), storage_rows(&[&[1, 2]]));
 }
 
+/// A join that emits no layer yields the empty row if it has a match, and no row otherwise.
 #[test]
 fn nullary_output_reports_bare_existence() {
     let arena = JoinArena::new();
@@ -336,6 +344,7 @@ fn nullary_output_reports_bare_existence() {
     assert!(collect(&mut missing).is_empty());
 }
 
+/// A subtracted input drops the rows that agree with one of its rows.
 #[test]
 fn subtracted_inputs_block_matching_rows() {
     let arena = JoinArena::new();
@@ -354,11 +363,12 @@ fn subtracted_inputs_block_matching_rows() {
     assert_eq!(collect(&mut join), storage_rows(&[&[1, 3]]));
 }
 
+/// A subtracted input whose columns map to layers 0 and 2 drops exactly the rows it matches.
 #[test]
 fn subtracted_inputs_follow_across_gaps() {
     let arena = JoinArena::new();
-    // R(a, b) ⋈ S(b, c) minus U(a, c): U's columns map to layers 0
-    // and 2, arming across the middle layer and across backtracking.
+    // R(a, b) ⋈ S(b, c) minus U(a, c). U's columns map to layers 0 and 2,
+    // so its second column is armed across the middle layer, and across backtracking.
     let left = int_trie(2, &[&[1, 2], &[2, 2]]);
     let right = int_trie(2, &[&[2, 7], &[2, 8]]);
     let minus = int_trie(2, &[&[1, 7], &[2, 8]]);
@@ -368,6 +378,8 @@ fn subtracted_inputs_follow_across_gaps() {
     assert_eq!(collect(&mut join), storage_rows(&[&[1, 2, 8], &[2, 2, 7]]));
 }
 
+/// The rows a join drains into a buffer are sorted and distinct,
+/// so a trie is built from them directly.
 #[test]
 fn drained_buffers_are_sorted_and_build_tries_directly() {
     let arena = JoinArena::new();
@@ -384,6 +396,8 @@ fn drained_buffers_are_sorted_and_build_tries_directly() {
     assert_eq!(result.row_count(), rows);
 }
 
+/// A shape that does not fit the given tries fails the fit check,
+/// and building a join over them panics.
 #[test]
 fn shapes_must_fit_the_tries() {
     let unary = int_trie(1, &[&[1]]);
@@ -394,7 +408,7 @@ fn shapes_must_fit_the_tries() {
             .is_err()
     };
 
-    // The chain shape needs two binary tries; building the join refuses a misfit.
+    // The chain shape needs two binary tries, and building the join panics on a misfit.
     let shape = chain_shape(3, vec![]);
     assert!(misfit(&shape, &[&unary, &unary], &[]));
     assert!(misfit(&shape, &[&unary], &[]));
@@ -421,7 +435,7 @@ fn shapes_must_fit_the_tries() {
 
 /// Returns a random value: mode 0 mixes terms and integers,
 /// mode 1 draws terms only (32-bit columns),
-/// and mode 2 integers only (64-bit columns).
+/// and mode 2 draws integers only (64-bit columns).
 fn random_value(rng: &mut StdRng, mode: u8) -> StorageValue {
     match mode {
         0 if rng.r#gen::<bool>() => StorageValue::term(rng.gen_range(0..4)),
@@ -431,7 +445,7 @@ fn random_value(rng: &mut StdRng, mode: u8) -> StorageValue {
     }
 }
 
-/// Returns a random set of rows.
+/// Returns fewer than 20 random rows of values drawn in the given mode.
 fn random_rows(rng: &mut StdRng, arity: usize, mode: u8) -> Vec<Vec<StorageValue>> {
     let count = rng.gen_range(0..20);
     (0..count)
@@ -439,12 +453,12 @@ fn random_rows(rng: &mut StdRng, arity: usize, mode: u8) -> Vec<Vec<StorageValue
         .collect()
 }
 
+/// Chain joins that emit every layer, or only the first two,
+/// and with a subtraction over layers 0 and 2,
+/// yield the rows of nested-loop evaluation, for data that exercises all three join cores.
 #[test]
 fn random_joins_match_brute_force() {
     let arena = JoinArena::new();
-    // The differential property: chain joins (full, existence-only,
-    // and with a gapped subtraction) against nested-loop evaluation,
-    // across data that exercises all three join cores.
     let mut rng = StdRng::seed_from_u64(11);
     for round in 0..300 {
         let mode = (round % 3) as u8;
@@ -491,7 +505,7 @@ fn random_joins_match_brute_force() {
 }
 
 /// Runs a join once per cell of a fixed partition,
-/// layer 0 split at 0 and layer 1 split at -1 and 1,
+/// with layer 0 split at 0 and layer 1 split at -1 and 1,
 /// and checks that the rows of every cell are sorted,
 /// that the cells are disjoint,
 /// and that together they are the unpartitioned result.
@@ -521,8 +535,8 @@ fn check_cells(
             if shape.view().emitted > 1 {
                 join.clip_layer(1, low1, high1);
             } else if low1.is_some() {
-                // A layer that is not emitted is not split; the
-                // remaining second-layer cells would repeat rows.
+                // A layer that is not emitted is not split,
+                // since the other second-layer cells would repeat rows.
                 continue;
             }
             let rows = collect(&mut join);
@@ -538,6 +552,8 @@ fn check_cells(
     assert_eq!(all, expected);
 }
 
+/// The cells of a join yield sorted, disjoint rows that together are the join's rows,
+/// with and without hooks.
 #[test]
 fn cells_partition_the_join() {
     // Integer data keeps every layer comparable with the clip bounds.
@@ -584,6 +600,7 @@ fn cells_partition_the_join() {
     }
 }
 
+/// Cells partition a join over 32-bit layers, and a join with a computed bound layer.
 #[test]
 fn cells_partition_bound_layers_of_u32_joins() {
     let arena = JoinArena::new();
@@ -613,8 +630,8 @@ fn cells_partition_bound_layers_of_u32_joins() {
     all.sort();
     assert_eq!(all, expected);
 
-    // A bound layer, probed rather than enumerated, must respect the clip like any other:
-    // c = a + 1 over R(a, b) ⋈ S(b, c), clipped on b.
+    // A bound layer is probed rather than enumerated, and its join must split into cells
+    // like any other. Here c = a + 1 over R(a, b) ⋈ S(b, c), in cells clipped on a and b.
     let left = int_trie(2, &[&[1, 2], &[1, 3], &[2, 3], &[2, 5]]);
     let right = int_trie(2, &[&[2, 2], &[3, 2], &[3, 3], &[5, 3]]);
     let bound = BoundLayerShape::computed(
@@ -645,10 +662,10 @@ fn cells_partition_bound_layers_of_u32_joins() {
     );
 }
 
+/// A unary join past the parallel threshold is split on its only layer,
+/// and the rows of its cells, in cell order, are the rows of the whole join.
 #[test]
 fn split_joins_deliver_the_sequential_rows() {
-    // A unary relation past the parallel threshold splits on its only layer,
-    // so the rows of the cells, in cell order, are the rows of the whole join.
     let shape = OwnedJoinShape::new(vec![vec![at(0, 0)]], 1, vec![], vec![])
         .expect("the shape is well-formed");
     let small = int_trie(1, &[[1], [2]]);
@@ -683,10 +700,12 @@ fn split_joins_deliver_the_sequential_rows() {
     assert_eq!(delivered.concat(), collect(&mut whole));
 }
 
+/// A row stage extends each row by its computed columns,
+/// and drops the rows its post-filter rejects.
 #[test]
 fn row_stages_extend_and_filter_drained_rows() {
-    // Over R(a, b) ⋈ S(b, c): s = a + c, d = a * 10 (stale only when a changes),
-    // and the post-filter s > 9; the row delivers d, then s.
+    // Over R(a, b) ⋈ S(b, c), s = a + c, and d = a * 10, which goes stale only when a changes.
+    // The post-filter is s > 9, and a result row delivers d, then s.
     let left = int_trie(2, &[[1, 2], [2, 3]]);
     let right = int_trie(2, &[[2, 7], [3, 8], [3, 9]]);
     let shape = chain_shape(3, vec![]);
@@ -753,10 +772,11 @@ fn hook(inputs: Vec<usize>, operations: Vec<OpCode>, constants: Vec<DataValue>) 
     FilterShape::new(inputs, program)
 }
 
+/// A filter over integer columns runs its integer form, without errors.
 #[test]
 fn filters_prune_rows_on_the_integer_fast_path() {
     let arena = JoinArena::new();
-    // R(a, b) join S(b, c), keeping rows with b != 3.
+    // R(a, b) ⋈ S(b, c), keeping the rows with b != 3.
     let left = int_trie(2, &[&[1, 2], &[1, 3], &[2, 3]]);
     let right = int_trie(2, &[&[2, 7], &[3, 8], &[3, 9]]);
     let not_three = hook(
@@ -778,6 +798,7 @@ fn filters_prune_rows_on_the_integer_fast_path() {
     assert!(join.evaluation_errors().is_empty());
 }
 
+/// A filter decided by its identity form keeps the rows the interpreter keeps.
 #[test]
 fn identity_filters_agree_with_the_interpreter() {
     let arena = JoinArena::new();
@@ -792,8 +813,8 @@ fn identity_filters_agree_with_the_interpreter() {
         .collect();
     let (present, absent) = (DataValue::iri("a"), DataValue::iri("z"));
 
-    // Over R(a, b) ⋈ S(b, c):
-    // a = c, a != c, a = <a>, and a != <z>, whose constant the dictionary does not hold.
+    // Over R(a, b) ⋈ S(b, c), the conditions a = c, a != c, a = <a>, and a != <z>,
+    // where the dictionary does not have <z>.
     let conditions = [
         (vec![0, 2], vec![OpCode::Same], vec![]),
         (vec![0, 2], vec![OpCode::Same, OpCode::Not], vec![]),
@@ -818,7 +839,7 @@ fn identity_filters_agree_with_the_interpreter() {
                 _ => OpCode::Input(1),
             });
             operations.extend(comparison);
-            // A double negation hides the identity from the recognition,
+            // A double negation hides the identity form,
             // so the interpreter decides the same condition.
             let mut disguised = operations.clone();
             disguised.extend([OpCode::Not, OpCode::Not]);
@@ -846,6 +867,7 @@ fn identity_filters_agree_with_the_interpreter() {
     }
 }
 
+/// A layer bound to a constant keeps the rows of the equivalent filter, also in cells.
 #[test]
 fn constant_bound_layers_agree_with_identity_filters() {
     // Integer data keeps every layer comparable with the clip bounds of the cells.
@@ -856,8 +878,8 @@ fn constant_bound_layers_agree_with_identity_filters() {
         let right = trie(2, &random_rows(&mut rng, 2, 2));
         let tries = [&left, &right];
 
-        // Each layer of R(a, b) ⋈ S(b, c), emitted or not, bound to a constant the data may hold
-        // and to one the dictionary does not hold.
+        // Each layer of R(a, b) ⋈ S(b, c), emitted or not, is bound to a constant
+        // that the data may contain, and to one that the dictionary does not have.
         for layer in 0..3 {
             for emitted in [3, 1] {
                 for constant in [DataValue::integer(1), DataValue::iri("absent")] {
@@ -890,6 +912,7 @@ fn constant_bound_layers_agree_with_identity_filters() {
     }
 }
 
+/// A filter over strings decodes them through the dictionary, without the integer form.
 #[test]
 fn filters_decode_dictionary_values() {
     let arena = JoinArena::new();
@@ -931,11 +954,11 @@ fn filters_decode_dictionary_values() {
     );
 }
 
+/// A filter that fails to evaluate drops the row, and the error is counted.
 #[test]
 fn filter_errors_are_counted_not_swallowed() {
     let arena = JoinArena::new();
-    // Comparing integers against a string errors per candidate; the
-    // rows vanish from the result but the errors are counted.
+    // Comparing an integer with a string fails for every candidate.
     let relation = int_trie(1, &[&[1], &[2], &[3]]);
     let broken = hook(
         vec![0],
@@ -958,6 +981,7 @@ fn filter_errors_are_counted_not_swallowed() {
     );
 }
 
+/// Building a join with a filter but without a dictionary panics.
 #[test]
 fn filters_require_a_dictionary() {
     let arena = JoinArena::new();
@@ -977,10 +1001,10 @@ fn filters_require_a_dictionary() {
     });
 }
 
+/// A hand-built shape whose filter reads no layer fails validation.
 #[test]
 fn hand_built_shapes_are_validated() {
-    // A shape whose filter reads no layer must come back as a
-    // diagnostic, not a panic inside the driver.
+    // The problem must come back from validation, not as a panic inside the driver.
     let layers = vec![vec![at(0, 0)]];
     let broken = hook(
         vec![],
@@ -998,11 +1022,13 @@ fn hand_built_shapes_are_validated() {
     assert!(shape.validate().is_err());
 }
 
+/// A chain join with the condition c < a yields the rows of nested-loop evaluation,
+/// without errors.
 #[test]
 fn random_filtered_joins_match_brute_force() {
     let arena = JoinArena::new();
-    // The chain join with the cross-layer condition c < a, checked
-    // against nested loops; integer data keeps the semantics exact.
+    // With integer data, the storage order that the nested loops compare by
+    // agrees with the value order of the condition.
     let mut rng = StdRng::seed_from_u64(17);
     let dictionary = Dictionary::new();
     for round in 0..100 {
@@ -1060,7 +1086,7 @@ fn aggregate_relation(
     (rows.into_rows(), errors)
 }
 
-/// Returns the aggregate of a function over layer 1, without an identity of its own.
+/// Returns the aggregate of a function over layer 1, without `per` layers.
 fn over_values(kind: AggregateKind) -> AggregateShape {
     AggregateShape {
         kind,
@@ -1070,11 +1096,11 @@ fn over_values(kind: AggregateKind) -> AggregateShape {
     }
 }
 
+/// Each aggregate reads each of its own identities once per group.
 #[test]
 fn aggregates_range_over_their_own_identities() {
-    // One shared relation (g, a, b); each aggregate names its own
-    // identity, so a's count ignores rows differing only in b and
-    // vice versa, while the pair-identified sum sees every row.
+    // One relation (g, a, b). The count of a ignores rows that differ only in b,
+    // and the count of b those that differ only in a, while the sum of a per b reads every row.
     let rows = storage_rows(&[&[1, 2, 7], &[1, 2, 8], &[1, 3, 7]]);
     let relation = trie(3, &rows);
     let shape = OwnedJoinShape::new(
@@ -1133,9 +1159,10 @@ fn aggregates_range_over_their_own_identities() {
     );
 }
 
+/// Several aggregates are computed per group in one pass.
 #[test]
 fn aggregates_run_in_one_group_pass() {
-    // Group (1): values 2, 4; group (2): value 10.
+    // Group 1 has the values 2 and 4, and group 2 the value 10.
     let rows = storage_rows(&[&[1, 2], &[1, 4], &[2, 10]]);
     let mut dictionary = Dictionary::new();
     let aggregates = [
@@ -1177,6 +1204,7 @@ fn aggregates_run_in_one_group_pass() {
     );
 }
 
+/// The average of integers may be a decimal.
 #[test]
 fn averages_divide_exactly_into_decimals() {
     let rows = storage_rows(&[&[1, 1], &[1, 2]]);
@@ -1193,11 +1221,11 @@ fn averages_divide_exactly_into_decimals() {
     );
 }
 
+/// Minimum and maximum compare values in value order, not in storage order.
 #[test]
 fn extrema_use_value_order_never_storage_order() {
-    // Extrema compare values, not storage encodings: min over one
-    // integer 100 and one double 1.0 is the double, although terms
-    // and integers sort before doubles in storage order.
+    // The minimum of the integer 100 and the double 1.0 is the double,
+    // although integers sort before doubles in storage order.
     let rows = vec![
         vec![StorageValue::integer(1), StorageValue::integer(100)],
         vec![StorageValue::integer(1), StorageValue::double(1.0)],
@@ -1215,6 +1243,7 @@ fn extrema_use_value_order_never_storage_order() {
     assert_eq!(buffer.row(0)[2], StorageValue::integer(100));
 }
 
+/// Minimum and maximum of strings compare their text, not their order in the dictionary.
 #[test]
 fn extrema_over_strings_compare_content() {
     let mut dictionary = Dictionary::new();
@@ -1223,7 +1252,7 @@ fn extrema_over_strings_compare_content() {
             .encode(DataValue::string(name).as_ref())
             .expect("strings are representable")
     };
-    // Insertion order deliberately disagrees with lexicographic order.
+    // The order of insertion into the dictionary differs from the lexicographic order.
     let rows = vec![
         vec![StorageValue::integer(1), encode(&mut dictionary, "mia")],
         vec![StorageValue::integer(1), encode(&mut dictionary, "alice")],
@@ -1243,6 +1272,7 @@ fn extrema_over_strings_compare_content() {
     assert_eq!(largest.to_owned(), DataValue::string("zoe"));
 }
 
+/// A sum beyond `i64` becomes a wide integer, without an error.
 #[test]
 fn sums_overflow_into_wide_integers_not_panics() {
     let rows = vec![
@@ -1266,6 +1296,8 @@ fn sums_overflow_into_wide_integers_not_panics() {
     );
 }
 
+/// Sums and averages over wide numbers, and over decimals that outgrow the `i128` workspace,
+/// are exact.
 #[test]
 fn sums_carry_wide_numbers_exactly() {
     let mut dictionary = Dictionary::new();
@@ -1282,7 +1314,7 @@ fn sums_carry_wide_numbers_exactly() {
         StorageValue::decimal(decimal::Compact::new(mantissa, exponent).expect("representable"))
     };
     let rows = vec![
-        // A big operand joins the sum.
+        // A wide operand in the sum.
         vec![StorageValue::integer(1), big("123456789012345678901")],
         vec![StorageValue::integer(1), StorageValue::integer(1)],
         vec![
@@ -1292,7 +1324,7 @@ fn sums_carry_wide_numbers_exactly() {
         // Aligning far-apart decimals outgrows the i128 workspace.
         vec![StorageValue::integer(2), decimal(1, -1)],
         vec![StorageValue::integer(2), decimal(1, -40)],
-        // An average divides the big sum.
+        // An average divides a wide sum.
         vec![StorageValue::integer(3), big("123456789012345678901")],
         vec![StorageValue::integer(3), big("123456789012345678903")],
     ];
@@ -1324,10 +1356,10 @@ fn sums_carry_wide_numbers_exactly() {
     assert_eq!(value(2, 2), big("123456789012345678902"));
 }
 
+/// A float or a double beside a wide number makes the group's sum and average
+/// approximate, in that floating-point type, as beside any exact number.
 #[test]
 fn floats_promote_big_sums() {
-    // A float beside a wide number approximates the group's sum and
-    // average, as it does beside any exact number.
     let mut dictionary = Dictionary::new();
     let big = dictionary
         .encode(
@@ -1363,9 +1395,10 @@ fn floats_promote_big_sums() {
     assert_eq!(value(1, 2), DataValue::float(6.172_839_5e19));
 }
 
+/// A group whose aggregate fails yields no row, and the error is counted.
 #[test]
 fn errored_groups_are_dropped_and_counted() {
-    // Group (1) sums a string; group (2) is clean.
+    // Group 1 sums a string, and group 2 sums an integer.
     let mut dictionary = Dictionary::new();
     let name = dictionary
         .encode(DataValue::string("oops").as_ref())
@@ -1387,6 +1420,7 @@ fn errored_groups_are_dropped_and_counted() {
     );
 }
 
+/// A NaN among the values makes the minimum NaN.
 #[test]
 fn nan_poisons_extrema() {
     let rows = vec![
@@ -1403,6 +1437,7 @@ fn nan_poisons_extrema() {
     assert_eq!(buffer.row(0)[1], StorageValue::double(f64::NAN));
 }
 
+/// A malformed aggregation shape fails validation, and building an aggregator over it panics.
 #[test]
 fn malformed_aggregations_are_rejected() {
     let count = |input| AggregateShape {
@@ -1423,7 +1458,7 @@ fn malformed_aggregations_are_rejected() {
     assert!(rejected(3, &[count(0)]));
     assert!(rejected(1, &[count(2)]));
 
-    // Building the aggregator refuses a malformed shape.
+    // Building the aggregator panics on a malformed shape.
     let dictionary = Dictionary::new();
     assert_panics("at least one aggregate", || {
         Aggregator::new(

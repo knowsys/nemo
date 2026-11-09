@@ -2,11 +2,11 @@
 
 use crate::{parallel::Workers, tuning::Tuning};
 
-/// How a phase is cut for the worker pool:
-/// into how many tasks, and whether they go to the pool at all.
+/// The decision of how a phase is cut for the worker pool.
 ///
+/// It consists of the number of tasks, and whether they run on the pool at all.
 /// Every phase obtains one before it cuts its input,
-/// so no task count reaches the pool that its policy did not allow.
+/// so that the rules for cutting are kept in one place.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Tasks {
     /// The number of tasks the phase is cut into.
@@ -19,11 +19,11 @@ pub struct Tasks {
 impl Tasks {
     /// Cuts a phase of the given work into tasks.
     ///
-    /// The phase is one task if the work is below the tuning's `parallel_work`,
-    /// or if there is a single thread.
-    /// Otherwise it is as many tasks of at least the tuning's `work_per_task`
-    /// as the work holds, but at most `limit`
-    /// and at most the maximum the thread budget allows.
+    /// The phase is one task if there is a single thread,
+    /// or if the work is below [parallel_work](crate::tuning::Tuning::parallel_work).
+    /// Otherwise, each task gets at least [work_per_task](crate::tuning::Tuning::work_per_task)
+    /// of the work, and there are at most `limit` tasks
+    /// and at most [tasks_per_thread](crate::tuning::Tuning::tasks_per_thread) per thread.
     pub(crate) fn cut(work: usize, limit: usize) -> Self {
         let threads = Workers::get().threads();
         let tuning = Tuning::get();
@@ -43,9 +43,11 @@ impl Tasks {
         }
     }
 
-    /// Cuts a phase of the given work into the given number of tasks,
-    /// fixed by its shape, such as one task per column:
-    /// on the pool when the work is worth cutting into at least two tasks.
+    /// Cuts a phase of the given work into a number of tasks that the phase's shape fixes,
+    /// such as one task per column.
+    ///
+    /// The tasks run on the pool if [cut](Self::cut) would cut the work into at least two
+    /// tasks, with `count` as the limit.
     pub(crate) fn fixed(work: usize, count: usize) -> Self {
         Self {
             count,
@@ -53,8 +55,9 @@ impl Tasks {
         }
     }
 
-    /// Creates exactly the given number of tasks, on the pool if there is one,
-    /// for a phase that cut its work by its own measure,
+    /// Creates exactly the given number of tasks, which run on the pool if there is one.
+    ///
+    /// It serves a phase that cuts its work by its own measure,
     /// such as the parsing of an input in windows of bytes.
     pub fn of(count: usize) -> Self {
         Self {
@@ -63,8 +66,10 @@ impl Tasks {
         }
     }
 
-    /// Creates exactly the given number of tasks, run one after another on the calling thread,
-    /// for a phase that judged its work too small for the pool.
+    /// Creates exactly the given number of tasks,
+    /// which run one after another on the calling thread.
+    ///
+    /// It serves a phase that judges its work too small for the pool.
     pub fn sequential(count: usize) -> Self {
         Self {
             count,
@@ -72,9 +77,9 @@ impl Tasks {
         }
     }
 
-    /// Returns the same decision over a different number of tasks,
-    /// for a phase whose data yields fewer or more cut points
-    /// than it aimed at.
+    /// Returns the same decision for a different number of tasks.
+    ///
+    /// It serves a phase whose data gives fewer or more cut points than it aimed at.
     pub(crate) fn over(self, count: usize) -> Self {
         Self { count, ..self }
     }
@@ -84,8 +89,8 @@ impl Tasks {
         self.count
     }
 
-    /// Returns the pool the tasks run on,
-    /// or `None` if they run on the caller.
+    /// Returns the pool that the tasks run on,
+    /// or `None` if they run on the calling thread.
     pub(super) fn pool(self) -> Option<&'static rayon_core::ThreadPool> {
         Workers::get()
             .pool()
@@ -97,6 +102,7 @@ impl Tasks {
 mod tests {
     use super::*;
 
+    /// The number of tasks follows the work, the limit and the number of threads.
     #[test]
     fn task_counts_follow_the_work() {
         let tuning = Tuning::get();

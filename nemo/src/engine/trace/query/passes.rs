@@ -1,7 +1,9 @@
-//! The valid/filter two-pass over a shaped request.
+//! The valid and filter passes over a shaped request.
 //!
-//! Bottom-up, each node's fact set is what its subtree's constraints allow.
-//! Top-down, each set shrinks to what participates in a surviving parent derivation.
+//! The valid pass, bottom-up, gives each node the facts that the constraints of its subtree
+//! allow.
+//! The filter pass, top-down, shrinks each node's set to the facts that take part in a
+//! surviving derivation of its parent.
 
 use std::ops::ControlFlow;
 
@@ -24,7 +26,8 @@ use crate::{
 };
 
 impl<'a> QueryEvaluation<'a> {
-    /// Computes every node's valid set bottom-up, children first.
+    /// Computes the valid sets of the node `index` and of its subtree, bottom-up, children
+    /// first.
     pub(super) fn valid(
         &mut self,
         nodes: &mut [CompiledNode],
@@ -116,8 +119,8 @@ impl<'a> QueryEvaluation<'a> {
         self.store(arity, rows)
     }
 
-    /// Shrinks every child's set top-down to what participates in a surviving parent
-    /// derivation, then recurses.
+    /// Shrinks the sets of the children of the node `index`, top-down,
+    /// to the facts that take part in a surviving derivation of the node, then recurses.
     pub(super) fn filter(&mut self, nodes: &mut [CompiledNode], index: usize) {
         let Some((rule_index, head_index, children)) = nodes[index].expansion.clone() else {
             return;
@@ -173,6 +176,9 @@ impl<'a> QueryEvaluation<'a> {
     }
 
     /// Resolves a node's selectors into encoded rows, or `None` if the node is unconstrained.
+    ///
+    /// A term selector with a value that is not in the dictionary selects no row.
+    /// Fails for an entry id that the predicate does not have.
     fn selector_rows(
         &mut self,
         nodes: &[CompiledNode],
@@ -210,8 +216,8 @@ impl<'a> QueryEvaluation<'a> {
         Ok(Some(rows))
     }
 
-    /// Returns the stored row at the given position of a predicate's
-    /// enumeration in its own column order, which entry ids refer to.
+    /// Returns the stored row at position `id` of a table's rows in their own column order,
+    /// which is the order that entry ids count in.
     fn row_at(&mut self, table: TableId, id: usize) -> Option<Vec<StorageValue>> {
         let arity = self.manager.arity(table);
         let identity = ColumnOrder::identity(arity);
@@ -226,13 +232,14 @@ impl<'a> QueryEvaluation<'a> {
         found
     }
 
-    /// Returns the rule's body join over the given fact sets per atom,
+    /// Returns the join of a rule's body over the given fact sets, one per atom,
     /// as one plan node with a column per variable, and the rule's columns as plan markers.
     ///
     /// Every atom reads its child's set if one constrains it, and its whole table otherwise.
     /// The negations hold against the whole store.
-    /// A rule that can never fire matches nothing:
-    /// the condition that proved it is folded away, not among its filters.
+    /// A rule that can never fire reads nothing, so that it matches nothing.
+    /// The condition that shows that it can never fire was folded away,
+    /// so it is not among the rule's filters.
     pub(super) fn body_join(
         &self,
         plan: &mut OperationPlan,

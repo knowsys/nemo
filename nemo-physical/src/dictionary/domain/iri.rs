@@ -4,10 +4,10 @@ use crate::{dictionary::store::PairPool, value::IriRef};
 
 /// The store of IRIs, each split into its namespace and its local part.
 ///
-/// The split is the canonical one of [IriRef], after the last `/` or `#`,
-/// so a view interns and resolves segment for segment without copying.
-/// The namespaces repeat across a dataset's IRIs and are interned once,
-/// as the frequent part of a [PairPool].
+/// The split is the one that [IriRef] makes, after the last `/` or `#`.
+/// So an [IriRef] is interned from its two parts, and read back as one, without copying.
+/// The namespaces repeat across the IRIs of a dataset,
+/// so they are the frequent part of a [PairPool] and are stored once.
 pub(crate) struct IriStore {
     /// The interned (namespace, local part) pairs.
     pairs: PairPool,
@@ -32,8 +32,8 @@ impl IriStore {
         self.pairs.frequents_len()
     }
 
-    /// Interns an IRI and returns its index,
-    /// or `None` if the store cannot hold it.
+    /// Interns an IRI and returns its index, or `None` if a part is longer than
+    /// [LENGTH_LIMIT](crate::dictionary::Dictionary::LENGTH_LIMIT).
     pub(crate) fn intern(&mut self, iri: IriRef<'_>) -> Option<u64> {
         self.pairs
             .intern(iri.namespace().as_bytes(), iri.local().as_bytes())
@@ -48,8 +48,8 @@ impl IriStore {
     /// Returns the IRI with the given index, borrowed from the store,
     /// or `None` for an unknown index.
     pub(crate) fn get(&self, index: u64) -> Option<IriRef<'_>> {
-        // SAFETY: the pool is fed by `intern` alone,
-        // which stores the two segments of an `IriRef`, both `&str`s.
+        // SAFETY: only `intern` adds pairs to the pool,
+        // and the two parts that it stores are the segments of an `IriRef`, both `&str`s.
         self.pairs.get(index).map(|(namespace, local)| unsafe {
             IriRef::from_parts(
                 std::str::from_utf8_unchecked(namespace),
@@ -68,6 +68,7 @@ impl IriStore {
 mod tests {
     use super::*;
 
+    /// IRIs with the same namespace share one stored copy of it.
     #[test]
     fn namespaces_are_shared() {
         let mut store = IriStore::new();
@@ -85,6 +86,7 @@ mod tests {
         assert_eq!(store.namespace_count(), 2);
     }
 
+    /// An IRI without `/` or `#` is stored with an empty namespace.
     #[test]
     fn separator_free_iris_have_an_empty_namespace() {
         let mut store = IriStore::new();

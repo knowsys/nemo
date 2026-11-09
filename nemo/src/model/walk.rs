@@ -1,17 +1,16 @@
-//! Walking components: every term a component holds, nested ones
-//! included, and every variable it mentions.
+//! Walking the terms of components, nested terms included.
 //!
-//! A term's subterms are an operation's arguments, the arguments of a
-//! function term, a tuple's elements, a map's keys and values, and an
-//! aggregate's input and value. An option key of an import or an export
-//! names the option, not a value of the program, so walks leave it out.
+//! The *subterms* of a term are an operation's arguments, the arguments of a function term,
+//! a tuple's elements, a map's keys and values, and an aggregate's input and value.
+//! An option key of an import or an export names the option, not a value of the program,
+//! so walks leave it out.
 
 use crate::model::{
     Aggregate, Atom, Attribute, Directive, Fact, Literal, Operation, Program, Rule, Statement,
     Term, TermKind, Variable, VariableKind,
 };
 
-/// The terms of a component, visited in place.
+/// A component whose terms can be visited in place, nested terms included.
 ///
 /// # Example
 ///
@@ -27,27 +26,25 @@ use crate::model::{
 /// assert_eq!(variables, ["?x", "?x", "?y", "?y"]);
 /// ```
 pub trait Walk {
-    /// Calls `visit` on every term of the component, each before its
-    /// subterms.
+    /// Calls `visit` on every term of the component, each before its subterms.
     fn walk<'a>(&'a self, visit: &mut impl FnMut(&'a Term));
 
-    /// Calls `visit` on every term of the component, mutably, each after
-    /// its subterms.
+    /// Calls `visit` on every term of the component, mutably, each after its subterms.
     ///
     /// A term that `visit` replaces is not walked again.
     fn walk_mut(&mut self, visit: &mut impl FnMut(&mut Term));
 
-    /// Returns whether some term of the component, nested ones
-    /// included, passes the test.
+    /// Returns whether some term of the component, nested terms included, passes the test.
     fn any_term(&self, mut test: impl FnMut(&Term) -> bool) -> bool {
         let mut found = false;
         self.walk(&mut |term| found = found || test(term));
         found
     }
 
-    /// Returns every variable the component mentions, repetitions
-    /// included: the variables of its terms, and the variables an
-    /// aggregate's scope names.
+    /// Returns every variable that the component mentions, with repetitions.
+    ///
+    /// These are the variables among its terms,
+    /// and the variables in the scopes of its aggregates.
     fn variables(&self) -> Vec<&Variable> {
         let mut variables = Vec::new();
         self.walk(&mut |term| match &term.kind {
@@ -323,6 +320,8 @@ mod tests {
 
     use crate::model::VariableKind;
 
+    /// A walk reaches the variables at every depth of nesting, the scope of an aggregate
+    /// included.
     #[test]
     fn walks_reach_into_every_nesting() {
         let rule =
@@ -338,6 +337,8 @@ mod tests {
         assert_eq!(names, ["a", "b", "c", "d", "e", "g", "h", "i", "j"]);
     }
 
+    /// [walk](Walk::walk) visits a term before its subterms,
+    /// and [walk_mut](Walk::walk_mut) visits it after them.
     #[test]
     fn walks_visit_terms_before_their_subterms_and_mutably_after() {
         let term = Term::parse("f(?x, g(?y))").expect("the term parses");
@@ -351,6 +352,7 @@ mod tests {
         assert_eq!(order, ["?x", "?y", "g(?y)", "f(?x, g(?y))"]);
     }
 
+    /// The walk of a directive visits its option values but not its option keys.
     #[test]
     fn directives_walk_their_values_but_not_their_option_keys() {
         let program = Program::parse(

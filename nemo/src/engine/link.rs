@@ -1,19 +1,22 @@
-//! Linking: a program's `@use`s instantiated into the program the engine loads.
+//! Linking: instantiating the modules that a program uses, into the program the engine loads.
 //!
-//! [load](Engine::load) takes a linked program: no `@use`, and no module-qualified name.
+//! A *linked* program has no `@use` directive and no module-qualified name,
+//! and the loading methods accept only linked programs.
 //! Linking is not a rewrite that tracing reverses:
 //! diagnostics and traces show the linked program, instance names included.
 //! Each instance of a module file is registered as a source of its own,
-//! recording the `@use` that created it,
-//! so diagnostics and traces can name the instance a statement belongs to.
+//! which records the `@use` that created it,
+//! so that diagnostics and traces can name the instance a statement belongs to.
 //!
 //! Any file is a module.
-//! Its `@input` directives name the predicates the using program binds,
-//! its `@parameter`s the values, and its `@output` directives the predicates it offers.
+//! Its `@input` directives name the predicates that the using program binds,
+//! its `@parameter` directives the values, and its `@output` directives the predicates it
+//! offers.
 //! Instantiating it with `@use lib::tc { edge = link, $x = 5 } as alias .`
 //! copies its statements into the using program,
-//! with every name it owns rewritten to belong to *that instantiation*:
-//! `alias::name` for the names it offers, and the same prefix for the ones it keeps to itself.
+//! and renames every name it owns to belong to *that instantiation*:
+//! `alias::name` for the names it offers, and the same prefix for the names it keeps to
+//! itself.
 //! Inputs are the exception:
 //! they become the predicates of the using program they are bound to (here `link`),
 //! which is how data reaches a module.
@@ -22,24 +25,16 @@
 //! Copying has two consequences.
 //! A module used twice is two independent copies,
 //! so `t::reach` and `u::reach` are different predicates over different data.
-//! And a name a module does not make public cannot be referred to,
-//! *provided* no other name resolves to what it was renamed to.
-//! That is why a program may not write a predicate whose name begins with the `alias::`
-//! of an instantiation in scope.
-//! Privacy rests on this check alone,
-//! since the renamed names live in the same namespace as everything else.
+//! And a name that a module does not offer cannot be referred to,
+//! *provided* that no other name resolves to what it was renamed to
+//! (see [forbid_owned_name]).
 //!
 //! Names are resolved *in the file they are written in*:
-//! a module's `@base` and `@prefix` declarations apply to the module and are consumed here,
-//! never leaking into the program that uses it.
-//! The same holds for its global variables and for the files it reads:
-//! a `@use` and a module's `@import` resolve against the directory of the module containing
-//! them.
-//!
-//! A `@use` names its module rather than locating it:
-//! `lib::tc` is the file `lib/tc.rls` next to the file containing the `@use`,
-//! each leading `super` goes one directory up,
-//! and a name beginning with a module root names a file inside the root's directory.
+//! a module's `@base` and `@prefix` declarations apply to the module only,
+//! and never reach the program that uses it.
+//! The same holds for its parameters and for the files it reads:
+//! a `@use` and an `@import` in a module are resolved against the module's directory
+//! ([location] describes how a `@use` names its module).
 
 mod files;
 mod instances;
@@ -78,7 +73,7 @@ use crate::{
     pipeline::{NameScope, Pipeline},
 };
 
-/// How deep a chain of modules may go.
+/// How deep a chain of nested module instantiations may go.
 ///
 /// Without a bound, a deep chain of files would overflow the stack
 /// instead of producing a diagnostic.
@@ -86,13 +81,14 @@ const MAX_DEPTH: usize = 64;
 
 /// How many instantiations one program may expand into.
 ///
-/// Instantiating is copying, so a module used twice by each of a chain
-/// of modules doubles per level. The bound turns an expansion that would
+/// Instantiating is copying, so if each module of a chain uses the next one twice,
+/// the number of copies doubles per level. The bound turns an expansion that would
 /// never finish into a diagnostic.
 const MAX_INSTANTIATIONS: usize = 512;
 
 impl Engine {
-    /// Instantiates a program's modules and resolves its module-qualified names.
+    /// Instantiates a program's modules and resolves its module-qualified names
+    /// (see [link](Engine::link)).
     pub(in crate::engine) fn link_program(
         &mut self,
         program: Program,
@@ -109,10 +105,10 @@ impl Engine {
     }
 }
 
-/// One run of linking: the pipeline module files are registered in,
-/// and the state shared by its instantiations.
+/// One linking of a program: the pipeline that module files are registered in,
+/// and the state that its instantiations share.
 struct Linker<'a> {
-    /// The registry of sources, which also collects warnings.
+    /// The pipeline, which registers the sources and collects the warnings.
     pipeline: &'a mut Pipeline,
     /// The module roots by name, with their directories.
     roots: &'a HashMap<String, PathBuf>,
@@ -120,8 +116,10 @@ struct Linker<'a> {
     texts: HashMap<Location, Arc<str>>,
     /// The module files read so far, by the name they are registered under.
     files: HashMap<String, FileId>,
-    /// The module files whose warnings were reported: a module
-    /// used twice is parsed and instantiated per instance but reported once.
+    /// The module files whose warnings were reported.
+    ///
+    /// A module used twice is parsed and instantiated once per instance,
+    /// but its warnings are reported once.
     reported: HashSet<FileId>,
     /// How many instantiations have been expanded so far.
     count: usize,
@@ -137,22 +135,20 @@ impl Linker<'_> {
         }
     }
 
-    /// Links a program.
+    /// Links a program (see [link](Engine::link)).
     fn link(mut self, program: Program) -> Result<Program, Diagnostic> {
-        // A program without a `@use` instantiates nothing, and is not
-        // walked at all: a qualified name in it belongs to no
-        // instantiation, and translation says so when it reaches it.
+        // A program without a `@use` instantiates nothing, and is returned
+        // without being walked. A qualified name in it belongs to no
+        // instantiation, and translation reports it.
         let is_use =
             |statement: &Statement| matches!(statement, Statement::Directive(Directive::Use(_)));
         if !program.statements.iter().any(is_use) {
             return Ok(program);
         }
 
-        // The program's own scope: what its names resolve to, which is
-        // what an ownership check has to be made against. A name is only
-        // an instantiation's if it *resolves* to one, since a prefix or a
-        // base can produce `alias::` out of a name that does not look
-        // like one.
+        // The program's own scope, which resolves its names. The ownership
+        // check is made on resolved names, since a prefix or a base can turn
+        // a name that does not look like `alias::…` into one.
         let scope = NameScope::of(&program.statements);
         let aliases: Vec<String> = program
             .statements
@@ -194,12 +190,12 @@ impl Linker<'_> {
             linked.extend(statements.into_iter().map(|statement| (statement, false)));
         }
 
-        // Every remaining `alias::name` resolves here, including one an
-        // instantiation carries because a `@use` *bound* an input to it,
-        // whose meaning nothing before this point could have known. Only
-        // the names the program wrote itself are checked against what
-        // the instantiations own, since a module's own statements are
-        // made of exactly those names.
+        // Every remaining `alias::name` is resolved here, including one in
+        // an instantiation's statements because a `@use` *bound* an input
+        // to it, whose meaning nothing before this point could know. Only
+        // the names that the program wrote itself are checked against what
+        // the instantiations own, since the statements copied from modules
+        // consist of exactly the owned names.
         let mut statements = Vec::with_capacity(linked.len());
         for (mut statement, written_here) in linked {
             let mut resolve = |identifier: &Identifier,
@@ -228,14 +224,17 @@ impl Linker<'_> {
     }
 }
 
-/// Returns an error if a predicate *resolves* to a name an instantiation owns.
+/// Returns an error if a predicate *resolves* to a name that an instantiation owns,
+/// which is a name that begins with `alias::` for one of the `aliases` in scope.
 ///
+/// A module's privacy rests on this check alone,
+/// since the renamed names live in the same namespace as every other name.
 /// The check is made on the resolved name. A renamed module name is an
 /// ordinary name in an ordinary namespace, and a program can write a name
 /// in that namespace in more ways than the obvious one: `<t::secret>`, but
-/// also a `@prefix t: <t::>` making `t:secret` the same name, or a
-/// `@base <t::>` making every bare name in the file one. Checking only how
-/// a name is written catches the first and none of the rest.
+/// also `t:secret` after a `@prefix t: <t::>`, or any bare name in a file with a
+/// `@base <t::>`. Checking only how a name is written catches the first and none of the
+/// rest.
 ///
 /// A name that does not resolve is left to translation, which reports
 /// the undeclared prefix that made it unresolvable.
@@ -267,6 +266,7 @@ fn forbid_owned_name(
 impl Linker<'_> {
     /// Counts one more instantiation, of the module file at `canonical` by the given `@use`.
     ///
+    /// `chain` lists the files being instantiated.
     /// Returns an error for a file already being instantiated (a cycle),
     /// a chain deeper than [MAX_DEPTH], and more instantiations than [MAX_INSTANTIATIONS].
     fn enter(
@@ -296,18 +296,18 @@ impl Linker<'_> {
 }
 
 impl Linker<'_> {
-    /// Instantiates one `@use`, returning the statements it contributes
-    /// and the instance a reference resolves against.
+    /// Instantiates one `@use`, and returns the statements it contributes
+    /// and the instance that a reference is resolved against.
     ///
     /// `directive` is the `@use` with its bindings renamed for the using
     /// program or module, and `written` the same `@use` as written, which
     /// the instance's source records.
-    /// `from` is the directory of the file containing the `@use`,
-    /// and `program` the directory of the program containing the outermost one.
+    /// `from` is the location of the directory of the file that contains the `@use`,
+    /// and `program` the directory of the program that contains the outermost `@use`.
     /// `namespace` is the prefix of the using program's or module's own names,
-    /// so a module used inside a module carries the whole path of aliases.
-    /// `chain` is the files being instantiated, which is what makes a cycle
-    /// an error rather than a hang.
+    /// so that the names of a module used inside a module carry the whole path of aliases.
+    /// `chain` lists the files being instantiated, so that a cycle is an error rather than
+    /// a hang.
     fn instantiate(
         &mut self,
         directive: &UseDirective,
@@ -324,13 +324,13 @@ impl Linker<'_> {
         self.enter(directive, &canonical, chain)?;
         let file = self.read(&location, tree, directive)?;
         let instance = self.pipeline.add_instance(file, written.clone());
-        // A module used twice reports what it offers but never writes once.
+        // A module used twice reports only once the names it offers but never writes.
         let first = !self.reported.contains(&file);
         let statements = self.parse(file, instance)?;
         let module = InstantiatedModule::new(location, path, statements, directive, namespace)?;
         let public = module.public()?;
 
-        // A module's own `@use`s resolve against *its* directory, and
+        // A module's own `@use`s are resolved against *its* directory, and
         // their instances nest inside this one.
         chain.push(canonical);
         let nested = self.expand_nested(&module, program, chain);
@@ -355,6 +355,8 @@ impl Linker<'_> {
 
     /// Instantiates the `@use`s a module contains, nested inside this
     /// instantiation.
+    ///
+    /// Returns the nested instantiations and the statements they contribute.
     fn expand_nested(
         &mut self,
         module: &InstantiatedModule,
@@ -380,7 +382,7 @@ impl Linker<'_> {
             };
             // The predicates this module binds are named in *its* scope:
             // one of its inputs, or one of its own predicates.
-            // Renaming the bound predicates first is what carries data
+            // Renaming the bound predicates first is what passes data
             // through a chain of modules.
             let mut inner = written.clone();
             let mut renaming = InstanceRenaming::new(module, &nested);

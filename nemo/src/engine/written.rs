@@ -3,10 +3,10 @@
 //! Results, traces and diagnostics refer to statements by *statement id*:
 //! a statement's position in the written program.
 //! The ids follow from the program text alone, and an extension appends to them.
-//! The pipeline stages rewrite the compiled program,
-//! and results are mapped back onto these statements.
-//! A predicate a stage introduced is *hidden*: no user wrote it,
-//! and a diagnostic names the written literals it stands for instead.
+//! The pipeline stages rewrite the program into the compiled program,
+//! and results are mapped back onto the written statements.
+//! A predicate that a stage introduced is *hidden*: no user wrote it,
+//! so a diagnostic names the written literals it replaces instead.
 //! Whether a predicate is derived or extensional also follows the written program,
 //! however the stages rewrote its rules.
 
@@ -36,7 +36,7 @@ pub(crate) struct WrittenProgram {
     /// export, in declaration order.
     outputs: Vec<String>,
     /// Per name of a hidden predicate, as written or resolved,
-    /// the written literals it stands for, as a diagnostic names them.
+    /// the text with which a diagnostic names the written literals it replaces.
     hidden: Vec<(String, String)>,
 }
 
@@ -54,17 +54,17 @@ struct WrittenPredicate {
 /// How a statement uses a predicate.
 #[derive(Debug, Clone, Copy)]
 enum PredicateUse {
-    /// It reads or declares it.
+    /// The statement reads or declares it.
     Read,
-    /// A rule derives into it.
+    /// The statement is a rule that derives into it.
     Derived,
     /// A fact, an import, or an `@input` produces facts for it.
     Input,
 }
 
 impl WrittenProgram {
-    /// Collects the written program of a revision, and the hidden
-    /// predicates of the revision made of it.
+    /// Collects the written program from the revision `written`,
+    /// and the hidden predicates of `revision`, which the pipeline stages made of it.
     pub(crate) fn new(pipeline: &Pipeline, written: RevisionId, revision: RevisionId) -> Self {
         let statements: Vec<StatementId> = pipeline.statements(written).map(|(id, _)| id).collect();
         let ids = statements
@@ -102,7 +102,8 @@ impl WrittenProgram {
         self.ids.get(&statement).copied()
     }
 
-    /// Returns the statement behind an id.
+    /// Returns the statement with the given id, or `None` for an id beyond the written
+    /// program.
     pub(crate) fn statement(&self, id: usize) -> Option<StatementId> {
         self.statements.get(id).copied()
     }
@@ -153,7 +154,7 @@ impl WrittenProgram {
     }
 
     /// Returns a diagnostic rewritten to refer to the written program:
-    /// every hidden predicate it names is replaced by the written literals it stands for.
+    /// every hidden predicate it names is replaced by the written literals it replaces.
     pub(crate) fn present(&self, diagnostic: Diagnostic) -> Diagnostic {
         if self.hidden.is_empty() {
             return diagnostic;
@@ -251,8 +252,9 @@ fn note_statement(
         .expect("noting names fails nowhere");
 }
 
-/// Returns, per name of a predicate a stage introduced on the way to a revision,
-/// as written or resolved, the written literals it stands for: "the literals `a`, `b`".
+/// Returns, per name of a predicate that a stage introduced on the way to a revision,
+/// as written or resolved, the text that names the written literals it replaces,
+/// such as "the literals `a`, `b`".
 fn hidden(pipeline: &Pipeline, revision: RevisionId, scope: &NameScope) -> Vec<(String, String)> {
     let mut hidden = Vec::new();
     let mut pending: Vec<StatementId> = pipeline.statements(revision).map(|(id, _)| id).collect();

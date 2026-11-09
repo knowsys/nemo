@@ -3,13 +3,13 @@
 //! A cursor is restricted to a range of its column, usually the children of one node,
 //! and moves forward through it.
 //! Its [seek](SeekCursor::seek) gallops to the first value at or above a target,
-//! the step the leapfrog intersection is built from.
+//! which is the step that the leapfrog intersection repeats.
 //! - A [PayloadCursor] reads the raw payloads of a column whose values share one tag.
 //! - A [TaggedCursor] compares full values, tag and payload, over a column of any layout.
 //!
 //! A cursor can be [clipped](SeekCursor::clip) to a range of values.
 //! The clip narrows every range of children the cursor enters, once per range,
-//! so moving through the range never checks it.
+//! so moving through the range never checks the clip.
 
 use std::{cmp::Ordering, fmt::Debug, ops::Range};
 
@@ -21,15 +21,15 @@ use crate::{
 /// A width of payloads, `u32` or `u64`,
 /// over which the payload cursors are monomorphized.
 pub(crate) trait Payload: Copy + Ord + Debug {
-    /// Returns a payload at this width,
-    /// or `None` if it exceeds the width, and thus every payload stored at it.
+    /// Returns a payload at this width, or `None` if it does not fit,
+    /// in which case it exceeds every payload stored at this width.
     fn narrow(payload: u64) -> Option<Self>;
 
     /// Returns the payload at 64 bits.
     fn widen(self) -> u64;
 
-    /// Returns the payloads of a column stored at this width whose values share one tag,
-    /// with the tag; `None` for a column of another layout.
+    /// Returns the payloads and the shared tag of a column stored at this width
+    /// whose values share one tag, or `None` for a column of another layout.
     fn payloads<'a>(column: ColumnView<'a>) -> Option<(&'a [Self], Tag)>;
 }
 
@@ -72,24 +72,26 @@ impl Payload for u64 {
 /// with `None` for an unbounded side.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Clip<V> {
-    /// The smallest value in the range.
+    /// The lower bound, included.
     pub(crate) low: Option<V>,
-    /// The smallest value above the range.
+    /// The upper bound, excluded.
     pub(crate) high: Option<V>,
 }
 
-/// A cursor over a range of a sorted trie column.
+/// A cursor over a sorted range of a trie column.
 pub(crate) trait SeekCursor {
     /// The values the cursor reads, ordered like the column.
     type Value: Copy + Ord + Debug;
 
     /// Restricts the cursor to a range of children, narrowed to the clip if there is one,
-    /// and rewinds it. The narrowed range may be empty.
+    /// and rewinds it.
+    ///
+    /// The narrowed range may be empty.
     fn set_range(&mut self, range: Range<usize>);
 
-    /// Clips the cursor to a range of values,
-    /// narrowing its current range and every range of children it enters from now on.
+    /// Clips the cursor to a range of values, and rewinds it.
     ///
+    /// The clip narrows the current range and every range of children set from now on.
     /// The current range must be sorted, as the children of one node are,
     /// and as the whole column is for the first column of a trie.
     fn clip(&mut self, clip: Clip<Self::Value>);
@@ -100,8 +102,9 @@ pub(crate) trait SeekCursor {
     /// Returns whether the cursor points at a value, before the end of its range.
     fn has_current(&self) -> bool;
 
-    /// Returns the value at the cursor;
-    /// valid while the cursor [has a current value](Self::has_current).
+    /// Returns the value at the cursor.
+    ///
+    /// The cursor must [have a current value](Self::has_current).
     fn current_value(&self) -> Self::Value;
 
     /// Returns the position of the cursor in the column.
@@ -112,7 +115,7 @@ pub(crate) trait SeekCursor {
     fn next(&mut self) -> Option<Self::Value>;
 
     /// Moves forward to the first value at or above `target` and returns it,
-    /// or returns `None` if the rest of the range holds no such value,
+    /// or returns `None` if the rest of the range has no such value,
     /// which leaves the cursor without a current value.
     fn seek(&mut self, target: Self::Value) -> Option<Self::Value>;
 }
@@ -120,8 +123,8 @@ pub(crate) trait SeekCursor {
 /// A cursor over the raw payloads of a column whose values share one tag,
 /// monomorphized for the width of the payloads.
 ///
-/// The layer resolves the tag once, up front,
-/// so the cursor runs as over an untyped column and never touches a tag.
+/// The layer handles the tag once, up front,
+/// so the cursor works on the payloads alone and never reads a tag.
 #[derive(Debug)]
 pub(crate) struct PayloadCursor<'a, P> {
     /// The payloads of the column.
@@ -237,7 +240,7 @@ impl<P: Payload> SeekCursor for PayloadCursor<'_, P> {
 pub(crate) struct TaggedCursor<'a> {
     /// The column.
     column: ColumnView<'a>,
-    /// The tag the values of the column share; unused for a mixed column.
+    /// The tag the values of the column share, unused for a mixed column.
     tag: Tag,
     /// The range the cursor is restricted to.
     interval: Range<usize>,
@@ -321,7 +324,8 @@ impl<'a> TaggedCursor<'a> {
         })
     }
 
-    /// Moves the cursor to the end of its range, and returns `None`, as a step past it does.
+    /// Moves the cursor to the end of its range and returns `None`,
+    /// as stepping past the end does.
     #[inline]
     fn exhaust(&mut self) -> Option<StorageValue> {
         self.position = self.interval.end;
@@ -407,14 +411,14 @@ impl SeekCursor for TaggedCursor<'_> {
 /// The search gallops forward in doubling steps until it passes the target,
 /// then bisects the last step.
 /// Its worst case is that of a binary search,
-/// but it finds a value close to the start much faster,
-/// and in a leapfrog join the next match usually is.
+/// but it finds a value near the start much faster,
+/// and in a leapfrog join the next match is usually near the start.
 #[inline]
 fn gallop<P: Ord + Copy>(values: &[P], start: usize, end: usize, target: P) -> Option<usize> {
     gallop_by(start, end, target, |index| values[index])
 }
 
-/// Returns what [gallop] returns, reading the values through an accessor:
+/// Returns what [gallop] returns, but reads the values through `entry`,
 /// for the layouts that store a value in two slices.
 #[inline]
 fn gallop_by<V: Ord, F: Fn(usize) -> V>(
@@ -423,7 +427,7 @@ fn gallop_by<V: Ord, F: Fn(usize) -> V>(
     target: V,
     entry: F,
 ) -> Option<usize> {
-    // The start may already hold a value at or above the target.
+    // The value at the start may already be at or above the target.
     if entry(start) >= target {
         return Some(start);
     }
@@ -475,6 +479,8 @@ mod tests {
         })
     }
 
+    /// A seek stops at the target if the column has it, at the next larger value otherwise,
+    /// and returns `None` past the last value.
     #[test]
     fn seeking_finds_matches_and_gaps() {
         let data = [1, 3, 5, 7, 9];
@@ -491,6 +497,7 @@ mod tests {
         assert_eq!(cursor.seek(StorageValue::term(10)), None);
     }
 
+    /// A seek stays within the cursor's range, and a rewind returns to the range's start.
     #[test]
     fn ranges_restrict_the_search() {
         let data = [1, 3, 5, 7, 9];
@@ -505,6 +512,8 @@ mod tests {
         assert_eq!(cursor.current_value(), StorageValue::term(3));
     }
 
+    /// A cursor over a 32-bit column narrows the target,
+    /// and a target beyond 32 bits exhausts the cursor.
     #[test]
     fn u32_columns_narrow_the_target() {
         let data: [u32; 3] = [1, 3, 5];
@@ -523,11 +532,13 @@ mod tests {
         );
     }
 
+    /// In a column whose values share one tag, the tags alone decide a seek
+    /// for a target of another tag.
     #[test]
     fn uniform_tag_comparison_short_circuits() {
         let data = [1, 3, 5];
         let mut terms = u64_cursor(&data);
-        // Terms sort below integers: no term can reach an integer target.
+        // Terms sort below integers, so no term reaches an integer target.
         assert_eq!(terms.seek(StorageValue::integer(i64::MIN)), None);
 
         let payloads = [
@@ -545,6 +556,7 @@ mod tests {
         );
     }
 
+    /// In a column that mixes tags, a seek compares tag and payload.
     #[test]
     fn mixed_columns_seek_across_tag_groups() {
         let entries = [
@@ -575,6 +587,7 @@ mod tests {
         assert_eq!(cursor.seek(StorageValue::integer(6)), None);
     }
 
+    /// A payload cursor seeks and steps over raw payloads.
     #[test]
     fn payload_cursors_run_untyped() {
         let data: [u32; 5] = [1, 3, 5, 7, 9];
@@ -584,6 +597,7 @@ mod tests {
         assert_eq!(cursor.seek(10), None);
     }
 
+    /// Stepping or seeking past the end of the range leaves the cursor without a current value.
     #[test]
     fn running_past_the_range_exhausts_the_cursor() {
         let data: [u32; 3] = [1, 3, 5];
@@ -596,7 +610,7 @@ mod tests {
         assert_eq!(cursor.seek(6), None);
         assert!(!cursor.has_current());
 
-        // Terms sort below integers, and a 64-bit column holds no larger term.
+        // Terms sort below integers, and the column has no term from 9 up.
         let mut tagged = u64_cursor(&[1, 3, 5]);
         assert_eq!(tagged.seek(StorageValue::integer(0)), None);
         assert!(!tagged.has_current());
@@ -612,6 +626,7 @@ mod tests {
         assert!(!tagged.has_current());
     }
 
+    /// A cursor over an empty column has no current value, and seeks and steps return `None`.
     #[test]
     fn empty_ranges_are_exhausted() {
         let data: [u64; 0] = [];
@@ -621,6 +636,8 @@ mod tests {
         assert_eq!(cursor.next(), None);
     }
 
+    /// A clip narrows the current range and every range set later,
+    /// and either side of a clip may be unbounded.
     #[test]
     fn clips_narrow_every_range_of_children_entered() {
         // Two ranges of children in a deeper column. The clip narrows each range

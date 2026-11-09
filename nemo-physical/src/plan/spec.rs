@@ -1,5 +1,5 @@
-//! Specifications: descriptions of plan operations, their inputs and outputs,
-//! and how they compute them.
+//! Specifications of the plan operations that compute values:
+//! filters, computed columns and aggregates, and the expressions they are built from.
 
 mod aggregate;
 mod aggregate_function;

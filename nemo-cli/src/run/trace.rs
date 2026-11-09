@@ -1,4 +1,4 @@
-//! The traces a run asks for, and the destinations of the derivations and responses.
+//! Tracing what the trace options ask for, and writing the derivations and query responses.
 
 use std::{
     io::{self, BufWriter, Write},
@@ -22,8 +22,10 @@ use crate::{
     stdout,
 };
 
-/// Reads the query of `--trace-tree` or `--trace-node`: the JSON text
-/// itself, an object or an array, or the file holding it.
+/// Reads the query of `--trace-tree` or `--trace-node` from `given`.
+///
+/// `given` is either the query's JSON text, recognized by an opening `{` or `[`,
+/// or the path of a file that contains it.
 fn read_query<Q: for<'de> serde::Deserialize<'de>>(given: &str) -> Result<Q, Diagnostic> {
     let text = if given.trim_start().starts_with(['{', '[']) {
         Ok(given.to_owned())
@@ -49,29 +51,37 @@ fn unwritable(path: &Path, error: io::Error) -> Diagnostic {
     .diagnostic()
 }
 
-/// Where `--trace-all` streams the response as its parts arrive:
-/// - into the `--trace-output` file, as one trace response with one node per line,
-/// - or to the standard output, one line per node: a derived fact as its rule instance,
-///   a loaded fact as a fact statement.
+/// The destination to which `--trace-all` writes the trace as its parts arrive.
+///
+/// - With `--trace-output`, the parts are written to that file as one trace response,
+///   with one node per line.
+/// - Otherwise, they are printed to standard output, one line per node.
+///   A derived fact is printed as its rule instance, and a loaded fact as a fact statement.
 struct TraceStream<'a> {
     /// The file, if the trace is written rather than printed.
     path: Option<&'a Path>,
-    /// The open destination.
+    /// The writer of the file or of standard output.
     out: Box<dyn Write>,
     /// The number of nodes written.
     written: usize,
-    /// The fact of every node printed, by id, to name the premises of later ones.
+    /// The fact of every printed node, indexed by node id, to write the premises of later
+    /// nodes.
     facts: Vec<String>,
-    /// The rules of the parts so far, for the end of the file's response, if there is a file.
+    /// The rules of the parts written to the file so far,
+    /// which are listed at the end of the file's response.
     rules: Vec<WrittenRule>,
-    /// Whether the standard output was closed, as when the program reading it has all it
-    /// wants, so that no further part is derived.
+    /// Whether a write failed because standard output was closed,
+    /// as happens when its reader wants no more output.
+    ///
+    /// The failed write stops the trace, so no further part is derived,
+    /// and the trace then ends without an error.
     closed: bool,
 }
 
 impl<'a> TraceStream<'a> {
-    /// Opens the stream on the file if one is named, and on the standard output otherwise,
-    /// and begins the file's response.
+    /// Opens the stream on the file at `path`, or on standard output if there is none.
+    ///
+    /// For a file, it writes the beginning of the trace response.
     fn open(path: Option<&'a Path>) -> Result<Self, Diagnostic> {
         let out: Box<dyn Write> = match path {
             None => Box::new(BufWriter::new(io::stdout().lock())),
@@ -94,14 +104,17 @@ impl<'a> TraceStream<'a> {
         Ok(stream)
     }
 
-    /// Writes a part of the response.
+    /// Writes one part of the trace, and returns a diagnostic if the write fails.
     fn take(&mut self, part: TracePart) -> Result<(), Diagnostic> {
         let written = self.write(part);
         written.map_err(|error| self.failed(error))
     }
 
-    /// Writes a part's nodes: each on its own line of the file's response,
-    /// or printed as a rule instance or a fact statement.
+    /// Writes the nodes of `part`, each on its own line.
+    ///
+    /// In a file, a node is written as JSON.
+    /// On standard output, a derived fact is written as its rule instance,
+    /// and a loaded fact as a fact statement.
     fn write(&mut self, part: TracePart) -> io::Result<()> {
         for node in part.nodes {
             if self.path.is_some() {
@@ -122,17 +135,20 @@ impl<'a> TraceStream<'a> {
             }
             self.written += 1;
         }
-        // Only the file's response lists the rules: printed, each line spells out its rule.
+        // Only the file's response lists the rules,
+        // since on standard output each rule instance already shows its rule.
         if self.path.is_some() {
             self.rules.extend(part.rules);
         }
         Ok(())
     }
 
-    /// Ends the stream with the traced facts the run named:
-    /// the file's response lists them after its rules,
-    /// and the standard output notes those that do not hold.
-    /// It then says where the trace was written.
+    /// Ends the stream with `named`, the results for the facts given to `--trace` and
+    /// `--trace-input`.
+    ///
+    /// In a file, the response lists them after its rules,
+    /// and the file's path is printed to the error stream.
+    /// On standard output, a line is printed for each of them that does not hold.
     fn finish(mut self, named: Vec<TracedFact>) -> Result<(), Diagnostic> {
         let Some(path) = self.path else {
             for traced in named.iter().filter(|traced| traced.node.is_none()) {
@@ -150,11 +166,11 @@ impl<'a> TraceStream<'a> {
         Ok(())
     }
 
-    /// Ends the stream of a trace that failed:
-    /// the file, holding an unfinished response, is removed.
+    /// Ends the stream of a trace that failed, and removes the file with its unfinished
+    /// response.
     fn abandon(self) {
         let Self { path, out, .. } = self;
-        // The file closes before it is removed.
+        // The file is closed before it is removed.
         drop(out);
         if let Some(path) = path {
             // The run reports the trace's failure, not a failure to remove the file.
@@ -162,9 +178,10 @@ impl<'a> TraceStream<'a> {
         }
     }
 
-    /// Returns what a failed write amounts to:
-    /// the file could not be written,
-    /// or the standard output failed, closed if the reader left.
+    /// Returns the diagnostic for a failed write.
+    ///
+    /// A write to standard output that failed on a closed pipe also sets
+    /// [closed](Self::closed).
     fn failed(&mut self, error: io::Error) -> Diagnostic {
         match self.path {
             Some(path) => unwritable(path, error),
@@ -185,11 +202,13 @@ fn json(value: &impl Serialize) -> String {
 }
 
 impl Run<'_> {
-    /// Traces what the run asked about: the facts of `--trace` and
-    /// `--trace-input`, every derived fact under `--trace-all`, and the
-    /// queries of `--trace-tree` and `--trace-node`. Derivations and
-    /// responses go to standard output, or into `--trace-output` as
-    /// JSON. Does nothing when nothing was asked.
+    /// Traces what the trace options ask for, and writes the results.
+    ///
+    /// It traces the facts of `--trace` and `--trace-input`, every derived fact with
+    /// `--trace-all`, and the queries of `--trace-tree` and `--trace-node`.
+    /// The derivations and responses are printed to standard output,
+    /// or written as JSON to the `--trace-output` file.
+    /// It does nothing if no trace option is given.
     pub(super) fn trace(&self, engine: &mut Engine) -> Result<(), Diagnostic> {
         let facts = self.traced_facts()?;
         if self.arguments.trace_all {
@@ -214,7 +233,9 @@ impl Run<'_> {
         Ok(())
     }
 
-    /// Returns the facts `--trace` and every `--trace-input` file name, parsed.
+    /// Returns the parsed facts of `--trace` and of every `--trace-input` file.
+    ///
+    /// Fails if a file cannot be read, or if a text is not a fact.
     fn traced_facts(&self) -> Result<Vec<Fact>, Diagnostic> {
         let mut texts: Vec<String> = self
             .arguments
@@ -247,12 +268,11 @@ impl Run<'_> {
             .collect()
     }
 
-    /// Traces every fact of every derived predicate, and the named facts,
-    /// streaming the response as it grows:
-    /// one line per fact to standard output,
-    /// or one trace response, a node per line, into `--trace-output`.
+    /// Traces every fact of every derived predicate, and also `facts`,
+    /// and writes the trace through a [TraceStream] as it grows.
     ///
-    /// What the engine does not store whole is skipped, and reported once.
+    /// The derived predicates that the engine does not store whole are skipped,
+    /// and reported in one warning.
     fn trace_all(&self, engine: &mut Engine, facts: &[Fact]) -> Result<(), Diagnostic> {
         let derived = Reached::split(
             engine,
@@ -280,8 +300,7 @@ impl Run<'_> {
         }
     }
 
-    /// Writes a query's response, as JSON, to the standard output or
-    /// into `--trace-output`.
+    /// Writes a query's response as JSON, to standard output or to the `--trace-output` file.
     fn write_query_response(&self, response: &impl Serialize) -> Result<(), Diagnostic> {
         let json = json(response);
         match &self.arguments.trace_output {
@@ -290,7 +309,8 @@ impl Run<'_> {
         }
     }
 
-    /// Writes a trace document to the `--trace-output` file, and says where it went.
+    /// Writes a trace document to the `--trace-output` file at `path`,
+    /// and prints the path to the error stream.
     fn write_trace(&self, path: &Path, bytes: &[u8]) -> Result<(), Diagnostic> {
         std::fs::write(path, bytes).map_err(|error| unwritable(path, error))?;
         eprintln!("trace: {}", path.display());
@@ -298,9 +318,9 @@ impl Run<'_> {
     }
 }
 
-/// Splits a text into the facts it separates by `;`, trimmed, without empty ones.
+/// Splits a text at `;` into trimmed facts, and drops the empty ones.
 ///
-/// A `;` inside a quoted string or an IRI in angle brackets separates nothing.
+/// A `;` inside a quoted string or inside angle brackets does not separate facts.
 fn split_facts(text: &str) -> Vec<String> {
     let mut facts = Vec::new();
     let (mut start, mut quoted, mut escaped, mut bracketed) = (0, false, false, false);
@@ -331,6 +351,7 @@ fn split_facts(text: &str) -> Vec<String> {
 mod tests {
     use super::split_facts;
 
+    /// A `;` separates facts, except inside a quoted string or an IRI in angle brackets.
     #[test]
     fn semicolons_in_values_separate_nothing() {
         assert_eq!(split_facts("p(a);q(b) ; "), ["p(a)", "q(b)"]);

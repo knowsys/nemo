@@ -3,6 +3,7 @@
 
 use super::*;
 
+/// An import column that no rule reads is not stored, unless the engine retains imports.
 #[test]
 fn unread_import_columns_prune_unless_retained() {
     let temporary = TempDirectory::new();
@@ -21,9 +22,8 @@ q(?a) :- p(?a, _, ?b), ?b > 5 .
 @output q .
 ";
 
-    // The string column is anonymous everywhere: the stored table
-    // is its projection, and the row differing only there
-    // collapses.
+    // No rule reads the string column, so the stored table leaves it
+    // out, and the two rows that differ only there become one.
     let program = parse(source);
     let mut engine = Engine::new();
     engine.set_import_directory(directory);
@@ -32,7 +32,7 @@ q(?a) :- p(?a, _, ?b), ?b > 5 .
     assert_eq!(stored(&engine, "p"), (2, 2));
     assert_eq!(count(&mut engine, "q"), 2);
 
-    // Retained, the same program keeps the written width and every
+    // With imports retained, the same program keeps the written width and every
     // row.
     let (program, _) = Program::parse(source, FileId::new(0));
     let mut engine = Engine::new();
@@ -43,8 +43,8 @@ q(?a) :- p(?a, _, ?b), ?b > 5 .
     assert_eq!(count(&mut engine, "p"), 3);
 }
 
-/// A universal variable the rule mentions nowhere else reads nothing, like `_`,
-/// so the column prunes.
+/// A universal variable that the rule uses nowhere else reads nothing, like `_`,
+/// so its column is not stored.
 #[test]
 fn named_unused_variables_prune_like_anonymous_ones() {
     let temporary = TempDirectory::new();
@@ -78,10 +78,11 @@ q(?a) :- p(?a, ?label, ?b), ?b > 5 .
     );
 }
 
-/// If every reader constrains the predicate,
-/// by a constant in the atom or comparisons on a variable used nowhere else,
-/// the loader admits only rows some reader can use.
-/// One unconstrained reader keeps every row.
+/// If every rule that reads an imported predicate constrains it,
+/// by a constant in the atom or by comparisons on its variables,
+/// the import stores only the rows that some rule can use.
+///
+/// One rule that reads the predicate without a constraint keeps every row.
 #[test]
 fn constrained_readers_push_their_filter_into_the_import() {
     let temporary = TempDirectory::new();
@@ -134,7 +135,8 @@ t(?v) :- p(?a, ?v), ?v > 10, ?a > 2 .
     assert_eq!(stored(&engine, "p").0, 1, "both columns constrain");
     assert_eq!(rows(&mut engine, "t"), vec![vec![String::from("20")]]);
 
-    // The rule draws once per row; a copy of the comparison at the loader would draw again.
+    // The rule draws once per row, and a copy of the comparison in the import would draw
+    // again.
     let mut engine = load(&format!(
         "{import}
 u(?a) :- p(?a, ?v), ?v < RAND() .
@@ -148,8 +150,9 @@ u(?a) :- p(?a, ?v), ?v < RAND() .
     assert_eq!(count(&mut engine, "u"), 0);
 }
 
-/// Rows arriving by another door after the load still go through the rule's own filter,
-/// since the pushdown reduces the load, never the semantics.
+/// Rows added through [import_rows](Engine::import_rows) after the load still pass through
+/// the rule's own condition, since a filter pushed into an import reduces only what is
+/// loaded, never what the rules derive.
 #[test]
 fn rows_imported_after_a_pushed_filter_still_pass_the_rule() {
     let temporary = TempDirectory::new();
@@ -184,9 +187,10 @@ q(?a) :- p(?a, 5) .
     );
 }
 
-/// An extension reading rows the loader excluded is refused: the
-/// stored relation cannot supply them. With imports retained, the
-/// same extension is fine.
+/// An extension that reads rows the import left out is refused,
+/// since the stored table cannot supply them.
+///
+/// With imports retained, the same extension succeeds.
 #[test]
 fn an_extension_relaxing_a_pushed_filter_is_an_error() {
     let temporary = TempDirectory::new();
@@ -221,8 +225,7 @@ q(?a) :- p(?a, 5) .
     assert_eq!(count(&mut engine, "r"), 1);
 }
 
-/// Every import format delivers only the columns and rows the rules
-/// read: RDF and JSON through their registered bytes here.
+/// RDF and JSON imports, too, store only the columns and rows that the rules read.
 #[test]
 fn rdf_and_json_imports_prune_and_filter_too() {
     let mut engine = Engine::new();
@@ -248,22 +251,22 @@ kind(?t) :- j(?id, <type>, ?t) .
     let program = parse(source);
     engine.load(program).expect("the program loads");
     engine.reason().expect("reasoning reaches the fixpoint");
-    // The object is unread and the predicate column a constant: the
-    // graph stores two columns and only the `p` statements, two rows
-    // that collapse into one.
+    // No rule reads the object, and the predicate column is a constant,
+    // so the graph stores two columns and only the `p` statements,
+    // whose two rows become one.
     assert!(arities(&engine).contains(&(String::from("g"), 3)));
     assert_eq!(stored(&engine, "g"), (1, 2));
     assert_eq!(count(&mut engine, "subject"), 1);
-    // The document's node ids are unread and the key is a constant:
-    // two columns, the `type` rows only, one per node, five nodes of
-    // four kinds.
+    // No rule reads the document's node ids, and the key is a constant,
+    // so the table stores two columns of the `type` rows, one per node,
+    // and the five nodes are of four kinds.
     assert!(arities(&engine).contains(&(String::from("j"), 3)));
     assert_eq!(stored(&engine, "j"), (4, 2), "object, number, array, bool");
     assert_eq!(count(&mut engine, "kind"), 4);
 }
 
-/// `limit` caps what an import reads and what an export writes; on
-/// RDF and SPARQL imports, `format` keeps or skips columns of terms.
+/// `limit` caps what an import reads and what an export writes,
+/// and on RDF and SPARQL imports, `format` keeps or skips columns of terms.
 #[test]
 fn limits_and_term_column_formats_apply() {
     let temporary = TempDirectory::new();
@@ -342,7 +345,7 @@ fn reading_an_import_stored_partially_names_what_is_left_out() {
         Err(codes::NOT_STORED_WHOLE)
     );
 
-    // Rows only a filter admits are left out too.
+    // With a filter pushed into the import, the rows it rejects are left out too.
     let mut engine = load_resources(
         "@import p from csv { resource = \"p.csv\" } .\nq(?a) :- p(?a, ?b), ?b = \"x\" .\n@output q .",
         &data,
@@ -353,7 +356,7 @@ fn reading_an_import_stored_partially_names_what_is_left_out() {
         "`p` is not stored whole: only the rows the rules reading it can use are stored"
     );
 
-    // Declared an output, the import is stored whole.
+    // Declared `@output`, the import is stored whole.
     let mut engine = load_resources(
         "@import p from csv { resource = \"p.csv\" } .\nq(?a) :- p(?a, _) .\n@output p .",
         &data,
@@ -361,13 +364,13 @@ fn reading_an_import_stored_partially_names_what_is_left_out() {
     assert_eq!(count(&mut engine, "p"), 2);
 }
 
-/// The format is the type of what an import reads: a declaration alone derives the formats,
-/// each column reading in the format named like its declared type,
-/// and a cell that does not read is malformed.
+/// A declaration alone gives an import its column formats:
+/// each column is read in the format named like its declared type,
+/// and a cell that cannot be read in that format is malformed.
 #[test]
 fn a_declaration_reads_its_import_in_its_formats() {
-    // Line 2 fails the int reading, line 3 the bool reading, and line 4
-    // the width.
+    // Line 2 has no int in its first column, line 3 no bool in its second,
+    // and line 4 has the wrong width.
     let mut engine = load_resources(
         "@declare p(n: int, b: bool) .
          @import p from csv { resource = \"data.csv\", quoting = false } .",
@@ -378,7 +381,7 @@ fn a_declaration_reads_its_import_in_its_formats() {
         vec![vec![DataValue::integer(1), DataValue::boolean(true)]]
     );
     assert_eq!(reported_count(&engine, codes::MALFORMED_ROWS), Some(3));
-    // The formats give the store's types.
+    // The formats give the stored column types.
     let types: Vec<String> = engine
         .column_types("p")
         .expect("registered")
@@ -394,7 +397,7 @@ fn a_declaration_reads_its_import_in_its_formats() {
 #[test]
 fn declarations_check_pruned_import_columns() {
     for rule in ["q(?x) :- p(?x, ?y) .", "q(?y) :- p(?x, ?y) ."] {
-        // The second column reads as `bool`, which neither cell is.
+        // The second column is read as `bool`, which neither cell is.
         let mut engine = load_resources(
             &format!(
                 "@declare p(x: int, y: bool) .
@@ -414,8 +417,8 @@ fn declarations_check_pruned_import_columns() {
 }
 
 /// With both a `format` and a declaration, `term` defers to the
-/// declaration on the columns it types, while a typed format keeps its
-/// own reading, which must lie within the declaration.
+/// declaration on the columns it types, while a typed format is used as it is
+/// and must lie within the declaration.
 #[test]
 fn term_defers_to_the_declaration_and_typed_formats_must_fit_it() {
     let mut engine = load_resources(
@@ -423,7 +426,7 @@ fn term_defers_to_the_declaration_and_typed_formats_must_fit_it() {
          @import s from csv { resource = \"s.csv\", format = (term) } .",
         &[("s.csv", "42\nalice\n")],
     );
-    // `42` reads verbatim rather than as an integer.
+    // `42` is read as a string rather than as an integer.
     let mut strings = engine.rows("s").expect("registered");
     strings.sort();
     assert_eq!(
@@ -433,7 +436,7 @@ fn term_defers_to_the_declaration_and_typed_formats_must_fit_it() {
             vec![DataValue::string("alice")]
         ]
     );
-    // A decimal reading is wider than `int`, so the import is refused.
+    // The decimal format reads values outside `int`, so the import is refused.
     let (program, _) = Program::parse(
         "@declare n(x: int) .
          @import n from csv { resource = \"n.csv\", format = (decimal) } .",
@@ -542,7 +545,7 @@ _:blank <http://x/p> \"6\"^^<http://www.w3.org/2001/XMLSchema#integer> .
         &[("graph.nt", GRAPH)],
     );
     assert_eq!(count(&mut engine, "g"), 3);
-    // `string` is a reading of cells, and RDF columns hold terms.
+    // `string` is a format for reading cells, and RDF columns contain terms.
     let (program, _) = Program::parse(
         "@import g from ntriples { resource = \"graph.nt\", format = (string, term, term) } .",
         FileId::new(0),
@@ -629,8 +632,8 @@ _:blank <http://x/p> \"6\"^^<http://www.w3.org/2001/XMLSchema#integer> .
     assert!(problems.is_empty(), "{problems:?}");
 }
 
-/// The columns an import's conditions test are kept like the columns rules read,
-/// and the others are pruned as usual.
+/// The columns that an import's conditions test are kept like the columns that rules read,
+/// and the others are left out as usual.
 #[test]
 fn import_conditions_keep_the_columns_they_test() {
     let mut engine = load_resources(
@@ -720,7 +723,7 @@ fn directive_options_are_refused_rather_than_ignored() {
             "@import p from csv { resource = \"p.csv\", compression = gzip } .",
             codes::OPTION_VALUE_TYPE,
         ),
-        // A format that takes a base is told its value is of the wrong type.
+        // For a format that accepts a base, a base of the wrong type is named as such.
         (
             "@import p from turtle { resource = \"p.ttl\", base = 3 } .",
             codes::OPTION_VALUE_TYPE,
@@ -746,7 +749,7 @@ fn directive_options_are_refused_rather_than_ignored() {
 }
 
 /// A header name written as a bare name is sent as written, not resolved against the base,
-/// and a header HTTP cannot carry is refused before any request is sent.
+/// and a header that HTTP cannot send is refused before any request is sent.
 #[test]
 fn request_headers_are_sent_as_written_or_refused() {
     let mut engine = Engine::new();
@@ -791,10 +794,11 @@ fn request_headers_are_sent_as_written_or_refused() {
     }
 }
 
+/// An import reads a resource registered with [add_resource](Engine::add_resource) instead
+/// of the file of that name.
 #[test]
 fn registered_resources_shadow_the_filesystem() {
-    // No `data.csv` exists on disk, and the registered bytes serve the
-    // import, as for input data that is not in a file.
+    // No `data.csv` exists on disk.
     let program = parse("@import p from csv { resource = \"data.csv\" } . q(?x) :- p(?x, ?y) .");
     let mut engine = Engine::new();
     engine.add_resource("data.csv", "a,1\nb,2\nc,3\n".as_bytes().to_vec());
@@ -803,8 +807,8 @@ fn registered_resources_shadow_the_filesystem() {
     assert_eq!(count(&mut engine, "q"), 3);
 }
 
-/// A diagnostic names the rule's own variables only: the columns the
-/// normalization invents have no name a program could write.
+/// A diagnostic names only the rule's own variables,
+/// since the columns that the normalization adds have no name a program could write.
 #[test]
 fn invented_columns_stay_out_of_diagnostics() {
     let program = parse("@declare p(x: string) . p(\"a\") . r(1) . q(?y) :- r(?y), p(?y + 1) .");
@@ -825,8 +829,10 @@ fn invented_columns_stay_out_of_diagnostics() {
     );
 }
 
-/// Rows handed in for a pruned predicate are given as written.
-/// The loader's projection applies to them as it did to the import,
+/// Rows added through [import_rows](Engine::import_rows) to an imported predicate stored
+/// without some columns are given with every written column.
+///
+/// The import's projection applies to them as it did to the imported rows,
 /// and a row with only the stored columns is an error, since its values would
 /// land in the wrong columns.
 #[test]

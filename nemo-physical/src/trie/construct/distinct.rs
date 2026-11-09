@@ -1,14 +1,16 @@
-//! The distinct filter: the distinct rows of one sorted stream, each with its change.
+//! The distinct filter, which passes the distinct rows of one sorted stream,
+//! each with its change.
 //!
-//! Every trie build reads rows in storage order and needs
-//! the distinct rows, and for each the [column it changed at](RowChange),
+//! Every trie build reads rows in storage order.
+//! It needs the distinct rows, and for each row the [column at which it changed](RowChange),
 //! which tells the columns below where their blocks start.
 
 use crate::{storage::StorageValue, trie::construct::builder::RowChange};
 
-/// Where a [Distinct] filter keeps the last row it passed:
-/// by reference if the rows live on behind the filter, as in a run,
-/// and by value if they do not, as in the rows a cursor overwrites.
+/// Where a [Distinct] filter keeps the last row that it passed.
+///
+/// The filter keeps the row by reference if the rows stay valid after they are passed,
+/// as in a run, and by value if they do not, as with the rows that a cursor overwrites.
 pub(super) trait Keep<'r> {
     /// Returns the last row kept, or `None` before the first.
     fn last(&self) -> Option<&[StorageValue]>;
@@ -17,7 +19,7 @@ pub(super) trait Keep<'r> {
     fn keep(&mut self, row: &'r [StorageValue], changed: usize);
 }
 
-/// The last row, by reference.
+/// A last row kept by reference.
 #[derive(Debug, Default)]
 pub(super) struct Borrowed<'r>(Option<&'r [StorageValue]>);
 
@@ -33,7 +35,9 @@ impl<'r> Keep<'r> for Borrowed<'r> {
     }
 }
 
-/// The last row, by value; only its changed suffix is copied.
+/// A last row kept by value.
+///
+/// Only the changed suffix of each new row is copied.
 #[derive(Debug, Default)]
 pub(super) struct Copied(Vec<StorageValue>);
 
@@ -53,8 +57,9 @@ impl<'r> Keep<'r> for Copied {
     }
 }
 
-/// A filter passing the distinct rows of a sorted stream, each with its [RowChange];
-/// a repeat of the last row passed is dropped.
+/// A filter that passes the distinct rows of a sorted stream, each with its [RowChange].
+///
+/// A repeat of the last row passed is dropped.
 #[derive(Debug)]
 pub(super) struct Distinct<K> {
     /// The last row passed.
@@ -62,7 +67,7 @@ pub(super) struct Distinct<K> {
 }
 
 impl Distinct<Borrowed<'_>> {
-    /// Creates a filter over rows that live on behind it.
+    /// Creates a filter over rows that stay valid after they are passed.
     pub(super) fn borrowed() -> Self {
         Self {
             kept: Borrowed::default(),
@@ -80,8 +85,9 @@ impl Distinct<Copied> {
 }
 
 impl<'r, K: Keep<'r>> Distinct<K> {
-    /// Passes a row, which must not precede the last one:
-    /// how it differs from that row, or `None` for a repeat.
+    /// Passes a row, and returns how it differs from the last row, or `None` for a repeat.
+    ///
+    /// The row must not precede the last one in storage order.
     #[inline]
     pub(super) fn pass(&mut self, row: &'r [StorageValue]) -> Option<RowChange> {
         let Some(last) = self.kept.last() else {
@@ -103,6 +109,7 @@ impl<'r, K: Keep<'r>> Distinct<K> {
 mod tests {
     use super::*;
 
+    /// Each distinct row reports the column at which it changed, and a repeat reports none.
     #[test]
     fn distinct_rows_report_where_they_changed() {
         let run =
@@ -123,6 +130,8 @@ mod tests {
         );
     }
 
+    /// A filter that copies rows compares with the last row passed,
+    /// even after the source row was overwritten.
     #[test]
     fn copied_rows_survive_the_source_moving_on() {
         let mut distinct = Distinct::copied(2);

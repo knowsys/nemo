@@ -1,5 +1,7 @@
-//! The construction from tries: the bounds sampled from their first columns,
-//! and the build of the rows between two bounds.
+//! The construction of a trie's columns from tries to merge.
+//!
+//! It samples the bounds from the tries' first columns,
+//! and builds the *window* of their rows between two bounds.
 
 use crate::{
     storage::StorageValue,
@@ -25,7 +27,9 @@ pub(super) struct Tries<'s, 't> {
 }
 
 impl<'s, 't> Tries<'s, 't> {
-    /// Creates the source merging the given tries, at least one and of one positive arity.
+    /// Creates the source that merges the given tries.
+    ///
+    /// There must be at least one trie, and the tries must have one positive arity.
     pub(super) fn new(sources: &'s [&'t Trie]) -> Self {
         let kinds = (0..sources[0].arity())
             .map(|column| ColumnKind::merged(sources.iter().map(|source| source.column(column))))
@@ -34,7 +38,9 @@ impl<'s, 't> Tries<'s, 't> {
         Self { sources, kinds }
     }
 
-    /// Returns the window of the sources' rows whose first-column value lies in `low..high`.
+    /// Returns the window of the tries' rows whose first-column value lies in `low..high`.
+    ///
+    /// A bound that is `None` leaves its side unbounded.
     pub(super) fn window(
         &self,
         low: Option<StorageValue>,
@@ -43,9 +49,10 @@ impl<'s, 't> Tries<'s, 't> {
         Window::of(self.sources, self.kinds.len(), low, high)
     }
 
-    /// Merges the rows of a window into one piece per column,
-    /// and reports each merged row to `carry` by the range it was taken from,
-    /// that of the earliest source holding it.
+    /// Merges the rows of a window into one piece per column.
+    ///
+    /// For each merged row, it calls `carry` with the range that the row was taken from,
+    /// which is the range of the first source in the list that contains the row.
     pub(super) fn merge_window(
         &self,
         window: Window<'_>,
@@ -73,8 +80,9 @@ impl ShardSource for Tries<'_, '_> {
         self.kinds.len()
     }
 
-    /// Samples the values of the longest first column at equal position splits,
-    /// which is sorted, so the sample is.
+    /// Samples the values of the longest first column at equally spaced positions.
+    ///
+    /// The column is sorted, so the sample is sorted too.
     fn bounds(&self, shards: usize) -> Vec<StorageValue> {
         let longest = self
             .sources
@@ -90,32 +98,36 @@ impl ShardSource for Tries<'_, '_> {
         bounds
     }
 
-    /// Merges the sources' rows of the shard into one column piece per position.
+    /// Merges the tries' rows of the shard into one piece per column.
     fn build_shard(&self, low: Option<StorageValue>, high: Option<StorageValue>) -> Vec<Column> {
         self.merge_window(self.window(low, high), |_| {})
     }
 }
 
-/// The rows of the sources between two bounds: one row range per source that has any,
-/// and per column the number of values those ranges hold, which bounds the merged pieces.
+/// The rows of the sources between two bounds.
 ///
-/// A trie lays subtrees out in order, so in each source the window is a range
-/// of first-column positions and, beneath it, one range of positions per column.
+/// It has one row range for each source with rows in the window,
+/// and for each column the number of values in those ranges,
+/// which bounds the size of the merged pieces.
+/// A trie stores its subtrees in order, so in each source the window is a range of
+/// first-column positions and, below it, one range of positions per column.
 #[derive(Debug)]
 pub(super) struct Window<'a> {
-    /// The rows of each source in the window, sources without any left out.
+    /// The rows of each source in the window, leaving out the sources without any.
     ranges: Vec<RowRange<'a>>,
     /// The number of values across the sources, per column.
     values: Vec<usize>,
 }
 
 impl<'a> Window<'a> {
-    /// Returns the number of rows across the ranges, which bounds the rows they merge into.
+    /// Returns the number of rows across the ranges, which bounds the number of merged rows.
     pub(super) fn rows(&self) -> usize {
         self.values.last().copied().unwrap_or(0)
     }
 
     /// Finds the window of the sources' rows whose first-column value lies in `low..high`.
+    ///
+    /// `arity` is the number of columns of the sources.
     fn of(
         sources: &[&'a Trie],
         arity: usize,

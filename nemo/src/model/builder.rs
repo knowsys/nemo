@@ -1,16 +1,18 @@
-//! Constructors, conversions, and fluent builders for program components.
+//! Constructors, conversions and fluent builders for program components.
 //!
-//! They suit programs whose predicate names or rule shapes are computed at runtime.
-//! The macros in [macros](crate::model::macros) suit programs fixed in the Rust source,
-//! and `parse` reads programs from text.
+//! They are meant for programs whose predicate names or rule shapes are computed at run time.
+//! For a program fixed in the Rust source, the macros in [macros](crate::model::macros)
+//! are shorter, and [Program::parse] reads a program from text.
 //!
-//! Conversions of Rust primitives:
-//! - `&str` and [String] convert to *plain string* terms,
-//!   since a conversion never guesses whether an IRI was meant.
-//!   IRIs and names are requested explicitly ([Term::iri], [Term::prefixed], [Term::constant]).
-//! - Rust float literals are doubles.
-//!   Exact decimals come from [Term::decimal] (or parsing),
-//!   since a float literal cannot carry the distinction.
+//! The conversions from Rust values are:
+//! - `&str` and [String] convert to plain string terms,
+//!   so that a conversion never guesses whether an IRI was meant.
+//!   IRIs and names are created explicitly, with [Term::iri], [Term::prefixed] and
+//!   [Term::constant].
+//!   As an [Identifier], such as a predicate, a string is a bare name.
+//! - `f64` converts to a double term.
+//!   Exact decimals come from [Term::decimal] or from parsing,
+//!   since a Rust float cannot express the difference.
 
 use nemo_physical::value::{DataValue, Decimal, Double, Float, Number, ValueRef};
 
@@ -47,12 +49,12 @@ impl Term {
         Self::new(TermKind::Variable(Variable::global(name)))
     }
 
-    /// Creates a full-IRI constant term.
+    /// Creates a constant term with a full IRI.
     pub fn iri(iri: impl Into<String>) -> Self {
         Self::new(TermKind::Constant(Identifier::Iri(iri.into())))
     }
 
-    /// Creates a prefixed-name constant term like `foaf:Person`.
+    /// Creates a constant term with a prefixed name, like `foaf:Person`.
     pub fn prefixed(prefix: impl Into<String>, name: impl Into<String>) -> Self {
         Self::new(TermKind::Constant(Identifier::Prefixed {
             prefix: prefix.into(),
@@ -70,10 +72,11 @@ impl Term {
         Self::new(TermKind::Number(Number::Float(value.into())))
     }
 
-    /// Returns the exact number term `mantissa * 10^exponent`.
+    /// Returns the term of the exact number `mantissa * 10^exponent`.
     ///
     /// An integral value gives an integer term.
-    /// Returns `None` if the value's canonical form exceeds the length limit of numbers.
+    /// Returns `None` if the canonical form of the value exceeds the
+    /// [length limit of numbers](Decimal).
     pub fn decimal(mantissa: i128, exponent: i64) -> Option<Self> {
         Decimal::new(mantissa, exponent)
             .map(|value| Self::new(TermKind::Number(Number::Decimal(value))))
@@ -91,10 +94,10 @@ impl Term {
         })
     }
 
-    /// Creates a function-style call by name.
+    /// Creates a call of the given name with the given arguments.
     ///
-    /// A builtin name (see [Operator::from_name]) becomes an operation,
-    /// and any other name an uninterpreted function term.
+    /// The name of a builtin, as [Operator::from_name] recognizes it, gives an operation,
+    /// and any other name gives an uninterpreted function term.
     pub fn apply(name: &str, arguments: impl IntoIterator<Item = impl Into<Term>>) -> Self {
         match Operator::from_name(name) {
             Some(operator) => {
@@ -104,33 +107,34 @@ impl Term {
         }
     }
 
-    /// Returns the term denoting a data value.
+    /// Returns the term that denotes a data value.
     ///
-    /// It puts values computed in Rust, or read from engine results, into a program.
-    /// IRIs and structure labels become full IRIs, not resolved against prefixes or a base.
-    /// Returns `None` for nulls and for structures containing them, since no term denotes a null.
+    /// This puts values computed in Rust, or read from engine results, into a program.
+    /// IRIs and structure labels become full IRIs, which are not resolved by prefixes or a base.
+    /// Returns `None` for a null and for a structure that contains one,
+    /// since no term denotes a null.
     pub fn value(value: &DataValue) -> Option<Self> {
         Self::of_value(value.as_ref())
     }
 
-    /// Returns the term denoting a borrowed data value.
+    /// Returns the term that denotes a borrowed data value, as [value](Self::value) does.
     fn of_value(value: ValueRef<'_>) -> Option<Self> {
-        /// Returns a typed literal with a full-IRI datatype.
+        /// Returns a typed literal whose datatype is a full IRI.
         fn literal(lexical: String, datatype: String) -> Term {
             Term::new(TermKind::RdfLiteral {
                 lexical,
                 datatype: Identifier::Iri(datatype),
             })
         }
-        /// Returns the typed literal of a value of a native datatype:
-        /// its canonical lexical and the datatype of its domain.
+        /// Returns the typed literal of a value of a native datatype,
+        /// with the given lexical form and the datatype of the value's domain.
         fn typed(value: ValueRef<'_>, lexical: String) -> Term {
             let datatype = value
                 .datatype_iri()
                 .expect("a value of a native datatype has one");
             literal(lexical, datatype.to_owned())
         }
-        /// Returns the terms of a structure's elements, or `None` if any holds a null.
+        /// Returns the terms of a structure's elements, or `None` if any of them contains a null.
         fn elements<'a>(values: impl Iterator<Item = ValueRef<'a>>) -> Option<Vec<Term>> {
             values.map(Term::of_value).collect()
         }
@@ -170,16 +174,20 @@ impl Term {
     }
 }
 
-/// Strings convert to *plain string* terms, never IRIs (see the module
-/// documentation).
+/// A string converts to a plain string term, never to an IRI,
+/// so that a conversion never guesses whether an IRI was meant.
+///
+/// [Term::iri], [Term::prefixed] and [Term::constant] create names.
 impl From<&str> for Term {
     fn from(value: &str) -> Self {
         Term::string(value)
     }
 }
 
-/// Strings convert to *plain string* terms, never IRIs (see the module
-/// documentation).
+/// A string converts to a plain string term, never to an IRI,
+/// so that a conversion never guesses whether an IRI was meant.
+///
+/// [Term::iri], [Term::prefixed] and [Term::constant] create names.
 impl From<String> for Term {
     fn from(value: String) -> Self {
         Term::string(value)
@@ -210,7 +218,7 @@ impl From<Variable> for Term {
     }
 }
 
-/// The term takes the operation's span, since both cover the same source text.
+/// The term gets the operation's span, since both cover the same source text.
 impl From<Operation> for Term {
     fn from(value: Operation) -> Self {
         let span = value.span;
@@ -221,7 +229,7 @@ impl From<Operation> for Term {
     }
 }
 
-/// The term takes the aggregate's span, since both cover the same source text.
+/// The term gets the aggregate's span, since both cover the same source text.
 impl From<Aggregate> for Term {
     fn from(value: Aggregate) -> Self {
         let span = value.span;
@@ -232,7 +240,7 @@ impl From<Aggregate> for Term {
     }
 }
 
-/// Generates a binary [Operation] constructor per listed operator.
+/// Generates a constructor of a binary [Operation] for each listed operator.
 macro_rules! binary_constructors {
     ($($(#[$documentation:meta])* $function:ident => $operator:ident),+ $(,)?) => {
         impl Operation {
@@ -247,29 +255,29 @@ macro_rules! binary_constructors {
 }
 
 binary_constructors! {
-    /// A term-identity comparison `left = right`.
+    /// Creates the comparison `left = right`, by term identity.
     equal => Equal,
-    /// A term-distinctness comparison `left != right`.
+    /// Creates the comparison `left != right`, by term distinctness.
     unequal => Unequal,
-    /// A value-equality comparison `left == right`.
+    /// Creates the comparison `left == right`, by value equality.
     value_equal => ValueEqual,
-    /// A value-inequality comparison `left !== right`.
+    /// Creates the comparison `left !== right`, by value inequality.
     value_unequal => ValueUnequal,
-    /// A comparison `left > right`.
+    /// Creates the comparison `left > right`.
     greater => Greater,
-    /// A comparison `left >= right`.
+    /// Creates the comparison `left >= right`.
     greater_eq => GreaterEq,
-    /// A comparison `left < right`.
+    /// Creates the comparison `left < right`.
     less => Less,
-    /// A comparison `left <= right`.
+    /// Creates the comparison `left <= right`.
     less_eq => LessEq,
-    /// An addition `left + right`.
+    /// Creates the addition `left + right`.
     add => Add,
-    /// A subtraction `left - right`.
+    /// Creates the subtraction `left - right`.
     subtract => Subtract,
-    /// A multiplication `left * right`.
+    /// Creates the multiplication `left * right`.
     multiply => Multiply,
-    /// A division `left / right`.
+    /// Creates the division `left / right`.
     divide => Divide,
 }
 
@@ -286,7 +294,7 @@ impl Aggregate {
         }
     }
 
-    /// Returns the match count: `#count()`.
+    /// Creates the aggregate `#count()`, which counts the body matches.
     pub fn matches() -> Self {
         Self {
             kind: AggregateKind::Count,
@@ -298,9 +306,10 @@ impl Aggregate {
         }
     }
 
-    /// Scopes the aggregate by the given variables: `?v per ?w…`.
+    /// Returns the aggregate with the given scope variables, as in `#sum(?v per ?w, …)`.
     ///
-    /// On [Aggregate::matches], it is the value-less `#count(per ?w…)`.
+    /// The variables replace any earlier scope.
+    /// On [Aggregate::matches], this gives `#count(per ?w, …)`, which has no value.
     pub fn per(mut self, variables: impl IntoIterator<Item = Variable>) -> Self {
         self.scope = variables.into_iter().collect();
         self.legacy_list = false;
@@ -329,13 +338,13 @@ impl Aggregate {
 }
 
 impl Atom {
-    /// Appends argument terms.
+    /// Returns the atom with the given argument terms appended.
     pub fn terms(mut self, terms: impl IntoIterator<Item = impl Into<Term>>) -> Self {
         self.terms.extend(terms.into_iter().map(Into::into));
         self
     }
 
-    /// Appends one argument term.
+    /// Returns the atom with one argument term appended.
     pub fn term(mut self, term: impl Into<Term>) -> Self {
         self.terms.push(term.into());
         self
@@ -353,7 +362,7 @@ impl From<Atom> for Fact {
     }
 }
 
-/// Atoms convert to positive literals, since negation is explicit.
+/// An atom converts to a positive literal, since a negated literal must be created explicitly.
 impl From<Atom> for Literal {
     fn from(value: Atom) -> Self {
         Self::Positive(value)
@@ -402,8 +411,9 @@ impl RuleBuilder {
         self
     }
 
-    /// Adds a literal to the body:
-    /// atoms come in as positive literals, and operations as constraints.
+    /// Adds a literal to the body.
+    ///
+    /// An atom is added as a positive literal, and an operation as an operation literal.
     pub fn body(mut self, literal: impl Into<Literal>) -> Self {
         self.rule.body.push(literal.into());
         self
@@ -414,13 +424,13 @@ impl RuleBuilder {
         self.body(Literal::Negative(atom))
     }
 
-    /// Attaches an attribute.
+    /// Attaches an attribute to the rule.
     pub fn attribute(mut self, attribute: Attribute) -> Self {
         self.rule.attributes.push(attribute);
         self
     }
 
-    /// Finishes the rule.
+    /// Returns the built rule.
     pub fn build(self) -> Rule {
         self.rule
     }
@@ -455,13 +465,13 @@ impl ProgramBuilder {
         self
     }
 
-    /// Adds any statement.
+    /// Adds a statement of any kind.
     pub fn statement(mut self, statement: impl Into<Statement>) -> Self {
         self.statements.push(statement.into());
         self
     }
 
-    /// Finishes the program.
+    /// Returns the built program.
     pub fn build(self) -> Program {
         Program::new(self.statements)
     }

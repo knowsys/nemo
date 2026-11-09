@@ -1,5 +1,5 @@
-//! Exports: the directives a program declares, and writing a
-//! predicate's rows out in the serialization each one names.
+//! Exports: a program's export directives as specifications,
+//! and writing a predicate's rows in the serialization that a specification names.
 
 use nemo_io::{
     compression::Compression,
@@ -12,7 +12,9 @@ use crate::{
     engine::{Engine, compile::translation::exports::rdf_export_arity},
 };
 
-/// One export directive: the predicate and the file serialization it declares.
+/// One export: the predicate, and the file and serialization to write it to.
+///
+/// [exports](Engine::exports) returns the program's export directives in this form.
 ///
 /// # Example
 ///
@@ -36,16 +38,17 @@ use crate::{
 /// ```
 #[derive(Debug, Clone)]
 pub struct ExportSpec {
-    /// The exported predicate, resolved.
+    /// The resolved name of the exported predicate.
     pub predicate: String,
-    /// The declared resource name, or `None` for the conventional `predicate.extension`.
+    /// The resource name, or `None` for the conventional `predicate.extension`
+    /// (see [file_name](Self::file_name)).
     pub resource: Option<String>,
-    /// The serialization written.
+    /// The serialization.
     pub format: ExportFormat,
-    /// The stream compression (never applied to Parquet, which
-    /// compresses internally).
+    /// The stream compression, which is never applied to Parquet,
+    /// since Parquet compresses internally.
     pub compression: Compression,
-    /// The most rows written, if declared.
+    /// The largest number of rows to write, or `None` for no limit.
     pub limit: Option<u64>,
 }
 
@@ -56,9 +59,10 @@ pub enum ExportFormat {
     Dsv {
         /// The column delimiter.
         delimiter: u8,
-        /// The file extension of the format name.
+        /// The file extension that goes with the format's name, such as `csv`.
         extension: String,
-        /// The declared column formats, or `None` to write every column in the `term` format.
+        /// The declared column formats, or `None` to write every column in the
+        /// [Term](nemo_io::format::ValueFormat::Term) format.
         formats: Option<Vec<nemo_io::format::ValueFormat>>,
     },
     /// An RDF serialization.
@@ -67,15 +71,15 @@ pub enum ExportFormat {
     Rdf {
         /// The serialization variant.
         variant: nemo_io::file_format::RdfVariant,
-        /// The base IRI, written if the serialization carries one.
+        /// The base IRI, which is written if the serialization supports one.
         base: Option<String>,
-        /// The prefix declarations, the program's own,
-        /// written if the serialization abbreviates.
+        /// The program's prefix declarations,
+        /// which are written if the serialization abbreviates IRIs.
         prefixes: Vec<(String, String)>,
     },
     /// A JSON array of row arrays.
     Json,
-    /// A Parquet file over the Arrow interchange mapping.
+    /// A Parquet file, with the values mapped to Arrow types.
     Parquet,
 }
 
@@ -92,8 +96,8 @@ impl ExportFormat {
 }
 
 impl ExportSpec {
-    /// Creates a specification writing a predicate as comma-separated values in the `term`
-    /// column format.
+    /// Creates a specification that writes a predicate as comma-separated values,
+    /// with every column in the [Term](nemo_io::format::ValueFormat::Term) format.
     pub fn csv(predicate: impl Into<String>) -> Self {
         Self {
             predicate: predicate.into(),
@@ -114,19 +118,23 @@ impl ExportSpec {
         self.resource.as_deref() == Some("")
     }
 
-    /// Returns the file this specification writes to, relative to the export
-    /// directory: the declared resource name, or the conventional
-    /// `predicate.extension` with the characters of an IRI predicate
-    /// that a file name cannot carry mangled to `_`. Empty for
-    /// standard output.
+    /// Returns the name of the file this specification writes to, relative to the export
+    /// directory.
+    ///
+    /// It is the resource name, or else the conventional `predicate.extension`,
+    /// in which every character of the predicate other than a letter, a digit, `.`, `-` or `_`
+    /// is replaced by `_`.
+    /// Under gzip compression, `.gz` is appended if the name does not end with it,
+    /// except for Parquet.
+    /// The name is empty for standard output.
     pub fn file_name(&self) -> String {
         let name = self.named();
         if name.is_empty() {
             return name;
         }
-        // A gzipped stream carries `.gz`, because that is how every
-        // reader that detects compression by name, this engine's
-        // included, knows to unwrap it. Parquet never gzips.
+        // A gzipped stream gets `.gz`, because every reader that detects
+        // compression by name, this engine's included, needs it to unwrap
+        // the stream. Parquet is never gzipped.
         if self.compression == Compression::Gzip
             && !name.ends_with(".gz")
             && !matches!(self.format, ExportFormat::Parquet)
@@ -156,9 +164,7 @@ impl ExportSpec {
     }
 }
 
-/// One export's configured serializer,
-/// one of the writers behind [export_specs](Engine::export_specs)
-/// and [export_bytes](Engine::export_bytes).
+/// The configured writer of one export.
 enum ExportWriter {
     /// Delimiter-separated values.
     Dsv(nemo_io::dsv::DsvWriter),
@@ -166,14 +172,18 @@ enum ExportWriter {
     Rdf(nemo_io::rdf::RdfWriter),
     /// A JSON array of row arrays.
     Json(nemo_io::json::JsonWriter),
-    /// A Parquet file, dispatched apart, since its writer wants the whole target and never a
-    /// gzip stream.
+    /// A Parquet file, which is written apart from the others,
+    /// since its writer needs the whole target and never writes to a gzip stream.
     #[cfg(feature = "parquet")]
     Parquet(nemo_io::parquet::ParquetWriter),
 }
 
 impl ExportWriter {
     /// Writes rows to a streaming target.
+    ///
+    /// # Panics
+    ///
+    /// Panics for a Parquet writer, which does not stream.
     fn write<'a>(
         &self,
         target: impl std::io::Write,
@@ -190,9 +200,10 @@ impl ExportWriter {
 }
 
 impl Engine {
-    /// Writes export specifications' rows into files of a directory,
-    /// or to the standard output for an empty resource,
-    /// which a closed pipe ends quietly.
+    /// Writes the rows of export specifications into files of a directory,
+    /// or to the standard output for an empty resource name.
+    ///
+    /// If the standard output is closed, the export to it ends without an error.
     pub(in crate::engine) fn write_exports(
         &mut self,
         directory: impl AsRef<std::path::Path>,
@@ -239,8 +250,8 @@ impl Engine {
     ) -> Result<Vec<u8>, Diagnostic> {
         let rows = self.export_rows(spec)?;
         let name = spec.file_name();
-        // A stream has no name to detect compression by: the option
-        // decides alone.
+        // The standard output has no name to detect compression by,
+        // so the compression option alone decides.
         let target = (!spec.is_stdout()).then(|| std::path::Path::new(&name));
         let mut bytes = Vec::new();
         let writer = self.export_writer(spec)?;
@@ -260,12 +271,12 @@ impl Engine {
         Ok(bytes)
     }
 
-    /// Returns the rows one export specification serializes, checked against
-    /// the number of columns its format requires.
+    /// Returns the rows that one export specification writes,
+    /// after checking them against the number of columns its format requires.
     fn export_rows(&mut self, spec: &ExportSpec) -> Result<Vec<Vec<DataValue>>, Diagnostic> {
         let mut rows = match self.arity_of(&spec.predicate) {
             Some(_) => self.rows(&spec.predicate)?,
-            // Never used: an empty file states the empty result.
+            // A predicate that the program never used is written as an empty file.
             None => Vec::new(),
         };
         if let Some(limit) = spec.limit {

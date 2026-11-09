@@ -1,14 +1,16 @@
-//! The HTML report: one self-contained page over a document.
+//! The HTML report: one self-contained page that shows a document.
 
 /// The page template, whose placeholders [render] substitutes.
 const TEMPLATE: &str = include_str!("page.html");
 
-/// Renders the report page over a document's JSON (see [ReportDocument::page](super::ReportDocument::page)).
+/// Renders the report page that shows a document's JSON.
 ///
+/// `live` is the flag of [ReportDocument::page](super::ReportDocument::page).
 /// The JSON is embedded in a `<script>` element,
 /// and the HTML parser ends that element at the first `</script>`, even inside a string.
 /// So `<`, `>` and `&` are written as `\u` escapes.
-/// So are U+2028 and U+2029, which JSON allows in strings but JavaScript source does not.
+/// So are U+2028 and U+2029, which JSON allows in strings but JavaScript before ES2019 does
+/// not.
 pub(super) fn render(document: &str, live: bool) -> String {
     let embedded = document
         .replace('<', "\\u003c")
@@ -16,8 +18,8 @@ pub(super) fn render(document: &str, live: bool) -> String {
         .replace('&', "\\u0026")
         .replace('\u{2028}', "\\u2028")
         .replace('\u{2029}', "\\u2029");
-    // The live flag first: the document is arbitrary JSON and could
-    // contain any placeholder, so it must be substituted last.
+    // The document is substituted last, since it is arbitrary JSON that could contain a
+    // placeholder.
     TEMPLATE
         .replacen("__LIVE__", if live { "true" } else { "false" }, 1)
         .replacen("__DOCUMENT__", &embedded, 1)
@@ -29,6 +31,7 @@ mod tests {
 
     use crate::telemetry::ReportDocument;
 
+    /// A page embeds the document and sets the live flag.
     #[test]
     fn pages_embed_the_document_and_the_mode() {
         let page = render("{\"title\":\"t\",\"run\":null,\"telemetry\":null}", false);
@@ -41,6 +44,7 @@ mod tests {
         assert!(!page.contains("__LIVE__"));
     }
 
+    /// A document that contains a placeholder is embedded unchanged.
     #[test]
     fn a_document_containing_a_placeholder_is_embedded_unchanged() {
         let page = render("{\"title\":\"__LIVE__\"}", true);
@@ -48,10 +52,12 @@ mod tests {
         assert!(page.contains("const DOCUMENT = {\"title\":\"__LIVE__\"};"));
     }
 
+    /// A document cannot end the page's script early or add markup,
+    /// and its line separators are escaped.
     #[test]
     fn documents_cannot_end_the_page_script_early() {
-        // A title (or a rule, a resource, a program text) containing the
-        // script's end tag must not end the script.
+        // Any text of the document, such as a title, a rule, a resource or a program text,
+        // may contain the script's end tag.
         let page = ReportDocument {
             title: "</script><img src=x onerror=alert(1)>\u{2028}",
             run: None,

@@ -1,19 +1,20 @@
-//! The shapes of joins and aggregations: what they compute, in layer positions.
+//! The shapes of joins and aggregations: what they compute, with layers given by index.
 //!
 //! A join descends through its layers in order, choosing a value at each.
-//! A match chooses a value for every layer,
-//! such that each input holds a row with these values in the columns it maps.
-//! The values of a match at the leading, emitted layers form a result row.
+//! A *match* chooses a value for every layer,
+//! such that each input has a row with these values in the columns it maps.
+//! The values of a match at the emitted layers form a result row.
 //! For the deeper layers, the join only checks that some match exists,
 //! so it emits each result row once.
 //!
 //! The hooks of a join restrict its matches further:
-//! [subtracted inputs](SubtractedShape), [filters](FilterShape) and [bound layers](BoundLayerShape).
+//! [subtracted inputs](SubtractedShape), [filters](FilterShape)
+//! and [bound layers](BoundLayerShape).
 //!
-//! The rows a join emits may pass through a [row stage](RowStageShape),
-//! whose [computed columns](ComputedShape) extend them
-//! and whose [post-filters](PostFilterShape) may drop them,
+//! The rows a join emits may pass through a [row stage](RowStageShape)
 //! or through a [projection](ProjectionShape).
+//! A row stage extends each row by [computed columns](ComputedShape),
+//! and its [post-filters](PostFilterShape) may drop the row.
 //! An [aggregation](AggregationShape) groups the rows of a join by their leading layers,
 //! and computes its [aggregates](AggregateShape) per group.
 
@@ -29,44 +30,46 @@ use crate::{
 pub(crate) struct InputColumn {
     /// The index of the input among the inputs the join is given.
     pub(crate) input: usize,
-    /// The column within the input's tries.
+    /// The index of the column in the input's tries.
     pub(crate) column: usize,
 }
 
-/// A subtracted input of a join: a trie whose rows the join removes from its matches.
+/// The shape of a subtracted input of a join.
 ///
-/// The join finds its matches in its inputs,
-/// and drops a match if some row of the subtracted trie
+/// The join drops a match if some row of the subtracted trie
 /// agrees with it on the compared columns.
-/// These are the first columns of the subtracted trie, each compared with one layer.
+/// The compared columns are the first columns of the subtracted trie,
+/// each compared with one layer.
 /// Any further columns are not compared,
-/// so the join subtracts the trie's projection onto the compared columns.
+/// so the join subtracts the projection of the trie onto the compared columns.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct SubtractedShape<'a> {
-    /// The layer of each compared column:
-    /// column `i` of the subtracted trie is compared with layer `layers[i]`.
-    /// The layers strictly increase, since the join follows the trie along its descent.
+    /// The layer of each compared column.
+    ///
+    /// Column `i` of the subtracted trie is compared with layer `layers[i]`.
+    /// The layers strictly increase, since the join follows the trie down as it descends.
     pub(crate) layers: &'a [usize],
 }
 
 /// A filter of a join: a condition over the values of some layers.
 ///
-/// The join checks the filter at the deepest layer it reads.
+/// The join checks the filter at the deepest layer the filter reads.
 /// If the condition does not hold there, or fails to evaluate,
-/// the join moves on to that layer's next value, skipping everything below;
-/// it counts each failed evaluation as an error.
+/// the join moves on to that layer's next value, skipping everything below.
+/// Each failed evaluation counts as an error.
 #[derive(Debug, Clone)]
 pub(crate) struct FilterShape {
-    /// The layers the program reads:
-    /// the program's input `i` is the value of layer `inputs[i]`.
+    /// The layers the condition reads.
+    ///
+    /// Input `i` of the program is the value of layer `inputs[i]`.
     pub(crate) inputs: Vec<usize>,
     /// The condition, with its specialization.
     pub(crate) program: SpecializedProgram,
 }
 
 impl FilterShape {
-    /// Creates the filter of a program over the given layers,
-    /// compiling its specialization.
+    /// Creates the filter of a condition over the given layers,
+    /// and compiles the condition's specialization.
     pub(crate) fn new(inputs: Vec<usize>, program: StackProgram) -> Self {
         Self {
             inputs,
@@ -75,19 +78,19 @@ impl FilterShape {
     }
 }
 
-/// A bound layer of a join: a layer whose single value is a constant
-/// or computed by a program from shallower layers.
+/// A bound layer of a join: a layer with a single value,
+/// which is a constant or computed by a program from shallower layers.
 ///
 /// Instead of enumerating the layer,
-/// the join looks up the value in the layer's input columns.
-/// If the value has no storage value, such as a string the dictionary does not hold,
-/// or the evaluation fails, nothing matches at the layer;
-/// the join counts each failed evaluation as an error.
+/// the join looks the value up in the layer's input columns.
+/// Nothing matches at the layer if the value has no storage value,
+/// such as a string the dictionary does not have, or if its evaluation fails.
+/// Each failed evaluation counts as an error.
 #[derive(Debug, Clone)]
 pub(crate) struct BoundLayerShape {
     /// The bound layer.
     pub(crate) layer: usize,
-    /// What the layer's value is.
+    /// The value of the layer.
     pub(crate) value: BoundValue,
 }
 
@@ -98,8 +101,9 @@ pub(crate) enum BoundValue {
     Constant(DataValue),
     /// The result of a program.
     Computed {
-        /// The layers the program reads, each shallower than the bound layer:
-        /// the program's input `i` is the value of layer `inputs[i]`.
+        /// The layers the program reads, each shallower than the bound layer.
+        ///
+        /// Input `i` of the program is the value of layer `inputs[i]`.
         inputs: Vec<usize>,
         /// The program, with its specialization.
         program: SpecializedProgram,
@@ -115,8 +119,8 @@ impl BoundLayerShape {
         }
     }
 
-    /// Creates a bound layer whose value the program computes from the given layers,
-    /// compiling its specialization.
+    /// Creates a layer bound to the value a program computes from the given layers,
+    /// and compiles the program's specialization.
     pub(crate) fn computed(layer: usize, inputs: Vec<usize>, program: StackProgram) -> Self {
         Self {
             layer,
@@ -133,14 +137,14 @@ impl BoundLayerShape {
     }
 }
 
-/// The shape of a join, from which a join is built; it borrows its parts.
+/// The shape of a join, from which a join is built.
 ///
-/// [TrieJoin::new](crate::execution::TrieJoin::new) validates the shape.
-/// A caller whose shapes are valid by construction builds through
-/// [TrieJoin::with_trusted_shape](crate::execution::TrieJoin::with_trusted_shape) instead,
-/// which neither clones nor validates anything.
-/// Such a shape must pass [validate](Self::validate)
-/// and [fit](Self::validate_fit) what the join is given.
+/// The shape borrows its parts.
+/// [TrieJoin::new](crate::execution::TrieJoin::new) validates it, and
+/// [TrieJoin::with_trusted_shape](crate::execution::TrieJoin::with_trusted_shape) does not,
+/// for a shape that is valid by construction.
+/// A valid shape passes [validate](Self::validate),
+/// and [validate_fit](Self::validate_fit) with what the join is given.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct JoinShape<'a> {
     /// Per layer, the input columns intersected there.
@@ -158,8 +162,8 @@ pub(crate) struct JoinShape<'a> {
 impl JoinShape<'_> {
     /// Checks the invariants of the shape.
     ///
-    /// Returns the first invariant violated, as a message:
-    /// a malformed shape is a bug of the code that built it, not an error in the data.
+    /// Returns the first violated invariant as a message.
+    /// A malformed shape is a bug in the code that built it, not an error in the data.
     pub(crate) fn validate(&self) -> Result<(), &'static str> {
         self.validate_layers()?;
         self.validate_subtracted()?;
@@ -169,7 +173,7 @@ impl JoinShape<'_> {
 
     /// Checks the layers:
     /// - there is at least one, and each intersects at least one column,
-    /// - no more are emitted than there are,
+    /// - the join emits no more layers than it has,
     /// - each input maps the first columns of its trie, in order, to strictly increasing layers.
     fn validate_layers(&self) -> Result<(), &'static str> {
         if self.layers.is_empty() {
@@ -209,8 +213,8 @@ impl JoinShape<'_> {
         Ok(())
     }
 
-    /// Checks the subtracted inputs:
-    /// each maps at least one column, to strictly increasing layers the join has.
+    /// Checks that each subtracted input maps at least one column,
+    /// and maps its columns to strictly increasing layers that the join has.
     fn validate_subtracted(&self) -> Result<(), &'static str> {
         for input in self.subtracted {
             let Some(&last) = input.layers.last() else {
@@ -229,9 +233,8 @@ impl JoinShape<'_> {
         Ok(())
     }
 
-    /// Checks the filters: each reads
-    /// - at least one layer, and only layers the join has,
-    /// - as many layers as its program has inputs.
+    /// Checks that each filter reads at least one layer, only layers the join has,
+    /// and as many layers as its program has inputs.
     fn validate_filters(&self) -> Result<(), &'static str> {
         for filter in self.filters {
             if filter.inputs.is_empty() {
@@ -256,8 +259,8 @@ impl JoinShape<'_> {
 
     /// Checks the bound layers:
     /// - each binds a layer the join has, and no layer is bound twice,
-    /// - each program reads at least one layer, and only layers shallower than the one it binds;
-    ///   a value that reads no layer is a constant,
+    /// - each program reads at least one layer, since a value that reads none is a constant,
+    ///   and only layers shallower than the one it binds,
     /// - each program reads as many layers as it has inputs.
     fn validate_bound_layers(&self) -> Result<(), &'static str> {
         for bound in self.bound_layers {
@@ -294,12 +297,12 @@ impl JoinShape<'_> {
         Ok(())
     }
 
-    /// Checks that the shape fits what a join over it is given:
-    /// the blocks of its inputs, one trie per subtracted input,
-    /// and the dictionary, if filters or bound layers decode values through it.
+    /// Checks that the shape fits what a join over it is given.
     ///
-    /// Returns the first mismatch, as a message:
-    /// like a malformed shape, it is a bug of the code that built the join.
+    /// A join is given the blocks of its inputs, one trie per subtracted input,
+    /// and a dictionary, which it needs if it has filters or bound layers.
+    /// Returns the first mismatch as a message.
+    /// Like a malformed shape, a mismatch is a bug in the code that built the join.
     pub(crate) fn validate_fit(
         &self,
         inputs: &[&[&Trie]],
@@ -330,8 +333,8 @@ impl JoinShape<'_> {
         Ok(())
     }
 
-    /// Checks that the input columns fit the blocks of the inputs:
-    /// each names an input that is given, and a column each of its tries has.
+    /// Checks that each input column names a given input,
+    /// and a column that every block of that input has.
     fn validate_input_fit(&self, inputs: &[&[&Trie]]) -> Result<(), &'static str> {
         for input_column in self.layers.iter().flatten() {
             let Some(blocks) = inputs.get(input_column.input) else {
@@ -361,55 +364,57 @@ pub(crate) enum RowInput {
 /// A computed column of a row stage: a program evaluated on each row.
 #[derive(Debug)]
 pub(crate) struct ComputedShape {
-    /// The inputs of the program, in program input order.
+    /// The inputs of the program, in order.
     pub(crate) inputs: Vec<RowInput>,
     /// The program computing the value, with its specialization.
     pub(crate) program: SpecializedProgram,
-    /// The deepest layer the column reads, also through computed inputs.
+    /// The deepest layer the column reads, also through the computed columns it reads.
     ///
-    /// The result is stale once a row changes that layer or one above it.
-    /// It is `None` for a constant, which never goes stale.
+    /// The result goes stale when a row changes that layer or a shallower one.
+    /// It is `None` for a column that reads no layer, such as a constant,
+    /// whose result never goes stale.
     pub(crate) deepest: Option<usize>,
-    /// Whether the column evaluates on every row,
-    /// since its program, or one it reads, is nondeterministic.
+    /// Whether the column is evaluated on every row,
+    /// because its program, or that of a computed column it reads, is nondeterministic.
     pub(crate) volatile: bool,
 }
 
 /// A post-filter of a row stage: a condition checked on each row after the computed columns.
 ///
-/// A row on which the condition does not hold, or fails to evaluate, is dropped;
-/// each failed evaluation counts as an error.
+/// A row on which the condition does not hold, or fails to evaluate, is dropped.
+/// Each failed evaluation counts as an error.
 #[derive(Debug)]
 pub(crate) struct PostFilterShape {
-    /// The inputs of the program, in program input order.
+    /// The inputs of the program, in order.
     pub(crate) inputs: Vec<RowInput>,
     /// The condition, with its specialization.
     pub(crate) program: SpecializedProgram,
 }
 
-/// The shape of a row stage over a join's rows, from which a row evaluator is built:
-/// the programs evaluated on each emitted row.
+/// The shape of a row stage: the programs evaluated on each row a join emits.
 ///
+/// A [RowEvaluator](crate::execution::RowEvaluator) is built from it.
 /// Computed columns extend the row, and post-filters may drop it.
-/// A result row holds the emitted layers, followed by the delivered computed columns.
+/// A result row consists of the emitted layers, followed by the delivered computed columns.
 #[derive(Debug)]
 pub(crate) struct RowStageShape {
-    /// The computed columns, each reading only layers and earlier columns.
+    /// The computed columns, each reading only layers and earlier computed columns.
     pub(crate) computed: Vec<ComputedShape>,
     /// The filters checked after the computed columns.
     pub(crate) post_filters: Vec<PostFilterShape>,
-    /// The computed columns a row delivers after the emitted layers, by index, in order.
+    /// The indices of the computed columns that follow the emitted layers in a result row,
+    /// in order.
     pub(crate) delivered: Vec<usize>,
 }
 
 impl RowStageShape {
-    /// Checks that the shape fits the joins whose rows it reads, which emit `emitted` layers:
+    /// Checks that the shape fits joins that emit `emitted` layers:
     /// - its programs read only emitted layers and earlier computed columns,
     /// - each program has as many inputs as it reads,
     /// - it delivers only computed columns it has.
     ///
-    /// Returns the first mismatch, as a message:
-    /// like a malformed shape, it is a bug of the code that built the row stage.
+    /// Returns the first mismatch as a message.
+    /// Like a malformed shape, a mismatch is a bug in the code that built the row stage.
     pub(crate) fn validate_fit(&self, emitted: usize) -> Result<(), &'static str> {
         let fits = |inputs: &[RowInput], earlier: usize| {
             inputs.iter().all(|input| match *input {
@@ -448,16 +453,18 @@ impl RowStageShape {
     }
 }
 
-/// The shape of a projection of a join's rows, from which a projecting sink is built.
+/// The shape of a projection of a join's rows.
+///
+/// A [ProjectingSink](crate::execution::ProjectingSink) is built from it.
 #[derive(Debug)]
 pub(crate) struct ProjectionShape {
     /// Per projected column, the emitted layer it reads.
     pub(crate) columns: Vec<usize>,
-    /// The length of the projection's leading identity run:
+    /// The length of the *group prefix*:
     /// the leading projected columns that read the leading layers, in order.
     ///
-    /// Within it, the projected rows keep the order of the drain,
-    /// and a change there starts a fresh group of rows to deduplicate.
+    /// On the group prefix, the projected rows keep the order the join emits them in,
+    /// and a change in it starts a new group of rows to deduplicate.
     pub(crate) group_prefix: usize,
 }
 
@@ -497,26 +504,25 @@ pub(crate) enum AggregateKind {
     Map,
 }
 
-/// One aggregate of an aggregation:
-/// its function, the layers it reads, and the layers that tell its rows apart.
+/// One aggregate of an aggregation: its function and the layers it reads.
+///
+/// A row's *identity* for the aggregate is its values at the input, pair and `per` layers.
+/// Within a group, the aggregate reads each identity once.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct AggregateShape {
     /// The aggregation function.
     pub(crate) kind: AggregateKind,
-    /// The layer whose values are aggregated; the keys of a map.
-    /// `None` for a count, which reads no value.
+    /// The layer whose values are aggregated, which has the keys for a map,
+    /// or `None` for a count, which reads no value.
     pub(crate) input: Option<usize>,
-    /// The layer of a map's values; `None` for every other function.
+    /// The layer of a map's values, or `None` for every other function.
     pub(crate) pair: Option<usize>,
-    /// The layers that, with the input and the pair,
-    /// identify a row for this aggregate;
-    /// the aggregate reads each identity of a group once.
+    /// The further layers of a row's identity, beside the input and the pair.
     pub(crate) per: Vec<usize>,
 }
 
 impl AggregateShape {
-    /// Returns the layers identifying a row for this aggregate:
-    /// the input, the pair, then the `per` layers.
+    /// Returns the layers of a row's identity: the input, the pair, then the `per` layers.
     pub(crate) fn identity_layers(&self) -> impl Iterator<Item = usize> + '_ {
         self.input
             .into_iter()
@@ -525,11 +531,12 @@ impl AggregateShape {
     }
 }
 
-/// The shape of an aggregation over a join's rows, from which an aggregator is built;
-/// it borrows its aggregates.
+/// The shape of an aggregation over a join's rows.
 ///
+/// An [Aggregator](crate::execution::Aggregator) is built from it,
+/// and the shape borrows its aggregates.
 /// The leading layers of a row are its group key.
-/// A result row holds the group key, followed by one value per aggregate.
+/// A result row consists of the group key, followed by one value per aggregate.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct AggregationShape<'a> {
     /// The number of leading layers forming the group key.
@@ -542,10 +549,10 @@ impl AggregationShape<'_> {
     /// Checks the invariants of the shape:
     /// - there is at least one aggregate,
     /// - every aggregate but a count reads an input layer,
-    /// - exactly the map aggregate reads a layer of values.
+    /// - exactly the map aggregates read a layer of values.
     ///
-    /// Returns the first invariant violated, as a message:
-    /// a malformed shape is a bug of the code that built it, not an error in the data.
+    /// Returns the first violated invariant as a message.
+    /// A malformed shape is a bug in the code that built it, not an error in the data.
     pub(crate) fn validate(&self) -> Result<(), &'static str> {
         if self.aggregates.is_empty() {
             return Err("an aggregation must compute at least one aggregate");
@@ -570,11 +577,12 @@ impl AggregationShape<'_> {
         Ok(())
     }
 
-    /// Checks that the shape fits the joins it aggregates, which emit `emitted` layers:
-    /// it groups by no more layers than they emit, and its aggregates read only emitted layers.
+    /// Checks that the shape fits joins that emit `emitted` layers.
     ///
-    /// Returns the first mismatch, as a message:
-    /// like a malformed shape, it is a bug of the code that built the aggregation.
+    /// The shape must group by no more layers than the joins emit,
+    /// and its aggregates must read only emitted layers.
+    /// Returns the first mismatch as a message.
+    /// Like a malformed shape, a mismatch is a bug in the code that built the aggregation.
     pub(crate) fn validate_fit(&self, emitted: usize) -> Result<(), &'static str> {
         if self.group_layers > emitted {
             return Err("an aggregation cannot group by more layers than the join emits");
@@ -610,9 +618,9 @@ pub(crate) struct OwnedJoinShape {
 
 #[cfg(test)]
 impl OwnedJoinShape {
-    /// Creates the parts of a join's shape, validated.
+    /// Creates a validated shape without bound layers.
     ///
-    /// Returns the first invariant a malformed shape violates, as a message.
+    /// Returns the first violated invariant as an error message if the shape is malformed.
     pub(crate) fn new(
         layers: Vec<Vec<InputColumn>>,
         emitted: usize,
@@ -632,6 +640,8 @@ impl OwnedJoinShape {
     }
 
     /// Returns the shape with the given bound layers, validated.
+    ///
+    /// Returns the first violated invariant as an error message if the shape is malformed.
     pub(crate) fn with_bound_layers(
         mut self,
         bound_layers: Vec<BoundLayerShape>,
@@ -660,6 +670,7 @@ mod tests {
 
     use crate::{function::OpCode, testing::at};
 
+    /// A well-formed shape with a subtracted input passes validation.
     #[test]
     fn valid_shapes_are_accepted() {
         // R(a, b) ⋈ S(b, c), emitting all three layers.
@@ -672,6 +683,7 @@ mod tests {
         assert!(shape.is_ok());
     }
 
+    /// Each kind of malformed join shape fails validation.
     #[test]
     fn malformed_shapes_are_rejected() {
         // No layers.
@@ -706,6 +718,8 @@ mod tests {
         );
     }
 
+    /// A row stage fits only joins that emit every layer it reads,
+    /// and only if its programs and delivered columns match its computed columns.
     #[test]
     fn row_stages_must_fit_the_emitted_layers() {
         let sum = || {
@@ -733,7 +747,7 @@ mod tests {
         // A column reading itself.
         let cyclic = stage(vec![RowInput::Layer(0), RowInput::Computed(0)], vec![0]);
         assert!(cyclic.validate_fit(2).is_err());
-        // A program of two inputs given one.
+        // A program of two inputs that is given one.
         assert!(
             stage(vec![RowInput::Layer(0)], vec![0])
                 .validate_fit(2)
@@ -744,6 +758,8 @@ mod tests {
         assert!(beyond.validate_fit(2).is_err());
     }
 
+    /// The group prefix of a projection is its leading run of columns
+    /// that read layers 0, 1, 2 and so on, in order.
     #[test]
     fn projections_group_by_their_leading_identity_run() {
         assert_eq!(ProjectionShape::new(vec![0, 1, 3]).group_prefix, 2);

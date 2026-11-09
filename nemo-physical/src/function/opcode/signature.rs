@@ -1,88 +1,91 @@
-//! Signatures: the domains an instruction accepts and yields.
+//! Signatures, the domains of the operands that an instruction accepts
+//! and of the results that it yields.
 //!
-//! A signature lists the ways an instruction can succeed.
-//! Each way, an overload, has one parameter per operand:
-//! the domains that operand must lie in.
-//! It also names the domains the result then lies in.
-//! Operands come in operand order, the order they were pushed in.
+//! A signature lists the ways in which an instruction can succeed, its overloads.
+//! An overload has one parameter for each operand, the domains that the operand must lie in,
+//! and it gives the domains that the result then lies in.
+//! Operands are in operand order, the order in which they were pushed.
 //!
 //! A signature over-approximates.
-//! Operands that fit an overload may still fail on their values,
-//! as a malformed string fails a cast.
-//! Operands that fit no overload never succeed.
+//! Operands that fit an overload may still make the instruction fail,
+//! as a malformed string makes a cast fail.
+//! Operands that fit no overload never let it succeed.
 //!
-//! [OpCode::signature](super::OpCode::signature) holds the signature of every instruction,
-//! written in the named sets of [DomainSet].
-//! Inference applies it to the domains the operands may hold,
-//! narrowing reads it backwards from the result,
-//! and debug builds hold every evaluation to it.
+//! [OpCode::signature](super::OpCode::signature) defines the signature of every instruction,
+//! in terms of the named sets of [DomainSet].
+//! [Inference](crate::function::StackProgram::infer) applies a signature
+//! to the domains of the operands,
+//! and [narrowing](crate::function::StackProgram::narrow) applies it backwards from the result.
 
 use crate::value::{DomainSet, ValueDomain};
 
-/// The domains an instruction accepts and yields.
+/// The domains of the operands that an instruction accepts and of the results that it yields.
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum Signature {
-    /// Pushes a value without popping any: a constant or an input.
+    /// Pops nothing and pushes a constant or an input.
     ///
-    /// The program knows what it pushes, not the instruction,
-    /// so the signature allows any domain.
+    /// What it pushes depends on the program, not on the instruction,
+    /// so the result may lie in any domain.
     Push,
     /// Pops a fixed number of operands,
     /// and can succeed only if they fit one of the overloads.
     ///
-    /// There is at least one overload, and each has one parameter per operand.
+    /// There is at least one overload, and each has one parameter for each operand.
     Fixed(&'static [Overload]),
-    /// Pops leading operands and then a run of operands,
+    /// Pops some leading operands followed by a sequence of further operands,
     /// and can succeed only if every operand fits.
     Each {
-        /// The domains each leading operand must lie in.
+        /// The domains that each leading operand must lie in, one set for each.
         leading: &'static [DomainSet],
-        /// The number of operands in the run.
+        /// The number of operands in the sequence.
         count: usize,
-        /// The domains each operand of the run must lie in.
+        /// The domains that each operand of the sequence must lie in.
         operand: DomainSet,
-        /// The domains the result lies in.
+        /// The domains that the result lies in.
         result: DomainSet,
     },
-    /// Pops a run of numbers and yields one of them,
+    /// Pops a sequence of numbers and yields one of them,
     /// promoted to the smallest numeric type that holds all of them.
     Promoting {
         /// The number of operands.
         count: usize,
     },
-    /// Pops a run of operands,
-    /// and can succeed wherever one of them fits, whatever the others hold.
+    /// Pops a sequence of operands,
+    /// and can succeed if one of them fits, whatever the others are.
     ///
-    /// This is a connective of three-valued logic:
-    /// one operand can decide it while the others are errors.
+    /// This is the signature of a connective of three-valued logic,
+    /// which one operand can decide while the others are errors.
     Lenient {
         /// The number of operands.
         count: usize,
-        /// The domains a deciding operand must lie in.
+        /// The domains that a deciding operand must lie in.
         operand: DomainSet,
-        /// The domains the result lies in.
+        /// The domains that the result lies in.
         result: DomainSet,
     },
 }
 
-/// One way an instruction can succeed:
-/// operands in the domains of the parameters, one parameter per operand,
-/// yield a result in the domains the overload names.
+/// One way in which an instruction can succeed.
+///
+/// Operands in the domains of the parameters, one parameter for each operand,
+/// yield a result in the domains that the overload gives.
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum Overload {
     /// Yields a result in the given domains.
     Plain(&'static [DomainSet], DomainSet),
-    /// Yields a result in the given domains,
-    /// if the operands also share one domain.
+    /// Yields a result in the given domains
+    /// if all operands can also lie in one common domain.
     Shared(&'static [DomainSet], DomainSet),
     /// Yields a result in the domain of the operand at the given position.
     Keeps(&'static [DomainSet], usize),
-    /// Takes two numbers and yields a number of the domain they promote to:
-    /// a double beside a double, a float beside a float or an exact number,
-    /// and an exact number for two exact numbers,
-    /// an integer for two integers if `integral` holds.
+    /// Accepts two numbers and yields a number of the domain that they promote to.
     ///
-    /// An exact result that is integral is an integer, so it may be one in any case.
+    /// - A double with any number yields a double.
+    /// - A float with a float or an exact number yields a float.
+    /// - Two exact numbers yield an exact number, and two integers an integer if `integral` holds.
+    ///
+    /// An exact result with an integral value is an integer,
+    /// so the result may be an integer in any case.
     Promoted {
         /// Whether two integers yield an integer.
         integral: bool,
@@ -112,10 +115,10 @@ impl Signature {
         }
     }
 
-    /// Returns the domains the result can lie in,
-    /// for operands in the given domains, one set per operand.
+    /// Returns the domains that the result can lie in, for operands in the given domains.
     ///
-    /// Empty proves that the instruction fails on every such input.
+    /// `operands` has one set of domains for each operand.
+    /// An empty result proves that the instruction fails on every such input.
     pub(crate) fn apply(self, operands: &[DomainSet]) -> DomainSet {
         debug_assert_eq!(operands.len(), self.pops(), "one domain set per operand");
 
@@ -163,14 +166,14 @@ impl Signature {
 }
 
 impl Signature {
-    /// Returns the domains each operand can lie in
-    /// if the instruction succeeds with a result in the given domains,
-    /// for operands in the given domains, one set per operand.
+    /// Returns the domains that each operand can lie in
+    /// if the instruction succeeds with a result in the domains `result`.
     ///
-    /// This is [apply](Self::apply) read backwards:
+    /// `operands` has one set of domains for each operand, as for [apply](Self::apply).
+    /// This is [apply](Self::apply) applied backwards:
     /// only the overloads that can yield such a result count,
-    /// and each operand keeps the domains their parameters accept.
-    /// A connective can succeed whatever one operand holds, so it narrows none.
+    /// and each operand keeps the domains that the parameters of these overloads accept.
+    /// A connective can succeed whatever one of its operands is, so it narrows no operand.
     pub(crate) fn narrow(self, operands: &[DomainSet], result: DomainSet) -> Vec<DomainSet> {
         debug_assert_eq!(operands.len(), self.pops(), "one domain set per operand");
 
@@ -212,7 +215,7 @@ impl Signature {
 }
 
 impl Overload {
-    /// Returns the domains each operand must lie in, one set per operand.
+    /// Returns the parameters, the domains that each operand must lie in.
     fn parameters(self) -> &'static [DomainSet] {
         match self {
             Overload::Plain(parameters, _)
@@ -222,8 +225,8 @@ impl Overload {
         }
     }
 
-    /// Returns the domains the result can lie in through this overload,
-    /// for operands in the given domains, one set per operand.
+    /// Returns the domains that the result can lie in through this overload,
+    /// for operands in the given domains, one set for each operand.
     fn apply(self, operands: &[DomainSet]) -> DomainSet {
         let parameters = self.parameters();
         if !fits(parameters, operands) {
@@ -252,8 +255,8 @@ impl Overload {
 }
 
 impl Overload {
-    /// Returns the domains each operand can lie in
-    /// if the instruction succeeds through this overload with a result in the given domains,
+    /// Returns the domains that each operand can lie in
+    /// if the instruction succeeds through this overload with a result in the domains `result`,
     /// or `None` if it cannot.
     fn narrow(self, operands: &[DomainSet], result: DomainSet) -> Option<Vec<DomainSet>> {
         if !self.apply(operands).intersects(result) {
@@ -267,8 +270,8 @@ impl Overload {
             .map(|(&parameter, &kinds)| parameter & kinds);
         Some(match self {
             Overload::Plain(..) => within.collect(),
-            // A double result admits any operand, a float one no double,
-            // and an exact one only exact operands.
+            // A double result allows any operands, a float result no double operand,
+            // and an exact result only exact operands.
             Overload::Promoted { .. } => {
                 let allowed = if result.contains(ValueDomain::Double) {
                     DomainSet::NUMERIC
@@ -305,9 +308,8 @@ fn fits(parameters: &[DomainSet], operands: &[DomainSet]) -> bool {
         .all(|(parameter, kinds)| parameter.intersects(*kinds))
 }
 
-/// Returns the domains the result of an arithmetic operation can lie in,
-/// for numeric operands in the given domains;
-/// see [Promoted](Overload::Promoted).
+/// Returns the domains that the result of an arithmetic operation can lie in,
+/// for numeric operands in the given domains, as [Promoted](Overload::Promoted) describes.
 fn arithmetic(operands: &[DomainSet], integral: bool) -> DomainSet {
     let some_may = |domains| operands.iter().any(|kinds| kinds.intersects(domains));
     let each_may = |domains| operands.iter().all(|kinds| kinds.intersects(domains));
@@ -332,12 +334,14 @@ fn arithmetic(operands: &[DomainSet], integral: bool) -> DomainSet {
     result
 }
 
-/// Returns the domains a number can lie in
-/// once promoted to the smallest numeric type that holds every operand,
-/// for numeric operands in the given domains:
-/// - a double, if some operand may be one;
-/// - a float, if some operand may be one and each may be below a double;
-/// - an exact domain of an operand, if each may be exact.
+/// Returns the domains that the result of [Promoting](Signature::Promoting) can lie in,
+/// for numeric operands in the given domains.
+///
+/// The result is promoted to the smallest numeric type that holds every operand,
+/// so it can be
+/// - a double, if some operand may be a double;
+/// - a float, if some operand may be a float and each may be a float or an exact number;
+/// - in an exact domain of an operand, if each operand may be exact.
 fn promoted(operands: &[DomainSet]) -> DomainSet {
     let some_may = |domains| operands.iter().any(|kinds| kinds.intersects(domains));
     let each_may = |domains| operands.iter().all(|kinds| kinds.intersects(domains));
@@ -364,6 +368,7 @@ mod tests {
 
     use crate::value::DomainSet as D;
 
+    /// A plain overload yields its result only if every operand can fit its parameter.
     #[test]
     fn plain_overloads_need_every_operand_to_fit() {
         let add = Overload::Plain(&[D::NUMERIC, D::NUMERIC], D::NUMERIC);
@@ -371,6 +376,8 @@ mod tests {
         assert!(add.apply(&[D::INTEGER, D::STRING]).is_empty());
     }
 
+    /// A shared overload yields its result only if all operands can lie in one domain
+    /// that the parameters accept.
     #[test]
     fn shared_overloads_need_one_domain_for_all_operands() {
         let distance = Overload::Shared(&[D::TEMPORAL, D::TEMPORAL], D::DAY_TIME_DURATION);
@@ -383,6 +390,7 @@ mod tests {
         assert!(distance.apply(&[D::INTEGER, D::INTEGER]).is_empty());
     }
 
+    /// A keeping overload yields the domains of the kept operand that its parameter accepts.
     #[test]
     fn keeping_overloads_yield_the_operand_domain() {
         let shift = Overload::Keeps(&[D::TEMPORAL, D::DURATION], 0);
@@ -393,6 +401,7 @@ mod tests {
         assert!(shift.apply(&[D::DATE, D::INTEGER]).is_empty());
     }
 
+    /// A fixed signature yields the union of the results of its overloads.
     #[test]
     fn fixed_signatures_unite_their_overloads() {
         let signature = Signature::Fixed(&[
@@ -405,6 +414,8 @@ mod tests {
         assert!(signature.apply(&[D::STRING, D::LANGUAGE_STRING]).is_empty());
     }
 
+    /// A signature of leading operands and a sequence yields its result only if every operand
+    /// can fit.
     #[test]
     fn runs_need_every_operand_to_fit() {
         let labeled = Signature::Each {
@@ -416,10 +427,12 @@ mod tests {
         assert_eq!(labeled.pops(), 3);
         assert_eq!(labeled.apply(&[D::IRI, D::INTEGER, D::MAP]), D::TUPLE);
         assert!(labeled.apply(&[D::INTEGER, D::INTEGER, D::MAP]).is_empty());
-        // An operand without a value starves the run.
+        // An operand that can have no value leaves the signature no result.
         assert!(labeled.apply(&[D::IRI, D::INTEGER, D::EMPTY]).is_empty());
     }
 
+    /// Arithmetic yields the domain that its operands promote to, and an integer for two integers
+    /// if `integral` holds.
     #[test]
     fn arithmetic_promotes_and_keeps_integers() {
         let add = Overload::Promoted { integral: true };
@@ -431,16 +444,17 @@ mod tests {
             add.apply(&[D::INTEGER | D::DOUBLE, D::INTEGER]),
             D::INTEGER | D::DOUBLE
         );
-        // Two integers divide to an exact number.
+        // Two integers divide into an exact number.
         let divide = Overload::Promoted { integral: false };
         assert_eq!(divide.apply(&[D::INTEGER, D::INTEGER]), D::EXACT);
-        // An integer result takes exact operands.
+        // An integer result needs exact operands.
         assert_eq!(
             add.narrow(&[D::ANY, D::ANY], D::INTEGER),
             Some(vec![D::EXACT, D::EXACT])
         );
     }
 
+    /// The extrema yield the domain that their operands promote to, and nothing for a non-number.
     #[test]
     fn extrema_promote_their_operands() {
         let maximum = Signature::Promoting { count: 2 };
@@ -450,6 +464,8 @@ mod tests {
         assert!(maximum.apply(&[D::INTEGER, D::STRING]).is_empty());
     }
 
+    /// Narrowing keeps the operand domains of the overloads that can yield the result,
+    /// and a connective narrows no operand.
     #[test]
     fn narrowing_reads_the_overloads_backwards() {
         let compare = Signature::Fixed(&[
@@ -461,23 +477,23 @@ mod tests {
             compare.narrow(&[D::ANY, D::INTEGER], D::BOOLEAN),
             vec![D::NUMERIC, D::INTEGER]
         );
-        // With either operand open, both overloads remain.
+        // If both operands may lie in any domain, both overloads remain.
         assert_eq!(
             compare.narrow(&[D::ANY, D::ANY], D::BOOLEAN),
             vec![D::NUMERIC | D::STRINGLIKE; 2]
         );
-        // A result outside every overload's leaves no operand a domain.
+        // A result that no overload yields leaves every operand without a domain.
         assert_eq!(
             compare.narrow(&[D::ANY, D::ANY], D::INTEGER),
             vec![D::EMPTY; 2]
         );
-        // A kept domain is the result's.
+        // The kept operand narrows to the domains of the result.
         let shift = Signature::Fixed(&[Overload::Keeps(&[D::TEMPORAL, D::DURATION], 0)]);
         assert_eq!(
             shift.narrow(&[D::ANY, D::ANY], D::DATE),
             vec![D::DATE, D::DURATION]
         );
-        // A connective narrows none.
+        // A connective narrows no operand.
         let and = Signature::Lenient {
             count: 2,
             operand: D::TRUTHY,
@@ -489,6 +505,7 @@ mod tests {
         );
     }
 
+    /// A connective can succeed if one operand fits, even if the other can have no value.
     #[test]
     fn connectives_need_one_operand_to_fit() {
         let and = Signature::Lenient {

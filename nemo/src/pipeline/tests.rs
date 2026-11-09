@@ -1,5 +1,5 @@
-//! The pipeline: loading, commits and their provenance, stage lists,
-//! frozen statements, fresh names, and the report sink.
+//! Tests of the pipeline: loading, commits and their provenance, stage lists,
+//! frozen statements, fresh names, and the reports.
 
 use super::*;
 
@@ -8,7 +8,7 @@ use crate::model::{
     Variable,
 };
 
-/// A fact statement `p(value) .`.
+/// Returns the fact `predicate(value) .`.
 fn fact(predicate: &str, value: i64) -> Statement {
     Statement::Fact(Fact::new(
         Identifier::bare(predicate),
@@ -16,7 +16,7 @@ fn fact(predicate: &str, value: i64) -> Statement {
     ))
 }
 
-/// A rule statement `head(?x) :- body(?x) .`.
+/// Returns the rule `head(?x) :- body(?x) .`.
 fn rule(head: &str, body: &str) -> Statement {
     let variable = || Term::variable(Variable::universal("x"));
     Statement::Rule(Rule::new(
@@ -28,8 +28,7 @@ fn rule(head: &str, body: &str) -> Statement {
     ))
 }
 
-/// A rule reading a module-qualified predicate:
-/// `reach(?x) :- lib::edge(?x) .`.
+/// Returns the rule `reach(?x) :- lib::edge(?x) .`, which reads a module-qualified predicate.
 fn qualified_rule() -> Statement {
     let variable = || Term::variable(Variable::universal("x"));
     let qualified = Identifier::Qualified {
@@ -42,7 +41,7 @@ fn qualified_rule() -> Statement {
     ))
 }
 
-/// A pipeline loaded with three statements.
+/// Returns a pipeline loaded with three statements, and the loaded revision.
 fn loaded() -> (Pipeline, RevisionId) {
     let mut pipeline = Pipeline::new();
     let revision = pipeline.load(Program::new(vec![
@@ -53,6 +52,7 @@ fn loaded() -> (Pipeline, RevisionId) {
     (pipeline, revision)
 }
 
+/// A loaded program is returned unchanged.
 #[test]
 fn loading_round_trips_the_program() {
     let (pipeline, revision) = loaded();
@@ -62,6 +62,7 @@ fn loading_round_trips_the_program() {
     );
 }
 
+/// A commit without changes keeps every statement, and its revision counts as run by its stage.
 #[test]
 fn keeping_is_the_default() {
     let (mut pipeline, revision) = loaded();
@@ -72,6 +73,8 @@ fn keeping_is_the_default() {
     assert!(pipeline.ran(after, "noop"));
 }
 
+/// A replacement takes the place of the statement it replaces,
+/// which becomes its origin and stays in the arena.
 #[test]
 fn replacing_preserves_position_and_records_provenance() {
     let (mut pipeline, revision) = loaded();
@@ -86,13 +89,14 @@ fn replacing_preserves_position_and_records_provenance() {
     assert_eq!(live[1], new);
     assert_eq!(live[0], ids[0]);
     assert_eq!(pipeline.origins(new), vec![ids[1]]);
-    // The old version stays addressable.
+    // The old version stays in the arena.
     assert_eq!(
         pipeline.statement(ids[1]).to_string(),
         "reach(?x) :- edge(?x) ."
     );
 }
 
+/// A new statement without a span gets the span of its source.
 #[test]
 fn a_new_statement_takes_the_span_of_its_source() {
     let mut pipeline = Pipeline::new();
@@ -115,6 +119,7 @@ fn a_new_statement_takes_the_span_of_its_source() {
     assert_eq!(pipeline.source_span(new), Some(span));
 }
 
+/// The statements of a split take the place of the split statement, and each has it as origin.
 #[test]
 fn splitting_shares_one_edge() {
     let (mut pipeline, revision) = loaded();
@@ -131,6 +136,7 @@ fn splitting_shares_one_edge() {
     }
 }
 
+/// A statement derived from two sources is appended, and has both of them as origins.
 #[test]
 fn deriving_merges_without_losing_roots() {
     let (mut pipeline, revision) = loaded();
@@ -147,6 +153,7 @@ fn deriving_merges_without_losing_roots() {
     assert_eq!(pipeline.origins(merged), vec![ids[0], ids[2]]);
 }
 
+/// Removing a fact panics, since facts change only through declared rewrites.
 #[test]
 #[should_panic(expected = "without declaring it")]
 fn removing_a_fact_panics() {
@@ -156,6 +163,7 @@ fn removing_a_fact_panics() {
     commit.remove(ids[0]);
 }
 
+/// Origins are found across several commits, and a loaded statement is its own origin.
 #[test]
 fn origins_walk_transformation_chains() {
     let (mut pipeline, revision) = loaded();
@@ -173,7 +181,8 @@ fn origins_walk_transformation_chains() {
     assert_eq!(pipeline.origins(ids[0]), vec![ids[0]]);
 }
 
-/// A transformation replacing every rule's body predicate.
+/// A stage that replaces every rule by `reach(?x) :- name(?x) .`, where `name` is the stage's
+/// name.
 struct RenameBodies(&'static str);
 
 impl Transformation for RenameBodies {
@@ -191,6 +200,7 @@ impl Transformation for RenameBodies {
     }
 }
 
+/// Applying a stage list skips the stages that a revision has been through.
 #[test]
 fn applying_skips_stages_already_run() {
     let (mut pipeline, revision) = loaded();
@@ -201,11 +211,11 @@ fn applying_skips_stages_already_run() {
     let first = pipeline.apply(&stages, revision).expect("stages run");
     assert!(pipeline.ran(first, "alpha") && pipeline.ran(first, "beta"));
 
-    // Re-applying the same list changes nothing.
+    // Applying the same list again changes nothing.
     let second = pipeline.apply(&stages, first).expect("stages run");
     assert_eq!(second, first);
 
-    // A grown list applies only the new stage.
+    // A longer list applies only the new stage.
     stages.push(RenameBodies("gamma"));
     let third = pipeline.apply(&stages, first).expect("stages run");
     assert_ne!(third, first);
@@ -215,6 +225,7 @@ fn applying_skips_stages_already_run() {
     );
 }
 
+/// A stage is inserted directly before or after the named stage.
 #[test]
 fn stage_lists_support_insertion() {
     let mut stages = Stages::new();
@@ -228,6 +239,7 @@ fn stage_lists_support_insertion() {
     );
 }
 
+/// Inserting a stage beside a name that no stage has panics.
 #[test]
 #[should_panic(expected = "there is no stage named `missing`")]
 fn inserting_beside_an_unknown_stage_panics() {
@@ -236,7 +248,7 @@ fn inserting_beside_an_unknown_stage_panics() {
     stages.insert_before("missing", RenameBodies("x"));
 }
 
-/// A stage that requires other stages, rewriting by a function.
+/// A stage that requires other stages and rewrites through a function.
 struct RequiringStage {
     /// The stage's name.
     name: &'static str,
@@ -270,6 +282,7 @@ fn idle(name: &'static str, requires: &'static [&'static str]) -> RequiringStage
     }
 }
 
+/// A stage listed before a stage that it requires panics.
 #[test]
 #[should_panic(expected = "the `late` stage requires the `early` stage before it")]
 fn a_stage_before_what_it_requires_panics() {
@@ -280,6 +293,7 @@ fn a_stage_before_what_it_requires_panics() {
     let _ = pipeline.apply(&stages, revision);
 }
 
+/// A stage listed after the stages that it requires runs.
 #[test]
 fn a_stage_after_what_it_requires_runs() {
     let (mut pipeline, revision) = loaded();
@@ -290,6 +304,7 @@ fn a_stage_after_what_it_requires_runs() {
     assert!(pipeline.ran(after, "late"));
 }
 
+/// A stage that writes a module-qualified name panics.
 #[test]
 #[should_panic(expected = "which a loaded program cannot hold")]
 fn writing_a_qualified_name_panics() {
@@ -305,6 +320,8 @@ fn writing_a_qualified_name_panics() {
     let _ = pipeline.apply(&stages, revision);
 }
 
+/// A module instance knows the chain of `@use` directives that made it,
+/// and has the name and text of its file.
 #[test]
 fn an_instance_knows_the_uses_that_made_it() {
     let mut pipeline = Pipeline::new();
@@ -335,10 +352,11 @@ fn an_instance_knows_the_uses_that_made_it() {
     assert_eq!(aliases, ["one", "two"]);
     assert_eq!(pipeline.file_name(two), Some("b.rls"));
     assert_eq!(pipeline.text(two), Some("p(1) ."));
-    // The file itself is no instance.
+    // The file itself is not an instance.
     assert!(pipeline.instances(inner).is_empty());
 }
 
+/// A stage over a merged extension sees every statement, but rewrites only the extension's.
 #[test]
 fn stages_over_an_extension_keep_the_loaded_statements() {
     let (mut pipeline, revision) = loaded();
@@ -367,6 +385,7 @@ next(?x) :- link(?x) ."
     );
 }
 
+/// Rewriting a frozen statement panics.
 #[test]
 #[should_panic(expected = "rewrote a frozen statement")]
 fn rewriting_a_frozen_statement_panics() {
@@ -376,6 +395,7 @@ fn rewriting_a_frozen_statement_panics() {
     commit.remove(ids[1]);
 }
 
+/// Fresh names skip the names in use, and a name once returned counts as used.
 #[test]
 fn fresh_names_avoid_every_name_in_use() {
     let mut pipeline = Pipeline::new();
@@ -386,6 +406,7 @@ fn fresh_names_avoid_every_name_in_use() {
     assert_eq!(commit.fresh("other"), Identifier::bare("other1"));
 }
 
+/// A reported diagnostic is kept among the pipeline's reports.
 #[test]
 fn reports_accumulate_in_one_sink() {
     let (mut pipeline, _) = loaded();
@@ -396,6 +417,8 @@ fn reports_accumulate_in_one_sink() {
     assert_eq!(pipeline.reports().len(), 1);
 }
 
+/// A diagnostic labeled inside a substituted occurrence gets a label at the definition of the
+/// substituted value, and a diagnostic labeled elsewhere does not.
 #[test]
 fn substitutions_add_definition_labels_to_diagnostics() {
     let mut pipeline = Pipeline::new();
@@ -426,8 +449,6 @@ fn substitutions_add_definition_labels_to_diagnostics() {
     let new = commit.substitute(ids[0], &substitution);
     commit.finish();
 
-    // A diagnostic labeled inside the occurrence gains the
-    // definition label; one elsewhere does not.
     let inside = Diagnostic::error(nemo_physical::diagnostics::Code::new(999), "bad value")
         .with_label(
             Span {
@@ -454,6 +475,8 @@ fn substitutions_add_definition_labels_to_diagnostics() {
     assert_eq!(refined.labels().len(), 1);
 }
 
+/// The line and column of every position, including those past the end of the text,
+/// agree with a scan of the text, also in a module instance.
 #[test]
 fn line_columns_agree_with_a_scan_of_the_text() {
     let mut pipeline = Pipeline::new();

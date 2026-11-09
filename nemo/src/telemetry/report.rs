@@ -1,5 +1,5 @@
-//! Reports of a run: the JSON document they are built from, the HTML page over it,
-//! and the tables that name the accounting's rows.
+//! Reports of a run: the JSON document, the HTML page that shows it,
+//! and the tables that name the rows of the accounting.
 
 mod page;
 mod run_facts;
@@ -14,8 +14,9 @@ use serde::Serialize;
 
 use crate::telemetry::Recorder;
 
-/// The JSON document a run's reports are built from: the JSON report and the HTML page.
+/// The JSON document that the reports of a run are built from.
 ///
+/// It is the JSON report itself, and [page](Self::page) renders it as an HTML page.
 /// Times are in nanoseconds and sizes in bytes throughout.
 #[derive(Debug, Serialize)]
 pub struct ReportDocument<'a> {
@@ -33,12 +34,12 @@ impl ReportDocument<'_> {
         serde_json::to_string(self).expect("a document serializes")
     }
 
-    /// Returns the HTML report over the document:
-    /// one self-contained page, without external assets.
+    /// Returns the HTML report of the document, as one self-contained page without external
+    /// assets.
     ///
-    /// A live page (`live`) additionally subscribes to `/events`
-    /// for document updates sent by the server.
-    /// A static page shows only the embedded document.
+    /// If `live` is true, the page also subscribes to `/events`
+    /// for the updates of the document that the page's server sends.
+    /// Otherwise the page shows only the embedded document.
     pub fn page(&self, live: bool) -> String {
         page::render(&self.json(), live)
     }
@@ -48,6 +49,7 @@ impl ReportDocument<'_> {
 mod tests {
     use super::*;
 
+    /// A document without run facts or telemetry has `null` in their place.
     #[test]
     fn documents_carry_their_absences_as_null() {
         let document = ReportDocument {

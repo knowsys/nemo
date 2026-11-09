@@ -4,13 +4,13 @@ use std::ops::Range;
 
 use crate::storage::StorageValue;
 
-/// A run: rows of one arity in storage order,
-/// borrowed from a [SortedRowBuffer](super::SortedRowBuffer)
+/// A run, a borrowed sequence of rows of one arity in storage order.
+///
+/// A run is borrowed from a [SortedRowBuffer](super::SortedRowBuffer)
 /// or a segment of a [SegmentedRowBuffer](super::SegmentedRowBuffer),
 /// or cut from another run.
-///
-/// Rows may repeat within a run; a build keeps each once.
-/// A run of nullary rows holds no values and counts its rows.
+/// Rows may repeat within a run, and a trie built from it keeps each row once.
+/// A run of nullary rows has no values and only counts its rows.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Run<'a> {
     /// The rows' values, row-major.
@@ -22,8 +22,8 @@ pub(crate) struct Run<'a> {
 }
 
 impl<'a> Run<'a> {
-    /// Creates a run over values holding the given number of whole rows
-    /// of the arity, in storage order.
+    /// Creates a run over values that form the given number of whole rows of the arity,
+    /// in storage order.
     pub(super) fn new(values: &'a [StorageValue], arity: usize, rows: usize) -> Self {
         debug_assert_eq!(values.len(), arity * rows, "a run holds whole rows");
         Self {
@@ -43,7 +43,7 @@ impl<'a> Run<'a> {
         self.rows
     }
 
-    /// Returns whether the run holds no rows.
+    /// Returns whether the run has no rows.
     pub(crate) fn is_empty(&self) -> bool {
         self.rows == 0
     }
@@ -68,8 +68,10 @@ impl<'a> Run<'a> {
         (0..run.rows).map(move |index| run.row(index))
     }
 
-    /// Returns the first row whose first-column value is at or above the given one,
-    /// or the number of rows when there is none; the run must have positive arity.
+    /// Returns the index of the first row whose first-column value is at or above the given one,
+    /// or the number of rows if there is none.
+    ///
+    /// The run must have positive arity.
     pub(in crate::trie) fn lower_bound(&self, value: StorageValue) -> usize {
         debug_assert!(self.arity > 0, "a first-column bound needs a first column");
 
@@ -93,6 +95,8 @@ mod tests {
 
     use crate::trie::RowBuffer;
 
+    /// A lower bound is the index of the first row whose first value is at or above the given
+    /// one.
     #[test]
     fn lower_bounds_find_the_first_row_at_or_above_a_value() {
         let mut buffer = RowBuffer::new(2);
@@ -108,6 +112,7 @@ mod tests {
         assert_eq!(run.lower_bound(StorageValue::integer(9)), 3);
     }
 
+    /// A nullary run counts its rows, which have no values.
     #[test]
     fn nullary_runs_count_rows_without_values() {
         let mut buffer = RowBuffer::new(0);

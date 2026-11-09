@@ -1,5 +1,7 @@
-//! The bindings: conditions that one input is the same term as a constant
-//! or as an expression over the others, which a lookup of that value decides.
+//! Bindings, the conditions that one input is the same term as a constant
+//! or as an expression over the other inputs.
+//!
+//! A lookup of the constant or of the expression's value can decide such a condition.
 
 use crate::{
     function::{IdentityOperand, OpCode, StackProgram},
@@ -7,12 +9,11 @@ use crate::{
 };
 
 impl StackProgram {
-    /// Returns the condition that input 0 is the same term as this program's result
-    /// over the inputs after it:
-    /// this program's inputs shift up one position to make room for the compared value.
+    /// Returns the condition that input 0 is the same term as this program's result.
     ///
+    /// The inputs of this program move up by one position, to make room for input 0.
     /// The comparison is term identity, so that the condition accepts exactly
-    /// the rows a lookup of the result would find.
+    /// the rows that a lookup of the result would find.
     pub fn shifted_equality(&self) -> Self {
         let mut operations = Vec::with_capacity(self.operations.len() + 2);
         operations.push(OpCode::Input(0));
@@ -26,19 +27,22 @@ impl StackProgram {
         Self::new(operations, self.constants.clone(), self.inputs + 1)
     }
 
-    /// Recognizes a binding: the condition that one input is the same term
+    /// Recognizes a binding, the condition that one input is the same term
     /// as an expression over the other inputs.
     ///
-    /// Returns the compared input and the expression,
-    /// whose inputs are the program's other inputs, in order.
+    /// Returns the compared input and the expression as a program,
+    /// whose inputs are the other inputs of this program, in their order.
     /// The compared input may stand on either side of the comparison.
-    /// The inverse of [shifted_equality](Self::shifted_equality).
+    /// This inverts [shifted_equality](Self::shifted_equality).
     ///
-    /// A bare input on the other side is no binding:
-    /// the identity form decides such a condition on storage values.
-    /// A constant there is a [constant binding](Self::constant_binding).
-    /// Neither is an expression without inputs, nor a nondeterministic one,
-    /// which draws once per row.
+    /// Returns `None` if the other side of the comparison
+    /// - is a bare input, since the [identity form](crate::function::IdentityCondition) decides
+    ///   such a condition on storage values;
+    /// - is a constant, which makes a [constant binding](Self::constant_binding);
+    /// - reads no input or reads the compared input.
+    ///
+    /// Returns `None` for a [nondeterministic](Self::is_nondeterministic) program too,
+    /// since its expression may yield a different value for every row.
     pub(crate) fn binding(&self) -> Option<(usize, Self)> {
         if self.is_nondeterministic() {
             return None;
@@ -70,7 +74,7 @@ impl StackProgram {
             return None;
         }
 
-        // The expression reads the other inputs, renumbered past the compared one.
+        // The inputs after the compared one move down by one position.
         let renumbered = expression
             .iter()
             .map(|&operation| match operation {
@@ -84,9 +88,10 @@ impl StackProgram {
         Some((target, program))
     }
 
-    /// Recognizes a constant binding: the condition that an input is the same term as a constant.
+    /// Recognizes a constant binding, the condition that an input is the same term as a constant.
     ///
-    /// Returns the compared input and the constant.
+    /// Returns the compared input and the constant,
+    /// or `None` if the program is not such a condition.
     /// The constant may stand on either side of the comparison.
     pub(crate) fn constant_binding(&self) -> Option<(usize, DataValue)> {
         let condition = self.identity_specialization()?;
@@ -99,8 +104,9 @@ impl StackProgram {
     }
 }
 
-/// Returns whether instructions form one complete expression:
-/// they never pop below their start, and leave exactly one value.
+/// Returns whether the instructions form one complete expression.
+///
+/// That is, they never pop a value that they did not push, and they leave exactly one value.
 fn is_expression(operations: &[OpCode]) -> bool {
     let mut depth = 0usize;
     for operation in operations {

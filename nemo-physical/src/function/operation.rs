@@ -1,11 +1,11 @@
-//! The operation families: what the instructions of a stack program compute.
+//! The operations that the instructions of a stack program compute, grouped in families.
 //!
-//! Each family is a set of plain functions over borrowed [ValueRef](crate::value::ValueRef)s
-//! returning a [StackValue](super::StackValue):
-//! the result, or the [evaluation error](crate::value::EvaluationError) that propagates.
-//! The families know nothing of the stack or the instruction set;
-//! the interpreter in [program](super::StackProgram) dispatches to them,
-//! and the type analysis in [infer](super::infer) mirrors them.
+//! An operation is a plain function on borrowed values that returns a
+//! [StackValue](super::StackValue), the result or an
+//! [evaluation error](crate::value::EvaluationError).
+//! Most operations accept [ValueRef](crate::value::ValueRef)s,
+//! and those that must see the errors among their operands accept stack values.
+//! The operations never pop or push values themselves.
 
 pub(super) mod boolean;
 pub(super) mod compare;

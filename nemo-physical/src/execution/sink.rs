@@ -1,7 +1,7 @@
 //! The row sinks: consumers of a join's rows.
 //!
 //! A join drains its rows into a sink,
-//! handing each over with the shallowest layer that changed since the previous row.
+//! and passes each row with the shallowest layer that changed since the previous row.
 //! A group is a run of rows that agree on a number of leading layers,
 //! so a change at one of those layers starts a new group.
 
@@ -22,8 +22,10 @@ use crate::{storage::StorageValue, trie::RowBuffer};
 /// The drain loop is monomorphized over the sink,
 /// so a sink costs only the work it does per row.
 pub(crate) trait RowSink {
-    /// Accepts one row, with the shallowest layer whose value differs from the previous row;
-    /// 0 for the first row.
+    /// Accepts one row.
+    ///
+    /// `changed` is the shallowest layer whose value differs from the previous row,
+    /// and 0 for the first row.
     fn accept(&mut self, row: &[StorageValue], changed: usize);
 }
 

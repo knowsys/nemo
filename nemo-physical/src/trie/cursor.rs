@@ -2,17 +2,17 @@
 
 use crate::{storage::StorageValue, trie::Trie};
 
-/// A reader of a trie's rows in storage order, one row at a time:
-/// the streaming counterpart of [Trie::for_each_row].
+/// A reader of a trie's rows in storage order, one row at a time.
 ///
-/// A nullary trie reads as empty.
+/// It is the streaming counterpart of [Trie::for_each_row].
+/// A cursor on a nullary trie is done at once, as if the trie were empty.
 #[derive(Debug)]
 pub(crate) struct RowCursor<'a> {
-    /// The trie read.
+    /// The trie that is read.
     trie: &'a Trie,
     /// Per column, the position of the current row's node.
     positions: Vec<usize>,
-    /// Per column, the exclusive end of the block the current node lies in.
+    /// Per column, the exclusive end of the block that the current node lies in.
     ends: Vec<usize>,
     /// The current row.
     row: Vec<StorageValue>,
@@ -21,8 +21,9 @@ pub(crate) struct RowCursor<'a> {
 }
 
 impl<'a> RowCursor<'a> {
-    /// Creates a cursor on the trie's row of the given index in storage order,
-    /// exhausted when the index is out of range.
+    /// Creates a cursor at the trie's row with the given index in storage order.
+    ///
+    /// The cursor is done at once if the index is out of range.
     pub(crate) fn new(trie: &'a Trie, index: usize) -> Self {
         let arity = trie.arity();
         let mut cursor = Self {
@@ -36,8 +37,9 @@ impl<'a> RowCursor<'a> {
             return cursor;
         }
 
-        // Rows are the last column's positions; each column above holds
-        // the position's parent, whose block bounds the walk below it.
+        // The row's index is its position in the last column.
+        // Each column above has the parent of the position below it,
+        // and the block of each position ends the walk in its column.
         cursor.positions[arity - 1] = index;
         for column in (1..arity).rev() {
             let parent = trie.intervals(column).parent(cursor.positions[column]);
@@ -55,13 +57,16 @@ impl<'a> RowCursor<'a> {
         cursor
     }
 
-    /// Returns the index of the current row, its position in the last column;
-    /// valid while the cursor is not [done](Self::is_done).
+    /// Returns the index of the current row, which is its position in the last column.
+    ///
+    /// It is valid while the cursor is not [done](Self::is_done).
     pub(crate) fn index(&self) -> usize {
         self.positions[self.positions.len() - 1]
     }
 
-    /// Returns the current row; valid while the cursor is not [done](Self::is_done).
+    /// Returns the current row.
+    ///
+    /// It is valid while the cursor is not [done](Self::is_done).
     pub(crate) fn row(&self) -> &[StorageValue] {
         &self.row
     }
@@ -75,8 +80,8 @@ impl<'a> RowCursor<'a> {
     pub(crate) fn advance(&mut self) {
         debug_assert!(!self.done, "an exhausted cursor stays exhausted");
 
-        // The deepest column with a further node in its block steps;
-        // every column beneath it enters its first child block.
+        // The deepest column with a further node in its block moves to that node,
+        // and every column below it moves to the first node of its new block.
         for column in (0..self.positions.len()).rev() {
             if self.positions[column] + 1 < self.ends[column] {
                 self.positions[column] += 1;
@@ -89,8 +94,9 @@ impl<'a> RowCursor<'a> {
         self.done = true;
     }
 
-    /// Fills the row from `column` downward,
-    /// each deeper column entering the first block beneath the node above.
+    /// Fills the row from `column` downward.
+    ///
+    /// Each deeper column moves to the first child of the node in the column above.
     fn descend(&mut self, column: usize) {
         self.row[column] = self.trie.column(column).get(self.positions[column]);
         for deeper in column + 1..self.positions.len() {
@@ -112,7 +118,7 @@ mod tests {
 
     use crate::testing::int_trie;
 
-    /// The rows a cursor visits until it is done.
+    /// Returns the rows that a cursor visits until it is done.
     fn visited(mut cursor: RowCursor<'_>) -> Vec<Vec<StorageValue>> {
         let mut rows = Vec::new();
 
@@ -124,12 +130,14 @@ mod tests {
         rows
     }
 
+    /// A cursor on an empty or a nullary trie is done at once.
     #[test]
     fn empty_tries_read_as_exhausted() {
         assert!(RowCursor::new(&Trie::empty(2), 0).is_done());
         assert!(RowCursor::new(&Trie::nullary(true), 0).is_done());
     }
 
+    /// A cursor created at any index visits exactly the rows from that index on.
     #[test]
     fn seeking_visits_exactly_the_suffix() {
         let trie = int_trie(

@@ -1,20 +1,21 @@
-//! The record behind the timestamp types and its bridge to `oxsdatatypes`.
+//! The record behind the timestamp types, and its bridge to `oxsdatatypes`.
 //!
 //! An [Instant] is a count of attoseconds since `0001-01-01T00:00:00Z`, UTC,
-//! and the code of the timezone offset the value was written with.
-//! An unzoned value stores its local fields read as UTC.
-//! The derived equality and order are term identity and term order.
-//! A dateTime is any instant, a date the instant of a day's start in its offset,
-//! and a time the instant of a time of day on the reference day `1972-12-31` in its offset.
+//! together with the code of the timezone offset that the value was written with.
+//! An unzoned value stores its local fields as if they were UTC.
+//! The derived equality and order are term identity and the term order.
+//! - A dateTime is any instant.
+//! - A date is the instant at which its day starts in its offset.
+//! - A time is the instant of its time of day on the reference day `1972-12-31` in its offset.
 //!
-//! Parsing, printing, the calendar fields, offset adjustment and duration arithmetic
-//! are delegated to `oxsdatatypes`,
-//! which keeps a timestamp as the same attoseconds and an offset in minutes,
-//! serialized as sixteen big-endian bytes of the count and two of the offset.
-//! The unzoned mark of that serialization, `FF FF`, is also the offset `-00:01`,
-//! so the offset crosses the bridge as a value in both directions, never as bytes:
-//! a value goes to `oxsdatatypes` as UTC and is adjusted to its offset,
-//! and comes back with the offset read through its accessor.
+//! Parsing, writing, the calendar fields, offset adjustment and duration arithmetic
+//! are delegated to `oxsdatatypes`.
+//! That crate keeps a timestamp as the same count of attoseconds and an offset in minutes,
+//! and serializes it as sixteen big-endian bytes of the count and two bytes of the offset.
+//! The mark of an unzoned value in that serialization, `FF FF`, is also the offset `-00:01`.
+//! So the offset crosses the bridge as a value in both directions, never as bytes.
+//! A value goes to `oxsdatatypes` as UTC and is then adjusted to its offset,
+//! and it comes back with the offset read through its accessor.
 
 use std::{cmp::Ordering, fmt, str::FromStr};
 
@@ -25,13 +26,13 @@ use oxsdatatypes::{
 
 use crate::value::temporal::{Duration, TimezoneOffset};
 
-/// The fraction digits of a second the value space carries.
+/// The number of fraction digits of a second in the value space.
 pub(crate) const FRACTION_DIGITS: u32 = 18;
 
-/// The attoseconds of a second.
+/// The number of attoseconds in a second.
 pub(crate) const ATTOSECONDS_PER_SECOND: i128 = 10i128.pow(FRACTION_DIGITS);
 
-/// The seconds of a day.
+/// The number of seconds in a day.
 pub(super) const SECONDS_PER_DAY: i128 = 86_400;
 
 /// The Unix epoch, `1970-01-01T00:00:00Z`, in seconds since `0001-01-01T00:00:00Z`.
@@ -41,33 +42,40 @@ pub(super) const UNIX_EPOCH_SECONDS: i128 = 62_135_596_800;
 /// in seconds since `0001-01-01T00:00:00Z`.
 pub(super) const TIME_REFERENCE_SECONDS: i128 = 62_230_204_800;
 
-/// The offset code marking the absence of a timezone, above every offset's code.
+/// The offset code that marks an unzoned value, which lies above the code of every offset.
 const UNZONED_CODE: u16 = TimezoneOffset::CODE_COUNT;
 
-/// The number of offset codes, the unzoned mark included.
+/// The number of offset codes, including the mark of an unzoned value.
 pub(super) const OFFSET_CODE_COUNT: u64 = UNZONED_CODE as u64 + 1;
 
-/// The distance within which a zoned and an unzoned value stay incomparable, in attoseconds.
+/// Fourteen hours in attoseconds, the largest offset in either direction.
+///
+/// A zoned and an unzoned value at most this far apart cannot be ordered.
 const FOURTEEN_HOURS: i128 = 14 * 3_600 * ATTOSECONDS_PER_SECOND;
 
-/// An instant and the offset it was written with.
+/// An instant and the timezone offset that it was written with.
 ///
-/// The record is packed to 8-byte alignment so that it takes 24 bytes rather than 32.
+/// The record is packed to 8-byte alignment, so that it occupies 24 bytes rather than 32.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(Rust, packed(8))]
 pub(super) struct Instant {
     /// Attoseconds since `0001-01-01T00:00:00Z`.
     attoseconds: i128,
-    /// The order-preserving code of the timezone offset the value was written with:
-    /// zoned offsets at minute granularity, the unzoned mark above them.
+    /// The code of the timezone offset that the value was written with,
+    /// which preserves the order of offsets.
+    ///
+    /// The codes of offsets count minutes from `-14:00`, and the mark of an unzoned value lies
+    /// above them.
     offset_code: u16,
 }
 
-/// What the bridge needs of an `oxsdatatypes` timestamp type: its dateTime, date or time.
+/// The operations that the bridge needs from an `oxsdatatypes` timestamp type,
+/// which is its dateTime, date or time.
 pub(super) trait LibraryTimestamp: Copy + FromStr + fmt::Display {
-    /// Returns the serialization: sixteen big-endian bytes of attoseconds and two of the offset.
+    /// Returns the serialization,
+    /// sixteen big-endian bytes of attoseconds and two bytes of the offset.
     fn to_be_bytes(self) -> [u8; 18];
-    /// Returns the offset the value was written with.
+    /// Returns the offset that the value was written with.
     fn timezone_offset(self) -> Option<LibraryOffset>;
     /// Creates the value of an `oxsdatatypes` dateTime at the same instant and offset.
     fn from_datetime(value: LibraryDateTime) -> Self;
@@ -82,8 +90,9 @@ pub(super) trait LibraryTimestamp: Copy + FromStr + fmt::Display {
     fn checked_sub(self, earlier: Self) -> Option<DayTimeDuration>;
 }
 
-/// Implements [LibraryTimestamp] for an `oxsdatatypes` type,
-/// given how it is built from that crate's dateTime.
+/// Implements [LibraryTimestamp] for an `oxsdatatypes` type.
+///
+/// `$from_datetime` creates a value of the type from that crate's dateTime.
 macro_rules! library_timestamp {
     ($type:ty, $from_datetime:expr) => {
         impl LibraryTimestamp for $type {
@@ -134,7 +143,7 @@ impl Instant {
     }
 
     /// Creates the instant of a count of attoseconds and a raw offset code,
-    /// or `None` if the code is not one.
+    /// or `None` if the code is not an offset code.
     pub(super) fn from_code(attoseconds: i128, offset_code: u64) -> Option<Self> {
         let offset_code = u16::try_from(offset_code).ok()?;
         (u64::from(offset_code) < OFFSET_CODE_COUNT).then_some(Self {
@@ -143,9 +152,10 @@ impl Instant {
         })
     }
 
-    /// Creates the instant of a local time of day on a local day,
-    /// given as seconds since the epoch in the offset and the fraction of the second,
-    /// or `None` beyond the range of instants.
+    /// Creates the instant of a local time, or `None` beyond the range of instants.
+    ///
+    /// `local_seconds` is the number of whole seconds since `0001-01-01T00:00:00`
+    /// in the local time of `offset`, and `attosecond` is the fraction of the second.
     pub(super) fn from_local(
         local_seconds: i128,
         attosecond: u64,
@@ -158,7 +168,8 @@ impl Instant {
         Some(Self::new(attoseconds, offset))
     }
 
-    /// Parses a lexical form of the `oxsdatatypes` type `T`, or `None` if it is not one.
+    /// Parses a lexical form of the `oxsdatatypes` type `T`,
+    /// or returns `None` if the text is not one.
     pub(super) fn from_lexical<T: LibraryTimestamp>(lexical: &str) -> Option<Self> {
         lexical.parse::<T>().ok().map(Self::from_library)
     }
@@ -172,12 +183,12 @@ impl Instant {
         )
     }
 
-    /// Converts the value into the `oxsdatatypes` value at this instant and offset.
+    /// Returns the `oxsdatatypes` value at this instant and offset.
     ///
-    /// The instant is serialized as UTC and the offset then adjusted,
-    /// which keeps the instant and sets the offset as written;
-    /// adjusting to no offset keeps the UTC fields as the local ones,
-    /// which is how an unzoned value denotes its instant.
+    /// The instant is serialized as UTC and then adjusted to the offset,
+    /// which keeps the instant and sets the offset as written.
+    /// Adjusting to no offset keeps the UTC fields as the local fields,
+    /// which is how an unzoned value stores its instant.
     pub(super) fn to_library<T: LibraryTimestamp>(self) -> T {
         let mut bytes = [0; 18];
         bytes[..16].copy_from_slice(&self.attoseconds.to_be_bytes());
@@ -192,7 +203,8 @@ impl Instant {
         self.attoseconds
     }
 
-    /// Returns the timezone offset the value was written with; `None` for an unzoned value.
+    /// Returns the timezone offset that the value was written with,
+    /// or `None` for an unzoned value.
     pub(super) fn offset(self) -> Option<TimezoneOffset> {
         TimezoneOffset::from_code(self.offset_code)
     }
@@ -207,8 +219,10 @@ impl Instant {
         self.offset_code != UNZONED_CODE
     }
 
-    /// Returns the whole seconds since the epoch in the value's own offset:
-    /// the local calendar fields as one count.
+    /// Returns the whole seconds since `0001-01-01T00:00:00` in the local time of the
+    /// value's offset.
+    ///
+    /// This count combines the local calendar fields.
     pub(super) fn local_seconds(self) -> i128 {
         self.attoseconds.div_euclid(ATTOSECONDS_PER_SECOND) + offset_seconds(self.offset())
     }
@@ -255,11 +269,11 @@ impl Instant {
         .expect("the reference day is far from the range limits")
     }
 
-    /// Returns the instant of a time of day on the day this instant starts,
-    /// or `None` if both carry an offset and the offsets differ
-    /// or the result is beyond the range of instants.
+    /// Returns the instant of the time of day of `time` on the day that this instant starts,
+    /// or `None` if both have offsets and the offsets differ,
+    /// or if the result is beyond the range of instants.
     ///
-    /// The offset of the result is the one that is present.
+    /// The result has the offset of whichever value has one.
     pub(super) fn at(self, time: Self) -> Option<Self> {
         let offset = match (self.offset(), time.offset()) {
             (Some(date), Some(time)) if date != time => return None,
@@ -280,14 +294,16 @@ impl Instant {
             .map(Self::from_library)
     }
 
-    /// Returns the value a duration later, computed through `T`, or `None` beyond the value space.
+    /// Returns the value a duration later, computed through `T`,
+    /// or `None` beyond the value space.
     pub(super) fn checked_add<T: LibraryTimestamp>(self, duration: Duration) -> Option<Self> {
         self.to_library::<T>()
             .checked_add_duration(duration.to_library())
             .map(Self::from_library)
     }
 
-    /// Returns the value a duration earlier, computed through `T`, or `None` beyond the value space.
+    /// Returns the value a duration earlier, computed through `T`,
+    /// or `None` beyond the value space.
     pub(super) fn checked_sub<T: LibraryTimestamp>(self, duration: Duration) -> Option<Self> {
         self.to_library::<T>()
             .checked_sub_duration(duration.to_library())
@@ -305,17 +321,18 @@ impl Instant {
         )))
     }
 
-    /// Returns whether two values are equal in XSD's value space:
-    /// both zoned or both unzoned, and at the same instant.
+    /// Returns whether two values are equal by value.
+    ///
+    /// They are if both are zoned or both are unzoned, and they are at the same instant.
     pub(super) fn value_eq(self, other: Self) -> bool {
         self.is_zoned() == other.is_zoned() && self.attoseconds == other.attoseconds
     }
 
-    /// Returns the order of two values in XSD's value space,
-    /// or `None` for a zoned and an unzoned value within fourteen hours of each other.
+    /// Returns the order of two values by value,
+    /// or `None` for a zoned and an unzoned value at most fourteen hours apart.
     ///
-    /// A zoned value compares with an unzoned one only when the comparison
-    /// comes out the same under every offset the unzoned value could carry.
+    /// A zoned value is ordered against an unzoned one only if the order is the same
+    /// under every offset that the unzoned value could have.
     pub(super) fn value_cmp(self, other: Self) -> Option<Ordering> {
         let (left, right) = (self.attoseconds, other.attoseconds);
         match (self.is_zoned(), other.is_zoned()) {
@@ -334,7 +351,8 @@ impl Instant {
     }
 }
 
-/// Returns the seconds an offset adds to UTC to reach local time; zero for an unzoned value.
+/// Returns the seconds that an offset adds to UTC to give local time,
+/// which is zero for an unzoned value.
 fn offset_seconds(offset: Option<TimezoneOffset>) -> i128 {
     offset.map_or(0, |offset| i128::from(offset.minutes()) * 60)
 }
@@ -369,7 +387,7 @@ pub(super) fn time_lexical(hour: u8, minute: u8, second: u8, attosecond: u64) ->
     Some(format!("{hour:02}:{minute:02}:{second:02}{fraction}"))
 }
 
-/// Returns the offset part of a canonical lexical form; empty for an unzoned value.
+/// Returns the offset part of a canonical lexical form, which is empty for an unzoned value.
 pub(super) fn offset_lexical(offset: Option<TimezoneOffset>) -> String {
     offset.map(|offset| offset.to_string()).unwrap_or_default()
 }
@@ -380,6 +398,7 @@ mod tests {
 
     use crate::value::temporal::{Date, DateTime, Time};
 
+    /// Instants count attoseconds from the start of year one.
     #[test]
     fn instants_count_from_year_one() {
         let unix_epoch =
@@ -393,6 +412,7 @@ mod tests {
         assert_eq!(first.attoseconds(), 0);
     }
 
+    /// A time is an instant on the reference day `1972-12-31`.
     #[test]
     fn the_reference_day_is_pinned() {
         let midnight = Time::from_lexical("00:00:00Z").expect("valid");
@@ -410,13 +430,15 @@ mod tests {
         );
     }
 
+    /// An unzoned value and a value with the offset `-00:01` stay distinct across the bridge,
+    /// although `oxsdatatypes` serializes their offsets alike.
     #[test]
     fn the_unzoned_mark_collides_with_an_offset() {
         // `oxsdatatypes` writes an unzoned value and the offset `-00:01` with the same tail bytes.
         let unzoned: LibraryDateTime = "1970-01-01T00:00:00".parse().expect("valid");
         let shifted: LibraryDateTime = "1970-01-01T00:00:00-00:01".parse().expect("valid");
         assert_eq!(unzoned.to_be_bytes()[16..], shifted.to_be_bytes()[16..]);
-        // The bridge tells them apart in both directions.
+        // The bridge distinguishes them in both directions.
         for lexical in ["1970-01-01T00:00:00", "1970-01-01T00:00:00-00:01"] {
             let value = DateTime::from_lexical(lexical).expect("valid");
             assert_eq!(value.to_string(), lexical);
@@ -435,6 +457,8 @@ mod tests {
         );
     }
 
+    /// Comparison by value agrees with `oxsdatatypes`,
+    /// including near the offset limits and the range limits.
     #[test]
     fn value_comparison_agrees_with_oxsdatatypes() {
         let datetime = |lexical: &str| DateTime::from_lexical(lexical).expect(lexical);
@@ -489,7 +513,7 @@ mod tests {
                 );
             }
         }
-        // The XSD 1.1 examples.
+        // The examples of XSD 1.1.
         let less = |left: &str, right: &str| {
             assert_eq!(
                 datetime(left).value_cmp(datetime(right)),

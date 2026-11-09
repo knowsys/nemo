@@ -1,5 +1,5 @@
-//! JSON imports: a document's node/edge triples into a ternary
-//! predicate.
+//! JSON imports: loading the triples that describe a JSON document
+//! (see [JsonReader]) into a predicate with three columns.
 
 use std::sync::Arc;
 

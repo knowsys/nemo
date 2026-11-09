@@ -1,22 +1,23 @@
-//! Facts: asserted ground atoms.
+//! Facts, which state that a predicate holds for ground terms.
 
 use std::fmt::{self, Display, Formatter};
 
 use crate::model::{Identifier, Span, Term, span_ignoring_eq, term::fmt_labeled};
 
-/// A fact: a predicate asserted over ground terms.
+/// A fact, which states that a predicate holds for ground terms, such as `parent(alice, bob) .`.
 ///
-/// The type does not enforce groundness.
-/// The engine checks it when it loads the program.
+/// The type does not ensure that the terms are ground.
+/// An [Engine](crate::engine::Engine) checks that when it loads the program.
 #[derive(Debug, Clone)]
 pub struct Fact {
     /// The predicate.
     pub predicate: Identifier,
     /// The argument terms.
     pub terms: Vec<Term>,
-    /// The written column names, aligned with the terms, `Some` for a fact naming its columns.
+    /// The names of the columns that the terms fill, one per term,
+    /// if the fact is written with named arguments, as in `person(name: "Ann") .`.
     ///
-    /// Each name must be a column name declared for the predicate, by `@declare` or `@input`.
+    /// Each name must be a column name that `@declare` or `@input` declares for the predicate.
     pub labels: Option<Vec<String>>,
     /// The source position, or `None` for a component built programmatically.
     pub span: Option<Span>,

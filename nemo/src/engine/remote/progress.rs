@@ -2,9 +2,9 @@
 
 use crate::engine::remote::PendingRequest;
 
-/// How a call of a method that may need data from the network ended:
-/// the method is done, or it is suspended until these requests have responses.
+/// How a call of a method that may need data from the network ended.
 ///
+/// Either the method is done, or it is suspended until the listed requests have responses.
 /// The `start_*` methods of the [Engine](crate::engine::Engine) return it,
 /// and so does [resume](crate::engine::Engine::resume).
 ///
@@ -28,7 +28,7 @@ use crate::engine::remote::PendingRequest;
 /// };
 /// assert_eq!(pending[0].request.url, "https://example.org/p.csv");
 ///
-/// // Fetched in some other way, the bodies go back under the ids of their requests.
+/// // The bodies, fetched in some other way, are passed back under the ids of their requests.
 /// let responses = pending
 ///     .iter()
 ///     .map(|pending| (pending.id, Ok(Arc::from(&b"1\n"[..]))));

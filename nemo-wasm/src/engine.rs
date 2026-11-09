@@ -1,4 +1,4 @@
-//! The engine: load, reason, read back.
+//! The `NemoEngine` class, which loads programs, reasons, and reads the results.
 
 use std::{
     cell::RefCell,
@@ -27,41 +27,42 @@ use crate::{
     values::{to_js, to_value},
 };
 
-/// The loading methods, which take a program.
+/// A loading method of the engine.
 #[derive(Debug, Clone, Copy)]
 enum LoadKind {
-    /// `load`.
+    /// [Engine::load](nemo::engine::Engine::load).
     Load,
-    /// `extend`.
+    /// [Engine::extend](nemo::engine::Engine::extend).
     Extend,
-    /// `reload`.
+    /// [Engine::reload](nemo::engine::Engine::reload).
     Reload,
 }
 
-/// What a [NemoEngine] handle shares with the calls it has started.
+/// The state that a [NemoEngine] shares with its async methods in progress.
 #[derive(Debug, Default)]
 pub(crate) struct Inner {
     /// The wrapped engine.
     pub(crate) engine: nemo::engine::Engine,
-    /// The source texts of this run, for rendering diagnostics.
+    /// The texts of the engine's sources, for rendering diagnostics.
     sources: SourceTexts,
     /// Whether an async method is waiting for responses from the network.
     pub(crate) driving: bool,
 }
 
 impl Inner {
-    /// Returns a thrown error carrying one diagnostic.
+    /// Returns the `Error` to throw for one diagnostic.
     pub(crate) fn throw(&self, diagnostic: nemo::diagnostics::Diagnostic) -> JsValue {
         diagnostics::throw(vec![diagnostic], &self.sources)
     }
 
-    /// Carries a program through one of the loading methods, and throws
-    /// the errors it reports.
+    /// Passes a program to the loading method `kind`,
+    /// and returns the error to throw for the diagnostics of a failure.
     ///
-    /// In its start form, the method sends no request and returns the requests it is suspended
-    /// for.
-    /// Otherwise it completes, and throws N0491 if it needs data from the network,
-    /// since the browser engine has no client of its own.
+    /// With `start_form`, the method's `start_*` form runs,
+    /// which sends nothing and returns the requests that it is suspended for.
+    /// Otherwise the plain form runs, which fails with [NO_CLIENT](nemo::codes::NO_CLIENT)
+    /// if the program needs data from the network, since the engine in the browser has no
+    /// client.
     fn ingest(
         &mut self,
         name: &str,
@@ -85,8 +86,8 @@ impl Inner {
                 LoadKind::Reload => engine.reload(model),
             }
         });
-        // Linking reads the program's modules, so their sources are
-        // taken in before its outcome is reported against them.
+        // Linking reads the program's modules, so their sources are added before the
+        // outcome is rendered against them.
         self.sources.absorb(self.engine.sources());
         outcome
             .map(|()| progress)
@@ -94,32 +95,34 @@ impl Inner {
     }
 }
 
-/// The reasoning engine over one program:
-/// load it, reason to the fixpoint, read the results back.
+/// The reasoning engine for one program,
+/// which loads the program, reasons to the fixpoint, and reads the results.
 ///
-/// The methods are synchronous, so run them in a worker.
-/// A method that needs data from the network has an async form, which fetches the data,
-/// and a `start*` form, which returns the requests instead. `resume` takes their responses.
+/// The methods are synchronous, so the engine should run in a worker.
+/// A method that needs data from the network has an async form, such as `loadAsync`,
+/// which fetches the data, and a `start` form, such as `startLoad`,
+/// which returns the requests instead, so that `resume` can receive their responses.
 /// A method that may change the engine throws while an async method waits for responses.
-/// Errors are thrown as an `Error` whose `diagnostics` carry the structured entries.
+/// An error is thrown as an `Error` whose `diagnostics` property lists the diagnostics as
+/// plain objects.
 #[wasm_bindgen]
 #[derive(Debug, Default)]
 pub struct NemoEngine {
-    /// The engine and its sources, shared with the async methods in
-    /// progress.
+    /// The engine and its sources, shared with the async methods in progress.
     inner: Rc<RefCell<Inner>>,
 }
 
 impl NemoEngine {
-    /// Returns the engine and its sources, for a call that changes nothing an
-    /// async method relies on.
+    /// Borrows the engine's state, for a method that changes nothing an async method relies
+    /// on.
     fn state(&self) -> std::cell::Ref<'_, Inner> {
         self.inner.borrow()
     }
 
-    /// Returns the engine and its sources, for a call that may change them.
+    /// Borrows the engine's state mutably, for a method that may change it.
     ///
-    /// The call fails while an async method waits for responses, which only it may pass on.
+    /// Fails while an async method waits for responses, since only that method may pass
+    /// them on.
     fn state_mut(&self) -> Result<std::cell::RefMut<'_, Inner>, JsValue> {
         let inner = self.inner.borrow_mut();
         if inner.driving {
@@ -131,8 +134,8 @@ impl NemoEngine {
         Ok(inner)
     }
 
-    /// Returns the facts `trace` and `traceAscii` take, each written with or
-    /// without its terminator.
+    /// Parses the facts given to `trace` or `traceAscii`,
+    /// each written with or without its terminating `.`.
     fn trace_facts(inner: &Inner, texts: &[String]) -> Result<Vec<nemo::model::Fact>, JsValue> {
         texts
             .iter()
@@ -142,8 +145,10 @@ impl NemoEngine {
             .collect()
     }
 
-    /// Starts an async method: it calls the method, fetches the requests the method is
-    /// suspended for, passes their responses on, and settles when the method completes.
+    /// Starts the async method that `call` starts, and returns its promise,
+    /// which [fetch::drive] settles.
+    ///
+    /// Fails while another async method waits for responses.
     fn drive(
         &self,
         call: impl FnOnce(&mut Inner) -> Result<Progress, JsValue> + 'static,
@@ -156,9 +161,9 @@ impl NemoEngine {
     }
 }
 
-/// Returns what a call of a method returns to JavaScript:
-/// `null` if the method is done, else the requests it is suspended for, as `pendingRequests`
-/// lists them.
+/// Returns the progress of a method as JavaScript data:
+/// `null` if the method is done, and otherwise the requests it is suspended for,
+/// in the form of [requests_js].
 fn progress_js(progress: Progress) -> Result<JsValue, JsValue> {
     match progress {
         Progress::Done => Ok(JsValue::NULL),
@@ -166,9 +171,10 @@ fn progress_js(progress: Progress) -> Result<JsValue, JsValue> {
     }
 }
 
-/// Returns requests as plain objects:
-/// `{id, url, method, headers: [[name, value]…], accept, parameters: [[name, value]…],
-/// form: [[name, value]…] | null}`, the id a `BigInt`.
+/// Returns requests as plain objects.
+///
+/// Each is `{id, url, method, headers: [[name, value]…], accept, parameters: [[name, value]…],
+/// form: [[name, value]…] | null}`, where `id` is a `BigInt` and `accept` may be `null`.
 fn requests_js(pending: &[PendingRequest]) -> Result<Array, JsValue> {
     let pairs = |pairs: &[(String, String)]| -> Array {
         pairs
@@ -212,12 +218,16 @@ fn requests_js(pending: &[PendingRequest]) -> Result<Array, JsValue> {
         .collect()
 }
 
-/// Returns the responses `resume` takes, from plain objects:
-/// `{id, body}` for a response, its body a `Uint8Array` or a string,
-/// and `{id, status, message}` for a failure, `status` left out if no response came.
-/// A failure with `partial: true` is a response holding only part of the result
-/// (as [Failure::of_partial_response](nemo::engine::remote::Failure::of_partial_response)
-/// tells), which a bound import splits into smaller requests.
+/// Returns the responses given to `resume`, read from plain objects.
+///
+/// - `{id, body}` is a response, with a body that is a `Uint8Array` or a string.
+/// - `{id, status, message}` is a [Failure], without `status` if no response came.
+/// - A failure with `partial: true` is a response that contains only part of the result,
+///   as [Failure::of_partial_response](nemo::engine::remote::Failure::of_partial_response)
+///   detects.
+///
+/// An id is a `BigInt` or an integral, non-negative number.
+/// Returns the error to throw for anything else.
 fn responses_of(responses: &JsValue) -> Result<Vec<(RequestId, Response)>, JsValue> {
     let invalid = |what: &str| -> JsValue {
         js_sys::Error::new(&format!(
@@ -237,7 +247,7 @@ fn responses_of(responses: &JsValue) -> Result<Vec<(RequestId, Response)>, JsVal
                 u64::try_from(id).map_err(|_| invalid("an id out of range"))?
             } else {
                 match id.as_f64() {
-                    // The ids the engine hands out are far below 2^53, exact as numbers.
+                    // The engine's ids are far below 2^53, so a number holds them exactly.
                     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
                     Some(number) if number >= 0.0 && number.fract() == 0.0 => number as u64,
                     _ => return Err(invalid("a response without an id")),
@@ -253,7 +263,7 @@ fn responses_of(responses: &JsValue) -> Result<Vec<(RequestId, Response)>, JsVal
                     Failure::transport(message)
                 } else {
                     match status.as_f64() {
-                        // Checked to be an HTTP status, so it fits.
+                        // The guard checks that it is an HTTP status, so it fits in a `u16`.
                         #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
                         Some(number)
                             if (100.0..=599.0).contains(&number) && number.fract() == 0.0 =>
@@ -276,8 +286,10 @@ fn responses_of(responses: &JsValue) -> Result<Vec<(RequestId, Response)>, JsVal
         .collect()
 }
 
-/// Checks that each response is under an id the pending requests list, and under one no
-/// other response has, so that `resume` throws where the engine would panic.
+/// Checks that each response has an id that `pending` lists, and that no two responses share
+/// an id.
+///
+/// So `resume` throws where [Engine::resume](nemo::engine::Engine::resume) would panic.
 fn check_ids(
     responses: &[(RequestId, Response)],
     pending: &[PendingRequest],
@@ -296,8 +308,9 @@ fn check_ids(
     Ok(())
 }
 
-/// Returns the bytes a `Uint8Array` or a string holds,
-/// or what a method named `method` throws for anything else.
+/// Returns the bytes of a `Uint8Array`, or of a string in UTF-8.
+///
+/// For anything else, returns the error to throw, which names `method`.
 fn bytes_of(content: &JsValue, method: &str) -> Result<Vec<u8>, JsValue> {
     if let Some(text) = content.as_string() {
         Ok(text.into_bytes())
@@ -315,8 +328,11 @@ fn protocol_value(value: &impl Serialize) -> Result<JsValue, JsValue> {
         .map_err(|error| js_sys::Error::new(&error.to_string()).into())
 }
 
-/// Replaces the ids in a trace response's JavaScript value by what they name:
-/// a node's rule and premises, and a traced fact's node.
+/// Replaces the ids in the JavaScript value of a trace response with the objects they refer
+/// to.
+///
+/// A node's `rule` becomes the rule's object, and its `premises` become the premises' nodes.
+/// A traced fact's `node` becomes the node's object.
 fn linked(response: &TraceResponse, value: &JsValue) -> Result<(), JsValue> {
     let nodes: Array = Reflect::get(value, &"nodes".into())?.into();
     let rules: Array = Reflect::get(value, &"rules".into())?.into();
@@ -344,7 +360,11 @@ fn linked(response: &TraceResponse, value: &JsValue) -> Result<(), JsValue> {
     Ok(())
 }
 
-/// Returns a protocol query from plain JavaScript data, through its JSON form.
+/// Returns a protocol query made from plain JavaScript data, converted through their JSON
+/// form.
+///
+/// Fails if the data cannot be converted to JSON, or if the JSON does not have the query's
+/// shape.
 fn protocol_query<T: serde::de::DeserializeOwned>(query: &JsValue) -> Result<T, JsValue> {
     let json = js_sys::JSON::stringify(query)
         .map(String::from)
@@ -361,13 +381,15 @@ impl NemoEngine {
         NemoEngine::default()
     }
 
-    /// Adds in-memory rows to a predicate.
+    /// Adds rows from memory to a predicate.
     ///
-    /// Before `load`, they join the program as facts.
-    /// After it, they land as deltas and the next `reason()` continues to the new fixpoint,
-    /// and the predicate must be one the program uses (`extend` introduces new ones).
-    /// `rows` is an array of arrays of values, per the module's conversion table.
-    /// Throws for a row the predicate does not take.
+    /// `rows` is an array of rows, each an array of values,
+    /// which are converted by the bindings' conversion table.
+    /// Before `load`, the rows become facts of the program.
+    /// After it, they are new facts, and the next `reason()` continues to the new fixpoint.
+    /// The predicate must then be one that the program uses, since only `extend` adds new ones.
+    /// Throws for a value that does not convert, for a row that the predicate does not accept,
+    /// and with code N0493 while a method is suspended.
     #[wasm_bindgen(js_name = "importRows")]
     pub fn import_rows(&mut self, predicate: &str, rows: &JsValue) -> Result<(), JsValue> {
         let rows = rows
@@ -392,11 +414,11 @@ impl NemoEngine {
             .map_err(|diagnostic| inner.throw(diagnostic))
     }
 
-    /// Registers an in-memory resource:
-    /// an `@import` whose resource name matches reads these bytes,
-    /// instead of a filesystem the browser does not have.
+    /// Registers a resource in memory under `name`.
     ///
-    /// Takes a `Uint8Array` or a string, and throws for anything else.
+    /// An `@import` of a resource with that name reads `content`,
+    /// since the browser has no file system.
+    /// `content` is a `Uint8Array` or a string, and anything else throws.
     #[wasm_bindgen(js_name = "addResource")]
     pub fn add_resource(&mut self, name: &str, content: &JsValue) -> Result<(), JsValue> {
         let bytes = bytes_of(content, "addResource")?;
@@ -404,11 +426,11 @@ impl NemoEngine {
         Ok(())
     }
 
-    /// Registers a module text under the name a `@use` in the program writes for it,
-    /// such as `lib::tc`: a `@use` of the module reads this text,
-    /// instead of a file the browser does not have.
+    /// Registers the text of a module under `name`, the name with which a `@use` refers to it,
+    /// such as `lib::tc`.
     ///
-    /// Throws if the name is not a module name.
+    /// A `@use` of the module then reads this text, since the browser has no files.
+    /// Throws if `name` is not a module name.
     #[wasm_bindgen(js_name = "addModule")]
     pub fn add_module(&mut self, name: &str, text: String) -> Result<(), JsValue> {
         let mut inner = self.state_mut()?;
@@ -420,8 +442,8 @@ impl NemoEngine {
 
     /// Keeps every imported predicate whole.
     ///
-    /// Without it, loading stores only the columns and rows of an import its rules read,
-    /// and a trace or a query over the rest throws.
+    /// Without it, loading stores only the columns and rows of an import that the rules read,
+    /// and tracing or reading the rest throws.
     /// Call it before `load`.
     #[wasm_bindgen(js_name = "retainImports")]
     pub fn retain_imports(&mut self) -> Result<(), JsValue> {
@@ -430,34 +452,41 @@ impl NemoEngine {
     }
 
     /// Returns the requests of the suspended method that have no response yet,
-    /// empty if no method is suspended.
+    /// or none if no method is suspended.
     ///
-    /// The async methods, such as `loadAsync`, fetch the data a method needs from the
-    /// network themselves. To fetch it another way, through a proxy or with credentials,
-    /// call the method's `start*` form, such as `startLoad`, which returns the requests it
-    /// is suspended for (or `null` once done), fetch each, and pass the responses to `resume`,
-    /// which returns the requests the method is suspended for next.
-    /// Entries are plain objects:
+    /// The async methods, such as `loadAsync`, fetch the data that a method needs from the
+    /// network themselves.
+    /// To fetch it another way, such as through a proxy or with credentials,
+    /// call the method's `start` form, such as `startLoad`.
+    /// It returns the requests it is suspended for, or `null` once it is done.
+    /// Fetch each request, and pass the responses to `resume`,
+    /// which returns the requests that the method is suspended for next.
+    /// Each request is a plain object
     /// `{id, url, method, headers: [[name, value]…], accept, parameters: [[name, value]…],
-    /// form: [[name, value]…] | null}`, the id a `BigInt`.
+    /// form: [[name, value]…] | null}`, where `id` is a `BigInt` and `accept` may be `null`.
     #[wasm_bindgen(js_name = "pendingRequests")]
     pub fn pending_requests(&self) -> Result<Array, JsValue> {
         requests_js(&self.state().engine.pending())
     }
 
-    /// Continues the suspended method with responses to its requests:
-    /// an array of `{id, body}`, the body a `Uint8Array` or a string,
-    /// or `{id, status, message}` for a request that got no body,
-    /// `status` left out if no response came.
+    /// Continues the suspended method with the responses to its requests.
     ///
-    /// Returns `null` once the method is done, or the requests it is suspended for, as
-    /// `startLoad` does: those without a response yet, or new ones.
-    /// A failure is final, so retry before passing it in.
-    /// A request too large for the server (413, 414) is sent again in smaller pieces
-    /// if the engine can split it, as is one whose response the server cut off.
-    /// Throws for a response under an id that `pendingRequests` does not list,
-    /// or for two responses under one id, taking no response.
-    /// Otherwise it throws what the method it continues throws.
+    /// `responses` is an array with an entry per response:
+    /// - `{id, body}` for a response, with a body that is a `Uint8Array` or a string;
+    /// - `{id, status, message}` for a request that got no body,
+    ///   without `status` if no response came;
+    /// - `{id, status, message, partial: true}` for a successful response that contains only
+    ///   part of the result, as a server marks a result that it cut off.
+    ///
+    /// Returns `null` once the method is done, or the requests that it is suspended for,
+    /// as `startLoad` does: those without a response yet, or new ones.
+    /// A failure is final, so retry a request before passing its failure in.
+    /// A request of a run that was too large for the server (status 413 or 414),
+    /// or whose response was partial, is listed again in smaller pieces if the engine can
+    /// split it.
+    /// Throws, and passes on no response, for a response with an id that `pendingRequests`
+    /// does not list, or for two responses with the same id.
+    /// Otherwise it throws what the continued method throws.
     pub fn resume(&mut self, responses: &JsValue) -> Result<JsValue, JsValue> {
         let responses = responses_of(responses)?;
         let mut inner = self.state_mut()?;
@@ -469,9 +498,9 @@ impl NemoEngine {
         progress_js(progress)
     }
 
-    /// Discards the suspended method, returning whether there was one.
+    /// Discards the suspended method, and returns whether there was one.
     ///
-    /// A suspended load, extension or reload has changed nothing,
+    /// A suspended `load`, `extend` or `reload` has changed nothing,
     /// and a suspended `reason` stops as after a cancellation.
     /// Throws while an async method waits for responses.
     #[wasm_bindgen(js_name = "discardPending")]
@@ -479,11 +508,11 @@ impl NemoEngine {
         Ok(self.state_mut()?.engine.discard_pending())
     }
 
-    /// Loads a program: facts become stored rows, imports read their resources, rules compile.
+    /// Loads a program: it stores the facts, reads the imports and compiles the rules.
     ///
-    /// Throws for a program that does not load,
-    /// with code N0491 if it needs data from the network: `loadAsync` fetches it,
-    /// and `startLoad` returns the requests that fetch it.
+    /// Throws for a program that does not parse or load,
+    /// and with code N0491 if it needs data from the network.
+    /// `loadAsync` fetches that data, and `startLoad` returns the requests for it.
     pub fn load(&mut self, program: &NemoProgram) -> Result<(), JsValue> {
         let text = program.text.clone();
         self.state_mut()?
@@ -491,10 +520,13 @@ impl NemoEngine {
             .map(drop)
     }
 
-    /// Loads a program as `load` does, but sends no request:
-    /// returns `null` once loaded, or the requests the load is suspended for, as
-    /// `pendingRequests` lists them, having stored nothing. `resume` takes the responses.
-    /// Throws code N0493 while another method is suspended.
+    /// Loads a program as `load` does, but returns the requests for the data it needs from
+    /// the network instead of throwing.
+    ///
+    /// Returns `null` once the program is loaded, or the requests that the load is suspended
+    /// for, in the form that `pendingRequests` returns, with nothing stored yet.
+    /// Pass their responses to `resume`.
+    /// Throws with code N0493 while another method is suspended.
     #[wasm_bindgen(js_name = "startLoad")]
     pub fn start_load(&mut self, program: &NemoProgram) -> Result<JsValue, JsValue> {
         let text = program.text.clone();
@@ -504,26 +536,28 @@ impl NemoEngine {
         progress_js(progress)
     }
 
-    /// Loads a program as `load` does, its remote resources fetched with the global `fetch`.
+    /// Loads a program as `load` does, and fetches its remote resources with the global
+    /// `fetch`.
     ///
-    /// The promise resolves once the program is loaded, and rejects with what `load` throws
-    /// otherwise.
-    /// A failed request is sent again if the server asks to wait (429, 503)
-    /// or is overloaded (502, 504), up to five times.
-    /// The engine is free for reads while requests are out.
+    /// The promise resolves once the program is loaded, and otherwise rejects with what
+    /// `load` throws.
+    /// A failed request is sent again, up to five times,
+    /// if the server asks to wait (status 429 or 503) or is overloaded (status 502 or 504).
+    /// The engine can still be read while requests are out.
     #[wasm_bindgen(js_name = "loadAsync")]
     pub fn load_async(&self, program: &NemoProgram) -> Result<Promise, JsValue> {
         let (name, text) = (program.name.clone(), program.text.clone());
         self.drive(move |inner| inner.ingest(&name, text, LoadKind::Load, true))
     }
 
-    /// Extends the loaded program:
-    /// the new statements join it, new facts and imports store, the program recompiles,
-    /// and the next `reason()` continues to the new fixpoint.
+    /// Extends the loaded program with the statements of `program`.
     ///
-    /// An extension cannot change what loaded statements mean:
-    /// `@base`, prefix rebinding, and parameter redefinition throw,
-    /// since they need a `reload`.
+    /// The new facts and imports are stored, the whole program is compiled again,
+    /// and the next `reason()` continues to the new fixpoint.
+    /// An extension cannot change what the loaded statements mean,
+    /// so a new `@base`, a prefix bound to another IRI, or a parameter declared again throws,
+    /// since these need a `reload`.
+    /// It also throws as `load` does.
     pub fn extend(&mut self, program: &NemoProgram) -> Result<(), JsValue> {
         let text = program.text.clone();
         self.state_mut()?
@@ -531,10 +565,11 @@ impl NemoEngine {
             .map(drop)
     }
 
-    /// Extends the loaded program as `extend` does, but sends no request,
-    /// returning the requests it is suspended for as `startLoad` does, the loaded program
-    /// unchanged until it completes.
-    /// Throws code N0493 while another method is suspended.
+    /// Extends the loaded program as `extend` does,
+    /// but returns the requests that it is suspended for, as `startLoad` does.
+    ///
+    /// The loaded program is unchanged until the extension completes.
+    /// Throws with code N0493 while another method is suspended.
     #[wasm_bindgen(js_name = "startExtend")]
     pub fn start_extend(&mut self, program: &NemoProgram) -> Result<JsValue, JsValue> {
         let text = program.text.clone();
@@ -545,19 +580,22 @@ impl NemoEngine {
     }
 
     /// Extends the loaded program as `extend` does,
-    /// its remote resources fetched as `loadAsync` fetches them.
+    /// and fetches its remote resources as `loadAsync` does.
     #[wasm_bindgen(js_name = "extendAsync")]
     pub fn extend_async(&self, program: &NemoProgram) -> Result<Promise, JsValue> {
         let (name, text) = (program.name.clone(), program.text.clone());
         self.drive(move |inner| inner.ingest(&name, text, LoadKind::Extend, true))
     }
 
-    /// Replaces the program:
-    /// every derived row drops, every rule starts over,
-    /// and the next `reason()` computes again from the loaded data.
+    /// Replaces the loaded program with `program`.
     ///
-    /// Unchanged predicates keep their data, and unchanged imports are not read again.
-    /// Rows imported into a predicate whose definition changed are dropped, with a report.
+    /// Every derived row is dropped, every rule starts over,
+    /// and the next `reason()` derives everything again from the input facts.
+    /// A predicate whose facts, imports and declarations are unchanged keeps its input facts,
+    /// and an unchanged import is not read again.
+    /// The rows added through `importRows` to a predicate whose definition changed are
+    /// dropped, with a warning.
+    /// It throws as `load` does.
     pub fn reload(&mut self, program: &NemoProgram) -> Result<(), JsValue> {
         let text = program.text.clone();
         self.state_mut()?
@@ -565,10 +603,11 @@ impl NemoEngine {
             .map(drop)
     }
 
-    /// Replaces the program as `reload` does, but sends no request,
-    /// returning the requests it is suspended for as `startLoad` does, the loaded program
-    /// unchanged until it completes.
-    /// Throws code N0493 while another method is suspended.
+    /// Replaces the loaded program as `reload` does,
+    /// but returns the requests that it is suspended for, as `startLoad` does.
+    ///
+    /// The loaded program is unchanged until the reload completes.
+    /// Throws with code N0493 while another method is suspended.
     #[wasm_bindgen(js_name = "startReload")]
     pub fn start_reload(&mut self, program: &NemoProgram) -> Result<JsValue, JsValue> {
         let text = program.text.clone();
@@ -578,17 +617,18 @@ impl NemoEngine {
         progress_js(progress)
     }
 
-    /// Replaces the program as `reload` does,
-    /// its remote resources fetched as `loadAsync` fetches them.
+    /// Replaces the loaded program as `reload` does,
+    /// and fetches its remote resources as `loadAsync` does.
     #[wasm_bindgen(js_name = "reloadAsync")]
     pub fn reload_async(&self, program: &NemoProgram) -> Result<Promise, JsValue> {
         let (name, text) = (program.name.clone(), program.text.clone());
         self.drive(move |inner| inner.ingest(&name, text, LoadKind::Reload, true))
     }
 
-    /// Checks a program without loading it:
-    /// no data is read, nothing is stored,
-    /// and every problem is returned (as plain diagnostic objects) rather than thrown.
+    /// Checks a program without loading it, and returns its diagnostics as plain objects.
+    ///
+    /// No data is read and nothing is stored.
+    /// Every problem, warnings included, is returned rather than thrown.
     pub fn check(&mut self, program: &NemoProgram) -> Result<JsValue, JsValue> {
         let mut inner = self.state_mut()?;
         let Inner {
@@ -605,11 +645,12 @@ impl NemoEngine {
         Ok(diagnostics::to_js(&resolved))
     }
 
-    /// Runs semi-naive evaluation to the fixpoint.
+    /// Reasons to the fixpoint by semi-naive evaluation.
     ///
-    /// The call is synchronous and returns when the fixpoint is reached, so run it in a worker.
-    /// If a bound import needs data from the network, it throws code N0491:
-    /// `reasonAsync` fetches the data, and `startReason` returns the requests that fetch it.
+    /// The call is synchronous and returns when the fixpoint is reached,
+    /// so it should run in a worker.
+    /// If a bound import needs data from the network, it throws with code N0491.
+    /// `reasonAsync` fetches that data, and `startReason` returns the requests for it.
     pub fn reason(&mut self) -> Result<(), JsValue> {
         let mut inner = self.state_mut()?;
         inner
@@ -618,11 +659,13 @@ impl NemoEngine {
             .map_err(|diagnostic| inner.throw(diagnostic))
     }
 
-    /// Runs semi-naive evaluation as `reason` does, but sends no request:
-    /// returns `null` at the fixpoint, or the requests of the bound import whose fetch the run
-    /// is suspended in, as `startLoad` does. `resume` takes the responses and continues the run
-    /// there.
-    /// Throws code N0493 while a load, extension or reload is suspended.
+    /// Reasons as `reason` does, but returns the requests for the data that a bound import
+    /// needs from the network instead of throwing.
+    ///
+    /// Returns `null` at the fixpoint, or the requests that the run is suspended for,
+    /// as `startLoad` does.
+    /// Passing their responses to `resume` continues the run where it stopped.
+    /// Throws with code N0493 while a `load`, `extend` or `reload` is suspended.
     #[wasm_bindgen(js_name = "startReason")]
     pub fn start_reason(&mut self) -> Result<JsValue, JsValue> {
         let mut inner = self.state_mut()?;
@@ -633,10 +676,10 @@ impl NemoEngine {
         progress_js(progress)
     }
 
-    /// Runs semi-naive evaluation as `reason` does,
-    /// the requests of its bound imports fetched as `loadAsync` fetches them.
+    /// Reasons as `reason` does, and fetches the requests of its bound imports as `loadAsync`
+    /// does.
     ///
-    /// The promise resolves at the fixpoint.
+    /// The promise resolves at the fixpoint, and otherwise rejects with what `reason` throws.
     #[wasm_bindgen(js_name = "reasonAsync")]
     pub fn reason_async(&self) -> Result<Promise, JsValue> {
         self.drive(|inner| {
@@ -647,13 +690,17 @@ impl NemoEngine {
         })
     }
 
-    /// Traces facts, each written in fact syntax as `reach(a, b)`,
-    /// returning the protocol response:
-    /// per fact, its node if it holds, and the nodes of the derivations.
-    /// A node's `rule` is the rule's object and its `premises` are the premises' nodes,
-    /// so a derivation walks like a tree, and a fact several derivations use is one object.
+    /// Traces facts, and returns the trace response as a plain object.
     ///
-    /// Throws for an engine holding updates `reason()` has not processed.
+    /// `facts` is an array of facts as strings, such as `"reach(a, b)"`,
+    /// and the terminating `.` may be left out.
+    /// The response lists, for each fact, its node if the fact holds,
+    /// and the nodes of the derivations.
+    /// A node's `rule` is the object of its rule, and its `premises` are the nodes of its
+    /// premises, so a derivation can be walked like a tree,
+    /// and a fact that several derivations use is one object.
+    /// Throws for a text that is not a fact, or if the facts cannot be traced,
+    /// for example while the engine holds updates that `reason()` has not processed.
     pub fn trace(&mut self, facts: Vec<String>) -> Result<JsValue, JsValue> {
         let mut inner = self.inner.borrow_mut();
         let facts = Self::trace_facts(&inner, &facts)?;
@@ -666,8 +713,7 @@ impl NemoEngine {
         Ok(value)
     }
 
-    /// Returns the [trace](Self::trace) rendered as ASCII proof trees,
-    /// the terminal-style convenience.
+    /// Traces facts as `trace` does, and returns the response as ASCII proof trees.
     #[wasm_bindgen(js_name = "traceAscii")]
     pub fn trace_ascii(&mut self, facts: Vec<String>) -> Result<String, JsValue> {
         let mut inner = self.inner.borrow_mut();
@@ -679,10 +725,13 @@ impl NemoEngine {
         Ok(response.ascii())
     }
 
-    /// Answers the explanation view's `treeForTable` query:
-    /// the facts it selects, their derivation expanded.
+    /// Answers a `treeForTable` query of the explanation view, given as a plain object.
     ///
-    /// Takes and returns the protocol's plain camelCase objects.
+    /// The response, also a plain object, contains the facts that the query selects,
+    /// with their derivations expanded.
+    /// The query and the response use the protocol's camelCase keys.
+    /// Throws for a query that does not have the protocol's shape,
+    /// or that the engine cannot answer.
     #[wasm_bindgen(js_name = "treeForTable")]
     pub fn tree_for_table(&mut self, query: JsValue) -> Result<JsValue, JsValue> {
         let query = protocol_query(&query)?;
@@ -694,10 +743,13 @@ impl NemoEngine {
         protocol_value(&response)
     }
 
-    /// Answers the explanation view's `tableEntriesForTreeNodes` query:
-    /// the facts of every node of the tree it shapes, parents before children.
+    /// Answers a `tableEntriesForTreeNodes` query of the explanation view,
+    /// given as a plain object.
     ///
-    /// Takes and returns the protocol's plain camelCase objects.
+    /// The response is an array of plain objects, one for each node of the tree that the
+    /// query describes, with the node's facts, parents before children.
+    /// The query and the response use the protocol's camelCase keys.
+    /// Throws as `treeForTable` does.
     #[wasm_bindgen(js_name = "tableEntriesForTreeNodes")]
     pub fn table_entries_for_tree_nodes(&mut self, query: JsValue) -> Result<JsValue, JsValue> {
         let query = protocol_query(&query)?;
@@ -709,8 +761,8 @@ impl NemoEngine {
         protocol_value(&response)
     }
 
-    /// Returns the rule a statement id names, as traces and queries refer to it,
-    /// or `undefined` for an id that names none.
+    /// Returns the rule with the statement id `id`, by which traces and queries refer to it,
+    /// or `undefined` if no rule has that id.
     ///
     /// The rule is `{rule, text, name?, source?: {file, start, end, line, column}, instances?}`.
     pub fn rule(&self, id: usize) -> Result<JsValue, JsValue> {
@@ -722,7 +774,9 @@ impl NemoEngine {
 
     /// Returns the stored rows of a predicate, as an array of arrays of converted values.
     ///
-    /// For large results, page with `cursor`.
+    /// For large results, read them in pages through `cursor` instead.
+    /// Throws for a predicate that the program does not have,
+    /// or that the engine does not store whole.
     pub fn rows(&mut self, predicate: &str) -> Result<Array, JsValue> {
         let mut inner = self.inner.borrow_mut();
         let rows = inner
@@ -741,7 +795,9 @@ impl NemoEngine {
             .collect())
     }
 
-    /// Opens a cursor over a predicate's rows (see [NemoCursor]).
+    /// Opens a `NemoCursor` over a predicate's rows, which `readChunk` reads.
+    ///
+    /// Throws as `rows` does.
     pub fn cursor(&self, predicate: &str) -> Result<NemoCursor, JsValue> {
         let inner = self.state();
         let cursor = inner
@@ -754,11 +810,11 @@ impl NemoEngine {
         })
     }
 
-    /// Returns the next rows of a cursor, at most `budget` of them
-    /// (a bounded default if omitted), or an empty array once exhausted.
+    /// Returns the next rows of a cursor, or an empty array once all rows have been read.
     ///
-    /// A row is a plain object `{entryId, values, terms}`:
-    /// its entry id, its values per the conversion table, and the same values in term syntax.
+    /// At most `budget` rows are returned, or a bounded default number without a budget.
+    /// A row is a plain object `{entryId, values, terms}`, with the row's entry id,
+    /// its values as the conversion table converts them, and the same values in term syntax.
     #[wasm_bindgen(js_name = "readChunk")]
     pub fn read_chunk(
         &mut self,
@@ -787,6 +843,8 @@ impl NemoEngine {
     }
 
     /// Returns the number of stored rows of a predicate.
+    ///
+    /// Throws as `rows` does.
     pub fn count(&self, predicate: &str) -> Result<usize, JsValue> {
         let inner = self.state();
         inner
@@ -795,9 +853,11 @@ impl NemoEngine {
             .map_err(|diagnostic| inner.throw(diagnostic))
     }
 
-    /// Returns the program's outputs:
-    /// what it declares `@output` or exports, in declaration order,
-    /// or every predicate rules derive if it declares neither.
+    /// Returns the program's outputs.
+    ///
+    /// They are the predicates that the program declares `@output` or exports,
+    /// in declaration order.
+    /// If it declares neither, they are the predicates that its rules derive, sorted by name.
     #[wasm_bindgen(js_name = "outputPredicates")]
     pub fn output_predicates(&self) -> Array {
         self.state()
@@ -809,8 +869,11 @@ impl NemoEngine {
     }
 
     /// Returns every predicate of the program, sorted by name,
-    /// as `[name, columns, role]` triples,
-    /// the role `"extensional"` (given from outside), `"derived"` (by rules), or `"both"`.
+    /// as `[name, columns, role]` triples.
+    ///
+    /// The role is `"derived"` for a predicate that rules derive and that has no input facts,
+    /// `"both"` for one that rules derive and that also has input facts,
+    /// and `"extensional"` for any other.
     pub fn predicates(&self) -> Array {
         self.state()
             .engine
@@ -827,6 +890,9 @@ impl NemoEngine {
     }
 
     /// Returns the inferred column types of a predicate, in declaration syntax.
+    ///
+    /// Returns `undefined` for a predicate that the program never used,
+    /// or that the engine does not store whole.
     #[wasm_bindgen(js_name = "columnTypes")]
     pub fn column_types(&self, predicate: &str) -> Option<Vec<String>> {
         self.state().engine.column_types(predicate).map(|types| {
@@ -837,9 +903,10 @@ impl NemoEngine {
         })
     }
 
-    /// Serializes the program's declared exports:
-    /// an object mapping each export's file name to its content as a `Uint8Array`
-    /// (compressed if the export says so).
+    /// Serializes the program's exports.
+    ///
+    /// Returns an object that maps the file name of each export to its content as a
+    /// `Uint8Array`, which is compressed if the export says so.
     #[wasm_bindgen(js_name = "exportTables")]
     pub fn export_tables(&mut self) -> Result<Object, JsValue> {
         let mut inner = self.inner.borrow_mut();
@@ -856,15 +923,16 @@ impl NemoEngine {
         Ok(tables)
     }
 
-    /// Serializes one predicate, any the engine holds, exported or not,
-    /// as comma-separated values in the `term` column format,
-    /// as bytes the page can save to a file (a download, a picked file handle).
+    /// Serializes one predicate, exported or not, as comma-separated values with each value in
+    /// term syntax.
     ///
-    /// Throws for a predicate the program never used.
+    /// Returns the bytes, which the page can save to a file,
+    /// for example as a download or into a file handle that the user picked.
+    /// Throws as `rows` does.
     #[wasm_bindgen(js_name = "exportPredicate")]
     pub fn export_predicate(&mut self, predicate: &str) -> Result<Uint8Array, JsValue> {
         let mut inner = self.inner.borrow_mut();
-        // An unknown predicate throws as it does for every read.
+        // A predicate that cannot be read throws here, as it does for `rows`.
         inner
             .engine
             .count(predicate)
@@ -877,8 +945,8 @@ impl NemoEngine {
         Ok(Uint8Array::from(bytes.as_slice()))
     }
 
-    /// Returns the warnings (and other reports) the run collected so far, as
-    /// plain diagnostic objects.
+    /// Returns the reports, such as warnings, that the engine has collected while loading and
+    /// reasoning, as plain diagnostic objects.
     pub fn reports(&self) -> JsValue {
         let inner = self.state();
         let resolved: Vec<diagnostics::Diagnostic> = inner
@@ -890,14 +958,15 @@ impl NemoEngine {
         diagnostics::to_js(&resolved)
     }
 
-    /// Facts the program's predicates hold from outside: its facts and
-    /// imports, and the rows added through `importRows`.
+    /// Returns the number of input facts: the rows of the program's facts and imports,
+    /// and the rows added through `importRows`.
     #[wasm_bindgen(getter, js_name = "loadedFacts")]
     pub fn loaded_facts(&self) -> usize {
         self.state().engine.loaded_facts()
     }
 
-    /// Facts the program's predicates hold from reasoning.
+    /// Returns the number of facts that reasoning stored,
+    /// including the rows that bound imports fetched.
     #[wasm_bindgen(getter, js_name = "derivedFacts")]
     pub fn derived_facts(&self) -> usize {
         self.state().engine.derived_facts()
@@ -909,15 +978,16 @@ impl NemoEngine {
         self.state().engine.applications()
     }
 
-    /// Bytes currently allocated across tables and the dictionary.
+    /// Returns the number of bytes that the tables and the dictionary currently use.
     #[wasm_bindgen(getter, js_name = "memoryBytes")]
     pub fn memory_bytes(&self) -> usize {
         self.state().engine.memory_bytes()
     }
 }
 
-/// Returns a cursor row as a plain object: its entry id, its values per the
-/// conversion table, and its values in term syntax.
+/// Returns a cursor row as a plain object `{entryId, values, terms}`,
+/// with `entry` as its entry id, its values converted to JavaScript,
+/// and its values in term syntax.
 fn row_object(entry: usize, row: &[DataValue]) -> Result<JsValue, JsValue> {
     let object = Object::new();
     #[allow(clippy::cast_precision_loss)]
@@ -933,34 +1003,34 @@ fn row_object(entry: usize, row: &[DataValue]) -> Result<JsValue, JsValue> {
     Ok(object.into())
 }
 
-/// A cursor over one predicate's rows, advanced through [read_chunk](NemoEngine::read_chunk).
+/// A cursor over a predicate's rows, which the engine's `readChunk` reads.
 ///
-/// It is plain data, holding no reference to the engine.
+/// It is plain data, without a reference to the engine.
 #[wasm_bindgen]
 #[derive(Debug)]
 pub struct NemoCursor {
-    /// The engine-side cursor.
+    /// The engine's cursor.
     cursor: PredicateCursor,
-    /// Rows fetched but not yet delivered.
+    /// The rows read but not yet returned.
     buffered: VecDeque<Vec<DataValue>>,
 }
 
 #[wasm_bindgen]
 impl NemoCursor {
-    /// Returns the rows not yet delivered.
+    /// Returns the number of rows not yet returned.
     #[wasm_bindgen(getter)]
     pub fn remaining(&self) -> usize {
         self.cursor.remaining() + self.buffered.len()
     }
 
-    /// Returns the position of the next row to deliver,
-    /// the entry id a query selects that row by.
+    /// Returns the position of the next row to return,
+    /// which is the entry id by which a query selects that row.
     #[wasm_bindgen(getter)]
     pub fn position(&self) -> usize {
         self.cursor.position() - self.buffered.len()
     }
 
-    /// Returns whether every row has been delivered.
+    /// Returns whether every row has been returned.
     #[wasm_bindgen(getter)]
     pub fn done(&self) -> bool {
         self.cursor.is_done() && self.buffered.is_empty()

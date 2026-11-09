@@ -1,12 +1,12 @@
-//! The kinds of problems a plan reports about what it is given.
+//! The errors that building a plan can report.
 
 use crate::diagnostic_kinds;
 
 diagnostic_kinds! {
-    /// A limit of the plan's representation that large input can reach.
+    /// An error from a limit of the plan's representation, which large input can reach.
     pub enum PlanError {
         ExpressionTooLarge {
-            /// The most columns, and the most constants, an expression reads.
+            /// The largest number of distinct columns, and of constants, an expression can read.
             limit: usize,
         } => EXPRESSION_TOO_LARGE = 2, error,
                "expression reads more than {limit} distinct columns or constants",

@@ -1,10 +1,9 @@
-//! The protocol shell around the language core.
+//! The protocol layer of the language server.
 //!
-//! Everything here is translation: protocol types in, core types out,
-//! and back. The knowledge of what a Nemo program means lives in
-//! [Workspace] and the index it keeps, so
-//! this file can be replaced with a different framework without taking
-//! any of that with it.
+//! It only translates between the protocol's types and the types of the other modules.
+//! What a Nemo program means is known to [Workspace] and the documents it keeps,
+//! so this module can be replaced to use another protocol framework without losing any
+//! of that.
 
 use std::{collections::HashMap, sync::Arc};
 
@@ -37,17 +36,17 @@ use crate::{
     workspace::Workspace,
 };
 
-/// The language server: the open documents, and the client to report to.
+/// The language server, which keeps the open documents and reports to the client.
 #[derive(Debug)]
 pub struct Server {
-    /// The channel diagnostics are published on.
+    /// The connection to the client, on which diagnostics and log messages are sent.
     client: Client,
     /// The open documents.
     workspace: Arc<RwLock<Workspace>>,
 }
 
 impl Server {
-    /// Creates a server reporting to the given client.
+    /// Creates a server that reports to `client`.
     pub fn new(client: Client) -> Self {
         Self {
             client,
@@ -55,10 +54,10 @@ impl Server {
         }
     }
 
-    /// Parses a document and publishes what the parser said about it.
+    /// Stores the new text of a document, and publishes its diagnostics.
     ///
-    /// The version travels with the diagnostics: it is how a client
-    /// knows to discard a report that predates what it now holds.
+    /// The diagnostics are sent with the document's `version`,
+    /// so that the client can discard diagnostics of an older version.
     async fn refresh(&self, uri: Uri, text: String, version: i32) {
         let diagnostics = {
             let mut workspace = self.workspace.write().await;
@@ -79,9 +78,9 @@ impl LanguageServer for Server {
     async fn initialize(&self, _: InitializeParams) -> Result<InitializeResult> {
         Ok(InitializeResult {
             capabilities: ServerCapabilities {
-                // Full sync: the parser is fast enough that an edit costs
-                // one parse, and incremental sync would buy nothing until
-                // the parser itself is incremental.
+                // With full sync, each edit sends the whole text. Parsing the whole text on
+                // each edit is fast enough, and incremental sync would gain nothing while the
+                // parser is not incremental.
                 text_document_sync: Some(TextDocumentSyncCapability::Kind(
                     TextDocumentSyncKind::FULL,
                 )),
@@ -92,15 +91,14 @@ impl LanguageServer for Server {
                 document_highlight_provider: Some(OneOf::Left(true)),
                 document_formatting_provider: Some(OneOf::Left(true)),
                 rename_provider: Some(OneOf::Right(RenameOptions {
-                    // The editor asks what may be renamed before it asks
-                    // for a new name, so a cursor on nothing renameable
-                    // says so at once.
+                    // The editor asks what may be renamed before it asks for a new name,
+                    // so a rename on something that cannot be renamed is refused at once.
                     prepare_provider: Some(true),
                     work_done_progress_options: Default::default(),
                 })),
                 completion_provider: Some(CompletionOptions {
-                    // A marker decides what a word could be, so each one
-                    // opens the list.
+                    // The marker at the start of a word decides what the word can be,
+                    // so typing a marker opens the list of completions.
                     trigger_characters: Some(["@", "?", "!", "$", "#"].map(String::from).to_vec()),
                     ..CompletionOptions::default()
                 }),
@@ -111,8 +109,8 @@ impl LanguageServer for Server {
                 name: String::from("nemo-language-server"),
                 version: Some(String::from(env!("CARGO_PKG_VERSION"))),
             }),
-            // Left unset, which is the protocol's UTF-16, what
-            // [Lines](crate::position::Lines) counts.
+            // Left unset, which means the protocol's default of UTF-16,
+            // in which `position::Lines` counts.
             offset_encoding: None,
         })
     }
@@ -128,11 +126,10 @@ impl LanguageServer for Server {
     }
 
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
-        // Full sync sends the whole text as one range-less change. A
-        // client that sends ranges anyway is not one this server
-        // advertised itself to, and taking a range's text for the whole
-        // document would replace the file with a fragment, so nothing
-        // is taken unless it is the whole document.
+        // With full sync, a change contains the whole text and no range. A client that sends
+        // ranges anyway ignores what this server announced. Taking a range's text as the whole
+        // document would replace the document with a fragment, so only the last change
+        // without a range is used.
         let whole = params
             .content_changes
             .into_iter()
@@ -157,7 +154,7 @@ impl LanguageServer for Server {
     async fn did_close(&self, params: DidCloseTextDocumentParams) {
         let uri = params.text_document.uri;
         self.workspace.write().await.remove(uri.as_str());
-        // A closed document's diagnostics are the editor's to forget.
+        // Publishing no diagnostics makes the editor clear those of the closed document.
         self.client.publish_diagnostics(uri, Vec::new(), None).await;
     }
 
@@ -227,8 +224,8 @@ impl LanguageServer for Server {
         let Some(occurrence) = at(document, position.position) else {
             return Ok(None);
         };
-        // Where a predicate is derived is what "definition" means for a
-        // rule language: the facts and rule heads that give it rows.
+        // In a rule language, the definitions of a predicate are the facts and rule heads
+        // that derive its rows.
         let locations: Vec<Location> = document
             .symbols()
             .definitions(&occurrence.name)
@@ -275,8 +272,8 @@ impl LanguageServer for Server {
         let offset = document.offset(position.position.line, position.position.character);
         let prefix = document.prefix(offset);
 
-        // What a word could be is decided by the marker it opens with:
-        // there is nothing to offer after a `$` but a global.
+        // The marker that a word starts with decides what the word can be.
+        // For example, a word that starts with `$` can only be a parameter.
         let items: Vec<CompletionItem> = match prefix.chars().next() {
             Some('@') => DIRECTIVES
                 .iter()
@@ -415,8 +412,8 @@ impl LanguageServer for Server {
             return Ok(None);
         };
 
-        // Every occurrence of the name is renamed, or none is: renaming
-        // some of them would change what the program says.
+        // Either every occurrence of the name is renamed or none is,
+        // since renaming only some of them would change the program's meaning.
         let mut edits = Vec::new();
         for other in document.symbols().occurrences(&occurrence.name) {
             let Some(span) = document.name_span(&other.name, other.span) else {
@@ -442,8 +439,8 @@ impl LanguageServer for Server {
         let Some(document) = workspace.get(params.text_document.uri.as_str()) else {
             return Ok(None);
         };
-        // A document that does not parse has no statements to print, and
-        // printing what did parse would delete the rest of it.
+        // A document with an error is not formatted,
+        // since printing only the statements that parsed would delete the rest of it.
         if document
             .diagnostics()
             .iter()
@@ -462,7 +459,7 @@ impl LanguageServer for Server {
     }
 }
 
-/// The directives a statement can open with.
+/// The names of the directives, which completion offers after `@`.
 const DIRECTIVES: &[&str] = &[
     "base",
     "declare",
@@ -478,7 +475,7 @@ const DIRECTIVES: &[&str] = &[
     "use",
 ];
 
-/// Returns one completion, named and classified.
+/// Returns a completion item with `label`, `kind` and `detail`.
 fn item(label: String, kind: CompletionItemKind, detail: Option<String>) -> CompletionItem {
     CompletionItem {
         label,
@@ -488,7 +485,7 @@ fn item(label: String, kind: CompletionItemKind, detail: Option<String>) -> Comp
     }
 }
 
-/// Returns the occurrence a protocol position is in.
+/// Returns the occurrence of a name at a protocol position, if there is one.
 fn at(document: &Document, position: Position) -> Option<&crate::symbols::Occurrence> {
     let offset = document.offset(position.line, position.character);
     document.symbols().at(offset)
@@ -503,8 +500,10 @@ fn range(document: &Document, span: nemo::model::Span) -> Range {
     }
 }
 
-/// Returns a report as the protocol's diagnostic:
-/// the first label is its location, and the rest come along as related information.
+/// Returns a report as a protocol diagnostic.
+///
+/// The first label in this document gives the diagnostic's range,
+/// and the other labels in this document become related information.
 fn translate(document: &Document, uri: &Uri, report: &Report) -> Diagnostic {
     // A label pointing into another file has no range in this one, and
     // giving it one anyway would put the report somewhere it does not
@@ -525,8 +524,8 @@ fn translate(document: &Document, uri: &Uri, report: &Report) -> Diagnostic {
         .collect();
 
     Diagnostic {
-        // A report without a label is about the file, not a place in it,
-        // and the protocol has nowhere to put that but the start.
+        // A report without a label in this document is about the file rather than a place
+        // in it, and the protocol can only place it at the start.
         range: anchor.map_or_else(
             || Range::new(Position::new(0, 0), Position::new(0, 0)),
             |span| range(document, span),
@@ -545,8 +544,10 @@ fn translate(document: &Document, uri: &Uri, report: &Report) -> Diagnostic {
     }
 }
 
-/// Returns a report's message, with what its label says about the place it
-/// points at, and the context that follows.
+/// Returns the text of a report: its message, the message of its first label,
+/// and its notes and hints.
+///
+/// A first label without a message, or with the message `here`, adds nothing.
 fn message(report: &Report) -> String {
     let mut message = report.message().to_owned();
     if let Some(label) = report.labels().first()

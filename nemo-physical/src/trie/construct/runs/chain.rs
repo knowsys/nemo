@@ -1,21 +1,21 @@
-//! The chain: pieces of runs that follow one another, so that together they are one sorted sequence.
+//! The chain, a sequence of run pieces that together are one sorted sequence.
 
 use crate::{
     storage::StorageValue,
     trie::{Run, construct::merge::RowSource},
 };
 
-/// A chain of run pieces, each following the one before,
-/// so that its rows read piece after piece are in storage order.
+/// A chain of run pieces, each of which follows the one before,
+/// so that the rows, read piece after piece, are in storage order.
 ///
 /// A chain is also the [source](RowSource) of its rows for a merge.
 #[derive(Debug)]
 pub(super) struct RunChain<'r> {
     /// The pieces, in order.
     pieces: Vec<Run<'r>>,
-    /// The piece the source is at.
+    /// The index of the piece that the source is at.
     piece: usize,
-    /// The row within the piece the source is at.
+    /// The index of the row within the piece that the source is at.
     row: usize,
 }
 
@@ -35,10 +35,10 @@ impl<'r> RunChain<'r> {
 
     /// Groups nonempty pieces into as few chains as their overlaps allow.
     ///
-    /// Pieces that already follow one another, as the rows of one sorted stream
-    /// cut into runs do, form one chain as they are.
-    /// Otherwise first fit over the pieces in first-row order finds the fewest chains,
-    /// so that a merge ranges over chains rather than pieces.
+    /// Pieces that already follow one another, as the runs of one sorted stream do,
+    /// form one chain as they are.
+    /// Otherwise, a first-fit assignment of the pieces in the order of their first rows
+    /// finds the fewest chains, so that a merge has chains rather than pieces as its sources.
     pub(super) fn partition(pieces: &[Run<'r>]) -> Vec<Self> {
         if pieces.windows(2).all(|pair| follows(pair[0], pair[1])) {
             return vec![Self::new(pieces.to_vec())];
@@ -71,13 +71,13 @@ impl<'r> RunChain<'r> {
         self.pieces.iter().map(Run::len).sum()
     }
 
-    /// Returns the rows in order, whatever the source's position.
+    /// Returns all rows in order, whatever position the source is at.
     pub(super) fn rows(&self) -> impl Iterator<Item = &'r [StorageValue]> + '_ {
         self.pieces.iter().flat_map(Run::iter)
     }
 }
 
-/// Returns whether one piece's rows all come at or before another's.
+/// Returns whether every row of `before` comes at or before every row of `after`.
 fn follows(before: Run<'_>, after: Run<'_>) -> bool {
     before.row(before.len() - 1) <= after.row(0)
 }
@@ -106,7 +106,7 @@ mod tests {
 
     use crate::trie::{RowBuffer, SortedRowBuffer};
 
-    /// A sorted buffer of the given unary rows.
+    /// Returns a sorted buffer of unary rows with the given integers.
     fn buffer(values: &[i64]) -> SortedRowBuffer {
         let mut buffer = RowBuffer::new(1);
         for &value in values {
@@ -115,10 +115,11 @@ mod tests {
         buffer.into_sorted()
     }
 
+    /// Interleaved pieces of two overlapping sorted streams are grouped into two chains.
     #[test]
     fn pieces_group_into_the_fewest_chains() {
-        // The pieces of two joins, interleaved as emitted: each
-        // join's pieces chain, the joins overlap.
+        // The pieces of two sorted streams, interleaved as they were produced.
+        // The pieces of each stream follow one another, and the two streams overlap.
         let buffers = [
             buffer(&[1, 2]),
             buffer(&[3, 4]),
@@ -136,6 +137,8 @@ mod tests {
         assert_eq!(chains[0].len(), 6);
     }
 
+    /// A chain returns the rows of its pieces in order,
+    /// both as a source and through [rows](RunChain::rows).
     #[test]
     fn a_chain_reads_its_pieces_in_order() {
         let buffers = [buffer(&[1, 2]), buffer(&[2, 3])];

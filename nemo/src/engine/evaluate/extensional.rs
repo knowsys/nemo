@@ -1,7 +1,10 @@
-//! Which revision blocks of a table hold input facts rather than derived ones.
+//! The extensional blocks of a table: the revision ranges that hold input facts rather than
+//! derived ones.
 //!
 //! Consolidation never merges these blocks with derived rows,
-//! so recovery and reload can drop exactly the derived rows.
+//! so that exactly the derived rows can be dropped,
+//! when new input facts invalidate them ([recover](Engine::recover))
+//! or when a reload replaces the program.
 
 use std::{collections::HashSet, ops::Range};
 
@@ -16,36 +19,38 @@ use crate::{
 };
 
 /// The origin of a block of extensional rows,
-/// which tells what a [reload](Engine::reload) can and cannot reproduce.
+/// which determines whether a [reload](Engine::reload) can reproduce the rows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ExtensionalOrigin {
-    /// The program's own facts and imports, which the statements reproduce.
+    /// The program's own facts and imports, which a reload reproduces from the statements.
     Load,
     /// The rows added through [import_rows](Engine::import_rows),
-    /// which no statement holds.
+    /// which no statement reproduces.
     ImportRows,
 }
 
-/// One block of extensional rows in a table's revision sequence.
+/// One block of extensional rows among a table's revisions.
 ///
 /// The boundaries of these blocks are walls of every consolidation
-/// (revisions no merge crosses),
+/// (revisions that no merge crosses),
 /// so extensional rows never merge with derived ones,
 /// and dropping the derived rows of a table drops whole revision ranges.
 #[derive(Debug, Clone)]
 pub(crate) struct ExtensionalBlock {
-    /// The covered revisions.
+    /// The revisions it covers.
     pub(crate) range: Range<Revision>,
     /// Where the rows came from.
     pub(crate) origin: ExtensionalOrigin,
 }
 
 impl Engine {
-    /// Drops the derived rows that new input facts may invalidate, before reasoning continues.
+    /// Drops the derived rows that new input facts may invalidate, before a run continues.
     ///
     /// After input facts are added,
     /// derived facts that depend on them through negation or aggregation may no longer be
     /// derivable, so they are dropped and derived again.
+    /// The tables that gained input facts are those the engine marked since the last run,
+    /// and this clears the marks.
     /// The rules to reset are found by a fixpoint over the rules:
     ///
     /// - A table *grows* if it gained input facts,
@@ -53,19 +58,19 @@ impl Engine {
     ///   since reasoning will derive new rows into it.
     /// - A rule is *reset* if a negated atom, or any body atom of an aggregating rule,
     ///   reads a growing or dropped table
-    ///   (exactly the dependencies stratification calls negative).
+    ///   (exactly the dependencies that stratification calls negative).
     ///   It is also reset if any body atom reads a dropped table
     ///   (its old conclusions may depend on removed rows),
     ///   or if one of its head tables was dropped (its rows must be derived again).
     /// - Resetting a rule whose conclusions may be invalid drops the derived rows of its head
     ///   tables.
-    ///   A rule reset only to derive a dropped head again keeps its heads,
+    ///   A rule reset only to derive a dropped head again keeps the rows of its head tables,
     ///   since deriving the same rows twice is harmless.
-    ///   The exception is a rule that calls a nondeterministic function (such as `RAND()`),
-    ///   since running it again would add new values beside the old rows,
-    ///   so its heads are dropped too.
+    ///   A rule that calls a nondeterministic function (such as `RAND()`) is the exception.
+    ///   Running it again would add new values beside the old rows,
+    ///   so the derived rows of its head tables are dropped too.
     ///
-    /// Reset rules return to `last_applied = 0`.
+    /// A reset rule starts over, as if it had never been applied.
     /// Programs without negation or aggregation never drop a row.
     pub(super) fn recover(&mut self, program: &mut CompiledProgram) {
         if self.dirty.is_empty() {
@@ -137,8 +142,8 @@ impl Engine {
         );
     }
 
-    /// Drops a table's derived rows, every revision outside its extensional blocks,
-    /// returning the number of rows removed.
+    /// Drops a table's derived rows, which are the rows of every revision outside its
+    /// extensional blocks, and returns the number of rows removed.
     ///
     /// The blocks' boundaries were walls of every consolidation,
     /// so no stored block crosses them.
@@ -165,8 +170,10 @@ impl Engine {
         removed
     }
 
-    /// Records a stored extensional batch at the given revision,
-    /// coalescing with an adjacent block of the same origin.
+    /// Records that the given revision of a table contains input rows of the given origin.
+    ///
+    /// The revision joins the table's last block if it directly follows that block and has
+    /// the same origin.
     pub(crate) fn record_extensional(
         &mut self,
         table: TableId,
@@ -188,8 +195,8 @@ impl Engine {
         });
     }
 
-    /// Returns one rule's head tables:
-    /// the ordinary heads, the aggregate head, and the existential insert atoms.
+    /// Returns the tables of a rule's heads:
+    /// the ordinary heads, the aggregate head, and the atoms that the existential heads insert.
     pub(crate) fn head_tables(rule: &compiled::CompiledRule) -> impl Iterator<Item = TableId> + '_ {
         rule.heads
             .iter()

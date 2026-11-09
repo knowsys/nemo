@@ -1,99 +1,97 @@
-//! The SPARQL rewrite stage:
-//! rules over plain `sparql` imports become rules over bound imports,
-//! so that the endpoint is queried only for what the rules need.
+//! The SPARQL rewrite stage, which turns rules over plain `sparql` imports into rules over
+//! bound imports, so that the endpoint is asked only for what the rules need.
 //!
 //! A *plain* import is a `sparql` import without a `where` clause.
-//! A *bound* import has a `where` clause, whose binding atoms restrict what it fetches.
-//! A plain import `@import t from sparql { query = "SELECT ?s ?p ?o …" }` read by a rule
-//! fetches the whole query result, however little of it the rule reads.
-//! This stage rewrites each rule reading such imports:
+//! It fetches the whole query result, however little of it the rules read.
+//! A *bound* import has atoms in its `where` clause, whose rows restrict what it fetches.
+//! This stage rewrites each rule that reads plain imports:
 //!
-//! - The rule's atoms over one endpoint that share variables are merged into one query:
-//!   their patterns are instantiated at the atoms, constants substituted,
-//!   private variables renamed apart,
-//!   and negated atoms whose variables the rest binds become `FILTER NOT EXISTS`.
+//! - The rule's atoms over one endpoint that share variables are merged into one query.
+//!   Their patterns are instantiated at the atoms, with constants substituted and private
+//!   variables renamed apart.
+//!   Negated atoms whose variables the rest of the query binds become `FILTER NOT EXISTS`.
 //! - The query projects what the rest of the rule reads.
-//! - Every group of local atoms sharing variables with the merged atoms becomes a
+//! - Every group of local atoms that share variables with the merged atoms becomes a
 //!   *binding predicate*, defined by a fresh rule over those atoms,
-//!   and the new import is bound by them.
-//!   The group computes what its variables determine:
-//!   an assignment like `?label = STRLANG(?org, "en")`,
-//!   and an argument of a merged atom like `STRLANG(?org, "en")`, which the query sees as a
-//!   fresh variable.
+//!   and the binding predicates bind the new import.
+//!   The group also computes what its variables determine,
+//!   such as an assignment `?label = STRLANG(?org, "en")`,
+//!   or an argument `STRLANG(?org, "en")` of a merged atom, which the query sees as a fresh
+//!   variable.
 //! - The rule reads the new import in place of the merged atoms.
 //!
-//! A query calling a `SERVICE` keeps its variable names and is never merged,
+//! A query that calls a `SERVICE` keeps its variable names and is never merged,
 //! since a service may read or bind variables by name,
 //! as Wikidata's label service binds `?xLabel` for `?x`.
-//!
 //! A rule that only copies a bound import into its head is folded into the import itself.
-//! A plain import no rule reads anymore is removed.
-//! Everything the stage writes is program syntax,
+//! A plain import that no rule reads after the rewrite is removed.
+//! Everything that the stage writes is program syntax,
 //! and the revision it produces prints and parses back to itself.
 //!
-//! Queries whose result cannot be restricted (a `LIMIT`, a nondeterministic construct)
-//! are left alone, as are atoms whose rewrite would not reduce what they fetch:
-//! one atom of distinct variables sharing nothing with the local atoms.
+//! Queries whose result cannot be restricted, such as those with a `LIMIT`, are left alone.
+//! So are atoms whose rewrite would not reduce what they fetch:
+//! a single atom of distinct variables that shares nothing with the local atoms.
 //!
 //! # What the rewrite assumes of an endpoint
 //!
-//! A rewritten program derives what the program as written derives under a few assumptions
-//! about the endpoint. Nemo assumes what common stores do, documents it here,
-//! and checks where checking is cheap and precise.
+//! A rewritten program derives what the written program derives under a few assumptions
+//! about the endpoint.
+//! Nemo assumes what common stores do, documents it here,
+//! and checks it where checking is cheap and precise.
 //!
-//! - **Values are held in their canonical terms.** Nemo compares values, an endpoint terms.
-//!   Nemo reads `"3.0"^^xsd:decimal`, `"03"^^xsd:int` and `3` as one integer and writes it
-//!   in the canonical form of its datatype, `"3"^^xsd:integer`
+//! - **Values are stored in their canonical terms.** Nemo compares values,
+//!   and an endpoint compares terms.
+//!   Nemo reads `"3.0"^^xsd:decimal`, `"03"^^xsd:int` and `3` as one integer,
+//!   and writes it in the canonical form of its datatype, `"3"^^xsd:integer`
 //!   ([ground_terms](nemo_io::sparql::SparqlQuery::ground_terms)).
-//!   Stores keep datatypes apart (Blazegraph, Jena, AllegroGraph) and many canonicalise the
-//!   lexical form within one, so the datatype matters.
-//!   An integer also goes out as `"3.0"^^xsd:decimal`, since stores such as Wikidata's hold
-//!   every quantity as a decimal.
-//!   Every comparison the rewrite hands to the endpoint is the endpoint's:
+//!   Stores keep datatypes apart, as Jena does, and many canonicalise the lexical form within
+//!   one datatype, so the datatype matters.
+//!   An integer is also sent as `"3.0"^^xsd:decimal`,
+//!   since some stores, such as Wikidata's, store every quantity as a decimal.
+//!   Every comparison that the rewrite hands to the endpoint is the endpoint's:
 //!   a constant in a pattern, a binding in a `VALUES` block, a pushed condition,
 //!   a negated atom, and a join between merged atoms.
-//!   A value the endpoint holds in another datatype or form is not found there,
-//!   so the rewritten program may miss rows the program as written reads,
-//!   and through a negated atom keep rows it excludes.
-//!   A store comparing more loosely than Nemo, as QLever finds the double `3.0E0` for the
+//!   A value that the endpoint stores in another datatype or form is not found there.
+//!   So the rewritten program may miss rows that the written program reads,
+//!   and through a negated atom keep rows that the written program excludes.
+//!   A store that compares more loosely than Nemo, as QLever finds the double `3.0E0` for the
 //!   integer 3, may add rows through a constant or a join between merged atoms.
-//!   A bound import never holds a solution its bindings do not justify: it keeps only the
-//!   solutions that match them as Nemo compares values
+//!   A bound import never keeps a solution that its bindings do not justify,
+//!   since it keeps only the solutions that match them as Nemo compares values
 //!   ([SparqlReader::with_bindings](nemo_io::sparql::SparqlReader::with_bindings)).
-//!   All of this needs a store holding one value in several forms.
-//!   Where a store holds each value in one form, and for IRIs, Nemo and the endpoint compare
-//!   alike.
+//!   All of this needs a store that keeps one value in several forms.
+//!   Where a store has each value in one form, and for IRIs,
+//!   Nemo and the endpoint compare in the same way.
 //! - **A blank node keeps its label.** The rewrite splits an import into several queries,
 //!   and one blank node must be one null in all of them.
-//!   A label names the same null in every response from an endpoint
-//!   ([Dictionary::labeled_null](nemo_physical::dictionary::Dictionary::labeled_null)),
-//!   as stores that label nodes by their internal ids do
-//!   (Jena's TSV results, Virtuoso, Oxigraph, QLever),
-//!   though SPARQL only promises a label within one result.
+//!   A label names the same null in every response of an endpoint
+//!   ([with_endpoint_blank_nodes](nemo_io::sparql::SparqlReader::with_endpoint_blank_nodes)),
+//!   which is the case for a store that labels nodes by their internal ids,
+//!   though SPARQL promises a label only within one result.
 //!   On a store that labels each result anew, two blank nodes of different responses may
 //!   share a label and become one null, and one blank node may come under two labels and
-//!   become two.
-//!   No query can name a blank node, so a binding row holding one fetches nothing,
-//!   which reasoning reports.
+//!   become two nulls.
+//!   No query can name a blank node, so a binding row that contains one fetches nothing,
+//!   and reasoning reports this.
 //! - **An unbound value is a null of its own.** No other fetch can meet it,
-//!   so a query that may leave a projected variable unbound is not rewritten.
-//!   A variable no pattern of the query binds counts as well,
-//!   except in a query calling a service, which may bind it.
-//!   There the variable takes only the values the rule's bindings give it,
-//!   as a label service labels only the items it is asked about.
-//!   Asked as written, without bindings, the query labels every item its pattern finds.
-//! - **A result is one fixed set.** A query whose result depends on how it is asked
-//!   (`LIMIT`, `OFFSET`, `SAMPLE`, `RAND()`, `NOW()`, `UUID()`, `STRUUID()`, `BNODE()`)
-//!   is never restricted or merged.
-//!   A grouping or a subquery is never bound either, since the endpoint would compute it in
-//!   full for every page of bindings.
-//! - **A response is complete.** A response the endpoint cut short, by its trace, a last row
-//!   cut off, or the status and headers a store sends with a partial result,
-//!   fails its import (see [nemo_io::sparql]).
+//!   so a query that [may leave](nemo_io::sparql::SparqlQuery::may_leave_unbound) a projected
+//!   variable unbound is not rewritten.
+//!   In a query that calls a service, a variable that no pattern binds does not count,
+//!   since the service may bind it.
+//!   There the variable gets only the values that the rule's bindings give it,
+//!   as a label service labels only the items that it is asked about,
+//!   while the query as written labels every item that its pattern finds.
+//! - **A result is one fixed set.** A query whose result depends on how it is asked is
+//!   [opaque](nemo_io::sparql::QueryShape::Opaque), and is never restricted or merged.
+//!   A grouping or a subquery is never bound either,
+//!   since the endpoint would compute it in full for every page of bindings.
+//! - **A response is complete.** A response that the endpoint cut short fails its import,
+//!   whether its body shows it or its status and headers do
+//!   ([SparqlReader::read](nemo_io::sparql::SparqlReader::read)).
 //!
 //! The stage surveys the program into a [RewriteContext],
 //! rewrites each [rule] over the [components] of its body,
-//! and emits the [statements] replacing it.
+//! and emits the [statements] that replace it.
 
 mod components;
 mod context;
@@ -119,14 +117,14 @@ use self::{
 
 /// The SPARQL rewrite stage (see the module documentation).
 ///
-/// If the program is extended, the statements loaded earlier are frozen,
+/// When a program is extended, the statements loaded earlier are frozen,
 /// since they were rewritten when they were loaded, and their rules must keep their indices.
 /// The extension's rules are rewritten with the whole program in scope.
 #[derive(Debug, Default)]
 pub(crate) struct SparqlRewrite;
 
 impl SparqlRewrite {
-    /// Removes each candidate import no rule reads anymore,
+    /// Removes each candidate import that no rule reads after the rewrite,
     /// since the rewritten rules query its endpoint directly
     /// (see [Commit::remove_import]).
     ///
@@ -186,12 +184,12 @@ impl Transformation for SparqlRewrite {
     }
 }
 
-/// Writes a rule's rewrite into the commit as declared rewrites.
+/// Writes a rule's rewrite into the commit.
 ///
-/// Each binding rule is added as a filter ([Commit::define_filter]):
+/// Each binding rule is added as a filter ([Commit::define_filter]),
 /// a rule whose predicate other statements use only to restrict their matches.
-/// Each bound import defines its predicate by the atoms it replaces,
-/// and the rewritten rule replaces the original.
+/// Each bound import defines its predicate by the atoms that it replaces,
+/// and the rewritten rule replaces the written one.
 /// If the rule was folded into its one import, that import replaces the rule instead.
 fn declare(commit: &mut Commit<'_>, id: StatementId, rule: &Rule, rewrite: RuleRewrite) {
     let mut sources = vec![id];
@@ -226,7 +224,8 @@ fn declare(commit: &mut Commit<'_>, id: StatementId, rule: &Rule, rewrite: RuleR
     }
 }
 
-/// Returns the view of a replacement's import: its atom, defined by the atoms it replaces.
+/// Returns the view of a replacement's import:
+/// a rule whose head is the import's atom and whose body is the atoms that the import replaces.
 fn view(replacement: &ComponentReplacement) -> Rule {
     let atom = Atom::new(
         replacement.import.predicate.clone(),
@@ -258,7 +257,7 @@ fn is_sparql(import: &ImportDirective) -> bool {
 }
 
 /// Returns whether a statement is a plain `sparql` import,
-/// one the stage may rewrite rules over and removes once no rule reads it.
+/// over which the stage may rewrite rules, and which it removes once no rule reads it.
 pub(crate) fn is_plain_sparql_import(statement: &Statement) -> bool {
     matches!(statement, Statement::Directive(Directive::Import(import)) if is_plain(import))
 }
@@ -280,7 +279,7 @@ mod tests {
         testing::parse,
     };
 
-    /// Runs the stage over a program, returning the revision's text.
+    /// Runs the stage over a program, and returns the revision's text.
     fn rewrite(source: &str) -> String {
         let program = parse(source);
         assert!(used(&program.statements));
@@ -304,6 +303,8 @@ mod tests {
 @import t from sparql { endpoint = <https://query.wikidata.org/sparql>, query = "SELECT ?s ?p ?o WHERE { ?s ?p ?o }" } .
 "#;
 
+    /// A constant in a remote atom becomes part of the query,
+    /// and a rule that only copies the import is folded into the import.
     #[test]
     fn a_constant_atom_specialises_the_query_and_folds_into_its_head() {
         let text = rewrite(&format!(
@@ -320,6 +321,7 @@ mod tests {
         assert!(!text.contains(":- "), "the copying rule folded: {text}");
     }
 
+    /// Remote atoms that share a variable merge into one query, which the local atom binds.
     #[test]
     fn chained_atoms_merge_and_bind_on_the_local_atom() {
         let text = rewrite(&format!(
@@ -339,6 +341,7 @@ mod tests {
         );
     }
 
+    /// The binding rule computes an expression argument of a remote atom.
     #[test]
     fn a_computed_argument_binds_the_import() {
         let text = rewrite(&format!(
@@ -358,6 +361,7 @@ mod tests {
         );
     }
 
+    /// An assignment of a variable that a remote atom reads becomes part of the binding rule.
     #[test]
     fn an_assignment_binds_the_import() {
         let text = rewrite(&format!(
@@ -370,6 +374,7 @@ mod tests {
         assert!(text.contains("where t_bindings1(?label) ."), "{text}");
     }
 
+    /// A query that calls a service keeps its variable names when it is bound or specialised.
     #[test]
     fn a_query_calling_a_service_keeps_its_variable_names() {
         // Wikidata's label service binds `?qidLabel` because the query names `?qid`.
@@ -391,6 +396,8 @@ mod tests {
         assert!(text.contains("SELECT ?qidLabel WHERE"), "{text}");
     }
 
+    /// A negated remote atom whose variables the rest of the query binds becomes a
+    /// `FILTER NOT EXISTS`.
     #[test]
     fn a_negated_remote_atom_becomes_a_filter_not_exists() {
         let text = rewrite(&format!(
@@ -403,6 +410,8 @@ mod tests {
         );
     }
 
+    /// A negated atom that reads the variables of two groups of remote atoms
+    /// joins the groups into one query.
     #[test]
     fn a_negation_bridging_two_components_joins_them_into_one_query() {
         // The negated atom refers to ?i, which only an atom sharing no
@@ -433,6 +442,7 @@ mod tests {
         );
     }
 
+    /// A recursive rule binds its import by the predicate that it derives.
     #[test]
     fn a_recursive_binding_reaches_the_import() {
         let text = rewrite(&format!(
@@ -446,6 +456,7 @@ mod tests {
         );
     }
 
+    /// An atom of distinct variables, and an atom over an opaque query, stay as written.
     #[test]
     fn plain_atoms_and_opaque_queries_stay_as_written() {
         let text = rewrite(&format!("{TRIPLES}copy(?s, ?p, ?o) :- t(?s, ?p, ?o) .\n"));
@@ -463,6 +474,7 @@ mod tests {
         );
     }
 
+    /// The imports of a program without `@output` are rewritten too.
     #[test]
     fn a_program_declaring_no_outputs_rewrites_its_imports() {
         // Its outputs are the derived predicates, so the triples are a
@@ -474,6 +486,8 @@ mod tests {
         assert!(text.contains("where t_bindings1(?c) ."), "{text}");
     }
 
+    /// An atom with anonymous columns reads the import as written,
+    /// so that its rule and a rule that copies the import share one fetch.
     #[test]
     fn an_atom_leaving_columns_anonymous_reads_the_import_as_written() {
         let text = rewrite(&format!(
@@ -484,6 +498,7 @@ mod tests {
         assert!(!text.contains("_query"), "one fetch for both: {text}");
     }
 
+    /// A query that may leave a projected variable unbound is not rewritten.
     #[test]
     fn a_query_that_may_leave_a_variable_unbound_stays_one_import() {
         // Rewritten, each reader would see its own null for the same unbound ?c,
@@ -507,6 +522,7 @@ mod tests {
         assert!(!text.contains("_bindings"), "{text}");
     }
 
+    /// A query whose filter requires its optional variable to be bound is rewritten.
     #[test]
     fn a_query_requiring_its_optional_variable_is_rewritten() {
         let source = "@import solutions from sparql { endpoint = <https://e/sparql>, query = \"SELECT ?h ?c WHERE { ?h <urn:p> ?x OPTIONAL { ?h <urn:q> ?c } FILTER(BOUND(?c)) }\" } .\n\
@@ -517,6 +533,7 @@ mod tests {
         assert!(text.contains("where solutions_bindings1(?c) ."), "{text}");
     }
 
+    /// An aggregating query is never bound.
     #[test]
     fn an_aggregating_query_is_never_bound() {
         // Bound, the endpoint would count every class again for each page of bindings.
@@ -533,6 +550,7 @@ mod tests {
         assert!(!text.contains("_bindings"), "{text}");
     }
 
+    /// Two groups of local atoms that share no variable bind the import separately.
     #[test]
     fn two_local_groups_bind_separately() {
         let text = rewrite(&format!(

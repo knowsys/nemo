@@ -1,10 +1,12 @@
-//! The kinds of problems the engine's entry points report.
+//! The kinds of problems that the engine's methods report.
 
 use nemo_physical::{diagnostic_kinds, diagnostics::Count};
 
 diagnostic_kinds! {
-    /// A problem with how the engine is used: its program, its
-    /// sources, its cursors, and the updates between runs.
+    /// A problem with how the engine is used.
+    ///
+    /// It concerns the engine's program and sources, its result cursors,
+    /// the updates between runs, or the remote requests of a method.
     pub enum EngineError {
         CursorInvalidated
             => CURSOR_INVALIDATED = 206, error,

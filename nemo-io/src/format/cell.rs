@@ -2,14 +2,15 @@
 
 use nemo_physical::value::DataValue;
 
-/// The value a [format](super::ValueFormat) reads from a cell,
-/// borrowing the text of an IRI or a string that the cell holds as it is,
-/// so a reader that only copies such text never makes an owned value.
+/// The value a [format](super::ValueFormat) reads from a cell.
+///
+/// An IRI or a string that appears in the cell unchanged borrows its text from the cell,
+/// so a reader that only copies such text never creates an owned value.
 #[derive(Debug)]
 pub(crate) enum CellValue<'a> {
-    /// An IRI, the cell's text or part of it.
+    /// An IRI whose text is the cell's text or part of it.
     Iri(&'a str),
-    /// A plain string, the cell's text or part of it.
+    /// A plain string whose text is the cell's text or part of it.
     String(&'a str),
     /// Any other value, or an IRI or a string whose text differs from the cell's.
     Value(DataValue),

@@ -1,8 +1,9 @@
-//! Translation: model programs into compiled, normalized rules.
+//! Translation: turning a program's statements into stored rows and compiled rules.
 //!
-//! The [Translator] resolves names, registers tables, loads facts, and compiles rules.
-//! Its concerns are split by statement kind into the submodules,
-//! each an `impl` block over the same translator.
+//! The [Translator] resolves names, registers tables, loads facts and imports,
+//! and compiles rules.
+//! Its submodules split this work by statement kind,
+//! and each of them adds an `impl` block to the same translator.
 
 mod compiler;
 mod declarations;
@@ -58,77 +59,88 @@ use crate::{
     telemetry::SinkSlot,
 };
 
-/// The parts of the engine one translation writes into.
+/// The parts of the engine that one translation writes to.
 pub(crate) struct TranslationStores<'a> {
-    /// The table store facts load into.
+    /// The table store that facts are loaded into.
     pub(crate) manager: &'a mut TableManager,
-    /// The dictionary fact values intern into.
+    /// The dictionary in which fact values are interned.
     pub(crate) dictionary: &'a mut Dictionary,
     /// The registered predicates by resolved name, each with its table
     /// and its number of columns.
     pub(crate) predicates: &'a mut HashMap<String, Registered>,
-    /// The pipeline the program's reports go to, with the files its statements come from.
+    /// The pipeline that receives the program's reports,
+    /// and knows the files that its statements come from.
     pub(crate) pipeline: &'a mut Pipeline,
-    /// Evaluation errors of pushed-down import conditions, counted per kind.
+    /// The failed evaluations of import conditions, counted per error kind.
     ///
     /// A row whose condition fails to evaluate is dropped.
     pub(crate) errors: &'a mut ErrorCounts,
 }
 
-/// The settings one translation runs with.
+/// The settings of one translation.
 pub(crate) struct TranslationSetup<'a> {
-    /// The directory relative import resources resolve against, if the engine sets one.
+    /// The directory against which relative import resources are resolved,
+    /// if the engine sets one.
     pub(crate) import_directory: Option<&'a Path>,
-    /// The in-memory resources registered on the engine.
+    /// The in-memory resources registered on the engine, by name.
     ///
-    /// A resource name found here reads its bytes instead of the filesystem.
+    /// An import of a resource with one of these names reads its bytes from here
+    /// instead of the file system.
     pub(crate) resources: &'a HashMap<String, Arc<[u8]>>,
-    /// The slot of the installed telemetry sink, to which imports report their loads.
+    /// The slot of the installed telemetry sink, which receives a report of each import's load.
     pub(crate) telemetry: &'a SinkSlot,
     /// The optimization passes.
     ///
-    /// The import passes run where data is read.
+    /// The import passes run only in a translation that reads data.
     pub(crate) passes: &'a OptimizationPasses,
     /// What the translation is for.
     pub(crate) purpose: Purpose<'a>,
-    /// The written program of the statements translated,
-    /// whose derived predicates the import passes keep whole,
-    /// or `None` if no import pass runs.
+    /// The written program of the translated statements, or `None` if no import pass runs.
+    ///
+    /// The import passes store the predicates that it derives whole.
     pub(crate) written: Option<&'a WrittenProgram>,
-    /// The column types the loaded program was analyzed with,
-    /// if a program is loaded, so that an error of a change can say what it widened.
+    /// The column types with which the loaded program was analyzed, if a program is loaded.
+    ///
+    /// An error about a change can then say which types the change widened.
     pub(crate) previous_types: Option<&'a HashMap<TableId, Vec<Type>>>,
-    /// The context ground expressions evaluate in: the instant of their `NOW()`.
+    /// The evaluation context of ground expressions, such as the instant that their `NOW()`
+    /// returns.
     pub(crate) context: EvaluationContext,
 }
 
-/// What a translation is for:
-/// whether it reads data, and what becomes of the problems it finds.
+/// What a translation is for,
+/// which decides whether it reads data and what happens to the problems it finds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Purpose<'a> {
-    /// A load of a program the pipeline stages left as written:
-    /// data is read, and the first error ends the translation.
-    Load,
-    /// A load of the program the pipeline stages made of a written program
-    /// that passed its [validation](Self::Validate): data is read.
+    /// A load of a program that the pipeline stages left as written.
     ///
-    /// A problem reading finds ends the translation.
-    /// Any other error is a bug of the stages, and panics;
-    /// any other warning was reported for the written program already, and is dropped.
+    /// Data is read, and the first error ends the translation.
+    Load,
+    /// A load of the program that the pipeline stages made from a written program,
+    /// after the written program passed its [validation](Self::Validate).
+    ///
+    /// Data is read, and a problem found while reading data ends the translation.
+    /// Any other error is a bug of the stages, and panics.
+    /// Any other warning was already reported for the written program, and is dropped.
     LoadRewritten {
-        /// The stages that made the program.
+        /// The names of the stages that changed the program.
         stages: &'a [&'static str],
     },
-    /// The translation of a written program before the program its stages made loads:
-    /// no data is read, and the first error ends the translation.
+    /// The translation of a written program before the program that its stages made is
+    /// loaded.
+    ///
+    /// No data is read, and the first error ends the translation.
     Validate,
-    /// A check: no data is read, and every problem is reported.
+    /// A check.
+    ///
+    /// No data is read, and every problem is reported.
     Check,
 }
 
 impl<'a> Purpose<'a> {
-    /// Returns the purpose of a load of the program the given pipeline stages made,
-    /// a plain load if no stage changed it.
+    /// Returns the purpose of a load of the program that the given pipeline stages made.
+    ///
+    /// It is [Load](Self::Load) if no stage changed the program.
     pub(crate) fn of_load(stages: &'a [&'static str]) -> Self {
         if stages.is_empty() {
             Purpose::Load
@@ -143,13 +155,15 @@ impl<'a> Purpose<'a> {
     }
 }
 
-/// The pseudo-column an aggregate result reads as while a head expression compiles.
+/// The column that stands for an aggregate's result while the head expression around the
+/// aggregate is compiled.
 ///
-/// It is remapped into the aggregation's output space.
+/// It is replaced by the result's position in a row of the aggregation's output.
 const AGGREGATE_RESULT: usize = usize::MAX;
 
-/// The name of the label scope in which a program's blank nodes are nulls:
-/// `_:a` names one null in every statement and revision of the program.
+/// The name of the label scope in which a program's blank nodes are nulls.
+///
+/// In this scope, `_:a` names the same null in every statement and revision of the program.
 const PROGRAM_BLANK_NODES: &str = "program";
 
 /// Returns a diagnostic for an unsupported feature, labeled if a span is given.
@@ -181,9 +195,11 @@ fn resolve_identifier(
     }
 }
 
-/// Collects the column pseudo-variables of a condition as variable ids equal to their positions.
+/// Collects the variables of an import's condition that stand for delivered columns,
+/// each with its column's position as its variable id.
 ///
-/// The import passes name them `column N` for delivered column `N`.
+/// Delivered column `N` is the variable `column N`
+/// (see [column_variable](crate::engine::compile::optimize::column_variable)).
 fn collect_columns(operation: &Operation, names: &mut HashMap<String, VariableId>) {
     for variable in operation.variables() {
         if let Some(position) = variable
@@ -196,25 +212,26 @@ fn collect_columns(operation: &Operation, names: &mut HashMap<String, VariableId
     }
 }
 
-/// The rules of one translation as they compile,
-/// with what reporting and the analysis need of each, aligned by index:
-/// its rendered text, its statement, its variables' source names, and its span.
+/// The rules of one translation as they are compiled,
+/// with what the reports and the type analysis need of each rule.
+///
+/// The other fields match [rules](Self::rules) by index.
 #[derive(Default)]
 struct CompiledRules {
     /// The rules, in statement order.
     rules: Vec<CompiledRule>,
-    /// The rules' rendered texts.
+    /// The text of each rule, rendered from the rule.
     texts: Vec<String>,
-    /// The rules' originating statements.
+    /// The statement that each rule was compiled from.
     statements: Vec<StatementId>,
-    /// Per rule, the source name of each variable by variable id.
+    /// Per rule, the written name of each rule column, or `None` for a column without one.
     names: Vec<Vec<Option<String>>>,
-    /// The rules' source positions.
+    /// The source position of each rule.
     spans: Vec<Option<Span>>,
 }
 
 impl CompiledRules {
-    /// Adds a rule.
+    /// Adds a rule with its text, statement, column names and source position.
     fn push(
         &mut self,
         rule: CompiledRule,
@@ -240,107 +257,121 @@ impl CompiledRules {
     }
 }
 
-/// The translator: resolves names, registers tables, loads facts, and
-/// compiles rules.
+/// The translator of a program's statements, which resolves names, registers tables,
+/// loads facts and imports, and compiles rules.
 pub(crate) struct Translator<'a> {
-    /// The table store facts load into.
+    /// The table store that facts are loaded into.
     pub(crate) manager: &'a mut TableManager,
-    /// The dictionary fact values intern into.
+    /// The dictionary in which fact values are interned.
     pub(crate) dictionary: &'a mut Dictionary,
     /// The registered predicates by resolved name, each with its table
     /// and its number of columns.
     pub(crate) predicates: &'a mut HashMap<String, Registered>,
-    /// The pipeline the program's reports go to, with the files its statements come from.
+    /// The pipeline that receives the program's reports,
+    /// and knows the files that its statements come from.
     pub(crate) pipeline: &'a mut Pipeline,
-    /// Evaluation errors of pushed-down import conditions, counted per kind.
+    /// The failed evaluations of import conditions, counted per error kind.
     ///
     /// A row whose condition fails to evaluate is dropped.
     pub(crate) errors: &'a mut ErrorCounts,
-    /// The directory relative import resources resolve against, if the engine sets one.
+    /// The directory against which relative import resources are resolved,
+    /// if the engine sets one.
     import_directory: Option<&'a Path>,
-    /// The in-memory resources registered on the engine.
+    /// The in-memory resources registered on the engine, by name.
     ///
-    /// A resource name found here reads its bytes instead of the filesystem.
+    /// An import of a resource with one of these names reads its bytes from here
+    /// instead of the file system.
     resources: &'a HashMap<String, Arc<[u8]>>,
-    /// The declared base IRI bare names resolve against.
+    /// The declared base IRI, against which bare names are resolved.
     base_iri: Option<String>,
     /// The declared prefixes.
     prefixes: HashMap<String, String>,
-    /// The resolved global parameters.
+    /// The values of the global parameters, by name.
     globals: HashMap<String, DataValue>,
-    /// The fact rows collected per table, dictionary-encoded.
+    /// The rows of the facts per table, encoded by the dictionary.
     facts: HashMap<TableId, RowBuffer>,
-    /// The import directives, executed after every arity is known.
+    /// The import directives, which are executed once every arity is known.
     imports: Vec<PendingImport>,
-    /// The export directives, resolved.
+    /// The resolved export directives.
     exports: Vec<ExportSpec>,
-    /// The export directives' source positions, aligned with [exports](Self::exports),
-    /// for the checks that need every predicate's arity
-    /// and so run after all statements are translated.
+    /// The source positions of the export directives, matching [exports](Self::exports) by
+    /// index.
+    ///
+    /// The checks that need every predicate's arity run after all statements are translated,
+    /// and report at these positions.
     export_spans: Vec<Option<Span>>,
     /// The declared column types, by resolved predicate name.
     declarations: HashMap<String, types::PredicateDeclaration>,
     /// The `@type` definitions, by resolved label.
     type_definitions: HashMap<String, (TypeExpression, Option<Span>)>,
-    /// The types the `@type` definitions declare, by resolved label,
-    /// known once every definition is recorded.
+    /// The types that the `@type` definitions declare, by resolved label.
+    ///
+    /// They are known once every definition is recorded.
     label_types: LabelTypes,
-    /// The column type seeds per table, from the facts and import formats.
+    /// Per table, the initial column types from the facts and import formats,
+    /// from which the type analysis starts.
     seeds: HashMap<TableId, Vec<Type>>,
-    /// The import-fed predicates whose columns are not statically known, and the declared
-    /// inputs.
+    /// The imported predicates whose column types are not known before loading,
+    /// and the `@input` predicates.
     ///
-    /// The analysis takes their columns as anything their declarations allow.
+    /// The type analysis assumes that their columns can hold anything that their declarations
+    /// allow.
     open: HashSet<String>,
-    /// The `@input` predicates, resolved.
+    /// The resolved `@input` predicates.
     ///
-    /// Their rows come from a using program or from
+    /// Their rows come from a program that uses this one as a module, or from
     /// [import_rows](crate::engine::Engine::import_rows),
-    /// so they cannot be the target of an `@import`.
+    /// so an `@import` cannot fill them.
     inputs: HashSet<String>,
-    /// What the loaders of import-fed predicates leave out (see [ImportPlan]).
+    /// What the loads of imported predicates leave out (see [ImportPlan]).
     pub(super) plan: ImportPlan,
-    /// The label scope of the program's blank nodes, in which each label names one null,
-    /// created before any term is evaluated and kept across translations.
+    /// The label scope of the program's blank nodes, in which each label names one null.
+    ///
+    /// It is created before any term is evaluated, and kept across translations.
     program_blanks: LabelScope,
-    /// Per resource an RDF import reads, the label scope of its blank nodes:
-    /// imports of one resource within one translation agree on them,
-    /// and the scopes close when the translation [finishes](Self::finish).
+    /// Per resource that an RDF import reads, the label scope of its blank nodes.
+    ///
+    /// So the imports of one resource within one translation agree on its blank nodes.
+    /// The scopes close when the translation [finishes](Self::finish).
     documents: HashMap<String, LabelScope>,
-    /// Per predicate of an import with a `where` clause, the scratch table of its fetches.
+    /// Per predicate of an import with atoms in its `where` clause,
+    /// the scratch table of its fetches.
     scratch: HashMap<String, TableId>,
-    /// The fetch rules of imports with a `where` clause, compiled when the
-    /// imports execute, each with the rule index reserved for it and its
-    /// variables' names.
+    /// The fetch rules of the imports with atoms in their `where` clauses,
+    /// each with the rule index reserved for it and the names of its rule columns.
+    ///
+    /// They are compiled when the imports are executed.
     fetch_rules: Vec<(usize, CompiledRule, Vec<Option<String>>)>,
-    /// The slot of the installed telemetry sink, to which imports report their loads.
+    /// The slot of the installed telemetry sink, which receives a report of each import's load.
     telemetry: &'a SinkSlot,
-    /// The remote resources fetched for the imports, by the position of the import's directive
-    /// among the statements, which [commit](Self::commit) reads.
+    /// The remote resources fetched for the imports,
+    /// by the position of each import's directive among the statements.
+    ///
+    /// [commit](Self::commit) receives them.
     fetched: HashMap<usize, FetchedResource>,
     /// The optimization passes.
     passes: &'a OptimizationPasses,
     /// What the translation is for.
     purpose: Purpose<'a>,
-    /// The written program of the statements translated.
+    /// The written program of the translated statements, or `None` if no import pass runs.
     pub(super) written: Option<&'a WrittenProgram>,
-    /// The column types the loaded program was analyzed with, if one is loaded.
+    /// The column types with which the loaded program was analyzed, if a program is loaded.
     previous_types: Option<&'a HashMap<TableId, Vec<Type>>>,
-    /// The context ground expressions evaluate in: the instant of their `NOW()`.
+    /// The evaluation context of ground expressions, such as the instant that their `NOW()`
+    /// returns.
     context: EvaluationContext,
-    /// Per statement, whether its data is already in the tables, or empty for a first load.
+    /// Per statement, whether its data is already stored, or empty for a first load.
     ///
-    /// A preloaded fact contributes no rows and a preloaded import reads nothing,
-    /// while everything they declare still compiles.
+    /// A *preloaded* fact adds no rows, and a preloaded import reads nothing,
+    /// but everything that they declare is still compiled.
     preloaded: Vec<bool>,
 }
 
 impl<'a> Translator<'a> {
-    /// Creates a translator over the engine's stores, run with the given setup.
+    /// Creates a translator over the engine's stores, with the given setup.
     ///
-    /// The translation state carries what earlier translations established
-    /// (empty on a first load),
-    /// and `preloaded` marks the statements whose data is already stored.
+    /// `state` contains what earlier translations established, and is empty for a first load.
+    /// `preloaded` marks the statements whose data is already stored.
     pub(crate) fn new(
         stores: TranslationStores<'a>,
         setup: TranslationSetup<'a>,
@@ -390,19 +421,23 @@ impl<'a> Translator<'a> {
         self.preloaded.get(index).copied().unwrap_or(false)
     }
 
-    /// Returns whether an import validates its resolved options without reading data:
-    /// in a translation that reads no data, or for a directive whose data is already stored.
+    /// Returns whether an import only validates its resolved options, without reading data.
+    ///
+    /// This is the case in a translation that reads no data,
+    /// and for a directive whose data is already stored.
     fn options_only(&self, import: &PendingImport) -> bool {
         !self.purpose.reads() || import.preloaded
     }
 
-    /// Handles a problem with the program's statements according to the purpose:
-    /// a check reports it and continues, and every other translation returns it as the error.
+    /// Handles a problem with the program's statements according to the purpose.
+    ///
+    /// A check reports the problem and continues,
+    /// and every other translation returns it as the error.
     ///
     /// # Panics
     ///
-    /// Panics in the translation of a program the pipeline stages made,
-    /// whose written program passed: the stages wrote what translation refuses.
+    /// Panics in the translation of a program that the pipeline stages made from a written
+    /// program that passed, since the stages then wrote something that translation refuses.
     fn recover(&mut self, problem: Diagnostic) -> Result<(), Diagnostic> {
         match self.purpose {
             Purpose::Check => {
@@ -422,17 +457,19 @@ impl<'a> Translator<'a> {
     }
 
     /// Reports a warning about the program's statements,
-    /// except in the translation of a program the pipeline stages made,
-    /// whose written program was warned about already.
+    /// except in the translation of a program that the pipeline stages made,
+    /// since the warnings about its written program were already reported.
     fn warn(&mut self, warning: Diagnostic) {
         if !matches!(self.purpose, Purpose::LoadRewritten { .. }) {
             self.pipeline.report(warning);
         }
     }
 
-    /// Translates the statements of a program whose imports read no remote resource:
-    /// facts become the rows it returns for storing, rules compile, directives configure.
+    /// Translates the statements of a program whose imports read no remote resource,
+    /// and returns the compiled program.
     ///
+    /// The facts are collected as rows, which [finish](Self::finish) returns,
+    /// the rules are compiled, and the directives take effect.
     /// A program whose imports do read one is translated in two steps instead,
     /// [prepare](Self::prepare) and [commit](Self::commit), with the fetching in between.
     pub(crate) fn program(
@@ -444,14 +481,17 @@ impl<'a> Translator<'a> {
         self.commit(statements, ids, HashMap::new())
     }
 
-    /// Prepares the translation of a program: blank nodes, names, parameters,
-    /// declarations and the import plan, and returns the requests of the remote resources
-    /// its imports read, each tagged with the position of its directive.
+    /// Prepares the translation of a program, and returns the requests for the remote
+    /// resources that its imports read, each tagged with the position of its directive.
     ///
-    /// Nothing is registered, read, or stored, so a load can be suspended for the responses and
-    /// [commit](Self::commit) from the translation state this leaves
-    /// ([finish](Self::finish) takes it out) without preparing again.
-    /// A translation that reads no data needs no remote resource.
+    /// Preparing creates the nulls of blank nodes, reads the names, parameters and
+    /// declarations, and computes the import plan.
+    /// It registers, reads and stores nothing else.
+    /// So a load can be suspended for the responses,
+    /// and then [commit](Self::commit) from the translation state that preparing leaves,
+    /// without preparing again.
+    /// [finish](Self::finish) takes that state out.
+    /// A translation that reads no data requests no remote resource.
     pub(crate) fn prepare(
         &mut self,
         statements: &[Statement],
@@ -471,9 +511,12 @@ impl<'a> Translator<'a> {
         self.remote_requests(statements, ids)
     }
 
-    /// Completes a [prepared](Self::prepare) translation:
-    /// facts become the rows it returns for storing, rules compile, directives configure,
-    /// and imports read, a remote one from what `fetched` holds for its directive's position.
+    /// Completes a [prepared](Self::prepare) translation, and returns the compiled program.
+    ///
+    /// The facts are collected as rows, the rules are compiled, the directives take effect,
+    /// and the imports are executed.
+    /// `fetched` contains the remote resources of the imports,
+    /// by the position of each import's directive among the statements.
     pub(crate) fn commit(
         &mut self,
         statements: &[Statement],
@@ -492,7 +535,7 @@ impl<'a> Translator<'a> {
     /// Reads the prefixes, the base, the parameters, and the `@type` definitions
     /// before anything is resolved, typed, or evaluated.
     ///
-    /// A name may thus be used before its declaration, whatever the statement order,
+    /// So a name may be used before its declaration,
     /// and `@type` definitions may refer to each other in any order.
     fn namespace(&mut self, statements: &[Statement]) -> Result<(), Diagnostic> {
         if let Err(problem) = NameScope::check_base(statements) {
@@ -547,8 +590,9 @@ impl<'a> Translator<'a> {
 
     /// Reads the column declarations and the inputs before the statements are translated.
     ///
-    /// A declaration arriving after data (through `extend`) is checked against what the tables
-    /// already hold, since the facts it would have rejected are already stored.
+    /// A declaration that arrives after data, through [extend](crate::engine::Engine::extend),
+    /// is checked against what the tables already contain,
+    /// since the facts that it would have rejected are already stored.
     fn declaration_directives(&mut self, statements: &[Statement]) -> Result<(), Diagnostic> {
         let mut fresh = Vec::new();
         for (index, statement) in statements.iter().enumerate() {
@@ -584,12 +628,11 @@ impl<'a> Translator<'a> {
         Ok(())
     }
 
-    /// Runs the import passes, which decide what loaders leave out.
+    /// Runs the import passes, which decide what the loads leave out.
     ///
-    /// The plan determines the stored tables, so a later translation,
-    /// after `extend` or `reload`, must not expect what an earlier plan
-    /// left out. A translation that reads no import plans nothing,
-    /// and keeps the plan of what is stored.
+    /// The new plan is checked against the plan that the stored tables were loaded under
+    /// (see [check_stability](ImportPlan::check_stability)).
+    /// A translation that reads no data plans nothing, and keeps the stored plan.
     fn plan_imports(&mut self, statements: &[Statement]) -> Result<(), Diagnostic> {
         if !self.purpose.reads() {
             return Ok(());
@@ -600,8 +643,9 @@ impl<'a> Translator<'a> {
         self.plan.check_stability(stored, self.predicates.keys())
     }
 
-    /// Translates the statements one by one, returning the compiled rules:
-    /// facts become rows, rules compile, directives configure.
+    /// Translates the statements one by one, and returns the compiled rules.
+    ///
+    /// The facts are collected as rows, the rules are compiled, and the directives take effect.
     fn translate_statements(
         &mut self,
         statements: &[Statement],
@@ -624,10 +668,10 @@ impl<'a> Translator<'a> {
                     );
                 }),
                 Statement::Directive(directive) => {
-                    // An import with a `where` clause is a rule of the
-                    // program (its fetch rule, compiled when the imports
-                    // execute), and keeps its position among the rules, so
-                    // rule indices follow statement order.
+                    // An import with atoms in its `where` clause is a rule of the program,
+                    // its fetch rule, which is compiled when the imports are executed.
+                    // A placeholder keeps its position among the rules,
+                    // so that rule indices follow statement order.
                     #[cfg(feature = "sparql")]
                     if let Directive::Import(import) = directive
                         && !import.bindings.is_empty()
@@ -643,8 +687,8 @@ impl<'a> Translator<'a> {
                     self.directive(directive, index, compiled.rules.len())
                 }
             };
-            // What the statement's translation reported is about it: in a
-            // module instance, about that instance.
+            // What the statement's translation reported is about the statement,
+            // and so, in a module instance, about that instance.
             self.pipeline
                 .label_instances_in_reports(already, ids[index]);
             if let Err(problem) = outcome {
@@ -655,9 +699,9 @@ impl<'a> Translator<'a> {
         Ok(compiled)
     }
 
-    /// Completes the compiled program after the imports ran.
+    /// Completes the compiled program after the imports were executed.
     ///
-    /// This chooses the join orders, runs the program passes and the type analysis,
+    /// It chooses the join orders, runs the program passes and the type analysis,
     /// puts the fetch rules at their reserved indices, and computes the strata.
     fn finish_program(
         &mut self,
@@ -668,10 +712,10 @@ impl<'a> Translator<'a> {
             self.warn(report);
         }
 
-        // The type analysis: column types to a fixpoint, then its
-        // proofs, warnings for rules that cannot fire and errors for
-        // contradicted declarations. Fetch rules take no part: an
-        // import's columns are seeded with whatever an endpoint may return.
+        // The type analysis computes the column types to a fixpoint, and then its proofs:
+        // warnings for rules that cannot fire, and errors for contradicted declarations.
+        // The fetch rules take no part, since an import's columns start with every type
+        // that an endpoint may return.
         let inputs = types::AnalysisInputs {
             predicates: self.predicates,
             seeds: &self.seeds,
@@ -702,9 +746,9 @@ impl<'a> Translator<'a> {
             }
         }
 
-        // The fetch rules take their reserved indices before the strata
-        // are computed: an import whose `where` clause reads a derived
-        // predicate depends on that predicate's rules like any consumer.
+        // The fetch rules take their reserved indices before the strata are computed,
+        // since an import whose `where` clause reads a derived predicate
+        // depends on that predicate's rules, like any rule that reads it.
         for (index, rule, names) in std::mem::take(&mut self.fetch_rules) {
             compiled.rules[index] = rule;
             compiled.names[index] = names;
@@ -730,9 +774,10 @@ impl<'a> Translator<'a> {
         })
     }
 
-    /// Resolves a fact for tracing: the predicate's table and the ground
-    /// values, without storing anything, seeding anything, or
-    /// registering an unknown predicate.
+    /// Resolves a fact for tracing into its predicate's table and its values.
+    ///
+    /// Nothing is stored, no column type is recorded, and an unknown predicate is not
+    /// registered.
     pub(crate) fn trace_fact(
         &mut self,
         fact: &Fact,
@@ -774,10 +819,11 @@ impl<'a> Translator<'a> {
         Ok((table, values))
     }
 
-    /// Dissolves the translator into the persistent translation state and the collected fact
-    /// rows, by table.
+    /// Dissolves the translator into the translation state that persists,
+    /// and the collected fact rows by table.
     ///
-    /// The dissolution is infallible, so the caller recovers its state on the error path too.
+    /// It cannot fail, so the translation state can be recovered after a failed translation
+    /// too.
     pub(crate) fn finish(self) -> (TranslationState, HashMap<TableId, RowBuffer>) {
         for scope in self.documents.values() {
             self.dictionary.close_label_scope(*scope);
@@ -800,11 +846,11 @@ impl<'a> Translator<'a> {
         )
     }
 
-    /// Handles one directive, the statement at `index`, reporting an unsupported one rather
-    /// than failing.
+    /// Handles one directive, the statement at position `index`.
     ///
-    /// `rule_count` is the number of rules compiled so far, a bound import's placeholder
-    /// included.
+    /// A directive without effect is reported as a warning rather than failing.
+    /// `rule_count` is the number of rules compiled so far,
+    /// including the placeholder of an import with atoms in its `where` clause.
     fn directive(
         &mut self,
         directive: &Directive,
@@ -814,8 +860,8 @@ impl<'a> Translator<'a> {
         match directive {
             Directive::Prefix(_) | Directive::Parameter(_) => Ok(()),
             Directive::Base(_) => Ok(()),
-            // `@output` names outputs, which the written program records;
-            // their names must resolve.
+            // The written program records the predicates that `@output` names,
+            // and their names must resolve.
             Directive::Output(output) => {
                 for predicate in &output.predicates {
                     self.resolve(predicate, output.span)?;
@@ -823,8 +869,8 @@ impl<'a> Translator<'a> {
                 Ok(())
             }
             Directive::Import(import) => {
-                // The rule index of the fetch rule of an import with a
-                // `where` clause: the placeholder pushed just before this call.
+                // The rule index of the fetch rule of an import with atoms in its `where`
+                // clause is the index of the placeholder pushed just before this call.
                 let pending = self.pending_import(import, index, rule_count.saturating_sub(1))?;
                 self.imports.push(pending);
                 Ok(())
@@ -859,11 +905,12 @@ impl<'a> Translator<'a> {
         }
     }
 
-    /// Returns the import an import directive, the statement at `index`, describes:
-    /// its predicate resolved and its format known, to be executed once every arity is known.
+    /// Returns the pending import that an import directive describes,
+    /// with its predicate resolved and its format known.
     ///
-    /// `rule_index` is the rule index reserved for the fetch rule of an import with a
-    /// `where` clause.
+    /// The import is executed once every arity is known.
+    /// `index` is the directive's position among the statements, and `rule_index` is the rule
+    /// index reserved for the fetch rule of an import with atoms in its `where` clause.
     fn pending_import(
         &self,
         import: &ImportDirective,
@@ -896,8 +943,8 @@ impl<'a> Translator<'a> {
         })
     }
 
-    /// Creates a null for every blank-node label the statements mention
-    /// that has none yet.
+    /// Creates a null for every blank node label that the statements mention
+    /// and that has no null yet.
     fn create_blank_nodes(&mut self, statements: &[Statement]) {
         let mut labels: Vec<&str> = Vec::new();
         for statement in statements {
@@ -908,9 +955,11 @@ impl<'a> Translator<'a> {
         }
     }
 
-    /// Compiles a condition over pseudo-variables into a program,
-    /// returning the variables it reads, in input order, and the program,
-    /// from which an import pass builds a row filter.
+    /// Compiles an import's condition into a program,
+    /// and returns the columns that the program reads, in input order, with the program.
+    ///
+    /// The condition refers to delivered column `N` by the variable `column N`,
+    /// whose id is `N`.
     pub(crate) fn condition(
         &self,
         operation: &Operation,
@@ -935,9 +984,8 @@ impl<'a> Translator<'a> {
                     prefix: prefix.clone(),
                 }
                 .at(span),
-                // A qualified name that reaches translation belongs to no
-                // instantiation: a program that uses modules has had them
-                // resolved long before this.
+                // A qualified name that reaches translation belongs to no module instance,
+                // since linking resolves the names of a program that uses modules.
                 Identifier::Qualified { module, name } => {
                     TranslationError::QualifiedWithoutModules {
                         module: module.clone(),
@@ -952,7 +1000,8 @@ impl<'a> Translator<'a> {
         })
     }
 
-    /// Returns the table of a predicate, registered on first sight.
+    /// Returns the table of a predicate, and registers it on first use,
+    /// as [register_table](Self::register_table) does.
     fn table(
         &mut self,
         predicate: &Identifier,
@@ -963,9 +1012,8 @@ impl<'a> Translator<'a> {
         self.register_table(name, arity, span, |_| predicate.to_string())
     }
 
-    /// Returns the table of a resolved predicate name, registered on first
-    /// sight. A name is one predicate: a use whose number of columns
-    /// disagrees with an earlier one is an error.
+    /// Returns the table of a resolved predicate name, and registers it on first use,
+    /// as [register_table](Self::register_table) does.
     fn table_named(
         &mut self,
         name: String,
@@ -975,8 +1023,11 @@ impl<'a> Translator<'a> {
         self.register_table(name, arity, span, |name| Identifier::bare(name).to_string())
     }
 
-    /// Returns the table of a resolved predicate name, registered on first sight,
-    /// with `shown` giving the name the arity error presents.
+    /// Returns the table of a resolved predicate name, and registers it on first use.
+    ///
+    /// A name is one predicate, so a use with another number of columns than an earlier one
+    /// is an error.
+    /// `shown` returns the name that this error shows.
     fn register_table(
         &mut self,
         name: String,
@@ -1005,17 +1056,19 @@ impl<'a> Translator<'a> {
     }
 }
 
-/// Stores a translation writes into in place of the engine's, which it leaves as they were:
-/// the engine's tables without their rows, a dictionary, registered predicates,
+/// Stores that a translation writes to in place of the engine's,
+/// so that the engine's stores stay as they were.
+///
+/// They are the engine's tables without their rows, a dictionary, registered predicates
 /// and error counts.
 pub(in crate::engine) struct ScratchStores {
     /// The engine's tables, under their ids, without their rows.
     manager: TableManager,
-    /// A dictionary of its own.
+    /// A dictionary separate from the engine's.
     dictionary: Dictionary,
-    /// The registered predicates the translation starts from.
+    /// The registered predicates that the translation starts from.
     predicates: HashMap<String, Registered>,
-    /// Error counts of its own.
+    /// Error counts separate from the engine's.
     errors: ErrorCounts,
 }
 
@@ -1027,15 +1080,16 @@ impl ScratchStores {
 }
 
 impl Engine {
-    /// Returns the context a loading call translates in, choosing one at the current instant
-    /// if no loading call chose one since the last reasoning run began.
+    /// Returns the evaluation context in which a loading method translates.
     ///
+    /// If no loading method has chosen a context since the last run began,
+    /// it chooses one at the current instant.
     /// The next run evaluates in the same context.
     pub(in crate::engine) fn loading_context(&mut self) -> EvaluationContext {
         *self.next_context.get_or_insert_with(EvaluationContext::now)
     }
 
-    /// Runs a loading call and settles its choice of the context by how it ended
+    /// Runs a loading method, and settles its choice of the context by how it ended
     /// (see [settle_context](Self::settle_context)).
     pub(in crate::engine) fn choosing_context(
         &mut self,
@@ -1047,12 +1101,12 @@ impl Engine {
         outcome
     }
 
-    /// Settles a loading call's choice of the context by how the call ended.
+    /// Settles a loading method's choice of the context by how the method ended.
     ///
-    /// `chose` tells whether the call chose the context.
-    /// A call suspended for data from the network keeps the choice until it is resumed
+    /// `chose` says whether the method chose the context.
+    /// A method suspended for data from the network keeps the choice until it is resumed
     /// or discarded.
-    /// A call that failed undoes it, so that the next loading call chooses anew.
+    /// A method that failed undoes the choice, so that the next loading method chooses again.
     pub(in crate::engine) fn settle_context(
         &mut self,
         chose: bool,
@@ -1072,10 +1126,11 @@ impl Engine {
         }
     }
 
-    /// Returns the stores and setup one translation runs with,
-    /// borrowed separately so that the translation writes the stores while reading the rest.
+    /// Returns the stores and the setup of one translation.
     ///
-    /// The translation evaluates its ground expressions in the given context.
+    /// They are borrowed separately,
+    /// so that the translation can write the stores while it reads the rest of the engine.
+    /// The translation evaluates its ground expressions in `context`.
     pub(in crate::engine) fn translation_parts<'a>(
         &'a mut self,
         purpose: Purpose<'a>,
@@ -1084,7 +1139,8 @@ impl Engine {
         self.parts(purpose, None, context)
     }
 
-    /// Returns scratch stores beside the engine's tables, starting from the given predicates.
+    /// Returns scratch stores beside the engine's tables,
+    /// which start from the given registered predicates.
     pub(in crate::engine) fn scratch_stores(
         &self,
         predicates: HashMap<String, Registered>,
@@ -1097,11 +1153,12 @@ impl Engine {
         }
     }
 
-    /// Returns the scratch stores and the setup of a translation that leaves the engine's
-    /// stores as they were, and reports to the engine's pipeline.
+    /// Returns the stores and the setup of a translation that writes to `scratch`,
+    /// so that the engine's stores stay as they were.
     ///
-    /// Its ground expressions evaluate at the instant chosen for the next run, if there is one,
-    /// without choosing it.
+    /// The translation still reports to the engine's pipeline.
+    /// Its ground expressions are evaluated at the instant chosen for the next run,
+    /// if one is chosen, and otherwise at the current instant, which this does not choose.
     pub(in crate::engine) fn scratch_translation_parts<'a>(
         &'a mut self,
         purpose: Purpose<'a>,
@@ -1111,8 +1168,9 @@ impl Engine {
         self.parts(purpose, Some(scratch), context)
     }
 
-    /// Returns the stores and setup of a translation, the stores being the scratch ones if given
-    /// and the engine's otherwise.
+    /// Returns the stores and the setup of a translation.
+    ///
+    /// The stores are `scratch` if it is given, and the engine's otherwise.
     fn parts<'a>(
         &'a mut self,
         purpose: Purpose<'a>,

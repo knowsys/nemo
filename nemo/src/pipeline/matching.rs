@@ -1,18 +1,21 @@
-//! The correspondence of a declared rewrite: the path of each literal of an input rule
-//! in the rule that replaces it, and what each of its variables became.
+//! The correspondence of a declared rewrite.
 //!
-//! A stage gives the path of each literal as a [LiteralPath]. Following
-//! a path *unfolds* the predicates the commit defined along it: a
-//! literal over a defined predicate gives way to the body of its
-//! definition, whose head variables take the literal's terms and whose
-//! other variables are renamed apart as `name~path`, the path saying
-//! where the definition was unfolded. A negated literal unfolds only
-//! if its definition is one atom.
+//! The correspondence of a rule that replaces an input rule gives the path of each literal of
+//! the input rule in the new rule, and the term that each variable of the input rule became.
 //!
-//! *Matching* each input literal against the literal at its path, and
-//! the input head against the new one, binds the input rule's variables:
-//! the assignment the [Correspondence] records. A literal of the new rule
-//! that no path leads to is a guard, which only restricts the rule's matches.
+//! A stage gives the path of each literal as a [LiteralPath].
+//! Following a path *unfolds* the predicates that the commit defined along it.
+//! A literal over a defined predicate is replaced by the body of its definition,
+//! in which the head variables become the literal's terms.
+//! The other variables of the definition are renamed apart as `name~p`,
+//! where `p` is the path of the unfolded literal written with dots, as in `y~1.0`.
+//! A negated literal unfolds only if its definition is one atom.
+//!
+//! *Matching* each input literal against the literal at its path,
+//! and the input head against the new head, binds the variables of the input rule.
+//! The [Correspondence] records the resulting assignment.
+//! A literal of the new rule that no path leads to is a *guard*,
+//! which only restricts the rule's matches.
 
 mod mismatch;
 
@@ -28,44 +31,46 @@ use crate::{
 
 /// The location of an input rule's literal in the rule that replaces it.
 ///
-/// The path is the literal's index in the new rule's body, followed,
-/// for each predicate defined by the commit that the literal was moved into,
-/// by its index in the body of that predicate's defining rule.
-/// `[1, 0]` is the first body literal of the definition of the predicate
+/// The first index is the position of a literal in the new rule's body.
+/// If the input literal was moved into a predicate that the commit defines,
+/// the next index is its position in the body of that predicate's definition, and so on.
+/// For example, `[1, 0]` is the first body literal of the definition of the predicate
 /// that the new rule's second body literal uses.
 pub type LiteralPath = Vec<usize>;
 
 /// How an input rule reappears in the rule that replaces it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Correspondence {
-    /// Per literal of the input rule, its path.
+    /// The path of each literal of the input rule.
     pub(crate) literals: Vec<LiteralPath>,
-    /// The term each variable of the input rule became, over the
-    /// unfolded rule's variables.
+    /// The term that each variable of the input rule became,
+    /// in the variables of the unfolded new rule, sorted by variable name.
     pub(crate) assignment: Vec<(Variable, Term)>,
 }
 
-/// The variables of the input rule bound so far.
+/// The terms that the variables of the input rule are bound to so far.
 type Bindings = HashMap<Variable, Term>;
 
-/// The definitions instantiated so far, by the path of the literal
-/// they were instantiated at.
+/// The bodies of the definitions instantiated so far,
+/// by the path of the literal that each was instantiated at.
 type Unfolded = HashMap<LiteralPath, Vec<Literal>>;
 
-/// Computes the correspondences of one commit's replacing rules,
-/// unfolding the predicates the commit defined.
+/// A matcher that computes the correspondences of the rules
+/// that replace input rules in one commit.
 pub(crate) struct CorrespondenceMatcher<'a> {
-    /// The rules defining the predicates the commit introduced, by the resolved name
-    /// of the predicate defined: a defining rule, or an import's view.
-    /// Each head is one atom of distinct universal variables.
+    /// The definitions of the predicates that the commit introduced,
+    /// by the resolved name of the defined predicate.
+    ///
+    /// A definition is a defining rule or an import's view,
+    /// and its head is one atom of distinct universal variables.
     pub(crate) definitions: &'a HashMap<String, Rule>,
-    /// The scope names resolve in.
+    /// The name scope that names are resolved in.
     pub(crate) scope: &'a NameScope,
 }
 
 impl CorrespondenceMatcher<'_> {
-    /// Returns how the input rule reappears in the new one, given the path
-    /// of each of its literals, or why it does not.
+    /// Returns how the input rule reappears in the new rule,
+    /// given the path `literals` of each of its literals, or why it does not.
     pub(crate) fn correspond(
         &self,
         input: &Rule,
@@ -112,12 +117,13 @@ impl CorrespondenceMatcher<'_> {
         })
     }
 
-    /// Returns the literal a path leads to in a rule.
+    /// Returns the literal that a path leads to in a rule.
     ///
     /// The first step picks a literal of the rule's body.
-    /// Every further step picks a literal of the body of the definition
-    /// of the predicate the literal so far uses, instantiated at that literal.
-    /// Each definition is instantiated once per path prefix,
+    /// Each further step picks a literal of the body of the definition
+    /// of the predicate that the previous literal uses, instantiated at that literal.
+    /// `unfolded` keeps the instantiated bodies by path prefix,
+    /// so that a definition is instantiated once per prefix,
     /// however many input literals were moved into it.
     fn literal_at(
         &self,
@@ -174,8 +180,8 @@ impl CorrespondenceMatcher<'_> {
         Ok(literal)
     }
 
-    /// Returns whether a literal of the input rule matches an unfolded
-    /// one, extending the bindings.
+    /// Returns whether a literal of the input rule matches a literal of the unfolded new rule,
+    /// extending `bindings`.
     fn literal_matches(
         &self,
         pattern: &Literal,
@@ -195,8 +201,8 @@ impl CorrespondenceMatcher<'_> {
         }
     }
 
-    /// Returns whether an atom of the input rule matches one of the new
-    /// rule, extending the bindings.
+    /// Returns whether an atom of the input rule matches an atom of the new rule,
+    /// extending `bindings`.
     fn atom_matches(&self, pattern: &Atom, atom: &Atom, bindings: &mut Bindings) -> bool {
         self.same_name(&pattern.predicate, &atom.predicate)
             && pattern.labels == atom.labels
@@ -212,9 +218,14 @@ impl CorrespondenceMatcher<'_> {
                 .all(|(pattern, term)| self.term_matches(pattern, term, bindings))
     }
 
-    /// Returns whether a term of the input rule matches one of the new
-    /// rule: its universal and existential variables bind, an anonymous
-    /// one matches anything, and everything else must be the same.
+    /// Returns whether a term of the input rule matches a term of the new rule,
+    /// extending `bindings`.
+    ///
+    /// - A universal or existential variable is bound to the term, or must match its binding.
+    /// - An anonymous variable matches any term.
+    /// - Constants match if they stand for the same name.
+    /// - Compound terms match if their kinds and their parts match.
+    /// - Any other term must equal the term of the new rule.
     fn term_matches(&self, pattern: &Term, term: &Term, bindings: &mut Bindings) -> bool {
         match (&pattern.kind, &term.kind) {
             (TermKind::Variable(variable), _) => match variable.kind {
@@ -272,7 +283,7 @@ impl CorrespondenceMatcher<'_> {
         }
     }
 
-    /// Returns whether the subterms of two terms of one shape match.
+    /// Returns whether the subterms of two terms of the same kind match, position by position.
     fn subterms_match(&self, pattern: &Term, term: &Term, bindings: &mut Bindings) -> bool {
         let patterns: Vec<&Term> = pattern.subterms().collect();
         let terms: Vec<&Term> = term.subterms().collect();
@@ -283,7 +294,7 @@ impl CorrespondenceMatcher<'_> {
                 .all(|(pattern, term)| self.term_matches(pattern, term, bindings))
     }
 
-    /// Returns whether two aggregates range over matching scopes.
+    /// Returns whether the scope variables of two aggregates match, position by position.
     fn scopes_match(
         &self,
         pattern: &Aggregate,
@@ -301,8 +312,7 @@ impl CorrespondenceMatcher<'_> {
         self.all_match(&terms(pattern), &terms(aggregate), bindings)
     }
 
-    /// Returns whether two names stand for the same thing: spelled
-    /// alike, or resolving alike.
+    /// Returns whether two names are the same, either as written or once resolved.
     fn same_name(&self, left: &Identifier, right: &Identifier) -> bool {
         left == right
             || matches!(
@@ -312,11 +322,11 @@ impl CorrespondenceMatcher<'_> {
     }
 }
 
-/// Returns the path of each literal of a body of `len` literals when each
-/// group of positions, ascending, is replaced by one literal at the
-/// position of the group's first.
+/// Returns the path of each literal of a body of `len` literals, after each group of positions
+/// is replaced by one literal at the position of the group's first member.
 ///
-/// A literal outside the groups gets its new index.
+/// Each group lists its positions in ascending order.
+/// A literal outside the groups gets its new index as its path.
 /// A literal inside a group gets the index of the replacing literal,
 /// then its index within the group.
 pub(crate) fn grouped_paths(len: usize, groups: &[&[usize]]) -> Vec<LiteralPath> {
@@ -336,9 +346,11 @@ pub(crate) fn grouped_paths(len: usize, groups: &[&[usize]]) -> Vec<LiteralPath>
     paths
 }
 
-/// Returns the body of a definition instantiated at an atom: its head
-/// variables replaced by the atom's terms, its other variables renamed
-/// apart for the path.
+/// Returns the body of a definition instantiated at an atom.
+///
+/// The definition's head variables are replaced by the atom's terms,
+/// and its other variables are renamed apart as `name~p`, where `p` is `path` written with dots.
+/// Returns a mismatch if the atom has another number of terms than the definition's head.
 fn instantiate(
     definition: &Rule,
     atom: &Atom,
@@ -390,8 +402,8 @@ mod tests {
 
     use crate::testing::rule;
 
-    /// Computes the correspondence of a new rule replacing an input rule
-    /// under the definitions, with the given literal paths.
+    /// Returns the correspondence of a new rule that replaces an input rule,
+    /// given the definitions and the literal paths.
     fn check(
         input: &str,
         new: &str,
@@ -417,6 +429,7 @@ mod tests {
         .correspond(&rule(input), &rule(new), &literals)
     }
 
+    /// An unchanged rule replaces itself, with each literal at its own position.
     #[test]
     fn an_unchanged_rule_replaces_itself() {
         let found = check(
@@ -429,6 +442,8 @@ mod tests {
         assert_eq!(found.literals, [vec![0], vec![1]]);
     }
 
+    /// A folded rule unfolds into its definition,
+    /// whose other variables are renamed apart for the path.
     #[test]
     fn a_fold_unfolds_into_its_definition() {
         let found = check(
@@ -448,6 +463,7 @@ mod tests {
         );
     }
 
+    /// A path to a literal that the definition does not have is a mismatch.
     #[test]
     fn a_dropped_literal_is_found_out() {
         let problem = check(
@@ -466,6 +482,7 @@ mod tests {
         );
     }
 
+    /// Literals of the new rule that no path leads to are allowed as guards.
     #[test]
     fn extra_literals_act_as_filters() {
         check(
@@ -477,6 +494,7 @@ mod tests {
         .expect("guards are allowed");
     }
 
+    /// A variable that a substitution replaced is bound to the substituted term.
     #[test]
     fn a_substituted_variable_matches_its_term() {
         let found = check("p(?x) :- q(?x, ?y) .", "p(?x) :- q(?x, 5) .", &[], &[&[0]])
@@ -489,6 +507,7 @@ mod tests {
         );
     }
 
+    /// A negated literal over a definition of one atom unfolds into that atom, negated.
     #[test]
     fn a_negated_definition_of_one_atom_unfolds_negated() {
         let found = check(
@@ -501,6 +520,7 @@ mod tests {
         assert_eq!(found.literals, [vec![0], vec![1, 0]]);
     }
 
+    /// A new rule with another head is a mismatch.
     #[test]
     fn a_changed_head_is_found_out() {
         let problem = check("p(?x) :- q(?x) .", "r(?x) :- q(?x) .", &[], &[&[0]])
@@ -511,6 +531,7 @@ mod tests {
         );
     }
 
+    /// A literal paired with the wrong path is a mismatch at that path.
     #[test]
     fn a_literal_at_the_wrong_path_is_found_out() {
         let problem = check(
@@ -526,6 +547,8 @@ mod tests {
         );
     }
 
+    /// A literal inside a group gets the index of the replacing literal and its index within the
+    /// group, and every other literal gets its new index.
     #[test]
     fn grouped_paths_follow_the_replaced_groups() {
         assert_eq!(

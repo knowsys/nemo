@@ -9,16 +9,17 @@ pub enum Operator {
     /// Joins and duplicate elimination use this equality.
     /// It never raises an evaluation error.
     Equal,
-    /// Term distinctness, written `!=`: the negation of [Equal](Self::Equal).
+    /// Term distinctness, written `!=`, which is the negation of [Equal](Self::Equal).
     Unequal,
     /// Value equality, written `==`.
     ///
-    /// Numbers compare across domains (`1 == 1.0d`), dateTimes, dates and times by instant,
-    /// and durations by length.
-    /// Incomparable literal pairs are evaluation errors, as in SPARQL.
+    /// Numbers are compared across domains, so `1 == 1.0d` holds.
+    /// DateTimes, dates and times are compared as instants, and durations by their length.
+    /// Comparing two literals that cannot be compared is an evaluation error, as in SPARQL.
     ValueEqual,
-    /// Value inequality, written `!==`: the negation of [ValueEqual](Self::ValueEqual),
-    /// errors included.
+    /// Value inequality, written `!==`, which is the negation of [ValueEqual](Self::ValueEqual).
+    ///
+    /// It is an evaluation error wherever [ValueEqual](Self::ValueEqual) is one.
     ValueUnequal,
     /// Greater-than comparison, written `>`.
     Greater,
@@ -28,16 +29,15 @@ pub enum Operator {
     Less,
     /// Less-or-equal comparison, written `<=`.
     LessEq,
-    /// Addition, written `+`: of numbers, of durations, or of a point in
-    /// time and a duration.
+    /// Addition, written `+`, of numbers, of durations, or of a point in time and a duration.
     Add,
-    /// Subtraction, written `-`: of numbers, of durations, of a duration
-    /// from a point in time, or of two points in time, a duration.
+    /// Subtraction, written `-`, of numbers, of durations, of a duration from a point in time,
+    /// or of two points in time, which gives a duration.
     Subtract,
-    /// Multiplication, written `*`: of numbers, or of a duration and a number.
+    /// Multiplication, written `*`, of numbers, or of a duration and a number.
     Multiply,
-    /// Division, written `/`: of numbers, of a duration by a number, or of
-    /// two durations, a decimal.
+    /// Division, written `/`, of numbers, of a duration by a number,
+    /// or of two durations, which gives a decimal.
     Divide,
     /// Numeric negation.
     Negate,
@@ -111,7 +111,7 @@ pub enum Operator {
     StrLang,
     /// Whether a language tag matches a range.
     LangMatches,
-    /// A typed literal from a lexical and a datatype.
+    /// A typed literal from a lexical form and a datatype.
     StrDt,
     /// A value cast to an integer.
     CastInt,
@@ -165,7 +165,7 @@ pub enum Operator {
     BitShr,
     /// The Lukasiewicz t-norm of the arguments.
     Luka,
-    /// -1, 0, or 1 by the order of two values.
+    /// The order of two values, as -1, 0 or 1.
     Compare,
     /// The Levenshtein distance of two strings.
     Levenshtein,
@@ -185,11 +185,11 @@ pub enum Operator {
     UriEncode,
     /// A string percent-decoded.
     UriDecode,
-    /// The 1-based substring of a string.
+    /// A substring of a string, from a 1-based position.
     Substr,
-    /// Whether a regular expression matches.
+    /// Whether a regular expression matches a string.
     Regex,
-    /// A string with pattern matches replaced.
+    /// A string with the matches of a regular expression replaced.
     Replace,
     /// The MD5 digest of a string, in hex.
     Md5,
@@ -227,8 +227,10 @@ pub enum Operator {
     StrUuid,
     /// The current instant as a dateTime.
     Now,
-    /// The component of a structure: a tuple's element at a 0-based
-    /// index, a map's value at a key. Also written `?t[0]`.
+    /// A component of a structure,
+    /// which is a tuple's element at a 0-based index or a map's value at a key.
+    ///
+    /// It is also written `?t[0]`.
     Get,
     /// The number of elements or pairs of a structure.
     Length,
@@ -236,7 +238,7 @@ pub enum Operator {
     Label,
     /// The keys of a map as a tuple.
     Keys,
-    /// Whether a map holds a key.
+    /// Whether a map has a key.
     HasKey,
     /// Whether the argument is a tuple.
     IsTuple,
@@ -249,8 +251,9 @@ pub enum Operator {
 }
 
 impl Operator {
-    /// Returns whether the operator is a nondeterministic function
-    /// (`RAND`, `UUID`, `STRUUID`, or `NOW`), whose calls need not agree.
+    /// Returns whether the operator is nondeterministic, so that two calls of it need not agree.
+    ///
+    /// These operators are `RAND`, `UUID`, `STRUUID` and `NOW`.
     pub(crate) fn is_nondeterministic(&self) -> bool {
         matches!(
             self,
@@ -258,8 +261,8 @@ impl Operator {
         )
     }
 
-    /// Returns the infix symbol of this operator, or `None` if it is only
-    /// written as a function-style call.
+    /// Returns the infix symbol of the operator,
+    /// or `None` if the operator is only written as a call.
     pub fn infix(&self) -> Option<&'static str> {
         Some(match self {
             Operator::Equal => "=",
@@ -278,9 +281,10 @@ impl Operator {
         })
     }
 
-    /// Returns the binding power of an infix operator, a higher one binding tighter.
+    /// Returns the precedence of an infix operator, or `None` for any other operator.
     ///
-    /// The parser and the display share these numbers.
+    /// An operator with a higher precedence binds more tightly.
+    /// The parser and the display of operations use the same numbers.
     pub const fn precedence(&self) -> Option<u8> {
         Some(match self {
             Operator::Equal
@@ -297,7 +301,7 @@ impl Operator {
         })
     }
 
-    /// Returns the function-style name of this operator.
+    /// Returns the name of the operator in a call, such as `STRLEN`.
     pub fn name(&self) -> &'static str {
         match self {
             Operator::Equal => "EQUALITY",
@@ -418,9 +422,10 @@ impl Operator {
         }
     }
 
-    /// Every name a builtin can be called by, in declaration order.
+    /// Every name that a builtin can be called by, in the order of the variants.
     ///
-    /// These names are reserved: a program cannot use them as predicate or function names.
+    /// These names are reserved, in any case,
+    /// so a program cannot use them as names of predicates or functions.
     pub const NAMES: &'static [&'static str] = &[
         "EQUALITY",
         "UNEQUALITY",
@@ -540,10 +545,11 @@ impl Operator {
         "STRSPLIT",
     ];
 
-    /// Resolves a function-style name to an operator, case-insensitively.
+    /// Returns the operator with the given name in a call, written in any case,
+    /// or `None` if there is none.
     ///
-    /// Recognizes exactly the names in [NAMES](Self::NAMES).
-    /// Other names, like `equal` or `less`, stay free for predicates and function terms.
+    /// The names are exactly those in [NAMES](Self::NAMES).
+    /// Other names, like `equal` or `less`, remain free for predicates and function terms.
     pub fn from_name(name: &str) -> Option<Self> {
         Some(match name.to_ascii_uppercase().as_str() {
             "EQUALITY" => Operator::Equal,
@@ -670,11 +676,11 @@ impl Operator {
 mod tests {
     use super::*;
 
+    /// Every name in [NAMES](Operator::NAMES) is found, in any case.
     #[test]
     fn every_listed_name_resolves() {
-        // The list and the resolution are two statements of the same
-        // fact; a name in one and not the other is a mistake in
-        // whichever was edited last.
+        // The list and the lookup must agree,
+        // so a name that is in one and not in the other is a mistake.
         for name in Operator::NAMES {
             assert!(
                 Operator::from_name(name).is_some(),
@@ -687,6 +693,7 @@ mod tests {
         }
     }
 
+    /// No name appears twice in [NAMES](Operator::NAMES).
     #[test]
     fn the_listed_names_have_no_repeats() {
         let mut sorted = Operator::NAMES.to_vec();

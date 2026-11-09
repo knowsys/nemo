@@ -9,21 +9,23 @@ use crate::value::temporal::{
     instant::{self, Instant},
 };
 
-/// An [`xsd:time`](https://www.w3.org/TR/xmlschema11-2/#time) value:
-/// a time of day and the timezone offset it was written with, or no offset for a local time.
+/// An [`xsd:time`](https://www.w3.org/TR/xmlschema11-2/#time) value,
+/// a time of day and the timezone offset that it was written with.
 ///
-/// Equality, order and hashing are term identity:
-/// the same time in different offsets are distinct values.
-/// The order is by the instant of the time in its offset on the reference day `1972-12-31`,
-/// a local time read as UTC, then by offset, with no offset last.
-/// The reference day is the date
+/// A local time has no offset.
+/// Equality, order and hashing follow term identity,
+/// so the same time in different offsets gives distinct values.
+/// The values are ordered by the instant of the time in its offset
+/// on the reference day `1972-12-31`, with a local time read as UTC,
+/// and then by offset, with no offset last.
+/// The reference day is the date that
 /// [XSD fills in](https://www.w3.org/TR/xmlschema11-2/#theSevenPropertyModel)
 /// for a value without one.
-/// XSD's value comparison is [value_eq](Self::value_eq) and [value_cmp](Self::value_cmp).
+/// XSD's comparison by value is [value_eq](Self::value_eq) and [value_cmp](Self::value_cmp).
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Time(Instant);
 
-/// The value takes 24 bytes at 8-byte alignment.
+/// Checks at compile time that a value occupies 24 bytes at 8-byte alignment.
 const _: () = assert!(size_of::<Time>() == 24 && align_of::<Time>() == 8);
 
 impl Time {
@@ -37,18 +39,17 @@ impl Time {
         self.0
     }
 
-    /// Parses an `xsd:time` lexical form,
-    /// or `None` for malformed input.
+    /// Parses an `xsd:time` lexical form, or returns `None` for a malformed lexical form.
     ///
     /// `24:00:00` is the time `00:00:00`.
     pub fn from_lexical(lexical: &str) -> Option<Self> {
         Instant::from_lexical::<LibraryTime>(lexical).map(Self)
     }
 
-    /// Creates the time of clock components,
-    /// or `None` for components that do not name a time of day.
+    /// Creates the time with the given clock fields,
+    /// or `None` for fields that name no time of day.
     ///
-    /// The hour `24` with a zero minute, second and fraction is the time `00:00:00`.
+    /// The hour `24` with zero minutes, seconds and fraction is the time `00:00:00`.
     pub fn from_components(
         hour: u8,
         minute: u8,
@@ -75,7 +76,8 @@ impl Time {
     }
 
     /// Returns the whole second of the minute.
-    /// With [attosecond](Self::attosecond), it gives `fn:seconds-from-time`.
+    ///
+    /// Together with [attosecond](Self::attosecond), it gives `fn:seconds-from-time`.
     pub fn second(self) -> u8 {
         self.0.second()
     }
@@ -85,29 +87,33 @@ impl Time {
         self.0.attosecond()
     }
 
-    /// Returns the timezone offset the value was written with, or `None` for an unzoned value.
+    /// Returns the timezone offset that the value was written with,
+    /// or `None` for an unzoned value.
     pub fn offset(self) -> Option<TimezoneOffset> {
         self.0.offset()
     }
 
-    /// Returns whether two values are equal in XSD's value space:
-    /// both zoned or both unzoned, and at the same instant of the reference day.
+    /// Returns whether two values are equal by value.
+    ///
+    /// They are if both are zoned or both are unzoned,
+    /// and they are at the same instant of the reference day.
     pub fn value_eq(self, other: Self) -> bool {
         self.0.value_eq(other.0)
     }
 
-    /// Returns the order of two values in XSD's value space,
-    /// or `None` for a zoned and an unzoned value within fourteen hours of each other.
+    /// Returns the order of two values by value,
+    /// or `None` for a zoned and an unzoned value at most fourteen hours apart.
     pub fn value_cmp(self, other: Self) -> Option<Ordering> {
         self.0.value_cmp(other.0)
     }
 
-    /// Returns the value adjusted to another offset, `fn:adjust-time-to-timezone`.
+    /// Returns the value adjusted to another offset, `fn:adjust-time-to-timezone`,
+    /// or `None` beyond the value space.
     ///
-    /// Given an offset, a zoned value keeps its instant and reads it in the new offset,
-    /// wrapping around the day as needed,
-    /// and an unzoned value keeps its clock fields and takes the offset.
-    /// Given `None`, the value keeps its clock fields and drops its offset.
+    /// With an offset, a zoned value keeps its instant and gets the clock fields of the new
+    /// offset, wrapping around the day as needed,
+    /// and an unzoned value keeps its clock fields and gets the offset.
+    /// With `None`, the value keeps its clock fields and loses its offset.
     pub fn adjust(self, offset: Option<TimezoneOffset>) -> Option<Self> {
         self.0.adjust::<LibraryTime>(offset).map(Self)
     }
@@ -132,43 +138,43 @@ impl Time {
             .map(Self)
     }
 
-    /// Returns the time from an earlier value to this one on the reference day, `op:subtract-times`,
-    /// or `None` if one value is zoned and the other not.
+    /// Returns the time from an earlier value to this one on the reference day,
+    /// `op:subtract-times`, or `None` if one value is zoned and the other is not.
     ///
-    /// The result is negative when the other value is later in the day.
+    /// The result is negative if the other value is later in the day.
     pub fn duration_since(self, earlier: Self) -> Option<Duration> {
         self.0.duration_since::<LibraryTime>(earlier.0)
     }
 }
 
-/// The hooks of the compact representations.
+/// Conversions to and from the compact representation of times.
 impl Time {
-    /// The number of offset codes, the unzoned mark included.
+    /// The number of offset codes, including the mark of an unzoned value.
     pub(crate) const OFFSET_CODE_COUNT: u64 = instant::OFFSET_CODE_COUNT;
 
-    /// The attoseconds of a nanosecond.
+    /// The number of attoseconds in a nanosecond.
     const ATTOSECONDS_PER_NANOSECOND: i128 = 10i128.pow(9);
 
-    /// The start of the reference day in attoseconds of the instant.
+    /// The start of the reference day, in attoseconds since `0001-01-01T00:00:00Z`.
     const REFERENCE_DAY: i128 = instant::TIME_REFERENCE_SECONDS * instant::ATTOSECONDS_PER_SECOND;
 
-    /// Creates the time a number of nanoseconds after the start of the reference day, UTC,
-    /// written with a timezone offset.
+    /// Creates the time `nanos` nanoseconds after the start of the reference day, UTC,
+    /// which was written with `offset`.
     pub(crate) fn from_nanos(nanos: i64, offset: Option<TimezoneOffset>) -> Self {
         Self(Instant::new(Self::attoseconds(nanos), offset))
     }
 
-    /// Creates the time a number of nanoseconds after the start of the reference day, UTC,
-    /// written with the offset of a raw code, or `None` if the code is not one.
+    /// Creates the time `nanos` nanoseconds after the start of the reference day, UTC,
+    /// whose offset has the given raw code, or `None` if the code is not an offset code.
     pub(crate) fn from_nanos_and_code(nanos: i64, offset_code: u64) -> Option<Self> {
         Instant::from_code(Self::attoseconds(nanos), offset_code).map(Self)
     }
 
     /// Returns the nanoseconds from the start of the reference day, UTC, to the instant,
-    /// or `None` if the instant is finer than a nanosecond.
+    /// or `None` if the instant has a fraction finer than a nanosecond.
     ///
     /// The instant lies within fourteen hours of the reference day,
-    /// so the count is within a few days' nanoseconds either way.
+    /// so the count is at most a few days of nanoseconds in either direction.
     pub(crate) fn nanos(self) -> Option<i64> {
         let since_reference = self.0.attoseconds() - Self::REFERENCE_DAY;
         (since_reference % Self::ATTOSECONDS_PER_NANOSECOND == 0).then(|| {
@@ -182,7 +188,8 @@ impl Time {
         self.0.offset_code()
     }
 
-    /// Returns the attoseconds of the instant a number of nanoseconds after the reference day starts.
+    /// Returns the attoseconds since `0001-01-01T00:00:00Z`
+    /// of the instant `nanos` nanoseconds after the start of the reference day.
     fn attoseconds(nanos: i64) -> i128 {
         Self::REFERENCE_DAY + i128::from(nanos) * Self::ATTOSECONDS_PER_NANOSECOND
     }
@@ -213,7 +220,7 @@ mod tests {
         },
     };
 
-    /// Parses the time of a lexical; panics on malformed input.
+    /// Returns the time of a lexical form, and panics for a malformed one.
     fn time(lexical: &str) -> Time {
         Time::from_lexical(lexical).expect(lexical)
     }
@@ -227,6 +234,8 @@ mod tests {
         );
     }
 
+    /// A canonical lexical form is written back unchanged, `24:00:00` is written as `00:00:00`,
+    /// and every time lies on the reference day.
     #[test]
     fn canonical_lexicals_round_trip() {
         for lexical in [
@@ -249,6 +258,7 @@ mod tests {
         );
     }
 
+    /// Malformed lexical forms are rejected.
     #[test]
     fn malformed_lexicals_are_refused() {
         for lexical in [
@@ -269,6 +279,8 @@ mod tests {
         }
     }
 
+    /// A time is created from clock fields and returns them,
+    /// and fields that name no time of day are rejected.
     #[test]
     fn components_build_and_read_values() {
         let value =
@@ -302,6 +314,7 @@ mod tests {
         }
     }
 
+    /// Times are compared by value as XSD defines it.
     #[test]
     fn value_comparison_follows_xsd() {
         assert!(time("10:00:00Z").value_eq(time("12:00:00+02:00")));
@@ -321,6 +334,8 @@ mod tests {
         );
     }
 
+    /// The term order sorts times by instant on the reference day,
+    /// with an unzoned value after the zoned ones at the same instant.
     #[test]
     fn order_is_by_instant_with_unzoned_last() {
         let ordered = [
@@ -337,6 +352,8 @@ mod tests {
         }
     }
 
+    /// Adjusting a time to an offset gives the results of the examples of XPath,
+    /// and stays on the reference day.
     #[test]
     fn adjusting_follows_xpath() {
         let adjusted = |lexical: &str, offset: Option<TimezoneOffset>| {
@@ -351,6 +368,7 @@ mod tests {
         assert_eq!(adjusted("10:00:00", None), "10:00:00");
     }
 
+    /// Time arithmetic gives the results of the examples of XPath, and stays on the reference day.
     #[test]
     fn arithmetic_follows_xpath() {
         let duration = |lexical: &str| Duration::from_lexical(lexical).expect(lexical);

@@ -1,4 +1,4 @@
-//! The command line arguments.
+//! The command line arguments of `nmo`.
 
 use std::path::{Path, PathBuf};
 
@@ -15,7 +15,7 @@ use clap::{Parser, ValueEnum};
                   2 for invalid arguments, and 101 on an internal error."
 )]
 pub struct Arguments {
-    /// The rule programs to run, read as one program in the given order.
+    /// The rule programs to run, combined into one program in the given order.
     #[arg(required_unless_present = "explain", value_name = "PROGRAM")]
     pub programs: Vec<PathBuf>,
 
@@ -26,9 +26,10 @@ pub struct Arguments {
 
     /// Print the results to standard output as facts, instead of
     /// writing export files. Without a mode, or with `keep`, it prints
-    /// the predicates `--export` selects and the declared outputs.
-    /// Another mode, written as `-P=idb`, selects the predicates by
-    /// role instead.
+    /// what `--export` selects. If that is `keep`, it also prints the
+    /// `@output` predicates, or every derived predicate if the program
+    /// declares no outputs and no exports. Another mode, written as
+    /// `-P=idb`, selects the predicates by role.
     #[arg(
         short = 'P',
         long,
@@ -59,8 +60,8 @@ pub struct Arguments {
     #[arg(short = 'I', long, value_name = "DIR")]
     pub import_dir: Option<PathBuf>,
 
-    /// Declare a module root, as `name=directory`: a `@use` names the module
-    /// `tc.rls` in the directory as `name::tc`.
+    /// Declare a module root, as `name=directory`. A `@use` then refers
+    /// to the module `tc.rls` in that directory as `name::tc`.
     #[arg(long, value_name = "NAME=DIR")]
     pub module_root: Vec<String>,
 
@@ -92,7 +93,7 @@ pub struct Arguments {
     pub verbose: u8,
 
     /// Log by filter directives, as `debug` or `nemo::io=debug,warn`.
-    /// The `NMO_LOG` environment variable holds the default.
+    /// The `NMO_LOG` environment variable sets the default.
     #[arg(long, value_name = "FILTER")]
     pub log: Option<String>,
 
@@ -102,8 +103,8 @@ pub struct Arguments {
     pub events: Option<PathBuf>,
 
     /// Serve a live dashboard of the run on this port, written as
-    /// `--dashboard=PORT` (0 picks a free port). Nemo keeps serving it
-    /// until interrupted.
+    /// `--dashboard=PORT` (0 picks a free port, and no port means 8280).
+    /// Nemo keeps serving it until interrupted.
     #[arg(
         long,
         value_name = "PORT",
@@ -143,7 +144,7 @@ pub struct Arguments {
     pub trace_tree: Option<String>,
 
     /// Answer a `tableEntriesForTreeNodes` query of the explanation
-    /// view, given and answered like `--trace-tree`.
+    /// view, given and printed as for `--trace-tree`.
     #[arg(
         long,
         value_name = "FILE|JSON",
@@ -151,9 +152,10 @@ pub struct Arguments {
     )]
     pub trace_node: Option<String>,
 
-    /// Write the response as JSON to this file instead of printing it:
-    /// for `--trace` and `--trace-all` the derivations as one graph of
-    /// facts, for `--trace-tree` and `--trace-node` the query's response.
+    /// Write the trace as JSON to this file instead of printing it. For
+    /// `--trace` and `--trace-all`, the file contains the derivations as
+    /// one graph of facts. For `--trace-tree` and `--trace-node`, it
+    /// contains the query's response.
     #[arg(long, value_name = "FILE")]
     pub trace_output: Option<PathBuf>,
 
@@ -164,9 +166,10 @@ pub struct Arguments {
 }
 
 impl Arguments {
-    /// Returns how much to report, with `--quiet` and `auto` folded in: `auto`
-    /// is the summary unless the results were printed, which keeps the
-    /// terminal to the data.
+    /// Returns the report level, after applying `--quiet` and resolving `auto`.
+    ///
+    /// `auto` becomes the summary, or nothing if the results are printed,
+    /// so that the terminal shows only the data.
     pub fn reporting(&self) -> Report {
         match self.report {
             _ if self.quiet => Report::None,
@@ -185,14 +188,16 @@ impl Arguments {
             || self.trace_node.is_some()
     }
 
-    /// Returns whether a trace prints to the standard output,
-    /// which any trace without `--trace-output` does.
+    /// Returns whether the run prints a trace to standard output,
+    /// which it does for any trace without `--trace-output`.
     pub fn traces_to_stdout(&self) -> bool {
         self.traces() && self.trace_output.is_none()
     }
 
-    /// Returns whether the run's selection reaches the given predicates,
-    /// which the loader must then keep whole.
+    /// Returns whether the run exports or prints the extensional predicates.
+    ///
+    /// Their imported tables are then written as they were read,
+    /// so the imports must be loaded whole.
     pub fn selects_extensional(&self) -> bool {
         matches!(self.export, Mode::All | Mode::Extensional)
             || matches!(self.print, Some(Mode::All | Mode::Extensional))
@@ -203,8 +208,10 @@ impl Arguments {
         self.print.filter(|mode| *mode != Mode::None)
     }
 
-    /// Returns whether a program path reads as the value of an option written without `=`:
-    /// a print mode, as in `-P idb`, or a port, as in `--dashboard 8080`.
+    /// Returns whether a program path looks like the value of an option written without `=`.
+    ///
+    /// Such a value is a print mode, as in `-P idb`, or a port, as in `--dashboard 8080`.
+    /// Both options need `=` before their value, so clap takes the value for a program path.
     pub fn is_option_value(path: &Path) -> bool {
         path.to_str()
             .is_some_and(|text| Mode::from_str(text, true).is_ok() || text.parse::<u16>().is_ok())
@@ -216,10 +223,10 @@ impl Arguments {
 pub enum Mode {
     /// What the program declares, or, when printing, what `--export` selects.
     Keep,
-    /// Every predicate that rules derive into.
+    /// Every predicate that rules derive facts for.
     #[value(name = "idb")]
     Derived,
-    /// Every predicate fed from outside: facts, imports, inputs.
+    /// Every predicate with input facts, from facts, imports or `@input`.
     #[value(name = "edb")]
     Extensional,
     /// Every predicate.
@@ -231,12 +238,12 @@ pub enum Mode {
 /// How much a run reports about itself.
 ///
 /// Everything but the JSON document goes to the error stream,
-/// which keeps the standard output for data.
+/// so that standard output is left for the data.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum Report {
     /// Warnings and errors only.
     None,
-    /// The summary, unless the results are printed with `--print`.
+    /// The summary, or nothing if the results are printed with `--print`.
     Auto,
     /// The headline, and how many facts each output predicate holds.
     #[value(alias = "short")]
@@ -259,8 +266,9 @@ pub enum Report {
 }
 
 impl Report {
-    /// Returns whether this level consumes the engine's telemetry stream.
-    /// Resolve `auto` through [Arguments::reporting] first.
+    /// Returns whether this level reads the engine's telemetry stream.
+    ///
+    /// `auto` must be resolved through [Arguments::reporting] first.
     pub fn observes(self) -> bool {
         matches!(self, Report::Full | Report::Json | Report::Html)
     }

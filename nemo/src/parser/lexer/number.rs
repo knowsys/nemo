@@ -1,12 +1,14 @@
-//! Number literals.
+//! Lexing number literals.
 
 use nemo_physical::value::NameKind;
 
 use crate::parser::lexer::{Lexer, TokenKind};
 
 impl Lexer<'_> {
-    /// Consumes a number literal: digits, an optional fraction, and an optional exponent,
-    /// or after `0b`, `0o` or `0x` a radix form.
+    /// Consumes a number literal that starts at `start`, and emits its token.
+    ///
+    /// A number literal is either a binary, octal or hexadecimal number after `0b`, `0o`
+    /// or `0x`, or digits with an optional fraction, exponent and type suffix.
     pub(super) fn number(&mut self, start: usize) {
         if self.peek() == Some(b'0')
             && let Some(marker @ (b'b' | b'o' | b'x')) = self.peek_at(1)
@@ -37,12 +39,12 @@ impl Lexer<'_> {
             if self.peek().is_some_and(|byte| byte.is_ascii_digit()) {
                 self.skip_while(|byte| byte.is_ascii_digit());
             } else {
-                // Not an exponent after all: `1e` starts `1` and `e…`.
+                // This is not an exponent, so `1e…` is lexed as `1` followed by a name `e…`.
                 self.position = mark;
             }
         }
-        // A type suffix: `f`/`F` marks a float, `d`/`D` a double, taken
-        // only if nothing name-like follows.
+        // A type suffix `f` or `F` marks a float, and `d` or `D` a double.
+        // It is consumed only if no character of a name follows it.
         if matches!(self.peek(), Some(b'f' | b'F' | b'd' | b'D'))
             && !self.source[self.position + 1..]
                 .chars()

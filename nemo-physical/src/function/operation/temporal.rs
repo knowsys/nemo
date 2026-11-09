@@ -1,14 +1,15 @@
-//! The functions on dates, times and durations:
-//! SPARQL's [`YEAR` through `TIMEZONE`](https://www.w3.org/TR/sparql12-query/#func-year),
+//! The component and timezone functions of dates, times and durations.
+//!
+//! They are SPARQL's
+//! [`YEAR` through `TIMEZONE`](https://www.w3.org/TR/sparql12-query/#func-year),
 //! which are XPath's
 //! [component functions](https://www.w3.org/TR/xpath-functions-31/#func-year-from-dateTime),
 //! and SPARQL 1.2's `ADJUST`.
+//! SPARQL 1.1 defines the components on dateTimes only,
+//! SPARQL 1.2 and XPath also on dates and times, and XPath also on durations.
+//! This module follows XPath.
+//! A component is read in the value's own timezone, never normalized to UTC.
 //!
-//! SPARQL 1.1 defines the components on dateTimes only.
-//! SPARQL 1.2 and XPath read them from dates and times as well,
-//! and XPath from durations; so does this module.
-//! Components are read in the value's own timezone,
-//! never normalized to UTC, following XPath's component functions.
 //! The arithmetic and the comparisons of these values are [ValueRef]'s operators.
 
 use crate::{
@@ -19,25 +20,26 @@ use crate::{
     },
 };
 
-/// The extractable components.
+/// The components that [component] reads.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Component {
-    /// The year (dateTime, date), or the whole years (duration).
+    /// The year of a dateTime or a date, or the whole years of a duration.
     Year,
-    /// The month (dateTime, date), or the months beyond the whole years (duration).
+    /// The month of a dateTime or a date, or the months of a duration beyond its whole years.
     Month,
-    /// The day (dateTime, date), or the whole days (duration).
+    /// The day of a dateTime or a date, or the whole days of a duration.
     Day,
-    /// The hours (dateTime, time), or the hours beyond the whole days (duration).
+    /// The hours of a dateTime or a time, or the hours of a duration beyond its whole days.
     Hours,
-    /// The minutes (dateTime, time), or the minutes beyond the whole hours (duration).
+    /// The minutes of a dateTime or a time,
+    /// or the minutes of a duration beyond its whole hours.
     Minutes,
-    /// The seconds, fractional if present (dateTime, time),
-    /// or the seconds beyond the whole minutes (duration).
+    /// The seconds of a dateTime or a time, with their fraction,
+    /// or the seconds of a duration beyond its whole minutes.
     Seconds,
 }
 
-/// A temporal value: a dateTime, a date or a time.
+/// A point in time: a dateTime, a date or a time.
 enum Temporal {
     /// A dateTime.
     DateTime(DateTime),
@@ -48,7 +50,7 @@ enum Temporal {
 }
 
 impl Temporal {
-    /// Returns the temporal value of a value, if it is one.
+    /// Returns the value as a point in time, if it is one.
     fn of(value: ValueRef<'_>) -> Option<Self> {
         match value {
             ValueRef::DateTime(value) => Some(Self::DateTime(value)),
@@ -58,7 +60,7 @@ impl Temporal {
         }
     }
 
-    /// Returns the timezone offset the value was written with, if present.
+    /// Returns the timezone offset of the value, if it has one.
     fn offset(&self) -> Option<TimezoneOffset> {
         match self {
             Self::DateTime(value) => value.offset(),
@@ -68,10 +70,12 @@ impl Temporal {
     }
 }
 
-/// Extracts one component of a dateTime, date, time or duration.
+/// Returns one component of a dateTime, date, time or duration.
 ///
-/// The components of a duration carry its sign,
-/// as XPath's `fn:years-from-duration` and its kin do.
+/// The components of a duration have its sign,
+/// as in XPath's `fn:years-from-duration` and the related functions.
+/// A value without the component, such as a date for the hours,
+/// is a [TypeMismatch](EvaluationError::TypeMismatch).
 pub(crate) fn component(value: ValueRef<'_>, component: Component) -> StackValue<'static> {
     let result = match (value, component) {
         (ValueRef::DateTime(value), Component::Year) => integer(value.year()),
@@ -105,12 +109,12 @@ pub(crate) fn component(value: ValueRef<'_>, component: Component) -> StackValue
     }
 }
 
-/// Returns an integer component.
+/// Returns an integer component as a value.
 fn integer(value: impl Into<i64>) -> Option<DataValue> {
     Some(DataValue::integer(value.into()))
 }
 
-/// Returns the seconds component as an exact number: the whole seconds and their fraction.
+/// Returns the seconds component, the whole seconds and their fraction, as an exact number.
 fn seconds(second: impl Into<i128>, attosecond: impl Into<i128>) -> Option<DataValue> {
     DataValue::decimal(
         second.into() * ATTOSECONDS_PER_SECOND + attosecond.into(),
@@ -118,9 +122,10 @@ fn seconds(second: impl Into<i128>, attosecond: impl Into<i128>) -> Option<DataV
     )
 }
 
-/// Returns the timezone of a temporal value as a plain string,
-/// empty if absent,
+/// Returns the timezone of a dateTime, date or time as a plain string,
 /// SPARQL's [`TZ`](https://www.w3.org/TR/sparql12-query/#func-tz).
+///
+/// A value without a timezone gives the empty string.
 pub(crate) fn timezone_string(value: ValueRef<'_>) -> StackValue<'static> {
     let Some(temporal) = Temporal::of(value) else {
         return EvaluationError::TypeMismatch.into();
@@ -134,10 +139,11 @@ pub(crate) fn timezone_string(value: ValueRef<'_>) -> StackValue<'static> {
     .into()
 }
 
-/// Returns the timezone of a temporal value as an `xsd:dayTimeDuration`,
-/// [Missing](EvaluationError::Missing) if the value has none,
-/// SPARQL's [`TIMEZONE`](https://www.w3.org/TR/sparql12-query/#func-timezone),
-/// XPath's [`fn:timezone-from-dateTime`].
+/// Returns the timezone of a dateTime, date or time as a dayTimeDuration,
+/// SPARQL's [`TIMEZONE`](https://www.w3.org/TR/sparql12-query/#func-timezone)
+/// and XPath's [`fn:timezone-from-dateTime`].
+///
+/// A value without a timezone is [Missing](EvaluationError::Missing).
 ///
 /// [`fn:timezone-from-dateTime`]: https://www.w3.org/TR/xpath-functions-31/#func-timezone-from-dateTime
 pub(crate) fn timezone_duration(value: ValueRef<'_>) -> StackValue<'static> {
@@ -150,16 +156,18 @@ pub(crate) fn timezone_duration(value: ValueRef<'_>) -> StackValue<'static> {
     DataValue::duration(Duration::from(offset)).into()
 }
 
-/// Returns a dateTime, date or time adjusted to the timezone a dayTimeDuration names,
-/// SPARQL 1.2's `ADJUST`,
-/// XPath's [`fn:adjust-dateTime-to-timezone`] and its kin.
+/// Returns a dateTime, date or time adjusted to the timezone that a dayTimeDuration gives,
+/// SPARQL 1.2's `ADJUST`
+/// and XPath's [`fn:adjust-dateTime-to-timezone`] with the related functions.
 ///
-/// A zoned value keeps its instant and reads it in the new timezone;
-/// an unzoned value keeps its local fields and takes the timezone.
-/// The timezone is a dayTimeDuration, any other duration a
-/// [TypeMismatch](EvaluationError::TypeMismatch),
-/// of whole minutes within fourteen hours either way;
-/// any other dayTimeDuration is [Malformed](EvaluationError::Malformed).
+/// A value with a timezone keeps its instant, and its fields change to the new timezone.
+/// A value without a timezone keeps its fields and gets the new timezone.
+///
+/// The timezone must be a dayTimeDuration,
+/// and any other operand is a [TypeMismatch](EvaluationError::TypeMismatch).
+/// It must be whole minutes within fourteen hours either way,
+/// and any other dayTimeDuration is [Malformed](EvaluationError::Malformed).
+/// An adjusted value outside the value space is an [Overflow](EvaluationError::Overflow).
 ///
 /// [`fn:adjust-dateTime-to-timezone`]: https://www.w3.org/TR/xpath-functions-31/#func-adjust-dateTime-to-timezone
 pub(crate) fn adjust(value: ValueRef<'_>, timezone: ValueRef<'_>) -> StackValue<'static> {
@@ -187,14 +195,16 @@ mod tests {
 
     use crate::{testing::value, value::datatype::xsd};
 
-    /// The value of a typed literal; panics on a lexical the datatype does not accept.
+    /// Returns the value of a typed literal,
+    /// and panics for a lexical form that the datatype does not accept.
     fn literal(datatype: &str, lexical: &str) -> DataValue {
         DataValue::typed_literal(datatype, lexical).expect(lexical)
     }
 
+    /// The components of a duration have its sign, as in XPath's examples.
     #[test]
     fn durations_have_their_components() {
-        // The examples of XPath's `fn:years-from-duration` and its kin.
+        // The examples of XPath's `fn:years-from-duration` and the related functions.
         for (lexical, part, expected) in [
             ("P20Y15M", Component::Year, "21"),
             ("-P15M", Component::Year, "-1"),
@@ -216,6 +226,8 @@ mod tests {
         }
     }
 
+    /// Values adjust to a timezone as in XPath's examples,
+    /// and a timezone that is no dayTimeDuration of whole minutes within fourteen hours fails.
     #[test]
     fn values_adjust_to_a_timezone() {
         let adjusted = |datatype, lexical, timezone| {
@@ -225,7 +237,7 @@ mod tests {
             )
         };
 
-        // The examples of XPath's `fn:adjust-dateTime-to-timezone` and its kin.
+        // The examples of XPath's `fn:adjust-dateTime-to-timezone` and the related functions.
         assert_eq!(
             value(adjusted(
                 xsd::DATE_TIME,
@@ -269,6 +281,8 @@ mod tests {
         );
     }
 
+    /// The timezone of a value without one is missing,
+    /// and a value that is not a point in time has the wrong type.
     #[test]
     fn a_value_without_a_timezone_misses_one() {
         let unzoned = literal(xsd::DATE_TIME, "2002-03-07T10:00:00");
@@ -284,6 +298,7 @@ mod tests {
         );
     }
 
+    /// Components and timezones are read alike from inline dateTimes and from wide ones.
     #[test]
     fn components_read_inline_and_wide_datetimes() {
         for (lexical, year, seconds) in [
@@ -311,6 +326,8 @@ mod tests {
         }
     }
 
+    /// Dates and times have their own components and timezones,
+    /// and reading a component that they lack fails.
     #[test]
     fn dates_and_times_have_their_components() {
         let date = literal(xsd::DATE, "2024-03-01Z");
