@@ -27,8 +27,7 @@ use crate::{
 /// since it counts the body matches.
 /// Rows that differ only in pruned columns become one stored row, which no rule can observe,
 /// so the load leaves these columns out before their values are interned or stored.
-/// A predicate whose rules read none of its columns is stored whole,
-/// so that its atoms can still test whether a row exists.
+/// A predicate whose rules read none of its columns is stored whole.
 #[derive(Debug)]
 pub(crate) struct ProjectionPushdown;
 
@@ -88,8 +87,9 @@ impl ImportPass for ProjectionPushdown {
             if survey.conditioned.contains(&name) {
                 continue;
             }
-            // Rules that read no column still ask whether a row exists,
-            // and a join reads columns, so such an import is stored whole.
+            // Rules that read no column only ask whether a row exists.
+            // Such an import is stored whole, since pruning every column would need each
+            // import format to deliver rows without columns.
             if !flags.contains(&true) {
                 continue;
             }

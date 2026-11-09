@@ -1,0 +1,54 @@
+% Regression test for https://github.com/knowsys/nemo/issues/130: atoms
+% without terms. A nullary predicate holds the empty row or nothing, and
+% rules derive and read it like any other predicate.
+
+p(1) .
+p(2) .
+
+% A nullary head, and a positive nullary body atom.
+found() :- p(_) .
+answer(yes) :- found() .
+copied(?x) :- found(), p(?x) .
+
+% A body of nullary atoms holds if each of them holds.
+missing() :- p(3) .
+checked() :- p(1) .
+both() :- found(), checked() .
+neither() :- found(), missing() .
+
+% A negated nullary atom.
+unblocked(?x) :- p(?x), ~missing() .
+blocked(?x) :- p(?x), ~found() .
+alone() :- ~missing() .
+
+% `reached` and `done` depend on each other, so they are evaluated together.
+% `done()` holds only once `reached(3)` is derived, and then the rule that
+% reads it joins every row of `extra`, which holds from the start.
+edge(1, 2) .
+edge(2, 3) .
+extra(10) .
+extra(11) .
+reached(1) .
+reached(?y) :- reached(?x), edge(?x, ?y) .
+done() :- reached(3) .
+reached(?x) :- done(), extra(?x) .
+
+% A nullary atom that derives itself again.
+again() :- done() .
+again() :- again(), reached(_) .
+
+% A body without variables has one match if it holds.
+counted(#count()) :- found() .
+uncounted(#count()) :- missing() .
+twice(#count(), #count()) :- found() .
+
+% An existential rule without frontier variables creates one null if its
+% body holds, unless a fact already satisfies its head.
+fresh(!n) :- found() .
+taken(!n) :- found() .
+taken(5) .
+named(!n), flagged() :- p(_) .
+
+@output found, answer, copied, missing, checked, both, neither .
+@output unblocked, blocked, alone, reached, done, again, counted, uncounted, twice .
+@output fresh, taken, named, flagged .

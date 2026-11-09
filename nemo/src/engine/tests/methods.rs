@@ -166,6 +166,38 @@ fn telemetry_events_account_for_the_run() {
     assert!(snapshot.contains("reach(?x, ?y)"), "{snapshot}");
 }
 
+/// Telemetry compares the delta atom of a variant with the atoms that bind the first variable
+/// of the rule's order, so a rule without variables, which has no order, is not observed.
+#[test]
+fn telemetry_observes_no_variant_of_a_rule_without_variables() {
+    use crate::telemetry::Recorder;
+
+    let program = parse(
+        "p(1) .
+         found() :- p(_) .
+         copied(?x) :- found(), p(?x) .
+         answer(yes) :- found() .",
+    );
+    let mut engine = Engine::new();
+    let recorder = Arc::new(Recorder::new());
+    engine.set_telemetry(recorder.clone());
+    engine.load(program).expect("the program loads");
+    engine.reason().expect("reasoning reaches the fixpoint");
+
+    // Only the variant of `copied` led by `found()` sums the rows of the atom that leads, `p`.
+    let snapshot = recorder.snapshot_json();
+    let led: Vec<u64> = snapshot
+        .split("\"ledRows\":")
+        .skip(1)
+        .map(|rest| {
+            let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
+            digits.parse().expect("a count")
+        })
+        .collect();
+    assert!(!led.is_empty(), "{snapshot}");
+    assert!(led.iter().all(|&rows| rows <= 1), "{snapshot}");
+}
+
 /// The file name of an export under gzip compression ends with `.gz`, which is added once.
 #[test]
 fn a_gzipped_export_says_so_in_its_name() {

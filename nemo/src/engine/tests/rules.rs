@@ -94,18 +94,25 @@ fn unsafe_and_unsupported_rules_are_diagnosed() {
     assert!(engine.load(program).is_err());
 }
 
-/// A positive nullary body atom is refused as unsupported,
-/// while a negated one is a guard and runs.
+/// A fact that a rule derives from a nullary fact traces through it,
+/// and the nullary fact traces to the rule that derived it.
 #[test]
-fn a_positive_nullary_body_atom_is_refused() {
-    // Joins read columns, so the atom is refused rather than crashing the join.
-    for source in ["z() . p(1) :- z() .", "z() . q(1) . p(?x) :- q(?x), z() ."] {
-        let mut engine = Engine::new();
-        let problem = engine.load(parse(source)).expect_err(source);
-        assert_eq!(problem.code(), codes::UNSUPPORTED, "{problem:?}");
-    }
-    let mut engine = run("q(1) . p(?x) :- q(?x), ~z() .");
-    assert_eq!(rows(&mut engine, "p"), vec![vec!["1".to_string()]]);
+fn a_derived_nullary_fact_traces_like_any_other() {
+    let mut engine = run("
+        p(1) .
+        found() :- p(_) .
+        answer(yes) :- found() .
+    ");
+    let fact = Fact::parse("answer(yes) .").expect("the fact parses");
+    let response = engine.trace(&[fact]).expect("tracing answers");
+    let answer = response.proof(0).expect("the fact holds");
+    let premises: Vec<_> = answer.premises().collect();
+    let facts: Vec<&str> = premises.iter().map(|premise| premise.fact()).collect();
+    assert_eq!(facts, ["found()"], "{response:?}");
+    let found = premises[0];
+    assert!(found.rule().is_some(), "a derived fact: {response:?}");
+    let facts: Vec<&str> = found.premises().map(|premise| premise.fact()).collect();
+    assert_eq!(facts, ["p(1)"], "{response:?}");
 }
 
 /// A rule without positive body atoms fires once, adds no predicate to the listing,

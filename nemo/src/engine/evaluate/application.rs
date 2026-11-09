@@ -149,8 +149,9 @@ pub(crate) struct PlanSkeleton {
     arena: JoinArena,
     /// Per head, its table and plan output index.
     targets: Vec<(TableId, usize)>,
-    /// The existential outputs, if the rule has existential variables.
-    probe: Option<ExistentialProbe>,
+    /// The plan output of the unsatisfied frontier tuples,
+    /// if the rule has existential variables.
+    probe: Option<usize>,
 }
 
 /// Applies one rule at the given step.
@@ -158,7 +159,8 @@ pub(crate) struct PlanSkeleton {
 /// Returns the derived rows per head table, without the rows already stored,
 /// and the evaluation-error counts.
 /// The filters and computed columns are evaluated in `context`,
-/// and `observe` asks for one [VariantObservation] per variant.
+/// and `observe` asks for one [VariantObservation] per variant,
+/// unless the rule aggregates or has no variables.
 ///
 /// Each application sets the loads' revision ranges for the rule's delta window
 /// and executes the [skeleton](PlanSkeleton) again.
@@ -197,8 +199,9 @@ pub(crate) fn apply(
     let ranges = skeleton.retarget(last, now, snapping, aggregating, manager);
 
     // The observation reads only the row counts of the ranges, before the execution.
-    // An aggregate rule has a single variant, so there is nothing to compare.
-    let observations = if observe && !aggregating {
+    // An aggregate rule has a single variant, so there is nothing to compare,
+    // and a rule without variables has no order to compare its variants with.
+    let observations = if observe && !aggregating && !rule.order.is_empty() {
         skeleton.observe(&ranges, manager)
     } else {
         Vec::new()
@@ -617,57 +620,41 @@ impl<'r> PlanSkeletonBuilder<'r> {
         node
     }
 
-    /// Returns the plan outputs of the existential head, if the rule has one.
+    /// Returns the plan output of the unsatisfied frontier tuples,
+    /// if the rule has an existential head.
     ///
     /// The body result is projected to the frontier,
     /// and one existence-only join checks against the stored rows
     /// whether the whole head is already satisfied for each frontier tuple.
-    fn existential_probe(&mut self, derived: NodeId) -> Option<ExistentialProbe> {
-        let Some(head) = &self.rule.existential else {
-            return None;
-        };
+    /// An empty frontier has the empty tuple if the body has a match.
+    fn existential_probe(&mut self, derived: NodeId) -> Option<usize> {
+        let head = self.rule.existential.as_ref()?;
         let existential_markers: Vec<Marker> =
             (0..head.existentials).map(|_| self.plan.marker()).collect();
-        if head.frontier.is_empty() {
-            // Without a frontier, the head asks two yes/no questions:
-            // does any body match exist, and is the head already satisfied?
-            let projected = self.plan.project(derived, vec![self.space.markers[0]]);
-            let matches = self.plan.output(projected);
-            let blocked = self.satisfaction(Vec::new(), &[], &existential_markers, 1);
-            return Some(ExistentialProbe::Empty {
-                matches,
-                blocked: self.plan.output(blocked),
-            });
-        }
         let frontier_markers = self.space.columns(&head.frontier);
         let delta = self.plan.project(derived, frontier_markers.clone());
-        let blocked = self.satisfaction(
-            vec![delta],
-            &frontier_markers,
-            &existential_markers,
-            frontier_markers.len(),
-        );
+        let blocked = self.satisfaction(delta, &frontier_markers, &existential_markers);
         let unsatisfied = self.plan.subtract(delta, blocked);
-        Some(ExistentialProbe::Frontier(self.plan.output(unsatisfied)))
+        Some(self.plan.output(unsatisfied))
     }
 
-    /// Returns the satisfaction check of the existential head.
+    /// Returns the frontier tuples of `delta` for which the existential head is satisfied.
     ///
-    /// The check atoms are joined after `inputs`, in the order of the frontier markers
+    /// The check atoms are joined after `delta`, in the order of the frontier markers
     /// and then the existential markers,
-    /// and the result is projected to the first `emitted` markers of that order.
+    /// and the result is projected to the frontier markers.
     fn satisfaction(
         &mut self,
-        mut inputs: Vec<NodeId>,
+        delta: NodeId,
         frontier_markers: &[Marker],
         existential_markers: &[Marker],
-        emitted: usize,
     ) -> NodeId {
         let head = self
             .rule
             .existential
             .as_ref()
             .expect("satisfaction is planned for existential heads only");
+        let mut inputs = vec![delta];
         let mut order: Vec<Marker> = frontier_markers.to_vec();
         order.extend(existential_markers.iter().copied());
         let mut filters = Vec::new();
@@ -680,9 +667,9 @@ impl<'r> PlanSkeletonBuilder<'r> {
                 &mut filters,
             ));
         }
-        let joined = self.plan.join(inputs, order.clone());
+        let joined = self.plan.join(inputs, order);
         let checked = filtered(&mut self.plan, joined, filters);
-        self.plan.project(checked, order[..emitted].to_vec())
+        self.plan.project(checked, frontier_markers.to_vec())
     }
 
     /// Returns the load of one satisfaction-check atom.
@@ -747,21 +734,10 @@ fn deliver(
     for &(table, output) in &skeleton.targets {
         delivered.push((table, std::mem::take(&mut outputs[output])));
     }
-    if let (Some(head), Some(probe)) = (&rule.existential, skeleton.probe) {
-        let unsatisfied: Vec<Vec<StorageValue>> = match probe {
-            ExistentialProbe::Frontier(output) => {
-                let mut rows = Vec::with_capacity(outputs[output].row_count());
-                outputs[output].for_each_row(|row| rows.push(row.to_vec()));
-                rows
-            }
-            ExistentialProbe::Empty { matches, blocked } => {
-                if !outputs[matches].is_empty() && outputs[blocked].is_empty() {
-                    vec![Vec::new()]
-                } else {
-                    Vec::new()
-                }
-            }
-        };
+    if let (Some(head), Some(output)) = (&rule.existential, skeleton.probe) {
+        let mut unsatisfied: Vec<Vec<StorageValue>> =
+            Vec::with_capacity(outputs[output].row_count());
+        outputs[output].for_each_row(|row| unsatisfied.push(row.to_vec()));
         delivered.extend(mint(head, &unsatisfied, dictionary));
     }
     Applied {
@@ -820,18 +796,4 @@ fn mint(
         .into_iter()
         .map(|(table, buffer)| (table, Trie::from_buffer(buffer)))
         .collect()
-}
-
-/// The plan outputs of an existential application.
-#[derive(Debug, Clone, Copy)]
-enum ExistentialProbe {
-    /// The output of the unsatisfied frontier tuples, which receive fresh nulls.
-    Frontier(usize),
-    /// The outputs for an empty frontier.
-    Empty {
-        /// The output that is nonempty if any body match exists.
-        matches: usize,
-        /// The output that is nonempty if the head is already satisfied.
-        blocked: usize,
-    },
 }

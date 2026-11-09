@@ -1,0 +1,37 @@
+again() .
+
+alone() .
+
+answer(yes) .
+
+both() .
+
+checked() .
+
+copied(1) .
+copied(2) .
+
+counted(1) .
+
+done() .
+
+flagged() .
+
+found() .
+
+fresh(_:0) .
+
+named(_:1) .
+
+reached(1) .
+reached(2) .
+reached(3) .
+reached(10) .
+reached(11) .
+
+taken(5) .
+
+twice(1, 1) .
+
+unblocked(1) .
+unblocked(2) .

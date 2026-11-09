@@ -150,11 +150,6 @@ impl RuleCompiler<'_, '_> {
     /// since a repeated variable or a constant in an atom means term identity (`=`),
     /// not value equality.
     pub(super) fn body_atom(&mut self, atom: &Atom) -> Result<(), Diagnostic> {
-        // A join reads columns, and a nullary atom has none.
-        // Negated nullary atoms are guards, which `negated_atom` compiles.
-        if atom.terms.is_empty() {
-            return Err(unsupported("a positive nullary body atom", atom.span));
-        }
         let name = self.translator.resolve(&atom.predicate, atom.span)?;
         let layout = self.translator.plan.layout_of(&name, atom.terms.len());
         let table = self
@@ -518,8 +513,6 @@ impl RuleCompiler<'_, '_> {
     /// Checks an aggregate head's functions against its group.
     ///
     /// No aggregate may aggregate a group variable written in the rule.
-    /// `#count()` counts contributions, which the body variables distinguish,
-    /// so it needs a body with variables.
     fn check_aggregate(
         &self,
         group: &[usize],
@@ -536,12 +529,6 @@ impl RuleCompiler<'_, '_> {
             {
                 return Err(TranslationError::AggregatedGroupColumn { variable }.at(span));
             }
-        }
-        if functions.iter().any(|function| function.input.is_none()) && self.variables == 0 {
-            return Err(unsupported(
-                "counting the matches of a variable-free body",
-                span,
-            ));
         }
         Ok(())
     }
@@ -663,9 +650,6 @@ impl RuleCompiler<'_, '_> {
         let table = self
             .translator
             .table(&atom.predicate, atom.terms.len(), atom.span)?;
-        if atom.terms.is_empty() {
-            return Err(unsupported("a nullary head atom", atom.span));
-        }
 
         let mut columns = Vec::with_capacity(atom.terms.len());
         for term in &atom.terms {
