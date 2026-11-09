@@ -493,6 +493,9 @@ impl<'a> LayoutBuilder<'a> {
                         for subtracted in &member.subtracted {
                             self.materialized_sources(subtracted.order.node, &mut read);
                         }
+                        for uncompared in &member.uncompared {
+                            self.materialized_sources(uncompared.node, &mut read);
+                        }
                     }
                 }
                 Step::Aggregate(aggregate) => {
@@ -564,10 +567,11 @@ impl fmt::Display for PlanLayout {
                         let sink = matches!(member.delivery, Delivery::Sink(_));
                         writeln!(
                             f,
-                            "  join of {} input(s), {} layer(s), {} emitted; descent: {} filter(s), {} bound layer(s), {} subtraction(s); rows: {} computed, {} filter(s); sink: {}",
+                            "  join of {} input(s), {} layer(s), {} emitted; before: {} subtraction(s); descent: {} filter(s), {} bound layer(s), {} subtraction(s); rows: {} computed, {} filter(s); sink: {}",
                             member.inputs.len(),
                             member.layers.len(),
                             member.emitted,
+                            member.uncompared.len(),
                             member.filters.len(),
                             member.bound_layers.len(),
                             member.subtracted.len(),
@@ -579,7 +583,7 @@ impl fmt::Display for PlanLayout {
                 }
                 Step::Aggregate(aggregate) => {
                     let pass = match aggregate.pass {
-                        AggregatePass::CountRows => "count of rows",
+                        AggregatePass::CountRows { .. } => "count of rows",
                         AggregatePass::Scan(_) => "one pass",
                     };
                     writeln!(f, "aggregate at node {}: {}", aggregate.node.0, pass)?;

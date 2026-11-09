@@ -26,9 +26,14 @@ pub(crate) struct AggregateLayout {
 pub(crate) enum AggregatePass {
     /// A count of the input's rows, which needs no pass over them.
     ///
-    /// It applies if the only aggregate of an aggregation without a group key
-    /// is a count whose `per` markers include every column of the input.
-    CountRows,
+    /// It applies if every aggregate of an aggregation without a group key
+    /// is a count whose `per` markers include every column of the input,
+    /// as every aggregate over an input without columns is.
+    /// Each aggregate's column holds the count.
+    CountRows {
+        /// The number of aggregates.
+        aggregates: usize,
+    },
     /// One pass of an aggregating sink over the input.
     Scan(ScanLayout),
 }
@@ -65,11 +70,14 @@ impl AggregatePass {
     /// Returns how an aggregation computes its aggregates over its input, read in the given order.
     fn new(aggregate: &AggregateNode, order: &MarkerOrder) -> Self {
         if aggregate.group().is_empty()
-            && let [column] = aggregate.aggregates.as_slice()
-            && column.function == AggregateFunction::Count
-            && order.iter().all(|marker| column.per.contains(marker))
+            && aggregate.aggregates.iter().all(|column| {
+                column.function == AggregateFunction::Count
+                    && order.iter().all(|marker| column.per.contains(marker))
+            })
         {
-            return Self::CountRows;
+            return Self::CountRows {
+                aggregates: aggregate.aggregates.len(),
+            };
         }
 
         let position = |&marker: &Marker| {

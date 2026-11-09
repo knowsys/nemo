@@ -27,19 +27,25 @@ impl Execution<'_> {
         self.blocks(aggregate.input, &mut blocks);
 
         let rows = match &aggregate.pass {
-            AggregatePass::CountRows => Self::count_rows(&blocks, &mut context.accounting),
+            &AggregatePass::CountRows { aggregates } => {
+                Self::count_rows(&blocks, aggregates, &mut context.accounting)
+            }
             AggregatePass::Scan(scan) => Self::scan(&blocks, scan, context),
         };
 
         self.materialize(aggregate.node, Runs::of(rows), &mut context.accounting)
     }
 
-    /// Returns a single row with the number of distinct rows across the blocks,
-    /// or no row for an empty input, as a scan does.
+    /// Returns a single row with the number of distinct rows across the blocks
+    /// in each of its `aggregates` columns, or no row for an empty input, as a scan does.
     ///
     /// A trie's rows are distinct,
     /// and the rows of several blocks are counted by a streaming merge, which builds nothing.
-    fn count_rows(blocks: &[&Trie], accounting: &mut Accounting) -> SortedRowBuffer {
+    fn count_rows(
+        blocks: &[&Trie],
+        aggregates: usize,
+        accounting: &mut Accounting,
+    ) -> SortedRowBuffer {
         let begun = Stopwatch::start();
         let count = match blocks {
             [] => 0,
@@ -48,10 +54,10 @@ impl Execution<'_> {
         };
         accounting.timings.join += begun.nanos();
 
-        let mut buffer = RowBuffer::new(1);
+        let mut buffer = RowBuffer::new(aggregates);
         if count > 0 {
             let count = i64::try_from(count).expect("row counts fit the integer value space");
-            buffer.push_row(&[StorageValue::integer(count)]);
+            buffer.push_row(&vec![StorageValue::integer(count); aggregates]);
         }
 
         buffer.into_sorted()

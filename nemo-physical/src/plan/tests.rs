@@ -607,7 +607,7 @@ fn counts_tell_rows_apart_by_their_own_columns() {
 
         let layout = plan.layout();
         let counting = layout.steps.iter().any(|step| {
-            matches!(step, Step::Aggregate(aggregate) if matches!(aggregate.pass, AggregatePass::CountRows))
+            matches!(step, Step::Aggregate(aggregate) if matches!(aggregate.pass, AggregatePass::CountRows { .. }))
         });
         assert_eq!(counting, counts_rows, "{columns:?}: {layout}");
 
@@ -617,6 +617,37 @@ fn counts_tell_rows_apart_by_their_own_columns() {
             vec![vec![expected]],
             "{columns:?}"
         );
+    }
+}
+
+/// Several counts of an input's rows each hold the count,
+/// also over an input without columns, which has one row or none.
+#[test]
+fn several_counts_of_the_rows_agree() {
+    let mut manager = TableManager::new();
+    let data = add_table(&mut manager, 2, &[&[&[1, 2], &[1, 3]]]);
+    let holds = add_table(&mut manager, 0, &[&[&[]]]);
+    let empty = manager.register("empty", 0);
+    let mut dictionary = Dictionary::new();
+
+    let cases = [
+        (data, 2, vec![vec![2, 2]]),
+        (holds, 0, vec![vec![1, 1]]),
+        (empty, 0, Vec::new()),
+    ];
+    for (table, arity, expected) in cases {
+        let mut plan = OperationPlan::new();
+        let [x, y, first, second] = plan.markers();
+        let markers = [x, y][..arity].to_vec();
+        let rows = plan.load(table, all(), markers.clone());
+        let counts = [first, second].map(|result| {
+            AggregateColumnSpec::new(AggregateFunction::Count, result).per(markers.clone())
+        });
+        let counted = plan.aggregate(rows, Vec::new(), counts.to_vec());
+        plan.output(counted);
+
+        let results = plan.execute(&mut manager, &mut dictionary, EvaluationContext::now());
+        assert_eq!(int_rows(&results.outputs[0]), expected, "arity {arity}");
     }
 }
 
@@ -833,6 +864,104 @@ fn nullary_outputs_answer_existence() {
     plan.output(exists);
     let results = plan.execute(&mut manager, &mut dictionary, EvaluationContext::now());
     assert!(results.outputs[0].is_empty());
+}
+
+/// A joined relation without columns keeps the rows of the join if it holds the empty row,
+/// and drops them otherwise.
+/// A join of such relations alone holds the empty row only if each of them does.
+#[test]
+fn relations_without_columns_decide_a_join_whole() {
+    let mut manager = TableManager::new();
+    let data = add_table(&mut manager, 1, &[&[&[1], &[2]]]);
+    let holds = add_table(&mut manager, 0, &[&[&[]]]);
+    let empty = manager.register("empty", 0);
+    let mut dictionary = Dictionary::new();
+
+    for (flag, expected) in [(holds, vec![vec![1], vec![2]]), (empty, Vec::new())] {
+        let mut plan = OperationPlan::new();
+        let [a] = plan.markers();
+        let flag = plan.load(flag, all(), Vec::new());
+        let rows = plan.load(data, all(), vec![a]);
+        let both = plan.join(vec![flag, rows], vec![a]);
+        plan.output(both);
+        let results = plan.execute(&mut manager, &mut dictionary, EvaluationContext::now());
+        assert_eq!(int_rows(&results.outputs[0]), expected);
+    }
+
+    for (first, second, expected) in [(holds, holds, 1), (holds, empty, 0), (empty, holds, 0)] {
+        let mut plan = OperationPlan::new();
+        let first = plan.load(first, all(), Vec::new());
+        let second = plan.load(second, all(), Vec::new());
+        let both = plan.join(vec![first, second], Vec::new());
+        plan.output(both);
+        let results = plan.execute(&mut manager, &mut dictionary, EvaluationContext::now());
+        assert_eq!(results.outputs[0].row_count(), expected);
+    }
+}
+
+/// A subtracted relation that shares no marker with the input drops every row if it has a row,
+/// and none otherwise, with or without columns of its own.
+#[test]
+fn a_subtraction_sharing_no_marker_drops_every_row_or_none() {
+    let mut manager = TableManager::new();
+    let data = add_table(&mut manager, 1, &[&[&[1], &[2]]]);
+    let holds = add_table(&mut manager, 0, &[&[&[]]]);
+    let empty = manager.register("empty", 0);
+    let other = add_table(&mut manager, 1, &[&[&[7]]]);
+    let none = manager.register("none", 1);
+    let mut dictionary = Dictionary::new();
+
+    let cases = [
+        (holds, 0, Vec::new()),
+        (empty, 0, vec![vec![1], vec![2]]),
+        (other, 1, Vec::new()),
+        (none, 1, vec![vec![1], vec![2]]),
+    ];
+    for (relation, arity, expected) in cases {
+        let mut plan = OperationPlan::new();
+        let [a, b] = plan.markers();
+        let rows = plan.load(data, all(), vec![a]);
+        let subtracted = plan.load(relation, all(), vec![b; arity]);
+        let rest = plan.subtract(rows, subtracted);
+        plan.output(rest);
+        let results = plan.execute(&mut manager, &mut dictionary, EvaluationContext::now());
+        assert_eq!(int_rows(&results.outputs[0]), expected, "arity {arity}");
+    }
+}
+
+/// A materialized relation that a later unit subtracts without sharing a marker
+/// is kept until that unit has read it.
+#[test]
+fn a_relation_subtracted_without_a_shared_marker_is_kept_until_read() {
+    let mut manager = TableManager::new();
+    let data = add_table(&mut manager, 1, &[&[&[1], &[2]]]);
+    let source = add_table(&mut manager, 1, &[&[&[7], &[8]]]);
+    let mut dictionary = Dictionary::new();
+
+    let mut plan = OperationPlan::new();
+    let [a, z] = plan.markers();
+    let loaded = plan.load(source, all(), vec![z]);
+    let seven = plan.filter(
+        loaded,
+        condition(
+            vec![z],
+            vec![OpCode::Input(0), OpCode::Constant(0), OpCode::Same],
+            vec![DataValue::integer(7)],
+        ),
+    );
+    // The first unit reads the relation, and the second subtracts it after that.
+    let rows = plan.load(data, all(), vec![a]);
+    let first = plan.join(vec![seven, rows], vec![z, a]);
+    let rows = plan.load(data, all(), vec![a]);
+    let second = plan.subtract(rows, seven);
+    plan.output(first);
+    plan.output(second);
+
+    let layout = plan.layout();
+    assert!(layout.materializations[seven.index()].is_some(), "{layout}");
+    let results = plan.execute(&mut manager, &mut dictionary, EvaluationContext::now());
+    assert_eq!(int_rows(&results.outputs[0]), vec![vec![7, 1], vec![7, 2]]);
+    assert!(results.outputs[1].is_empty());
 }
 
 /// Returns a computed column specification built from the parts of its program.
@@ -1384,8 +1513,7 @@ fn construction_rejects_malformed_nodes() {
     assert_panics("every marker", || plan.join(vec![rows], vec![x]));
     assert_panics("only list markers", || plan.join(vec![rows], vec![x, y, z]));
     assert_panics("every marker", || plan.join(vec![rows, apart], vec![x, y]));
-    // A subtracted relation sharing no marker, and a filter reading a foreign one.
-    assert_panics("share a marker", || plan.subtract(rows, apart));
+    // A filter reading a foreign marker.
     assert_panics("input's markers", || {
         plan.filter(rows, condition(vec![z], vec![OpCode::Input(0)], Vec::new()))
     });

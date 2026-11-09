@@ -80,9 +80,19 @@ impl<'a> UnitRows<'a> {
         accounting.counts.joins += 1;
         accounting.counts.blocks += blocks.count() as u64;
 
-        // A relation without columns has the empty row or nothing, so it is read without a join.
+        // A row of a subtracted relation that shares no layer with the join matches every row,
+        // so it drops them all.
+        if blocks.uncompared.iter().any(|block| !block.is_empty()) {
+            return;
+        }
+
+        // A join without layers reads only relations without columns.
+        // Each has the empty row or nothing, so they are read without a join.
         if member.layers.is_empty() {
-            let holds = blocks.inputs[0].iter().any(|block| !block.is_empty());
+            let holds = blocks
+                .inputs
+                .iter()
+                .all(|input| input.iter().any(|block| !block.is_empty()));
             if let Delivery::RowStage(stage) = &member.delivery {
                 let mut evaluator =
                     RowEvaluator::new(stage, member.emitted, dictionary, context.evaluation);

@@ -27,8 +27,14 @@ pub(crate) struct MemberLayout {
     pub(crate) layers: Vec<Vec<InputColumn>>,
     /// The number of leading layers the join emits.
     pub(crate) emitted: usize,
-    /// The subtracted relations, compared in the descent.
+    /// The subtracted relations that share a layer with the join, compared in the descent.
     pub(crate) subtracted: Vec<SubtractedLayout>,
+    /// The subtracted relations that share no layer with the join, each in the order it is
+    /// read in.
+    ///
+    /// Every row of such a relation matches every row of the join,
+    /// so the member has no rows if one of them has a row.
+    pub(crate) uncompared: Vec<RequiredOrder>,
     /// The filters checked in the descent, reading layers by index.
     pub(crate) filters: Vec<FilterShape>,
     /// The layers bound to a constant or to a value computed from shallower layers,
@@ -170,7 +176,14 @@ impl LayoutBuilder<'_> {
         }
 
         let mut subtracted = Vec::with_capacity(chain.subtracted.len());
+        let mut uncompared = Vec::new();
         for (relation, shared) in &chain.subtracted {
+            if shared.is_empty() {
+                // Only whether the relation has a row matters, so it is read as it is.
+                let order = self.plan.node_markers(*relation).clone();
+                uncompared.push(self.require(*relation, order));
+                continue;
+            }
             let compared =
                 |marker: &Marker| shared.contains(marker).then(|| layer_of(marker)).flatten();
             let (bound, order) = aligned(self.plan.node_markers(*relation), compared);
@@ -209,6 +222,7 @@ impl LayoutBuilder<'_> {
             layers: join_layers,
             emitted: columns.emitted,
             subtracted,
+            uncompared,
             filters,
             bound_layers,
             delivery,

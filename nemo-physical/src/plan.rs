@@ -183,10 +183,13 @@ impl OperationPlan {
     /// Adds a node joining relations on their shared markers.
     ///
     /// `order` lists the markers of the result, in the order the join binds them.
+    /// A relation without columns holds the empty row or no row,
+    /// so the join keeps the rows of the other inputs if it holds the empty row, and none
+    /// otherwise.
     ///
     /// # Panics
     ///
-    /// Panics if there is no input, if an input is not a node of this plan or has no column,
+    /// Panics if there is no input, if an input is not a node of this plan,
     /// if a marker of the order is not allocated from this plan or repeats,
     /// or if the order does not list exactly the markers of the inputs.
     pub fn join(&mut self, inputs: Vec<NodeId>, order: Vec<Marker>) -> NodeId {
@@ -250,18 +253,15 @@ impl OperationPlan {
     /// A row is dropped if the subtracted relation has a row
     /// that agrees with it on their shared markers.
     /// The other markers of the subtracted relation are not compared.
+    /// If the relations share no marker, every row agrees,
+    /// so a subtracted relation with a row drops every row of the input.
     ///
     /// # Panics
     ///
-    /// Panics if either relation is not a node of this plan, or if they share no marker.
+    /// Panics if either relation is not a node of this plan.
     pub fn subtract(&mut self, input: NodeId, relation: NodeId) -> NodeId {
         let markers = self.checked_markers(input).clone();
-        assert!(
-            self.checked_markers(relation)
-                .iter()
-                .any(|marker| markers.contains(marker)),
-            "a subtracted relation must share a marker with the input"
-        );
+        self.check_node(relation);
 
         self.push(Node::Subtract {
             input,
@@ -486,12 +486,11 @@ impl OperationPlan {
 
     /// Checks the inputs of a join against its order, and panics on a mismatch.
     ///
-    /// Every input must have a column, and the order must list exactly the inputs' markers.
+    /// The order must list exactly the inputs' markers.
     fn check_join_inputs(&self, inputs: &[NodeId], order: &[Marker]) {
         assert!(!inputs.is_empty(), "a join needs at least one input");
         for &input in inputs {
             let markers = self.checked_markers(input);
-            assert!(!markers.is_empty(), "every joined relation needs a column");
             assert!(
                 markers.iter().all(|marker| order.contains(marker)),
                 "a join's order must list every marker of its inputs"
