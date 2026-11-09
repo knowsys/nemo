@@ -195,6 +195,34 @@ fn a_gzipped_export_says_so_in_its_name() {
     assert_eq!(specification(None, Compression::Auto).file_name(), "p.csv");
 }
 
+/// An export to memory under gzip compression is one whole gzip stream
+/// of the bytes that the same export without compression writes.
+#[test]
+fn a_gzipped_export_to_memory_holds_the_whole_export() {
+    use std::io::Read;
+
+    use nemo_io::compression::Compression;
+
+    let mut engine = Engine::new();
+    engine
+        .load(parse("p(1, \"a\") . p(2, \"b\") ."))
+        .expect("the program loads");
+    engine.reason().expect("reasoning reaches the fixpoint");
+
+    let plain = engine
+        .export_bytes(&ExportSpec::csv("p"))
+        .expect("the export writes");
+    let mut gzipped = ExportSpec::csv("p");
+    gzipped.compression = Compression::Gzip;
+    let compressed = engine.export_bytes(&gzipped).expect("the export writes");
+    let mut read = Vec::new();
+    Compression::Gzip
+        .open_bytes(compressed.into(), "p.csv.gz")
+        .read_to_end(&mut read)
+        .expect("the bytes are one whole gzip stream");
+    assert_eq!(read, plain);
+}
+
 /// An export directive with an option that only applies to reading fails the load.
 #[test]
 fn an_export_rejects_the_options_that_describe_reading() {

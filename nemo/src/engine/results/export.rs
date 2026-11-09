@@ -179,20 +179,22 @@ enum ExportWriter {
 }
 
 impl ExportWriter {
-    /// Writes rows to a streaming target.
+    /// Writes rows to a streaming target, compressed as the writer's options say,
+    /// as [Writer::write_compressed] describes.
     ///
     /// # Panics
     ///
     /// Panics for a Parquet writer, which does not stream.
-    fn write<'a>(
+    fn write_compressed<'a>(
         &self,
         target: impl std::io::Write,
+        name: Option<&std::path::Path>,
         rows: impl Iterator<Item = &'a [DataValue]>,
     ) -> Result<Written, Diagnostic> {
         match self {
-            ExportWriter::Dsv(writer) => writer.write(target, rows),
-            ExportWriter::Rdf(writer) => writer.write(target, rows),
-            ExportWriter::Json(writer) => writer.write(target, rows),
+            ExportWriter::Dsv(writer) => writer.write_compressed(target, name, rows),
+            ExportWriter::Rdf(writer) => writer.write_compressed(target, name, rows),
+            ExportWriter::Json(writer) => writer.write_compressed(target, name, rows),
             #[cfg(feature = "parquet")]
             ExportWriter::Parquet(_) => unreachable!("Parquet writes dispatch before streaming"),
         }
@@ -263,10 +265,8 @@ impl Engine {
             self.report_dropped(spec, written.dropped, name);
             return Ok(bytes);
         }
-        let written = writer.write(
-            spec.compression.wrap(&mut bytes, target),
-            rows.iter().map(Vec::as_slice),
-        )?;
+        let written =
+            writer.write_compressed(&mut bytes, target, rows.iter().map(Vec::as_slice))?;
         self.report_dropped(spec, written.dropped, name);
         Ok(bytes)
     }

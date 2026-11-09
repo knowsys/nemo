@@ -15,8 +15,12 @@ use nemo_physical::{
 };
 
 use crate::{
-    AboutResource, arrow::ColumnKind, error::IoError, load::Loaded, selection::RowSelection,
-    written::Written,
+    AboutResource,
+    arrow::ColumnKind,
+    error::IoError,
+    load::Loaded,
+    selection::RowSelection,
+    written::{Written, create},
 };
 
 /// A reader of Parquet files, which decodes record batches into row buffers.
@@ -248,10 +252,8 @@ impl ParquetWriter {
         rows: impl IntoIterator<Item = &'a [DataValue]>,
     ) -> Result<Written, Diagnostic> {
         let path = path.as_ref();
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).map_err(|error| IoError::unwritable(path, error))?;
-        }
-        let file = File::create(path).map_err(|error| IoError::unwritable(path, error))?;
+        // The Parquet writer buffers its target itself.
+        let file = create(path)?;
         self.write(file, rows)
             .map_err(|diagnostic| diagnostic.with_resource(path.display().to_string()))
     }

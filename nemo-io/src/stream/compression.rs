@@ -4,7 +4,7 @@
 
 use std::{
     fs::File,
-    io::{Read, Write},
+    io::{self, BufWriter, IntoInnerError, Read, Write},
     path::Path,
     sync::Arc,
 };
@@ -99,7 +99,7 @@ impl Compression {
                 "the name and the content disagree on gzip; the content decides"
             );
         }
-        let cursor = std::io::Cursor::new(bytes);
+        let cursor = io::Cursor::new(bytes);
         if gzip {
             Box::new(MultiGzDecoder::new(cursor))
         } else {
@@ -111,15 +111,92 @@ impl Compression {
     /// compressing through gzip if this compression [applies](Self::applies) to the target's name.
     ///
     /// A target without a name is compressed only under [Gzip](Self::Gzip).
-    pub fn wrap<'a>(self, target: impl Write + 'a, name: Option<&Path>) -> Box<dyn Write + 'a> {
+    /// The returned stream must be ended with [finish](CompressedWriter::finish).
+    pub fn wrap<W: Write>(self, target: W, name: Option<&Path>) -> CompressedWriter<W> {
         let gzip = match name {
             Some(name) => self.applies(name),
             None => self == Compression::Gzip,
         };
-        if gzip {
-            Box::new(GzEncoder::new(target, flate2::Compression::default()))
+        let encoder = if gzip {
+            Encoder::Gzip(GzEncoder::new(target, flate2::Compression::default()))
         } else {
-            Box::new(target)
+            Encoder::Plain(target)
+        };
+        CompressedWriter {
+            buffer: BufWriter::new(encoder),
+        }
+    }
+}
+
+/// A byte stream that is written to a target through a buffer, and compressed if its
+/// [Compression] applies.
+///
+/// The buffer collects small writes into large ones,
+/// so that the target is not written once per term or per cell.
+/// It sits in front of the encoder, so that gzip compresses large blocks too.
+/// The stream must be ended with [finish](Self::finish).
+/// A stream that is dropped instead writes its last bytes without reporting an error.
+#[derive(Debug)]
+pub struct CompressedWriter<W: Write> {
+    /// The buffer in front of the encoder.
+    buffer: BufWriter<Encoder<W>>,
+}
+
+impl<W: Write> CompressedWriter<W> {
+    /// Ends the stream: writes the buffered bytes, ends the gzip stream if there is one,
+    /// and flushes the target.
+    ///
+    /// # Errors
+    ///
+    /// Returns the error of a write to the target.
+    pub fn finish(self) -> io::Result<()> {
+        let encoder = self
+            .buffer
+            .into_inner()
+            .map_err(IntoInnerError::into_error)?;
+        let mut target = match encoder {
+            Encoder::Plain(target) => target,
+            Encoder::Gzip(encoder) => encoder.finish()?,
+        };
+        target.flush()
+    }
+}
+
+impl<W: Write> Write for CompressedWriter<W> {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        self.buffer.write(bytes)
+    }
+
+    fn write_all(&mut self, bytes: &[u8]) -> io::Result<()> {
+        self.buffer.write_all(bytes)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.buffer.flush()
+    }
+}
+
+/// The encoder between a [CompressedWriter]'s buffer and its target.
+#[derive(Debug)]
+enum Encoder<W: Write> {
+    /// Passes the bytes on unchanged.
+    Plain(W),
+    /// Compresses the bytes into a gzip stream.
+    Gzip(GzEncoder<W>),
+}
+
+impl<W: Write> Write for Encoder<W> {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        match self {
+            Encoder::Plain(target) => target.write(bytes),
+            Encoder::Gzip(encoder) => encoder.write(bytes),
+        }
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        match self {
+            Encoder::Plain(target) => target.flush(),
+            Encoder::Gzip(encoder) => encoder.flush(),
         }
     }
 }
@@ -143,16 +220,6 @@ pub(crate) fn open(path: &Path, compression: Compression) -> Result<Box<dyn Read
     } else {
         Box::new(file)
     })
-}
-
-/// Creates a file for writing, together with its parent directories,
-/// compressing it if declared or detected.
-pub(crate) fn create(path: &Path, compression: Compression) -> Result<Box<dyn Write>, Diagnostic> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|error| IoError::unwritable(path, &error))?;
-    }
-    let file = File::create(path).map_err(|error| IoError::unwritable(path, &error))?;
-    Ok(compression.wrap(file, Some(path)))
 }
 
 #[cfg(test)]
@@ -196,10 +263,9 @@ mod tests {
     #[test]
     fn in_memory_bytes_are_read_by_their_content() {
         let mut compressed = Vec::new();
-        Compression::Gzip
-            .wrap(&mut compressed, None)
-            .write_all(b"in memory")
-            .expect("writes");
+        let mut stream = Compression::Gzip.wrap(&mut compressed, None);
+        stream.write_all(b"in memory").expect("writes");
+        stream.finish().expect("finishes");
         let read = |bytes: &[u8], name: &str, compression: Compression| {
             let mut text = String::new();
             compression
@@ -238,10 +304,10 @@ mod tests {
     fn written_streams_read_back() {
         let path =
             std::env::temp_dir().join(format!("nemo-io-compression-{}.txt.gz", std::process::id()));
-        create(&path, Compression::Auto)
-            .expect("the file creates")
-            .write_all(b"hello")
-            .expect("the bytes write");
+        let file = File::create(&path).expect("the file creates");
+        let mut stream = Compression::Auto.wrap(file, Some(&path));
+        stream.write_all(b"hello").expect("the bytes write");
+        stream.finish().expect("the stream ends");
         let mut text = String::new();
         open(&path, Compression::Auto)
             .expect("the file opens")
