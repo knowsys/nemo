@@ -157,7 +157,6 @@ fn registered_bytes_beat_the_network() {
 
 /// A SPARQL import sends the validated query, file-level prefixes resolved,
 /// and reads the TSV solutions as the predicate's rows.
-#[cfg(all(feature = "sparql", feature = "http"))]
 #[test]
 fn sparql_imports_query_their_endpoint() {
     let (base, requests) = serve(
@@ -203,7 +202,6 @@ fn sparql_imports_query_their_endpoint() {
 
 /// A SPARQL import resolves its query against a directive `base`, and
 /// `format` keeps or skips solution columns.
-#[cfg(all(feature = "sparql", feature = "http"))]
 #[test]
 fn sparql_imports_take_a_base_and_column_formats() {
     let (base, requests) = serve("?a\t?b\n<http://example.org/x>\t42\n", "200 OK", 1);
@@ -228,7 +226,6 @@ fn sparql_imports_take_a_base_and_column_formats() {
 /// A SPARQL import's columns hold any term an endpoint returns,
 /// so a narrower declaration on it is refused before any request is sent,
 /// and the solutions load as they come, the malformed ones counted.
-#[cfg(all(feature = "sparql", feature = "http"))]
 #[test]
 fn sparql_imports_hold_any_term() {
     let mut checker = Engine::new();
@@ -270,7 +267,6 @@ fn sparql_imports_hold_any_term() {
 /// The conditions of a SPARQL import's `where` clause go to the endpoint as a `FILTER`,
 /// each as far as it has a SPARQL form, and apply to the solutions regardless,
 /// so the import's columns can be declared.
-#[cfg(all(feature = "sparql", feature = "http"))]
 #[test]
 fn sparql_import_conditions_reach_the_endpoint() {
     let (base, requests) = serve(
@@ -361,7 +357,6 @@ fn the_client_retries_overload_and_rate_limits() {
 /// A response the endpoint says holds only part of the result, by Virtuoso's status 206 or its
 /// headers, fails the import rather than importing the part, or leaves it empty with a warning
 /// under `on_error = warn`.
-#[cfg(all(feature = "sparql", feature = "http"))]
 #[test]
 fn a_partial_result_fails_its_import() {
     let partial = |status: &str, headers: &str| {

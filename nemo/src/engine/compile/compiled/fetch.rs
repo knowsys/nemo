@@ -7,7 +7,6 @@ use nemo_physical::{management::TableId, value::DataValue};
 ///
 /// Each application of the rule sends the rows of the `where` clause's atoms to the endpoint
 /// as `VALUES` blocks, and stores the solutions in the head table.
-#[cfg(feature = "sparql")]
 #[derive(Debug)]
 pub(crate) struct CompiledFetch {
     /// The endpoint URL.
@@ -34,7 +33,6 @@ pub(crate) struct CompiledFetch {
 }
 
 /// How a fetch reads one stored column of an atom of the `where` clause.
-#[cfg(feature = "sparql")]
 #[derive(Debug, Clone)]
 pub(crate) enum FetchColumn {
     /// The column binds a projected variable of the query, which a request sends as a column

@@ -18,9 +18,8 @@ name = "nemo_python"
 crate-type = ["cdylib"]
 
 [dependencies]
-# The bindings ship every IO feature: remote resources, SPARQL
-# endpoints, and Parquet.
-nemo = { path = "../nemo", features = ["http", "sparql", "parquet"] }
+# The bindings ship every IO feature: remote resources and Parquet.
+nemo = { path = "../nemo", features = ["http", "parquet"] }
 nemo-io = { path = "../nemo-io", optional = true }
 pyo3 = { version = "0.29", features = ["extension-module", "abi3-py39"] }
 # Traces cross as their JSON form, keys unchanged, and arrive as plain

@@ -70,7 +70,6 @@ pub(super) struct PendingImport {
     pub(super) preloaded: bool,
     /// The rule index reserved for the fetch rule of an import with atoms in its `where`
     /// clause.
-    #[cfg_attr(not(feature = "sparql"), allow(dead_code))]
     pub(super) rule_index: usize,
 }
 

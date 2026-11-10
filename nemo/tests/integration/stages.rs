@@ -64,7 +64,6 @@ fn an_added_stage_runs_at_load_and_over_extensions() {
     );
 }
 
-#[cfg(feature = "sparql")]
 #[test]
 fn the_engines_own_stages_take_neighbours() {
     let mut engine = Engine::new();

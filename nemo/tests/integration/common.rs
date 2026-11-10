@@ -130,14 +130,12 @@ impl Responder {
     }
 
     /// Creates a SPARQL endpoint responding to each query text with the given function.
-    #[cfg(feature = "sparql")]
     pub(crate) fn endpoint(respond: impl Fn(&str) -> String + Send + Sync + 'static) -> Self {
         Self::new(move |request| Ok(respond(&query_text(request))))
     }
 
     /// Creates a SPARQL endpoint responding to each query text with the given function,
     /// failures included.
-    #[cfg(feature = "sparql")]
     pub(crate) fn failing_endpoint(
         respond: impl Fn(&str) -> Result<String, Failure> + Send + Sync + 'static,
     ) -> Self {
@@ -184,7 +182,6 @@ impl Responder {
     }
 
     /// Returns the query texts of the requests responded to so far, in order.
-    #[cfg(feature = "sparql")]
     pub(crate) fn queries(&self) -> Vec<String> {
         self.seen().iter().map(query_text).collect()
     }
@@ -192,7 +189,6 @@ impl Responder {
 
 /// Returns the query a request carries, as a GET parameter or a form
 /// field.
-#[cfg(feature = "sparql")]
 pub(crate) fn query_text(request: &Request) -> String {
     request
         .parameters

@@ -171,22 +171,16 @@ impl<'a> Translator<'a> {
             if !import.bindings.is_empty() {
                 return Ok(None);
             }
-            // Without the `sparql` feature, `sparql_import` reports the error.
-            #[cfg(feature = "sparql")]
-            {
-                let spec = self.sparql_import_spec(import)?;
-                let resource = spec.resource();
-                if self.resources.contains_key(&resource) {
-                    return Ok(None);
-                }
-                return Ok(Some(ResourceRequest {
-                    statement: import.statement,
-                    resource,
-                    request: spec.request(),
-                }));
+            let spec = self.sparql_import_spec(import)?;
+            let resource = spec.resource();
+            if self.resources.contains_key(&resource) {
+                return Ok(None);
             }
-            #[cfg(not(feature = "sparql"))]
-            return Ok(None);
+            return Ok(Some(ResourceRequest {
+                statement: import.statement,
+                resource,
+                request: spec.request(),
+            }));
         }
         let Some(resource) = self.remote_resource(import)? else {
             return Ok(None);

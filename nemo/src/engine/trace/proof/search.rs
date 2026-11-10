@@ -269,8 +269,7 @@ impl<'a> ProofSearch<'a> {
         let values = self.decode(candidate.row);
 
         // A fetched fact is proven by the binding rows its request was built from.
-        #[cfg(feature = "sparql")]
-        if rule.fetch.is_some() {
+        if rule.fetches() {
             return self.attempt_fetch(candidate);
         }
 

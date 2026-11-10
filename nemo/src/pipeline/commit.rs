@@ -181,7 +181,6 @@ impl<'a> Commit<'a> {
     /// [import_rows](crate::engine::Engine::import_rows).
     ///
     /// No statement shows these rows, so the engine's own stages leave their predicates alone.
-    #[cfg(feature = "sparql")]
     pub(crate) fn imported_predicates(&self) -> &[String] {
         self.imported
     }
@@ -362,10 +361,6 @@ impl<'a> Commit<'a> {
     /// derived from `sources` and without a rewrite declaration.
     ///
     /// The sources stay live.
-    #[cfg_attr(
-        not(any(feature = "sparql", test)),
-        expect(dead_code, reason = "only the SPARQL rewrite takes imports out")
-    )]
     pub(crate) fn derive(&mut self, sources: &[StatementId], new: Statement) -> StatementId {
         self.derive_at(sources, vec![new], self.statements.len())[0]
     }

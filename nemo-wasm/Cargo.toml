@@ -13,9 +13,9 @@ repository.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-# SPARQL imports load and reason in the browser too, fetched through the
-# global `fetch`.
-nemo = { path = "../nemo", features = ["sparql"] }
+# Without `http`: remote data, SPARQL endpoints among them, is fetched
+# through the global `fetch`.
+nemo = { path = "../nemo" }
 # Exact: the nix flake post-processes the module with the wasm-bindgen-cli
 # of the same version, which nixpkgs must provide.
 wasm-bindgen = "=0.2.126"

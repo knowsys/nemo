@@ -74,13 +74,11 @@ impl NameScope {
     }
 
     /// Returns the base IRI, if declared.
-    #[cfg(feature = "sparql")]
     pub(crate) fn base(&self) -> Option<&str> {
         self.base.as_deref()
     }
 
     /// Returns the declared prefixes, mapped to their IRIs.
-    #[cfg(feature = "sparql")]
     pub(crate) fn prefixes(&self) -> &HashMap<String, String> {
         &self.prefixes
     }

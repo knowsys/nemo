@@ -13,10 +13,6 @@ repository.workspace = true
 # Remote resources: the blocking client that performs http(s) requests,
 # with retries.
 http = ["dep:reqwest"]
-# SPARQL endpoint imports: query validation and request building —
-# sending them is `http`'s, so a checker (the language server)
-# validates queries without a network stack.
-sparql = ["dep:spargebra"]
 # The Arrow interchange mapping (record batches from value rows).
 arrow = ["dep:arrow"]
 # Parquet import and export, through Arrow.
@@ -40,7 +36,9 @@ reqwest = { version = "0.12", optional = true, default-features = false, feature
     "rustls-tls",
     "gzip",
 ] }
-spargebra = { version = "0.4", optional = true }
+# SPARQL endpoint imports: query validation and request building, which
+# need no network stack, since sending the requests is `http`'s.
+spargebra = "0.4"
 arrow = { version = "56", optional = true, default-features = false }
 parquet = { version = "56", optional = true, default-features = false, features = [
     "arrow",

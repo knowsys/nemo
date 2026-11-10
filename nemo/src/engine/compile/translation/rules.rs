@@ -85,7 +85,6 @@ impl<'a> Translator<'a> {
             never_fires: compiler.never_fires,
             nondeterministic,
             last_applied: 0,
-            #[cfg(feature = "sparql")]
             fetch: None,
         };
         Ok((compiled, names))

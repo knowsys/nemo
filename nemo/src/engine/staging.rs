@@ -6,7 +6,7 @@
 
 mod reload;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use nemo_physical::{
     diagnostics::{Diagnostic, Severity},
@@ -27,6 +27,7 @@ use crate::{
         imported_rows::{RowBlock, UnloadedRows},
         registered::Registered,
         remote::{LoadKind, Progress, SuspendedLoad, Suspension},
+        transform::sparql_rewrite,
         written::WrittenProgram,
     },
     model::{Directive, Program, Statement},
@@ -51,10 +52,8 @@ pub(crate) struct EngineStages(pub(crate) Stages);
 impl Default for EngineStages {
     /// Returns the engine's own pipeline stages.
     fn default() -> Self {
-        #[cfg_attr(not(feature = "sparql"), expect(unused_mut))]
         let mut stages = Stages::new();
-        #[cfg(feature = "sparql")]
-        stages.push(super::transform::sparql_rewrite::SparqlRewrite);
+        stages.push(sparql_rewrite::SparqlRewrite);
         Self(stages)
     }
 }
@@ -356,7 +355,6 @@ impl Engine {
             .expect("a loaded program has a written program")
             .revision();
         let written = self.pipeline.merge(held_written, addition);
-        #[cfg(feature = "sparql")]
         let merged = self.revive_sparql_imports(held, merged);
         let imported = self.imported_predicates();
         let revision = self
@@ -372,12 +370,7 @@ impl Engine {
     /// `held` is the loaded revision, and `merged` the revision with the extension appended.
     /// Returns the revision with the restored imports, or `merged` if there are none.
     /// The stage removes them again if they stay unread.
-    #[cfg(feature = "sparql")]
     fn revive_sparql_imports(&mut self, held: RevisionId, merged: RevisionId) -> RevisionId {
-        use std::collections::HashSet;
-
-        use crate::engine::transform::sparql_rewrite;
-
         let root = self.pipeline.lineage(held)[0];
         let live: HashSet<StatementId> = self.pipeline.statements(held).map(|(id, _)| id).collect();
         let revived: Vec<(StatementId, Statement)> = self

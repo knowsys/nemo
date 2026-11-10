@@ -6,17 +6,15 @@
 
 mod aggregate;
 mod body;
-#[cfg(feature = "sparql")]
 mod fetch;
 mod head;
 mod negation;
 mod rule;
 
-#[cfg(feature = "sparql")]
-pub(crate) use self::fetch::{CompiledFetch, FetchColumn};
 pub(crate) use self::{
     aggregate::{AggregateColumn, CompiledAggregate, CompiledAggregateFunction},
     body::{BodyAtom, ComputedColumn, FilterOrigin, RuleBinding, RuleFilter},
+    fetch::{CompiledFetch, FetchColumn},
     head::{ExistentialAtom, ExistentialHead, ExistentialTerm, HeadAtom},
     negation::{NegatedAtom, NegatedColumn},
     rule::CompiledRule,

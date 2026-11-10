@@ -1,10 +1,8 @@
 //! Compiled rules.
 
-#[cfg(feature = "sparql")]
-use crate::engine::compile::compiled::CompiledFetch;
 use crate::engine::compile::compiled::{
-    BodyAtom, CompiledAggregate, ComputedColumn, ExistentialHead, HeadAtom, NegatedAtom,
-    RuleBinding, RuleFilter, VariableId,
+    BodyAtom, CompiledAggregate, CompiledFetch, ComputedColumn, ExistentialHead, HeadAtom,
+    NegatedAtom, RuleBinding, RuleFilter, VariableId,
 };
 
 /// One rule, normalized for execution.
@@ -55,7 +53,6 @@ pub(crate) struct CompiledRule {
     ///
     /// The body atoms are then the atoms of the `where` clause,
     /// and the head is the imported predicate.
-    #[cfg(feature = "sparql")]
     pub(crate) fetch: Option<CompiledFetch>,
 }
 
@@ -68,26 +65,17 @@ impl CompiledRule {
     /// It is also the case for a rule that fetches, since reading a binding again costs a
     /// request.
     pub(crate) fn exact_windows(&self) -> bool {
-        #[cfg(feature = "sparql")]
-        if self.fetch.is_some() {
-            return true;
-        }
-        self.nondeterministic
+        self.fetches() || self.nondeterministic
     }
 
     /// Returns whether the rule fetches from an endpoint instead of joining.
     pub(crate) fn fetches(&self) -> bool {
-        #[cfg(feature = "sparql")]
-        if self.fetch.is_some() {
-            return true;
-        }
-        false
+        self.fetch.is_some()
     }
 
     /// Creates a rule that does nothing.
     ///
     /// It keeps a rule index free for a rule that the translation compiles later.
-    #[cfg(feature = "sparql")]
     pub(crate) fn inert() -> Self {
         Self {
             variables: 0,

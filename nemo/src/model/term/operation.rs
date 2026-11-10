@@ -36,7 +36,6 @@ impl Operation {
     /// The conjuncts of an [And](Operator::And) whose operands are all operations
     /// are the conjuncts of its operands.
     /// Any other operation is a single conjunct.
-    #[cfg_attr(not(feature = "sparql"), allow(dead_code))]
     pub(crate) fn conjuncts<'a>(&'a self, conjuncts: &mut Vec<&'a Operation>) {
         let operands: Option<Vec<&Operation>> = (self.operator == Operator::And)
             .then(|| {

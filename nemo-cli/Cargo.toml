@@ -14,9 +14,9 @@ name = "nmo"
 path = "src/main.rs"
 
 [dependencies]
-# The command line ships the full IO surface: remote resources, SPARQL
-# endpoints, and Parquet.
-nemo = { path = "../nemo", features = ["http", "sparql", "parquet"] }
+# The command line ships the full IO surface: remote resources and
+# Parquet.
+nemo = { path = "../nemo", features = ["http", "parquet"] }
 nemo-io = { path = "../nemo-io" }
 nemo-physical = { path = "../nemo-physical" }
 

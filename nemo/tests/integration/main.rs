@@ -10,7 +10,6 @@ mod consolidation;
 mod grammar;
 mod io;
 mod multistage;
-#[cfg(feature = "sparql")]
 mod sparql;
 mod stages;
 mod tracing;

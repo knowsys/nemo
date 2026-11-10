@@ -384,7 +384,6 @@ fn a_computed_resource_name_is_requested_once() {
 
 /// A SPARQL import is suspended for its query like any remote import, and the
 /// solutions in the response are its rows.
-#[cfg(feature = "sparql")]
 #[test]
 fn sparql_imports_are_suspended_for_their_query() {
     let program = parse(
@@ -428,7 +427,6 @@ fn sparql_imports_are_suspended_for_their_query() {
 
 /// Queries the SPARQL parser renders with fresh, randomly named variables or blank nodes
 /// (an aggregate, an anonymous blank node, a sequence path) are requested once each.
-#[cfg(feature = "sparql")]
 #[test]
 fn queries_with_fresh_names_are_requested_once() {
     for (query, body) in [
@@ -464,7 +462,6 @@ fn queries_with_fresh_names_are_requested_once() {
 
 /// Two imports of the same query text under different bases are two queries,
 /// each requested and responded to on its own.
-#[cfg(feature = "sparql")]
 #[test]
 fn the_same_text_under_two_bases_is_two_queries() {
     let endpoint = Responder::endpoint(|text| {

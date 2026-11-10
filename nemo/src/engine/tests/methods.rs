@@ -345,7 +345,6 @@ fn traces_fail_on_a_store_short_of_the_fixpoint() {
 
 /// A diagnostic that names a predicate a stage introduced names the written
 /// literals that the predicate replaces instead.
-#[cfg(feature = "sparql")]
 #[test]
 fn diagnostics_name_the_literals_a_hidden_predicate_replaces() {
     let program = parse(

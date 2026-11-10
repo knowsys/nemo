@@ -33,9 +33,7 @@ stdio = [
 wasm = ["tower-lsp-server/runtime-agnostic"]
 
 [dependencies]
-# `sparql` is validation only (no network stack): the editor's check
-# diagnoses a broken query the way a run would.
-nemo = { path = "../nemo", features = ["sparql"] }
+nemo = { path = "../nemo" }
 nemo-physical = { path = "../nemo-physical" }
 
 tower-lsp-server = { version = "0.23", default-features = false }

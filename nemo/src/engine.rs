@@ -354,7 +354,7 @@ impl Engine {
     /// Returns the pipeline stages that run over every loaded program,
     /// so that more stages can be added.
     ///
-    /// The list starts with the engine's own stage, `sparql`, if that feature is enabled.
+    /// The list starts with the engine's own stage, `sparql`.
     /// A stage rewrites the program through a [Commit](crate::pipeline::Commit)
     /// and declares each rewrite,
     /// so that results and diagnostics can be mapped back to the written program.

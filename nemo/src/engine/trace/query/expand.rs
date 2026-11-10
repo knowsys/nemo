@@ -20,11 +20,7 @@ use crate::engine::{
 /// Aggregate and existential rules cannot be expanded,
 /// and neither can a bound import's fetch rule, whose facts were fetched from an endpoint.
 fn expandable(rule: &CompiledRule) -> bool {
-    #[cfg(feature = "sparql")]
-    if rule.fetch.is_some() {
-        return false;
-    }
-    rule.aggregate.is_none() && rule.existential.is_none()
+    !rule.fetches() && rule.aggregate.is_none() && rule.existential.is_none()
 }
 
 impl QueryEvaluation<'_> {

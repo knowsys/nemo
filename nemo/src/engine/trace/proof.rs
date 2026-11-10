@@ -20,7 +20,6 @@
 //! - [response] converts the lifted proofs to the types of [crate::trace].
 //! - [parts] traces every row of some predicates, and hands the response out in parts.
 
-#[cfg(feature = "sparql")]
 mod fetch;
 mod lift;
 mod parts;

@@ -22,32 +22,20 @@ use nemo_physical::{
 };
 
 use crate::{
-    diagnostics::EngineError,
+    diagnostics::{AboutPredicate, AboutResource, EngineError, TranslationError},
     engine::{
         Engine,
-        compile::compiled::{CompiledProgram, CompiledRule},
-        evaluate::application::{self, Applied},
+        compile::compiled::{CompiledFetch, CompiledProgram, CompiledRule},
+        evaluate::{
+            application::{self, Applied},
+            fetch::{self, FetchOutcome, Fetched, PendingFetch},
+        },
         registered::Registered,
         remote::{PendingRequest, Progress, Response, Suspension},
     },
     model::Span,
     telemetry::EngineEvent,
 };
-#[cfg(feature = "sparql")]
-use crate::{
-    diagnostics::{AboutPredicate, AboutResource, TranslationError},
-    engine::{
-        compile::compiled::CompiledFetch,
-        evaluate::fetch::{self, FetchOutcome, Fetched, PendingFetch},
-    },
-};
-
-/// The type of a suspended fetch in a build without the `sparql` feature.
-///
-/// The type is uninhabited, since no application is suspended without the feature.
-#[cfg(not(feature = "sparql"))]
-#[derive(Debug)]
-pub(in crate::engine) enum PendingFetch {}
 
 /// A run suspended until the requests of a fetch have responses:
 /// the suspended fetch, and the position from which the run continues.
@@ -72,29 +60,17 @@ pub(in crate::engine) struct SuspendedReasoning {
 impl SuspendedReasoning {
     /// Returns the requests without a response yet.
     pub(in crate::engine) fn pending(&self) -> Vec<PendingRequest> {
-        #[cfg(feature = "sparql")]
-        return self.fetch.slots.pending().collect();
-        #[cfg(not(feature = "sparql"))]
-        match *self.fetch {}
+        self.fetch.slots.pending().collect()
     }
 
     /// Returns whether some request has no response yet.
     pub(in crate::engine) fn has_pending(&self) -> bool {
-        #[cfg(feature = "sparql")]
-        return self.fetch.slots.has_pending();
-        #[cfg(not(feature = "sparql"))]
-        match *self.fetch {}
+        self.fetch.slots.has_pending()
     }
 
     /// Records the response to the request with the given id, if such a request is pending.
     pub(in crate::engine) fn respond(&mut self, id: u64, response: Response) {
-        #[cfg(feature = "sparql")]
-        return self.fetch.slots.respond(id, response);
-        #[cfg(not(feature = "sparql"))]
-        {
-            let _ = (id, response);
-            match *self.fetch {}
-        }
+        self.fetch.slots.respond(id, response);
     }
 }
 
@@ -104,7 +80,6 @@ impl SuspendedReasoning {
 /// and the rows of the responses that were not valid solutions.
 /// They are reported when the run ends, with one warning of each kind per import.
 #[derive(Debug)]
-#[cfg_attr(not(feature = "sparql"), expect(dead_code))]
 pub(in crate::engine) struct FetchTally {
     /// The endpoint queried.
     endpoint: String,
@@ -135,7 +110,6 @@ enum ApplicationOutcome {
     /// The rule was applied, with this result.
     Applied(Applied),
     /// The application is suspended until the requests of this fetch have responses.
-    #[cfg_attr(not(feature = "sparql"), expect(dead_code))]
     Suspended(Box<PendingFetch>),
 }
 
@@ -202,7 +176,6 @@ impl Engine {
         observe: bool,
         suspended: Option<Box<PendingFetch>>,
     ) -> Result<ApplicationOutcome, Diagnostic> {
-        #[cfg(feature = "sparql")]
         if let Some(fetch) = &rule.fetch {
             let outcome = fetch::apply(
                 rule,
@@ -233,11 +206,6 @@ impl Engine {
             }
             return Ok(ApplicationOutcome::Applied(applied));
         }
-        #[cfg(not(feature = "sparql"))]
-        if let Some(suspended) = suspended {
-            match *suspended {}
-        }
-        #[cfg(feature = "sparql")]
         debug_assert!(suspended.is_none(), "only a fetch is suspended");
         let skeleton = self.skeletons.of(index, rule);
         Ok(ApplicationOutcome::Applied(application::apply(
@@ -253,7 +221,6 @@ impl Engine {
 
     /// Adds a fetch application's requests, failures, and malformed rows to its rule's
     /// tally for the run.
-    #[cfg(feature = "sparql")]
     fn tally_fetch(&mut self, index: usize, fetch: &CompiledFetch, fetched: &Fetched) {
         let tally = self
             .fetch_tallies
@@ -287,7 +254,6 @@ impl Engine {
             .into_iter()
             .collect();
         tallies.sort_unstable_by_key(|(rule, _)| *rule);
-        #[cfg(feature = "sparql")]
         for (_, tally) in tallies {
             if tally.malformed > 0 {
                 self.pipeline.report(
@@ -328,8 +294,6 @@ impl Engine {
             }
             self.pipeline.report(warning);
         }
-        #[cfg(not(feature = "sparql"))]
-        debug_assert!(tallies.is_empty(), "only a fetch tallies");
     }
 
     /// Ends a run that was discarded while it was suspended, as a cancellation ends one.

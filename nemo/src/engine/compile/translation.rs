@@ -708,7 +708,6 @@ impl<'a> Translator<'a> {
                     // its fetch rule, which is compiled when the imports are executed.
                     // A placeholder keeps its position among the rules,
                     // so that rule indices follow statement order.
-                    #[cfg(feature = "sparql")]
                     if let Directive::Import(import) = directive
                         && !import.bindings.is_empty()
                     {

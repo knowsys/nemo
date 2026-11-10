@@ -12,5 +12,4 @@ pub mod json;
 #[cfg(feature = "parquet")]
 pub mod parquet;
 pub mod rdf;
-#[cfg(feature = "sparql")]
 pub mod sparql;

@@ -18,7 +18,7 @@
 //!   while one thread interns their rows in order, as they arrive.
 //!
 //! In the middle are the format adapters, each with a reader and, except for SPARQL, a writer:
-//! [dsv], [rdf], [json], and `parquet` and `sparql` behind their features.
+//! [dsv], [rdf], [json], [sparql], and `parquet` behind its feature.
 //! At the bottom are the byte streams they read and write:
 //! [compression] wraps a byte stream, and [remote] has the requests for remote resources and
 //! the clients that send them.
@@ -44,7 +44,6 @@ pub mod written;
 
 #[cfg(feature = "parquet")]
 pub use formats::parquet;
-#[cfg(feature = "sparql")]
 pub use formats::sparql;
 pub use formats::{dsv, json, rdf};
 pub use stream::{compression, remote};

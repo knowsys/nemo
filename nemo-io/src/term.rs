@@ -26,9 +26,6 @@ pub(crate) enum LiteralSyntax {
     /// It resolves the escapes `\t`, `\b`, `\n`, `\r`, `\f`, `\"`, `\'`, `\\`, `\uXXXX`
     /// and `\UXXXXXXXX`, and rejects any other.
     /// Datatypes are read as written.
-    ///
-    /// Only the SPARQL reader reads Turtle terms, so a build without it constructs none.
-    #[cfg_attr(not(feature = "sparql"), allow(dead_code))]
     Turtle,
 }
 

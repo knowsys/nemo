@@ -11,7 +11,6 @@ use crate::common::{TempDirectory, parse};
 
 /// A malformed query is a check-time diagnostic with the option's
 /// span, not a runtime surprise.
-#[cfg(feature = "sparql")]
 #[test]
 fn a_broken_query_is_diagnosed_before_any_fetch() {
     let source = r#"@import q from sparql { endpoint = "http://127.0.0.1:1/sparql",
@@ -28,7 +27,6 @@ fn a_broken_query_is_diagnosed_before_any_fetch() {
 }
 
 /// A query selecting no variables is refused before any request is sent.
-#[cfg(feature = "sparql")]
 #[test]
 fn a_query_selecting_nothing_is_diagnosed_before_any_fetch() {
     let program = parse(
@@ -46,7 +44,6 @@ fn a_query_selecting_nothing_is_diagnosed_before_any_fetch() {
 }
 
 /// A base the directive gives that is not an IRI is the option's fault, not the query's.
-#[cfg(feature = "sparql")]
 #[test]
 fn an_invalid_base_of_a_query_is_the_options_fault() {
     let program = parse(

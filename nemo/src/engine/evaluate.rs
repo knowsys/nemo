@@ -14,6 +14,5 @@ pub(super) mod application;
 pub(super) mod body;
 pub(super) mod contexts;
 pub(super) mod extensional;
-#[cfg(feature = "sparql")]
 pub(super) mod fetch;
 pub(super) mod reason;

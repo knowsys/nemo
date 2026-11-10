@@ -6,28 +6,23 @@
 //! is fetched during reasoning by its fetch rule (`fetch`).
 //! The import's condition is added to the query as far as it has a SPARQL form (`condition`).
 
-#[cfg(feature = "sparql")]
 mod condition;
-#[cfg(feature = "sparql")]
 mod fetch;
 
 use std::sync::Arc;
 
-#[cfg(feature = "sparql")]
-use nemo_physical::diagnostics::Diagnostic;
+use nemo_physical::{diagnostics::Diagnostic, value::ValueRef};
 
-#[cfg(feature = "sparql")]
-use crate::diagnostics::{AboutPredicate, AboutResource};
 use crate::{
-    diagnostics::TranslationError,
+    diagnostics::{AboutPredicate, AboutResource, TranslationError},
     engine::compile::translation::{
         Translator,
         imports::{ImportFailure, PendingImport},
+        options::{iri_or_string, on_error, option_name, term_columns},
     },
 };
 
 /// The resolved options of a SPARQL import.
-#[cfg(feature = "sparql")]
 pub(super) struct SparqlImportSpec {
     /// The endpoint URL.
     pub(super) endpoint: String,
@@ -55,7 +50,6 @@ pub(super) struct SparqlImportSpec {
 }
 
 /// The evaluated options of a SPARQL directive.
-#[cfg(feature = "sparql")]
 struct SparqlDirectiveOptions {
     /// The endpoint URL, if given.
     endpoint: Option<String>,
@@ -85,10 +79,8 @@ struct SparqlDirectiveOptions {
 /// unless the `page` option sets another number.
 ///
 /// The number is assumed to stay within what common endpoints accept in one `VALUES` block.
-#[cfg(feature = "sparql")]
 const DEFAULT_PAGE_SIZE: usize = 10_000;
 
-#[cfg(feature = "sparql")]
 impl SparqlImportSpec {
     /// Returns the request that fetches this import's solutions.
     pub(super) fn request(&self) -> nemo_io::remote::Request {
@@ -106,7 +98,6 @@ impl SparqlImportSpec {
     }
 }
 
-#[cfg(feature = "sparql")]
 impl<'a> Translator<'a> {
     /// Executes one SPARQL import (see [execute_imports](Self::execute_imports)).
     ///
@@ -168,8 +159,6 @@ impl<'a> Translator<'a> {
         &self,
         import: &PendingImport,
     ) -> Result<SparqlImportSpec, Diagnostic> {
-        use crate::engine::compile::translation::options::term_columns;
-
         let options = self.sparql_options(import)?;
         let Some(endpoint) = options.endpoint else {
             return Err(TranslationError::OptionMissing {
@@ -237,13 +226,6 @@ impl<'a> Translator<'a> {
 
     /// Evaluates a SPARQL directive's options, with the guard bindings in scope.
     fn sparql_options(&self, import: &PendingImport) -> Result<SparqlDirectiveOptions, Diagnostic> {
-        use nemo_physical::value::ValueRef;
-
-        use crate::{
-            diagnostics::TranslationError,
-            engine::compile::translation::options::{iri_or_string, on_error, option_name},
-        };
-
         let bindings = self.guard_bindings(&import.guards)?;
         let mut options = SparqlDirectiveOptions {
             endpoint: None,
@@ -371,32 +353,5 @@ impl<'a> Translator<'a> {
             Some(expression) => query.with_filter(expression),
             None => query,
         }
-    }
-}
-
-#[cfg(not(feature = "sparql"))]
-impl<'a> Translator<'a> {
-    /// Returns an error for a SPARQL import in a build without the `sparql` feature,
-    /// rather than misreading it.
-    ///
-    /// A check accepts the import and marks its predicate open,
-    /// since the program may be meant for a build that can validate it.
-    pub(super) fn sparql_import(
-        &mut self,
-        import: &PendingImport,
-        _fetched: Option<Arc<[u8]>>,
-    ) -> Result<(), ImportFailure> {
-        use crate::engine::compile::translation::Purpose;
-
-        if self.purpose == Purpose::Check {
-            self.open.insert(import.predicate.clone());
-            return Ok(());
-        }
-        Err(TranslationError::FeatureUnavailable {
-            what: String::from("a SPARQL import"),
-            feature: String::from("sparql"),
-        }
-        .at(import.span)
-        .into())
     }
 }

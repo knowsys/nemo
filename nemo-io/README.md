@@ -5,5 +5,4 @@ values, RDF serializations, JSON, Parquet, and the solutions of SPARQL endpoints
 not, local or remote.
 
 It loads into the tables of [nemo-physical](../nemo-physical/README.md) and holds no rule-language
-or engine logic. Remote resources (`http`), SPARQL endpoints (`sparql`), and Parquet (`parquet`)
-are behind features.
+or engine logic. Remote resources (`http`) and Parquet (`parquet`) are behind features.
