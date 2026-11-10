@@ -60,7 +60,7 @@ impl Aggregate {
                 kind == AggregateKind::Count,
                 "only `#count()` takes no arguments"
             );
-            return Aggregate::matches();
+            return Aggregate::count_matches();
         }
 
         let input = terms.remove(0);

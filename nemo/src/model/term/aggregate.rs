@@ -187,7 +187,7 @@ mod tests {
             "#count(?v per ?x, ?y)"
         );
         assert_eq!(
-            Aggregate::matches().per(scope).to_string(),
+            Aggregate::count_matches().per(scope).to_string(),
             "#count(per ?x, ?y)"
         );
     }

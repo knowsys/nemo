@@ -224,7 +224,7 @@ fn aggregates_display_their_scope() {
     let value = Aggregate::new(AggregateKind::Count, var("v"));
     assert_eq!(value.to_string(), "#count(?v)");
 
-    assert_eq!(Aggregate::matches().to_string(), "#count()");
+    assert_eq!(Aggregate::count_matches().to_string(), "#count()");
     assert_eq!(
         Aggregate::new(AggregateKind::Average, var("v")).to_string(),
         "#avg(?v)"

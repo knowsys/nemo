@@ -295,7 +295,7 @@ impl Aggregate {
     }
 
     /// Creates the aggregate `#count()`, which counts the body matches.
-    pub fn matches() -> Self {
+    pub fn count_matches() -> Self {
         Self {
             kind: AggregateKind::Count,
             input: None,
@@ -309,7 +309,7 @@ impl Aggregate {
     /// Returns the aggregate with the given scope variables, as in `#sum(?v per ?w, …)`.
     ///
     /// The variables replace any earlier scope.
-    /// On [Aggregate::matches], this gives `#count(per ?w, …)`, which has no value.
+    /// On [Aggregate::count_matches], this gives `#count(per ?w, …)`, which has no value.
     pub fn per(mut self, variables: impl IntoIterator<Item = Variable>) -> Self {
         self.scope = variables.into_iter().collect();
         self.legacy_list = false;
