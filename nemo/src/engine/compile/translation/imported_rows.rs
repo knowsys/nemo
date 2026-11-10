@@ -2,19 +2,11 @@
 //! [import_rows](crate::engine::Engine::import_rows) against the program,
 //! and encoding it for its predicate's table.
 
-use nemo_physical::{
-    diagnostics::Diagnostic,
-    management::TableId,
-    trie::RowBuffer,
-    value::{DomainSet, Type},
-};
+use nemo_physical::{diagnostics::Diagnostic, management::TableId, trie::RowBuffer};
 
-use crate::{
-    diagnostics::TranslationError,
-    engine::{
-        compile::translation::Translator,
-        imported_rows::{RowBlock, row_note},
-    },
+use crate::engine::{
+    compile::translation::Translator,
+    imported_rows::{RowBlock, row_note},
 };
 
 impl<'a> Translator<'a> {
@@ -36,16 +28,11 @@ impl<'a> Translator<'a> {
         let table = self
             .table_named(name.to_owned(), layout.delivered(), None)
             .map_err(first)?;
+        // A first load that a pipeline stage rewrote checks the rows twice:
+        // for the written program, and here for the rewritten one,
+        // since a stage may change the declarations that the rows are checked against.
         self.check_imported_rows(block)?;
-
-        let delivered = layout.deliver(block.column_types().to_vec());
-        let seeds = self
-            .seeds
-            .entry(table)
-            .or_insert_with(|| vec![Type::EMPTY; delivered.len()]);
-        for (seed, column_type) in seeds.iter_mut().zip(&delivered) {
-            *seed = seed.union(column_type);
-        }
+        self.seed(table, &layout.deliver(block.column_types().to_vec()));
         if !self.purpose.reads() {
             return Ok(None);
         }
@@ -58,11 +45,9 @@ impl<'a> Translator<'a> {
                 if layout.is_pruned(kept) {
                     continue;
                 }
-                let Some(value) = self.dictionary.encode(value.as_ref()) else {
-                    return Err(TranslationError::Unrepresentable
-                        .at(None)
-                        .with_note(row_note(name, row)));
-                };
+                let value = self
+                    .encode_value(value.as_ref(), None)
+                    .map_err(|problem| problem.with_note(row_note(name, row)))?;
                 encoded.push(value);
             }
             rows.push_row(&encoded);
@@ -70,46 +55,29 @@ impl<'a> Translator<'a> {
         Ok(Some((table, rows)))
     }
 
-    /// Checks the values of a block as the values of facts are checked:
-    /// the structures against the `@type` of their labels,
-    /// and every value against the declaration of its column.
+    /// Checks the values of a block as the values of facts are checked
+    /// ([check_value](Self::check_value)).
     ///
-    /// Only the columns that the checks can refuse are read value by value:
-    /// those with structures, and those whose type is not shown to lie within the declaration.
+    /// Only the columns whose type the check does not [accept](Self::accepts_column) whole
+    /// are read value by value.
     /// The first refused value in row order is reported, as for facts.
     fn check_imported_rows(&self, block: &RowBlock) -> Result<(), Diagnostic> {
         let name = block.predicate();
-        let declared = self
-            .declarations
-            .get(name)
-            .map(|declaration| declaration.types.as_slice())
-            .unwrap_or_default();
         let read: Vec<bool> = block
             .column_types()
             .iter()
             .enumerate()
-            .map(|(column, column_type)| {
-                column_type
-                    .domains()
-                    .intersects(DomainSet::TUPLE | DomainSet::MAP)
-                    || declared
-                        .get(column)
-                        .is_some_and(|declared| !column_type.is_subset(declared, &self.label_types))
-            })
+            .map(|(column, column_type)| !self.accepts_column(name, column, column_type))
             .collect();
         if !read.contains(&true) {
             return Ok(());
         }
         for row in block.rows() {
             for (position, value) in row.iter().enumerate() {
-                if !read[position] {
-                    continue;
+                if read[position] {
+                    self.check_value(name, position, value.as_ref(), None)
+                        .map_err(|problem| problem.with_note(row_note(name, row)))?;
                 }
-                self.check_value_types(value.as_ref(), None)
-                    .and_then(|()| {
-                        self.check_fact_declaration(name, position, value.as_ref(), None)
-                    })
-                    .map_err(|problem| problem.with_note(row_note(name, row)))?;
             }
         }
         Ok(())

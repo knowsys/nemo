@@ -462,13 +462,7 @@ impl<'a> Translator<'a> {
                 }
             }
         }
-        let seeds = self
-            .seeds
-            .entry(table)
-            .or_insert_with(|| vec![Type::EMPTY; column_types.len()]);
-        for (position, column_type) in column_types.into_iter().enumerate() {
-            seeds[position] = seeds[position].union(&column_type);
-        }
+        self.seed(table, &column_types);
         Ok(())
     }
 
