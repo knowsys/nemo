@@ -2,6 +2,11 @@
 
 use super::*;
 
+use crate::{
+    diagnostics::Location,
+    engine::remote::{Failure, Request},
+};
+
 /// Returns the problem that loading a source fails with.
 fn refusal(source: &str) -> Diagnostic {
     Engine::new()
@@ -274,10 +279,66 @@ fn a_named_argument_and_a_prefixed_name_point_to_each_other() {
     );
 }
 
-/// The engine resolves and renders a diagnostic against the sources registered with it:
-/// a label of a problem in a module is placed in the module's text, under the module's name.
+/// Returns the location at a line and column of the source with the given name.
+fn at(source: &str, line: u32, column: u32) -> Location {
+    Location {
+        source: Some(source.into()),
+        line,
+        column,
+    }
+}
+
+/// A program whose second line is a rule with the head variable `?y`, in column 7,
+/// which its body does not bind.
+const UNSAFE: &str = "p(1) .\nq(?x, ?y) :- p(?x) .\n";
+
+/// A program whose second line imports a resource from the network.
+const REMOTE: &str = "p(1) .\n@import q from csv { resource = \"http://example.org/q.csv\" } .\n";
+
+/// A loading method, in the form that [Engine::with_source] calls.
+type Method = fn(&mut Engine, Program) -> Result<(), Diagnostic>;
+
+/// A client that fails every request.
+struct Unreachable;
+
+impl Client for Unreachable {
+    fn fetch_all(&self, requests: &[Request], _: &dyn Fn() -> bool) -> Option<Vec<Response>> {
+        let failed = |_| Err(Failure::transport("the host is unreachable"));
+        Some(requests.iter().map(failed).collect())
+    }
+}
+
+/// Returns the location of the problem that each method fails with for the program `text`,
+/// with the method's name.
+///
+/// A method marked `true` is called on an engine that has loaded a program,
+/// and every engine has a client that fails every request.
+fn refused_at(
+    text: &str,
+    methods: &[(&'static str, bool, Method)],
+) -> Vec<(&'static str, Option<Location>)> {
+    methods
+        .iter()
+        .map(|&(name, after_load, method)| {
+            let mut engine = Engine::new();
+            engine.set_client(Some(Box::new(Unreachable)));
+            if after_load {
+                engine
+                    .load_source("base.rls", "p(1) .\n")
+                    .expect("the program loads");
+            }
+            let refused = engine
+                .with_source("test.rls", text, method)
+                .expect_err("the program is refused");
+            (name, refused[0].location().cloned())
+        })
+        .collect()
+}
+
+/// A problem in a module has its location in the module's text, under the module's name,
+/// and the engine renders it with the line of that text.
 #[test]
-fn the_engine_renders_a_diagnostic_against_its_registered_sources() {
+fn a_problem_in_a_module_is_located_and_rendered_in_the_modules_text() {
     let mut engine = Engine::new();
     // The head of the module's rule has a variable that its body does not bind.
     engine
@@ -296,11 +357,201 @@ fn the_engine_renders_a_diagnostic_against_its_registered_sources() {
         panic!("the load returns its first problem: {refused:?}");
     };
 
-    let resolved = engine.resolve(problem);
-    let label = &resolved.labels[0];
-    assert_eq!(label.source.as_deref(), Some("lib/broken.rls"), "{label:?}");
-    assert_eq!((label.line, label.column), (Some(3), Some(7)), "{label:?}");
-    // The rendering quotes the line of the module's text.
+    assert_eq!(problem.location(), Some(&at("lib/broken.rls", 3, 7)));
     let rendered = engine.render(problem);
     assert!(rendered.contains("q(?x, ?y) :- p(?x) ."), "{rendered}");
+}
+
+/// The diagnostics of parsing a registered source have their locations under its name.
+#[test]
+fn a_parse_of_a_registered_source_locates_its_diagnostics() {
+    let mut engine = Engine::new();
+    // The atom `p(?x` on line 2 is not closed.
+    let file = engine
+        .add_source("test.rls", "p(1) .\nq(?x) :- p(?x .\n")
+        .expect("the text is small");
+    let (_, diagnostics) = engine.parse_source(file);
+    let [problem] = diagnostics.as_slice() else {
+        panic!("one statement does not parse: {diagnostics:?}");
+    };
+    assert_eq!(problem.location(), Some(&at("test.rls", 2, 15)));
+}
+
+/// A link that fails returns its problem with the location of the problem's label.
+#[test]
+fn a_link_locates_the_problem_it_returns() {
+    let mut engine = Engine::new();
+    // The module registered as `lib::m` has no output `q`, which line 2 reads.
+    engine
+        .add_module("lib::m", "@output p .\np(1) .\n")
+        .expect("the name is a module name");
+    let file = engine
+        .add_source("main.rls", "@use lib::m as m .\nr(?x) :- m::q(?x) .\n")
+        .expect("the text is small");
+    let (program, diagnostics) = engine.parse_source(file);
+    assert!(diagnostics.is_empty(), "{diagnostics:?}");
+    let problem = engine.link(program).expect_err("`m` offers no `q`");
+    assert_eq!(problem.location(), Some(&at("main.rls", 2, 10)));
+}
+
+/// A loading method returns the problem of a program with the location of the problem's
+/// label, in its plain form and in its `start_*` form.
+#[test]
+fn a_loading_method_locates_the_problem_it_returns() {
+    let methods: [(&str, bool, Method); 6] = [
+        ("load", false, Engine::load),
+        ("start_load", false, |engine, program| {
+            engine.start_load(program).map(drop)
+        }),
+        ("extend", true, Engine::extend),
+        ("start_extend", true, |engine, program| {
+            engine.start_extend(program).map(drop)
+        }),
+        ("reload", true, Engine::reload),
+        ("start_reload", true, |engine, program| {
+            engine.start_reload(program).map(drop)
+        }),
+    ];
+    let expected = methods.map(|(name, _, _)| (name, Some(at("test.rls", 2, 7))));
+    assert_eq!(refused_at(UNSAFE, &methods), expected);
+}
+
+/// A loading method that fails when the responses to its requests arrive returns its problem
+/// with the location of the problem's label,
+/// whether the engine's client sent the requests or `resume` was given the responses.
+#[test]
+fn a_loading_method_locates_a_problem_of_its_responses() {
+    let resumed: Method = |engine, program| {
+        let Progress::Suspended(pending) = engine.start_load(program)? else {
+            panic!("the import needs its resource");
+        };
+        let failure = Failure::transport("the host is unreachable");
+        engine.resume([(pending[0].id, Err(failure))]).map(drop)
+    };
+    let methods: [(&str, bool, Method); 4] = [
+        ("load", false, Engine::load),
+        ("extend", true, Engine::extend),
+        ("reload", true, Engine::reload),
+        ("resume", false, resumed),
+    ];
+    let expected = methods.map(|(name, _, _)| (name, Some(at("test.rls", 2, 1))));
+    assert_eq!(refused_at(REMOTE, &methods), expected);
+}
+
+/// A check returns its diagnostics with their locations:
+/// those of parsing, those of the check, and the problem that ends a check early.
+#[test]
+fn a_check_locates_its_diagnostics() {
+    let locations = |report: &CheckReport| -> Vec<Option<Location>> {
+        report
+            .diagnostics()
+            .iter()
+            .map(|diagnostic| diagnostic.location().cloned())
+            .collect()
+    };
+    let mut engine = Engine::new();
+    // The first line does not parse, and the head variable `?y` of the second is not bound.
+    let whole = engine.check_source("test.rls", "p(1 .\nq(?x, ?y) :- p(?x) .\n");
+
+    // A program that is not linked ends the check early, with a label at its `@use`.
+    let file = engine
+        .add_source("main.rls", "base(1) .\n@use lib::m { p = base } as m .\n")
+        .expect("the text is small");
+    let (program, diagnostics) = engine.parse_source(file);
+    assert!(diagnostics.is_empty(), "{diagnostics:?}");
+    let ended = engine.check(program);
+
+    assert_eq!(
+        (locations(&whole), locations(&ended)),
+        (
+            vec![Some(at("test.rls", 1, 5)), Some(at("test.rls", 2, 7))],
+            vec![Some(at("main.rls", 2, 1))]
+        ),
+        "{whole:?}\n{ended:?}"
+    );
+}
+
+/// A report has the location of its label,
+/// and a report about a statement of a module instance also has the location of the `@use`
+/// that made the instance.
+#[test]
+fn a_report_has_the_locations_of_its_labels() {
+    let mut engine = Engine::new();
+    // Line 3 of the module and line 3 of the program are `@define` directives,
+    // and each is ignored with a warning.
+    engine
+        .add_module(
+            "lib::noisy",
+            "@output q .\nq(1) .\n@define f(?x) = ?x + 1 .\n",
+        )
+        .expect("the name is a module name");
+    engine
+        .load_source(
+            "main.rls",
+            "p(1) .\n@use lib::noisy as n .\n@define g(?x) = ?x + 2 .\n",
+        )
+        .expect("the program loads");
+    let located: Vec<Vec<Option<Location>>> = engine
+        .reports()
+        .iter()
+        .filter(|report| report.code() == codes::IGNORED_DIRECTIVE)
+        .map(|report| {
+            let labels = report.labels().iter();
+            labels.map(|label| label.location.clone()).collect()
+        })
+        .collect();
+    assert!(
+        located.contains(&vec![Some(at("main.rls", 3, 1))]),
+        "the program's directive: {located:?}"
+    );
+    assert!(
+        located.contains(&vec![
+            Some(at("lib/noisy.rls", 3, 1)),
+            Some(at("main.rls", 2, 1))
+        ]),
+        "the module's directive: {located:?}"
+    );
+}
+
+/// Rows that a rule of a module instance cannot take are refused
+/// with the location of the `@use` that made the instance.
+#[test]
+fn imported_rows_that_a_module_instance_refuses_are_refused_at_its_use() {
+    let mut engine = Engine::new();
+    // The module copies its input into `q`, which it declares to hold integers.
+    engine
+        .add_module(
+            "lib::typed",
+            "@input p .
+@declare q(x: int) .
+@output q .
+q(?x) :- p(?x) .
+",
+        )
+        .expect("the name is a module name");
+    engine
+        .load_source(
+            "main.rls",
+            "base(1) .
+@use lib::typed { p = base } as t .
+",
+        )
+        .expect("the program loads");
+    let refused = engine
+        .import_rows("base", [vec![DataValue::string("a")]])
+        .expect_err("the module's `q` holds no string");
+    assert_eq!(
+        refused.location(),
+        Some(&at("main.rls", 2, 1)),
+        "{refused:?}"
+    );
+}
+
+/// A label of a program whose text is not registered has no location,
+/// since the engine has no text to count the lines of.
+#[test]
+fn a_label_of_an_unregistered_text_has_no_location() {
+    let problem = refusal(UNSAFE);
+    assert_eq!(problem.labels().len(), 1, "{problem:?}");
+    assert_eq!(problem.location(), None);
 }

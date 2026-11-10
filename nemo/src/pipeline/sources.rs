@@ -3,6 +3,8 @@
 
 use std::sync::{Arc, OnceLock};
 
+use nemo_physical::diagnostics::{Diagnostic, Location};
+
 use crate::{
     model::{FileId, Program, Span, UseDirective},
     pipeline::Pipeline,
@@ -12,7 +14,7 @@ use crate::{
 #[derive(Debug)]
 pub(super) struct SourceFile {
     /// The name that diagnostics show, as given to [Pipeline::add_source], such as a path.
-    name: String,
+    name: Arc<str>,
     /// The text, shared by the instances of a module file.
     text: Arc<str>,
     /// The byte offsets at which the text's lines start,
@@ -44,9 +46,9 @@ impl Pipeline {
     /// so the spans of an earlier version of a file that is read again stay valid.
     /// A [reserved](Self::reserve_files) id is never assigned either.
     pub fn add_source(&mut self, name: impl Into<String>, text: impl Into<String>) -> FileId {
-        let text: String = text.into();
+        let (name, text): (String, String) = (name.into(), text.into());
         self.push_source(SourceFile {
-            name: name.into(),
+            name: Arc::from(name),
             text: Arc::from(text),
             lines: Arc::default(),
             instance: None,
@@ -126,7 +128,7 @@ impl Pipeline {
 
     /// Returns the name of a source file, or `None` if the file is not registered.
     pub fn file_name(&self, file: FileId) -> Option<&str> {
-        self.source(file).map(|source| source.name.as_str())
+        self.source(file).map(|source| &*source.name)
     }
 
     /// Returns the text of a source file, or `None` if the file is not registered.
@@ -141,11 +143,29 @@ impl Pipeline {
             .map(|source| source.line_column(span))
     }
 
+    /// Returns the location where a span starts: the name of its file, the line and the column.
+    /// Returns `None` if its file is not registered.
+    pub(crate) fn location(&self, span: Span) -> Option<Location> {
+        let source = self.source(span.file)?;
+        let (line, column) = source.line_column(span);
+        Some(Location {
+            source: Some(source.name.clone()),
+            line,
+            column,
+        })
+    }
+
+    /// Returns a diagnostic in which every label whose file is registered has its location:
+    /// the name of the file, and the line and column where the label's span starts.
+    pub fn locate(&self, diagnostic: Diagnostic) -> Diagnostic {
+        diagnostic.with_locations(|span| self.location(span))
+    }
+
     /// Returns every registered source as its file id, name and text.
     pub fn sources(&self) -> impl Iterator<Item = (FileId, &str, &str)> {
         self.files
             .iter()
-            .map(|(&id, source)| (id, source.name.as_str(), &*source.text))
+            .map(|(&id, source)| (id, &*source.name, &*source.text))
     }
 
     /// Returns the source text a span covers,

@@ -3,13 +3,31 @@
 
 use std::borrow::Cow;
 
-use nemo_physical::{diagnostics::Diagnostic, value::Iri};
+use nemo_physical::{
+    diagnostics::{Diagnostic, Location},
+    value::Iri,
+};
 
 use crate::{
     diagnostics::ParseError,
     model::{FileId, Span, Statement, Term},
     parser::lexer::{self, Token, TokenKind},
 };
+
+/// Returns a diagnostic of parsing `source` in which every label has the line and column
+/// at which its span starts, as its location without a name.
+///
+/// `lines` must be the [line starts](Span::line_starts) of `source`.
+fn located(diagnostic: Diagnostic, source: &str, lines: &[usize]) -> Diagnostic {
+    diagnostic.with_locations(|span| {
+        let (line, column) = span.line_column_in(source, lines);
+        Some(Location {
+            source: None,
+            line,
+            column,
+        })
+    })
+}
 
 /// The state of a parser over one token buffer.
 ///
@@ -106,7 +124,16 @@ impl<'a> Parser<'a> {
                 }
             }
         }
-        (statements, parser.diagnostics)
+        if parser.diagnostics.is_empty() {
+            return (statements, parser.diagnostics);
+        }
+        let lines = Span::line_starts(source);
+        let diagnostics = parser
+            .diagnostics
+            .into_iter()
+            .map(|diagnostic| located(diagnostic, source, &lines))
+            .collect();
+        (statements, diagnostics)
     }
 
     /// Parses one component with `parse`, and requires it to span the whole input.
@@ -123,6 +150,7 @@ impl<'a> Parser<'a> {
             "the end of the input",
             parse,
         )
+        .map_err(|problem| located(problem, source, &Span::line_starts(source)))
     }
 
     /// Parses the term that `span` covers in the source text,

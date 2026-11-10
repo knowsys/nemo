@@ -38,8 +38,8 @@ impl NemoProgram {
         let (model, diagnostics) = nemo::model::Program::parse(&text);
         let sources = SourceTexts::detached(name.clone(), text.clone());
         let diagnostics = diagnostics
-            .iter()
-            .map(|diagnostic| diagnostics::resolve(diagnostic, &sources))
+            .into_iter()
+            .map(|diagnostic| diagnostics::resolve(&sources.locate(diagnostic), &sources))
             .collect();
         NemoProgram {
             text,

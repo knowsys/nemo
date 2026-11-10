@@ -3,7 +3,7 @@
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
 
-use nemo::diagnostics::render::{ResolvedDiagnostic, SourceTexts};
+use nemo::diagnostics::render::{Renderer, SourceTexts, notes};
 
 /// A label of a [Diagnostic]: its message, and the place it points at if that is known.
 #[derive(Debug, Serialize)]
@@ -38,29 +38,35 @@ pub(crate) struct Diagnostic {
     pub rendered: String,
 }
 
-/// Returns a diagnostic as plain data, with the places of its labels found in `sources`.
+/// Returns a diagnostic as plain data, with its rendering against `sources`.
+///
+/// The place of a label is the location that the label has.
 pub(crate) fn resolve(
     diagnostic: &nemo::diagnostics::Diagnostic,
     sources: &SourceTexts,
 ) -> Diagnostic {
-    let resolved = ResolvedDiagnostic::new(diagnostic, sources);
     Diagnostic {
-        code: resolved.code,
-        severity: resolved.severity.to_string(),
-        message: resolved.message,
-        labels: resolved
-            .labels
-            .into_iter()
-            .map(|label| Label {
-                message: label.message,
-                source: label.source,
-                line: label.line,
-                column: label.column,
+        code: diagnostic.code().to_string(),
+        severity: diagnostic.severity().to_string(),
+        message: diagnostic.message().to_owned(),
+        labels: diagnostic
+            .labels()
+            .iter()
+            .map(|label| {
+                let location = label.location.as_ref();
+                Label {
+                    message: label.message.clone(),
+                    source: location
+                        .and_then(|location| location.source.as_deref())
+                        .map(str::to_owned),
+                    line: location.map(|location| location.line),
+                    column: location.map(|location| location.column),
+                }
             })
             .collect(),
-        notes: resolved.notes,
-        hints: resolved.hints,
-        rendered: resolved.rendered,
+        notes: notes(diagnostic),
+        hints: diagnostic.hints().to_vec(),
+        rendered: Renderer::plain(sources).show(diagnostic),
     }
 }
 

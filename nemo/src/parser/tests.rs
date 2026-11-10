@@ -822,3 +822,23 @@ fn an_iri_cannot_spell_the_character_u0000() {
     let (_, diagnostics) = Program::parse("<a\\u0009b\\u007Fc\u{85}d>(5) .");
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
 }
+
+/// A diagnostic of parsing has the line and column of its label, without the name of a source,
+/// for a program as for a single component.
+#[test]
+fn a_parse_diagnostic_has_its_line_and_column() {
+    let line_column = |diagnostic: &Diagnostic| {
+        let location = diagnostic.location().expect("the label has its location");
+        assert_eq!(location.source, None);
+        (location.line, location.column)
+    };
+
+    // The atom `p(?x` on line 2 is not closed.
+    let (_, diagnostics) = Program::parse("p(1) .\nq(?x) :- p(?x .");
+    assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
+    assert_eq!(line_column(&diagnostics[0]), (2, 15));
+
+    // The second argument, on line 2, is missing.
+    let problem = Term::parse("f(1,\n  )").expect_err("an argument is missing");
+    assert_eq!(line_column(&problem), (2, 3));
+}

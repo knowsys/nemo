@@ -47,8 +47,8 @@ impl Program {
         let (model, diagnostics) = nemo::model::Program::parse(&text);
         let sources = SourceTexts::detached(name, text.clone());
         let diagnostics = diagnostics
-            .iter()
-            .map(|diagnostic| resolve(diagnostic, &sources))
+            .into_iter()
+            .map(|diagnostic| resolve(&sources.locate(diagnostic), &sources))
             .collect();
         Self {
             text,

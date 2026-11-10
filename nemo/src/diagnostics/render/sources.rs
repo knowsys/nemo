@@ -6,9 +6,9 @@
 //! An [Engine](crate::engine::Engine) looks them up among the sources registered with it,
 //! and [SourceTexts] keeps copies of texts apart from an engine.
 
-use std::{collections::HashMap, fmt::Debug};
+use std::{collections::HashMap, fmt::Debug, sync::Arc};
 
-use nemo_physical::diagnostics::FileId;
+use nemo_physical::diagnostics::{Diagnostic, FileId, Location};
 
 /// The source texts that rendering quotes, addressed by the [FileId] of a span.
 pub trait SourceLookup: Debug {
@@ -24,7 +24,7 @@ pub trait SourceLookup: Debug {
 #[derive(Debug)]
 struct SourceText {
     /// The name shown for the text, such as its path.
-    name: String,
+    name: Arc<str>,
     /// The text itself.
     text: String,
 }
@@ -72,10 +72,11 @@ impl SourceTexts {
     /// give their spans the file id 0.
     pub fn detached(name: impl Into<String>, text: impl Into<String>) -> Self {
         let mut sources = Self::new();
+        let name: String = name.into();
         sources.files.insert(
             0,
             SourceText {
-                name: name.into(),
+                name: Arc::from(name),
                 text: text.into(),
             },
         );
@@ -89,10 +90,28 @@ impl SourceTexts {
     pub fn absorb<'a>(&mut self, sources: impl IntoIterator<Item = (FileId, &'a str, &'a str)>) {
         for (id, name, text) in sources {
             self.files.entry(id.index()).or_insert_with(|| SourceText {
-                name: name.to_owned(),
+                name: Arc::from(name),
                 text: text.to_owned(),
             });
         }
+    }
+
+    /// Returns a diagnostic in which every label whose file is in the registry has its
+    /// location: the name of the file, and the line and column where the label's span starts.
+    ///
+    /// The diagnostics that an [Engine](crate::engine::Engine) returns have their locations
+    /// already.
+    /// This gives the labels of a text parsed without an engine the name of the text.
+    pub fn locate(&self, diagnostic: Diagnostic) -> Diagnostic {
+        diagnostic.with_locations(|span| {
+            let source = self.source(span.file)?;
+            let (line, column) = span.line_column(&source.text);
+            Some(Location {
+                source: Some(source.name.clone()),
+                line,
+                column,
+            })
+        })
     }
 
     /// Returns the text registered for a file, or an empty text for an unknown file.
@@ -102,7 +121,7 @@ impl SourceTexts {
 
     /// Returns the name registered for a file, or `None` for an unknown file.
     pub fn name(&self, file: FileId) -> Option<&str> {
-        self.source(file).map(|source| source.name.as_str())
+        self.source(file).map(|source| &*source.name)
     }
 
     /// Returns the source a file id addresses.
@@ -124,6 +143,33 @@ impl SourceLookup for SourceTexts {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use nemo_physical::diagnostics::{Code, Span};
+
+    /// Locating gives a label the name of its text in the registry, with its line and column
+    /// in that text, and gives a label of an unknown file no location.
+    #[test]
+    fn a_registry_locates_the_labels_of_its_texts() {
+        let sources = SourceTexts::detached("example.rls", "p(1) .\nq(2) .\n");
+        let span = |file, start| Span {
+            file: FileId::new(file),
+            start,
+            end: start + 1,
+        };
+        // Byte 7 starts the second line.
+        let located = sources.locate(
+            Diagnostic::error(Code::new(1), "refused")
+                .with_label(span(0, 7), "here")
+                .with_label(span(4, 7), "there"),
+        );
+        let expected = Location {
+            source: Some("example.rls".into()),
+            line: 2,
+            column: 1,
+        };
+        assert_eq!(located.labels()[0].location, Some(expected));
+        assert_eq!(located.labels()[1].location, None);
+    }
 
     /// A file absorbed twice keeps the name and text that it was first absorbed with.
     #[test]

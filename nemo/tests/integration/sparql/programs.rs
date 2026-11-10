@@ -194,6 +194,13 @@ fn a_failed_fetch_keeps_the_program() {
         .serve(&mut engine, Engine::reason)
         .expect_err("the fetch fails");
     assert_eq!(problem.code(), nemo::codes::UNFETCHABLE, "{problem:?}");
+    // The import that the label points at starts the second line of the registered text.
+    let location = problem.location().expect("the import is labeled");
+    assert_eq!(
+        (location.source.as_deref(), location.line, location.column),
+        (Some("test.rls"), 2, 1),
+        "{problem:?}"
+    );
     assert!(
         problem
             .field("reason")

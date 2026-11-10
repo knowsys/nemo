@@ -14,6 +14,8 @@
 //! [Program::parse] returns the program together with all diagnostics.
 //! The other `parse` functions ([Rule], [Fact], [Atom], [Term], [Statement], [ModuleName])
 //! parse one component, which must span the whole input, and fail at its first problem.
+//! Each label of a diagnostic that a `parse` function returns has its location:
+//! the line and column at which its span starts in the input, without the name of a source.
 
 mod combinators;
 mod cursor;

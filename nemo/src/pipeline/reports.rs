@@ -1,5 +1,8 @@
 //! The pipeline's reports, which are warnings and non-fatal errors,
 //! and the labels added to diagnostics about statement versions.
+//!
+//! Every label of a report has its location if its file is registered,
+//! since the functions that add a report or a label [locate](Pipeline::locate) it.
 
 use nemo_physical::diagnostics::Diagnostic;
 
@@ -11,6 +14,7 @@ use crate::{
 impl Pipeline {
     /// Adds a diagnostic to the reports.
     pub fn report(&mut self, diagnostic: Diagnostic) {
+        let diagnostic = self.locate(diagnostic);
         self.reports.push(diagnostic);
     }
 
@@ -42,10 +46,13 @@ impl Pipeline {
         if labels.is_empty() {
             return;
         }
-        for report in &mut self.reports[from..] {
-            for (span, label) in &labels {
-                *report = report.clone().with_label(*span, label.clone());
-            }
+        let fresh: Vec<Diagnostic> = self.reports.drain(from..).collect();
+        for report in fresh {
+            let report = labels.iter().fold(report, |report, (span, label)| {
+                report.with_label(*span, label.clone())
+            });
+            let report = self.locate(report);
+            self.reports.push(report);
         }
     }
 

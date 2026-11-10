@@ -132,7 +132,13 @@ fn malformed_solutions_of_a_bound_import_are_reported_once() {
         .collect();
     assert_eq!(malformed.len(), 1, "{malformed:?}");
     assert_eq!(malformed[0].field("count"), Some("4"), "{malformed:?}");
-    assert!(!malformed[0].labels().is_empty(), "{malformed:?}");
+    // The import that the label points at starts the second line of the registered text.
+    let location = malformed[0].location().expect("the import is labeled");
+    assert_eq!(
+        (location.source.as_deref(), location.line, location.column),
+        (Some("test.rls"), 2, 1),
+        "{malformed:?}"
+    );
 }
 
 #[test]

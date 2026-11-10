@@ -15,6 +15,10 @@
 //! *compiled program*.
 //! Results, traces and diagnostics refer to the written program.
 //!
+//! A diagnostic that a method returns or [reports](Engine::reports) has the
+//! [location](crate::diagnostics::Location) of every label that points into a source
+//! registered with the engine: the name of the source, the line and the column.
+//!
 //! The engine covers Datalog with expressions (filters, assignments, head computations),
 //! stratified negation, aggregates, existential rules (the restricted chase),
 //! and global parameters.
@@ -66,7 +70,7 @@ use std::{
 };
 
 use nemo_physical::{
-    diagnostics::Diagnostic,
+    diagnostics::{Diagnostic, Location, Span},
     dictionary::Dictionary,
     function::EvaluationContext,
     management::{Revision, TableId, TableManager},
@@ -76,7 +80,7 @@ use nemo_physical::{
 use crate::{
     diagnostics::{
         AboutResource, EngineError,
-        render::{Renderer, ResolvedDiagnostic, SourceLookup},
+        render::{Renderer, SourceLookup},
     },
     engine::{
         compile::compiled::CompiledProgram,
@@ -284,7 +288,8 @@ impl Engine {
 
     /// Parses a registered source with its own file id.
     ///
-    /// The spans of the program and of the diagnostics then point into the registered text.
+    /// The spans of the program and of the diagnostics then point into the registered text,
+    /// and the labels of the diagnostics have their locations in it.
     ///
     /// # Panics
     ///
@@ -293,7 +298,12 @@ impl Engine {
         let text = self
             .source(file)
             .expect("the engine handed out the file id");
-        Program::parse_with_file(text, file)
+        let (program, diagnostics) = Program::parse_with_file(text, file);
+        let diagnostics = diagnostics
+            .into_iter()
+            .map(|diagnostic| self.pipeline.locate(diagnostic))
+            .collect();
+        (program, diagnostics)
     }
 
     /// Returns the text registered under a file id, or `None` for an id the engine did not
@@ -326,10 +336,17 @@ impl Engine {
         Renderer::plain(self).show(diagnostic)
     }
 
-    /// Returns a diagnostic as plain data, in which each label is resolved to the name of a
-    /// registered source, a line and a column.
-    pub fn resolve(&self, diagnostic: &Diagnostic) -> ResolvedDiagnostic {
-        ResolvedDiagnostic::new(diagnostic, self)
+    /// Returns the location where a span starts in a registered source:
+    /// the name of the source, the line and the column.
+    /// Returns `None` for a span whose file id the engine did not hand out.
+    pub fn location(&self, span: Span) -> Option<Location> {
+        self.pipeline.location(span)
+    }
+
+    /// Returns a result whose error has the location of every label
+    /// that points into a registered source.
+    fn located<T>(&self, result: Result<T, Diagnostic>) -> Result<T, Diagnostic> {
+        result.map_err(|problem| self.pipeline.locate(problem))
     }
 
     /// Sets the directory against which relative import resources are resolved,
@@ -414,7 +431,8 @@ impl Engine {
     /// a file that cannot be read or does not parse, a cycle, an alias used twice,
     /// a name that an instance does not offer, or a binding or a parameter that does not fit.
     pub fn link(&mut self, program: Program) -> Result<Program, Diagnostic> {
-        self.link_program(program)
+        let linked = self.link_program(program);
+        self.located(linked)
     }
 
     /// Loads a program: stores its facts, reads its imports, and compiles its rules.
@@ -453,7 +471,8 @@ impl Engine {
     pub fn load(&mut self, program: Program) -> Result<(), Diagnostic> {
         self.cancel.clear();
         let progress = self.start_load(program);
-        self.complete(progress)
+        let loaded = self.complete(progress);
+        self.located(loaded)
     }
 
     /// Loads a program as [load](Self::load) does, but sends no request.
@@ -471,7 +490,8 @@ impl Engine {
     /// Panics as [load](Self::load) does.
     pub fn start_load(&mut self, program: Program) -> Result<Progress, Diagnostic> {
         self.refuse_while_suspended("load")?;
-        self.choosing_context(|engine| engine.load_program(program))
+        let progress = self.choosing_context(|engine| engine.load_program(program));
+        self.located(progress)
     }
 
     /// Extends the loaded program with new statements.
@@ -505,7 +525,8 @@ impl Engine {
     pub fn extend(&mut self, program: Program) -> Result<(), Diagnostic> {
         self.cancel.clear();
         let progress = self.start_extend(program);
-        self.complete(progress)
+        let extended = self.complete(progress);
+        self.located(extended)
     }
 
     /// Extends the loaded program as [extend](Self::extend) does, but sends no request.
@@ -523,7 +544,8 @@ impl Engine {
     /// Panics as [extend](Self::extend) does.
     pub fn start_extend(&mut self, program: Program) -> Result<Progress, Diagnostic> {
         self.refuse_while_suspended("extend")?;
-        self.choosing_context(|engine| engine.extend_program(program))
+        let progress = self.choosing_context(|engine| engine.extend_program(program));
+        self.located(progress)
     }
 
     /// Replaces the loaded program, which is how statements are retracted.
@@ -556,7 +578,8 @@ impl Engine {
     pub fn reload(&mut self, program: Program) -> Result<(), Diagnostic> {
         self.cancel.clear();
         let progress = self.start_reload(program);
-        self.complete(progress)
+        let reloaded = self.complete(progress);
+        self.located(reloaded)
     }
 
     /// Replaces the loaded program as [reload](Self::reload) does, but sends no request.
@@ -574,7 +597,8 @@ impl Engine {
     /// Panics as [reload](Self::reload) does.
     pub fn start_reload(&mut self, program: Program) -> Result<Progress, Diagnostic> {
         self.refuse_while_suspended("reload")?;
-        self.choosing_context(|engine| engine.reload_program(program))
+        let progress = self.choosing_context(|engine| engine.reload_program(program));
+        self.located(progress)
     }
 
     /// Checks a program without loading it.
@@ -595,7 +619,8 @@ impl Engine {
     /// Otherwise, the report contains the error that [load](Self::load) would return.
     pub fn check(&mut self, program: Program) -> CheckReport {
         let already = self.pipeline.reports().len();
-        let (types, aborted) = match self.check_inner(program) {
+        let checked = self.check_inner(program);
+        let (types, aborted) = match self.located(checked) {
             Ok(types) => (Some(types), None),
             Err(problem) => (None, Some(problem)),
         };
@@ -720,8 +745,10 @@ impl Engine {
         rows: impl IntoIterator<Item = Vec<DataValue>>,
     ) -> Result<(), Diagnostic> {
         self.refuse_while_suspended("import_rows")?;
-        self.choosing_context(|engine| engine.admit_rows(predicate, rows).map(|()| Progress::Done))
-            .map(drop)
+        let admitted = self
+            .choosing_context(|engine| engine.admit_rows(predicate, rows).map(|()| Progress::Done))
+            .map(drop);
+        self.located(admitted)
     }
 
     /// Drops the rows given through [import_rows](Self::import_rows) to a predicate that wait
@@ -801,7 +828,8 @@ impl Engine {
         responses: impl IntoIterator<Item = (RequestId, Response)>,
     ) -> Result<Progress, Diagnostic> {
         self.cancel.clear();
-        self.pass_responses(responses)
+        let progress = self.pass_responses(responses);
+        self.located(progress)
     }
 
     /// Discards the suspended method, if there is one, and returns whether there was.
@@ -845,7 +873,8 @@ impl Engine {
     /// - Otherwise, returns the first failure of a rule application.
     pub fn reason(&mut self) -> Result<(), Diagnostic> {
         let progress = self.start_reason();
-        self.complete(progress)
+        let reasoned = self.complete(progress);
+        self.located(reasoned)
     }
 
     /// Reasons as [reason](Self::reason) does, but sends no request.
@@ -868,7 +897,8 @@ impl Engine {
             }
             _ => {}
         }
-        self.reason_until_suspended()
+        let progress = self.reason_until_suspended();
+        self.located(progress)
     }
 
     /// Starts or continues a run, until the fixpoint or until the run is suspended for data

@@ -33,7 +33,8 @@ pub(crate) mod types;
 
 pub use nemo_io::AboutResource;
 pub use nemo_physical::diagnostics::{
-    Code, CodeEntry, Diagnostic, DiagnosticKind, Field, FileId, Label, Registry, Severity, Span,
+    Code, CodeEntry, Diagnostic, DiagnosticKind, Field, FileId, Label, Location, Registry,
+    Severity, Span,
 };
 
 pub(crate) use self::{

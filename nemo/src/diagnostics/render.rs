@@ -19,77 +19,14 @@ use nemo_physical::diagnostics::{Diagnostic, FileId, Severity, Span};
 
 use crate::diagnostics::{AboutPredicate, AboutResource};
 
-/// One label of a [ResolvedDiagnostic], with its message and, if the source is known,
-/// its position.
-#[derive(Debug, Clone)]
-pub struct ResolvedLabel {
-    /// The label's message.
-    pub message: String,
-    /// The name of the source that the label's span points into, if the source is known.
-    pub source: Option<String>,
-    /// The 1-based line, if the source is known.
-    pub line: Option<u32>,
-    /// The 1-based column in characters, if the source is known.
-    pub column: Option<u32>,
-}
-
-/// A diagnostic resolved against its source texts, as plain data.
+/// Returns the notes of a diagnostic, in the order that the rendering shows them.
 ///
-/// Each span is resolved to a source name, a line and a column,
-/// and the plain-text rendering is included.
-#[derive(Debug, Clone)]
-pub struct ResolvedDiagnostic {
-    /// The code, such as `"N0204"`.
-    pub code: String,
-    /// The severity.
-    pub severity: Severity,
-    /// The main message.
-    pub message: String,
-    /// The resolved labels.
-    pub labels: Vec<ResolvedLabel>,
-    /// The notes, in the order that the rendering shows them.
-    ///
-    /// They begin with a note naming the diagnostic's resource and one naming its predicate,
-    /// each only if the message does not name it already.
-    pub notes: Vec<String>,
-    /// Hints toward a fix.
-    pub hints: Vec<String>,
-    /// The plain-text rendering, with the quoted source lines.
-    pub rendered: String,
-}
-
-impl ResolvedDiagnostic {
-    /// Resolves a diagnostic against the source texts in `sources`.
-    pub fn new(diagnostic: &Diagnostic, sources: &dyn SourceLookup) -> Self {
-        let labels = diagnostic
-            .labels()
-            .iter()
-            .map(|label| {
-                let text = sources.text(label.span.file);
-                let placed = sources.name(label.span.file).map(|name| {
-                    let (line, column) = label.span.line_column(text);
-                    (name.to_owned(), line, column)
-                });
-                ResolvedLabel {
-                    message: label.message.clone(),
-                    source: placed.as_ref().map(|(name, _, _)| name.clone()),
-                    line: placed.as_ref().map(|&(_, line, _)| line),
-                    column: placed.as_ref().map(|&(_, _, column)| column),
-                }
-            })
-            .collect();
-        let mut notes = subject_notes(diagnostic);
-        notes.extend(diagnostic.notes().iter().cloned());
-        Self {
-            code: diagnostic.code().to_string(),
-            severity: diagnostic.severity(),
-            message: diagnostic.message().to_owned(),
-            labels,
-            notes,
-            hints: diagnostic.hints().to_vec(),
-            rendered: Renderer::plain(sources).show(diagnostic),
-        }
-    }
+/// They begin with a note naming the diagnostic's resource and one naming its predicate,
+/// each only if the message does not name it already.
+pub fn notes(diagnostic: &Diagnostic) -> Vec<String> {
+    let mut notes = subject_notes(diagnostic);
+    notes.extend(diagnostic.notes().iter().cloned());
+    notes
 }
 
 /// Returns the notes that name a diagnostic's resource and its predicate.
@@ -241,8 +178,7 @@ impl<'a> Renderer<'a> {
             }
         }
 
-        context.extend(subject_notes(diagnostic));
-        context.extend(diagnostic.notes().iter().cloned());
+        context.extend(notes(diagnostic));
 
         if located.is_empty() {
             return self.block(diagnostic, &context);
