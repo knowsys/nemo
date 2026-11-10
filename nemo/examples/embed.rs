@@ -48,7 +48,7 @@ fn main() {
     );
 
     let source = "
-        @declare reading(sensor: iri, value: int, at: point(int, int)) .
+        @declare reading(sensor: iri, value: int, at: point) .
         @type point(int, int) .
 
         @import threshold from csv { resource = \"thresholds.csv\" } .
