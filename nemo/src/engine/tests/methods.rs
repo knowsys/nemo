@@ -320,6 +320,39 @@ fn cursors_notice_a_reload_that_rebuilds_their_predicate() {
     assert_eq!(refusal.code(), codes::CURSOR_INVALIDATED, "{refusal:?}");
 }
 
+/// An export of a predicate that no statement of the program mentions is an error,
+/// and an output that the program declares but never uses is exported without rows.
+#[test]
+fn an_export_fails_for_a_predicate_the_program_does_not_mention() {
+    let mut engine = run("p(1) .\n@output p, unused .");
+    let refusal = engine
+        .export_bytes(&ExportSpec::csv("typo"))
+        .expect_err("no statement mentions `typo`");
+    assert_eq!(refusal.code(), codes::UNKNOWN_PREDICATE, "{refusal:?}");
+    assert_eq!(refusal.field("predicate"), Some("typo"));
+
+    let bytes = engine
+        .export_bytes(&ExportSpec::csv("unused"))
+        .expect("a declared output is exported");
+    assert!(bytes.is_empty(), "{bytes:?}");
+}
+
+/// The export methods return an error for an engine without a program,
+/// also if there is nothing to write.
+#[test]
+fn an_export_fails_without_a_program() {
+    let directory = TempDirectory::new();
+    let mut engine = Engine::new();
+    let refusal = engine
+        .export(directory.path())
+        .expect_err("no program is loaded");
+    assert_eq!(refusal.code(), codes::NO_PROGRAM, "{refusal:?}");
+    let refusal = engine
+        .export_bytes(&ExportSpec::csv("p"))
+        .expect_err("no program is loaded");
+    assert_eq!(refusal.code(), codes::NO_PROGRAM, "{refusal:?}");
+}
+
 /// A trace fails until a run has reached the fixpoint,
 /// both before any run and after a cancelled one.
 #[test]

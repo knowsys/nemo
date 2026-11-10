@@ -981,7 +981,7 @@ impl Engine {
     ///
     /// Each export is written to the file that [ExportSpec::file_name] names,
     /// or to the standard output if its resource name is empty.
-    /// A predicate the program never used is written as an empty file.
+    /// An output that the program declares but never uses is written as an empty file.
     /// Rows with values that do not fit a declared column format are dropped, with a warning.
     ///
     /// # Errors
@@ -1001,8 +1001,10 @@ impl Engine {
     ///
     /// # Errors
     ///
-    /// Returns N0486 or N0489 for a predicate the engine does not hold or does not store whole,
-    /// and the failure to write a file.
+    /// - Returns N0482 if no program is loaded.
+    /// - Returns N0486 for a predicate that the program neither uses nor declares as an output,
+    ///   and N0489 for one that the engine does not store whole.
+    /// - Otherwise, returns the failure to write a file.
     pub fn export_specs(
         &mut self,
         directory: impl AsRef<std::path::Path>,
@@ -1019,7 +1021,7 @@ impl Engine {
     ///
     /// # Errors
     ///
-    /// Returns N0486 or N0489 for a predicate the engine does not hold or does not store whole,
+    /// Returns N0482, N0486 or N0489 as [export_specs](Self::export_specs) does,
     /// and the failure to serialize the rows.
     pub fn export_bytes(&mut self, spec: &ExportSpec) -> Result<Vec<u8>, Diagnostic> {
         self.serialize_export(spec)

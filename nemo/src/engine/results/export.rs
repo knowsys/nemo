@@ -8,7 +8,7 @@ use nemo_io::{
 use nemo_physical::{diagnostics::Diagnostic, value::DataValue};
 
 use crate::{
-    diagnostics::{AboutResource, TranslationError},
+    diagnostics::{AboutResource, EngineError, TranslationError},
     engine::{Engine, compile::translation::exports::rdf_export_arity},
 };
 
@@ -206,11 +206,15 @@ impl Engine {
     /// or to the standard output for an empty resource name.
     ///
     /// If the standard output is closed, the export to it ends without an error.
+    /// Fails if no program is loaded, also for an empty list of specifications.
     pub(in crate::engine) fn write_exports(
         &mut self,
         directory: impl AsRef<std::path::Path>,
         specs: &[ExportSpec],
     ) -> Result<(), Diagnostic> {
+        if self.program.is_none() {
+            return Err(EngineError::NoProgram.diagnostic());
+        }
         let directory = directory.as_ref();
         for spec in specs {
             if spec.is_stdout() {
@@ -273,11 +277,24 @@ impl Engine {
 
     /// Returns the rows that one export specification writes,
     /// after checking them against the number of columns its format requires.
+    ///
+    /// Fails if no program is loaded,
+    /// and for a predicate that the program neither uses nor declares as an output.
     fn export_rows(&mut self, spec: &ExportSpec) -> Result<Vec<Vec<DataValue>>, Diagnostic> {
+        if self.program.is_none() {
+            return Err(EngineError::NoProgram.diagnostic());
+        }
         let mut rows = match self.arity_of(&spec.predicate) {
             Some(_) => self.rows(&spec.predicate)?,
-            // A predicate that the program never used is written as an empty file.
-            None => Vec::new(),
+            // An output that the program declares but never uses has no table,
+            // and is written as an empty file.
+            None if self.output_names().contains(&spec.predicate) => Vec::new(),
+            None => {
+                return Err(EngineError::UnknownPredicate {
+                    predicate: spec.predicate.clone(),
+                }
+                .diagnostic());
+            }
         };
         if let Some(limit) = spec.limit {
             rows.truncate(usize::try_from(limit).unwrap_or(usize::MAX));
