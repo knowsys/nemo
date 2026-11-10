@@ -24,8 +24,8 @@ nemo-physical = { path = "../nemo-physical" }
 nemo-io = { path = "../nemo-io" }
 # The default diagnostic renderer (`render`) quotes snippets through it.
 ariadne = "0.6"
-# The tracing protocol DTOs are serde-first: one derived dialect, shared
-# verbatim by every surface.
+# The trace types (`nemo::trace`) are serde-first: one derived dialect,
+# shared verbatim by every surface.
 serde = { version = "1", features = ["derive"] }
 # The telemetry documents are written as JSON.
 serde_json = "1"

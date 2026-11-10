@@ -6,7 +6,7 @@
 //! Two sinks are ready-made:
 //! - The [Recorder] aggregates the events into statistics and curves over the run,
 //!   which it writes as JSON snapshots.
-//! - The [TracingSink] emits each event as a `tracing` event under the [TARGET] target,
+//! - The [LogSink] emits each event as a `tracing` event under the [TARGET] target,
 //!   where a `tracing` subscriber receives it along with the engine's log lines.
 //!
 //! A [ReportDocument] combines a recorder with the [RunFacts] of a finished run into one JSON
@@ -55,7 +55,7 @@ pub use self::{
     report::{
         ErrorCount, NamedCount, PhaseTable, PredicateSize, ProgramText, ReportDocument, RunFacts,
     },
-    stream::{TARGET, TracingSink},
+    stream::{LogSink, TARGET},
     timings::EngineTimings,
 };
 pub use nemo_physical::stopwatch::Stopwatch;

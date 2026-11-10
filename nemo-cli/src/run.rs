@@ -24,7 +24,7 @@ use nemo::{
     diagnostics::render::{Renderer, SourceTexts},
     engine::{Engine, ExportSpec},
     model::{FileId, Program},
-    telemetry::{EngineEvent, EventSink, Recorder, TracingSink},
+    telemetry::{EngineEvent, EventSink, LogSink, Recorder},
 };
 use nemo_physical::diagnostics::{Diagnostic, Severity};
 
@@ -79,14 +79,14 @@ struct RunSink {
 
 impl EventSink<EngineEvent> for RunSink {
     fn record(&self, event: &EngineEvent) {
-        TracingSink.record(event);
+        LogSink.record(event);
         if let Some(recorder) = &self.recorder {
             recorder.record(event);
         }
     }
 
     fn enabled(&self) -> bool {
-        self.recorder.is_some() || TracingSink.enabled()
+        self.recorder.is_some() || LogSink.enabled()
     }
 }
 

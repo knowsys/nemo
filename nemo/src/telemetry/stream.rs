@@ -19,9 +19,9 @@ pub const TARGET: &str = "nemo::telemetry";
 /// at trace level,
 /// so an engine without a listener still skips the work of building its expensive events.
 #[derive(Debug, Default, Clone, Copy)]
-pub struct TracingSink;
+pub struct LogSink;
 
-impl EventSink<EngineEvent> for TracingSink {
+impl EventSink<EngineEvent> for LogSink {
     fn record(&self, event: &EngineEvent) {
         emit(event);
     }
