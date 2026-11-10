@@ -499,7 +499,10 @@ def test_a_short_call_returns_at_once():
     import time
 
     # A call that does little returns as soon as it is done,
-    # although calls poll for Ctrl-C while they run.
+    # although calls poll for Ctrl-C every 50 ms while they run.
+    # The bound is half the polling interval, which leaves room for a debug build or a busy
+    # machine.
+    bound = 0.025
     program = nmo.Program.parse("p(1) . q(?x) :- p(?x) .")
     loads, runs = [], []
     for _ in range(20):
@@ -510,8 +513,8 @@ def test_a_short_call_returns_at_once():
         engine.reason()
         loads.append(middle - start)
         runs.append(time.perf_counter() - middle)
-    assert statistics.median(loads) < 0.01
-    assert statistics.median(runs) < 0.01
+    assert statistics.median(loads) < bound
+    assert statistics.median(runs) < bound
 
 
 def test_trace_returns_the_protocol_dict():
