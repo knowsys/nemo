@@ -65,7 +65,7 @@ pub use results::{
 };
 
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     sync::Arc,
 };
 
@@ -89,7 +89,7 @@ use crate::{
         registered::Registered,
         remote::{Client, ClientSlot, PendingRequest, Progress, RequestId, Response, Suspension},
     },
-    model::{Fact, FileId, Program, Statement},
+    model::{Fact, FileId, Program, Statement, Term},
     pipeline::{Pipeline, RevisionId, Stages},
     telemetry::{EngineEvent, EngineTimings, EventSink, SinkSlot},
     trace::{TracePart, TraceResponse, TracedFact},
@@ -150,6 +150,12 @@ pub struct Engine {
     /// An import of a resource with one of these names reads the bytes from here
     /// instead of the filesystem.
     resources: HashMap<String, Arc<[u8]>>,
+    /// The values set through [set_parameter](Self::set_parameter),
+    /// by the name of their parameter without its `$`.
+    ///
+    /// The loading methods and [check](Self::check) write them into the `@parameter`
+    /// declarations of the program they are given.
+    parameters: BTreeMap<String, Term>,
     /// The module roots and the module texts registered by name, which [link](Self::link)
     /// reads.
     modules: link::ModuleSources,
@@ -367,6 +373,57 @@ impl Engine {
         self.resources.insert(name.into(), bytes.into());
     }
 
+    /// Sets the value of a parameter, which a program declares with `@parameter`.
+    ///
+    /// The loading methods and [check](Self::check) give the parameter this value in every
+    /// program that they are given afterwards, whatever value its declaration states.
+    /// The loaded program keeps the values it was loaded with,
+    /// so a value set after a load takes effect with the next [reload](Self::reload).
+    /// `name` is the name of the parameter, with or without its `$`.
+    ///
+    /// The value is a term, which may read other parameters, as `$limit * 2` does.
+    /// A Rust integer, float, boolean or string converts into a term,
+    /// [Term::value] returns the term of a [DataValue], and [Term::parse] reads a term from
+    /// text.
+    ///
+    /// Only a parameter that the program itself declares takes its value from here:
+    /// a parameter of a module gets its value from the `@use` of the module.
+    /// While a value is set for a parameter that a program does not declare,
+    /// the loading methods refuse the program.
+    /// [unset_parameter](Self::unset_parameter) removes a value.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use nemo::{engine::Engine, model::Program};
+    ///
+    /// let (program, _) = Program::parse(
+    ///     "@parameter $limit: int .
+    ///      n(1) . n(2) . n(3) .
+    ///      small(?x) :- n(?x), ?x < $limit .",
+    /// );
+    ///
+    /// let mut engine = Engine::new();
+    /// engine.set_parameter("limit", 3);
+    /// engine.load(program)?;
+    /// engine.reason()?;
+    /// assert_eq!(engine.count("small")?, 2);
+    /// # Ok::<(), nemo::diagnostics::Diagnostic>(())
+    /// ```
+    pub fn set_parameter(&mut self, name: &str, value: impl Into<Term>) {
+        self.parameters
+            .insert(parameter_name(name).to_owned(), value.into());
+    }
+
+    /// Removes the value that [set_parameter](Self::set_parameter) set for a parameter,
+    /// and returns whether one was set.
+    ///
+    /// The programs given to the loading methods afterwards have the value that the
+    /// parameter's declaration states.
+    pub fn unset_parameter(&mut self, name: &str) -> bool {
+        self.parameters.remove(parameter_name(name)).is_some()
+    }
+
     /// Makes imports store every declared column and every row.
     ///
     /// By default, imports are loaded partially:
@@ -457,6 +514,8 @@ impl Engine {
     /// - Returns N0490 for a program that is not linked.
     /// - Returns N0493 if another method is suspended for data from the network
     ///   (see [pending](Self::pending)).
+    /// - Returns N0494 if a value is [set](Self::set_parameter) for a parameter that the
+    ///   program does not declare.
     /// - Returns N0491 if the imports need data from the network but the engine has no client,
     ///   and N0492 if the [cancel token](Self::cancel_token) stops the wait for the responses.
     ///   The load then changes nothing.
@@ -515,6 +574,8 @@ impl Engine {
     ///   parameters again.
     ///   These would change the meaning of the loaded statements,
     ///   so they need [reload](Self::reload).
+    /// - Returns N0494 if a value is [set](Self::set_parameter) for a parameter that neither
+    ///   the extension nor the loaded program declares.
     /// - Returns N0491 or N0492 as [load](Self::load) does, with the loaded program unchanged.
     /// - Otherwise, returns the first problem of the extension or its data.
     ///
@@ -568,6 +629,8 @@ impl Engine {
     ///
     /// - Returns N0482 if no program is loaded, N0490 for a program that is not linked,
     ///   and N0493 if another method is suspended for data from the network.
+    /// - Returns N0494 if a value is [set](Self::set_parameter) for a parameter that the
+    ///   program does not declare.
     /// - Returns N0491 or N0492 as [load](Self::load) does, with the loaded program unchanged.
     /// - Otherwise, returns the first problem of the program or its data.
     ///
@@ -605,8 +668,9 @@ impl Engine {
     ///
     /// The check resolves the parameters, validates the directives, compiles the rules,
     /// and stratifies the whole program, but reads no imported data and stores no facts.
-    /// A parameter declared without a value, which a load must be given, stands for any value
-    /// of its declared type, as an `@input` predicate stands for any rows its declaration allows.
+    /// A parameter has the value [set](Self::set_parameter) for it, as in a load.
+    /// A parameter without a value, which a load refuses, stands for any value of its
+    /// declared type, as an `@input` predicate stands for any rows its declaration allows.
     ///
     /// Unlike [load](Self::load), a check does not stop at the first problem.
     /// It reports every problem it found, warnings included,
@@ -1376,6 +1440,11 @@ impl Engine {
     pub fn evaluation_errors(&self) -> ErrorCounts {
         self.errors
     }
+}
+
+/// Returns the name of a parameter without the `$` that it is written with in a program.
+fn parameter_name(name: &str) -> &str {
+    name.strip_prefix('$').unwrap_or(name)
 }
 
 /// An engine looks up the sources that are registered with it.

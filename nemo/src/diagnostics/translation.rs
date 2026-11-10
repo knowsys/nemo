@@ -156,8 +156,8 @@ diagnostic_kinds! {
             => PARAMETER_WITHOUT_VALUE = 279, error, "parameter `${name}` has no value",
                explain "A parameter is declared without a value, and no value was supplied \
                         from outside.",
-               hint "supply a value, for example with `--param name=value` on the command \
-                     line";
+               hint "give it a value with `set_parameter`, or with `--param name=value` on \
+                     the command line";
         ParameterCycle { name: String }
             => PARAMETER_CYCLE = 280, error,
                "parameter `${name}` depends on itself",

@@ -111,5 +111,12 @@ diagnostic_kinds! {
                         query at its endpoint is not stored at all. Derived predicates, and \
                         predicates the program declares `@output` or exports, are always \
                         stored whole.";
+        UnknownParameter { name: String }
+            => UNKNOWN_PARAMETER = 494, error, "the program has no parameter `${name}`",
+               explain "A value was set for a parameter that the program does not declare. \
+                        Only a parameter that the program itself declares with `@parameter` \
+                        can be given a value this way: a parameter of a module gets its value \
+                        from the `@use` of the module.",
+               hint "declare the parameter with `@parameter` before setting it";
     }
 }

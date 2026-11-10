@@ -249,18 +249,72 @@ impl Engine {
         Ok(Progress::Done)
     }
 
+    /// Gives the `@parameter` declarations of a program the values set through
+    /// [set_parameter](Engine::set_parameter), whatever values they state.
+    ///
+    /// Only the declarations of the program itself are given values.
+    /// The parameters of a module instance have its alias in their names,
+    /// and their values come from the `@use`.
+    /// For an `extension`, the parameters of the loaded program count as declared.
+    /// Fails for a value whose parameter is not declared.
+    fn supply_parameters(&self, program: &mut Program, extension: bool) -> Result<(), Diagnostic> {
+        if self.parameters.is_empty() {
+            return Ok(());
+        }
+        let of_instance = |name: &str| name.contains("::");
+        let mut declared: Vec<String> = Vec::new();
+        for statement in &mut program.statements {
+            let Statement::Directive(Directive::Parameter(parameter)) = statement else {
+                continue;
+            };
+            let name = &parameter.variable.name;
+            if of_instance(name) {
+                continue;
+            }
+            if let Some(value) = self.parameters.get(name) {
+                parameter.value = Some(value.clone());
+            }
+            declared.push(name.clone());
+        }
+        if extension {
+            let loaded = self.translation.globals.keys();
+            declared.extend(loaded.filter(|name| !of_instance(name)).cloned());
+        }
+
+        let Some(unknown) = self.parameters.keys().find(|name| !declared.contains(name)) else {
+            return Ok(());
+        };
+        let mut problem = EngineError::UnknownParameter {
+            name: unknown.clone(),
+        }
+        .diagnostic();
+        if !declared.is_empty() {
+            declared.sort();
+            declared.dedup();
+            problem = problem.with_note(format!(
+                "the program declares: `${}`",
+                declared.join("`, `$")
+            ));
+        }
+        Err(problem)
+    }
+
     /// Stages a program: adds it to the pipeline as the written revision,
     /// and runs the pipeline stages over it.
     ///
     /// `imported` names the predicates with rows added through
     /// [import_rows](Engine::import_rows), which the stages see only by name.
-    /// Fails for a program that is not linked, and for a problem a stage reports.
+    /// The program's parameters first get the values set through
+    /// [set_parameter](Engine::set_parameter).
+    /// Fails for a program that is not linked, for a value set for a parameter that the
+    /// program does not declare, and for a problem a stage reports.
     pub(super) fn stage(
         &mut self,
-        program: Program,
+        mut program: Program,
         imported: &[String],
     ) -> Result<Staged, Diagnostic> {
         expect_linked(&program)?;
+        self.supply_parameters(&mut program, false)?;
         let written = self.pipeline.load(program);
         let revision = self
             .pipeline
@@ -333,6 +387,8 @@ impl Engine {
 
     /// Stages an extension: checks it, and appends it to `held`, the loaded revision.
     ///
+    /// The extension's parameters first get the values set through
+    /// [set_parameter](Engine::set_parameter).
     /// The check fails for an extension that is not linked,
     /// or that changes the `@base`, a prefix or a parameter of the loaded program.
     /// The pipeline stages then run over the whole program without rewriting the loaded
@@ -341,10 +397,11 @@ impl Engine {
     /// program in view, and the names that the stages introduce are new to the whole program.
     fn stage_extension(
         &mut self,
-        program: Program,
+        mut program: Program,
         held: RevisionId,
     ) -> Result<Staged, Diagnostic> {
         expect_linked(&program)?;
+        self.supply_parameters(&mut program, true)?;
         let addition = self.pipeline.load(program);
         self.check_extension(addition)?;
         let frozen = self.pipeline.statements(held).count();

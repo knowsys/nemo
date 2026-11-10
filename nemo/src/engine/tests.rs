@@ -12,7 +12,7 @@ use nemo_physical::{
 use crate::{
     codes,
     engine::{PredicateRole, registered::Registered},
-    model::{Fact, FileId, Program},
+    model::{Fact, FileId, Program, Term},
     testing::{TempDirectory, arities, parse, roles, run},
     values::TypeSyntax,
 };
@@ -24,6 +24,7 @@ mod documentation;
 mod imported_rows;
 mod imports;
 mod methods;
+mod parameters;
 mod rules;
 mod structures;
 mod types;
