@@ -48,9 +48,8 @@ reports through `program.diagnostics`.
 
 ## Data in, data out
 
-- `engine.import_rows(predicate, rows)` — rows from Python join the
-  program as facts (before `load`, so they pass the same checks and type
-  analysis).
+- `engine.import_rows(predicate, rows)` — rows from Python, before or
+  after `load`, checked like the program's facts.
 - `engine.add_resource(name, text_or_bytes)` — an `@import` whose
   resource matches reads these bytes instead of the filesystem.
 - `engine.add_module(name, text)` — a `@use` of the module `name`

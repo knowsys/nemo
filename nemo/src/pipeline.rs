@@ -175,12 +175,24 @@ impl Pipeline {
     /// or if a stage breaks a rule of [Commit],
     /// such as by writing a construct that a loaded program cannot contain.
     pub fn apply(&mut self, stages: &Stages, base: RevisionId) -> Result<RevisionId, Diagnostic> {
+        self.apply_imported(stages, base, &[])
+    }
+
+    /// Applies stages as [apply](Self::apply) does,
+    /// telling them which predicates have rows given through
+    /// [import_rows](crate::engine::Engine::import_rows) (see [Commit::with_imported]).
+    pub(crate) fn apply_imported(
+        &mut self,
+        stages: &Stages,
+        base: RevisionId,
+        imported: &[String],
+    ) -> Result<RevisionId, Diagnostic> {
         let mut current = base;
         for stage in stages.entries() {
             if self.ran(current, stage.name()) {
                 continue;
             }
-            current = self.run(stage.as_ref(), current, 0)?;
+            current = self.run(stage.as_ref(), current, 0, imported)?;
         }
         Ok(current)
     }
@@ -191,27 +203,32 @@ impl Pipeline {
     ///
     /// Every stage runs, and none may rewrite the frozen statements.
     /// A stage that returns an error aborts the application, as in [apply](Self::apply).
+    /// `imported` is as for [apply_imported](Self::apply_imported).
     pub(crate) fn extend(
         &mut self,
         stages: &Stages,
         base: RevisionId,
         frozen: usize,
+        imported: &[String],
     ) -> Result<RevisionId, Diagnostic> {
         let mut current = base;
         for stage in stages.entries() {
-            current = self.run(stage.as_ref(), current, frozen)?;
+            current = self.run(stage.as_ref(), current, frozen, imported)?;
         }
         Ok(current)
     }
 
     /// Runs one stage over a revision, after checking that the stages it requires have run.
     ///
-    /// The first `frozen` statements of `base` are frozen in the stage's commit.
+    /// The first `frozen` statements of `base` are frozen in the stage's commit,
+    /// and `imported` names the predicates with rows given through
+    /// [import_rows](crate::engine::Engine::import_rows).
     fn run(
         &mut self,
         stage: &dyn Transformation,
         base: RevisionId,
         frozen: usize,
+        imported: &[String],
     ) -> Result<RevisionId, Diagnostic> {
         for required in stage.requires() {
             assert!(
@@ -220,7 +237,7 @@ impl Pipeline {
                 stage.name()
             );
         }
-        let mut commit = Commit::new(self, base, stage.name(), frozen);
+        let mut commit = Commit::new(self, base, stage.name(), frozen).with_imported(imported);
         stage.apply(&mut commit)?;
         Ok(commit.finish())
     }

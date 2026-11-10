@@ -128,7 +128,10 @@ impl Engine {
                 .with_hint("call `load()` first; `reload()` replaces a loaded program"));
         }
         let already = self.pipeline.reports().len();
-        let staged = self.stage(program)?;
+        // The rows added through `import_rows` stay, unless their predicate is rebuilt,
+        // so the stages are told which predicates have them.
+        let imported = self.imported_predicates();
+        let staged = self.stage(program, &imported)?;
         if !self.rewriting_stages(&staged).is_empty() {
             self.translate_written_reload(&staged)?;
         }

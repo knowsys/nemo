@@ -21,6 +21,7 @@ mod aggregates;
 mod checking;
 mod diagnostics;
 mod documentation;
+mod imported_rows;
 mod imports;
 mod methods;
 mod rules;

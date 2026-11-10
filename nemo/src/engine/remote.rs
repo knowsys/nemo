@@ -45,7 +45,6 @@ use crate::{
         Engine, compile::translation::TranslationState, evaluate::reason::SuspendedReasoning,
         staging::Staged,
     },
-    model::Statement,
 };
 
 /// A remote resource that a loading method needs: the import that reads it, its name,
@@ -165,12 +164,6 @@ pub(super) struct SuspendedLoad {
     pub(super) kind: LoadKind,
     /// The program, with the revisions the pipeline made of it.
     pub(super) staged: Staged,
-    /// The number of rows added through [import_rows](Engine::import_rows) before a first load,
-    /// which the load added to its program.
-    ///
-    /// They are the last statements of its written revision,
-    /// and go back to the engine if the suspended method is discarded.
-    pub(super) imported_rows: usize,
     /// The translation state that the preparation left, once the method was suspended,
     /// from which it commits without preparing again.
     pub(super) prepared: Option<TranslationState>,
@@ -202,7 +195,6 @@ impl SuspendedLoad {
             kind,
             staged,
             reports_from,
-            imported_rows: 0,
             prepared: None,
             unstable: HashSet::new(),
             fetched: HashMap::new(),
@@ -502,8 +494,6 @@ impl Engine {
     ///
     /// A suspended loading method withdraws its reports and undoes its choice of the
     /// evaluation context.
-    /// A suspended first load also returns the rows that were added through
-    /// [import_rows](Engine::import_rows) before it to the engine.
     /// A suspended run ends as a cancelled one does, and reports what its fetches skipped.
     pub(super) fn abandon(&mut self) {
         let load = match self.suspension.take() {
@@ -518,16 +508,6 @@ impl Engine {
             self.next_context = None;
         }
         self.pipeline.withdraw_reports(load.reports_from);
-        if load.imported_rows > 0 {
-            let statements: Vec<Statement> = self
-                .pipeline
-                .statements(load.staged.written)
-                .map(|(_, statement)| statement.clone())
-                .collect();
-            let first = statements.len() - load.imported_rows;
-            self.unloaded_rows
-                .extend(statements.into_iter().skip(first));
-        }
     }
 
     /// Records a suspended method, and returns [Progress::Suspended] with the requests it is

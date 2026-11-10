@@ -271,6 +271,93 @@ fn an_import_matched_at_its_endpoint_is_listed_but_not_stored() {
     assert_eq!((engine.loaded_facts(), engine.derived_facts()), (1, 3));
 }
 
+/// Rows given through `import_rows` keep the rules that read their predicate from being
+/// matched at the import's endpoint, which does not have these rows,
+/// as facts of the predicate do, also once a reload keeps the rows.
+#[test]
+fn imported_rows_keep_their_import_fetched_whole() {
+    let fetcher = Responder::endpoint(|text| {
+        assert!(
+            values_blocks(text).is_empty(),
+            "the import is fetched whole: {text}"
+        );
+        String::from("?x\t?y\n<urn:a>\t<urn:one>\n")
+    });
+    let source = r#"
+@import pairs from sparql {
+    endpoint = <http://example.org/sparql>,
+    query = "SELECT ?x ?y WHERE { ?x <urn:p> ?y }"
+} .
+item(<urn:a>) . item(<urn:b>) .
+named(?x, ?y) :- item(?x), pairs(?x, ?y) .
+@output named .
+"#;
+    let mut engine = Engine::new();
+    engine
+        .import_rows(
+            "pairs",
+            [vec![DataValue::iri("urn:b"), DataValue::iri("urn:two")]],
+        )
+        .expect("the rows are kept for the load");
+    let program = parse_into(&mut engine, source);
+    fetcher
+        .serve(&mut engine, |engine| engine.load(program))
+        .unwrap_or_else(|problem| panic!("{problem:?}"));
+    fetcher
+        .serve(&mut engine, Engine::reason)
+        .unwrap_or_else(|problem| panic!("{problem:?}"));
+    assert_eq!(engine.count("named").expect("derived"), 2);
+
+    let program = parse_into(&mut engine, source);
+    fetcher
+        .serve(&mut engine, |engine| engine.reload(program))
+        .unwrap_or_else(|problem| panic!("{problem:?}"));
+    fetcher
+        .serve(&mut engine, Engine::reason)
+        .unwrap_or_else(|problem| panic!("{problem:?}"));
+    assert_eq!(engine.count("named").expect("derived"), 2);
+}
+
+/// The names that the SPARQL rewrite gives its new predicates avoid the predicates with rows
+/// given through `import_rows`, as they avoid the predicates of the program.
+#[test]
+fn fresh_names_avoid_the_predicates_of_imported_rows() {
+    let fetcher = Responder::endpoint(|text| {
+        assert!(
+            !values_blocks(text).is_empty(),
+            "the import is bound: {text}"
+        );
+        String::from("?x\t?y\n<urn:a>\t<urn:one>\n")
+    });
+    let mut engine = Engine::new();
+    engine
+        .import_rows("pairs_query1", [vec![DataValue::iri("urn:z")]])
+        .expect("the rows are kept for the load");
+    let program = parse_into(
+        &mut engine,
+        r#"
+@import pairs from sparql {
+    endpoint = <http://example.org/sparql>,
+    query = "SELECT ?x ?y WHERE { ?x <urn:p> ?y }"
+} .
+item(<urn:a>) .
+named(?x, ?y) :- item(?x), pairs(?x, ?y) .
+@output named .
+"#,
+    );
+    fetcher
+        .serve(&mut engine, |engine| engine.load(program))
+        .unwrap_or_else(|problem| panic!("{problem:?}"));
+    fetcher
+        .serve(&mut engine, Engine::reason)
+        .unwrap_or_else(|problem| panic!("{problem:?}"));
+    assert_eq!(engine.count("named").expect("derived"), 1);
+    assert_eq!(
+        engine.rows("pairs_query1").expect("the rows are stored"),
+        vec![vec![DataValue::iri("urn:z")]]
+    );
+}
+
 #[test]
 fn a_derived_predicate_a_fold_imports_is_stored_whole() {
     let fetcher = Responder::endpoint(|text| {

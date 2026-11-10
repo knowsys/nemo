@@ -472,10 +472,15 @@ impl Commit<'_> {
         name
     }
 
-    /// Returns the resolved names of the predicates that the input uses.
+    /// Returns the resolved names of the predicates that the input uses,
+    /// with those that rows given through [import_rows](crate::engine::Engine::import_rows)
+    /// use.
     fn input_names(&self) -> &HashSet<String> {
-        self.input_names
-            .get_or_init(|| self.names_of(self.pipeline.revision_statements(self.base)))
+        self.input_names.get_or_init(|| {
+            let mut names = self.names_of(self.pipeline.revision_statements(self.base));
+            names.extend(self.imported.iter().cloned());
+            names
+        })
     }
 }
 

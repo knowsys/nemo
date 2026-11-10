@@ -375,7 +375,9 @@ fn stages_over_an_extension_keep_the_loaded_statements() {
             }
         },
     });
-    let after = pipeline.extend(&stages, merged, 3).expect("the stage runs");
+    let after = pipeline
+        .extend(&stages, merged, 3, &[])
+        .expect("the stage runs");
     assert_eq!(
         pipeline.program(after).to_string(),
         "edge(1) .

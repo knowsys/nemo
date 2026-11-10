@@ -125,10 +125,12 @@ pub struct Commit<'a> {
     pending: Vec<PendingDeclaration>,
     /// The name scope of the base revision, built on first use.
     scope: OnceCell<NameScope>,
-    /// The resolved names of the predicates that the input uses, collected on first use.
+    /// The resolved names of the predicates that the input uses,
+    /// with the predicates of [imported](Self::imported), collected on first use.
     input_names: OnceCell<HashSet<String>>,
     /// The resolved names of the predicates in use,
-    /// including those drawn by [fresh](Self::fresh), collected on first use.
+    /// with the predicates of [imported](Self::imported)
+    /// and those drawn by [fresh](Self::fresh), collected on first use.
     taken: Option<HashSet<String>>,
     /// The imports removed with [remove_import](Self::remove_import),
     /// each with the resolved name of its predicate.
@@ -136,6 +138,9 @@ pub struct Commit<'a> {
     /// When the commit finishes, no statement other than a `@declare` directive may name these
     /// predicates.
     removed_imports: Vec<(StatementId, String)>,
+    /// The resolved names of the predicates with rows given through
+    /// [import_rows](crate::engine::Engine::import_rows), which no statement shows.
+    imported: &'a [String],
 }
 
 impl<'a> Commit<'a> {
@@ -161,7 +166,24 @@ impl<'a> Commit<'a> {
             input_names: OnceCell::new(),
             taken: None,
             removed_imports: Vec::new(),
+            imported: &[],
         }
+    }
+
+    /// Returns the commit, telling the stage which predicates have rows given through
+    /// [import_rows](crate::engine::Engine::import_rows), by resolved name.
+    pub(crate) fn with_imported(mut self, imported: &'a [String]) -> Self {
+        self.imported = imported;
+        self
+    }
+
+    /// Returns the resolved names of the predicates with rows given through
+    /// [import_rows](crate::engine::Engine::import_rows).
+    ///
+    /// No statement shows these rows, so the engine's own stages leave their predicates alone.
+    #[cfg(feature = "sparql")]
+    pub(crate) fn imported_predicates(&self) -> &[String] {
+        self.imported
     }
 
     /// Returns the live statements that the stage may rewrite, in program order.
@@ -199,13 +221,16 @@ impl<'a> Commit<'a> {
         self.scope().resolve(identifier, None)
     }
 
-    /// Returns a bare predicate name that no statement uses yet.
+    /// Returns a bare predicate name that neither a statement nor the rows given through
+    /// [import_rows](crate::engine::Engine::import_rows) use yet.
     ///
     /// The name is `stem` followed by the first number from 1 that makes it unused.
     /// A name that this method returns counts as used from then on.
     pub fn fresh(&mut self, stem: &str) -> Identifier {
         if self.taken.is_none() {
-            self.taken = Some(self.names_of(&self.statements));
+            let mut taken = self.names_of(&self.statements);
+            taken.extend(self.imported.iter().cloned());
+            self.taken = Some(taken);
         }
         for index in 1.. {
             let identifier = Identifier::bare(format!("{stem}{index}"));

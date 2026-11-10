@@ -385,9 +385,11 @@ impl NemoEngine {
     ///
     /// `rows` is an array of rows, each an array of values,
     /// which are converted by the bindings' conversion table.
-    /// Before `load`, the rows become facts of the program.
+    /// Before `load`, the rows are kept, and `load` checks them as it checks the program's facts
+    /// and stores them with these.
     /// After it, they are new facts, and the next `reason()` continues to the new fixpoint.
-    /// The predicate must then be one that the program uses, since only `extend` adds new ones.
+    /// The predicate must then be one that the program uses or that rows were given to,
+    /// since only `extend` adds new ones.
     /// Throws for a value that does not convert, for a row that the predicate does not accept,
     /// and with code N0493 while a method is suspended.
     #[wasm_bindgen(js_name = "importRows")]

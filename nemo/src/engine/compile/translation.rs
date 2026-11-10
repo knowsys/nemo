@@ -9,6 +9,7 @@ mod compiler;
 mod declarations;
 pub(crate) mod exports;
 mod facts;
+mod imported_rows;
 pub(crate) mod imports;
 mod options;
 mod program_builder;
@@ -47,6 +48,7 @@ use crate::{
             program_builder::{StackProgramBuilder, VariableScope},
         },
         compile::types,
+        imported_rows::RowBlock,
         registered::Registered,
         remote::{FetchedResource, Progress, ResourceRequest, Suspension},
         written::WrittenProgram,
@@ -106,6 +108,11 @@ pub(crate) struct TranslationSetup<'a> {
     /// The evaluation context of ground expressions, such as the instant that their `NOW()`
     /// returns.
     pub(crate) context: EvaluationContext,
+    /// The rows given through [import_rows](crate::engine::Engine::import_rows) before the
+    /// first load, which its translation checks and encodes after the statements.
+    ///
+    /// A check, which looks at the program on its own, leaves them out.
+    pub(crate) imported: &'a [RowBlock],
 }
 
 /// What a translation is for,
@@ -365,6 +372,12 @@ pub(crate) struct Translator<'a> {
     /// A *preloaded* fact adds no rows, and a preloaded import reads nothing,
     /// but everything that they declare is still compiled.
     preloaded: Vec<bool>,
+    /// The rows given through [import_rows](crate::engine::Engine::import_rows) before the
+    /// first load (see [TranslationSetup::imported]).
+    imported: &'a [RowBlock],
+    /// The encoded rows of [imported](Self::imported), per table,
+    /// which are stored apart from the facts since they are not part of the program.
+    imported_tables: Vec<(TableId, RowBuffer)>,
 }
 
 impl<'a> Translator<'a> {
@@ -413,7 +426,21 @@ impl<'a> Translator<'a> {
             previous_types: setup.previous_types,
             context: setup.context,
             preloaded,
+            imported: setup.imported,
+            imported_tables: Vec::new(),
         }
+    }
+
+    /// Returns the names of the predicates with rows given through
+    /// [import_rows](crate::engine::Engine::import_rows) before the first load.
+    pub(crate) fn imported_predicates(&self) -> impl Iterator<Item = &str> {
+        self.imported.iter().map(RowBlock::predicate)
+    }
+
+    /// Takes out the encoded rows given through
+    /// [import_rows](crate::engine::Engine::import_rows) before the first load, per table.
+    pub(crate) fn take_imported_rows(&mut self) -> Vec<(TableId, RowBuffer)> {
+        std::mem::take(&mut self.imported_tables)
     }
 
     /// Returns whether a statement's data is already stored.
@@ -525,6 +552,15 @@ impl<'a> Translator<'a> {
     ) -> Result<CompiledProgram, Diagnostic> {
         self.fetched = fetched;
         let compiled = self.translate_statements(statements, ids)?;
+        // The rows given through `import_rows` are data, which a check leaves out.
+        // A refused row ends any other translation, as a problem in an import's data does.
+        if self.purpose != Purpose::Check {
+            for block in self.imported {
+                if let Some(rows) = self.imported_rows(block)? {
+                    self.imported_tables.push(rows);
+                }
+            }
+        }
         // Imports run last, when every predicate's arity is known.
         self.execute_imports()?;
         // So do the export checks that need an arity.
@@ -1208,6 +1244,7 @@ impl Engine {
                 written: None,
                 previous_types: self.program.as_ref().map(|program| &program.column_types),
                 context,
+                imported: self.unloaded_rows.blocks(),
             },
         )
     }

@@ -1,6 +1,7 @@
 //! The program's predicates, as the result methods name and describe them.
 //!
-//! The predicates are those of the written program.
+//! The predicates are those of the written program,
+//! and those with rows added through [import_rows](crate::engine::Engine::import_rows).
 //! A predicate is *stored whole* if the engine stores every one of its facts.
 //! Every derived predicate is stored whole,
 //! and so is every predicate that the program declares `@output` or exports.
@@ -182,11 +183,36 @@ impl Engine {
             })
     }
 
+    /// Returns the resolved names of the predicates with rows added through
+    /// [import_rows](crate::engine::Engine::import_rows),
+    /// whether they wait for the first load or are stored.
+    pub(in crate::engine) fn imported_predicates(&self) -> Vec<String> {
+        let mut names = self.unloaded_rows.predicates();
+        names.extend(
+            self.predicates
+                .keys()
+                .filter(|name| self.holds_imported_rows(name))
+                .cloned(),
+        );
+        names
+    }
+
     /// Returns the names of the program's predicates:
-    /// the written program's, or every registered one if no program is loaded.
+    /// the written program's and those with rows added through
+    /// [import_rows](crate::engine::Engine::import_rows),
+    /// or every registered one if no program is loaded.
     pub(in crate::engine) fn listed(&self) -> Vec<String> {
         match &self.written {
-            Some(written) => written.predicates().map(str::to_owned).collect(),
+            Some(written) => {
+                let mut names: Vec<String> = written.predicates().map(str::to_owned).collect();
+                names.extend(
+                    self.predicates
+                        .keys()
+                        .filter(|name| !written.names(name) && self.holds_imported_rows(name))
+                        .cloned(),
+                );
+                names
+            }
             None => self.predicates.keys().cloned().collect(),
         }
     }
@@ -194,7 +220,7 @@ impl Engine {
     /// Returns whether a name is one of the program's predicates.
     fn names(&self, predicate: &str) -> bool {
         match &self.written {
-            Some(written) => written.names(predicate),
+            Some(written) => written.names(predicate) || self.holds_imported_rows(predicate),
             None => self.predicates.contains_key(predicate),
         }
     }

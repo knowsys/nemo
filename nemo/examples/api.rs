@@ -63,7 +63,7 @@ fn main() {
     // ── Running ──────────────────────────────────────────────────────
     //
     // Data can also arrive from the host directly: rows imported before
-    // the load join the program as facts.
+    // the load are checked and stored with the program's facts.
     let mut engine = Engine::new();
     engine
         .import_rows(

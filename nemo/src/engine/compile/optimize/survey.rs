@@ -26,6 +26,8 @@ pub(crate) struct ImportSurvey {
     /// since something other than a rule body can read them.
     ///
     /// These are the predicates of facts, rule heads, exports, `@output` and `@input`,
+    /// those with rows given through [import_rows](crate::engine::Engine::import_rows)
+    /// before the first load,
     /// and every predicate that the written program derives,
     /// even if a pipeline stage replaced its rules with an import.
     pub(crate) sealed: HashSet<String>,
@@ -64,6 +66,10 @@ impl ImportSurvey {
         if let Some(written) = translator.written {
             survey.sealed.extend(written.derived().map(str::to_owned));
         }
+        // So is a predicate with rows given through `import_rows`, as one with facts is.
+        survey
+            .sealed
+            .extend(translator.imported_predicates().map(str::to_owned));
         for statement in statements {
             match statement {
                 Statement::Fact(fact) => {

@@ -30,6 +30,7 @@
 //!
 //! Alongside them:
 //! - `staging` implements the loading methods and the check of a program.
+//! - `imported_rows` keeps the rows given through [import_rows](Engine::import_rows).
 //! - [remote] implements the methods suspended for data from the network.
 //! - `cancel` implements cancellation.
 
@@ -37,6 +38,7 @@ mod cancel;
 mod check;
 mod compile;
 mod evaluate;
+mod imported_rows;
 mod link;
 mod registered;
 pub mod remote;
@@ -135,10 +137,11 @@ pub struct Engine {
     /// and its number of columns.
     predicates: HashMap<String, Registered>,
     /// The rows added through [import_rows](Self::import_rows) before a program is loaded,
-    /// as facts.
+    /// one block per predicate.
     ///
-    /// [load](Self::load) adds them to the program.
-    unloaded_rows: Vec<Statement>,
+    /// The first [load](Self::load) checks them against the program and stores them.
+    /// They stay here until a load succeeds.
+    unloaded_rows: imported_rows::UnloadedRows,
     /// The in-memory resources registered through [add_resource](Self::add_resource), by name.
     ///
     /// An import of a resource with one of these names reads the bytes from here
@@ -616,10 +619,15 @@ impl Engine {
 
     /// Adds rows computed in memory, rather than read from a file, to a predicate.
     ///
-    /// Before [load](Self::load), the rows are kept, and the load adds them to the program as
-    /// facts, so that they are checked and analyzed like the program's own facts.
-    /// After a load, each row is checked like a fact of the program,
-    /// and the rows are stored in the predicate's table as a new revision.
+    /// The rows are checked against the program as its facts are,
+    /// but the pipeline stages do not see them,
+    /// and a [reload](Self::reload) keeps them unless it rebuilds their predicate,
+    /// which it reports.
+    /// Before [load](Self::load), the rows are kept, and the load checks and stores them with
+    /// the program's facts.
+    /// A load that fails keeps them, so that a corrected program can be loaded with them.
+    /// After a load, the rows are checked against the loaded program,
+    /// and stored in the predicate's table as a new revision.
     /// The next [reason](Self::reason) treats them as new facts and continues to the new
     /// fixpoint, dropping and deriving again the facts that depend on the predicate through
     /// negation or aggregation.
@@ -627,12 +635,17 @@ impl Engine {
     ///
     /// # Errors
     ///
-    /// - After a load, returns N0486 for a predicate the program does not use,
-    ///   since only [extend](Self::extend) introduces new ones.
+    /// A refused call adds no row.
+    /// A row that the program refuses gets the diagnostic that a fact with its values would
+    /// get, with a note that names the row; before a load, the load returns it.
+    ///
+    /// - After a load, returns N0486 for a predicate that the program does not use and that
+    ///   no rows were given to, since only [extend](Self::extend) introduces new ones.
     /// - Returns N0487 for a row that contains a null, since nulls are only created by
     ///   reasoning.
-    /// - Returns an error for a row with the wrong number of values,
-    ///   or with a value that the predicate's declaration does not allow.
+    /// - Returns N0254 for a row with another number of values than the predicate's other
+    ///   rows or than the program uses it with,
+    ///   and N0460 for a value that the predicate's declaration does not allow.
     /// - Returns N0493 if a method is suspended for data from the network.
     pub fn import_rows(
         &mut self,

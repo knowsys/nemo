@@ -164,7 +164,7 @@ impl Transformation for SparqlRewrite {
         if !used(&statements) {
             return Ok(());
         }
-        let mut context = RewriteContext::new(&statements, &ids);
+        let mut context = RewriteContext::new(&statements, &ids, commit.imported_predicates());
         if context.candidates.is_empty() {
             return Ok(());
         }

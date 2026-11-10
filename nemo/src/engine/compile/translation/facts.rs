@@ -22,7 +22,7 @@ impl<'a> Translator<'a> {
         let positional = self.positional_fact(fact)?;
         let fact = positional.as_ref().unwrap_or(fact);
         let name = self.resolve(&fact.predicate, fact.span)?;
-        let layout = self.fact_layout(&name, fact)?;
+        let layout = self.row_layout(&name, fact.terms.len(), fact.span)?;
         let table = self.table(&fact.predicate, layout.delivered(), fact.span)?;
 
         let mut values = Vec::with_capacity(fact.terms.len());
@@ -58,24 +58,30 @@ impl<'a> Translator<'a> {
         Ok(())
     }
 
-    /// Returns the layout that maps a fact's columns to its table's columns.
+    /// Returns the layout that maps the columns of a fact or a row with `arity` values to its
+    /// table's columns.
     ///
     /// For a pruned predicate, these are the delivered columns, and otherwise every column.
-    /// A fact with as many values as a pruned predicate has delivered columns is an error,
+    /// A row with as many values as a pruned predicate has delivered columns is an error,
     /// since its values would land in the wrong columns.
-    fn fact_layout(&self, name: &str, fact: &Fact) -> Result<ColumnLayout, Diagnostic> {
-        let layout = self.plan.layout_of(name, fact.terms.len());
+    pub(super) fn row_layout(
+        &self,
+        name: &str,
+        arity: usize,
+        span: Option<Span>,
+    ) -> Result<ColumnLayout, Diagnostic> {
+        let layout = self.plan.layout_of(name, arity);
         if layout.prunes() {
             return Ok(layout);
         }
-        let kept = self.plan.stored_layout(name, fact.terms.len()).kept();
-        if kept != fact.terms.len() {
+        let kept = self.plan.stored_layout(name, arity).kept();
+        if kept != arity {
             return Err(TranslationError::PrunedPredicateRows {
                 name: name.to_owned(),
                 written: kept.into(),
-                stored: fact.terms.len().into(),
+                stored: arity.into(),
             }
-            .at(fact.span));
+            .at(span));
         }
         Ok(layout)
     }
@@ -85,7 +91,7 @@ impl<'a> Translator<'a> {
     ///
     /// A value of a type that the declaration excludes is an error before anything runs.
     /// A tuple of the wrong shape is excluded like a string in an integer column.
-    fn check_fact_declaration(
+    pub(super) fn check_fact_declaration(
         &self,
         name: &str,
         position: usize,

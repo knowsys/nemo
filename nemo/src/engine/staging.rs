@@ -1,5 +1,5 @@
 //! Loading, extending, reloading and checking a program,
-//! and adding rows to a loaded program through [import_rows](crate::engine::Engine::import_rows).
+//! and adding rows through [import_rows](crate::engine::Engine::import_rows).
 //!
 //! A loading method first *stages* its program: it adds the program to the pipeline as the
 //! written revision, and runs the pipeline stages over it.
@@ -24,11 +24,12 @@ use crate::{
         compile::translation::{self, Purpose, TranslationState},
         compile::types,
         evaluate::extensional::ExtensionalOrigin,
+        imported_rows::{RowBlock, UnloadedRows},
         registered::Registered,
         remote::{LoadKind, Progress, SuspendedLoad, Suspension},
         written::WrittenProgram,
     },
-    model::{Directive, Fact, Identifier, Program, Statement, Term},
+    model::{Directive, Program, Statement},
     pipeline::{NameScope, RevisionId, Stages, StatementId},
 };
 
@@ -93,16 +94,14 @@ impl Engine {
             ));
         }
 
-        // The rows added through `import_rows` before the load are added to the program as
-        // facts, so that they pass the same declaration checks and seed the type analysis
-        // as the program's own facts do.
-        let mut program = program;
-        let imported_rows = self.unloaded_rows.len();
-        program.statements.append(&mut self.unloaded_rows);
         tracing::info!(statements = program.statements.len(), "loading a program");
 
+        // The stages are told which predicates have rows added through `import_rows`,
+        // which no statement shows.
+        // The translation checks the rows after the program's statements, as it checks facts.
         let already = self.pipeline.reports().len();
-        let staged = self.stage(program)?;
+        let imported = self.imported_predicates();
+        let staged = self.stage(program, &imported)?;
         if !self.rewriting_stages(&staged).is_empty() {
             let predicates = self.predicates.clone();
             self.translate_written(
@@ -113,8 +112,7 @@ impl Engine {
                 Purpose::Validate,
             )?;
         }
-        let mut load = SuspendedLoad::new(LoadKind::Load, staged, already);
-        load.imported_rows = imported_rows;
+        let load = SuspendedLoad::new(LoadKind::Load, staged, already);
         self.load_staged(load, already)
     }
 
@@ -163,6 +161,7 @@ impl Engine {
             }
             _ => None,
         };
+        let imported = translator.take_imported_rows();
         let (state, facts) = translator.finish();
         match requests {
             Ok(missing) if !missing.is_empty() => {
@@ -200,9 +199,29 @@ impl Engine {
                 self.record_extensional(table, Revision(0), ExtensionalOrigin::Load);
             }
         }
+        // The rows added through `import_rows` get a revision of their own, apart from the
+        // program's facts, as such rows do after a load.
+        self.step = 1;
+        if !imported.is_empty() {
+            for (table, rows) in imported {
+                #[cfg(debug_assertions)]
+                self.assert_stored_types(&compiled.column_types, table, &rows);
+                let arity = rows.arity();
+                let stored =
+                    self.manager
+                        .add_rows(table, Revision(1), ColumnOrder::identity(arity), rows);
+                if stored > 0 {
+                    self.record_extensional(table, Revision(1), ExtensionalOrigin::ImportRows);
+                }
+            }
+            self.step = 2;
+        }
+        self.unloaded_rows = UnloadedRows::default();
         // Everything stored so far was loaded, not derived.
         for &Registered { table, .. } in self.predicates.values() {
-            self.loaded += self.manager.row_count(table, Revision(0)..Revision(1));
+            self.loaded += self
+                .manager
+                .row_count(table, Revision(0)..Revision(self.step));
         }
         tracing::debug!(
             rules = compiled.rules.len(),
@@ -216,18 +235,25 @@ impl Engine {
         self.program = Some(compiled);
         self.revision = Some(revision);
         self.written = Some(written);
-        self.step = 1;
         Ok(Progress::Done)
     }
 
     /// Stages a program: adds it to the pipeline as the written revision,
     /// and runs the pipeline stages over it.
     ///
+    /// `imported` names the predicates with rows added through
+    /// [import_rows](Engine::import_rows), which the stages see only by name.
     /// Fails for a program that is not linked, and for a problem a stage reports.
-    pub(super) fn stage(&mut self, program: Program) -> Result<Staged, Diagnostic> {
+    pub(super) fn stage(
+        &mut self,
+        program: Program,
+        imported: &[String],
+    ) -> Result<Staged, Diagnostic> {
         expect_linked(&program)?;
         let written = self.pipeline.load(program);
-        let revision = self.pipeline.apply(&self.stages.0, written)?;
+        let revision = self
+            .pipeline
+            .apply_imported(&self.stages.0, written, imported)?;
         Ok(Staged { written, revision })
     }
 
@@ -320,7 +346,10 @@ impl Engine {
         let written = self.pipeline.merge(held_written, addition);
         #[cfg(feature = "sparql")]
         let merged = self.revive_sparql_imports(held, merged);
-        let revision = self.pipeline.extend(&self.stages.0, merged, frozen)?;
+        let imported = self.imported_predicates();
+        let revision = self
+            .pipeline
+            .extend(&self.stages.0, merged, frozen, &imported)?;
         Ok(Staged { written, revision })
     }
 
@@ -636,7 +665,7 @@ impl Engine {
     }
 
     /// Adds rows given through [import_rows](Engine::import_rows) to a predicate:
-    /// as facts of the program before a load, and as a new revision after one.
+    /// as a block for the first load before one, and as a new revision after one.
     ///
     /// The loaded program was analyzed with the types that its columns could hold.
     /// If the rows stay within the inferred types of the predicate's columns,
@@ -649,11 +678,9 @@ impl Engine {
         rows: impl IntoIterator<Item = Vec<DataValue>>,
     ) -> Result<(), Diagnostic> {
         if self.program.is_none() {
-            for row in rows {
-                self.unloaded_rows.push(Statement::Fact(Fact::new(
-                    Identifier::Iri(predicate.to_owned()),
-                    Self::row_terms(predicate, &row)?,
-                )));
+            let arity = self.unloaded_rows.arity(predicate);
+            if let Some(block) = RowBlock::read(predicate, rows, arity)? {
+                self.unloaded_rows.add(block);
             }
             return Ok(());
         }
@@ -661,43 +688,26 @@ impl Engine {
         let (table, _) = self.written_predicate(predicate).map_err(|unknown| {
             unknown.with_hint("first `extend()` the program with statements that use it")
         })?;
-        // Each row is checked like a fact of the program (declarations,
-        // the element types that `@type` declares, encoding), against the kept
-        // translation state. A refused call leaves the seeds as they were.
+        let Some(block) = RowBlock::read(predicate, rows, None)? else {
+            return Ok(());
+        };
+        // The rows are checked as facts of the program are (declarations, the element types
+        // that `@type` declares, encoding), against the kept translation state.
+        // A refused call leaves the seeds as they were.
         let seeds_before = self.translation.seeds.get(&table).cloned();
         let state = std::mem::take(&mut self.translation);
         let context = self.loading_context();
         let (stores, setup) = self.translation_parts(Purpose::Load, context);
         let mut translator = translation::Translator::new(stores, setup, state, Vec::new());
-        let mut outcome = Ok(());
-        for row in rows {
-            let fact = match Self::row_terms(predicate, &row) {
-                Ok(terms) => Fact::new(Identifier::Iri(predicate.to_owned()), terms),
-                Err(problem) => {
-                    outcome = Err(problem);
-                    break;
-                }
-            };
-            if let Err(problem) = translator.fact(&fact) {
-                // The row has no source position, so the note shows it.
-                let terms: Vec<String> = fact.terms.iter().map(ToString::to_string).collect();
-                outcome = Err(problem.with_note(format!(
-                    "the row given to `import_rows` is `{}({})`",
-                    Identifier::Bare(predicate.to_owned()),
-                    terms.join(", ")
-                )));
-                break;
-            }
-        }
-        let (state, mut facts) = translator.finish();
+        let outcome = translator.imported_rows(&block);
+        let (state, _) = translator.finish();
         self.translation = state;
-        if let Err(problem) = outcome {
-            self.restore_seeds(table, seeds_before);
-            return Err(problem);
-        }
-
-        let Some(rows) = facts.remove(&table) else {
-            return Ok(());
+        let rows = match outcome {
+            Ok(encoded) => encoded.expect("a load reads data").1,
+            Err(problem) => {
+                self.restore_seeds(table, seeds_before);
+                return Err(problem);
+            }
         };
         if !self.seeds_within_inferred(table) {
             match self.reanalyze() {
@@ -807,18 +817,6 @@ impl Engine {
         }
     }
 
-    /// Returns a row given through [import_rows](crate::engine::Engine::import_rows) as the
-    /// terms of a fact, or an error for a row that contains a null.
-    fn row_terms(predicate: &str, row: &[DataValue]) -> Result<Vec<Term>, Diagnostic> {
-        let terms: Option<Vec<Term>> = row.iter().map(Term::value).collect();
-        terms.ok_or_else(|| {
-            EngineError::NullInRow {
-                predicate: predicate.to_owned(),
-            }
-            .diagnostic()
-        })
-    }
-
     /// Registers, parses and links a program text, and passes the result to `call`
     /// (see [ingest](Engine::ingest)).
     pub(in crate::engine) fn ingest_text(
@@ -885,7 +883,7 @@ impl Engine {
             return Err(EngineError::AlreadyLoaded.diagnostic());
         }
         tracing::debug!(statements = program.statements.len(), "checking a program");
-        let staged = self.stage(program)?;
+        let staged = self.stage(program, &[])?;
         let (compiled, tables) = self.translate_written(
             staged.written,
             TranslationState::default(),

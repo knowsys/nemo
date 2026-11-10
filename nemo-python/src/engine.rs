@@ -180,9 +180,11 @@ impl Engine {
     ///
     /// `rows` is an iterable of rows, each an iterable of values,
     /// which are converted by the module's conversion table.
-    /// Before `load`, the rows become facts of the program.
+    /// Before `load`, the rows are kept, and `load` checks them as it checks the program's facts
+    /// and stores them with these.
     /// After it, they are new facts, and the next `reason()` continues to the new fixpoint.
-    /// The predicate must then be one that the program uses, since only `extend` adds new ones.
+    /// The predicate must then be one that the program uses or that rows were given to,
+    /// since only `extend` adds new ones.
     /// Raises `ValueError` or `TypeError` for a value that does not convert,
     /// and `DiagnosticsError` for a row that the predicate does not accept,
     /// or with code N0493 while a run is suspended (see `discard_pending`).

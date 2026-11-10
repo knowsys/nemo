@@ -74,8 +74,13 @@ pub(super) struct RewriteContext {
 
 impl RewriteContext {
     /// Surveys the program: its scope, parameters, candidates, and predicates.
-    pub(super) fn new(statements: &[Statement], ids: &[StatementId]) -> Self {
+    ///
+    /// `imported` names the predicates with rows given through
+    /// [import_rows](crate::engine::Engine::import_rows),
+    /// which are no candidates, as the predicates of facts are not.
+    pub(super) fn new(statements: &[Statement], ids: &[StatementId], imported: &[String]) -> Self {
         let mut builder = RewriteContextBuilder::new(NameScope::of(statements));
+        builder.sealed.extend(imported.iter().cloned());
         for (&id, statement) in ids.iter().zip(statements) {
             builder.statement(id, statement);
         }
