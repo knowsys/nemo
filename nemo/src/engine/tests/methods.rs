@@ -461,16 +461,12 @@ fn outputs_are_declared_or_derived() {
     assert_eq!(stored(&undeclared, "p"), (2, 1));
 }
 
-/// [ingest](Engine::ingest) registers, parses, links and loads a program text.
+/// [load_source](Engine::load_source) registers, parses, links and loads a program text.
 #[test]
 fn a_program_text_is_carried_through_a_loading_method() {
     let mut engine = Engine::new();
     engine
-        .ingest(
-            "test.rls",
-            "p(1) .\nq(?x) :- p(?x) .\n",
-            |engine, program| engine.load(program),
-        )
+        .load_source("test.rls", "p(1) .\nq(?x) :- p(?x) .\n")
         .expect("the program loads");
     assert_eq!(
         arities(&engine),
@@ -484,11 +480,7 @@ fn a_program_text_is_carried_through_a_loading_method() {
 fn a_text_with_errors_fails_with_what_parsing_reported() {
     let mut engine = Engine::new();
     let refused = engine
-        .ingest(
-            "test.rls",
-            "p(1 .\nq(?x) :- p(?x) .\n",
-            |engine, program| engine.load(program),
-        )
+        .load_source("test.rls", "p(1 .\nq(?x) :- p(?x) .\n")
         .expect_err("the first statement does not parse");
     assert!(!refused.is_empty());
     assert!(

@@ -612,8 +612,10 @@ impl Engine {
     /// Registers a program text, parses and [links](Self::link) it,
     /// and passes the result to `call`.
     ///
-    /// `call` is a loading method, such as [load](Self::load), or another function that
-    /// accepts a linked program.
+    /// `call` is a loading method, such as [start_load](Self::start_load), or another function
+    /// that accepts a linked program.
+    /// [load_source](Self::load_source), [extend_source](Self::extend_source) and
+    /// [reload_source](Self::reload_source) pass the program to the plain loading methods.
     /// If parsing reports an error, the text is rejected with everything parsing reported.
     /// Warnings alone do not stop it.
     ///
@@ -621,13 +623,54 @@ impl Engine {
     ///
     /// Returns the diagnostics of the step that failed:
     /// registration, parsing, linking, or `call`.
-    pub fn ingest(
+    pub fn with_source(
         &mut self,
         name: impl Into<String>,
         text: impl Into<String>,
         call: impl FnOnce(&mut Engine, Program) -> Result<(), Diagnostic>,
     ) -> Result<(), Vec<Diagnostic>> {
-        self.ingest_text(name, text, call)
+        self.with_source_text(name, text, call)
+    }
+
+    /// Registers a program text, parses and [links](Self::link) it, and [loads](Self::load) it.
+    ///
+    /// # Errors
+    ///
+    /// Returns the diagnostics of the step that failed, as [with_source](Self::with_source) does.
+    pub fn load_source(
+        &mut self,
+        name: impl Into<String>,
+        text: impl Into<String>,
+    ) -> Result<(), Vec<Diagnostic>> {
+        self.with_source(name, text, |engine, program| engine.load(program))
+    }
+
+    /// Registers a program text, parses and [links](Self::link) it,
+    /// and [extends](Self::extend) the loaded program with it.
+    ///
+    /// # Errors
+    ///
+    /// Returns the diagnostics of the step that failed, as [with_source](Self::with_source) does.
+    pub fn extend_source(
+        &mut self,
+        name: impl Into<String>,
+        text: impl Into<String>,
+    ) -> Result<(), Vec<Diagnostic>> {
+        self.with_source(name, text, |engine, program| engine.extend(program))
+    }
+
+    /// Registers a program text, parses and [links](Self::link) it,
+    /// and [replaces](Self::reload) the loaded program by it.
+    ///
+    /// # Errors
+    ///
+    /// Returns the diagnostics of the step that failed, as [with_source](Self::with_source) does.
+    pub fn reload_source(
+        &mut self,
+        name: impl Into<String>,
+        text: impl Into<String>,
+    ) -> Result<(), Vec<Diagnostic>> {
+        self.with_source(name, text, |engine, program| engine.reload(program))
     }
 
     /// Registers a program text and checks it without loading it.

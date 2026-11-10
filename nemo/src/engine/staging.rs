@@ -824,8 +824,8 @@ impl Engine {
     }
 
     /// Registers, parses and links a program text, and passes the result to `call`
-    /// (see [ingest](Engine::ingest)).
-    pub(in crate::engine) fn ingest_text(
+    /// (see [with_source](Engine::with_source)).
+    pub(in crate::engine) fn with_source_text(
         &mut self,
         name: impl Into<String>,
         text: impl Into<String>,

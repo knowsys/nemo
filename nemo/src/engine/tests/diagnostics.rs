@@ -287,10 +287,9 @@ fn the_engine_renders_a_diagnostic_against_its_registered_sources() {
         )
         .expect("the name is a module name");
     let refused = engine
-        .ingest(
+        .load_source(
             "main.rls",
             "base(1) .\n@use lib::broken { p = base } as b .\n",
-            |engine, program| engine.load(program),
         )
         .expect_err("the module's rule is unsafe");
     let [problem] = refused.as_slice() else {

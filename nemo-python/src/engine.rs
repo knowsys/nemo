@@ -81,10 +81,10 @@ impl Engine {
     /// Passes `program` to `call`, a loading method of the engine,
     /// and raises the diagnostics of a failure.
     ///
-    /// [Engine::ingest](nemo::engine::Engine::ingest) parses the program's text again,
+    /// [Engine::with_source](nemo::engine::Engine::with_source) parses the program's text again,
     /// under the engine's own file id.
     /// The call runs as [interruptible](Self::interruptible) describes.
-    fn ingest(
+    fn with_source(
         &self,
         py: Python<'_>,
         program: &Program,
@@ -100,7 +100,7 @@ impl Engine {
         let text = program.text.clone();
         let engine = &mut inner.engine;
         let outcome = self.interruptible(py, || {
-            engine.ingest(name, text, |engine, model| call(engine, model))
+            engine.with_source(name, text, |engine, model| call(engine, model))
         })?;
         // Linking reads the program's modules, so their sources are added before the
         // outcome is rendered against them.
@@ -288,7 +288,7 @@ impl Engine {
     /// Raises `DiagnosticsError` if the program does not parse or load,
     /// and with code N0493 while a run is suspended (see `discard_pending`).
     fn load(&self, py: Python<'_>, program: &Program) -> PyResult<()> {
-        self.ingest(py, program, |engine, model| engine.load(model))
+        self.with_source(py, program, |engine, model| engine.load(model))
     }
 
     /// Extends the loaded program with the statements of `program`.
@@ -302,7 +302,7 @@ impl Engine {
     /// It also raises `DiagnosticsError` with code N0493 while a run is suspended
     /// (see `discard_pending`).
     fn extend(&self, py: Python<'_>, program: &Program) -> PyResult<()> {
-        self.ingest(py, program, |engine, model| engine.extend(model))
+        self.with_source(py, program, |engine, model| engine.extend(model))
     }
 
     /// Replaces the loaded program with `program`.
@@ -317,7 +317,7 @@ impl Engine {
     /// Raises `DiagnosticsError` if the program does not parse or load,
     /// and with code N0493 while a run is suspended (see `discard_pending`).
     fn reload(&self, py: Python<'_>, program: &Program) -> PyResult<()> {
-        self.ingest(py, program, |engine, model| engine.reload(model))
+        self.with_source(py, program, |engine, model| engine.reload(model))
     }
 
     /// Checks a program without loading it, and returns its diagnostics.

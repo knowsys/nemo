@@ -63,7 +63,7 @@ impl Inner {
     /// Otherwise the plain form runs, which fails with [NO_CLIENT](nemo::codes::NO_CLIENT)
     /// if the program needs data from the network, since the engine in the browser has no
     /// client.
-    fn ingest(
+    fn with_source(
         &mut self,
         name: &str,
         text: String,
@@ -71,7 +71,7 @@ impl Inner {
         start_form: bool,
     ) -> Result<Progress, JsValue> {
         let mut progress = Progress::Done;
-        let outcome = self.engine.ingest(name, text, |engine, model| {
+        let outcome = self.engine.with_source(name, text, |engine, model| {
             if start_form {
                 progress = match kind {
                     LoadKind::Load => engine.start_load(model),
@@ -533,7 +533,7 @@ impl NemoEngine {
     pub fn load(&mut self, program: &NemoProgram) -> Result<(), JsValue> {
         let text = program.text.clone();
         self.state_mut()?
-            .ingest(&program.name, text, LoadKind::Load, false)
+            .with_source(&program.name, text, LoadKind::Load, false)
             .map(drop)
     }
 
@@ -549,7 +549,7 @@ impl NemoEngine {
         let text = program.text.clone();
         let progress = self
             .state_mut()?
-            .ingest(&program.name, text, LoadKind::Load, true)?;
+            .with_source(&program.name, text, LoadKind::Load, true)?;
         progress_js(progress)
     }
 
@@ -564,7 +564,7 @@ impl NemoEngine {
     #[wasm_bindgen(js_name = "loadAsync")]
     pub fn load_async(&self, program: &NemoProgram) -> Result<Promise, JsValue> {
         let (name, text) = (program.name.clone(), program.text.clone());
-        self.drive(move |inner| inner.ingest(&name, text, LoadKind::Load, true))
+        self.drive(move |inner| inner.with_source(&name, text, LoadKind::Load, true))
     }
 
     /// Extends the loaded program with the statements of `program`.
@@ -578,7 +578,7 @@ impl NemoEngine {
     pub fn extend(&mut self, program: &NemoProgram) -> Result<(), JsValue> {
         let text = program.text.clone();
         self.state_mut()?
-            .ingest(&program.name, text, LoadKind::Extend, false)
+            .with_source(&program.name, text, LoadKind::Extend, false)
             .map(drop)
     }
 
@@ -590,9 +590,9 @@ impl NemoEngine {
     #[wasm_bindgen(js_name = "startExtend")]
     pub fn start_extend(&mut self, program: &NemoProgram) -> Result<JsValue, JsValue> {
         let text = program.text.clone();
-        let progress = self
-            .state_mut()?
-            .ingest(&program.name, text, LoadKind::Extend, true)?;
+        let progress =
+            self.state_mut()?
+                .with_source(&program.name, text, LoadKind::Extend, true)?;
         progress_js(progress)
     }
 
@@ -601,7 +601,7 @@ impl NemoEngine {
     #[wasm_bindgen(js_name = "extendAsync")]
     pub fn extend_async(&self, program: &NemoProgram) -> Result<Promise, JsValue> {
         let (name, text) = (program.name.clone(), program.text.clone());
-        self.drive(move |inner| inner.ingest(&name, text, LoadKind::Extend, true))
+        self.drive(move |inner| inner.with_source(&name, text, LoadKind::Extend, true))
     }
 
     /// Replaces the loaded program with `program`.
@@ -616,7 +616,7 @@ impl NemoEngine {
     pub fn reload(&mut self, program: &NemoProgram) -> Result<(), JsValue> {
         let text = program.text.clone();
         self.state_mut()?
-            .ingest(&program.name, text, LoadKind::Reload, false)
+            .with_source(&program.name, text, LoadKind::Reload, false)
             .map(drop)
     }
 
@@ -628,9 +628,9 @@ impl NemoEngine {
     #[wasm_bindgen(js_name = "startReload")]
     pub fn start_reload(&mut self, program: &NemoProgram) -> Result<JsValue, JsValue> {
         let text = program.text.clone();
-        let progress = self
-            .state_mut()?
-            .ingest(&program.name, text, LoadKind::Reload, true)?;
+        let progress =
+            self.state_mut()?
+                .with_source(&program.name, text, LoadKind::Reload, true)?;
         progress_js(progress)
     }
 
@@ -639,7 +639,7 @@ impl NemoEngine {
     #[wasm_bindgen(js_name = "reloadAsync")]
     pub fn reload_async(&self, program: &NemoProgram) -> Result<Promise, JsValue> {
         let (name, text) = (program.name.clone(), program.text.clone());
-        self.drive(move |inner| inner.ingest(&name, text, LoadKind::Reload, true))
+        self.drive(move |inner| inner.with_source(&name, text, LoadKind::Reload, true))
     }
 
     /// Checks a program without loading it, and returns its diagnostics as plain objects.
