@@ -93,6 +93,9 @@ impl Engine {
         &mut self,
         program: Program,
     ) -> Result<Program, Diagnostic> {
+        // The module files must get file ids apart from the program's,
+        // whose text need not be registered.
+        self.pipeline.reserve_files(&program);
         Linker {
             pipeline: &mut self.pipeline,
             roots: &self.modules.roots,

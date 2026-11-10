@@ -1059,3 +1059,27 @@ fn a_root_reads_its_modules_from_its_directory() {
     let problem = link(source).expect_err("`shared` is a directory here too");
     assert_eq!(problem.code(), crate::codes::AMBIGUOUS_ROOT, "{problem:?}");
 }
+
+/// The modules of a program whose text is not registered get file ids of their own,
+/// so that each `@use` of the program is resolved against the working directory.
+#[test]
+fn an_unregistered_program_shares_no_file_id_with_its_modules() {
+    let mut engine = Engine::new();
+    for name in ["sub::a", "sub::b"] {
+        engine
+            .add_module(name, CLOSURE)
+            .expect("the name is a module name");
+    }
+    // The program is parsed with the file id 0, and its text is not registered.
+    let (parsed, diagnostics) = Program::parse(
+        "link(1, 2) .\n@use sub::a { edge = link } as x .\n@use sub::b { edge = link } as y .",
+        FileId::new(0),
+    );
+    assert!(diagnostics.is_empty(), "{diagnostics:?}");
+    engine.link(parsed).expect("the modules link");
+
+    let names: Vec<&str> = engine.sources().map(|(_, name, _)| name).collect();
+    assert!(names.contains(&"sub/a.rls"), "{names:?}");
+    assert!(names.contains(&"sub/b.rls"), "{names:?}");
+    assert_eq!(engine.file_name(FileId::new(0)), None);
+}

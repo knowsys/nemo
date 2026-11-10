@@ -245,6 +245,8 @@ impl Engine {
     ///
     /// If the text is parsed with this id, every diagnostic, from the parser or the engine,
     /// points into the registered text.
+    /// The id differs from the file id of every program that the engine was given before,
+    /// also of a program whose text is not registered.
     ///
     /// # Errors
     ///

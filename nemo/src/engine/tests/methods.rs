@@ -353,6 +353,20 @@ fn an_export_fails_without_a_program() {
     assert_eq!(refusal.code(), codes::NO_PROGRAM, "{refusal:?}");
 }
 
+/// A source registered after a program whose text is not registered
+/// gets a file id that the spans of the program do not use.
+#[test]
+fn a_registered_source_shares_no_file_id_with_an_unregistered_program() {
+    let mut engine = Engine::new();
+    // The program is parsed with the file id 0, and its text is not registered.
+    engine.load(parse("p(1) .")).expect("the program loads");
+    let file = engine
+        .add_source("later.rls", "q(1) .")
+        .expect("the text is small");
+    assert_ne!(file, FileId::new(0));
+    assert_eq!(engine.file_name(FileId::new(0)), None);
+}
+
 /// A trace fails until a run has reached the fixpoint,
 /// both before any run and after a cancelled one.
 #[test]

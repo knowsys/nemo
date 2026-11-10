@@ -4,7 +4,7 @@
 use std::sync::{Arc, OnceLock};
 
 use crate::{
-    model::{FileId, Span, UseDirective},
+    model::{FileId, Program, Span, UseDirective},
     pipeline::Pipeline,
 };
 
@@ -42,6 +42,7 @@ impl Pipeline {
     /// Registering a name again adds a new source under a new id.
     /// Ids are never reused,
     /// so the spans of an earlier version of a file that is read again stay valid.
+    /// A [reserved](Self::reserve_files) id is never assigned either.
     pub fn add_source(&mut self, name: impl Into<String>, text: impl Into<String>) -> FileId {
         let text: String = text.into();
         self.push_source(SourceFile {
@@ -91,10 +92,35 @@ impl Pipeline {
         chain
     }
 
-    /// Appends a source, and returns its file id.
+    /// Reserves the file ids of a program's statements that no source is registered under,
+    /// so that no source registered later gets one of them.
+    ///
+    /// The text of a program need not be registered.
+    /// The spans of its statements then point into no source of the pipeline,
+    /// and a source registered under their file id would be taken for the program's text.
+    pub(crate) fn reserve_files(&mut self, program: &Program) {
+        for statement in &program.statements {
+            if let Some(span) = statement.span()
+                && !self.files.contains_key(&span.file)
+            {
+                self.reserved_files.insert(span.file);
+            }
+        }
+    }
+
+    /// Adds a source under the next file id that is not reserved, and returns the id.
     fn push_source(&mut self, source: SourceFile) -> FileId {
-        let id = FileId::new(u32::try_from(self.files.len()).expect("file counts stay below u32"));
-        self.files.push(source);
+        let after = |index: u32| index.checked_add(1).expect("file counts stay below u32");
+        let mut index = self
+            .files
+            .last_key_value()
+            .map_or(0, |(last, _)| after(last.index()));
+        while self.reserved_files.contains(&FileId::new(index)) {
+            index = after(index);
+        }
+
+        let id = FileId::new(index);
+        self.files.insert(id, source);
         id
     }
 
@@ -117,10 +143,9 @@ impl Pipeline {
 
     /// Returns every registered source as its file id, name and text.
     pub fn sources(&self) -> impl Iterator<Item = (FileId, &str, &str)> {
-        self.files.iter().enumerate().map(|(index, source)| {
-            let id = FileId::new(u32::try_from(index).expect("file counts stay below u32"));
-            (id, source.name.as_str(), &*source.text)
-        })
+        self.files
+            .iter()
+            .map(|(&id, source)| (id, source.name.as_str(), &*source.text))
     }
 
     /// Returns the source text a span covers,
@@ -133,6 +158,6 @@ impl Pipeline {
 
     /// Returns the registered source a file id addresses.
     fn source(&self, file: FileId) -> Option<&SourceFile> {
-        self.files.get(file.index() as usize)
+        self.files.get(&file)
     }
 }

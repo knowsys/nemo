@@ -47,10 +47,12 @@ pub(crate) use self::{
     scope::NameScope,
 };
 
+use std::collections::{BTreeMap, BTreeSet};
+
 use nemo_physical::diagnostics::Diagnostic;
 
 use crate::{
-    model::{Program, Span, Statement},
+    model::{FileId, Program, Span, Statement},
     pipeline::{provenance::ProvenanceEdge, revision::ProgramRevision, sources::SourceFile},
 };
 
@@ -75,7 +77,10 @@ impl StatementId {
 #[derive(Debug, Default)]
 pub struct Pipeline {
     /// The registered source texts, by file id.
-    files: Vec<SourceFile>,
+    files: BTreeMap<FileId, SourceFile>,
+    /// The file ids that the spans of loaded statements use although no source is registered
+    /// under them (see [reserve_files](Self::reserve_files)).
+    reserved_files: BTreeSet<FileId>,
     /// Every statement version, by id, including the replaced and removed ones.
     statements: Vec<Statement>,
     /// For each statement version, the index of the edge that created it,
@@ -98,7 +103,9 @@ impl Pipeline {
     /// Adds a program as a new revision without a parent.
     ///
     /// Its statements have no provenance edge, so they are the roots of provenance.
+    /// The file ids of their spans are [reserved](Self::reserve_files).
     pub fn load(&mut self, program: Program) -> RevisionId {
+        self.reserve_files(&program);
         let statements = program
             .statements
             .into_iter()
