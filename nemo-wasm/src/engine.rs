@@ -443,6 +443,33 @@ impl NemoEngine {
         Ok(())
     }
 
+    /// Sets the value of a parameter, which a program declares with `@parameter`.
+    ///
+    /// The loading methods and `check` give the parameter this value in every program that
+    /// they are given afterwards, whatever value its declaration states.
+    /// The loaded program keeps the values it was loaded with,
+    /// so a value set after `load` takes effect with the next `reload`.
+    /// `name` is the name of the parameter, with or without its `$`,
+    /// and `value` is converted as a value of `importRows` is.
+    /// Throws for a value that does not convert, and for a null.
+    /// While a value is set for a parameter that a program does not declare,
+    /// loading the program throws with code N0494, until `unsetParameter` removes the value.
+    #[wasm_bindgen(js_name = "setParameter")]
+    pub fn set_parameter(&mut self, name: &str, value: &JsValue) -> Result<(), JsValue> {
+        let value = to_value(value)?;
+        let term = nemo::model::Term::value(&value)
+            .ok_or_else(|| js_sys::Error::new("a null cannot be the value of a parameter"))?;
+        self.state_mut()?.engine.set_parameter(name, term);
+        Ok(())
+    }
+
+    /// Removes the value that `setParameter` set for a parameter,
+    /// and returns whether one was set.
+    #[wasm_bindgen(js_name = "unsetParameter")]
+    pub fn unset_parameter(&mut self, name: &str) -> Result<bool, JsValue> {
+        Ok(self.state_mut()?.engine.unset_parameter(name))
+    }
+
     /// Registers the text of a module under `name`, the name with which a `@use` refers to it,
     /// such as `lib::tc`.
     ///

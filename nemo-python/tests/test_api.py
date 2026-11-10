@@ -152,6 +152,37 @@ def test_map_keys_that_collapse_in_python_raise():
         engine.rows("m")
 
 
+def test_set_parameter_gives_a_declared_parameter_its_value():
+    program = nmo.Program.parse(
+        "@parameter $limit: int .\n"
+        "n(1) . n(2) . n(3) .\n"
+        "small(?x) :- n(?x), ?x < $limit .\n"
+    )
+    engine = nmo.Engine()
+    with pytest.raises(nmo.DiagnosticsError) as refused:
+        engine.load(program)
+    assert refused.value.diagnostics[0].code == "N0279"
+    assert refused.value.diagnostics[0].hints == ["give it a value with `set_parameter`"]
+
+    engine.set_parameter("limit", 3)
+    engine.load(program)
+    engine.reason()
+    assert sorted(engine.rows("small")) == [(1,), (2,)]
+
+    # A value for a parameter that the program does not declare refuses the program.
+    engine.set_parameter("limt", 4)
+    with pytest.raises(nmo.DiagnosticsError) as refused:
+        engine.reload(program)
+    assert refused.value.diagnostics[0].code == "N0494"
+    assert engine.unset_parameter("limt")
+
+    # The loaded program keeps its value until a reload.
+    engine.set_parameter("limit", 4)
+    engine.reload(program)
+    engine.reason()
+    assert sorted(engine.rows("small")) == [(1,), (2,), (3,)]
+
+
 def test_registered_resources_shadow_the_filesystem():
     engine = nmo.Engine()
     engine.add_resource("data.csv", "a,1\nb,2\nc,3\n")

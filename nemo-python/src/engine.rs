@@ -22,7 +22,7 @@ use nemo::{
 };
 
 use crate::{
-    errors::{Diagnostic, NemoError, raise, resolve},
+    errors::{Diagnostic, NemoError, raise, resolve, value_error},
     program::Program,
     values::{to_python, to_value},
 };
@@ -261,6 +261,33 @@ impl Engine {
             .engine
             .add_module_root(name, directory)
             .map_err(|diagnostic| inner.raise(py, diagnostic))
+    }
+
+    /// Sets the value of a parameter, which a program declares with `@parameter`.
+    ///
+    /// `load`, `extend`, `reload` and `check` give the parameter this value in every program
+    /// that they are given afterwards, whatever value its declaration states.
+    /// The loaded program keeps the values it was loaded with,
+    /// so a value set after `load` takes effect with the next `reload`.
+    /// `name` is the name of the parameter, with or without its `$`,
+    /// and `value` is converted by the module's conversion table.
+    /// Raises `ValueError` or `TypeError` for a value that does not convert,
+    /// and `ValueError` for a null.
+    /// While a value is set for a parameter that a program does not declare,
+    /// loading the program raises `DiagnosticsError` with code N0494,
+    /// until `unset_parameter` removes the value.
+    fn set_parameter(&self, name: &str, value: &Bound<'_, PyAny>) -> PyResult<()> {
+        let value = to_value(value)?;
+        let term = nemo::model::Term::value(&value)
+            .ok_or_else(|| value_error("a null cannot be the value of a parameter"))?;
+        self.lock()?.engine.set_parameter(name, term);
+        Ok(())
+    }
+
+    /// Removes the value that `set_parameter` set for a parameter,
+    /// and returns whether one was set.
+    fn unset_parameter(&self, name: &str) -> PyResult<bool> {
+        Ok(self.lock()?.engine.unset_parameter(name))
     }
 
     /// Sets the directory against which relative import resources are resolved,

@@ -53,6 +53,8 @@ reports through `program.diagnostics`.
   `engine.discard_rows(predicate)` drops those still waiting for `load`.
 - `engine.add_resource(name, text_or_bytes)` — an `@import` whose
   resource matches reads these bytes instead of the filesystem.
+- `engine.set_parameter(name, value)` — the value of a `@parameter` of
+  the programs loaded afterwards; `engine.unset_parameter(name)` removes it.
 - `engine.add_module(name, text)` — a `@use` of the module `name`
   (as in `lib::tc`) reads this text instead of its file;
   `engine.add_module_root(name, dir)` makes `@use name::tc` read

@@ -72,9 +72,10 @@ pub(crate) fn resolve(
 
 /// Returns a diagnostic whose hints name the methods of the JavaScript API.
 ///
-/// The hints of [NO_CLIENT](nemo::codes::NO_CLIENT) and
-/// [METHOD_SUSPENDED](nemo::codes::METHOD_SUSPENDED) name engine methods that the bindings
-/// lack or name differently, so they are replaced.
+/// The hints of [NO_CLIENT](nemo::codes::NO_CLIENT),
+/// [METHOD_SUSPENDED](nemo::codes::METHOD_SUSPENDED) and
+/// [PARAMETER_WITHOUT_VALUE](nemo::codes::PARAMETER_WITHOUT_VALUE) name engine methods that
+/// the bindings lack or name differently, so they are replaced.
 fn with_browser_hints(diagnostic: nemo::diagnostics::Diagnostic) -> nemo::diagnostics::Diagnostic {
     let code = diagnostic.code();
     if code == nemo::codes::NO_CLIENT {
@@ -86,6 +87,10 @@ fn with_browser_hints(diagnostic: nemo::diagnostics::Diagnostic) -> nemo::diagno
         diagnostic
             .without_hints()
             .with_hint("pass the responses to `resume`, or call `discardPending`")
+    } else if code == nemo::codes::PARAMETER_WITHOUT_VALUE {
+        diagnostic
+            .without_hints()
+            .with_hint("give it a value with `setParameter`")
     } else {
         diagnostic
     }

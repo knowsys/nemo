@@ -13,6 +13,7 @@ const engine = new NemoEngine();
 engine.addResource("data.csv", bytesOrString); // a browser has no filesystem
 engine.addModule("lib::tc", text);             // read by `@use lib::tc`
 engine.importRows("p", [["a", 1], ["b", 2]]);  // rows from JS, before load
+engine.setParameter("limit", 3);               // the value of `@parameter $limit`
 await engine.loadAsync(program);               // remote imports fetched
 await engine.reasonAsync();                    // bound imports fetched
 

@@ -126,16 +126,23 @@ pub(crate) fn resolve(
     }
 }
 
-/// Returns a diagnostic whose hints name only methods that the Python module has.
+/// Returns a diagnostic whose hints name only what the Python module has.
 ///
 /// The module has no `resume`, and a run that is suspended for data from the network
 /// continues with `reason()`.
 /// So the hint of [METHOD_SUSPENDED](nemo::codes::METHOD_SUSPENDED) is replaced.
+/// The hint of [PARAMETER_WITHOUT_VALUE](nemo::codes::PARAMETER_WITHOUT_VALUE) also names
+/// the command line, so it is replaced as well.
 fn with_python_hints(diagnostic: nemo::diagnostics::Diagnostic) -> nemo::diagnostics::Diagnostic {
-    if diagnostic.code() == nemo::codes::METHOD_SUSPENDED {
+    let code = diagnostic.code();
+    if code == nemo::codes::METHOD_SUSPENDED {
         diagnostic
             .without_hints()
             .with_hint("call `reason()` to continue the run, or `discard_pending()` to drop it")
+    } else if code == nemo::codes::PARAMETER_WITHOUT_VALUE {
+        diagnostic
+            .without_hints()
+            .with_hint("give it a value with `set_parameter`")
     } else {
         diagnostic
     }
