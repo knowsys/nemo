@@ -8,8 +8,6 @@
 //!   which it writes as JSON snapshots.
 //! - The [TracingSink] emits each event as a `tracing` event under the [TARGET] target,
 //!   where a `tracing` subscriber receives it along with the engine's log lines.
-//!   Behind the `subscriber` feature, the `SinkLayer` decodes these back into events for any
-//!   sink.
 //!
 //! A [ReportDocument] combines a recorder with the [RunFacts] of a finished run into one JSON
 //! document, which it can also render as an HTML page.
@@ -50,8 +48,6 @@ mod sink_slot;
 mod stream;
 mod timings;
 
-#[cfg(feature = "subscriber")]
-pub use self::stream::SinkLayer;
 pub use self::{
     event::EngineEvent,
     event_sink::EventSink,

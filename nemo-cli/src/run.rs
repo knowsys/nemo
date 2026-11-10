@@ -24,7 +24,7 @@ use nemo::{
     diagnostics::render::{Renderer, SourceTexts},
     engine::{Engine, ExportSpec},
     model::{FileId, Program},
-    telemetry::{Recorder, TracingSink},
+    telemetry::{EngineEvent, EventSink, Recorder, TracingSink},
 };
 use nemo_physical::diagnostics::{Diagnostic, Severity};
 
@@ -65,6 +65,28 @@ impl Times {
             export: Duration::ZERO,
             total: Duration::ZERO,
         }
+    }
+}
+
+/// The engine's telemetry sink in a run.
+///
+/// It passes each event to the `tracing` stream, which the log lines and `--events` read,
+/// and to the recorder, if the run has one.
+struct RunSink {
+    /// The recorder of the report and the dashboard, if the run has one.
+    recorder: Option<Arc<Recorder>>,
+}
+
+impl EventSink<EngineEvent> for RunSink {
+    fn record(&self, event: &EngineEvent) {
+        TracingSink.record(event);
+        if let Some(recorder) = &self.recorder {
+            recorder.record(event);
+        }
+    }
+
+    fn enabled(&self) -> bool {
+        self.recorder.is_some() || TracingSink.enabled()
     }
 }
 
@@ -129,8 +151,7 @@ impl<'a> Run<'a> {
         let mut engine = self.engine()?;
         let level = self.arguments.reporting();
         self.reserve_stdout(level)?;
-        let recorder = self.observe(level)?;
-        engine.set_telemetry(Arc::new(TracingSink));
+        let recorder = self.observe(&mut engine, level)?;
         let dashboard = self.dashboard(recorder.as_ref())?;
 
         let Some(program) = self.program(&mut engine, &mut times)? else {
@@ -213,15 +234,22 @@ impl<'a> Run<'a> {
         Ok(())
     }
 
-    /// Installs the run's `tracing` subscriber,
+    /// Installs the run's `tracing` subscriber and the engine's telemetry sink,
     /// and returns a recorder of the telemetry if the report or the dashboard needs one.
     ///
     /// The subscriber receives both the log lines and the engine's telemetry,
     /// as [logging::install] describes.
-    fn observe(&self, level: Report) -> Result<Option<Arc<Recorder>>, Diagnostic> {
+    fn observe(
+        &self,
+        engine: &mut Engine,
+        level: Report,
+    ) -> Result<Option<Arc<Recorder>>, Diagnostic> {
         let recorder = (level.observes() || self.arguments.dashboard.is_some())
             .then(|| Arc::new(Recorder::new()));
-        logging::install(self.arguments, recorder.as_ref())?;
+        logging::install(self.arguments)?;
+        engine.set_telemetry(Arc::new(RunSink {
+            recorder: recorder.clone(),
+        }));
         Ok(recorder)
     }
 

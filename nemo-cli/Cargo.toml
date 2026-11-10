@@ -16,7 +16,7 @@ path = "src/main.rs"
 [dependencies]
 # The command line ships the full IO surface: remote resources, SPARQL
 # endpoints, and Parquet.
-nemo = { path = "../nemo", features = ["http", "sparql", "parquet", "subscriber"] }
+nemo = { path = "../nemo", features = ["http", "sparql", "parquet"] }
 nemo-io = { path = "../nemo-io" }
 nemo-physical = { path = "../nemo-physical" }
 
@@ -25,8 +25,8 @@ clap = { version = "4.5", features = ["derive"] }
 # `--trace-output` writes the inference list as JSON.
 serde = "1"
 serde_json = "1"
-# The global subscriber: `-v`/`--log`/`NMO_LOG` to stderr, the telemetry
-# stream into the recorder, and `--events` as JSON lines.
+# The global subscriber: `-v`/`--log`/`NMO_LOG` to stderr, and the
+# telemetry stream to `--events` as JSON lines.
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", default-features = false, features = [
     "env-filter",

@@ -1554,7 +1554,6 @@ dependencies = [
  "sparesults",
  "spareval",
  "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]

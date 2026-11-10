@@ -1,15 +1,11 @@
 //! The global `tracing` subscriber of a run.
 //!
-//! It writes log lines to the error stream, passes the engine's telemetry stream to the
-//! recorder, and writes the telemetry stream to the event log as JSON lines.
+//! It writes log lines to the error stream, and the engine's telemetry stream to the event log
+//! as JSON lines.
 
-use std::{
-    fs::File,
-    path::Path,
-    sync::{Arc, Mutex},
-};
+use std::{fs::File, path::Path, sync::Mutex};
 
-use nemo::telemetry::{Recorder, SinkLayer, TARGET};
+use nemo::telemetry::TARGET;
 use nemo_physical::diagnostics::Diagnostic;
 use tracing_subscriber::{
     EnvFilter, Registry,
@@ -37,20 +33,12 @@ pub(crate) const ENVIRONMENT: &str = "NMO_LOG";
 /// - otherwise `warn`.
 ///
 /// `--log` and `NMO_LOG` accept full filter directives, such as `nemo::io=debug`.
-/// The recorder, if given, receives the telemetry stream whatever the log filter,
-/// and `--events` writes the same stream to a file as JSON lines.
-pub(crate) fn install(
-    arguments: &Arguments,
-    recorder: Option<&Arc<Recorder>>,
-) -> Result<(), Diagnostic> {
+/// `--events` writes the telemetry stream to a file as JSON lines, whatever the log filter.
+pub(crate) fn install(arguments: &Arguments) -> Result<(), Diagnostic> {
     let stderr = fmt::layer()
         .with_writer(std::io::stderr)
         .with_filter(filter(arguments)?);
     let mut layers: Vec<Boxed> = vec![Box::new(stderr)];
-    if let Some(recorder) = recorder {
-        let recording = SinkLayer::new(Arc::clone(recorder) as _).with_filter(SinkLayer::filter());
-        layers.push(Box::new(recording));
-    }
     if let Some(path) = &arguments.events {
         layers.push(events(path)?);
     }
