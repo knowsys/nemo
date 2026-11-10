@@ -575,10 +575,12 @@ type Step = fn(&Bound<'_, PyAny>) -> PyResult<Option<DataValue>>;
 /// Raises `TypeError` for a value of a type that does not convert,
 /// and `ValueError` for a value that the conversion of its type rejects.
 pub(crate) fn to_value(any: &Bound<'_, PyAny>) -> PyResult<DataValue> {
-    // The wrapper classes come first, since each of them converts in exactly one way.
+    // The builtin types come first, as the most common values.
+    // Their step tests the exact type, which no wrapper class is,
+    // so each wrapper class converts only through its own step.
     let steps: [Step; 4] = [
-        wrapper_to_value,
         builtin_to_value,
+        wrapper_to_value,
         standard_to_value,
         container_to_value,
     ];
