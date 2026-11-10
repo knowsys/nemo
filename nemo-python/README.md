@@ -49,7 +49,8 @@ reports through `program.diagnostics`.
 ## Data in, data out
 
 - `engine.import_rows(predicate, rows)` — rows from Python, before or
-  after `load`, checked like the program's facts.
+  after `load`, checked like the program's facts;
+  `engine.discard_rows(predicate)` drops those still waiting for `load`.
 - `engine.add_resource(name, text_or_bytes)` — an `@import` whose
   resource matches reads these bytes instead of the filesystem.
 - `engine.add_module(name, text)` — a `@use` of the module `name`

@@ -311,6 +311,20 @@ def test_rows_import_after_the_fixpoint():
         engine.import_rows("unknown", [(1,)])
 
 
+def test_discarded_rows_can_be_given_again():
+    engine = nmo.Engine()
+    engine.import_rows("p", [("x",)])
+    program = nmo.Program.parse("@declare p(int) . q(?x) :- p(?x) .")
+    with pytest.raises(nmo.DiagnosticsError):
+        engine.load(program)
+    assert engine.discard_rows("p")
+    assert not engine.discard_rows("p")
+    engine.import_rows("p", [(2,)])
+    engine.load(program)
+    engine.reason()
+    assert engine.count("q") == 1
+
+
 def test_extend_adds_rules_and_facts():
     engine = reasoned()
     engine.extend(

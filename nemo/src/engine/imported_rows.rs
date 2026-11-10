@@ -214,6 +214,20 @@ impl UnloadedRows {
         Ok(())
     }
 
+    /// Drops the rows of a predicate, and returns whether there were any.
+    pub(in crate::engine) fn discard(&mut self, predicate: &str) -> bool {
+        let Some(position) = self.positions.remove(predicate) else {
+            return false;
+        };
+        self.blocks.remove(position);
+        for later in self.positions.values_mut() {
+            if *later > position {
+                *later -= 1;
+            }
+        }
+        true
+    }
+
     /// Returns the blocks, one per predicate.
     pub(in crate::engine) fn blocks(&self) -> &[RowBlock] {
         &self.blocks

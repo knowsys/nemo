@@ -628,6 +628,8 @@ impl Engine {
     /// Before [load](Self::load), the rows are kept, and the load checks and stores them with
     /// the program's facts.
     /// A load that fails keeps them, so that a corrected program can be loaded with them.
+    /// [discard_rows](Self::discard_rows) drops a predicate's kept rows, for rows that need
+    /// correcting themselves.
     /// After a load, the rows are checked against the loaded program,
     /// and stored in the predicate's table as a new revision.
     /// The next [reason](Self::reason) treats them as new facts and continues to the new
@@ -657,6 +659,21 @@ impl Engine {
         self.refuse_while_suspended("import_rows")?;
         self.choosing_context(|engine| engine.admit_rows(predicate, rows).map(|()| Progress::Done))
             .map(drop)
+    }
+
+    /// Drops the rows given through [import_rows](Self::import_rows) to a predicate that wait
+    /// for the first [load](Self::load), and returns whether there were any.
+    ///
+    /// Rows that a load stored stay in the predicate's table.
+    /// The predicate is given by its resolved name, as for [import_rows](Self::import_rows).
+    ///
+    /// # Errors
+    ///
+    /// Returns N0493 if a method is suspended for data from the network,
+    /// since a suspended load reads the kept rows when it continues.
+    pub fn discard_rows(&mut self, predicate: &str) -> Result<bool, Diagnostic> {
+        self.refuse_while_suspended("discard_rows")?;
+        Ok(self.unloaded_rows.discard(predicate))
     }
 
     /// Sets the client through which the plain methods ([load](Self::load),

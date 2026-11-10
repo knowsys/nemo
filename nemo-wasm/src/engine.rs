@@ -416,6 +416,21 @@ impl NemoEngine {
             .map_err(|diagnostic| inner.throw(diagnostic))
     }
 
+    /// Drops the rows given through `importRows` to a predicate that wait for `load`,
+    /// and returns whether there were any.
+    ///
+    /// A failed `load` keeps the rows, and this drops the ones that need correcting.
+    /// The rows that `load` stored stay.
+    /// Throws with code N0493 while a method is suspended.
+    #[wasm_bindgen(js_name = "discardRows")]
+    pub fn discard_rows(&mut self, predicate: &str) -> Result<bool, JsValue> {
+        let mut inner = self.state_mut()?;
+        inner
+            .engine
+            .discard_rows(predicate)
+            .map_err(|diagnostic| inner.throw(diagnostic))
+    }
+
     /// Registers a resource in memory under `name`.
     ///
     /// An `@import` of a resource with that name reads `content`,

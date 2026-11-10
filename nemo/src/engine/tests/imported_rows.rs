@@ -244,6 +244,49 @@ fn a_failed_load_keeps_the_imported_rows() {
     assert_eq!(engine.count("q").expect("q is derived"), 1);
 }
 
+/// Discarding a predicate's kept rows drops them alone,
+/// so that the rows can be given again and the program loads with them and the other rows.
+/// Rows that a load stored stay.
+#[test]
+fn discarded_rows_are_left_out_of_the_load() {
+    let program = "@declare p(int) . q(?x) :- p(?x) . s(?x) :- r(?x) .";
+    let mut engine = Engine::new();
+    engine
+        .import_rows("p", [vec![DataValue::string("x")]])
+        .expect("the rows are kept for the load");
+    engine
+        .import_rows("r", [integers(&[1])])
+        .expect("the rows are kept for the load");
+    engine
+        .load(parse(program))
+        .expect_err("the declaration refuses the row");
+
+    assert!(
+        engine.discard_rows("p").expect("not suspended"),
+        "p has rows"
+    );
+    assert!(
+        !engine.discard_rows("p").expect("not suspended"),
+        "p has none left"
+    );
+    engine
+        .import_rows("r", [integers(&[3])])
+        .expect("the rows are kept for the load");
+    engine
+        .import_rows("p", [integers(&[2])])
+        .expect("the rows are kept for the load");
+    engine.load(parse(program)).expect("the program loads");
+    engine.reason().expect("reasoning reaches the fixpoint");
+    assert_eq!(rows(&mut engine, "q"), [["2"]]);
+    assert_eq!(rows(&mut engine, "s"), [["1"], ["3"]]);
+
+    assert!(
+        !engine.discard_rows("r").expect("not suspended"),
+        "none wait for a load"
+    );
+    assert_eq!(rows(&mut engine, "r"), [["1"], ["3"]]);
+}
+
 /// Rows given to a predicate that the program never names make it a predicate of the program:
 /// it is listed, and takes more rows after the load.
 #[test]

@@ -210,6 +210,21 @@ impl Engine {
             .map_err(|diagnostic| inner.raise(py, diagnostic))
     }
 
+    /// Drops the rows given through `import_rows` to a predicate that wait for `load`,
+    /// and returns whether there were any.
+    ///
+    /// A failed `load` keeps the rows, and this drops the ones that need correcting.
+    /// The rows that `load` stored stay.
+    /// Raises `DiagnosticsError` with code N0493 while a run is suspended
+    /// (see `discard_pending`).
+    fn discard_rows(&self, py: Python<'_>, predicate: &str) -> PyResult<bool> {
+        let mut inner = self.lock()?;
+        inner
+            .engine
+            .discard_rows(predicate)
+            .map_err(|diagnostic| inner.raise(py, diagnostic))
+    }
+
     /// Registers a resource in memory under `name`.
     ///
     /// An `@import` of a resource with that name reads `content`, a `str` or `bytes`,

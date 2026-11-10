@@ -140,6 +140,28 @@ fn cursors_page_through_the_rows() {
 }
 
 #[wasm_bindgen_test]
+fn discarded_rows_can_be_given_again() {
+    let one_row = |value: JsValue| JsValue::from(Array::of1(&Array::of1(&value).into()));
+    let mut engine = NemoEngine::new();
+    engine
+        .import_rows("p", &one_row(JsValue::from_str("x")))
+        .expect("rows import");
+    let program = NemoProgram::parse(String::from("@declare p(int) . q(?x) :- p(?x) ."), None);
+    assert!(
+        engine.load(&program).is_err(),
+        "the declaration refuses the row"
+    );
+    assert!(engine.discard_rows("p").expect("not suspended"));
+    assert!(!engine.discard_rows("p").expect("not suspended"));
+    engine
+        .import_rows("p", &one_row(JsValue::from_f64(2.0)))
+        .expect("rows import");
+    engine.load(&program).expect("the program loads");
+    engine.reason().expect("reasoning reaches the fixpoint");
+    assert_eq!(engine.count("q").expect("registered"), 1);
+}
+
+#[wasm_bindgen_test]
 fn imported_rows_round_trip() {
     // One value per conversion-table row, through a rule and back.
     let values = Array::new();

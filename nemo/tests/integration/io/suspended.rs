@@ -272,6 +272,7 @@ fn a_suspended_load_refuses_changes_until_discarded() {
             "import_rows",
             engine.import_rows("h", vec![vec![DataValue::integer(2)]]),
         ),
+        ("discard_rows", engine.discard_rows("h").map(drop)),
         ("reason", engine.reason()),
         ("reason", engine.start_reason().map(drop)),
     ];
