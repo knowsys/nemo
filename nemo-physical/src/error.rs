@@ -41,6 +41,7 @@ pub enum ReadingErrorKind {
     #[error("resource was not provided by any resource provider")]
     ResourceNotProvided,
     /// Error in Reqwest's HTTP handler
+    #[cfg(feature = "http")]
     #[error(transparent)]
     HttpTransfer(#[from] reqwest::Error),
     /// Type conversion error

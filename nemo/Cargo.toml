@@ -10,6 +10,10 @@ readme = "README.md"
 repository.workspace = true
 
 [features]
+default = ["http"]
+# Importing resources over HTTP(S), including SPARQL endpoints (pulls in reqwest and its TLS stack).
+# Without it, such imports fail with "resource was not provided by any resource provider".
+http = ["dep:reqwest", "nemo-physical/http"]
 # Allows building for web assembly environments
 # Enables the "js" feature of the "getrandom" crate
 js = ["getrandom/wasm_js"]
@@ -27,7 +31,7 @@ flate2 = { workspace = true }
 sanitise-file-name = "1.0.0"
 getrandom = { version = "0.3.4" }
 oxiri = { workspace = true }
-reqwest = { workspace = true, features = [
+reqwest = { workspace = true, optional = true, features = [
     "form",
     "gzip",
     "brotli",

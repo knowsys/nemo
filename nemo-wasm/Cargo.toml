@@ -24,8 +24,8 @@ async-trait = { workspace = true }
 console_error_panic_hook = "0.1.7"
 indexmap = { workspace = true }
 js-sys = "0.3.63"
-nemo = { path = "../nemo", features = [ "js" ], default-features = false }
-nemo-physical = { path = "../nemo-physical", default-features = false }
+nemo = { path = "../nemo", features = [ "js", "http" ], default-features = false }
+nemo-physical = { path = "../nemo-physical", features = [ "http" ], default-features = false }
 nemo-language-server = { path = "../nemo-language-server", features = [ "js" ], default-features = false}
 futures = { workspace = true }
 gloo-utils = { version = "0.3.0", features = ["serde"] }

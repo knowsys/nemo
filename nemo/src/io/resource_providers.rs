@@ -11,6 +11,7 @@ use nemo_physical::{
 /// A resource provider for files.
 pub mod file;
 /// A resource provider for HTTP(s) requests.
+#[cfg(feature = "http")]
 pub mod http;
 /// A resource provider for stdin.
 pub mod stdin;
@@ -55,6 +56,7 @@ impl ResourceProviders {
     /// Construct default with a base path for the `FileResourceProvider`
     pub fn with_base_path(base_path: Option<PathBuf>) -> Self {
         Self(Rc::new(vec![
+            #[cfg(feature = "http")]
             Box::<http::HttpResourceProvider>::default(),
             Box::new(file::FileResourceProvider::new(base_path)),
             Box::new(stdin::StdinResourceProvider::default()),
@@ -89,5 +91,29 @@ impl ResourceProviders {
 impl Default for ResourceProviders {
     fn default() -> Self {
         Self::with_base_path(Default::default())
+    }
+}
+
+#[cfg(all(test, not(feature = "http")))]
+mod test {
+    use nemo_physical::{error::ReadingErrorKind, resource::ResourceBuilder};
+
+    use super::ResourceProviders;
+
+    /// Without the `http` feature, HTTP resources are not provided, and nothing is fetched.
+    #[tokio::test]
+    async fn http_resource_not_provided_without_http_feature() {
+        let resource = ResourceBuilder::try_from(String::from("https://example.org/data.csv"))
+            .expect("valid IRI")
+            .finalize();
+        let error = ResourceProviders::default()
+            .open_resource(&resource, "text/csv")
+            .await
+            .err()
+            .expect("HTTP is disabled");
+        assert!(matches!(
+            error.kind(),
+            ReadingErrorKind::ResourceNotProvided
+        ));
     }
 }
