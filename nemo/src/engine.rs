@@ -942,11 +942,18 @@ impl Engine {
     /// Returns whether a cursor still reads the rows it was opened on,
     /// which holds while nothing changes its predicate's table.
     ///
+    /// A cursor on a predicate that a [reload](Self::reload) rebuilt is not current.
     /// [read_chunk](Self::read_chunk) refuses a cursor that is not current.
     pub fn is_current(&self, cursor: &PredicateCursor) -> bool {
+        // A reload drops the table of a predicate that it rebuilds,
+        // and the table manager answers only for the tables it holds.
+        let held = self
+            .predicates
+            .values()
+            .any(|registered| registered.table == cursor.table);
         // The blocks are compared first, since counting the rows of a range panics if the range
         // does not align with the table's blocks, which a merge of blocks can cause.
-        self.manager.blocks(cursor.table) == cursor.blocks
+        held && self.manager.blocks(cursor.table) == cursor.blocks
             && self.manager.row_count(cursor.table, cursor.range.clone()) == cursor.rows
     }
 
