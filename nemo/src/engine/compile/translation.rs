@@ -33,6 +33,7 @@ use nemo_physical::{
     value::{DataValue, ErrorCounts, LabelTypes, Type},
 };
 
+pub(crate) use declarations::ParametersWithoutValue;
 pub(crate) use state::TranslationState;
 
 use crate::{
@@ -378,6 +379,9 @@ pub(crate) struct Translator<'a> {
     /// The encoded rows of [imported](Self::imported), per table,
     /// which are stored apart from the facts since they are not part of the program.
     imported_tables: Vec<(TableId, RowBuffer)>,
+    /// The parameters that a check has no value for,
+    /// which [resolve_parameters](Self::resolve_parameters) records.
+    unvalued: ParametersWithoutValue,
 }
 
 impl<'a> Translator<'a> {
@@ -428,6 +432,7 @@ impl<'a> Translator<'a> {
             preloaded,
             imported: setup.imported,
             imported_tables: Vec::new(),
+            unvalued: ParametersWithoutValue::default(),
         }
     }
 
@@ -505,6 +510,44 @@ impl<'a> Translator<'a> {
         ids: &[StatementId],
     ) -> Result<CompiledProgram, Diagnostic> {
         self.prepare(statements, ids)?;
+        self.commit(statements, ids, HashMap::new())
+    }
+
+    /// Reads the names, the `@type` definitions and the parameters of a program that is
+    /// checked, and returns the parameters that the check has no value for.
+    ///
+    /// This is the first step of a check's translation.
+    /// The statements that read these parameters are then rewritten to read any value,
+    /// and [check_statements](Self::check_statements) translates the rewritten program.
+    pub(crate) fn check_names(
+        &mut self,
+        statements: &[Statement],
+    ) -> Result<ParametersWithoutValue, Diagnostic> {
+        // Blank nodes get their nulls first, so that every occurrence of
+        // a label maps to the same null.
+        self.create_blank_nodes(statements);
+        self.namespace(statements)?;
+        Ok(std::mem::take(&mut self.unvalued))
+    }
+
+    /// Translates the statements of a program that is checked,
+    /// after [check_names](Self::check_names) read its names,
+    /// and returns the compiled program.
+    ///
+    /// A check reads no data, so the imports request no remote resource.
+    pub(crate) fn check_statements(
+        &mut self,
+        statements: &[Statement],
+        ids: &[StatementId],
+    ) -> Result<CompiledProgram, Diagnostic> {
+        assert_eq!(
+            statements.len(),
+            ids.len(),
+            "statements and their pipeline ids must align"
+        );
+        self.declaration_directives(statements)?;
+        self.plan_imports(statements)?;
+        self.remote_requests(statements, ids)?;
         self.commit(statements, ids, HashMap::new())
     }
 
@@ -618,10 +661,7 @@ impl<'a> Translator<'a> {
                 }
             }
         }
-        if let Err(problem) = self.resolve_parameters(parameters) {
-            self.recover(problem)?;
-        }
-        Ok(())
+        self.resolve_parameters(parameters)
     }
 
     /// Reads the column declarations and the inputs before the statements are translated.

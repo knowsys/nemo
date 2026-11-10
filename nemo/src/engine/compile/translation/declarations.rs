@@ -1,7 +1,7 @@
 //! Declarations: parameters, column declarations (`@declare`), user-defined types (`@type`),
 //! named arguments, and inputs.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use nemo_physical::{
     diagnostics::Diagnostic,
@@ -27,6 +27,49 @@ use crate::{
     },
     values::TypeSyntax,
 };
+
+/// The parameters that a check has no value for.
+///
+/// They are the parameters declared without a value, those with a problem that the check
+/// reported, and those whose value reads one of these.
+/// A check reads such a parameter as any value of its declared type.
+#[derive(Debug, Default)]
+pub(crate) struct ParametersWithoutValue {
+    /// The names of the parameters, without the `$`.
+    names: HashSet<String>,
+    /// The parameters among them whose declared type the check refused,
+    /// which it reads as any value.
+    untyped: HashSet<String>,
+}
+
+impl ParametersWithoutValue {
+    /// Returns whether there is no such parameter.
+    pub(crate) fn is_empty(&self) -> bool {
+        self.names.is_empty()
+    }
+
+    /// Returns whether the check has no value for the parameter with the given name.
+    pub(crate) fn contains(&self, name: &str) -> bool {
+        self.names.contains(name)
+    }
+
+    /// Returns whether the declared type of a parameter stands for its values in the check.
+    pub(crate) fn keeps_type(&self, name: &str) -> bool {
+        !self.untyped.contains(name)
+    }
+
+    /// Records a parameter as one that the check has no value for.
+    fn insert(&mut self, name: &str) {
+        self.names.insert(name.to_owned());
+    }
+
+    /// Records a parameter as one that the check has no value for,
+    /// and whose declared type the check refused.
+    fn insert_untyped(&mut self, name: &str) {
+        self.insert(name);
+        self.untyped.insert(name.to_owned());
+    }
+}
 
 impl<'a> Translator<'a> {
     /// Checks a new declaration against the values that its predicate's table already stores,
@@ -73,90 +116,158 @@ impl<'a> Translator<'a> {
     /// Resolves the parameter declarations to a fixpoint,
     /// since a parameter's value may read other parameters, declared in any order.
     ///
-    /// Fails for a parameter declared twice or without a value, for a value that reads an
-    /// undefined parameter or is outside its declared type, and for a cycle of parameters.
+    /// A parameter has a problem if it is declared twice, if its declared type is refused,
+    /// or if its value reads an undeclared parameter, fails to evaluate, is outside the
+    /// declared type, or reads the parameter itself, directly or through other parameters.
+    /// Each problem is handled as [recover](Self::recover) handles it:
+    /// a check reports it and goes on, and any other translation fails with it.
+    /// Any other translation also fails for a parameter without a value.
+    ///
+    /// A check has no value for a parameter that is declared without one,
+    /// for a parameter with a problem, and for a parameter whose value reads one of these.
+    /// These are recorded as [unvalued](Self::unvalued).
     pub(super) fn resolve_parameters(
         &mut self,
-        mut pending: Vec<&ParameterDirective>,
+        parameters: Vec<&ParameterDirective>,
     ) -> Result<(), Diagnostic> {
-        for parameter in &pending {
-            if pending
+        for parameter in &parameters {
+            let name = &parameter.variable.name;
+            let declarations = parameters
                 .iter()
-                .filter(|other| other.variable.name == parameter.variable.name)
-                .count()
-                > 1
-            {
-                return Err(TranslationError::DuplicateParameter {
-                    name: parameter.variable.name.clone(),
-                }
-                .at(parameter.span));
+                .filter(|other| other.variable.name == *name)
+                .count();
+            if declarations > 1 && !self.unvalued.contains(name) {
+                self.recover(
+                    TranslationError::DuplicateParameter { name: name.clone() }.at(parameter.span),
+                )?;
+                self.unvalued.insert(name);
             }
         }
-        for parameter in &pending {
+        for parameter in &parameters {
+            let name = &parameter.variable.name;
             let Some(value) = &parameter.value else {
                 continue;
             };
+            if self.unvalued.contains(name) {
+                continue;
+            }
             let mut reads = Vec::new();
             collect_globals(value, &mut reads);
-            let undefined = reads.into_iter().find(|name| {
-                !self.globals.contains_key(*name)
-                    && !pending.iter().any(|other| other.variable.name == *name)
+            let undefined = reads.into_iter().find(|read| {
+                !self.globals.contains_key(*read)
+                    && !parameters.iter().any(|other| other.variable.name == *read)
             });
-            if let Some(name) = undefined {
-                return Err(TranslationError::UndefinedParameter {
-                    name: name.to_owned(),
-                }
-                .at(parameter_span(value, name).or(parameter.span)));
+            if let Some(read) = undefined {
+                self.recover(
+                    TranslationError::UndefinedParameter {
+                        name: read.to_owned(),
+                    }
+                    .at(parameter_span(value, read).or(parameter.span)),
+                )?;
+                self.unvalued.insert(name);
             }
         }
-        loop {
-            let mut progressed = false;
-            let mut remaining = Vec::with_capacity(pending.len());
-            for parameter in pending {
-                let Some(value) = &parameter.value else {
-                    return Err(TranslationError::ParameterWithoutValue {
+
+        let mut pending: Vec<&ParameterDirective> = parameters
+            .into_iter()
+            .filter(|parameter| !self.unvalued.contains(&parameter.variable.name))
+            .collect();
+        while !pending.is_empty() {
+            let mut waiting = Vec::with_capacity(pending.len());
+            for &parameter in &pending {
+                if !self.resolve_parameter(parameter)? {
+                    waiting.push(parameter);
+                }
+            }
+            if waiting.len() == pending.len() {
+                // Every parameter left waits for another one of them.
+                let parameter = parameter_on_cycle(&waiting);
+                self.recover(
+                    TranslationError::ParameterCycle {
                         name: parameter.variable.name.clone(),
                     }
-                    .at(parameter.span));
-                };
-                let mut reads = Vec::new();
-                collect_globals(value, &mut reads);
-                if reads.iter().all(|name| self.globals.contains_key(*name)) {
-                    let grounded = self.evaluate(value)?;
-                    self.check_value_types(grounded.as_ref(), value.span.or(parameter.span))?;
-                    // A typed parameter whose value is provably outside
-                    // its declared type is an error.
-                    if let Some(datatype) = &parameter.datatype {
-                        let declared = self.declared_type(datatype, parameter.span)?;
-                        if !declared.admits(grounded.as_ref(), &self.label_types) {
-                            let supplied = Type::of_value(grounded.as_ref());
-                            return Err(TypeError::ParameterOutsideType {
-                                name: parameter.variable.name.clone(),
-                                declared: TypeSyntax::of(&declared).to_string(),
-                                supplied: TypeSyntax::of(&supplied).to_string(),
-                            }
-                            .at(value.span.or(parameter.span)));
-                        }
-                    }
-                    self.globals
-                        .insert(parameter.variable.name.clone(), grounded);
-                    progressed = true;
-                } else {
-                    remaining.push(parameter);
+                    .at(parameter.span),
+                )?;
+                for parameter in &waiting {
+                    self.unvalued.insert(&parameter.variable.name);
                 }
+                break;
             }
-            pending = remaining;
-            if pending.is_empty() {
-                return Ok(());
+            pending = waiting;
+        }
+        Ok(())
+    }
+
+    /// Resolves a parameter if every parameter that its value reads is resolved.
+    ///
+    /// Returns whether the parameter is settled: it has its value,
+    /// or it is recorded as a parameter that a check has no value for.
+    /// Returns `false` for a parameter that waits for another one.
+    fn resolve_parameter(&mut self, parameter: &ParameterDirective) -> Result<bool, Diagnostic> {
+        let name = &parameter.variable.name;
+        let Some(value) = &parameter.value else {
+            if self.purpose != Purpose::Check {
+                self.recover(
+                    TranslationError::ParameterWithoutValue { name: name.clone() }
+                        .at(parameter.span),
+                )?;
             }
-            if !progressed {
-                let parameter = parameter_on_cycle(&pending);
-                return Err(TranslationError::ParameterCycle {
-                    name: parameter.variable.name.clone(),
-                }
-                .at(parameter.span));
+            self.unvalued.insert(name);
+            return Ok(true);
+        };
+        let mut reads = Vec::new();
+        collect_globals(value, &mut reads);
+        if reads.iter().any(|read| self.unvalued.contains(read)) {
+            self.unvalued.insert(name);
+            return Ok(true);
+        }
+        if !reads.iter().all(|read| self.globals.contains_key(*read)) {
+            return Ok(false);
+        }
+        match self.parameter_value(parameter, value) {
+            Ok(grounded) => {
+                self.globals.insert(name.clone(), grounded);
+            }
+            Err(problem) => {
+                self.recover(problem)?;
+                self.unvalued.insert(name);
             }
         }
+        Ok(true)
+    }
+
+    /// Returns the value of a parameter whose value reads only resolved parameters.
+    ///
+    /// Fails for a value that does not evaluate or is outside the parameter's declared type.
+    /// Also fails for a declared type that is refused,
+    /// and records that the parameter's type cannot stand for its values.
+    fn parameter_value(
+        &mut self,
+        parameter: &ParameterDirective,
+        value: &Term,
+    ) -> Result<DataValue, Diagnostic> {
+        let grounded = self.evaluate(value)?;
+        self.check_value_types(grounded.as_ref(), value.span.or(parameter.span))?;
+        // A typed parameter whose value is provably outside its declared type is an error.
+        if let Some(datatype) = &parameter.datatype {
+            let declared = match self.declared_type(datatype, parameter.span) {
+                Ok(declared) => declared,
+                Err(problem) => {
+                    self.unvalued.insert_untyped(&parameter.variable.name);
+                    return Err(problem);
+                }
+            };
+            if !declared.admits(grounded.as_ref(), &self.label_types) {
+                let supplied = Type::of_value(grounded.as_ref());
+                return Err(TypeError::ParameterOutsideType {
+                    name: parameter.variable.name.clone(),
+                    declared: TypeSyntax::of(&declared).to_string(),
+                    supplied: TypeSyntax::of(&supplied).to_string(),
+                }
+                .at(value.span.or(parameter.span)));
+            }
+        }
+        Ok(grounded)
     }
 
     /// Returns the value of a global parameter.

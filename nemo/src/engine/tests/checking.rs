@@ -184,6 +184,111 @@ fn an_import_reading_a_parameter_without_a_value_holds_anything() {
     assert!(problems.is_empty(), "{problems:?}");
 }
 
+/// A check reports the problem of a parameter once,
+/// and reads the parameter as any value in the statements that read it.
+#[test]
+fn a_parameter_with_a_problem_is_reported_once_and_read_as_any_value() {
+    let programs = [
+        // The value is outside the declared type, and a rule reads the predicate of the
+        // rule that reads the parameter.
+        (
+            "@parameter $limit: int = \"three\" .
+             n(1) .
+             small(?x) :- n(?x), ?x < $limit .
+             big(?x) :- small(?x) .
+             @output big .",
+            codes::PARAMETER_OUTSIDE_TYPE,
+        ),
+        // The value of `$c` reads a parameter with a problem.
+        (
+            "@parameter $a: int = \"x\" .
+             @parameter $c: int = $a + 1 .
+             p($c) .",
+            codes::PARAMETER_OUTSIDE_TYPE,
+        ),
+        // The value does not evaluate.
+        (
+            "@parameter $a = 1 / 0 .
+             p($a) .
+             q(?x) :- p(?x), ?x > $a .",
+            codes::CONSTANT_EXPRESSION_ERRORS,
+        ),
+        // The value reads a parameter that is not declared.
+        (
+            "@parameter $a = $nope .
+             p($a) .",
+            codes::UNDEFINED_PARAMETER,
+        ),
+        // The parameters read each other.
+        (
+            "@parameter $a = $b .
+             @parameter $b = $a .
+             p($a) .",
+            codes::PARAMETER_CYCLE,
+        ),
+        // The parameter is declared twice.
+        (
+            "@parameter $a = 1 .
+             @parameter $a = 2 .
+             p($a) .",
+            codes::DUPLICATE_PARAMETER,
+        ),
+    ];
+    let reported = programs.map(|(source, _)| {
+        let problems = check(source);
+        problems.iter().map(Diagnostic::code).collect::<Vec<_>>()
+    });
+    assert_eq!(reported, programs.map(|(_, code)| vec![code]));
+}
+
+/// A check reports the problem of every parameter that has one,
+/// and the other parameters have their values.
+#[test]
+fn a_parameter_with_a_problem_leaves_the_others_as_they_are() {
+    // `$b` has its value, although the value of `$a`, which is declared before it, is refused.
+    let problems = check(
+        "@parameter $a: int = \"x\" .
+         @parameter $b: int = 1 .
+         p($b) .",
+    );
+    let named: Vec<_> = problems
+        .iter()
+        .map(|problem| problem.field("name"))
+        .collect();
+    assert_eq!(named, [Some("a")], "{problems:?}");
+
+    // Both values are outside their declared types.
+    let problems = check(
+        "@parameter $a: int = \"x\" .
+         @parameter $b: string = 1 .
+         p($a, $b) .",
+    );
+    let reported: Vec<_> = problems
+        .iter()
+        .map(|problem| (problem.code(), problem.field("name")))
+        .collect();
+    assert_eq!(
+        reported,
+        [
+            (codes::PARAMETER_OUTSIDE_TYPE, Some("a")),
+            (codes::PARAMETER_OUTSIDE_TYPE, Some("b"))
+        ],
+        "{problems:?}"
+    );
+}
+
+/// A check reports a parameter's declared type that it refuses once,
+/// and reads the parameter as any value.
+#[test]
+fn a_refused_type_of_a_parameter_is_reported_once() {
+    // No `@type` defines `nosuch`.
+    let problems = check(
+        "@parameter $a: nosuch = 1 .
+         p($a) .",
+    );
+    assert_eq!(problems.len(), 1, "{problems:?}");
+}
+
 /// Loading a program with a parameter without a value is an error.
 #[test]
 fn a_run_needs_a_value_for_every_parameter() {

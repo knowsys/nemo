@@ -143,12 +143,10 @@ fn a_check_reads_the_set_values() {
 
     engine.set_parameter("limit", "three");
     let report = engine.check(parse(BELOW_LIMIT));
-    // The check goes on after this problem, and also reports the rule that reads the parameter.
-    let problem = report
-        .diagnostics()
-        .iter()
-        .find(|problem| problem.code() == codes::PARAMETER_OUTSIDE_TYPE)
-        .unwrap_or_else(|| panic!("the value is a string: {report:?}"));
+    let [problem] = report.diagnostics() else {
+        panic!("the value is a string: {report:?}");
+    };
+    assert_eq!(problem.code(), codes::PARAMETER_OUTSIDE_TYPE, "{problem:?}");
     assert_eq!(problem.field("name"), Some("limit"));
 }
 

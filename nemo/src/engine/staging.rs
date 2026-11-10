@@ -353,7 +353,8 @@ impl Engine {
     /// The type analysis and the stratification are thus checked on the written statements.
     /// The translation of the program that the pipeline stages made of them then reports only
     /// what reading the data finds.
-    /// For a check, the parameters without a value are first rewritten into inputs
+    /// A check first reads the program's names and parameters,
+    /// and then rewrites the parameters that it has no value for into inputs
     /// (see [rewrite_unvalued]).
     ///
     /// Returns the compiled program and the predicates registered for it.
@@ -370,18 +371,27 @@ impl Engine {
             .statements(written)
             .map(|(id, statement)| (id, statement.clone()))
             .collect();
-        let statements = if purpose == Purpose::Check {
-            // The rewrite may leave statements out, so `preloaded` would not match them.
-            debug_assert!(preloaded.is_empty(), "a check preloads nothing");
-            rewrite_unvalued(statements)
-        } else {
-            statements
-        };
-        let (ids, statements): (Vec<_>, Vec<_>) = statements.into_iter().unzip();
+        // The rewrite of a check may leave statements out, so `preloaded` would not match them.
+        debug_assert!(
+            purpose != Purpose::Check || preloaded.is_empty(),
+            "a check preloads nothing"
+        );
         let mut scratch = self.scratch_stores(predicates);
         let (stores, setup) = self.scratch_translation_parts(purpose, &mut scratch);
         let mut translator = translation::Translator::new(stores, setup, state, preloaded);
-        let compiled = translator.program(&statements, &ids)?;
+        let compiled = if purpose == Purpose::Check {
+            let written: Vec<Statement> = statements
+                .iter()
+                .map(|(_, statement)| statement.clone())
+                .collect();
+            let unvalued = translator.check_names(&written)?;
+            let (ids, statements): (Vec<_>, Vec<_>) =
+                rewrite_unvalued(statements, &unvalued).into_iter().unzip();
+            translator.check_statements(&statements, &ids)?
+        } else {
+            let (ids, statements): (Vec<_>, Vec<_>) = statements.into_iter().unzip();
+            translator.program(&statements, &ids)?
+        };
         Ok((compiled, scratch.into_predicates()))
     }
 

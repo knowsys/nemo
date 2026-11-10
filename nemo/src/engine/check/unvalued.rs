@@ -2,34 +2,39 @@
 //!
 //! A program may leave a parameter for whoever runs it to supply, as `@parameter $limit: int .`
 //! does, and a module leaves one for each `@use` of it.
-//! A check looks at the program on its own and has no value for such a parameter,
-//! so it treats the parameter as an input instead:
+//! A check looks at the program on its own and has no value for such a parameter.
+//! It has none either for a parameter with a problem, such as a value outside its declared
+//! type, which it reports, or for a parameter whose value reads a parameter without a value.
+//! The check treats each of these parameters as an input instead:
 //! a one-column predicate that may contain any value of the parameter's declared type,
 //! as an `@input` predicate may contain any rows its declaration allows.
 //! Every statement that reads the parameter is then checked as for any value it may take.
-//! Before the check translates the program, [rewrite_unvalued] rewrites its statements
-//! to this end, with *hidden* predicates and variables.
+//! The translation of the check finds these parameters when it resolves the parameters.
+//! Before it translates the statements, [rewrite_unvalued] rewrites them to this end,
+//! with *hidden* predicates and variables.
 //!
 //! The hidden names begin with a NUL byte, which no program can write,
 //! and the places that name a program's variables and predicates leave them out:
 //! the compiler's `source_names` and `written_name`, and `InferredTypes::of_check`.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use crate::{
+    engine::compile::translation::ParametersWithoutValue,
     model::{
-        Atom, ColumnDeclaration, Directive, Identifier, InputDirective, Literal,
-        ParameterDirective, Rule, Statement, Substitution, Term, TermKind, Variable, VariableKind,
-        Walk,
+        Atom, ColumnDeclaration, Directive, Identifier, InputDirective, Literal, Rule, Statement,
+        Substitution, Term, TermKind, Variable, VariableKind, Walk,
     },
     pipeline::StatementId,
 };
 
 /// Rewrites the statements of a program for its check, each with its id,
-/// so that its parameters without a value are treated as inputs.
+/// so that the parameters that the check has no value for are treated as inputs.
 ///
 /// - The parameter's directive becomes an `@input` of a hidden predicate,
-///   typed by the parameter's declared type, or untyped if it declares none.
+///   typed by the parameter's declared type.
+///   The input is untyped if the parameter declares no type or the check refused the type.
+///   The other directives of a parameter declared twice are left out.
 /// - A rule that reads the parameter reads a hidden variable instead,
 ///   which an extra body atom over that predicate binds.
 /// - A fact that reads the parameter becomes such a rule.
@@ -39,23 +44,21 @@ use crate::{
 ///   since the input may already contain any value.
 /// - An export that reads the parameter is left out.
 ///
-/// A parameter whose value reads a parameter without a value has none either.
-/// A parameter declared twice is left as written, for translation to refuse.
 /// The rewritten statements keep their ids, and their terms their source positions,
 /// so that diagnostics point at the program as written.
 pub(in crate::engine) fn rewrite_unvalued(
     statements: Vec<(StatementId, Statement)>,
+    unvalued: &ParametersWithoutValue,
 ) -> Vec<(StatementId, Statement)> {
-    let unvalued = unvalued_parameters(&statements);
     if unvalued.is_empty() {
         return statements;
     }
-    let as_inputs = input_predicates(&statements, &unvalued);
+    let as_inputs = input_predicates(&statements, unvalued);
     let mut given = HashSet::new();
     statements
         .into_iter()
         .filter_map(|(id, statement)| {
-            let rewritten = rewrite_statement(statement, &unvalued, &as_inputs, &mut given)?;
+            let rewritten = rewrite_statement(statement, unvalued, &as_inputs, &mut given)?;
             Some((id, rewritten))
         })
         .collect()
@@ -65,7 +68,7 @@ pub(in crate::engine) fn rewrite_unvalued(
 /// which the check treats as inputs.
 fn input_predicates(
     statements: &[(StatementId, Statement)],
-    unvalued: &HashSet<String>,
+    unvalued: &ParametersWithoutValue,
 ) -> HashSet<Identifier> {
     statements
         .iter()
@@ -78,49 +81,8 @@ fn input_predicates(
         .collect()
 }
 
-/// Returns the names of the parameters without a value:
-/// those that declare none, and those whose value reads one without a value.
-///
-/// A name declared more than once is left out.
-fn unvalued_parameters(statements: &[(StatementId, Statement)]) -> HashSet<String> {
-    let mut declared: HashMap<&str, Vec<&ParameterDirective>> = HashMap::new();
-    for (_, statement) in statements {
-        if let Statement::Directive(Directive::Parameter(parameter)) = statement {
-            declared
-                .entry(parameter.variable.name.as_str())
-                .or_default()
-                .push(parameter);
-        }
-    }
-    let parameters: Vec<&ParameterDirective> = declared
-        .into_values()
-        .filter(|directives| directives.len() == 1)
-        .flatten()
-        .collect();
-    let mut unvalued: HashSet<String> = parameters
-        .iter()
-        .filter(|parameter| parameter.value.is_none())
-        .map(|parameter| parameter.variable.name.clone())
-        .collect();
-    loop {
-        let before = unvalued.len();
-        for parameter in &parameters {
-            if parameter
-                .value
-                .as_ref()
-                .is_some_and(|value| reads(value, &unvalued))
-            {
-                unvalued.insert(parameter.variable.name.clone());
-            }
-        }
-        if unvalued.len() == before {
-            return unvalued;
-        }
-    }
-}
-
 /// Returns whether a component reads one of the given parameters.
-fn reads(component: &impl Walk, parameters: &HashSet<String>) -> bool {
+fn reads(component: &impl Walk, parameters: &ParametersWithoutValue) -> bool {
     component.any_term(|term| global(term).is_some_and(|name| parameters.contains(name)))
 }
 
@@ -137,10 +99,10 @@ fn global(term: &Term) -> Option<&str> {
 /// Returns a statement as the check reads it, or `None` if the check leaves it out.
 ///
 /// `as_inputs` are the predicates the check treats as inputs (see [input_predicates]),
-/// and `given` those given their `@input` so far.
+/// and `given` the predicates given their `@input` so far.
 fn rewrite_statement(
     statement: Statement,
-    unvalued: &HashSet<String>,
+    unvalued: &ParametersWithoutValue,
     as_inputs: &HashSet<Identifier>,
     given: &mut HashSet<Identifier>,
 ) -> Option<Statement> {
@@ -158,9 +120,13 @@ fn rewrite_statement(
         Statement::Directive(Directive::Parameter(parameter))
             if unvalued.contains(&parameter.variable.name) =>
         {
-            Some(Statement::Directive(Directive::Input(InputDirective {
-                predicate: hidden_predicate(&parameter.variable.name),
-                columns: parameter.datatype.map(|datatype| {
+            let name = &parameter.variable.name;
+            let predicate = hidden_predicate(name);
+            let first = given.insert(predicate.clone());
+            let datatype = parameter.datatype.filter(|_| unvalued.keeps_type(name));
+            first.then_some(Statement::Directive(Directive::Input(InputDirective {
+                predicate,
+                columns: datatype.map(|datatype| {
                     vec![ColumnDeclaration {
                         name: None,
                         datatype,
@@ -195,7 +161,7 @@ fn rewrite_statement(
 
 /// Returns a rule that reads hidden variables in place of the parameters without a value,
 /// each bound by an extra body atom over the parameter's hidden predicate.
-fn rewrite_rule(mut rule: Rule, unvalued: &HashSet<String>) -> Rule {
+fn rewrite_rule(mut rule: Rule, unvalued: &ParametersWithoutValue) -> Rule {
     let mut read: Vec<String> = Vec::new();
     rule.walk(&mut |term| {
         if let Some(name) = global(term)
