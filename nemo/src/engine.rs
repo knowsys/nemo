@@ -573,6 +573,8 @@ impl Engine {
     /// Unlike [load](Self::load), a check does not stop at the first problem.
     /// It reports every problem it found, warnings included,
     /// with the types that the type analysis inferred.
+    /// Its diagnostics are in the returned report only,
+    /// and the engine's [reports](Self::reports) stay as they were.
     /// Since it reads no data, a check suits a program while it is edited.
     /// A check stores nothing, so the engine can still load a program afterwards.
     /// Like a load, it needs a [linked](Self::link) program and an engine without a program.
@@ -584,6 +586,7 @@ impl Engine {
             Err(problem) => (None, Some(problem)),
         };
         let mut reports = self.pipeline.reports()[already..].to_vec();
+        self.pipeline.withdraw_reports(already);
         reports.extend(aborted);
         CheckReport::new(reports, types)
     }
@@ -613,6 +616,7 @@ impl Engine {
     ///
     /// The report contains what parsing, linking and [check](Self::check) reported,
     /// warnings included, or the error of a failed registration.
+    /// The engine's [reports](Self::reports) stay as they were.
     pub fn check_source(
         &mut self,
         name: impl Into<String>,

@@ -242,3 +242,17 @@ fn a_check_leaves_no_registrations_behind() {
     engine.reason().expect("reasoning reaches the fixpoint");
     assert_eq!(count(&mut engine, "q"), 1);
 }
+
+/// A check returns its diagnostics in its report, and adds none to the engine's reports.
+#[test]
+fn a_check_leaves_no_reports_behind() {
+    let mut engine = Engine::new();
+    // The head of the rule has a variable that its body does not bind.
+    let report = engine.check_source("test.rls", "q(?x, ?y) :- p(?x) .\n");
+    assert!(!report.diagnostics().is_empty());
+    assert!(engine.reports().is_empty(), "{:?}", engine.reports());
+
+    let report = engine.check(parse("q(?x, ?y) :- p(?x) ."));
+    assert!(!report.diagnostics().is_empty());
+    assert!(engine.reports().is_empty(), "{:?}", engine.reports());
+}

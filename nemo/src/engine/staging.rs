@@ -861,6 +861,7 @@ impl Engine {
         let already = self.reports().len();
         let linked = self.link(program);
         diagnostics.extend(self.reports()[already..].iter().cloned());
+        self.pipeline.withdraw_reports(already);
         let types = match linked {
             Ok(linked) => {
                 let (checked, types) = self.check(linked).into_parts();
