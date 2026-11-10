@@ -122,6 +122,8 @@ impl Engine {
     /// If it needs remote resources that are not fetched yet, the load is suspended for them
     /// with the prepared translation state, and commits from that state once every response
     /// is in.
+    /// A load that fails drops the tables it registered and restores the translation state,
+    /// so that the engine is as it was before the load.
     /// The reports from index `already` on are rewritten to refer to the written program.
     pub(super) fn load_staged(
         &mut self,
@@ -141,6 +143,9 @@ impl Engine {
             .unzip();
 
         let stages = self.rewriting_stages(&load.staged);
+        // Everything below must be undoable until the translation succeeds.
+        let saved = self.translation.clone();
+        let saved_predicates = self.predicates.clone();
         let context = self.loading_context();
         let (stores, mut setup) = self.translation_parts(Purpose::of_load(&stages), context);
         setup.written = Some(&written);
@@ -176,6 +181,8 @@ impl Engine {
             Ok(_) => {}
             Err(problem) => {
                 self.translation = state;
+                self.forget_registrations(&saved_predicates, &saved);
+                self.translation = saved;
                 self.pipeline
                     .present_reports(already, |report| written.present(report));
                 return Err(written.present(problem));
@@ -184,9 +191,14 @@ impl Engine {
         self.translation = state;
         self.pipeline
             .present_reports(already, |report| written.present(report));
-        let compiled = outcome
-            .expect("a prepared load with every resource fetched commits")
-            .map_err(|problem| written.present(problem))?;
+        let compiled = match outcome.expect("a prepared load with every resource fetched commits") {
+            Ok(compiled) => compiled,
+            Err(problem) => {
+                self.forget_registrations(&saved_predicates, &saved);
+                self.translation = saved;
+                return Err(written.present(problem));
+            }
+        };
 
         for (table, rows) in facts {
             #[cfg(debug_assertions)]

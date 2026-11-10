@@ -569,3 +569,20 @@ fn a_discarded_load_withdraws_its_reports() {
     );
     assert_eq!(unsupplied(&engine), 1, "{:?}", engine.reports());
 }
+
+/// A load that fails registers no predicate, so that a corrected program loads,
+/// even one that uses a predicate of the failed program with another number of columns.
+#[test]
+fn a_failed_load_registers_no_predicate() {
+    let mut engine = Engine::new();
+    engine
+        .load(parse("r(1, 2) . q(?x) :- r(?x) ."))
+        .expect_err("`r` is used with two numbers of columns");
+    let registered: Vec<&String> = engine.predicates.keys().collect();
+    assert!(registered.is_empty(), "{registered:?}");
+    engine
+        .load(parse("r(1) . q(?x) :- r(?x) ."))
+        .expect("the corrected program loads");
+    engine.reason().expect("reasoning reaches the fixpoint");
+    assert_eq!(rows(&mut engine, "q"), [["1"]]);
+}

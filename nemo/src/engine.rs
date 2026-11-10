@@ -428,6 +428,8 @@ impl Engine {
     ///   The load then changes nothing.
     /// - Otherwise, returns the first problem of the program or its data.
     ///
+    /// A load that fails registers no predicate, so another program can be loaded instead.
+    ///
     /// # Panics
     ///
     /// Panics if a pipeline stage rewrites the program into one that translation refuses,
