@@ -954,7 +954,7 @@ impl Engine {
     ///
     /// Returns N0206 for a cursor whose table changed after the cursor was opened,
     /// since its remaining rows would no longer match the table.
-    /// [is_current](Self::is_current) checks for this beforehand.
+    /// [is_valid](Self::is_valid) checks for this beforehand.
     pub fn read_chunk(
         &mut self,
         cursor: &mut PredicateCursor,
@@ -966,9 +966,9 @@ impl Engine {
     /// Returns whether a cursor still reads the rows it was opened on,
     /// which holds while nothing changes its predicate's table.
     ///
-    /// A cursor on a predicate that a [reload](Self::reload) rebuilt is not current.
-    /// [read_chunk](Self::read_chunk) refuses a cursor that is not current.
-    pub fn is_current(&self, cursor: &PredicateCursor) -> bool {
+    /// A cursor on a predicate that a [reload](Self::reload) rebuilt is not valid.
+    /// [read_chunk](Self::read_chunk) refuses a cursor that is not valid.
+    pub fn is_valid(&self, cursor: &PredicateCursor) -> bool {
         // A reload drops the table of a predicate that it rebuilds,
         // and the table manager answers only for the tables it holds.
         let held = self

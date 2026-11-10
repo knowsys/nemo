@@ -303,7 +303,7 @@ fn cursors_notice_later_work_on_their_table() {
     assert_eq!(refusal.code(), codes::CURSOR_INVALIDATED, "{refusal:?}");
 }
 
-/// A cursor on a predicate that a reload rebuilt is not current,
+/// A cursor on a predicate that a reload rebuilt is not valid,
 /// and a read through it returns an error.
 #[test]
 fn cursors_notice_a_reload_that_rebuilds_their_predicate() {
@@ -313,7 +313,7 @@ fn cursors_notice_a_reload_that_rebuilds_their_predicate() {
     engine
         .reload(parse("p(1) . p(3) . q(?x) :- p(?x) ."))
         .expect("the program loads");
-    assert!(!engine.is_current(&cursor));
+    assert!(!engine.is_valid(&cursor));
     let refusal = engine
         .read_chunk(&mut cursor, 1)
         .expect_err("the table that the cursor was opened on is dropped");

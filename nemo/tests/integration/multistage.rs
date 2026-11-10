@@ -417,7 +417,7 @@ fn open_cursors_notice_recovery() {
         .import_rows("blocked", vec![row(&[1])])
         .expect("rows import");
     engine.reason().expect("recovery reasons");
-    assert!(!engine.is_current(&cursor));
+    assert!(!engine.is_valid(&cursor));
     let refusal = engine
         .read_chunk(&mut cursor, 16)
         .expect_err("the world shifted under the cursor");
@@ -449,7 +449,7 @@ fn the_checks_tell_which_methods_fail() {
     assert!(!engine.is_at_fixpoint());
 
     let cursor = engine.cursor("q").expect("the cursor opens");
-    assert!(engine.is_current(&cursor));
+    assert!(engine.is_valid(&cursor));
 }
 
 #[test]

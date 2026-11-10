@@ -34,7 +34,7 @@ impl Engine {
 
     /// Decodes the next rows of a cursor, at most `budget` of them, into a chunk.
     ///
-    /// Fails for a cursor that is not [current](Self::is_current).
+    /// Fails for a cursor that is not [valid](Self::is_valid).
     pub(in crate::engine) fn decode_chunk(
         &mut self,
         cursor: &mut PredicateCursor,
@@ -44,7 +44,7 @@ impl Engine {
         if cursor.is_done() || budget == 0 {
             return Ok(chunk);
         }
-        if !self.is_current(cursor) {
+        if !self.is_valid(cursor) {
             return Err(EngineError::CursorInvalidated.diagnostic());
         }
         let order = ColumnOrder::identity(cursor.arity);
