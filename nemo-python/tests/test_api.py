@@ -411,6 +411,95 @@ def test_cancel_from_another_thread():
     assert engine.count("path") == 121 * 120 // 2
 
 
+def test_ctrl_c_interrupts_a_call_while_it_waits():
+    import _thread
+    import http.server
+    import signal
+    import threading
+
+    # The handler simulates Ctrl-C for the request made while `interrupt` is set, and holds
+    # the response to it until the test ends, so that the call still waits when the signal
+    # arrives.
+    interrupt = threading.Event()
+    release = threading.Event()
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def respond(self):
+            self.rfile.read(int(self.headers.get("Content-Length", 0)))
+            if interrupt.is_set():
+                interrupt.clear()
+                _thread.interrupt_main()
+                release.wait(10)
+            body = b"?c\t?p\n<urn:a>\t<urn:b>\n"
+            self.send_response(200)
+            self.send_header("Content-Type", "text/tab-separated-values")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        do_GET = do_POST = respond
+
+        def log_message(self, *args):
+            pass
+
+    httpd = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    endpoint = f"http://127.0.0.1:{httpd.server_address[1]}/sparql"
+    parents = (
+        f'@import parent(?c, ?p) from sparql {{ endpoint = <{endpoint}>, '
+        f'query = "SELECT ?c ?p WHERE {{ ?c <urn:parent> ?p }}" }}'
+    )
+    rule = "anc(?p) :- parent(?c, ?p) ."
+    # A process started in the background may ignore SIGINT, and `interrupt_main` then
+    # does nothing.
+    previous = signal.signal(signal.SIGINT, signal.default_int_handler)
+    try:
+        # The load fetches the unbound import.
+        # Ctrl-C cancels the load, which then changes nothing, so a second load succeeds.
+        unbound = nmo.Program.parse(f"{parents} . {rule}")
+        engine = nmo.Engine()
+        interrupt.set()
+        with pytest.raises(KeyboardInterrupt):
+            engine.load(unbound)
+        engine.load(unbound)
+
+        # The run fetches the bound import.
+        # Ctrl-C cancels the run, which stays suspended, and `reason()` continues it.
+        bound = nmo.Program.parse(f"{parents} where anc(?c) . anc(<urn:a>) . {rule}")
+        engine = nmo.Engine()
+        engine.load(bound)
+        interrupt.set()
+        with pytest.raises(KeyboardInterrupt):
+            engine.reason()
+        assert engine.count("anc") == 1
+        engine.reason()
+        assert engine.count("anc") == 2
+    finally:
+        signal.signal(signal.SIGINT, previous)
+        release.set()
+        httpd.shutdown()
+
+
+def test_a_short_call_returns_at_once():
+    import statistics
+    import time
+
+    # A call that does little returns as soon as it is done,
+    # although calls poll for Ctrl-C while they run.
+    program = nmo.Program.parse("p(1) . q(?x) :- p(?x) .")
+    loads, runs = [], []
+    for _ in range(20):
+        engine = nmo.Engine()
+        start = time.perf_counter()
+        engine.load(program)
+        middle = time.perf_counter()
+        engine.reason()
+        loads.append(middle - start)
+        runs.append(time.perf_counter() - middle)
+    assert statistics.median(loads) < 0.01
+    assert statistics.median(runs) < 0.01
+
+
 def test_trace_returns_the_protocol_dict():
     engine = reasoned()
     response = engine.trace("ancestor(alice, carol)")

@@ -2,7 +2,10 @@
 
 use std::{
     collections::VecDeque,
-    sync::{Mutex, MutexGuard, TryLockError},
+    sync::{
+        Mutex, MutexGuard, TryLockError,
+        mpsc::{self, RecvTimeoutError},
+    },
     time::Duration,
 };
 
@@ -108,6 +111,7 @@ impl Engine {
     /// Runs `call` with the GIL released, on a thread of its own,
     /// while this thread polls for signals every [SIGNAL_POLL].
     ///
+    /// It returns as soon as the call ends.
     /// Ctrl-C cancels the call through the engine's cancel token.
     /// Once the call has stopped, `KeyboardInterrupt` is raised in place of its outcome.
     fn interruptible<T: Send>(
@@ -119,9 +123,15 @@ impl Engine {
         let mut interrupt: Option<PyErr> = None;
         let outcome = py.detach(|| {
             std::thread::scope(|scope| {
-                let worker = scope.spawn(call);
-                while !worker.is_finished() {
-                    std::thread::sleep(SIGNAL_POLL);
+                // The wait ends when the worker sends on the channel as it ends,
+                // or when a worker that panics drops the sender.
+                let (sender, receiver) = mpsc::channel();
+                let worker = scope.spawn(move || {
+                    let outcome = call();
+                    sender.send(()).ok();
+                    outcome
+                });
+                while let Err(RecvTimeoutError::Timeout) = receiver.recv_timeout(SIGNAL_POLL) {
                     if interrupt.is_none()
                         && let Err(signal) = Python::attach(|py| py.check_signals())
                     {
