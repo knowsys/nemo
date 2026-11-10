@@ -88,3 +88,7 @@ pip install maturin
 maturin develop --release    # in nemo-python/, inside a virtualenv
 pytest tests/
 ```
+
+The scripts in `examples/` each show one part of the API (`quickstart`,
+`values`, `diagnostics`, `incremental`, `dataframes`) and run against
+the built module, as `python examples/quickstart.py`.

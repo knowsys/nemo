@@ -164,3 +164,6 @@ console with their message.
 wasm-pack build --target web nemo-wasm     # or --target bundler / nodejs
 wasm-pack test --node nemo-wasm            # the real test suite
 ```
+
+The Node scripts in `examples/` (`quickstart`, `resources`, `fetch`)
+run against the `nodejs` target, as `node nemo-wasm/examples/quickstart.mjs`.
