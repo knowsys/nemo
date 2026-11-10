@@ -1,10 +1,7 @@
 //! Bound imports follow the program's bindings to the fixpoint, one `VALUES` block per binding
 //! atom, are checked without fetching, and bind generic imports through the rewrite stage.
 
-use nemo::{
-    engine::Engine,
-    model::{FileId, Program},
-};
+use nemo::{engine::Engine, model::Program};
 use nemo_physical::value::DataValue;
 
 use crate::common::{Responder, parse_into};
@@ -209,7 +206,6 @@ fn checks_validate_bound_imports_without_fetching() {
     let (program, _) = Program::parse(
         r#"@import q(?a) from sparql { endpoint = <http://e/sparql>,
             query = "SELECT ?a WHERE { ?a ?b ?c }" } where b(?zzz) ."#,
-        FileId::new(0),
     );
     let problems = engine.check(program).into_diagnostics();
     assert!(
@@ -224,7 +220,6 @@ fn checks_validate_bound_imports_without_fetching() {
     let (program, _) = Program::parse(
         r#"@import q(?a) from sparql { endpoint = <http://e/sparql>,
             query = "SELECT ?a WHERE { ?a ?b ?c } LIMIT 10" } where b(?a) ."#,
-        FileId::new(0),
     );
     let problems = engine.check(program).into_diagnostics();
     assert!(
@@ -239,7 +234,6 @@ fn checks_validate_bound_imports_without_fetching() {
     let (program, _) = Program::parse(
         r#"@import q(?a, ?b) from sparql { endpoint = <http://e/sparql>,
             query = "SELECT ?a WHERE { ?a ?b ?c }" } ."#,
-        FileId::new(0),
     );
     let problems = engine.check(program).into_diagnostics();
     assert!(

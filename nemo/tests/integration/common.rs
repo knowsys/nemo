@@ -13,13 +13,13 @@ use nemo::{
         Engine, PredicateRole,
         remote::{Client, Failure, Progress, Request, Response},
     },
-    model::{FileId, Program},
+    model::Program,
 };
 use nemo_physical::diagnostics::Diagnostic;
 
 /// Parses a program, panicking on diagnostics.
 pub(crate) fn parse(source: &str) -> Program {
-    let (program, diagnostics) = Program::parse(source, FileId::new(0));
+    let (program, diagnostics) = Program::parse(source);
     assert!(diagnostics.is_empty(), "{source}: {diagnostics:?}");
     program
 }
@@ -33,7 +33,7 @@ pub(crate) fn parse_into(engine: &mut Engine, source: &str) -> Program {
     let file = engine
         .add_source("test.rls", source)
         .expect("the text is small");
-    let (program, diagnostics) = Program::parse(source, file);
+    let (program, diagnostics) = Program::parse_with_file(source, file);
     assert!(diagnostics.is_empty(), "{source}: {diagnostics:?}");
     program
 }

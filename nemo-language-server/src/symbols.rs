@@ -589,11 +589,9 @@ fn names(identifiers: &[Identifier]) -> String {
 mod tests {
     use super::*;
 
-    use nemo::model::FileId;
-
     /// Returns the index of a source that parses without diagnostics.
     fn symbols(source: &str) -> Symbols {
-        let (program, diagnostics) = Program::parse(source, FileId::new(0));
+        let (program, diagnostics) = Program::parse(source);
         assert!(diagnostics.is_empty(), "{diagnostics:?}");
         Symbols::of(&program, source)
     }

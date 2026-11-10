@@ -8,7 +8,7 @@ use nemo::{
     diagnostics::render::{Renderer, SourceTexts},
     engine::Engine,
     fact,
-    model::{Fact, FileId, Program, Rule, Term},
+    model::{Fact, Program, Rule, Term},
     rule,
     values::{DataValue, TypeSyntax},
 };
@@ -22,7 +22,7 @@ fn main() {
         ancestor(?x, ?y) :- parent(?x, ?y) .
         ancestor(?x, ?z) :- parent(?x, ?y), ancestor(?y, ?z) .
     ";
-    let (parsed, diagnostics) = Program::parse(source, FileId::new(0));
+    let (parsed, diagnostics) = Program::parse(source);
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
 
     // 2. Macros, for rule shapes known at compile time.
@@ -113,10 +113,8 @@ fn main() {
     // An `@import` reads a registered in-memory resource in place of
     // the filesystem, the data path of embedders that have none
     // (browsers) or hold their input already (any host language).
-    let (fed, diagnostics) = Program::parse(
-        "@import p from csv { resource = \"data.csv\" } . q(?x) :- p(?x, ?y) .",
-        FileId::new(0),
-    );
+    let (fed, diagnostics) =
+        Program::parse("@import p from csv { resource = \"data.csv\" } . q(?x) :- p(?x, ?y) .");
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
     let mut engine = Engine::new();
     engine.add_resource("data.csv", "a,1\nb,2\n".as_bytes().to_vec());
@@ -138,7 +136,6 @@ fn main() {
     let (staged, _) = Program::parse(
         "parent(alice, bob) . ancestor(?x, ?y) :- parent(?x, ?y) .
          ancestor(?x, ?z) :- parent(?x, ?y), ancestor(?y, ?z) .",
-        FileId::new(0),
     );
     let mut engine = Engine::new();
     engine.load(staged).expect("the program loads");
@@ -149,7 +146,7 @@ fn main() {
             vec![vec![DataValue::iri("bob"), DataValue::iri("carol")]],
         )
         .expect("rows join the loaded engine");
-    let (extension, _) = Program::parse("forebear(?x) :- ancestor(?x, ?y) .", FileId::new(0));
+    let (extension, _) = Program::parse("forebear(?x) :- ancestor(?x, ?y) .");
     engine.extend(extension).expect("the extension compiles");
     engine.reason().expect("reasoning continues");
     println!(
@@ -165,7 +162,7 @@ fn main() {
     // nothing. It is what an editor runs per keystroke. The shared
     // renderer quotes each diagnostic against its source.
     let source = "@type angle(decimal) . spin(angle(\"north\")) .";
-    let (broken, _) = Program::parse(source, FileId::new(0));
+    let (broken, _) = Program::parse(source);
     let sources = SourceTexts::detached("broken.rls", source);
     let mut checker = Engine::new();
     for report in checker.check(broken).diagnostics() {

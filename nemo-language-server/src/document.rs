@@ -123,7 +123,7 @@ impl Document {
     /// A `@use` of one of them reads its open text rather than the file on disk.
     pub(crate) fn new(text: String, path: Option<PathBuf>, open: &[(PathBuf, &str)]) -> Self {
         let lines = Lines::of(&text);
-        let (program, mut diagnostics) = Program::parse(&text, DOCUMENT);
+        let (program, mut diagnostics) = Program::parse_with_file(&text, DOCUMENT);
         let symbols = Symbols::of(&program, &text);
 
         let parsed = !diagnostics

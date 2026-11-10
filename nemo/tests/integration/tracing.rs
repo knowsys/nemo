@@ -437,7 +437,7 @@ fn module_rules_attribute_back_to_their_use() {
     let file = engine
         .add_source(directory.join("main.rls").display().to_string(), source)
         .expect("the text is small");
-    let (program, diagnostics) = Program::parse(source, file);
+    let (program, diagnostics) = Program::parse_with_file(source, file);
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
     let program = engine.link(program).expect("the program links");
     engine.load(program).expect("the program loads");

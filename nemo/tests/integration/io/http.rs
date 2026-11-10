@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use nemo::{
     engine::{Engine, remote::Progress},
-    model::{FileId, Program},
+    model::Program,
 };
 use nemo_physical::value::DataValue;
 
@@ -120,7 +120,7 @@ fn csv_imports_fetch_over_http() {
 fn a_failed_fetch_is_an_error() {
     let (base, _requests) = serve("gone", "404 Not Found", 1);
     let source = format!(r#"@import p from csv {{ resource = "{base}/missing.csv" }} ."#);
-    let (program, diagnostics) = Program::parse(&source, FileId::new(0));
+    let (program, diagnostics) = Program::parse(&source);
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
     let problem = Engine::new().load(program).expect_err("the fetch failed");
     assert_eq!(problem.code(), nemo::codes::UNFETCHABLE, "{problem:?}");

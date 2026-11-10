@@ -8,10 +8,7 @@ use super::*;
 fn a_type_conflict_hints_at_a_near_builtin() {
     // `loh(?x)` builds a tuple, so writing it into a declared double
     // column is probably a misspelled `LOG`.
-    let (program, _) = Program::parse(
-        "@declare out(v: double) . n(1) . out(loh(?x)) :- n(?x) .",
-        FileId::new(0),
-    );
+    let (program, _) = Program::parse("@declare out(v: double) . n(1) . out(loh(?x)) :- n(?x) .");
     let problem = Engine::new()
         .load(program)
         .expect_err("a tuple is not a double");
@@ -61,10 +58,8 @@ fn iri_and_langstring_declare_like_any_base_type() {
 
     // The declared types are written back as declared, since the display and the
     // declaration use the same names.
-    let (program, _) = Program::parse(
-        "@declare said(who: iri, what: langstring) . said(alice, \"hi\"@en) .",
-        FileId::new(0),
-    );
+    let (program, _) =
+        Program::parse("@declare said(who: iri, what: langstring) . said(alice, \"hi\"@en) .");
     let mut engine = Engine::new();
     engine.load(program).expect("the program loads");
     let types = engine.column_types("said").expect("registered");
@@ -161,7 +156,7 @@ fn conditions_narrow_what_a_rule_writes() {
 /// A `@type` cannot define a label named like a base type.
 #[test]
 fn base_type_names_cannot_be_declared_with_type() {
-    let (program, _) = Program::parse("@type langstring(int) .", FileId::new(0));
+    let (program, _) = Program::parse("@type langstring(int) .");
     let problem = Engine::new()
         .load(program)
         .expect_err("base-type names are reserved");
@@ -225,7 +220,7 @@ fn the_analysis_stays_silent_where_a_value_could_fit() {
 /// A fact with a value outside its declared type is an error.
 #[test]
 fn a_fact_violating_its_declaration_is_an_error() {
-    let (program, _) = Program::parse("@declare p(int) . p(\"a\") .", FileId::new(0));
+    let (program, _) = Program::parse("@declare p(int) . p(\"a\") .");
     let problem = Engine::new()
         .load(program)
         .expect_err("the value is outside the declared type");
@@ -244,7 +239,6 @@ fn a_declared_shape_checks_fact_elements() {
     let (program, _) = Program::parse(
         "@declare city(location: (int, int), name: string) .\n\
          city((\"x\", 13), \"Dresden\") .",
-        FileId::new(0),
     );
     let problem = Engine::new()
         .load(program)
@@ -341,7 +335,7 @@ fn mixed_shapes_widen_and_stay_quiet() {
 fn an_unlabeled_tuple_type_is_exactly_unlabeled() {
     // `(int, int)` and `point(int, int)` are different values, so
     // they are different types.
-    let (program, _) = Program::parse("@declare p((int, int)) . p(point(1, 2)) .", FileId::new(0));
+    let (program, _) = Program::parse("@declare p((int, int)) . p(point(1, 2)) .");
     let problem = Engine::new()
         .load(program)
         .expect_err("the label's value is outside its declared type");
@@ -355,7 +349,7 @@ fn an_unlabeled_tuple_type_is_exactly_unlabeled() {
 /// The bare types `tuple` and `map` accept any value of their kind and no other.
 #[test]
 fn bare_structure_types_declare_the_kind() {
-    let (program, _) = Program::parse("@declare p(tuple) . p({a = 1}) .", FileId::new(0));
+    let (program, _) = Program::parse("@declare p(tuple) . p({a = 1}) .");
     let problem = Engine::new()
         .load(program)
         .expect_err("a map is not a tuple");
@@ -388,7 +382,7 @@ fn a_type_declaration_checks_ground_constructions() {
         "@type angle(decimal) . a(angle(1.5, 2.5)) .",
         "@type angle(decimal) . nested((angle(\"x\"), 1)) .",
     ] {
-        let (program, _) = Program::parse(bad, FileId::new(0));
+        let (program, _) = Program::parse(bad);
         let problem = Engine::new()
             .load(program)
             .expect_err("the value is outside the declared type");
@@ -418,7 +412,7 @@ fn a_type_declaration_checks_rule_constructions() {
             codes::UNKNOWN_FIELD,
         ),
     ] {
-        let (program, _) = Program::parse(bad, FileId::new(0));
+        let (program, _) = Program::parse(bad);
         let problem = Engine::new()
             .load(program)
             .expect_err("the value is outside the declared type");
@@ -444,7 +438,7 @@ fn a_type_declaration_checks_what_variables_build() {
         "@type angle(decimal) . p(\"x\") . q((angle(?v), 1)) :- p(?v) .",
         "@type config{ port: int } . p(\"x\") . q(config{port = ?v}) :- p(?v) .",
     ] {
-        let (program, _) = Program::parse(bad, FileId::new(0));
+        let (program, _) = Program::parse(bad);
         let problem = Engine::new()
             .load(program)
             .expect_err("the built value is outside the declared type");
@@ -457,7 +451,6 @@ fn a_type_declaration_checks_what_variables_build() {
     // Into a declared column, the declaration of the column reports it.
     let (program, _) = Program::parse(
         "@type angle(decimal) . @declare q(angle) . p(\"x\") . q(angle(?v)) :- p(?v) .",
-        FileId::new(0),
     );
     let problem = Engine::new()
         .load(program)
@@ -499,10 +492,7 @@ fn a_declared_label_is_a_type() {
     assert!(engine.reports().is_empty(), "{:?}", engine.reports());
 
     // A bare decimal is not an angle, since the wrapper is distinct.
-    let (program, _) = Program::parse(
-        "@type angle(decimal) . @declare a(turn: angle) . a(1.5) .",
-        FileId::new(0),
-    );
+    let (program, _) = Program::parse("@type angle(decimal) . @declare a(turn: angle) . a(1.5) .");
     let problem = Engine::new()
         .load(program)
         .expect_err("the wrapper is not its content");
@@ -867,7 +857,6 @@ fn a_rule_writing_a_wrong_shape_is_an_error() {
         "@declare city(location: (int, int), name: string) .\n\
          src(1) .\n\
          city((?x, ?x, ?x), \"n\") :- src(?x) .",
-        FileId::new(0),
     );
     let problem = Engine::new()
         .load(program)
@@ -878,10 +867,7 @@ fn a_rule_writing_a_wrong_shape_is_an_error() {
 /// A rule that provably writes a value outside its head's declaration is an error.
 #[test]
 fn a_rule_writing_outside_a_declaration_is_an_error() {
-    let (program, _) = Program::parse(
-        "@declare out(int) . src(\"a\") . out(?x) :- src(?x) .",
-        FileId::new(0),
-    );
+    let (program, _) = Program::parse("@declare out(int) . src(\"a\") . out(?x) :- src(?x) .");
     let problem = Engine::new()
         .load(program)
         .expect_err("the head provably writes a string");
@@ -891,7 +877,7 @@ fn a_rule_writing_outside_a_declaration_is_an_error() {
 /// A fact with another number of columns than its predicate's declaration is an error.
 #[test]
 fn a_declaration_fixes_the_arity() {
-    let (program, _) = Program::parse("@declare p(int, int) . p(1) .", FileId::new(0));
+    let (program, _) = Program::parse("@declare p(int, int) . p(1) .");
     let problem = Engine::new()
         .load(program)
         .expect_err("one column is not two");
@@ -970,7 +956,7 @@ fn inferred_types_are_readable() {
 /// A typed parameter with a value outside its type is an error.
 #[test]
 fn a_typed_parameter_rejects_a_value_outside_its_type() {
-    let (program, _) = Program::parse("@parameter $limit: int = \"ten\" .\np(1) .", FileId::new(0));
+    let (program, _) = Program::parse("@parameter $limit: int = \"ten\" .\np(1) .");
     let problem = Engine::new()
         .load(program)
         .expect_err("a string is not an int");

@@ -24,7 +24,7 @@ use std::{
 use libtest_mimic::{Arguments, Failed, Trial};
 use nemo::{
     engine::Engine,
-    model::{Directive, FileId, Identifier, Program, Statement},
+    model::{Directive, Identifier, Program, Statement},
 };
 use nemo_physical::{
     diagnostics::{Diagnostic, Severity},
@@ -126,7 +126,7 @@ fn reason(path: &Path, expected: &Results) -> Result<(Engine, bool), String> {
     let file = engine
         .add_source(path.to_string_lossy(), text.clone())
         .expect("the text is small");
-    let (program, diagnostics) = Program::parse(&text, file);
+    let (program, diagnostics) = Program::parse_with_file(&text, file);
     errors(&diagnostics)?;
 
     let imports_named = program.statements.iter().any(|statement| match statement {
@@ -151,7 +151,7 @@ fn reason(path: &Path, expected: &Results) -> Result<(Engine, bool), String> {
 
 /// The facts of an expectation file, read as a program of facts.
 fn expectation(text: &str) -> Result<Results, String> {
-    let (program, diagnostics) = Program::parse(text, FileId::new(0));
+    let (program, diagnostics) = Program::parse(text);
     errors(&diagnostics)?;
     let mut engine = Engine::new();
     engine.load(program).map_err(describe)?;

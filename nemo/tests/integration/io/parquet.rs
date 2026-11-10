@@ -1,10 +1,7 @@
 //! Parquet through Arrow: the round trip through the engine, pruned and filtered imports, the
 //! values an import's columns hold, and the compression the format refuses.
 
-use nemo::{
-    engine::Engine,
-    model::{FileId, Program},
-};
+use nemo::{engine::Engine, model::Program};
 use nemo_physical::value::DataValue;
 
 use crate::common::{TempDirectory, parse};
@@ -27,7 +24,7 @@ p(2, "beta") .
 
     let mut reader = Engine::new();
     let source = r#"@import q from parquet { resource = "p.parquet" } ."#;
-    let (program, diagnostics) = Program::parse(source, FileId::new(0));
+    let (program, diagnostics) = Program::parse(source);
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
     reader.set_import_directory(directory);
     reader.load(program).expect("the file reads back");
@@ -136,7 +133,7 @@ p(2, "beta") .
 #[test]
 fn parquet_rejects_stream_compression() {
     let source = "p(1) .\n@export p to parquet { compression = \"gzip\" } .\n";
-    let (program, diagnostics) = Program::parse(source, FileId::new(0));
+    let (program, diagnostics) = Program::parse(source);
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
     let mut engine = Engine::new();
     let problem = engine.load(program).expect_err("parquet compresses itself");

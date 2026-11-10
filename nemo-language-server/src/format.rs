@@ -72,11 +72,11 @@ fn slice(text: &str, span: Span) -> Option<&str> {
 mod tests {
     use super::*;
 
-    use nemo::model::{FileId, Program};
+    use nemo::model::Program;
 
     /// Returns the text of a source that parses, with its formatting edits applied.
     fn formatted(source: &str) -> String {
-        let (program, diagnostics) = Program::parse(source, FileId::new(0));
+        let (program, diagnostics) = Program::parse(source);
         assert!(diagnostics.is_empty(), "{diagnostics:?}");
         let mut text = source.to_string();
         // The edits are applied from the back, so that the spans of earlier edits stay valid.
@@ -149,7 +149,7 @@ mod tests {
     #[test]
     fn a_formatted_document_is_left_alone() {
         let source = "p(1, 2) .\nq(?x) :- p(?x, 2) .\n@output q .\n";
-        let (program, diagnostics) = Program::parse(source, FileId::new(0));
+        let (program, diagnostics) = Program::parse(source);
         assert!(diagnostics.is_empty(), "{diagnostics:?}");
         assert!(
             edits(&program.statements, source).is_empty(),

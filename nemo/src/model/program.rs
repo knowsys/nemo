@@ -14,11 +14,11 @@ use crate::model::{Literal, Span, Statement, span_ignoring_eq};
 /// ```
 /// use nemo::{
 ///     atom,
-///     model::{Fact, FileId, Program, Rule, Term},
+///     model::{Fact, Program, Rule, Term},
 /// };
 ///
 /// let text = "parent(alice, bob) . ancestor(?x, ?y) :- parent(?x, ?y) .";
-/// let (parsed, diagnostics) = Program::parse(text, FileId::new(0));
+/// let (parsed, diagnostics) = Program::parse(text);
 /// assert!(diagnostics.is_empty());
 ///
 /// let built = Program::builder()
@@ -102,8 +102,6 @@ impl Display for Program {
 mod tests {
     use super::*;
 
-    use crate::model::FileId;
-
     /// The predicates are those of facts and of the atoms of rules, negated ones included,
     /// and the predicates of directives are left out.
     #[test]
@@ -111,7 +109,6 @@ mod tests {
         let (program, diagnostics) = Program::parse(
             "@output reach .\nedge(1, 2) .\n\
              reach(?x, ?y) :- edge(?x, ?y), ~blocked(?x), ?x < ?y .\n",
-            FileId::new(0),
         );
         assert!(diagnostics.is_empty(), "{diagnostics:?}");
         assert_eq!(

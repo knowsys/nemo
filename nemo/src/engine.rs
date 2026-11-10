@@ -100,16 +100,12 @@ use crate::{
 /// # Example
 ///
 /// ```
-/// use nemo::{
-///     engine::Engine,
-///     model::{FileId, Program},
-/// };
+/// use nemo::{engine::Engine, model::Program};
 ///
 /// let (program, diagnostics) = Program::parse(
 ///     "edge(1, 2) . edge(2, 3) .
 ///      reach(?x, ?y) :- edge(?x, ?y) .
 ///      reach(?x, ?z) :- reach(?x, ?y), edge(?y, ?z) .",
-///     FileId::new(0),
 /// );
 /// assert!(diagnostics.is_empty());
 ///
@@ -297,7 +293,7 @@ impl Engine {
         let text = self
             .source(file)
             .expect("the engine handed out the file id");
-        Program::parse(text, file)
+        Program::parse_with_file(text, file)
     }
 
     /// Returns the text registered under a file id, or `None` for an id the engine did not
@@ -1136,15 +1132,9 @@ impl Engine {
     /// # Example
     ///
     /// ```
-    /// use nemo::{
-    ///     engine::Engine,
-    ///     model::{FileId, Program},
-    /// };
+    /// use nemo::{engine::Engine, model::Program};
     ///
-    /// let (program, _) = Program::parse(
-    ///     "edge(1, 2) . reach(?x, ?y) :- edge(?x, ?y) .",
-    ///     FileId::new(0),
-    /// );
+    /// let (program, _) = Program::parse("edge(1, 2) . reach(?x, ?y) :- edge(?x, ?y) .");
     /// let mut engine = Engine::new();
     /// engine.load(program)?;
     /// engine.reason()?;

@@ -2,7 +2,7 @@
 
 use pyo3::prelude::*;
 
-use nemo::{diagnostics::render::SourceTexts, model::FileId};
+use nemo::diagnostics::render::SourceTexts;
 
 use crate::errors::{Diagnostic, resolve};
 
@@ -44,7 +44,7 @@ impl Program {
     #[staticmethod]
     #[pyo3(signature = (text, name = "<program>"))]
     pub fn parse(text: String, name: &str) -> Self {
-        let (model, diagnostics) = nemo::model::Program::parse(&text, FileId::new(0));
+        let (model, diagnostics) = nemo::model::Program::parse(&text);
         let sources = SourceTexts::detached(name, text.clone());
         let diagnostics = diagnostics
             .iter()

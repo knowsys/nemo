@@ -18,17 +18,12 @@ use crate::trace::{Proof, TraceNode, WrittenRule};
 /// # Example
 ///
 /// ```
-/// use nemo::{
-///     engine::Engine,
-///     fact,
-///     model::{FileId, Program},
-/// };
+/// use nemo::{engine::Engine, fact, model::Program};
 ///
 /// let (program, _) = Program::parse(
 ///     "edge(1, 2) . edge(2, 3) .
 ///      reach(?x, ?y) :- edge(?x, ?y) .
 ///      reach(?x, ?z) :- reach(?x, ?y), edge(?y, ?z) .",
-///     FileId::new(0),
 /// );
 /// let mut engine = Engine::new();
 /// engine.load(program)?;

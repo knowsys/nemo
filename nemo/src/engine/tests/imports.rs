@@ -34,7 +34,7 @@ q(?a) :- p(?a, _, ?b), ?b > 5 .
 
     // With imports retained, the same program keeps the written width and every
     // row.
-    let (program, _) = Program::parse(source, FileId::new(0));
+    let (program, _) = Program::parse(source);
     let mut engine = Engine::new();
     engine.retain_imports();
     engine.set_import_directory(directory);
@@ -302,7 +302,7 @@ fn limits_and_term_column_formats_apply() {
     assert_eq!(written.lines().count(), 1, "the export stops at its limit");
 
     let bad = r#"@import g from ntriples { resource = "graph.nt", format = (int, term, term) } ."#;
-    let (program, _) = Program::parse(bad, FileId::new(0));
+    let (program, _) = Program::parse(bad);
     let mut engine = Engine::new();
     engine.add_resource("graph.nt", "".as_bytes().to_vec());
     let refusal = engine.load(program).expect_err("terms take term or skip");
@@ -440,7 +440,6 @@ fn term_defers_to_the_declaration_and_typed_formats_must_fit_it() {
     let (program, _) = Program::parse(
         "@declare n(x: int) .
          @import n from csv { resource = \"n.csv\", format = (decimal) } .",
-        FileId::new(0),
     );
     let mut engine = Engine::new();
     engine.add_resource("n.csv", b"1\n".to_vec());
@@ -548,7 +547,6 @@ _:blank <http://x/p> \"6\"^^<http://www.w3.org/2001/XMLSchema#integer> .
     // `string` is a format for reading cells, and RDF columns contain terms.
     let (program, _) = Program::parse(
         "@import g from ntriples { resource = \"graph.nt\", format = (string, term, term) } .",
-        FileId::new(0),
     );
     let mut engine = Engine::new();
     engine.add_resource("graph.nt", GRAPH.as_bytes().to_vec());

@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use nemo::{
     engine::Engine,
-    model::{FileId, Program},
+    model::Program,
     values::{DataValue, TupleValue},
 };
 
@@ -57,7 +57,7 @@ fn main() {
                                   threshold(?sensor, ?limit), ?value >= ?limit .
         @export alert to csv .
     ";
-    let (program, diagnostics) = Program::parse(source, FileId::new(0));
+    let (program, diagnostics) = Program::parse(source);
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
     engine.load(program).expect("the program loads");
 

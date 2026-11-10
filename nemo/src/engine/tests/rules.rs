@@ -6,7 +6,7 @@ use super::*;
 /// A builtin's name in predicate position is refused with a label that says it is a builtin.
 #[test]
 fn a_builtin_call_in_predicate_position_says_so() {
-    let (_, diagnostics) = Program::parse("log(?x) :- n(?x) .", FileId::new(0));
+    let (_, diagnostics) = Program::parse("log(?x) :- n(?x) .");
     let problem = diagnostics.first().expect("the statement is refused");
     assert!(
         problem.labels()[0].message.contains("`log` is a builtin"),
@@ -85,11 +85,11 @@ fn the_same_base_again_is_no_conflict() {
 /// and so does a module-qualified name in a program that is not linked.
 #[test]
 fn unsafe_and_unsupported_rules_are_diagnosed() {
-    let (program, _) = Program::parse("p(?x) :- q(?y) .", FileId::new(0));
+    let (program, _) = Program::parse("p(?x) :- q(?y) .");
     let mut engine = Engine::new();
     assert!(engine.load(program).is_err());
 
-    let (program, _) = Program::parse("p(?x) :- m::q(?x) .", FileId::new(0));
+    let (program, _) = Program::parse("p(?x) :- m::q(?x) .");
     let mut engine = Engine::new();
     assert!(engine.load(program).is_err());
 }
@@ -202,7 +202,7 @@ fn recursive_draws_happen_once_per_row() {
 /// A predicate negated within its own recursion fails the load.
 #[test]
 fn a_predicate_negated_within_its_own_recursion_is_refused() {
-    let (program, _) = Program::parse("q(1) . p(?x) :- q(?x), ~p(?x) .", FileId::new(0));
+    let (program, _) = Program::parse("q(1) . p(?x) :- q(?x), ~p(?x) .");
     let mut engine = Engine::new();
     assert!(engine.load(program).is_err());
 }

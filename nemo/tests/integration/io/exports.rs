@@ -1,9 +1,6 @@
 //! RDF exports: the column count the format takes, and the rows without an RDF form.
 
-use nemo::{
-    engine::Engine,
-    model::{FileId, Program},
-};
+use nemo::{engine::Engine, model::Program};
 
 use super::run;
 
@@ -12,7 +9,7 @@ use super::run;
 #[test]
 fn rdf_exports_check_the_column_count() {
     let source = "p(1, 2) .\n@export p to ntriples .\n";
-    let (program, diagnostics) = Program::parse(source, FileId::new(0));
+    let (program, diagnostics) = Program::parse(source);
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
     let mut engine = Engine::new();
     let problem = engine.load(program).expect_err("two columns are no triple");

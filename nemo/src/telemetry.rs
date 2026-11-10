@@ -17,13 +17,12 @@
 //!
 //! ```
 //! use std::sync::Arc;
-//! use nemo::{engine::Engine, model::{FileId, Program}, telemetry::Recorder};
+//! use nemo::{engine::Engine, model::Program, telemetry::Recorder};
 //!
 //! let (program, diagnostics) = Program::parse(
 //!     "edge(1, 2) . edge(2, 3) .
 //!      reach(?x, ?y) :- edge(?x, ?y) .
 //!      reach(?x, ?z) :- reach(?x, ?y), edge(?y, ?z) .",
-//!     FileId::new(0),
 //! );
 //! assert!(diagnostics.is_empty());
 //!

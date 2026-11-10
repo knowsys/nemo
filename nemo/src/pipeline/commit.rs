@@ -61,7 +61,7 @@ use self::declare::PendingDeclaration;
 /// ```
 /// use nemo::{
 ///     engine::Engine,
-///     model::{FileId, Literal, Program, Statement},
+///     model::{Literal, Program, Statement},
 ///     pipeline::{Commit, Transformation},
 /// };
 /// use nemo_physical::diagnostics::Diagnostic;
@@ -100,7 +100,6 @@ use self::declare::PendingDeclaration;
 /// engine.stages_mut().push(SplitBodies);
 /// let (program, _) = Program::parse(
 ///     "e(1, 2) . e(2, 3) . f(3) . p(?x) :- e(?x, ?y), e(?y, ?z), f(?z) .",
-///     FileId::new(0),
 /// );
 /// engine.load(program).expect("the program loads");
 /// engine.reason().expect("reasoning reaches the fixpoint");

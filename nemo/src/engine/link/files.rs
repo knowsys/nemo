@@ -201,7 +201,7 @@ impl Linker<'_> {
         instance: FileId,
     ) -> Result<Vec<Statement>, Diagnostic> {
         let text = self.pipeline.text(file).unwrap_or_default().to_owned();
-        let (module, diagnostics) = Program::parse(&text, instance);
+        let (module, diagnostics) = Program::parse_with_file(&text, instance);
         let first = self.reported.insert(file);
         // The first error ends linking, and the parser's other
         // diagnostics are reported with it.

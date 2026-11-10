@@ -24,7 +24,7 @@ fn load(program: &str, modules: &[(&str, &str)]) -> Result<Engine, Diagnostic> {
     let file = engine
         .add_source("main.rls", program)
         .expect("the text is small");
-    let (parsed, diagnostics) = Program::parse(program, file);
+    let (parsed, diagnostics) = Program::parse_with_file(program, file);
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
     let linked = engine.link(parsed)?;
     engine.load(linked)?;
@@ -37,7 +37,7 @@ fn run_in(mut engine: Engine, program: &str) -> Result<Engine, Diagnostic> {
     let file = engine
         .add_source("main.rls", program)
         .expect("the text is small");
-    let (parsed, diagnostics) = Program::parse(program, file);
+    let (parsed, diagnostics) = Program::parse_with_file(program, file);
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
     let linked = engine.link(parsed)?;
     engine.load(linked)?;
@@ -51,7 +51,7 @@ fn link_in(directory: &Path, program: &str) -> Result<Program, Diagnostic> {
     let file = engine
         .add_source(directory.join("main.rls").to_string_lossy(), program)
         .expect("the text is small");
-    let (parsed, diagnostics) = Program::parse(program, file);
+    let (parsed, diagnostics) = Program::parse_with_file(program, file);
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
     engine.link(parsed)
 }
@@ -356,7 +356,7 @@ fn a_modules_import_does_not_take_the_using_programs_base() {
     let file = engine
         .add_source("main.rls", source)
         .expect("the text is small");
-    let (program, diagnostics) = Program::parse(source, file);
+    let (program, diagnostics) = Program::parse_with_file(source, file);
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
     engine.set_import_directory("somewhere/else");
     let problem = engine
@@ -623,7 +623,7 @@ fn a_modules_import_reads_from_where_the_module_is() {
     let file = engine
         .add_source("main.rls", source)
         .expect("the text is small");
-    let (program, diagnostics) = Program::parse(source, file);
+    let (program, diagnostics) = Program::parse_with_file(source, file);
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
     let problem = engine
         .link(program)
@@ -658,7 +658,7 @@ fn a_module_chain_deeper_than_the_limit_is_an_error() {
     let file = engine
         .add_source("main.rls", source)
         .expect("the text is small");
-    let (program, diagnostics) = Program::parse(source, file);
+    let (program, diagnostics) = Program::parse_with_file(source, file);
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
     let problem = engine.link(program).expect_err("the chain is too deep");
     assert_eq!(
@@ -776,7 +776,7 @@ fn an_unlinked_program_is_an_error() {
     let file = engine
         .add_source("main.rls", source)
         .expect("the text is small");
-    let (program, diagnostics) = Program::parse(source, file);
+    let (program, diagnostics) = Program::parse_with_file(source, file);
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
     let problem = engine.load(program).expect_err("the program is not linked");
     assert_eq!(problem.code(), crate::codes::NOT_LINKED);
@@ -787,7 +787,7 @@ fn an_unlinked_program_is_an_error() {
 #[test]
 fn a_program_without_modules_links_to_itself() {
     let mut engine = Engine::new();
-    let (program, _) = Program::parse("p(1) . q(?x) :- p(?x) .", FileId::new(0));
+    let (program, _) = Program::parse("p(1) . q(?x) :- p(?x) .");
     let linked = engine.link(program.clone()).expect("nothing to link");
     assert_eq!(linked, program);
 }
@@ -1047,7 +1047,7 @@ fn a_root_reads_its_modules_from_its_directory() {
         let file = engine
             .add_source(program.path().join("main.rls").to_string_lossy(), source)
             .expect("the text is small");
-        let (parsed, diagnostics) = Program::parse(source, file);
+        let (parsed, diagnostics) = Program::parse_with_file(source, file);
         assert!(diagnostics.is_empty(), "{diagnostics:?}");
         engine.link(parsed)
     };
@@ -1073,7 +1073,6 @@ fn an_unregistered_program_shares_no_file_id_with_its_modules() {
     // The program is parsed with the file id 0, and its text is not registered.
     let (parsed, diagnostics) = Program::parse(
         "link(1, 2) .\n@use sub::a { edge = link } as x .\n@use sub::b { edge = link } as y .",
-        FileId::new(0),
     );
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
     engine.link(parsed).expect("the modules link");

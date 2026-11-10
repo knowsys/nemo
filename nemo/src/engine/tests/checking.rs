@@ -79,7 +79,7 @@ fn a_typed_input_types_the_module_from_within() {
 #[test]
 fn an_unsupplied_input_is_warned_about_at_load_only() {
     let source = "@input edge .\nreach(?x, ?y) :- edge(?x, ?y) .\n@output reach .";
-    let (program, _) = Program::parse(source, FileId::new(0));
+    let (program, _) = Program::parse(source);
     let mut engine = Engine::new();
     engine.load(program).expect("the module runs on its own");
     let [warning] = engine.reports() else {
@@ -187,7 +187,7 @@ fn an_import_reading_a_parameter_without_a_value_holds_anything() {
 /// Loading a program with a parameter without a value is an error.
 #[test]
 fn a_run_needs_a_value_for_every_parameter() {
-    let (program, _) = Program::parse("@parameter $limit: int .\np(1) .", FileId::new(0));
+    let (program, _) = Program::parse("@parameter $limit: int .\np(1) .");
     let problem = Engine::new()
         .load(program)
         .expect_err("the parameter has no value");
@@ -201,10 +201,8 @@ fn a_run_needs_a_value_for_every_parameter() {
 /// A predicate declared `@input` cannot also be imported.
 #[test]
 fn an_input_cannot_also_be_imported() {
-    let (program, _) = Program::parse(
-        "@input p .\n@import p from csv { resource = \"data.csv\" } .",
-        FileId::new(0),
-    );
+    let (program, _) =
+        Program::parse("@input p .\n@import p from csv { resource = \"data.csv\" } .");
     let problem = Engine::new()
         .load(program)
         .expect_err("an input is supplied from outside");
@@ -215,7 +213,7 @@ fn an_input_cannot_also_be_imported() {
 /// A check loads no program, so the engine still has nothing to reason over.
 #[test]
 fn a_checked_engine_holds_no_program() {
-    let (program, _) = Program::parse("p(1) .", FileId::new(0));
+    let (program, _) = Program::parse("p(1) .");
     let mut engine = Engine::new();
     assert!(engine.check(program).diagnostics().is_empty());
     assert!(

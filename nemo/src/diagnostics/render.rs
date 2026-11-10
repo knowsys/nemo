@@ -190,13 +190,10 @@ impl TerminalStyle {
 /// # Example
 ///
 /// ```
-/// use nemo::{
-///     diagnostics::render::{Renderer, SourceTexts},
-///     model::{FileId, Program},
-/// };
+/// use nemo::{diagnostics::render::{Renderer, SourceTexts}, model::Program};
 ///
 /// let text = "p(1) .\nq(?x) :- p(?x .";
-/// let (_, diagnostics) = Program::parse(text, FileId::new(0));
+/// let (_, diagnostics) = Program::parse(text);
 /// let sources = SourceTexts::detached("example.rls", text);
 /// let shown = Renderer::plain(&sources).show(&diagnostics[0]);
 /// assert!(shown.contains("example.rls:2"));

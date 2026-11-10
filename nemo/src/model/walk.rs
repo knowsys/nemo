@@ -355,11 +355,7 @@ mod tests {
     /// The walk of a directive visits its option values but not its option keys.
     #[test]
     fn directives_walk_their_values_but_not_their_option_keys() {
-        let program = Program::parse(
-            "@import p from csv { resource = \"p.csv\" } .",
-            crate::model::FileId::new(0),
-        )
-        .0;
+        let program = Program::parse("@import p from csv { resource = \"p.csv\" } .").0;
         let mut seen = Vec::new();
         program.walk(&mut |term| seen.push(term.to_string()));
         assert_eq!(seen, ["\"p.csv\""]);

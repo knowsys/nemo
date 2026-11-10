@@ -36,8 +36,21 @@ impl Program {
     ///
     /// A statement that does not parse becomes a diagnostic,
     /// and the program contains every statement that parses.
-    /// `file` identifies the source text in the spans of the components and diagnostics.
-    pub fn parse(source: &str, file: FileId) -> (Program, Vec<Diagnostic>) {
+    /// The spans of the components and diagnostics have the file id 0,
+    /// as those of the other `parse` functions do.
+    /// [parse_with_file](Self::parse_with_file) parses a text that is registered with an
+    /// [Engine](crate::engine::Engine).
+    pub fn parse(source: &str) -> (Program, Vec<Diagnostic>) {
+        Self::parse_with_file(source, FileId::new(0))
+    }
+
+    /// Parses a whole source text into a program as [parse](Self::parse) does,
+    /// with `file` as the file id of the spans.
+    ///
+    /// `file` is the id under which the text is registered,
+    /// as [Engine::add_source](crate::engine::Engine::add_source) returns it.
+    /// The spans of the components and diagnostics then point into the registered text.
+    pub fn parse_with_file(source: &str, file: FileId) -> (Program, Vec<Diagnostic>) {
         let (statements, diagnostics) = Parser::program(source, file);
         (Program::new(statements), diagnostics)
     }

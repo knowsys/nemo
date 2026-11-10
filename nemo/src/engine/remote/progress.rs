@@ -13,14 +13,10 @@ use crate::engine::remote::PendingRequest;
 /// ```
 /// use std::sync::Arc;
 ///
-/// use nemo::{
-///     engine::{Engine, remote::Progress},
-///     model::{FileId, Program},
-/// };
+/// use nemo::{engine::{Engine, remote::Progress}, model::Program};
 ///
 /// let (program, _) = Program::parse(
 ///     r#"@import p from csv { resource = "https://example.org/p.csv" } ."#,
-///     FileId::new(0),
 /// );
 /// let mut engine = Engine::new();
 /// let Progress::Suspended(pending) = engine.start_load(program)? else {

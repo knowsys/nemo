@@ -30,12 +30,9 @@ use nemo_physical::{
 /// # Example
 ///
 /// ```
-/// use nemo::{
-///     engine::Engine,
-///     model::{FileId, Program},
-/// };
+/// use nemo::{engine::Engine, model::Program};
 ///
-/// let (program, _) = Program::parse("n(1) . n(2) . n(3) . n(4) . n(5) .", FileId::new(0));
+/// let (program, _) = Program::parse("n(1) . n(2) . n(3) . n(4) . n(5) .");
 /// let mut engine = Engine::new();
 /// engine.load(program)?;
 /// engine.reason()?;
@@ -99,13 +96,9 @@ impl PredicateCursor {
 /// # Example
 ///
 /// ```
-/// use nemo::{
-///     engine::Engine,
-///     model::{FileId, Program},
-///     values::DataValue,
-/// };
+/// use nemo::{engine::Engine, model::Program, values::DataValue};
 ///
-/// let (program, _) = Program::parse("pair(1, 2) . pair(3, 4) .", FileId::new(0));
+/// let (program, _) = Program::parse("pair(1, 2) . pair(3, 4) .");
 /// let mut engine = Engine::new();
 /// engine.load(program)?;
 /// engine.reason()?;

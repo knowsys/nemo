@@ -3,7 +3,7 @@
 use js_sys::Array;
 use wasm_bindgen::prelude::*;
 
-use nemo::{diagnostics::render::SourceTexts, model::FileId};
+use nemo::diagnostics::render::SourceTexts;
 
 use crate::diagnostics::{self, Diagnostic};
 
@@ -35,7 +35,7 @@ impl NemoProgram {
     #[wasm_bindgen(js_name = "parse")]
     pub fn parse(text: String, name: Option<String>) -> NemoProgram {
         let name = name.unwrap_or_else(|| String::from("<program>"));
-        let (model, diagnostics) = nemo::model::Program::parse(&text, FileId::new(0));
+        let (model, diagnostics) = nemo::model::Program::parse(&text);
         let sources = SourceTexts::detached(name.clone(), text.clone());
         let diagnostics = diagnostics
             .iter()

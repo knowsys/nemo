@@ -1,10 +1,7 @@
 //! How imports name their resources: a SPARQL query checked before any fetch, the options a
 //! local resource refuses, and the directory relative imports resolve against.
 
-use nemo::{
-    engine::Engine,
-    model::{FileId, Program},
-};
+use nemo::{engine::Engine, model::Program};
 use nemo_physical::value::DataValue;
 
 use crate::common::{TempDirectory, parse};
@@ -15,7 +12,7 @@ use crate::common::{TempDirectory, parse};
 fn a_broken_query_is_diagnosed_before_any_fetch() {
     let source = r#"@import q from sparql { endpoint = "http://127.0.0.1:1/sparql",
         query = "SELECT ?a WHERE { broken" } ."#;
-    let (program, diagnostics) = Program::parse(source, FileId::new(0));
+    let (program, diagnostics) = Program::parse(source);
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
     let mut engine = Engine::new();
     let problem = engine.load(program).expect_err("the query is broken");
@@ -67,7 +64,7 @@ fn an_invalid_base_of_a_query_is_the_options_fault() {
 fn headers_on_a_local_resource_are_an_error() {
     let source = r#"@import p from csv { resource = "local.csv",
         http_headers = { Authorization = "x" } } ."#;
-    let (program, diagnostics) = Program::parse(source, FileId::new(0));
+    let (program, diagnostics) = Program::parse(source);
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
     let mut engine = Engine::new();
     let problem = engine

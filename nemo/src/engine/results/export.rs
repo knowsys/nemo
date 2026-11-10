@@ -19,12 +19,9 @@ use crate::{
 /// # Example
 ///
 /// ```
-/// use nemo::{
-///     engine::{Engine, ExportSpec},
-///     model::{FileId, Program},
-/// };
+/// use nemo::{engine::{Engine, ExportSpec}, model::Program};
 ///
-/// let (program, _) = Program::parse("pair(1, 2) . pair(3, 4) .", FileId::new(0));
+/// let (program, _) = Program::parse("pair(1, 2) . pair(3, 4) .");
 /// let mut engine = Engine::new();
 /// engine.load(program)?;
 /// engine.reason()?;

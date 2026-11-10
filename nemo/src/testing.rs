@@ -9,12 +9,12 @@ pub(crate) use temp_directory::TempDirectory;
 
 use crate::{
     engine::{Engine, PredicateRole},
-    model::{FileId, Program, Rule},
+    model::{Program, Rule},
 };
 
 /// Parses a program, and panics if parsing reports any diagnostic.
 pub(crate) fn parse(source: &str) -> Program {
-    let (program, diagnostics) = Program::parse(source, FileId::new(0));
+    let (program, diagnostics) = Program::parse(source);
     assert!(diagnostics.is_empty(), "{source}: {diagnostics:?}");
     program
 }

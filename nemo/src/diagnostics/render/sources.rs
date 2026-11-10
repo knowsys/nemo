@@ -67,8 +67,9 @@ impl SourceTexts {
 
     /// Creates a registry of one text under file id 0, without an engine.
     ///
-    /// It suits the diagnostics of a text parsed outside an engine with file id 0,
-    /// which [Statement::parse](crate::model::Statement::parse) always uses.
+    /// It suits the diagnostics of a text parsed outside an engine,
+    /// since [Program::parse](crate::model::Program::parse) and the other `parse` functions
+    /// give their spans the file id 0.
     pub fn detached(name: impl Into<String>, text: impl Into<String>) -> Self {
         let mut sources = Self::new();
         sources.files.insert(

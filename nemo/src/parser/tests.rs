@@ -77,17 +77,16 @@ const ROUND_TRIPS: &[&str] = &[
 fn block_comments_are_trivia_and_blank_nodes_are_terms() {
     let (program, diagnostics) = Program::parse(
         "p(_:a, /* inline */ 1) . /* between\nstatements */ q(?x) :- p(_:a, ?x) . /* unterminated",
-        FileId::new(0),
     );
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
     assert_eq!(program.statements.len(), 2);
     let rendered = program.statements[0].to_string();
     assert_eq!(rendered, "p(_:a, 1) .");
-    let (again, diagnostics) = Program::parse(&rendered, FileId::new(0));
+    let (again, diagnostics) = Program::parse(&rendered);
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
     assert_eq!(again.statements[0], program.statements[0]);
     // A lone `_` is an anonymous variable, and `_x` is a name.
-    let (program, diagnostics) = Program::parse("r(?y) :- s(_, ?y, _x) .", FileId::new(0));
+    let (program, diagnostics) = Program::parse("r(?y) :- s(_, ?y, _x) .");
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
     assert!(program.statements[0].to_string().contains("s(_, ?y, _x)"));
 }
@@ -117,7 +116,7 @@ fn iris_in_term_syntax_read_back_as_themselves() {
         "tab	here",
     ] {
         let source = format!("p({}) .", nemo_physical::value::DataValue::iri(iri));
-        let (program, diagnostics) = Program::parse(&source, FileId::new(0));
+        let (program, diagnostics) = Program::parse(&source);
         assert!(diagnostics.is_empty(), "{source}: {diagnostics:?}");
         let Statement::Fact(fact) = &program.statements[0] else {
             panic!("{source} is a fact");
@@ -135,7 +134,7 @@ fn iris_in_term_syntax_read_back_as_themselves() {
 #[test]
 fn statements_round_trip_through_display() {
     for source in ROUND_TRIPS {
-        let (program, diagnostics) = Program::parse(source, FileId::new(0));
+        let (program, diagnostics) = Program::parse(source);
         assert!(
             diagnostics.is_empty(),
             "{source:?}: {:?}",
@@ -192,7 +191,7 @@ fn imports_and_exports_take_only_their_own_connective() {
         ("@import edge :- csv { resource = \"e.csv\" } .", "from"),
         ("@export reach :- csv { resource = \"r.csv\" } .", "to"),
     ] {
-        let (program, diagnostics) = Program::parse(source, FileId::new(0));
+        let (program, diagnostics) = Program::parse(source);
         assert!(program.statements.is_empty(), "{source:?}");
         assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
         assert_eq!(
@@ -209,10 +208,7 @@ fn imports_and_exports_take_only_their_own_connective() {
     }
 
     // An import with `to` is an error too.
-    let (_, diagnostics) = Program::parse(
-        "@import edge to csv { resource = \"e.csv\" } .",
-        FileId::new(0),
-    );
+    let (_, diagnostics) = Program::parse("@import edge to csv { resource = \"e.csv\" } .");
     assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
     assert_eq!(
         diagnostics[0].code(),
@@ -288,7 +284,7 @@ fn a_module_name_is_super_steps_then_names() {
 /// that shows how to write the module name.
 #[test]
 fn a_use_names_its_module_rather_than_a_path() {
-    let (_, diagnostics) = Program::parse("@use \"lib/tc.rls\" as t .", FileId::new(0));
+    let (_, diagnostics) = Program::parse("@use \"lib/tc.rls\" as t .");
     assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
     assert_eq!(diagnostics[0].code(), crate::codes::EXPECTED);
     assert_eq!(
@@ -300,12 +296,12 @@ fn a_use_names_its_module_rather_than_a_path() {
 /// A byte order mark at the start of a source text is skipped.
 #[test]
 fn a_leading_byte_order_mark_is_not_content() {
-    let (program, diagnostics) = Program::parse("\u{feff}p(1) .\n", FileId::new(0));
+    let (program, diagnostics) = Program::parse("\u{feff}p(1) .\n");
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
     assert_eq!(program.statements.len(), 1);
 
     // Anywhere else, the mark is a zero-width character, which is reported.
-    let (_, diagnostics) = Program::parse("p(1\u{feff}) .\n", FileId::new(0));
+    let (_, diagnostics) = Program::parse("p(1\u{feff}) .\n");
     assert!(!diagnostics.is_empty(), "a stray mark is still reported");
 }
 
@@ -432,7 +428,7 @@ fn nesting_deeper_than_the_limit_returns_an_error() {
         "(".repeat(MAX_NESTING + 8),
         ")".repeat(MAX_NESTING + 8)
     );
-    let (_, diagnostics) = Program::parse(&deep, FileId::new(0));
+    let (_, diagnostics) = Program::parse(&deep);
     let problem = diagnostics.first().expect("parsing returns an error");
     assert_eq!(problem.code(), crate::codes::TOO_DEEP, "{problem:?}");
 }
@@ -447,7 +443,7 @@ fn nesting_through_format_strings_counts_too() {
         "f\"{".repeat(MAX_NESTING + 8),
         "}\"".repeat(MAX_NESTING + 8)
     );
-    let (_, diagnostics) = Program::parse(&deep, FileId::new(0));
+    let (_, diagnostics) = Program::parse(&deep);
     let problem = diagnostics.first().expect("parsing returns an error");
     assert_eq!(problem.code(), crate::codes::TOO_DEEP, "{problem:?}");
 }
@@ -460,7 +456,7 @@ fn nesting_within_the_limit_is_accepted() {
         "(".repeat(MAX_NESTING - 8),
         ")".repeat(MAX_NESTING - 8)
     );
-    let (_, diagnostics) = Program::parse(&deep, FileId::new(0));
+    let (_, diagnostics) = Program::parse(&deep);
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
 }
 
@@ -494,7 +490,7 @@ fn body_literals_classify_without_reparsing() {
 #[test]
 fn recovery_keeps_the_healthy_statements() {
     let source = "good(1) .\nbroken( .\ngood(2) .";
-    let (program, diagnostics) = Program::parse(source, FileId::new(0));
+    let (program, diagnostics) = Program::parse(source);
     assert_eq!(program.statements.len(), 2);
     assert_eq!(diagnostics.len(), 1);
     assert_eq!(program.to_string(), "good(1) .\ngood(2) .");
@@ -517,7 +513,7 @@ fn component_parsers_demand_complete_input() {
 #[test]
 fn spans_point_into_the_source() {
     let source = "p(?x) :- q(?x) .";
-    let (program, diagnostics) = Program::parse(source, FileId::new(7));
+    let (program, diagnostics) = Program::parse_with_file(source, FileId::new(7));
     assert!(diagnostics.is_empty());
     let span = program.statements[0]
         .span()
@@ -529,16 +525,16 @@ fn spans_point_into_the_source() {
 /// An attribute before a fact or a directive is an error.
 #[test]
 fn attributes_belong_to_rules_only() {
-    let (_, diagnostics) = Program::parse("#[name(\"x\")]\nfact(1) .", FileId::new(0));
+    let (_, diagnostics) = Program::parse("#[name(\"x\")]\nfact(1) .");
     assert!(!diagnostics.is_empty());
-    let (_, diagnostics) = Program::parse("#[name(\"x\")]\n@output p .", FileId::new(0));
+    let (_, diagnostics) = Program::parse("#[name(\"x\")]\n@output p .");
     assert!(!diagnostics.is_empty());
 }
 
 /// An unknown directive is an error that names it and has a hint.
 #[test]
 fn unknown_directives_are_diagnosed_with_hints() {
-    let (program, diagnostics) = Program::parse("@baseerror <x> .", FileId::new(0));
+    let (program, diagnostics) = Program::parse("@baseerror <x> .");
     assert!(program.statements.is_empty());
     assert_eq!(diagnostics.len(), 1);
     assert_eq!(
@@ -588,7 +584,6 @@ fn strings_process_escapes_and_language_subtags() {
 fn a_where_clause_holds_atoms_and_conditions_but_no_negation() {
     let (program, diagnostics) = Program::parse(
         "@import q(?x, ?y) from sparql { endpoint = <https://e/sparql> } where b(?x), ?y > 3 .",
-        FileId::new(0),
     );
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
     let Some(Statement::Directive(Directive::Import(import))) = program.statements.first() else {
@@ -599,7 +594,6 @@ fn a_where_clause_holds_atoms_and_conditions_but_no_negation() {
 
     let (_, diagnostics) = Program::parse(
         "@import q(?x) from sparql { endpoint = <https://e/sparql> } where ~b(?x) .",
-        FileId::new(0),
     );
     assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
     assert_eq!(diagnostics[0].code(), crate::codes::NEGATION_IN_WHERE);
@@ -608,7 +602,7 @@ fn a_where_clause_holds_atoms_and_conditions_but_no_negation() {
 /// A fact with several atoms is an error.
 #[test]
 fn facts_reject_multiple_heads() {
-    let (program, diagnostics) = Program::parse("p(1), q(2) .", FileId::new(0));
+    let (program, diagnostics) = Program::parse("p(1), q(2) .");
     assert!(program.statements.is_empty());
     assert!(!diagnostics.is_empty());
 }
@@ -617,7 +611,7 @@ fn facts_reject_multiple_heads() {
 #[test]
 fn a_misplaced_token_is_quoted_only_as_far_as_a_message_shows() {
     // A string over several lines in place of a prefix is described by its kind.
-    let (_, diagnostics) = Program::parse("@prefix \"\"\"a\nb\"\"\" .", FileId::new(0));
+    let (_, diagnostics) = Program::parse("@prefix \"\"\"a\nb\"\"\" .");
     assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
     let message = diagnostics[0].message();
     assert!(message.contains("a string literal"), "{message}");
@@ -625,7 +619,7 @@ fn a_misplaced_token_is_quoted_only_as_far_as_a_message_shows() {
 
     // Any other token is cut to an excerpt.
     let long = format!("@prefix <{}> .", "x".repeat(1000));
-    let (_, diagnostics) = Program::parse(&long, FileId::new(0));
+    let (_, diagnostics) = Program::parse(&long);
     assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
     let message = diagnostics[0].message();
     assert!(message.len() < 100, "{message}");
@@ -635,7 +629,7 @@ fn a_misplaced_token_is_quoted_only_as_far_as_a_message_shows() {
 /// A lexical problem is reported once, and not again by the parser.
 #[test]
 fn a_lexical_problem_is_reported_once() {
-    let (program, diagnostics) = Program::parse("p(a) & q(b) .\ngood(1) .", FileId::new(0));
+    let (program, diagnostics) = Program::parse("p(a) & q(b) .\ngood(1) .");
     assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
     assert_eq!(diagnostics[0].code(), crate::codes::UNEXPECTED_CHARACTER);
     assert_eq!(program.to_string(), "good(1) .");
@@ -646,7 +640,7 @@ fn a_lexical_problem_is_reported_once() {
 fn a_stray_brace_is_reported_where_it_stands() {
     // The format string still extends to its closing quote, so the rest of the text parses.
     let source = "p(f\"a}b\") .\ngood(1) .";
-    let (program, diagnostics) = Program::parse(source, FileId::new(0));
+    let (program, diagnostics) = Program::parse(source);
     assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
     assert_eq!(diagnostics[0].code(), crate::codes::STRAY_BRACE);
     let span = diagnostics[0].labels()[0].span;
@@ -658,7 +652,7 @@ fn a_stray_brace_is_reported_where_it_stands() {
 /// not the end of the input.
 #[test]
 fn the_end_of_an_embedded_expression_is_not_the_end_of_the_input() {
-    let (_, diagnostics) = Program::parse("p(f\"a{1 +}b\") .", FileId::new(0));
+    let (_, diagnostics) = Program::parse("p(f\"a{1 +}b\") .");
     assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
     assert_eq!(
         diagnostics[0].field("found"),
@@ -670,7 +664,7 @@ fn the_end_of_an_embedded_expression_is_not_the_end_of_the_input() {
 /// and the error for an expression in place of an atom has no hint to rename it.
 #[test]
 fn only_a_builtin_name_in_place_of_an_atom_is_called_a_call() {
-    let (_, diagnostics) = Program::parse("strlen(?x) :- p(?x) .", FileId::new(0));
+    let (_, diagnostics) = Program::parse("strlen(?x) :- p(?x) .");
     assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
     assert_eq!(diagnostics[0].code(), crate::codes::EXPECTED_ATOM);
     let label = &diagnostics[0].labels()[0].message;
@@ -678,7 +672,7 @@ fn only_a_builtin_name_in_place_of_an_atom_is_called_a_call() {
 
     // An expression names no predicate to rename.
     for source in ["q(?x), ?x > 3 :- p(?x) .", "q(?x) :- p(?x), ~ ?x > 3 ."] {
-        let (_, diagnostics) = Program::parse(source, FileId::new(0));
+        let (_, diagnostics) = Program::parse(source);
         assert_eq!(diagnostics.len(), 1, "{source:?}: {diagnostics:?}");
         assert_eq!(diagnostics[0].code(), crate::codes::EXPECTED_ATOM);
         assert!(diagnostics[0].hints().is_empty(), "{:?}", diagnostics[0]);
@@ -710,7 +704,7 @@ fn a_radix_literal_beyond_128_bits_is_out_of_range() {
 #[test]
 fn a_lone_caret_is_explained_by_what_precedes_it() {
     let hint = |source: &str| {
-        let (_, diagnostics) = Program::parse(source, FileId::new(0));
+        let (_, diagnostics) = Program::parse(source);
         assert_eq!(diagnostics.len(), 1, "{source:?}: {diagnostics:?}");
         assert_eq!(diagnostics[0].code(), crate::codes::LONE_CARET);
         diagnostics[0].hints().join("\n")
@@ -754,7 +748,7 @@ fn spacing_tells_a_prefixed_name_from_a_named_argument() {
     assert_eq!(fact.to_string(), "in(wd: 42, ex: Q1) .");
 
     // Among named arguments, a prefixed name gets a hint that it lacks its space.
-    let (_, diagnostics) = Program::parse("person(name: \"Ann\", age:30) .", FileId::new(0));
+    let (_, diagnostics) = Program::parse("person(name: \"Ann\", age:30) .");
     assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
     assert_eq!(diagnostics[0].code(), crate::codes::MIXED_ARGUMENTS);
     assert_eq!(
@@ -763,7 +757,7 @@ fn spacing_tells_a_prefixed_name_from_a_named_argument() {
     );
 
     // A prefixed name with an empty local name may also end an embedded expression.
-    let (_, diagnostics) = Program::parse("p(f\"{ex:}x\") .", FileId::new(0));
+    let (_, diagnostics) = Program::parse("p(f\"{ex:}x\") .");
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
 }
 
@@ -772,7 +766,7 @@ fn spacing_tells_a_prefixed_name_from_a_named_argument() {
 #[test]
 fn a_dot_joins_a_local_name_only_inside_it() {
     let source = "p(?x) :- q(?x), ?x = ex:a.\nr(ex:v1.2).% the end\n";
-    let (program, diagnostics) = Program::parse(source, FileId::new(0));
+    let (program, diagnostics) = Program::parse(source);
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
     assert_eq!(
         program.to_string(),
@@ -814,7 +808,7 @@ fn an_iri_cannot_spell_the_character_u0000() {
         "@prefix p: <\\u0000> .",
         "<a\u{0}b>(5) .",
     ] {
-        let (_, diagnostics) = Program::parse(source, FileId::new(0));
+        let (_, diagnostics) = Program::parse(source);
         assert_eq!(diagnostics.len(), 1, "{source:?}: {diagnostics:?}");
         assert_eq!(
             diagnostics[0].code(),
@@ -825,6 +819,6 @@ fn an_iri_cannot_spell_the_character_u0000() {
 
     // Other control characters are allowed,
     // so that every IRI that term syntax writes is parsed back.
-    let (_, diagnostics) = Program::parse("<a\\u0009b\\u007Fc\u{85}d>(5) .", FileId::new(0));
+    let (_, diagnostics) = Program::parse("<a\\u0009b\\u007Fc\u{85}d>(5) .");
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
 }

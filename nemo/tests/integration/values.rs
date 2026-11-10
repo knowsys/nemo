@@ -5,16 +5,13 @@
 //! decoding must yield the identical value. Nulls are the documented
 //! exception (`_:id` is data syntax, not program syntax).
 
-use nemo::{
-    engine::Engine,
-    model::{FileId, Program},
-};
+use nemo::{engine::Engine, model::Program};
 use nemo_physical::value::{DataValue, MapValue, TupleValue};
 
 /// Loads a fact holding the value's rendered form and reads it back.
 fn round_trips(value: DataValue) {
     let source = format!("p({value}) .");
-    let (program, diagnostics) = Program::parse(&source, FileId::new(0));
+    let (program, diagnostics) = Program::parse(&source);
     assert!(diagnostics.is_empty(), "{source}: {diagnostics:?}");
     let mut engine = Engine::new();
     engine
@@ -102,7 +99,7 @@ fn imported_rows_read_back_identically() {
     let mut engine = Engine::new();
     let rows: Vec<Vec<DataValue>> = values.iter().cloned().map(|value| vec![value]).collect();
     engine.import_rows("p", rows.clone()).expect("rows import");
-    let (program, diagnostics) = Program::parse("q(?x) :- p(?x) .", FileId::new(0));
+    let (program, diagnostics) = Program::parse("q(?x) :- p(?x) .");
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
     engine.load(program).expect("the program loads");
     engine.reason().expect("reasoning reaches the fixpoint");
@@ -129,7 +126,7 @@ fn rows_import_into_a_loaded_engine() {
     // Post-fixpoint rows are deltas: the next reason() carries them to
     // the new fixpoint. A predicate the program never uses stays
     // refused, since extend() introduces new ones.
-    let (program, _) = Program::parse("p(1) . q(?x) :- p(?x) .", FileId::new(0));
+    let (program, _) = Program::parse("p(1) . q(?x) :- p(?x) .");
     let mut engine = Engine::new();
     engine.load(program).expect("the program loads");
     engine.reason().expect("reasoning reaches the fixpoint");
