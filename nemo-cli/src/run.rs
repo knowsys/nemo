@@ -414,3 +414,35 @@ impl<'a> Run<'a> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use nemo::telemetry::TARGET;
+    use tracing_subscriber::{
+        filter::{LevelFilter, Targets},
+        layer::SubscriberExt,
+    };
+
+    use super::*;
+
+    /// The run's sink asks for events when the recorder or a subscriber of the telemetry target
+    /// takes them, and only then.
+    ///
+    /// The case without a subscriber comes first, since `tracing` caches the interest of a
+    /// callsite per process, across all live dispatchers.
+    #[test]
+    fn the_run_sink_is_enabled_for_a_consumer_only() {
+        let alone = RunSink { recorder: None };
+        let recording = RunSink {
+            recorder: Some(Arc::new(Recorder::new())),
+        };
+        assert!(!alone.enabled(), "nothing takes the events");
+        assert!(recording.enabled(), "the recorder takes the events");
+
+        let listening = tracing_subscriber::registry()
+            .with(Targets::new().with_target(TARGET, LevelFilter::TRACE));
+        tracing::subscriber::with_default(listening, || {
+            assert!(alone.enabled(), "the subscriber takes the events");
+        });
+    }
+}
