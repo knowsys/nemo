@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use crate::diagnostics::{Code, DiagnosticKind, Span, registry::INTERNAL_NOTE};
+use crate::diagnostics::{Code, DiagnosticKind, Location, Span, registry::INTERNAL_NOTE};
 
 /// How severe a diagnostic is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -29,6 +29,11 @@ pub struct Label {
     pub span: Span,
     /// The message shown at the range.
     pub message: String,
+    /// The name of the source text, and the line and column at which the range starts.
+    ///
+    /// A label is created without a location,
+    /// and [Diagnostic::with_locations] sets it from the source text.
+    pub location: Option<Location>,
 }
 
 /// One named value of a diagnostic.
@@ -137,7 +142,22 @@ impl Diagnostic {
         self.0.labels.push(Label {
             span,
             message: message.into(),
+            location: None,
         });
+        self
+    }
+
+    /// Sets the location of every label for which `locate` returns one,
+    /// and keeps the locations of the other labels.
+    ///
+    /// `locate` is given the range of a label,
+    /// and returns the location of its start if the source text of the range is known.
+    pub fn with_locations(mut self, mut locate: impl FnMut(Span) -> Option<Location>) -> Self {
+        for label in &mut self.0.labels {
+            if let Some(location) = locate(label.span) {
+                label.location = Some(location);
+            }
+        }
         self
     }
 
@@ -208,8 +228,16 @@ impl Diagnostic {
     }
 
     /// Returns the messages that point at ranges of source texts.
+    ///
+    /// The first label marks the problem, and the others show its context.
     pub fn labels(&self) -> &[Label] {
         &self.0.labels
+    }
+
+    /// Returns the location of the problem, which is the location of the first label,
+    /// or `None` if the diagnostic has no label or its first label has no location.
+    pub fn location(&self) -> Option<&Location> {
+        self.0.labels.first()?.location.as_ref()
     }
 
     /// Returns the value of the field with the given name, if it has one.
@@ -284,6 +312,33 @@ mod tests {
         assert_eq!(diagnostic.field("predicate"), Some("b"));
         assert_eq!(diagnostic.notes(), ["bbout `b`"]);
         assert_eq!(diagnostic.hints(), ["renbme `b`"]);
+    }
+
+    /// Setting the locations keeps the location of a label whose source text is not known,
+    /// and the location of the first label is the location of the diagnostic.
+    #[test]
+    fn locations_are_set_where_the_source_text_is_known() {
+        let span = |file| Span {
+            file: FileId::new(file),
+            start: 0,
+            end: 1,
+        };
+        let at = |line| Location {
+            source: None,
+            line,
+            column: 1,
+        };
+        let diagnostic = Diagnostic::error(Code::new(1), "refused")
+            .with_label(span(0), "here")
+            .with_label(span(1), "declared here");
+        assert_eq!(diagnostic.location(), None);
+
+        // The first text is known first, and then only the second.
+        let diagnostic = diagnostic
+            .with_locations(|span| (span.file == FileId::new(0)).then(|| at(3)))
+            .with_locations(|span| (span.file == FileId::new(1)).then(|| at(7)));
+        assert_eq!(diagnostic.location(), Some(&at(3)));
+        assert_eq!(diagnostic.labels()[1].location, Some(at(7)));
     }
 
     /// Removing the hints lets new hints replace them.

@@ -1,5 +1,7 @@
 //! Locations in source texts.
 
+use std::{fmt, sync::Arc};
+
 /// The id of one source text that a diagnostic may point into.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct FileId(u32);
@@ -59,6 +61,42 @@ impl Span {
         std::iter::once(0)
             .chain(text.match_indices('\n').map(|(index, _)| index + 1))
             .collect()
+    }
+}
+
+/// The place at which a range of a source text starts:
+/// the name of the text, a line and a column.
+///
+/// It is shown as `name:line:column`, or as `line:column` for a text without a name.
+///
+/// # Example
+///
+/// ```
+/// use nemo_physical::diagnostics::Location;
+///
+/// let location = Location {
+///     source: Some("people.rls".into()),
+///     line: 3,
+///     column: 5,
+/// };
+/// assert_eq!(location.to_string(), "people.rls:3:5");
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Location {
+    /// The name of the source text, such as its path, or `None` for a text without a name.
+    pub source: Option<Arc<str>>,
+    /// The 1-based line.
+    pub line: u32,
+    /// The 1-based column, which counts characters.
+    pub column: u32,
+}
+
+impl fmt::Display for Location {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(source) = &self.source {
+            write!(f, "{source}:")?;
+        }
+        write!(f, "{}:{}", self.line, self.column)
     }
 }
 

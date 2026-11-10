@@ -3,6 +3,7 @@
 //! A [Diagnostic] is one error or warning.
 //! Its [Code] names the kind of problem, and its message says what happened.
 //! Its [Label]s point at [Span]s of source texts, if the problem lies in one,
+//! each with the [Location] of its span once the source text is known,
 //! its [Field]s give named values of the problem, and its notes and hints explain it further.
 //!
 //! A crate declares the kinds of problem that it reports
@@ -28,4 +29,4 @@ pub use count::Count;
 pub use diagnostic::{Diagnostic, Field, Label, Severity};
 pub use kind::DiagnosticKind;
 pub use registry::{CodeEntry, REGISTRY, Registry};
-pub use span::{FileId, Span};
+pub use span::{FileId, Location, Span};
