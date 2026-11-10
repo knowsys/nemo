@@ -3,11 +3,13 @@
 //! A [Diagnostic] is structured data: a code, a severity, labelled spans, named fields,
 //! notes and hints.
 //! Rendering quotes the source lines that the spans point into, so it needs the source texts.
-//! [SourceTexts] keeps copies of the texts that an engine registered.
+//! It finds them through a [SourceLookup]:
+//! an [Engine](crate::engine::Engine) with the sources registered with it,
+//! or a [SourceTexts], which keeps copies of texts.
 
 mod sources;
 
-pub use sources::SourceTexts;
+pub use sources::{SourceLookup, SourceTexts};
 
 use std::io::IsTerminal;
 
@@ -58,7 +60,7 @@ pub struct ResolvedDiagnostic {
 
 impl ResolvedDiagnostic {
     /// Resolves a diagnostic against the source texts in `sources`.
-    pub fn new(diagnostic: &Diagnostic, sources: &SourceTexts) -> Self {
+    pub fn new(diagnostic: &Diagnostic, sources: &dyn SourceLookup) -> Self {
         let labels = diagnostic
             .labels()
             .iter()
@@ -203,7 +205,7 @@ impl TerminalStyle {
 #[derive(Debug)]
 pub struct Renderer<'a> {
     /// The source texts that spans are resolved against.
-    sources: &'a SourceTexts,
+    sources: &'a dyn SourceLookup,
     /// The escape sequences that the output accepts.
     style: TerminalStyle,
 }
@@ -211,7 +213,7 @@ pub struct Renderer<'a> {
 impl<'a> Renderer<'a> {
     /// Creates a renderer for the error stream, in the style that [TerminalStyle::detect]
     /// returns.
-    pub fn new(sources: &'a SourceTexts) -> Self {
+    pub fn new(sources: &'a dyn SourceLookup) -> Self {
         Self {
             sources,
             style: TerminalStyle::detect(),
@@ -221,7 +223,7 @@ impl<'a> Renderer<'a> {
     /// Creates a renderer that writes no escape sequences.
     ///
     /// It suits output that is not a terminal, such as exception messages or logs.
-    pub fn plain(sources: &'a SourceTexts) -> Self {
+    pub fn plain(sources: &'a dyn SourceLookup) -> Self {
         Self {
             sources,
             style: TerminalStyle::PLAIN,

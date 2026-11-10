@@ -273,3 +273,35 @@ fn a_named_argument_and_a_prefixed_name_point_to_each_other() {
         "{problem:?}"
     );
 }
+
+/// The engine resolves and renders a diagnostic against the sources registered with it:
+/// a label of a problem in a module is placed in the module's text, under the module's name.
+#[test]
+fn the_engine_renders_a_diagnostic_against_its_registered_sources() {
+    let mut engine = Engine::new();
+    // The head of the module's rule has a variable that its body does not bind.
+    engine
+        .add_module(
+            "lib::broken",
+            "@input p .\n@output q .\nq(?x, ?y) :- p(?x) .\n",
+        )
+        .expect("the name is a module name");
+    let refused = engine
+        .ingest(
+            "main.rls",
+            "base(1) .\n@use lib::broken { p = base } as b .\n",
+            |engine, program| engine.load(program),
+        )
+        .expect_err("the module's rule is unsafe");
+    let [problem] = refused.as_slice() else {
+        panic!("the load returns its first problem: {refused:?}");
+    };
+
+    let resolved = engine.resolve(problem);
+    let label = &resolved.labels[0];
+    assert_eq!(label.source.as_deref(), Some("lib/broken.rls"), "{label:?}");
+    assert_eq!((label.line, label.column), (Some(3), Some(7)), "{label:?}");
+    // The rendering quotes the line of the module's text.
+    let rendered = engine.render(problem);
+    assert!(rendered.contains("q(?x, ?y) :- p(?x) ."), "{rendered}");
+}

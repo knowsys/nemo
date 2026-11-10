@@ -8,7 +8,6 @@
 use std::time::Duration;
 
 use nemo::{
-    diagnostics::render::{Renderer, SourceTexts},
     engine::Engine,
     model::{FileId, Program},
     values::{DataValue, TupleValue},
@@ -126,12 +125,10 @@ fn main() {
 
     // ── What the run wants to tell you ───────────────────────────────
     //
-    // Warnings accumulate on the engine (dropped rows, unused inputs);
-    // the shared renderer quotes each against the sources of this run.
-    let mut sources = SourceTexts::new();
-    sources.absorb(engine.sources());
-    for report in engine.reports().to_vec() {
-        print!("{}", Renderer::plain(&sources).show(&report));
+    // Warnings accumulate on the engine (dropped rows, unused inputs),
+    // and the engine renders each against the sources registered with it.
+    for report in engine.reports() {
+        print!("{}", engine.render(report));
     }
     println!(
         "loaded {} facts, derived {}, in {} rule applications",

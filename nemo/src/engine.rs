@@ -74,7 +74,10 @@ use nemo_physical::{
 };
 
 use crate::{
-    diagnostics::{AboutResource, EngineError},
+    diagnostics::{
+        AboutResource, EngineError,
+        render::{Renderer, ResolvedDiagnostic, SourceLookup},
+    },
     engine::{
         compile::compiled::CompiledProgram,
         compile::translation::TranslationState,
@@ -316,6 +319,21 @@ impl Engine {
     /// including the module files that [link](Self::link) read.
     pub fn sources(&self) -> impl Iterator<Item = (FileId, &str, &str)> {
         self.pipeline.sources()
+    }
+
+    /// Returns a diagnostic as text, which quotes the lines of the registered sources that the
+    /// diagnostic's labels point at.
+    ///
+    /// The text ends with a newline and contains no escape sequences.
+    /// A [Renderer] over the engine writes the colours of a terminal.
+    pub fn render(&self, diagnostic: &Diagnostic) -> String {
+        Renderer::plain(self).show(diagnostic)
+    }
+
+    /// Returns a diagnostic as plain data, in which each label is resolved to the name of a
+    /// registered source, a line and a column.
+    pub fn resolve(&self, diagnostic: &Diagnostic) -> ResolvedDiagnostic {
+        ResolvedDiagnostic::new(diagnostic, self)
     }
 
     /// Sets the directory against which relative import resources are resolved,
@@ -1294,5 +1312,16 @@ impl Engine {
     /// A row whose evaluation fails is dropped and counted here.
     pub fn evaluation_errors(&self) -> ErrorCounts {
         self.errors
+    }
+}
+
+/// An engine looks up the sources that are registered with it.
+impl SourceLookup for Engine {
+    fn text(&self, file: FileId) -> &str {
+        self.source(file).unwrap_or_default()
+    }
+
+    fn name(&self, file: FileId) -> Option<&str> {
+        self.file_name(file)
     }
 }
