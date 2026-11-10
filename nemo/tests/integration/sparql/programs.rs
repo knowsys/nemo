@@ -205,7 +205,7 @@ fn a_failed_fetch_keeps_the_program() {
         "a failed run leaves no suspension"
     );
     assert!(
-        !engine.ran_rules().is_empty(),
+        !engine.compiled_rules().is_empty(),
         "the program is still loaded"
     );
     let again = refusing

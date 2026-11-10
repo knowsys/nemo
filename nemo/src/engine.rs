@@ -1284,13 +1284,13 @@ impl Engine {
     /// while traces name them by statement id (see [rule](Self::rule)).
     /// A bound import is a rule here too, rendered as its directive.
     /// Returns none before [load](Self::load).
-    pub fn ran_rules(&self) -> &[String] {
+    pub fn compiled_rules(&self) -> &[String] {
         self.program
             .as_ref()
             .map_or(&[], |program| program.texts.as_slice())
     }
 
-    /// Returns the join order chosen for the rule at a [position](Self::ran_rules),
+    /// Returns the join order chosen for the rule at a [position](Self::compiled_rules),
     /// as variable ids in the order the join binds them,
     /// or `None` if there is no rule at that position.
     pub fn join_order(&self, position: usize) -> Option<Vec<usize>> {

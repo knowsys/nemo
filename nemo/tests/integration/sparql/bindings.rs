@@ -286,7 +286,7 @@ fn the_rewrite_stage_binds_generic_imports_before_reasoning() {
     // The generic import is gone: nothing asked for every triple.
     assert!(engine.rows("triple").is_err());
     // The rewritten program is what the engine ran, and it prints.
-    let texts = engine.ran_rules();
+    let texts = engine.compiled_rules();
     assert!(
         texts
             .iter()

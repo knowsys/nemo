@@ -46,7 +46,7 @@ impl Recorder {
 
     /// Sets the rendered texts of the rules, by which the snapshot names the rules.
     ///
-    /// `texts` gives each rule's text at its [position](crate::engine::Engine::ran_rules),
+    /// `texts` gives each rule's text at its [position](crate::engine::Engine::compiled_rules),
     /// which is how events name rules.
     /// Once texts are set, an event for a position beyond them counts only towards the totals.
     pub fn set_rules(&self, texts: Vec<String>) {

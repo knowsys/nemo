@@ -18,7 +18,7 @@ pub enum EngineEvent {
     /// One application of a bound SPARQL import, which is an import with a `where` clause,
     /// fetched its solutions.
     Fetched {
-        /// The import's [position](crate::engine::Engine::ran_rules) among the rules.
+        /// The import's [position](crate::engine::Engine::compiled_rules) among the rules.
         rule: usize,
         /// The endpoint that was queried.
         endpoint: String,
@@ -36,7 +36,7 @@ pub enum EngineEvent {
     },
     /// One rule application finished, and its derived rows were stored.
     RuleApplied {
-        /// The rule's [position](crate::engine::Engine::ran_rules).
+        /// The rule's [position](crate::engine::Engine::compiled_rules).
         rule: usize,
         /// The engine step at which the application ran.
         ///
@@ -76,7 +76,7 @@ pub enum EngineEvent {
     /// and compares the rows it reads in this variant with those of the smallest leading atom.
     /// It is emitted only if the sink is [enabled](crate::telemetry::EventSink::enabled).
     VariantObserved {
-        /// The rule's [position](crate::engine::Engine::ran_rules).
+        /// The rule's [position](crate::engine::Engine::compiled_rules).
         rule: usize,
         /// The variant, given as the body position of its delta atom.
         variant: usize,

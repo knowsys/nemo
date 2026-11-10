@@ -151,11 +151,11 @@ fn telemetry_events_account_for_the_run() {
     let recorder = Arc::new(Recorder::new());
     engine.set_telemetry(recorder.clone());
     engine.load(program).expect("the program loads");
-    recorder.set_rules(engine.ran_rules().to_vec());
+    recorder.set_rules(engine.compiled_rules().to_vec());
     engine.reason().expect("reasoning reaches the fixpoint");
 
-    assert_eq!(engine.ran_rules().len(), 2);
-    assert!(engine.ran_rules()[0].contains("edge"));
+    assert_eq!(engine.compiled_rules().len(), 2);
+    assert!(engine.compiled_rules()[0].contains("edge"));
     let snapshot = recorder.snapshot_json();
     assert!(snapshot.contains("\"finished\":true"), "{snapshot}");
     assert!(snapshot.contains("\"fixpoint\":true"), "{snapshot}");
