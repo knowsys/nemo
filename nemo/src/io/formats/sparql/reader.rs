@@ -17,7 +17,9 @@ use spargebra::Query;
 use crate::io::format_builder::FormatBuilder;
 use crate::io::formats::dsv::reader::DsvReader;
 use crate::io::formats::dsv::value_format::DsvValueFormats;
+#[cfg(feature = "http")]
 use crate::io::resource_providers::ResourceProvider;
+#[cfg(feature = "http")]
 use crate::io::resource_providers::http::HttpResourceProvider;
 use crate::rule_model::components::import_export::Direction;
 use crate::syntax::import_export::file_format::MEDIA_TYPE_TSV;
@@ -46,14 +48,25 @@ impl SparqlReader {
             .expect("should create a resource builder");
 
         let resource = resource_builder.finalize();
-        let provider = HttpResourceProvider {};
 
-        match provider.open_resource(&resource, MEDIA_TYPE_TSV).await {
-            Ok(resource) => Ok(resource),
-            Err(error) => {
-                log::warn!("Failed to obtain a response: {error}");
-                Err(error)
+        #[cfg(feature = "http")]
+        {
+            let provider = HttpResourceProvider {};
+
+            match provider.open_resource(&resource, MEDIA_TYPE_TSV).await {
+                Ok(resource) => Ok(resource),
+                Err(error) => {
+                    log::warn!("Failed to obtain a response: {error}");
+                    Err(error)
+                }
             }
+        }
+
+        // SPARQL endpoints are only reachable over HTTP.
+        #[cfg(not(feature = "http"))]
+        {
+            let _ = MEDIA_TYPE_TSV;
+            Err(ReadingError::new(ReadingErrorKind::ResourceNotProvided).with_resource(resource))
         }
     }
 
@@ -108,6 +121,7 @@ impl SparqlReader {
 
             // TODO(mam): detect timeouts here and reduce page size
             // cf. https://github.com/knowsys/nemo/issues/712
+            #[cfg(feature = "http")]
             if let Err(error) = result
                 && let ReadingErrorKind::HttpTransfer(error) = error.kind()
                 && let Some(code) = error.status()
@@ -128,6 +142,13 @@ impl SparqlReader {
                     ))
                     .await?;
                 }
+            }
+
+            // Without HTTP support no page can be retrieved, so there is nothing to split.
+            #[cfg(not(feature = "http"))]
+            {
+                let _ = page;
+                result?;
             }
         }
 
