@@ -161,6 +161,38 @@ fn imported_rows_keep_one_arity() {
     );
 }
 
+/// Of rows that disagree on their number of values, the one refused is the row without the
+/// number that the predicate's rows need, even if it is the first.
+#[test]
+fn the_row_without_the_predicates_arity_is_refused() {
+    let first_refused = |refusal: &Diagnostic, row: &str| {
+        assert_eq!(refusal.code(), codes::ARITY_MISMATCH, "{refusal:?}");
+        assert!(
+            refusal
+                .notes()
+                .iter()
+                .any(|note| note == &format!("the row given to `import_rows` is `{row}`")),
+            "{refusal:?}"
+        );
+    };
+    let mut engine = Engine::new();
+    engine
+        .import_rows("p", [integers(&[1])])
+        .expect("the rows are kept for the load");
+    let refusal = engine
+        .import_rows("p", [integers(&[2, 3]), integers(&[4])])
+        .expect_err("the earlier rows have one value");
+    first_refused(&refusal, "p(2, 3)");
+
+    engine
+        .load(parse("q(?x) :- p(?x) . r(5, 6) ."))
+        .expect("the program loads");
+    let refusal = engine
+        .import_rows("r", [integers(&[7]), integers(&[8, 9])])
+        .expect_err("the program gives `r` two values");
+    first_refused(&refusal, "r(7)");
+}
+
 /// A row without values makes a nullary predicate hold, before the load and after it.
 #[test]
 fn imported_rows_without_values_hold_a_nullary_predicate() {

@@ -36,19 +36,22 @@ pub(in crate::engine) struct RowBlock {
 impl RowBlock {
     /// Reads the rows given to a predicate into a block, or returns `None` if there are none.
     ///
-    /// Every row needs as many values as the first, or as `arity` if it is given.
-    /// A row with another number of values is an error, and so is a row that contains a null,
-    /// since no term denotes a null.
+    /// Every row needs as many values as the first.
+    /// `expected` is the number of values that the predicate's rows need, if it is known.
+    /// Of two rows with different numbers of values, the one reported is the first row if it
+    /// lacks the expected number, and the later row otherwise.
+    /// A row that contains a null is an error too, since no term denotes a null.
+    /// The caller checks the block's number of values against `expected`.
     pub(in crate::engine) fn read(
         predicate: &str,
         rows: impl IntoIterator<Item = Vec<DataValue>>,
-        arity: Option<usize>,
+        expected: Option<usize>,
     ) -> Result<Option<Self>, Diagnostic> {
         let mut rows = rows.into_iter().peekable();
         let Some(first) = rows.peek() else {
             return Ok(None);
         };
-        let arity = arity.unwrap_or(first.len());
+        let arity = first.len();
         let mut values = Vec::with_capacity(arity * rows.size_hint().0);
         let mut columns = vec![ColumnType::new(); arity];
         let mut count = 0;
@@ -60,13 +63,12 @@ impl RowBlock {
                 .diagnostic());
             }
             if row.len() != arity {
-                return Err(TranslationError::ArityMismatch {
-                    name: Identifier::bare(predicate.to_owned()).to_string(),
-                    arity: row.len().into(),
-                    registered: arity.into(),
-                }
-                .at(None)
-                .with_note(row_note(predicate, &row)));
+                return Err(match expected {
+                    Some(expected) if expected != arity => {
+                        arity_mismatch(predicate, &values[..arity], expected)
+                    }
+                    _ => arity_mismatch(predicate, &row, arity),
+                });
             }
             for (column, value) in columns.iter_mut().zip(&row) {
                 column.add(value.as_ref());
@@ -184,16 +186,32 @@ impl UnloadedRows {
             .map(|&position| self.blocks[position].arity)
     }
 
-    /// Adds a block to the rows of its predicate, which must have its arity.
-    pub(in crate::engine) fn add(&mut self, block: RowBlock) {
+    /// Adds a block to the rows of its predicate.
+    ///
+    /// # Errors
+    ///
+    /// Fails for a block whose rows have another number of values than the predicate's
+    /// earlier rows, naming its first row.
+    pub(in crate::engine) fn add(&mut self, block: RowBlock) -> Result<(), Diagnostic> {
         match self.positions.get(block.predicate()) {
-            Some(&position) => self.blocks[position].append(block),
+            Some(&position) => {
+                let kept = &mut self.blocks[position];
+                if block.arity != kept.arity {
+                    return Err(arity_mismatch(
+                        &block.predicate,
+                        block.first_row(),
+                        kept.arity,
+                    ));
+                }
+                kept.append(block);
+            }
             None => {
                 self.positions
                     .insert(block.predicate.clone(), self.blocks.len());
                 self.blocks.push(block);
             }
         }
+        Ok(())
     }
 
     /// Returns the blocks, one per predicate.
@@ -222,6 +240,18 @@ pub(in crate::engine) fn row_note(predicate: &str, row: &[DataValue]) -> String 
         Identifier::Bare(predicate.to_owned()),
         terms.join(", ")
     )
+}
+
+/// Returns the diagnostic for a row given to a predicate whose rows need `arity` values,
+/// with a note that names the row.
+fn arity_mismatch(predicate: &str, row: &[DataValue], arity: usize) -> Diagnostic {
+    TranslationError::ArityMismatch {
+        name: Identifier::bare(predicate.to_owned()).to_string(),
+        arity: row.len().into(),
+        registered: arity.into(),
+    }
+    .at(None)
+    .with_note(row_note(predicate, row))
 }
 
 /// Returns whether a value is a null or a structure that contains one.
