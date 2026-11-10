@@ -2,7 +2,7 @@
 
 use nemo::{
     engine::Engine,
-    model::{Directive, FileId, Program, Statement},
+    model::{Directive, FileId, Statement},
 };
 use nemo_physical::diagnostics::Diagnostic;
 
@@ -61,17 +61,15 @@ impl Run<'_> {
         })
     }
 
-    /// Sets the value of the program's declaration of `parameter` to the value from the
-    /// command line.
+    /// Sets the engine's value of `parameter` to the value from the command line,
+    /// which the load gives the program's declaration of the parameter.
     ///
     /// The value is parsed as part of the registered declaration, so it must be one term,
     /// and a diagnostic about it points into the setting.
-    /// Fails for a setting that does not parse as one declaration of the named parameter,
-    /// or for a parameter that the program does not declare.
+    /// Fails for a setting that does not parse as one declaration of the named parameter.
     pub(super) fn supply(
         &self,
-        engine: &Engine,
-        program: &mut Program,
+        engine: &mut Engine,
         parameter: &Parameter,
     ) -> Result<(), Diagnostic> {
         let (parsed, diagnostics) = engine.parse_source(parameter.file);
@@ -92,40 +90,7 @@ impl Run<'_> {
         let Some(value) = value else {
             return Err(malformed_setting(&parameter.setting));
         };
-
-        let mut supplied = false;
-        for statement in &mut program.statements {
-            if let Statement::Directive(Directive::Parameter(directive)) = statement
-                && directive.variable.name == parameter.name
-            {
-                directive.value = Some(value.clone());
-                supplied = true;
-            }
-        }
-        if supplied {
-            return Ok(());
-        }
-
-        let declared: Vec<&str> = program
-            .statements
-            .iter()
-            .filter_map(|statement| match statement {
-                Statement::Directive(Directive::Parameter(directive)) => {
-                    Some(directive.variable.name.as_str())
-                }
-                _ => None,
-            })
-            .collect();
-        let mut problem = CliError::UndeclaredParameter {
-            name: parameter.name.clone(),
-        }
-        .diagnostic();
-        if !declared.is_empty() {
-            problem = problem.with_note(format!(
-                "the program declares: `${}`",
-                declared.join("`, `$")
-            ));
-        }
-        Err(problem)
+        engine.set_parameter(&parameter.name, value);
+        Ok(())
     }
 }

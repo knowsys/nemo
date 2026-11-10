@@ -41,10 +41,6 @@ diagnostic_kinds! {
             => TRACE_UNWRITABLE = 906, error,
                "could not write the trace to `{path}`: {reason}",
                explain "The `--trace-output` file could not be written.";
-        UndeclaredParameter { name: String }
-            => UNDECLARED_PARAMETER = 907, error, "the program has no parameter `${name}`",
-               explain "`--param` sets a parameter that the program does not declare.",
-               hint "declare the parameter with `@parameter` before setting it";
         ExportCollision {
             /// The writers of the file, as `` `p` and `q` ``.
             claimants: String,

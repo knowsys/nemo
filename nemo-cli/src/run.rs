@@ -253,7 +253,8 @@ impl<'a> Run<'a> {
         Ok(recorder)
     }
 
-    /// Reads and parses the programs into one program, and supplies the `--param` values.
+    /// Reads and parses the programs into one program, and gives the engine the `--param`
+    /// values.
     ///
     /// Returns `None` if a program failed to parse, after showing its diagnostics.
     fn program(
@@ -284,11 +285,11 @@ impl<'a> Run<'a> {
         self.sources.absorb(engine.sources());
 
         let start = Instant::now();
-        let Some(mut program) = self.parse(engine, &programs) else {
+        let Some(program) = self.parse(engine, &programs) else {
             return Ok(None);
         };
         for parameter in &parameters {
-            self.supply(engine, &mut program, parameter)?;
+            self.supply(engine, parameter)?;
         }
         times.parse = start.elapsed();
         Ok(Some(program))

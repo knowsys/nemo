@@ -31,6 +31,27 @@ fn a_parameter_takes_the_value_the_command_line_gives_it() {
     assert_eq!(rows, ["1", "2"]);
 }
 
+/// A setting for a parameter that the program does not declare fails the run,
+/// with the error that names the parameters the program declares.
+#[test]
+fn a_setting_for_an_undeclared_parameter_fails_the_run() {
+    let directory = workspace("undeclared-param");
+    write(
+        &directory,
+        "program.rls",
+        "@parameter $limit = 1 .\np($limit) .\n",
+    );
+
+    let outcome = run(&directory, &["program.rls", "-p", "limt=3"]);
+    assert_eq!(outcome.status, Some(1), "{}", outcome.stderr);
+    assert!(
+        outcome.stderr.contains("[N0494] Error"),
+        "{}",
+        outcome.stderr
+    );
+    assert!(outcome.stderr.contains("`$limit`"), "{}", outcome.stderr);
+}
+
 #[test]
 fn a_malformed_parameter_setting_is_reported_rather_than_fatal() {
     let directory = workspace("malformed-param");
