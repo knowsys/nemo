@@ -24,6 +24,7 @@
 //! by the [Display](std::fmt::Display) of [DataValue] and [ValueRef],
 //! and read from it by [ReadValue::from_term_syntax].
 //! [NameKind] distinguishes the names that term syntax writes without quotes or brackets,
+//! [BUILTIN_NAMES] are the names that it reserves for calls,
 //! and [Escape] reads its escape sequences.
 
 pub(crate) mod datatype;
@@ -50,7 +51,7 @@ pub use escape::Escape;
 pub use iri::{Iri, IriRef};
 pub use language_string::{LanguageString, LanguageStringRef};
 pub use literal::{OtherLiteral, OtherLiteralRef};
-pub use name::NameKind;
+pub use name::{BUILTIN_NAMES, NameKind, is_builtin_name};
 pub use number::{Decimal, DecimalRef, Double, Float, Number, NumberRef};
 pub use owned::DataValue;
 pub use read::ReadValue;

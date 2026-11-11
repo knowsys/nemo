@@ -2,7 +2,7 @@
 
 use std::borrow::Cow;
 
-use super::{DataValue, Escape, Iri, MapValue, NameKind, Number, TupleValue};
+use super::{DataValue, Escape, Iri, MapValue, NameKind, Number, TupleValue, is_builtin_name};
 
 /// The deepest nesting of tuples and maps that is read.
 const MAX_NESTING: usize = 128;
@@ -33,6 +33,8 @@ impl<'a> ReadValue<'a> {
     ///   where the datatype is an IRI in angle brackets or a bare name;
     /// - a null, written `_:` followed by its label;
     /// - a tuple such as `(1, 2)` or `point(1, 2)`, or a map such as `{a = 1}`, of constants.
+    ///   A label is a bare name that is not the [name of a builtin](is_builtin_name),
+    ///   or an IRI in angle brackets.
     ///
     /// These are the constants of a program, read as a program without a base IRI reads them.
     /// A prefixed name is not read, since the text declares no prefix.
@@ -223,10 +225,17 @@ impl<'a> Reader<'a, '_> {
     /// a boolean, or the IRI that the name is.
     ///
     /// `bare` says whether the name is written without angle brackets.
+    /// The bare name of a builtin labels nothing: before a `(` it makes a call,
+    /// which is computed, and before a `{` it makes no term.
     fn named(&mut self, name: Cow<'a, str>, bare: bool) -> Option<ReadValue<'a>> {
+        let reserved = bare && is_builtin_name(&name);
         let end = self.position;
         self.skip_whitespace();
         if self.eat(b'(') {
+            if reserved {
+                return None;
+            }
+
             let elements = self.elements(b')')?;
             let tuple = TupleValue::labeled(name.into_owned(), elements);
 
@@ -238,6 +247,7 @@ impl<'a> Reader<'a, '_> {
             Cow::Borrowed("true") if bare => Some(ReadValue::Value(DataValue::boolean(true))),
             Cow::Borrowed("false") if bare => Some(ReadValue::Value(DataValue::boolean(false))),
             // A `{` labels a map only directly after the name.
+            _ if self.peek() == Some(b'{') && reserved => None,
             name if self.eat(b'{') => self.map(Some(name.into_owned())).map(ReadValue::Value),
             Cow::Borrowed(name) => Some(ReadValue::Iri(name)),
             Cow::Owned(name) => Some(ReadValue::Value(DataValue::iri(name))),
@@ -687,6 +697,10 @@ mod tests {
             ("true(1)", {
                 DataValue::tuple(TupleValue::labeled("true", vec![DataValue::integer(1)]))
             }),
+            (
+                "<strlen>(1)",
+                DataValue::tuple(TupleValue::labeled("strlen", vec![DataValue::integer(1)])),
+            ),
         ];
 
         for (text, value) in cases {
@@ -742,6 +756,11 @@ mod tests {
             "{a}",
             "{a = }",
             "label {a = 1}",
+            // The bare name of a builtin labels nothing, in any case.
+            "STRLEN(\"abc\")",
+            "strlen (\"abc\")",
+            "Year{a = 1}",
+            "(1, sum(2, 3))",
             "alice,",
             "alice)",
             "% comment",

@@ -1,5 +1,147 @@
 //! The names of term syntax, which are written without quotes or brackets.
 
+/// Every name that calls a builtin.
+///
+/// Term syntax reserves these names, in any case, before a `(` or a `{`.
+/// There, a program reads such a name as the call of a builtin:
+/// `STRLEN("abc")` is a call, and not a tuple with the label `STRLEN`.
+/// So such a name labels a tuple or a map only in angle brackets, as in `<STRLEN>("abc")`.
+pub const BUILTIN_NAMES: &[&str] = &[
+    "EQUALITY",
+    "UNEQUALITY",
+    "VALUEEQUALITY",
+    "VALUEUNEQUALITY",
+    "NUMGREATER",
+    "NUMGREATEREQ",
+    "NUMLESS",
+    "NUMLESSEQ",
+    "SUM",
+    "SUBTRACTION",
+    "PRODUCT",
+    "DIVISION",
+    "NEGATION",
+    "INVERTSIGN",
+    "ABS",
+    "MAX",
+    "MIN",
+    "AND",
+    "OR",
+    "NOT",
+    "ISIRI",
+    "ISNUMERIC",
+    "STRLEN",
+    "UCASE",
+    "LCASE",
+    "CONTAINS",
+    "STRSTARTS",
+    "STRENDS",
+    "CONCAT",
+    "STR",
+    "ISSTRING",
+    "ISINTEGER",
+    "ISFLOAT",
+    "ISDOUBLE",
+    "ISNULL",
+    "ISDECIMAL",
+    "ISBOOLEAN",
+    "ISLANGSTRING",
+    "ISDATETIME",
+    "ISDATE",
+    "ISTIME",
+    "ISDURATION",
+    "ISDAYTIMEDURATION",
+    "ISYEARMONTHDURATION",
+    "DATATYPE",
+    "FULLSTR",
+    "LANG",
+    "STRLANG",
+    "LANGMATCHES",
+    "STRDT",
+    "INT",
+    "FLOAT",
+    "DOUBLE",
+    "IRI",
+    "DATETIME",
+    "DATE",
+    "TIME",
+    "DURATION",
+    "DAYTIMEDURATION",
+    "YEARMONTHDURATION",
+    "ROUND",
+    "POW",
+    "LOG",
+    "SIN",
+    "SQRT",
+    "COS",
+    "TAN",
+    "CEIL",
+    "FLOOR",
+    "REM",
+    "BITAND",
+    "BITOR",
+    "BITXOR",
+    "BITSHL",
+    "BITSHR",
+    "LUKA",
+    "COMPARE",
+    "LEVENSHTEIN",
+    "STRREV",
+    "STRTRIM",
+    "STRTRIMSTART",
+    "STRTRIMEND",
+    "STRBEFORE",
+    "STRAFTER",
+    "URIENCODE",
+    "URIDECODE",
+    "SUBSTR",
+    "REGEX",
+    "REPLACE",
+    "MD5",
+    "SHA1",
+    "SHA256",
+    "SHA384",
+    "SHA512",
+    "YEAR",
+    "MONTH",
+    "DAY",
+    "HOURS",
+    "MINUTES",
+    "SECONDS",
+    "TZ",
+    "TIMEZONE",
+    "ADJUST",
+    "RAND",
+    "UUID",
+    "STRUUID",
+    "NOW",
+    "GET",
+    "LENGTH",
+    "LABEL",
+    "KEYS",
+    "HASKEY",
+    "ISTUPLE",
+    "ISMAP",
+    "STRJOIN",
+    "STRSPLIT",
+];
+
+/// Returns whether a name is one of the [BUILTIN_NAMES], written in any case.
+///
+/// # Example
+///
+/// ```
+/// use nemo_physical::value::is_builtin_name;
+///
+/// assert!(is_builtin_name("STRLEN"));
+/// assert!(is_builtin_name("strlen"));
+/// assert!(!is_builtin_name("point"));
+/// ```
+pub fn is_builtin_name(name: &str) -> bool {
+    BUILTIN_NAMES
+        .iter()
+        .any(|builtin| builtin.eq_ignore_ascii_case(name))
+}
+
 /// A kind of name in term syntax.
 ///
 /// The kinds differ in what may start a name and in what may join two parts of one,

@@ -70,6 +70,13 @@ fn both_readers_read_back_what_display_writes() {
             .expect("the keys differ"),
         ),
         DataValue::map(MapValue::labeled("box", []).expect("the map is empty")),
+        // A label that is the name of a builtin, which is written in angle brackets.
+        DataValue::tuple(TupleValue::labeled(
+            "STRLEN",
+            vec![DataValue::string("abc")],
+        )),
+        DataValue::tuple(TupleValue::labeled("year", vec![DataValue::iri("year")])),
+        DataValue::map(MapValue::labeled("label", []).expect("the map is empty")),
     ];
 
     for value in values {
@@ -140,6 +147,8 @@ fn both_readers_read_the_same_constants() {
         "{a = 1, \"b\" = (2,)}",
         "box{a = 1}",
         "<http://e.org/p>{a = 1}",
+        "<strlen>(1)",
+        "label{a = 1}",
         "box {a = 1}",
         "{a = 1,}",
         "{a = 1, a = 2}",
@@ -171,24 +180,16 @@ fn a_file_holds_no_computed_terms() {
         ("--5", DataValue::integer(5)),
         ("-(5)", DataValue::integer(-5)),
         ("f\"a{1}\"", DataValue::string("a1")),
+        ("STRLEN(\"abc\")", DataValue::integer(3)),
+        (
+            "(1, sum(2, 3))",
+            DataValue::tuple(TupleValue::new(vec![
+                DataValue::integer(1),
+                DataValue::integer(5),
+            ])),
+        ),
     ] {
         assert_eq!(program_value(text), Some(value), "{text}");
         assert_eq!(file_value(text), None, "{text}");
     }
-}
-
-/// In a file, a name before parentheses labels a tuple, whatever the name is.
-/// A program calls the builtin of that name instead,
-/// so it does not read back what `Display` writes for a tuple with such a label.
-#[test]
-fn a_file_reads_the_name_of_a_builtin_as_a_label() {
-    let text = "STRLEN(\"abc\")";
-    let labeled = DataValue::tuple(TupleValue::labeled(
-        "STRLEN",
-        vec![DataValue::string("abc")],
-    ));
-
-    assert_eq!(labeled.to_string(), text);
-    assert_eq!(file_value(text), Some(labeled));
-    assert_eq!(program_value(text), Some(DataValue::integer(3)));
 }

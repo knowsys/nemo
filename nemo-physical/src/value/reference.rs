@@ -699,6 +699,20 @@ mod tests {
         );
     }
 
+    /// A label that is the name of a builtin is written in angle brackets,
+    /// since the bare name would make a call, while the same name as a constant stays bare.
+    #[test]
+    fn a_label_that_names_a_builtin_is_written_in_brackets() {
+        use crate::value::{MapValue, TupleValue};
+
+        let tuple = DataValue::tuple(TupleValue::labeled("year", vec![DataValue::iri("year")]));
+        assert_eq!(tuple.to_string(), "<year>(year)");
+
+        let map = MapValue::labeled("STRLEN", [(DataValue::iri("a"), DataValue::integer(1))]);
+        let map = DataValue::map(map.expect("one key"));
+        assert_eq!(map.to_string(), "<STRLEN>{a = 1}");
+    }
+
     /// Adding or subtracting a duration moves a dateTime, date or time as XPath's operators do.
     #[test]
     fn points_in_time_move_by_durations() {
