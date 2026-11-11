@@ -221,6 +221,42 @@ fn a_text_that_is_not_a_fact_fails_the_run_before_it_starts() {
 }
 
 #[test]
+fn a_fact_that_does_not_fit_the_program_fails_the_run_before_reasoning() {
+    let directory = workspace("unfit-fact");
+    write(&directory, "program.rls", ROLES);
+
+    // The predicates are known once the program is loaded,
+    // so neither fact is left for after the run, whose exports would then be written.
+    for (fact, code) in [
+        ("nowhere(1)", "[N0486] Error"),
+        ("reach(1)", "[N0501] Error"),
+    ] {
+        let outcome = run(&directory, &["program.rls", "-e", "idb", "--trace", fact]);
+        assert_eq!(outcome.status, Some(1), "{}", outcome.stderr);
+        assert!(outcome.stderr.starts_with(code), "{}", outcome.stderr);
+        assert!(
+            !directory.join("results").exists(),
+            "{fact}: nothing is exported"
+        );
+    }
+}
+
+#[test]
+fn a_query_that_cannot_be_read_fails_the_run_before_it_starts() {
+    let directory = workspace("unread-query");
+    write(&directory, "program.rls", ROLES);
+
+    for option in ["--trace-tree", "--trace-node"] {
+        let outcome = run(&directory, &["program.rls", "-e", "idb", option, "[1]"]);
+        assert_eq!(outcome.status, Some(1), "{}", outcome.stderr);
+        assert!(
+            !directory.join("results").exists(),
+            "{option}: nothing is exported"
+        );
+    }
+}
+
+#[test]
 fn a_trace_file_is_written_like_an_export() {
     let directory = workspace("trace-file");
     write(&directory, "program.rls", ROLES);

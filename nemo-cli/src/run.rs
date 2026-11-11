@@ -183,10 +183,10 @@ impl<'a> Run<'a> {
         let mut engine = self.engine()?;
         let level = self.arguments.reporting();
         self.reserve_stdout(level)?;
-        // A trace file that exists, or a text that is not a fact, fails the run here
-        // rather than after the work.
+        // A trace file that exists, a text that is not a fact, or a query that cannot be read
+        // fails the run here rather than after the work.
         self.vacant_trace_file()?;
-        let traced = self.traced_facts()?;
+        let traced = self.traced()?;
         let recorder = self.observe(&mut engine, level)?;
         let dashboard = self.dashboard(recorder.as_ref())?;
 
@@ -194,6 +194,9 @@ impl<'a> Run<'a> {
             return Ok(ExitCode::FAILURE);
         };
         self.load(&mut engine, program, &mut times, recorder.as_deref())?;
+        // The loaded program knows its predicates,
+        // so a fact that does not fit them fails the run before reasoning.
+        engine.check_facts(&traced.facts)?;
         let specifications = self.exports(&engine, level)?;
         self.reason(&mut engine, &mut times)?;
         self.write(&mut engine, &specifications, &mut times)?;
@@ -203,7 +206,7 @@ impl<'a> Run<'a> {
         self.summarize(&engine, &specifications, times, recorder.as_deref());
         let facts = recorder.is_some().then(|| self.facts(&engine, times));
         self.document(level, facts.as_ref(), recorder.as_deref())?;
-        self.trace(&mut engine, &traced)?;
+        self.trace(&mut engine, traced)?;
         if let Some(dashboard) = dashboard {
             Self::serve(dashboard, facts);
         }

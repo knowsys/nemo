@@ -147,10 +147,18 @@ fn an_error_after_the_summary_is_set_apart_from_it() {
     let directory = workspace("error-after-summary");
     write(&directory, "program.rls", "p(1) .\nq(?x) :- p(?x) .\n");
 
-    // The fact parses, but the program has no such predicate, which the trace finds.
+    // The trace file cannot be created below a file, which the run finds when it writes it.
     let outcome = run(
         &directory,
-        &["program.rls", "-e", "none", "--trace", "r(1)"],
+        &[
+            "program.rls",
+            "-e",
+            "none",
+            "--trace",
+            "q(1)",
+            "--trace-output",
+            "program.rls/trace.json",
+        ],
     );
     assert_eq!(outcome.status, Some(1), "{}", outcome.stderr);
     assert!(
@@ -159,7 +167,7 @@ fn an_error_after_the_summary_is_set_apart_from_it() {
         outcome.stderr
     );
     assert!(
-        outcome.stderr.contains("\n\n[N0486] Error"),
+        outcome.stderr.contains("\n\n[N0906] Error"),
         "{}",
         outcome.stderr
     );

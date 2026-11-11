@@ -1184,6 +1184,27 @@ impl Engine {
         self.serialize_export(spec)
     }
 
+    /// Checks that facts can be traced, without tracing them.
+    ///
+    /// Each fact must name a predicate of the program and fit it,
+    /// as [trace](Self::trace) requires.
+    /// The check needs a loaded program but no fixpoint,
+    /// so it finds a fact that cannot be traced before [reason](Self::reason) does its work.
+    /// It stores nothing.
+    ///
+    /// # Errors
+    ///
+    /// - Returns N0482 if no program is loaded.
+    /// - Returns the error that [trace](Self::trace) returns for a fact that names no
+    ///   predicate of the program, or that does not fit its predicate.
+    pub fn check_facts(&mut self, facts: &[Fact]) -> Result<(), Diagnostic> {
+        if self.program.is_none() {
+            return Err(EngineError::NoProgram.diagnostic());
+        }
+
+        self.ground_facts(facts).map(drop)
+    }
+
     /// Traces facts: returns for each whether it holds after reasoning,
     /// and if it does, the derivation that explains why.
     ///

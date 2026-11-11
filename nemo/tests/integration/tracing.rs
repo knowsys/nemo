@@ -810,6 +810,47 @@ fn stored_rows_trace_into_one_response_in_parts() {
     assert_eq!(refusal.field("predicate"), Some("nowhere"));
 }
 
+/// A loaded program is enough to check the facts that a trace is to explain,
+/// so a fact that cannot be traced is found before reasoning.
+#[test]
+fn facts_are_checked_against_the_program_before_reasoning() {
+    let fact = |text: &str| Fact::parse(text).expect("the fact parses");
+    let mut engine = Engine::new();
+    let refusal = engine
+        .check_facts(&[fact("reach(a, b) .")])
+        .expect_err("no program is loaded");
+    assert_eq!(refusal.code(), nemo::codes::NO_PROGRAM, "{refusal:?}");
+
+    let program = parse_into(
+        &mut engine,
+        "edge(a, b) . edge(_:x, b) . reach(?x, ?y) :- edge(?x, ?y) .",
+    );
+    engine.load(program).expect("the program loads");
+    assert!(!engine.is_at_fixpoint());
+
+    // A fact of a derived predicate passes, although no rule has derived it yet.
+    engine
+        .check_facts(&[fact("reach(a, b) ."), fact("edge(_:x, b) .")])
+        .expect("the facts fit the program");
+
+    // The check refuses what a trace refuses.
+    for (text, code) in [
+        ("nowhere(a) .", nemo::codes::UNKNOWN_PREDICATE),
+        ("reach(a) .", nemo::codes::FACT_ARITY),
+        ("reach(_:nope, b) .", nemo::codes::UNKNOWN_BLANK_NODE),
+    ] {
+        let refusal = engine
+            .check_facts(&[fact("reach(a, b) ."), fact(text)])
+            .expect_err("the fact does not fit the program");
+        assert_eq!(refusal.code(), code, "{text}: {refusal:?}");
+    }
+
+    // The check stores nothing, and reasoning and tracing go on as without it.
+    engine.reason().expect("reasoning reaches the fixpoint");
+    let response = trace(&mut engine, "reach(a, b) .");
+    check(&mut engine, &response);
+}
+
 /// A traced fact naming a blank node the program never created is a
 /// refusal by name, not a bug report.
 #[test]

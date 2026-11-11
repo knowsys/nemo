@@ -206,20 +206,54 @@ fn json(value: &impl Serialize) -> String {
     serde_json::to_string(value).expect("trace responses serialize")
 }
 
+/// What the trace options ask a run to trace, read before the run starts.
+#[derive(Debug)]
+pub(super) struct Traced {
+    /// The facts of `--trace` and of every `--trace-input` file.
+    pub(super) facts: Vec<Fact>,
+    /// The query of `--trace-tree`.
+    tree: Option<TreeForTableQuery>,
+    /// The query of `--trace-node`.
+    node: Option<TableEntriesForTreeNodesQuery>,
+}
+
 impl Run<'_> {
+    /// Reads what the trace options ask the run to trace.
+    ///
+    /// Fails if a `--trace-input` file cannot be read, if a text is not a fact,
+    /// or if a query cannot be read.
+    pub(super) fn traced(&self) -> Result<Traced, Diagnostic> {
+        Ok(Traced {
+            facts: self.traced_facts()?,
+            tree: self
+                .arguments
+                .trace_tree
+                .as_deref()
+                .map(read_query)
+                .transpose()?,
+            node: self
+                .arguments
+                .trace_node
+                .as_deref()
+                .map(read_query)
+                .transpose()?,
+        })
+    }
+
     /// Traces what the trace options ask for, and writes the results.
     ///
-    /// It traces `facts`, which are those of `--trace` and `--trace-input`,
+    /// It traces the facts of `--trace` and `--trace-input`,
     /// every derived fact with `--trace-all`,
     /// and the queries of `--trace-tree` and `--trace-node`.
     /// The derivations and responses are printed to standard output,
     /// or written as JSON to the `--trace-output` file.
     /// It does nothing if no trace option is given.
-    pub(super) fn trace(&self, engine: &mut Engine, facts: &[Fact]) -> Result<(), Diagnostic> {
+    pub(super) fn trace(&self, engine: &mut Engine, traced: Traced) -> Result<(), Diagnostic> {
+        let Traced { facts, tree, node } = traced;
         if self.arguments.trace_all {
-            self.trace_all(engine, facts)?;
+            self.trace_all(engine, &facts)?;
         } else if !facts.is_empty() {
-            let response = engine.trace(facts)?;
+            let response = engine.trace(&facts)?;
             match &self.arguments.trace_output {
                 None => {
                     self.begin(Part::Trace);
@@ -228,13 +262,11 @@ impl Run<'_> {
                 Some(path) => self.write_trace(path, json(&response).as_bytes())?,
             }
         }
-        if let Some(given) = &self.arguments.trace_tree {
-            let query: TreeForTableQuery = read_query(given)?;
+        if let Some(query) = tree {
             let response = engine.tree_for_table(query)?;
             self.write_query_response(&response)?;
         }
-        if let Some(given) = &self.arguments.trace_node {
-            let query: TableEntriesForTreeNodesQuery = read_query(given)?;
+        if let Some(query) = node {
             let response = engine.table_entries_for_tree_nodes(query)?;
             self.write_query_response(&response)?;
         }
@@ -260,7 +292,7 @@ impl Run<'_> {
     /// Returns the parsed facts of `--trace` and of every `--trace-input` file.
     ///
     /// Fails if a file cannot be read, or if a text is not a fact.
-    pub(super) fn traced_facts(&self) -> Result<Vec<Fact>, Diagnostic> {
+    fn traced_facts(&self) -> Result<Vec<Fact>, Diagnostic> {
         let mut texts: Vec<String> = self
             .arguments
             .trace
