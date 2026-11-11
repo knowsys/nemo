@@ -44,7 +44,8 @@ impl Pipeline {
     /// Registering a name again adds a new source under a new id.
     /// Ids are never reused,
     /// so the spans of an earlier version of a file that is read again stay valid.
-    /// A [reserved](Self::reserve_files) id is never assigned either.
+    /// Neither is an id assigned that [load](Self::load) reserved,
+    /// for the spans of a program whose text is not registered.
     pub fn add_source(&mut self, name: impl Into<String>, text: impl Into<String>) -> FileId {
         let (name, text): (String, String) = (name.into(), text.into());
         self.push_source(SourceFile {

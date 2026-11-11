@@ -103,7 +103,8 @@ impl Pipeline {
     /// Adds a program as a new revision without a parent.
     ///
     /// Its statements have no provenance edge, so they are the roots of provenance.
-    /// The file ids of their spans are [reserved](Self::reserve_files).
+    /// A file id of their spans that no source is registered under is reserved,
+    /// so that [add_source](Self::add_source) gives it to no source.
     pub fn load(&mut self, program: Program) -> RevisionId {
         self.reserve_files(&program);
         let statements = program
