@@ -87,6 +87,21 @@ fn an_unbound_solution_of_one_column_is_an_empty_line() {
     assert_eq!((loaded.rows.len(), loaded.counts.malformed), (2, 0));
 }
 
+/// In a response without columns, each empty line after the header is a solution,
+/// and any other line is malformed.
+#[test]
+fn a_solution_without_columns_is_an_empty_line() {
+    let read = |body: &str| read_response(body, 0, &mut Dictionary::new());
+    let loaded = read("\n\n\r\n");
+    assert_eq!((loaded.rows.len(), loaded.counts.malformed), (2, 0));
+    let loaded = read("\n");
+    assert_eq!(loaded.rows.len(), 0, "a header alone holds no solution");
+
+    // Virtuoso writes a column of its own for a query that projects no variable.
+    let loaded = read("?_star_fake\n1\n");
+    assert_eq!((loaded.rows.len(), loaded.counts.malformed), (0, 1));
+}
+
 /// A cell that is not a term makes its row malformed, reported at its line.
 #[test]
 fn a_cell_that_is_no_term_makes_the_row_malformed() {

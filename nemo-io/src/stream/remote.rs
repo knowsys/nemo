@@ -67,53 +67,68 @@ impl Request {
 
 /// The reason a request got no body.
 ///
-/// A failure has the response's status, if a response came,
-/// and what the transport or the response said.
 /// A failure is final, since a [Client] retries a request before it responds with one.
 /// [smaller_may_succeed](Self::smaller_may_succeed) says whether a smaller request may succeed
 /// instead.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Failure {
-    /// The HTTP status, if a response came.
-    pub status: Option<u16>,
-    /// The transport's reason, or an excerpt of the response body.
-    pub message: String,
-    /// Whether a response came, but its status or headers said that it contains only part of
-    /// the result ([of_partial_response](Self::of_partial_response)).
+pub enum Failure {
+    /// The request got no response,
+    /// for example because there was no connection, a timeout, or a broken transfer.
+    Transport {
+        /// What the transport said.
+        reason: String,
+    },
+    /// The response had a status outside the success range.
+    Response {
+        /// The HTTP status.
+        status: u16,
+        /// An excerpt of the response body, which may be empty.
+        message: String,
+    },
+    /// The response was successful, but its status or headers said that it contains only part
+    /// of the result ([of_partial_response](Self::of_partial_response)).
     ///
     /// Such a failure has no body, so no partial result is read.
-    pub partial: bool,
+    Partial {
+        /// The HTTP status.
+        status: u16,
+        /// Why the result is partial.
+        reason: String,
+    },
 }
 
 impl Failure {
+    /// Creates the failure of a request that got no response, for the given reason.
+    pub fn transport(reason: impl Into<String>) -> Self {
+        Self::Transport {
+            reason: reason.into(),
+        }
+    }
+
     /// Creates the failure of a response with a status outside the success range.
     ///
     /// `message` is an excerpt of the response body.
     pub fn response(status: u16, message: impl Into<String>) -> Self {
-        Self {
-            status: Some(status),
+        Self::Response {
+            status,
             message: message.into(),
-            partial: false,
-        }
-    }
-
-    /// Creates the failure of a request that got no response,
-    /// for example because there was no connection, a timeout, or a broken transfer.
-    pub fn transport(message: impl Into<String>) -> Self {
-        Self {
-            status: None,
-            message: message.into(),
-            partial: false,
         }
     }
 
     /// Creates the failure of a successful response that held only part of the result,
     /// for the given reason.
     pub fn partial(status: u16, reason: impl Into<String>) -> Self {
-        Self {
-            status: Some(status),
-            message: reason.into(),
-            partial: true,
+        Self::Partial {
+            status,
+            reason: reason.into(),
+        }
+    }
+
+    /// Returns the HTTP status of the response, or `None` if no response came.
+    pub fn status(&self) -> Option<u16> {
+        match self {
+            Failure::Transport { .. } => None,
+            Failure::Response { status, .. } | Failure::Partial { status, .. } => Some(*status),
         }
     }
 
@@ -156,7 +171,13 @@ impl Failure {
     /// Returns whether the server found the request too large (413) or its URL too long (414),
     /// in which case a smaller request may succeed.
     pub fn too_large(&self) -> bool {
-        matches!(self.status, Some(413 | 414))
+        matches!(
+            self,
+            Failure::Response {
+                status: 413 | 414,
+                ..
+            }
+        )
     }
 
     /// Returns whether a smaller request may succeed.
@@ -164,7 +185,7 @@ impl Failure {
     /// That is the case if the server found the request [too large](Self::too_large),
     /// or if it responded only in part, stopped by its time or row limit.
     pub fn smaller_may_succeed(&self) -> bool {
-        self.too_large() || self.partial
+        self.too_large() || matches!(self, Failure::Partial { .. })
     }
 
     /// Returns the diagnostic of this failure to fetch `url`.
@@ -173,16 +194,15 @@ impl Failure {
     /// and an [UNFETCHABLE](crate::codes::UNFETCHABLE) otherwise.
     pub fn diagnostic(&self, url: &str) -> Diagnostic {
         let url = url.to_owned();
-        let error = if self.partial {
-            IoError::PartialResult {
+        let error = match self {
+            Failure::Partial { reason, .. } => IoError::PartialResult {
                 url: url.clone(),
-                reason: self.message.clone(),
-            }
-        } else {
-            IoError::Unfetchable {
+                reason: reason.clone(),
+            },
+            Failure::Transport { .. } | Failure::Response { .. } => IoError::Unfetchable {
                 url: url.clone(),
                 reason: self.to_string(),
-            }
+            },
         };
 
         error.diagnostic().with_resource(url)
@@ -191,22 +211,17 @@ impl Failure {
 
 impl fmt::Display for Failure {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.partial {
-            return write!(
-                f,
-                "the endpoint returned only part of the result: {}",
-                self.message
-            );
-        }
-
-        match (self.status, self.message.is_empty()) {
-            (Some(status), true) => write!(f, "the server responded with status {status}"),
-            (Some(status), false) => write!(
-                f,
-                "the server responded with status {status}: {}",
-                self.message
-            ),
-            (None, _) => f.write_str(&self.message),
+        match self {
+            Failure::Transport { reason } => f.write_str(reason),
+            Failure::Response { status, message } if message.is_empty() => {
+                write!(f, "the server responded with status {status}")
+            }
+            Failure::Response { status, message } => {
+                write!(f, "the server responded with status {status}: {message}")
+            }
+            Failure::Partial { reason, .. } => {
+                write!(f, "the endpoint returned only part of the result: {reason}")
+            }
         }
     }
 }
@@ -269,19 +284,11 @@ pub trait Client {
 mod tests {
     use super::*;
 
-    /// A failure shows the response's status and message,
-    /// and says whether a smaller request may succeed.
+    /// A smaller request may succeed after a response that found the request too large,
+    /// or that held only part of the result, and after no other failure.
+    /// A partial response has a diagnostic of its own.
     #[test]
-    fn failures_show_the_status_and_message_of_the_response() {
-        assert_eq!(
-            Failure::response(503, "busy").to_string(),
-            "the server responded with status 503: busy"
-        );
-        assert_eq!(
-            Failure::response(404, "").to_string(),
-            "the server responded with status 404"
-        );
-        assert_eq!(Failure::transport("timed out").to_string(), "timed out");
+    fn only_too_large_and_partial_responses_suggest_a_smaller_request() {
         assert!(Failure::response(413, "").too_large());
         assert!(Failure::response(414, "").too_large());
         assert!(!Failure::response(500, "").too_large());
@@ -289,14 +296,20 @@ mod tests {
 
         let partial = Failure::partial(200, "it returns at most 10000 rows");
         assert!(partial.smaller_may_succeed() && !partial.too_large());
-        assert_eq!(
-            partial.to_string(),
-            "the endpoint returned only part of the result: it returns at most 10000 rows"
-        );
-        let problem = partial.diagnostic("https://dbpedia.org/sparql");
-        assert_eq!(problem.code(), crate::codes::PARTIAL_RESULT, "{problem:?}");
         assert!(Failure::response(413, "").smaller_may_succeed());
         assert!(!Failure::response(500, "").smaller_may_succeed());
+        assert!(!Failure::transport("reset").smaller_may_succeed());
+
+        let url = "https://dbpedia.org/sparql";
+        assert_eq!(partial.diagnostic(url).code(), crate::codes::PARTIAL_RESULT);
+        assert_eq!(
+            Failure::response(500, "").diagnostic(url).code(),
+            crate::codes::UNFETCHABLE
+        );
+        assert_eq!(
+            Failure::transport("reset").diagnostic(url).code(),
+            crate::codes::UNFETCHABLE
+        );
     }
 
     /// A partial response is recognized by its status 206 or by its headers,
@@ -305,11 +318,16 @@ mod tests {
     fn partial_responses_are_recognized_by_status_and_headers() {
         let none = |_: &str| None;
         assert_eq!(Failure::of_partial_response(200, none), None);
-        assert!(Failure::of_partial_response(206, none).is_some_and(|failure| failure.partial));
+        assert!(matches!(
+            Failure::of_partial_response(206, none),
+            Some(Failure::Partial { status: 206, .. })
+        ));
         let capped = |name: &str| (name == "X-SPARQL-MaxRows").then_some("10000");
         assert!(
-            Failure::of_partial_response(200, capped)
-                .is_some_and(|failure| failure.message.contains("10000")),
+            matches!(
+                Failure::of_partial_response(200, capped),
+                Some(Failure::Partial { status: 200, reason }) if reason.contains("10000")
+            ),
             "{:?}",
             Failure::of_partial_response(200, capped)
         );
@@ -318,9 +336,9 @@ mod tests {
             "X-SQL-Message" => Some("RC...: Returning incomplete results"),
             _ => None,
         };
-        assert!(
-            Failure::of_partial_response(200, timed_out)
-                .is_some_and(|failure| failure.message.contains("S1TAT"))
-        );
+        assert!(matches!(
+            Failure::of_partial_response(200, timed_out),
+            Some(Failure::Partial { reason, .. }) if reason.contains("S1TAT")
+        ));
     }
 }

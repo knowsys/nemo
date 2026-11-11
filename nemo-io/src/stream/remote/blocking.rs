@@ -3,7 +3,7 @@
 use std::{
     error::Error,
     sync::{
-        Arc,
+        Arc, OnceLock,
         atomic::{AtomicBool, AtomicUsize, Ordering},
         mpsc,
     },
@@ -16,8 +16,9 @@ use crate::remote::{Client, Failure, Request, Response, Retry};
 /// A [Client] that sends requests over HTTP with `reqwest`'s blocking client.
 ///
 /// `reqwest` runs an async runtime internally, so this crate needs none of its own.
-/// The requests of one call run in parallel on a bounded pool of threads,
-/// which share one `reqwest` client and its pooled connections.
+/// The requests of one call run in parallel on a bounded pool of threads.
+/// All calls of a client, and of its clones, share one `reqwest` client,
+/// so a call reuses the connections that an earlier call opened.
 /// A failed request is retried on the client's [Retry] schedule.
 ///
 /// # Example
@@ -33,10 +34,13 @@ use crate::remote::{Client, Failure, Request, Response, Retry};
 ///     println!("{} bytes", body.len());
 /// }
 /// ```
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Debug, Default, Clone)]
 pub struct BlockingClient {
     /// The schedule on which failed requests are sent again.
     retry: Retry,
+    /// The `reqwest` client with its pooled connections, which the first call builds,
+    /// or the failure to build it.
+    http: Arc<OnceLock<Result<reqwest::blocking::Client, Failure>>>,
 }
 
 /// The largest number of requests in flight at once.
@@ -74,7 +78,10 @@ struct RequestBatch {
 impl BlockingClient {
     /// Creates a client that retries on the given schedule.
     pub fn new(retry: Retry) -> Self {
-        Self { retry }
+        Self {
+            retry,
+            http: Arc::default(),
+        }
     }
 }
 
@@ -92,7 +99,7 @@ impl Client for BlockingClient {
             return None;
         }
 
-        let client = match client() {
+        let client = match self.http.get_or_init(http_client) {
             Ok(client) => client,
             Err(failure) => return Some(requests.iter().map(|_| Err(failure.clone())).collect()),
         };
@@ -154,9 +161,8 @@ impl Client for BlockingClient {
     }
 }
 
-/// Returns the `reqwest` client of one call, which pools connections across the call's
-/// requests.
-fn client() -> Result<reqwest::blocking::Client, Failure> {
+/// Builds the `reqwest` client, which pools the connections of its requests.
+fn http_client() -> Result<reqwest::blocking::Client, Failure> {
     reqwest::blocking::Client::builder()
         .user_agent(concat!("nemo/", env!("CARGO_PKG_VERSION")))
         .timeout(REQUEST_TIMEOUT)
@@ -180,7 +186,7 @@ fn fetch_retrying(
             Err(failed) => failed,
         };
         let delay = failure
-            .status
+            .status()
             .and_then(|status| retry.delay(attempt, status, retry_after.as_deref()));
         let Some(delay) = delay else {
             return Err(failure);
@@ -189,7 +195,7 @@ fn fetch_retrying(
         // This is a warning, since a wait that the server asks for can take minutes.
         tracing::warn!(
             url = request.url.as_str(),
-            status = failure.status,
+            status = failure.status(),
             attempt,
             wait_seconds = delay.as_secs_f64(),
             "waiting before retrying a remote request"
@@ -328,7 +334,10 @@ fn excerpt(body: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::net::TcpListener;
+    use std::{
+        io::{BufRead, BufReader, Write},
+        net::TcpListener,
+    };
 
     use super::*;
 
@@ -359,5 +368,53 @@ mod tests {
         assert!(responses.is_none());
         assert!(started.elapsed() < Duration::from_secs(5));
         drop(listener);
+    }
+
+    /// The calls of one client send their requests over the connection that the first call
+    /// opened.
+    #[test]
+    fn calls_share_the_connection_to_a_server() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("a local port");
+        let url = format!("http://{}/data", listener.local_addr().expect("an address"));
+
+        // A server that responds to every request of a connection, and counts its connections.
+        let connections = Arc::new(AtomicUsize::new(0));
+        let accepted = Arc::clone(&connections);
+        thread::spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(mut stream) = stream else {
+                    return;
+                };
+                accepted.fetch_add(1, Ordering::SeqCst);
+                thread::spawn(move || {
+                    let mut reader = BufReader::new(stream.try_clone().expect("the stream clones"));
+                    let mut line = String::new();
+                    loop {
+                        // A request without a body ends at its first empty line.
+                        line.clear();
+                        match reader.read_line(&mut line) {
+                            Ok(0) | Err(_) => return,
+                            Ok(_) if line != "\r\n" => continue,
+                            Ok(_) => {}
+                        }
+
+                        let response = b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok";
+                        if stream.write_all(response).is_err() {
+                            return;
+                        }
+                    }
+                });
+            }
+        });
+
+        let client = BlockingClient::default();
+        for _ in 0..2 {
+            let responses = client
+                .fetch_all(&[Request::get(url.clone())], &|| false)
+                .expect("nothing cancels");
+            assert_eq!(responses[0].as_deref().ok(), Some(&b"ok"[..]));
+        }
+
+        assert_eq!(connections.load(Ordering::SeqCst), 1);
     }
 }

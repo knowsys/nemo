@@ -33,9 +33,9 @@ use crate::{
 /// A resource of at least twice this size is cut into windows.
 /// The common case is a batch with one bulk file,
 /// which would stay on one thread if only whole resources were parsed in parallel.
-/// The runs of a window need up to eight times the size of its text, for narrow rows of short
-/// numbers, and [AHEAD_BYTES] has room for all of them.
-pub(crate) const WINDOW_BYTES: u64 = 2 * 1024 * 1024;
+/// The runs of a window need about three times the size of its text for narrow rows of
+/// numbers, and less for wider rows, and [AHEAD_BYTES] has room for them.
+pub(crate) const WINDOW_BYTES: u64 = 1024 * 1024;
 
 /// The size of input from which a batch of a single window is parsed on the worker pool.
 ///
@@ -47,8 +47,10 @@ const POOL_BYTES: u64 = 64 * 1024;
 /// A parse that is further ahead waits.
 /// The windows are interned in order,
 /// so a window is parsed in parallel only as far as its runs fit within this bound.
-/// The bound has room for all runs of a [window](WINDOW_BYTES).
-const AHEAD_BYTES: usize = 16 * 1024 * 1024;
+/// The bound has room for all runs of a [window](WINDOW_BYTES), and for little more:
+/// every worker may hold this much in memory beside the stored rows,
+/// and loads were measured to be no faster with a larger bound.
+const AHEAD_BYTES: usize = 4 * 1024 * 1024;
 
 /// The size of a whole resource's runs that a worker may hold ready before they are interned.
 ///

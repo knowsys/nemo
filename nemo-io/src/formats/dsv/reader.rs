@@ -21,6 +21,8 @@ use super::{
 ///
 /// The reader streams: it parses records by their columns' formats into runs of bounded size,
 /// and interns each run once it is full.
+/// It reads on the calling thread,
+/// while a [batch](super::DsvBatch) parses large resources on several threads.
 /// A malformed row is counted and skipped.
 /// A row is malformed if it has the wrong width, if a cell's format rejects the cell,
 /// or if the dictionary cannot hold one of its values.

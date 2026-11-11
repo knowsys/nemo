@@ -145,8 +145,13 @@ impl SparqlReader {
 ///   own, since the value exists but is unknown.
 /// - A cell that is not a term makes the row malformed, whichever columns are delivered.
 ///
-/// In a response of one column, an empty line is a solution whose variable is unbound.
-/// In a wider one, it is not a solution.
+/// An empty line is a solution in a response without columns,
+/// and in a response of one column, where its variable is unbound.
+/// In a wider response, it is not a solution.
+///
+/// The solutions of a query that projects no variable are read as Blazegraph and QLever
+/// write them: an empty line each, after an empty header.
+/// Virtuoso writes a column of its own for such a query, whose rows are malformed here.
 /// A solution that does not match the `blocks` is left out ([SparqlReader::with_values]).
 /// `context` is the evaluation context of the selection's condition.
 fn read_tsv(
@@ -183,10 +188,16 @@ fn read_tsv(
     for (index, line) in text.split_terminator('\n').enumerate().skip(1) {
         let line = line.strip_suffix('\r').unwrap_or(line);
         let number = index as u64 + 1;
-        if line.is_empty() && width != 1 {
+        if line.is_empty() && width > 1 {
             continue;
         }
-        let cells: Vec<&str> = line.split('\t').collect();
+
+        // The empty line of a solution without columns has no cell.
+        let cells: Vec<&str> = if width == 0 && line.is_empty() {
+            Vec::new()
+        } else {
+            line.split('\t').collect()
+        };
         if cells.len() != width {
             intake.count_malformed(number);
             continue;
