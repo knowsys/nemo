@@ -228,11 +228,6 @@ impl Writer for DsvWriter {
         self.options.compression
     }
 
-    /// Writes rows to a target.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the target cannot be written.
     fn write<'a>(
         &self,
         target: impl std::io::Write,
@@ -263,12 +258,7 @@ impl Writer for DsvWriter {
                 .map_err(IoError::stream_unwritable)?;
             written.rows += 1;
         }
-        writer.flush().map_err(|error| {
-            IoError::StreamUnwritable {
-                reason: error.to_string(),
-            }
-            .diagnostic()
-        })?;
+        writer.flush().map_err(IoError::stream_unwritable)?;
         Ok(written)
     }
 }
@@ -383,8 +373,7 @@ impl DsvReader {
             }
         }
         // The position after the last record is the first unread line,
-        // so one line fewer was consumed. A following window of the same
-        // file continues its line numbers from this count.
+        // so one line fewer was consumed.
         Ok(reader.position().line().saturating_sub(1))
     }
 }
@@ -430,7 +419,10 @@ mod tests {
 
     use std::io::Cursor;
 
-    use crate::format::ValueFormat;
+    use crate::{
+        format::ValueFormat,
+        testing::{TempDirectory, greater_than},
+    };
 
     /// CSV rows in term syntax are read as their values.
     #[test]
@@ -606,8 +598,8 @@ mod tests {
     /// A file written through gzip, as its name asks, is read back as the rows written.
     #[test]
     fn compressed_writes_read_back() {
-        let path =
-            std::env::temp_dir().join(format!("nemo-io-writer-{}.csv.gz", std::process::id()));
+        let directory = TempDirectory::new();
+        let path = directory.path().join("rows.csv.gz");
         let rows: Vec<Vec<DataValue>> = vec![vec![
             DataValue::integer(7),
             DataValue::string("hello"),
@@ -621,20 +613,7 @@ mod tests {
         let loaded = DsvReader::new(DsvOptions::new(b',', vec![ValueFormat::Term; 3]))
             .read_path(&path, &mut dictionary, EvaluationContext::now())
             .expect("the file reads back");
-        std::fs::remove_file(&path).ok();
-        assert_eq!(loaded.rows.len(), 1);
-        let read: Vec<DataValue> = loaded
-            .rows
-            .row(0)
-            .iter()
-            .map(|&value| {
-                dictionary
-                    .decode(value)
-                    .expect("stored values decode")
-                    .to_owned()
-            })
-            .collect();
-        assert_eq!(read, rows[0], "the write inverts the read");
+        assert_eq!(loaded.decoded(&dictionary), rows);
     }
 
     /// Writes rows in term syntax, and returns the rows read back from the result.
@@ -654,16 +633,7 @@ mod tests {
             .read(target.as_slice(), &mut dictionary, EvaluationContext::now())
             .expect("the output reads back");
         assert_eq!(loaded.malformed, 0, "no row is malformed");
-        (0..loaded.rows.len())
-            .map(|index| {
-                loaded
-                    .rows
-                    .row(index)
-                    .iter()
-                    .map(|&value| dictionary.decode(value).expect("decodes").to_owned())
-                    .collect()
-            })
-            .collect()
+        loaded.decoded(&dictionary)
     }
 
     /// Strings with quotes, backslashes and line breaks are read back as written.
@@ -686,20 +656,11 @@ mod tests {
     /// The limit counts well-formed rows before the condition.
     #[test]
     fn the_limit_counts_rows_before_the_condition() {
-        use nemo_physical::function::{OpCode, StackProgram};
-
         // The first three well-formed rows are 1, 2 and 3, whichever of them
         // the condition keeps. A condition reduces the rows of a read with a
         // limit, and never makes it read further into the resource.
         let mut options = DsvOptions::csv(vec![ValueFormat::Integer]);
-        options.filter = Some(RowFilter::new(
-            vec![0],
-            StackProgram::new(
-                vec![OpCode::Input(0), OpCode::Constant(0), OpCode::Greater],
-                vec![DataValue::integer(2)],
-                1,
-            ),
-        ));
+        options.filter = Some(greater_than(0, 2));
         options.limit = Some(3);
         let mut dictionary = Dictionary::new();
         let loaded = DsvReader::new(options)

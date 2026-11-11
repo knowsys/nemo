@@ -117,8 +117,8 @@ impl Failure {
         }
     }
 
-    /// The response headers that [of_partial_response](Self::of_partial_response) reads,
-    /// for a client that must collect headers in advance.
+    /// The names of the response headers that [of_partial_response](Self::of_partial_response)
+    /// reads.
     pub const PARTIAL_RESPONSE_HEADERS: [&'static str; 3] =
         ["X-SQL-State", "X-SQL-Message", "X-SPARQL-MaxRows"];
 

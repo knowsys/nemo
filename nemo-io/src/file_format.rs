@@ -43,9 +43,10 @@ pub enum RdfVariant {
     RdfXml,
 }
 
-/// The options shared by all formats that a format accepts.
+/// The shared options that one format accepts.
 ///
-/// Each field says whether the format accepts one of these options.
+/// Several formats share options such as `limit`.
+/// Each field says whether the format accepts one of them.
 /// An option that the format does not accept is an error.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FormatOptions {
@@ -228,8 +229,7 @@ impl FileFormat {
                 limit: true,
                 formats: reading,
             },
-            // A JSON document is read whole, and its compression is
-            // detected from its name alone.
+            // A JSON document is read whole, and its compression is always detected.
             FileFormat::Json => FormatOptions {
                 base: false,
                 compression: !reading,
@@ -303,7 +303,7 @@ impl RdfVariant {
 
     /// Returns whether the variant puts each statement on a line of its own,
     /// as N-Triples and N-Quads do.
-    pub fn line_based(self) -> bool {
+    pub(crate) fn line_based(self) -> bool {
         matches!(self, RdfVariant::NTriples | RdfVariant::NQuads)
     }
 

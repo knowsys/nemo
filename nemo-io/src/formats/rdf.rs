@@ -219,12 +219,6 @@ impl RdfReader {
         dictionary: &mut Dictionary,
     ) -> Result<(), Diagnostic> {
         let limit = self.options.limit.unwrap_or(u64::MAX);
-        let unreadable = |error: std::io::Error| {
-            IoError::StreamUnreadable {
-                reason: error.to_string(),
-            }
-            .diagnostic()
-        };
 
         if self.options.variant.line_based() {
             // A statement fits on one line, so a line with a syntax error is one malformed row.
@@ -233,7 +227,10 @@ impl RdfReader {
             let (mut line, mut quads, mut number) = (Vec::new(), Vec::new(), 0u64);
             while statements.loaded.well_formed < limit {
                 line.clear();
-                if source.read_until(b'\n', &mut line).map_err(unreadable)? == 0 {
+                let read = source
+                    .read_until(b'\n', &mut line)
+                    .map_err(IoError::stream_unreadable)?;
+                if read == 0 {
                     break;
                 }
                 number += 1;
@@ -263,7 +260,9 @@ impl RdfReader {
                     Err(oxrdfio::RdfParseError::Syntax(_)) => statements.loaded.count_malformed(0),
                     // The stream itself broke, and the error would repeat for
                     // every further statement, so the read ends.
-                    Err(oxrdfio::RdfParseError::Io(error)) => return Err(unreadable(error)),
+                    Err(oxrdfio::RdfParseError::Io(error)) => {
+                        return Err(IoError::stream_unreadable(error));
+                    }
                 }
             }
         }
@@ -436,11 +435,7 @@ impl Writer for RdfWriter {
         self.options.compression
     }
 
-    /// Writes rows to a target.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the target cannot be written.
+    /// Writes each row as one statement.
     ///
     /// # Panics
     ///
@@ -634,16 +629,11 @@ mod tests {
             .read(text.as_bytes(), &mut dictionary, EvaluationContext::now())
             .expect("the output reads back");
         assert_eq!((loaded.rows.len(), loaded.malformed), (2, 0));
-        let cell = |row: usize, column: usize| -> DataValue {
-            dictionary
-                .decode(loaded.rows.row(row)[column])
-                .expect("decodes")
-                .to_owned()
-        };
-        assert_eq!(cell(0, 0), DataValue::iri("http://example.org/a"));
-        assert_eq!(cell(0, 2), DataValue::integer(42));
+        let read = loaded.decoded(&dictionary);
+        assert_eq!(read[0][0], DataValue::iri("http://example.org/a"));
+        assert_eq!(read[0][2], DataValue::integer(42));
         assert!(
-            matches!(cell(1, 0).as_ref(), ValueRef::Null(_)),
+            matches!(read[1][0].as_ref(), ValueRef::Null(_)),
             "the blank node reads back as a null"
         );
     }
@@ -729,13 +719,10 @@ mod tests {
             .expect("the triples read");
         assert_eq!((loaded.rows.len(), loaded.malformed), (2, 3));
         assert_eq!(loaded.first_malformed, Some(1));
-        let subjects: Vec<DataValue> = (0..loaded.rows.len())
-            .map(|row| {
-                dictionary
-                    .decode(loaded.rows.row(row)[0])
-                    .expect("stored")
-                    .to_owned()
-            })
+        let subjects: Vec<DataValue> = loaded
+            .decoded(&dictionary)
+            .into_iter()
+            .map(|row| row[0].clone())
             .collect();
         assert_eq!(
             subjects,
@@ -747,20 +734,11 @@ mod tests {
     /// read with a limit, and never makes it read further into the resource.
     #[test]
     fn the_limit_counts_statements_before_the_condition() {
-        use nemo_physical::function::{OpCode, StackProgram};
-
         let text: String = (1..=5)
             .map(|index| format!("<http://a> <http://b> {index} .\n"))
             .collect();
         let mut options = RdfOptions::new(RdfVariant::Turtle);
-        options.selection.filter = Some(crate::row_filter::RowFilter::new(
-            vec![2],
-            StackProgram::new(
-                vec![OpCode::Input(0), OpCode::Constant(0), OpCode::Greater],
-                vec![DataValue::integer(2)],
-                1,
-            ),
-        ));
+        options.selection.filter = Some(crate::testing::greater_than(2, 2));
         options.limit = Some(3);
         let mut dictionary = Dictionary::new();
         let loaded = RdfReader::new(options)

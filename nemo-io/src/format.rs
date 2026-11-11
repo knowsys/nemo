@@ -183,19 +183,21 @@ impl ValueFormat {
     /// Returns the XSD datatype whose lexical forms the format reads,
     /// or `None` for a format that reads cells another way.
     fn datatype(&self) -> Option<&'static str> {
-        Some(match self {
-            ValueFormat::Integer => "http://www.w3.org/2001/XMLSchema#integer",
-            ValueFormat::Double => "http://www.w3.org/2001/XMLSchema#double",
-            ValueFormat::Float => "http://www.w3.org/2001/XMLSchema#float",
-            ValueFormat::Boolean => "http://www.w3.org/2001/XMLSchema#boolean",
-            ValueFormat::DateTime => "http://www.w3.org/2001/XMLSchema#dateTime",
-            ValueFormat::Date => "http://www.w3.org/2001/XMLSchema#date",
-            ValueFormat::Time => "http://www.w3.org/2001/XMLSchema#time",
-            ValueFormat::Duration => "http://www.w3.org/2001/XMLSchema#duration",
-            ValueFormat::DayTimeDuration => "http://www.w3.org/2001/XMLSchema#dayTimeDuration",
-            ValueFormat::YearMonthDuration => "http://www.w3.org/2001/XMLSchema#yearMonthDuration",
+        let domain = match self {
+            ValueFormat::Integer => ValueDomain::Integer,
+            ValueFormat::Double => ValueDomain::Double,
+            ValueFormat::Float => ValueDomain::Float,
+            ValueFormat::Boolean => ValueDomain::Boolean,
+            ValueFormat::DateTime => ValueDomain::DateTime,
+            ValueFormat::Date => ValueDomain::Date,
+            ValueFormat::Time => ValueDomain::Time,
+            ValueFormat::Duration => ValueDomain::Duration,
+            ValueFormat::DayTimeDuration => ValueDomain::DayTimeDuration,
+            ValueFormat::YearMonthDuration => ValueDomain::YearMonthDuration,
             _ => return None,
-        })
+        };
+
+        domain.datatype_iri()
     }
 
     /// Parses one cell, or returns `None` if it does not match the format.

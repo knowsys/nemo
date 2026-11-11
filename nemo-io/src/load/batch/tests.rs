@@ -5,16 +5,13 @@ use super::*;
 
 use std::{fs, io::Cursor};
 
-use nemo_physical::{
-    storage::StorageValue,
-    value::{DataValue, EvaluationError},
-};
+use nemo_physical::{storage::StorageValue, value::EvaluationError};
 
 use crate::{
     format::ValueFormat,
     formats::dsv::DsvOptions,
     load::Reader,
-    testing::{TempDirectory, greater_than_five},
+    testing::{TempDirectory, greater_than},
 };
 
 /// Three files loaded as a batch are interned as the same values that sequential reads give,
@@ -220,10 +217,6 @@ fn windowed_malformed_rows_keep_their_global_lines() {
 /// A batch counts malformed and excluded rows as a streaming read does.
 #[test]
 fn rows_are_counted_alike_in_both_paths() {
-    use nemo_physical::function::{OpCode, StackProgram};
-
-    use crate::row_filter::RowFilter;
-
     // Column 1 is read as `int`, and the condition keeps rows with column 1
     // above 5. Line 2 is not an integer and line 3 is short,
     // so both are malformed. Line 4 fails the condition.
@@ -241,14 +234,7 @@ e,9
     )
     .expect("the temp file writes");
     let mut options = DsvOptions::csv(vec![ValueFormat::Term, ValueFormat::Integer]);
-    options.filter = Some(RowFilter::new(
-        vec![1],
-        StackProgram::new(
-            vec![OpCode::Input(0), OpCode::Constant(0), OpCode::Greater],
-            vec![DataValue::integer(5)],
-            1,
-        ),
-    ));
+    options.filter = Some(greater_than(1, 5));
 
     let mut dictionary = Dictionary::new();
     let streamed = DsvReader::new(options.clone())
@@ -274,7 +260,7 @@ fn an_erroring_condition_is_counted_by_its_kind_in_both_paths() {
     let path = directory.join("nemo_io_filter_errors.csv");
     fs::write(&path, "a,7\nb,x\nc,3\n").expect("the temp file writes");
     let mut options = DsvOptions::csv(vec![ValueFormat::Term, ValueFormat::Term]);
-    options.filter = Some(greater_than_five());
+    options.filter = Some(greater_than(1, 5));
 
     let mut dictionary = Dictionary::new();
     let streamed = DsvReader::new(options.clone())
@@ -313,7 +299,7 @@ fn limited_sources_read_as_one_window_and_count_like_the_streaming_reader() {
     fs::write(&path, &content).expect("the temp file writes");
     let mut options = DsvOptions::tsv(vec![ValueFormat::Term, ValueFormat::Integer]);
     options.quoting = false;
-    options.filter = Some(greater_than_five());
+    options.filter = Some(greater_than(1, 5));
     options.limit = Some(200);
     let source = DsvResource::path(path.clone(), options.clone());
 
@@ -386,7 +372,7 @@ fn runs_intern_like_a_straight_read() {
     ]);
     options.quoting = false;
     let mut filtered = options.clone();
-    filtered.filter = Some(greater_than_five());
+    filtered.filter = Some(greater_than(1, 5));
 
     for options in [options, filtered] {
         for (path, window_bytes) in [

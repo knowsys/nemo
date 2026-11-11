@@ -766,3 +766,34 @@ fn a_malformed_bound_cell_is_counted() {
     assert_eq!((loaded.rows.len(), loaded.malformed), (1, 1));
     assert_eq!(loaded.first_malformed, Some(3));
 }
+
+/// A cell that is no term makes its solution malformed in a column that is not delivered too,
+/// while an unbound value or a blank node in such a column keeps the solution.
+#[test]
+fn a_column_that_is_not_delivered_still_decides_whether_a_solution_is_well_formed() {
+    let selection = RowSelection {
+        columns: Some(vec![true, false]),
+        filter: None,
+    };
+    let reader = SparqlReader::new(2, selection);
+    let body = [
+        "?s\t?v",
+        "<urn:a>\t3",
+        "<urn:b>\t\"abc\"^^<http://www.w3.org/2001/XMLSchema#integer>",
+        "<urn:c>\t",
+        "<urn:d>\t_:x",
+        "",
+    ]
+    .join("\n");
+    let loaded = reader
+        .read(
+            "http://e/sparql",
+            body.as_bytes(),
+            &mut Dictionary::new(),
+            EvaluationContext::now(),
+        )
+        .expect("the response reads");
+    assert_eq!((loaded.rows.len(), loaded.malformed), (3, 1));
+    assert_eq!(loaded.first_malformed, Some(3));
+    assert_eq!(loaded.rows.arity(), 1);
+}

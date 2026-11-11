@@ -76,7 +76,7 @@ impl Compression {
     /// Returns a resource name without its compression suffix,
     /// and a URL also without its query and fragment.
     ///
-    /// The extension that names the resource's format is read from the result.
+    /// The result ends with the extension that names the resource's format.
     pub fn strip_suffix(name: &str) -> &str {
         let path = resource_path(name);
         path.strip_suffix(".gz").unwrap_or(path)
@@ -112,7 +112,7 @@ impl Compression {
     ///
     /// A target without a name is compressed only under [Gzip](Self::Gzip).
     /// The returned stream must be ended with [finish](CompressedWriter::finish).
-    pub fn wrap<W: Write>(self, target: W, name: Option<&Path>) -> CompressedWriter<W> {
+    pub(crate) fn wrap<W: Write>(self, target: W, name: Option<&Path>) -> CompressedWriter<W> {
         let gzip = match name {
             Some(name) => self.applies(name),
             None => self == Compression::Gzip,
@@ -137,7 +137,7 @@ impl Compression {
 /// The stream must be ended with [finish](Self::finish).
 /// A stream that is dropped instead writes its last bytes without reporting an error.
 #[derive(Debug)]
-pub struct CompressedWriter<W: Write> {
+pub(crate) struct CompressedWriter<W: Write> {
     /// The buffer in front of the encoder.
     buffer: BufWriter<Encoder<W>>,
 }
@@ -149,7 +149,7 @@ impl<W: Write> CompressedWriter<W> {
     /// # Errors
     ///
     /// Returns the error of a write to the target.
-    pub fn finish(self) -> io::Result<()> {
+    pub(crate) fn finish(self) -> io::Result<()> {
         let encoder = self
             .buffer
             .into_inner()
@@ -302,8 +302,8 @@ mod tests {
     /// A file written through gzip, as its name asks, is read back.
     #[test]
     fn written_streams_read_back() {
-        let path =
-            std::env::temp_dir().join(format!("nemo-io-compression-{}.txt.gz", std::process::id()));
+        let directory = crate::testing::TempDirectory::new();
+        let path = directory.path().join("text.txt.gz");
         let file = File::create(&path).expect("the file creates");
         let mut stream = Compression::Auto.wrap(file, Some(&path));
         stream.write_all(b"hello").expect("the bytes write");
@@ -313,7 +313,6 @@ mod tests {
             .expect("the file opens")
             .read_to_string(&mut text)
             .expect("the bytes read");
-        std::fs::remove_file(&path).ok();
         assert_eq!(text, "hello");
     }
 }

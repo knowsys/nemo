@@ -3,7 +3,8 @@
 //! This crate imports and exports tabular and RDF data:
 //! delimiter-separated values, RDF serializations, JSON, Parquet,
 //! and the solutions of SPARQL endpoints, compressed or not, local or remote.
-//! It uses the load API of [`nemo_physical`], and has no rule-language or engine logic.
+//! It reads into the row buffers and the dictionary of [`nemo_physical`],
+//! and has no rule-language or engine logic.
 //! It expects every configuration it is given, such as a format's options, to be valid already.
 //!
 //! The crate has three layers.
@@ -14,11 +15,11 @@
 //!   and its [condition](row_filter) says which rows it admits.
 //! - Every reader produces the same kind of [load](load::Loaded),
 //!   and every writer reports the same kind of [outcome](written::Written).
-//! - A [batch](load::ResourceBatch) parses its resources in parallel,
-//!   while one thread interns their rows in order, as they arrive.
 //!
 //! In the middle are the format adapters, each with a reader and, except for SPARQL, a writer:
 //! [dsv], [rdf], [json], [sparql], and `parquet` behind its feature.
+//! A [batch](load::ResourceBatch) of delimiter-separated resources is parsed in parallel,
+//! while one thread interns the rows in order, as they arrive.
 //! At the bottom are the byte streams they read and write:
 //! [compression] wraps a byte stream, and [remote] has the requests for remote resources and
 //! the clients that send them.

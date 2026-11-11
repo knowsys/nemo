@@ -121,13 +121,12 @@ impl ParquetReader {
             .build()
             .map_err(|error| IoError::unreadable(path, error))?;
 
-        let mut loaded: Option<Loaded> = None;
+        let arity = delivered.iter().filter(|&&delivered| delivered).count();
+        let mut loaded = Loaded::new(arity, context);
         let mut row = Vec::new();
         let mut kept: Vec<DataValue> = Vec::new();
         for batch in reader {
             let batch = batch.map_err(|error| IoError::unreadable(path, error))?;
-            let arity = delivered.iter().filter(|&&delivered| delivered).count();
-            let loaded = loaded.get_or_insert_with(|| Loaded::new(arity, context));
             // Dictionary-encoded columns are read as their value type.
             let columns: Vec<arrow::array::ArrayRef> = batch
                 .columns()
@@ -157,7 +156,6 @@ impl ParquetReader {
                 }
             }
         }
-        let loaded = loaded.unwrap_or_else(|| Loaded::new(0, context));
         tracing::debug!(
             rows = loaded.rows.len(),
             malformed = loaded.malformed,
@@ -195,15 +193,21 @@ impl ParquetWriter {
     ///
     /// # Panics
     ///
-    /// Panics if a row is shorter than the first.
+    /// Panics if a row does not have the writer's number of columns.
     pub fn write<'a>(
         &self,
         target: impl std::io::Write + Send,
         rows: impl IntoIterator<Item = &'a [DataValue]>,
     ) -> Result<Written, Diagnostic> {
         let rows: Vec<&[DataValue]> = rows.into_iter().collect();
-        let arity = rows.first().map_or(self.arity, |row| row.len());
-        let kinds: Vec<ColumnKind> = (0..arity)
+        for row in &rows {
+            assert_eq!(
+                row.len(),
+                self.arity,
+                "a row of a Parquet export has the writer's number of columns"
+            );
+        }
+        let kinds: Vec<ColumnKind> = (0..self.arity)
             .map(|column| {
                 rows.iter()
                     .fold(None, |running, row| {
@@ -245,7 +249,8 @@ impl ParquetWriter {
     ///
     /// # Panics
     ///
-    /// Panics if a row is shorter than the first, as [write](Self::write) does.
+    /// Panics if a row does not have the writer's number of columns, as [write](Self::write)
+    /// does.
     pub fn write_path<'a>(
         &self,
         path: impl AsRef<Path>,
@@ -375,18 +380,18 @@ fn may_hold_nulls(metadata: &parquet::file::metadata::ParquetMetaData, position:
 
 /// Returns the error for a column of an unsupported type.
 fn unsupported_type(path: &Path, data_type: &DataType) -> Diagnostic {
-    let resource = path.display().to_string();
     IoError::UnsupportedArrowType {
-        resource: resource.clone(),
+        resource: path.display().to_string(),
         data_type: data_type.to_string(),
     }
     .diagnostic()
-    .with_resource(resource)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use crate::testing::TempDirectory;
 
     /// A written file is read back:
     /// columns of one kind keep their values, with floats and doubles apart,
@@ -407,8 +412,8 @@ mod tests {
                 DataValue::float(1.25),
             ],
         ];
-        let path =
-            std::env::temp_dir().join(format!("nemo-io-parquet-{}.parquet", std::process::id()));
+        let directory = TempDirectory::new();
+        let path = directory.path().join("rows.parquet");
         let written = ParquetWriter::new(4)
             .write_path(&path, rows.iter().map(Vec::as_slice))
             .expect("the rows write");
@@ -419,21 +424,15 @@ mod tests {
         let loaded = ParquetReader::new()
             .read_path(&path, &mut dictionary, EvaluationContext::now())
             .expect("the file reads back");
-        std::fs::remove_file(&path).ok();
         assert_eq!((loaded.rows.len(), loaded.malformed), (2, 0));
-        let cell = |row: usize, column: usize| -> DataValue {
-            dictionary
-                .decode(loaded.rows.row(row)[column])
-                .expect("decodes")
-                .to_owned()
-        };
-        assert_eq!(cell(0, 0), DataValue::integer(1));
-        assert_eq!(cell(1, 1), DataValue::double(1.5));
-        assert_eq!(cell(0, 2), DataValue::string("plain"));
-        assert_eq!(cell(0, 3), DataValue::float(0.25));
+        let read = loaded.decoded(&dictionary);
+        assert_eq!(read[0][0], DataValue::integer(1));
+        assert_eq!(read[1][1], DataValue::double(1.5));
+        assert_eq!(read[0][2], DataValue::string("plain"));
+        assert_eq!(read[0][3], DataValue::float(0.25));
         // The mixed third column went through text, so the IRI is read back
         // as a string of its text.
-        assert_eq!(cell(1, 2), DataValue::string("http://example.org/a"));
+        assert_eq!(read[1][2], DataValue::string("http://example.org/a"));
     }
 
     /// A null in a column that is not delivered still makes its row malformed.
@@ -458,10 +457,8 @@ mod tests {
             ],
         )
         .expect("the batch builds");
-        let path = std::env::temp_dir().join(format!(
-            "nemo-io-parquet-nulls-{}.parquet",
-            std::process::id()
-        ));
+        let directory = TempDirectory::new();
+        let path = directory.path().join("nulls.parquet");
         let mut writer =
             ArrowWriter::try_new(File::create(&path).expect("the file opens"), schema, None)
                 .expect("the writer starts");
@@ -475,25 +472,36 @@ mod tests {
         let loaded = ParquetReader::with_selection(selection)
             .read_path(&path, &mut Dictionary::new(), EvaluationContext::now())
             .expect("the file reads");
-        std::fs::remove_file(&path).ok();
         // The second row's null makes it malformed, whether its column is delivered or not.
         assert_eq!((loaded.rows.len(), loaded.malformed), (1, 1));
         assert_eq!(loaded.rows.arity(), 1);
     }
 
-    /// A file written without rows keeps the writer's number of columns.
+    /// A file written without rows keeps the writer's number of columns,
+    /// and its load has as many columns as the reader delivers.
     #[test]
     fn a_file_without_rows_keeps_its_columns() {
-        let path = std::env::temp_dir().join(format!(
-            "nemo-io-parquet-empty-{}.parquet",
-            std::process::id()
-        ));
+        let directory = TempDirectory::new();
+        let path = directory.path().join("empty.parquet");
         let written = ParquetWriter::new(2)
             .write_path(&path, std::iter::empty())
             .expect("no rows write");
         assert_eq!(written.rows, 0);
-        let arity = ParquetReader::arity(&path).expect("the schema reads");
-        std::fs::remove_file(&path).ok();
-        assert_eq!(arity, 2);
+        assert_eq!(ParquetReader::arity(&path).expect("the schema reads"), 2);
+
+        let read = |reader: ParquetReader| {
+            reader
+                .read_path(&path, &mut Dictionary::new(), EvaluationContext::now())
+                .expect("the file reads")
+        };
+        let whole = read(ParquetReader::new());
+        assert_eq!((whole.rows.len(), whole.rows.arity()), (0, 2));
+
+        let selection = RowSelection {
+            columns: Some(vec![false, true]),
+            filter: None,
+        };
+        let selected = read(ParquetReader::with_selection(selection));
+        assert_eq!((selected.rows.len(), selected.rows.arity()), (0, 1));
     }
 }

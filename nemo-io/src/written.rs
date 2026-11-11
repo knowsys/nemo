@@ -31,9 +31,9 @@ pub trait Writer {
     /// Writes rows to a stream as [write](Self::write) does,
     /// compressed as [compression](Self::compression) says, and ends the stream.
     ///
-    /// `name` is the name of the stream's resource,
-    /// which under [Compression::Auto] decides whether the stream is compressed,
-    /// as [Compression::wrap] describes.
+    /// `name` is the name of the stream's resource.
+    /// Under [Compression::Auto], the stream is compressed if this name ends in `.gz`,
+    /// and a stream without a name is not compressed.
     /// The bytes are buffered, so a writer that writes single terms or cells
     /// does not write the target once for each of them.
     ///

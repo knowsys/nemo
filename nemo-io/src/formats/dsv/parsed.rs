@@ -83,7 +83,7 @@ pub(crate) struct Parsed {
     values: Vec<DataValue>,
     /// The number of lines that the parse consumed, set on its last run only.
     ///
-    /// A following window of the same file continues its line numbers from here.
+    /// It is the line number at which the text after the parsed part begins, less one.
     pub(crate) consumed_lines: u64,
 }
 

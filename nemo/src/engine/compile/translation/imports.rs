@@ -26,9 +26,7 @@ use nemo_io::{
     compression::Compression, file_format::FileFormat, load::Loaded, row_filter::RowFilter,
     selection::RowSelection,
 };
-use nemo_physical::{
-    diagnostics::Diagnostic, function::Outcome, management::TableId, trie::RowBuffer, value::Type,
-};
+use nemo_physical::{diagnostics::Diagnostic, function::Outcome, management::TableId, value::Type};
 
 use crate::{
     diagnostics::{AboutPredicate, AboutResource, TranslationError, TypeError},
@@ -489,14 +487,20 @@ impl<'a> Translator<'a> {
                 });
         }
 
+        debug_assert_eq!(
+            loaded.rows.arity(),
+            arity,
+            "a load has as many columns as its table"
+        );
+
         // The first rows that a table receives become its fact buffer as they are,
         // and later rows are added to it.
         match self.facts.entry(table) {
-            Entry::Vacant(entry) if loaded.rows.arity() == arity => {
+            Entry::Vacant(entry) => {
                 entry.insert(loaded.rows);
             }
-            entry => {
-                let buffer = entry.or_insert_with(|| RowBuffer::new(arity));
+            Entry::Occupied(mut entry) => {
+                let buffer = entry.get_mut();
                 for index in 0..loaded.rows.len() {
                     buffer.push_row(loaded.rows.row(index));
                 }

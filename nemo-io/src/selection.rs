@@ -14,7 +14,7 @@ use crate::row_filter::RowFilter;
 ///
 /// A selection says which written columns are delivered,
 /// and gives a [condition](RowFilter) over the delivered columns that a row must pass.
-/// A dropped column is never parsed or validated, so only what is read makes a row malformed.
+/// A column that is not delivered still decides whether a row is well-formed.
 /// A row that the condition excludes is never interned.
 ///
 /// The default selection delivers every column and admits every row.
@@ -52,6 +52,10 @@ impl RowSelection {
     /// # Errors
     ///
     /// Returns the evaluation error that left the row undecided, as [RowFilter::evaluate] does.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the row has no value at a column that the condition reads.
     pub fn evaluate(
         &self,
         context: EvaluationContext,
@@ -64,6 +68,10 @@ impl RowSelection {
 
     /// Returns whether a delivered row passes the condition,
     /// counting an evaluation error as a failure.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the row has no value at a column that the condition reads.
     pub fn admits(&self, context: EvaluationContext, row: &[DataValue]) -> bool {
         self.evaluate(context, row).unwrap_or(false)
     }

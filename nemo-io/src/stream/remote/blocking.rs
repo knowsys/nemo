@@ -74,12 +74,14 @@ impl BlockingClient {
     pub fn new(retry: Retry) -> Self {
         Self { retry }
     }
+}
 
-    /// Sends several requests, as [Client::fetch_all] describes.
+impl Client for BlockingClient {
+    /// Sends the requests on a bounded number of threads.
     ///
     /// If `cancelled` returns true, the requests in flight finish on their own threads,
     /// and their responses are dropped.
-    fn send_all(
+    fn fetch_all(
         &self,
         requests: &[Request],
         cancelled: &dyn Fn() -> bool,
@@ -117,7 +119,7 @@ impl BlockingClient {
         }
         drop(sender);
 
-        let mut responses: Vec<Option<Result<Arc<[u8]>, Failure>>> = vec![None; requests.len()];
+        let mut responses: Vec<Option<Response>> = vec![None; requests.len()];
         let mut received = 0;
         while received < requests.len() {
             match receiver.recv_timeout(POLL) {
@@ -146,16 +148,6 @@ impl BlockingClient {
     }
 }
 
-impl Client for BlockingClient {
-    fn fetch_all(
-        &self,
-        requests: &[Request],
-        cancelled: &dyn Fn() -> bool,
-    ) -> Option<Vec<Response>> {
-        self.send_all(requests, cancelled)
-    }
-}
-
 /// Returns the `reqwest` client of one call, which pools connections across the call's
 /// requests.
 fn client() -> Result<reqwest::blocking::Client, Failure> {
@@ -174,7 +166,7 @@ fn fetch_retrying(
     request: &Request,
     retry: Retry,
     abandoned: &AtomicBool,
-) -> Result<Arc<[u8]>, Failure> {
+) -> Response {
     let mut attempt = 0;
     loop {
         let (failure, retry_after) = match send(client, request) {

@@ -10,10 +10,7 @@ use std::collections::{HashMap, HashSet};
 
 use spargebra::{
     Query,
-    algebra::{
-        AggregateExpression, Expression, GraphPattern, OrderExpression, PropertyPathExpression,
-        QueryDataset,
-    },
+    algebra::{AggregateExpression, Expression, GraphPattern, OrderExpression, QueryDataset},
     term::{GroundTerm, NamedNodePattern, TermPattern, TriplePattern, Variable},
 };
 
@@ -92,8 +89,7 @@ impl SparqlQuery {
             projected.len(),
             "an instantiation binds every projected variable"
         );
-        let GraphPattern::Project { inner, variables } =
-            algebra::strip_modifiers(query_pattern(self))
+        let GraphPattern::Project { inner, variables } = algebra::strip_modifiers(self.pattern())
         else {
             unreachable!("a SELECT query projects, `*` included")
         };
@@ -157,20 +153,15 @@ impl SparqlQuery {
 ///
 /// Each block binds the variable in the constant's place to the constant's terms,
 /// one row per term.
-fn join_values(
-    pattern: GraphPattern,
-    values: Vec<(String, Variable, Vec<GroundTerm>)>,
-) -> GraphPattern {
+fn join_values(pattern: GraphPattern, values: Vec<(Variable, Vec<GroundTerm>)>) -> GraphPattern {
     values
         .into_iter()
-        .fold(pattern, |pattern, (_, variable, terms)| {
-            GraphPattern::Join {
-                left: Box::new(pattern),
-                right: Box::new(GraphPattern::Values {
-                    variables: vec![variable],
-                    bindings: terms.into_iter().map(|term| vec![Some(term)]).collect(),
-                }),
-            }
+        .fold(pattern, |pattern, (variable, terms)| GraphPattern::Join {
+            left: Box::new(pattern),
+            right: Box::new(GraphPattern::Values {
+                variables: vec![variable],
+                bindings: terms.into_iter().map(|term| vec![Some(term)]).collect(),
+            }),
         })
 }
 
@@ -290,8 +281,8 @@ struct Rebinding {
     /// For each projected variable, what replaces it.
     replacements: HashMap<String, Replacement>,
     /// The constants bound by a `VALUES` block outside the pattern:
-    /// for each, the projected variable's name, the variable in its place, and the terms.
-    values: Vec<(String, Variable, Vec<GroundTerm>)>,
+    /// for each, the variable in its place and the terms.
+    values: Vec<(Variable, Vec<GroundTerm>)>,
     /// The variables that a solution must bind to count.
     required: Vec<Variable>,
 }
@@ -357,9 +348,7 @@ fn rebinding(
                         if unassured(name) {
                             rebinding.required.push(fresh.clone());
                         }
-                        rebinding
-                            .values
-                            .push((name.clone(), fresh.clone(), terms.clone()));
+                        rebinding.values.push((fresh.clone(), terms.clone()));
                         Replacement::Variable(fresh)
                     }
                 }
@@ -368,14 +357,6 @@ fn rebinding(
         rebinding.replacements.insert(name.clone(), replacement);
     }
     Some(rebinding)
-}
-
-/// Returns a query's graph pattern.
-fn query_pattern(query: &SparqlQuery) -> &GraphPattern {
-    match query.query() {
-        Query::Select { pattern, .. } => pattern,
-        _ => unreachable!("a SparqlQuery is a SELECT"),
-    }
 }
 
 /// Returns a variable's name in one instance: the name followed by `_` and the instance's
@@ -469,13 +450,11 @@ fn rename_pattern(pattern: &mut GraphPattern, map: &mut impl FnMut(&Variable) ->
                 rename_term(object, map);
             }
         }
+        // The path between the two ends has no variables.
         GraphPattern::Path {
-            subject,
-            path,
-            object,
+            subject, object, ..
         } => {
             rename_term(subject, map);
-            let _: &PropertyPathExpression = path;
             rename_term(object, map);
         }
         GraphPattern::Join { left, right }
@@ -512,13 +491,16 @@ fn rename_pattern(pattern: &mut GraphPattern, map: &mut impl FnMut(&Variable) ->
             rename_variable(variable, map);
             rename_expression(expression, map);
         }
-        GraphPattern::Values { variables, .. } | GraphPattern::Project { variables, .. } => {
+        GraphPattern::Values { variables, .. } => {
             for variable in variables {
                 rename_variable(variable, map);
             }
-            if let GraphPattern::Project { inner, .. } = pattern {
-                rename_pattern(inner, map);
+        }
+        GraphPattern::Project { inner, variables } => {
+            for variable in variables {
+                rename_variable(variable, map);
             }
+            rename_pattern(inner, map);
         }
         GraphPattern::OrderBy { inner, expression } => {
             rename_pattern(inner, map);

@@ -100,24 +100,20 @@ diagnostic_kinds! {
 impl IoError {
     /// Returns the diagnostic of a file that cannot be read, naming it as the resource.
     pub(crate) fn unreadable(path: &Path, reason: impl Display) -> Diagnostic {
-        let resource = path.display().to_string();
         IoError::Unreadable {
-            resource: resource.clone(),
+            resource: path.display().to_string(),
             reason: reason.to_string(),
         }
         .diagnostic()
-        .with_resource(resource)
     }
 
     /// Returns the diagnostic of a file that cannot be written, naming it as the resource.
     pub(crate) fn unwritable(path: &Path, reason: impl Display) -> Diagnostic {
-        let resource = path.display().to_string();
         IoError::Unwritable {
-            resource: resource.clone(),
+            resource: path.display().to_string(),
             reason: reason.to_string(),
         }
         .diagnostic()
-        .with_resource(resource)
     }
 
     /// Returns the diagnostic of a stream that cannot be read.

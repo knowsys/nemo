@@ -53,6 +53,10 @@ impl RowFilter {
     /// # Errors
     ///
     /// Returns the evaluation error that left the row undecided.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the row has no value at one of the condition's [inputs](Self::inputs).
     pub fn evaluate(
         &self,
         context: EvaluationContext,
@@ -74,12 +78,12 @@ mod tests {
 
     use super::*;
 
-    use crate::testing::greater_than_five;
+    use crate::testing::greater_than;
 
     /// A row passes if the condition holds for it, and fails otherwise.
     #[test]
     fn rows_pass_or_fail_the_condition() {
-        let filter = greater_than_five();
+        let filter = greater_than(1, 5);
         assert_eq!(
             filter.evaluate(
                 EvaluationContext::now(),
@@ -99,7 +103,7 @@ mod tests {
     /// A row on which the condition fails yields the error, and the next row is evaluated afresh.
     #[test]
     fn an_erroring_row_is_rejected_and_names_its_error() {
-        let filter = greater_than_five();
+        let filter = greater_than(1, 5);
         let row = [DataValue::string("x"), DataValue::string("seven")];
         assert_eq!(
             filter.evaluate(EvaluationContext::now(), &row),

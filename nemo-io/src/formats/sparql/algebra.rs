@@ -6,7 +6,7 @@ use std::collections::HashSet;
 use nemo_physical::value::DataValue;
 use spargebra::{
     algebra::{AggregateExpression, AggregateFunction, Expression, Function, GraphPattern},
-    term::{GroundTerm, NamedNodePattern, TermPattern, Variable},
+    term::{GroundTerm, NamedNodePattern, TermPattern, TriplePattern, Variable},
 };
 
 use super::SparqlQuery;
@@ -271,33 +271,11 @@ impl ValuesBlock {
 /// They are the variables that its mandatory parts match, and not those that an `OPTIONAL`,
 /// one `UNION` branch, a `BIND` or a `VALUES` row may leave unbound.
 pub(super) fn always_bound(pattern: &GraphPattern) -> HashSet<String> {
-    /// Returns the variable in a term position, if there is one.
-    fn term_variable(term: &TermPattern) -> Option<String> {
-        match term {
-            TermPattern::Variable(variable) => Some(variable.as_str().to_owned()),
-            _ => None,
-        }
-    }
     match pattern {
-        GraphPattern::Bgp { patterns } => patterns
-            .iter()
-            .flat_map(|triple| {
-                let predicate = match &triple.predicate {
-                    NamedNodePattern::Variable(variable) => Some(variable.as_str().to_owned()),
-                    NamedNodePattern::NamedNode(_) => None,
-                };
-                term_variable(&triple.subject)
-                    .into_iter()
-                    .chain(predicate)
-                    .chain(term_variable(&triple.object))
-            })
-            .collect(),
+        GraphPattern::Bgp { patterns } => triple_variables(patterns),
         GraphPattern::Path {
             subject, object, ..
-        } => term_variable(subject)
-            .into_iter()
-            .chain(term_variable(object))
-            .collect(),
+        } => path_variables(subject, object),
         GraphPattern::Join { left, right } => {
             let mut bound = always_bound(left);
             bound.extend(always_bound(right));
@@ -350,6 +328,40 @@ pub(super) fn always_bound(pattern: &GraphPattern) -> HashSet<String> {
     }
 }
 
+/// Returns the variables of the triple patterns of a basic graph pattern.
+fn triple_variables(patterns: &[TriplePattern]) -> HashSet<String> {
+    patterns
+        .iter()
+        .flat_map(|triple| {
+            let predicate = match &triple.predicate {
+                NamedNodePattern::Variable(variable) => Some(variable.as_str().to_owned()),
+                NamedNodePattern::NamedNode(_) => None,
+            };
+
+            term_variable(&triple.subject)
+                .into_iter()
+                .chain(predicate)
+                .chain(term_variable(&triple.object))
+        })
+        .collect()
+}
+
+/// Returns the variables at the two ends of a property path.
+fn path_variables(subject: &TermPattern, object: &TermPattern) -> HashSet<String> {
+    term_variable(subject)
+        .into_iter()
+        .chain(term_variable(object))
+        .collect()
+}
+
+/// Returns the variable in a term position, if there is one.
+fn term_variable(term: &TermPattern) -> Option<String> {
+    match term {
+        TermPattern::Variable(variable) => Some(variable.as_str().to_owned()),
+        _ => None,
+    }
+}
+
 /// Returns the variables that every solution of a query's result binds.
 ///
 /// They are the variables that its pattern always binds,
@@ -390,33 +402,11 @@ fn required_bound(expression: &Expression) -> Vec<String> {
 /// They are the variables that any part of it matches or defines,
 /// and not those that only its filters mention, which no solution binds.
 pub(super) fn possibly_bound(pattern: &GraphPattern) -> HashSet<String> {
-    /// Returns the variable in a term position, if there is one.
-    fn term_variable(term: &TermPattern) -> Option<String> {
-        match term {
-            TermPattern::Variable(variable) => Some(variable.as_str().to_owned()),
-            _ => None,
-        }
-    }
     match pattern {
-        GraphPattern::Bgp { patterns } => patterns
-            .iter()
-            .flat_map(|triple| {
-                let predicate = match &triple.predicate {
-                    NamedNodePattern::Variable(variable) => Some(variable.as_str().to_owned()),
-                    NamedNodePattern::NamedNode(_) => None,
-                };
-                term_variable(&triple.subject)
-                    .into_iter()
-                    .chain(predicate)
-                    .chain(term_variable(&triple.object))
-            })
-            .collect(),
+        GraphPattern::Bgp { patterns } => triple_variables(patterns),
         GraphPattern::Path {
             subject, object, ..
-        } => term_variable(subject)
-            .into_iter()
-            .chain(term_variable(object))
-            .collect(),
+        } => path_variables(subject, object),
         GraphPattern::Join { left, right }
         | GraphPattern::LeftJoin { left, right, .. }
         | GraphPattern::Union { left, right } => {
@@ -510,43 +500,20 @@ pub(super) fn visit_patterns<'a>(
             visit_patterns(left, visit);
             visit_patterns(right, visit);
         }
-        GraphPattern::LeftJoin {
-            left,
-            right,
-            expression,
-        } => {
+        GraphPattern::LeftJoin { left, right, .. } => {
             visit_patterns(left, visit);
             visit_patterns(right, visit);
-            if let Some(expression) = expression {
+            node_expressions(pattern, &mut |expression| {
                 visit_expression_patterns(expression, visit);
-            }
+            });
         }
-        GraphPattern::Filter { expr, inner } => {
-            visit_expression_patterns(expr, visit);
-            visit_patterns(inner, visit);
-        }
-        GraphPattern::Extend {
-            inner, expression, ..
-        } => {
-            visit_expression_patterns(expression, visit);
-            visit_patterns(inner, visit);
-        }
-        GraphPattern::OrderBy { inner, expression } => {
-            for order in expression {
-                let (spargebra::algebra::OrderExpression::Asc(expression)
-                | spargebra::algebra::OrderExpression::Desc(expression)) = order;
+        GraphPattern::Filter { inner, .. }
+        | GraphPattern::Extend { inner, .. }
+        | GraphPattern::OrderBy { inner, .. }
+        | GraphPattern::Group { inner, .. } => {
+            node_expressions(pattern, &mut |expression| {
                 visit_expression_patterns(expression, visit);
-            }
-            visit_patterns(inner, visit);
-        }
-        GraphPattern::Group {
-            inner, aggregates, ..
-        } => {
-            for (_, aggregate) in aggregates {
-                if let AggregateExpression::FunctionCall { expr, .. } = aggregate {
-                    visit_expression_patterns(expr, visit);
-                }
-            }
+            });
             visit_patterns(inner, visit);
         }
         GraphPattern::Graph { inner, .. }
@@ -555,6 +522,36 @@ pub(super) fn visit_patterns<'a>(
         | GraphPattern::Reduced { inner }
         | GraphPattern::Slice { inner, .. }
         | GraphPattern::Service { inner, .. } => visit_patterns(inner, visit),
+    }
+}
+
+/// Visits the expressions that a pattern node itself has,
+/// without those of the patterns nested in it.
+fn node_expressions<'a>(node: &'a GraphPattern, visit: &mut impl FnMut(&'a Expression)) {
+    match node {
+        GraphPattern::LeftJoin {
+            expression: Some(expression),
+            ..
+        }
+        | GraphPattern::Filter {
+            expr: expression, ..
+        }
+        | GraphPattern::Extend { expression, .. } => visit(expression),
+        GraphPattern::OrderBy { expression, .. } => {
+            for order in expression {
+                let (spargebra::algebra::OrderExpression::Asc(expression)
+                | spargebra::algebra::OrderExpression::Desc(expression)) = order;
+                visit(expression);
+            }
+        }
+        GraphPattern::Group { aggregates, .. } => {
+            for (_, aggregate) in aggregates {
+                if let AggregateExpression::FunctionCall { expr, .. } = aggregate {
+                    visit(expr);
+                }
+            }
+        }
+        _ => {}
     }
 }
 
@@ -577,32 +574,9 @@ pub(super) fn visit_expressions<'a>(
     visit: &mut impl FnMut(&'a Expression),
 ) {
     visit_patterns(pattern, &mut |node| {
-        let mut on = |expression: &'a Expression| visit_subexpressions(expression, visit);
-        match node {
-            GraphPattern::LeftJoin {
-                expression: Some(expression),
-                ..
-            }
-            | GraphPattern::Filter {
-                expr: expression, ..
-            }
-            | GraphPattern::Extend { expression, .. } => on(expression),
-            GraphPattern::OrderBy { expression, .. } => {
-                for order in expression {
-                    let (spargebra::algebra::OrderExpression::Asc(expression)
-                    | spargebra::algebra::OrderExpression::Desc(expression)) = order;
-                    on(expression);
-                }
-            }
-            GraphPattern::Group { aggregates, .. } => {
-                for (_, aggregate) in aggregates {
-                    if let AggregateExpression::FunctionCall { expr, .. } = aggregate {
-                        on(expr);
-                    }
-                }
-            }
-            _ => {}
-        }
+        node_expressions(node, &mut |expression| {
+            visit_subexpressions(expression, visit);
+        });
     });
 }
 

@@ -8,7 +8,7 @@ use crate::formats::dsv::Parsed;
 
 /// A pool of runs that were interned and wait to be filled again.
 ///
-/// A batch fills runs on its worker threads and interns them on the calling thread.
+/// Runs are filled on one thread and interned on another.
 /// Handing each interned run back to the pool keeps its buffers,
 /// so after the first few runs the parse allocates nothing per run.
 /// This also keeps the heap from fragmenting

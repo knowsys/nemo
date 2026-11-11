@@ -11,13 +11,14 @@ use nemo_physical::{
 
 use crate::row_filter::RowFilter;
 
-/// Returns the condition that the delivered column 1 is greater than 5.
-pub(crate) fn greater_than_five() -> RowFilter {
+/// Returns the condition that the delivered column at `column` is greater than the integer
+/// `bound`.
+pub(crate) fn greater_than(column: usize, bound: i64) -> RowFilter {
     RowFilter::new(
-        vec![1],
+        vec![column],
         StackProgram::new(
             vec![OpCode::Input(0), OpCode::Constant(0), OpCode::Greater],
-            vec![DataValue::integer(5)],
+            vec![DataValue::integer(bound)],
             1,
         ),
     )

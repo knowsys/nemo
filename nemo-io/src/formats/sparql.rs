@@ -18,7 +18,7 @@ use nemo_physical::{
     diagnostics::Diagnostic,
     dictionary::Dictionary,
     function::EvaluationContext,
-    value::{DataValue, NumberRef, ValueRef},
+    value::{DataValue, NumberRef, ValueDomain, ValueRef},
 };
 
 use crate::{
@@ -44,12 +44,6 @@ use spargebra::{
     algebra::{Expression, GraphPattern},
     term::{GroundTerm, Literal, NamedNode, Variable},
 };
-
-/// The datatype IRI of `xsd:integer`.
-const INTEGER: &str = "http://www.w3.org/2001/XMLSchema#integer";
-
-/// The datatype IRI of `xsd:decimal`.
-const DECIMAL: &str = "http://www.w3.org/2001/XMLSchema#decimal";
 
 /// The default query, which asks for every triple.
 pub const DEFAULT_QUERY: &str = "SELECT ?s ?p ?o WHERE { ?s ?p ?o }";
@@ -131,6 +125,7 @@ impl SparqlQuery {
                 )))
             }
             spargebra::term::Term::BlankNode(_) => None,
+            // `Term` has a variant for triple terms if a crate of the build turns on RDF 1.2.
             #[allow(unreachable_patterns)]
             _ => None,
         }
@@ -163,10 +158,14 @@ impl SparqlQuery {
     /// as Wikidata does, so a query for the integer does not find it.
     /// The decimal is written as such a store writes an integral quantity.
     fn integer_as_decimal(literal: &Literal) -> Option<Literal> {
-        (literal.datatype().as_str() == INTEGER).then(|| {
+        let decimal = ValueDomain::Decimal
+            .datatype_iri()
+            .expect("decimals have one datatype");
+
+        (Some(literal.datatype().as_str()) == ValueDomain::Integer.datatype_iri()).then(|| {
             Literal::new_typed_literal(
                 format!("{}.0", literal.value()),
-                NamedNode::new_unchecked(DECIMAL),
+                NamedNode::new_unchecked(decimal),
             )
         })
     }
@@ -361,6 +360,7 @@ impl SparqlQuery {
     /// Panics for an [opaque](QueryShape::Opaque) query,
     /// since no part of such a query selects from its whole result.
     /// The query's [shape](Self::shape) says whether it is opaque.
+    /// Panics also if a block has a position that is not one of the projected variables.
     pub fn with_values(&self, blocks: &[ValuesBlock]) -> Self {
         if let QueryShape::Opaque(reason) = self.shape() {
             panic!("values cannot be joined into an opaque query: {reason}");
@@ -541,6 +541,11 @@ impl SparqlReader {
     ///
     /// Returns an error if the response is cut off or is not SPARQL TSV.
     /// Every error names the endpoint.
+    ///
+    /// # Panics
+    ///
+    /// Panics if a block of the reader's bindings has a position that is not a column of the
+    /// responses.
     pub fn read(
         &self,
         endpoint: &str,
@@ -633,7 +638,7 @@ fn cut_off(body: &[u8]) -> Option<String> {
 /// - A blank node is the null that its label names in `blanks`.
 /// - An *unbound* cell, as from an `OPTIONAL` that did not match, becomes a fresh null of its
 ///   own, since the value exists but is unknown.
-/// - A cell that is not a term makes the row malformed, if its column is delivered or bound.
+/// - A cell that is not a term makes the row malformed, whichever columns are delivered.
 ///
 /// In a response of one column, an empty line is a solution whose variable is unbound.
 /// In a wider one, it is not a solution.
@@ -680,27 +685,22 @@ fn read_tsv(
             loaded.count_malformed(number);
             continue;
         }
-        // An unbound value or a blank node in a bound column matches no binding,
-        // so the row is left out before anything is read, and no null is minted for it.
-        if cells
-            .iter()
-            .zip(&bound)
-            .any(|(cell, bound)| *bound && (cell.is_empty() || cell.starts_with("_:")))
-        {
-            continue;
-        }
-        // Only the delivered or bound cells are parsed, once each,
-        // so a column that is neither cannot make the row malformed.
+
+        // Every cell is read, so that a cell that is no term makes its row malformed,
+        // whichever columns are delivered.
+        // An unbound cell and a blank node are left without a value here,
+        // and get their nulls once the row is known to be kept.
         let mut complete = true;
         for (position, cell) in cells.iter().enumerate() {
             values[position] = None;
-            if selection.keeps(position) || bound[position] {
-                match term(cell, blanks, dictionary) {
-                    Some(value) => values[position] = Some(value),
-                    None => {
-                        complete = false;
-                        break;
-                    }
+            if cell.is_empty() || cell.starts_with("_:") {
+                continue;
+            }
+            match ground_cell(cell) {
+                Some(value) => values[position] = Some(value),
+                None => {
+                    complete = false;
+                    break;
                 }
             }
         }
@@ -708,17 +708,26 @@ fn read_tsv(
             loaded.count_malformed(number);
             continue;
         }
-        if !matches_bindings(&values, bindings) {
+
+        // An unbound value or a blank node in a bound column matches no binding,
+        // so the row is left out, and no null is minted for it.
+        let unmatched = bound
+            .iter()
+            .zip(&values)
+            .any(|(bound, value)| *bound && value.is_none());
+        if unmatched || !matches_bindings(&values, bindings) {
             continue;
         }
+
         kept.clear();
-        kept.extend(
-            values
-                .iter_mut()
-                .enumerate()
-                .filter(|(position, _)| selection.keeps(*position))
-                .map(|(_, value)| value.take().expect("a delivered cell is parsed")),
-        );
+        for (position, cell) in cells.iter().enumerate() {
+            if selection.keeps(position) {
+                let value = values[position]
+                    .take()
+                    .or_else(|| term(cell, blanks, dictionary));
+                kept.push(value.expect("every cell of the row is a term"));
+            }
+        }
         loaded.take(&kept, selection, dictionary, &mut row, number);
     }
     tracing::debug!(
@@ -762,10 +771,15 @@ fn is_cell(cell: &str) -> bool {
         || cell.starts_with('"')
         || cell.starts_with("_:")
         || matches!(cell, "true" | "false")
-        || cell
-            .strip_prefix(['+', '-'])
-            .unwrap_or(cell)
-            .starts_with(|character: char| character.is_ascii_digit() || character == '.')
+        || starts_as_number(cell)
+}
+
+/// Returns whether a cell starts as a number does:
+/// with a digit or a point, after an optional sign.
+fn starts_as_number(cell: &str) -> bool {
+    cell.strip_prefix(['+', '-'])
+        .unwrap_or(cell)
+        .starts_with(|character: char| character.is_ascii_digit() || character == '.')
 }
 
 /// Parses one TSV cell as a term in Turtle syntax,
@@ -855,11 +869,7 @@ fn ground_cell(cell: &str) -> Option<DataValue> {
     }
     // Bare numbers have Turtle's three forms: a number with an exponent is a double,
     // and any other is an exact integer or decimal.
-    let numeric = cell
-        .strip_prefix(['+', '-'])
-        .unwrap_or(cell)
-        .starts_with(|character: char| character.is_ascii_digit() || character == '.');
-    if !numeric {
+    if !starts_as_number(cell) {
         return None;
     }
     if cell.bytes().any(|byte| matches!(byte, b'e' | b'E')) {

@@ -465,11 +465,6 @@ impl Writer for JsonWriter {
         self.compression
     }
 
-    /// Writes rows to a target.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the target cannot be written.
     fn write<'a>(
         &self,
         target: impl std::io::Write,
@@ -525,15 +520,16 @@ mod tests {
             .read(text.as_bytes(), &mut dictionary, EvaluationContext::now())
             .expect("the document reads");
         let key_value = DataValue::iri("value");
-        (0..loaded.rows.len())
-            .map(|index| loaded.rows.row(index))
-            .filter(|row| dictionary.decode(row[1]).expect("decodes") == key_value.as_ref())
+        loaded
+            .decoded(&dictionary)
+            .into_iter()
+            .filter(|row| row[1] == key_value)
             .map(|row| {
-                let id = match dictionary.decode(row[0]).expect("decodes") {
+                let id = match row[0].as_ref() {
                     nemo_physical::value::ValueRef::Number(id) => id.to_i64().expect("small"),
                     other => panic!("ids are integers, not {other:?}"),
                 };
-                (id, dictionary.decode(row[2]).expect("decodes").to_owned())
+                (id, row[2].clone())
             })
             .collect()
     }
