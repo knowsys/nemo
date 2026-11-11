@@ -68,7 +68,11 @@ the loaded and imported facts.
 | `--trace-all` | trace every fact of every derived predicate, streaming: each fact once, after the lines of its premises, a derived fact as the rule instance that derives it and a loaded one as a fact statement, which together make the ground program of the derivations. |
 | `--trace-tree <FILE\|JSON>` | answer the explanation view's `treeForTable` query — the facts it selects, their derivation expanded by the engine — read from the file, or given inline as JSON text. It cannot be combined with the other trace flags, which would write the same output. |
 | `--trace-node <FILE\|JSON>` | answer the explanation view's `tableEntriesForTreeNodes` query — the facts of every node of the tree it shapes — given and answered as `--trace-tree`. |
-| `--trace-output <FILE>` | write JSON instead of printing: for `--trace` and `--trace-all` the trace response, its derivations as one graph (`facts`, each naming its node; `nodes`, each a fact with its rule, step, assignment and premises by node id, premises first; `rules`, each listed once); for `--trace-tree` and `--trace-node` the query's response. |
+| `--trace-output <FILE>` | write JSON instead of printing: for `--trace` and `--trace-all` the trace response, its derivations as one graph (`facts`, each naming its node; `nodes`, each a fact with its rule, step, assignment and premises by node id, premises first; `rules`, each listed once); for `--trace-tree` and `--trace-node` the query's response. The file's directory is created, an existing file is replaced only with `--overwrite`, and the option needs one of the trace options above. |
+
+A trace is the last thing a run shows, below its summary. The summary's times end before
+the trace: `--report timing` and `full` print the trace's time after it, and the JSON and
+HTML reports list it as the stage `trace`, beside the `total` that does not include it.
 
 Any trace keeps every import whole (see below).
 

@@ -78,6 +78,19 @@ impl Run<'_> {
         }
     }
 
+    /// Prints the time of the run's trace to the error stream,
+    /// if the run traced and `level` prints the stage times.
+    ///
+    /// The trace follows the summary, whose stage times therefore end before it.
+    pub(super) fn trace_time(&self, level: Report, times: Times) {
+        if !level.times() || !self.arguments.traces() {
+            return;
+        }
+
+        self.begin(Part::Summary);
+        eprintln!("trace   {:>12.3} ms", times.trace.as_secs_f64() * 1e3);
+    }
+
     /// Prints the [RULES_LISTED] applied rules that took the most time,
     /// each with its time, applications, derived facts and dropped rows.
     fn rules(recorder: &Recorder) {

@@ -25,8 +25,12 @@ pub struct RunFacts {
     pub reason: u64,
     /// The wall time of writing the exports.
     pub export: u64,
-    /// The wall time of the whole run.
+    /// The wall time of the run, from its start until its results are written.
     pub total: u64,
+    /// The wall time of tracing, if the run traced.
+    ///
+    /// A trace follows the results, so the total does not include it.
+    pub trace: Option<u64>,
     /// The number of facts stored by loading.
     pub loaded: u64,
     /// The number of new facts derived beyond the loaded ones.
@@ -86,8 +90,11 @@ struct StageTimes {
     reason: u64,
     /// The wall time of writing the exports.
     export: u64,
-    /// The wall time of the whole run.
+    /// The wall time of the run, from its start until its results are written.
     total: u64,
+    /// The wall time of tracing, if the run traced.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    trace: Option<u64>,
 }
 
 /// The facts as the document lays them out.
@@ -126,6 +133,7 @@ impl Serialize for RunFacts {
                 reason: self.reason,
                 export: self.export,
                 total: self.total,
+                trace: self.trace,
             },
             loaded: self.loaded,
             derived: self.derived,
@@ -202,6 +210,33 @@ mod tests {
         );
     }
 
+    /// The time of a trace is a stage after the total, which does not include it,
+    /// and a run without a trace has no such stage.
+    #[test]
+    fn the_time_of_a_trace_is_a_stage_of_its_own() {
+        let mut facts = RunFacts {
+            export: 4,
+            total: 10,
+            ..RunFacts::default()
+        };
+        let stages = |facts: &RunFacts| {
+            let out = serde_json::to_string(facts).expect("the facts serialize");
+            let end = out.find('}').expect("the stages end");
+            out[..=end].to_owned()
+        };
+        assert_eq!(
+            stages(&facts),
+            "{\"stages\":{\"parse\":0,\"load\":0,\"reason\":0,\"export\":4,\"total\":10}"
+        );
+
+        facts.trace = Some(3);
+        assert_eq!(
+            stages(&facts),
+            "{\"stages\":{\"parse\":0,\"load\":0,\"reason\":0,\"export\":4,\"total\":10,\
+             \"trace\":3}"
+        );
+    }
+
     /// The facts serialize with every key in order, byte for byte.
     ///
     /// Readers of the document, such as the report page, rely on its shape.
@@ -213,6 +248,7 @@ mod tests {
             reason: 3,
             export: 4,
             total: 10,
+            trace: None,
             loaded: 5,
             derived: 6,
             applications: 7,

@@ -98,6 +98,59 @@ fn the_json_report_owns_the_standard_output() {
     let document: serde_json::Value =
         serde_json::from_str(&outcome.stdout).expect("one JSON document and nothing else");
     assert_eq!(document["run"]["derived"], 1, "{document}");
+    // The document is written after the trace, whose time is one of its stages.
+    assert!(document["run"]["stages"]["trace"].is_u64(), "{document}");
+
+    let outcome = run(
+        &directory,
+        &["program.rls", "-e", "none", "--report", "json"],
+    );
+    let document: serde_json::Value =
+        serde_json::from_str(&outcome.stdout).expect("one JSON document and nothing else");
+    assert!(document["run"]["stages"]["total"].is_u64(), "{document}");
+    assert!(document["run"]["stages"]["trace"].is_null(), "{document}");
+}
+
+#[test]
+fn the_timing_report_adds_the_time_of_a_trace_after_it() {
+    let directory = workspace("trace-time");
+    write(&directory, "program.rls", ROLES);
+    let timed = |outcome: &crate::common::Outcome| {
+        outcome
+            .stderr
+            .lines()
+            .any(|line| line.starts_with("trace ") && line.ends_with(" ms"))
+    };
+
+    // The stage times end before the trace, so its time follows it, as the last line.
+    let outcome = run(
+        &directory,
+        &[
+            "program.rls",
+            "-e",
+            "none",
+            "--report",
+            "timing",
+            "--trace",
+            "reach(1, 3)",
+        ],
+    );
+    assert_eq!(outcome.status, Some(0), "{}", outcome.stderr);
+    let last = outcome.stderr.lines().last().expect("a report");
+    assert!(
+        last.starts_with("trace ") && last.ends_with(" ms"),
+        "{last}"
+    );
+
+    // The summary reports no stage times, and a run without a trace has none to report.
+    for arguments in [
+        &["program.rls", "-e", "none", "--trace", "reach(1, 3)"][..],
+        &["program.rls", "-e", "none", "--report", "timing"],
+    ] {
+        let outcome = run(&directory, arguments);
+        assert_eq!(outcome.status, Some(0), "{}", outcome.stderr);
+        assert!(!timed(&outcome), "{}", outcome.stderr);
+    }
 }
 
 #[test]

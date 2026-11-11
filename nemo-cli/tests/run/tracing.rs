@@ -324,7 +324,8 @@ fn a_trace_is_the_last_thing_a_run_shows() {
     assert!(position("reach ") < position("reach(1, 3) :- "), "{shown}");
     assert!(shown.ends_with("\n└─ edge(2, 3) .\n"), "{shown}");
 
-    // The note of a trace file follows the summary and the note of the report page.
+    // The note of a trace file follows the summary,
+    // and the report page, which contains the time of the trace, follows the trace.
     let shown = run_on_one_stream(
         &directory,
         &[
@@ -340,7 +341,7 @@ fn a_trace_is_the_last_thing_a_run_shows() {
     );
     assert!(shown.contains("Finished in"), "{shown}");
     assert!(
-        shown.ends_with("report: results/report.html\ntrace: trace.json\n"),
+        shown.ends_with("trace: trace.json\nreport: results/report.html\n"),
         "{shown}"
     );
 }

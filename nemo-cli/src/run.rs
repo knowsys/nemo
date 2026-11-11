@@ -52,6 +52,8 @@ struct Times {
     export: Duration,
     /// The time from the start of the run until the results were written.
     total: Duration,
+    /// The time spent tracing and writing the trace, which follows the results.
+    trace: Duration,
 }
 
 impl Times {
@@ -64,6 +66,7 @@ impl Times {
             reason: Duration::ZERO,
             export: Duration::ZERO,
             total: Duration::ZERO,
+            trace: Duration::ZERO,
         }
     }
 }
@@ -201,12 +204,17 @@ impl<'a> Run<'a> {
         self.reason(&mut engine, &mut times)?;
         self.write(&mut engine, &specifications, &mut times)?;
 
-        // The summary and the report document describe the run up to here,
-        // and a trace, which answers a question about the results, is shown last.
+        // The summary describes the run up to here.
+        // A trace answers a question about the results, so it is shown below the summary,
+        // and only its time and the report document, which contains that time, follow it.
         self.summarize(&engine, &specifications, times, recorder.as_deref());
+        let start = Instant::now();
+        self.trace(&mut engine, traced)?;
+        times.trace = start.elapsed();
+        self.trace_time(level, times);
+
         let facts = recorder.is_some().then(|| self.facts(&engine, times));
         self.document(level, facts.as_ref(), recorder.as_deref())?;
-        self.trace(&mut engine, traced)?;
         if let Some(dashboard) = dashboard {
             Self::serve(dashboard, facts);
         }

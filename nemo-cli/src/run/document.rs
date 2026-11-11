@@ -71,6 +71,7 @@ impl Run<'_> {
             reason: nanos(times.reason),
             export: nanos(times.export),
             total: nanos(times.total),
+            trace: self.arguments.traces().then(|| nanos(times.trace)),
             loaded: engine.loaded_facts() as u64,
             derived: engine.derived_facts() as u64,
             applications: engine.applications(),
