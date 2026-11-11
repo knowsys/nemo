@@ -221,6 +221,51 @@ fn a_text_that_is_not_a_fact_fails_the_run_before_it_starts() {
 }
 
 #[test]
+fn a_trace_file_is_written_like_an_export() {
+    let directory = workspace("trace-file");
+    write(&directory, "program.rls", ROLES);
+    let traced = |extra: &[&str]| {
+        let mut arguments = vec!["program.rls", "-e", "none", "--trace", "reach(1, 3)"];
+        arguments.extend(extra);
+        run(&directory, &arguments)
+    };
+
+    // Its directory is created, as the export directory is.
+    let outcome = traced(&["--trace-output", "traces/first/trace.json"]);
+    assert_eq!(outcome.status, Some(0), "{}", outcome.stderr);
+    let file = directory.join("traces").join("first").join("trace.json");
+    let first = fs::read_to_string(&file).expect("the trace was written");
+
+    // An existing file fails the run before it starts, unless `--overwrite` is given.
+    let again = traced(&["--trace-output", "traces/first/trace.json"]);
+    assert_eq!(again.status, Some(1), "{}", again.stderr);
+    assert!(
+        again.stderr.starts_with("[N0909] Error"),
+        "{}",
+        again.stderr
+    );
+    assert!(again.stderr.contains("--overwrite"), "{}", again.stderr);
+    assert_eq!(fs::read_to_string(&file).expect("the file is kept"), first);
+
+    let forced = traced(&["--trace-output", "traces/first/trace.json", "-o"]);
+    assert_eq!(forced.status, Some(0), "{}", forced.stderr);
+}
+
+#[test]
+fn a_trace_file_needs_something_to_trace() {
+    let directory = workspace("trace-file-alone");
+    write(&directory, "program.rls", ROLES);
+
+    let outcome = run(
+        &directory,
+        &["program.rls", "-e", "none", "--trace-output", "trace.json"],
+    );
+    assert_eq!(outcome.status, Some(2), "{}", outcome.stderr);
+    assert!(outcome.stderr.contains("--trace-all"), "{}", outcome.stderr);
+    assert!(!directory.join("trace.json").exists());
+}
+
+#[test]
 fn a_trace_is_the_last_thing_a_run_shows() {
     let directory = workspace("trace-last");
     write(&directory, "program.rls", ROLES);

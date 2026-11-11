@@ -33,7 +33,7 @@ the data).
 | `-e, --export <MODE>` | which predicates to write: `keep` (the program's `@export` directives, the default), `idb` (every derived predicate), `edb` (every given one), `all`, `none`. A predicate the program declares no export for is written as CSV. |
 | `-P, --print[=<MODE>]` | print the results to standard output as facts, one per line in term syntax, and write no files. Bare, `--export` picks the predicates and `keep` prints the declared `@output` predicates too; `idb`, `edb`, or `all` — written `-P=idb` — pick by what feeds the predicates. |
 | `-D, --export-dir <DIR>` | where exports are written (`results`). |
-| `-o, --overwrite` | replace export files, and the HTML report, that already exist (alias `--overwrite-results`). |
+| `-o, --overwrite` | replace export files, the HTML report and the trace file, if they already exist (alias `--overwrite-results`). |
 | `-g, --gzip` | compress every export with gzip. |
 | `-I, --import-dir <DIR>` | the directory relative imports resolve against, by default the directory of the program file each import is written in. |
 | `-p, --param <NAME=VALUE>` | give a declared `@parameter` its value; repeatable. |

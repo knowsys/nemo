@@ -183,7 +183,9 @@ impl<'a> Run<'a> {
         let mut engine = self.engine()?;
         let level = self.arguments.reporting();
         self.reserve_stdout(level)?;
-        // A text that is not a fact fails the run here rather than after the work.
+        // A trace file that exists, or a text that is not a fact, fails the run here
+        // rather than after the work.
+        self.vacant_trace_file()?;
         let traced = self.traced_facts()?;
         let recorder = self.observe(&mut engine, level)?;
         let dashboard = self.dashboard(recorder.as_ref())?;

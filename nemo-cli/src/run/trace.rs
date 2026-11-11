@@ -1,6 +1,7 @@
 //! Tracing what the trace options ask for, and writing the derivations and query responses.
 
 use std::{
+    fs::File,
     io::{self, BufWriter, Write},
     path::Path,
 };
@@ -40,6 +41,15 @@ fn read_query<Q: for<'de> serde::Deserialize<'de>>(given: &str) -> Result<Q, Dia
             }
             .diagnostic()
         })
+}
+
+/// Creates the `--trace-output` file at `path`, and the directories that lead to it.
+fn create(path: &Path) -> io::Result<File> {
+    if let Some(directory) = path.parent() {
+        std::fs::create_dir_all(directory)?;
+    }
+
+    File::create(path)
 }
 
 /// Returns the diagnostic for a `--trace-output` file that could not be written.
@@ -86,7 +96,7 @@ impl<'a> TraceStream<'a> {
         let out: Box<dyn Write> = match path {
             None => Box::new(BufWriter::new(io::stdout().lock())),
             Some(path) => Box::new(BufWriter::new(
-                std::fs::File::create(path).map_err(|error| unwritable(path, error))?,
+                create(path).map_err(|error| unwritable(path, error))?,
             )),
         };
         let mut stream = Self {
@@ -233,6 +243,22 @@ impl Run<'_> {
         Ok(())
     }
 
+    /// Returns an error if the `--trace-output` file already exists
+    /// and `--overwrite` is not given.
+    ///
+    /// The run checks this before it starts, as it does for the files of its exports.
+    pub(super) fn vacant_trace_file(&self) -> Result<(), Diagnostic> {
+        match &self.arguments.trace_output {
+            Some(path) if !self.arguments.overwrite && path.exists() => {
+                Err(CliError::ExportExists {
+                    path: path.display().to_string(),
+                }
+                .diagnostic())
+            }
+            _ => Ok(()),
+        }
+    }
+
     /// Returns the parsed facts of `--trace` and of every `--trace-input` file.
     ///
     /// Fails if a file cannot be read, or if a text is not a fact.
@@ -325,7 +351,9 @@ impl Run<'_> {
     /// Writes a trace document to the `--trace-output` file at `path`,
     /// and prints the path to the error stream.
     fn write_trace(&self, path: &Path, bytes: &[u8]) -> Result<(), Diagnostic> {
-        std::fs::write(path, bytes).map_err(|error| unwritable(path, error))?;
+        create(path)
+            .and_then(|mut file| file.write_all(bytes))
+            .map_err(|error| unwritable(path, error))?;
         self.note_trace_file(path);
         Ok(())
     }

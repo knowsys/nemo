@@ -51,8 +51,8 @@ diagnostic_kinds! {
                         file.";
         ExportExists { path: String }
             => EXPORT_EXISTS = 909, error, "file `{path}` already exists",
-               explain "An export, or the HTML report, would replace a file that already \
-                        exists.",
+               explain "An export, the HTML report, or the trace of `--trace-output` would \
+                        replace a file that already exists.",
                hint "pass `--overwrite` to replace existing files";
         DroppedDerivations { count: Count, kind: String }
             => DROPPED_DERIVATIONS = 910, warning,

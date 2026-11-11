@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use clap::{Parser, ValueEnum};
+use clap::{ArgGroup, Parser, ValueEnum};
 
 /// Runs a Nemo rule program and writes what it derives.
 #[derive(Debug, Parser)]
@@ -12,7 +12,11 @@ use clap::{Parser, ValueEnum};
     about,
     long_about = None,
     after_help = "Exit status: 0 on success, 3 if warnings were reported, 1 on an error, \
-                  2 for invalid arguments, and 101 on an internal error."
+                  2 for invalid arguments, and 101 on an internal error.",
+    // The options that trace something, of which `--trace-output` requires one.
+    group = ArgGroup::new("traced")
+        .multiple(true)
+        .args(["trace", "trace_input", "trace_all", "trace_tree", "trace_node"])
 )]
 pub struct Arguments {
     /// The rule programs to run, combined into one program in the given order.
@@ -46,7 +50,8 @@ pub struct Arguments {
     #[arg(short = 'D', long, default_value = "results", value_name = "DIR")]
     pub export_dir: PathBuf,
 
-    /// Replace export files, and the HTML report, that already exist.
+    /// Replace export files, the HTML report and the trace file, if they
+    /// already exist.
     #[arg(short, long, alias = "overwrite-results")]
     pub overwrite: bool,
 
@@ -156,7 +161,7 @@ pub struct Arguments {
     /// `--trace` and `--trace-all`, the file contains the derivations as
     /// one graph of facts. For `--trace-tree` and `--trace-node`, it
     /// contains the query's response.
-    #[arg(long, value_name = "FILE")]
+    #[arg(long, value_name = "FILE", requires = "traced")]
     pub trace_output: Option<PathBuf>,
 
     /// Explain a diagnostic code, as `--explain N0204`, and do nothing
