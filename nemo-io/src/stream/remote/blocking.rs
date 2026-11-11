@@ -1,11 +1,13 @@
 //! The blocking HTTP client, built on `reqwest`.
 
 use std::{
+    error::Error,
     sync::{
         Arc,
         atomic::{AtomicBool, AtomicUsize, Ordering},
         mpsc,
     },
+    thread,
     time::{Duration, Instant},
 };
 
@@ -105,7 +107,7 @@ impl Client for BlockingClient {
             let sender = sender.clone();
             let client = client.clone();
             let retry = self.retry;
-            std::thread::spawn(move || {
+            thread::spawn(move || {
                 while !batch.abandoned.load(Ordering::Relaxed) {
                     let index = batch.next.fetch_add(1, Ordering::Relaxed);
                     let Some(request) = batch.requests.get(index) else {
@@ -214,7 +216,7 @@ fn wait(duration: Duration, abandoned: &AtomicBool) -> bool {
             return true;
         }
 
-        std::thread::sleep(POLL.min(end - now));
+        thread::sleep(POLL.min(end - now));
     }
 }
 
@@ -288,7 +290,7 @@ fn send(
 fn transport_reason(error: reqwest::Error) -> String {
     let error = error.without_url();
     let mut reason = error.to_string();
-    let mut cause = std::error::Error::source(&error);
+    let mut cause = Error::source(&error);
     while let Some(inner) = cause {
         let text = inner.to_string();
 
@@ -298,7 +300,7 @@ fn transport_reason(error: reqwest::Error) -> String {
             reason.push_str(&text);
         }
 
-        cause = std::error::Error::source(inner);
+        cause = Error::source(inner);
     }
 
     reason

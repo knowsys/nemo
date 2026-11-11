@@ -1,6 +1,6 @@
 //! The errors of [SparqlQuery::parse](super::SparqlQuery::parse).
 
-use std::fmt;
+use std::{error::Error, fmt};
 
 /// The reason that [SparqlQuery::parse](super::SparqlQuery::parse) rejects a text.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -35,4 +35,4 @@ impl fmt::Display for QueryError {
     }
 }
 
-impl std::error::Error for QueryError {}
+impl Error for QueryError {}

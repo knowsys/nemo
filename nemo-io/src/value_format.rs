@@ -9,7 +9,7 @@ use std::{
     fmt::{self, Display, Formatter},
 };
 
-use nemo_physical::value::{DataValue, DomainSet, Iri, IriRef, NumberRef, ValueDomain};
+use nemo_physical::value::{DataValue, DomainSet, Iri, IriRef, NumberRef, ValueDomain, ValueRef};
 
 use crate::term::{self, LiteralSyntax};
 
@@ -239,8 +239,7 @@ impl ValueFormat {
     /// - A typed format writes only values of its own domains,
     ///   as their lexical forms without a datatype.
     /// - No value fits [Skip](Self::Skip).
-    pub fn write(&self, value: nemo_physical::value::ValueRef<'_>) -> Option<String> {
-        use nemo_physical::value::ValueRef;
+    pub fn write(&self, value: ValueRef<'_>) -> Option<String> {
         match (self, value) {
             (ValueFormat::Term, value) => Some(Self::any_cell(value)),
             (ValueFormat::String, ValueRef::String(text)) => Some(text.to_owned()),
@@ -337,8 +336,7 @@ impl ValueFormat {
     ///
     /// An IRI is written in angle brackets if its bare text would be read back as something
     /// else, such as a number, a quoted literal, or a string with whitespace.
-    pub fn any_cell(value: nemo_physical::value::ValueRef<'_>) -> String {
-        use nemo_physical::value::ValueRef;
+    pub fn any_cell(value: ValueRef<'_>) -> String {
         let quote = |text: &str| {
             let mut quoted = String::with_capacity(text.len() + 2);
             quoted.push('"');
@@ -453,6 +451,8 @@ impl Display for ValueFormat {
 
 #[cfg(test)]
 mod tests {
+    use nemo_physical::value::{MapValue, TupleValue};
+
     use super::*;
 
     /// An IRI is written bare only if its bare text is read back as that IRI,
@@ -494,8 +494,6 @@ mod tests {
     /// Tuples and maps are written in their own syntax, recursively.
     #[test]
     fn structured_values_write_the_syntax_they_are_written_in() {
-        use nemo_physical::value::{MapValue, TupleValue};
-
         let rendered = |value: DataValue| ValueFormat::any_cell(value.as_ref());
         let tuple = |elements: Vec<DataValue>| DataValue::tuple(TupleValue::new(elements));
 

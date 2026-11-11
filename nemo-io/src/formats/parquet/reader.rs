@@ -3,8 +3,11 @@
 use std::{fs::File, path::Path};
 
 use arrow::{
-    array::{Array, AsArray},
-    datatypes::DataType,
+    array::{Array, ArrayRef, AsArray},
+    datatypes::{
+        DataType, Float32Type, Float64Type, Int8Type, Int16Type, Int32Type, Int64Type, UInt8Type,
+        UInt16Type, UInt32Type, UInt64Type,
+    },
 };
 use parquet::arrow::{ProjectionMask, arrow_reader::ParquetRecordBatchReaderBuilder};
 
@@ -124,7 +127,7 @@ impl ParquetReader {
             let batch = batch.map_err(|error| IoError::unreadable(path, error))?;
 
             // Dictionary-encoded columns are read as their value type.
-            let columns: Vec<arrow::array::ArrayRef> = batch
+            let columns: Vec<ArrayRef> = batch
                 .columns()
                 .iter()
                 .map(|column| match column.data_type() {
@@ -198,51 +201,19 @@ fn arrow_value(column: &dyn Array, row: usize) -> Option<DataValue> {
 
     let value = match column.data_type() {
         DataType::Boolean => DataValue::boolean(column.as_boolean().value(row)),
-        DataType::Int8 => DataValue::integer(
-            column
-                .as_primitive::<arrow::datatypes::Int8Type>()
-                .value(row)
-                .into(),
-        ),
-        DataType::Int16 => DataValue::integer(
-            column
-                .as_primitive::<arrow::datatypes::Int16Type>()
-                .value(row)
-                .into(),
-        ),
-        DataType::Int32 => DataValue::integer(
-            column
-                .as_primitive::<arrow::datatypes::Int32Type>()
-                .value(row)
-                .into(),
-        ),
-        DataType::Int64 => DataValue::integer(
-            column
-                .as_primitive::<arrow::datatypes::Int64Type>()
-                .value(row),
-        ),
-        DataType::UInt8 => DataValue::integer(
-            column
-                .as_primitive::<arrow::datatypes::UInt8Type>()
-                .value(row)
-                .into(),
-        ),
-        DataType::UInt16 => DataValue::integer(
-            column
-                .as_primitive::<arrow::datatypes::UInt16Type>()
-                .value(row)
-                .into(),
-        ),
-        DataType::UInt32 => DataValue::integer(
-            column
-                .as_primitive::<arrow::datatypes::UInt32Type>()
-                .value(row)
-                .into(),
-        ),
+        DataType::Int8 => DataValue::integer(column.as_primitive::<Int8Type>().value(row).into()),
+        DataType::Int16 => DataValue::integer(column.as_primitive::<Int16Type>().value(row).into()),
+        DataType::Int32 => DataValue::integer(column.as_primitive::<Int32Type>().value(row).into()),
+        DataType::Int64 => DataValue::integer(column.as_primitive::<Int64Type>().value(row)),
+        DataType::UInt8 => DataValue::integer(column.as_primitive::<UInt8Type>().value(row).into()),
+        DataType::UInt16 => {
+            DataValue::integer(column.as_primitive::<UInt16Type>().value(row).into())
+        }
+        DataType::UInt32 => {
+            DataValue::integer(column.as_primitive::<UInt32Type>().value(row).into())
+        }
         DataType::UInt64 => {
-            let value = column
-                .as_primitive::<arrow::datatypes::UInt64Type>()
-                .value(row);
+            let value = column.as_primitive::<UInt64Type>().value(row);
             match i64::try_from(value) {
                 Ok(value) => DataValue::integer(value),
                 // Beyond the signed range, the value is read as a wide integer
@@ -250,16 +221,8 @@ fn arrow_value(column: &dyn Array, row: usize) -> Option<DataValue> {
                 Err(_) => return DataValue::decimal_from_lexical(&value.to_string()),
             }
         }
-        DataType::Float32 => DataValue::float(
-            column
-                .as_primitive::<arrow::datatypes::Float32Type>()
-                .value(row),
-        ),
-        DataType::Float64 => DataValue::double(
-            column
-                .as_primitive::<arrow::datatypes::Float64Type>()
-                .value(row),
-        ),
+        DataType::Float32 => DataValue::float(column.as_primitive::<Float32Type>().value(row)),
+        DataType::Float64 => DataValue::double(column.as_primitive::<Float64Type>().value(row)),
         DataType::Utf8 => DataValue::string(column.as_string::<i32>().value(row)),
         DataType::LargeUtf8 => DataValue::string(column.as_string::<i64>().value(row)),
         DataType::Utf8View => DataValue::string(column.as_string_view().value(row)),

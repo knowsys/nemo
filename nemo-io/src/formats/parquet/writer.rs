@@ -1,8 +1,8 @@
 //! Writing Parquet files.
 
-use std::path::Path;
+use std::{io::Write, path::Path};
 
-use arrow::array::{RecordBatch, RecordBatchOptions};
+use arrow::array::{ArrayRef, RecordBatch, RecordBatchOptions};
 use parquet::arrow::ArrowWriter;
 
 use nemo_physical::{diagnostics::Diagnostic, value::DataValue};
@@ -43,7 +43,7 @@ impl ParquetWriter {
     /// Panics if a row does not have the writer's number of columns.
     pub fn write<'a>(
         &self,
-        target: impl std::io::Write + Send,
+        target: impl Write + Send,
         rows: impl IntoIterator<Item = &'a [DataValue]>,
     ) -> Result<Written, Diagnostic> {
         let rows: Vec<&[DataValue]> = rows.into_iter().collect();
@@ -65,7 +65,7 @@ impl ParquetWriter {
             })
             .collect();
         let schema = ColumnKind::schema(&kinds);
-        let arrays: Vec<arrow::array::ArrayRef> = kinds
+        let arrays: Vec<ArrayRef> = kinds
             .iter()
             .enumerate()
             .map(|(index, &kind)| kind.array(rows.iter().map(move |row| row[index].as_ref())))

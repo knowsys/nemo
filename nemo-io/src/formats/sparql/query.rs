@@ -54,82 +54,6 @@ pub struct SparqlQuery {
 }
 
 impl SparqlQuery {
-    /// Returns a value as a SPARQL ground term, in the value's canonical lexical form.
-    ///
-    /// - IRIs become named nodes.
-    /// - Strings and language strings become literals.
-    /// - Every other scalar becomes a typed literal of its domain's datatype.
-    ///   For example, an integer becomes an `xsd:integer`, whatever datatype it was read from,
-    ///   and a double is written in XSD's canonical form, such as `"2.5E0"^^xsd:double`.
-    ///   The canonical form is the one most likely held by a store that keeps lexical forms as
-    ///   written.
-    ///
-    /// An endpoint finds the value by this term only if it holds the value as this term,
-    /// or canonicalizes values when loading them (see [with_values](Self::with_values)).
-    ///
-    /// Returns `None` for a null, since a query cannot ask for a blank node,
-    /// and for tuples and maps, which have no RDF form.
-    pub fn ground_term(value: &DataValue) -> Option<GroundTerm> {
-        match crate::rdf::object_term(value)? {
-            spargebra::term::Term::NamedNode(node) => Some(GroundTerm::NamedNode(node)),
-            spargebra::term::Term::Literal(literal) => {
-                let canonical = match value.as_ref() {
-                    ValueRef::Number(NumberRef::Double(double)) => double.canonical_lexical(),
-                    ValueRef::Number(NumberRef::Float(float)) => float.canonical_lexical(),
-                    _ => return Some(GroundTerm::Literal(literal)),
-                };
-                Some(GroundTerm::Literal(Literal::new_typed_literal(
-                    canonical,
-                    literal.datatype().into_owned(),
-                )))
-            }
-            spargebra::term::Term::BlankNode(_) => None,
-            // `Term` has a variant for triple terms if a crate of the build turns on RDF 1.2.
-            #[allow(unreachable_patterns)]
-            _ => None,
-        }
-    }
-
-    /// Returns the terms an endpoint may hold a value as, for asking for the value by term.
-    ///
-    /// They are the value's [ground term](Self::ground_term), and, for an integer, also the
-    /// decimal that an endpoint holding quantities as decimals has,
-    /// such as `"3.0"^^xsd:decimal` for the integer 3.
-    /// Returns an empty list for a value without a ground term.
-    pub fn ground_terms(value: &DataValue) -> Vec<GroundTerm> {
-        let Some(term) = Self::ground_term(value) else {
-            return Vec::new();
-        };
-
-        let decimal = match &term {
-            GroundTerm::Literal(literal) => Self::integer_as_decimal(literal),
-            _ => None,
-        };
-        match decimal {
-            Some(decimal) => vec![term, GroundTerm::Literal(decimal)],
-            None => vec![term],
-        }
-    }
-
-    /// Returns an `xsd:integer` literal as an `xsd:decimal` with one zero after the point,
-    /// such as `"3"` as `"3.0"^^xsd:decimal`, or `None` for any other literal.
-    ///
-    /// Stores keep datatypes apart, and some hold every quantity as a decimal,
-    /// as Wikidata does, so a query for the integer does not find it.
-    /// The decimal is written as such a store writes an integral quantity.
-    fn integer_as_decimal(literal: &Literal) -> Option<Literal> {
-        let decimal = ValueDomain::Decimal
-            .datatype_iri()
-            .expect("decimals have one datatype");
-
-        (Some(literal.datatype().as_str()) == ValueDomain::Integer.datatype_iri()).then(|| {
-            Literal::new_typed_literal(
-                format!("{}.0", literal.value()),
-                NamedNode::new_unchecked(decimal),
-            )
-        })
-    }
-
     /// Parses and validates a `SELECT` query, with the given base and prefixes in scope.
     ///
     /// The prefixes let the query use prefixed names declared outside it,
@@ -403,6 +327,82 @@ impl SparqlQuery {
             pattern,
             base_iri: self.query.base_iri().cloned(),
         }
+    }
+
+    /// Returns a value as a SPARQL ground term, in the value's canonical lexical form.
+    ///
+    /// - IRIs become named nodes.
+    /// - Strings and language strings become literals.
+    /// - Every other scalar becomes a typed literal of its domain's datatype.
+    ///   For example, an integer becomes an `xsd:integer`, whatever datatype it was read from,
+    ///   and a double is written in XSD's canonical form, such as `"2.5E0"^^xsd:double`.
+    ///   The canonical form is the one most likely held by a store that keeps lexical forms as
+    ///   written.
+    ///
+    /// An endpoint finds the value by this term only if it holds the value as this term,
+    /// or canonicalizes values when loading them (see [with_values](Self::with_values)).
+    ///
+    /// Returns `None` for a null, since a query cannot ask for a blank node,
+    /// and for tuples and maps, which have no RDF form.
+    pub fn ground_term(value: &DataValue) -> Option<GroundTerm> {
+        match crate::rdf::object_term(value)? {
+            spargebra::term::Term::NamedNode(node) => Some(GroundTerm::NamedNode(node)),
+            spargebra::term::Term::Literal(literal) => {
+                let canonical = match value.as_ref() {
+                    ValueRef::Number(NumberRef::Double(double)) => double.canonical_lexical(),
+                    ValueRef::Number(NumberRef::Float(float)) => float.canonical_lexical(),
+                    _ => return Some(GroundTerm::Literal(literal)),
+                };
+                Some(GroundTerm::Literal(Literal::new_typed_literal(
+                    canonical,
+                    literal.datatype().into_owned(),
+                )))
+            }
+            spargebra::term::Term::BlankNode(_) => None,
+            // `Term` has a variant for triple terms if a crate of the build turns on RDF 1.2.
+            #[allow(unreachable_patterns)]
+            _ => None,
+        }
+    }
+
+    /// Returns the terms an endpoint may hold a value as, for asking for the value by term.
+    ///
+    /// They are the value's [ground term](Self::ground_term), and, for an integer, also the
+    /// decimal that an endpoint holding quantities as decimals has,
+    /// such as `"3.0"^^xsd:decimal` for the integer 3.
+    /// Returns an empty list for a value without a ground term.
+    pub fn ground_terms(value: &DataValue) -> Vec<GroundTerm> {
+        let Some(term) = Self::ground_term(value) else {
+            return Vec::new();
+        };
+
+        let decimal = match &term {
+            GroundTerm::Literal(literal) => Self::integer_as_decimal(literal),
+            _ => None,
+        };
+        match decimal {
+            Some(decimal) => vec![term, GroundTerm::Literal(decimal)],
+            None => vec![term],
+        }
+    }
+
+    /// Returns an `xsd:integer` literal as an `xsd:decimal` with one zero after the point,
+    /// such as `"3"` as `"3.0"^^xsd:decimal`, or `None` for any other literal.
+    ///
+    /// Stores keep datatypes apart, and some hold every quantity as a decimal,
+    /// as Wikidata does, so a query for the integer does not find it.
+    /// The decimal is written as such a store writes an integral quantity.
+    fn integer_as_decimal(literal: &Literal) -> Option<Literal> {
+        let decimal = ValueDomain::Decimal
+            .datatype_iri()
+            .expect("decimals have one datatype");
+
+        (Some(literal.datatype().as_str()) == ValueDomain::Integer.datatype_iri()).then(|| {
+            Literal::new_typed_literal(
+                format!("{}.0", literal.value()),
+                NamedNode::new_unchecked(decimal),
+            )
+        })
     }
 }
 

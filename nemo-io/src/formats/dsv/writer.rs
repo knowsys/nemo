@@ -1,5 +1,7 @@
 //! Writing delimiter-separated values.
 
+use std::io::Write;
+
 use nemo_physical::{diagnostics::Diagnostic, value::DataValue};
 
 use crate::{
@@ -39,7 +41,7 @@ impl Writer for DsvWriter {
 
     fn write<'a>(
         &self,
-        target: impl std::io::Write,
+        target: impl Write,
         rows: impl IntoIterator<Item = &'a [DataValue]>,
     ) -> Result<Written, Diagnostic> {
         let mut writer = csv::WriterBuilder::new()

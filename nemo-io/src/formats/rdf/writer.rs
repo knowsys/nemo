@@ -1,5 +1,7 @@
 //! Writing rows of three or four columns as RDF serializations.
 
+use std::io::Write;
+
 use oxrdfio::RdfSerializer;
 
 use nemo_physical::{
@@ -78,7 +80,7 @@ impl Writer for RdfWriter {
     /// Panics if a row does not have the variant's [arity](RdfVariant::width).
     fn write<'a>(
         &self,
-        target: impl std::io::Write,
+        target: impl Write,
         rows: impl IntoIterator<Item = &'a [DataValue]>,
     ) -> Result<Written, Diagnostic> {
         let mut serializer = RdfSerializer::from_format(self.options.variant.format());

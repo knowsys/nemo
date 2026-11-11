@@ -1,5 +1,7 @@
 //! Reading an endpoint's responses, which contain solutions in SPARQL TSV.
 
+use std::str;
+
 use nemo_physical::{
     diagnostics::Diagnostic, dictionary::Dictionary, function::EvaluationContext, value::DataValue,
 };
@@ -170,7 +172,7 @@ fn read_tsv(
         }
     }
 
-    let text = std::str::from_utf8(body).map_err(|error| {
+    let text = str::from_utf8(body).map_err(|error| {
         IoError::SparqlResponseUnreadable {
             reason: error.to_string(),
         }

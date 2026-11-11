@@ -13,7 +13,7 @@
 mod blocking;
 mod retry;
 
-use std::sync::Arc;
+use std::{fmt, sync::Arc};
 
 use nemo_physical::diagnostics::Diagnostic;
 
@@ -189,8 +189,8 @@ impl Failure {
     }
 }
 
-impl std::fmt::Display for Failure {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for Failure {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.partial {
             return write!(
                 f,
@@ -225,7 +225,7 @@ pub type Response = Result<Arc<[u8]>, Failure>;
 /// A client that responds from fixtures:
 ///
 /// ```
-/// use std::sync::Arc;
+/// use std::{fmt, sync::Arc};
 ///
 /// use nemo_io::remote::{Client, Failure, Request, Response};
 ///
