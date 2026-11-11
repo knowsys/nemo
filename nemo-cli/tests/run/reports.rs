@@ -254,6 +254,40 @@ fn old_report_spellings_are_accepted() {
 }
 
 #[test]
+fn the_auto_report_is_silent_where_data_is_printed() {
+    let directory = workspace("report-auto");
+    write(&directory, "program.rls", ROLES);
+
+    // Printed results and a printed trace leave no summary beside them.
+    for printing in [&["-P"][..], &["-e", "none", "--trace", "reach(1, 3)"]] {
+        let mut arguments = vec!["program.rls", "--report", "auto"];
+        arguments.extend(printing);
+        let outcome = run(&directory, &arguments);
+        assert_eq!(outcome.status, Some(0), "{}", outcome.stderr);
+        assert!(outcome.stdout.contains("reach(1, 3)"), "{}", outcome.stdout);
+        assert_eq!(outcome.stderr, "", "{printing:?}");
+    }
+
+    // A trace that is written to a file prints nothing, so the summary is shown.
+    let outcome = run(
+        &directory,
+        &[
+            "program.rls",
+            "-e",
+            "none",
+            "--report",
+            "auto",
+            "--trace",
+            "reach(1, 3)",
+            "--trace-output",
+            "trace.json",
+        ],
+    );
+    assert_eq!(outcome.status, Some(0), "{}", outcome.stderr);
+    assert!(outcome.stderr.contains("Finished in"), "{}", outcome.stderr);
+}
+
+#[test]
 fn a_program_declaring_no_outputs_has_every_derived_predicate_as_one() {
     let directory = workspace("no-outputs");
     write(

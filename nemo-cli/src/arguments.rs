@@ -168,12 +168,13 @@ pub struct Arguments {
 impl Arguments {
     /// Returns the report level, after applying `--quiet` and resolving `auto`.
     ///
-    /// `auto` becomes the summary, or nothing if the results are printed,
+    /// `auto` becomes the summary, or nothing if the results or a trace are printed,
     /// so that the terminal shows only the data.
     pub fn reporting(&self) -> Report {
+        let prints = self.print.is_some_and(|mode| mode != Mode::None) || self.traces_to_stdout();
         match self.report {
             _ if self.quiet => Report::None,
-            Report::Auto if self.print.is_some_and(|mode| mode != Mode::None) => Report::None,
+            Report::Auto if prints => Report::None,
             Report::Auto => Report::Summary,
             level => level,
         }
@@ -243,7 +244,7 @@ pub enum Mode {
 pub enum Report {
     /// Warnings and errors only.
     None,
-    /// The summary, or nothing if the results are printed with `--print`.
+    /// The summary, or nothing if the results or a trace are printed.
     Auto,
     /// The headline, and how many facts each output predicate holds.
     #[value(alias = "short")]

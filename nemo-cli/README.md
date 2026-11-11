@@ -47,7 +47,7 @@ output is the data's.
 
 | option | meaning |
 |---|---|
-| `--report <LEVEL>` | `none`; `summary` (the default; also `short`); `auto` (the summary unless the results were printed); `timing` (stage times, where the reasoning time went, every predicate's size — measured without recording, what benchmarks read; also `time`, `mem`); `full` (`timing` plus the rules by time; also `all`); `json` (the whole run as one document on standard output, which nothing else may then write to: not `--print`, not a trace without `--trace-output`, not an export to `""`; diagnostics still go to the error stream); `html` (the summary, plus a visual `report.html` in the export directory, which no export may write to). |
+| `--report <LEVEL>` | `none`; `summary` (the default; also `short`); `auto` (the summary unless the results or a trace were printed); `timing` (stage times, where the reasoning time went, every predicate's size — measured without recording, what benchmarks read; also `time`, `mem`); `full` (`timing` plus the rules by time; also `all`); `json` (the whole run as one document on standard output, which nothing else may then write to: not `--print`, not a trace without `--trace-output`, not an export to `""`; diagnostics still go to the error stream); `html` (the summary, plus a visual `report.html` in the export directory, which no export may write to). |
 | `-q, --quiet` | warnings and errors only, and log errors only. |
 | `--no-warnings` | show no warnings, and exit 0 where a warned run exits 3. |
 | `-v, --verbose` | log more: `-v` what the run does, `-vv` the engine's decisions, `-vvv` everything including the telemetry stream. |
