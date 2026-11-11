@@ -57,12 +57,14 @@ fn tsv_cells_parse_as_turtle_terms() {
         row(1)[2],
         DataValue::decimal(-15, -1).expect("representable")
     );
+
     // The blank label names one null across rows.
     assert_eq!(row(1)[0], row(2)[0]);
     assert_eq!(row(2)[1], DataValue::integer(7));
     assert_eq!(row(2)[2], DataValue::double(1000.0));
     assert_eq!(row(3)[0], DataValue::boolean(true));
     assert_eq!(row(3)[1], DataValue::string("tab\there"));
+
     // The unbound cell minted a null distinct from the labeled one.
     assert!(matches!(
         row(3)[2].as_ref(),
@@ -114,9 +116,11 @@ fn responses_sharing_a_scope_agree_on_blank_nodes() {
             .to_owned()
     };
     let mut dictionary = Dictionary::new();
+
     // In a scope for each response, as SPARQL specifies, two responses give two nulls.
     let own = SparqlReader::new(2, RowSelection::default());
     assert_ne!(read(&own, &mut dictionary), read(&own, &mut dictionary));
+
     // In the endpoint's scope, one label names one null in every response,
     // and the null's scope shows that it came from an endpoint.
     let shared = SparqlReader::new(2, RowSelection::default()).with_endpoint_blank_nodes();
@@ -125,6 +129,7 @@ fn responses_sharing_a_scope_agree_on_blank_nodes() {
     let ValueRef::Null(id) = first.as_ref() else {
         panic!("a blank node is a null: {first}");
     };
+
     assert!(SparqlReader::is_endpoint_blank_node(&dictionary, id));
     let fresh = dictionary.fresh_null();
     assert!(!SparqlReader::is_endpoint_blank_node(&dictionary, fresh));
@@ -138,6 +143,7 @@ fn a_reader_given_the_values_keeps_the_solutions_that_match_them() {
         positions: vec![1],
         rows: vec![vec![DataValue::integer(3)], vec![DataValue::double(2.5)]],
     };
+
     // The second column is not delivered, but the values still decide.
     let selection = RowSelection {
         columns: Some(vec![true, false]),
@@ -164,6 +170,7 @@ fn a_reader_given_the_values_keeps_the_solutions_that_match_them() {
             EvaluationContext::now(),
         )
         .expect("the response reads");
+
     // The first two are the integer 3 and the third is the double 2.5, however the endpoint
     // matched them. The double 3 is a different value for Nemo, and the last two match nothing.
     assert_eq!((loaded.rows.len(), loaded.malformed), (3, 0));

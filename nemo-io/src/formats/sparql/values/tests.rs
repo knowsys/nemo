@@ -31,6 +31,7 @@ fn a_row_is_sent_as_the_combinations_of_its_terms() {
         }])
         .text()
         .to_owned();
+
     // The integer is sent as an integer and as a decimal, so its row is sent as two rows.
     assert!(text.contains("VALUES ( ?s ?v ?b )"), "{text}");
     assert_eq!(text.matches("( <urn:a> ").count(), 2, "{text}");

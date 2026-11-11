@@ -54,6 +54,7 @@ fn malformed_rows_are_counted_never_silent() {
         ValueFormat::String,
         ValueFormat::Integer,
     ]));
+
     // Line 2 has a bad integer, and line 3 has the wrong width.
     let input = "a,1\nb,oops\nc\nd,4\n";
     let loaded = reader

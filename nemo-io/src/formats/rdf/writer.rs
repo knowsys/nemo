@@ -90,6 +90,7 @@ impl Writer for RdfWriter {
                 serializer = with;
             }
         }
+
         if let Some(base) = &self.options.base
             && let Ok(with) = serializer.clone().with_base_iri(base)
         {
@@ -131,10 +132,12 @@ impl Writer for RdfWriter {
                 None => written.dropped += 1,
             }
         }
+
         writer
             .finish()
             .and_then(|mut target| target.flush())
             .map_err(IoError::output_unwritable)?;
+
         Ok(written)
     }
 }
@@ -177,6 +180,7 @@ fn graph_node(value: &DataValue) -> Option<oxrdf::GraphName> {
     ) {
         return Some(oxrdf::GraphName::DefaultGraph);
     }
+
     subject_node(value).map(|node| match node {
         oxrdf::NamedOrBlankNode::NamedNode(node) => oxrdf::GraphName::NamedNode(node),
         oxrdf::NamedOrBlankNode::BlankNode(node) => oxrdf::GraphName::BlankNode(node),

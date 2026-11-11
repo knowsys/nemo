@@ -19,6 +19,7 @@ fn a_cut_off_response_is_an_error() {
             .is_some_and(|reason| reason.contains("TimeoutException")),
         "{problem:?}"
     );
+
     // A trace longer than any fixed tail is still found.
     let long = format!("{cut}{}", "\tat java.base/...\n".repeat(2000));
     assert!(check_complete("http://e/sparql", long.as_bytes()).is_err());
@@ -40,6 +41,7 @@ fn a_response_ending_partway_through_a_row_is_cut_off() {
         assert_eq!(problem.code(), crate::codes::SPARQL_RESPONSE_CUT, "{cut}");
         assert!(SparqlReader::is_cut_off(cut.as_bytes()), "{cut}");
     }
+
     // A whole last row needs no line end, nor does a header alone.
     for whole in [
         "?x\t?y\n<http://e/a>\t<http://e/b>",
@@ -72,6 +74,7 @@ fn a_whole_last_row_is_recognized_by_its_syntax() {
             "{body}"
         );
     }
+
     let cut = [
         "?a\t?b\n<urn:a>\t<urn:b",
         "?a\t?b\n<urn:a>\t\"unfinish",
@@ -93,6 +96,7 @@ fn solution_rows_may_contain_the_markers() {
     let body = "?x\t?l\n<http://example.org/x>\t\"see QueryTimeoutException in the docs\"\n\
                 <http://example.org/java/util/concurrent/TimeoutException>\t\"\"\n";
     assert!(check_complete("http://e/sparql", body.as_bytes()).is_ok());
+
     // Unbound cells are rows too.
     let sparse = "?x\t?l\n<http://example.org/x>\t\n";
     assert!(check_complete("http://e/sparql", sparse.as_bytes()).is_ok());

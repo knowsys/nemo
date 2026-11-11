@@ -73,6 +73,7 @@ impl DsvReader {
         let limit = self.options.limit.unwrap_or(u64::MAX);
         let arity = self.options.arity();
         let mut run = runs.take(arity);
+
         // The well-formed rows so far, across the runs, which the limit counts.
         let mut well_formed = 0;
         let mut wanted = true;
@@ -80,18 +81,21 @@ impl DsvReader {
             if well_formed >= limit {
                 return false;
             }
+
             let before = run.well_formed();
             run.push_record(&self.options, &selection, record, line);
             well_formed += run.well_formed() - before;
             if run.is_full() {
                 wanted = emit(std::mem::replace(&mut run, runs.take(arity)));
             }
+
             wanted
         })?;
         if wanted {
             run.consumed_lines = consumed;
             emit(run);
         }
+
         Ok(())
     }
 
@@ -123,6 +127,7 @@ impl DsvReader {
                 break;
             }
         }
+
         // The position after the last record is the first unread line,
         // so one line fewer was consumed.
         Ok(reader.position().line().saturating_sub(1))
@@ -160,6 +165,7 @@ impl Reader for DsvReader {
             errors = ?loaded.errors,
             "read a delimited source"
         );
+
         Ok(loaded)
     }
 }

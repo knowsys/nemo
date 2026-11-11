@@ -83,6 +83,7 @@ impl SparqlQuery {
         if let QueryShape::Opaque(reason) = &shape {
             panic!("an opaque query cannot be instantiated: {reason}");
         }
+
         let projected = self.variables();
         assert_eq!(
             bindings.len(),
@@ -93,6 +94,7 @@ impl SparqlQuery {
         else {
             unreachable!("a SELECT query projects, `*` included")
         };
+
         // An ordering under the projection means nothing inside a join.
         let inner = match inner.as_ref() {
             GraphPattern::OrderBy { inner, .. } => inner,
@@ -118,6 +120,7 @@ impl SparqlQuery {
 
         let mut pattern = inner.clone();
         rename_pattern(&mut pattern, &mut map);
+
         // The guards are placed in a group of their own, either inside the
         // subquery that a complex query becomes or in a group made for them,
         // so that they apply to the solutions before anything is joined with them.
@@ -129,6 +132,7 @@ impl SparqlQuery {
                     inner: Box::new(pattern),
                 };
             }
+
             pattern = GraphPattern::Project {
                 inner: Box::new(pattern),
                 variables: variables
@@ -145,6 +149,7 @@ impl SparqlQuery {
                 inner: Box::new(pattern),
             });
         }
+
         Some(join_values(pattern, values))
     }
 }
@@ -250,6 +255,7 @@ impl Composition {
             },
             base_iri: None,
         });
+
         Some(query.expect("a SELECT wraps"))
     }
 }
@@ -330,6 +336,7 @@ fn rebinding(
                 if joined.contains(target.as_str()) && sometimes_bound(name) {
                     rebinding.required.push(target.clone());
                 }
+
                 Replacement::Variable(target)
             }
             Binding::Constant(terms) => {
@@ -348,6 +355,7 @@ fn rebinding(
                         if sometimes_bound(name) {
                             rebinding.required.push(fresh.clone());
                         }
+
                         rebinding.values.push((fresh.clone(), terms.clone()));
                         Replacement::Variable(fresh)
                     }
@@ -356,6 +364,7 @@ fn rebinding(
         };
         rebinding.replacements.insert(name.clone(), replacement);
     }
+
     Some(rebinding)
 }
 
@@ -368,6 +377,7 @@ fn apart(name: &str, suffix: &str, reserved: &HashSet<String>) -> Variable {
     while reserved.contains(&apart) {
         apart.push('_');
     }
+
     Variable::new_unchecked(apart)
 }
 
@@ -450,6 +460,7 @@ fn rename_pattern(pattern: &mut GraphPattern, map: &mut impl FnMut(&Variable) ->
                 rename_term(object, map);
             }
         }
+
         // The path between the two ends has no variables.
         GraphPattern::Path {
             subject, object, ..
@@ -500,6 +511,7 @@ fn rename_pattern(pattern: &mut GraphPattern, map: &mut impl FnMut(&Variable) ->
             for variable in variables {
                 rename_variable(variable, map);
             }
+
             rename_pattern(inner, map);
         }
         GraphPattern::OrderBy { inner, expression } => {
@@ -521,6 +533,7 @@ fn rename_pattern(pattern: &mut GraphPattern, map: &mut impl FnMut(&Variable) ->
             for variable in variables {
                 rename_variable(variable, map);
             }
+
             for (variable, aggregate) in aggregates {
                 rename_variable(variable, map);
                 if let AggregateExpression::FunctionCall { expr, .. } = aggregate {
@@ -560,6 +573,7 @@ fn rename_node(node: &mut NamedNodePattern, map: &mut impl FnMut(&Variable) -> R
             Replacement::Term(GroundTerm::NamedNode(named)) => {
                 *node = NamedNodePattern::NamedNode(named);
             }
+
             // `rebinding` rules this out, since a literal cannot be a predicate or graph name.
             Replacement::Term(GroundTerm::Literal(_)) => {}
         }
@@ -739,6 +753,7 @@ mod tests {
         let text = merged.text();
         assert!(text.contains("GROUP BY ?x"), "{text}");
         assert!(text.contains("VALUES ( ?n_1 )"), "{text}");
+
         // The subquery is kept whole: parsing the text again gives the outer
         // projection, with the aggregation inside.
         let reparsed = SparqlQuery::parse(text, None, []).expect("parses");
@@ -792,6 +807,7 @@ mod tests {
             .expect("instantiates");
         let merged = composed(vec![instance], Vec::new(), &["qidLabel"]).expect("selects");
         let text = merged.text();
+
         // The constant binds the variable that the service labels, which keeps its name,
         // and so does the private variable `?o`.
         assert!(text.contains("?qid <urn:p> ?o ."), "{text}");

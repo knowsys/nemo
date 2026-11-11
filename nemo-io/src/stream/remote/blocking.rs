@@ -89,6 +89,7 @@ impl Client for BlockingClient {
         if cancelled() {
             return None;
         }
+
         let client = match client() {
             Ok(client) => client,
             Err(failure) => return Some(requests.iter().map(|_| Err(failure.clone())).collect()),
@@ -117,6 +118,7 @@ impl Client for BlockingClient {
                 }
             });
         }
+
         drop(sender);
 
         let mut responses: Vec<Option<Response>> = vec![None; requests.len()];
@@ -133,10 +135,12 @@ impl Client for BlockingClient {
                         return None;
                     }
                 }
+
                 // Every thread has ended, and a thread that panicked left its slot empty.
                 Err(mpsc::RecvTimeoutError::Disconnected) => break,
             }
         }
+
         Some(
             responses
                 .into_iter()
@@ -179,6 +183,7 @@ fn fetch_retrying(
         let Some(delay) = delay else {
             return Err(failure);
         };
+
         // This is a warning, since a wait that the server asks for can take minutes.
         tracing::warn!(
             url = request.url.as_str(),
@@ -190,6 +195,7 @@ fn fetch_retrying(
         if !wait(delay, abandoned) {
             return Err(failure);
         }
+
         attempt += 1;
     }
 }
@@ -207,6 +213,7 @@ fn wait(duration: Duration, abandoned: &AtomicBool) -> bool {
         if now >= end {
             return true;
         }
+
         std::thread::sleep(POLL.min(end - now));
     }
 }
@@ -227,9 +234,11 @@ fn send(
     if let Some(accept) = request.accept {
         builder = builder.header(reqwest::header::ACCEPT, accept);
     }
+
     for (name, value) in &request.headers {
         builder = builder.header(name.as_str(), value.as_str());
     }
+
     let response = builder
         .send()
         .map_err(|error| (Failure::transport(transport_reason(error)), None))?;
@@ -249,6 +258,7 @@ fn send(
         };
         return Err((Failure::response(status.as_u16(), message), retry_after));
     }
+
     let partial = Failure::of_partial_response(status.as_u16(), |name| {
         response
             .headers()
@@ -258,6 +268,7 @@ fn send(
     if let Some(failure) = partial {
         return Err((failure, None));
     }
+
     let bytes = response
         .bytes()
         .map_err(|error| (Failure::transport(transport_reason(error)), None))?;
@@ -280,13 +291,16 @@ fn transport_reason(error: reqwest::Error) -> String {
     let mut cause = std::error::Error::source(&error);
     while let Some(inner) = cause {
         let text = inner.to_string();
+
         // Some layers repeat the cause they wrap in their own text.
         if !reason.ends_with(&text) {
             reason.push_str(": ");
             reason.push_str(&text);
         }
+
         cause = std::error::Error::source(inner);
     }
+
     reason
 }
 
@@ -299,12 +313,14 @@ fn excerpt(body: &str) -> String {
         if index > 0 {
             excerpt.push(' ');
         }
+
         excerpt.push_str(word);
         if excerpt.chars().count() > EXCERPT_CHARS {
             let cut: String = excerpt.chars().take(EXCERPT_CHARS).collect();
             return format!("{cut}…");
         }
     }
+
     excerpt
 }
 

@@ -52,6 +52,7 @@ pub(super) fn reason(body: &[u8]) -> Option<String> {
     if traced.is_some() {
         return traced;
     }
+
     let (_, last) = text.rsplit_once('\n')?;
     let last = last.strip_suffix('\r').unwrap_or(last);
     (!last.is_empty() && !is_whole_row(last, columns))
@@ -102,6 +103,7 @@ fn is_whole_cell(cell: &str) -> bool {
     let Some(rest) = cell.strip_prefix('"') else {
         return is_cell(cell);
     };
+
     // The literal ends at its first unescaped quote, or its first `"""` if it is long.
     let (body, quote) = match rest.strip_prefix("\"\"") {
         Some(long) => (long, "\"\"\""),
@@ -128,6 +130,7 @@ fn is_whole_cell(cell: &str) -> bool {
             _ => {}
         }
     }
+
     false
 }
 

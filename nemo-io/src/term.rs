@@ -90,6 +90,7 @@ fn split(rest: &str) -> Option<(&str, &str)> {
             return Some((&rest[..index], &rest[index + 1..]));
         }
     }
+
     None
 }
 
@@ -102,6 +103,7 @@ fn unescape(raw: &str, syntax: LiteralSyntax) -> Option<String> {
     if !raw.contains('\\') {
         return Some(raw.to_owned());
     }
+
     let mut resolved = String::with_capacity(raw.len());
     let mut rest = raw;
     while let Some(backslash) = rest.find('\\') {
@@ -116,6 +118,7 @@ fn unescape(raw: &str, syntax: LiteralSyntax) -> Option<String> {
         resolved.push(character);
         rest = &after[length..];
     }
+
     resolved.push_str(rest);
     Some(resolved)
 }
@@ -141,6 +144,7 @@ mod tests {
             assert_eq!(literal(r#"x"tail"#, syntax), None, "{syntax:?}");
             assert_eq!(literal(r#"trailing\"#, syntax), None, "{syntax:?}");
         }
+
         // Turtle reads `\b` as a backspace, while term syntax keeps it for regular expressions.
         // Both read `\f` and `\'`.
         assert_eq!(
@@ -163,6 +167,7 @@ mod tests {
                 "{syntax:?}"
             );
         }
+
         // Only term syntax abbreviates the XML Schema namespace.
         assert_eq!(
             literal(r#"5"^^<xsd:integer>"#, LiteralSyntax::TermSyntax),

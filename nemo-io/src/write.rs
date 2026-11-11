@@ -67,6 +67,7 @@ pub trait Writer {
         rows: impl IntoIterator<Item = &'a [DataValue]>,
     ) -> Result<Written, Diagnostic> {
         let path = path.as_ref();
+
         create(path)
             .and_then(|file| self.write_compressed(file, Some(path), rows))
             .map_err(|diagnostic| diagnostic.with_resource(path.display().to_string()))
@@ -82,6 +83,7 @@ pub(crate) fn create(path: &Path) -> Result<File, Diagnostic> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|error| IoError::unwritable(path, &error))?;
     }
+
     File::create(path).map_err(|error| IoError::unwritable(path, &error))
 }
 
@@ -141,6 +143,7 @@ mod tests {
             if room == 0 && !bytes.is_empty() {
                 return Err(io::ErrorKind::StorageFull.into());
             }
+
             let taken = bytes.len().min(room);
             self.bytes.extend_from_slice(&bytes[..taken]);
             Ok(taken)
@@ -192,6 +195,7 @@ mod tests {
                 export(JsonWriter { compression }),
             ));
         }
+
         exports
     }
 

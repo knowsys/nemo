@@ -48,6 +48,7 @@ fn written_parquet_reads_back() {
     assert_eq!(read[1][1], DataValue::double(1.5));
     assert_eq!(read[0][2], DataValue::string("plain"));
     assert_eq!(read[0][3], DataValue::float(0.25));
+
     // The mixed third column went through text, so the IRI is read back
     // as a string of its text.
     assert_eq!(read[1][2], DataValue::string("http://example.org/a"));
@@ -90,6 +91,7 @@ fn a_column_left_out_still_decides_whether_a_row_is_well_formed() {
     let loaded = ParquetReader::with_selection(selection)
         .read_path(&path, &mut Dictionary::new(), EvaluationContext::now())
         .expect("the file reads");
+
     // The second row's null makes it malformed, whether its column is delivered or not.
     assert_eq!((loaded.rows.len(), loaded.malformed), (1, 1));
     assert_eq!(loaded.rows.arity(), 1);

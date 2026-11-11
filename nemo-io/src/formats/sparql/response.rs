@@ -161,6 +161,7 @@ fn read_tsv(
     let mut row = Vec::with_capacity(width);
     let mut kept: Vec<DataValue> = Vec::with_capacity(width);
     let mut values: Vec<Option<DataValue>> = vec![None; width];
+
     // The columns that a block reads, whether delivered or not.
     let mut bound = vec![false; width];
     for block in blocks {
@@ -175,6 +176,7 @@ fn read_tsv(
         }
         .diagnostic()
     })?;
+
     // SPARQL TSV has no quoting convention, since quotes belong to the
     // terms, so a line is a row and a tab separates its cells. The header
     // row names the variables and is skipped.
@@ -200,6 +202,7 @@ fn read_tsv(
             if cell.is_empty() || cell.starts_with("_:") {
                 continue;
             }
+
             match ground_cell(cell) {
                 Some(value) => values[position] = Some(value),
                 None => {
@@ -208,6 +211,7 @@ fn read_tsv(
                 }
             }
         }
+
         if !complete {
             loaded.count_malformed(number);
             continue;
@@ -232,8 +236,10 @@ fn read_tsv(
                 kept.push(value.expect("every cell of the row is a term"));
             }
         }
+
         loaded.take(&kept, selection, dictionary, &mut row, number);
     }
+
     tracing::debug!(
         rows = loaded.rows.len(),
         malformed = loaded.malformed,
@@ -255,9 +261,11 @@ fn read_cell(cell: &str, blanks: &BlankNodes, dictionary: &mut Dictionary) -> Op
         // say nothing about being equal.
         return Some(DataValue::null(dictionary.fresh_null()));
     }
+
     if let Some(label) = cell.strip_prefix("_:") {
         return Some(blanks.null(label, dictionary));
     }
+
     ground_cell(cell)
 }
 
@@ -270,11 +278,13 @@ fn ground_cell(cell: &str) -> Option<DataValue> {
     if let Some(rest) = cell.strip_prefix('"') {
         return term::literal(rest, LiteralSyntax::Turtle);
     }
+
     match cell {
         "true" => return Some(DataValue::boolean(true)),
         "false" => return Some(DataValue::boolean(false)),
         _ => {}
     }
+
     // Bare numbers have Turtle's three forms: a number with an exponent is a double,
     // and any other is an exact integer or decimal.
     if !starts_as_number(cell) {
@@ -283,6 +293,7 @@ fn ground_cell(cell: &str) -> Option<DataValue> {
     if cell.bytes().any(|byte| matches!(byte, b'e' | b'E')) {
         return cell.parse::<f64>().ok().map(DataValue::double);
     }
+
     DataValue::decimal_from_lexical(cell.strip_prefix('+').unwrap_or(cell))
 }
 

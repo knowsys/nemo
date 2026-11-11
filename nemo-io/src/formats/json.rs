@@ -112,6 +112,7 @@ impl Reader for JsonReader {
             errors = ?loaded.errors,
             "read a JSON document"
         );
+
         Ok(loaded)
     }
 }
@@ -314,6 +315,7 @@ impl<'a> NumberLiterals<'a> {
                 _ => 1,
             };
         }
+
         self.position += 1;
     }
 }
@@ -332,12 +334,14 @@ impl<'a> Iterator for NumberLiterals<'a> {
                     }) {
                         self.position += 1;
                     }
+
                     // A number literal is ASCII.
                     return std::str::from_utf8(&self.document[start..self.position]).ok();
                 }
                 _ => self.position += 1,
             }
         }
+
         None
     }
 }
@@ -380,6 +384,7 @@ impl<'de> Visitor<'de> for NodeSeed<'_, '_> {
 
     fn visit_u64<E: serde::de::Error>(self, value: u64) -> Result<Node, E> {
         self.literals.next();
+
         Ok(Node::Number(match i64::try_from(value) {
             Ok(value) => Number::Integer(value),
             Err(_) => Number::Big(value.to_string()),
@@ -400,6 +405,7 @@ impl<'de> Visitor<'de> for NodeSeed<'_, '_> {
                     .parse::<f64>()
                     .is_ok_and(|parsed| (parsed - value).abs() <= 4.0 * f64::EPSILON * parsed.abs())
         });
+
         Ok(Node::Number(match literal {
             Some(literal) => Number::Big(literal.to_owned()),
             None => Number::Double(value),
@@ -421,6 +427,7 @@ impl<'de> Visitor<'de> for NodeSeed<'_, '_> {
         })? {
             nodes.push(node);
         }
+
         Ok(Node::Array(nodes))
     }
 
@@ -432,6 +439,7 @@ impl<'de> Visitor<'de> for NodeSeed<'_, '_> {
             })?;
             nodes.insert(key, node);
         }
+
         Ok(Node::Object(nodes))
     }
 }
@@ -482,6 +490,7 @@ impl Writer for JsonWriter {
             serde_json::to_writer(&mut target, &cells).map_err(IoError::output_unwritable)?;
             written.rows += 1;
         }
+
         target
             .write_all(b"\n]\n")
             .map_err(IoError::output_unwritable)?;
@@ -499,6 +508,7 @@ fn cell(value: &DataValue) -> serde_json::Value {
     {
         return serde_json::Value::from(integer);
     }
+
     match value {
         ValueRef::Number(NumberRef::Double(value)) if value.is_finite() => {
             serde_json::Value::from(value.get())
@@ -520,6 +530,7 @@ mod tests {
             .read(text.as_bytes(), &mut dictionary, EvaluationContext::now())
             .expect("the document reads");
         let key_value = DataValue::iri("value");
+
         loaded
             .decoded(&dictionary)
             .into_iter()
@@ -540,6 +551,7 @@ mod tests {
     fn documents_read_as_typed_scalars() {
         let text = r#"{"name": "alice", "age": 42, "half": 0.5, "on": true, "none": null}"#;
         let values = values(text);
+
         // The members' ids follow the key order: age, half, name, none, on.
         assert_eq!(values[&1], DataValue::integer(42));
         assert_eq!(values[&2], DataValue::double(0.5));
@@ -569,11 +581,13 @@ mod tests {
         assert_eq!(values[&2], big("9223372036854775809"));
         assert_eq!(values[&3], big("18446744073709551617"));
         assert_eq!(values[&4], DataValue::integer(i64::MIN));
+
         // Exponent and fraction forms are doubles, whatever they denote.
         assert_eq!(values[&5], DataValue::double(1e19));
         assert_eq!(values[&6], DataValue::integer(0));
         assert_eq!(values[&7], DataValue::double(2.5));
         assert_eq!(values[&8], DataValue::string("1e400"));
+
         // After an escaped string, the scan is still in step with the parse.
         assert_eq!(values[&10], big("100000000000000000000"));
     }

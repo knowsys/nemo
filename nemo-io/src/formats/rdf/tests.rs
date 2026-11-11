@@ -100,6 +100,7 @@ fn a_broken_stream_ends_the_read() {
             )
             .expect("writes");
         }
+
         encoder.finish().expect("finishes");
     }
     let cut = compressed[..compressed.len() / 2].to_vec();

@@ -151,6 +151,7 @@ impl DsvOptions {
         if !complete {
             values.truncate(before);
         }
+
         complete
     }
 
@@ -171,6 +172,7 @@ impl DsvOptions {
         compression: Compression,
     ) -> Result<Option<usize>, Diagnostic> {
         let path = path.as_ref();
+
         Self::sniff_width_from(
             compression.open_file(path)?,
             delimiter,

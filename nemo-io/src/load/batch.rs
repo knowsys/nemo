@@ -123,6 +123,7 @@ impl ResourceBatch {
         {
             return whole;
         }
+
         let size = match &source.input {
             Resource::Path(path) => match std::fs::metadata(path) {
                 Ok(data) => data.len(),
@@ -134,6 +135,7 @@ impl ResourceBatch {
         if size < self.window_bytes * 2 {
             return whole;
         }
+
         let mut file = match &source.input {
             Resource::Path(path) => match File::open(path) {
                 Ok(file) => Some(file),
@@ -167,10 +169,12 @@ impl ResourceBatch {
                 None => break,
             }
         }
+
         bounds.push(size);
         if bounds.len() <= 2 {
             return whole;
         }
+
         bounds
             .windows(2)
             .enumerate()
@@ -206,6 +210,7 @@ impl ResourceBatch {
     ) {
         let source = &self.sources[window.source];
         let mut options = source.options.clone();
+
         // Only the first window of a resource contains the header to skip.
         options.ignore_headers = source.options.ignore_headers && window.position == 0;
         let reader = DsvReader::new(options);
@@ -260,6 +265,7 @@ impl ResourceBatch {
         let windows: Vec<Window> = (0..self.sources.len())
             .flat_map(|index| self.windows(index))
             .collect();
+
         // Several windows go to the worker pool whatever their size, so only
         // the input of a single window is measured.
         let tasks = if windows.len() > 1 || self.input_bytes() >= POOL_BYTES {
@@ -273,6 +279,7 @@ impl ResourceBatch {
             .iter()
             .map(|source| Loaded::new(source.options.arity(), context))
             .collect();
+
         // For each resource, the lines that its earlier windows consumed,
         // and the window being interned with the lines it consumed so far.
         // A window's line numbers continue from its resource's base.
@@ -299,6 +306,7 @@ impl ResourceBatch {
                 if let Some((window, consumed)) = current.filter(|&(window, _)| window != index) {
                     bases[windows[window].source] += consumed;
                 }
+
                 current = Some((index, run.consumed_lines));
                 let source = windows[index].source;
                 run.encode_into(&mut loads[source], dictionary, bases[source]);
@@ -338,8 +346,10 @@ fn next_record_boundary(file: &mut File, target: u64, size: u64) -> Option<u64> 
             let boundary = target + scanned + newline as u64 + 1;
             return (boundary < size).then_some(boundary);
         }
+
         scanned += read as u64;
     }
+
     None
 }
 

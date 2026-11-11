@@ -137,6 +137,7 @@ impl RdfReader {
         let Some(base) = &self.options.base else {
             return Ok(parser);
         };
+
         // The Turtle parser checks a base, while the line-based parsers accept any text.
         RdfParser::from_format(RdfFormat::Turtle)
             .with_base_iri(base.clone())
@@ -182,6 +183,7 @@ impl Reader for RdfReader {
             errors = ?loaded.errors,
             "read an RDF source"
         );
+
         Ok(loaded)
     }
 }
@@ -211,6 +213,7 @@ impl RdfReader {
                 if read == 0 {
                     break;
                 }
+
                 number += 1;
                 quads.clear();
                 let parsed = parser
@@ -221,10 +224,12 @@ impl RdfReader {
                     statements.loaded.count_malformed(number);
                     continue;
                 }
+
                 for quad in quads.drain(..) {
                     if statements.loaded.well_formed >= limit {
                         break;
                     }
+
                     statements.take(quad, dictionary, number);
                 }
             }
@@ -233,6 +238,7 @@ impl RdfReader {
                 if statements.loaded.well_formed >= limit {
                     break;
                 }
+
                 match quad {
                     Ok(quad) => statements.take(quad, dictionary, 0),
                     Err(oxrdfio::RdfParseError::Syntax(_)) => statements.loaded.count_malformed(0),
@@ -244,6 +250,7 @@ impl RdfReader {
                 }
             }
         }
+
         Ok(())
     }
 }
@@ -271,6 +278,7 @@ impl<'a> Statements<'a> {
     /// and `context` is the evaluation context of the selection's condition.
     fn new(options: &'a RdfReaderOptions, blanks: BlankNodes, context: EvaluationContext) -> Self {
         let arity = options.variant.width();
+
         Self {
             options,
             loaded: Loaded::new(options.selection.arity(arity), context),
@@ -293,6 +301,7 @@ impl<'a> Statements<'a> {
             dictionary,
             &mut self.terms,
         );
+
         // Every column decides whether the statement is well-formed,
         // including the columns that are not delivered.
         if self.terms.iter().all(Option::is_some) {
@@ -334,6 +343,7 @@ fn statement(
             oxrdf::GraphName::BlankNode(node) => blanks.null(node.as_str(), dictionary),
         }));
     }
+
     terms.push(Some(match quad.subject {
         oxrdf::NamedOrBlankNode::NamedNode(node) => DataValue::iri(node.into_string()),
         oxrdf::NamedOrBlankNode::BlankNode(node) => blanks.null(node.as_str(), dictionary),
@@ -355,5 +365,6 @@ fn literal_value(literal: &oxrdf::Literal) -> Option<DataValue> {
     if let Some(language) = literal.language() {
         return DataValue::language_string(literal.value(), language);
     }
+
     DataValue::typed_literal(literal.datatype().as_str(), literal.value())
 }

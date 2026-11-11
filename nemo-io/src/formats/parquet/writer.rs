@@ -54,6 +54,7 @@ impl ParquetWriter {
                 "a row of a Parquet export has the writer's number of columns"
             );
         }
+
         let kinds: Vec<ColumnKind> = (0..self.arity)
             .map(|column| {
                 rows.iter()
@@ -82,6 +83,7 @@ impl ParquetWriter {
             .write(&batch)
             .and_then(|()| writer.close().map(|_| ()))
             .map_err(IoError::output_unwritable)?;
+
         Ok(Written {
             rows: rows.len() as u64,
             dropped: 0,
@@ -104,8 +106,10 @@ impl ParquetWriter {
         rows: impl IntoIterator<Item = &'a [DataValue]>,
     ) -> Result<Written, Diagnostic> {
         let path = path.as_ref();
+
         // The Parquet writer buffers its target itself.
         let file = create(path)?;
+
         self.write(file, rows)
             .map_err(|diagnostic| diagnostic.with_resource(path.display().to_string()))
     }

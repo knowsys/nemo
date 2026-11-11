@@ -194,8 +194,10 @@ impl Parsed {
             for value in values.drain(..) {
                 self.push_value(value);
             }
+
             self.lines.push(line);
         }
+
         self.values = values;
     }
 
@@ -226,12 +228,14 @@ impl Parsed {
         if format == ValueFormat::Skip {
             return true;
         }
+
         match format.parse_cell(cell) {
             Some(CellValue::Iri(iri)) => self.push_text(iri, true),
             Some(CellValue::String(text)) => self.push_text(text, false),
             Some(CellValue::Value(value)) => self.push_value(value),
             None => return false,
         }
+
         true
     }
 
@@ -272,6 +276,7 @@ impl Parsed {
         let end = u32::try_from(self.text.len() + parts[0].len() + parts[1].len()).ok()?;
         self.text.push_str(parts[0]);
         self.text.push_str(parts[1]);
+
         Some(if iri {
             ParsedCell::Iri { start, end }
         } else {
@@ -294,6 +299,7 @@ impl Parsed {
     /// A row with a value that the dictionary cannot hold is counted as malformed.
     pub(crate) fn encode_into(&self, loaded: &mut Loaded, dictionary: &mut Dictionary, base: u64) {
         let shifted = |line: u64| if line > 0 { line + base } else { 0 };
+
         // The rows are stored first, in line order, after the rows of every
         // earlier run. The first malformed line of the parse is merged afterwards,
         // since it may come before the line of a row that failed to encode.
@@ -315,6 +321,7 @@ impl Parsed {
                 loaded.count_malformed(shifted(line));
             }
         }
+
         loaded.malformed += self.loaded.malformed;
         loaded.excluded += self.loaded.excluded;
         loaded.well_formed += self.loaded.well_formed;

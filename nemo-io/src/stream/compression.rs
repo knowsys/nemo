@@ -115,6 +115,7 @@ impl Compression {
                 "the name and the content disagree on gzip; the content decides"
             );
         }
+
         let cursor = io::Cursor::new(bytes);
         if gzip {
             Box::new(MultiGzDecoder::new(cursor))
@@ -138,6 +139,7 @@ impl Compression {
         } else {
             Encoder::Plain(target)
         };
+
         CompressedWriter {
             buffer: BufWriter::new(encoder),
         }
@@ -174,6 +176,7 @@ impl<W: Write> CompressedWriter<W> {
             Encoder::Plain(target) => target,
             Encoder::Gzip(encoder) => encoder.finish()?,
         };
+
         target.flush()
     }
 }
@@ -224,6 +227,7 @@ fn resource_path(name: &str) -> &str {
     if !Request::is_remote(name) {
         return name;
     }
+
     let end = name.find(['?', '#']).unwrap_or(name.len());
     &name[..end]
 }
@@ -258,7 +262,9 @@ mod tests {
             assert!(Compression::Auto.gzip_for_name(Path::new(url)), "{url}");
             assert_eq!(Compression::strip_suffix(url), "https://h/x.csv", "{url}");
         }
+
         assert!(!Compression::Auto.gzip_for_name(Path::new("https://h/x.csv?dl=1.gz")));
+
         // A local file name may contain the characters a URL reserves.
         assert!(Compression::Auto.gzip_for_name(Path::new("data#1.csv.gz")));
         assert_eq!(Compression::strip_suffix("data#1.csv.gz"), "data#1.csv");
@@ -279,6 +285,7 @@ mod tests {
                 .read_to_string(&mut text)
                 .map(|_| text)
         };
+
         // Gzip bytes are decompressed whatever the name says. Plain bytes under a
         // `.gz` name, such as a body the transport decompressed, are read as they are.
         assert_eq!(
@@ -295,6 +302,7 @@ mod tests {
         );
         assert!(Compression::Auto.gzip_for_bytes(&compressed));
         assert!(!Compression::Auto.gzip_for_bytes(b"plain"));
+
         // The declared settings stay strict.
         assert!(read(b"plain", "x.gz", Compression::Gzip).is_err());
         let mut raw = Vec::new();

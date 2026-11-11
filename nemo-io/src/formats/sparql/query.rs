@@ -100,6 +100,7 @@ impl SparqlQuery {
         let Some(term) = Self::ground_term(value) else {
             return Vec::new();
         };
+
         let decimal = match &term {
             GroundTerm::Literal(literal) => Self::integer_as_decimal(literal),
             _ => None,
@@ -153,6 +154,7 @@ impl SparqlQuery {
                     reason: error.to_string(),
                 })?;
         }
+
         for (name, iri) in prefixes {
             // A prefix name that the SPARQL grammar does not allow stays
             // out of scope for the query. An empty name is allowed, but
@@ -161,11 +163,13 @@ impl SparqlQuery {
                 parser = seeded;
             }
         }
+
         let query = parser
             .parse_query(text)
             .map_err(|error| QueryError::Syntax {
                 reason: error.to_string(),
             })?;
+
         Self::from_select(query).ok_or(QueryError::NotSelect)
     }
 
@@ -175,12 +179,14 @@ impl SparqlQuery {
         let Query::Select { pattern, .. } = &query else {
             return None;
         };
+
         let mut variables: Vec<String> = Vec::new();
         pattern.on_in_scope_variable(|variable| {
             if !variables.iter().any(|seen| seen == variable.as_str()) {
                 variables.push(variable.as_str().to_owned());
             }
         });
+
         Some(Self {
             // The parsed form is rendered with the prefixes and base
             // resolved, so the request needs no PREFIX declarations.
@@ -227,6 +233,7 @@ impl SparqlQuery {
         algebra::visit_patterns(self.pattern(), &mut |pattern| {
             service |= matches!(pattern, GraphPattern::Service { .. });
         });
+
         service
     }
 
@@ -268,6 +275,7 @@ impl SparqlQuery {
         let always = algebra::bound_in_results(self.pattern());
         let possibly = algebra::possibly_bound(self.pattern());
         let service = self.keeps_names();
+
         self.variables
             .iter()
             .any(|variable| !always.contains(variable) && (possibly.contains(variable) || !service))
@@ -279,6 +287,7 @@ impl SparqlQuery {
     pub fn never_bound_variables(&self) -> Vec<&str> {
         let always = algebra::bound_in_results(self.pattern());
         let possibly = algebra::possibly_bound(self.pattern());
+
         self.variables
             .iter()
             .filter(|variable| !always.contains(*variable) && !possibly.contains(*variable))
@@ -324,6 +333,7 @@ impl SparqlQuery {
         if let QueryShape::Opaque(reason) = self.shape() {
             panic!("values cannot be joined into an opaque query: {reason}");
         }
+
         let variables = &self.variables;
         let pattern = algebra::under_projection(self.pattern().clone(), |inner| {
             // Only a variable that the pattern binds in some solutions but not
@@ -358,8 +368,10 @@ impl SparqlQuery {
                     right: Box::new(block.pattern(variables)),
                 };
             }
+
             inner
         });
+
         Self::from_select(self.with_pattern(pattern)).expect("the query stays a SELECT")
     }
 
@@ -374,11 +386,13 @@ impl SparqlQuery {
         if let QueryShape::Opaque(reason) = self.shape() {
             panic!("a condition cannot be filtered into an opaque query: {reason}");
         }
+
         let pattern =
             algebra::under_projection(self.pattern().clone(), |inner| GraphPattern::Filter {
                 expr: expression,
                 inner: Box::new(inner),
             });
+
         Self::from_select(self.with_pattern(pattern)).expect("the query stays a SELECT")
     }
 
@@ -407,6 +421,7 @@ impl Request {
         } else {
             request.form = Some(vec![(String::from("query"), text.to_owned())]);
         }
+
         request
     }
 }

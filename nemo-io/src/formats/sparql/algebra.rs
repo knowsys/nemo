@@ -46,6 +46,7 @@ pub(super) fn shape(pattern: &GraphPattern) -> QueryShape {
     if let Some(reason) = opaque(pattern) {
         return QueryShape::Opaque(reason);
     }
+
     match strip_modifiers(pattern) {
         GraphPattern::Project { inner, .. } if !has_inner_scope(inner) => QueryShape::Pattern,
         _ => QueryShape::Complex,
@@ -59,6 +60,7 @@ fn opaque(pattern: &GraphPattern) -> Option<&'static str> {
         if reason.is_some() {
             return;
         }
+
         match node {
             GraphPattern::Slice { start, length, .. } => {
                 reason = Some(match (start, length) {
@@ -86,6 +88,7 @@ fn opaque(pattern: &GraphPattern) -> Option<&'static str> {
     if reason.is_some() {
         return reason;
     }
+
     visit_expressions(pattern, &mut |expression| {
         if reason.is_some() {
             return;
@@ -242,6 +245,7 @@ pub(super) fn always_bound(pattern: &GraphPattern) -> HashSet<String> {
             if let NamedNodePattern::Variable(variable) = name {
                 bound.insert(variable.as_str().to_owned());
             }
+
             bound
         }
         GraphPattern::Values {
@@ -366,6 +370,7 @@ pub(super) fn possibly_bound(pattern: &GraphPattern) -> HashSet<String> {
             if let NamedNodePattern::Variable(variable) = name {
                 bound.insert(variable.as_str().to_owned());
             }
+
             bound
         }
         GraphPattern::Values { variables, .. } => variables

@@ -149,6 +149,7 @@ impl Failure {
         } else {
             return None;
         };
+
         Some(Self::partial(status, reason))
     }
 
@@ -183,6 +184,7 @@ impl Failure {
                 reason: self.to_string(),
             }
         };
+
         error.diagnostic().with_resource(url)
     }
 }
@@ -196,6 +198,7 @@ impl std::fmt::Display for Failure {
                 self.message
             );
         }
+
         match (self.status, self.message.is_empty()) {
             (Some(status), true) => write!(f, "the server responded with status {status}"),
             (Some(status), false) => write!(

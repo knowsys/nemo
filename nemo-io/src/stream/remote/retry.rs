@@ -60,6 +60,7 @@ impl Retry {
         if attempt >= self.retries || !matches!(status, 429 | 502 | 503 | 504) {
             return None;
         }
+
         let asked = matches!(status, 429 | 503)
             .then(|| retry_after?.trim().parse::<u64>().ok())
             .flatten()
@@ -102,14 +103,17 @@ mod tests {
         let retry = Retry::default();
         assert_eq!(retry.delay(0, 429, Some("7")), Some(Duration::from_secs(7)));
         assert_eq!(retry.delay(3, 429, Some(" 0 ")), Some(Duration::ZERO));
+
         // A date, or no value, leads to a backoff instead.
         assert_eq!(
             retry.delay(1, 429, Some("Wed, 21 Oct 2026 07:28:00 GMT")),
             Some(Duration::from_secs(2))
         );
         assert_eq!(retry.delay(2, 429, None), Some(Duration::from_secs(4)));
+
         // Asking for more than the longest wait is final.
         assert_eq!(retry.delay(0, 429, Some("600")), None);
+
         // The `Retry-After` of any status but 429 and 503 is ignored.
         assert_eq!(retry.delay(0, 502, Some("7")), Some(Duration::from_secs(1)));
     }

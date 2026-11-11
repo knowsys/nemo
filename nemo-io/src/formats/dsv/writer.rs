@@ -54,6 +54,7 @@ impl Writer for DsvWriter {
                 if matches!(format, ValueFormat::Skip) {
                     continue;
                 }
+
                 match format.write(value.as_ref()) {
                     Some(cell) => record.push(cell),
                     None => {
@@ -62,11 +63,13 @@ impl Writer for DsvWriter {
                     }
                 }
             }
+
             writer
                 .write_record(&record)
                 .map_err(IoError::output_unwritable)?;
             written.rows += 1;
         }
+
         writer.flush().map_err(IoError::output_unwritable)?;
         Ok(written)
     }

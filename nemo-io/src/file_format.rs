@@ -164,6 +164,7 @@ impl FileFormat {
     /// Returns `None` for a `.dsv` name, which does not say what the delimiter is.
     pub(crate) fn from_extension(resource: &str) -> Option<Self> {
         let (_, extension) = Compression::strip_suffix(resource).rsplit_once('.')?;
+
         Self::ALL
             .into_iter()
             .filter(|format| *format != FileFormat::Dsv)
@@ -331,6 +332,7 @@ mod tests {
             let format = FileFormat::from_name(name).expect("a known name");
             assert_eq!(format.name(), name);
         }
+
         assert_eq!(FileFormat::from_name("xml"), None);
     }
 
@@ -347,6 +349,7 @@ mod tests {
             Some(FileFormat::Csv)
         );
         assert_eq!(FileFormat::from_extension("noext"), None);
+
         // A URL's query and fragment are not part of its name.
         assert_eq!(
             FileFormat::from_extension("https://h/rows.csv.gz?dl=1"),

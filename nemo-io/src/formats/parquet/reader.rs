@@ -58,6 +58,7 @@ impl ParquetReader {
         let file = File::open(path).map_err(|error| IoError::unreadable(path, &error))?;
         let builder = ParquetRecordBatchReaderBuilder::try_new(file)
             .map_err(|error| IoError::unreadable(path, error))?;
+
         Ok(builder.schema().fields().len())
     }
 
@@ -79,6 +80,7 @@ impl ParquetReader {
         let file = File::open(path).map_err(|error| IoError::unreadable(path, &error))?;
         let mut builder = ParquetRecordBatchReaderBuilder::try_new(file)
             .map_err(|error| IoError::unreadable(path, error))?;
+
         // Every column decides whether a row is well-formed, including the columns that are not
         // delivered, so a column of an unsupported type fails the file even if it is not
         // delivered.
@@ -94,6 +96,7 @@ impl ParquetReader {
         {
             return Err(unsupported_type(path, outside));
         }
+
         // A column that is not delivered is read only if it may have a null,
         // which makes its row malformed.
         let width = builder.schema().fields().len();
@@ -108,6 +111,7 @@ impl ParquetReader {
             let mask = ProjectionMask::roots(builder.parquet_schema(), read);
             builder = builder.with_projection(mask);
         }
+
         let reader = builder
             .build()
             .map_err(|error| IoError::unreadable(path, error))?;
@@ -118,6 +122,7 @@ impl ParquetReader {
         let mut kept: Vec<DataValue> = Vec::new();
         for batch in reader {
             let batch = batch.map_err(|error| IoError::unreadable(path, error))?;
+
             // Dictionary-encoded columns are read as their value type.
             let columns: Vec<arrow::array::ArrayRef> = batch
                 .columns()
@@ -130,11 +135,13 @@ impl ParquetReader {
                 .collect::<Result<_, _>>()?;
             for index in 0..batch.num_rows() {
                 kept.clear();
+
                 // `None` here is a null cell, so the row is malformed.
                 let complete = columns.iter().zip(&delivered).all(|(column, &delivered)| {
                     if !delivered {
                         return !column.is_null(index);
                     }
+
                     arrow_value(column.as_ref(), index).is_some_and(|value| {
                         kept.push(value);
                         true
@@ -147,6 +154,7 @@ impl ParquetReader {
                 }
             }
         }
+
         tracing::debug!(
             rows = loaded.rows.len(),
             malformed = loaded.malformed,
@@ -154,6 +162,7 @@ impl ParquetReader {
             errors = ?loaded.errors,
             "read a Parquet file"
         );
+
         Ok(loaded)
     }
 }
@@ -186,6 +195,7 @@ fn arrow_value(column: &dyn Array, row: usize) -> Option<DataValue> {
     if column.is_null(row) {
         return None;
     }
+
     let value = match column.data_type() {
         DataType::Boolean => DataValue::boolean(column.as_boolean().value(row)),
         DataType::Int8 => DataValue::integer(

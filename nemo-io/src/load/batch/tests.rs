@@ -27,6 +27,7 @@ fn batches_match_sequential_reads() {
         fs::write(&path, content).expect("the temp file writes");
         paths.push(path);
     }
+
     let sources: Vec<DsvResource> = paths
         .iter()
         .map(|path| DsvResource::path(path.clone(), DsvOptions::csv_terms(2)))
@@ -294,8 +295,10 @@ fn limited_sources_read_as_one_window_and_count_like_the_streaming_reader() {
         if index % 100 == 50 {
             content.push_str("broken\n");
         }
+
         content.push_str(&format!("name-{index}\t{index}\n"));
     }
+
     fs::write(&path, &content).expect("the temp file writes");
     let mut options = DsvOptions::tsv(vec![ValueFormat::Term, ValueFormat::Integer]);
     options.quoting = false;
@@ -347,12 +350,14 @@ fn runs_intern_like_a_straight_read() {
         if index == 2 || index == 45_000 {
             content.push_str("broken\n");
         }
+
         content.push_str(&format!(
             "name-{}\t{index}\t\"text {}\"\n",
             index % 1000,
             index % 777
         ));
     }
+
     let plain = directory.join("nemo_io_runs.tsv");
     fs::write(&plain, &content).expect("the temp file writes");
     let compressed = directory.join("nemo_io_runs.tsv.gz");

@@ -49,8 +49,10 @@ impl ValuesBlock {
                     })
                     .collect();
             }
+
             bindings.extend(combinations);
         }
+
         GraphPattern::Values {
             variables: self
                 .positions

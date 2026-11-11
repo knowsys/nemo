@@ -145,6 +145,7 @@ impl Loaded {
         } else {
             self.count_malformed(line);
         }
+
         complete
     }
 

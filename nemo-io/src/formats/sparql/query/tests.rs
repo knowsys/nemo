@@ -9,6 +9,7 @@ fn queries_validate_and_count_their_projection() {
     let query = SparqlQuery::parse("SELECT ?a ?b WHERE { ?a ?b ?c }", None, []).expect("valid");
     assert_eq!(query.width(), 2);
     assert_eq!(query.variables(), ["a", "b"]);
+
     // The given prefixes are in scope for the parser, so the query needs no PREFIX line.
     let query = SparqlQuery::parse(
         "SELECT ?x WHERE { ?x a ex:Thing }",
@@ -61,6 +62,7 @@ fn shapes_distinguish_patterns_from_complex_and_opaque_queries() {
         shape("SELECT ?a WHERE { ?a ?b ?c . BIND(STR(?a) AS ?s) }"),
         QueryShape::Pattern
     );
+
     // A part that binds only some solutions makes the query a subquery in a merge,
     // since substituting a term into the part would change the query.
     assert_eq!(
@@ -75,6 +77,7 @@ fn shapes_distinguish_patterns_from_complex_and_opaque_queries() {
         shape("SELECT ?a WHERE { { SELECT ?a WHERE { ?a ?b ?c } } ?a ?d ?e }"),
         QueryShape::Complex
     );
+
     // LIMIT bounds the whole result, at the top or inside a subquery,
     // so no selection in each request reproduces it.
     assert!(matches!(
@@ -89,6 +92,7 @@ fn shapes_distinguish_patterns_from_complex_and_opaque_queries() {
         shape("SELECT ?a WHERE { ?a ?b ?c } OFFSET 5"),
         QueryShape::Opaque(_)
     ));
+
     // A nondeterministic query has no single result to restrict.
     assert!(matches!(
         shape("SELECT ?a WHERE { ?a ?b ?c . FILTER(RAND() < 0.5) }"),
@@ -126,6 +130,7 @@ fn bound_variables_are_required_below_the_values_join() {
     let guard = text.find("FILTER(BOUND(?p))").expect("the guard is there");
     let values = text.find("VALUES").expect("the block is there");
     assert!(guard < values, "the guard sits below the join: {text}");
+
     // The guard's group closes before the block is joined with it.
     let between = &text[guard..values];
     assert!(between.contains('}'), "{text}");
@@ -149,14 +154,17 @@ fn queries_report_whether_a_solution_may_leave_a_variable_unbound() {
     assert!(leaves(
         "SELECT ?s WHERE { { ?s <urn:p> ?o } UNION { ?t <urn:q> ?o } }"
     ));
+
     // A filter that requires the variable to be bound keeps only the solutions that bind it.
     assert!(!leaves(
         "SELECT ?s ?r WHERE { ?s <urn:p> ?o OPTIONAL { ?s <urn:q> ?r } FILTER(BOUND(?r)) }"
     ));
+
     // A computed value counts as possibly unbound.
     assert!(leaves(
         "SELECT ?s (COUNT(?o) AS ?n) WHERE { ?s <urn:p> ?o } GROUP BY ?s"
     ));
+
     // A variable no pattern binds is unbound in every solution,
     // unless the query calls a service, which may bind it.
     assert!(leaves("SELECT ?s ?label WHERE { ?s <urn:p> <urn:o> }"));
@@ -253,9 +261,11 @@ fn values_join_in_under_the_projection() {
         bound.contains("<urn:x>") && bound.contains("<urn:y>"),
         "{bound}"
     );
+
     // The modifiers stay above the block.
     assert!(bound.starts_with("SELECT DISTINCT ?a ?c"), "{bound}");
     assert!(bound.trim_end().ends_with("ORDER BY ASC(?c)"), "{bound}");
+
     // Parsing the text again gives the same projection, so the block did not widen it.
     let reparsed = SparqlQuery::parse(&bound, None, []).expect("the bound query parses");
     assert_eq!(reparsed.variables(), ["a", "c"]);
@@ -280,6 +290,7 @@ fn values_land_inside_the_filters_so_absences_see_them() {
         }])
         .text()
         .to_owned();
+
     // The block binds ?i before the absence is decided: it is
     // in the same group, before the FILTER.
     let values = bound.find("VALUES").expect("bound");
@@ -306,6 +317,7 @@ fn values_on_an_aggregate_result_land_above_the_group() {
         }])
         .text()
         .to_owned();
+
     // The block is placed where ?n exists, outside the grouping, which
     // the rendered text keeps whole as a subquery.
     assert!(bound.contains("VALUES ( ?n )"), "{bound}");
@@ -369,12 +381,14 @@ fn ground_terms_render_values_in_their_lexical_forms() {
         render(DataValue::boolean(true)).as_deref(),
         Some("\"true\"^^<http://www.w3.org/2001/XMLSchema#boolean>")
     );
+
     // An integer is an `xsd:integer`, whatever datatype it was read from.
     let int = DataValue::typed_literal("http://www.w3.org/2001/XMLSchema#int", "03");
     assert_eq!(
         render(int.expect("an int")).as_deref(),
         Some("\"3\"^^<http://www.w3.org/2001/XMLSchema#integer>")
     );
+
     // Doubles and floats are in XSD's canonical form,
     // and the special values are written as Nemo writes them.
     let double = |value: f64| render(DataValue::double(value));
@@ -393,6 +407,7 @@ fn ground_terms_render_values_in_their_lexical_forms() {
         render(DataValue::float(0.5)).as_deref(),
         Some("\"5.0E-1\"^^<http://www.w3.org/2001/XMLSchema#float>")
     );
+
     // A query cannot ask an endpoint about a null.
     assert_eq!(render(DataValue::null(7)), None);
 }
@@ -420,6 +435,7 @@ fn an_integer_is_sent_as_an_integer_and_as_a_decimal() {
             "\"-12.0\"^^<http://www.w3.org/2001/XMLSchema#decimal>"
         ]
     );
+
     // Every other value is sent as its one term.
     assert_eq!(
         terms(DataValue::decimal(15, -1).expect("representable")),

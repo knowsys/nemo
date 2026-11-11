@@ -44,6 +44,7 @@ pub trait Reader {
         context: EvaluationContext,
     ) -> Result<Loaded, Diagnostic> {
         let path = path.as_ref();
+
         self.read(self.compression().open_file(path)?, dictionary, context)
             .map_err(|diagnostic| diagnostic.with_resource(path.display().to_string()))
     }

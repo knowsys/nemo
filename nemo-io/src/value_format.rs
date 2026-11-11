@@ -227,6 +227,7 @@ impl ValueFormat {
             },
             typed => DataValue::typed_literal(typed.datatype()?, cell)?,
         };
+
         self.domains()
             .contains(value.domain())
             .then_some(CellValue::Value(value))
@@ -255,6 +256,7 @@ impl ValueFormat {
             {
                 Some(value.to_string())
             }
+
             // A double is written in exponent form, so that it is not read back as a decimal.
             (ValueFormat::Number, ValueRef::Number(NumberRef::Double(value))) => {
                 let value = value.get();
@@ -278,6 +280,7 @@ impl ValueFormat {
             (ValueFormat::LanguageString, ValueRef::LanguageString(_)) => {
                 Some(Self::any_cell(value))
             }
+
             // The canonical lexical form of a temporal value is its `Display`.
             (ValueFormat::DateTime, ValueRef::DateTime(value)) => Some(value.to_string()),
             (ValueFormat::Date, ValueRef::Date(value)) => Some(value.to_string()),
@@ -308,9 +311,11 @@ impl ValueFormat {
                 Cow::Owned(iri) => CellValue::Value(DataValue::iri(iri)),
             });
         }
+
         if let Some(number) = DataValue::number_from_term_syntax(cell) {
             return Some(CellValue::Value(number));
         }
+
         // Bare text is an IRI only if it is a valid one.
         // Empty cells and cells with whitespace stay strings.
         Some(
@@ -346,6 +351,7 @@ impl ValueFormat {
                     other => quoted.push(other),
                 }
             }
+
             quoted.push('"');
             quoted
         };
@@ -380,11 +386,13 @@ impl ValueFormat {
             ValueRef::Other(literal) => {
                 format!("{}^^<{}>", quote(literal.lexical()), literal.datatype())
             }
+
             // A structured value is written in its own syntax,
             // recursively: `(1, 2)`, `point(1, 2)`, `{a = 1}`.
             ValueRef::Tuple(tuple) => {
                 let elements: Vec<String> = tuple.elements().map(Self::any_cell).collect();
                 let label = tuple.label().map(Self::label_cell).unwrap_or_default();
+
                 // A one-element tuple keeps its comma,
                 // which distinguishes it from a parenthesized term.
                 let trailing = if elements.len() == 1 && tuple.label().is_none() {
@@ -477,6 +485,7 @@ mod tests {
             assert_eq!(ValueFormat::from_name(format.name()), Some(format));
             assert!(ValueFormat::NAMES.contains(format.name()));
         }
+
         assert_eq!(ValueFormat::from_name("any"), None);
         assert_eq!(ValueFormat::from_name("integer"), None);
         assert_eq!(ValueFormat::Integer.to_string(), "int");
@@ -494,6 +503,7 @@ mod tests {
             rendered(tuple(vec![DataValue::integer(1), DataValue::integer(2)])),
             "(1, 2)"
         );
+
         // The comma distinguishes a one-element tuple from a
         // parenthesized term.
         assert_eq!(rendered(tuple(vec![DataValue::integer(1)])), "(1,)");
@@ -515,6 +525,7 @@ mod tests {
             // Pairs are stored sorted by key, so the rendering is canonical.
             "{host = \"localhost\", port = 8080}"
         );
+
         // Nested values are written recursively.
         assert_eq!(
             rendered(tuple(vec![
@@ -536,6 +547,7 @@ mod tests {
         assert_eq!(read(ValueFormat::Term, "<a>b>"), None);
         assert_eq!(read(ValueFormat::Iri, "http://e/a"), iri("http://e/a"));
         assert_eq!(read(ValueFormat::Iri, "a{b}"), None);
+
         // Bare text that is not a valid IRI stays a string.
         assert_eq!(
             read(ValueFormat::Term, "a{b}"),
@@ -567,6 +579,7 @@ mod tests {
         ] {
             assert_eq!(term(cell), Some(value), "cell {cell:?}");
         }
+
         // Text that term syntax does not read as a number stays an IRI.
         for cell in [
             "+", "-.", "5.", ".5", "1e", "0x", "INF", "nan", "1.5.5", "2.5ff",
@@ -594,6 +607,7 @@ mod tests {
             term(r#""q\"uote"^^<http://example.org/t>"#),
             DataValue::other("http://example.org/t", r#"q"uote"#)
         );
+
         // Character escapes are resolved, and an unknown escape keeps its backslash.
         assert_eq!(
             term(r#""\u0041\U0001F600""#),
@@ -604,6 +618,7 @@ mod tests {
             term(r#""\d+ \user""#),
             Some(DataValue::string(r"\d+ \user"))
         );
+
         // An unclosed literal is invalid, and so is a literal followed by text that is neither
         // a language tag nor a datatype.
         assert_eq!(term(r#""abc"#), None);
@@ -628,11 +643,13 @@ mod tests {
             ValueFormat::Double.parse("-INF"),
             Some(DataValue::double(f64::NEG_INFINITY))
         );
+
         // Only XSD's spellings of the special values are read, and surrounding whitespace is
         // rejected.
         for cell in ["inf", "nan", "Infinity", " 2.5"] {
             assert_eq!(ValueFormat::Double.parse(cell), None, "cell {cell:?}");
         }
+
         // A typed column stores values, not lexical forms, so a
         // non-canonical lexical form is normalized rather than rejected.
         assert_eq!(
@@ -640,6 +657,7 @@ mod tests {
             Some(DataValue::decimal(15, -1).expect("representable"))
         );
         assert_eq!(ValueFormat::Decimal.parse("x"), None);
+
         // Strings and IRIs are read verbatim, not as numbers.
         assert_eq!(ValueFormat::String.parse("5"), Some(DataValue::string("5")));
         assert_eq!(
@@ -692,8 +710,10 @@ mod tests {
             );
             assert_eq!(reads(format, "x"), None, "{format} rejects x");
         }
+
         // The zero duration is a dayTimeDuration, never a yearMonthDuration.
         assert_eq!(reads(ValueFormat::YearMonthDuration, "P0M"), None);
+
         // A number is an integer, a decimal, or a double, as it is written.
         assert_eq!(reads(ValueFormat::Number, "5"), Some(DataValue::integer(5)));
         assert_eq!(
@@ -705,6 +725,7 @@ mod tests {
             Some(ValueDomain::Double)
         );
         assert_eq!(reads(ValueFormat::Number, "five"), None);
+
         // The language string format reads a language-tagged string, and nothing else.
         assert_eq!(
             reads(ValueFormat::LanguageString, "\"hello\"@en").map(|value| value.domain()),
