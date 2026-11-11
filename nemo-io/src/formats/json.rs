@@ -6,13 +6,16 @@
 use std::{
     collections::{BTreeMap, VecDeque},
     fmt,
-    io::Read,
+    io::{Read, Write},
 };
 
 use serde::de::{DeserializeSeed, Deserializer, MapAccess, SeqAccess, Visitor};
 
 use nemo_physical::{
-    diagnostics::Diagnostic, dictionary::Dictionary, function::EvaluationContext, value::DataValue,
+    diagnostics::Diagnostic,
+    dictionary::Dictionary,
+    function::EvaluationContext,
+    value::{DataValue, NumberRef, ValueRef},
 };
 
 use crate::{
@@ -20,7 +23,7 @@ use crate::{
     error::IoError,
     load::{Loaded, Reader, RowIntake},
     selection::RowSelection,
-    write::{Writer, Written},
+    write::{RowSink, Writer, Written},
 };
 
 /// A reader of JSON documents, which decodes a document into node/edge triples.
@@ -450,40 +453,60 @@ impl JsonWriter {
 }
 
 impl Writer for JsonWriter {
+    type Sink<W: Write> = JsonSink<W>;
+
     fn compression(&self) -> Compression {
         self.compression
     }
 
-    fn write<'a>(
-        &self,
-        target: impl std::io::Write,
-        rows: impl IntoIterator<Item = &'a [DataValue]>,
-    ) -> Result<Written, Diagnostic> {
-        let mut target = target;
-        let mut written = Written::default();
+    fn start<W: Write>(&self, mut target: W) -> Result<JsonSink<W>, Diagnostic> {
         target.write_all(b"[").map_err(IoError::output_unwritable)?;
-        for row in rows {
-            let cells: Vec<serde_json::Value> = row.iter().map(cell).collect();
-            let separator: &[u8] = if written.rows == 0 { b"\n" } else { b",\n" };
-            target
-                .write_all(separator)
-                .map_err(IoError::output_unwritable)?;
-            serde_json::to_writer(&mut target, &cells).map_err(IoError::output_unwritable)?;
-            written.rows += 1;
-        }
 
-        target
-            .write_all(b"\n]\n")
+        Ok(JsonSink {
+            target,
+            written: Written::default(),
+        })
+    }
+}
+
+/// The sink of the rows of one JSON document.
+#[derive(Debug)]
+pub struct JsonSink<W: Write> {
+    /// The stream of the document.
+    target: W,
+    /// The counts of the rows written and dropped so far.
+    written: Written,
+}
+
+impl<W: Write> RowSink for JsonSink<W> {
+    fn write_row(&mut self, row: &[ValueRef<'_>]) -> Result<(), Diagnostic> {
+        let cells: Vec<serde_json::Value> = row.iter().map(|&value| cell(value)).collect();
+        let separator: &[u8] = if self.written.rows == 0 {
+            b"\n"
+        } else {
+            b",\n"
+        };
+        self.target
+            .write_all(separator)
             .map_err(IoError::output_unwritable)?;
-        target.flush().map_err(IoError::output_unwritable)?;
-        Ok(written)
+        serde_json::to_writer(&mut self.target, &cells).map_err(IoError::output_unwritable)?;
+        self.written.rows += 1;
+
+        Ok(())
+    }
+
+    fn finish(mut self) -> Result<Written, Diagnostic> {
+        self.target
+            .write_all(b"\n]\n")
+            .and_then(|()| self.target.flush())
+            .map_err(IoError::output_unwritable)?;
+
+        Ok(self.written)
     }
 }
 
 /// Returns the JSON form of one value, as [JsonWriter] describes it.
-fn cell(value: &DataValue) -> serde_json::Value {
-    use nemo_physical::value::{NumberRef, ValueRef};
-    let value = value.as_ref();
+fn cell(value: ValueRef<'_>) -> serde_json::Value {
     if let ValueRef::Number(number) = value
         && let Some(integer) = number.to_i64()
     {
@@ -518,7 +541,7 @@ mod tests {
             .filter(|row| row[1] == key_value)
             .map(|row| {
                 let id = match row[0].as_ref() {
-                    nemo_physical::value::ValueRef::Number(id) => id.to_i64().expect("small"),
+                    ValueRef::Number(id) => id.to_i64().expect("small"),
                     other => panic!("ids are integers, not {other:?}"),
                 };
                 (id, row[2].clone())

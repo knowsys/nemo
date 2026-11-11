@@ -1,21 +1,62 @@
-//! The trait that every writer of a format implements, and the outcome of a write.
+//! The traits that the writers of the formats implement, and the outcome of a write.
 
 use std::{fs::File, io::Write, path::Path};
 
-use nemo_physical::{diagnostics::Diagnostic, value::DataValue};
+use nemo_physical::{
+    diagnostics::Diagnostic,
+    value::{DataValue, ValueRef},
+};
 
 use crate::{AboutResource, compression::Compression, error::IoError};
 
+/// A sink of the rows of one written resource.
+///
+/// A [Writer] starts a sink on a stream.
+/// The sink takes the rows one at a time, as borrowed values,
+/// so the rows need not all exist before the write starts.
+/// [finish](Self::finish) ends the resource.
+pub trait RowSink {
+    /// Writes one row, or drops and counts it if one of its values has no form in its column.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the stream cannot be written.
+    fn write_row(&mut self, row: &[ValueRef<'_>]) -> Result<(), Diagnostic>;
+
+    /// Ends the resource, and returns how many rows were written and how many were dropped.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the stream cannot be written.
+    fn finish(self) -> Result<Written, Diagnostic>
+    where
+        Self: Sized;
+}
+
 /// A writer of one format, which serializes rows onto a byte stream.
 ///
-/// Each format implements [write](Self::write) for a stream.
-/// The trait provides [write_compressed](Self::write_compressed),
-/// which also applies the writer's compression,
-/// and [write_path](Self::write_path) for a file.
+/// Each format implements [start](Self::start), which starts a resource on a stream.
+/// The trait provides the ways to write a whole resource:
+/// - [write](Self::write) writes rows to a stream as it is.
+/// - [write_compressed](Self::write_compressed) also applies the writer's compression,
+///   and [write_path](Self::write_path) writes a file.
+/// - [write_compressed_with](Self::write_compressed_with) and
+///   [write_path_with](Self::write_path_with) do the same for rows that a function writes into
+///   the sink one at a time, as a caller does that decodes them from a table.
 pub trait Writer {
+    /// The sink of the rows of one resource on a stream.
+    type Sink<W: Write>: RowSink;
+
     /// Returns the compression that [write_compressed](Self::write_compressed) and
     /// [write_path](Self::write_path) apply.
     fn compression(&self) -> Compression;
+
+    /// Starts a resource on a stream, without compressing or buffering the stream.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the stream cannot be written.
+    fn start<W: Write>(&self, target: W) -> Result<Self::Sink<W>, Diagnostic>;
 
     /// Writes rows to a stream, without compressing or buffering them.
     ///
@@ -26,16 +67,43 @@ pub trait Writer {
         &self,
         target: impl Write,
         rows: impl IntoIterator<Item = &'a [DataValue]>,
-    ) -> Result<Written, Diagnostic>;
+    ) -> Result<Written, Diagnostic> {
+        let mut sink = self.start(target)?;
+        write_rows(&mut sink, rows)?;
 
-    /// Writes rows to a stream as [write](Self::write) does,
-    /// compressed as [compression](Self::compression) says, and ends the stream.
+        sink.finish()
+    }
+
+    /// Writes a resource to a stream, compressed as [compression](Self::compression) says,
+    /// and ends the stream.
     ///
+    /// `feed` writes the rows into the sink of the resource.
     /// `name` is the name of the stream's resource.
     /// Under [Compression::Auto], the stream is compressed if this name ends in `.gz`,
     /// and a stream without a name is not compressed.
     /// The bytes are buffered, so a writer that writes single terms or cells
     /// does not write the target once for each of them.
+    ///
+    /// # Errors
+    ///
+    /// Returns the error of `feed`, or an error if the stream cannot be written,
+    /// including when it is ended.
+    fn write_compressed_with(
+        &self,
+        target: impl Write,
+        name: Option<&Path>,
+        feed: impl FnOnce(&mut dyn RowSink) -> Result<(), Diagnostic>,
+    ) -> Result<Written, Diagnostic> {
+        let mut stream = self.compression().wrap(target, name);
+        let mut sink = self.start(&mut stream)?;
+        feed(&mut sink)?;
+        let written = sink.finish()?;
+        stream.finish().map_err(IoError::output_unwritable)?;
+
+        Ok(written)
+    }
+
+    /// Writes rows to a stream as [write_compressed_with](Self::write_compressed_with) does.
     ///
     /// # Errors
     ///
@@ -46,17 +114,32 @@ pub trait Writer {
         name: Option<&Path>,
         rows: impl IntoIterator<Item = &'a [DataValue]>,
     ) -> Result<Written, Diagnostic> {
-        let mut stream = self.compression().wrap(target, name);
-        let written = self.write(&mut stream, rows)?;
-        stream.finish().map_err(IoError::output_unwritable)?;
-        Ok(written)
+        self.write_compressed_with(target, name, |sink| write_rows(sink, rows))
     }
 
-    /// Writes rows to a file as [write_compressed](Self::write_compressed) does,
-    /// and creates its parent directories.
+    /// Writes a resource to a file as [write_compressed_with](Self::write_compressed_with)
+    /// does, and creates its parent directories.
     ///
     /// The file is compressed as [compression](Self::compression) says,
     /// which under [Compression::Auto] means if its name ends in `.gz`.
+    ///
+    /// # Errors
+    ///
+    /// Returns the error of `feed`, or an error naming the file if it cannot be created or
+    /// written.
+    fn write_path_with(
+        &self,
+        path: impl AsRef<Path>,
+        feed: impl FnOnce(&mut dyn RowSink) -> Result<(), Diagnostic>,
+    ) -> Result<Written, Diagnostic> {
+        let path = path.as_ref();
+
+        create(path)
+            .and_then(|file| self.write_compressed_with(file, Some(path), feed))
+            .map_err(|diagnostic| diagnostic.with_resource(path.display().to_string()))
+    }
+
+    /// Writes rows to a file as [write_path_with](Self::write_path_with) does.
     ///
     /// # Errors
     ///
@@ -66,12 +149,23 @@ pub trait Writer {
         path: impl AsRef<Path>,
         rows: impl IntoIterator<Item = &'a [DataValue]>,
     ) -> Result<Written, Diagnostic> {
-        let path = path.as_ref();
-
-        create(path)
-            .and_then(|file| self.write_compressed(file, Some(path), rows))
-            .map_err(|diagnostic| diagnostic.with_resource(path.display().to_string()))
+        self.write_path_with(path, |sink| write_rows(sink, rows))
     }
+}
+
+/// Writes owned rows into a sink.
+pub(crate) fn write_rows<'a>(
+    sink: &mut (impl RowSink + ?Sized),
+    rows: impl IntoIterator<Item = &'a [DataValue]>,
+) -> Result<(), Diagnostic> {
+    let mut row: Vec<ValueRef<'a>> = Vec::new();
+    for values in rows {
+        row.clear();
+        row.extend(values.iter().map(DataValue::as_ref));
+        sink.write_row(&row)?;
+    }
+
+    Ok(())
 }
 
 /// Creates a file for writing, together with its parent directories.
@@ -105,10 +199,11 @@ mod tests {
 
     use super::*;
     use crate::{
-        dsv::{DsvOptions, DsvWriter},
+        dsv::{DsvWriter, DsvWriterOptions},
         file_format::RdfVariant,
         json::JsonWriter,
         rdf::{RdfWriter, RdfWriterOptions},
+        value_format::ValueFormat,
     };
 
     /// The number of rows each test export writes.
@@ -181,7 +276,7 @@ mod tests {
 
         let mut exports = Vec::new();
         for compression in [Compression::Plain, Compression::Gzip] {
-            let mut dsv = DsvOptions::csv_terms(4);
+            let mut dsv = DsvWriterOptions::csv(vec![ValueFormat::Term; 4]);
             dsv.compression = compression;
             exports.push((format!("CSV, {compression:?}"), export(DsvWriter::new(dsv))));
             let mut rdf = RdfWriterOptions::new(RdfVariant::NQuads);

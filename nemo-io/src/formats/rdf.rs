@@ -7,7 +7,7 @@ mod writer;
 
 pub use reader::{RdfReader, RdfReaderOptions};
 pub(crate) use writer::object_term;
-pub use writer::{RdfWriter, RdfWriterOptions};
+pub use writer::{RdfSink, RdfWriter, RdfWriterOptions};
 
 use oxrdfio::RdfFormat;
 

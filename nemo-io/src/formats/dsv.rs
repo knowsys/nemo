@@ -13,7 +13,7 @@ pub(crate) use layout::ColumnLayout;
 pub(crate) use parsed::{Parsed, ResourceLoad};
 pub use reader::DsvReader;
 pub(crate) use run_pool::RunPool;
-pub use writer::DsvWriter;
+pub use writer::{DsvSink, DsvWriter, DsvWriterOptions};
 
 use std::{io::Read, path::Path};
 
@@ -29,12 +29,12 @@ use crate::{
     value_format::{ColumnFormat, ValueFormat},
 };
 
-/// The options of a delimiter-separated resource, such as its delimiter and one [ColumnFormat]
-/// per column.
+/// The options of a delimiter-separated resource for reading, such as its delimiter and one
+/// [ColumnFormat] per column.
 ///
 /// A [Skip](ValueFormat::Skip) column counts toward the width but not toward the arity.
 #[derive(Debug, Clone)]
-pub struct DsvOptions {
+pub struct DsvReaderOptions {
     /// The delimiter between the cells of a record.
     pub delimiter: u8,
     /// The format of each column of the resource.
@@ -52,10 +52,9 @@ pub struct DsvOptions {
     /// The names of the columns, in the order of [formats](Self::formats),
     /// or `None` for a resource whose columns go by position.
     ///
-    /// A reader then reads the first record as the header and finds each column by its name,
-    /// whatever its position, and does not read a column of the resource that is not named.
-    /// A writer writes the names as the first record.
-    /// The name of a [Skip](ValueFormat::Skip) column is neither looked up nor written.
+    /// The first record is then read as the header, and each column is found by its name,
+    /// whatever its position. A column of the resource that is not named is not read.
+    /// The name of a [Skip](ValueFormat::Skip) column is not looked up.
     pub columns: Option<Vec<String>>,
     /// Whether the first record is skipped, whatever it contains.
     ///
@@ -75,7 +74,7 @@ pub struct DsvOptions {
     pub limit: Option<u64>,
 }
 
-impl DsvOptions {
+impl DsvReaderOptions {
     /// Creates options for a delimiter and column formats.
     ///
     /// The options have quoting on, columns that go by position, no header, detected

@@ -5,7 +5,7 @@
 //! a value format, and whether the column admits a *missing value*,
 //! which is a place in a row where the resource has no value, such as an empty cell.
 
-use std::fmt::{self, Display, Formatter};
+use std::fmt::{self, Display, Formatter, Write};
 
 use nemo_physical::value::{
     DataValue, DomainSet, Iri, NumberRef, ReadValue, ValueDomain, ValueRef,
@@ -250,67 +250,88 @@ impl ValueFormat {
             .then_some(ReadValue::Value(value))
     }
 
-    /// Returns the text of a value as a cell, or `None` if the value does not fit the format.
+    /// Returns the text of a value as a cell, or `None` if the value does not fit the format,
+    /// as [write_into](Self::write_into) decides.
+    pub fn write(&self, value: ValueRef<'_>) -> Option<String> {
+        let mut cell = String::new();
+
+        self.write_into(value, &mut cell).then_some(cell)
+    }
+
+    /// Appends the text of a value as a cell to `cell`,
+    /// and returns whether the value fits the format.
     ///
     /// - [Term](Self::Term) writes any value, in canonical term syntax.
     /// - [Text](Self::Text) writes any value, as its lexical form if it has one.
     /// - A typed format writes only values of its own domains,
     ///   as their lexical forms without a datatype.
     /// - No value fits [Skip](Self::Skip).
-    pub fn write(&self, value: ValueRef<'_>) -> Option<String> {
-        match (self, value) {
-            (ValueFormat::Term, value) => Some(value.to_string()),
-            (ValueFormat::Text, value) => {
-                Some(value.lexical_form().unwrap_or_else(|| value.to_string()))
+    ///
+    /// Nothing is appended for a value that does not fit.
+    pub fn write_into(&self, value: ValueRef<'_>, cell: &mut String) -> bool {
+        let written = match (self, value) {
+            (ValueFormat::Term, value) => write!(cell, "{value}"),
+            (ValueFormat::Text, value) => match value.lexical_form() {
+                Some(text) => {
+                    cell.push_str(&text);
+                    Ok(())
+                }
+                None => write!(cell, "{value}"),
+            },
+            (ValueFormat::String, ValueRef::String(text)) => {
+                cell.push_str(text);
+                Ok(())
             }
-            (ValueFormat::String, ValueRef::String(text)) => Some(text.to_owned()),
-            (ValueFormat::Iri, ValueRef::Iri(iri)) => Some(iri.to_string()),
+            (ValueFormat::Iri, ValueRef::Iri(iri)) => write!(cell, "{iri}"),
             (ValueFormat::Integer, ValueRef::Number(value)) if value.is_integral() => {
-                Some(value.to_string())
+                write!(cell, "{value}")
             }
             (ValueFormat::Double, ValueRef::Number(NumberRef::Double(value))) => {
-                Some(value.to_string())
+                write!(cell, "{value}")
             }
             (ValueFormat::Decimal, ValueRef::Number(value))
                 if matches!(value.domain(), ValueDomain::Integer | ValueDomain::Decimal) =>
             {
-                Some(value.to_string())
+                write!(cell, "{value}")
             }
 
             // A double is written in exponent form, so that it is not read back as a decimal.
             (ValueFormat::Number, ValueRef::Number(NumberRef::Double(value))) => {
                 let value = value.get();
-                Some(if value.is_nan() {
-                    String::from("NaN")
+                if value.is_nan() {
+                    write!(cell, "NaN")
                 } else if value.is_infinite() {
-                    String::from(if value > 0.0 { "INF" } else { "-INF" })
+                    write!(cell, "{}", if value > 0.0 { "INF" } else { "-INF" })
                 } else {
-                    format!("{value:E}")
-                })
+                    write!(cell, "{value:E}")
+                }
             }
             (ValueFormat::Number, ValueRef::Number(value))
                 if value.domain() != ValueDomain::Float =>
             {
-                Some(value.to_string())
+                write!(cell, "{value}")
             }
             (ValueFormat::Float, ValueRef::Number(NumberRef::Float(value))) => {
-                Some(value.to_string())
+                write!(cell, "{value}")
             }
-            (ValueFormat::Boolean, ValueRef::Boolean(value)) => Some(value.to_string()),
-            (ValueFormat::LanguageString, ValueRef::LanguageString(_)) => Some(value.to_string()),
+            (ValueFormat::Boolean, ValueRef::Boolean(value)) => write!(cell, "{value}"),
+            (ValueFormat::LanguageString, ValueRef::LanguageString(_)) => write!(cell, "{value}"),
 
             // The canonical lexical form of a temporal value is its `Display`.
-            (ValueFormat::DateTime, ValueRef::DateTime(value)) => Some(value.to_string()),
-            (ValueFormat::Date, ValueRef::Date(value)) => Some(value.to_string()),
-            (ValueFormat::Time, ValueRef::Time(value)) => Some(value.to_string()),
+            (ValueFormat::DateTime, ValueRef::DateTime(value)) => write!(cell, "{value}"),
+            (ValueFormat::Date, ValueRef::Date(value)) => write!(cell, "{value}"),
+            (ValueFormat::Time, ValueRef::Time(value)) => write!(cell, "{value}"),
             (
                 ValueFormat::Duration
                 | ValueFormat::DayTimeDuration
                 | ValueFormat::YearMonthDuration,
                 ValueRef::Duration(duration),
-            ) if self.domains().contains(value.domain()) => Some(duration.to_string()),
-            _ => None,
-        }
+            ) if self.domains().contains(value.domain()) => write!(cell, "{duration}"),
+            _ => return false,
+        };
+        written.expect("writing to a string does not fail");
+
+        true
     }
 }
 
@@ -418,20 +439,32 @@ impl ColumnFormat {
     }
 
     /// Returns the text of a value as a cell of a delimiter-separated resource,
-    /// or `None` if the value has no form in the column.
+    /// or `None` if the value has no form in the column,
+    /// as [write_into](Self::write_into) decides.
+    pub fn write(&self, value: ValueRef<'_>) -> Option<String> {
+        let mut cell = String::new();
+
+        self.write_into(value, &mut cell).then_some(cell)
+    }
+
+    /// Appends the text of a value as a cell of a delimiter-separated resource to `cell`,
+    /// and returns whether the value has a form in the column.
     ///
     /// A column that admits a missing value writes a null as the empty cell.
     /// A value whose cell would be empty, such as the empty string under `string?`,
     /// has no form there, since it would be read back as a missing value.
-    pub fn write(&self, value: ValueRef<'_>) -> Option<String> {
+    /// Nothing is appended for a value without a form.
+    pub fn write_into(&self, value: ValueRef<'_>, cell: &mut String) -> bool {
         if !self.optional {
-            return self.value.write(value);
+            return self.value.write_into(value, cell);
         }
         if matches!(value, ValueRef::Null(_)) {
-            return Some(String::new());
+            return true;
         }
 
-        self.value.write(value).filter(|cell| !cell.is_empty())
+        let before = cell.len();
+
+        self.value.write_into(value, cell) && cell.len() > before
     }
 }
 

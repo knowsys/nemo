@@ -12,7 +12,7 @@ use nemo_physical::{
 
 use crate::{
     AboutResource,
-    dsv::DsvOptions,
+    dsv::DsvReaderOptions,
     load::Reader,
     testing::{TempDirectory, greater_than},
     value_format::ValueFormat,
@@ -34,7 +34,7 @@ fn batches_match_sequential_reads() {
 
     let sources: Vec<DsvResource> = paths
         .iter()
-        .map(|path| DsvResource::path(path.clone(), DsvOptions::csv_terms(2)))
+        .map(|path| DsvResource::path(path.clone(), DsvReaderOptions::csv_terms(2)))
         .collect();
 
     let mut batch_dictionary = Dictionary::new();
@@ -47,7 +47,7 @@ fn batches_match_sequential_reads() {
     let sequential: Vec<Loaded> = paths
         .iter()
         .map(|path| {
-            DsvReader::new(DsvOptions::csv_terms(2))
+            DsvReader::new(DsvReaderOptions::csv_terms(2))
                 .read_path(path, &mut sequential_dictionary, EvaluationContext::now())
                 .expect("the source reads")
         })
@@ -69,7 +69,7 @@ fn byte_sources_match_file_reads() {
     let content: String = (0..500)
         .map(|index| format!("name-{index}\t{index}\n"))
         .collect();
-    let mut options = DsvOptions::tsv(vec![ValueFormat::Term, ValueFormat::Term]);
+    let mut options = DsvReaderOptions::tsv(vec![ValueFormat::Term, ValueFormat::Term]);
     options.quoting = false;
 
     let mut batch = ResourceBatch::new(vec![DsvResource::bytes(
@@ -109,7 +109,7 @@ fn all_skip_sources_keep_their_record_count_in_batches() {
     let directory = temporary.path();
     let path = directory.join("nemo_io_batch_skip.csv");
     fs::write(&path, "a,1\nb,2\n").expect("the temp file writes");
-    let options = DsvOptions::csv(vec![ValueFormat::Skip, ValueFormat::Skip]);
+    let options = DsvReaderOptions::csv(vec![ValueFormat::Skip, ValueFormat::Skip]);
     let source = DsvResource::path(path.clone(), options.clone());
 
     let mut dictionary = Dictionary::new();
@@ -134,7 +134,7 @@ fn batches_and_streams_agree_on_wide_values() {
     let path = directory.join("nemo_io_batch_wide_value.csv");
     let content = "a\n\"999999-01-01T00:00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime>\nb\n";
     fs::write(&path, content).expect("the temp file writes");
-    let mut options = DsvOptions::csv(vec![ValueFormat::Term]);
+    let mut options = DsvReaderOptions::csv(vec![ValueFormat::Term]);
     options.quoting = false;
     let source = DsvResource::path(path.clone(), options.clone());
 
@@ -163,7 +163,7 @@ fn windowed_batches_match_sequential_reads() {
         .map(|index| format!("name-{index}\t{index}\n"))
         .collect();
     fs::write(&path, &content).expect("the temp file writes");
-    let mut options = DsvOptions::tsv(vec![ValueFormat::Term, ValueFormat::Term]);
+    let mut options = DsvReaderOptions::tsv(vec![ValueFormat::Term, ValueFormat::Term]);
     options.quoting = false;
     let source = DsvResource::path(path.clone(), options.clone());
 
@@ -204,7 +204,7 @@ fn a_label_names_one_null_across_the_windows_of_a_file() {
         })
         .collect();
     fs::write(&path, &content).expect("the temp file writes");
-    let mut options = DsvOptions::tsv(vec![ValueFormat::Term, ValueFormat::Term]);
+    let mut options = DsvReaderOptions::tsv(vec![ValueFormat::Term, ValueFormat::Term]);
     options.quoting = false;
 
     let mut batch = ResourceBatch::new(vec![DsvResource::path(path, options)]);
@@ -249,7 +249,7 @@ fn the_windows_of_a_file_share_its_header() {
     }))
     .collect();
     fs::write(&path, &content).expect("the temp file writes");
-    let mut options = DsvOptions::tsv([ValueFormat::Term, ValueFormat::Integer]);
+    let mut options = DsvReaderOptions::tsv([ValueFormat::Term, ValueFormat::Integer]);
     options.quoting = false;
     options.columns = Some(vec![String::from("name"), String::from("number")]);
 
@@ -293,7 +293,7 @@ fn windowed_malformed_rows_keep_their_global_lines() {
     content.push_str("broken\n");
     content.push_str("name-tail\t400\n");
     fs::write(&path, &content).expect("the temp file writes");
-    let mut options = DsvOptions::tsv(vec![ValueFormat::Term, ValueFormat::Integer]);
+    let mut options = DsvReaderOptions::tsv(vec![ValueFormat::Term, ValueFormat::Integer]);
     options.quoting = false;
     let source = DsvResource::path(path.clone(), options);
 
@@ -328,7 +328,7 @@ e,9
 ",
     )
     .expect("the temp file writes");
-    let mut options = DsvOptions::csv(vec![ValueFormat::Term, ValueFormat::Integer]);
+    let mut options = DsvReaderOptions::csv(vec![ValueFormat::Term, ValueFormat::Integer]);
     options.condition = Some(greater_than(1, 5));
 
     let mut dictionary = Dictionary::new();
@@ -354,7 +354,7 @@ fn an_erroring_condition_is_counted_by_its_kind_in_both_paths() {
     let directory = temporary.path();
     let path = directory.join("nemo_io_filter_errors.csv");
     fs::write(&path, "a,7\nb,x\nc,3\n").expect("the temp file writes");
-    let mut options = DsvOptions::csv(vec![ValueFormat::Term, ValueFormat::Term]);
+    let mut options = DsvReaderOptions::csv(vec![ValueFormat::Term, ValueFormat::Term]);
     options.condition = Some(greater_than(1, 5));
 
     let mut dictionary = Dictionary::new();
@@ -394,7 +394,7 @@ fn limited_sources_read_as_one_window_and_count_like_the_streaming_reader() {
     }
 
     fs::write(&path, &content).expect("the temp file writes");
-    let mut options = DsvOptions::tsv(vec![ValueFormat::Term, ValueFormat::Integer]);
+    let mut options = DsvReaderOptions::tsv(vec![ValueFormat::Term, ValueFormat::Integer]);
     options.quoting = false;
     options.condition = Some(greater_than(1, 5));
     options.limit = Some(200);
@@ -470,7 +470,7 @@ fn runs_intern_like_a_straight_read() {
         .expect("the temp file writes");
     encoder.finish().expect("the temp file writes");
 
-    let mut options = DsvOptions::tsv(vec![
+    let mut options = DsvReaderOptions::tsv(vec![
         ValueFormat::Iri,
         ValueFormat::Integer,
         ValueFormat::Term,
@@ -522,13 +522,16 @@ fn missing_files_are_reported() {
     let path = temporary.path().join("does_not_exist.csv");
     let mut dictionary = Dictionary::new();
     assert!(
-        DsvReader::new(DsvOptions::csv_terms(1))
+        DsvReader::new(DsvReaderOptions::csv_terms(1))
             .read_path(&path, &mut dictionary, EvaluationContext::now())
             .is_err()
     );
     assert!(
-        ResourceBatch::new(vec![DsvResource::path(path, DsvOptions::csv_terms(1))])
-            .load(&mut dictionary, EvaluationContext::now())
-            .is_err()
+        ResourceBatch::new(vec![DsvResource::path(
+            path,
+            DsvReaderOptions::csv_terms(1)
+        )])
+        .load(&mut dictionary, EvaluationContext::now())
+        .is_err()
     );
 }

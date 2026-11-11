@@ -8,7 +8,7 @@ use nemo_physical::{
 };
 
 use crate::{
-    dsv::{ColumnLayout, DsvOptions},
+    dsv::{ColumnLayout, DsvReaderOptions},
     load::{BlankNodes, Loaded, RowCounts, RowIntake},
     selection::ConditionBuffers,
     value_format::{CellRead, ValueFormat},
@@ -78,7 +78,7 @@ struct DeferredRow {
 #[derive(Debug)]
 pub(crate) struct ResourceLoad<'a> {
     /// The options of the resource.
-    options: &'a DsvOptions,
+    options: &'a DsvReaderOptions,
     /// The intake of the resource's rows.
     intake: RowIntake,
     /// The nulls of the resource, once a row has named one.
@@ -95,7 +95,7 @@ impl<'a> ResourceLoad<'a> {
     /// Creates the empty load of a resource with the given options.
     ///
     /// `context` is the evaluation context of the options' condition.
-    pub(crate) fn new(options: &'a DsvOptions, context: EvaluationContext) -> Self {
+    pub(crate) fn new(options: &'a DsvReaderOptions, context: EvaluationContext) -> Self {
         Self {
             options,
             intake: RowIntake::of_arity(options.arity(), options.selection(), context),
@@ -251,7 +251,7 @@ impl Parsed {
     /// and `context` is the evaluation context of the condition.
     pub(crate) fn push_record(
         &mut self,
-        options: &DsvOptions,
+        options: &DsvReaderOptions,
         layout: &ColumnLayout,
         context: EvaluationContext,
         record: &csv::StringRecord,
@@ -311,7 +311,7 @@ impl Parsed {
     /// from `start` on, and counts the row if it does not.
     fn admits(
         &mut self,
-        options: &DsvOptions,
+        options: &DsvReaderOptions,
         context: EvaluationContext,
         start: RowStart,
     ) -> bool {
@@ -352,7 +352,7 @@ impl Parsed {
     fn defer(
         &mut self,
         record: &csv::StringRecord,
-        options: &DsvOptions,
+        options: &DsvReaderOptions,
         layout: &ColumnLayout,
         line: u64,
     ) {

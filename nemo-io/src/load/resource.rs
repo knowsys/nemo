@@ -2,7 +2,7 @@
 
 use std::{path::PathBuf, sync::Arc};
 
-use crate::{compression::Compression, dsv::DsvOptions};
+use crate::{compression::Compression, dsv::DsvReaderOptions};
 
 /// Where a resource's bytes come from.
 #[derive(Debug, Clone)]
@@ -46,12 +46,12 @@ pub struct DsvResource {
     /// Where the bytes come from.
     pub input: Resource,
     /// The options of the format, such as the delimiter.
-    pub options: DsvOptions,
+    pub options: DsvReaderOptions,
 }
 
 impl DsvResource {
     /// Creates a resource that reads the given file.
-    pub fn path(path: impl Into<PathBuf>, options: DsvOptions) -> Self {
+    pub fn path(path: impl Into<PathBuf>, options: DsvReaderOptions) -> Self {
         Self {
             input: Resource::Path(path.into()),
             options,
@@ -62,7 +62,7 @@ impl DsvResource {
     pub fn bytes(
         name: impl Into<String>,
         bytes: impl Into<Arc<[u8]>>,
-        options: DsvOptions,
+        options: DsvReaderOptions,
     ) -> Self {
         Self {
             input: Resource::Bytes {

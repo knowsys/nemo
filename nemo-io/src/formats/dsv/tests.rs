@@ -17,13 +17,13 @@ use crate::{
     write::Writer,
 };
 
-use super::{DsvOptions, DsvReader, DsvWriter};
+use super::{DsvReader, DsvReaderOptions, DsvWriter, DsvWriterOptions};
 
 /// CSV rows in term syntax are read as their values.
 #[test]
 fn csv_rows_intern_and_round_trip() {
     let mut dictionary = Dictionary::new();
-    let reader = DsvReader::new(DsvOptions::csv_terms(3));
+    let reader = DsvReader::new(DsvReaderOptions::csv_terms(3));
     let input = "alice,42,-2.5\nbob,7,1e3\n";
     let loaded = reader
         .read(
@@ -55,7 +55,7 @@ fn csv_rows_intern_and_round_trip() {
 #[test]
 fn malformed_rows_are_counted_never_silent() {
     let mut dictionary = Dictionary::new();
-    let reader = DsvReader::new(DsvOptions::csv(vec![
+    let reader = DsvReader::new(DsvReaderOptions::csv(vec![
         ValueFormat::String,
         ValueFormat::Integer,
     ]));
@@ -79,7 +79,10 @@ fn malformed_rows_are_counted_never_silent() {
 #[test]
 fn delimiters_are_configurable() {
     let mut dictionary = Dictionary::new();
-    let reader = DsvReader::new(DsvOptions::tsv(vec![ValueFormat::Term, ValueFormat::Term]));
+    let reader = DsvReader::new(DsvReaderOptions::tsv(vec![
+        ValueFormat::Term,
+        ValueFormat::Term,
+    ]));
     let loaded = reader
         .read(
             Cursor::new("a\t1\n"),
@@ -97,7 +100,7 @@ fn delimiters_are_configurable() {
 #[test]
 fn empty_sources_load_empty() {
     let mut dictionary = Dictionary::new();
-    let reader = DsvReader::new(DsvOptions::csv_terms(2));
+    let reader = DsvReader::new(DsvReaderOptions::csv_terms(2));
     let loaded = reader
         .read(Cursor::new(""), &mut dictionary, EvaluationContext::now())
         .expect("the source reads");
@@ -116,7 +119,7 @@ fn writers_serialize_cells_in_the_term_format() {
         ],
     ];
     let mut target = Vec::new();
-    let written = DsvWriter::new(DsvOptions::csv_terms(2))
+    let written = DsvWriter::new(DsvWriterOptions::csv(vec![ValueFormat::Term; 2]))
         .write(&mut target, rows.iter().map(Vec::as_slice))
         .expect("the rows write");
     assert_eq!(written.rows, 2);
@@ -141,7 +144,7 @@ fn a_cell_that_is_no_constant_makes_its_row_malformed() {
     ]
     .join("\n");
     let mut dictionary = Dictionary::new();
-    let loaded = DsvReader::new(DsvOptions::csv_terms(2))
+    let loaded = DsvReader::new(DsvReaderOptions::csv_terms(2))
         .read(
             Cursor::new(input),
             &mut dictionary,
@@ -170,7 +173,7 @@ fn read_csv(formats: &[&str], input: &str) -> (Vec<Vec<DataValue>>, RowCounts) {
         .iter()
         .map(|name| ColumnFormat::from_name(name).expect("the format exists"));
     let mut dictionary = Dictionary::new();
-    let loaded = DsvReader::new(DsvOptions::csv(formats))
+    let loaded = DsvReader::new(DsvReaderOptions::csv(formats))
         .read(
             Cursor::new(input.to_owned()),
             &mut dictionary,
@@ -232,7 +235,7 @@ fn a_condition_can_require_a_value_that_may_be_missing() {
         ),
     );
     let formats = ["int", "string?"].map(|name| ColumnFormat::from_name(name).expect("exists"));
-    let mut options = DsvOptions::csv(formats);
+    let mut options = DsvReaderOptions::csv(formats);
     options.condition = Some(is_string);
     let mut dictionary = Dictionary::new();
     let loaded = DsvReader::new(options)
@@ -265,7 +268,7 @@ fn a_null_is_written_as_a_missing_value_where_the_column_admits_it() {
     let write = |formats: [&str; 2]| {
         let formats = formats.map(|name| ColumnFormat::from_name(name).expect("exists"));
         let mut target = Vec::new();
-        let written = DsvWriter::new(DsvOptions::csv(formats))
+        let written = DsvWriter::new(DsvWriterOptions::csv(formats))
             .write(&mut target, rows.iter().map(Vec::as_slice))
             .expect("the rows write");
 
@@ -294,7 +297,7 @@ fn a_null_is_a_null_of_its_resource() {
     let input = "_:a,1\nx,2\n\"(_:a,)\",3\n_:b,4\n";
     let mut dictionary = Dictionary::new();
     let mut read = || {
-        let loaded = DsvReader::new(DsvOptions::csv_terms(2))
+        let loaded = DsvReader::new(DsvReaderOptions::csv_terms(2))
             .read(
                 Cursor::new(input),
                 &mut dictionary,
@@ -331,7 +334,7 @@ fn a_null_is_a_null_of_its_resource() {
 /// A row with a null is admitted by the condition and counted by the limit as any other row.
 #[test]
 fn rows_with_nulls_meet_the_condition_and_the_limit() {
-    let read = |options: DsvOptions, input: &str| {
+    let read = |options: DsvReaderOptions, input: &str| {
         let mut dictionary = Dictionary::new();
         let loaded = DsvReader::new(options)
             .read(
@@ -345,7 +348,7 @@ fn rows_with_nulls_meet_the_condition_and_the_limit() {
         (rows, loaded.counts.excluded, loaded.counts.malformed)
     };
 
-    let mut options = DsvOptions::csv_terms(2);
+    let mut options = DsvReaderOptions::csv_terms(2);
     options.condition = Some(greater_than(1, 2));
     let (rows, excluded, malformed) = read(options, "_:a,1\n_:a,5\nx,7\ny,0\n");
     assert_eq!((rows.len(), excluded, malformed), (2, 2, 0));
@@ -353,7 +356,7 @@ fn rows_with_nulls_meet_the_condition_and_the_limit() {
     assert_eq!(rows[1][0], DataValue::iri("x"));
 
     // The limit counts the rows with nulls among the well-formed rows.
-    let mut options = DsvOptions::csv_terms(2);
+    let mut options = DsvReaderOptions::csv_terms(2);
     options.limit = Some(2);
     let (rows, _, _) = read(options, "_:a,1\n_:b,2\n_:c,3\nx,4\n");
     assert_eq!(rows.len(), 2);
@@ -367,7 +370,7 @@ fn skipped_columns_are_left_out_of_the_record() {
         vec![DataValue::integer(2), DataValue::string("b")],
     ];
     let mut target = Vec::new();
-    let written = DsvWriter::new(DsvOptions::new(
+    let written = DsvWriter::new(DsvWriterOptions::new(
         b',',
         vec![ValueFormat::Skip, ValueFormat::Term],
     ))
@@ -386,7 +389,7 @@ fn skipped_columns_are_left_out_of_the_record() {
 fn declared_formats_drop_unfit_rows() {
     let rows: Vec<Vec<DataValue>> = vec![vec![DataValue::integer(1)], vec![DataValue::string("x")]];
     let mut target = Vec::new();
-    let written = DsvWriter::new(DsvOptions::new(b',', vec![ValueFormat::Integer]))
+    let written = DsvWriter::new(DsvWriterOptions::new(b',', vec![ValueFormat::Integer]))
         .write(&mut target, rows.iter().map(Vec::as_slice))
         .expect("the rows write");
     assert_eq!((written.rows, written.dropped), (1, 1));
@@ -404,7 +407,7 @@ fn numeric_formats_write_and_read_wide_numbers() {
         vec![big("123456789012345678901.5"), big("123456789012345678901")],
     ];
     let mut target = Vec::new();
-    let written = DsvWriter::new(DsvOptions::new(
+    let written = DsvWriter::new(DsvWriterOptions::new(
         b',',
         vec![ValueFormat::Integer, ValueFormat::Decimal],
     ))
@@ -436,12 +439,12 @@ fn compressed_writes_read_back() {
         DataValue::string("hello"),
         DataValue::iri("urn:x"),
     ]];
-    DsvWriter::new(DsvOptions::new(b',', vec![ValueFormat::Term; 3]))
+    DsvWriter::new(DsvWriterOptions::new(b',', vec![ValueFormat::Term; 3]))
         .write_path(&path, rows.iter().map(Vec::as_slice))
         .expect("the rows write");
 
     let mut dictionary = Dictionary::new();
-    let loaded = DsvReader::new(DsvOptions::new(b',', vec![ValueFormat::Term; 3]))
+    let loaded = DsvReader::new(DsvReaderOptions::new(b',', vec![ValueFormat::Term; 3]))
         .read_path(&path, &mut dictionary, EvaluationContext::now())
         .expect("the file reads back");
     assert_eq!(loaded.decoded(&dictionary), rows);
@@ -451,7 +454,7 @@ fn compressed_writes_read_back() {
 fn round_trip(rows: &[Vec<DataValue>]) -> Vec<Vec<DataValue>> {
     let width = rows[0].len();
     let mut target = Vec::new();
-    let written = DsvWriter::new(DsvOptions::csv_terms(width))
+    let written = DsvWriter::new(DsvWriterOptions::csv(vec![ValueFormat::Term; width]))
         .write(&mut target, rows.iter().map(Vec::as_slice))
         .expect("the rows write");
     assert_eq!(
@@ -460,7 +463,7 @@ fn round_trip(rows: &[Vec<DataValue>]) -> Vec<Vec<DataValue>> {
     );
 
     let mut dictionary = Dictionary::new();
-    let loaded = DsvReader::new(DsvOptions::csv(vec![ValueFormat::Term; width]))
+    let loaded = DsvReader::new(DsvReaderOptions::csv(vec![ValueFormat::Term; width]))
         .read(target.as_slice(), &mut dictionary, EvaluationContext::now())
         .expect("the output reads back");
     assert_eq!(loaded.counts.malformed, 0, "no row is malformed");
@@ -490,7 +493,7 @@ fn the_limit_counts_rows_before_the_condition() {
     // The first three well-formed rows are 1, 2 and 3, whichever of them
     // the condition keeps. A condition reduces the rows of a read with a
     // limit, and never makes it read further into the resource.
-    let mut options = DsvOptions::csv(vec![ValueFormat::Integer]);
+    let mut options = DsvReaderOptions::csv(vec![ValueFormat::Integer]);
     options.condition = Some(greater_than(0, 2));
     options.limit = Some(3);
     let mut dictionary = Dictionary::new();
@@ -518,7 +521,7 @@ fn a_condition_reads_the_instant_of_the_context_given() {
 
     // The condition keeps a row equal to the year of `NOW()`, which is 1970 only in a
     // context at the epoch.
-    let mut options = DsvOptions::csv(vec![ValueFormat::Integer]);
+    let mut options = DsvReaderOptions::csv(vec![ValueFormat::Integer]);
     options.condition = Some(RowCondition::new(
         vec![0],
         StackProgram::new(
@@ -545,7 +548,7 @@ fn a_condition_reads_the_instant_of_the_context_given() {
 #[test]
 fn the_width_is_sniffed_as_the_records_are_read() {
     let sniff = |text: &str, quoting, ignore_headers| {
-        DsvOptions::sniff_width_from(text.as_bytes(), b',', quoting, ignore_headers)
+        DsvReaderOptions::sniff_width_from(text.as_bytes(), b',', quoting, ignore_headers)
             .expect("the record reads")
     };
     assert_eq!(sniff("\"a,b\",c\n", true, false), Some(2));
@@ -559,7 +562,7 @@ fn read_named(names: &[&str], formats: &[&str], input: &str) -> Result<Loaded, D
     let formats = formats
         .iter()
         .map(|name| ColumnFormat::from_name(name).expect("the format exists"));
-    let mut options = DsvOptions::csv(formats);
+    let mut options = DsvReaderOptions::csv(formats);
     options.columns = Some(names.iter().map(|&name| name.to_owned()).collect());
 
     DsvReader::new(options).read(
@@ -577,7 +580,7 @@ fn named_columns_are_found_by_the_header() {
     // The `note` column is not named, so its cells are not read, whatever they hold.
     let input = "age,note,name\n30,\"not, a term\",alice\nold,,bob\n17,x\n";
     let names = ["name", "age"];
-    let mut options = DsvOptions::csv([ValueFormat::Term, ValueFormat::Integer]);
+    let mut options = DsvReaderOptions::csv([ValueFormat::Term, ValueFormat::Integer]);
     options.columns = Some(names.map(String::from).to_vec());
     let mut dictionary = Dictionary::new();
     let loaded = DsvReader::new(options)
@@ -624,7 +627,7 @@ fn a_written_header_names_the_columns_for_a_reader() {
         vec![DataValue::iri("alice"), DataValue::integer(30)],
         vec![DataValue::iri("bob"), DataValue::integer(17)],
     ];
-    let mut options = DsvOptions::csv([ValueFormat::Term, ValueFormat::Integer]);
+    let mut options = DsvWriterOptions::csv([ValueFormat::Term, ValueFormat::Integer]);
     options.columns = Some(vec![String::from("name"), String::from("age, in years")]);
     let mut target = Vec::new();
     DsvWriter::new(options)
@@ -633,7 +636,7 @@ fn a_written_header_names_the_columns_for_a_reader() {
     let written = String::from_utf8(target).expect("the output is text");
     assert_eq!(written, "name,\"age, in years\"\nalice,30\nbob,17\n");
 
-    let mut options = DsvOptions::csv([ValueFormat::Integer, ValueFormat::Term]);
+    let mut options = DsvReaderOptions::csv([ValueFormat::Integer, ValueFormat::Term]);
     options.columns = Some(vec![String::from("age, in years"), String::from("name")]);
     let mut dictionary = Dictionary::new();
     let loaded = DsvReader::new(options)
@@ -650,4 +653,52 @@ fn a_written_header_names_the_columns_for_a_reader() {
             vec![DataValue::integer(17), DataValue::iri("bob")],
         ]
     );
+}
+
+/// A record whose only cell is empty is written in quotes,
+/// so that it is read back as a record with a missing value, and not skipped as an empty line.
+#[test]
+fn a_record_of_one_missing_value_is_read_back() {
+    let rows: Vec<Vec<DataValue>> = vec![vec![DataValue::null(1)], vec![DataValue::string("a")]];
+    let format = ColumnFormat::from_name("string?").expect("the format exists");
+    let mut target = Vec::new();
+    DsvWriter::new(DsvWriterOptions::csv([format]))
+        .write(&mut target, rows.iter().map(Vec::as_slice))
+        .expect("the rows write");
+    let written = String::from_utf8(target).expect("the output is text");
+    assert_eq!(written, "\"\"\na\n");
+
+    let (read, counts) = read_csv(&["string?"], &written);
+    assert_eq!((read.len(), counts.malformed), (2, 0));
+    assert!(matches!(read[0][0].as_ref(), ValueRef::Null(_)));
+    assert_eq!(read[1][0], DataValue::string("a"));
+}
+
+/// A sink takes its rows one at a time, and a row that fails ends the write with its error.
+#[test]
+fn a_write_ends_with_the_error_of_its_rows() {
+    let writer = DsvWriter::new(DsvWriterOptions::csv([ValueFormat::Integer]));
+    let mut target = Vec::new();
+    let outcome = writer.write_compressed_with(&mut target, None, |sink| {
+        sink.write_row(&[ValueRef::Boolean(true)])?;
+        sink.write_row(&[DataValue::integer(7).as_ref()])?;
+
+        Err(crate::error::IoError::input_unreadable(
+            "the table ended early",
+        ))
+    });
+
+    let problem = outcome.expect_err("the rows fail");
+    assert_eq!(problem.code(), crate::codes::INPUT_UNREADABLE);
+
+    // Without the failure, the first row has no form and is counted, and the second is written.
+    let mut target = Vec::new();
+    let written = writer
+        .write_compressed_with(&mut target, None, |sink| {
+            sink.write_row(&[ValueRef::Boolean(true)])?;
+            sink.write_row(&[DataValue::integer(7).as_ref()])
+        })
+        .expect("the rows write");
+    assert_eq!((written.rows, written.dropped), (1, 1));
+    assert_eq!(target, b"7\n");
 }

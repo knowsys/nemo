@@ -345,7 +345,7 @@ impl SparqlQuery {
     /// Returns `None` for a null, since a query cannot ask for a blank node,
     /// and for tuples and maps, which have no RDF form.
     pub fn ground_term(value: &DataValue) -> Option<GroundTerm> {
-        match crate::rdf::object_term(value)? {
+        match crate::rdf::object_term(value.as_ref())? {
             spargebra::term::Term::NamedNode(node) => Some(GroundTerm::NamedNode(node)),
             spargebra::term::Term::Literal(literal) => {
                 let canonical = match value.as_ref() {

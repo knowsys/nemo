@@ -1,11 +1,13 @@
 //! Exports: a program's export directives as specifications,
 //! and writing a predicate's rows in the serialization that a specification names.
 
+use std::{io::Write, ops::ControlFlow, path::Path};
+
 use nemo_io::{
     compression::Compression,
-    write::{Writer, Written},
+    write::{RowSink, Writer, Written},
 };
-use nemo_physical::{diagnostics::Diagnostic, value::DataValue};
+use nemo_physical::{diagnostics::Diagnostic, management::ColumnOrder, value::ValueRef};
 
 use crate::{
     diagnostics::{AboutResource, EngineError, TranslationError},
@@ -98,6 +100,35 @@ impl ExportFormat {
 }
 
 impl ExportSpec {
+    /// Checks that rows with `arity` columns fit the specification's format:
+    /// the `format` and `columns` options of delimiter-separated values list one format and
+    /// one name per column, and an RDF statement has three columns, or four with its graph.
+    fn check_arity(&self, arity: usize) -> Result<(), Diagnostic> {
+        match &self.format {
+            ExportFormat::Dsv {
+                formats: Some(formats),
+                ..
+            } if formats.len() != arity => Err(TranslationError::ExportFormatArity {
+                predicate: self.predicate.clone(),
+                declared: formats.len().into(),
+                arity: arity.into(),
+            }
+            .diagnostic()),
+            ExportFormat::Dsv {
+                columns: Some(names),
+                ..
+            } if names.len() != arity => Err(TranslationError::ColumnNameCount {
+                names: names.len().into(),
+                columns: arity.into(),
+            }
+            .diagnostic()),
+            ExportFormat::Rdf { variant, .. } if arity != variant.width() => {
+                Err(rdf_export_arity(*variant, &self.predicate, arity).diagnostic())
+            }
+            _ => Ok(()),
+        }
+    }
+
     /// Creates a specification that writes a predicate as comma-separated values,
     /// with every column in the [Term](nemo_io::value_format::ValueFormat::Term) format.
     pub fn csv(predicate: impl Into<String>) -> Self {
@@ -182,24 +213,45 @@ enum ExportWriter {
 }
 
 impl ExportWriter {
-    /// Writes rows to a streaming target, compressed as the writer's options say,
-    /// as [Writer::write_compressed] describes.
+    /// Writes a resource to a stream, compressed as the writer's options say,
+    /// as [Writer::write_compressed_with] describes.
     ///
-    /// # Panics
-    ///
-    /// Panics for a Parquet writer, which does not stream.
-    fn write_compressed<'a>(
+    /// `feed` writes the rows into the sink of the resource.
+    /// A Parquet file compresses itself, and is written to the stream as it is.
+    fn write_compressed_with(
         &self,
-        target: impl std::io::Write,
-        name: Option<&std::path::Path>,
-        rows: impl Iterator<Item = &'a [DataValue]>,
+        target: impl Write + Send,
+        name: Option<&Path>,
+        feed: impl FnOnce(&mut dyn RowSink) -> Result<(), Diagnostic>,
     ) -> Result<Written, Diagnostic> {
         match self {
-            ExportWriter::Dsv(writer) => writer.write_compressed(target, name, rows),
-            ExportWriter::Rdf(writer) => writer.write_compressed(target, name, rows),
-            ExportWriter::Json(writer) => writer.write_compressed(target, name, rows),
+            ExportWriter::Dsv(writer) => writer.write_compressed_with(target, name, feed),
+            ExportWriter::Rdf(writer) => writer.write_compressed_with(target, name, feed),
+            ExportWriter::Json(writer) => writer.write_compressed_with(target, name, feed),
             #[cfg(feature = "parquet")]
-            ExportWriter::Parquet(_) => unreachable!("Parquet writes dispatch before streaming"),
+            ExportWriter::Parquet(writer) => {
+                let mut sink = writer.start(target);
+                feed(&mut sink)?;
+
+                sink.finish()
+            }
+        }
+    }
+
+    /// Writes a resource to a file, as [Writer::write_path_with] describes.
+    ///
+    /// `feed` writes the rows into the sink of the resource.
+    fn write_path_with(
+        &self,
+        path: &Path,
+        feed: impl FnOnce(&mut dyn RowSink) -> Result<(), Diagnostic>,
+    ) -> Result<Written, Diagnostic> {
+        match self {
+            ExportWriter::Dsv(writer) => writer.write_path_with(path, feed),
+            ExportWriter::Rdf(writer) => writer.write_path_with(path, feed),
+            ExportWriter::Json(writer) => writer.write_path_with(path, feed),
+            #[cfg(feature = "parquet")]
+            ExportWriter::Parquet(writer) => writer.write_path_with(path, feed),
         }
     }
 }
@@ -208,11 +260,13 @@ impl Engine {
     /// Writes the rows of export specifications into files of a directory,
     /// or to the standard output for an empty resource name.
     ///
+    /// The rows are decoded from their table as they are written,
+    /// so an export holds no second copy of the table.
     /// If the standard output is closed, the export to it ends without an error.
     /// Fails if no program is loaded, also for an empty list of specifications.
     pub(in crate::engine) fn write_exports(
         &mut self,
-        directory: impl AsRef<std::path::Path>,
+        directory: impl AsRef<Path>,
         specs: &[ExportSpec],
     ) -> Result<(), Diagnostic> {
         if self.program.is_none() {
@@ -223,8 +277,7 @@ impl Engine {
             if spec.is_stdout() {
                 let bytes = self.export_bytes(spec)?;
                 let mut stdout = std::io::stdout().lock();
-                let written = std::io::Write::write_all(&mut stdout, &bytes)
-                    .and_then(|()| std::io::Write::flush(&mut stdout));
+                let written = stdout.write_all(&bytes).and_then(|()| stdout.flush());
                 match written {
                     // A closed pipe means the reader has all it wants.
                     Err(error) if error.kind() != std::io::ErrorKind::BrokenPipe => {
@@ -237,16 +290,10 @@ impl Engine {
                     _ => continue,
                 }
             }
+
             let path = directory.join(spec.file_name());
-            let rows = self.export_rows(spec)?;
-            let rows = rows.iter().map(Vec::as_slice);
-            let written = match self.export_writer(spec)? {
-                ExportWriter::Dsv(writer) => writer.write_path(&path, rows)?,
-                ExportWriter::Rdf(writer) => writer.write_path(&path, rows)?,
-                ExportWriter::Json(writer) => writer.write_path(&path, rows)?,
-                #[cfg(feature = "parquet")]
-                ExportWriter::Parquet(writer) => writer.write_path(&path, rows)?,
-            };
+            let writer = self.export_writer(spec)?;
+            let written = writer.write_path_with(&path, |sink| self.feed_export(spec, sink))?;
             self.report_dropped(spec, written.dropped, path.display().to_string());
         }
         Ok(())
@@ -257,80 +304,86 @@ impl Engine {
         &mut self,
         spec: &ExportSpec,
     ) -> Result<Vec<u8>, Diagnostic> {
-        let rows = self.export_rows(spec)?;
         let name = spec.file_name();
+
         // The standard output has no name to detect compression by,
         // so the compression option alone decides.
-        let target = (!spec.is_stdout()).then(|| std::path::Path::new(&name));
+        let target = (!spec.is_stdout()).then(|| Path::new(&name));
         let mut bytes = Vec::new();
         let writer = self.export_writer(spec)?;
-        // Parquet compresses internally and needs its whole target.
-        // Every other writer streams, through gzip if requested.
-        #[cfg(feature = "parquet")]
-        if let ExportWriter::Parquet(writer) = &writer {
-            let written = writer.write(&mut bytes, rows.iter().map(Vec::as_slice))?;
-            self.report_dropped(spec, written.dropped, name);
-            return Ok(bytes);
-        }
-        let written =
-            writer.write_compressed(&mut bytes, target, rows.iter().map(Vec::as_slice))?;
+        let written = writer
+            .write_compressed_with(&mut bytes, target, |sink| self.feed_export(spec, sink))?;
         self.report_dropped(spec, written.dropped, name);
+
         Ok(bytes)
     }
 
-    /// Returns the rows that one export specification writes,
-    /// after checking them against the number of columns its format requires.
+    /// Writes the rows that one export specification selects into a sink,
+    /// after checking the number of their columns against what the format requires.
+    ///
+    /// The rows are decoded from the predicate's table one at a time,
+    /// and the read ends at the specification's limit.
+    /// A predicate that the program declares as an output but never uses has no rows.
+    ///
+    /// # Errors
     ///
     /// Fails if no program is loaded,
-    /// and for a predicate that the program neither uses nor declares as an output.
-    fn export_rows(&mut self, spec: &ExportSpec) -> Result<Vec<Vec<DataValue>>, Diagnostic> {
+    /// for a predicate that the program neither uses nor declares as an output,
+    /// for a predicate that is not stored whole,
+    /// and if the sink cannot be written.
+    fn feed_export(&mut self, spec: &ExportSpec, sink: &mut dyn RowSink) -> Result<(), Diagnostic> {
         if self.program.is_none() {
             return Err(EngineError::NoProgram.diagnostic());
         }
-        let mut rows = match self.arity_of(&spec.predicate) {
-            Some(_) => self.rows(&spec.predicate)?,
+        if self.arity_of(&spec.predicate).is_none() {
             // An output that the program declares but never uses has no table,
             // and is written as an empty file.
-            None if self.output_names().contains(&spec.predicate) => Vec::new(),
-            None => {
-                return Err(EngineError::UnknownPredicate {
-                    predicate: spec.predicate.clone(),
-                }
-                .diagnostic());
+            if self.output_names().contains(&spec.predicate) {
+                return Ok(());
             }
-        };
-        if let Some(limit) = spec.limit {
-            rows.truncate(usize::try_from(limit).unwrap_or(usize::MAX));
+
+            return Err(EngineError::UnknownPredicate {
+                predicate: spec.predicate.clone(),
+            }
+            .diagnostic());
         }
-        let arity = rows.first().map_or(0, Vec::len);
-        match &spec.format {
-            ExportFormat::Dsv {
-                formats: Some(formats),
-                ..
-            } if formats.len() != arity && !rows.is_empty() => {
-                Err(TranslationError::ExportFormatArity {
-                    predicate: spec.predicate.clone(),
-                    declared: formats.len().into(),
-                    arity: arity.into(),
-                }
-                .diagnostic())
-            }
-            ExportFormat::Dsv {
-                formats,
-                columns: Some(names),
-                ..
-            } if names.len() != formats.as_ref().map_or(arity, Vec::len) && !rows.is_empty() => {
-                Err(TranslationError::ColumnNameCount {
-                    names: names.len().into(),
-                    columns: formats.as_ref().map_or(arity, Vec::len).into(),
-                }
-                .diagnostic())
-            }
-            ExportFormat::Rdf { variant, .. } if !rows.is_empty() && arity != variant.width() => {
-                Err(rdf_export_arity(*variant, &spec.predicate, arity).diagnostic())
-            }
-            _ => Ok(rows),
+
+        let cursor = self.open_cursor(&spec.predicate)?;
+        let limit = spec.limit.unwrap_or(u64::MAX);
+        if cursor.remaining() == 0 || limit == 0 {
+            return Ok(());
         }
+        spec.check_arity(cursor.arity)?;
+
+        let order = ColumnOrder::identity(cursor.arity);
+        self.manager
+            .ensure_order(cursor.table, cursor.range.clone(), &order);
+
+        let mut row: Vec<ValueRef<'_>> = Vec::with_capacity(cursor.arity);
+        let mut written = 0;
+        let mut failure = None;
+        self.manager
+            .for_each_row_from(cursor.table, cursor.range, &order, 0, |values| {
+                row.clear();
+                row.extend(values.iter().map(|&value| {
+                    self.dictionary
+                        .decode(value)
+                        .expect("stored values decode against their dictionary")
+                }));
+                if let Err(problem) = sink.write_row(&row) {
+                    failure = Some(problem);
+                    return ControlFlow::Break(());
+                }
+
+                written += 1;
+                if written < limit {
+                    ControlFlow::Continue(())
+                } else {
+                    ControlFlow::Break(())
+                }
+            });
+
+        failure.map_or(Ok(()), Err)
     }
 
     /// Returns the configured writer of one export specification.
@@ -348,7 +401,7 @@ impl Engine {
                 let formats = formats
                     .clone()
                     .unwrap_or_else(|| vec![ColumnFormat::new(ValueFormat::Term); arity]);
-                let mut options = nemo_io::dsv::DsvOptions::new(*delimiter, formats);
+                let mut options = nemo_io::dsv::DsvWriterOptions::new(*delimiter, formats);
                 options.columns = columns.clone();
                 options.compression = spec.compression;
                 ExportWriter::Dsv(nemo_io::dsv::DsvWriter::new(options))

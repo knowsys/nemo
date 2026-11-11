@@ -12,7 +12,7 @@ use crate::{
     load::{Loaded, Reader},
 };
 
-use super::{ColumnLayout, DsvOptions, Parsed, ResourceLoad, RunPool};
+use super::{ColumnLayout, DsvReaderOptions, Parsed, ResourceLoad, RunPool};
 
 /// A reader of delimiter-separated values, which decodes rows into row buffers.
 ///
@@ -23,7 +23,7 @@ use super::{ColumnLayout, DsvOptions, Parsed, ResourceLoad, RunPool};
 /// or if the dictionary cannot hold one of its values.
 /// A row with an empty cell in a column that does not admit a missing value is counted apart,
 /// unless the column's format reads the empty text.
-/// If the options name the [columns](DsvOptions::columns), the first record is the header,
+/// If the options name the [columns](DsvReaderOptions::columns), the first record is the header,
 /// and each column is found by its name.
 /// A null in a cell is a null of the resource: a label names the same null throughout one
 /// read, and another null in every other read.
@@ -33,13 +33,13 @@ use super::{ColumnLayout, DsvOptions, Parsed, ResourceLoad, RunPool};
 ///
 /// ```
 /// use nemo_io::{
-///     dsv::{DsvOptions, DsvReader},
+///     dsv::{DsvReaderOptions, DsvReader},
 ///     value_format::ValueFormat,
 ///     load::Reader,
 /// };
 /// use nemo_physical::{dictionary::Dictionary, function::EvaluationContext};
 ///
-/// let reader = DsvReader::new(DsvOptions::csv(vec![ValueFormat::Term, ValueFormat::Integer]));
+/// let reader = DsvReader::new(DsvReaderOptions::csv(vec![ValueFormat::Term, ValueFormat::Integer]));
 /// let mut dictionary = Dictionary::new();
 /// let text = "alice,1\nbob,two\ncarol,3\n";
 /// let loaded = reader
@@ -53,12 +53,12 @@ use super::{ColumnLayout, DsvOptions, Parsed, ResourceLoad, RunPool};
 #[derive(Debug, Clone)]
 pub struct DsvReader {
     /// The options of the read resources.
-    options: DsvOptions,
+    options: DsvReaderOptions,
 }
 
 impl DsvReader {
     /// Creates a reader with the given options.
-    pub fn new(options: DsvOptions) -> Self {
+    pub fn new(options: DsvReaderOptions) -> Self {
         Self { options }
     }
 
@@ -66,7 +66,7 @@ impl DsvReader {
     /// without using a dictionary.
     ///
     /// Each run is passed to `emit` once it is full.
-    /// The last run is passed when the resource ends or the [limit](DsvOptions::limit) is
+    /// The last run is passed when the resource ends or the [limit](DsvReaderOptions::limit) is
     /// reached, with the number of lines that the parse consumed.
     /// If `emit` returns `false`, the parse ends.
     /// `context` is the evaluation context of the options' condition.

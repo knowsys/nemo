@@ -6,7 +6,7 @@ mod reader;
 mod writer;
 
 pub use reader::ParquetReader;
-pub use writer::ParquetWriter;
+pub use writer::{ParquetSink, ParquetWriter};
 
 #[cfg(test)]
 mod tests;

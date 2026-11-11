@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use nemo_io::{
-    dsv::DsvOptions,
+    dsv::DsvReaderOptions,
     load::{DsvResource, Resource, ResourceBatch},
     value_format::{ColumnFormat, ValueFormat},
 };
@@ -65,7 +65,7 @@ impl<'a> Translator<'a> {
             return Ok(None);
         };
         // The pruned columns are only checked while parsing, and not delivered
-        // (see `DsvOptions::checked_only`), so that they still decide which rows are
+        // (see `DsvReaderOptions::checked_only`), so that they still decide which rows are
         // well-formed.
         // The plan's positions are among the kept columns, which the directive does not skip.
         let kept = formats
@@ -91,7 +91,7 @@ impl<'a> Translator<'a> {
             return Ok(None);
         }
 
-        let mut options = DsvOptions::new(directive.delimiter, formats);
+        let mut options = DsvReaderOptions::new(directive.delimiter, formats);
         options.checked_only = checked_only;
         options.quoting = directive.quoting;
         options.columns = directive.columns.clone();
@@ -178,14 +178,14 @@ impl<'a> Translator<'a> {
                 }
                 let sniffed =
                     match self.source_stream(resource, directive.compression, fetched.cloned()) {
-                        Some(source) => DsvOptions::sniff_width_from(
+                        Some(source) => DsvReaderOptions::sniff_width_from(
                             source,
                             directive.delimiter,
                             directive.quoting,
                             directive.ignore_headers,
                         )
                         .map_err(|diagnostic| diagnostic.with_resource(resource.to_owned())),
-                        None => DsvOptions::sniff_width(
+                        None => DsvReaderOptions::sniff_width(
                             self.resource_path(import.span, resource),
                             directive.delimiter,
                             directive.quoting,
