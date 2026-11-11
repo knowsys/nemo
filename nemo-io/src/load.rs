@@ -11,19 +11,19 @@
 //! all.
 //! The [counts](RowCounts) of a load say how many rows were not stored, by cause.
 
-mod batch;
+pub(crate) mod batch;
 mod blank_nodes;
 mod counts;
 mod intake;
 mod reader;
 mod resource;
+pub(crate) mod run;
 
-pub use batch::ResourceBatch;
 pub(crate) use blank_nodes::BlankNodes;
 pub use counts::RowCounts;
 pub(crate) use intake::RowIntake;
 pub use reader::Reader;
-pub use resource::{DsvResource, Resource};
+pub use resource::Resource;
 
 use nemo_physical::trie::RowBuffer;
 #[cfg(test)]

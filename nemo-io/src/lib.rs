@@ -20,8 +20,8 @@
 //!
 //! In the middle are the format adapters, each with a reader and, except for SPARQL, a writer:
 //! [dsv], [rdf], [json], [sparql], and `parquet` behind its feature.
-//! A [batch](load::ResourceBatch) of delimiter-separated resources is parsed in parallel,
-//! while one thread interns the rows in order, as they arrive.
+//! A batch of [delimiter-separated](dsv::DsvBatch) or [RDF](rdf::RdfBatch) resources is parsed
+//! in parallel, while one thread interns the rows in order, as they arrive.
 //! At the bottom are the byte streams they read and write:
 //! [compression] wraps a byte stream, and [remote] has the requests for remote resources and
 //! the clients that send them.

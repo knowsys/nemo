@@ -5,21 +5,17 @@ use std::sync::Arc;
 
 use nemo_io::{
     file_format::FileFormat,
-    load::Reader,
-    rdf::{RdfReader, RdfReaderOptions},
+    rdf::{RdfBatch, RdfReader, RdfReaderOptions, RdfResource},
 };
 use nemo_physical::{
     dictionary::LabelScope,
     value::{DomainSet, Type, ValueDomain},
 };
 
-use crate::{
-    diagnostics::AboutResource,
-    engine::compile::translation::{
-        Translator,
-        imports::{ImportFailure, PendingImport, required_resource},
-        options::term_columns,
-    },
+use crate::engine::compile::translation::{
+    Translator,
+    imports::{ImportFailure, PendingImport, required_resource},
+    options::term_columns,
 };
 
 /// Returns the types of the columns of an RDF import with `arity` columns.
@@ -87,19 +83,16 @@ impl<'a> Translator<'a> {
         if self.options_only(import) {
             return Ok(());
         }
-        let compression = options.compression;
         let reader = RdfReader::new(options).with_blank_node_scope(self.document_scope(&resource));
-        let loaded = match self.source_stream(&resource, compression, fetched) {
-            Some(source) => reader
-                .read(source, self.dictionary, self.context)
-                .map_err(|diagnostic| diagnostic.with_resource(resource.clone())),
-            None => reader.read_path(
-                self.resource_path(import.span, &resource),
-                self.dictionary,
-                self.context,
-            ),
-        }
-        .map_err(ImportFailure::Reading)?;
+        let input = self.import_input(import, &resource, fetched);
+
+        // The batch parses the statements on worker threads, and a large line-based resource
+        // on several of them.
+        let loaded = RdfBatch::new(vec![RdfResource { input, reader }])
+            .load(self.dictionary, self.context)
+            .map_err(ImportFailure::Reading)?
+            .pop()
+            .expect("a batch gives one load per resource");
         self.absorb(table, layout.delivered(), loaded, &resource, false);
         Ok(())
     }

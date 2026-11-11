@@ -4,8 +4,7 @@
 use std::sync::Arc;
 
 use nemo_io::{
-    dsv::DsvReaderOptions,
-    load::{DsvResource, Resource, ResourceBatch},
+    dsv::{DsvBatch, DsvReaderOptions, DsvResource},
     value_format::{ColumnFormat, ValueFormat},
 };
 use nemo_physical::{diagnostics::Diagnostic, management::TableId, value::Type};
@@ -32,16 +31,6 @@ pub(super) struct PreparedDsv {
     arity: usize,
     /// The resource name, for reporting.
     resource: String,
-}
-
-/// Returns the name under which a source of registered or fetched bytes is reported:
-/// the resource name, or `<stdin>` for the empty name, which stands for standard input.
-fn source_name(resource: &str) -> String {
-    if resource.is_empty() {
-        String::from("<stdin>")
-    } else {
-        resource.to_owned()
-    }
 }
 
 impl<'a> Translator<'a> {
@@ -101,13 +90,7 @@ impl<'a> Translator<'a> {
             .import_condition(import, &layout)?
             .map(|(_, filter)| filter);
         options.limit = directive.limit;
-        let input = match self.resources.get(&resource).cloned().or(fetched) {
-            Some(bytes) => Resource::Bytes {
-                name: source_name(&resource),
-                bytes,
-            },
-            None => Resource::Path(self.resource_path(import.span, &resource)),
-        };
+        let input = self.import_input(import, &resource, fetched);
         Ok(Some(PreparedDsv {
             source: DsvResource { input, options },
             table,
@@ -223,7 +206,7 @@ impl<'a> Translator<'a> {
             .iter()
             .map(|prepared| prepared.source.clone())
             .collect();
-        let loaded = ResourceBatch::new(sources).load(self.dictionary, self.context)?;
+        let loaded = DsvBatch::new(sources).load(self.dictionary, self.context)?;
         for (prepared, loaded) in batch.into_iter().zip(loaded) {
             self.absorb(
                 prepared.table,

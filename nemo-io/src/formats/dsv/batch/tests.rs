@@ -3,7 +3,11 @@
 
 use super::*;
 
-use std::{collections::HashSet, fs, io::Cursor};
+use std::{
+    collections::HashSet,
+    fs::{self, File},
+    io::Cursor,
+};
 
 use nemo_physical::{
     storage::StorageValue,
@@ -38,7 +42,7 @@ fn batches_match_sequential_reads() {
         .collect();
 
     let mut batch_dictionary = Dictionary::new();
-    let batch = ResourceBatch::new(sources.clone());
+    let batch = DsvBatch::new(sources.clone());
     let batch_loaded = batch
         .load(&mut batch_dictionary, EvaluationContext::now())
         .expect("the batch loads");
@@ -72,13 +76,13 @@ fn byte_sources_match_file_reads() {
     let mut options = DsvReaderOptions::tsv(vec![ValueFormat::Term, ValueFormat::Term]);
     options.quoting = false;
 
-    let mut batch = ResourceBatch::new(vec![DsvResource::bytes(
+    let mut batch = DsvBatch::new(vec![DsvResource::bytes(
         "held.tsv",
         content.clone().into_bytes(),
         options.clone(),
     )]);
     batch.window_bytes = 256;
-    assert!(batch.windows(0).len() > 2, "the buffer split");
+    assert!(batch.windows(0) > 2, "the buffer split");
     let mut bytes_dictionary = Dictionary::new();
     let from_bytes = batch
         .load(&mut bytes_dictionary, EvaluationContext::now())
@@ -113,7 +117,7 @@ fn all_skip_sources_keep_their_record_count_in_batches() {
     let source = DsvResource::path(path.clone(), options.clone());
 
     let mut dictionary = Dictionary::new();
-    let batched = ResourceBatch::new(vec![source.clone(), source.clone()])
+    let batched = DsvBatch::new(vec![source.clone(), source.clone()])
         .load(&mut dictionary, EvaluationContext::now())
         .expect("the batch loads");
     let streamed = DsvReader::new(options)
@@ -139,7 +143,7 @@ fn batches_and_streams_agree_on_wide_values() {
     let source = DsvResource::path(path.clone(), options.clone());
 
     let mut dictionary = Dictionary::new();
-    let batched = ResourceBatch::new(vec![source.clone(), source.clone()])
+    let batched = DsvBatch::new(vec![source.clone(), source.clone()])
         .load(&mut dictionary, EvaluationContext::now())
         .expect("the batch loads");
     let streamed = DsvReader::new(options)
@@ -167,7 +171,7 @@ fn windowed_batches_match_sequential_reads() {
     options.quoting = false;
     let source = DsvResource::path(path.clone(), options.clone());
 
-    let mut batch = ResourceBatch::new(vec![source.clone()]);
+    let mut batch = DsvBatch::new(vec![source.clone()]);
     batch.window_bytes = 64;
     let mut windowed_dictionary = Dictionary::new();
     let windowed = batch
@@ -179,10 +183,7 @@ fn windowed_batches_match_sequential_reads() {
         .read_path(&path, &mut sequential_dictionary, EvaluationContext::now())
         .expect("the source reads");
 
-    assert!(
-        batch.windows(0).len() > 50,
-        "the file split into many windows"
-    );
+    assert!(batch.windows(0) > 50, "the file split into many windows");
     assert_eq!(windowed[0].rows.len(), 500);
     assert_eq!(
         windowed[0].decoded(&windowed_dictionary),
@@ -207,13 +208,13 @@ fn a_label_names_one_null_across_the_windows_of_a_file() {
     let mut options = DsvReaderOptions::tsv(vec![ValueFormat::Term, ValueFormat::Term]);
     options.quoting = false;
 
-    let mut batch = ResourceBatch::new(vec![DsvResource::path(path, options)]);
+    let mut batch = DsvBatch::new(vec![DsvResource::path(path, options)]);
     batch.window_bytes = 64;
     let mut dictionary = Dictionary::new();
     let loaded = batch
         .load(&mut dictionary, EvaluationContext::now())
         .expect("the batch loads");
-    assert!(batch.windows(0).len() > 20, "the file split into windows");
+    assert!(batch.windows(0) > 20, "the file split into windows");
 
     let rows = loaded[0].decoded(&dictionary);
     assert_eq!(rows.len(), 300);
@@ -253,13 +254,13 @@ fn the_windows_of_a_file_share_its_header() {
     options.quoting = false;
     options.columns = Some(vec![String::from("name"), String::from("number")]);
 
-    let mut batch = ResourceBatch::new(vec![DsvResource::path(path.clone(), options.clone())]);
+    let mut batch = DsvBatch::new(vec![DsvResource::path(path.clone(), options.clone())]);
     batch.window_bytes = 64;
     let mut dictionary = Dictionary::new();
     let loaded = batch
         .load(&mut dictionary, EvaluationContext::now())
         .expect("the batch loads");
-    assert!(batch.windows(0).len() > 20, "the file split into windows");
+    assert!(batch.windows(0) > 20, "the file split into windows");
 
     let rows = loaded[0].decoded(&dictionary);
     assert_eq!((rows.len(), loaded[0].counts.malformed), (300, 0));
@@ -270,7 +271,7 @@ fn the_windows_of_a_file_share_its_header() {
 
     // A header without one of the names fails the batch, and the error names the file.
     options.columns = Some(vec![String::from("name"), String::from("missing")]);
-    let problem = ResourceBatch::new(vec![DsvResource::path(path.clone(), options)])
+    let problem = DsvBatch::new(vec![DsvResource::path(path.clone(), options)])
         .load(&mut dictionary, EvaluationContext::now())
         .expect_err("the header has no such column");
     assert_eq!(problem.code(), crate::codes::HEADER_LACKS_COLUMN);
@@ -297,7 +298,7 @@ fn windowed_malformed_rows_keep_their_global_lines() {
     options.quoting = false;
     let source = DsvResource::path(path.clone(), options);
 
-    let mut batch = ResourceBatch::new(vec![source]);
+    let mut batch = DsvBatch::new(vec![source]);
     batch.window_bytes = 256;
     let mut dictionary = Dictionary::new();
     let loaded = batch
@@ -335,7 +336,7 @@ e,9
     let streamed = DsvReader::new(options.clone())
         .read_path(&path, &mut dictionary, EvaluationContext::now())
         .expect("the source reads");
-    let batched = ResourceBatch::new(vec![DsvResource::path(path.clone(), options)])
+    let batched = DsvBatch::new(vec![DsvResource::path(path.clone(), options)])
         .load(&mut dictionary, EvaluationContext::now())
         .expect("the batch loads");
     for loaded in [&streamed, &batched[0]] {
@@ -361,7 +362,7 @@ fn an_erroring_condition_is_counted_by_its_kind_in_both_paths() {
     let streamed = DsvReader::new(options.clone())
         .read_path(&path, &mut dictionary, EvaluationContext::now())
         .expect("the source reads");
-    let batched = ResourceBatch::new(vec![DsvResource::path(path.clone(), options)])
+    let batched = DsvBatch::new(vec![DsvResource::path(path.clone(), options)])
         .load(&mut dictionary, EvaluationContext::now())
         .expect("the batch loads");
     for loaded in [&streamed, &batched[0]] {
@@ -400,9 +401,9 @@ fn limited_sources_read_as_one_window_and_count_like_the_streaming_reader() {
     options.limit = Some(200);
     let source = DsvResource::path(path.clone(), options.clone());
 
-    let mut batch = ResourceBatch::new(vec![source]);
+    let mut batch = DsvBatch::new(vec![source]);
     batch.window_bytes = 256;
-    assert_eq!(batch.windows(0).len(), 1, "a limited source is one window");
+    assert_eq!(batch.windows(0), 1, "a limited source is one window");
     let mut windowed_dictionary = Dictionary::new();
     let windowed = batch
         .load(&mut windowed_dictionary, EvaluationContext::now())
@@ -485,8 +486,7 @@ fn runs_intern_like_a_straight_read() {
             (&plain, 64 * 1024),
             (&compressed, WINDOW_BYTES),
         ] {
-            let mut batch =
-                ResourceBatch::new(vec![DsvResource::path(path.clone(), options.clone())]);
+            let mut batch = DsvBatch::new(vec![DsvResource::path(path.clone(), options.clone())]);
             batch.window_bytes = window_bytes;
             let mut dictionary = Dictionary::new();
             let batched = batch
@@ -527,7 +527,7 @@ fn missing_files_are_reported() {
             .is_err()
     );
     assert!(
-        ResourceBatch::new(vec![DsvResource::path(
+        DsvBatch::new(vec![DsvResource::path(
             path,
             DsvReaderOptions::csv_terms(1)
         )])

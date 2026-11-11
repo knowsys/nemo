@@ -1,6 +1,6 @@
 //! The counts of the rows that a load dropped.
 
-use nemo_physical::value::ErrorCounts;
+use nemo_physical::value::{ErrorCounts, EvaluationError};
 
 /// The counts of the rows of one resource that a load did not store, by cause.
 ///
@@ -53,6 +53,21 @@ impl RowCounts {
         if line > 0 {
             self.first_missing.get_or_insert(line);
         }
+    }
+
+    /// Counts a well-formed row by the result of the condition on it,
+    /// and returns whether the condition admits the row.
+    ///
+    /// A row that the condition does not admit is counted as excluded,
+    /// or under the kind of the error that the condition raised on it.
+    pub(crate) fn count_condition(&mut self, result: Result<bool, EvaluationError>) -> bool {
+        match result {
+            Ok(true) => return true,
+            Ok(false) => self.excluded += 1,
+            Err(kind) => self.errors.record(kind),
+        }
+
+        false
     }
 
     /// Adds the counts of a part of the same resource.

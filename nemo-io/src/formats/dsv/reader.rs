@@ -9,10 +9,13 @@ use nemo_physical::{diagnostics::Diagnostic, dictionary::Dictionary, function::E
 use crate::{
     compression::Compression,
     error::IoError,
-    load::{Loaded, Reader},
+    load::{Loaded, Reader, run::RunPool},
 };
 
-use super::{ColumnLayout, DsvReaderOptions, Parsed, ResourceLoad, RunPool};
+use super::{
+    ColumnLayout, DsvReaderOptions,
+    run::{DsvLoad, DsvRun},
+};
 
 /// A reader of delimiter-separated values, which decodes rows into row buffers.
 ///
@@ -62,7 +65,7 @@ impl DsvReader {
         Self { options }
     }
 
-    /// Parses all rows of a resource into [runs](Parsed) taken from `runs`,
+    /// Parses all rows of a resource into [runs](DsvRun) taken from `runs`,
     /// without using a dictionary.
     ///
     /// Each run is passed to `emit` once it is full.
@@ -83,10 +86,10 @@ impl DsvReader {
     pub(crate) fn parse(
         &self,
         source: impl Read,
-        runs: &RunPool,
+        runs: &RunPool<DsvRun>,
         context: EvaluationContext,
         layout: Option<&ColumnLayout>,
-        mut emit: impl FnMut(Parsed) -> bool,
+        mut emit: impl FnMut(DsvRun) -> bool,
     ) -> Result<(), Diagnostic> {
         let header = layout.is_none() && self.options.columns.is_some();
         let mut reader = self.csv_reader(source, self.options.ignore_headers || header);
@@ -106,7 +109,7 @@ impl DsvReader {
 
         let limit = self.options.limit.unwrap_or(u64::MAX);
         let arity = self.options.arity();
-        let mut run = runs.take(arity);
+        let mut run = DsvRun::from_pool(runs, arity);
 
         // The well-formed rows so far, across the runs, which the limit counts.
         let mut well_formed = 0;
@@ -120,13 +123,13 @@ impl DsvReader {
             run.push_record(&self.options, layout, context, record, line);
             well_formed += run.well_formed() - before;
             if run.is_full() {
-                wanted = emit(std::mem::replace(&mut run, runs.take(arity)));
+                wanted = emit(std::mem::replace(&mut run, DsvRun::from_pool(runs, arity)));
             }
 
             wanted
         })?;
         if wanted {
-            run.consumed_lines = consumed;
+            run.end_parse(consumed);
             emit(run);
         }
 
@@ -213,7 +216,7 @@ impl Reader for DsvReader {
         context: EvaluationContext,
     ) -> Result<Loaded, Diagnostic> {
         let runs = RunPool::default();
-        let mut load = ResourceLoad::new(&self.options, context);
+        let mut load = DsvLoad::new(&self.options, context);
         let parsed = self.parse(source, &runs, context, None, |run| {
             run.encode_into(&mut load, dictionary, 0);
             runs.give(run);

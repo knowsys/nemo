@@ -2,9 +2,11 @@
 //!
 //! A *statement* is one triple, or one quad in the variants with graphs.
 
+mod batch;
 mod reader;
 mod writer;
 
+pub use batch::{RdfBatch, RdfResource};
 pub use reader::{RdfReader, RdfReaderOptions};
 pub(crate) use writer::object_term;
 pub use writer::{RdfSink, RdfWriter, RdfWriterOptions};

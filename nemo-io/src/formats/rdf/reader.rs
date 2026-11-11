@@ -2,12 +2,14 @@
 
 use std::io::{BufRead, BufReader, Read};
 
-use oxrdfio::{RdfFormat, RdfParser};
+use oxrdf::vocab::xsd;
+use oxrdfio::{RdfFormat, RdfParseError, RdfParser};
 
 use nemo_physical::{
     diagnostics::Diagnostic,
     dictionary::{Dictionary, LabelScope},
     function::EvaluationContext,
+    storage::StorageValue,
     value::DataValue,
 };
 
@@ -15,7 +17,10 @@ use crate::{
     compression::Compression,
     error::IoError,
     file_format::RdfVariant,
-    load::{BlankNodes, Loaded, Reader, RowIntake},
+    load::{
+        BlankNodes, Loaded, Reader, RowIntake,
+        run::{Run, RunPool},
+    },
     selection::RowSelection,
 };
 
@@ -58,6 +63,8 @@ impl RdfReaderOptions {
 /// A reader of RDF statements, which decodes them into row buffers.
 ///
 /// The reader streams, and handles each statement on its own.
+/// It reads on the calling thread,
+/// while a [batch](super::RdfBatch) parses large resources on several threads.
 /// A statement with a syntax error, a literal that its datatype rejects,
 /// or a term that the dictionary cannot hold is counted as malformed and skipped,
 /// and parsing resumes with its state, such as the prefix declarations, intact.
@@ -126,12 +133,21 @@ impl RdfReader {
         self
     }
 
+    /// Returns the options of the read resources.
+    pub fn options(&self) -> &RdfReaderOptions {
+        &self.options
+    }
+
     /// Returns the parser for the variant,
     /// which resolves relative IRIs against the base if one is declared.
     ///
     /// The base is checked for every variant,
     /// although the line-based ones have no relative IRIs and ignore it.
-    fn parser(&self) -> Result<RdfParser, Diagnostic> {
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the base is not an IRI.
+    pub(crate) fn parser(&self) -> Result<RdfParser, Diagnostic> {
         let parser = RdfParser::from_format(self.options.variant.format());
         let Some(base) = &self.options.base else {
             return Ok(parser);
@@ -156,7 +172,7 @@ impl Reader for RdfReader {
         self.options.compression
     }
 
-    /// Reads all statements of a resource, interning values as they arrive.
+    /// Reads all statements of a resource, interning them as they are parsed.
     ///
     /// # Errors
     ///
@@ -168,18 +184,17 @@ impl Reader for RdfReader {
         context: EvaluationContext,
     ) -> Result<Loaded, Diagnostic> {
         let parser = self.parser()?;
-        let width = self.options.variant.width();
-        let mut statements = Statements {
-            quads: self.options.variant.quads(),
-            intake: RowIntake::new(width, &self.options.selection, context),
-            blanks: BlankNodes::open(self.blank_nodes, "document", dictionary),
-            kept: Vec::with_capacity(width),
-        };
-        let read = self.read_statements(parser, source, &mut statements, dictionary);
-        statements.blanks.close(dictionary);
-        read?;
+        let runs = RunPool::default();
+        let mut load = self.start(dictionary, context);
+        let parsed = self.parse(parser, source, &runs, context, &mut |run| {
+            load.intern(&run, dictionary, 0);
+            runs.give(run);
 
-        let loaded = statements.intake.finish();
+            true
+        });
+        let loaded = load.finish(dictionary);
+        parsed?;
+
         tracing::debug!(rows = loaded.rows.len(), counts = ?loaded.counts, "read an RDF source");
 
         Ok(loaded)
@@ -187,23 +202,53 @@ impl Reader for RdfReader {
 }
 
 impl RdfReader {
-    /// Reads the statements of a resource into `statements`,
-    /// until the [limit](RdfReaderOptions::limit) of well-formed statements is reached.
-    fn read_statements(
+    /// Starts the load of a resource, which opens the scope of its blank nodes.
+    ///
+    /// `context` is the evaluation context of the selection's condition.
+    pub(crate) fn start(&self, dictionary: &mut Dictionary, context: EvaluationContext) -> RdfLoad {
+        let width = self.options.variant.width();
+
+        RdfLoad {
+            intake: RowIntake::new(width, &self.options.selection, context),
+            blanks: Some(BlankNodes::open(self.blank_nodes, "document", dictionary)),
+            row: Vec::with_capacity(width),
+        }
+    }
+
+    /// Parses the statements of a resource, or of a part of one that begins and ends at line
+    /// ends, into runs taken from `runs`, and passes each run to `emit` once it is full,
+    /// until `emit` returns `false`.
+    ///
+    /// `parser` is the [parser](Self::parser) of the variant,
+    /// and `context` is the evaluation context of the selection's condition.
+    /// The parse ends at the [limit](RdfReaderOptions::limit) of well-formed statements.
+    /// The last run has the number of lines that the parse consumed,
+    /// which only the line-based variants count.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the stream cannot be read.
+    pub(crate) fn parse(
         &self,
         parser: RdfParser,
         source: impl Read,
-        statements: &mut Statements,
-        dictionary: &mut Dictionary,
+        runs: &RunPool<Run>,
+        context: EvaluationContext,
+        emit: &mut dyn FnMut(Run) -> bool,
     ) -> Result<(), Diagnostic> {
         let limit = self.options.limit.unwrap_or(u64::MAX);
+        let arity = self.options.selection.arity(self.options.variant.width());
+        let mut run = Run::from_pool(runs, arity);
+
+        // The well-formed statements of the runs passed on so far, which the limit counts.
+        let mut passed = 0;
 
         if self.options.variant.line_based() {
             // A statement fits on one line, so a line with a syntax error is one malformed row.
             // None of the line's statements is kept, and the error does not affect the next line.
             let mut source = BufReader::new(source);
             let (mut line, mut quads, mut number) = (Vec::new(), Vec::new(), 0u64);
-            while statements.intake.well_formed() < limit {
+            while passed + run.counts.well_formed < limit {
                 line.clear();
                 let read = source
                     .read_until(b'\n', &mut line)
@@ -219,95 +264,164 @@ impl RdfReader {
                     .for_slice(&line)
                     .all(|quad| quad.map(|quad| quads.push(quad)).is_ok());
                 if !parsed {
-                    statements.intake.count_malformed(number);
+                    run.counts.count_malformed(number);
                     continue;
                 }
 
                 for quad in quads.drain(..) {
-                    if statements.intake.well_formed() >= limit {
+                    if passed + run.counts.well_formed >= limit {
                         break;
                     }
 
-                    statements.take(quad, dictionary, number);
+                    self.push_statement(&mut run, context, &quad, number);
+                }
+
+                if run.is_full() {
+                    passed += run.counts.well_formed;
+                    if !emit(std::mem::replace(&mut run, Run::from_pool(runs, arity))) {
+                        return Ok(());
+                    }
                 }
             }
+
+            run.consumed_lines = number;
         } else {
             for quad in parser.for_reader(source) {
-                if statements.intake.well_formed() >= limit {
+                if passed + run.counts.well_formed >= limit {
                     break;
                 }
 
                 match quad {
-                    Ok(quad) => statements.take(quad, dictionary, 0),
-                    Err(oxrdfio::RdfParseError::Syntax(_)) => statements.intake.count_malformed(0),
+                    Ok(quad) => self.push_statement(&mut run, context, &quad, 0),
+                    Err(RdfParseError::Syntax(_)) => run.counts.count_malformed(0),
                     // The stream itself broke, and the error would repeat for
                     // every further statement, so the read ends.
-                    Err(oxrdfio::RdfParseError::Io(error)) => {
+                    Err(RdfParseError::Io(error)) => {
                         return Err(IoError::input_unreadable(error));
+                    }
+                }
+
+                if run.is_full() {
+                    passed += run.counts.well_formed;
+                    if !emit(std::mem::replace(&mut run, Run::from_pool(runs, arity))) {
+                        return Ok(());
                     }
                 }
             }
         }
 
+        emit(run);
+
         Ok(())
     }
-}
 
-/// The statements of one read, as they become the rows of its load.
-struct Statements {
-    /// Whether the statements are quads, whose rows start with the graph.
-    quads: bool,
-    /// The intake of the read's rows.
-    intake: RowIntake,
-    /// The blank nodes of the read.
-    blanks: BlankNodes,
-    /// The delivered values of the current statement.
-    kept: Vec<DataValue>,
-}
-
-impl Statements {
-    /// Takes a statement as a row, or counts it as malformed.
+    /// Adds a statement to a run as a row, or counts it as malformed.
     ///
     /// - IRIs stay as they are, and the default graph becomes [DEFAULT_GRAPH].
-    /// - Blank nodes become the nulls that their labels name.
+    /// - Blank nodes become the nulls that their labels name in the resource.
     /// - Literals become their [values](literal_value),
     ///   and a literal without a value makes the statement malformed,
     ///   whether or not its column is delivered.
     ///
-    /// `line` is the statement's line, or `0` if it is not known.
-    fn take(&mut self, quad: oxrdf::Quad, dictionary: &mut Dictionary, line: u64) {
-        let object = match quad.object {
-            oxrdf::Term::NamedNode(node) => Some(DataValue::iri(node.into_string())),
-            oxrdf::Term::BlankNode(node) => Some(self.blanks.null(node.as_str(), dictionary)),
-            oxrdf::Term::Literal(literal) => literal_value(&literal),
-        };
-        let Some(object) = object else {
-            self.intake.count_malformed(line);
-            return;
-        };
+    /// `line` is the statement's line, or `0` if it is not known,
+    /// and `context` is the evaluation context of the selection's condition.
+    fn push_statement(
+        &self,
+        run: &mut Run,
+        context: EvaluationContext,
+        quad: &oxrdf::Quad,
+        line: u64,
+    ) {
+        let selection = &self.options.selection;
+        let start = run.values.row_start();
+        let values = &mut run.values;
 
-        let graph = self.quads.then(|| match quad.graph_name {
-            oxrdf::GraphName::DefaultGraph => DataValue::iri(DEFAULT_GRAPH),
-            oxrdf::GraphName::NamedNode(node) => DataValue::iri(node.into_string()),
-            oxrdf::GraphName::BlankNode(node) => self.blanks.null(node.as_str(), dictionary),
-        });
-        let subject = match quad.subject {
-            oxrdf::NamedOrBlankNode::NamedNode(node) => DataValue::iri(node.into_string()),
-            oxrdf::NamedOrBlankNode::BlankNode(node) => self.blanks.null(node.as_str(), dictionary),
-        };
-        let predicate = DataValue::iri(quad.predicate.into_string());
+        // The rows of quads start with the graph.
+        let mut position = 0;
+        if self.options.variant.quads() {
+            if selection.keeps(position) {
+                match &quad.graph_name {
+                    oxrdf::GraphName::DefaultGraph => values.push_iri(DEFAULT_GRAPH),
+                    oxrdf::GraphName::NamedNode(node) => values.push_iri(node.as_str()),
+                    oxrdf::GraphName::BlankNode(node) => values.push_labeled(node.as_str()),
+                }
+            }
 
-        let selection = self.intake.selection();
-        self.kept.clear();
-        self.kept.extend(
-            graph
-                .into_iter()
-                .chain([subject, predicate, object])
-                .enumerate()
-                .filter(|(position, _)| selection.keeps(*position))
-                .map(|(_, value)| value),
+            position += 1;
+        }
+
+        if selection.keeps(position) {
+            match &quad.subject {
+                oxrdf::NamedOrBlankNode::NamedNode(node) => values.push_iri(node.as_str()),
+                oxrdf::NamedOrBlankNode::BlankNode(node) => values.push_labeled(node.as_str()),
+            }
+        }
+
+        if selection.keeps(position + 1) {
+            values.push_iri(quad.predicate.as_str());
+        }
+
+        let delivered = selection.keeps(position + 2);
+        match &quad.object {
+            oxrdf::Term::NamedNode(node) if delivered => values.push_iri(node.as_str()),
+            oxrdf::Term::BlankNode(node) if delivered => values.push_labeled(node.as_str()),
+            oxrdf::Term::NamedNode(_) | oxrdf::Term::BlankNode(_) => {}
+
+            // A plain string is its text, and needs no owned value.
+            oxrdf::Term::Literal(literal) if literal.datatype() == xsd::STRING => {
+                if delivered {
+                    values.push_string(literal.value());
+                }
+            }
+            oxrdf::Term::Literal(literal) => match literal_value(literal) {
+                Some(value) if delivered => values.push_value(value),
+                Some(_) => {}
+                None => {
+                    values.take_back(start);
+                    run.counts.count_malformed(line);
+                    return;
+                }
+            },
+        }
+
+        run.end_row(start, selection.condition.as_ref(), context, line);
+    }
+}
+
+/// The load of one RDF resource while its runs are interned.
+#[derive(Debug)]
+pub(crate) struct RdfLoad {
+    /// The intake of the resource's rows.
+    intake: RowIntake,
+    /// The blank nodes of the resource, which are open from the start of the load.
+    blanks: Option<BlankNodes>,
+    /// A scratch buffer for the encoded values of a row.
+    row: Vec<StorageValue>,
+}
+
+impl RdfLoad {
+    /// Interns the rows of a run, and adds the run's counts to the load.
+    ///
+    /// `base` is the number of lines before the part of the resource that the run was parsed
+    /// from, which is added to the run's line numbers.
+    pub(crate) fn intern(&mut self, run: &Run, dictionary: &mut Dictionary, base: u64) {
+        run.intern(
+            &mut self.intake,
+            &mut self.blanks,
+            dictionary,
+            &mut self.row,
+            base,
         );
-        self.intake.take(&self.kept, dictionary, line);
+    }
+
+    /// Ends the load, which closes the scope of the blank nodes if the load opened it,
+    /// and returns it.
+    pub(crate) fn finish(self, dictionary: &mut Dictionary) -> Loaded {
+        if let Some(blanks) = self.blanks {
+            blanks.close(dictionary);
+        }
+
+        self.intake.finish()
     }
 }
 

@@ -25,7 +25,7 @@ use std::{
 use nemo_io::{
     compression::Compression,
     file_format::FileFormat,
-    load::{Loaded, RowCounts},
+    load::{Loaded, Resource, RowCounts},
     selection::RowCondition,
     selection::RowSelection,
 };
@@ -140,6 +140,16 @@ impl From<Diagnostic> for ImportFailure {
     /// Treats a problem as the directive's, which it is unless it was found while reading.
     fn from(problem: Diagnostic) -> Self {
         ImportFailure::Directive(problem)
+    }
+}
+
+/// Returns the name under which a source of registered or fetched bytes is reported:
+/// the resource name, or `<stdin>` for the empty name, which stands for standard input.
+fn source_name(resource: &str) -> String {
+    if resource.is_empty() {
+        String::from("<stdin>")
+    } else {
+        resource.to_owned()
     }
 }
 
@@ -267,6 +277,24 @@ impl<'a> Translator<'a> {
     ) -> Option<Box<dyn std::io::Read>> {
         self.registered_stream(resource, compression)
             .or_else(|| fetched.map(|bytes| compression.open_bytes(bytes, resource)))
+    }
+
+    /// Returns where an import reads the bytes of its resource:
+    /// the bytes registered under the resource name, or else the `fetched` bytes,
+    /// or else the file of that name.
+    fn import_input(
+        &self,
+        import: &PendingImport,
+        resource: &str,
+        fetched: Option<Arc<[u8]>>,
+    ) -> Resource {
+        match self.resources.get(resource).cloned().or(fetched) {
+            Some(bytes) => Resource::Bytes {
+                name: source_name(resource),
+                bytes,
+            },
+            None => Resource::Path(self.resource_path(import.span, resource)),
+        }
     }
 
     /// Registers the table that an import loads into, and records the types of its delivered

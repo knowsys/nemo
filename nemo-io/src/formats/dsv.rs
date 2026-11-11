@@ -3,16 +3,15 @@
 //! The *width* of a resource is the number of its columns,
 //! and the *arity* is the number of columns that a reader delivers.
 
+mod batch;
 mod layout;
-mod parsed;
 mod reader;
-mod run_pool;
+mod run;
 mod writer;
 
+pub use batch::{DsvBatch, DsvResource};
 pub(crate) use layout::ColumnLayout;
-pub(crate) use parsed::{Parsed, ResourceLoad};
 pub use reader::DsvReader;
-pub(crate) use run_pool::RunPool;
 pub use writer::{DsvSink, DsvWriter, DsvWriterOptions};
 
 use std::{io::Read, path::Path};

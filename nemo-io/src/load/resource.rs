@@ -2,7 +2,7 @@
 
 use std::{path::PathBuf, sync::Arc};
 
-use crate::{compression::Compression, dsv::DsvReaderOptions};
+use crate::compression::Compression;
 
 /// Where a resource's bytes come from.
 #[derive(Debug, Clone)]
@@ -36,40 +36,6 @@ impl Resource {
         match self {
             Resource::Path(path) => compression.gzip_for_name(path),
             Resource::Bytes { bytes, .. } => compression.gzip_for_bytes(bytes),
-        }
-    }
-}
-
-/// One delimiter-separated resource of a batch.
-#[derive(Debug, Clone)]
-pub struct DsvResource {
-    /// Where the bytes come from.
-    pub input: Resource,
-    /// The options of the format, such as the delimiter.
-    pub options: DsvReaderOptions,
-}
-
-impl DsvResource {
-    /// Creates a resource that reads the given file.
-    pub fn path(path: impl Into<PathBuf>, options: DsvReaderOptions) -> Self {
-        Self {
-            input: Resource::Path(path.into()),
-            options,
-        }
-    }
-
-    /// Creates a resource that reads bytes already in memory, under `name` in diagnostics.
-    pub fn bytes(
-        name: impl Into<String>,
-        bytes: impl Into<Arc<[u8]>>,
-        options: DsvReaderOptions,
-    ) -> Self {
-        Self {
-            input: Resource::Bytes {
-                name: name.into(),
-                bytes: bytes.into(),
-            },
-            options,
         }
     }
 }

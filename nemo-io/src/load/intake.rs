@@ -1,8 +1,11 @@
 //! The intake of the rows of one resource into a load.
 
 use nemo_physical::{
-    dictionary::Dictionary, function::EvaluationContext, storage::StorageValue, trie::RowBuffer,
-    value::DataValue,
+    dictionary::Dictionary,
+    function::EvaluationContext,
+    storage::StorageValue,
+    trie::RowBuffer,
+    value::{DataValue, ValueRef},
 };
 
 use crate::{
@@ -94,24 +97,9 @@ impl RowIntake {
         dictionary: &mut Dictionary,
         line: u64,
     ) -> bool {
-        let counts = &mut self.loaded.counts;
-        counts.well_formed += 1;
-
-        if let Some(condition) = &self.selection.condition {
-            let admitted = condition.evaluate_with(self.context, &mut self.buffers, |position| {
-                kept[position].as_ref()
-            });
-            match admitted {
-                Ok(true) => {}
-                Ok(false) => {
-                    counts.excluded += 1;
-                    return false;
-                }
-                Err(kind) => {
-                    counts.errors.record(kind);
-                    return false;
-                }
-            }
+        self.loaded.counts.well_formed += 1;
+        if !self.admits(|position| kept[position].as_ref()) {
+            return false;
         }
 
         self.row.clear();
@@ -124,10 +112,25 @@ impl RowIntake {
         if complete {
             self.loaded.rows.push_row(&self.row);
         } else {
-            counts.count_malformed(line);
+            self.loaded.counts.count_malformed(line);
         }
 
         complete
+    }
+
+    /// Returns whether the selection's condition admits a row.
+    ///
+    /// `value` returns the row's value at a delivered column.
+    /// A row that the condition does not admit is counted as excluded,
+    /// or under the kind of the error that the condition raised on it.
+    pub(crate) fn admits<'a>(&'a mut self, value: impl Fn(usize) -> ValueRef<'a>) -> bool {
+        let Some(condition) = &self.selection.condition else {
+            return true;
+        };
+
+        let result = condition.evaluate_with(self.context, &mut self.buffers, value);
+
+        self.loaded.counts.count_condition(result)
     }
 
     /// Stores a row that is admitted and encoded already.
