@@ -230,7 +230,6 @@ impl Engine {
             }
         };
         self.replace_store(retranslated.replaced, &retranslated.extensional);
-        #[cfg(debug_assertions)]
         for (&table, rows) in &retranslated.facts {
             self.assert_stored_types(&retranslated.compiled.column_types, table, rows);
         }

@@ -19,6 +19,7 @@ use nemo_physical::{
     management::{ColumnOrder, MergePolicy, Revision, TableId},
     stopwatch::Stopwatch,
     trie::Trie,
+    value::Type,
 };
 
 use crate::{
@@ -516,13 +517,19 @@ impl Engine {
         context: EvaluationContext,
         mut suspended: Option<Box<PendingFetch>>,
     ) -> Result<(usize, IterationOutcome), Diagnostic> {
+        let CompiledProgram {
+            rules,
+            column_types,
+            ..
+        } = program;
+
         let mut stored = 0usize;
         for (position, &index) in active.iter().enumerate().skip(from) {
             if self.cancel.is_cancelled() {
                 return Ok((stored, IterationOutcome::Cancelled));
             }
-            let rule = &mut program.rules[index];
-            match self.apply_and_store(rule, index, context, suspended.take())? {
+            let rule = &mut rules[index];
+            match self.apply_and_store(rule, index, column_types, context, suspended.take())? {
                 StoreOutcome::Stored(rows) => stored += rows,
                 StoreOutcome::Suspended(fetch) => {
                     let outcome = IterationOutcome::Suspended {
@@ -555,10 +562,12 @@ impl Engine {
     /// A suspended application does not advance the step.
     /// A body without new rows since the rule's last application derives nothing,
     /// so the rule's delta window advances without building a plan.
+    /// `column_types` are the program's inferred column types, by table.
     fn apply_and_store(
         &mut self,
         rule: &mut CompiledRule,
         index: usize,
+        column_types: &HashMap<TableId, Vec<Type>>,
         context: EvaluationContext,
         suspended: Option<Box<PendingFetch>>,
     ) -> Result<StoreOutcome, Diagnostic> {
@@ -601,7 +610,7 @@ impl Engine {
 
         let per_table = group_per_table(outputs);
         let begun = Stopwatch::start();
-        let stored = self.store_grouped(step, per_table, applied);
+        let stored = self.store_grouped(step, per_table, applied, column_types);
         let storing = begun.nanos();
         self.timings.store += storing;
         if stored > 0 {
@@ -636,11 +645,13 @@ impl Engine {
     ///
     /// `applied` is the time the application took, in nanoseconds.
     /// A table that gains rows is charged this time, plus the time spent storing into it.
+    /// A debug build checks the rows against `column_types`, the inferred types by table.
     fn store_grouped(
         &mut self,
         step: u64,
         per_table: HashMap<TableId, Vec<Trie>>,
         applied: u64,
+        column_types: &HashMap<TableId, Vec<Type>>,
     ) -> usize {
         let mut stored = 0;
         for (table, mut tries) in per_table {
@@ -649,10 +660,8 @@ impl Engine {
                 1 => tries.pop().expect("one trie"),
                 _ => Trie::merge(&tries.iter().collect::<Vec<_>>()),
             };
-            #[cfg(debug_assertions)]
-            if let Some(program) = &self.program {
-                self.assert_stored_trie(&program.column_types, table, &trie);
-            }
+            self.assert_stored_trie(column_types, table, &trie);
+
             let arity = trie.arity();
             let added =
                 self.manager

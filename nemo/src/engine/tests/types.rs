@@ -827,6 +827,29 @@ fn a_stored_value_outside_the_inferred_types_panics_in_debug_builds() {
     engine.assert_stored_types(&types, table, &rows);
 }
 
+/// Debug builds check the rows that reasoning stores too,
+/// so a derived value outside the inferred column types panics.
+#[cfg(debug_assertions)]
+#[test]
+#[should_panic(expected = "the analysis inferred")]
+fn a_derived_value_outside_the_inferred_types_panics_in_debug_builds() {
+    use nemo_physical::value::{Type, ValueDomain};
+
+    let mut engine = Engine::new();
+    engine
+        .load(parse("p(1) . q(?x) :- p(?x) ."))
+        .expect("the program loads");
+
+    // The analysis inferred integers for `q`, and strings stand in for a wrong inference.
+    let &Registered { table, .. } = engine.predicates.get("q").expect("registered");
+    let program = engine.program.as_mut().expect("a program is loaded");
+    program
+        .column_types
+        .insert(table, vec![Type::of(ValueDomain::String)]);
+
+    let _ = engine.reason();
+}
+
 /// A `@type` named like a base type or a builtin, an unnamed `@type`, a second `@type` of a
 /// label, and an unknown type in a declaration are errors.
 #[test]

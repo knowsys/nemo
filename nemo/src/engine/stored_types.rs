@@ -19,16 +19,22 @@ use nemo_physical::{
 use crate::engine::Engine;
 
 impl Engine {
-    /// Panics if a block of rows about to be stored in a table contains a value outside the
-    /// table's column types, or a labeled value outside the `@type` of its label.
+    /// Panics, in a debug build, if a block of rows about to be stored in a table contains a
+    /// value outside the table's column types, or a labeled value outside the `@type` of its
+    /// label.
     ///
     /// A table without column types, such as a scratch table, is not checked.
+    /// A release build checks nothing.
     pub(in crate::engine) fn assert_stored_types(
         &self,
         column_types: &HashMap<TableId, Vec<Type>>,
         table: TableId,
         rows: &RowBuffer,
     ) {
+        if !cfg!(debug_assertions) {
+            return;
+        }
+
         for index in 0..rows.len() {
             self.assert_stored_row(column_types, table, rows.row(index));
         }
@@ -41,6 +47,10 @@ impl Engine {
         table: TableId,
         trie: &Trie,
     ) {
+        if !cfg!(debug_assertions) {
+            return;
+        }
+
         trie.for_each_row(|row| self.assert_stored_row(column_types, table, row));
     }
 

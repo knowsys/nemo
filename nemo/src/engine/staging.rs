@@ -200,7 +200,6 @@ impl Engine {
         };
 
         for (table, rows) in facts {
-            #[cfg(debug_assertions)]
             self.assert_stored_types(&compiled.column_types, table, &rows);
             let arity = rows.arity();
             let stored =
@@ -215,7 +214,6 @@ impl Engine {
         self.step = 1;
         if !imported.is_empty() {
             for (table, rows) in imported {
-                #[cfg(debug_assertions)]
                 self.assert_stored_types(&compiled.column_types, table, &rows);
                 let arity = rows.arity();
                 let stored =
@@ -629,7 +627,6 @@ impl Engine {
         };
         self.pipeline
             .present_reports(already, |report| written.present(report));
-        #[cfg(debug_assertions)]
         for (&table, rows) in &facts {
             self.assert_stored_types(&compiled.column_types, table, rows);
         }
@@ -797,7 +794,6 @@ impl Engine {
                 }
             }
         }
-        #[cfg(debug_assertions)]
         if let Some(program) = &self.program {
             self.assert_stored_types(&program.column_types, table, &rows);
         }

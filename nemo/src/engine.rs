@@ -48,7 +48,6 @@ mod registered;
 pub mod remote;
 mod results;
 mod staging;
-#[cfg(debug_assertions)]
 mod stored_types;
 mod trace;
 mod transform;
