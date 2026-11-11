@@ -3,11 +3,13 @@
 //! The *width* of a resource is the number of its columns,
 //! and the *arity* is the number of columns that a reader delivers.
 
+mod layout;
 mod parsed;
 mod reader;
 mod run_pool;
 mod writer;
 
+pub(crate) use layout::ColumnLayout;
 pub(crate) use parsed::{Parsed, ResourceLoad};
 pub use reader::DsvReader;
 pub(crate) use run_pool::RunPool;
@@ -47,7 +49,18 @@ pub struct DsvOptions {
     pub checked_only: Vec<bool>,
     /// Whether `"` quotes cells, rather than being an ordinary character.
     pub quoting: bool,
+    /// The names of the columns, in the order of [formats](Self::formats),
+    /// or `None` for a resource whose columns go by position.
+    ///
+    /// A reader then reads the first record as the header and finds each column by its name,
+    /// whatever its position, and does not read a column of the resource that is not named.
+    /// A writer writes the names as the first record.
+    /// The name of a [Skip](ValueFormat::Skip) column is neither looked up nor written.
+    pub columns: Option<Vec<String>>,
     /// Whether the first record is skipped, whatever it contains.
+    ///
+    /// It does not apply to a resource with named [columns](Self::columns),
+    /// whose first record is read as the header.
     pub ignore_headers: bool,
     /// The stream compression.
     pub compression: Compression,
@@ -65,14 +78,15 @@ pub struct DsvOptions {
 impl DsvOptions {
     /// Creates options for a delimiter and column formats.
     ///
-    /// The options have quoting on, no header, detected compression, no column that is only
-    /// checked, no condition and no limit.
+    /// The options have quoting on, columns that go by position, no header, detected
+    /// compression, no column that is only checked, no condition and no limit.
     pub fn new(delimiter: u8, formats: impl IntoIterator<Item = impl Into<ColumnFormat>>) -> Self {
         Self {
             delimiter,
             formats: formats.into_iter().map(Into::into).collect(),
             checked_only: Vec::new(),
             quoting: true,
+            columns: None,
             ignore_headers: false,
             compression: Compression::Auto,
             condition: None,

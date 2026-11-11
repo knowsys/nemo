@@ -18,7 +18,8 @@ use super::DsvOptions;
 /// Each value is written as its column's format [writes](crate::value_format::ColumnFormat::write) it.
 /// The resulting cell is quoted only if it contains the delimiter, a quote or a line break,
 /// and the quotes inside it are doubled.
-/// No header row is written.
+/// If the options name the [columns](DsvOptions::columns), the names are written first,
+/// as a header row.
 /// A [Skip](ValueFormat::Skip) column is left out of every record,
 /// and a row with a value that has no form in its column's format is dropped and counted.
 #[derive(Debug, Clone)]
@@ -48,6 +49,17 @@ impl Writer for DsvWriter {
             .delimiter(self.options.delimiter)
             .flexible(true)
             .from_writer(target);
+        if let Some(names) = &self.options.columns {
+            let written = names
+                .iter()
+                .zip(&self.options.formats)
+                .filter(|(_, format)| format.value != ValueFormat::Skip)
+                .map(|(name, _)| name);
+            writer
+                .write_record(written)
+                .map_err(IoError::output_unwritable)?;
+        }
+
         let mut written = Written::default();
         let mut record = Vec::with_capacity(self.options.formats.len());
         'rows: for row in rows {

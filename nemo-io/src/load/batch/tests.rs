@@ -11,6 +11,7 @@ use nemo_physical::{
 };
 
 use crate::{
+    AboutResource,
     dsv::DsvOptions,
     load::Reader,
     testing::{TempDirectory, greater_than},
@@ -228,6 +229,55 @@ fn a_label_names_one_null_across_the_windows_of_a_file() {
             _ => assert_eq!(row[0], DataValue::iri(format!("name-{index}"))),
         }
     }
+}
+
+/// The header of a file with named columns is read once,
+/// and every window of the file finds its columns by it.
+#[test]
+fn the_windows_of_a_file_share_its_header() {
+    let temporary = TempDirectory::new();
+    let path = temporary.path().join("named.tsv");
+    let content: String = std::iter::once(String::from(
+        "number	unread	name
+",
+    ))
+    .chain((0..300).map(|index| {
+        format!(
+            "{index}	not a term	name-{index}
+"
+        )
+    }))
+    .collect();
+    fs::write(&path, &content).expect("the temp file writes");
+    let mut options = DsvOptions::tsv([ValueFormat::Term, ValueFormat::Integer]);
+    options.quoting = false;
+    options.columns = Some(vec![String::from("name"), String::from("number")]);
+
+    let mut batch = ResourceBatch::new(vec![DsvResource::path(path.clone(), options.clone())]);
+    batch.window_bytes = 64;
+    let mut dictionary = Dictionary::new();
+    let loaded = batch
+        .load(&mut dictionary, EvaluationContext::now())
+        .expect("the batch loads");
+    assert!(batch.windows(0).len() > 20, "the file split into windows");
+
+    let rows = loaded[0].decoded(&dictionary);
+    assert_eq!((rows.len(), loaded[0].counts.malformed), (300, 0));
+    for (index, row) in (0i64..).zip(&rows) {
+        let name = DataValue::iri(format!("name-{index}"));
+        assert_eq!(row[..], [name, DataValue::integer(index)]);
+    }
+
+    // A header without one of the names fails the batch, and the error names the file.
+    options.columns = Some(vec![String::from("name"), String::from("missing")]);
+    let problem = ResourceBatch::new(vec![DsvResource::path(path.clone(), options)])
+        .load(&mut dictionary, EvaluationContext::now())
+        .expect_err("the header has no such column");
+    assert_eq!(problem.code(), crate::codes::HEADER_LACKS_COLUMN);
+    assert_eq!(
+        problem.resource(),
+        Some(path.display().to_string().as_str())
+    );
 }
 
 /// A malformed row deep in a later window is reported at its line in the file,

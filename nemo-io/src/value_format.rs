@@ -70,6 +70,15 @@ pub enum ValueFormat {
     ///
     /// The zero duration is a dayTimeDuration, so `P0M` is not read as a yearMonthDuration.
     YearMonthDuration,
+    /// The text of a value, for a resource that people or other tools read.
+    ///
+    /// The format only writes.
+    /// It writes the lexical form that the function `STR` returns
+    /// ([ValueRef::lexical_form]): a string or an IRI as its text,
+    /// a language string without its tag, and any other literal as its lexical form.
+    /// A null, a tuple and a map have no lexical form and are written in term syntax.
+    /// The text does not say what its value is, so the format reads no cell.
+    Text,
     /// A column that is not read.
     ///
     /// Its cells are never parsed and deliver no value.
@@ -80,10 +89,10 @@ pub enum ValueFormat {
 impl ValueFormat {
     /// The names that [from_name](Self::from_name) accepts, for diagnostics.
     pub const NAMES: &str = "int, double, decimal, number, float, bool, string, langstring, iri, \
-        datetime, date, time, duration, daytimeduration, yearmonthduration, term, skip";
+        datetime, date, time, duration, daytimeduration, yearmonthduration, term, text, skip";
 
     /// Every format.
-    pub const ALL: [Self; 17] = [
+    pub const ALL: [Self; 18] = [
         ValueFormat::Term,
         ValueFormat::String,
         ValueFormat::Iri,
@@ -100,6 +109,7 @@ impl ValueFormat {
         ValueFormat::Duration,
         ValueFormat::DayTimeDuration,
         ValueFormat::YearMonthDuration,
+        ValueFormat::Text,
         ValueFormat::Skip,
     ];
 
@@ -122,6 +132,7 @@ impl ValueFormat {
             "daytimeduration" => ValueFormat::DayTimeDuration,
             "yearmonthduration" => ValueFormat::YearMonthDuration,
             "term" => ValueFormat::Term,
+            "text" => ValueFormat::Text,
             "skip" => ValueFormat::Skip,
             _ => return None,
         })
@@ -146,6 +157,7 @@ impl ValueFormat {
             ValueFormat::DayTimeDuration => "daytimeduration",
             ValueFormat::YearMonthDuration => "yearmonthduration",
             ValueFormat::Term => "term",
+            ValueFormat::Text => "text",
             ValueFormat::Skip => "skip",
         }
     }
@@ -173,8 +185,8 @@ impl ValueFormat {
             ValueFormat::Duration => DomainSet::DURATION,
             ValueFormat::DayTimeDuration => DomainSet::DAY_TIME_DURATION,
             ValueFormat::YearMonthDuration => DomainSet::YEAR_MONTH_DURATION,
-            // A skipped column stores nothing.
-            ValueFormat::Skip => DomainSet::EMPTY,
+            // A skipped column stores nothing, and the text format reads nothing.
+            ValueFormat::Text | ValueFormat::Skip => DomainSet::EMPTY,
         }
     }
 
@@ -217,7 +229,7 @@ impl ValueFormat {
             ValueFormat::Term => return ReadValue::from_term_syntax(cell, null),
             ValueFormat::String => return Some(ReadValue::String(cell)),
             ValueFormat::Iri => return Iri::is_valid(cell).then_some(ReadValue::Iri(cell)),
-            ValueFormat::Skip => return None,
+            ValueFormat::Text | ValueFormat::Skip => return None,
             ValueFormat::Decimal => DataValue::decimal_from_lexical(cell)?,
             ValueFormat::Number => {
                 let integer = ValueFormat::Integer.datatype()?;
@@ -241,12 +253,16 @@ impl ValueFormat {
     /// Returns the text of a value as a cell, or `None` if the value does not fit the format.
     ///
     /// - [Term](Self::Term) writes any value, in canonical term syntax.
+    /// - [Text](Self::Text) writes any value, as its lexical form if it has one.
     /// - A typed format writes only values of its own domains,
     ///   as their lexical forms without a datatype.
     /// - No value fits [Skip](Self::Skip).
     pub fn write(&self, value: ValueRef<'_>) -> Option<String> {
         match (self, value) {
             (ValueFormat::Term, value) => Some(value.to_string()),
+            (ValueFormat::Text, value) => {
+                Some(value.lexical_form().unwrap_or_else(|| value.to_string()))
+            }
             (ValueFormat::String, ValueRef::String(text)) => Some(text.to_owned()),
             (ValueFormat::Iri, ValueRef::Iri(iri)) => Some(iri.to_string()),
             (ValueFormat::Integer, ValueRef::Number(value)) if value.is_integral() => {
@@ -482,6 +498,37 @@ mod tests {
         assert_eq!(ColumnFormat::from_name("skip?"), None);
         assert_eq!(ColumnFormat::from_name("int??"), None);
         assert_eq!(ColumnFormat::from_name("?"), None);
+    }
+
+    /// The text format writes what `STR` returns, and a value without a lexical form in term
+    /// syntax. It reads no cell.
+    #[test]
+    fn the_text_format_only_writes() {
+        let pair = DataValue::tuple(TupleValue::new(vec![
+            DataValue::integer(1),
+            DataValue::string("a"),
+        ]));
+        for (value, cell) in [
+            (DataValue::string("plain"), "plain"),
+            (
+                DataValue::iri("http://example.org/a"),
+                "http://example.org/a",
+            ),
+            (
+                DataValue::language_string("hallo", "de").expect("valid"),
+                "hallo",
+            ),
+            (DataValue::double(2.5), "2.5"),
+            (DataValue::boolean(true), "true"),
+            (DataValue::null(7), "_:7"),
+            (pair, "(1, \"a\")"),
+        ] {
+            let written = ValueFormat::Text.write(value.as_ref());
+            assert_eq!(written.as_deref(), Some(cell));
+        }
+
+        assert_eq!(read(ValueFormat::Text, "plain"), None);
+        assert!(ValueFormat::Text.domains().is_empty());
     }
 
     /// The term format writes a value in canonical term syntax and reads it back,

@@ -47,20 +47,10 @@ pub(crate) fn datatype(value: ValueRef<'_>) -> StackValue<'static> {
 /// Nulls and structures have no lexical form,
 /// which is a [TypeMismatch](EvaluationError::TypeMismatch).
 pub(crate) fn lexical(value: ValueRef<'_>) -> StackValue<'static> {
-    let text = match value {
-        ValueRef::String(text) => text.to_owned(),
-        ValueRef::LanguageString(value) => value.text().to_owned(),
-        ValueRef::Iri(iri) => iri.to_string(),
-        ValueRef::Boolean(value) => value.to_string(),
-        ValueRef::Number(value) => value.to_string(),
-        ValueRef::DateTime(value) => value.to_string(),
-        ValueRef::Date(value) => value.to_string(),
-        ValueRef::Time(value) => value.to_string(),
-        ValueRef::Duration(value) => value.to_string(),
-        ValueRef::Other(literal) => literal.lexical().to_owned(),
-        _ => return EvaluationError::TypeMismatch.into(),
-    };
-    DataValue::string(text).into()
+    match value.lexical_form() {
+        Some(text) => DataValue::string(text).into(),
+        None => EvaluationError::TypeMismatch.into(),
+    }
 }
 
 /// Returns a value in canonical term syntax as a plain string,

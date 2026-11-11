@@ -20,7 +20,7 @@ use nemo_physical::{
 
 use crate::{
     AboutResource,
-    dsv::{DsvReader, Parsed, ResourceLoad, RunPool},
+    dsv::{ColumnLayout, DsvReader, Parsed, ResourceLoad, RunPool},
     error::IoError,
     load::{DsvResource, Loaded, Resource},
 };
@@ -202,18 +202,21 @@ impl ResourceBatch {
     /// Parses one window and passes its runs to `emit`.
     ///
     /// If the window cannot be read, the failure is passed to `emit` after the runs.
+    /// `layout` says where the records have their cells, for a resource with named columns.
     fn parse(
         &self,
         window: &Window,
         runs: &RunPool,
         context: EvaluationContext,
+        layout: Option<&ColumnLayout>,
         emit: &mut dyn FnMut(Result<Parsed, Diagnostic>) -> bool,
     ) {
         let source = &self.sources[window.source];
         let mut options = source.options.clone();
 
         // Only the first window of a resource contains the header to skip.
-        options.ignore_headers = source.options.ignore_headers && window.position == 0;
+        options.ignore_headers =
+            (source.options.ignore_headers || layout.is_some()) && window.position == 0;
         let reader = DsvReader::new(options);
         let mut deliver = |run: Parsed| emit(Ok(run));
         let result = match (&source.input, &window.range) {
@@ -221,17 +224,14 @@ impl ResourceBatch {
                 .options
                 .compression
                 .open_file(path)
-                .and_then(|file| reader.parse(file, runs, context, &mut deliver)),
+                .and_then(|file| reader.parse(file, runs, context, layout, &mut deliver)),
             (Resource::Path(path), Some(range)) => File::open(path)
                 .and_then(|mut file| file.seek(SeekFrom::Start(range.start)).map(|_| file))
                 .map_err(|error| IoError::unreadable(path, error))
                 .and_then(|file| {
-                    reader.parse(
-                        file.take(range.end - range.start),
-                        runs,
-                        context,
-                        &mut deliver,
-                    )
+                    let file = file.take(range.end - range.start);
+
+                    reader.parse(file, runs, context, layout, &mut deliver)
                 }),
             (Resource::Bytes { bytes, .. }, range) => {
                 let slice: &[u8] = match range {
@@ -245,15 +245,39 @@ impl ResourceBatch {
                     }
                 };
                 if source.input.compressed(source.options.compression) {
-                    reader.parse(MultiGzDecoder::new(slice), runs, context, &mut deliver)
+                    let slice = MultiGzDecoder::new(slice);
+
+                    reader.parse(slice, runs, context, layout, &mut deliver)
                 } else {
-                    reader.parse(slice, runs, context, &mut deliver)
+                    reader.parse(slice, runs, context, layout, &mut deliver)
                 }
             }
         };
         if let Err(diagnostic) = result {
             emit(Err(diagnostic.with_resource(source.input.name())));
         }
+    }
+
+    /// Returns where the records of the resource at `index` have the cells of its named
+    /// columns, read from its header, or `None` for a resource whose columns go by position.
+    fn header_layout(&self, index: usize) -> Result<Option<ColumnLayout>, Diagnostic> {
+        let source = &self.sources[index];
+        if source.options.columns.is_none() {
+            return Ok(None);
+        }
+
+        let reader = DsvReader::new(source.options.clone());
+        let compression = source.options.compression;
+        let layout = match &source.input {
+            Resource::Path(path) => compression
+                .open_file(path)
+                .and_then(|file| reader.header_layout(file)),
+            Resource::Bytes { name, bytes } => {
+                reader.header_layout(compression.open_bytes(bytes.clone(), name))
+            }
+        };
+
+        layout.map_err(|diagnostic| diagnostic.with_resource(source.input.name()))
     }
 
     /// Loads every resource, and returns the loads in the order of the batch.
@@ -263,11 +287,19 @@ impl ResourceBatch {
     /// # Errors
     ///
     /// Returns the first failure to read a resource.
+    /// A resource with named columns fails if its header lacks one of the names,
+    /// or has it more than once.
     pub fn load(
         &self,
         dictionary: &mut Dictionary,
         context: EvaluationContext,
     ) -> Result<Vec<Loaded>, Diagnostic> {
+        // The header of a resource is read before its windows are parsed,
+        // since only the first window contains it.
+        let layouts: Vec<Option<ColumnLayout>> = (0..self.sources.len())
+            .map(|index| self.header_layout(index))
+            .collect::<Result<_, _>>()?;
+
         let windows: Vec<Window> = (0..self.sources.len())
             .flat_map(|index| self.windows(index))
             .collect();
@@ -300,7 +332,11 @@ impl ResourceBatch {
                 None => WHOLE_AHEAD_BYTES,
             },
             |run: &Result<Parsed, Diagnostic>| run.as_ref().map_or(0, Parsed::bytes),
-            |index, emit| self.parse(&windows[index], &runs, context, emit),
+            |index, emit| {
+                let layout = layouts[windows[index].source].as_ref();
+
+                self.parse(&windows[index], &runs, context, layout, emit)
+            },
             |index, run| {
                 let run = match run {
                     Ok(run) => run,

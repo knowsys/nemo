@@ -63,6 +63,9 @@ pub enum ExportFormat {
         ///
         /// A column whose format admits a missing value writes a null as an empty cell.
         formats: Option<Vec<nemo_io::value_format::ColumnFormat>>,
+        /// The names of the written columns, which are written first, as a header row,
+        /// or `None` to write no header.
+        columns: Option<Vec<String>>,
     },
     /// An RDF serialization.
     ///
@@ -105,6 +108,7 @@ impl ExportSpec {
                 delimiter: b',',
                 extension: String::from("csv"),
                 formats: None,
+                columns: None,
             },
             compression: Compression::Auto,
             limit: None,
@@ -311,6 +315,17 @@ impl Engine {
                 }
                 .diagnostic())
             }
+            ExportFormat::Dsv {
+                formats,
+                columns: Some(names),
+                ..
+            } if names.len() != formats.as_ref().map_or(arity, Vec::len) && !rows.is_empty() => {
+                Err(TranslationError::ColumnNameCount {
+                    names: names.len().into(),
+                    columns: formats.as_ref().map_or(arity, Vec::len).into(),
+                }
+                .diagnostic())
+            }
             ExportFormat::Rdf { variant, .. } if !rows.is_empty() && arity != variant.width() => {
                 Err(rdf_export_arity(*variant, &spec.predicate, arity).diagnostic())
             }
@@ -324,13 +339,17 @@ impl Engine {
 
         Ok(match &spec.format {
             ExportFormat::Dsv {
-                delimiter, formats, ..
+                delimiter,
+                formats,
+                columns,
+                ..
             } => {
                 let arity = self.arity_of(&spec.predicate).unwrap_or(0);
                 let formats = formats
                     .clone()
                     .unwrap_or_else(|| vec![ColumnFormat::new(ValueFormat::Term); arity]);
                 let mut options = nemo_io::dsv::DsvOptions::new(*delimiter, formats);
+                options.columns = columns.clone();
                 options.compression = spec.compression;
                 ExportWriter::Dsv(nemo_io::dsv::DsvWriter::new(options))
             }

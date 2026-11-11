@@ -401,6 +401,31 @@ impl Neg for ValueRef<'_> {
     }
 }
 
+impl ValueRef<'_> {
+    /// Returns the lexical form of the value as SPARQL's `STR` returns it,
+    /// or `None` for a null, a tuple or a map, which have none.
+    ///
+    /// - A string and an IRI have their text, and a language string its text without the tag.
+    /// - A double or a float has the text of XPath's cast to a string,
+    ///   such as `5.5` or `1.0E100`.
+    /// - Every other literal has its canonical lexical form.
+    pub fn lexical_form(self) -> Option<String> {
+        Some(match self {
+            ValueRef::String(text) => text.to_owned(),
+            ValueRef::LanguageString(value) => value.text().to_owned(),
+            ValueRef::Iri(iri) => iri.to_string(),
+            ValueRef::Boolean(value) => value.to_string(),
+            ValueRef::Number(value) => value.to_string(),
+            ValueRef::DateTime(value) => value.to_string(),
+            ValueRef::Date(value) => value.to_string(),
+            ValueRef::Time(value) => value.to_string(),
+            ValueRef::Duration(value) => value.to_string(),
+            ValueRef::Other(literal) => literal.lexical().to_owned(),
+            ValueRef::Null(_) | ValueRef::Tuple(_) | ValueRef::Map(_) => return None,
+        })
+    }
+}
+
 impl fmt::Display for ValueRef<'_> {
     /// Writes the value in canonical term syntax.
     ///

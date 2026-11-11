@@ -1,0 +1,10 @@
+% With `columns`, the first record of a file is its header: each column
+% is found by its name, whatever its position, and a column that the
+% option does not name is not read.
+
+@import person from csv { resource = "sources/people-header.csv",
+    columns = ("name", "age"), format = (string, int) } .
+@import ages from csv { resource = "sources/people-header.csv", columns = "age", format = int } .
+
+adult(?name) :- person(?name, ?age), ?age >= 18 .
+age(?age) :- ages(?age) .

@@ -944,3 +944,78 @@ q(?a) :- p(?a, _, ?b), ?b > 5 .
     engine.reason().expect("reasoning continues");
     assert_eq!(count(&mut engine, "q"), 2);
 }
+
+/// The `columns` option names the header's columns, one name per format,
+/// and the header that it reads is not skipped as well.
+#[test]
+fn the_columns_option_is_checked_against_the_other_options() {
+    let import = |options: &str| {
+        let problems = check(&format!(
+            "@import p from csv {{ resource = \"p.csv\", {options} }} ."
+        ));
+
+        problems.first().map(Diagnostic::code)
+    };
+
+    assert_eq!(import("columns = (\"a\", \"b\")"), None);
+    assert_eq!(
+        import("columns = (\"a\", \"b\"), ignore_headers = true"),
+        Some(codes::HEADER_OPTIONS)
+    );
+    assert_eq!(
+        import("columns = (\"a\", \"b\"), format = (int)"),
+        Some(codes::COLUMN_NAME_COUNT)
+    );
+    for names in ["(\"a\", \"a\")", "(\"a\", 1)", "true"] {
+        assert_eq!(
+            import(&format!("columns = {names}")),
+            Some(codes::OPTION_VALUE_TYPE),
+            "{names}"
+        );
+    }
+
+    // An export without formats has one name per column of its predicate.
+    let problems = check(
+        "p(1, 2) .
+         @export p to csv { resource = \"p.csv\", columns = (\"a\") } .",
+    );
+    assert_eq!(problems[0].code(), codes::COLUMN_NAME_COUNT, "{problems:?}");
+}
+
+/// An import whose header lacks a named column fails, and names the column and the resource.
+#[test]
+fn a_header_without_a_named_column_fails_the_import() {
+    let (program, _) = Program::parse(
+        "@import p from csv { resource = \"p.csv\", columns = (\"name\", \"age\") } .",
+    );
+    let mut engine = Engine::new();
+    engine.add_resource("p.csv", b"name,years\nalice,30\n".to_vec());
+    let failure = engine.load(program).expect_err("the header has no `age`");
+
+    assert_eq!(
+        failure.code(),
+        nemo_io::codes::HEADER_LACKS_COLUMN,
+        "{failure:?}"
+    );
+    assert_eq!(failure.field("name"), Some("age"));
+    assert_eq!(failure.field("resource"), Some("p.csv"));
+}
+
+/// The `text` format only writes, so an import refuses it and points at `string`.
+#[test]
+fn the_text_format_is_refused_on_an_import() {
+    let problems = check("@import p from csv { resource = \"p.csv\", format = (int, text) } .");
+    assert_eq!(problems[0].code(), codes::WRITE_ONLY_FORMAT, "{problems:?}");
+    assert!(
+        problems[0]
+            .hints()
+            .iter()
+            .any(|hint| hint.contains("`string`"))
+    );
+
+    let problems = check(
+        "p(1, \"a\") .
+         @export p to csv { resource = \"p.csv\", format = (int, text) } .",
+    );
+    assert!(problems.is_empty(), "{problems:?}");
+}

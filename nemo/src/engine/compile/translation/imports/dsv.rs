@@ -94,6 +94,7 @@ impl<'a> Translator<'a> {
         let mut options = DsvOptions::new(directive.delimiter, formats);
         options.checked_only = checked_only;
         options.quoting = directive.quoting;
+        options.columns = directive.columns.clone();
         options.ignore_headers = directive.ignore_headers;
         options.compression = directive.compression;
         options.condition = self
@@ -119,8 +120,8 @@ impl<'a> Translator<'a> {
     /// or `None` if nothing fixes the number of columns.
     ///
     /// - The directive's `format` option fixes them.
-    /// - Otherwise the directive's column names fix the number of columns,
-    ///   and every column is read as `term`.
+    /// - Otherwise the `columns` option or the directive's column variables fix the number of
+    ///   columns, and every column is read as `term`.
     /// - Otherwise a `@declare`, the predicate's registration or the file gives the number of
     ///   columns, and every column is read as `term`.
     ///
@@ -136,6 +137,9 @@ impl<'a> Translator<'a> {
 
         if let Some(formats) = &directive.formats {
             return Ok(Some(formats.clone()));
+        }
+        if let Some(names) = &directive.columns {
+            return Ok(Some(terms(names.len())));
         }
         if !import.variables.is_empty() {
             return Ok(Some(terms(import.variables.len())));

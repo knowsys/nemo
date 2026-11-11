@@ -1,0 +1,10 @@
+adult("Alice") .
+adult("Dora") .
+
+age(17) .
+age(30) .
+age(52) .
+
+person("Alice", 30) .
+person("Bob", 17) .
+person("Dora", 52) .

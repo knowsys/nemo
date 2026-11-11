@@ -1,0 +1,2 @@
+person("Alice", 30) .
+person("Bob", 17) .

@@ -109,6 +109,28 @@ fn header(
     }
 }
 
+/// Returns the names of a `columns` option, which is a string or a tuple of strings,
+/// or `None` for any other value and for a name that is given twice.
+fn column_names(value: ValueRef<'_>) -> Option<Vec<String>> {
+    let names: Vec<String> = match value {
+        ValueRef::String(name) => vec![name.to_owned()],
+        ValueRef::Tuple(tuple) if tuple.label().is_none() => tuple
+            .elements()
+            .map(|element| match element {
+                ValueRef::String(name) => Some(name.to_owned()),
+                _ => None,
+            })
+            .collect::<Option<_>>()?,
+        _ => return None,
+    };
+    let distinct = names
+        .iter()
+        .enumerate()
+        .all(|(index, name)| !names[..index].contains(name));
+
+    distinct.then_some(names)
+}
+
 /// Returns, per column of a source of terms, such as RDF statements or SPARQL solutions,
 /// whether a `format` option keeps it.
 ///
@@ -261,6 +283,8 @@ pub(super) struct DsvDirectiveOptions {
     pub(super) resource: Option<String>,
     /// The column formats of the `format` option, if given.
     pub(super) formats: Option<Vec<ColumnFormat>>,
+    /// The column names of the `columns` option, if given.
+    pub(super) columns: Option<Vec<String>>,
     /// Whether `"` quotes fields.
     pub(super) quoting: bool,
     /// Whether the first record is skipped.
@@ -309,8 +333,11 @@ impl<'a> Translator<'a> {
         let mut common = ResourceDirectiveOptions::new();
         let mut delimiter_option = None;
         let mut formats = None;
+        let mut formats_span = None;
+        let mut columns = None;
+        let mut columns_span = None;
         let mut quoting = true;
-        let mut ignore_headers = false;
+        let mut ignore_headers = None;
         for (key, value) in options {
             let name = option_name(key, format.name())?;
             if !reading
@@ -327,6 +354,7 @@ impl<'a> Translator<'a> {
             // The column formats are keywords, matched without evaluation.
             if name == "format" {
                 formats = Some(self.column_formats(value)?);
+                formats_span = value.span;
                 continue;
             }
             if name == "http_headers" && accepts.http_headers {
@@ -342,6 +370,16 @@ impl<'a> Translator<'a> {
                 continue;
             }
             match (name, evaluated.as_ref()) {
+                ("columns", names) => {
+                    columns = Some(column_names(names).ok_or_else(|| {
+                        TranslationError::option_type(
+                            "columns",
+                            "a string or a tuple of strings, each of them once",
+                        )
+                        .at(value.span)
+                    })?);
+                    columns_span = value.span;
+                }
                 // The format names `csv` and `tsv` fix their delimiters.
                 ("delimiter", _) if format != FileFormat::Dsv => {
                     return Err(TranslationError::unknown_option(name, format.name())
@@ -358,7 +396,9 @@ impl<'a> Translator<'a> {
                     )
                     .at(value.span));
                 }
-                ("ignore_headers", ValueRef::Boolean(flag)) => ignore_headers = flag,
+                ("ignore_headers", ValueRef::Boolean(flag)) => {
+                    ignore_headers = Some((flag, key.span))
+                }
                 ("quoting", ValueRef::Boolean(flag)) => quoting = flag,
                 ("ignore_headers" | "quoting", _) => {
                     return Err(TranslationError::option_type(name, "a boolean").at(value.span));
@@ -369,6 +409,34 @@ impl<'a> Translator<'a> {
             }
         }
         common.check_remote()?;
+
+        // The header that names the columns is read, so it is not skipped as well.
+        if let (Some(_), Some((_, span))) = (&columns, ignore_headers) {
+            return Err(TranslationError::HeaderOptions.at(span));
+        }
+        if let (Some(names), Some(formats)) = (&columns, &formats)
+            && names.len() != formats.len()
+        {
+            return Err(TranslationError::ColumnNameCount {
+                names: names.len().into(),
+                columns: formats.len().into(),
+            }
+            .at(columns_span));
+        }
+
+        // A format that only writes reads no cell of an import.
+        if reading
+            && let Some(written) = formats
+                .iter()
+                .flatten()
+                .find(|column| column.value == ValueFormat::Text)
+        {
+            return Err(TranslationError::WriteOnlyFormat {
+                format: written.to_string(),
+            }
+            .at(formats_span));
+        }
+
         let delimiter = match format {
             FileFormat::Csv => b',',
             FileFormat::Tsv => b'\t',
@@ -385,8 +453,9 @@ impl<'a> Translator<'a> {
             extension: format.name().to_owned(),
             resource: common.resource,
             formats,
+            columns,
             quoting,
-            ignore_headers,
+            ignore_headers: ignore_headers.is_some_and(|(flag, _)| flag),
             compression: common.compression,
             limit: common.limit,
         })

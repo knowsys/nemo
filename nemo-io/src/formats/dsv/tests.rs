@@ -3,13 +3,14 @@
 use std::io::Cursor;
 
 use nemo_physical::{
+    diagnostics::Diagnostic,
     dictionary::Dictionary,
     function::{EvaluationContext, OpCode, StackProgram},
     value::{DataValue, DomainSet, TupleValue, ValueRef},
 };
 
 use crate::{
-    load::{Reader, RowCounts},
+    load::{Loaded, Reader, RowCounts},
     selection::RowCondition,
     testing::{TempDirectory, greater_than},
     value_format::{ColumnFormat, ValueFormat},
@@ -551,4 +552,102 @@ fn the_width_is_sniffed_as_the_records_are_read() {
     assert_eq!(sniff("\"a,b\",c\n", false, false), Some(3));
     assert_eq!(sniff("name\nalice,30\n", false, true), Some(2));
     assert_eq!(sniff("name\n", true, true), None);
+}
+
+/// Reads a CSV text whose first record names its columns.
+fn read_named(names: &[&str], formats: &[&str], input: &str) -> Result<Loaded, Diagnostic> {
+    let formats = formats
+        .iter()
+        .map(|name| ColumnFormat::from_name(name).expect("the format exists"));
+    let mut options = DsvOptions::csv(formats);
+    options.columns = Some(names.iter().map(|&name| name.to_owned()).collect());
+
+    DsvReader::new(options).read(
+        Cursor::new(input.to_owned()),
+        &mut Dictionary::new(),
+        EvaluationContext::now(),
+    )
+}
+
+/// With named columns, the first record is the header:
+/// each column is found by its name, whatever its position,
+/// and a column that is not named is not read.
+#[test]
+fn named_columns_are_found_by_the_header() {
+    // The `note` column is not named, so its cells are not read, whatever they hold.
+    let input = "age,note,name\n30,\"not, a term\",alice\nold,,bob\n17,x\n";
+    let names = ["name", "age"];
+    let mut options = DsvOptions::csv([ValueFormat::Term, ValueFormat::Integer]);
+    options.columns = Some(names.map(String::from).to_vec());
+    let mut dictionary = Dictionary::new();
+    let loaded = DsvReader::new(options)
+        .read(
+            Cursor::new(input),
+            &mut dictionary,
+            EvaluationContext::now(),
+        )
+        .expect("the source reads");
+
+    assert_eq!(
+        loaded.decoded(&dictionary),
+        vec![vec![DataValue::iri("alice"), DataValue::integer(30)]]
+    );
+
+    // Line 3 has no integer as its age, and line 4 lacks a cell.
+    let counts = &loaded.counts;
+    assert_eq!((counts.malformed, counts.first_malformed), (2, Some(3)));
+}
+
+/// A header that lacks a named column, or has it more than once, fails the read.
+#[test]
+fn a_header_must_have_each_named_column_once() {
+    let problem = read_named(&["name", "age"], &["term", "int"], "name,years\nalice,30\n")
+        .expect_err("the header has no `age`");
+    assert_eq!(problem.code(), crate::codes::HEADER_LACKS_COLUMN);
+    assert_eq!(problem.field("name"), Some("age"));
+
+    let problem = read_named(&["name"], &["term"], "name,age,name\nalice,30,bob\n")
+        .expect_err("the header has `name` twice");
+    assert_eq!(problem.code(), crate::codes::HEADER_REPEATS_COLUMN);
+
+    // A column that is not named may repeat, and an empty resource has no header.
+    assert!(read_named(&["name"], &["term"], "name,age,age\nalice,30,31\n").is_ok());
+    let problem = read_named(&["name"], &["term"], "").expect_err("there is no header");
+    assert_eq!(problem.code(), crate::codes::HEADER_LACKS_COLUMN);
+}
+
+/// A writer with named columns writes them as the header,
+/// and a reader finds the columns in the written resource by any order of the names.
+#[test]
+fn a_written_header_names_the_columns_for_a_reader() {
+    let rows: Vec<Vec<DataValue>> = vec![
+        vec![DataValue::iri("alice"), DataValue::integer(30)],
+        vec![DataValue::iri("bob"), DataValue::integer(17)],
+    ];
+    let mut options = DsvOptions::csv([ValueFormat::Term, ValueFormat::Integer]);
+    options.columns = Some(vec![String::from("name"), String::from("age, in years")]);
+    let mut target = Vec::new();
+    DsvWriter::new(options)
+        .write(&mut target, rows.iter().map(Vec::as_slice))
+        .expect("the rows write");
+    let written = String::from_utf8(target).expect("the output is text");
+    assert_eq!(written, "name,\"age, in years\"\nalice,30\nbob,17\n");
+
+    let mut options = DsvOptions::csv([ValueFormat::Integer, ValueFormat::Term]);
+    options.columns = Some(vec![String::from("age, in years"), String::from("name")]);
+    let mut dictionary = Dictionary::new();
+    let loaded = DsvReader::new(options)
+        .read(
+            Cursor::new(written),
+            &mut dictionary,
+            EvaluationContext::now(),
+        )
+        .expect("the source reads");
+    assert_eq!(
+        loaded.decoded(&dictionary),
+        vec![
+            vec![DataValue::integer(30), DataValue::iri("alice")],
+            vec![DataValue::integer(17), DataValue::iri("bob")],
+        ]
+    );
 }

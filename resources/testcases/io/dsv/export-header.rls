@@ -1,0 +1,7 @@
+% With `columns`, an export starts with a header row of the names,
+% which an import with the same option finds its columns by.
+
+person("Alice", 30) .
+person("Bob", 17) .
+
+@export person to csv { resource = "people.csv", columns = ("name", "age"), format = (string, int) } .

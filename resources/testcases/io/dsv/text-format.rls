@@ -1,0 +1,14 @@
+% The `text` format writes the text of each value, for people and other
+% tools: what STR returns, so a string and an IRI as they are, a language
+% string without its tag, and a double without its marker. A tuple has no
+% such text and is written as a term. The file does not say what its
+% values are, so the format only writes.
+
+value(1, "plain") .
+value(2, <http://example.org/a>) .
+value(3, "hallo"@de) .
+value(4, 2.5E0) .
+value(5, alice) .
+value(6, (1, "a")) .
+
+@export value to csv { resource = "text.csv", format = (int, text) } .

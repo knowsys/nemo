@@ -61,9 +61,11 @@ pub struct AcceptedOptions {
     pub http_headers: bool,
     /// Whether the format accepts `limit`, the largest number of rows.
     pub limit: bool,
-    /// Whether the format accepts `format`, one [ValueFormat](crate::value_format::ValueFormat) per
-    /// column.
+    /// Whether the format accepts `format`, one
+    /// [ColumnFormat](crate::value_format::ColumnFormat) per column.
     pub format: bool,
+    /// Whether the format accepts `columns`, the names of the columns in the resource.
+    pub columns: bool,
 }
 
 /// The name of a format, and its conventional file extension and media type if it has them.
@@ -231,6 +233,7 @@ impl FileFormat {
                 http_headers: reading,
                 limit: true,
                 format: reading,
+                columns: false,
             },
             // A JSON document is read whole, and its compression is always detected.
             FileFormat::Json => AcceptedOptions {
@@ -239,6 +242,7 @@ impl FileFormat {
                 http_headers: reading,
                 limit: !reading,
                 format: false,
+                columns: false,
             },
             // Parquet has its own compression, and is read from local
             // files only.
@@ -248,6 +252,7 @@ impl FileFormat {
                 http_headers: false,
                 limit: !reading,
                 format: false,
+                columns: false,
             },
             FileFormat::Csv | FileFormat::Tsv | FileFormat::Dsv => AcceptedOptions {
                 base: false,
@@ -255,6 +260,7 @@ impl FileFormat {
                 http_headers: reading,
                 limit: true,
                 format: true,
+                columns: true,
             },
             FileFormat::Sparql => AcceptedOptions {
                 base: true,
@@ -262,6 +268,7 @@ impl FileFormat {
                 http_headers: true,
                 limit: false,
                 format: true,
+                columns: false,
             },
         }
     }

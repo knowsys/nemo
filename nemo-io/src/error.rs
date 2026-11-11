@@ -52,6 +52,18 @@ diagnostic_kinds! {
         OutputUnwritable { reason: String }
             => OUTPUT_UNWRITABLE = 104, error, "could not write the output: {reason}",
                explain "Writing an output failed partway.";
+        HeaderLacksColumn { name: String }
+            => HEADER_LACKS_COLUMN = 114, error, "the header has no column `{name}`",
+               explain "An import that names its columns reads the first record of the \
+                        resource as the header, and finds each column by its name. One of \
+                        the names is not in the header.";
+        HeaderRepeatsColumn { name: String }
+            => HEADER_REPEATS_COLUMN = 115, error,
+               "the header has more than one column `{name}`",
+               explain "An import that names its columns finds each column by its name in \
+                        the header, which is the first record of the resource. The header \
+                        has one of the names more than once, so the name does not say which \
+                        column is meant.";
         NotJson { reason: String }
             => NOT_JSON = 105, error, "invalid JSON: {reason}",
                explain "The document of a JSON import is not valid JSON.";

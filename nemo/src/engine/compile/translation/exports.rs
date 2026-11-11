@@ -81,6 +81,7 @@ impl<'a> Translator<'a> {
                         delimiter: shape.delimiter,
                         extension: shape.extension,
                         formats: shape.formats,
+                        columns: shape.columns,
                     },
                     compression: shape.compression,
                     limit: shape.limit,
@@ -154,7 +155,8 @@ impl<'a> Translator<'a> {
     /// Runs the export checks that need every predicate's arity.
     ///
     /// An RDF export needs three columns, or four for quads,
-    /// and the `format` option of a DSV export must list one format per column.
+    /// and the `format` and `columns` options of a DSV export must list one format and one
+    /// name per column.
     pub(super) fn validate_exports(&mut self) -> Result<(), Diagnostic> {
         let mut problems = Vec::new();
         for (spec, &span) in self.exports.iter().zip(&self.export_spans) {
@@ -174,6 +176,20 @@ impl<'a> Translator<'a> {
                             predicate: spec.predicate.clone(),
                             declared: formats.len().into(),
                             arity: arity.into(),
+                        }
+                        .at(span),
+                    );
+                }
+                // With formats, the names were counted against them already.
+                ExportFormat::Dsv {
+                    formats: None,
+                    columns: Some(names),
+                    ..
+                } if names.len() != arity => {
+                    problems.push(
+                        TranslationError::ColumnNameCount {
+                            names: names.len().into(),
+                            columns: arity.into(),
                         }
                         .at(span),
                     );

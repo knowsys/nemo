@@ -335,6 +335,25 @@ diagnostic_kinds! {
                         does not admit a missing value, such as an empty cell in an `int` \
                         column. A `?` after the column's format, as in `int?`, reads a \
                         missing value as a null and keeps the row.";
+        WriteOnlyFormat { format: String }
+            => WRITE_ONLY_FORMAT = 341, error,
+               "column format `{format}` only applies to exports",
+               explain "An import was given a column format that only writes. The `text` \
+                        format writes the text of a value without saying what the value is, \
+                        so no value can be read back from it.",
+               hint "read the column as `string`";
+        ColumnNameCount { names: Count, columns: Count }
+            => COLUMN_NAME_COUNT = 342, error,
+               "`columns` has {names} name{names:#} for {columns} column{columns:#}",
+               explain "The `columns` option names the columns of a resource, one name per \
+                        column that is read or written. It has a different number of names \
+                        than the `format` option has formats, or than the predicate has \
+                        columns.";
+        HeaderOptions
+            => HEADER_OPTIONS = 343, error,
+               "`ignore_headers` does not apply beside `columns`",
+               explain "With the `columns` option, the first record of the resource is read \
+                        as the header that names the columns, so it is not skipped as well.";
         InputUnsupplied { predicate: String }
             => INPUT_UNSUPPLIED = 315, warning,
                "input `{predicate}` is not bound by a `@use` in this run",

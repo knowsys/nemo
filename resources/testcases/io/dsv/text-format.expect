@@ -1,0 +1,6 @@
+value(1, "plain") .
+value(2, <http://example.org/a>) .
+value(3, "hallo"@de) .
+value(4, 2.5d) .
+value(5, alice) .
+value(6, (1, "a")) .

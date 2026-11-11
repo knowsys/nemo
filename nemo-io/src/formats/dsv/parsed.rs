@@ -8,7 +8,7 @@ use nemo_physical::{
 };
 
 use crate::{
-    dsv::DsvOptions,
+    dsv::{ColumnLayout, DsvOptions},
     load::{BlankNodes, Loaded, RowCounts, RowIntake},
     selection::ConditionBuffers,
     value_format::{CellRead, ValueFormat},
@@ -179,7 +179,7 @@ pub(crate) struct Parsed {
     /// The rows that hold a null, in the order of the resource.
     deferred: Vec<DeferredRow>,
     /// The byte range in the run's text of each cell of the deferred rows,
-    /// with one range per column of the resource.
+    /// with one range per format of the resource's options.
     deferred_cells: Vec<(usize, usize)>,
     /// The buffers of the condition's evaluations.
     buffers: ConditionBuffers,
@@ -247,15 +247,17 @@ impl Parsed {
     /// raised on it.
     /// A well-formed record that holds a null is kept as text,
     /// and is read when the run is [interned](Self::encode_into).
-    /// `context` is the evaluation context of the condition.
+    /// `layout` says where the record has the cell of each format,
+    /// and `context` is the evaluation context of the condition.
     pub(crate) fn push_record(
         &mut self,
         options: &DsvOptions,
+        layout: &ColumnLayout,
         context: EvaluationContext,
         record: &csv::StringRecord,
         line: u64,
     ) {
-        if record.len() != options.formats.len() {
+        if record.len() != layout.width() {
             self.counts.count_malformed(line);
             return;
         }
@@ -269,11 +271,12 @@ impl Parsed {
             holds_null = true;
             DataValue::null(0)
         };
-        for (column, (cell, format)) in record.iter().zip(&options.formats).enumerate() {
+        for (column, format) in options.formats.iter().enumerate() {
             if format.value == ValueFormat::Skip {
                 continue;
             }
 
+            let cell = &record[layout.position(column)];
             let delivered = !options.checks_only(column) && !unadmitted;
             match format.read(cell, &mut null) {
                 CellRead::Value(value) if delivered => self.push_value(value),
@@ -293,7 +296,7 @@ impl Parsed {
             self.counts.count_missing(line);
         } else if holds_null {
             self.take_back(start);
-            self.defer(record, line);
+            self.defer(record, options, layout, line);
         } else {
             self.counts.well_formed += 1;
             if self.admits(options, context, start) {
@@ -344,15 +347,25 @@ impl Parsed {
         }
     }
 
-    /// Keeps a well-formed record that holds a null as text.
-    fn defer(&mut self, record: &csv::StringRecord, line: u64) {
+    /// Keeps a well-formed record that holds a null as text:
+    /// the cell of each format, in the order of the formats.
+    fn defer(
+        &mut self,
+        record: &csv::StringRecord,
+        options: &DsvOptions,
+        layout: &ColumnLayout,
+        line: u64,
+    ) {
         self.deferred.push(DeferredRow {
             position: self.lines.len(),
             line,
         });
-        for cell in record {
+        for (column, format) in options.formats.iter().enumerate() {
             let start = self.text.len();
-            self.text.push_str(cell);
+            if format.value != ValueFormat::Skip {
+                self.text.push_str(&record[layout.position(column)]);
+            }
+
             self.deferred_cells.push((start, self.text.len()));
         }
     }
