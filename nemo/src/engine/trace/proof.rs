@@ -6,11 +6,12 @@
 //! fact.
 //! The rule's body is grounded by the fact's values and evaluated again,
 //! as an ordinary operation plan over the data from before the application.
-//! Each row that this evaluation finds is a *witness*,
-//! with a value for every variable of the rule,
-//! and the premises of a witness are proven in turn.
+//! The evaluation ends with the first row that it finds, the *witness*,
+//! which has a value for every variable of the rule,
+//! and the premises of the witness are proven in turn.
 //! The premises of a witness were all added before the fact,
 //! so the search never meets a cycle, and it can remember every outcome.
+//! Only a fact of an aggregate head needs every row of its group, to summarize the group.
 //!
 //! The submodules:
 //!
@@ -66,8 +67,7 @@ enum Explanation {
         /// or the revision at which the fact was added if the application log has no entry
         /// for it.
         step: u64,
-        /// The witness, which is the rule's combined row,
-        /// with the variables in the rule's order and then the computed columns.
+        /// The witness, which has the value of each of the rule's variables, in the rule's order.
         ///
         /// It is empty for an aggregate node without a witness row.
         witness: Vec<StorageValue>,

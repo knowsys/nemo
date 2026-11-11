@@ -576,6 +576,57 @@ fn recursion_over_a_cyclic_graph_traces_in_polynomial_time() {
 }
 
 #[test]
+fn a_body_of_free_variables_is_traced_by_its_first_match() {
+    // No variable of the body occurs in the head, so the fact grounds none of them,
+    // and every combination of five `d` facts matches the body: 24⁵, about eight million.
+    let facts: String = (0..24).map(|value| format!("d({value}) . ")).collect();
+    let mut engine = run(&format!(
+        "{facts} g(z) :- d(?a), d(?b), d(?c), d(?d), d(?e) ."
+    ));
+
+    let started = std::time::Instant::now();
+    let response = trace(&mut engine, "g(z) .");
+    // Reading one match takes milliseconds, and reading them all many seconds.
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(2),
+        "the trace took {:?}",
+        started.elapsed()
+    );
+
+    check(&mut engine, &response);
+    let proof = response.proof(0).expect("the fact holds");
+    let premises: Vec<&str> = proof.premises().map(|premise| premise.fact()).collect();
+    assert_eq!(premises, ["d(0)"; 5]);
+}
+
+#[test]
+fn matches_with_a_fact_newer_than_the_traced_one_are_passed_over_together() {
+    // The `d` facts are derived from 40 downwards, each after the `g` fact of the one before.
+    // So g(20) is derived while `d` has only the values from 20 on,
+    // and a match with a smaller value is no witness of it.
+    // The first of the body's atoms with such a value rules out every match that has it:
+    // a few dozen checks, where the matches that start with a smaller value are millions.
+    let mut engine = run("
+        d(40) .
+        d(?x - 1) :- d(?x), g(?x), ?x > 0 .
+        g(?x) :- d(?x), d(?a), d(?b), d(?c), d(?e) .
+    ");
+
+    let started = std::time::Instant::now();
+    let response = trace(&mut engine, "g(20) .");
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(2),
+        "the trace took {:?}",
+        started.elapsed()
+    );
+
+    check(&mut engine, &response);
+    let proof = response.proof(0).expect("the fact holds");
+    let premises: Vec<&str> = proof.premises().map(|premise| premise.fact()).collect();
+    assert_eq!(premises, ["d(20)"; 5]);
+}
+
+#[test]
 fn responses_serialize_to_one_json_format() {
     let mut engine = run("edge(a, b) . reach(?x, ?y) :- edge(?x, ?y) .");
     let response = trace(&mut engine, "reach(a, b) .");

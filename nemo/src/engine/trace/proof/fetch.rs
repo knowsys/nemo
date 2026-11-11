@@ -11,7 +11,7 @@ use std::rc::Rc;
 use nemo_physical::{
     diagnostics::Diagnostic,
     management::{Revision, TableId},
-    plan::{FilterSpec, Marker, OperationPlan},
+    plan::{FilterSpec, Marker, OperationPlan, Verdict},
     storage::StorageValue,
 };
 
@@ -20,7 +20,7 @@ use crate::engine::{
     evaluate::body::{filtered, same_constant},
     trace::proof::{
         ProofNode,
-        search::{CandidateApplication, ProofSearch},
+        search::{CandidateApplication, ProofSearch, added_before},
     },
 };
 
@@ -124,7 +124,7 @@ impl ProofSearch<'_> {
                 .into_iter()
                 .map(|value| value.expect("every entry was just checked to be known"))
                 .collect();
-            return Ok(self.added_before(table, &row, step).then_some(row));
+            return Ok(added_before(self.manager, table, &row, step).then_some(row));
         }
         self.any_row(table, &known, step)
     }
@@ -141,6 +141,9 @@ impl ProofSearch<'_> {
         let markers: Vec<Marker> = known.iter().map(|_| plan.marker()).collect();
         let end = self.aligned_end(table, step);
         let load = plan.load(table, Revision(0)..end, markers.clone());
+        // The table is read as a join of one input, whose rows the plan finds one at a time.
+        let rows = plan.join(vec![load], markers.clone());
+
         let mut filters = Vec::new();
         for (column, value) in known.iter().enumerate() {
             let Some(value) = value else { continue };
@@ -150,15 +153,14 @@ impl ProofSearch<'_> {
                 same_constant(decoded),
             ));
         }
-        let node = filtered(&mut plan, load, filters);
-        let output = plan.output(node);
+        let node = filtered(&mut plan, rows, filters);
+        plan.output(node);
+
+        // The read ends at the end of the block that contains the step,
+        // so it also returns rows added from the step on, which are passed over.
         let context = self.contexts.at(step);
-        let results = plan.execute(self.manager, self.dictionary, context);
-        let mut found = None;
-        results.outputs[output].for_each_row(|row| {
-            if found.is_none() && self.added_before(table, row, step) {
-                found = Some(row.to_vec());
-            }
+        let found = plan.find_row(self.manager, self.dictionary, context, |manager, row| {
+            Verdict::for_row(row, added_before(manager, table, row, step))
         });
         Ok(found)
     }

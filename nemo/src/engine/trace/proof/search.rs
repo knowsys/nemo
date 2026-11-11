@@ -8,10 +8,10 @@ use std::{
 use nemo_physical::{
     diagnostics::Diagnostic,
     dictionary::Dictionary,
+    function::EvaluationContext,
     management::{Revision, TableId, TableManager},
-    plan::OperationPlan,
+    plan::{NodeId, OperationPlan, Verdict},
     storage::StorageValue,
-    trie::Trie,
     value::{DataValue, ValueRef},
 };
 
@@ -20,8 +20,8 @@ use crate::{
     engine::{
         Engine,
         compile::compiled::{
-            AggregateColumn, CompiledProgram, CompiledRule, ExistentialAtom, ExistentialHead,
-            ExistentialTerm, HeadAtom,
+            AggregateColumn, BodyAtom, CompiledProgram, CompiledRule, ExistentialAtom,
+            ExistentialHead, ExistentialTerm, HeadAtom,
         },
         evaluate::{
             application::{LoggedApplication, scope_columns},
@@ -168,13 +168,6 @@ impl<'a> ProofSearch<'a> {
         at
     }
 
-    /// Returns whether the table's row was added before the step.
-    pub(super) fn added_before(&self, table: TableId, row: &[StorageValue], step: u64) -> bool {
-        self.manager
-            .revision_of(table, row)
-            .is_some_and(|added| added.0 < step)
-    }
-
     /// Returns whether a revision lies in one of the table's extensional blocks.
     fn is_extensional(&self, table: TableId, revision: Revision) -> bool {
         self.extensional
@@ -259,7 +252,7 @@ impl<'a> ProofSearch<'a> {
     ///
     /// Each head of the rule that writes the fact's table, an ordinary head or an existential
     /// insert, grounds the body by the fact's values.
-    /// The first grounding with a witness whose premises are all proven wins.
+    /// The first grounding whose first witness has only proven premises wins.
     fn attempt(
         &mut self,
         candidate: &CandidateApplication<'_>,
@@ -305,12 +298,23 @@ impl<'a> ProofSearch<'a> {
             }
         }
 
+        let positions = combined_positions(rule);
         for (grounding, nondeterministic) in groundings {
-            let witnesses = self.witnesses(candidate.rule, &grounding, candidate.step);
-            let proven =
-                self.prove_witnesses(candidate, &witnesses, nondeterministic, None, None)?;
-            if proven.is_some() {
-                return Ok(proven);
+            let Some(witness) = self.first_witness(candidate.rule, &grounding, candidate.step)
+            else {
+                continue;
+            };
+
+            // The premises were added before the fact, so each of them has a proof,
+            // unless the application that derived it cannot be evaluated again,
+            // as with a condition that calls a nondeterministic function.
+            if let Some(premises) = self.premises(rule, &positions, &witness)? {
+                return Ok(Some(candidate.derived(
+                    witness,
+                    premises,
+                    None,
+                    nondeterministic,
+                )));
             }
         }
         Ok(None)
@@ -380,58 +384,89 @@ impl<'a> ProofSearch<'a> {
                 .map(|input| (positions[input], target))
         });
 
-        // The group exists even if no witness is fully proven, or none is needed,
-        // and the summary explains it.
-        let proven = self.prove_witnesses(candidate, &witnesses, false, keep, Some(matches))?;
-        Ok(Some(proven.unwrap_or_else(|| {
-            candidate.derived(Vec::new(), Vec::new(), Some(matches), false)
-        })))
-    }
-
-    /// Tries the witnesses in order, proving each one's premises,
-    /// until one witness is fully proven.
-    ///
-    /// `keep`, if given, keeps only the witnesses that have the given value at the given
-    /// position.
-    /// `matches` becomes the aggregate summary of the proof.
-    fn prove_witnesses(
-        &mut self,
-        candidate: &CandidateApplication<'_>,
-        witnesses: &[Vec<StorageValue>],
-        nondeterministic: bool,
-        keep: Option<(usize, StorageValue)>,
-        matches: Option<usize>,
-    ) -> Result<Option<Rc<ProofNode>>, Diagnostic> {
-        let program = self.program;
-        let rule = &program.rules[candidate.rule];
-        let positions = combined_positions(rule);
-
-        'witnesses: for witness in witnesses {
+        // The first of these witnesses whose premises are all proven explains the fact.
+        for witness in &witnesses {
             if let Some((column, value)) = keep
                 && witness[column] != value
             {
                 continue;
             }
-            let mut premises = Vec::with_capacity(rule.body.len());
-            for atom in &rule.body {
-                let premise: Vec<StorageValue> = atom
-                    .variables
-                    .iter()
-                    .map(|&variable| witness[positions[variable]])
-                    .collect();
-                match self.search(atom.table, &premise)? {
-                    Some(node) => premises.push(node),
-                    None => continue 'witnesses,
-                }
+            if let Some(premises) = self.premises(rule, &positions, witness)? {
+                // The variables come first in a witness, and the node keeps their values.
+                let witness = witness[..rule.variables].to_vec();
+                return Ok(Some(candidate.derived(
+                    witness,
+                    premises,
+                    Some(matches),
+                    false,
+                )));
             }
-            return Ok(Some(candidate.derived(
-                witness.to_vec(),
-                premises,
-                matches,
-                nondeterministic,
-            )));
         }
-        Ok(None)
+
+        // The group exists even if no witness is fully proven, and the summary explains it.
+        Ok(Some(candidate.derived(
+            Vec::new(),
+            Vec::new(),
+            Some(matches),
+            false,
+        )))
+    }
+
+    /// Returns the proofs of a witness's premises, one per body atom of the rule,
+    /// or `None` if a premise has no proof.
+    ///
+    /// `positions` has the position in the witness of each of the rule's columns.
+    fn premises(
+        &mut self,
+        rule: &CompiledRule,
+        positions: &[usize],
+        witness: &[StorageValue],
+    ) -> Result<Option<Vec<Rc<ProofNode>>>, Diagnostic> {
+        let mut premises = Vec::with_capacity(rule.body.len());
+        for atom in &rule.body {
+            let premise: Vec<StorageValue> = atom
+                .variables
+                .iter()
+                .map(|&variable| witness[positions[variable]])
+                .collect();
+            match self.search(atom.table, &premise)? {
+                Some(node) => premises.push(node),
+                None => return Ok(None),
+            }
+        }
+        Ok(Some(premises))
+    }
+
+    /// Returns the first witness of a rule's body grounded by the head fact:
+    /// the first row that the body has over the data before the application step.
+    ///
+    /// The witness has the value of each variable, in the rule's order.
+    /// The body is evaluated only until it has such a row, however many rows it has.
+    fn first_witness(
+        &mut self,
+        rule_index: usize,
+        grounding: &[(usize, DataValue)],
+        step: u64,
+    ) -> Option<Vec<StorageValue>> {
+        let BodyPlan {
+            mut plan,
+            space,
+            result,
+            context,
+        } = self.body_plan(rule_index, grounding, step);
+        let mut check = self.premise_check(rule_index, step);
+
+        // Without the computed columns, the result has the rows of the body's join,
+        // which the plan finds one at a time.
+        let variables = plan.project(result, space.order);
+        plan.output(variables);
+
+        plan.find_row(
+            self.manager,
+            self.dictionary,
+            context,
+            |manager, witness| check.judge(manager, witness),
+        )
     }
 
     /// Runs the rule's body grounded by the head fact over the data before the application step,
@@ -439,49 +474,42 @@ impl<'a> ProofSearch<'a> {
     ///
     /// A witness is a distinct combined row,
     /// with the variables in the rule's order and then the computed columns.
-    /// Each premise of a witness was added before the step,
-    /// so a premise is always older than the fact it supports.
     fn witnesses(
         &mut self,
         rule_index: usize,
         grounding: &[(usize, DataValue)],
         step: u64,
     ) -> Vec<Vec<StorageValue>> {
-        let joined = self.joined(rule_index, grounding, step);
+        let BodyPlan {
+            mut plan,
+            result,
+            context,
+            ..
+        } = self.body_plan(rule_index, grounding, step);
+        let mut check = self.premise_check(rule_index, step);
 
-        // A read that ends inside a block also returns rows added from the step on,
-        // so the premises from such a read are checked.
-        // A body table read up to exactly the step returns no such rows.
-        let rule = &self.program.rules[rule_index];
-        let positions = combined_positions(rule);
-        let checked: Vec<_> = rule
-            .body
-            .iter()
-            .filter(|atom| self.aligned_end(atom.table, step) > Revision(step))
-            .collect();
-        let mut witnesses = Vec::with_capacity(joined.row_count());
-        let mut premise = Vec::new();
-        joined.for_each_row(|witness| {
-            let before = checked.iter().all(|atom| {
-                premise.clear();
-                premise.extend(
-                    atom.variables
-                        .iter()
-                        .map(|&variable| witness[positions[variable]]),
-                );
-                self.added_before(atom.table, &premise, step)
-            });
-            if before {
+        let output = plan.output(result);
+        let results = plan.execute(self.manager, self.dictionary, context);
+
+        let mut witnesses = Vec::new();
+        results.outputs[output].for_each_row(|witness| {
+            if check.judge(self.manager, witness) == Verdict::Accept {
                 witnesses.push(witness.to_vec());
             }
         });
         witnesses
     }
 
-    /// Runs the rule's body grounded by the head fact, and returns the distinct combined rows.
+    /// Plans the rule's body grounded by the head fact, as the application at the step
+    /// evaluated it.
     ///
     /// Each body table is read up to the end of the block that contains the step.
-    fn joined(&mut self, rule_index: usize, grounding: &[(usize, DataValue)], step: u64) -> Trie {
+    fn body_plan(
+        &self,
+        rule_index: usize,
+        grounding: &[(usize, DataValue)],
+        step: u64,
+    ) -> BodyPlan<'a> {
         let program = self.program;
         let rule = &program.rules[rule_index];
         let mut plan = OperationPlan::new();
@@ -495,17 +523,127 @@ impl<'a> ProofSearch<'a> {
             inputs.push(plan.load(atom.table, Revision(0)..end, space.atom_markers(atom)));
         }
         let node = space.join(&mut plan, inputs, space.order.clone(), grounding);
-        // Negations hold against the saturated store, exactly as at
-        // application time.
-        let (node, _) = space.subtract_negations(&mut plan, node, Revision(0)..Revision(self.now));
 
-        // The body is evaluated as it was at the application,
-        // so `NOW()` returns the instant at which that run began.
-        let output = plan.output(node);
-        let context = self.contexts.at(step);
-        let mut results = plan.execute(self.manager, self.dictionary, context);
-        std::mem::take(&mut results.outputs[output])
+        // Negations hold against the saturated store, exactly as at application time.
+        let (result, _) =
+            space.subtract_negations(&mut plan, node, Revision(0)..Revision(self.now));
+
+        BodyPlan {
+            plan,
+            space,
+            result,
+            context: self.contexts.at(step),
+        }
     }
+
+    /// Returns the check that the premises of a witness of the rule were added before the step.
+    ///
+    /// A body table is read up to the end of the block that contains the step.
+    /// If the block ends after the step, the read also returns rows added from the step on,
+    /// so the premises from such a read are checked.
+    /// A body table read up to exactly the step returns no such rows.
+    fn premise_check(&self, rule_index: usize, step: u64) -> PremiseCheck<'a> {
+        let program = self.program;
+        let rule = &program.rules[rule_index];
+        let positions = combined_positions(rule);
+
+        let mut premises: Vec<CheckedPremise<'a>> = rule
+            .body
+            .iter()
+            .filter(|atom| self.aligned_end(atom.table, step) > Revision(step))
+            .map(|atom| {
+                let columns = atom.variables.iter().map(|&id| positions[id] + 1);
+                CheckedPremise {
+                    atom,
+                    prefix: columns.max().unwrap_or(0),
+                }
+            })
+            .collect();
+        premises.sort_by_key(|premise| premise.prefix);
+
+        PremiseCheck {
+            premises,
+            positions,
+            step,
+            premise: Vec::new(),
+        }
+    }
+}
+
+/// The plan of a rule's body grounded by a head fact.
+struct BodyPlan<'r> {
+    /// The plan, without an output.
+    plan: OperationPlan,
+    /// The rule's columns in the plan.
+    space: BodySpace<'r>,
+    /// The node of the body's result, with the variables in the rule's order
+    /// and then the computed columns.
+    result: NodeId,
+    /// The context of the run that applied the rule, in which the plan is executed,
+    /// so that `NOW()` returns the instant at which that run began.
+    context: EvaluationContext,
+}
+
+/// The check that the premises of a witness were added before an application step,
+/// so that every premise is older than the fact it supports.
+struct PremiseCheck<'r> {
+    /// The premises that are checked, in ascending order of their prefixes.
+    premises: Vec<CheckedPremise<'r>>,
+    /// The position in a witness of each of the rule's columns.
+    positions: Vec<usize>,
+    /// The application step.
+    step: u64,
+    /// The buffer that each premise is assembled in.
+    premise: Vec<StorageValue>,
+}
+
+/// A premise that a [PremiseCheck] checks, given by its body atom.
+struct CheckedPremise<'r> {
+    /// The body atom.
+    atom: &'r BodyAtom,
+    /// The number of leading columns of a witness that contain every variable of the atom.
+    ///
+    /// The witnesses that agree on these columns have the same premise.
+    prefix: usize,
+}
+
+impl PremiseCheck<'_> {
+    /// Returns the verdict on a witness, which is accepted if each checked premise was added
+    /// before the step.
+    ///
+    /// A premise added later rejects every witness that has it.
+    /// Of several such premises, the one with the shortest prefix decides,
+    /// since it rejects the most witnesses.
+    fn judge(&mut self, manager: &TableManager, witness: &[StorageValue]) -> Verdict {
+        for checked in &self.premises {
+            let atom = checked.atom;
+            self.premise.clear();
+            self.premise.extend(
+                atom.variables
+                    .iter()
+                    .map(|&variable| witness[self.positions[variable]]),
+            );
+            if !added_before(manager, atom.table, &self.premise, self.step) {
+                return Verdict::Reject {
+                    prefix: checked.prefix,
+                };
+            }
+        }
+
+        Verdict::Accept
+    }
+}
+
+/// Returns whether the table's row was added before the step.
+pub(super) fn added_before(
+    manager: &TableManager,
+    table: TableId,
+    row: &[StorageValue],
+    step: u64,
+) -> bool {
+    manager
+        .revision_of(table, row)
+        .is_some_and(|added| added.0 < step)
 }
 
 /// Returns the grounding of a rule's body by one ordinary head that writes the fact,
