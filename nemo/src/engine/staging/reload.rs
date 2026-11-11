@@ -4,6 +4,8 @@
 //! The new statements are compared with the loaded ones.
 //! The predicates whose defining statements changed are *rebuilt*:
 //! their tables are dropped, and the new program loads them anew.
+//! So is every predicate without input facts to keep,
+//! which the new program may then use with another number of columns.
 //! Every other predicate keeps its input facts and loses its derived facts.
 
 use std::collections::{HashMap, HashSet};
@@ -88,6 +90,16 @@ fn unregister_from(
     replaced
 }
 
+/// Returns the predicate that a statement gives input rows, which is that of a fact or an
+/// import, or `None` for any other statement.
+fn input_predicate(statement: &Statement) -> Option<&Identifier> {
+    match statement {
+        Statement::Fact(fact) => Some(&fact.predicate),
+        Statement::Directive(Directive::Import(import)) => Some(&import.predicate),
+        _ => None,
+    }
+}
+
 /// Returns, per statement, whether its data is already stored,
 /// which holds for a fact or an import of a predicate that stays registered.
 ///
@@ -100,13 +112,8 @@ fn preloaded(
     statements
         .iter()
         .map(|statement| {
-            let predicate = match statement {
-                Statement::Fact(fact) => &fact.predicate,
-                Statement::Directive(Directive::Import(import)) => &import.predicate,
-                _ => return false,
-            };
-            state
-                .resolve(predicate)
+            input_predicate(statement)
+                .and_then(|predicate| state.resolve(predicate))
                 .is_some_and(|name| predicates.contains_key(&name))
         })
         .collect()
@@ -144,11 +151,9 @@ impl Engine {
     /// of it, but reads no data and stores nothing.
     fn translate_written_reload(&mut self, staged: &super::Staged) -> Result<(), Diagnostic> {
         let held = self.revision.expect("a loaded program has a revision");
-        let rebuild = self.rebuild_by_diff(
-            &self.statements_of(held),
-            &self.statements_of(staged.revision),
-        );
-        let rebuilt = self.rebuilt_predicates(&rebuild, &HashSet::new());
+        let new_statements = self.statements_of(staged.revision);
+        let rebuild = self.rebuild_by_diff(&self.statements_of(held), &new_statements);
+        let rebuilt = self.rebuilt_predicates(&rebuild, &HashSet::new(), &new_statements);
         let mut state = self.translation.clone();
         let mut predicates = self.predicates.clone();
         unregister_from(&mut state, &mut predicates, &rebuilt);
@@ -342,7 +347,7 @@ impl Engine {
     ) -> Result<TranslationOutcome<Retranslated>, Diagnostic> {
         let mut unstable: HashSet<String> = std::mem::take(&mut load.unstable);
         loop {
-            let rebuilt = self.rebuilt_predicates(rebuild, &unstable);
+            let rebuilt = self.rebuilt_predicates(rebuild, &unstable, new_statements);
 
             // Everything below must be undoable until translation succeeds.
             let saved_state = self.translation.clone();
@@ -438,21 +443,39 @@ impl Engine {
     /// Returns the registered predicates that a reload rebuilds.
     ///
     /// They are every registered predicate if `rebuild` says so.
-    /// Otherwise, they are the changed predicates and those in `unstable`,
-    /// whose stored import does not cover what the new rules read.
+    /// Otherwise, they are:
+    /// - the changed predicates;
+    /// - those in `unstable`, whose stored import does not cover what the new rules read;
+    /// - every predicate without input rows to keep, which is one that no fact or import among
+    ///   `statements`, the new program's, names, and that holds no rows added through
+    ///   [import_rows](crate::engine::Engine::import_rows).
+    ///
+    /// A predicate of the last kind holds only derived rows, which a reload drops.
+    /// The new program registers it anew if it uses it, with the number of columns that it
+    /// uses it with.
     fn rebuilt_predicates(
         &self,
         rebuild: &RebuildScope,
         unstable: &HashSet<String>,
+        statements: &[Statement],
     ) -> Vec<String> {
         if rebuild.all {
             return self.predicates.keys().cloned().collect();
         }
-        rebuild
-            .predicates
+
+        let with_input_statements: HashSet<String> = statements
             .iter()
-            .chain(unstable)
-            .filter(|name| self.predicates.contains_key(*name))
+            .filter_map(input_predicate)
+            .filter_map(|predicate| self.translation.resolve(predicate))
+            .collect();
+
+        self.predicates
+            .keys()
+            .filter(|name| {
+                let keeps_input_rows =
+                    with_input_statements.contains(*name) || self.holds_imported_rows(name);
+                rebuild.predicates.contains(*name) || unstable.contains(*name) || !keeps_input_rows
+            })
             .cloned()
             .collect()
     }

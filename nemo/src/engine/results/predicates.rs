@@ -171,7 +171,7 @@ impl Engine {
 
     /// Returns whether rows were added to a predicate through
     /// [import_rows](crate::engine::Engine::import_rows).
-    fn holds_imported_rows(&self, predicate: &str) -> bool {
+    pub(in crate::engine) fn holds_imported_rows(&self, predicate: &str) -> bool {
         self.predicates
             .get(predicate)
             .is_some_and(|Registered { table, .. }| {

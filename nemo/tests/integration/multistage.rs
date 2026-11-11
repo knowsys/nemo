@@ -409,6 +409,35 @@ fn reload_of_the_same_program_recomputes() {
     assert_eq!(engine.rows("q").expect("q").len(), 1);
 }
 
+/// A reload registers the predicates of the new program alone,
+/// so a derived predicate may come back with another number of columns.
+#[test]
+fn reload_changes_the_arity_of_a_derived_predicate() {
+    let mut engine = run("p(1) . q(?x) :- p(?x) .");
+    assert_eq!(rows(&mut engine, "q"), vec!["1"]);
+
+    engine
+        .reload(parse("p(1) . q(?x, ?x) :- p(?x) ."))
+        .expect("the new program uses `q` with one number of columns");
+    engine.reason().expect("recomputation reasons");
+    assert_eq!(rows(&mut engine, "q"), vec!["1,1"]);
+}
+
+/// A reload forgets a predicate that the new program leaves out,
+/// so a later extension may name it again, at any arity.
+#[test]
+fn reload_forgets_the_predicates_that_the_new_program_leaves_out() {
+    let mut engine = run("p(1) . q(?x) :- p(?x) . r(?x) :- q(?x) .");
+
+    engine.reload(parse("p(1) .")).expect("the reload loads");
+    engine
+        .extend(parse("q(?x, ?x) :- p(?x) . r(7, 8, 9) ."))
+        .expect("`q` and `r` are free to have other numbers of columns");
+    engine.reason().expect("reasoning continues");
+    assert_eq!(rows(&mut engine, "q"), vec!["1,1"]);
+    assert_eq!(rows(&mut engine, "r"), vec!["7,8,9"]);
+}
+
 #[test]
 fn open_cursors_notice_recovery() {
     let mut engine = run("node(1) . free(?x) :- node(?x), ~blocked(?x) .");
