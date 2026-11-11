@@ -176,6 +176,7 @@ fn shape_conditions(
             if labels.is_some() {
                 return Err(TranslationError::LabeledTupleNamedFields.at(span));
             }
+
             conditions.push(Operation {
                 operator: Operator::IsTuple,
                 arguments: vec![access.clone()],
@@ -220,6 +221,7 @@ fn shape_conditions(
                 if has_pattern_variables(key) {
                     return Err(unsupported("a variable in a map pattern's key", key.span));
                 }
+
                 conditions.push(Operation {
                     operator: Operator::HasKey,
                     arguments: vec![access.clone(), key.clone()],
@@ -230,6 +232,7 @@ fn shape_conditions(
         }
         _ => unreachable!("only structured terms are destructured"),
     }
+
     Ok(())
 }
 
@@ -253,6 +256,7 @@ fn position_conditions(
     if has_pattern_variables(subterm) {
         return Ok(());
     }
+
     let element = applied(Operator::Get, vec![access.clone(), key], subterm.span);
     conditions.push(Operation {
         operator: Operator::Equal,
@@ -295,6 +299,7 @@ fn extractions(access: Term, pattern: &Term, synthesized: &mut Vec<Operation>) {
             // `_` matches anything and binds nothing.
             continue;
         }
+
         let element = applied(Operator::Get, vec![access.clone(), key], subterm.span);
         if is_structured(subterm) {
             extractions(element, subterm, synthesized);
@@ -348,6 +353,7 @@ impl<'a> Translator<'a> {
             TermKind::Tuple(elements) => {
                 Ok(DataValue::tuple(TupleValue::new(self.elements(elements)?)))
             }
+
             // A function term is a labeled tuple: `point(1, 2)` names the shape of its
             // elements by position. Named arguments belong to atoms,
             // whose declaration resolves them.
@@ -359,6 +365,7 @@ impl<'a> Translator<'a> {
                 if labels.is_some() {
                     return Err(TranslationError::LabeledTupleNamedFields.at(term.span));
                 }
+
                 let label = self.resolve(name, term.span)?;
                 Ok(DataValue::tuple(TupleValue::labeled(
                     label,
@@ -370,9 +377,11 @@ impl<'a> Translator<'a> {
                 for (key, value) in pairs {
                     entries.push((self.evaluate(key)?, self.evaluate(value)?));
                 }
+
                 if let Some(position) = first_repeat(entries.iter().map(|(key, _)| key)) {
                     return Err(duplicate_key(&pairs[position].0, term.span));
                 }
+
                 let map = match label {
                     None => MapValue::new(entries),
                     Some(name) => MapValue::labeled(self.resolve(name, term.span)?, entries),

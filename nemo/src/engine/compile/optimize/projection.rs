@@ -52,10 +52,12 @@ impl ImportPass for ProjectionPushdown {
                 let Some(atom) = literal.atom() else {
                     continue;
                 };
+
                 let name = translator.resolve(&atom.predicate, atom.span)?;
                 if !survey.optimizable(&name) {
                     continue;
                 }
+
                 let entry = read
                     .entry(name)
                     .or_insert_with(|| Some(vec![false; atom.terms.len()]));
@@ -64,11 +66,13 @@ impl ImportPass for ProjectionPushdown {
                     *entry = None;
                     continue;
                 }
+
                 for (flag, term) in flags.iter_mut().zip(&atom.terms) {
                     *flag |= !unread(term, &counts, counted);
                 }
             }
         }
+
         // The columns that an import's `where` clause reads are read whatever the rules read:
         // its atoms bind them as the keys that its fetch sends, and its conditions test them.
         for (name, bound) in &survey.bound {
@@ -80,24 +84,29 @@ impl ImportPass for ProjectionPushdown {
                 }
             }
         }
+
         for (name, flags) in read {
             let Some(flags) = flags else { continue };
+
             // An import whose conditions the survey could not place among
             // the kept columns has its predicate stored whole.
             if survey.conditioned.contains(&name) {
                 continue;
             }
+
             // Rules that read no column only ask whether a row exists.
             // Such an import is stored whole, since pruning every column would need each
             // import format to deliver rows without columns.
             if !flags.contains(&true) {
                 continue;
             }
+
             let pruned: Vec<bool> = flags.iter().map(|&read| !read).collect();
             if pruned.contains(&true) {
                 plan.prune(name, pruned);
             }
         }
+
         Ok(())
     }
 }

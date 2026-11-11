@@ -112,6 +112,7 @@ impl Pipeline {
             .into_iter()
             .map(|statement| self.intern(statement, None))
             .collect();
+
         self.push_revision(ProgramRevision {
             parent: None,
             stage: None,
@@ -153,6 +154,7 @@ impl Pipeline {
     pub fn merge(&mut self, base: RevisionId, extension: RevisionId) -> RevisionId {
         let mut statements = self.revisions[base.index()].statements.clone();
         statements.extend_from_slice(&self.revisions[extension.index()].statements);
+
         self.push_revision(ProgramRevision {
             parent: Some(base),
             stage: None,
@@ -200,8 +202,10 @@ impl Pipeline {
             if self.ran(current, stage.name()) {
                 continue;
             }
+
             current = self.run(stage.as_ref(), current, 0, imported)?;
         }
+
         Ok(current)
     }
 
@@ -223,6 +227,7 @@ impl Pipeline {
         for stage in stages.entries() {
             current = self.run(stage.as_ref(), current, frozen, imported)?;
         }
+
         Ok(current)
     }
 
@@ -245,6 +250,7 @@ impl Pipeline {
                 stage.name()
             );
         }
+
         let mut commit = Commit::new(self, base, stage.name(), frozen).with_imported(imported);
         stage.apply(&mut commit)?;
         Ok(commit.finish())
@@ -259,6 +265,7 @@ impl Pipeline {
             chain.push(revision);
             current = self.revisions[revision.index()].parent;
         }
+
         chain.reverse();
         chain
     }
@@ -276,8 +283,10 @@ impl Pipeline {
             if entry.stage == Some(stage) {
                 return true;
             }
+
             current = entry.parent;
         }
+
         false
     }
 
@@ -294,12 +303,14 @@ impl Pipeline {
             if seen.contains(&id) {
                 continue;
             }
+
             seen.push(id);
             match self.created_by[id.index()] {
                 None => roots.push(id),
                 Some(edge) => pending.extend(self.edges[edge].sources.iter().rev()),
             }
         }
+
         roots
     }
 
@@ -314,6 +325,7 @@ impl Pipeline {
             if seen.contains(&id) {
                 continue;
             }
+
             seen.push(id);
             if let Some(span) = self.statement(id).span() {
                 return Some(span);
@@ -322,6 +334,7 @@ impl Pipeline {
                 pending.extend(self.edges[edge].sources.iter().rev());
             }
         }
+
         None
     }
 

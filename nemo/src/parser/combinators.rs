@@ -39,6 +39,7 @@ impl Parser<'_> {
         while self.eat(&TokenKind::Comma).is_some() {
             items.push(item(self)?);
         }
+
         Ok(items)
     }
 
@@ -76,7 +77,9 @@ impl Parser<'_> {
         let &TokenKind::Variable(kind) = self.peek() else {
             return Err(self.unexpected(what));
         };
+
         let token = self.advance();
+
         Ok(Variable {
             kind,
             name: self.marked_text(&token).to_owned(),

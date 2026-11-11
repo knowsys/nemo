@@ -20,6 +20,7 @@ impl Serialize for NamedCounts<'_> {
         for (name, value) in self.0 {
             map.serialize_entry(name, value)?;
         }
+
         map.end()
     }
 }
@@ -162,6 +163,7 @@ mod tests {
     #[test]
     fn the_run_phases_add_the_glue_and_the_engine_stages() {
         let table = PhaseTable::of_run(&timings());
+
         // The glue leaves `setup` out of the sum, since it is measured within `join`.
         assert_eq!(
             table.rows(),

@@ -42,6 +42,7 @@ fn a_load_of_remote_imports_is_suspended_until_their_responses_come() {
     let [request] = pending.as_slice() else {
         panic!("one request per remote import: {pending:?}");
     };
+
     assert_eq!(request.request.url, "https://example.org/data.csv");
     assert_eq!(request.request.method(), "GET");
     assert_eq!(request.request.accept, Some("text/csv"));
@@ -180,6 +181,7 @@ s(?x) :- q(?x, ?y) ."#,
     let [warning] = warnings.as_slice() else {
         panic!("one warning, for the failed import: {:?}", engine.reports());
     };
+
     assert_eq!(
         warning.field("resource"),
         Some("https://example.org/missing.csv")
@@ -282,6 +284,7 @@ fn a_suspended_load_refuses_changes_until_discarded() {
         assert_eq!(problem.field("refused"), Some(method), "{problem:?}");
         assert_eq!(problem.field("suspended"), Some("load"), "{problem:?}");
     }
+
     assert_eq!(engine.pending(), pending, "the load is still suspended");
 
     assert!(engine.discard_pending());
@@ -400,6 +403,7 @@ fn sparql_imports_are_suspended_for_their_query() {
     let [request] = pending.as_slice() else {
         panic!("one request: {pending:?}");
     };
+
     assert_eq!(request.request.url, "https://example.org/sparql");
     assert_eq!(request.request.method(), "GET");
     assert_eq!(request.request.accept, Some("text/tab-separated-values"));

@@ -68,6 +68,7 @@ impl Aggregate {
             TermKind::Variable(variable) => variable,
             other => panic!("aggregate scope arguments must be variables, found `{other:?}`"),
         });
+
         Aggregate::new(kind, input).per(scope)
     }
 }

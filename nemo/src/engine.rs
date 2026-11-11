@@ -265,6 +265,7 @@ impl Engine {
                 .diagnostic()
                 .with_resource(name));
         }
+
         Ok(self.pipeline.add_source(name, text))
     }
 
@@ -283,6 +284,7 @@ impl Engine {
             .diagnostic()
             .with_resource(name.clone())
         })?;
+
         self.add_source(name, text)
     }
 
@@ -955,6 +957,7 @@ impl Engine {
             }
             _ => {}
         }
+
         let progress = self.reason_until_suspended();
         self.located(progress)
     }
@@ -969,6 +972,7 @@ impl Engine {
         let Some(written) = &self.written else {
             return outcome;
         };
+
         self.pipeline
             .map_reports(already, |report| written.present(report));
         outcome.map_err(|problem| written.present(problem))
@@ -980,6 +984,7 @@ impl Engine {
     pub fn predicates(&self) -> Vec<PredicateInfo> {
         let mut names = self.listed();
         names.sort();
+
         names
             .into_iter()
             .filter_map(|name| self.predicate(&name))
@@ -1023,6 +1028,7 @@ impl Engine {
     /// [TypeSyntax](crate::values::TypeSyntax) writes a type in declaration syntax.
     pub fn column_types(&self, predicate: &str) -> Option<&[Type]> {
         let (table, _) = self.whole_predicate(predicate).ok()?;
+
         self.program
             .as_ref()?
             .column_types
@@ -1058,6 +1064,7 @@ impl Engine {
             let chunk = self.read_chunk(&mut cursor, PredicateCursor::BUDGET)?;
             rows.extend(chunk.rows());
         }
+
         Ok(rows)
     }
 
@@ -1102,6 +1109,7 @@ impl Engine {
             .predicates
             .values()
             .any(|registered| registered.table == cursor.table);
+
         // The blocks are compared first, since counting the rows of a range panics if the range
         // does not align with the table's blocks, which a merge of blocks can cause.
         held && self.manager.blocks(cursor.table) == cursor.blocks
@@ -1115,6 +1123,7 @@ impl Engine {
     /// Returns what [cursor](Self::cursor) returns.
     pub fn count(&self, predicate: &str) -> Result<usize, Diagnostic> {
         let (table, _) = self.whole_predicate(predicate)?;
+
         Ok(self
             .manager
             .row_count(table, Revision(0)..Revision(self.step.max(1))))
@@ -1321,6 +1330,7 @@ impl Engine {
             Statement::Directive(crate::model::Directive::Import(import)) if import.is_bound() => {}
             _ => return None,
         }
+
         Some(trace::proof::written_rule(self, statement))
     }
 
@@ -1401,20 +1411,24 @@ impl Engine {
         let Some(revision) = self.revision else {
             return Vec::new();
         };
+
         let mut revisions = Vec::new();
         let mut previous: Option<&[crate::pipeline::StatementId]> = None;
         for revision in self.pipeline.lineage(revision) {
             let statements = self.pipeline.revision_statements(revision);
+
             // A stage that rewrote nothing is left out.
             if previous == Some(statements) {
                 continue;
             }
+
             previous = Some(statements);
             revisions.push((
                 self.pipeline.stage(revision).unwrap_or("loaded"),
                 self.pipeline.program(revision).to_string(),
             ));
         }
+
         revisions
     }
 

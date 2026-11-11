@@ -93,6 +93,7 @@ impl<'a> Translator<'a> {
         let Some(declaration) = self.declarations.get(name) else {
             return Ok(());
         };
+
         let layout = self.plan.stored_layout(name, arity);
         for (column, declared) in declaration.types.iter().enumerate() {
             let Some(seed) = layout
@@ -110,6 +111,7 @@ impl<'a> Translator<'a> {
                 .at(span));
             }
         }
+
         Ok(())
     }
 
@@ -143,6 +145,7 @@ impl<'a> Translator<'a> {
                 self.unvalued.insert(name);
             }
         }
+
         for parameter in &parameters {
             let name = &parameter.variable.name;
             let Some(value) = &parameter.value else {
@@ -151,6 +154,7 @@ impl<'a> Translator<'a> {
             if self.unvalued.contains(name) {
                 continue;
             }
+
             let mut reads = Vec::new();
             collect_globals(value, &mut reads);
             let undefined = reads.into_iter().find(|read| {
@@ -179,6 +183,7 @@ impl<'a> Translator<'a> {
                     waiting.push(parameter);
                 }
             }
+
             if waiting.len() == pending.len() {
                 // Every parameter left waits for another one of them.
                 let parameter = parameter_on_cycle(&waiting);
@@ -191,10 +196,13 @@ impl<'a> Translator<'a> {
                 for parameter in &waiting {
                     self.unvalued.insert(&parameter.variable.name);
                 }
+
                 break;
             }
+
             pending = waiting;
         }
+
         Ok(())
     }
 
@@ -212,9 +220,11 @@ impl<'a> Translator<'a> {
                         .at(parameter.span),
                 )?;
             }
+
             self.unvalued.insert(name);
             return Ok(true);
         };
+
         let mut reads = Vec::new();
         collect_globals(value, &mut reads);
         if reads.iter().any(|read| self.unvalued.contains(read)) {
@@ -224,6 +234,7 @@ impl<'a> Translator<'a> {
         if !reads.iter().all(|read| self.globals.contains_key(*read)) {
             return Ok(false);
         }
+
         match self.parameter_value(parameter, value) {
             Ok(grounded) => {
                 self.globals.insert(name.clone(), grounded);
@@ -233,6 +244,7 @@ impl<'a> Translator<'a> {
                 self.unvalued.insert(name);
             }
         }
+
         Ok(true)
     }
 
@@ -248,6 +260,7 @@ impl<'a> Translator<'a> {
     ) -> Result<DataValue, Diagnostic> {
         let grounded = self.evaluate(value)?;
         self.check_value_types(grounded.as_ref(), value.span.or(parameter.span))?;
+
         // A typed parameter whose value is provably outside its declared type is an error.
         if let Some(datatype) = &parameter.datatype {
             let declared = match self.declared_type(datatype, parameter.span) {
@@ -267,6 +280,7 @@ impl<'a> Translator<'a> {
                 .at(value.span.or(parameter.span)));
             }
         }
+
         Ok(grounded)
     }
 
@@ -292,8 +306,10 @@ impl<'a> Translator<'a> {
             if bindings.contains_key(name) {
                 return Err(TranslationError::GuardBoundTwice { name: name.clone() }.at(term.span));
             }
+
             bindings.insert(name.clone(), self.evaluate(term)?);
         }
+
         Ok(bindings)
     }
 
@@ -308,6 +324,7 @@ impl<'a> Translator<'a> {
         builder.term(self, VariableScope::Bindings(bindings), term)?;
         let program = builder.finish(term.span)?;
         let mut stack = Vec::with_capacity(program.stack_bound());
+
         program
             .evaluate(self.context, &mut stack, &[])
             .as_result()
@@ -363,6 +380,7 @@ impl<'a> Translator<'a> {
                     }
                     .at(span));
                 };
+
                 let domain = match definition {
                     TypeExpression::Map { .. } => ValueDomain::Map,
                     _ => ValueDomain::Tuple,
@@ -375,6 +393,7 @@ impl<'a> Translator<'a> {
                 let TypeLabel::Named(name) = label else {
                     unreachable!("only a named label has a `@type`")
                 };
+
                 return Err(TypeError::DeclaredLabelWrittenOut {
                     name: name.to_string(),
                 }
@@ -388,6 +407,7 @@ impl<'a> Translator<'a> {
                 for member in members {
                     united = united.union(&self.declared_type(member, span)?);
                 }
+
                 united
             }
         })
@@ -418,6 +438,7 @@ impl<'a> Translator<'a> {
         let crate::model::TypeLabel::Named(name) = label else {
             return Ok(false);
         };
+
         Ok(self
             .type_definitions
             .contains_key(&self.resolve(name, span)?))
@@ -453,6 +474,7 @@ impl<'a> Translator<'a> {
             let key = DataValue::iri(self.resolve(&Identifier::bare(key.clone()), span)?);
             pairs.push((key, self.declared_type(field, span)?));
         }
+
         let label = self.declared_label(label, span)?;
         let Some(shape) = MapShape::new(label, pairs) else {
             let repeated = fields
@@ -467,6 +489,7 @@ impl<'a> Translator<'a> {
                 .expect("a map type fails to build only for a repeated key");
             return Err(TranslationError::DuplicateMapKey { key: repeated }.at(span));
         };
+
         Ok(Type::map(shape))
     }
 
@@ -514,6 +537,7 @@ impl<'a> Translator<'a> {
                 );
             }
         }
+
         let name = self.resolve(identifier, directive.span)?;
         match self.type_definitions.get(&name) {
             // Every instance of a module declares the module's types again,
@@ -578,6 +602,7 @@ impl<'a> Translator<'a> {
             }
             Ok(())
         };
+
         // The parts are checked first, so that the innermost value
         // outside its label's type is the one reported.
         match value {
@@ -585,6 +610,7 @@ impl<'a> Translator<'a> {
                 for element in tuple.elements() {
                     self.check_value_types(element, span)?;
                 }
+
                 check(tuple.label())?;
             }
             ValueRef::Map(map) => {
@@ -592,10 +618,12 @@ impl<'a> Translator<'a> {
                     self.check_value_types(key, span)?;
                     self.check_value_types(entry, span)?;
                 }
+
                 check(map.label())?;
             }
             _ => {}
         }
+
         Ok(())
     }
 
@@ -631,6 +659,7 @@ impl<'a> Translator<'a> {
             }
             .at(span));
         }
+
         for (argument, declared) in arguments.iter().zip(&shape.elements) {
             if let Ok(grounded) = self.evaluate(argument)
                 && !declared.admits(grounded.as_ref(), &self.label_types)
@@ -643,6 +672,7 @@ impl<'a> Translator<'a> {
                 .at(argument.span.or(span)));
             }
         }
+
         Ok(())
     }
 
@@ -677,6 +707,7 @@ impl<'a> Translator<'a> {
             }
             .at(span));
         }
+
         for (key, value) in pairs {
             let Ok(key_value) = self.evaluate(key) else {
                 continue;
@@ -701,6 +732,7 @@ impl<'a> Translator<'a> {
                 .at(value.span.or(span)));
             }
         }
+
         Ok(())
     }
 
@@ -738,6 +770,7 @@ impl<'a> Translator<'a> {
             }
             .at(declare.span));
         }
+
         Ok(name)
     }
 
@@ -765,6 +798,7 @@ impl<'a> Translator<'a> {
             .at(span);
             return Err(self.hint_prefixed_name(problem, labels, terms));
         };
+
         let mut placed: Vec<Option<Term>> = vec![None; declaration.names.len()];
         for (label, term) in labels.iter().zip(terms) {
             let Some(position) = declaration.position(label) else {
@@ -781,8 +815,10 @@ impl<'a> Translator<'a> {
                 }
                 .at(term.span.or(span)));
             }
+
             placed[position] = Some(term.clone());
         }
+
         placed
             .into_iter()
             .enumerate()
@@ -836,6 +872,7 @@ impl<'a> Translator<'a> {
         let Some((label, local)) = mistaken else {
             return problem;
         };
+
         problem.with_hint(format!(
             "write `{label}:{local}` without spaces for the prefixed name"
         ))
@@ -847,6 +884,7 @@ impl<'a> Translator<'a> {
         let Some(labels) = &fact.labels else {
             return Ok(None);
         };
+
         Ok(Some(Fact {
             predicate: fact.predicate.clone(),
             terms: self.positional_terms(&fact.predicate, &fact.terms, labels, fact.span, false)?,
@@ -861,6 +899,7 @@ impl<'a> Translator<'a> {
             atom.terms =
                 self.positional_terms(&atom.predicate, &atom.terms, &labels, atom.span, body)?;
         }
+
         Ok(())
     }
 
@@ -876,15 +915,18 @@ impl<'a> Translator<'a> {
         if !touched {
             return Ok(None);
         }
+
         let mut rule = rule.clone();
         for atom in &mut rule.head {
             self.positional_atom(atom, false)?;
         }
+
         for literal in &mut rule.body {
             if let Literal::Positive(atom) | Literal::Negative(atom) = literal {
                 self.positional_atom(atom, true)?;
             }
         }
+
         Ok(Some(rule))
     }
 
@@ -908,6 +950,7 @@ impl<'a> Translator<'a> {
             }
             .at(input.span));
         }
+
         let mut declared = None;
         if let Some(columns) = &input.columns {
             let declaration = types::PredicateDeclaration {
@@ -928,8 +971,10 @@ impl<'a> Translator<'a> {
                 }
                 .at(input.span));
             }
+
             declared = Some(name.clone());
         }
+
         // Running the program directly leaves the input unbound, which gets a warning.
         // A check looks at a module on its own, whose inputs are bound later,
         // and a preloaded statement was already warned about, so neither warns.
@@ -942,6 +987,7 @@ impl<'a> Translator<'a> {
                 .with_predicate(name.clone()),
             );
         }
+
         self.inputs.insert(name.clone());
         self.open.insert(name);
         Ok(declared)
@@ -989,6 +1035,7 @@ fn parameter_on_cycle<'p>(pending: &[&'p ParameterDirective]) -> &'p ParameterDi
             })
             .expect("an unresolved parameter reads another unresolved one");
     }
+
     current
 }
 

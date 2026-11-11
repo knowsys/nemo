@@ -146,6 +146,7 @@ impl LiftedGraph {
         if let Some(&id) = self.remote.get(&key) {
             return id;
         }
+
         let id = self.push(LiftedNode {
             predicate: key.predicate.clone(),
             terms: key.terms.clone(),
@@ -184,6 +185,7 @@ impl LiftedGraph {
                 );
             }
         }
+
         constants
     }
 }
@@ -267,6 +269,7 @@ impl<'a> Lifter<'a> {
                     .collect(),
             );
         }
+
         lifter
     }
 
@@ -323,6 +326,7 @@ impl<'a> Lifter<'a> {
             let Some((declaration, sources)) = self.pipeline.declaration(id) else {
                 continue;
             };
+
             match declaration {
                 RewriteDeclaration::Replaces { view, .. } => {
                     if view.is_some()
@@ -332,6 +336,7 @@ impl<'a> Lifter<'a> {
                     {
                         self.replacing.insert(name, id);
                     }
+
                     pending.push(sources[0]);
                 }
                 RewriteDeclaration::Defines { view } => {
@@ -363,6 +368,7 @@ impl<'a> Lifter<'a> {
         else {
             unreachable!("only a derived node has a derivation")
         };
+
         let statement = self.program.statements[*index];
         let rule = match self.pipeline.statement(statement) {
             Statement::Rule(rule) => rule.clone(),
@@ -372,6 +378,7 @@ impl<'a> Lifter<'a> {
                 {
                     return self.replacing_derivation(statement, terms, *step);
                 }
+
                 binding_rule(import)
             }
             other => unreachable!("only rules and imports derive facts: {other}"),
@@ -404,6 +411,7 @@ impl<'a> Lifter<'a> {
         for ((position, _), premise) in positives.zip(premises) {
             slots[position] = Some(Premise::Node(Rc::clone(premise)));
         }
+
         StageDerivation {
             statement,
             rule,
@@ -434,17 +442,20 @@ impl<'a> Lifter<'a> {
         else {
             unreachable!("an import that replaces a rule has a view")
         };
+
         let mut assignment = HashMap::new();
         for (term, cell) in view.head[0].terms.iter().zip(terms) {
             if let TermKind::Variable(variable) = &term.kind {
                 assignment.insert(variable.clone(), cell.clone());
             }
         }
+
         let premises = view
             .body
             .iter()
             .map(|literal| matches!(literal, Literal::Positive(_)).then_some(Premise::Remote))
             .collect();
+
         StageDerivation {
             statement,
             rule: view.clone(),
@@ -463,6 +474,7 @@ impl<'a> Lifter<'a> {
         {
             derivation = self.step_back(derivation, sources[0], correspondence);
         }
+
         derivation
     }
 
@@ -476,6 +488,7 @@ impl<'a> Lifter<'a> {
         let Statement::Rule(rule) = self.pipeline.statement(input) else {
             unreachable!("a statement that replaces a rule is a rule or an import")
         };
+
         let assignment = correspondence
             .assignment
             .iter()
@@ -492,6 +505,7 @@ impl<'a> Lifter<'a> {
                 Literal::Negative(_) | Literal::Operation(_) => None,
             })
             .collect();
+
         StageDerivation {
             statement: input,
             rule: rule.clone(),
@@ -509,6 +523,7 @@ impl<'a> Lifter<'a> {
         if rest.is_empty() {
             return derivation.premises[position].clone();
         }
+
         match self.instance(derivation, position) {
             Some(definition) => self.premise_at(&definition, rest),
             None => Some(Premise::Remote),
@@ -532,6 +547,7 @@ impl<'a> Lifter<'a> {
         if !matches!(node.proof, Explanation::Derived { .. }) {
             return None;
         }
+
         let terms = self.cells(&node.row);
         Some(self.climb(self.derivation(node, &terms)))
     }
@@ -556,12 +572,14 @@ impl<'a> Lifter<'a> {
         let Some((name, path)) = variable.name.rsplit_once('~') else {
             return derivation.assignment.get(variable).cloned();
         };
+
         let mut instance: Option<StageDerivation> = None;
         for step in path.split('.') {
             let position: usize = step.parse().expect("renamed paths are positions");
             let current = instance.as_ref().unwrap_or(derivation);
             instance = Some(self.instance(current, position)?);
         }
+
         instance?
             .assignment
             .get(&Variable {
@@ -604,6 +622,7 @@ impl<'a> Lifter<'a> {
                 Literal::Operation(_) => {}
             }
         }
+
         LiftedNode {
             predicate,
             terms,
@@ -647,7 +666,9 @@ impl<'a> Lifter<'a> {
         let Some(written) = at.filter(|written| written.len() > cells.len()) else {
             return cells;
         };
+
         let layout = self.state.plan.layout_of(predicate, written.len());
+
         written
             .iter()
             .enumerate()
@@ -676,6 +697,7 @@ fn binding_rule(import: &ImportDirective) -> Rule {
             .iter()
             .map(|name| Term::variable(Variable::universal(name))),
     );
+
     Rule::new(
         vec![atom],
         import
@@ -711,6 +733,7 @@ fn substituted(term: &Term, assignment: &HashMap<Variable, LiftedCell>) -> Term 
     if term.is_ground() {
         return term.clone();
     }
+
     let substitution: Substitution = assignment
         .iter()
         .filter_map(|(variable, cell)| {
@@ -758,5 +781,6 @@ fn ordered(rule: &Rule, assignment: &HashMap<Variable, LiftedCell>) -> Vec<(Vari
             ordered.push((variable.clone(), cell.clone()));
         }
     }
+
     ordered
 }

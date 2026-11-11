@@ -21,6 +21,7 @@ fn load(program: &str, modules: &[(&str, &str)]) -> Result<Engine, Diagnostic> {
             .add_module(name, *text)
             .expect("the name is a module name");
     }
+
     let file = engine
         .add_source("main.rls", program)
         .expect("the text is small");
@@ -65,6 +66,7 @@ fn directory_with(files: &[(&str, &str)]) -> TempDirectory {
             .expect("the directory is created");
         fs::write(&path, text).expect("the file is written");
     }
+
     directory
 }
 
@@ -600,6 +602,7 @@ fn the_identity_of_a_path_ignores_the_steps_that_lead_nowhere() {
         identity(&PathBuf::from(".").join("lib/tc.rls")),
         "lib/tc.rls"
     );
+
     // A rooted path keeps exactly one separator after its root.
     assert_eq!(identity(Path::new("/usr/lib/tc.rls")), "/usr/lib/tc.rls");
     #[cfg(windows)]
@@ -629,6 +632,7 @@ fn a_modules_import_reads_from_where_the_module_is() {
         .link(program)
         .and_then(|linked| engine.load(linked))
         .expect_err("there is no such file");
+
     // What matters is *which* path it looked for.
     assert_eq!(problem.code(), crate::codes::UNREADABLE, "{problem:?}");
     assert!(
@@ -654,6 +658,7 @@ fn a_module_chain_deeper_than_the_limit_is_an_error() {
             )
             .expect("the text is small");
     }
+
     let source = "@use m0 {} as m .";
     let file = engine
         .add_source("main.rls", source)
@@ -935,6 +940,7 @@ fn a_root_and_a_directory_of_its_name_are_ambiguous() {
             .add_module(name, text)
             .expect("the name is a module name");
     }
+
     let problem = run_in(engine, "link(1, 2) .\n@use lib::tc { edge = link } as t .")
         .expect_err("`shared` is the root and a directory next to `lib/tc.rls`");
     assert_eq!(problem.code(), crate::codes::AMBIGUOUS_ROOT, "{problem:?}");
@@ -952,6 +958,7 @@ fn a_root_is_named_by_one_plain_name() {
             .expect_err("it is not a root name");
         assert_eq!(problem.code(), crate::codes::NOT_A_ROOT_NAME, "{name:?}");
     }
+
     let problem = engine
         .add_module("lib/tc.rls", CLOSURE)
         .expect_err("a path is not a module name");
@@ -1070,6 +1077,7 @@ fn an_unregistered_program_shares_no_file_id_with_its_modules() {
             .add_module(name, CLOSURE)
             .expect("the name is a module name");
     }
+
     // The program is parsed with the file id 0, and its text is not registered.
     let (parsed, diagnostics) = Program::parse(
         "link(1, 2) .\n@use sub::a { edge = link } as x .\n@use sub::b { edge = link } as y .",

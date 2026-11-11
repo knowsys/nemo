@@ -56,6 +56,7 @@ fn tree_facts(response: &TreeForTableResponse, address: &[usize]) -> Vec<String>
             .unwrap_or_else(|| panic!("no children above {address:?}"))
             .children[index];
     }
+
     rendered(&node.predicate, &node.table_entries)
 }
 
@@ -75,6 +76,7 @@ fn a_tree_query_expands_at_the_instant_of_the_run() {
         stamped(?x, ?t) :- item(?x), ?t = NOW() .
         current(?x) :- stamped(?x, ?t), ?t = NOW() .
     ");
+
     // The clock moves on between reasoning and the query.
     std::thread::sleep(std::time::Duration::from_millis(5));
     let response = engine
@@ -92,6 +94,7 @@ fn a_tree_query_expands_to_the_asserted_edges() {
     let response = engine
         .tree_for_table(tree("reach", vec![EntryQuery::Terms("a, c".into())]))
         .expect("the query answers");
+
     // reach(a, c) comes only from the recursive rule; its premises
     // are reach(a, b) and edge(b, c), and reach(a, b) expands once
     // more to edge(a, b).
@@ -109,6 +112,7 @@ fn a_tree_query_expands_to_the_asserted_edges() {
     assert_eq!(tree_facts(&response, &[1]), ["edge(b, c)"]);
     assert_eq!(tree_facts(&response, &[0]), ["reach(a, b)"]);
     assert_eq!(tree_facts(&response, &[0, 0]), ["edge(a, b)"]);
+
     // The asserted edge is not derivable by any rule: expansion
     // stops there.
     let leaf = &response.child_information.as_ref().unwrap().children[0]
@@ -175,6 +179,7 @@ fn a_rule_that_can_never_fire_explains_nothing() {
 #[test]
 fn a_shaped_query_filters_top_down() {
     let mut engine = chain();
+
     // Constrain the *premise* to edge(a, b): only reach facts
     // derived from it survive at the root.
     let response = engine
@@ -194,6 +199,7 @@ fn a_shaped_query_filters_top_down() {
         .expect("the query answers");
     assert_eq!(node_facts(&response, &[]), ["reach(a, b)"]);
     assert_eq!(node_facts(&response, &[0]), ["edge(a, b)"]);
+
     // Parents come before their children.
     assert_eq!(response[0].address_in_tree, Vec::<usize>::new());
 }
@@ -229,6 +235,7 @@ fn negated_literals_list_their_predicate() {
         .map(|atom| atom.name.as_str())
         .collect();
     assert_eq!(body, ["node", "~edge", "~edge"]);
+
     // The listings follow the positive premise, each holding the
     // negated predicate's facts with their entry ids.
     assert_eq!(expansion.children.len(), 3);
@@ -354,6 +361,7 @@ fn rules_are_found_by_their_statement_id() {
     assert_eq!((source.file.as_str(), source.line), ("test.rls", 4));
     assert!(engine.rule(0).is_none(), "statement 0 is a fact");
     assert!(engine.rule(99).is_none());
+
     // The query names the same rule.
     let response = engine
         .tree_for_table(tree("reach", vec![EntryQuery::Terms("a, c".into())]))
@@ -376,12 +384,14 @@ fn scratch_tables_do_not_accumulate() {
     for _ in 0..5 {
         engine.tree_for_table(query()).expect("the query answers");
     }
+
     // Scratch tables are dropped per query; repeated queries may
     // build arrangements once, but must not grow per call.
     let after_one = engine.memory_bytes();
     for _ in 0..5 {
         engine.tree_for_table(query()).expect("the query answers");
     }
+
     assert_eq!(
         engine.memory_bytes(),
         after_one,

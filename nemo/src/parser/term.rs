@@ -52,6 +52,7 @@ fn binding_power(kind: &TokenKind) -> Option<(Operator, u8)> {
         TokenKind::Slash => Operator::Divide,
         _ => return None,
     };
+
     Some((operator, power(operator)))
 }
 
@@ -100,6 +101,7 @@ impl Parser<'_> {
             if power < minimum {
                 break;
             }
+
             self.advance();
             let right = self.term_with_power(power + 1)?;
             left = Term::from(Operation {
@@ -108,6 +110,7 @@ impl Parser<'_> {
                 span: Some(self.span_from(start)),
             });
         }
+
         Ok(left)
     }
 
@@ -131,6 +134,7 @@ impl Parser<'_> {
                 let operand = self.term_with_power(PREFIX)?;
                 Ok(self.negated(operand, start))
             }
+
             // A prefix `+` is only allowed as the sign of a number literal.
             TokenKind::Plus => {
                 self.advance();
@@ -157,6 +161,7 @@ impl Parser<'_> {
                     self.advance();
                     return Ok(self.spanned(start, TermKind::Variable(Variable::anonymous())));
                 }
+
                 let identifier = self.identifier()?;
                 self.applied(identifier, start)
             }

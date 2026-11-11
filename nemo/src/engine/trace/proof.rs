@@ -134,6 +134,7 @@ impl BatchedTrace {
 
         let responder = Responder::new(engine, canonical_constants);
         let part = responder.part(&mut self.graph, &mut self.listed);
+
         Ok(Batch {
             part,
             facts: responder.traced(facts, &roots),
@@ -147,6 +148,7 @@ pub(crate) fn run(
     facts: Vec<(TableId, Vec<DataValue>)>,
 ) -> Result<TraceResponse, Diagnostic> {
     let Batch { part, facts } = BatchedTrace::default().batch(engine, &facts)?;
+
     Ok(TraceResponse {
         version: VERSION,
         facts,

@@ -135,6 +135,7 @@ impl ImportPlan {
                 self.conditions.remove(name);
             }
         }
+
         let mut pruned: Vec<(String, Vec<bool>)> = stored.pruned.into_iter().collect();
         pruned.sort_by(|left, right| left.0.cmp(&right.0));
         for (name, was_pruned) in pruned {
@@ -155,8 +156,10 @@ impl ImportPlan {
                 .diagnostic()
                 .with_predicate(name));
             }
+
             self.pruned.insert(name, was_pruned);
         }
+
         let mut filters: Vec<(String, RowCondition)> = stored.filters.into_iter().collect();
         filters.sort_by(|left, right| left.0.cmp(&right.0));
         for (name, filter) in filters {
@@ -171,8 +174,10 @@ impl ImportPlan {
             if let Some(condition) = stored.conditions.get(&name) {
                 self.conditions.insert(name.clone(), condition.clone());
             }
+
             self.filters.insert(name, filter);
         }
+
         Ok(())
     }
 }

@@ -38,6 +38,7 @@ fn delivered_positions(fetch: &CompiledFetch) -> Vec<Option<usize>> {
             delivered.push(None);
         }
     }
+
     delivered
 }
 
@@ -60,6 +61,7 @@ impl ProofSearch<'_> {
         else {
             return Ok(None);
         };
+
         let delivered = delivered_positions(fetch);
 
         // The witness has every variable's value, from the fact and the binding rows,
@@ -68,6 +70,7 @@ impl ProofSearch<'_> {
         for (&column, &value) in head.columns.iter().zip(candidate.row) {
             witness[column] = value;
         }
+
         let mut premises = Vec::with_capacity(rule.body.len());
         for (atom, columns) in rule.body.iter().zip(&fetch.atoms) {
             let Some(premise) = self.binding_premise(
@@ -80,14 +83,17 @@ impl ProofSearch<'_> {
             else {
                 return Ok(None);
             };
+
             for (column, &variable) in atom.variables.iter().enumerate() {
                 witness[variable] = premise[column];
             }
+
             match self.search(atom.table, &premise)? {
                 Some(node) => premises.push(node),
                 None => return Ok(None),
             }
         }
+
         Ok(Some(candidate.derived(witness, premises, None, false)))
     }
 
@@ -119,6 +125,7 @@ impl ProofSearch<'_> {
                 FetchColumn::Free => None,
             });
         }
+
         if known.iter().all(Option::is_some) {
             let row: Vec<StorageValue> = known
                 .into_iter()
@@ -126,6 +133,7 @@ impl ProofSearch<'_> {
                 .collect();
             return Ok(added_before(self.manager, table, &row, step).then_some(row));
         }
+
         self.any_row(table, &known, step)
     }
 
@@ -141,6 +149,7 @@ impl ProofSearch<'_> {
         let markers: Vec<Marker> = known.iter().map(|_| plan.marker()).collect();
         let end = self.aligned_end(table, step);
         let load = plan.load(table, Revision(0)..end, markers.clone());
+
         // The table is read as a join of one input, whose rows the plan finds one at a time.
         let rows = plan.join(vec![load], markers.clone());
 
@@ -153,6 +162,7 @@ impl ProofSearch<'_> {
                 same_constant(decoded),
             ));
         }
+
         let node = filtered(&mut plan, rows, filters);
         plan.output(node);
         debug_assert!(
@@ -166,6 +176,7 @@ impl ProofSearch<'_> {
         let found = plan.find_row(self.manager, self.dictionary, context, |manager, row| {
             Verdict::for_row(row, added_before(manager, table, row, step))
         });
+
         Ok(found)
     }
 }

@@ -58,6 +58,7 @@ fn columns_of(
             columns[variable] = columns[variable].intersect(&table[position]);
         }
     }
+
     // Expressions read columns that other expressions narrow. The loop
     // ends because the columns only shrink.
     loop {
@@ -76,6 +77,7 @@ fn columns_of(
                 changed |= narrow(&mut columns, &binding.inputs, narrowed);
             }
         }
+
         if narrowing {
             for filter in &rule.filters {
                 let inputs = read(&columns, &filter.inputs);
@@ -83,6 +85,7 @@ fn columns_of(
                 changed |= narrow(&mut columns, &filter.inputs, narrowed);
             }
         }
+
         for (index, computed) in rule.computed.iter().enumerate() {
             let column = rule.variables + index;
             let inputs = read(&columns, &computed.inputs);
@@ -92,6 +95,7 @@ fn columns_of(
                 columns[column] = refined;
                 changed = true;
             }
+
             // A row for which a computed column fails is dropped.
             if narrowing {
                 let outcome = Outcome::Within(columns[column].clone());
@@ -99,10 +103,12 @@ fn columns_of(
                 changed |= narrow(&mut columns, &computed.inputs, narrowed);
             }
         }
+
         if !changed {
             break;
         }
     }
+
     columns
 }
 
@@ -122,6 +128,7 @@ fn narrow(columns: &mut [Type], inputs: &[usize], narrowed: Vec<Type>) -> bool {
             changed = true;
         }
     }
+
     changed
 }
 
@@ -141,6 +148,7 @@ pub(super) fn each_write(
             action(head.table, position, &columns[column], Some(column));
         }
     }
+
     if let Some(aggregate) = &rule.aggregate {
         for (position, written) in aggregate_output(aggregate, columns, labels)
             .iter()
@@ -200,6 +208,7 @@ fn aggregate_output(
                     if domains.intersects(DomainSet::DURATION) {
                         result |= DomainSet::ORDERED_DURATION;
                     }
+
                     Type::of_domains(result)
                 }
                 AggregateKind::Min | AggregateKind::Max => columns[input()].clone(),
@@ -228,6 +237,7 @@ fn aggregate_output(
             computed.program.infer(&inputs, labels).into_bound()
         })
         .collect();
+
     aggregate
         .columns
         .iter()

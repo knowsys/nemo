@@ -66,6 +66,7 @@ big(?n) :- q(?id, ?name, ?n), ?n > 15 .
         crate::common::arities(&reader).contains(&(String::from("q"), 3)),
         "the predicate is listed at its written width"
     );
+
     // Only the number column is delivered, and only the rows above the
     // threshold.
     assert_eq!(

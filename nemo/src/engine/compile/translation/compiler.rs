@@ -141,6 +141,7 @@ impl RuleCompiler<'_, '_> {
                 *slot = Some(name.clone());
             }
         }
+
         names
     }
 
@@ -163,9 +164,11 @@ impl RuleCompiler<'_, '_> {
             if layout.is_pruned(position) {
                 continue;
             }
+
             let variable = self.body_column(term, &variables)?;
             variables.push(variable);
         }
+
         self.body.push(BodyAtom { table, variables });
         Ok(())
     }
@@ -200,6 +203,7 @@ impl RuleCompiler<'_, '_> {
                 if !earlier.contains(&id) {
                     return Ok(id);
                 }
+
                 // A variable repeated within one atom gets a fresh column variable,
                 // which must be identical to the first occurrence.
                 let fresh = self.fresh();
@@ -211,6 +215,7 @@ impl RuleCompiler<'_, '_> {
                 );
                 Ok(fresh)
             }
+
             // Each `_` gets its own fresh variable, which nothing reads.
             TermKind::Variable(variable) if variable.kind == VariableKind::Anonymous => {
                 Ok(self.fresh())
@@ -291,9 +296,11 @@ impl RuleCompiler<'_, '_> {
             if layout.is_pruned(position) {
                 continue;
             }
+
             let column = self.negated_column(term, &mut negated, foreign)?;
             negated.columns.push(column);
         }
+
         // This atom's local variables are foreign to the later negated atoms.
         for (name, _) in negated.local {
             foreign.insert(name, atom.span);
@@ -327,6 +334,7 @@ impl RuleCompiler<'_, '_> {
                             negated.shared_at.insert(id, position);
                             NegatedColumn::Shared(id)
                         }
+
                         // A bound variable written again: the later occurrence is a private
                         // column that must be identical to the first.
                         Some(&first) => {
@@ -343,6 +351,7 @@ impl RuleCompiler<'_, '_> {
                     }
                     .at(term.span));
                 }
+
                 match negated.local.get(&variable.name) {
                     None => {
                         negated.local.insert(variable.name.clone(), position);
@@ -351,6 +360,7 @@ impl RuleCompiler<'_, '_> {
                         .filters
                         .push(equal_columns(first, position, term.span)),
                 }
+
                 Ok(NegatedColumn::Private)
             }
             TermKind::Variable(variable) if variable.kind == VariableKind::Anonymous => {
@@ -399,6 +409,7 @@ impl RuleCompiler<'_, '_> {
                     let Some(&id) = self.names.get(&variable.name) else {
                         return Err(unsafe_variable("head variable", &variable.name, term.span));
                     };
+
                     let index = match frontier.iter().position(|&column| column == id) {
                         Some(index) => index,
                         None => {
@@ -418,6 +429,7 @@ impl RuleCompiler<'_, '_> {
                 }
                 _ => {
                     let value = self.translator.evaluate(term)?;
+
                     // The constant is encoded here, so that a constant that the dictionary
                     // cannot hold is an error at its position,
                     // rather than at the first row that the head creates.
@@ -430,6 +442,7 @@ impl RuleCompiler<'_, '_> {
             };
             columns.push(column);
         }
+
         Ok(ExistentialAtom { table, columns })
     }
 
@@ -467,6 +480,7 @@ impl RuleCompiler<'_, '_> {
                             term.span,
                         ));
                     }
+
                     positions.push(id);
                     let index = match group.iter().position(|&existing| existing == id) {
                         Some(index) => index,
@@ -499,8 +513,10 @@ impl RuleCompiler<'_, '_> {
                 }
             }
         }
+
         self.check_aggregate(&group, &functions, atom.span)?;
         let post = post_columns(raw_posts, &group);
+
         Ok(CompiledAggregate {
             table,
             group,
@@ -530,6 +546,7 @@ impl RuleCompiler<'_, '_> {
                 return Err(TranslationError::AggregatedGroupColumn { variable }.at(span));
             }
         }
+
         Ok(())
     }
 
@@ -591,8 +608,10 @@ impl RuleCompiler<'_, '_> {
             if let Some(span) = aggregate.span {
                 warning = warning.with_label(span, "write `per` before the variables");
             }
+
             self.translator.warn(warning);
         }
+
         let mut scope = Vec::new();
         for variable in &aggregate.scope {
             if variable.kind != VariableKind::Universal {
@@ -605,14 +624,17 @@ impl RuleCompiler<'_, '_> {
                     aggregate.span,
                 ));
             };
+
             // A repeated variable, or the input itself, adds nothing to the scope.
             if input != Some(id) && value != Some(id) && !scope.contains(&id) {
                 scope.push(id);
             }
         }
+
         // `#count()` counts the body matches, so all body variables together identify a
         // contribution.
         let scope = (!aggregate.counts_matches()).then_some(scope);
+
         Ok(CompiledAggregateFunction {
             kind,
             input,
@@ -704,6 +726,7 @@ impl RuleCompiler<'_, '_> {
             };
             columns.push(column);
         }
+
         Ok(HeadAtom { table, columns })
     }
 
@@ -729,14 +752,17 @@ impl RuleCompiler<'_, '_> {
                     remaining.push((operation, origin));
                 }
             }
+
             pending = remaining;
             if !progressed {
                 break;
             }
         }
+
         for (operation, origin) in pending {
             self.filter(operation, origin)?;
         }
+
         Ok(())
     }
 
@@ -751,6 +777,7 @@ impl RuleCompiler<'_, '_> {
         if !self.bound(expression) {
             return Ok(false);
         }
+
         let (inputs, program) = self.compile_term(expression, VariableScope::Rule(&self.names))?;
         let target = *self
             .names
@@ -773,6 +800,7 @@ impl RuleCompiler<'_, '_> {
         if operation.operator != Operator::Equal || operation.arguments.len() != 2 {
             return Ok(false);
         }
+
         // Either side may be the unbound variable.
         for (target, expression) in [(0usize, 1usize), (1, 0)] {
             let target = &operation.arguments[target];
@@ -786,12 +814,14 @@ impl RuleCompiler<'_, '_> {
             {
                 continue;
             }
+
             let (inputs, program) =
                 self.compile_term(expression, VariableScope::Rule(&self.names))?;
             let column = self.computed_program(inputs, program);
             self.names.insert(variable.name.clone(), column);
             return Ok(true);
         }
+
         Ok(false)
     }
 
@@ -853,6 +883,7 @@ impl RuleCompiler<'_, '_> {
         if let Some(&id) = self.names.get(name) {
             return id;
         }
+
         let id = self.fresh();
         self.names.insert(name.to_owned(), id);
         id

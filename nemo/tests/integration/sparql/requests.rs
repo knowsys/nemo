@@ -40,10 +40,12 @@ impl Client for CancelledOnce {
             self.token.cancel();
             assert!(cancelled(), "the engine passes its token");
         }
+
         // As the HTTP client, give up at once on a cancelled token.
         if cancelled() {
             return None;
         }
+
         self.responder.fetch_all(requests, cancelled)
     }
 }
@@ -107,11 +109,13 @@ anc(?m) :- mother(?c, ?m) .
     let mut progress = engine
         .start_reason()
         .unwrap_or_else(|problem| panic!("{problem:?}"));
+
     // Respond until the mothers of `urn:m` are asked for, by which time a parent request failed.
     loop {
         let Progress::Suspended(pending) = progress else {
             panic!("the mothers keep the run fetching");
         };
+
         let asks_for_m = pending.iter().any(|pending| {
             pending.request.url.contains("mothers")
                 && values_blocks(&query_text(&pending.request)).concat() == ["urn:m"]
@@ -119,6 +123,7 @@ anc(?m) :- mother(?c, ?m) .
         if asks_for_m {
             break;
         }
+
         let responses: Vec<_> = pending
             .iter()
             .map(|pending| {
@@ -134,6 +139,7 @@ anc(?m) :- mother(?c, ?m) .
             .resume(responses)
             .unwrap_or_else(|problem| panic!("{problem:?}"));
     }
+
     assert_eq!(failed_requests(&engine), 0, "a run reports when it ends");
     assert!(engine.discard_pending());
     assert_eq!(failed_requests(&engine), 1, "{:?}", engine.reports());
@@ -147,12 +153,14 @@ fn ancestry(text: &str) -> String {
     if blocks.is_empty() {
         return String::from("?r\n<urn:a>\n");
     }
+
     let mut body = String::from("?c\t?p\n");
     for iri in blocks.into_iter().flatten() {
         if let Some(parent) = parent_of(&iri) {
             body.push_str(&format!("<{iri}>\t<{parent}>\n"));
         }
     }
+
     body
 }
 
@@ -172,8 +180,10 @@ fn form_decode(text: &str) -> String {
             }
             byte => decoded.push(byte),
         }
+
         index += 1;
     }
+
     String::from_utf8_lossy(&decoded).into_owned()
 }
 
@@ -203,6 +213,7 @@ fn serve_endpoint(respond: fn(&str) -> String) -> String {
                     length = value.trim().parse().unwrap_or(0);
                 }
             }
+
             let mut body = vec![0; length];
             reader.read_exact(&mut body).ok();
             let form = String::from_utf8_lossy(&body).into_owned();
@@ -241,6 +252,7 @@ fn a_suspended_run_continues_at_its_application() {
     let Progress::Suspended(pending) = progress.clone() else {
         panic!("the fetch is suspended");
     };
+
     assert_eq!(pending.len(), 1, "{pending:?}");
     assert_eq!(engine.pending(), pending);
     assert_eq!(
@@ -355,6 +367,7 @@ fn requests_with_partial_responses_split_until_they_are_whole() {
         if blocks[0].len() > 1 {
             return Err(Failure::partial(200, "it returns at most 1 rows"));
         }
+
         Ok(format!("?x\t?y\n<{}>\t<urn:seen>\n", blocks[0][0]))
     });
     let mut engine = Engine::new();
@@ -392,6 +405,7 @@ fn too_large_requests_split_until_they_fit() {
         if blocks[0].len() > 1 {
             return Err(Failure::response(413, "Payload Too Large"));
         }
+
         Ok(format!("?x\t?y\n<{}>\t<urn:seen>\n", blocks[0][0]))
     });
     let mut engine = Engine::new();
@@ -447,6 +461,7 @@ fn cut_off_responses_split_until_they_fit() {
         if blocks[0].len() > 1 {
             return String::from("?x\t?y\njava.util.concurrent.TimeoutException\n");
         }
+
         format!("?x\t?y\n<{}>\t<urn:seen>\n", blocks[0][0])
     });
     let mut engine = Engine::new();
@@ -505,6 +520,7 @@ fn responses_ending_partway_through_a_row_split_until_they_fit() {
         if blocks[0].len() > 1 {
             return format!("?x\t?y\n{}", &rows[..rows.len() / 2 + 3]);
         }
+
         format!("?x\t?y\n{rows}")
     });
     let mut engine = Engine::new();
@@ -524,6 +540,7 @@ item(<urn:1>) . item(<urn:2>) . item(<urn:3>) . item(<urn:4>) .
     endpoint
         .serve(&mut engine, Engine::reason)
         .unwrap_or_else(|problem| panic!("{problem:?}"));
+
     // Every binding's row, none lost to a cut.
     assert_eq!(engine.count("seen").expect("fetched"), 4);
     assert!(
@@ -548,12 +565,14 @@ fn failed_requests_under_warn_keep_what_arrived() {
         {
             return Err(Failure::response(503, "Service Unavailable"));
         }
+
         let mut body = String::from("?c\t?p\n");
         for iri in values_blocks(text).into_iter().flatten() {
             if let Some(parent) = parent_of(&iri) {
                 body.push_str(&format!("<{iri}>\t<{parent}>\n"));
             }
         }
+
         Ok(body)
     });
     let mut engine = Engine::new();
@@ -586,6 +605,7 @@ fn failed_requests_under_warn_keep_what_arrived() {
     let [warning] = warnings.as_slice() else {
         panic!("one warning: {:?}", engine.reports());
     };
+
     assert_eq!(warning.field("failed"), Some("1"));
     assert_eq!(warning.field("sent"), Some("2"));
     assert_eq!(warning.field("unasked"), Some("1"));
@@ -659,6 +679,7 @@ desc(?c) :- anc(?p), triple(?c, <urn:parent>, ?p) .
             table.sort();
             rows.push((predicate, table));
         }
+
         rows
     };
 

@@ -22,6 +22,7 @@ impl Parser<'_> {
             if let Some(attribute) = attributes.first() {
                 return Err(ParseError::MisplacedAttribute.at(attribute.span));
             }
+
             return Ok(Statement::Directive(self.directive()?));
         }
 
@@ -42,9 +43,11 @@ impl Parser<'_> {
         if let Some(attribute) = attributes.first() {
             return Err(ParseError::MisplacedAttribute.at(attribute.span));
         }
+
         let [atom] = <[Atom; 1]>::try_from(head)
             .map_err(|_| ParseError::FactWithSeveralHeads.at(Some(self.span_from(start))))?;
         self.expect(&TokenKind::Dot, "`.` at the end of the fact")?;
+
         Ok(Statement::Fact(Fact {
             predicate: atom.predicate,
             terms: atom.terms,
@@ -76,6 +79,7 @@ impl Parser<'_> {
                 span: Some(self.span_from(start)),
             });
         }
+
         Ok(attributes)
     }
 
@@ -92,6 +96,7 @@ impl Parser<'_> {
         if self.eat(&TokenKind::Tilde).is_some() {
             return Ok(Literal::Negative(self.atom()?));
         }
+
         let start = self.peek_span();
         let term = self.term()?;
         match term.kind {
@@ -119,6 +124,7 @@ impl Parser<'_> {
             TermKind::Operation(operation) => {
                 let span = self.span_from(start);
                 let written = self.span_text(start);
+
                 // Builtin names are reserved, so a predicate with the name of a builtin
                 // is parsed as a call of the builtin. The error points that out.
                 if Operator::from_name(written) == Some(operation.operator) {
@@ -133,10 +139,12 @@ impl Parser<'_> {
                              (case-insensitively)",
                         ));
                 }
+
                 Err(ParseError::ExpectedAtom
                     .diagnostic()
                     .with_label(span, "this is an expression, not an atom"))
             }
+
             // A name alone is a constant, and an atom without terms is written with
             // empty parentheses.
             TermKind::Constant(Identifier::Bare(name)) => Err(ParseError::ExpectedAtom

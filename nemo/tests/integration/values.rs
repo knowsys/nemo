@@ -30,6 +30,7 @@ fn scalar_values_round_trip() {
     round_trips(DataValue::iri("http://example.org/entry?a=1&b=2"));
     round_trips(DataValue::string("plain text"));
     round_trips(DataValue::string("with \"quotes\" and \\ escapes"));
+
     // The parser reads a line break in a literal normalized, so they are written escaped.
     round_trips(DataValue::string("lines\r\nand\rbreaks\n"));
     round_trips(DataValue::language_string("a\r\nb", "en").expect("valid tag"));
@@ -151,6 +152,7 @@ fn rows_import_into_a_loaded_engine() {
 fn structured_values_round_trip() {
     let tuple = |elements: Vec<DataValue>| DataValue::tuple(TupleValue::new(elements));
     round_trips(tuple(vec![DataValue::integer(1), DataValue::integer(2)]));
+
     // The one-element tuple keeps its comma.
     round_trips(tuple(vec![DataValue::string("solo")]));
     round_trips(DataValue::tuple(TupleValue::labeled(
@@ -168,11 +170,13 @@ fn structured_values_round_trip() {
         MapValue::labeled("config", [(DataValue::iri("port"), DataValue::integer(80))])
             .expect("the keys differ"),
     ));
+
     // Nesting recurses.
     round_trips(tuple(vec![
         DataValue::integer(1),
         tuple(vec![DataValue::integer(2), DataValue::integer(3)]),
     ]));
+
     // A label that is not a bare name keeps its angle brackets.
     for label in ["http://example.org/point", "", "_", "true", "1abc"] {
         round_trips(DataValue::tuple(TupleValue::labeled(

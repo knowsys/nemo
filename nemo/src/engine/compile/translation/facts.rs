@@ -34,6 +34,7 @@ impl<'a> Translator<'a> {
             self.check_value(&name, position, value.as_ref(), term.span)?;
             values.push((value, term.span));
         }
+
         let values = layout.deliver(values);
         let arity = values.len();
         let mut row = Vec::with_capacity(arity);
@@ -42,6 +43,7 @@ impl<'a> Translator<'a> {
             column_types.push(Type::of_value(value.as_ref()));
             row.push(self.encode_value(value.as_ref(), span)?);
         }
+
         self.seed(table, &column_types);
         self.facts
             .entry(table)
@@ -127,6 +129,7 @@ impl<'a> Translator<'a> {
         if layout.prunes() {
             return Ok(layout);
         }
+
         let kept = self.plan.stored_layout(name, arity).kept();
         if kept != arity {
             return Err(TranslationError::PrunedPredicateRows {
@@ -136,6 +139,7 @@ impl<'a> Translator<'a> {
             }
             .at(span));
         }
+
         Ok(layout)
     }
 
@@ -157,6 +161,7 @@ impl<'a> Translator<'a> {
         if declared.admits(value, &self.label_types) {
             return Ok(());
         }
+
         let typed = Type::of_value(value);
         let mut problem = TypeError::FactOutsideDeclaration {
             name: name.to_owned(),
@@ -171,6 +176,7 @@ impl<'a> Translator<'a> {
         {
             problem = problem.with_hint(hint);
         }
+
         Err(problem)
     }
 }

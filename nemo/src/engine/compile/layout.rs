@@ -33,6 +33,7 @@ impl ColumnLayout {
             Some(pruned) if pruned.len() == width => pruned.to_vec(),
             _ => vec![false; width],
         };
+
         Self { kept, pruned }
     }
 
@@ -73,6 +74,7 @@ impl ColumnLayout {
         if self.is_pruned(kept) {
             return None;
         }
+
         Some(
             self.pruned
                 .iter()
@@ -109,6 +111,7 @@ impl ColumnLayout {
         if !self.kept.get(column).copied().unwrap_or(false) {
             return None;
         }
+
         let kept = self.kept[..column].iter().filter(|&&keep| keep).count();
         self.delivered_position(kept)
     }
@@ -129,6 +132,7 @@ impl ColumnLayout {
         if kept.len() != self.kept() {
             return kept;
         }
+
         kept.into_iter()
             .zip(&self.pruned)
             .filter(|(_, pruned)| !**pruned)

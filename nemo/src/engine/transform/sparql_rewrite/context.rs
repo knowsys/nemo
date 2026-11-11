@@ -84,6 +84,7 @@ impl RewriteContext {
         for (&id, statement) in ids.iter().zip(statements) {
             builder.statement(id, statement);
         }
+
         builder.finish()
     }
 
@@ -115,6 +116,7 @@ impl RewriteContext {
                 pending.extend(read.iter().cloned());
             }
         }
+
         false
     }
 }
@@ -205,6 +207,7 @@ impl<'a> RewriteContextBuilder<'a> {
                 heads.push(name);
             }
         }
+
         for literal in &rule.body {
             let Some(atom) = literal.atom() else {
                 continue;
@@ -228,6 +231,7 @@ impl<'a> RewriteContextBuilder<'a> {
         if let Some(name) = self.resolve(&import.predicate) {
             self.imports.entry(name).or_default().push((id, import));
         }
+
         for atom in &import.bindings {
             self.seal(&atom.predicate);
         }
@@ -264,6 +268,7 @@ impl<'a> RewriteContextBuilder<'a> {
             if matches!(query.shape(), QueryShape::Opaque(_)) || query.may_leave_unbound() {
                 continue;
             }
+
             candidates.insert(
                 name,
                 CandidateImport {
@@ -274,6 +279,7 @@ impl<'a> RewriteContextBuilder<'a> {
                 },
             );
         }
+
         RewriteContext {
             scope: self.scope,
             parameters: self.parameters,
@@ -316,6 +322,7 @@ fn query_of(directive: &ImportDirective, scope: &NameScope) -> Option<SparqlQuer
         }) => Some(iri.clone()),
         Some(_) => return None,
     };
+
     SparqlQuery::parse(
         &text,
         base.as_deref(),

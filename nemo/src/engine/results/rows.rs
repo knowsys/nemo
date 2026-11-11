@@ -22,6 +22,7 @@ impl Engine {
         let range = Revision(0)..Revision(self.step.max(1));
         let rows = self.manager.row_count(table, range.clone());
         let blocks = self.manager.blocks(table);
+
         Ok(PredicateCursor {
             table,
             range,
@@ -47,6 +48,7 @@ impl Engine {
         if !self.is_valid(cursor) {
             return Err(EngineError::CursorInvalidated.diagnostic());
         }
+
         let order = ColumnOrder::identity(cursor.arity);
         self.manager
             .ensure_order(cursor.table, cursor.range.clone(), &order);

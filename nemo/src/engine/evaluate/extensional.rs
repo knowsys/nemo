@@ -76,6 +76,7 @@ impl Engine {
         if self.dirty.is_empty() {
             return;
         }
+
         let mut grown: HashSet<TableId> = std::mem::take(&mut self.dirty);
         let mut reset = vec![false; program.rules.len()];
         let mut dropped: HashSet<TableId> = HashSet::new();
@@ -90,6 +91,7 @@ impl Engine {
                 if reset[index] {
                     continue;
                 }
+
                 let invalidated = rule
                     .negated
                     .iter()
@@ -103,6 +105,7 @@ impl Engine {
                 if !invalidated && !owes {
                     continue;
                 }
+
                 reset[index] = true;
                 changed = true;
                 if invalidated || rule.nondeterministic {
@@ -111,10 +114,12 @@ impl Engine {
                     }
                 }
             }
+
             if !changed {
                 break;
             }
         }
+
         if dropped.is_empty() && !reset.contains(&true) {
             return;
         }
@@ -123,17 +128,20 @@ impl Engine {
         for &table in &dropped {
             removed += self.drop_derived(table);
         }
+
         for (rule, flag) in program.rules.iter_mut().zip(&reset) {
             if *flag {
                 rule.last_applied = 0;
             }
         }
+
         if self.telemetry.enabled() {
             self.telemetry.record(&EngineEvent::Invalidated {
                 tables: dropped.len() as u64,
                 rows: removed as u64,
             });
         }
+
         tracing::debug!(
             tables = dropped.len(),
             rows = removed,
@@ -161,11 +169,14 @@ impl Engine {
             if block.start > cursor {
                 removed += self.manager.drop_rows(table, cursor..block.start);
             }
+
             cursor = block.end;
         }
+
         if end > cursor {
             removed += self.manager.drop_rows(table, cursor..end);
         }
+
         removed
     }
 
@@ -188,6 +199,7 @@ impl Engine {
             last.range.end = next;
             return;
         }
+
         blocks.push(ExtensionalBlock {
             range: revision..next,
             origin,

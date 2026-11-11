@@ -36,6 +36,7 @@ pub(crate) fn stratify(
         for head in &rule.heads {
             derived_by.entry(head.table).or_default().push(index);
         }
+
         if let Some(aggregate) = &rule.aggregate {
             derived_by.entry(aggregate.table).or_default().push(index);
         }
@@ -57,6 +58,7 @@ pub(crate) fn stratify(
                 edges[producer].push((consumer, aggregating));
             }
         }
+
         for atom in &rule.negated {
             for &producer in derived_by.get(&atom.table).into_iter().flatten() {
                 edges[producer].push((consumer, true));
@@ -73,6 +75,7 @@ pub(crate) fn stratify(
             component_of[rule] = index;
         }
     }
+
     for (producer, targets) in edges.iter().enumerate() {
         for &(consumer, negative) in targets {
             if negative && component_of[producer] == component_of[consumer] {
@@ -94,6 +97,7 @@ pub(crate) fn stratify(
             }
         }
     }
+
     Ok(components)
 }
 
@@ -116,6 +120,7 @@ fn condense(edges: &[Vec<(usize, bool)>]) -> Vec<Vec<usize>> {
             component_of[rule] = index;
         }
     }
+
     let mut incoming = vec![0usize; count];
     let mut outgoing: Vec<Vec<usize>> = vec![Vec::new(); count];
     for (producer, targets) in edges.iter().enumerate() {
@@ -144,8 +149,10 @@ fn condense(edges: &[Vec<(usize, bool)>]) -> Vec<Vec<usize>> {
                 ready.push(next);
             }
         }
+
         ordered.push(components[component].clone());
     }
+
     ordered
 }
 
@@ -165,6 +172,7 @@ fn tarjan(edges: &[Vec<(usize, bool)>]) -> Vec<Vec<usize>> {
         if index[root] != usize::MAX {
             continue;
         }
+
         // The frames of the depth-first search, each a node and the position of its next edge.
         let mut frames: Vec<(usize, usize)> = vec![(root, 0)];
         while let Some(&mut (node, ref mut position)) = frames.last_mut() {
@@ -182,6 +190,7 @@ fn tarjan(edges: &[Vec<(usize, bool)>]) -> Vec<Vec<usize>> {
                 } else if on_stack[target] {
                     low[node] = low[node].min(index[target]);
                 }
+
                 continue;
             }
 
@@ -197,15 +206,18 @@ fn tarjan(edges: &[Vec<(usize, bool)>]) -> Vec<Vec<usize>> {
                         break;
                     }
                 }
+
                 component.sort_unstable();
                 components.push(component);
             }
+
             frames.pop();
             if let Some(&(parent, _)) = frames.last() {
                 low[parent] = low[parent].min(low[node]);
             }
         }
     }
+
     components
 }
 
@@ -219,6 +231,7 @@ mod tests {
         for &(from, to) in edge_list {
             edges[from].push((to, false));
         }
+
         condense(&edges)
     }
 

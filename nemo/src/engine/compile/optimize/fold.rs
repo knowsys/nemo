@@ -36,6 +36,7 @@ impl ProgramPass for ConstantFold {
                 if !filter.inputs.is_empty() || filter.program.is_nondeterministic() {
                     return true;
                 }
+
                 match filter
                     .program
                     .filter(EvaluationContext::now(), &mut Vec::new(), &[])
@@ -60,6 +61,7 @@ impl ProgramPass for ConstantFold {
                         });
                     }
                 }
+
                 false
             });
         }

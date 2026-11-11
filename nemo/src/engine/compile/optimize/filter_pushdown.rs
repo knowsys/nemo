@@ -71,14 +71,17 @@ impl ImportPass for FilterPushdown {
                 let Literal::Positive(atom) = literal else {
                     continue;
                 };
+
                 let name = translator.resolve(&atom.predicate, atom.span)?;
                 if !survey.optimizable(&name) || survey.negated.contains(&name) {
                     continue;
                 }
+
                 let entry = readers
                     .entry(name.clone())
                     .or_insert_with(|| Some(Vec::new()));
                 let Some(conjunctions) = entry else { continue };
+
                 // The condition refers to delivered columns,
                 // the columns that remain after the projection pass.
                 let layout = plan.layout_of(&name, atom.terms.len());
@@ -87,6 +90,7 @@ impl ImportPass for FilterPushdown {
                     let Some(delivered) = layout.delivered_position(kept) else {
                         continue;
                     };
+
                     let column = column_variable(delivered);
                     match &term.kind {
                         TermKind::Variable(variable)
@@ -110,12 +114,14 @@ impl ImportPass for FilterPushdown {
                         _ => {}
                     }
                 }
+
                 match conjoin(conjuncts) {
                     Some(conjunction) => conjunctions.push(conjunction),
                     None => *entry = None,
                 }
             }
         }
+
         for (name, conjunctions) in readers {
             let Some(conjunctions) = conjunctions else {
                 continue;
@@ -123,13 +129,16 @@ impl ImportPass for FilterPushdown {
             let Some(disjunction) = disjoin(conjunctions) else {
                 continue;
             };
+
             // A condition that cannot be compiled is dropped,
             // and the rule's own compilation reports what is wrong with it.
             let Ok((inputs, program)) = translator.condition(&disjunction) else {
                 continue;
             };
+
             plan.restrict(name, RowCondition::new(inputs, program), disjunction);
         }
+
         Ok(())
     }
 }
@@ -145,6 +154,7 @@ fn single_variable(term: &Term) -> Option<String> {
     if aggregated {
         return None;
     }
+
     let mut found: Option<&str> = None;
     for variable in term.variables() {
         match variable.kind {
@@ -156,6 +166,7 @@ fn single_variable(term: &Term) -> Option<String> {
             VariableKind::Existential | VariableKind::Anonymous => return None,
         }
     }
+
     found.map(str::to_owned)
 }
 
@@ -180,6 +191,7 @@ fn simple_comparisons(rule: &Rule) -> HashMap<String, Vec<&Operation>> {
         if !COMPARISONS.contains(&operation.operator) || operation.arguments.len() != 2 {
             continue;
         }
+
         // The rule evaluates a nondeterministic call once per row,
         // and a copy in the load would evaluate it a second time.
         let draws = operation.arguments.iter().any(|argument| {
@@ -190,6 +202,7 @@ fn simple_comparisons(rule: &Rule) -> HashMap<String, Vec<&Operation>> {
         if draws {
             continue;
         }
+
         let (left, right) = (&operation.arguments[0], &operation.arguments[1]);
         let name = match (left.is_ground(), right.is_ground()) {
             (false, true) => single_variable(left),
@@ -200,6 +213,7 @@ fn simple_comparisons(rule: &Rule) -> HashMap<String, Vec<&Operation>> {
             found.entry(name).or_default().push(operation);
         }
     }
+
     found
 }
 
@@ -218,6 +232,7 @@ fn disjoin(conditions: Vec<Operation>) -> Option<Operation> {
 fn combine(connective: Operator, conditions: Vec<Operation>) -> Option<Operation> {
     let mut conditions = conditions.into_iter();
     let first = conditions.next()?;
+
     Some(conditions.fold(first, |left, right| {
         Operation::new(
             connective,

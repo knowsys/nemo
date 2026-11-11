@@ -21,6 +21,7 @@ fn a_seed_fact_does_not_make_consolidation_quadratic() {
     assert_eq!(engine.derived_facts(), n - 1);
 
     let rewritten = engine.timings().consolidated_rows;
+
     // The quadratic schedule rewrites about n²/2 rows (8.4 M here); the
     // two-level one measures just under n·√n (243 k).
     let ceiling = (4 * n * n.isqrt()) as u64;

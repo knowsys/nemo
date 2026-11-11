@@ -106,6 +106,7 @@ impl OptimizationPasses {
             pass.run(survey, translator, &mut plan)?;
             tracing::debug!(pass = pass.name(), entries = plan.len(), "import pass ran");
         }
+
         Ok(plan)
     }
 
@@ -121,6 +122,7 @@ impl OptimizationPasses {
             pass.run(rules, spans, &mut reports);
             tracing::debug!(pass = pass.name(), "program pass ran");
         }
+
         reports
     }
 }

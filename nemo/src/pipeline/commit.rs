@@ -153,6 +153,7 @@ impl<'a> Commit<'a> {
     ) -> Self {
         let statements = pipeline.revision_statements(base).to_vec();
         let frozen = statements.iter().take(frozen).copied().collect();
+
         Self {
             pipeline,
             base,
@@ -230,6 +231,7 @@ impl<'a> Commit<'a> {
             taken.extend(self.imported.iter().cloned());
             self.taken = Some(taken);
         }
+
         for index in 1.. {
             let identifier = Identifier::bare(format!("{stem}{index}"));
             let name = self
@@ -245,6 +247,7 @@ impl<'a> Commit<'a> {
                 return identifier;
             }
         }
+
         unreachable!("the naturals run out before the names do")
     }
 
@@ -328,6 +331,7 @@ impl<'a> Commit<'a> {
             if !self.statements.contains(&id) {
                 continue;
             }
+
             let statement = self.pipeline.statement(id);
             for construct in UnlinkedConstruct::ALL {
                 assert!(
@@ -338,6 +342,7 @@ impl<'a> Commit<'a> {
                 );
             }
         }
+
         self.pipeline.push_revision(ProgramRevision {
             parent: Some(self.base),
             stage: Some(self.stage),
@@ -400,12 +405,14 @@ impl<'a> Commit<'a> {
             if statement.span().is_none() {
                 statement.set_span(inherited);
             }
+
             let id = self.pipeline.intern(statement, Some(edge));
             self.pipeline.edge_mut(edge).targets.push(id);
             self.statements.insert(position + offset, id);
             self.created.push(id);
             ids.push(id);
         }
+
         ids
     }
 
@@ -421,6 +428,7 @@ impl<'a> Commit<'a> {
             self.stage,
             self.pipeline.statement(id)
         );
+
         self.statements
             .iter()
             .position(|&candidate| candidate == id)
@@ -467,8 +475,10 @@ impl<'a> Commit<'a> {
                 if let Ok(name) = scope.resolve(&fact.predicate, None) {
                     names.insert(name);
                 }
+
                 continue;
             }
+
             let mut note = |identifier: &Identifier,
                             role: IdentifierRole,
                             _: Option<Span>|
@@ -486,6 +496,7 @@ impl<'a> Commit<'a> {
                 .rename_identifiers(&mut note)
                 .expect("noting names fails nowhere");
         }
+
         names
     }
 }

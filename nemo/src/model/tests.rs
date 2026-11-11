@@ -19,6 +19,7 @@ fn hyphenated_names_render_bare_where_they_read_back() {
         assert_eq!(term.to_string(), name);
         assert_eq!(Term::parse(name).expect("re-parses"), term);
     }
+
     for name in ["a-", "a--b", "a-%20", "-a"] {
         assert_eq!(Term::constant(name).to_string(), format!("<{name}>"));
     }
@@ -34,6 +35,7 @@ fn predicates_named_like_builtins_render_in_brackets() {
         let fact = crate::trace::fact_text(name, &["1".to_owned()]);
         assert_eq!(fact, format!("<{name}>(1)"));
     }
+
     assert_eq!(
         Atom::new(Identifier::bare("edge"), Vec::<Term>::new()).to_string(),
         "edge()"

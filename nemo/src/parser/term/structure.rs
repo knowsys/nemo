@@ -16,10 +16,12 @@ impl Parser<'_> {
         if self.eat(&TokenKind::ParenClose).is_some() {
             return Ok(self.spanned(start, TermKind::Tuple(Vec::new())));
         }
+
         let first = self.term()?;
         if self.eat(&TokenKind::ParenClose).is_some() {
             return Ok(first);
         }
+
         self.expect(&TokenKind::Comma, "`,` or `)` in the parentheses")?;
         let mut elements = vec![first];
         elements.extend(self.list(&TokenKind::ParenClose, "`)` closing the tuple", Self::term)?);
@@ -40,6 +42,7 @@ impl Parser<'_> {
             let value = parser.plain_term()?;
             Ok((key, value))
         })?;
+
         Ok(self.spanned(start, TermKind::Map { label, pairs }))
     }
 }

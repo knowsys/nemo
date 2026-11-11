@@ -141,8 +141,10 @@ pub(crate) fn fmt_labeled(
         if let Some(labels) = labels {
             write!(f, "{}: ", labels[index])?;
         }
+
         write!(f, "{term}")?;
     }
+
     Ok(())
 }
 
@@ -181,19 +183,23 @@ impl Display for Term {
                 if terms.len() == 1 {
                     f.write_str(",")?;
                 }
+
                 f.write_str(")")
             }
             TermKind::Map { label, pairs } => {
                 if let Some(label) = label {
                     write!(f, "{label}")?;
                 }
+
                 f.write_str("{")?;
                 for (index, (key, value)) in pairs.iter().enumerate() {
                     if index > 0 {
                         f.write_str(", ")?;
                     }
+
                     write!(f, "{key} = {value}")?;
                 }
+
                 f.write_str("}")
             }
             TermKind::Operation(operation) => write!(f, "{operation}"),

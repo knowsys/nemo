@@ -75,6 +75,7 @@ impl RewriteContext {
         if labeled {
             return None;
         }
+
         RuleRewriter::new(self, commit, rule).run()
     }
 }
@@ -147,10 +148,12 @@ impl<'a, 'c> RuleRewriter<'a, 'c> {
         if remote.is_empty() {
             return None;
         }
+
         let computed: Vec<ComputedArgument> = remote
             .iter()
             .flat_map(|atom| atom.computed.iter().cloned())
             .collect();
+
         // The rule compares a computed argument's column with its term.
         self.joined
             .extend(computed.iter().map(|argument| argument.variable.clone()));
@@ -164,6 +167,7 @@ impl<'a, 'c> RuleRewriter<'a, 'c> {
             let mut overlapping = self
                 .context
                 .overlapping(&groups, &component, &variables, self.rule);
+
             // A query that groups or nests a subquery would compute it in full again
             // for each page of bindings, so it stays unbound.
             if atoms
@@ -172,21 +176,26 @@ impl<'a, 'c> RuleRewriter<'a, 'c> {
             {
                 overlapping.clear();
             }
+
             // A plain atom that shares no variable with a local group would
             // fetch the same rows as the candidate import, so it stays.
             if component.plain(&remote) && overlapping.is_empty() {
                 continue;
             }
+
             // A component without variables has nothing to select,
             // and a query needs a variable.
             let Some(projected) = self.projection(&atoms, &variables) else {
                 continue;
             };
+
             self.replace(&component, &atoms, &variables, &projected, &overlapping)?;
         }
+
         if self.literals.is_empty() {
             return None;
         }
+
         Some(self.finish())
     }
 
@@ -204,8 +213,10 @@ impl<'a, 'c> RuleRewriter<'a, 'c> {
             if atoms.iter().any(|atom| atom.position == position) {
                 continue;
             }
+
             elsewhere.extend(universal(literal));
         }
+
         elsewhere.extend(atoms.iter().flat_map(|atom| {
             atom.computed
                 .iter()
@@ -219,6 +230,7 @@ impl<'a, 'c> RuleRewriter<'a, 'c> {
         if !projected.is_empty() {
             return Some(projected);
         }
+
         variables.first().map(|variable| vec![variable.clone()])
     }
 
@@ -243,6 +255,7 @@ impl<'a, 'c> RuleRewriter<'a, 'c> {
             .map(|group| self.binding_rule(&stem, group, variables))
             .unzip();
         let name = self.fresh(&stem, "query");
+
         // The fresh predicate copies the candidates' declarations, so its
         // rows are checked against the same types.
         let declaration = self.context.declaration_for(&name, projected, atoms);
@@ -252,8 +265,10 @@ impl<'a, 'c> RuleRewriter<'a, 'c> {
             if !self.imports.contains(&id) {
                 self.imports.push(id);
             }
+
             self.removed.insert(atom.position);
         }
+
         let mut positions: Vec<usize> = atoms.iter().map(|atom| atom.position).collect();
         positions.sort_unstable();
         let definition = positions
@@ -266,6 +281,7 @@ impl<'a, 'c> RuleRewriter<'a, 'c> {
                 self.defining_literal(atom, component.negative())
             })
             .collect();
+
         // The rule reads a computed argument's column as written.
         let terms: Vec<Term> = projected
             .iter()
@@ -310,11 +326,13 @@ impl<'a, 'c> RuleRewriter<'a, 'c> {
         else {
             unreachable!("a remote atom is an atom of the body")
         };
+
         let mut defining = written.clone();
         for argument in &atom.computed {
             defining.terms[argument.position] =
                 Term::variable(Variable::universal(&argument.variable));
         }
+
         if atom.negated && !negative {
             Literal::Negative(defining)
         } else {
@@ -339,12 +357,14 @@ impl<'a, 'c> RuleRewriter<'a, 'c> {
                 composition.join(pattern);
             }
         }
+
         if composition.joins_nothing() {
             // Without a positive pattern, the exclusion built above is unused,
             // and the query is the atom's own pattern, instantiated again.
             composition = Composition::default();
             composition.join(self.instantiate(atoms[0], &names)?);
         }
+
         let dataset = (atoms.len() == 1)
             .then(|| self.context.candidate(atoms[0]).query.dataset().cloned())
             .flatten();
@@ -368,12 +388,14 @@ impl<'a, 'c> RuleRewriter<'a, 'c> {
             if !query.keeps_names() {
                 continue;
             }
+
             for (binding, own) in atom.bindings.iter().zip(query.variables()) {
                 if let Binding::Variable(variable) = binding {
                     names.entry(variable.clone()).or_insert_with(|| own.clone());
                 }
             }
         }
+
         names
     }
 
@@ -401,6 +423,7 @@ impl<'a, 'c> RuleRewriter<'a, 'c> {
             .iter()
             .map(|variable| named(names, variable))
             .collect();
+
         self.context.candidate(atom).query.instantiate(
             &bindings,
             &self.instances.to_string(),
@@ -423,16 +446,19 @@ impl<'a, 'c> RuleRewriter<'a, 'c> {
                     body.push(replacement.clone());
                 }
             }
+
             if !self.removed.contains(&position) {
                 body.push(literal.clone());
             }
         }
+
         let rule = (!self.fold(&body)).then(|| Rule {
             attributes: self.rule.attributes.clone(),
             head: self.rule.head.clone(),
             body,
             span: self.rule.span,
         });
+
         RuleRewrite {
             replacements: self.replacements,
             rule,

@@ -92,6 +92,7 @@ impl<'a> Router<'a> {
             if !seen.insert(id) {
                 continue;
             }
+
             match self.pipeline.declaration(id) {
                 Some((RewriteDeclaration::Replaces { .. }, sources)) => {
                     self.later.insert(sources[0], id);
@@ -122,6 +123,7 @@ impl<'a> Router<'a> {
         {
             return Some(Realization::Import(current));
         }
+
         self.compiled.get(&current).copied().map(Realization::Rule)
     }
 
@@ -144,6 +146,7 @@ impl<'a> Router<'a> {
                 else {
                     unreachable!("a later version replaces its input")
                 };
+
                 self.route(next, &correspondence.literals[position])
             }
             None => Route {
@@ -164,10 +167,12 @@ impl<'a> Router<'a> {
                 ..base
             };
         }
+
         let inner = self.route(definition, rest);
         let mut hops = base.hops;
         hops.push(base.last);
         hops.extend(inner.hops);
+
         Route {
             hops,
             last: inner.last,
@@ -215,6 +220,7 @@ impl<'a> Router<'a> {
         while let Some(&next) = self.later.get(&statement) {
             statement = next;
         }
+
         statement
     }
 
@@ -230,6 +236,7 @@ impl<'a> Router<'a> {
     /// rule became, which is its position among the positive literals.
     pub(super) fn atom_of(&self, statement: StatementId, literal: usize) -> usize {
         let rule = self.rule(statement).expect("routes end at rule literals");
+
         rule.body[..literal]
             .iter()
             .filter(|literal| matches!(literal, Literal::Positive(_)))
@@ -249,12 +256,14 @@ impl<'a> Router<'a> {
 /// Columns are matched by the variable's name, since the stages copy literals as written.
 pub(super) fn view_columns(view: &Rule, written: &[Term]) -> Vec<Result<usize, Term>> {
     let head = &view.head[0].terms;
+
     written
         .iter()
         .map(|term| {
             let TermKind::Variable(variable) = &term.kind else {
                 return Err(term.clone());
             };
+
             head.iter()
                 .position(|column| {
                     matches!(&column.kind, TermKind::Variable(column) if column == variable)

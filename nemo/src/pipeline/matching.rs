@@ -84,6 +84,7 @@ impl CorrespondenceMatcher<'_> {
                 new: new.head.len(),
             }));
         }
+
         for (pattern, atom) in input.head.iter().zip(&new.head) {
             if !self.atom_matches(pattern, atom, &mut bindings) {
                 return Err(Box::new(CorrespondenceMismatch::HeadAtom {
@@ -92,12 +93,14 @@ impl CorrespondenceMatcher<'_> {
                 }));
             }
         }
+
         if literals.len() != input.body.len() {
             return Err(Box::new(CorrespondenceMismatch::PathCount {
                 input: input.body.len(),
                 paths: literals.len(),
             }));
         }
+
         let mut unfolded = Unfolded::new();
         for (pattern, path) in input.body.iter().zip(literals) {
             let literal = self.literal_at(new, path, &mut unfolded)?;
@@ -109,8 +112,10 @@ impl CorrespondenceMatcher<'_> {
                 }));
             }
         }
+
         let mut assignment: Vec<(Variable, Term)> = bindings.into_iter().collect();
         assignment.sort_by(|(left, _), (right, _)| left.name.cmp(&right.name));
+
         Ok(Correspondence {
             literals: literals.to_vec(),
             assignment,
@@ -134,6 +139,7 @@ impl CorrespondenceMatcher<'_> {
         let Some((&first, rest)) = path.split_first() else {
             return Err(Box::new(CorrespondenceMismatch::EmptyPath));
         };
+
         let mut literal =
             rule.body.get(first).cloned().ok_or_else(|| {
                 Box::new(CorrespondenceMismatch::NoBodyLiteral { position: first })
@@ -161,6 +167,7 @@ impl CorrespondenceMatcher<'_> {
                 let body = instantiate(definition, atom, prefix)?;
                 unfolded.insert(prefix.to_vec(), body);
             }
+
             let body = &unfolded[prefix];
             literal = match (negated, body.as_slice()) {
                 (true, [Literal::Positive(inner)]) if step == 0 => Literal::Negative(inner.clone()),
@@ -177,6 +184,7 @@ impl CorrespondenceMatcher<'_> {
                 })?,
             };
         }
+
         Ok(literal)
     }
 
@@ -287,6 +295,7 @@ impl CorrespondenceMatcher<'_> {
     fn subterms_match(&self, pattern: &Term, term: &Term, bindings: &mut Bindings) -> bool {
         let patterns: Vec<&Term> = pattern.subterms().collect();
         let terms: Vec<&Term> = term.subterms().collect();
+
         patterns.len() == terms.len()
             && patterns
                 .into_iter()
@@ -309,6 +318,7 @@ impl CorrespondenceMatcher<'_> {
                 .map(Term::variable)
                 .collect()
         };
+
         self.all_match(&terms(pattern), &terms(aggregate), bindings)
     }
 
@@ -337,12 +347,14 @@ pub(crate) fn grouped_paths(len: usize, groups: &[&[usize]]) -> Vec<LiteralPath>
             for (offset, &member) in group.iter().enumerate() {
                 paths[member] = vec![next, offset];
             }
+
             next += 1;
         } else if !groups.iter().any(|group| group.contains(&position)) {
             paths[position] = vec![next];
             next += 1;
         }
     }
+
     paths
 }
 
@@ -365,13 +377,16 @@ fn instantiate(
             head: head.terms.len(),
         }));
     }
+
     let mut substitution = Substitution::new();
     for (variable, term) in head.terms.iter().zip(&atom.terms) {
         let TermKind::Variable(variable) = &variable.kind else {
             unreachable!("a definition's head is made of variables")
         };
+
         substitution.insert(variable.clone(), term.clone());
     }
+
     let suffix: Vec<String> = path.iter().map(ToString::to_string).collect();
     let suffix = suffix.join(".");
     for literal in &definition.body {
@@ -389,10 +404,12 @@ fn instantiate(
             }
         }
     }
+
     let mut body = definition.body.clone();
     for literal in &mut body {
         substitution.apply(literal);
     }
+
     Ok(body)
 }
 
@@ -422,6 +439,7 @@ mod tests {
                 (name, definition)
             })
             .collect();
+
         CorrespondenceMatcher {
             definitions: &by_name,
             scope: &scope,

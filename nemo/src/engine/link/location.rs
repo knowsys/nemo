@@ -64,6 +64,7 @@ impl Location {
                 segments: name.segments[1..].to_vec(),
             });
         }
+
         let mut location = from.clone();
         for _ in 0..name.parents {
             if location.segments.pop().is_some() {
@@ -75,8 +76,10 @@ impl Location {
                     root: root.clone(),
                 });
             }
+
             location.parents += 1;
         }
+
         location.segments.extend(name.segments.iter().cloned());
         Ok(location)
     }
@@ -103,6 +106,7 @@ impl Location {
         if let Some(name) = self.segments.last() {
             path.push(format!("{name}.rls"));
         }
+
         path
     }
 
@@ -112,6 +116,7 @@ impl Location {
         for _ in 0..self.parents {
             path.push("..");
         }
+
         path.extend(&self.segments);
         path
     }
@@ -124,6 +129,7 @@ pub(super) fn root_of<'a>(
     roots: &HashMap<String, PathBuf>,
 ) -> Option<&'a str> {
     let first = name.segments.first()?;
+
     (name.parents == 0 && name.segments.len() >= 2 && roots.contains_key(first))
         .then_some(first.as_str())
 }

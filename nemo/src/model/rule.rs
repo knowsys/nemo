@@ -37,11 +37,13 @@ impl Display for Rule {
         for attribute in &self.attributes {
             writeln!(f, "{attribute}")?;
         }
+
         fmt_list(f, &self.head)?;
         if !self.body.is_empty() {
             f.write_str(" :- ")?;
             fmt_list(f, &self.body)?;
         }
+
         f.write_str(" .")
     }
 }

@@ -76,6 +76,7 @@ fn expect_linked(program: &Program) -> Result<(), Diagnostic> {
             if let Some(span) = using.span {
                 problem = problem.with_label(span, "this module is not linked");
             }
+
             Err(problem)
         }
     }
@@ -111,6 +112,7 @@ impl Engine {
                 Purpose::Validate,
             )?;
         }
+
         let load = SuspendedLoad::new(LoadKind::Load, staged, already);
         self.load_staged(load, already)
     }
@@ -133,6 +135,7 @@ impl Engine {
         if load.slots.has_pending() {
             return Ok(self.suspend(Suspension::Load(load)));
         }
+
         let revision = load.staged.revision;
         let written = WrittenProgram::new(&self.pipeline, load.staged.written, revision);
         let (ids, statements): (Vec<_>, Vec<_>) = self
@@ -142,6 +145,7 @@ impl Engine {
             .unzip();
 
         let stages = self.rewriting_stages(&load.staged);
+
         // Everything below must be undoable until the translation succeeds.
         let saved = self.translation.clone();
         let saved_predicates = self.predicates.clone();
@@ -187,6 +191,7 @@ impl Engine {
                 return Err(written.present(problem));
             }
         }
+
         self.translation = state;
         self.pipeline
             .present_reports(already, |report| written.present(report));
@@ -209,6 +214,7 @@ impl Engine {
                 self.record_extensional(table, Revision(0), ExtensionalOrigin::Load);
             }
         }
+
         // The rows added through `import_rows` get a revision of their own, apart from the
         // program's facts, as such rows do after a load.
         self.step = 1;
@@ -223,8 +229,10 @@ impl Engine {
                     self.record_extensional(table, Revision(1), ExtensionalOrigin::ImportRows);
                 }
             }
+
             self.step = 2;
         }
+
         self.unloaded_rows = UnloadedRows::default();
 
         let (rules, strata) = (compiled.rules.len(), compiled.strata.len());
@@ -240,6 +248,7 @@ impl Engine {
             loaded = self.loaded_facts(),
             "program loaded"
         );
+
         Ok(Progress::Done)
     }
 
@@ -255,12 +264,14 @@ impl Engine {
         if self.parameters.is_empty() {
             return Ok(());
         }
+
         let of_instance = |name: &str| name.contains("::");
         let mut declared: Vec<String> = Vec::new();
         for statement in &mut program.statements {
             let Statement::Directive(Directive::Parameter(parameter)) = statement else {
                 continue;
             };
+
             let name = &parameter.variable.name;
             if of_instance(name) {
                 continue;
@@ -268,8 +279,10 @@ impl Engine {
             if let Some(value) = self.parameters.get(name) {
                 parameter.value = Some(value.clone());
             }
+
             declared.push(name.clone());
         }
+
         if extension {
             let loaded = self.translation.globals.keys();
             declared.extend(loaded.filter(|name| !of_instance(name)).cloned());
@@ -278,6 +291,7 @@ impl Engine {
         let Some(unknown) = self.parameters.keys().find(|name| !declared.contains(name)) else {
             return Ok(());
         };
+
         let mut problem = EngineError::UnknownParameter {
             name: unknown.clone(),
         }
@@ -290,6 +304,7 @@ impl Engine {
                 declared.join("`, `$")
             ));
         }
+
         Err(problem)
     }
 
@@ -326,6 +341,7 @@ impl Engine {
         if same(staged.written, staged.revision) {
             return Vec::new();
         }
+
         let mut stages = Vec::new();
         for pair in self.pipeline.lineage(staged.revision).windows(2) {
             if let Some(stage) = self.pipeline.stage(pair[1])
@@ -335,6 +351,7 @@ impl Engine {
                 stages.push(stage);
             }
         }
+
         stages
     }
 
@@ -365,6 +382,7 @@ impl Engine {
             .statements(written)
             .map(|(id, statement)| (id, statement.clone()))
             .collect();
+
         // The rewrite of a check may leave statements out, so `preloaded` would not match them.
         debug_assert!(
             purpose != Purpose::Check || preloaded.is_empty(),
@@ -386,6 +404,7 @@ impl Engine {
             let (ids, statements): (Vec<_>, Vec<_>) = statements.into_iter().unzip();
             translator.program(&statements, &ids)?
         };
+
         Ok((compiled, scratch.into_predicates()))
     }
 
@@ -445,10 +464,12 @@ impl Engine {
         if revived.is_empty() {
             return merged;
         }
+
         let mut commit = self.pipeline.commit(merged, "extension");
         for (id, statement) in revived {
             commit.derive(&[id], statement);
         }
+
         commit.finish()
     }
 
@@ -483,6 +504,7 @@ impl Engine {
         for table in stale {
             self.manager.drop_table(table);
         }
+
         self.predicates = predicates.clone();
     }
 
@@ -500,12 +522,14 @@ impl Engine {
                 .diagnostic()
                 .with_hint("call `load()` first; `extend()` adds to a loaded program"));
         }
+
         let held = self.revision.expect("a loaded program has a revision");
         let already = self.pipeline.reports().len();
         let staged = self.stage_extension(program, held)?;
         if !self.rewriting_stages(&staged).is_empty() {
             self.translate_written_extension(&staged)?;
         }
+
         let load = SuspendedLoad::new(LoadKind::Extend, staged, already);
         self.extend_staged(load, already)
     }
@@ -550,6 +574,7 @@ impl Engine {
         if load.slots.has_pending() {
             return Ok(self.suspend(Suspension::Load(load)));
         }
+
         let held = self.revision.expect("a loaded program has a revision");
         let merged = load.staged.revision;
         let written = WrittenProgram::new(&self.pipeline, load.staged.written, merged);
@@ -593,6 +618,7 @@ impl Engine {
                     load.add_requests(missing, &mut self.request_ids);
                     return Ok(self.suspend(Suspension::Load(load)));
                 }
+
                 state
             }
         };
@@ -626,6 +652,7 @@ impl Engine {
         for (&table, rows) in &facts {
             self.assert_stored_types(&compiled.column_types, table, rows);
         }
+
         self.store_extension(facts);
         self.adopt_extension(&mut compiled, &old);
         self.skeletons.clear();
@@ -652,6 +679,7 @@ impl Engine {
                 self.dirty.insert(table);
             }
         }
+
         if grew {
             self.step += 1;
         }
@@ -670,6 +698,7 @@ impl Engine {
         for (rule, previous) in compiled.rules.iter_mut().zip(&old.rules) {
             rule.last_applied = previous.last_applied;
         }
+
         for rule in compiled.rules.iter().skip(old.rules.len()) {
             for table in Self::head_tables(rule) {
                 self.dirty.insert(table);
@@ -687,6 +716,7 @@ impl Engine {
             let Statement::Directive(directive) = statement else {
                 continue;
             };
+
             let refusal = match directive {
                 Directive::Base(base)
                     if self.translation.base_iri.as_deref() != Some(base.iri.as_str()) =>
@@ -722,9 +752,11 @@ impl Engine {
                 if let Some(span) = span {
                     problem = problem.with_label(span, "declared here");
                 }
+
                 return Err(problem);
             }
         }
+
         Ok(())
     }
 
@@ -746,16 +778,19 @@ impl Engine {
             if let Some(block) = RowBlock::read(predicate, rows, arity)? {
                 self.unloaded_rows.add(block)?;
             }
+
             return Ok(());
         }
 
         let (table, _) = self.written_predicate(predicate).map_err(|unknown| {
             unknown.with_hint("first `extend()` the program with statements that use it")
         })?;
+
         // The translation checks the block's number of values against the program.
         let Some(block) = RowBlock::read(predicate, rows, self.arity_of(predicate))? else {
             return Ok(());
         };
+
         // The rows are checked as facts of the program are (declarations, the element types
         // that `@type` declares, encoding), against the kept translation state.
         // A refused call leaves the seeds as they were.
@@ -792,6 +827,7 @@ impl Engine {
         if let Some(program) = &self.program {
             self.assert_stored_types(&program.column_types, table, &rows);
         }
+
         let revision = Revision(self.step);
         self.step += 1;
         let arity = rows.arity();
@@ -803,6 +839,7 @@ impl Engine {
             self.dirty.insert(table);
             self.fixpoint = false;
         }
+
         Ok(())
     }
 
@@ -815,6 +852,7 @@ impl Engine {
         else {
             return true;
         };
+
         program.column_types.get(&table).is_some_and(|inferred| {
             seeds
                 .iter()
@@ -898,6 +936,7 @@ impl Engine {
         {
             return Err(diagnostics);
         }
+
         self.link(program)
             .and_then(|linked| call(self, linked))
             .map_err(|failed| vec![failed])
@@ -930,6 +969,7 @@ impl Engine {
                 None
             }
         };
+
         CheckReport::new(diagnostics, types)
     }
 
@@ -946,6 +986,7 @@ impl Engine {
         if self.program.is_some() {
             return Err(EngineError::AlreadyLoaded.diagnostic());
         }
+
         tracing::debug!(statements = program.statements.len(), "checking a program");
         let staged = self.stage(program, &[])?;
         let (compiled, tables) = self.translate_written(
@@ -961,6 +1002,7 @@ impl Engine {
             .statements(staged.written)
             .map(|(_, statement)| statement.clone())
             .collect();
+
         Ok(InferredTypes::of_check(
             NameScope::of(&texts),
             written.predicates(),

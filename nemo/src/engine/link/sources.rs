@@ -61,6 +61,7 @@ impl Engine {
             .diagnostic()
             .with_resource(name.to_owned()));
         }
+
         self.modules.texts.insert(module, Arc::from(text));
         Ok(())
     }
@@ -92,6 +93,7 @@ impl Engine {
         if module.parents > 0 {
             return Err(not_a_root());
         }
+
         self.modules.roots.insert(root.clone(), directory.into());
         Ok(())
     }

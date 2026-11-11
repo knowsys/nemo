@@ -175,6 +175,7 @@ pub(super) fn apply(
                 };
                 return Ok(FetchOutcome::Applied(Box::default(), fetched));
             }
+
             let mut pending = PendingFetch {
                 rule: index,
                 step,
@@ -186,6 +187,7 @@ pub(super) fn apply(
                 pending.slots.push(request, blocks, ids);
                 pending.made += 1;
             }
+
             tracing::debug!(
                 endpoint = fetch.endpoint,
                 requests = pending.made,
@@ -221,12 +223,14 @@ pub(super) fn apply(
         dictionary,
         context,
     );
+
     // Drop the scratch rows, whether or not the subtraction failed.
     manager.drop_rows(fetch.scratch, Revision(step)..Revision(step + 1));
     let fresh = fresh?;
     if !fresh.is_empty() {
         applied.outputs.push((head.table, fresh));
     }
+
     Ok(FetchOutcome::Applied(Box::new(applied), fetched))
 }
 
@@ -261,6 +265,7 @@ impl PendingFetch {
                 self.slots.0.push(slot);
                 continue;
             };
+
             let mut first = slot.key;
             let half = first[widest].rows.len() / 2;
             let rest = first[widest].rows.split_off(half);
@@ -321,9 +326,11 @@ fn requests(
                 break;
             }
         }
+
         if empty {
             continue;
         }
+
         let FamilyBindings {
             rows,
             blank_bindings: blank,
@@ -332,8 +339,10 @@ fn requests(
         if rows.iter().any(Vec::is_empty) {
             continue;
         }
+
         requests.extend(paged_requests(fetch, &rows));
     }
+
     Ok(ApplicationRequests {
         requests,
         blank_bindings,
@@ -397,6 +406,7 @@ fn solutions(
             buffer.push_row(loaded.rows.row(index));
         }
     }
+
     Ok((buffer, fetched))
 }
 
@@ -493,6 +503,7 @@ fn binding_rows(
     let mut plan = OperationPlan::new();
     let space = BodySpace::new(&mut plan, rule);
     let mut outputs = Vec::with_capacity(rule.body.len());
+
     // The pivot's rows before its delta, whose keys were queried already.
     let mut asked = None;
     for (index, (atom, range)) in rule.body.iter().zip(ranges).enumerate() {
@@ -506,6 +517,7 @@ fn binding_rows(
             )?);
         }
     }
+
     let mut results = plan.execute(manager, dictionary, context);
 
     let mut per_atom = Vec::with_capacity(rule.body.len());
@@ -526,12 +538,14 @@ fn binding_rows(
                 seen.insert(bound.iter().map(|&column| row[column]).collect());
             });
         }
+
         let mut rows = Vec::new();
         trie.for_each_row(|row| {
             let key: Vec<StorageValue> = bound.iter().map(|&column| row[column]).collect();
             if !seen.insert(key.clone()) {
                 return;
             }
+
             let mut values = Vec::with_capacity(key.len());
             for value in key {
                 let decoded = dictionary
@@ -545,14 +559,18 @@ fn binding_rows(
                     {
                         blank += 1;
                     }
+
                     return;
                 }
+
                 values.push(decoded);
             }
+
             rows.push(values);
         });
         per_atom.push(rows);
     }
+
     Ok(FamilyBindings {
         rows: per_atom,
         blank_bindings: blank,
@@ -606,17 +624,21 @@ fn paged_requests(
                 too_long = true;
                 break;
             }
+
             requests.push((request_with(fetch, &text), blocks));
+
             // Advance to the next combination, the first atom's page fastest.
             let mut atom = 0;
             loop {
                 if atom == count {
                     break 'product;
                 }
+
                 indices[atom] += 1;
                 if indices[atom] < chunks[atom].len() {
                     break;
                 }
+
                 indices[atom] = 0;
                 atom += 1;
             }
@@ -624,6 +646,7 @@ fn paged_requests(
         if !too_long {
             return requests;
         }
+
         // Halve the widest page that can still shrink.
         let widest = (0..count)
             .filter(|&atom| pages[atom] > 1)

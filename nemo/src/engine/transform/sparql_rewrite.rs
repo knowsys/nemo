@@ -135,6 +135,7 @@ impl SparqlRewrite {
             let Statement::Rule(rule) = commit.statement(id) else {
                 continue;
             };
+
             for literal in &rule.body {
                 let Some(atom) = literal.atom() else {
                     continue;
@@ -144,6 +145,7 @@ impl SparqlRewrite {
                 }
             }
         }
+
         for (name, candidate) in &context.candidates {
             if !read.contains(name) && !commit.is_frozen(candidate.id) {
                 commit.remove_import(candidate.id);
@@ -164,10 +166,12 @@ impl Transformation for SparqlRewrite {
         if !used(&statements) {
             return Ok(());
         }
+
         let mut context = RewriteContext::new(&statements, &ids, commit.imported_predicates());
         if context.candidates.is_empty() {
             return Ok(());
         }
+
         for (&id, statement) in ids.iter().zip(&statements) {
             let Statement::Rule(rule) = statement else {
                 continue;
@@ -179,6 +183,7 @@ impl Transformation for SparqlRewrite {
                 declare(commit, id, rule, rewrite);
             }
         }
+
         self.remove_unread(commit, &context);
         Ok(())
     }
@@ -195,6 +200,7 @@ fn declare(commit: &mut Commit<'_>, id: StatementId, rule: &Rule, rewrite: RuleR
     let mut sources = vec![id];
     sources.extend(rewrite.imports.iter().copied());
     let folded = rewrite.rule.is_none();
+
     // The rule reads each replacement's import at the position of its first atom.
     let groups: Vec<&[usize]> = rewrite
         .replacements
@@ -206,6 +212,7 @@ fn declare(commit: &mut Commit<'_>, id: StatementId, rule: &Rule, rewrite: RuleR
         for binding in &replacement.bindings {
             commit.define_filter(binding.clone(), &sources);
         }
+
         if let Some(declaration) = &replacement.declaration {
             commit.add(
                 Statement::Directive(Directive::Declare(declaration.clone())),
@@ -219,6 +226,7 @@ fn declare(commit: &mut Commit<'_>, id: StatementId, rule: &Rule, rewrite: RuleR
             commit.define_import(replacement.import, view, &sources);
         }
     }
+
     if let Some(rewritten) = rewrite.rule {
         commit.replace_rule(id, rewritten, literals);
     }
@@ -231,6 +239,7 @@ fn view(replacement: &ComponentReplacement) -> Rule {
         replacement.import.predicate.clone(),
         variable_terms(&replacement.import.variables),
     );
+
     Rule::new(vec![atom], replacement.definition.clone())
 }
 
@@ -248,6 +257,7 @@ fn used(statements: &[Statement]) -> bool {
             _ => {}
         }
     }
+
     imports && rules
 }
 
@@ -292,6 +302,7 @@ mod tests {
             .unwrap_or_else(|problem| panic!("{problem:?}"));
         let program = pipeline.program(revision);
         let text = program.to_string();
+
         // The revision parses back to itself.
         assert_eq!(parse(&text), program, "{text}");
         text
@@ -354,6 +365,7 @@ mod tests {
             "{text}"
         );
         assert!(text.contains("where t_bindings1(?computed1) ."), "{text}");
+
         // The rule compares the fetched column with the argument as written.
         assert!(
             text.contains("business(?id) :- org(?org), t_query1(?id, STRLANG(?org, \"en\")) ."),
@@ -391,6 +403,7 @@ mod tests {
             text.contains("named(?item, ?name) :- item(?item), wdLabel_query1(?item, ?name) ."),
             "{text}"
         );
+
         // A constant binds the variable the service reads, though no pattern mentions it.
         assert!(text.contains("VALUES ( ?qid )"), "{text}");
         assert!(text.contains("SELECT ?qidLabel WHERE"), "{text}");
@@ -427,6 +440,7 @@ mod tests {
             text.contains("FILTER(NOT EXISTS { ?object ?i ?subject . })"),
             "{text}"
         );
+
         // One import for the whole body, bound by the local atom.
         assert!(
             text.contains("@import t_query2(?prop, ?stmt, ?inverse) from sparql"),

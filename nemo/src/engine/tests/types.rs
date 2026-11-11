@@ -25,6 +25,7 @@ fn a_type_conflict_hints_at_a_near_builtin() {
     let [warning] = engine.reports() else {
         panic!("expected the one warning: {:?}", engine.reports());
     };
+
     assert_eq!(warning.code(), codes::NEVER_FIRES, "{warning:?}");
     assert!(
         warning.hints().iter().any(|hint| hint.contains("LOG")),
@@ -146,6 +147,7 @@ fn conditions_narrow_what_a_rule_writes() {
     let [warning] = engine.reports() else {
         panic!("expected the one warning: {:?}", engine.reports());
     };
+
     assert_eq!(warning.code(), codes::NEVER_FIRES, "{warning:?}");
     assert!(
         format!("{warning:?}").contains("no value of `?x` satisfies the rule's conditions"),
@@ -180,6 +182,7 @@ fn a_disjoint_join_is_warned_and_still_runs() {
     let [warning] = engine.reports() else {
         panic!("expected the one warning: {:?}", engine.reports());
     };
+
     assert_eq!(warning.code(), codes::NEVER_FIRES);
     assert!(
         warning.labels()[0].message.contains("would have to be"),
@@ -197,6 +200,7 @@ fn a_condition_that_cannot_hold_is_warned() {
     let [warning] = engine.reports() else {
         panic!("expected the one warning: {:?}", engine.reports());
     };
+
     assert_eq!(
         warning.labels()[0].message,
         "this condition always fails to evaluate",
@@ -265,6 +269,7 @@ fn a_pattern_against_a_declared_shape_proves_dead() {
     let [warning] = engine.reports() else {
         panic!("expected the one warning: {:?}", engine.reports());
     };
+
     assert_eq!(warning.code(), codes::NEVER_FIRES, "{warning:?}");
     assert_eq!(
         warning.labels()[0].message,
@@ -284,6 +289,7 @@ fn a_pattern_against_the_facts_shape_proves_dead() {
     let [warning] = engine.reports() else {
         panic!("expected the one warning: {:?}", engine.reports());
     };
+
     assert_eq!(warning.code(), codes::NEVER_FIRES, "{warning:?}");
 }
 
@@ -298,6 +304,7 @@ fn a_label_mismatch_proves_dead() {
     let [warning] = engine.reports() else {
         panic!("expected the one warning: {:?}", engine.reports());
     };
+
     assert_eq!(warning.code(), codes::NEVER_FIRES, "{warning:?}");
 }
 
@@ -314,6 +321,7 @@ fn element_types_flow_through_accessors() {
     let [warning] = engine.reports() else {
         panic!("expected the one warning: {:?}", engine.reports());
     };
+
     assert_eq!(warning.code(), codes::NEVER_FIRES, "{warning:?}");
 }
 
@@ -418,6 +426,7 @@ fn a_type_declaration_checks_rule_constructions() {
             .expect_err("the value is outside the declared type");
         assert_eq!(problem.code(), code, "{bad}: {problem:?}");
     }
+
     // A conforming construction runs.
     let mut engine = run("
         @type point(int, int) .
@@ -448,6 +457,7 @@ fn a_type_declaration_checks_what_variables_build() {
             "{bad}: {problem:?}"
         );
     }
+
     // Into a declared column, the declaration of the column reports it.
     let (program, _) = Program::parse(
         "@type angle(decimal) . @declare q(angle) . p(\"x\") . q(angle(?v)) :- p(?v) .",
@@ -456,6 +466,7 @@ fn a_type_declaration_checks_what_variables_build() {
         .load(program)
         .expect_err("the column excludes the built value");
     assert_eq!(problem.code(), codes::RULE_WRITES_OUTSIDE, "{problem:?}");
+
     // Values that may not fit are an error too, since every construction must provably fit.
     let problem = Engine::new()
         .load(parse(
@@ -467,6 +478,7 @@ fn a_type_declaration_checks_what_variables_build() {
         codes::RULE_MAY_BUILD_OUTSIDE_TYPE,
         "{problem:?}"
     );
+
     // A condition establishes the type.
     let mut engine = run("
         @type angle(decimal) .
@@ -686,6 +698,7 @@ fn a_pattern_against_a_declared_label_is_proved_dead_by_its_declaration() {
     let [warning] = engine.reports() else {
         panic!("expected the one warning: {:?}", engine.reports());
     };
+
     assert_eq!(warning.code(), codes::NEVER_FIRES, "{warning:?}");
 }
 
@@ -799,6 +812,7 @@ fn an_extension_that_breaks_a_declaration_is_refused() {
                 before this change"),
         "{problem:?}"
     );
+
     // The loaded program is unchanged and runs on.
     engine.reason().expect("reasoning continues");
     assert_eq!(count(&mut engine, "q"), 1);
@@ -966,6 +980,7 @@ fn inferred_types_are_readable() {
             Type::of(ValueDomain::Integer)
         ]
     );
+
     // A structured column's type is written with its shape.
     let [located] = engine
         .column_types("located")
@@ -973,6 +988,7 @@ fn inferred_types_are_readable() {
     else {
         panic!("one column");
     };
+
     assert_eq!(TypeSyntax::of(located).to_string(), "point(int, int)");
 }
 
@@ -1133,11 +1149,13 @@ fn never_firing_rules_are_labeled_at_their_cause() {
         label("p(1) .\nr(?x) :- p(?x), q(_) ."),
         "`q` is always empty"
     );
+
     // The values a dead pattern would extract are not reported again.
     let engine = run("p(1) .\nr(?a) :- p((?a, _)) .");
     let [warning] = engine.reports() else {
         panic!("expected the one warning: {:?}", engine.reports());
     };
+
     assert_eq!(
         warning.labels()[0].message,
         "this pattern never matches a value of type int"

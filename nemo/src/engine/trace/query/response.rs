@@ -41,6 +41,7 @@ pub(super) fn constants(arenas: &QueryArenas) -> Vec<Term> {
             }));
         }
     }
+
     constants
 }
 
@@ -103,6 +104,7 @@ impl<'a> ResponseAssembly<'a> {
             });
             stack.extend(node.children.iter().rev());
         }
+
         nodes
     }
 
@@ -110,6 +112,7 @@ impl<'a> ResponseAssembly<'a> {
     pub(super) fn tree(&self, index: usize) -> TreeForTableResponse {
         let node = &self.arenas.written[index];
         let answer = self.answer(node);
+
         TreeForTableResponse {
             predicate: answer.predicate,
             table_entries: answer.table_entries,
@@ -150,6 +153,7 @@ impl<'a> ResponseAssembly<'a> {
             ),
             _ => (Vec::new(), Vec::new(), 0),
         };
+
         NodeAnswer {
             predicate: node.predicate.clone(),
             table_entries: TableEntries {
@@ -170,6 +174,7 @@ impl<'a> ResponseAssembly<'a> {
     /// Returns the rules that read a predicate, once with each of their head atoms.
     fn rules_above(&self, statements: &[StatementId]) -> Vec<QueryRule> {
         let mut seen = HashSet::new();
+
         statements
             .iter()
             .filter(|&&statement| seen.insert(statement))
@@ -186,6 +191,7 @@ impl<'a> ResponseAssembly<'a> {
     /// Returns the rules that write a predicate, once with each head atom that writes it.
     fn rules_below(&self, writers: &[(StatementId, usize)]) -> Vec<QueryRule> {
         let mut seen = HashSet::new();
+
         writers
             .iter()
             .filter(|&&writer| seen.insert(writer))
@@ -228,6 +234,7 @@ impl<'a> ResponseAssembly<'a> {
             ),
             _ => unreachable!("neighborhoods hold rules and bound imports"),
         };
+
         QueryRule {
             id: self
                 .engine
@@ -329,6 +336,7 @@ impl<'a> ResponseAssembly<'a> {
                 facts.push(terms);
             }
         }
+
         let total = facts.len();
         let entries = facts
             .into_iter()
@@ -355,6 +363,7 @@ impl<'a> ResponseAssembly<'a> {
         if count == 0 {
             return rows;
         }
+
         self.engine
             .manager
             .for_each_row_from(set, range, identity, start, |row| {
@@ -388,6 +397,7 @@ impl<'a> ResponseAssembly<'a> {
                     ids.entry(row.to_vec()).or_insert(position);
                     remaining -= 1;
                 }
+
                 position += 1;
                 if remaining == 0 {
                     ControlFlow::Break(())

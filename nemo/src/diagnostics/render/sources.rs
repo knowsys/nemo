@@ -156,6 +156,7 @@ mod tests {
             start,
             end: start + 1,
         };
+
         // Byte 7 starts the second line.
         let located = sources.locate(
             Diagnostic::error(Code::new(1), "refused")

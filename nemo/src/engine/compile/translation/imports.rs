@@ -182,11 +182,13 @@ impl<'a> Translator<'a> {
                 .and_then(|span| self.pipeline.file_name(span.file))
                 .map_or_else(|| PathBuf::from("."), |name| directory_of(Path::new(name))),
         };
+
         // A resource in the working directory keeps the name it was written with,
         // which is how diagnostics name it.
         if directory.as_path() == Path::new(".") {
             return PathBuf::from(resource);
         }
+
         directory.join(resource)
     }
 
@@ -200,6 +202,7 @@ impl<'a> Translator<'a> {
     /// The other formats are loaded one by one.
     pub(super) fn execute_imports(&mut self) -> Result<(), Diagnostic> {
         let mut imports = std::mem::take(&mut self.imports);
+
         // The remote resources were fetched before the translation was committed,
         // and their bytes are taken out before any import reads.
         let fetched = self.prefetch(&mut imports)?;
@@ -223,10 +226,12 @@ impl<'a> Translator<'a> {
                 Err(ImportFailure::Reading(problem)) => return Err(problem),
             }
         }
+
         // A translation that reads no data only validates the options, as the loop did.
         if !self.purpose.reads() {
             return Ok(());
         }
+
         self.load_dsv_batch(batch)
     }
 
@@ -249,6 +254,7 @@ impl<'a> Translator<'a> {
             }
             .at(import.bindings[0].span.or(import.span)));
         }
+
         Ok(())
     }
 
@@ -312,6 +318,7 @@ impl<'a> Translator<'a> {
         let table = self.table_named(import.predicate.clone(), layout.delivered(), import.span)?;
         let delivered =
             self.narrowed_by_conditions(import, layout, layout.deliver(kept_types.clone()))?;
+
         // The declaration covers every kept column, the pruned ones included,
         // so that pruning never changes what is checked.
         let checked: Vec<Type> = if kept_types.len() == layout.kept() {
@@ -339,6 +346,7 @@ impl<'a> Translator<'a> {
         let Some(condition) = self.own_condition(import, layout)? else {
             return Ok(column_types);
         };
+
         let (inputs, program) = self.condition(&condition)?;
         let read: Vec<Type> = inputs
             .iter()
@@ -348,6 +356,7 @@ impl<'a> Translator<'a> {
         for (&column, narrowed) in inputs.iter().zip(narrowed) {
             column_types[column] = column_types[column].intersect(&narrowed);
         }
+
         Ok(column_types)
     }
 
@@ -376,6 +385,7 @@ impl<'a> Translator<'a> {
             .at(import.span)
             .with_hint("name every column after the predicate: `@import q(?x, ?y) from …`"));
         }
+
         for (position, name) in import.variables.iter().enumerate() {
             if import.variables[..position].contains(name) {
                 return Err(TranslationError::DuplicateColumnVariable {
@@ -384,15 +394,18 @@ impl<'a> Translator<'a> {
                 .at(import.span));
             }
         }
+
         if import.conditions.is_empty() {
             return Ok(None);
         }
+
         let mut columns: Vec<(Variable, Term)> = Vec::new();
         for (source, name) in import.variables.iter().enumerate() {
             if let Some(delivered) = layout.delivered_source(source) {
                 columns.push((Variable::universal(name), column_variable(delivered)));
             }
         }
+
         let substitution: Substitution = columns.into_iter().collect();
         let mut conditions = Vec::with_capacity(import.conditions.len());
         for condition in &import.conditions {
@@ -400,6 +413,7 @@ impl<'a> Translator<'a> {
                 if variable.kind != VariableKind::Universal {
                     continue;
                 }
+
                 let span = condition.span.or(import.span);
                 match import
                     .variables
@@ -425,10 +439,12 @@ impl<'a> Translator<'a> {
                     Some(_) => {}
                 }
             }
+
             let mut condition = condition.clone();
             substitution.apply(&mut condition);
             conditions.push(condition);
         }
+
         Ok(conjoin(conditions))
     }
 
@@ -448,6 +464,7 @@ impl<'a> Translator<'a> {
         let Some(condition) = conjoin(own.into_iter().chain(pushed).collect()) else {
             return Ok(None);
         };
+
         let (inputs, program) = self.condition(&condition)?;
         Ok(Some((condition, RowCondition::new(inputs, program))))
     }
@@ -488,6 +505,7 @@ impl<'a> Translator<'a> {
             {
                 if !column_type.is_subset(declared, &self.label_types) {
                     let kind = TypeSyntax::of(column_type).to_string();
+
                     // Only a DSV format can read a column in a chosen format.
                     let hint = if import.format.is_dsv() {
                         String::from(
@@ -512,6 +530,7 @@ impl<'a> Translator<'a> {
                 }
             }
         }
+
         self.seed(table, &column_types);
         Ok(())
     }

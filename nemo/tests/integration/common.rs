@@ -120,6 +120,7 @@ impl Responder {
             .iter()
             .map(|&(url, body)| (url.to_owned(), body.to_owned()))
             .collect();
+
         Self::new(move |request| {
             bodies
                 .iter()
@@ -156,6 +157,7 @@ impl Responder {
                 .collect();
             progress = engine.resume(responses)?;
         }
+
         Ok(())
     }
 

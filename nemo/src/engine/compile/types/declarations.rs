@@ -58,6 +58,7 @@ pub(super) fn declaration_violations(
         if written.is_empty() {
             return;
         }
+
         let (name, _) = table_names[&table];
         let column = declared
             .predicates
@@ -79,6 +80,7 @@ pub(super) fn declaration_violations(
                 if let Some(origin) = origin {
                     problem = context.explain(problem, origin, column);
                 }
+
                 problem
             } else {
                 let mut problem = TypeError::RuleWritesOutside {
@@ -88,11 +90,13 @@ pub(super) fn declaration_violations(
                 }
                 .at(source.span)
                 .with_predicate(name);
+
                 // No condition makes such a write fit, so it gets no hint,
                 // only the note on where its values come from.
                 if let Some(origin) = origin {
                     problem = context.explain_column(problem, origin, column, false);
                 }
+
                 // If the declared type has no tuples, and a tuple arrives whose label is close
                 // to a builtin's name, the label was probably meant as a call.
                 if !column.domains().contains(ValueDomain::Tuple)
@@ -100,6 +104,7 @@ pub(super) fn declaration_violations(
                 {
                     problem = problem.with_hint(hint);
                 }
+
                 problem
             };
             problems.push(problem);
@@ -180,10 +185,13 @@ impl WriteContext<'_> {
             {
                 problem = problem.with_hint(hint);
             }
+
             return problem;
         }
+
         let computed = &rule.computed[column - rule.variables];
         let held = read(self.columns, &computed.inputs);
+
         // What the expression needs of each input, whatever the input can hold,
         // and whether inputs narrowed to that make the result fit.
         let open = vec![Type::ANY; held.len()];
@@ -212,6 +220,7 @@ impl WriteContext<'_> {
                     if tested.is_empty() || narrowed[position].is_subset(&tested, labels) {
                         continue;
                     }
+
                     let mut trial = narrowed.clone();
                     trial[position] = tested;
                     if fits(&trial) {
@@ -221,11 +230,13 @@ impl WriteContext<'_> {
                 }
             }
         }
+
         for ((&input, held), needed) in computed.inputs.iter().zip(&held).zip(&needed) {
             if !held.is_subset(needed, labels) {
                 problem = self.explain_column(problem, input, needed, hinting && sufficient);
             }
         }
+
         problem
     }
 }
@@ -251,6 +262,7 @@ fn origin_note(
     if column >= rule.variables {
         return None;
     }
+
     rule.body.iter().find_map(|atom| {
         atom.variables
             .iter()
@@ -261,6 +273,7 @@ fn origin_note(
                 if held.is_subset(declared, labels) {
                     return None;
                 }
+
                 let (predicate, arity) = table_names[&atom.table];
                 let mut note = format!(
                     "{} is read from column {} of `{predicate}`, which holds {}",
@@ -279,6 +292,7 @@ fn origin_note(
                         TypeSyntax::of(before)
                     ));
                 }
+
                 Some(note)
             })
     })
@@ -351,6 +365,7 @@ fn establishing_hint(
     if required.tuple_shapes().is_some() || required.map_shapes().is_some() {
         return None;
     }
+
     let allowed = required.domains();
     let kept = held.domains() & allowed;
     let fitting = |domains: DomainSet| kept.is_subset(domains) && domains.is_subset(allowed);
@@ -367,6 +382,7 @@ fn establishing_hint(
             None => format!("add a condition such as `{test}(?{name})`"),
         });
     }
+
     // No single test fits, so several tests cover what the variable can hold of the type.
     let mut covered = DomainSet::EMPTY;
     let mut tests = Vec::new();
@@ -376,6 +392,7 @@ fn establishing_hint(
             tests.push(format!("{test}(?{name})"));
         }
     }
+
     (tests.len() > 1 && kept.is_subset(covered))
         .then(|| format!("add a condition such as `OR({})`", tests.join(", ")))
 }
@@ -424,6 +441,7 @@ fn construction_problem(
         let Shape::Structural(shape) = shape else {
             continue;
         };
+
         let found = check(&shape.label, Type::tuple(shape.clone())).or_else(|| {
             shape
                 .elements
@@ -434,10 +452,12 @@ fn construction_problem(
             return found;
         }
     }
+
     for shape in written.map_shapes().unwrap_or_default() {
         let Shape::Structural(shape) = shape else {
             continue;
         };
+
         let found = check(&shape.label, Type::map(shape.clone())).or_else(|| {
             shape
                 .pairs()
@@ -448,6 +468,7 @@ fn construction_problem(
             return found;
         }
     }
+
     None
 }
 
@@ -509,5 +530,6 @@ pub(super) fn nominal(written: &Type, labels: &LabelTypes) -> Type {
             }),
         });
     }
+
     result
 }

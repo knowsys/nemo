@@ -32,8 +32,10 @@ impl InstancesByAlias {
             if let Some(span) = earlier.span {
                 problem = problem.with_label(span, "first used here");
             }
+
             return Err(problem);
         }
+
         Ok(())
     }
 
@@ -69,9 +71,11 @@ impl InstancesByAlias {
             else {
                 return Ok(reached);
             };
+
             let (next, offered) = (next.clone(), offered.clone());
             reached = self.lookup(&next, &offered, span)?;
         }
+
         Err(ModuleError::PassedInCycle {
             module: module.to_owned(),
             name: name.to_owned(),
@@ -98,6 +102,7 @@ impl InstancesByAlias {
                 problem =
                     problem.with_note(format!("the aliases in use are: {}", known.join(", ")));
             }
+
             return Err(problem);
         };
         let Some(resolved) = instance.public.get(name) else {
@@ -111,8 +116,10 @@ impl InstancesByAlias {
             if !known.is_empty() {
                 problem = problem.with_note(format!("`{module}` offers: {}", known.join(", ")));
             }
+
             return Err(problem);
         };
+
         Ok(resolved.clone())
     }
 }

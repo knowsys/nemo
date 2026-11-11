@@ -110,6 +110,7 @@ fn the_import_directory_moves_the_programs_imports_but_not_a_modules() {
     for name in ["data", "lib"] {
         std::fs::create_dir_all(directory.join(name)).expect("the directory creates");
     }
+
     std::fs::write(directory.join("data").join("rows.csv"), "3\n").expect("the data writes");
     std::fs::write(directory.join("lib").join("rows.csv"), "4\n").expect("the data writes");
     std::fs::write(

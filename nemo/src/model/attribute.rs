@@ -25,6 +25,7 @@ impl Display for Attribute {
             fmt_list(f, &self.arguments)?;
             f.write_str(")")?;
         }
+
         f.write_str("]")
     }
 }

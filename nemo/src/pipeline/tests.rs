@@ -19,6 +19,7 @@ fn fact(predicate: &str, value: i64) -> Statement {
 /// Returns the rule `head(?x) :- body(?x) .`.
 fn rule(head: &str, body: &str) -> Statement {
     let variable = || Term::variable(Variable::universal("x"));
+
     Statement::Rule(Rule::new(
         vec![Atom::new(Identifier::bare(head), vec![variable()])],
         vec![Literal::Positive(Atom::new(
@@ -35,6 +36,7 @@ fn qualified_rule() -> Statement {
         module: "lib".to_owned(),
         name: "edge".to_owned(),
     };
+
     Statement::Rule(Rule::new(
         vec![Atom::new(Identifier::bare("reach"), vec![variable()])],
         vec![Literal::Positive(Atom::new(qualified, vec![variable()]))],
@@ -49,6 +51,7 @@ fn loaded() -> (Pipeline, RevisionId) {
         rule("reach", "edge"),
         fact("edge", 2),
     ]));
+
     (pipeline, revision)
 }
 
@@ -89,6 +92,7 @@ fn replacing_preserves_position_and_records_provenance() {
     assert_eq!(live[1], new);
     assert_eq!(live[0], ids[0]);
     assert_eq!(pipeline.origins(new), vec![ids[1]]);
+
     // The old version stays in the arena.
     assert_eq!(
         pipeline.statement(ids[1]).to_string(),
@@ -177,6 +181,7 @@ fn origins_walk_transformation_chains() {
     commit.finish();
 
     assert_eq!(pipeline.origins(last), vec![ids[1]]);
+
     // A loaded statement is its own origin.
     assert_eq!(pipeline.origins(ids[0]), vec![ids[0]]);
 }
@@ -196,6 +201,7 @@ impl Transformation for RenameBodies {
                 commit.split(id, vec![rule("reach", self.0)]);
             }
         }
+
         Ok(())
     }
 }
@@ -352,6 +358,7 @@ fn an_instance_knows_the_uses_that_made_it() {
     assert_eq!(aliases, ["one", "two"]);
     assert_eq!(pipeline.file_name(two), Some("b.rls"));
     assert_eq!(pipeline.text(two), Some("p(1) ."));
+
     // The file itself is not an instance.
     assert!(pipeline.instances(inner).is_empty());
 }
@@ -441,6 +448,7 @@ fn substitutions_add_definition_labels_to_diagnostics() {
     {
         atom.terms[0].span = Some(occurrence);
     }
+
     let revision = pipeline.load(Program::new(vec![written]));
     let ids = pipeline.revision_statements(revision).to_vec();
 

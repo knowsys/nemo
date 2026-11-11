@@ -20,12 +20,15 @@ fn fmt_specification(
         if index > 0 {
             f.write_str(",")?;
         }
+
         write!(f, " {key} = {value}")?;
     }
+
     f.write_str(" }")?;
     for (variable, value) in guards {
         write!(f, ", ?{variable} = {value}")?;
     }
+
     Ok(())
 }
 
@@ -145,6 +148,7 @@ impl Display for ImportDirective {
             fmt_list(f, &variables)?;
             f.write_str(")")?;
         }
+
         f.write_str(" from ")?;
         fmt_specification(f, &self.format, &self.options, &self.guards)?;
         let clause: Vec<String> = self
@@ -157,6 +161,7 @@ impl Display for ImportDirective {
             f.write_str(" where ")?;
             fmt_list(f, &clause)?;
         }
+
         f.write_str(" .")
     }
 }

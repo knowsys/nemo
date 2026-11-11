@@ -82,6 +82,7 @@ impl WrittenProgram {
         for statement in texts {
             note_statement(&mut predicates, &scope, statement);
         }
+
         Self {
             revision: written,
             statements,
@@ -159,14 +160,17 @@ impl WrittenProgram {
         if self.hidden.is_empty() {
             return diagnostic;
         }
+
         diagnostic.map_text(|text| {
             let mut text = text.to_owned();
             for (spelling, literals) in &self.hidden {
                 if text == *spelling {
                     return literals.clone();
                 }
+
                 text = text.replace(&format!("`{spelling}`"), literals);
             }
+
             text
         })
     }
@@ -190,6 +194,7 @@ fn declared_outputs(statements: &[Statement], scope: &NameScope) -> Vec<String> 
             }
         }
     }
+
     outputs
 }
 
@@ -204,6 +209,7 @@ fn note_statement(
         let Ok(name) = scope.resolve(identifier, None) else {
             return;
         };
+
         let predicate: &mut WrittenPredicate = predicates.entry(name).or_default();
         predicate.derived |= matches!(usage, PredicateUse::Derived);
         predicate.input_facts |= matches!(usage, PredicateUse::Input);
@@ -220,6 +226,7 @@ fn note_statement(
             for atom in &rule.head {
                 note(&atom.predicate, PredicateUse::Derived, by_position(atom));
             }
+
             for atom in rule.body.iter().filter_map(|literal| literal.atom()) {
                 note(&atom.predicate, PredicateUse::Read, by_position(atom));
             }
@@ -236,6 +243,7 @@ fn note_statement(
         }
         Statement::Directive(_) => {}
     }
+
     // Every other predicate the statement names, as a declaration or an
     // output does.
     let mut named = |identifier: &Identifier,
@@ -266,6 +274,7 @@ fn hidden(pipeline: &Pipeline, revision: RevisionId, scope: &NameScope) -> Vec<(
         let Some((declaration, sources)) = pipeline.declaration(id) else {
             continue;
         };
+
         let meaning: &Rule = match (declaration, pipeline.statement(id)) {
             (RewriteDeclaration::Replaces { .. }, _) => {
                 pending.push(sources[0]);
@@ -294,9 +303,11 @@ fn hidden(pipeline: &Pipeline, revision: RevisionId, scope: &NameScope) -> Vec<(
         {
             spellings.push(name);
         }
+
         for spelling in spellings {
             hidden.push((spelling, literals.clone()));
         }
     }
+
     hidden
 }

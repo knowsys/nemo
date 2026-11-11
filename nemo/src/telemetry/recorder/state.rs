@@ -100,6 +100,7 @@ impl RecorderState {
         if self.rules.len() <= index {
             self.rules.resize(index + 1, RuleStats::default());
         }
+
         Some(&mut self.rules[index])
     }
 
@@ -165,6 +166,7 @@ impl RecorderState {
         if let Some(stats) = self.rule(rule) {
             stats.orders.observe(delta_rows, leading_rows, leads);
         }
+
         self.orders.observe(delta_rows, leading_rows, leads);
     }
 
@@ -176,6 +178,7 @@ impl RecorderState {
             stats.derived += derived;
             stats.dropped += dropped;
         }
+
         self.derived += derived;
         self.timeline.push(TimelinePoint {
             at,
@@ -286,6 +289,7 @@ impl Serialize for RecorderState {
         let orders = self.orders.rows();
         let phases = PhaseTable::of_execution(&self.execution);
         let counts = WorkTable::of_execution(&self.counts);
+
         RecorderStateView {
             duration: self.duration,
             finished: self.finished,

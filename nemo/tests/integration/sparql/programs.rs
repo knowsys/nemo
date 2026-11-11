@@ -24,6 +24,7 @@ fn reloads_replace_a_bound_imports_scratch_with_its_width() {
                 body.push_str(&format!("<{iri}>\n"));
             }
         }
+
         body
     });
     let wide = r#"
@@ -139,6 +140,7 @@ fn extensions_rewrite_in_the_scope_of_the_loaded_program() {
         if text.contains("<urn:b>") {
             body.push_str("<urn:2>\n");
         }
+
         body
     });
     let mut engine = Engine::new();
@@ -194,6 +196,7 @@ fn a_failed_fetch_keeps_the_program() {
         .serve(&mut engine, Engine::reason)
         .expect_err("the fetch fails");
     assert_eq!(problem.code(), nemo::codes::UNFETCHABLE, "{problem:?}");
+
     // The import that the label points at starts the second line of the registered text.
     let location = problem.location().expect("the import is labeled");
     assert_eq!(
@@ -273,6 +276,7 @@ fn an_import_matched_at_its_endpoint_is_listed_but_not_stored() {
          query it at its endpoint"
     );
     assert_eq!(refusal.hints(), ["declare it `@output`"]);
+
     // The fetched bindings live under hidden names and count toward
     // neither figure.
     assert_eq!((engine.loaded_facts(), engine.derived_facts()), (1, 3));

@@ -87,6 +87,7 @@ fn unregister_from(
             replaced.push((name.clone(), scratch));
         }
     }
+
     replaced
 }
 
@@ -134,7 +135,9 @@ impl Engine {
                 .diagnostic()
                 .with_hint("call `load()` first; `reload()` replaces a loaded program"));
         }
+
         let already = self.pipeline.reports().len();
+
         // The rows added through `import_rows` stay, unless their predicate is rebuilt,
         // so the stages are told which predicates have them.
         let imported = self.imported_predicates();
@@ -142,6 +145,7 @@ impl Engine {
         if !self.rewriting_stages(&staged).is_empty() {
             self.translate_written_reload(&staged)?;
         }
+
         let load = SuspendedLoad::new(LoadKind::Reload, staged, already);
         self.reload_staged(load, already)
     }
@@ -197,6 +201,7 @@ impl Engine {
         if load.slots.has_pending() {
             return Ok(self.suspend(Suspension::Load(load)));
         }
+
         let old = self.program.take().expect("a reload replaces a program");
         let held = self.revision.expect("a loaded program has a revision");
         let staged = load.staged;
@@ -238,6 +243,7 @@ impl Engine {
         for (&table, rows) in &retranslated.facts {
             self.assert_stored_types(&retranslated.compiled.column_types, table, rows);
         }
+
         self.store_reloaded(retranslated.facts);
         self.forget_runs();
         self.skeletons.clear();
@@ -266,9 +272,11 @@ impl Engine {
         for statement in old_statements {
             *net.entry(statement.to_string()).or_default() += 1;
         }
+
         for statement in new_statements {
             *net.entry(statement.to_string()).or_default() -= 1;
         }
+
         let changed =
             |statement: &Statement| net.get(&statement.to_string()).copied().unwrap_or(0) != 0;
 
@@ -289,6 +297,7 @@ impl Engine {
             if !changed(statement) {
                 continue;
             }
+
             match statement {
                 Statement::Fact(fact) => touch(&fact.predicate, &mut rebuild),
                 // Rules are compiled from the new program anyway.
@@ -303,6 +312,7 @@ impl Engine {
                 },
             }
         }
+
         rebuild
     }
 
@@ -316,6 +326,7 @@ impl Engine {
         for (_, table) in &replaced {
             self.extensional.remove(table);
         }
+
         replaced
     }
 
@@ -388,6 +399,7 @@ impl Engine {
                                     if Self::unstable_import(&problem, &mut unstable) {
                                         continue;
                                     }
+
                                     return Err(problem);
                                 }
                             }
@@ -400,6 +412,7 @@ impl Engine {
             setup.written = Some(written);
             setup.previous_types = Some(previous);
             let mut translator = translation::Translator::new(stores, setup, state, preloaded);
+
             // A repetition reads the fetched resources again.
             let outcome = translator.commit(new_statements, new_ids, load.fetched.clone());
             let (state, facts) = translator.finish();
@@ -422,6 +435,7 @@ impl Engine {
                     if Self::unstable_import(&problem, &mut unstable) {
                         continue;
                     }
+
                     return Err(problem);
                 }
             }
@@ -501,8 +515,10 @@ impl Engine {
                 self.pipeline
                     .report(EngineError::ImportedRowsDropped { predicate: name }.diagnostic());
             }
+
             self.manager.drop_table(table);
         }
+
         let tables: Vec<TableId> = self
             .predicates
             .values()
@@ -528,6 +544,7 @@ impl Engine {
                 self.record_extensional(table, revision, ExtensionalOrigin::Load);
             }
         }
+
         self.step = self.step.max(1);
         if grew {
             self.step += 1;

@@ -126,6 +126,7 @@ impl Serialize for RunFacts {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let phases = PhaseTable::of_run(&self.timings);
         let counts = WorkTable::of_run(&self.timings);
+
         FactsView {
             stages: StageTimes {
                 parse: self.parse,

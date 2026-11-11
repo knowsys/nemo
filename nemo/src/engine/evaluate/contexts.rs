@@ -21,6 +21,7 @@ impl RunContexts {
             *last = (step, context);
             return;
         }
+
         self.0.push((step, context));
     }
 
@@ -29,6 +30,7 @@ impl RunContexts {
     /// Before any run, there is no derived row to explain, and a fresh context is returned.
     pub(crate) fn at(&self, step: u64) -> EvaluationContext {
         let after = self.0.partition_point(|&(first, _)| first <= step);
+
         self.0
             .get(after.saturating_sub(1))
             .map_or_else(EvaluationContext::now, |&(_, context)| context)

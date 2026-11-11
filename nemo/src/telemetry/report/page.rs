@@ -18,6 +18,7 @@ pub(super) fn render(document: &str, live: bool) -> String {
         .replace('&', "\\u0026")
         .replace('\u{2028}', "\\u2028")
         .replace('\u{2029}', "\\u2029");
+
     // The document is substituted last, since it is arbitrary JSON that could contain a
     // placeholder.
     TEMPLATE

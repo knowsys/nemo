@@ -44,10 +44,12 @@ impl Engine {
                 if rows.is_empty() {
                     break;
                 }
+
                 let part = trace.batch(self, &rows)?.part;
                 sink(part)?;
             }
         }
+
         let Batch {
             part,
             facts: traced,

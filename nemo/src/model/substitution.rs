@@ -60,6 +60,7 @@ impl Substitution {
         if self.replacements.is_empty() {
             return;
         }
+
         component.walk_mut(&mut |term| match &mut term.kind {
             TermKind::Variable(variable) => {
                 if let Some(replacement) = self.replacements.get(variable) {

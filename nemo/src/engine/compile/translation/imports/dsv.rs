@@ -53,6 +53,7 @@ impl<'a> Translator<'a> {
         else {
             return Ok(None);
         };
+
         // The pruned columns are only checked while parsing, and not delivered
         // (see `DsvReaderOptions::checked_only`), so that they still decide which rows are
         // well-formed.
@@ -67,6 +68,7 @@ impl<'a> Translator<'a> {
             .enumerate()
             .map(|(column, format)| format.value != ValueFormat::Skip && !layout.delivers(column))
             .collect();
+
         // What the kept columns can hold follows from their formats
         // alone, so no file is read for it.
         let kept_types: Vec<Type> = formats
@@ -75,6 +77,7 @@ impl<'a> Translator<'a> {
             .map(|format| Type::of_domains(format.domains()))
             .collect();
         let table = self.register_import(import, kept_types, &layout)?;
+
         // A preloaded import's rows are already stored, so there is nothing to load.
         if import.preloaded {
             return Ok(None);
@@ -91,6 +94,7 @@ impl<'a> Translator<'a> {
             .map(|(_, filter)| filter);
         options.limit = directive.limit;
         let input = self.import_input(import, &resource, fetched);
+
         Ok(Some(PreparedDsv {
             source: DsvResource { input, options },
             table,
@@ -159,6 +163,7 @@ impl<'a> Translator<'a> {
                     self.open.insert(import.predicate.clone());
                     return Ok(None);
                 }
+
                 let sniffed =
                     match self.source_stream(resource, directive.compression, fetched.cloned()) {
                         Some(source) => DsvReaderOptions::sniff_width_from(
@@ -188,6 +193,7 @@ impl<'a> Translator<'a> {
                 }
             }
         };
+
         // The table of a pruned predicate has only the delivered columns,
         // but the file still has every kept column.
         Ok(Some(
@@ -202,6 +208,7 @@ impl<'a> Translator<'a> {
         if batch.is_empty() {
             return Ok(());
         }
+
         let sources: Vec<DsvResource> = batch
             .iter()
             .map(|prepared| prepared.source.clone())
@@ -216,6 +223,7 @@ impl<'a> Translator<'a> {
                 true,
             );
         }
+
         Ok(())
     }
 }

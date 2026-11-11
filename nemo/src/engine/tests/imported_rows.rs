@@ -32,6 +32,7 @@ fn imported_rows_add_no_statements() {
             "the rule is the only statement"
         );
     }
+
     assert_eq!(engine.loaded_facts(), 100);
     engine.reason().expect("reasoning reaches the fixpoint");
     assert_eq!(engine.count("q").expect("q is derived"), 100);

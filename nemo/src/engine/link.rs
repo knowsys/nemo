@@ -96,6 +96,7 @@ impl Engine {
         // The module files must get file ids apart from the program's,
         // whose text need not be registered.
         self.pipeline.reserve_files(&program);
+
         Linker {
             pipeline: &mut self.pipeline,
             roots: &self.modules.roots,
@@ -172,6 +173,7 @@ impl Linker<'_> {
                 linked.push((statement, true));
                 continue;
             };
+
             // A predicate a `@use` binds is a name of the using program,
             // and is checked like any other name it writes.
             for (_, actual) in &directive.bindings {
@@ -179,6 +181,7 @@ impl Linker<'_> {
                     forbid_owned_name(actual, &scope, &aliases, directive.span)?;
                 }
             }
+
             let program = self.directory(directive.span);
             let mut chain = Vec::new();
             let (statements, instance) = self.instantiate(
@@ -213,6 +216,7 @@ impl Linker<'_> {
                         if written_here && role == IdentifierRole::Predicate {
                             forbid_owned_name(other, &scope, &aliases, span)?;
                         }
+
                         Ok(None)
                     }
                 }
@@ -220,6 +224,7 @@ impl Linker<'_> {
             statement.rename_identifiers(&mut resolve)?;
             statements.push(statement);
         }
+
         Ok(Program {
             statements,
             span: program.span,
@@ -250,6 +255,7 @@ fn forbid_owned_name(
     let Ok(resolved) = scope.resolve(predicate, span) else {
         return Ok(());
     };
+
     for alias in aliases {
         if resolved.starts_with(&format!("{alias}::")) {
             let mut problem = ModuleError::OwnedName {
@@ -260,9 +266,11 @@ fn forbid_owned_name(
             if !matches!(predicate, Identifier::Iri(iri) if *iri == resolved) {
                 problem = problem.with_note(format!("`{predicate}` resolves to `{resolved}`"));
             }
+
             return Err(problem);
         }
     }
+
     Ok(())
 }
 
@@ -287,6 +295,7 @@ impl Linker<'_> {
         if chain.len() >= MAX_DEPTH {
             return Err(ModuleError::TooDeep { limit: MAX_DEPTH }.at(directive.span));
         }
+
         self.count += 1;
         if self.count > MAX_INSTANTIATIONS {
             return Err(ModuleError::TooManyInstantiations {
@@ -294,6 +303,7 @@ impl Linker<'_> {
             }
             .at(directive.span));
         }
+
         Ok(())
     }
 }
@@ -327,6 +337,7 @@ impl Linker<'_> {
         self.enter(directive, &canonical, chain)?;
         let file = self.read(&location, tree, directive)?;
         let instance = self.pipeline.add_instance(file, written.clone());
+
         // A module used twice reports only once the names it offers but never writes.
         let first = !self.reported.contains(&file);
         let statements = self.parse(file, instance)?;
@@ -383,6 +394,7 @@ impl Linker<'_> {
             let Statement::Directive(Directive::Use(written)) = statement else {
                 continue;
             };
+
             // The predicates this module binds are named in *its* scope:
             // one of its inputs, or one of its own predicates.
             // Renaming the bound predicates first is what passes data
@@ -398,12 +410,14 @@ impl Linker<'_> {
                     }
                 }
             }
+
             // The values it passes on are its own too: its constants
             // resolve here, and a `$parameter` of this module is passed on
             // under its renamed name.
             for (_, value) in &mut inner.values {
                 value.rename_identifiers(&mut renaming)?;
             }
+
             let (inner_statements, inner_instance) = self.instantiate(
                 &inner,
                 written,
@@ -415,6 +429,7 @@ impl Linker<'_> {
             nested.add(&inner, inner_instance)?;
             expanded.extend(inner_statements);
         }
+
         Ok((nested, expanded))
     }
 }
@@ -435,6 +450,7 @@ fn later_alias(
     if nested.by_alias.contains_key(module) || !declared.contains(&module.as_str()) {
         return problem;
     }
+
     ModuleError::UsedBelow {
         module: module.to_owned(),
     }

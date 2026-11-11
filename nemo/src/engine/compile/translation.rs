@@ -396,6 +396,7 @@ impl<'a> Translator<'a> {
         preloaded: Vec<bool>,
     ) -> Self {
         let program_blanks = stores.dictionary.shared_label_scope(PROGRAM_BLANK_NODES);
+
         Self {
             manager: stores.manager,
             dictionary: stores.dictionary,
@@ -572,6 +573,7 @@ impl<'a> Translator<'a> {
             ids.len(),
             "statements and their pipeline ids must align"
         );
+
         // Blank nodes get their nulls first, so that every occurrence of
         // a label maps to the same null.
         self.create_blank_nodes(statements);
@@ -595,6 +597,7 @@ impl<'a> Translator<'a> {
     ) -> Result<CompiledProgram, Diagnostic> {
         self.fetched = fetched;
         let compiled = self.translate_statements(statements, ids)?;
+
         // The rows given through `import_rows` are data, which a check leaves out.
         // A refused row ends any other translation, as a problem in an import's data does.
         if self.purpose != Purpose::Check {
@@ -604,8 +607,10 @@ impl<'a> Translator<'a> {
                 }
             }
         }
+
         // Imports run last, when every predicate's arity is known.
         self.execute_imports()?;
+
         // So do the export checks that need an arity.
         self.validate_exports()?;
         self.finish_program(compiled)
@@ -620,6 +625,7 @@ impl<'a> Translator<'a> {
         if let Err(problem) = NameScope::check_base(statements) {
             self.recover(problem)?;
         }
+
         let mut parameters = Vec::new();
         for statement in statements {
             match statement {
@@ -636,6 +642,7 @@ impl<'a> Translator<'a> {
                 _ => {}
             }
         }
+
         // `@type` definitions come before anything typed or evaluated,
         // since parameters, declarations, and facts are all checked
         // against them.
@@ -646,6 +653,7 @@ impl<'a> Translator<'a> {
                 self.recover(problem)?;
             }
         }
+
         // A second loop translates every definition once, so a bad field
         // is reported at its own directive however the definitions are
         // ordered.
@@ -661,6 +669,7 @@ impl<'a> Translator<'a> {
                 }
             }
         }
+
         self.resolve_parameters(parameters)
     }
 
@@ -696,11 +705,13 @@ impl<'a> Translator<'a> {
                 self.recover(problem)?;
             }
         }
+
         for (name, span) in fresh {
             if let Err(problem) = self.check_declaration_against_store(&name, span) {
                 self.recover(problem)?;
             }
         }
+
         Ok(())
     }
 
@@ -713,6 +724,7 @@ impl<'a> Translator<'a> {
         if !self.purpose.reads() {
             return Ok(());
         }
+
         let stored = std::mem::take(&mut self.plan);
         let survey = ImportSurvey::new(self, statements)?;
         self.plan = self.passes.plan_imports(&survey, self)?;
@@ -759,9 +771,11 @@ impl<'a> Translator<'a> {
                             import.span,
                         );
                     }
+
                     self.directive(directive, index, compiled.rules.len())
                 }
             };
+
             // What the statement's translation reported is about the statement,
             // and so, in a module instance, about that instance.
             self.pipeline
@@ -771,6 +785,7 @@ impl<'a> Translator<'a> {
                 self.recover(problem)?;
             }
         }
+
         Ok(compiled)
     }
 
@@ -873,6 +888,7 @@ impl<'a> Translator<'a> {
             }
             .diagnostic());
         }
+
         // A label the program never mentioned has no stored null.
         let mut labels = Vec::new();
         terms::collect_blank_nodes(fact, &mut labels);
@@ -886,6 +902,7 @@ impl<'a> Translator<'a> {
             }
             .diagnostic());
         }
+
         let values = fact
             .terms
             .iter()
@@ -903,6 +920,7 @@ impl<'a> Translator<'a> {
         for scope in self.documents.values() {
             self.dictionary.close_label_scope(*scope);
         }
+
         (
             TranslationState {
                 base_iri: self.base_iri,
@@ -941,6 +959,7 @@ impl<'a> Translator<'a> {
                 for predicate in &output.predicates {
                     self.resolve(predicate, output.span)?;
                 }
+
                 Ok(())
             }
             Directive::Import(import) => {
@@ -950,6 +969,7 @@ impl<'a> Translator<'a> {
                 self.imports.push(pending);
                 Ok(())
             }
+
             // Declarations, `@type` definitions, and inputs were read
             // before the statements were translated. See
             // [declare_directive](Self::declare_directive),
@@ -993,6 +1013,7 @@ impl<'a> Translator<'a> {
         rule_index: usize,
     ) -> Result<PendingImport, Diagnostic> {
         let predicate = self.resolve(&import.predicate, import.span)?;
+
         // The format is a keyword, not a name, so the base does not apply.
         let Identifier::Bare(name) = &import.format else {
             return Err(TranslationError::UnknownFormat {
@@ -1003,6 +1024,7 @@ impl<'a> Translator<'a> {
         let Some(format) = FileFormat::from_name(name) else {
             return Err(TranslationError::UnknownFormat { name: name.clone() }.at(import.span));
         };
+
         Ok(PendingImport {
             predicate,
             variables: import.variables.clone(),
@@ -1025,6 +1047,7 @@ impl<'a> Translator<'a> {
         for statement in statements {
             terms::collect_blank_nodes(statement, &mut labels);
         }
+
         for label in labels {
             self.dictionary.labeled_null(self.program_blanks, label);
         }
@@ -1123,8 +1146,10 @@ impl<'a> Translator<'a> {
                 }
                 .at(span));
             }
+
             return Ok(table);
         }
+
         let table = self.manager.register(name.clone(), arity);
         self.predicates.insert(name, Registered { table, arity });
         Ok(table)
@@ -1190,6 +1215,7 @@ impl Engine {
         if !chose {
             return;
         }
+
         match outcome {
             Ok(Progress::Done) => {}
             Ok(Progress::Suspended(_)) => {
@@ -1266,6 +1292,7 @@ impl Engine {
                 &mut self.errors,
             ),
         };
+
         (
             TranslationStores {
                 manager,

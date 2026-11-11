@@ -25,6 +25,7 @@ fn serve(
         "HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
         body.len()
     );
+
     serve_responses(vec![response; responses])
 }
 
@@ -42,8 +43,10 @@ fn serve_responses(responses: Vec<String>) -> (String, std::sync::mpsc::Receiver
             let Ok((mut stream, _)) = listener.accept() else {
                 return;
             };
+
             let mut request = Vec::new();
             let mut buffer = [0u8; 4096];
+
             // Read to the end of the headers, then any body the
             // headers announce.
             while !request.windows(4).any(|window| window == b"\r\n\r\n") {
@@ -52,6 +55,7 @@ fn serve_responses(responses: Vec<String>) -> (String, std::sync::mpsc::Receiver
                     Ok(count) => request.extend_from_slice(&buffer[..count]),
                 }
             }
+
             let text = String::from_utf8_lossy(&request).to_string();
             if let Some(length) = text.lines().find_map(|line| {
                 line.to_ascii_lowercase()
@@ -70,6 +74,7 @@ fn serve_responses(responses: Vec<String>) -> (String, std::sync::mpsc::Receiver
                     }
                 }
             }
+
             sender
                 .send(String::from_utf8_lossy(&request).to_string())
                 .ok();
@@ -143,6 +148,7 @@ fn a_failed_fetch_is_an_error() {
 #[test]
 fn registered_bytes_beat_the_network() {
     let mut engine = Engine::new();
+
     // No server exists at this address; the registered bytes are used.
     engine.add_resource("http://127.0.0.1:1/never.csv", "42\n".as_bytes().to_vec());
     load_into(
@@ -468,6 +474,7 @@ fn a_load_cancelled_while_waiting_changes_nothing() {
     else {
         panic!("the load needs its resource");
     };
+
     let progress = engine
         .resume([(pending[0].id, Ok(Arc::from(&b"5\n"[..])))])
         .unwrap_or_else(|problem| panic!("{problem:?}"));

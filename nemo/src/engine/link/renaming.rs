@@ -41,6 +41,7 @@ impl IdentifierRenaming for InstanceRenaming<'_> {
         if let Identifier::Qualified { module, name } = identifier {
             return self.nested.resolve(module, name, span).map(Some);
         }
+
         match role {
             // The engine matches these by their exact text, so they are not
             // names in the program's namespace and nothing rewrites them.

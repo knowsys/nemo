@@ -33,6 +33,7 @@ pub(super) fn joined_variables(rule: &Rule) -> HashSet<String> {
             }
         }
     }
+
     counts
         .into_iter()
         .filter(|(_, count)| *count > 1)

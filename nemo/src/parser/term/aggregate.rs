@@ -29,6 +29,7 @@ impl Parser<'_> {
             }
             .at(Some(token.span)));
         };
+
         self.expect(&TokenKind::ParenOpen, "`(` after the aggregate name")?;
 
         // A count needs no value, so it may have a scope alone.
@@ -43,6 +44,7 @@ impl Parser<'_> {
         };
 
         self.expect(&TokenKind::ParenClose, "`)` closing the aggregate")?;
+
         Ok(Term::from(Aggregate {
             kind,
             input,
@@ -71,6 +73,7 @@ impl Parser<'_> {
                 }
                 .at(Some(self.span_from(start))));
             }
+
             return Ok(Vec::new());
         }
         if kind != AggregateKind::Count {
@@ -79,6 +82,7 @@ impl Parser<'_> {
             }
             .at(Some(self.span_from(start))));
         }
+
         self.advance();
         self.scope_variables()
     }
@@ -110,6 +114,7 @@ impl Parser<'_> {
         if !keyword && !self.at(&TokenKind::Comma) {
             return Ok((Vec::new(), false));
         }
+
         // Both `per` and the comma are one token before the scope variables.
         self.advance();
         Ok((self.scope_variables()?, !keyword))

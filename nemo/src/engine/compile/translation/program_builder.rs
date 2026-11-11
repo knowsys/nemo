@@ -355,6 +355,7 @@ impl StackProgramBuilder {
                             variable.name
                         )));
                     };
+
                     self.push(value.clone());
                     Ok(())
                 }
@@ -368,6 +369,7 @@ impl StackProgramBuilder {
                         }
                         .at(span));
                     };
+
                     self.input(id);
                     Ok(())
                 }
@@ -399,11 +401,13 @@ impl StackProgramBuilder {
             self.push(value);
             return Ok(());
         }
+
         match &term.kind {
             TermKind::Tuple(elements) => {
                 for element in elements {
                     self.term(translator, scope, element)?;
                 }
+
                 self.structure(OpCode::Tuple, elements.len(), term.span)
             }
             TermKind::Function {
@@ -414,6 +418,7 @@ impl StackProgramBuilder {
                 if labels.is_some() {
                     return Err(TranslationError::LabeledTupleNamedFields.at(term.span));
                 }
+
                 // A function term is a labeled tuple, and its label is
                 // pushed before its elements.
                 let label = translator.resolve(name, term.span)?;
@@ -422,6 +427,7 @@ impl StackProgramBuilder {
                 for argument in arguments {
                     self.term(translator, scope, argument)?;
                 }
+
                 self.structure(OpCode::LabeledTuple, arguments.len(), term.span)
             }
             TermKind::Map { label, pairs } => {
@@ -429,16 +435,19 @@ impl StackProgramBuilder {
                 if let Some(problem) = translator.repeated_key(pairs, term.span) {
                     return Err(problem);
                 }
+
                 // A labeled map's label is pushed before its entries.
                 if let Some(name) = label {
                     let label = translator.resolve(name, term.span)?;
                     translator.check_map_construction(&label, pairs, term.span)?;
                     self.push(DataValue::iri(label));
                 }
+
                 for (key, value) in pairs {
                     self.term(translator, scope, key)?;
                     self.term(translator, scope, value)?;
                 }
+
                 let code: fn(u16) -> OpCode = match label {
                     None => OpCode::Map,
                     Some(_) => OpCode::LabeledMap,
@@ -472,6 +481,7 @@ impl StackProgramBuilder {
                         span,
                     ));
                 }
+
                 self.arguments(translator, scope, arguments)?;
                 self.operations.extend_from_slice(code);
             }
@@ -495,10 +505,12 @@ impl StackProgramBuilder {
                 let Some((first, rest)) = arguments.split_first() else {
                     return Err(argument_count(operator, "at least 1 argument", 0, span));
                 };
+
                 self.term(translator, scope, first)?;
                 if rest.is_empty() {
                     self.operations.extend_from_slice(single);
                 }
+
                 for argument in rest {
                     self.term(translator, scope, argument)?;
                     self.operations.push(code);
@@ -515,10 +527,12 @@ impl StackProgramBuilder {
                         span,
                     ));
                 }
+
                 self.arguments(translator, scope, arguments)?;
                 self.operations.push(make(count));
             }
         }
+
         Ok(())
     }
 
@@ -532,6 +546,7 @@ impl StackProgramBuilder {
         for argument in arguments {
             self.term(translator, scope, argument)?;
         }
+
         Ok(())
     }
 
@@ -545,6 +560,7 @@ impl StackProgramBuilder {
             }
             .at(span));
         }
+
         let arity = self.inputs.len();
         Ok(StackProgram::new(self.operations, self.constants, arity))
     }

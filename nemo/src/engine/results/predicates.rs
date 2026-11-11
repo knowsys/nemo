@@ -87,6 +87,7 @@ impl Engine {
         if !self.names(predicate) {
             return None;
         }
+
         match self.predicates.get(predicate) {
             Some(&Registered {
                 arity: delivered, ..
@@ -149,6 +150,7 @@ impl Engine {
             let Some(&Registered { table, .. }) = self.predicates.get(&name) else {
                 continue;
             };
+
             let has_input_facts = self
                 .written
                 .as_ref()
@@ -166,6 +168,7 @@ impl Engine {
             loaded += outside;
             derived += total - outside;
         }
+
         (loaded, derived)
     }
 
@@ -263,6 +266,7 @@ impl Engine {
             }
             .diagnostic());
         };
+
         match self.stored_extent(predicate) {
             StoredExtent::Whole(table) => Ok((table, arity)),
             extent => Err(not_stored_whole(predicate, extent)),
@@ -278,6 +282,7 @@ impl Engine {
         else {
             return StoredExtent::Absent;
         };
+
         let layout = self.translation.plan.stored_layout(predicate, delivered);
         let pruned: Vec<usize> = (0..layout.kept())
             .filter(|&column| layout.is_pruned(column))
@@ -329,6 +334,7 @@ fn not_stored_whole(predicate: &str, extent: StoredExtent) -> Diagnostic {
             "declare it `@output`",
         ),
     };
+
     EngineError::NotStoredWhole {
         predicate: predicate.to_owned(),
         missing,

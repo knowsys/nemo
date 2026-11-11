@@ -133,6 +133,7 @@ impl RowChunk {
         for (column, value) in self.columns.iter_mut().zip(values) {
             column.push(value.clone());
         }
+
         self.rows += 1;
     }
 

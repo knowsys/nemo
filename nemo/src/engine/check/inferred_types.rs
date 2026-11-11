@@ -48,6 +48,7 @@ impl InferredTypes {
                 Some((name.to_owned(), types.clone()))
             })
             .collect();
+
         Self {
             scope,
             predicates,
@@ -84,6 +85,7 @@ fn rule_types(compiled: &CompiledProgram) -> Vec<RuleTypes> {
         let Some(span) = span.filter(|_| !columns.is_empty()) else {
             continue;
         };
+
         let position = match rules.iter().position(|(other, _)| *other == span) {
             Some(position) => position,
             None => {
@@ -96,12 +98,14 @@ fn rule_types(compiled: &CompiledProgram) -> Vec<RuleTypes> {
             let Some(name) = name else {
                 continue;
             };
+
             match variables.iter_mut().find(|(other, _)| other == name) {
                 Some((_, known)) => *known = known.union(datatype),
                 None => variables.push((name.clone(), datatype.clone())),
             }
         }
     }
+
     rules
         .into_iter()
         .map(|(span, variables)| RuleTypes::new(span, variables))

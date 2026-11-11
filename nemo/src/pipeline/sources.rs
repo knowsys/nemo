@@ -48,6 +48,7 @@ impl Pipeline {
     /// for the spans of a program whose text is not registered.
     pub fn add_source(&mut self, name: impl Into<String>, text: impl Into<String>) -> FileId {
         let (name, text): (String, String) = (name.into(), text.into());
+
         self.push_source(SourceFile {
             name: Arc::from(name),
             text: Arc::from(text),
@@ -71,6 +72,7 @@ impl Pipeline {
             source.text.clone(),
             source.lines.clone(),
         );
+
         self.push_source(SourceFile {
             name,
             text,
@@ -91,6 +93,7 @@ impl Pipeline {
             chain.push(directive);
             current = directive.span.map(|span| span.file);
         }
+
         chain.reverse();
         chain
     }
@@ -149,6 +152,7 @@ impl Pipeline {
     pub(crate) fn location(&self, span: Span) -> Option<Location> {
         let source = self.source(span.file)?;
         let (line, column) = source.line_column(span);
+
         Some(Location {
             source: Some(source.name.clone()),
             line,

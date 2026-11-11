@@ -33,6 +33,7 @@ fn node_facts(response: &[NodeResponse], address: &[usize]) -> Vec<(String, bool
         .iter()
         .find(|node| node.address_in_tree == address)
         .unwrap_or_else(|| panic!("no node at {address:?}"));
+
     node.table_entries
         .entries
         .iter()
@@ -57,6 +58,7 @@ fn selecting(terms: &str) -> Option<EntriesQuery> {
 fn fetched_facts_trace_to_their_bindings() {
     let mut engine = Engine::new();
     let endpoint = parents();
+
     // A trace names facts by their written columns, so the import
     // passes must not prune the column no rule reads.
     engine.retain_imports();
@@ -74,6 +76,7 @@ fn fetched_facts_trace_to_their_bindings() {
     let rule = proof.rule().expect("a derived fact");
     let derivation = proof.derivation().expect("a derived fact");
     let premises: Vec<Proof<'_>> = proof.premises().collect();
+
     // The rule is the import directive, with a source position.
     assert!(
         rule.text.starts_with("@import parent(?c, ?p) from sparql"),
@@ -81,6 +84,7 @@ fn fetched_facts_trace_to_their_bindings() {
         rule.text
     );
     assert!(rule.source.is_some());
+
     // Its one premise is the binding row the endpoint was asked with.
     assert_eq!(premises.len(), 1);
     assert_eq!(premises[0].fact().to_string(), "anc(<urn:b>)");
@@ -117,12 +121,14 @@ fn rewritten_rules_trace_as_written() {
     let proof = response.proof(0).expect("the fact holds");
     let rule = proof.rule().expect("a derived fact");
     let premises: Vec<Proof<'_>> = proof.premises().collect();
+
     // The rule as written, by its position among the written statements.
     assert_eq!(
         rule.text,
         "anc(?p) :- anc(?c), triple(?c, <urn:parent>, ?p) ."
     );
     assert_eq!(rule.rule, 2);
+
     // One premise per written literal: the local one derived, the remote
     // one matched at the endpoint.
     assert_eq!(premises.len(), 2);
@@ -178,6 +184,7 @@ next(?e, ?n) :- event(?e), triple(?e, <urn:p1>, ?stmt), triple(?stmt, <urn:p2>, 
             "triple(?stmt, <urn:p2>, <urn:n>)",
         ]
     );
+
     // The assignment lists what the run had, and ?stmt it never had.
     let mut variables: Vec<&str> = proof
         .derivation()
@@ -280,6 +287,7 @@ fn shaped_queries_name_the_written_rules_of_a_rewritten_program() {
         node_facts(&response, &[0]),
         [("anc(<urn:b>)".to_owned(), true)]
     );
+
     // The remote premise, matched at the endpoint and never stored.
     assert_eq!(
         node_facts(&response, &[1]),
@@ -306,6 +314,7 @@ fn shapeless_queries_expand_rewritten_rules_as_written() {
         .as_ref()
         .expect("the server chose a rule");
     assert_eq!(expansion.rule.id, 2);
+
     // Only the written rule reads and writes anc: no binding rule.
     let above: Vec<usize> = response
         .possible_rules_above

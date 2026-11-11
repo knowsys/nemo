@@ -91,6 +91,7 @@ pub(super) fn never_fires_warning(
                 }),
         );
     }
+
     let (first, rest) = proofs.split_first()?;
     let mut warning = TypeError::NeverFires.diagnostic();
     warning = match first.span.or(source.span) {
@@ -103,11 +104,13 @@ pub(super) fn never_fires_warning(
             None => warning.with_note(proof.text.clone()),
         };
     }
+
     // A rule that never fires and has a tuple labeled close to a builtin's name
     // probably misspells the builtin, so the builtin is offered as a hint.
     if let Some(hint) = columns.iter().find_map(builtin_hint) {
         warning = warning.with_hint(hint);
     }
+
     Some(warning)
 }
 
@@ -120,6 +123,7 @@ fn rule_proofs(rule: &CompiledRule, context: &ProofContext<'_>, columns: &[Type]
             proofs.push(variable_proof(rule, context, variable));
         }
     }
+
     // The columns that a pattern that never matches tests.
     // What is extracted from them follows from the pattern, and is not reported again.
     let mut dead_patterns: Vec<VariableId> = Vec::new();
@@ -127,11 +131,13 @@ fn rule_proofs(rule: &CompiledRule, context: &ProofContext<'_>, columns: &[Type]
         if filter.inputs.iter().any(|&input| columns[input].is_empty()) {
             continue;
         }
+
         let inputs: Vec<Type> = filter
             .inputs
             .iter()
             .map(|&input| columns[input].clone())
             .collect();
+
         // An exact result decides the condition outright, which is how
         // a pattern's guard against a known shape is proven never to hold.
         let outcome = match filter.program.infer(&inputs, context.labels) {
@@ -154,8 +160,10 @@ fn rule_proofs(rule: &CompiledRule, context: &ProofContext<'_>, columns: &[Type]
         if matches!(filter.origin, FilterOrigin::Pattern(_)) {
             dead_patterns.extend(&filter.inputs);
         }
+
         proofs.push(filter_proof(rule, context, filter, &inputs, &outcome));
     }
+
     for (index, computed) in rule.computed.iter().enumerate() {
         // A computed column is reported only if all its inputs can hold values,
         // since empty inputs are reported for their own variables.
@@ -177,6 +185,7 @@ fn rule_proofs(rule: &CompiledRule, context: &ProofContext<'_>, columns: &[Type]
             proofs.push(Proof::at(None, text));
         }
     }
+
     if let Some(aggregate) = &rule.aggregate {
         for function in &aggregate.functions {
             if matches!(function.kind, AggregateKind::Sum | AggregateKind::Average)
@@ -196,6 +205,7 @@ fn rule_proofs(rule: &CompiledRule, context: &ProofContext<'_>, columns: &[Type]
             }
         }
     }
+
     proofs
 }
 
@@ -265,6 +275,7 @@ fn filter_proof(
         FilterOrigin::Expression(_) => fails("this argument"),
         FilterOrigin::Condition(_) => fails("this condition"),
     };
+
     Proof::at(filter.origin.span(), text)
 }
 
@@ -299,6 +310,7 @@ fn variable_proof(rule: &CompiledRule, context: &ProofContext<'_>, variable: usi
             if bound != variable {
                 continue;
             }
+
             let column = &context.types[&atom.table][position];
             let (predicate, _) = context.table_names[&atom.table];
             if column.is_empty() {
@@ -310,6 +322,7 @@ fn variable_proof(rule: &CompiledRule, context: &ProofContext<'_>, variable: usi
                 };
                 return Proof::at(None, text);
             }
+
             let narrowed = running.intersect(column);
             if narrowed.is_empty() {
                 return Proof::at(
@@ -322,9 +335,11 @@ fn variable_proof(rule: &CompiledRule, context: &ProofContext<'_>, variable: usi
                     ),
                 );
             }
+
             running = narrowed;
         }
     }
+
     // The atoms agree, so the expression bound to the column can have no value.
     match name {
         Some(name) => Proof::at(None, format!("{name} can never be computed")),
@@ -366,6 +381,7 @@ pub(crate) fn builtin_hint(written: &Type) -> Option<String> {
     let builtin = crate::model::Operator::NAMES
         .iter()
         .find(|builtin| label.len() >= 3 && one_edit_apart(label, builtin))?;
+
     Some(format!(
         "write `{builtin}(…)` to call the builtin, since `{label}(…)` builds a labeled tuple"
     ))
@@ -399,6 +415,7 @@ fn one_edit_apart(written: &str, builtin: &str) -> bool {
     if long.len() - short.len() > 1 {
         return false;
     }
+
     let prefix = short
         .iter()
         .zip(long)

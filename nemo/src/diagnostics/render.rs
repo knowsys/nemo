@@ -45,6 +45,7 @@ fn subject_notes(diagnostic: &Diagnostic) -> Vec<String> {
     {
         notes.push(format!("predicate `{predicate}`"));
     }
+
     notes
 }
 
@@ -183,6 +184,7 @@ impl<'a> Renderer<'a> {
         if located.is_empty() {
             return self.block(diagnostic, &context);
         }
+
         self.snippet(diagnostic, &located, &context)
             .unwrap_or_else(|| self.block(diagnostic, &context))
     }
@@ -202,6 +204,7 @@ impl<'a> Renderer<'a> {
             Severity::Error => ReportKind::Error,
             Severity::Warning => ReportKind::Warning,
         };
+
         // Spans are byte ranges. The writer applies or omits the colours itself,
         // so plain output needs only a configuration flag.
         let config = Config::new()
@@ -212,6 +215,7 @@ impl<'a> Renderer<'a> {
             .with_config(config)
             .with_code(diagnostic.code())
             .with_message(diagnostic.message());
+
         // The writer starts a new group, headed by the problem's location, whenever a label
         // lies above the one before it. So the labels are added in source order: by file, in
         // the order in which the files first appear among the labels, and by position within
@@ -224,6 +228,7 @@ impl<'a> Renderer<'a> {
         });
         for index in order {
             let label = labels[index];
+
             // The first label marks the problem, and the others show its context.
             let colour = match (index, diagnostic.severity()) {
                 (0, Severity::Error) => Color::Red,
@@ -234,11 +239,14 @@ impl<'a> Renderer<'a> {
             if !label.message.is_empty() {
                 placed = placed.with_message(&label.message);
             }
+
             report = report.with_label(placed);
         }
+
         for line in context {
             report = report.with_note(line);
         }
+
         for hint in diagnostic.hints() {
             report = report.with_help(hint);
         }
@@ -300,9 +308,11 @@ impl<'a> Renderer<'a> {
         for line in context {
             block.push_str(&format!("{accent}Note:{reset} {line}\n"));
         }
+
         for hint in diagnostic.hints() {
             block.push_str(&format!("{accent}Help:{reset} {hint}\n"));
         }
+
         block
     }
 }

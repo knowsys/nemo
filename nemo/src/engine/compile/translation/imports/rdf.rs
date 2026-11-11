@@ -42,6 +42,7 @@ impl<'a> Translator<'a> {
         if let Some(scope) = self.documents.get(resource) {
             return *scope;
         }
+
         let scope = self
             .dictionary
             .fresh_label_scope(&format!("document {resource}"));
@@ -59,6 +60,7 @@ impl<'a> Translator<'a> {
         let directive = self.plain_directive(import.format, &import.options, &bindings, true)?;
         let resource = required_resource(directive.resource, import)?;
         let variant = self.rdf_variant(import.format, Some(&resource), import.span)?;
+
         // The directive's `format` keeps or skips source columns,
         // the plan prunes some of the kept ones, and the reader delivers only the rest.
         let kept = term_columns(
@@ -83,6 +85,7 @@ impl<'a> Translator<'a> {
         if self.options_only(import) {
             return Ok(());
         }
+
         let reader = RdfReader::new(options).with_blank_node_scope(self.document_scope(&resource));
         let input = self.import_input(import, &resource, fetched);
 

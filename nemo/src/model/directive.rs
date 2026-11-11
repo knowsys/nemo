@@ -198,6 +198,7 @@ impl Display for ParameterDirective {
         if let Some(value) = &self.value {
             write!(f, " = {value}")?;
         }
+
         f.write_str(" .")
     }
 }

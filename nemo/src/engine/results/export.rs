@@ -186,6 +186,7 @@ impl ExportSpec {
         if name.is_empty() {
             return name;
         }
+
         // A gzipped stream gets `.gz`, because every reader that detects
         // compression by name, this engine's included, needs it to unwrap
         // the stream. Parquet is never gzipped.
@@ -195,6 +196,7 @@ impl ExportSpec {
         {
             return format!("{name}.gz");
         }
+
         name
     }
 
@@ -292,6 +294,7 @@ impl Engine {
         if self.program.is_none() {
             return Err(EngineError::NoProgram.diagnostic());
         }
+
         let directory = directory.as_ref();
         for spec in specs {
             if spec.is_stdout() {
@@ -316,6 +319,7 @@ impl Engine {
             let written = writer.write_path_with(&path, |sink| self.feed_export(spec, sink))?;
             self.report_dropped(spec, written.dropped, path.display().to_string());
         }
+
         Ok(())
     }
 
@@ -373,6 +377,7 @@ impl Engine {
         if cursor.remaining() == 0 || limit == 0 {
             return Ok(());
         }
+
         spec.check_arity(cursor.arity)?;
 
         let order = ColumnOrder::identity(cursor.arity);

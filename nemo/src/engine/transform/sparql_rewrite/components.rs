@@ -101,6 +101,7 @@ impl LocalGroup {
                 let Some(group) = Self::binding(&mut groups, &reads) else {
                     return true;
                 };
+
                 group.positions.push(position);
                 extend_unique(&mut group.variables, assigned.map(str::to_owned));
                 false
@@ -109,6 +110,7 @@ impl LocalGroup {
                 let Some(group) = Self::binding(&mut groups, &universal(&argument.term)) else {
                     return true;
                 };
+
                 group.computed.push((*argument).clone());
                 extend_unique(&mut group.variables, [argument.variable.clone()]);
                 false
@@ -117,9 +119,11 @@ impl LocalGroup {
                 break;
             }
         }
+
         for group in &mut groups {
             group.positions.sort_unstable();
         }
+
         groups
     }
 
@@ -139,7 +143,9 @@ impl LocalGroup {
             let Literal::Positive(atom) = &rule.body[position] else {
                 continue;
             };
+
             let variables = universal(atom);
+
             // Every group that shares a variable with the atom is merged with it.
             let mut merged = LocalGroup {
                 positions: vec![position],
@@ -156,9 +162,11 @@ impl LocalGroup {
                     rest.push(group);
                 }
             }
+
             rest.push(merged);
             groups = rest;
         }
+
         groups
     }
 }
@@ -177,6 +185,7 @@ fn assignment<'a>(literal: &'a Literal, bound: &HashSet<String>) -> Option<(&'a 
     if operation.operator != Operator::Equal {
         return None;
     }
+
     [(left, right), (right, left)]
         .into_iter()
         .find_map(|(target, term)| match &target.kind {
@@ -226,6 +235,7 @@ impl RemoteComponent {
         for atom in self.atoms(remote) {
             extend_unique(&mut variables, atom.variables.iter().cloned());
         }
+
         variables
     }
 
@@ -285,6 +295,7 @@ impl RewriteContext {
             if atom.terms.len() != candidate.query.width() {
                 return None;
             }
+
             let mut bindings = Vec::with_capacity(atom.terms.len());
             let mut variables = Vec::new();
             let mut computed = Vec::new();
@@ -297,6 +308,7 @@ impl RewriteContext {
                         } else {
                             variables.push(variable.name.clone());
                         }
+
                         Binding::Variable(variable.name.clone())
                     }
                     TermKind::Variable(variable) if variable.kind == VariableKind::Anonymous => {
@@ -320,6 +332,7 @@ impl RewriteContext {
                 };
                 bindings.push(binding);
             }
+
             remote.push(RemoteAtom {
                 position,
                 candidate: name,
@@ -330,6 +343,7 @@ impl RewriteContext {
                 computed,
             });
         }
+
         Some(remote)
     }
 
@@ -365,6 +379,7 @@ impl RewriteContext {
             if !assigned.insert(seed) {
                 continue;
             }
+
             let mut component = RemoteComponent {
                 members: vec![seed],
                 absorbed: Vec::new(),
@@ -373,6 +388,7 @@ impl RewriteContext {
                 components.push(component);
                 continue;
             }
+
             let mut frontier = vec![seed];
             while let Some(current) = frontier.pop() {
                 for &other in &positive {
@@ -383,13 +399,16 @@ impl RewriteContext {
                     {
                         continue;
                     }
+
                     assigned.insert(other);
                     component.members.push(other);
                     frontier.push(other);
                 }
             }
+
             components.push(component);
         }
+
         components
     }
 
@@ -417,6 +436,7 @@ impl RewriteContext {
             let Some(connected) = bridged else {
                 break;
             };
+
             let target = connected[0];
             for &other in connected[1..].iter().rev() {
                 let merged = components.remove(other);
@@ -446,6 +466,7 @@ impl RewriteContext {
                     bound.extend(group.variables.iter().map(String::as_str));
                 }
             }
+
             for (index, atom) in remote.iter().enumerate() {
                 if !atom.negated
                     || absorbed.contains(&index)
@@ -458,10 +479,12 @@ impl RewriteContext {
                 {
                     continue;
                 }
+
                 absorbed.insert(index);
                 component.absorbed.push(index);
             }
         }
+
         for (index, atom) in remote.iter().enumerate() {
             if atom.negated && !absorbed.contains(&index) {
                 components.push(RemoteComponent {
@@ -470,6 +493,7 @@ impl RewriteContext {
                 });
             }
         }
+
         components
     }
 

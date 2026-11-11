@@ -64,6 +64,7 @@ mod tests {
                 entry.code,
                 entry.name
             );
+
             // A line break in a string literal without a `\` before it keeps the indentation
             // of the next line.
             assert!(
@@ -73,6 +74,7 @@ mod tests {
                 entry.name
             );
         }
+
         assert_eq!(
             REGISTRY.explain(EXPECTED).map(|entry| entry.name),
             Some("Expected")

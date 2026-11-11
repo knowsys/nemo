@@ -33,6 +33,7 @@ impl Display for InputDirective {
             fmt_list(f, columns)?;
             f.write_str(")")?;
         }
+
         f.write_str(" .")
     }
 }

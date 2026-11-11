@@ -37,16 +37,19 @@ impl<'a> Translator<'a> {
         if !self.purpose.reads() {
             return Ok(requests);
         }
+
         for (index, statement) in statements.iter().enumerate() {
             let Statement::Directive(Directive::Import(directive)) = statement else {
                 continue;
             };
+
             // The `on_error` option, which says what a failed fetch does,
             // is validated before anything is fetched.
             let request = self.pending_import(directive, index, 0).and_then(|import| {
                 if import.preloaded {
                     return Ok(None);
                 }
+
                 let request = self.import_request(&import)?;
                 import_on_error(&import)?;
                 Ok(request)
@@ -60,6 +63,7 @@ impl<'a> Translator<'a> {
                 }
             }
         }
+
         Ok(requests)
     }
 
@@ -91,11 +95,13 @@ impl<'a> Translator<'a> {
             if import.preloaded {
                 continue;
             }
+
             match self.resource_name(import) {
                 Ok(Some(resource)) if resource.is_empty() => piped.push(index),
                 Ok(_) => {}
                 Err(problem) => self.recover(problem)?,
             }
+
             if let Some(FetchedResource { request, response }) =
                 self.fetched.remove(&import.statement)
             {
@@ -105,12 +111,14 @@ impl<'a> Translator<'a> {
                 };
                 continue;
             }
+
             match self.import_request(import) {
                 Ok(Some(request)) => missing.push(request),
                 Ok(None) => {}
                 Err(problem) => self.recover(problem)?,
             }
         }
+
         assert!(
             missing.is_empty(),
             "a translation commits with the remote resources it was prepared with"
@@ -124,6 +132,7 @@ impl<'a> Translator<'a> {
                 fetched[index] = Some(Arc::clone(&bytes));
             }
         }
+
         Ok(fetched)
     }
 
@@ -144,6 +153,7 @@ impl<'a> Translator<'a> {
         if import_on_error(import)? == OnError::Fail {
             return Err(problem);
         }
+
         self.pipeline.report(
             TranslationError::ImportFailed {
                 resource: request.resource.clone(),
@@ -152,6 +162,7 @@ impl<'a> Translator<'a> {
             .at(import.span)
             .with_resource(request.resource.clone()),
         );
+
         // Marked as preloaded, the import registers its table and reads nothing.
         import.preloaded = true;
         Ok(Some(Arc::from([])))
@@ -171,11 +182,13 @@ impl<'a> Translator<'a> {
             if !import.bindings.is_empty() {
                 return Ok(None);
             }
+
             let spec = self.sparql_import_spec(import)?;
             let resource = spec.resource();
             if self.resources.contains_key(&resource) {
                 return Ok(None);
             }
+
             return Ok(Some(ResourceRequest {
                 statement: import.statement,
                 resource,
@@ -185,6 +198,7 @@ impl<'a> Translator<'a> {
         let Some(resource) = self.remote_resource(import)? else {
             return Ok(None);
         };
+
         let mut request = Request::get(&resource);
         request.accept = import.format.media_type();
         let bindings = self.guard_bindings(&import.guards)?;
@@ -194,6 +208,7 @@ impl<'a> Translator<'a> {
                 request.headers = self.header_option(value, &bindings)?;
             }
         }
+
         Ok(Some(ResourceRequest {
             statement: import.statement,
             resource,
@@ -212,6 +227,7 @@ impl<'a> Translator<'a> {
             // remote resources.
             return Ok(None);
         }
+
         Ok(self.resource_name(import)?.filter(|resource| {
             Request::is_remote(resource) && !self.resources.contains_key(resource)
         }))
@@ -226,6 +242,7 @@ impl<'a> Translator<'a> {
             {
                 continue;
             }
+
             let evaluated = self.option_value(value, &bindings)?;
             return Ok(match evaluated.as_ref() {
                 ValueRef::String(path) => Some(path.to_owned()),
@@ -233,6 +250,7 @@ impl<'a> Translator<'a> {
                 _ => None,
             });
         }
+
         Ok(None)
     }
 }

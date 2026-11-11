@@ -80,6 +80,7 @@ impl Translator<'_> {
         let [left, right] = condition.arguments.as_slice() else {
             return None;
         };
+
         let (column, constant) = match (column_number(left), column_number(right)) {
             (Some(column), None) => (column, right),
             (None, Some(column)) => (column, left),
@@ -89,11 +90,13 @@ impl Translator<'_> {
         if SparqlQuery::ground_terms(&value).is_empty() {
             return None;
         }
+
         let (position, _) = delivered
             .iter()
             .enumerate()
             .filter(|(_, delivered)| **delivered)
             .nth(column)?;
+
         Some(ValuesBlock {
             positions: vec![position],
             rows: vec![vec![value]],
@@ -130,6 +133,7 @@ impl Translator<'_> {
             &mut lexical_reads,
             Polarity::Positive,
         )?;
+
         Some(
             lexical_reads
                 .into_iter()
@@ -187,6 +191,7 @@ impl Translator<'_> {
                     && !is_nan(&right);
                 (exact || covering).then(|| Expression::Equal(Box::new(left), Box::new(right)))
             }
+
             // A negated identity is translated only with an IRI.
             // With a literal, `=` would hold for more, since the double `3.0E0` is `=` to
             // the integer 3, a different value to Nemo,
@@ -223,6 +228,7 @@ impl Translator<'_> {
                 lexical_reads.extend(arguments.first().cloned());
                 call(Function::Str, 1, arguments)
             }
+
             // Nemo reads language tags in lower case.
             Operator::Lang => call(Function::Lang, 1, arguments)
                 .map(|tag| Expression::FunctionCall(Function::LCase, vec![tag])),
@@ -305,6 +311,7 @@ impl Translator<'_> {
             let name = delivered.get(position)?;
             return Variable::new(name.as_str()).ok().map(Expression::Variable);
         }
+
         match &term.kind {
             TermKind::Operation(operation) => {
                 self.sparql_expression(operation, delivered, lexical_reads, polarity)
@@ -384,6 +391,7 @@ fn datatype_test(arguments: Vec<Expression>, datatypes: &[&str]) -> Option<Expre
             )
         })
         .collect();
+
     Some(Expression::And(
         Box::new(Expression::FunctionCall(Function::IsLiteral, vec![value])),
         Box::new(fold(Expression::Or, alternatives)?),

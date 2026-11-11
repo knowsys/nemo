@@ -52,6 +52,7 @@ pub(crate) fn combined_positions(rule: &CompiledRule) -> Vec<usize> {
     for (position, &variable) in rule.order.iter().enumerate() {
         positions[variable] = position;
     }
+
     positions
 }
 
@@ -84,6 +85,7 @@ impl<'r> BodySpace<'r> {
             .copied()
             .chain(markers[rule.variables..].iter().copied())
             .collect();
+
         Self {
             rule,
             markers,
@@ -150,6 +152,7 @@ impl<'r> BodySpace<'r> {
                 node = plan.filter(node, FilterSpec::from_program(inputs, program));
             }
         }
+
         for (slot, entry) in rule.computed.iter().enumerate() {
             if entry.inputs.iter().all(|&id| bound[id]) {
                 let spec = ComputedColumnSpec::from_program(
@@ -201,6 +204,7 @@ impl<'r> BodySpace<'r> {
             let relation = self.negated_node(plan, atom, range.clone(), &mut loads);
             node = plan.subtract(node, relation);
         }
+
         (node, loads)
     }
 

@@ -29,6 +29,7 @@ impl Lexer<'_> {
         if multiline {
             self.position += 2;
         }
+
         multiline
     }
 
@@ -67,6 +68,7 @@ impl Lexer<'_> {
         let Some(byte) = self.peek() else {
             return LiteralStep::Unterminated;
         };
+
         match byte {
             b'"' if multiline && !self.closes_multiline() => {
                 text.push('"');
@@ -83,6 +85,7 @@ impl Lexer<'_> {
                 text.push(character);
             }
         }
+
         LiteralStep::Content
     }
 
@@ -122,6 +125,7 @@ impl Lexer<'_> {
         let multiline = self.opens_multiline();
         let mut parts = Vec::new();
         let mut text = String::new();
+
         // Whether a stray `}` was reported, which makes the literal an error token.
         let mut stray = false;
         loop {
@@ -141,6 +145,7 @@ impl Lexer<'_> {
                     if !text.is_empty() {
                         parts.push(FStringPart::Text(std::mem::take(&mut text)));
                     }
+
                     parts.push(FStringPart::Expression(region));
                 }
                 Some(b'}') => {
@@ -160,6 +165,7 @@ impl Lexer<'_> {
                         if !text.is_empty() {
                             parts.push(FStringPart::Text(text));
                         }
+
                         self.push(TokenKind::FString(parts), start);
                         return;
                     }
@@ -188,6 +194,7 @@ impl Lexer<'_> {
                     self.error(start, ParseError::UnterminatedFormatString);
                     return None;
                 }
+
                 // A brace inside a string literal of the expression closes nothing.
                 // A quote directly after an `f` that does not end a longer name
                 // opens a format string.
@@ -201,6 +208,7 @@ impl Lexer<'_> {
                     if !self.skip_literal(start, format) {
                         return None;
                     }
+
                     continue;
                 }
                 Some(b'{') => depth += 1,
@@ -212,8 +220,10 @@ impl Lexer<'_> {
                 }
                 _ => {}
             }
+
             self.position += 1;
         }
+
         let region = self.span(expression);
         self.position += 1;
         Some(region)
@@ -237,8 +247,10 @@ impl Lexer<'_> {
                 } else if self.embedded_expression(start).is_none() {
                     return false;
                 }
+
                 continue;
             }
+
             match self.literal_step(multiline, &mut text) {
                 LiteralStep::Content => {}
                 LiteralStep::Closed => return true,

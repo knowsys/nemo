@@ -101,6 +101,7 @@ impl Display for Operation {
             } else {
                 write!(f, "{base}")?;
             }
+
             return write!(f, "[{}]", self.arguments[1]);
         }
         if self.is_infix() {

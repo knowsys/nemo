@@ -51,6 +51,7 @@ impl RowBlock {
         let Some(first) = rows.peek() else {
             return Ok(None);
         };
+
         let arity = first.len();
         let mut values = Vec::with_capacity(arity * rows.size_hint().0);
         let mut columns = vec![ColumnType::new(); arity];
@@ -70,12 +71,15 @@ impl RowBlock {
                     _ => arity_mismatch(predicate, &row, arity),
                 });
             }
+
             for (column, value) in columns.iter_mut().zip(&row) {
                 column.add(value.as_ref());
             }
+
             values.extend(row);
             count += 1;
         }
+
         Ok(Some(Self {
             predicate: predicate.to_owned(),
             arity,
@@ -203,6 +207,7 @@ impl UnloadedRows {
                         kept.arity,
                     ));
                 }
+
                 kept.append(block);
             }
             None => {
@@ -211,6 +216,7 @@ impl UnloadedRows {
                 self.blocks.push(block);
             }
         }
+
         Ok(())
     }
 
@@ -219,12 +225,14 @@ impl UnloadedRows {
         let Some(position) = self.positions.remove(predicate) else {
             return false;
         };
+
         self.blocks.remove(position);
         for later in self.positions.values_mut() {
             if *later > position {
                 *later -= 1;
             }
         }
+
         true
     }
 
@@ -249,6 +257,7 @@ pub(in crate::engine) fn row_note(predicate: &str, row: &[DataValue]) -> String 
         .iter()
         .map(|value| Term::value(value).map_or_else(|| value.to_string(), |term| term.to_string()))
         .collect();
+
     format!(
         "the row given to `import_rows` is `{}({})`",
         Identifier::Bare(predicate.to_owned()),

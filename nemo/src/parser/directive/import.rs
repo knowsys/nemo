@@ -35,6 +35,7 @@ impl Parser<'_> {
     /// and its `where` clause.
     pub(super) fn import_directive(&mut self) -> Result<ImportDirective, Diagnostic> {
         let specification = self.specification("from", true)?;
+
         Ok(ImportDirective {
             predicate: specification.predicate,
             variables: specification.variables,
@@ -50,6 +51,7 @@ impl Parser<'_> {
     /// Parses `@export predicate to format { … }`, with its guards.
     pub(super) fn export_directive(&mut self) -> Result<ExportDirective, Diagnostic> {
         let specification = self.specification("to", false)?;
+
         Ok(ExportDirective {
             predicate: specification.predicate,
             format: specification.format,
@@ -80,6 +82,7 @@ impl Parser<'_> {
             })?;
             self.expect(&TokenKind::ParenClose, "`)` closing the column variables")?;
         }
+
         self.expect_word(
             connective,
             &format!("`{connective}` before the format"),
@@ -111,6 +114,7 @@ impl Parser<'_> {
                 )
             })?
             .unwrap_or_default();
+
         // Guards `, ?x = term` follow the options.
         let mut guards = Vec::new();
         while self.eat(&TokenKind::Comma).is_some() {
@@ -119,6 +123,7 @@ impl Parser<'_> {
             self.expect(&TokenKind::Equal, "`=` after the guard variable")?;
             guards.push((variable, self.term()?));
         }
+
         // The `where` clause contains binding atoms and conditions, as in a rule body.
         // `where` is a keyword only in this position.
         let mut bindings = Vec::new();
@@ -135,6 +140,7 @@ impl Parser<'_> {
                 }
             }
         }
+
         Ok(Specification {
             predicate,
             variables,

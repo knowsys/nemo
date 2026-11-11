@@ -35,6 +35,7 @@ pub(super) fn anchor_import_resources(statement: &mut Statement, directory: &Pat
     let Statement::Directive(Directive::Import(import)) = statement else {
         return;
     };
+
     for (key, value) in &mut import.options {
         let TermKind::Constant(Identifier::Bare(name)) = &key.kind else {
             continue;
@@ -42,6 +43,7 @@ pub(super) fn anchor_import_resources(statement: &mut Statement, directory: &Pat
         if name != "resource" {
             continue;
         }
+
         // A resource is written as a string or as an IRI, and the
         // engine accepts both.
         let resource = match &value.kind {
@@ -52,10 +54,12 @@ pub(super) fn anchor_import_resources(statement: &mut Statement, directory: &Pat
         if Path::new(&resource).is_absolute() || resource.contains("://") {
             continue;
         }
+
         let joined = directory.join(&resource);
         let Ok(absolute) = std::path::absolute(&joined) else {
             continue;
         };
+
         value.kind = TermKind::String(identity(&absolute));
     }
 }
@@ -91,6 +95,7 @@ impl Linker<'_> {
             }
             .at(directive.span));
         }
+
         Ok(location)
     }
 
@@ -106,6 +111,7 @@ impl Linker<'_> {
                 && text.segments.starts_with(&location.segments)
         });
         let directory = from.path(from.tree(program, self.roots));
+
         registered
             || (matches!(entry(&directory, name), Entry::Exact) && directory.join(name).is_dir())
     }
@@ -126,16 +132,19 @@ impl Linker<'_> {
         if let Some(&file) = self.files.get(&name) {
             return Ok(file);
         }
+
         let text = match self.texts.get(location) {
             Some(text) => text.to_string(),
             None => self.read_file(location, tree, &path, directive)?,
         };
+
         // Spans address a source by 32-bit offsets, as for the program itself.
         if u32::try_from(text.len()).is_err() {
             return Err(EngineError::SourceTooLarge { name: name.clone() }
                 .at(directive.span)
                 .with_resource(name));
         }
+
         let file = self.pipeline.add_source(name.clone(), text);
         self.files.insert(name, file);
         Ok(file)
@@ -162,6 +171,7 @@ impl Linker<'_> {
                 None => problem,
             });
         }
+
         fs::read_to_string(path).map_err(|error| {
             ModuleError::ModuleUnreadable {
                 module: directive.module.to_string(),
@@ -203,6 +213,7 @@ impl Linker<'_> {
         let text = self.pipeline.text(file).unwrap_or_default().to_owned();
         let (module, diagnostics) = Program::parse_with_file(&text, instance);
         let first = self.reported.insert(file);
+
         // The first error ends linking, and the parser's other
         // diagnostics are reported with it.
         let mut failure = None;
@@ -213,6 +224,7 @@ impl Linker<'_> {
                 self.pipeline.report(diagnostic);
             }
         }
+
         match failure {
             Some(problem) => Err(problem),
             None => Ok(module.statements),
@@ -241,10 +253,12 @@ pub(super) fn identity(path: &Path) -> String {
                 if !name.is_empty() && !name.ends_with('/') {
                     name.push('/');
                 }
+
                 name.push_str(&other.as_os_str().to_string_lossy());
             }
         }
     }
+
     if name.is_empty() {
         String::from(".")
     } else {
@@ -270,6 +284,7 @@ fn entry(directory: &Path, name: &str) -> Entry {
     let Ok(entries) = fs::read_dir(directory) else {
         return Entry::Missing;
     };
+
     let mut differs = None;
     for entry in entries.flatten() {
         let found = entry.file_name();
@@ -283,6 +298,7 @@ fn entry(directory: &Path, name: &str) -> Entry {
             differs = Some(found.to_owned());
         }
     }
+
     differs.map_or(Entry::Missing, Entry::Differs)
 }
 
@@ -306,6 +322,7 @@ fn find_exactly(location: &Location, tree: &Path) -> Result<(), Missing> {
     let Some((name, directories)) = location.segments.split_last() else {
         return Err(Missing::Nothing);
     };
+
     let mut directory = Location {
         segments: Vec::new(),
         ..location.clone()
@@ -318,6 +335,7 @@ fn find_exactly(location: &Location, tree: &Path) -> Result<(), Missing> {
             Entry::Missing => return Err(Missing::Nothing),
         }
     }
+
     match entry(&directory, &format!("{name}.rls")) {
         Entry::Exact => Ok(()),
         Entry::Differs(found) => Err(Missing::Case(found)),

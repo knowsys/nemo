@@ -111,6 +111,7 @@ impl<'a> ProofSearch<'a> {
             .program
             .as_ref()
             .ok_or_else(|| EngineError::NoProgram.diagnostic())?;
+
         Ok(Self {
             manager: &mut engine.manager,
             dictionary: &mut engine.dictionary,
@@ -139,6 +140,7 @@ impl<'a> ProofSearch<'a> {
         let Some(row) = row else {
             return Ok(None);
         };
+
         self.search(table, &row)
     }
 
@@ -165,6 +167,7 @@ impl<'a> ProofSearch<'a> {
                 return block.end;
             }
         }
+
         at
     }
 
@@ -197,6 +200,7 @@ impl<'a> ProofSearch<'a> {
         {
             return vec![(logged.rule as usize, logged.step)];
         }
+
         (0..program.rules.len())
             .filter(|&rule| {
                 !program.rules[rule].never_fires && targets(&program.rules[rule], table)
@@ -284,6 +288,7 @@ impl<'a> ProofSearch<'a> {
         {
             groundings.push(head_grounding(rule, head, &values));
         }
+
         if let Some(existential) = &rule.existential {
             for insert in existential
                 .inserts
@@ -317,6 +322,7 @@ impl<'a> ProofSearch<'a> {
                 )));
             }
         }
+
         Ok(None)
     }
 
@@ -355,6 +361,7 @@ impl<'a> ProofSearch<'a> {
         if witnesses.is_empty() {
             return Ok(None);
         }
+
         let positions = combined_positions(rule);
 
         // The summary of the group is the number of distinct contributions
@@ -370,6 +377,7 @@ impl<'a> ProofSearch<'a> {
                         .collect();
                     seen.insert(projected);
                 }
+
                 seen.len()
             }
             None => witnesses.len(),
@@ -434,6 +442,7 @@ impl<'a> ProofSearch<'a> {
                 None => return Ok(None),
             }
         }
+
         Ok(Some(premises))
     }
 
@@ -526,6 +535,7 @@ impl<'a> ProofSearch<'a> {
             let end = self.aligned_end(atom.table, step);
             inputs.push(plan.load(atom.table, Revision(0)..end, space.atom_markers(atom)));
         }
+
         let node = space.join(&mut plan, inputs, space.order.clone(), grounding);
 
         // Negations hold against the saturated store, exactly as at application time.
@@ -672,8 +682,10 @@ fn head_grounding(
             nondeterministic = true;
             continue;
         }
+
         grounding.push((column, value.clone()));
     }
+
     (grounding, nondeterministic)
 }
 
@@ -704,6 +716,7 @@ fn insert_grounding(
                 if !matches!(value.as_ref(), ValueRef::Null(_)) {
                     return None;
                 }
+
                 match nulls.get(slot) {
                     Some(&seen) if seen != encoded => return None,
                     _ => {
@@ -718,5 +731,6 @@ fn insert_grounding(
             }
         }
     }
+
     Some(grounding)
 }

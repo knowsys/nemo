@@ -75,6 +75,7 @@ impl<'a> Parser<'a> {
     /// keeping the diagnostics of the lexer.
     fn new(source: &'a str, file: FileId) -> Self {
         let (tokens, diagnostics) = lexer::tokenize(source, file);
+
         Self {
             diagnostics,
             ..Self::over(source, tokens, 0, "the end of the input")
@@ -97,11 +98,13 @@ impl<'a> Parser<'a> {
         if let Some(problem) = diagnostics.into_iter().next() {
             return Err(problem);
         }
+
         let mut parser = Self::over(source, tokens, depth, end);
         let parsed = parse(&mut parser)?;
         if !parser.at(&TokenKind::End) {
             return Err(parser.unexpected(end));
         }
+
         Ok(parsed)
     }
 
@@ -123,13 +126,16 @@ impl<'a> Parser<'a> {
                     if !repeats_lexer {
                         parser.diagnostics.push(diagnostic);
                     }
+
                     parser.recover();
                 }
             }
         }
+
         if parser.diagnostics.is_empty() {
             return (statements, parser.diagnostics);
         }
+
         let lines = Span::line_starts(source);
         let diagnostics = parser
             .diagnostics
@@ -164,6 +170,7 @@ impl<'a> Parser<'a> {
     /// as any other term.
     pub(super) fn embedded(&self, span: Span) -> Result<Term, Diagnostic> {
         let slice = &self.source[span.start as usize..span.end as usize];
+
         Parser::whole(
             self.source,
             lexer::tokenize_at(slice, span.file, span.start as usize),
@@ -185,6 +192,7 @@ impl<'a> Parser<'a> {
         if self.depth >= MAX_NESTING {
             return Err(ParseError::TooDeep { limit: MAX_NESTING }.at(Some(self.peek_span())));
         }
+
         self.depth += 1;
         let parsed = parse(self);
         self.depth -= 1;
@@ -239,6 +247,7 @@ impl<'a> Parser<'a> {
         if self.position + 1 < self.tokens.len() {
             self.position += 1;
         }
+
         token
     }
 
@@ -269,6 +278,7 @@ impl<'a> Parser<'a> {
         if self.text(&token) != word {
             return Err(error().at(Some(token.span)));
         }
+
         Ok(())
     }
 
@@ -312,6 +322,7 @@ impl<'a> Parser<'a> {
     /// Returns the span from the start of `start` to the end of the last consumed token.
     pub(super) fn span_from(&self, start: Span) -> Span {
         let end = self.tokens[self.position.saturating_sub(1)].span.end;
+
         Span {
             file: start.file,
             start: start.start,
@@ -332,6 +343,7 @@ impl<'a> Parser<'a> {
             TokenKind::FString(_) => String::from("a format string"),
             _ => format!("`{}`", excerpt(self.text(token))),
         };
+
         ParseError::Expected {
             expected: expected.to_owned(),
             found,

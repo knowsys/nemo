@@ -53,8 +53,10 @@ pub(in crate::engine) fn rewrite_unvalued(
     if unvalued.is_empty() {
         return statements;
     }
+
     let as_inputs = input_predicates(&statements, unvalued);
     let mut given = HashSet::new();
+
     statements
         .into_iter()
         .filter_map(|(id, statement)| {

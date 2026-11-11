@@ -115,6 +115,7 @@ impl<'a> Responder<'a> {
                         derivation: None,
                     };
                 };
+
                 let next = listed.len();
                 let rule = *listed.entry(*statement).or_insert_with_key(|statement| {
                     rules.push(written_rule(self.engine, *statement));
@@ -167,6 +168,7 @@ impl<'a> Responder<'a> {
 /// Returns a span as a [SourceLocation], or `None` if its file is not registered.
 fn source_location(engine: &Engine, span: Span) -> Option<SourceLocation> {
     let (line, column) = engine.pipeline.line_column(span)?;
+
     Some(SourceLocation {
         file: engine.pipeline.file_name(span.file)?.to_owned(),
         start: span.start,
@@ -207,6 +209,7 @@ pub(crate) fn written_rule(engine: &Engine, statement: StatementId) -> WrittenRu
             source: using.span.and_then(|span| source_location(engine, span)),
         })
         .collect();
+
     WrittenRule {
         rule: engine
             .written

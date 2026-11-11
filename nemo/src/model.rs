@@ -91,8 +91,10 @@ pub(crate) fn fmt_list<Item: Display>(f: &mut Formatter<'_>, items: &[Item]) -> 
         if index > 0 {
             f.write_str(", ")?;
         }
+
         write!(f, "{item}")?;
     }
+
     Ok(())
 }
 

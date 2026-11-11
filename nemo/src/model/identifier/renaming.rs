@@ -112,6 +112,7 @@ fn statement(
             for argument in &mut fact.terms {
                 term(argument, rename)?;
             }
+
             Ok(())
         }
         Statement::Rule(rule) => self::rule(rule, rename),
@@ -129,6 +130,7 @@ fn set(
     if let Some(renamed) = rename.identifier(identifier, role, span)? {
         *identifier = renamed;
     }
+
     Ok(())
 }
 
@@ -137,15 +139,18 @@ fn rule(rule: &mut Rule, rename: &mut impl IdentifierRenaming) -> Result<(), Dia
     for attribute in &mut rule.attributes {
         self::attribute(attribute, rename)?;
     }
+
     for head in &mut rule.head {
         atom(head, rename)?;
     }
+
     for literal in &mut rule.body {
         match literal {
             Literal::Positive(body) | Literal::Negative(body) => atom(body, rename)?,
             Literal::Operation(constraint) => operation(constraint, rename)?,
         }
     }
+
     Ok(())
 }
 
@@ -167,6 +172,7 @@ fn attribute(
     for argument in &mut attribute.arguments {
         term(argument, rename)?;
     }
+
     Ok(())
 }
 
@@ -181,6 +187,7 @@ fn atom(atom: &mut Atom, rename: &mut impl IdentifierRenaming) -> Result<(), Dia
     for argument in &mut atom.terms {
         term(argument, rename)?;
     }
+
     Ok(())
 }
 
@@ -192,6 +199,7 @@ fn term(term: &mut Term, rename: &mut impl IdentifierRenaming) -> Result<(), Dia
         TermKind::RdfLiteral { datatype, .. } => {
             set(datatype, rename, IdentifierRole::Value, span)?
         }
+
         // A function term is a labeled tuple, which is a value.
         // A call of a `@define`d function is written the same way,
         // and distinguishing the two needs the defines, which this walk does not know.
@@ -213,6 +221,7 @@ fn term(term: &mut Term, rename: &mut impl IdentifierRenaming) -> Result<(), Dia
             if let Some(label) = label {
                 set(label, rename, IdentifierRole::Value, span)?;
             }
+
             for (key, value) in pairs {
                 self::term(key, rename)?;
                 self::term(value, rename)?;
@@ -237,6 +246,7 @@ fn term(term: &mut Term, rename: &mut impl IdentifierRenaming) -> Result<(), Dia
         | TermKind::Boolean(_)
         | TermKind::Number(_) => {}
     }
+
     Ok(())
 }
 
@@ -248,6 +258,7 @@ fn operation(
     for argument in &mut operation.arguments {
         term(argument, rename)?;
     }
+
     Ok(())
 }
 
@@ -263,6 +274,7 @@ fn aggregate(
     if let Some(value) = &mut aggregate.value {
         term(value, rename)?;
     }
+
     for variable in &mut aggregate.scope {
         if variable.kind == VariableKind::Global
             && let Some(renamed) = rename.global(&variable.name)
@@ -270,6 +282,7 @@ fn aggregate(
             variable.name = renamed;
         }
     }
+
     Ok(())
 }
 
@@ -297,14 +310,17 @@ fn directive(
                 IdentifierRole::Reserved,
                 import.span,
             )?;
+
             // An option's key is matched by its spelling and is not a program name.
             // Only its value can contain one.
             for (_, value) in &mut import.options {
                 term(value, rename)?;
             }
+
             for (_, value) in &mut import.guards {
                 term(value, rename)?;
             }
+
             for condition in &mut import.conditions {
                 operation(condition, rename)?;
             }
@@ -325,6 +341,7 @@ fn directive(
             for (_, value) in &mut export.options {
                 term(value, rename)?;
             }
+
             for (_, value) in &mut export.guards {
                 term(value, rename)?;
             }
@@ -380,6 +397,7 @@ fn directive(
             for parameter in &mut external.parameters {
                 datatype(parameter, rename)?;
             }
+
             datatype(&mut external.result, rename)?;
         }
         Directive::Parameter(parameter) => {
@@ -390,10 +408,12 @@ fn directive(
                 term(value, rename)?;
             }
         }
+
         // `@base`, `@prefix` and `@use` name IRIs, prefixes and modules,
         // not program names.
         Directive::Base(_) | Directive::Prefix(_) | Directive::Use(_) => {}
     }
+
     Ok(())
 }
 
@@ -428,6 +448,7 @@ fn datatype(
             }
         }
     }
+
     Ok(())
 }
 
@@ -439,5 +460,6 @@ fn type_label(
     if let TypeLabel::Named(name) = label {
         set(name, rename, IdentifierRole::Value, None)?;
     }
+
     Ok(())
 }

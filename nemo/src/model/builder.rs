@@ -138,6 +138,7 @@ impl Term {
         fn elements<'a>(values: impl Iterator<Item = ValueRef<'a>>) -> Option<Vec<Term>> {
             values.map(Term::of_value).collect()
         }
+
         Some(match value {
             ValueRef::Iri(iri) => Self::iri(iri.to_string()),
             ValueRef::String(text) => Self::string(text),
@@ -222,6 +223,7 @@ impl From<Variable> for Term {
 impl From<Operation> for Term {
     fn from(value: Operation) -> Self {
         let span = value.span;
+
         Term {
             kind: TermKind::Operation(value),
             span,
@@ -233,6 +235,7 @@ impl From<Operation> for Term {
 impl From<Aggregate> for Term {
     fn from(value: Aggregate) -> Self {
         let span = value.span;
+
         Term {
             kind: TermKind::Aggregate(value),
             span,

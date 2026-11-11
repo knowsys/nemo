@@ -83,6 +83,7 @@ fn case_name(root: &Path, program: &Path) -> String {
         .strip_prefix(root)
         .expect("cases live under the root")
         .with_extension("");
+
     relative
         .components()
         .map(|component| component.as_os_str().to_string_lossy())
@@ -110,6 +111,7 @@ fn run(program: &Path, bless: bool) -> Result<(), String> {
     } else {
         compare(&actual, &expected)?;
     }
+
     check_exports(&mut engine, program)
 }
 
@@ -121,6 +123,7 @@ fn run(program: &Path, bless: bool) -> Result<(), String> {
 fn reason(path: &Path, expected: &Results) -> Result<(Engine, bool), String> {
     let text = fs::read_to_string(path).map_err(|error| error.to_string())?;
     let mut engine = Engine::new();
+
     // Registering the source under its path lets a `@use` resolve
     // relative to the case's directory.
     let file = engine
@@ -162,6 +165,7 @@ fn expectation(text: &str) -> Result<Results, String> {
         let rows = engine.rows(&info.name).map_err(describe)?;
         results.insert(info.name, rows);
     }
+
     Ok(results)
 }
 
@@ -185,6 +189,7 @@ fn results(
                 .map(|info| info.name),
         );
     }
+
     predicates.extend(engine.exports().iter().map(|spec| spec.predicate.clone()));
     predicates.extend(expected.keys().cloned());
 
@@ -197,6 +202,7 @@ fn results(
         };
         results.insert(predicate, rows);
     }
+
     Ok(results)
 }
 
@@ -224,6 +230,7 @@ fn render(results: &Results) -> String {
     for value in results.values().flatten().flatten() {
         nulls(value.as_ref(), &mut ids);
     }
+
     ids.sort_unstable();
     ids.dedup();
     let ranks: HashMap<u64, u64> = (0..).zip(&ids).map(|(rank, &id)| (id, rank)).collect();
@@ -233,6 +240,7 @@ fn render(results: &Results) -> String {
         if rows.is_empty() {
             continue;
         }
+
         let name = Identifier::bare(predicate.clone());
         let mut rows = rows.clone();
         rows.sort();
@@ -241,8 +249,10 @@ fn render(results: &Results) -> String {
             let terms: Vec<String> = row.iter().map(|value| term(value, &ranks)).collect();
             lines.push_str(&format!("{name}({}) .\n", terms.join(", ")));
         }
+
         groups.push(lines);
     }
+
     groups.join("\n")
 }
 
@@ -261,6 +271,7 @@ fn term(value: &DataValue, ranks: &HashMap<u64, u64>) -> String {
             return name;
         }
     }
+
     renamed(value.as_ref(), &mut |id| ranks[&id]).to_string()
 }
 
@@ -271,6 +282,7 @@ fn check_exports(engine: &mut Engine, program: &Path) -> Result<(), String> {
     if !expected_directory.is_dir() {
         return Ok(());
     }
+
     let written = std::env::temp_dir().join(format!(
         "nemo-testcase-{}-{}",
         std::process::id(),
@@ -310,6 +322,7 @@ fn check_exports(engine: &mut Engine, program: &Path) -> Result<(), String> {
             break;
         }
     }
+
     fs::remove_dir_all(&written).ok();
     outcome
 }
@@ -385,6 +398,7 @@ impl Cell {
                 });
             position as u64
         });
+
         Cell {
             shape: shape.to_string(),
             nulls: nulls_in_value,
@@ -426,6 +440,7 @@ fn compare(actual: &Results, expected: &Results) -> Result<(), String> {
             ));
         }
     }
+
     if !problems.is_empty() {
         return Err(problems.join("\n"));
     }
@@ -461,10 +476,12 @@ fn difference(actual: &[String], expected: &[String]) -> String {
         for row in rows.iter().take(SHOWN) {
             text.push_str(&format!("  {sign} {row}\n"));
         }
+
         if rows.len() > SHOWN {
             text.push_str(&format!("  {sign} … {} more\n", rows.len() - SHOWN));
         }
     }
+
     if missing.is_empty() && unexpected.is_empty() {
         text.push_str(&format!(
             "  the same rows, but {} derived and {} expected with repeats\n",
@@ -472,6 +489,7 @@ fn difference(actual: &[String], expected: &[String]) -> String {
             expected.len()
         ));
     }
+
     text.push_str("  (- expected but not derived, + derived but not expected)");
     text
 }
@@ -500,6 +518,7 @@ fn side(results: &Results, predicates: &BTreeSet<&String>) -> (Side, usize) {
             rows.push((index, cells));
         }
     }
+
     (rows, nulls.len())
 }
 
@@ -517,6 +536,7 @@ fn matches_up_to_nulls(
     if actual_count != expected_count || actual.len() != expected.len() {
         return false;
     }
+
     let mut actual_colors = vec![0u64; actual_count];
     let mut expected_colors = vec![0u64; expected_count];
     for _ in 0..=actual_count.min(24) {
@@ -529,9 +549,11 @@ fn matches_up_to_nulls(
     for (null, &color) in actual_colors.iter().enumerate() {
         classes.entry(color).or_default().0.push(null);
     }
+
     for (null, &color) in expected_colors.iter().enumerate() {
         classes.entry(color).or_default().1.push(null);
     }
+
     let classes: Vec<(Vec<usize>, Vec<usize>)> = classes.into_values().collect();
     if classes
         .iter()
@@ -549,6 +571,7 @@ fn matches_up_to_nulls(
         map: vec![0; actual_count],
         used: vec![false; expected_count],
     };
+
     search.class(0)
 }
 
@@ -565,6 +588,7 @@ fn refine(rows: &Side, colors: &mut [u64]) {
                 colors[null].hash(&mut hasher);
             }
         }
+
         let context = hasher.finish();
         for (column, (_, nulls)) in cells.iter().enumerate() {
             for (position, &null) in nulls.iter().enumerate() {
@@ -572,6 +596,7 @@ fn refine(rows: &Side, colors: &mut [u64]) {
             }
         }
     }
+
     for (null, mut signature) in signatures.into_iter().enumerate() {
         signature.sort_unstable();
         let mut hasher = DefaultHasher::new();
@@ -609,6 +634,7 @@ impl Search<'_> {
         let Some(&null) = nulls.get(at) else {
             return self.class(position + 1);
         };
+
         for candidate in self.classes[position].1.clone() {
             if !self.used[candidate] {
                 self.used[candidate] = true;
@@ -616,9 +642,11 @@ impl Search<'_> {
                 if self.assign(position, nulls, at + 1) {
                     return true;
                 }
+
                 self.used[candidate] = false;
             }
         }
+
         false
     }
 

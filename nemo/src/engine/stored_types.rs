@@ -65,6 +65,7 @@ impl Engine {
         let Some(types) = column_types.get(&table) else {
             return;
         };
+
         let labels = &self.translation.label_types;
         for (column, (&stored, inferred)) in row.iter().zip(types).enumerate() {
             let value = self

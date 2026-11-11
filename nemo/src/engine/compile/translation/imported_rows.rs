@@ -28,6 +28,7 @@ impl<'a> Translator<'a> {
         let table = self
             .table_named(name.to_owned(), layout.delivered(), None)
             .map_err(first)?;
+
         // A first load that a pipeline stage rewrote checks the rows twice:
         // for the written program, and here for the rewritten one,
         // since a stage may change the declarations that the rows are checked against.
@@ -45,13 +46,16 @@ impl<'a> Translator<'a> {
                 if layout.is_pruned(kept) {
                     continue;
                 }
+
                 let value = self
                     .encode_value(value.as_ref(), None)
                     .map_err(|problem| problem.with_note(row_note(name, row)))?;
                 encoded.push(value);
             }
+
             rows.push_row(&encoded);
         }
+
         Ok(Some((table, rows)))
     }
 
@@ -72,6 +76,7 @@ impl<'a> Translator<'a> {
         if !read.contains(&true) {
             return Ok(());
         }
+
         for row in block.rows() {
             for (position, value) in row.iter().enumerate() {
                 if read[position] {
@@ -80,6 +85,7 @@ impl<'a> Translator<'a> {
                 }
             }
         }
+
         Ok(())
     }
 }

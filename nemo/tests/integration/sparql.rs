@@ -61,6 +61,7 @@ fn parents() -> Responder {
                 body.push_str(&format!("<{iri}>\t<{parent}>\n"));
             }
         }
+
         body
     })
 }
@@ -86,6 +87,7 @@ fn parents_generic() -> Responder {
                 body.push_str(&format!("<{iri}>\t<{parent}>\n"));
             }
         }
+
         body
     })
 }

@@ -103,6 +103,7 @@ impl RuleRewriter<'_, '_> {
         let [replacement] = self.replacements.as_mut_slice() else {
             return false;
         };
+
         let import = &mut replacement.import;
         if import.predicate != atom.predicate
             || head.terms != atom.terms
@@ -121,6 +122,7 @@ impl RuleRewriter<'_, '_> {
         {
             return false;
         }
+
         import.predicate = head.predicate.clone();
         let head_declared = self.context.declarations.contains_key(&name);
         if head_declared {
@@ -128,6 +130,7 @@ impl RuleRewriter<'_, '_> {
         } else if let Some(declaration) = &mut replacement.declaration {
             declaration.predicate = head.predicate.clone();
         }
+
         true
     }
 }
@@ -154,6 +157,7 @@ impl RewriteContext {
                     if !matches!(binding, Binding::Variable(bound) if bound == variable) {
                         continue;
                     }
+
                     let declared = self
                         .declarations
                         .get(&atom.candidate)?
@@ -165,11 +169,13 @@ impl RewriteContext {
                     }
                 }
             }
+
             columns.push(ColumnDeclaration {
                 name: None,
                 datatype: column?.datatype.clone(),
             });
         }
+
         Some(DeclareDirective {
             predicate: Identifier::bare(name),
             columns,

@@ -44,6 +44,7 @@ impl NameScope {
                 _ => {}
             }
         }
+
         scope
     }
 
@@ -66,10 +67,12 @@ impl NameScope {
         let Some(other) = bases.find(|base| base.iri != first.iri) else {
             return Ok(());
         };
+
         let mut problem = TranslationError::ConflictingBase.at(other.span);
         if let Some(span) = first.span {
             problem = problem.with_label(span, "first declared here");
         }
+
         Err(problem)
     }
 

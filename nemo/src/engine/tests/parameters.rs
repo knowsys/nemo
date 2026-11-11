@@ -13,6 +13,7 @@ const BELOW_LIMIT: &str = "@parameter $limit: int .
 fn a_set_value_fills_a_declaration_and_replaces_its_own_value() {
     let mut engine = Engine::new();
     engine.set_parameter("limit", 3);
+
     // The name may be written with its `$`.
     engine.set_parameter("$unit", "points");
     engine
@@ -66,6 +67,7 @@ fn a_set_value_is_not_for_a_parameter_of_a_module_instance() {
             "@parameter $limit: int = 1 .\n@output q .\nq($limit) .\n",
         )
         .expect("the name is a module name");
+
     // The linked program names the instance's parameter `m::limit`.
     engine.set_parameter("m::limit", 5);
     let refused = engine
@@ -146,6 +148,7 @@ fn a_check_reads_the_set_values() {
     let [problem] = report.diagnostics() else {
         panic!("the value is a string: {report:?}");
     };
+
     assert_eq!(problem.code(), codes::PARAMETER_OUTSIDE_TYPE, "{problem:?}");
     assert_eq!(problem.field("name"), Some("limit"));
 }

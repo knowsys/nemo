@@ -58,6 +58,7 @@ impl InstantiatedModule {
         let scope = NameScope::of(&statements);
         let inputs = inputs(&statements, &scope)?;
         let bindings = bindings(directive, &inputs, &scope)?;
+
         Ok(Self {
             location,
             directory: directory_of(&path),
@@ -78,6 +79,7 @@ impl InstantiatedModule {
             let Statement::Directive(Directive::Output(directive)) = statement else {
                 continue;
             };
+
             for name in &directive.predicates {
                 // A reference is written `alias::name`, so an offered name
                 // must be a bare name.
@@ -87,7 +89,9 @@ impl InstantiatedModule {
                     }
                     .at(directive.span));
                 };
+
                 let resolved = self.scope.resolve(name, directive.span)?;
+
                 // An offered input *is* what it was bound to: the interface
                 // passes the predicate through rather than naming an empty
                 // one of its own.
@@ -98,6 +102,7 @@ impl InstantiatedModule {
                 public.insert(plain.clone(), stands_for);
             }
         }
+
         Ok(public)
     }
 
@@ -125,11 +130,13 @@ impl InstantiatedModule {
             ) {
                 continue;
             }
+
             let mut statement = statement.clone();
             statement.rename_identifiers(renaming)?;
             anchor_import_resources(&mut statement, &self.directory);
             renamed.push(statement);
         }
+
         Ok(renamed)
     }
 
@@ -155,6 +162,7 @@ impl InstantiatedModule {
                     found = true;
                 }
             }
+
             if !found {
                 return Err(ModuleError::NoSuchParameter {
                     module: directive.module.to_string(),
@@ -163,6 +171,7 @@ impl InstantiatedModule {
                 .at(directive.span));
             }
         }
+
         for statement in expanded.iter() {
             if let Statement::Directive(Directive::Parameter(parameter)) = statement
                 && parameter.value.is_none()
@@ -178,6 +187,7 @@ impl InstantiatedModule {
                 )));
             }
         }
+
         Ok(())
     }
 
@@ -206,6 +216,7 @@ impl InstantiatedModule {
         if missing.is_empty() {
             return;
         }
+
         missing.sort_unstable();
         let names: Vec<String> = missing.iter().map(|name| format!("`{name}`")).collect();
         let mut problem = ModuleError::OffersUnwritten {
@@ -214,12 +225,14 @@ impl InstantiatedModule {
             names: names.join(", "),
         }
         .diagnostic();
+
         // Label the `@output` directives that offer a name that is never written.
         let mut offered = false;
         for statement in &self.statements {
             let Statement::Directive(Directive::Output(output)) = statement else {
                 continue;
             };
+
             let offers_missing = output.predicates.iter().any(
                 |name| matches!(name, Identifier::Bare(plain) if missing.contains(&plain.as_str())),
             );
@@ -228,9 +241,11 @@ impl InstantiatedModule {
                 offered = true;
             }
         }
+
         if !offered {
             problem = problem.with_resource(identity(&self.path));
         }
+
         pipeline.report(problem);
     }
 
@@ -256,6 +271,7 @@ impl InstantiatedModule {
                 _ => {}
             }
         }
+
         written
     }
 }
@@ -275,6 +291,7 @@ fn inputs(
         let Statement::Directive(Directive::Input(input)) = statement else {
             continue;
         };
+
         let resolved = scope.resolve(&input.predicate, input.span)?;
         if inputs.iter().any(|(known, _)| *known == resolved) {
             return Err(ModuleError::DuplicateInput {
@@ -282,8 +299,10 @@ fn inputs(
             }
             .at(input.span));
         }
+
         inputs.push((resolved, input.predicate.clone()));
     }
+
     Ok(inputs)
 }
 
@@ -311,6 +330,7 @@ fn bindings(
                     listed(inputs.iter())
                 ));
             }
+
             return Err(problem);
         }
         if bindings.insert(resolved, actual.clone()).is_some() {
@@ -336,6 +356,7 @@ fn bindings(
         }
         .at(directive.span));
     }
+
     Ok(bindings)
 }
 

@@ -42,6 +42,7 @@ impl Parser<'_> {
                 }
                 .at(Some(self.span_from(start))));
             }
+
             self.advance();
             return self.map(start, Some(identifier));
         }
@@ -50,6 +51,7 @@ impl Parser<'_> {
             let identifier = self.marked(identifier)?;
             return Ok(self.spanned(start, TermKind::Constant(identifier)));
         }
+
         let (arguments, labels) = self.argument_list()?;
 
         // A bare name of a builtin makes a call of the builtin.
@@ -63,12 +65,14 @@ impl Parser<'_> {
                 }
                 .at(Some(self.span_from(start))));
             }
+
             return Ok(Term::from(Operation {
                 operator,
                 arguments,
                 span: Some(self.span_from(start)),
             }));
         }
+
         Ok(self.spanned(
             start,
             TermKind::Function {
@@ -125,6 +129,7 @@ impl Parser<'_> {
         }
         if named < labels.len() {
             let mut problem = ParseError::MixedArguments.at(Some(self.span_from(start)));
+
             // Among named arguments, an argument that is a prefixed name most likely lacks
             // the space that would make it a named argument too.
             let prefixed = labels
@@ -143,8 +148,10 @@ impl Parser<'_> {
                     "write `{prefix}: {name}` with a space for a named argument"
                 ));
             }
+
             return Err(problem);
         }
+
         Ok((terms, Some(labels.into_iter().flatten().collect())))
     }
 
@@ -160,10 +167,12 @@ impl Parser<'_> {
         if name.kind != TokenKind::Ident || colon.kind != TokenKind::Colon {
             return None;
         }
+
         let local_name = second.kind == TokenKind::Ident && Self::adjacent(colon.span, second.span);
         if Self::adjacent(name.span, colon.span) && (local_name || second.kind.ends_term()) {
             return None;
         }
+
         let name = self.advance();
         self.advance();
         Some(self.text(&name).to_owned())

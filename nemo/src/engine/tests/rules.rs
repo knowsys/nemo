@@ -58,6 +58,7 @@ fn a_second_base_iri_is_an_error() {
         .load(parse(source))
         .expect_err("a file declares one base IRI");
     assert_eq!(problem.code(), codes::CONFLICTING_BASE, "{problem:?}");
+
     // The second `@base`, and the first it conflicts with.
     assert_eq!(problem.labels().len(), 2, "{problem:?}");
 
@@ -168,6 +169,7 @@ fn nondeterministic_assignments_draw_per_row() {
         drawn(?x, ?v) :- data(?x), ?v = STRUUID() .
         passed(?x) :- data(?x), RAND() >= 0.0d .
     ");
+
     // Every row gets its own value, and the ground condition is evaluated per
     // row instead of being folded when the rule is compiled.
     let rows = rows(&mut engine, "drawn");

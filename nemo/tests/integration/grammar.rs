@@ -34,6 +34,7 @@ fn listed(grammar: &str, rule: &str) -> Vec<String> {
         .split('"')
         .next()
         .expect("the pattern is terminated");
+
     // The names sit in the last parenthesised group, before the
     // trailing lookahead, which requires that no name character follows
     // them. The group may be case-insensitive, and the lookahead may also
@@ -56,6 +57,7 @@ fn the_editor_grammar_knows_every_builtin() {
         println!("no editor grammar checked out; nothing to compare");
         return;
     };
+
     let mut listed = listed(&grammar, "builtin");
     listed.sort_unstable();
 
@@ -77,6 +79,7 @@ fn the_editor_grammar_knows_every_aggregate() {
         println!("no editor grammar checked out; nothing to compare");
         return;
     };
+
     let mut listed = listed(&grammar, "aggregate");
     listed.sort_unstable();
 

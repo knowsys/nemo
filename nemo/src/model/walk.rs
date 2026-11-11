@@ -123,6 +123,7 @@ impl Walk for Term {
         for subterm in self.subterms_mut() {
             subterm.walk_mut(visit);
         }
+
         visit(self);
     }
 }
@@ -189,9 +190,11 @@ impl Walk for Rule {
         for attribute in &self.attributes {
             attribute.walk(visit);
         }
+
         for atom in &self.head {
             atom.walk(visit);
         }
+
         for literal in &self.body {
             literal.walk(visit);
         }
@@ -201,9 +204,11 @@ impl Walk for Rule {
         for attribute in &mut self.attributes {
             attribute.walk_mut(visit);
         }
+
         for atom in &mut self.head {
             atom.walk_mut(visit);
         }
+
         for literal in &mut self.body {
             literal.walk_mut(visit);
         }
@@ -217,9 +222,11 @@ impl Walk for Directive {
                 for (_, value) in &import.options {
                     value.walk(visit);
                 }
+
                 for (_, value) in &import.guards {
                     value.walk(visit);
                 }
+
                 for atom in &import.bindings {
                     atom.walk(visit);
                 }
@@ -228,6 +235,7 @@ impl Walk for Directive {
                 for (_, value) in &export.options {
                     value.walk(visit);
                 }
+
                 for (_, value) in &export.guards {
                     value.walk(visit);
                 }
@@ -259,9 +267,11 @@ impl Walk for Directive {
                 for (_, value) in &mut import.options {
                     value.walk_mut(visit);
                 }
+
                 for (_, value) in &mut import.guards {
                     value.walk_mut(visit);
                 }
+
                 for atom in &mut import.bindings {
                     atom.walk_mut(visit);
                 }
@@ -270,6 +280,7 @@ impl Walk for Directive {
                 for (_, value) in &mut export.options {
                     value.walk_mut(visit);
                 }
+
                 for (_, value) in &mut export.guards {
                     value.walk_mut(visit);
                 }

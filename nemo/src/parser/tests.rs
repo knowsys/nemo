@@ -88,6 +88,7 @@ fn block_comments_are_trivia_and_blank_nodes_are_terms() {
     let (again, diagnostics) = Program::parse(&rendered);
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
     assert_eq!(again.statements[0], program.statements[0]);
+
     // A lone `_` is an anonymous variable, and `_x` is a name.
     let (program, diagnostics) = Program::parse("r(?y) :- s(_, ?y, _x) .");
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
@@ -124,6 +125,7 @@ fn iris_in_term_syntax_read_back_as_themselves() {
         let Statement::Fact(fact) = &program.statements[0] else {
             panic!("{source} is a fact");
         };
+
         let read = match &fact.terms[0].kind {
             TermKind::Constant(Identifier::Bare(name) | Identifier::Iri(name)) => name.as_str(),
             other => panic!("{source} reads as {other:?}"),
@@ -174,10 +176,12 @@ fn line_breaks_in_literals_normalize_in_every_form() {
             "{source:?}"
         );
     }
+
     for source in ["f\"a\r\nb\"", "f\"\"\"a\r\nb\"\"\""] {
         let TermKind::Operation(concat) = Term::parse(source).expect("parses").kind else {
             panic!("{source:?}: a format string is a concatenation");
         };
+
         assert_eq!(
             concat.arguments[0].kind,
             TermKind::String(String::from("a\nb")),
@@ -272,6 +276,7 @@ fn a_module_name_is_super_steps_then_names() {
         crate::codes::SUPER_INSIDE_MODULE_NAME,
         "{problem:?}"
     );
+
     // Only `super`, a trailing `::` or nothing at all is not a module name.
     for source in ["super", "super::", "lib::", ""] {
         let problem = ModuleName::parse(source).expect_err(source);
@@ -315,14 +320,17 @@ fn precedence_binds_arithmetic_over_comparisons() {
     let TermKind::Operation(equality) = &term.kind else {
         panic!("expected an operation");
     };
+
     assert_eq!(equality.operator, Operator::Equal);
     let TermKind::Operation(sum) = &equality.arguments[0].kind else {
         panic!("expected the sum on the left");
     };
+
     assert_eq!(sum.operator, Operator::Add);
     let TermKind::Operation(product) = &sum.arguments[1].kind else {
         panic!("expected the product to bind tighter");
     };
+
     assert_eq!(product.operator, Operator::Multiply);
 
     // Parentheses group terms, and the display writes the parentheses that grouping needs.
@@ -339,10 +347,12 @@ fn component_access_binds_tightest_and_writes_the_sugar() {
     let TermKind::Operation(sum) = &term.kind else {
         panic!("expected the sum on top");
     };
+
     assert_eq!(sum.operator, Operator::Add);
     let TermKind::Operation(access) = &sum.arguments[0].kind else {
         panic!("expected the access below");
     };
+
     assert_eq!(access.operator, Operator::Get);
 
     // `GET` is the same operation, and is displayed in the short form.
@@ -365,6 +375,7 @@ fn numbers_classify_by_form() {
     }
 
     assert_eq!(Term::parse("5").expect("parses"), Term::integer(5));
+
     // A decimal with an integral value is the same term as the integer,
     // as it is in the value layer.
     assert_eq!(Term::parse("2500.0").expect("parses"), Term::integer(2500));
@@ -385,13 +396,16 @@ fn numbers_classify_by_form() {
         let TermKind::Number(Number::Double(value)) = term.kind else {
             panic!("`{source}` must be a double");
         };
+
         assert_eq!(value.get(), double);
     }
+
     for (source, float) in [("2.5f", 2.5f32), ("9F", 9.0), ("1e3f", 1000.0)] {
         let term = Term::parse(source).expect("parses");
         let TermKind::Number(Number::Float(value)) = term.kind else {
             panic!("`{source}` must be a float");
         };
+
         assert_eq!(value.get(), float);
         assert_eq!(Term::parse(&term.to_string()).expect("re-parses"), term);
     }
@@ -406,6 +420,7 @@ fn a_plus_signs_only_numbers() {
         Term::parse("+2.5f").expect("parses").kind,
         TermKind::Number(Number::Float(_))
     ));
+
     // The sign binds to the literal, before any infix operator.
     let Term {
         kind: TermKind::Operation(sum),
@@ -414,6 +429,7 @@ fn a_plus_signs_only_numbers() {
     else {
         panic!("expected the sum");
     };
+
     assert_eq!(sum.operator, Operator::Add);
     assert_eq!(sum.arguments[0], Term::integer(1));
 
@@ -471,6 +487,7 @@ fn unspaced_less_than_is_not_an_iri() {
     let Literal::Operation(operation) = &rule.body[1] else {
         panic!("expected the comparison literal");
     };
+
     assert_eq!(operation.operator, Operator::Less);
 
     let iri = Term::parse("<https://example.org/a>").expect("the IRI parses");
@@ -558,6 +575,7 @@ fn strings_process_escapes_and_language_subtags() {
     let TermKind::String(value) = &term.kind else {
         panic!("expected a string");
     };
+
     assert_eq!(value, "say \"hi\"\n");
 
     // Character escapes are decoded as in Turtle.
@@ -571,6 +589,7 @@ fn strings_process_escapes_and_language_subtags() {
         let TermKind::String(parsed) = &term.kind else {
             panic!("expected a string");
         };
+
         assert_eq!(parsed, value, "{written}");
     }
 
@@ -578,6 +597,7 @@ fn strings_process_escapes_and_language_subtags() {
     let TermKind::LanguageString { language, .. } = &tagged.kind else {
         panic!("expected a language-tagged string");
     };
+
     assert_eq!(language, "en-us");
 }
 
@@ -592,6 +612,7 @@ fn a_where_clause_holds_atoms_and_conditions_but_no_negation() {
     let Some(Statement::Directive(Directive::Import(import))) = program.statements.first() else {
         panic!("an import: {:?}", program.statements);
     };
+
     assert_eq!(import.bindings.len(), 1);
     assert_eq!(import.conditions.len(), 1);
 

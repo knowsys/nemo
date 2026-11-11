@@ -184,11 +184,13 @@ pub(crate) fn analyze(
             rules_columns.push(Vec::new());
             continue;
         }
+
         let columns = rule_columns(rule, &types, labels);
         if rule.never_fires {
             rules_columns.push(columns);
             continue;
         }
+
         let joined = joined_columns(rule, &types, labels);
         let mut found = Vec::new();
         let context = ProofContext {
@@ -212,12 +214,14 @@ pub(crate) fn analyze(
                 );
             }
         }
+
         problems.extend(found.into_iter().map(|diagnostic| TypeFinding {
             rule: Some(index),
             diagnostic,
         }));
         rules_columns.push(columns);
     }
+
     Analysis {
         column_types: types,
         rule_columns: rules_columns,
@@ -260,6 +264,7 @@ fn initial_types(
         };
         types.insert(table, columns);
     }
+
     types
 }
 
@@ -292,6 +297,7 @@ fn declared_arity_problems(
             );
         }
     }
+
     problems
 }
 
@@ -310,6 +316,7 @@ fn grow_to_fixpoint(
             if rule.never_fires || rule.fetches() {
                 continue;
             }
+
             let columns = rule_columns(rule, types, labels);
             each_write(rule, &columns, labels, |table, position, written, _| {
                 let target = types
@@ -322,6 +329,7 @@ fn grow_to_fixpoint(
                 }
             });
         }
+
         if !changed {
             break;
         }

@@ -87,6 +87,7 @@ fn dataset() -> Arc<Dataset> {
         let triple = triple.expect("the data is valid Turtle");
         dataset.insert(&triple.in_graph(GraphName::DefaultGraph));
     }
+
     Arc::new(dataset)
 }
 
@@ -102,6 +103,7 @@ fn evaluate(dataset: &Dataset, text: &str) -> String {
     let QueryResults::Solutions(solutions) = results else {
         panic!("the engine sends SELECT queries: {text}");
     };
+
     let mut serializer = QueryResultsSerializer::from_format(QueryResultsFormat::Tsv)
         .serialize_solutions_to_writer(Vec::new(), solutions.variables().to_vec())
         .expect("writes to memory");
@@ -111,6 +113,7 @@ fn evaluate(dataset: &Dataset, text: &str) -> String {
             .serialize(solution.iter())
             .expect("writes to memory");
     }
+
     String::from_utf8(serializer.finish().expect("writes to memory")).expect("TSV is UTF-8")
 }
 
@@ -134,6 +137,7 @@ fn run(source: &str, outputs: &[&str], rewrite: bool, dataset: &Arc<Dataset>) ->
     if !rewrite {
         *engine.stages_mut() = Stages::new();
     }
+
     let program = parse_into(&mut engine, source);
     let stage = if rewrite { "rewritten" } else { "as written" };
     endpoint
@@ -155,6 +159,7 @@ fn run(source: &str, outputs: &[&str], rewrite: bool, dataset: &Arc<Dataset>) ->
         })
         .collect();
     let queries = endpoint.queries();
+
     Run {
         outputs,
         fetched: queries.len() - loaded,
@@ -175,6 +180,7 @@ fn mask_nulls(row: &str) -> String {
         masked.push_str(&rest[..start + 2]);
         rest = rest[start + 2..].trim_start_matches(|c: char| c.is_ascii_digit());
     }
+
     masked.push_str(rest);
     masked
 }
@@ -234,6 +240,7 @@ fn check_bound_import(query: &str, columns: &str, facts: &str, bindings: &str, h
     );
     let dataset = dataset();
     let bound = run(&format!("{PRELUDE}{bound}"), &["out"], true, &dataset);
+
     // The join stays as written: the rewrite stage would bind the plain import too.
     let joined = run(&format!("{PRELUDE}{joined}"), &["out"], false, &dataset);
     assert!(

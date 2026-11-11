@@ -103,6 +103,7 @@ fn header(
     if !is_header_name(&name) {
         return Err(TranslationError::HeaderName { name }.at(name_span));
     }
+
     match value {
         ValueRef::String(text) if is_header_value(text) => Ok((name, text.to_owned())),
         _ => Err(TranslationError::HeaderValue { name }.at(value_span)),
@@ -190,6 +191,7 @@ pub(super) fn term_columns(
         }
         .at(span));
     }
+
     formats
         .iter()
         .map(|column| match (column.value, column.optional) {
@@ -252,6 +254,7 @@ impl ResourceDirectiveOptions {
         if name != "on_error" || !accepts.http_headers {
             return Ok(false);
         }
+
         self.on_error = Some(on_error(value)?);
         self.on_error_span = key.span;
         Ok(true)
@@ -289,6 +292,7 @@ impl ResourceDirectiveOptions {
             }
             _ => return Ok(false),
         }
+
         Ok(true)
     }
 
@@ -304,6 +308,7 @@ impl ResourceDirectiveOptions {
         if self.on_error.is_some() && !remote {
             return Err(TranslationError::OnErrorNotRemote.at(self.on_error_span));
         }
+
         Ok(())
     }
 }
@@ -390,6 +395,7 @@ impl<'a> Translator<'a> {
                 }
                 .at(key.span));
             }
+
             // The column formats are keywords, matched without evaluation.
             if name == "format" {
                 formats = Some(self.column_formats(value)?);
@@ -404,10 +410,12 @@ impl<'a> Translator<'a> {
             if common.take_keyword(key, name, value, accepts)? {
                 continue;
             }
+
             let evaluated = self.option_value(value, bindings)?;
             if common.take(name, evaluated.as_ref(), value.span, accepts)? {
                 continue;
             }
+
             match (name, evaluated.as_ref()) {
                 ("columns", names) => {
                     columns = Some(column_names(names).ok_or_else(|| {
@@ -419,6 +427,7 @@ impl<'a> Translator<'a> {
                     })?);
                     columns_span = value.span;
                 }
+
                 // The format names `csv` and `tsv` fix their delimiters.
                 ("delimiter", _) if format != FileFormat::Dsv => {
                     return Err(TranslationError::unknown_option(name, format.name())
@@ -447,12 +456,14 @@ impl<'a> Translator<'a> {
                 }
             }
         }
+
         common.check_remote()?;
 
         // The header that names the columns is read, so it is not skipped as well.
         if let (Some(_), Some((_, span))) = (&columns, ignore_headers) {
             return Err(TranslationError::HeaderOptions.at(span));
         }
+
         check_columns(
             columns.as_deref(),
             columns_span,
@@ -472,6 +483,7 @@ impl<'a> Translator<'a> {
                 .at(span)
             })?,
         };
+
         Ok(DsvDirectiveOptions {
             delimiter,
             extension: format.name().to_owned(),
@@ -507,6 +519,7 @@ impl<'a> Translator<'a> {
         let mut path = None;
         for (key, value) in options {
             let name = option_name(key, format.name())?;
+
             // An option about fetching, which this format's imports accept,
             // is an error in an export.
             if !reading
@@ -518,6 +531,7 @@ impl<'a> Translator<'a> {
                 }
                 .at(key.span));
             }
+
             // The column formats are keywords, matched without evaluation.
             if name == "format" && accepts.format {
                 formats = Some(self.column_formats(value)?);
@@ -532,10 +546,12 @@ impl<'a> Translator<'a> {
             if common.take_keyword(key, name, value, accepts)? {
                 continue;
             }
+
             let evaluated = self.option_value(value, bindings)?;
             if common.take(name, evaluated.as_ref(), value.span, accepts)? {
                 continue;
             }
+
             match (name, evaluated.as_ref()) {
                 ("base", ValueRef::Iri(_) | ValueRef::String(_)) if accepts.base => {
                     base = iri_or_string(evaluated.as_ref());
@@ -570,6 +586,7 @@ impl<'a> Translator<'a> {
                 }
             }
         }
+
         common.check_remote()?;
         check_columns(
             columns.as_deref(),
@@ -632,6 +649,7 @@ impl<'a> Translator<'a> {
                 })
                 .collect();
         }
+
         let evaluated = self.option_value(value, bindings)?;
         let ValueRef::Map(map) = evaluated.as_ref() else {
             return Err(
@@ -639,6 +657,7 @@ impl<'a> Translator<'a> {
                     .at(value.span),
             );
         };
+
         map.pairs()
             .map(|(name, entry)| {
                 let Some(name) = iri_or_string(name) else {
@@ -647,6 +666,7 @@ impl<'a> Translator<'a> {
                     }
                     .at(value.span));
                 };
+
                 header(name, entry, value.span, value.span)
             })
             .collect()
@@ -670,6 +690,7 @@ impl<'a> Translator<'a> {
             }
             .at(span));
         }
+
         format
             .rdf_variant(resource)
             .ok_or_else(|| TranslationError::RdfExtensionUnknown.at(span))

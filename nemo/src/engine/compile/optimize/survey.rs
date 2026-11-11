@@ -61,11 +61,13 @@ impl ImportSurvey {
             bound: HashMap::new(),
             conditioned: HashSet::new(),
         };
+
         // A predicate the written program derives is stored whole, even
         // if a pipeline stage replaced its rules with an import.
         if let Some(written) = translator.written {
             survey.sealed.extend(written.derived().map(str::to_owned));
         }
+
         // So is a predicate with rows given through `import_rows`, as one with facts is.
         survey
             .sealed
@@ -101,6 +103,7 @@ impl ImportSurvey {
                 Statement::Directive(_) => {}
             }
         }
+
         Ok(survey)
     }
 
@@ -116,12 +119,14 @@ impl ImportSurvey {
             self.sealed
                 .insert(translator.resolve(&atom.predicate, atom.span)?);
         }
+
         for literal in &rule.body {
             if let Literal::Negative(atom) = literal {
                 self.negated
                     .insert(translator.resolve(&atom.predicate, atom.span)?);
             }
         }
+
         self.rules.push(rule);
         Ok(())
     }
@@ -149,6 +154,7 @@ impl ImportSurvey {
         if import.bindings.is_empty() {
             return Ok(());
         }
+
         let mentioned: HashSet<&str> = import
             .bindings
             .iter()
@@ -206,6 +212,7 @@ pub(crate) fn occurrences(rule: &Rule) -> HashMap<String, usize> {
             count(term, 1, &mut counts);
         }
     }
+
     for literal in &rule.body {
         match literal {
             Literal::Positive(atom) | Literal::Negative(atom) => {
@@ -220,6 +227,7 @@ pub(crate) fn occurrences(rule: &Rule) -> HashMap<String, usize> {
             }
         }
     }
+
     counts
 }
 
@@ -292,6 +300,7 @@ fn tested_columns(import: &ImportDirective) -> Option<Vec<bool>> {
         if !matches!(&key.kind, TermKind::Constant(Identifier::Bare(name)) if name == "format") {
             continue;
         }
+
         let names: Vec<&Term> = match &value.kind {
             TermKind::Tuple(terms) => terms.iter().collect(),
             _ => vec![value],
@@ -299,13 +308,16 @@ fn tested_columns(import: &ImportDirective) -> Option<Vec<bool>> {
         if names.len() != kept.len() {
             return None;
         }
+
         for (keep, name) in kept.iter_mut().zip(names) {
             let TermKind::Constant(Identifier::Bare(name)) = &name.kind else {
                 return None;
             };
+
             *keep = name != "skip";
         }
     }
+
     let read: HashSet<&str> = import
         .conditions
         .iter()
@@ -313,6 +325,7 @@ fn tested_columns(import: &ImportDirective) -> Option<Vec<bool>> {
         .filter(|variable| variable.kind == VariableKind::Universal)
         .map(|variable| variable.name.as_str())
         .collect();
+
     Some(
         import
             .variables

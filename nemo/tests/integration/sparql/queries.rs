@@ -39,6 +39,7 @@ fn a_query_calling_a_service_keeps_its_variable_names() {
             body.push_str(&cells.join("\t"));
             body.push('\n');
         }
+
         body
     });
     let mut engine = Engine::new();
@@ -80,6 +81,7 @@ fn a_computed_argument_reaches_the_endpoint_as_a_binding() {
         // The import is bound by the computed value, not fetched whole.
         assert!(text.contains("\"Shell\"@en"), "{text}");
         let mut body = projection(text).join("\t");
+
         // The endpoint returns more than it was asked for: the rule compares
         // the column with the argument as written.
         body.push_str("\n<urn:shell>\t\"Shell\"@en\n<urn:other>\t\"Other\"@en\n");
@@ -142,10 +144,12 @@ fn pushed_conditions_reach_the_endpoint_as_filters() {
         let mut body = String::from("?c\t?l\n");
         for iri in values_blocks(text).into_iter().flatten() {
             body.push_str(&format!("<{iri}>\t\"label of {iri}\"@en\n"));
+
             // A row the endpoint should not have sent: the rule's own
             // filter still drops it.
             body.push_str(&format!("<{iri}>\t\"Beschriftung\"@de\n"));
         }
+
         body
     });
     let mut engine = Engine::new();
@@ -184,6 +188,7 @@ fn type_tests_reach_the_endpoint_as_datatype_tests() {
             "{text}"
         );
         assert!(lowered.contains("isblank(?s)"), "{text}");
+
         // Rows the endpoint should not have sent: the local filter drops them.
         String::from("?s\t?o\n<urn:a>\t\"x\"\n<urn:b>\t5\n_:b\t\"y\"\n")
     });
@@ -219,6 +224,7 @@ fn pushed_conditions_name_delivered_columns_past_pruned_ones() {
         if text.contains("LANG(?o)") {
             body.push_str("<urn:a>\t<urn:label>\t\"label a\"@en\n");
         }
+
         body
     });
     let mut engine = Engine::new();
@@ -259,6 +265,7 @@ fn imports_read_by_binding_atoms_are_kept() {
             for iri in values_blocks(text).into_iter().flatten() {
                 body.push_str(&format!("<{iri}>\n"));
             }
+
             body
         } else {
             String::from("?s\t?p\t?o\n<urn:x>\t<urn:p>\t<urn:o>\n")
@@ -299,6 +306,7 @@ fn repeated_binding_variables_are_asked_once() {
         for iri in values_blocks(text).into_iter().flatten() {
             body.push_str(&format!("<{iri}>\n"));
         }
+
         body
     });
     let mut engine = Engine::new();
@@ -338,6 +346,7 @@ fn known_binding_keys_are_not_asked_again() {
         for iri in values_blocks(text).into_iter().flatten() {
             body.push_str(&format!("<{iri}>\t_:n\n"));
         }
+
         body
     });
     let mut engine = Engine::new();

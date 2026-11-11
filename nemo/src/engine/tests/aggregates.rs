@@ -42,5 +42,6 @@ fn the_legacy_aggregate_list_means_per_and_warns() {
     let [warning] = engine.reports() else {
         panic!("expected the one warning: {:?}", engine.reports());
     };
+
     assert_eq!(warning.code(), codes::LEGACY_SCOPE_LIST, "{warning:?}");
 }

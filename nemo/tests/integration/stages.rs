@@ -55,6 +55,7 @@ fn an_added_stage_runs_at_load_and_over_extensions() {
     engine.reason().expect("reasoning reaches the fixpoint");
 
     assert_eq!(rows(&mut engine, "out"), ["1", "2", "3", "4"]);
+
     // At load the stage may rewrite everything; over the extension only
     // its two statements, beside the four the load left.
     assert_eq!(
@@ -95,6 +96,7 @@ impl Transformation for DropFacts {
                 commit.remove(id);
             }
         }
+
         Ok(())
     }
 }
@@ -127,6 +129,7 @@ fn an_edit_before_the_load_is_the_program() {
         .proof(0)
         .and_then(|proof| proof.rule())
         .expect("a derived fact");
+
     // The edited program's third statement: its ids are positions in
     // what was loaded.
     assert_eq!(rule.rule, 2);
@@ -160,6 +163,7 @@ impl Transformation for SplitBodies {
                 commit.fold(id, &atoms, name);
             }
         }
+
         Ok(())
     }
 }
@@ -184,6 +188,7 @@ fn a_folded_rule_traces_as_written() {
     assert_eq!(rule.rule, 3, "the rule is the fourth written statement");
     let premises: Vec<&str> = proof.premises().map(|premise| premise.fact()).collect();
     assert_eq!(premises, ["e(1, 2)", "e(2, 3)", "f(3)"]);
+
     // The variable the fold kept to itself comes back from its rule.
     let bindings: Vec<String> = proof
         .derivation()
@@ -292,6 +297,7 @@ fn the_listings_name_the_written_predicates_only() {
         .rows("part1")
         .expect_err("the folded predicate is hidden");
     assert_eq!(refusal.code(), codes::UNKNOWN_PREDICATE);
+
     // The folded predicate's row counts toward neither figure.
     assert_eq!((engine.loaded_facts(), engine.derived_facts()), (3, 1));
 }
@@ -318,6 +324,7 @@ impl Transformation for Precomputed {
                 commit.extract_rule(id, import, &[]);
             }
         }
+
         Ok(())
     }
 }
@@ -348,6 +355,7 @@ fn a_rule_a_stage_replaces_by_an_import_stays_derived_and_whole() {
             ("source".into(), PredicateRole::Extensional),
         ]
     );
+
     // What the import stored for `event` counts as derived.
     assert_eq!((engine.loaded_facts(), engine.derived_facts()), (2, 4));
 }
@@ -373,6 +381,7 @@ impl Transformation for UnsafeDefinition {
         else {
             panic!("the text is a rule");
         };
+
         commit.define(rule, &[source]);
         Ok(())
     }

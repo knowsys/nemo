@@ -131,9 +131,11 @@ impl Display for Aggregate {
             if self.input.is_some() {
                 f.write_str(" ")?;
             }
+
             f.write_str("per ")?;
             fmt_list(f, &self.scope)?;
         }
+
         f.write_str(")")
     }
 }
@@ -170,6 +172,7 @@ mod tests {
                 kind.name()
             );
         }
+
         assert_eq!(AggregateKind::from_name("median"), None);
     }
 

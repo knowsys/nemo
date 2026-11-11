@@ -73,6 +73,7 @@ impl Recorder {
     /// Returns every rule's aggregate so far, in rule order.
     pub fn rules(&self) -> Vec<RuleSummary> {
         let state = self.lock();
+
         state
             .rules
             .iter()
@@ -177,6 +178,7 @@ mod tests {
         for _ in 0..(TIMELINE_POINTS * 3) {
             recorder.record(&applied(0, 1));
         }
+
         let state = recorder.lock();
         let timeline = state.timeline.entries();
         assert!(timeline.len() < TIMELINE_POINTS);
@@ -365,6 +367,7 @@ mod tests {
         for (index, event) in events.iter().enumerate() {
             state.absorb(index as u64 + 1, event);
         }
+
         assert_eq!(
             serde_json::to_string(&state).expect("a snapshot serializes"),
             "{\"duration\":10,\"finished\":true,\"fixpoint\":true,\"derived\":7,\"total\":12,\

@@ -38,18 +38,23 @@ impl Display for UseDirective {
                 if !first {
                     f.write_str(",")?;
                 }
+
                 first = false;
                 write!(f, " {input} = {actual}")?;
             }
+
             for (name, value) in &self.values {
                 if !first {
                     f.write_str(",")?;
                 }
+
                 first = false;
                 write!(f, " ${name} = {value}")?;
             }
+
             f.write_str(" }")?;
         }
+
         write!(f, " as {} .", self.alias)
     }
 }

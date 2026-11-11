@@ -174,8 +174,10 @@ impl Display for TypeExpression {
                     if index > 0 {
                         f.write_str(", ")?;
                     }
+
                     write!(f, "{name}: {field}")?;
                 }
+
                 f.write_str(" }")
             }
             TypeExpression::Union(members) => {
@@ -183,8 +185,10 @@ impl Display for TypeExpression {
                     if index > 0 {
                         f.write_str(" | ")?;
                     }
+
                     write!(f, "{member}")?;
                 }
+
                 Ok(())
             }
         }
@@ -205,6 +209,7 @@ impl Display for ColumnDeclaration {
         if let Some(name) = &self.name {
             write!(f, "{name}: ")?;
         }
+
         write!(f, "{}", self.datatype)
     }
 }

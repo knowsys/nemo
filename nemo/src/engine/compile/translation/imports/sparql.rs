@@ -123,12 +123,15 @@ impl<'a> Translator<'a> {
                 );
             }
         }
+
         let source_width = spec.layout.source_width();
+
         // Building the selection checks that the columns named after the predicate
         // match the query's projection, for a bound import too.
         let selection = self.import_selection(import, &spec.layout)?;
         let table =
             self.register_import(import, vec![Type::ANY; spec.layout.kept()], &spec.layout)?;
+
         // A bound import fetches during reasoning, like a rule,
         // so nothing is read at load, whatever the translation's purpose.
         if !import.bindings.is_empty() {
@@ -139,6 +142,7 @@ impl<'a> Translator<'a> {
         if self.options_only(import) {
             return Ok(());
         }
+
         // The solutions came from the fetch, or were registered under the
         // import's resource name. Otherwise the prefetch returned an error.
         let bytes = fetched
@@ -177,6 +181,7 @@ impl<'a> Translator<'a> {
             return Err(TranslationError::EndpointNotHttp { endpoint }
                 .at(options.endpoint_span.or(import.span)));
         }
+
         let text = options
             .query
             .unwrap_or_else(|| String::from(nemo_io::sparql::DEFAULT_QUERY));
@@ -199,11 +204,13 @@ impl<'a> Translator<'a> {
             }
             .at(options.query_span),
         })?;
+
         // This is checked before anything is fetched,
         // since the solutions of a query without a projection have no columns to import.
         if query.width() == 0 {
             return Err(TranslationError::SparqlNoProjection.at(options.query_span));
         }
+
         let kept = term_columns(
             import.format,
             options.formats.as_deref(),
@@ -219,6 +226,7 @@ impl<'a> Translator<'a> {
             .import_condition(import, &layout)?
             .map(|(condition, _)| condition);
         let query = self.pushed_query(condition.as_ref(), query, &layout);
+
         Ok(SparqlImportSpec {
             endpoint,
             query,
@@ -261,6 +269,7 @@ impl<'a> Translator<'a> {
                 options.headers = self.header_option(value, &bindings)?;
                 continue;
             }
+
             let evaluated = self.option_value(value, &bindings)?;
             match (name, evaluated.as_ref()) {
                 ("page", ValueRef::Number(count))
@@ -308,6 +317,7 @@ impl<'a> Translator<'a> {
                 }
             }
         }
+
         Ok(options)
     }
 
@@ -333,6 +343,7 @@ impl<'a> Translator<'a> {
         if matches!(query.shape(), nemo_io::sparql::QueryShape::Opaque(_)) {
             return query;
         }
+
         let delivered = layout.delivered_columns();
         let mut conjuncts = Vec::new();
         condition.conjuncts(&mut conjuncts);
@@ -347,6 +358,7 @@ impl<'a> Translator<'a> {
                 expressions.push(expression);
             }
         }
+
         let query = if blocks.is_empty() {
             query
         } else {

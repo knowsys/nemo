@@ -264,6 +264,7 @@ impl SuspendedLoad {
                 None => self.slots.0.push(slot),
             }
         }
+
         for request in std::mem::take(&mut self.sharing) {
             match self.response_to(&request) {
                 Some(response) => {
@@ -333,6 +334,7 @@ impl Default for ClientSlot {
     fn default() -> Self {
         #[cfg(feature = "http")]
         return Self(Some(Box::new(BlockingClient::default())));
+
         #[cfg(not(feature = "http"))]
         Self(None)
     }
@@ -357,6 +359,7 @@ impl Engine {
         let Some(suspension) = &self.suspension else {
             return Ok(());
         };
+
         Err(EngineError::MethodSuspended {
             refused: refused.to_owned(),
             suspended: suspension.method().to_owned(),
@@ -395,15 +398,19 @@ impl Engine {
                 "`resume` was given a response under the id {id}, which `pending()` does not list"
             );
         }
+
         let Some(suspension) = self.suspension.as_mut() else {
             return Ok(Progress::Done);
         };
+
         for (id, response) in responses {
             suspension.respond(id.0, response);
         }
+
         if suspension.has_pending() {
             return Ok(Progress::Suspended(self.pending()));
         }
+
         self.resume_suspended()
     }
 
@@ -424,6 +431,7 @@ impl Engine {
             let Progress::Suspended(pending) = progress else {
                 return Ok(());
             };
+
             let (ids, requests): (Vec<RequestId>, Vec<Request>) = pending
                 .into_iter()
                 .map(|pending| (pending.id, pending.request))
@@ -448,8 +456,10 @@ impl Engine {
                 if matches!(self.suspension, Some(Suspension::Load(_))) {
                     self.abandon();
                 }
+
                 return Err(EngineError::WaitCancelled.diagnostic());
             };
+
             // If the client gives fewer responses than requests, the rest fail,
             // rather than be sent again forever.
             let mut responses = responses.into_iter();
@@ -507,6 +517,7 @@ impl Engine {
         if load.chose_context {
             self.next_context = None;
         }
+
         self.pipeline.withdraw_reports(load.reports_from);
     }
 

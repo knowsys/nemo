@@ -63,6 +63,7 @@ fn cancellation_stops_at_a_boundary_and_resumes() {
     for index in 0..60 {
         source += &format!("edge({index}, {}) . ", index + 1);
     }
+
     source += "path(?x, ?y) :- edge(?x, ?y) . path(?x, ?z) :- edge(?x, ?y), path(?y, ?z) .";
     let load = || {
         let program = parse(&source);
@@ -95,6 +96,7 @@ fn cancellation_stops_at_a_boundary_and_resumes() {
         assert_eq!(report.code(), codes::CANCELLED, "{report}");
         engine.reason().expect("resuming reaches the fixpoint");
     }
+
     assert_eq!(count(&mut engine, "path"), 61 * 60 / 2);
 }
 
@@ -124,6 +126,7 @@ fn cursors_page_through_the_rows() {
         paged.extend(chunk.rows());
         reads += 1;
     }
+
     assert_eq!(reads, all.len().div_ceil(3));
     assert_eq!(paged, all);
 
@@ -209,6 +212,7 @@ fn a_gzipped_export_says_so_in_its_name() {
         specification.compression = compression;
         specification
     };
+
     // Otherwise nothing that detects compression by name, this
     // engine's own reader included, can read the file back.
     assert_eq!(
@@ -219,6 +223,7 @@ fn a_gzipped_export_says_so_in_its_name() {
         specification(Some("mine.csv"), Compression::Gzip).file_name(),
         "mine.csv.gz"
     );
+
     // A name that already ends with `.gz` does not get it twice.
     assert_eq!(
         specification(Some("mine.csv.gz"), Compression::Gzip).file_name(),
@@ -309,6 +314,7 @@ fn cursors_notice_later_work_on_their_table() {
 fn cursors_notice_a_reload_that_rebuilds_their_predicate() {
     let mut engine = run("p(1) . p(2) . q(?x) :- p(?x) .");
     let mut cursor = engine.cursor("p").expect("the predicate exists");
+
     // A changed fact of `p` makes the reload drop the table of `p` and build another.
     engine
         .reload(parse("p(1) . p(3) . q(?x) :- p(?x) ."))
@@ -358,6 +364,7 @@ fn an_export_fails_without_a_program() {
 #[test]
 fn a_registered_source_shares_no_file_id_with_an_unregistered_program() {
     let mut engine = Engine::new();
+
     // The program is parsed with the file id 0, and its text is not registered.
     engine.load(parse("p(1) .")).expect("the program loads");
     let file = engine
@@ -375,11 +382,13 @@ fn traces_fail_on_a_store_short_of_the_fixpoint() {
     for index in 0..60 {
         source += &format!("edge({index}, {}) . ", index + 1);
     }
+
     source += "path(?x, ?y) :- edge(?x, ?y) . path(?x, ?z) :- edge(?x, ?y), path(?y, ?z) .";
     let program = parse(&source);
     let mut engine = Engine::new();
     engine.load(program).expect("the program loads");
     let fact = Fact::parse("path(0, 60) .").expect("a fact");
+
     // Before any run and after a cancelled one, the stored facts are not at the
     // fixpoint, and after a completed run they are.
     let refusal = engine
@@ -403,6 +412,7 @@ fn traces_fail_on_a_store_short_of_the_fixpoint() {
         assert_eq!(refusal.code(), codes::UNFINISHED, "{refusal:?}");
         engine.reason().expect("resuming reaches the fixpoint");
     }
+
     let response = engine.trace(&[fact]).expect("the fixpoint is traceable");
     assert!(response.proof(0).is_some());
 }
@@ -429,6 +439,7 @@ fn diagnostics_name_the_literals_a_hidden_predicate_replaces() {
     let literals = "the literals `triple(?c, <urn:parent>, ?p)`";
     assert_eq!(presented.message(), format!("a rule reads {literals}"));
     assert_eq!(presented.field("predicate"), Some(literals));
+
     // The binding rule is hidden too.
     let presented = written.present(Diagnostic::warning(
         codes::NEVER_FIRES,
@@ -457,6 +468,7 @@ fn outputs_are_declared_or_derived() {
     );
     assert_eq!(undeclared.outputs(), ["q"]);
     assert_eq!(count(&mut undeclared, "q"), 2);
+
     // The import is not an output, so only the column that the rule reads is stored.
     assert_eq!(stored(&undeclared, "p"), (2, 1));
 }
@@ -488,6 +500,7 @@ fn a_text_with_errors_fails_with_what_parsing_reported() {
             .iter()
             .all(|diagnostic| diagnostic.severity() == nemo_physical::diagnostics::Severity::Error)
     );
+
     // The spans point into the registered text.
     let file = refused[0].labels()[0].span.file;
     assert_eq!(engine.file_name(file), Some("test.rls"));
@@ -499,6 +512,7 @@ fn a_text_with_errors_fails_with_what_parsing_reported() {
 #[test]
 fn a_check_collects_what_parsing_and_the_engine_report() {
     let mut engine = Engine::new();
+
     // One statement does not parse, and the other is unsafe.
     let reported = engine.check_source("test.rls", "p(1 .\nq(?x, ?y) :- p(?x) .\n");
     let codes: Vec<String> = reported

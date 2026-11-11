@@ -19,11 +19,13 @@ impl TraceResponse {
             if index > 0 {
                 out.push('\n');
             }
+
             match self.proof(index) {
                 Some(proof) => ascii_node(proof, "", "", &mut shown, &mut out),
                 None => out.push_str(&format!("{} does not hold\n", traced.fact)),
             }
         }
+
         out
     }
 }
@@ -52,6 +54,7 @@ fn ascii_node(
         out.push_str(&format!("{lead}{} (shown above)\n", proof.fact()));
         return;
     }
+
     out.push_str(&format!("{lead}{proof}\n"));
     let premises: Vec<Proof<'_>> = proof.premises().collect();
     for (index, premise) in premises.iter().enumerate() {

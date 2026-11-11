@@ -30,6 +30,7 @@ fn signature(written: &str) -> Signature {
         let [left, symbol, right] = call.split(' ').collect::<Vec<_>>()[..] else {
             panic!("`{written}` is no infix signature");
         };
+
         let operator = Operator::NAMES
             .iter()
             .filter_map(|name| Operator::from_name(name))
@@ -41,10 +42,12 @@ fn signature(written: &str) -> Signature {
             result,
         };
     };
+
     let name = &call[..open];
     let inside = call[open + 1..]
         .strip_suffix(')')
         .unwrap_or_else(|| panic!("`{written}` closes its arguments"));
+
     // A map aggregate accepts a key and a value.
     if let Some((key, value)) = inside.split_once(" = ") {
         let types = [key, value].map(|part| part.split_once(": ").expect("a typed part").1);
@@ -54,6 +57,7 @@ fn signature(written: &str) -> Signature {
             result,
         };
     }
+
     let mut arguments: Vec<String> = Vec::new();
     for part in inside.split(", ").filter(|part| !part.is_empty()) {
         if part == "…" {
@@ -66,9 +70,11 @@ fn signature(written: &str) -> Signature {
             arguments.push(datatype.to_owned());
         }
     }
+
     let variables: Vec<String> = (0..arguments.len())
         .map(|index| format!("?a{index}"))
         .collect();
+
     Signature {
         call: format!("{name}({})", variables.join(", ")),
         arguments,
@@ -91,6 +97,7 @@ fn disagreement(written: &str) -> Option<String> {
     let variables: Vec<String> = (0..arguments.len())
         .map(|index| format!("?a{index}"))
         .collect();
+
     // The declaration of `out` makes the check report N0463 if the call's result does not
     // fit the result type.
     let mut source = format!("@declare out({result}) .\ngo(1) .\n");
@@ -107,6 +114,7 @@ fn disagreement(written: &str) -> Option<String> {
     if !report.diagnostics().is_empty() {
         return Some(format!("{:?}", report.diagnostics()));
     }
+
     let types = report.types().expect("the analysis ran");
     let shown = |name: &str| {
         let types = types
@@ -137,6 +145,7 @@ fn disagreement(written: &str) -> Option<String> {
             wrong.push(format!("argument {index} is {declared}, needs {needed}"));
         }
     }
+
     (!wrong.is_empty()).then(|| wrong.join("; "))
 }
 
@@ -149,6 +158,7 @@ fn operators() -> Vec<Operator> {
             operators.push(operator);
         }
     }
+
     operators
 }
 
@@ -169,6 +179,7 @@ fn every_documented_signature_is_what_the_analysis_infers() {
             }
         }
     }
+
     assert!(wrong.is_empty(), "\n{}", wrong.join("\n"));
 }
 

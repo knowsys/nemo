@@ -33,8 +33,10 @@ fn positive_programs_take_rows_as_deltas() {
         .import_rows("edge", vec![row(&[3, 4])])
         .expect("rows import");
     engine.reason().expect("reasoning continues");
+
     // 1→2→3→4 closes into six pairs, three of them new.
     assert_eq!(engine.rows("reach").expect("reach").len(), 6);
+
     // Nothing was computed again, only the new conclusions were derived.
     assert_eq!(engine.derived_facts(), derived_before + 3);
 }
@@ -98,6 +100,7 @@ fn aggregates_recover_from_growth() {
         )
         .expect("rows import");
     engine.reason().expect("recovery reasons");
+
     // The stale total dropped; only the new one stands.
     assert_eq!(rows(&mut engine, "total"), vec!["alice,22"]);
 }
@@ -156,6 +159,7 @@ fn imported_rows_pass_the_fact_gate() {
         "{refusal:?}"
     );
     assert_eq!(refusal.field("declared"), Some("int"));
+
     // A row has no source position, so the message names the column and a note the row.
     assert_eq!(refusal.field("column"), Some("1"));
     assert!(
@@ -235,6 +239,7 @@ fn extensions_keep_the_one_arity_rule() {
         .expect_err("one predicate, one arity");
     assert_eq!(refusal.code(), nemo::codes::ARITY_MISMATCH, "{refusal:?}");
     assert_eq!(refusal.field("arity"), Some("2"));
+
     // The failed extension left the engine standing.
     engine.reason().expect("the engine still reasons");
     assert_eq!(engine.rows("p").expect("p").len(), 1);
@@ -317,6 +322,7 @@ fn reload_retracts_rules() {
         suspect(9) :- never(9) .
     ");
     assert!(rows(&mut engine, "free").is_empty());
+
     // Without the blocking fact, the conclusion returns.
     engine
         .reload(parse(
@@ -518,6 +524,7 @@ s(?a, ?v) :- p(?a, ?v) .
         if retained {
             engine.retain_imports();
         }
+
         engine.set_import_directory(directory);
         engine.load(parse(first)).expect("the program loads");
         engine.reason().expect("reasoning reaches the fixpoint");

@@ -154,6 +154,7 @@ impl Commit<'_> {
                 self.stage
             );
         };
+
         self.expect_new(&head.predicate);
         let created = self.insert(sources, Statement::Rule(rule));
         self.pending
@@ -182,6 +183,7 @@ impl Commit<'_> {
                 self.pipeline.statement(import)
             );
         };
+
         let name = self
             .resolve(&directive.predicate)
             .unwrap_or_else(|problem| {
@@ -197,6 +199,7 @@ impl Commit<'_> {
         if self.removed_imports.is_empty() {
             return;
         }
+
         let readers: Vec<StatementId> = self
             .statements
             .iter()
@@ -340,6 +343,7 @@ impl Commit<'_> {
                 declarations.push(declaration);
             }
         }
+
         for (created, declaration) in declarations {
             let edge = self
                 .pipeline
@@ -368,6 +372,7 @@ impl Commit<'_> {
             else {
                 continue;
             };
+
             let rule = match view {
                 Some(view) => view.clone(),
                 None => self.rule(*created).clone(),
@@ -378,6 +383,7 @@ impl Commit<'_> {
                 self.stage
             );
         }
+
         rules
     }
 
@@ -416,6 +422,7 @@ impl Commit<'_> {
                 self.stage
             );
         };
+
         assert!(
             distinct_universals(head),
             "the `{}` stage defines by `{rule}`, whose head is not made of distinct \
@@ -487,6 +494,7 @@ impl Commit<'_> {
 /// Returns whether an atom's terms are distinct universal variables.
 fn distinct_universals(atom: &Atom) -> bool {
     let mut seen = HashSet::with_capacity(atom.terms.len());
+
     atom.terms.iter().all(|term| {
         matches!(&term.kind, TermKind::Variable(variable)
             if variable.kind == VariableKind::Universal && seen.insert(variable.name.as_str()))

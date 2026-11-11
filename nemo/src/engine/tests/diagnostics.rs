@@ -18,6 +18,7 @@ fn refusal(source: &str) -> Diagnostic {
 fn warning(source: &str, code: nemo_physical::diagnostics::Code) -> Diagnostic {
     let mut engine = Engine::new();
     engine.load(parse(source)).expect("the program loads");
+
     engine
         .reports()
         .iter()
@@ -244,12 +245,14 @@ fn a_named_argument_and_a_prefixed_name_point_to_each_other() {
             "{problem:?}"
         );
     }
+
     let problem = refusal("in(item: 42) .");
     assert_eq!(
         problem.hints().len(),
         1,
         "a label that is not a prefix: {problem:?}"
     );
+
     // The prefixed name keeps the local name as written in the source, not the number's value.
     let mut engine = Engine::new();
     let file = engine
@@ -327,6 +330,7 @@ fn refused_at(
                     .load_source("base.rls", "p(1) .\n")
                     .expect("the program loads");
             }
+
             let refused = engine
                 .with_source("test.rls", text, method)
                 .expect_err("the program is refused");
@@ -340,6 +344,7 @@ fn refused_at(
 #[test]
 fn a_problem_in_a_module_is_located_and_rendered_in_the_modules_text() {
     let mut engine = Engine::new();
+
     // The head of the module's rule has a variable that its body does not bind.
     engine
         .add_module(
@@ -366,6 +371,7 @@ fn a_problem_in_a_module_is_located_and_rendered_in_the_modules_text() {
 #[test]
 fn a_parse_of_a_registered_source_locates_its_diagnostics() {
     let mut engine = Engine::new();
+
     // The atom `p(?x` on line 2 is not closed.
     let file = engine
         .add_source("test.rls", "p(1) .\nq(?x) :- p(?x .\n")
@@ -374,6 +380,7 @@ fn a_parse_of_a_registered_source_locates_its_diagnostics() {
     let [problem] = diagnostics.as_slice() else {
         panic!("one statement does not parse: {diagnostics:?}");
     };
+
     assert_eq!(problem.location(), Some(&at("test.rls", 2, 15)));
 }
 
@@ -381,6 +388,7 @@ fn a_parse_of_a_registered_source_locates_its_diagnostics() {
 #[test]
 fn a_link_locates_the_problem_it_returns() {
     let mut engine = Engine::new();
+
     // The module registered as `lib::m` has no output `q`, which line 2 reads.
     engine
         .add_module("lib::m", "@output p .\np(1) .\n")
@@ -425,6 +433,7 @@ fn a_loading_method_locates_a_problem_of_its_responses() {
         let Progress::Suspended(pending) = engine.start_load(program)? else {
             panic!("the import needs its resource");
         };
+
         let failure = Failure::transport("the host is unreachable");
         engine.resume([(pending[0].id, Err(failure))]).map(drop)
     };
@@ -450,6 +459,7 @@ fn a_check_locates_its_diagnostics() {
             .collect()
     };
     let mut engine = Engine::new();
+
     // The first line does not parse, and the head variable `?y` of the second is not bound.
     let whole = engine.check_source("test.rls", "p(1 .\nq(?x, ?y) :- p(?x) .\n");
 
@@ -477,6 +487,7 @@ fn a_check_locates_its_diagnostics() {
 #[test]
 fn a_report_has_the_locations_of_its_labels() {
     let mut engine = Engine::new();
+
     // Line 3 of the module and line 3 of the program are `@define` directives,
     // and each is ignored with a warning.
     engine
@@ -518,6 +529,7 @@ fn a_report_has_the_locations_of_its_labels() {
 #[test]
 fn imported_rows_that_a_module_instance_refuses_are_refused_at_its_use() {
     let mut engine = Engine::new();
+
     // The module copies its input into `q`, which it declares to hold integers.
     engine
         .add_module(

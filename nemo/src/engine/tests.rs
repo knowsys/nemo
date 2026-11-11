@@ -70,6 +70,7 @@ fn load_resources(source: &str, resources: &[(&str, &str)]) -> Engine {
     for (name, content) in resources {
         engine.add_resource(*name, content.as_bytes().to_vec());
     }
+
     engine.load(program).expect("the program loads");
     engine.reason().expect("reasoning reaches the fixpoint");
     engine
@@ -98,6 +99,7 @@ fn check(source: &str) -> Vec<Diagnostic> {
 /// which are its execution units and aggregations, read off its layout.
 fn rule_steps(engine: &Engine) -> Vec<usize> {
     let program = engine.program.as_ref().expect("the program is loaded");
+
     (0..program.rules.len())
         .map(|position| {
             let layout = engine

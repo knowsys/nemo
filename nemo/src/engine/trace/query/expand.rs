@@ -43,6 +43,7 @@ impl QueryEvaluation<'_> {
         let NodeFacts::Compiled(compiled) = arenas.written[written].facts else {
             return;
         };
+
         let (table, set) = (
             arenas.compiled[compiled].table,
             arenas.compiled[compiled].filtered,
@@ -51,6 +52,7 @@ impl QueryEvaluation<'_> {
         if total == 0 {
             return;
         }
+
         let predicate = arenas.written[written].predicate.clone();
         for &(statement, head) in context.writers(&predicate) {
             let covers = match context.router.realize(statement) {
@@ -70,11 +72,13 @@ impl QueryEvaluation<'_> {
             else {
                 continue;
             };
+
             // The premises' sets are the facts that take part in deriving this node's set.
             self.filter(&mut arenas.compiled, compiled);
             for child in children {
                 self.expand(arenas, context, child, depth - 1);
             }
+
             return;
         }
     }
@@ -97,6 +101,7 @@ impl QueryEvaluation<'_> {
         if !expandable(rule) {
             return false;
         }
+
         let unconstrained = vec![None; rule.body.len()];
         let mut plan = OperationPlan::new();
         let (joined, space) = self.body_join(&mut plan, rule, &unconstrained);

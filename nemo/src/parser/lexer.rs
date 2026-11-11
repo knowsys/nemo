@@ -78,11 +78,13 @@ impl Lexer<'_> {
             self.push(TokenKind::End, 0);
             return (self.tokens, self.diagnostics);
         }
+
         // Many files written on Windows start with a UTF-8 byte order mark.
         // At the very start of a text, it marks the encoding and is not content.
         if self.offset == 0 && self.source.starts_with('\u{feff}') {
             self.position = '\u{feff}'.len_utf8();
         }
+
         loop {
             self.skip_trivia();
             let start = self.position;
@@ -90,6 +92,7 @@ impl Lexer<'_> {
                 self.push(TokenKind::End, start);
                 return (self.tokens, self.diagnostics);
             };
+
             self.token(byte, start);
         }
     }
@@ -172,6 +175,7 @@ impl Lexer<'_> {
                 self.position += 1;
                 self.format_string(start);
             }
+
             // `_:label` is a blank node, whose label is a local name.
             // Otherwise, `_` starts a bare name, such as `_name` or `_` alone.
             // The parser makes a lone `_` an anonymous variable.
@@ -246,6 +250,7 @@ impl Lexer<'_> {
             self.error(start, ParseError::MarkerWithoutName);
             return;
         }
+
         while self.peek() == Some(b'-')
             && self
                 .peek_at(1)
@@ -254,6 +259,7 @@ impl Lexer<'_> {
             self.position += 1;
             self.skip_while(|byte| byte.is_ascii_alphanumeric());
         }
+
         self.push(TokenKind::LanguageTag, start);
     }
 
@@ -295,6 +301,7 @@ impl Lexer<'_> {
         if next {
             self.position += 1;
         }
+
         next
     }
 

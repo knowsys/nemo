@@ -72,6 +72,7 @@ fn a_typed_input_types_the_module_from_within() {
     let [warning] = &problems[..] else {
         panic!("expected the one warning: {problems:?}");
     };
+
     assert_eq!(warning.code(), codes::NEVER_FIRES, "{warning:?}");
 }
 
@@ -85,6 +86,7 @@ fn an_unsupplied_input_is_warned_about_at_load_only() {
     let [warning] = engine.reports() else {
         panic!("expected the one warning: {:?}", engine.reports());
     };
+
     assert_eq!(warning.code(), codes::INPUT_UNSUPPLIED, "{warning:?}");
     assert_eq!(warning.field("predicate"), Some("edge"));
 }
@@ -161,6 +163,7 @@ fn a_parameters_declared_type_types_the_rules_reading_it() {
     let [warning] = &problems[..] else {
         panic!("expected the one warning: {problems:?}");
     };
+
     assert_eq!(warning.code(), codes::NEVER_FIRES, "{warning:?}");
     assert!(
         !format!("{warning:?}").contains("\\0"),
@@ -350,6 +353,7 @@ fn a_check_leaves_no_registrations_behind() {
 #[test]
 fn a_check_leaves_no_reports_behind() {
     let mut engine = Engine::new();
+
     // The head of the rule has a variable that its body does not bind.
     let report = engine.check_source("test.rls", "q(?x, ?y) :- p(?x) .\n");
     assert!(!report.diagnostics().is_empty());

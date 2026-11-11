@@ -45,6 +45,7 @@ impl VariantOrderStats {
             self.delta_empty += 1;
             return;
         }
+
         self.led_rows += leading_rows;
         self.delta_rows += delta_rows;
         if delta_rows < leading_rows {

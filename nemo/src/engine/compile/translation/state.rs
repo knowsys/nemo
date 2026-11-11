@@ -92,12 +92,14 @@ impl TranslationState {
         else {
             return atom.terms.clone();
         };
+
         let mut placed = vec![Term::variable(Variable::anonymous()); declaration.names.len()];
         for (label, term) in labels.iter().zip(&atom.terms) {
             if let Some(position) = declaration.position(label) {
                 placed[position] = term.clone();
             }
         }
+
         placed
     }
 }

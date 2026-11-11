@@ -55,6 +55,7 @@ fn ordered(rule: &CompiledRule, seeds: &[VariableId]) -> Vec<VariableId> {
         order.push(next);
         remaining.retain(|&variable| variable != next);
     }
+
     order
 }
 
@@ -87,11 +88,13 @@ fn head_leader(rule: &CompiledRule, order: &[VariableId]) -> Option<VariableId> 
     {
         return None;
     }
+
     let head = &rule.heads[0];
     let first = *order.first()?;
     if head.columns.contains(&first) {
         return None;
     }
+
     head.columns
         .iter()
         .copied()
@@ -119,6 +122,7 @@ fn connected(
     if order.is_empty() {
         return candidates;
     }
+
     let kept: Vec<VariableId> = candidates
         .iter()
         .copied()
@@ -164,6 +168,7 @@ fn probing(
     if !kept.is_empty() {
         return kept;
     }
+
     let mut inputs: Vec<VariableId> = Vec::new();
     for &variable in &candidates {
         for binding in rule.bindings.iter().filter(|b| b.target == variable) {
@@ -177,6 +182,7 @@ fn probing(
             }
         }
     }
+
     inputs.sort_unstable();
     if inputs.is_empty() {
         candidates
@@ -271,6 +277,7 @@ mod tests {
                 .position(|&other| other == variable)
                 .expect("every variable is ordered")
         };
+
         // ?x has id 0, and the bound column of e has id 1.
         assert!(position(0) < position(1), "the probe's input comes first");
     }

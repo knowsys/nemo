@@ -16,6 +16,7 @@ fn bound_imports_follow_their_bindings_to_the_fixpoint() {
     fetcher
         .serve(&mut engine, |engine| engine.load(program))
         .unwrap_or_else(|problem| panic!("{problem:?}"));
+
     // Nothing was asked at load: a bound import is a rule.
     assert!(fetcher.queries().is_empty());
     fetcher
@@ -30,6 +31,7 @@ fn bound_imports_follow_their_bindings_to_the_fixpoint() {
             .map(|iri| vec![DataValue::iri(iri)])
             .to_vec()
     );
+
     // Each binding was asked for exactly once, as it appeared, so the
     // recursion reached the endpoint one iteration at a time.
     let asked: Vec<Vec<Vec<String>>> = fetcher
@@ -46,6 +48,7 @@ fn bound_imports_follow_their_bindings_to_the_fixpoint() {
             vec![vec!["urn:d".to_owned()]],
         ]
     );
+
     // The fetched rows are the import's, derived rows to the engine.
     let mut fetched = engine.rows("parent").expect("fetched");
     fetched.sort();
@@ -77,10 +80,12 @@ fn bound_imports_hold_any_term() {
         for iri in values_blocks(text).into_iter().flatten() {
             if let Some(parent) = parent_of(&iri) {
                 body.push_str(&format!("<{iri}>\t<{parent}>\n"));
+
                 // A stray literal where a node is expected.
                 body.push_str(&format!("<{iri}>\t\"nobody\"\n"));
             }
         }
+
         body
     });
     let mut engine = Engine::new();
@@ -112,6 +117,7 @@ fn malformed_solutions_of_a_bound_import_are_reported_once() {
                 body.push_str(&format!("<{iri}>\t<{parent}>\n"));
             }
         }
+
         // A line that is not a solution, in every response.
         body.push_str("broken\n");
         body
@@ -132,6 +138,7 @@ fn malformed_solutions_of_a_bound_import_are_reported_once() {
         .collect();
     assert_eq!(malformed.len(), 1, "{malformed:?}");
     assert_eq!(malformed[0].field("count"), Some("4"), "{malformed:?}");
+
     // The import that the label points at starts the second line of the registered text.
     let location = malformed[0].location().expect("the import is labeled");
     assert_eq!(
@@ -152,6 +159,7 @@ fn two_binding_atoms_send_one_values_block_each_and_page() {
                 body.push_str(&format!("<{x}>\t<{y}>\n"));
             }
         }
+
         body
     });
     let mut engine = Engine::new();
@@ -174,6 +182,7 @@ right(<urn:3>, 0) . right(<urn:4>, 0) . right(<urn:4>, 1) .
         .serve(&mut engine, Engine::reason)
         .unwrap_or_else(|problem| panic!("{problem:?}"));
     assert_eq!(engine.rows("pair").expect("fetched").len(), 4);
+
     // A page of one binding row per atom: one request per combination
     // of the two left and the two distinct right bindings, and no
     // second iteration, since nothing new bound.
@@ -263,6 +272,7 @@ fn the_rewrite_stage_binds_generic_imports_before_reasoning() {
                 body.push_str(&format!("<{iri}>\t<{parent}>\n"));
             }
         }
+
         body
     });
     let mut engine = Engine::new();
@@ -283,8 +293,10 @@ fn the_rewrite_stage_binds_generic_imports_before_reasoning() {
             .to_vec()
     );
     assert_eq!(fetcher.queries().len(), 4);
+
     // The generic import is gone: nothing asked for every triple.
     assert!(engine.rows("triple").is_err());
+
     // The rewritten program is what the engine ran, and it prints.
     let texts = engine.compiled_rules();
     assert!(

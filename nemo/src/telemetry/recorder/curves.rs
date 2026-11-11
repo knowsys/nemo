@@ -128,6 +128,7 @@ impl<T: CurveEntry, const CAP: usize> BoundedCurve<T, CAP> {
                 kept += 1;
             }
         }
+
         entries.truncate(kept);
     }
 }

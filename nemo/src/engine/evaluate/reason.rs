@@ -158,6 +158,7 @@ fn group_per_table(outputs: Vec<(TableId, Trie)>) -> HashMap<TableId, Vec<Trie>>
             per_table.entry(table).or_default().push(trie);
         }
     }
+
     per_table
 }
 
@@ -205,10 +206,13 @@ impl Engine {
                     rows: fetched.rows,
                 });
             }
+
             return Ok(ApplicationOutcome::Applied(applied));
         }
+
         debug_assert!(suspended.is_none(), "only a fetch is suspended");
         let skeleton = self.skeletons.of(index, rule);
+
         Ok(ApplicationOutcome::Applied(application::apply(
             rule,
             skeleton,
@@ -281,6 +285,7 @@ impl Engine {
             if tally.failed == 0 {
                 continue;
             }
+
             let mut warning = TranslationError::RequestsFailed {
                 failed: tally.failed.into(),
                 sent: tally.sent.into(),
@@ -293,6 +298,7 @@ impl Engine {
             if let Some(first) = tally.first {
                 warning = warning.with_note(format!("the first failure was: {first}"));
             }
+
             self.pipeline.report(warning);
         }
     }
@@ -315,6 +321,7 @@ impl Engine {
         let Some(mut program) = self.program.take() else {
             return Err(EngineError::NoProgram.diagnostic());
         };
+
         // A suspended run continues where it was suspended. A suspended
         // loading method refused the run before it got here.
         let resumed = match self.suspension.take() {
@@ -326,6 +333,7 @@ impl Engine {
             }
         };
         self.fixpoint = false;
+
         // A new run evaluates in the context that a loading method chose since the last run,
         // if one did.
         let context = match &resumed {
@@ -335,6 +343,7 @@ impl Engine {
                 .take()
                 .unwrap_or_else(EvaluationContext::now),
         };
+
         // New input facts first invalidate the derived facts that depend
         // on them through negation or aggregation (see `recover`). The
         // strata are moved out for the iterations and put back afterwards,
@@ -344,6 +353,7 @@ impl Engine {
             self.recover(&mut program);
             self.contexts.begin(self.step, context);
         }
+
         let outcome = self.iterate_strata(&mut program, &strata, context, resumed);
         program.strata = strata;
         self.program = Some(program);
@@ -366,6 +376,7 @@ impl Engine {
                 memory: self.memory_bytes() as u64,
             });
         }
+
         tracing::info!(
             derived = self.derived_facts(),
             steps = self.step,
@@ -375,6 +386,7 @@ impl Engine {
         if cancelled {
             return Err(EngineError::Cancelled.diagnostic());
         }
+
         self.fixpoint = true;
         Ok(Progress::Done)
     }
@@ -453,15 +465,19 @@ impl Engine {
                         }));
                     }
                 }
+
                 tracing::debug!(stratum = stratum_index, derived, "iteration finished");
                 self.report_iteration(stratum_index, derived);
                 if derived == 0 {
                     break;
                 }
+
                 self.consolidate(program, iteration_start);
             }
+
             self.finish(program, &finished[stratum_index]);
         }
+
         Ok(RunOutcome::Fixpoint)
     }
 
@@ -476,6 +492,7 @@ impl Engine {
                 for table in Self::head_tables(rule) {
                     last_writer.insert(table, stratum);
                 }
+
                 let read = rule.body.iter().map(|atom| atom.table);
                 for table in read.chain(rule.negated.iter().map(|atom| atom.table)) {
                     last_reader.insert(table, stratum);
@@ -492,6 +509,7 @@ impl Engine {
                 finished[stratum].push(table);
             }
         }
+
         finished
     }
 
@@ -527,6 +545,7 @@ impl Engine {
             if self.cancel.is_cancelled() {
                 return Ok((stored, IterationOutcome::Cancelled));
             }
+
             let rule = &mut rules[index];
             match self.apply_and_store(rule, index, column_types, context, suspended.take())? {
                 StoreOutcome::Stored(rows) => stored += rows,
@@ -539,6 +558,7 @@ impl Engine {
                 }
             }
         }
+
         Ok((stored, IterationOutcome::Completed))
     }
 
@@ -599,6 +619,7 @@ impl Engine {
                 delta_leads: observation.delta_leads,
             });
         }
+
         let applied = begun.nanos();
         self.timings.apply += applied;
         self.timings.execution.absorb(&timings);
@@ -619,6 +640,7 @@ impl Engine {
                 step,
             });
         }
+
         self.telemetry.record(&EngineEvent::RuleApplied {
             rule: index,
             step,
@@ -636,6 +658,7 @@ impl Engine {
             nanoseconds = applied + storing,
             "rule applied"
         );
+
         Ok(StoreOutcome::Stored(stored))
     }
 
@@ -668,8 +691,10 @@ impl Engine {
             if added > 0 {
                 *self.derivation_time.entry(table).or_default() += applied + begun.nanos();
             }
+
             stored += added;
         }
+
         stored
     }
 
@@ -680,6 +705,7 @@ impl Engine {
         if !self.telemetry.enabled() {
             return;
         }
+
         let mut total = 0;
         for &Registered { table, .. } in self.predicates.values() {
             total += self
@@ -721,6 +747,7 @@ impl Engine {
         for table in tables {
             self.consolidate_table(table, &walls, MergePolicy::TwoLevel);
         }
+
         self.timings.consolidate += begun.nanos();
     }
 
@@ -738,6 +765,7 @@ impl Engine {
         for &table in tables {
             self.consolidate_table(table, &walls, MergePolicy::Whole);
         }
+
         self.timings.consolidate += begun.nanos();
     }
 

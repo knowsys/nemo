@@ -39,6 +39,7 @@ fn aggregates(atom: &Atom) -> bool {
     for term in &atom.terms {
         collect_aggregates(term, &mut found);
     }
+
     !found.is_empty()
 }
 
@@ -87,6 +88,7 @@ impl<'a> Translator<'a> {
             last_applied: 0,
             fetch: None,
         };
+
         Ok((compiled, names))
     }
 }
@@ -132,9 +134,11 @@ impl RuleCompiler<'_, '_> {
                 Literal::Operation(operation) => operations.push(operation),
             }
         }
+
         if self.body.is_empty() {
             self.unit_atom()?;
         }
+
         self.conditions(operations)?;
 
         let mut negated = Vec::new();
@@ -142,6 +146,7 @@ impl RuleCompiler<'_, '_> {
         for atom in written {
             negated.push(self.negated_atom(atom, &mut foreign)?);
         }
+
         Ok(negated)
     }
 
@@ -167,6 +172,7 @@ impl RuleCompiler<'_, '_> {
             if self.binding(operation)? {
                 continue;
             }
+
             let pattern = &operation.arguments[1];
             if is_structured(pattern) {
                 destructure(&operation.arguments[0], pattern, &mut synthesized)?;
@@ -175,6 +181,7 @@ impl RuleCompiler<'_, '_> {
                 plain.push(operation);
             }
         }
+
         let mut pending: Vec<_> = operations
             .into_iter()
             .map(|operation| (operation, FilterOrigin::Condition(operation.span)))
@@ -213,6 +220,7 @@ impl RuleCompiler<'_, '_> {
                         atom.span,
                     ));
                 }
+
                 let compiled = self.existential_atom(atom, &mut frontier, &mut existentials)?;
                 if compiled
                     .columns
@@ -223,8 +231,10 @@ impl RuleCompiler<'_, '_> {
                 } else {
                     head.atoms.push(self.head_atom(atom)?);
                 }
+
                 check.push(compiled);
             }
+
             head.existential = Some(ExistentialHead {
                 frontier,
                 existentials: existentials.len(),
@@ -242,6 +252,7 @@ impl RuleCompiler<'_, '_> {
                 }
             }
         }
+
         Ok(head)
     }
 }

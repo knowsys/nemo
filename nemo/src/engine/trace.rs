@@ -43,7 +43,9 @@ impl Engine {
                 self.whole_predicate(&name)?;
             }
         }
+
         let state = std::mem::take(&mut self.translation);
+
         // The facts are evaluated in the context of the latest run, as its own facts were.
         let context = self.contexts.latest();
         let (stores, setup) = self.translation_parts(translation::Purpose::Load, context);
@@ -59,6 +61,7 @@ impl Engine {
                 }
             }
         }
+
         let (state, _) = translator.finish();
         self.translation = state;
         match problem {
@@ -75,6 +78,7 @@ impl Engine {
         if constants.is_empty() {
             return HashMap::new();
         }
+
         let state = std::mem::take(&mut self.translation);
         let context = self.contexts.latest();
         let (stores, setup) = self.translation_parts(translation::Purpose::Load, context);
@@ -88,6 +92,7 @@ impl Engine {
             .collect();
         let (state, _) = translator.finish();
         self.translation = state;
+
         values
             .into_iter()
             .map(|(constant, value)| {
@@ -109,6 +114,7 @@ impl Engine {
         if !self.fixpoint {
             return Err(TraceError::Unfinished.diagnostic());
         }
+
         Ok(())
     }
 }

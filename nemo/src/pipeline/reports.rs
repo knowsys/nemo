@@ -46,6 +46,7 @@ impl Pipeline {
         if labels.is_empty() {
             return;
         }
+
         let fresh: Vec<Diagnostic> = self.reports.drain(from..).collect();
         for report in fresh {
             let report = labels.iter().fold(report, |report, (span, label)| {
@@ -95,6 +96,7 @@ impl Pipeline {
         let Some(span) = self.source_span(statement) else {
             return Vec::new();
         };
+
         self.instances(span.file)
             .into_iter()
             .filter_map(|directive| {
@@ -126,10 +128,12 @@ impl Pipeline {
             if seen.contains(&id) {
                 continue;
             }
+
             seen.push(id);
             let Some(edge) = self.created_by[id.index()] else {
                 continue;
             };
+
             let edge = &self.edges[edge];
             if let Some(RewriteDeclaration::Replaces { substituted, .. }) = &edge.declaration {
                 for record in substituted {
@@ -148,8 +152,10 @@ impl Pipeline {
                     }
                 }
             }
+
             pending.extend(edge.sources.iter().rev());
         }
+
         diagnostic
     }
 }

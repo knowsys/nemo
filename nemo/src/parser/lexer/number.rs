@@ -25,6 +25,7 @@ impl Lexer<'_> {
                 return;
             }
         }
+
         self.skip_while(|byte| byte.is_ascii_digit());
         if self.peek() == Some(b'.') && self.peek_at(1).is_some_and(|byte| byte.is_ascii_digit()) {
             self.position += 1;
@@ -43,6 +44,7 @@ impl Lexer<'_> {
                 self.position = mark;
             }
         }
+
         // A type suffix `f` or `F` marks a float, and `d` or `D` a double.
         // It is consumed only if no character of a name follows it.
         if matches!(self.peek(), Some(b'f' | b'F' | b'd' | b'D'))
@@ -53,6 +55,7 @@ impl Lexer<'_> {
         {
             self.position += 1;
         }
+
         self.push(TokenKind::Number, start);
     }
 }

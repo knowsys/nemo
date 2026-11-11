@@ -24,6 +24,7 @@ impl Parser<'_> {
         } else {
             None
         };
+
         Ok(ColumnDeclaration {
             name,
             datatype: self.type_expression()?,
@@ -36,10 +37,12 @@ impl Parser<'_> {
         if !self.at(&TokenKind::Bar) {
             return Ok(first);
         }
+
         let mut members = vec![first];
         while self.eat(&TokenKind::Bar).is_some() {
             members.push(self.type_member()?);
         }
+
         Ok(TypeExpression::Union(members))
     }
 
@@ -56,6 +59,7 @@ impl Parser<'_> {
 
         let token = self.expect(&TokenKind::Ident, "a type")?;
         let name = self.text(&token);
+
         // `_` gives a shape without restricting the label.
         let label = if name == "_" {
             TypeLabel::Anonymous
@@ -99,6 +103,7 @@ impl Parser<'_> {
             )?;
             return Ok(Some(TypeExpression::Map { label, fields }));
         }
+
         Ok(None)
     }
 }

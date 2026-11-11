@@ -41,6 +41,7 @@ fn column_positions(
         .at(import.span)
         .with_hint("name the columns after the predicate: `@import q(?x, ?y) from …`"));
     }
+
     Ok(import
         .variables
         .iter()
@@ -72,6 +73,7 @@ impl<'a> Translator<'a> {
             let reason = reason.to_owned();
             return Err(TranslationError::OpaqueQueryBound { reason }.at(import.span));
         }
+
         let scratch = self.fetch_scratch(&import.predicate, spec.layout.delivered())?;
 
         let mut compiler = RuleCompiler::new(self);
@@ -79,6 +81,7 @@ impl<'a> Translator<'a> {
         for atom in &import.bindings {
             atoms.push(compiler.binding_atom(atom, &import.predicate, &positions)?);
         }
+
         debug_assert!(
             compiler.deferred.is_empty(),
             "binding atoms hold no expressions"
@@ -92,6 +95,7 @@ impl<'a> Translator<'a> {
                 columns.push(compiler.variable(variable));
             }
         }
+
         let names = compiler.source_names(compiler.variables);
 
         let compiled = CompiledRule {
@@ -126,6 +130,7 @@ impl<'a> Translator<'a> {
                 on_error: spec.on_error,
             }),
         };
+
         Ok((compiled, names))
     }
 
@@ -143,6 +148,7 @@ impl<'a> Translator<'a> {
             }
             None => None,
         };
+
         Ok(match kept {
             Some(scratch) => scratch,
             None => {
@@ -172,10 +178,12 @@ impl RuleCompiler<'_, '_> {
         if atom.labels.is_some() {
             return Err(unsupported("a named argument in a binding atom", atom.span));
         }
+
         let name = self.translator.resolve(&atom.predicate, atom.span)?;
         if name == predicate {
             return Err(TranslationError::BindingSelf { predicate: name }.at(atom.span));
         }
+
         let layout = self.translator.plan.layout_of(&name, atom.terms.len());
         let mut columns = Vec::with_capacity(atom.terms.len());
         let mut bound_here: HashSet<usize> = HashSet::new();
@@ -213,6 +221,7 @@ impl RuleCompiler<'_, '_> {
                 columns.push(column);
             }
         }
+
         self.body_atom(atom)?;
         Ok(columns)
     }

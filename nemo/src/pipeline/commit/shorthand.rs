@@ -42,6 +42,7 @@ impl Commit<'_> {
         for literal in &kept {
             elsewhere.extend(universal(*literal));
         }
+
         let mut frontier: Vec<Variable> = Vec::new();
         for &position in &folded {
             for variable in universal(&input.body[position]) {
@@ -50,6 +51,7 @@ impl Commit<'_> {
                 }
             }
         }
+
         let atom = Atom::new(name, frontier.into_iter().map(Term::variable));
         let definition = Rule::new(
             vec![atom.clone()],
@@ -115,6 +117,7 @@ impl Commit<'_> {
             let Literal::Negative(negated) = &input.body[*position] else {
                 unreachable!("the literal is negated")
             };
+
             (
                 vec![Literal::Positive(negated.clone())],
                 Literal::Negative(atom.clone()),
@@ -211,6 +214,7 @@ impl Commit<'_> {
         let Statement::Rule(mut rewritten) = self.statement(rule).clone() else {
             unreachable!("the statement is a rule")
         };
+
         let mut substituted = Vec::new();
         rewritten.walk(&mut |term| {
             if let TermKind::Variable(variable) = &term.kind
@@ -242,6 +246,7 @@ impl Commit<'_> {
         let Statement::Rule(input) = self.statement(rule).clone() else {
             unreachable!("the statement is a rule")
         };
+
         let mut positions = literals.to_vec();
         positions.sort_unstable();
         positions.dedup();
@@ -276,6 +281,7 @@ impl Commit<'_> {
                 body.push(literal.clone());
             }
         }
+
         (body, grouped_paths(rule.body.len(), &[positions]))
     }
 
@@ -288,6 +294,7 @@ impl Commit<'_> {
                 bound.extend(universal(literal));
             }
         }
+
         let head: HashSet<&Variable> = rule.head.iter().flat_map(|atom| universal(atom)).collect();
         assert!(
             head.is_subset(&bound),

@@ -23,6 +23,7 @@ impl Display for ModuleName {
         for _ in 0..self.parents {
             f.write_str("super::")?;
         }
+
         f.write_str(&self.segments.join("::"))
     }
 }

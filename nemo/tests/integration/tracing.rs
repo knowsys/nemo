@@ -64,9 +64,11 @@ fn split_fact(fact: &str) -> (String, Vec<String>) {
             _ => {}
         }
     }
+
     if !inner.trim().is_empty() {
         terms.push(inner[start..].trim().to_owned());
     }
+
     (predicate, terms)
 }
 
@@ -82,6 +84,7 @@ fn check(engine: &mut Engine, response: &TraceResponse) {
             );
         }
     }
+
     for id in 0..response.nodes.len() {
         check_node(engine, response.node_proof(id));
     }
@@ -99,6 +102,7 @@ fn check_node(engine: &mut Engine, proof: Proof<'_>) {
     let (Some(rule), Some(derivation)) = (proof.rule(), proof.derivation()) else {
         return;
     };
+
     assert!(
         derivation.step >= 1,
         "derivations happen at reasoning steps"
@@ -127,6 +131,7 @@ fn check_node(engine: &mut Engine, proof: Proof<'_>) {
             Literal::Operation(_) => {}
         }
     }
+
     let premises: Vec<Proof<'_>> = proof.premises().collect();
     if derivation.aggregate.is_some() {
         assert!(
@@ -141,6 +146,7 @@ fn check_node(engine: &mut Engine, proof: Proof<'_>) {
             rule.text
         );
     }
+
     for (premise, atom) in premises.iter().zip(&positives) {
         assert!(
             premise.id() < proof.id(),
@@ -155,6 +161,7 @@ fn check_node(engine: &mut Engine, proof: Proof<'_>) {
             rule.text
         );
     }
+
     assert_eq!(derivation.absences.len(), negatives.len());
     for (absence, atom) in derivation.absences.iter().zip(&negatives) {
         assert!(
@@ -178,6 +185,7 @@ fn instance_of(atom: &Atom, fact: &str, values: &HashMap<String, String>) -> boo
     if atom.labels.is_some() {
         return true;
     }
+
     atom.terms.len() == terms.len()
         && atom.terms.iter().zip(&terms).all(|(term, value)| {
             let TermKind::Variable(variable) = &term.kind else {
@@ -186,6 +194,7 @@ fn instance_of(atom: &Atom, fact: &str, values: &HashMap<String, String>) -> boo
             if variable.kind != VariableKind::Universal {
                 return true;
             }
+
             values
                 .get(&variable.to_string())
                 .is_none_or(|bound| bound == value)
@@ -225,6 +234,7 @@ fn derivations_are_traced_at_the_instant_of_their_run() {
         stamped(?x, ?t) :- item(?x), ?t = NOW() .
         current(?x) :- stamped(?x, ?t), ?t = NOW() .
     ");
+
     // The clock moves on between reasoning and tracing.
     std::thread::sleep(std::time::Duration::from_millis(5));
     let response = trace(&mut engine, "current(a) .");
@@ -380,6 +390,7 @@ fn existential_derivations_trace_through_their_nulls() {
     ");
     let response = trace(&mut engine, "parented(alice) .");
     check(&mut engine, &response);
+
     // The premise is the created fact, whose null renders in data
     // syntax; its own proof grounds the frontier back to the person.
     let proof = response.proof(0).expect("the fact holds");
@@ -463,6 +474,7 @@ fn module_rules_attribute_back_to_their_use() {
         @use closure { edge = edge } as closure .
         path(?x, ?y) :- closure::reach(?x, ?y) .
         ";
+
     // A `@use` resolves against the directory of the file it stands in.
     let file = engine
         .add_source(directory.join("main.rls").display().to_string(), source)
@@ -474,6 +486,7 @@ fn module_rules_attribute_back_to_their_use() {
     engine.reason().expect("reasoning reaches the fixpoint");
     let response = trace(&mut engine, "path(a, b) .");
     check(&mut engine, &response);
+
     // The instantiated module rule carries provenance back to the
     // statements it derives from.
     let proof = response.proof(0).expect("the fact holds");
@@ -482,6 +495,7 @@ fn module_rules_attribute_back_to_their_use() {
         .next()
         .and_then(|premise| premise.rule())
         .expect("the module rule derived the reach fact");
+
     // It stands in the module file, instantiated by the program's `@use`.
     assert_eq!(rule.instances.len(), 1, "{:?}", rule.instances);
     assert!(
@@ -616,6 +630,7 @@ fn a_body_of_free_variables_is_traced_by_its_first_match() {
 
     let started = std::time::Instant::now();
     let response = trace(&mut engine, "g(z) .");
+
     // Reading one match takes milliseconds, and reading them all many seconds.
     assert!(
         started.elapsed() < std::time::Duration::from_secs(2),
@@ -789,6 +804,7 @@ fn stored_rows_trace_into_one_response_in_parts() {
     facts.sort_unstable();
     facts.dedup();
     assert_eq!(facts.len(), listed, "each fact is one node");
+
     // The three far facts, the six reach facts, and the three edges they stand on.
     assert_eq!(listed, 12);
     assert_eq!(response.rules.len(), 3, "each rule is listed once");

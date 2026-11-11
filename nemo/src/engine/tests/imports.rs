@@ -253,12 +253,14 @@ kind(?t) :- j(?id, "kind", ?t) .
     let program = parse(source);
     engine.load(program).expect("the program loads");
     engine.reason().expect("reasoning reaches the fixpoint");
+
     // No rule reads the object, and the predicate column is a constant,
     // so the graph stores two columns and only the `p` statements,
     // whose two rows become one.
     assert!(arities(&engine).contains(&(String::from("g"), 3)));
     assert_eq!(stored(&engine, "g"), (1, 2));
     assert_eq!(count(&mut engine, "subject"), 1);
+
     // No rule reads the first element of the records, and the second is a constant,
     // so the table stores two columns of the `kind` records, whose three rows become two.
     assert!(arities(&engine).contains(&(String::from("j"), 3)));
@@ -549,12 +551,14 @@ fn a_format_wider_than_the_declaration_is_an_error_at_check() {
         let [problem] = &problems[..] else {
             panic!("expected the one refusal for {format} into {declared}: {problems:?}");
         };
+
         assert_eq!(
             problem.code(),
             codes::IMPORT_OUTSIDE_DECLARATION,
             "{problem:?}"
         );
     }
+
     // A column no rule reads is checked too, so what is refused does not depend on the rules.
     let problems = check(
         "@declare t(a: string, b: string) .
@@ -567,6 +571,7 @@ fn a_format_wider_than_the_declaration_is_an_error_at_check() {
             .any(|problem| problem.code() == codes::IMPORT_OUTSIDE_DECLARATION),
         "{problems:?}"
     );
+
     // A name outside the vocabulary says what the vocabulary is.
     let problems = check("@import p from csv { resource = \"nowhere.csv\", format = (integer) } .");
     assert_eq!(problems.len(), 1, "{problems:?}");
@@ -588,6 +593,7 @@ fn declared_rdf_imports_take_the_shape_of_statements() {
 <http://x/b> <http://x/p> \"text\" .
 _:blank <http://x/p> \"6\"^^<http://www.w3.org/2001/XMLSchema#integer> .
 ";
+
     // A declaration of the statements' shape loads every one.
     let mut engine = load_resources(
         "@declare g(s: iri | null, p: iri, o: any) .
@@ -596,6 +602,7 @@ _:blank <http://x/p> \"6\"^^<http://www.w3.org/2001/XMLSchema#integer> .
     );
     assert_eq!(count(&mut engine, "g"), 3);
     assert!(engine.reports().is_empty(), "{:?}", engine.reports());
+
     // A narrower one is refused, before the graph is read.
     for declaration in [
         "@declare g(s: iri, p: iri, o: int) .",
@@ -617,12 +624,14 @@ _:blank <http://x/p> \"6\"^^<http://www.w3.org/2001/XMLSchema#integer> .
             problems[0]
         );
     }
+
     // Format only: every statement loads.
     let mut engine = load_resources(
         "@import g from ntriples { resource = \"graph.nt\", format = (term, skip, term) } .",
         &[("graph.nt", GRAPH)],
     );
     assert_eq!(count(&mut engine, "g"), 3);
+
     // `string` is a format for reading cells, and RDF columns contain terms.
     let (program, _) = Program::parse(
         "@import g from ntriples { resource = \"graph.nt\", format = (string, term, term) } .",
@@ -690,6 +699,7 @@ _:blank <http://x/p> \"6\"^^<http://www.w3.org/2001/XMLSchema#integer> .
         engine.rows("age").expect("registered"),
         vec![vec![DataValue::iri("http://x/a"), DataValue::integer(5)]]
     );
+
     // The rows that fail a condition are left out silently.
     assert!(engine.reports().is_empty(), "{:?}", engine.reports());
     let types: Vec<String> = engine
@@ -707,6 +717,7 @@ _:blank <http://x/p> \"6\"^^<http://www.w3.org/2001/XMLSchema#integer> .
     );
     assert_eq!(problems.len(), 1, "{problems:?}");
     assert_eq!(problems[0].code(), codes::IMPORT_OUTSIDE_DECLARATION);
+
     // With them, a check proves it without reading anything.
     let problems = check(
         "@declare age(who: iri, years: int) .
@@ -851,6 +862,7 @@ fn request_headers_are_sent_as_written_or_refused() {
     let Progress::Suspended(pending) = progress else {
         panic!("the import is suspended for its resource");
     };
+
     assert_eq!(engine.pending(), pending);
     assert_eq!(pending.len(), 1, "{pending:?}");
     assert!(

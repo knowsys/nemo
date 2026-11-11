@@ -178,6 +178,7 @@ impl<'a> QueryContext<'a> {
                     if let Some(neighborhood) = neighborhood {
                         neighborhood.below.push((statement, 0));
                     }
+
                     (Vec::new(), import.bindings.iter().collect())
                 }
                 _ => continue,
@@ -187,6 +188,7 @@ impl<'a> QueryContext<'a> {
                     neighborhood.below.push((statement, head));
                 }
             }
+
             for atom in body {
                 if let Some(neighborhood) = self.neighborhood_of(&atom.predicate)
                     && neighborhood.above.last() != Some(&statement)
@@ -278,6 +280,7 @@ impl QueryArenas {
         if let Some(expansion) = expansion {
             self.shape(context, written, compiled, expansion)?;
         }
+
         Ok(())
     }
 
@@ -343,6 +346,7 @@ impl QueryArenas {
         {
             return Err(TraceError::NegatedExpansion.diagnostic());
         }
+
         let requested: Vec<&QueryNode> = expansion.children.iter().collect();
         let children = self.expand(
             context,
@@ -357,9 +361,11 @@ impl QueryArenas {
                 let NodeFacts::Compiled(compiled) = self.written[child].facts else {
                     return Err(TraceError::RemoteExpansion.diagnostic());
                 };
+
                 self.shape(context, child, compiled, expansion)?;
             }
         }
+
         Ok(())
     }
 
@@ -382,11 +388,13 @@ impl QueryArenas {
         let rule = context
             .rule(statement)
             .expect("expansions name written rules");
+
         // A stage rewrites a rule into a rule or an import, and never removes one.
         let realization = context
             .router
             .realize(statement)
             .expect("every written rule runs as a compiled rule or an import");
+
         // Every error that a server-side expansion can meet happens before the arenas change,
         // so that the expansion can try the next rule. The error for a selection on a remote
         // literal comes later, but a server-side expansion gives no selections.
@@ -404,6 +412,7 @@ impl QueryArenas {
                     Some((rule_index, head, vec![None; context.atoms(rule_index)]));
             }
         }
+
         let request = |ordinal: usize| requested.get(ordinal).copied().unwrap_or(&UNCONSTRAINED);
         let positives = positive_literals(rule);
         let mut children = Vec::with_capacity(positives.len());
@@ -411,6 +420,7 @@ impl QueryArenas {
             let Literal::Positive(atom) = &rule.body[position] else {
                 unreachable!("the position is a positive literal")
             };
+
             let entries = request(ordinal).table_entries.as_ref();
             let facts = self.literal_facts(
                 context,
@@ -423,11 +433,13 @@ impl QueryArenas {
             if matches!(facts, NodeFacts::Remote { .. }) && !selection(entries).is_empty() {
                 return Err(TraceError::RemoteSelectors.diagnostic());
             }
+
             let mut address = self.written[written].address.clone();
             address.push(ordinal);
             let predicate = context.name(atom);
             children.push(self.written_node(address, predicate, facts, page(entries)));
         }
+
         let mut listings = Vec::new();
         for (offset, (predicate, (table, arity))) in negated.into_iter().enumerate() {
             let ordinal = positives.len() + offset;
@@ -445,6 +457,7 @@ impl QueryArenas {
             self.written[listing].listing = true;
             listings.push(listing);
         }
+
         self.written[written].expanded = Some((statement, head));
         self.written[written].children = children.iter().copied().chain(listings).collect();
         Ok(children)
@@ -488,6 +501,7 @@ impl QueryArenas {
                 if !route.remote {
                     return NodeFacts::Compiled(target);
                 }
+
                 let view = context
                     .router
                     .remote_view(&route)
@@ -523,6 +537,7 @@ impl QueryArenas {
                     Some((rule_index, 0, vec![None; context.atoms(rule_index)]));
             }
         }
+
         let (statement, literal) = route.last;
         let selectors = if route.remote { Vec::new() } else { selectors };
         self.child_at(context, current, statement, literal, selectors)
@@ -546,6 +561,7 @@ impl QueryArenas {
         if let Some(child) = children[atom] {
             return child;
         }
+
         let predicate = context
             .router
             .predicate_at(statement, literal)
@@ -558,6 +574,7 @@ impl QueryArenas {
         let Some((_, _, children)) = &mut self.compiled[parent].expansion else {
             unreachable!("the expansion was just read")
         };
+
         children[atom] = Some(child);
         child
     }
@@ -602,6 +619,7 @@ fn check_head(
         }
         .diagnostic());
     }
+
     Ok(())
 }
 
@@ -612,6 +630,7 @@ fn check_rule(context: &QueryContext<'_>, compiled: usize) -> Result<(), Diagnos
     if rule.aggregate.is_some() || rule.existential.is_some() {
         return Err(TraceError::QueryHeadKind.diagnostic());
     }
+
     Ok(())
 }
 
@@ -653,6 +672,7 @@ fn selection_terms(text: &str) -> Result<Vec<Term>, Diagnostic> {
     if atom.labels.is_some() {
         return Err(refusal(String::from("a selection cannot name columns")));
     }
+
     Ok(atom.terms)
 }
 
@@ -670,6 +690,7 @@ pub(super) fn ground_selectors(
             let EntryQuery::Terms(text) = selector else {
                 continue;
             };
+
             let terms = selection_terms(text)?;
             let name = engine.manager.name(node.table).to_owned();
             if terms.len() != node.arity {
@@ -680,10 +701,12 @@ pub(super) fn ground_selectors(
                 }
                 .diagnostic());
             }
+
             owners.push(index);
             facts.push(Fact::new(Identifier::Iri(name), terms));
         }
     }
+
     if facts.is_empty() {
         return Ok(HashMap::new());
     }
@@ -692,5 +715,6 @@ pub(super) fn ground_selectors(
     for (index, (_, values)) in owners.into_iter().zip(engine.ground_facts(&facts)?) {
         grounded.entry(index).or_default().push(values);
     }
+
     Ok(grounded)
 }

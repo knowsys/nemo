@@ -55,6 +55,7 @@ impl<'a> Translator<'a> {
         let Some(spec) = self.export_spec(export, predicate, format)? else {
             return Ok(());
         };
+
         self.export_spans.push(export.span);
         self.exports.push(spec);
         Ok(())
@@ -90,6 +91,7 @@ impl<'a> Translator<'a> {
             FileFormat::Rdf(_) => {
                 let shape = self.plain_directive(format, &export.options, &bindings, false)?;
                 let variant = self.rdf_variant(format, shape.resource.as_deref(), export.span)?;
+
                 // The program's own prefixes and base, so that the
                 // output abbreviates IRIs as the program does.
                 let mut prefixes: Vec<(String, String)> = self
@@ -153,6 +155,7 @@ impl<'a> Translator<'a> {
                 return Err(unsupported("exporting to a SPARQL endpoint", export.span));
             }
         };
+
         Ok(Some(spec))
     }
 
@@ -167,6 +170,7 @@ impl<'a> Translator<'a> {
             let Some(&Registered { arity, .. }) = self.predicates.get(&spec.predicate) else {
                 continue;
             };
+
             match &spec.format {
                 ExportFormat::Rdf { variant, .. } if arity != variant.width() => {
                     problems.push(rdf_export_arity(*variant, &spec.predicate, arity).at(span));
@@ -188,6 +192,7 @@ impl<'a> Translator<'a> {
                         .at(span),
                     );
                 }
+
                 // With formats, the names were counted against them already.
                 ExportFormat::Dsv {
                     formats: None,
@@ -210,9 +215,11 @@ impl<'a> Translator<'a> {
                 _ => {}
             }
         }
+
         for problem in problems {
             self.recover(problem)?;
         }
+
         Ok(())
     }
 }

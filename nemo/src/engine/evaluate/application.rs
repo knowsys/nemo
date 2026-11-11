@@ -120,6 +120,7 @@ impl PlanSkeletons {
         if self.0.len() <= position {
             self.0.resize_with(position + 1, || None);
         }
+
         self.0[position].get_or_insert_with(|| PlanSkeletonBuilder::new(rule).build())
     }
 
@@ -183,6 +184,7 @@ pub(crate) fn apply(
         Revision(rule.last_applied)
     };
     let now = Revision(step);
+
     // A delta window starts at the table's block boundary at or before
     // the rule's last application. The rows it reads again are derived again
     // and removed by the head deduplication, so consolidation need not
@@ -258,6 +260,7 @@ impl PlanSkeleton {
                 RangeRole::Delta => start..now,
             });
         }
+
         if !aggregating {
             for variant in &self.variants {
                 let mut empty = false;
@@ -268,6 +271,7 @@ impl PlanSkeleton {
                         break;
                     }
                 }
+
                 if empty {
                     for load in variant.loads.clone() {
                         let start = ranges[load].start;
@@ -276,9 +280,11 @@ impl PlanSkeleton {
                 }
             }
         }
+
         for (&(node, _, _), range) in self.loads.iter().zip(&ranges) {
             self.plan.set_load_range(node, range.clone());
         }
+
         ranges
     }
 
@@ -299,6 +305,7 @@ impl PlanSkeleton {
             for &load in &loads.leading {
                 leading_rows = leading_rows.min(rows(load));
             }
+
             observations.push(VariantObservation {
                 variant,
                 delta_rows: rows(loads.delta),
@@ -306,6 +313,7 @@ impl PlanSkeleton {
                 delta_leads: loads.leading.contains(&loads.delta),
             });
         }
+
         observations
     }
 }
@@ -361,6 +369,7 @@ pub(crate) fn scope_columns(rule: &CompiledRule, spec: &CompiledAggregateFunctio
             }
         }
     }
+
     columns
 }
 
@@ -383,6 +392,7 @@ impl<'r> PlanSkeletonBuilder<'r> {
     fn new(rule: &'r CompiledRule) -> Self {
         let mut plan = OperationPlan::new();
         let space = BodySpace::new(&mut plan, rule);
+
         Self {
             rule,
             space,
@@ -422,6 +432,7 @@ impl<'r> PlanSkeletonBuilder<'r> {
         let probe = self.existential_probe(derived);
 
         let layout = self.plan.layout();
+
         PlanSkeleton {
             plan: self.plan,
             layout,
@@ -447,6 +458,7 @@ impl<'r> PlanSkeletonBuilder<'r> {
             if pivot > 0 && rule.aggregate.is_some() {
                 break;
             }
+
             let mut inputs = Vec::with_capacity(rule.body.len());
             let mut leading = Vec::new();
             let mut delta = 0;
@@ -466,9 +478,11 @@ impl<'r> PlanSkeletonBuilder<'r> {
                 if first_variable.is_some_and(|id| atom.variables.contains(&id)) {
                     leading.push(self.loads.len());
                 }
+
                 self.loads.push((node, atom.table, role));
                 inputs.push(node);
             }
+
             variant_loads.push(VariantLoads {
                 loads: first_load..self.loads.len(),
                 delta,
@@ -476,6 +490,7 @@ impl<'r> PlanSkeletonBuilder<'r> {
             });
             variants.push(self.plan.join(inputs, self.space.order.clone()));
         }
+
         (self.plan.union(variants), variant_loads)
     }
 
@@ -507,6 +522,7 @@ impl<'r> PlanSkeletonBuilder<'r> {
         let Some(aggregate) = &rule.aggregate else {
             return;
         };
+
         let projected = self.aggregate_scope(derived, aggregate);
         let results: Vec<Marker> = aggregate
             .functions
@@ -519,6 +535,7 @@ impl<'r> PlanSkeletonBuilder<'r> {
             .zip(&results)
             .map(|(spec, &result)| {
                 let function = aggregate_function(spec, &self.space.markers);
+
                 // The scope columns start with the function's own value columns,
                 // which `per` leaves out. A count reads no value, so `per` keeps all
                 // of its scope columns.
@@ -575,9 +592,11 @@ impl<'r> PlanSkeletonBuilder<'r> {
                 }
             }
         }
+
         if let Some(prefix) = join_order_prefix(&self.space.order, &list, aggregate.group.len()) {
             list = prefix;
         }
+
         let direct = rule.body.len() == 1
             && rule.filters.is_empty()
             && rule.bindings.is_empty()
@@ -617,6 +636,7 @@ impl<'r> PlanSkeletonBuilder<'r> {
             output_markers.push(result);
             node = self.plan.compute(node, spec);
         }
+
         node
     }
 
@@ -667,6 +687,7 @@ impl<'r> PlanSkeletonBuilder<'r> {
                 &mut filters,
             ));
         }
+
         let joined = self.plan.join(inputs, order);
         let checked = filtered(&mut self.plan, joined, filters);
         self.plan.project(checked, frontier_markers.to_vec())
@@ -697,6 +718,7 @@ impl<'r> PlanSkeletonBuilder<'r> {
                 binding => {
                     let fresh = self.plan.marker();
                     order.push(fresh);
+
                     // For a repeated variable, the fresh column must be the same term.
                     // For a constant, the fresh column must be that constant.
                     let other = match (binding, term) {
@@ -715,6 +737,7 @@ impl<'r> PlanSkeletonBuilder<'r> {
             };
             column_markers.push(marker);
         }
+
         let node = self.plan.load(atom.table, unpatched(), column_markers);
         self.loads.push((node, atom.table, RangeRole::Full));
         node
@@ -734,12 +757,14 @@ fn deliver(
     for &(table, output) in &skeleton.targets {
         delivered.push((table, std::mem::take(&mut outputs[output])));
     }
+
     if let (Some(head), Some(output)) = (&rule.existential, skeleton.probe) {
         let mut unsatisfied: Vec<Vec<StorageValue>> =
             Vec::with_capacity(outputs[output].row_count());
         outputs[output].for_each_row(|row| unsatisfied.push(row.to_vec()));
         delivered.extend(mint(head, &unsatisfied, dictionary));
     }
+
     Applied {
         outputs: delivered,
         errors: results.errors,
@@ -779,6 +804,7 @@ fn mint(
                         .expect("head constants were encoded when the rule compiled"),
                 });
             }
+
             match per_table
                 .iter_mut()
                 .find(|(table, _)| *table == insert.table)
@@ -792,6 +818,7 @@ fn mint(
             }
         }
     }
+
     per_table
         .into_iter()
         .map(|(table, buffer)| (table, Trie::from_buffer(buffer)))

@@ -80,6 +80,7 @@ impl Program {
                 Statement::Directive(_) => {}
             }
         }
+
         predicates.sort();
         predicates.dedup();
         predicates
@@ -92,8 +93,10 @@ impl Display for Program {
             if index > 0 {
                 f.write_str("\n")?;
             }
+
             write!(f, "{statement}")?;
         }
+
         Ok(())
     }
 }

@@ -38,6 +38,7 @@ impl Display for TypeSyntax<'_> {
         if datatype.tuple_shapes().is_none() && datatype.map_shapes().is_none() {
             return fmt_domains(f, domains);
         }
+
         let mut first = true;
         let mut separate = |f: &mut Formatter<'_>| -> fmt::Result {
             if !first {
@@ -87,6 +88,7 @@ impl Display for TypeSyntax<'_> {
                 }
             }
         }
+
         Ok(())
     }
 }
@@ -129,6 +131,7 @@ fn fmt_domains(f: &mut Formatter<'_>, domains: DomainSet) -> fmt::Result {
     if domains == DomainSet::ANY {
         return f.write_str(BaseType::Any.name());
     }
+
     let full_number = DomainSet::NUMERIC.is_subset(domains);
     let full_decimal = DomainSet::EXACT.is_subset(domains);
     let full_duration = DomainSet::DURATION.is_subset(domains);
@@ -146,6 +149,7 @@ fn fmt_domains(f: &mut Formatter<'_>, domains: DomainSet) -> fmt::Result {
         if !first {
             f.write_str(" | ")?;
         }
+
         first = false;
         f.write_str(match domain {
             ValueDomain::Integer if full_number => BaseType::Number.name(),
@@ -154,6 +158,7 @@ fn fmt_domains(f: &mut Formatter<'_>, domains: DomainSet) -> fmt::Result {
             other => keyword(other),
         })?;
     }
+
     Ok(())
 }
 
@@ -164,6 +169,7 @@ fn fmt_label(f: &mut Formatter<'_>, label: &LabelBound) -> fmt::Result {
     if let LabelBound::Exactly(Some(label)) = label {
         f.write_str(label)?;
     }
+
     Ok(())
 }
 
@@ -177,11 +183,14 @@ fn fmt_tuple(f: &mut Formatter<'_>, shape: &TupleShape) -> fmt::Result {
         if index > 0 {
             f.write_str(", ")?;
         }
+
         TypeSyntax(element).fmt(f)?;
     }
+
     if shape.elements.len() == 1 {
         f.write_str(",")?;
     }
+
     f.write_str(")")
 }
 
@@ -199,14 +208,17 @@ fn fmt_map(f: &mut Formatter<'_>, shape: &MapShape) -> fmt::Result {
         if index > 0 {
             f.write_str(", ")?;
         }
+
         match key.as_ref() {
             ValueRef::Iri(iri) => write!(f, "{iri}")?,
             ValueRef::String(text) => write!(f, "{text:?}")?,
             ValueRef::Number(number) if number.is_integral() => write!(f, "{number}")?,
             other => fmt_domains(f, DomainSet::of(other.domain()))?,
         }
+
         write!(f, ": {}", TypeSyntax(value))?;
     }
+
     f.write_str("}")
 }
 
@@ -247,6 +259,7 @@ mod tests {
             ),
             "string | decimal"
         );
+
         // Either domain alone is written as its own keyword.
         assert_eq!(render(DomainSet::INTEGER), "int");
         assert_eq!(render(DomainSet::DECIMAL), "decimal");
@@ -272,6 +285,7 @@ mod tests {
             render(DomainSet::NUMERIC.with(ValueDomain::String)),
             "string | number"
         );
+
         // Without all four numeric domains, the integer and the decimal domain still combine.
         assert_eq!(
             render(DomainSet::EXACT.with(ValueDomain::Double)),

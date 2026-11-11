@@ -32,6 +32,7 @@ impl TraceNode {
         let Some(derivation) = &self.derivation else {
             return format!("{} .", self.fact);
         };
+
         let mut body: Vec<String> = premises.into_iter().map(str::to_owned).collect();
         body.extend(
             derivation
@@ -45,6 +46,7 @@ impl TraceNode {
             let noun = if matches == 1 { "match" } else { "matches" };
             line.push_str(&format!("  % aggregated over {matches} {noun}"));
         }
+
         line
     }
 }

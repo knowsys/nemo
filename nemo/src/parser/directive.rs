@@ -51,6 +51,7 @@ impl Parser<'_> {
     /// Parses `@base <iri>`.
     fn base_directive(&mut self) -> Result<BaseDirective, Diagnostic> {
         let iri = self.expect(&TokenKind::Iri, "the base IRI in angle brackets")?;
+
         Ok(BaseDirective {
             iri: self.iri_text(&iri).into_owned(),
             span: None,
@@ -73,6 +74,7 @@ impl Parser<'_> {
             }
         };
         let iri = self.expect(&TokenKind::Iri, "the expanded IRI in angle brackets")?;
+
         Ok(PrefixDirective {
             prefix,
             iri: self.iri_text(&iri).into_owned(),
@@ -93,6 +95,7 @@ impl Parser<'_> {
         let predicate = self.identifier()?;
         self.expect(&TokenKind::ParenOpen, "`(` opening the column declarations")?;
         let columns = self.columns("`)` closing the column declarations")?;
+
         Ok(DeclareDirective {
             predicate,
             columns,
@@ -115,6 +118,7 @@ impl Parser<'_> {
             self.expect_variable(VariableKind::Global, "a global variable like `$threshold`")?;
         let datatype = self.after(&TokenKind::Colon, Self::type_expression)?;
         let value = self.after(&TokenKind::Equal, Self::term)?;
+
         Ok(ParameterDirective {
             variable: Variable::global(name),
             datatype,
@@ -129,6 +133,7 @@ impl Parser<'_> {
         let columns = self.after(&TokenKind::ParenOpen, |parser| {
             parser.columns("`)` closing the input's columns")
         })?;
+
         Ok(InputDirective {
             predicate,
             columns,
@@ -155,14 +160,17 @@ impl Parser<'_> {
                         parser.expect(&TokenKind::Equal, "`=` binding the input")?;
                         bindings.push((input, parser.identifier()?));
                     }
+
                     Ok(())
                 },
             )?;
         }
+
         self.expect_word("as", "`as` before the module alias", || {
             ParseError::ExpectedAlias
         })?;
         let alias = self.name("the module alias")?;
+
         Ok(UseDirective {
             module,
             bindings,
@@ -183,6 +191,7 @@ impl Parser<'_> {
         )?;
         self.expect(&TokenKind::Equal, "`=` before the defining expression")?;
         let body = self.term()?;
+
         Ok(DefineDirective {
             name,
             parameters,
@@ -202,6 +211,7 @@ impl Parser<'_> {
         )?;
         self.expect(&TokenKind::ArrowRight, "`->` before the result type")?;
         let result = self.type_expression()?;
+
         Ok(ExternDirective {
             name,
             parameters,

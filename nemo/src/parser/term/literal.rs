@@ -36,6 +36,7 @@ impl Parser<'_> {
                 }),
             });
         }
+
         Ok(Term::from(Operation {
             operator: Operator::Concat,
             arguments,
@@ -48,6 +49,7 @@ impl Parser<'_> {
     pub(super) fn number(&self, token: &Token) -> Result<Term, Diagnostic> {
         let number = Number::from_term_syntax(self.text(token))
             .ok_or_else(|| ParseError::MalformedNumber.at(Some(token.span)))?;
+
         Ok(Term {
             kind: TermKind::Number(number),
             span: Some(token.span),
@@ -102,6 +104,7 @@ impl Parser<'_> {
                 },
             ));
         }
+
         Ok(self.spanned(start, TermKind::String(value)))
     }
 }

@@ -38,6 +38,7 @@ impl<'a> QueryEvaluation<'a> {
                 self.valid(nodes, child)?;
             }
         }
+
         let selectors = self.selected(nodes, index)?;
         let valid = match nodes[index].expansion.clone() {
             // A leaf: the selectors intersected with the store, or the
@@ -71,11 +72,13 @@ impl<'a> QueryEvaluation<'a> {
         let Some(rows) = self.selector_rows(nodes, index)? else {
             return Ok(None);
         };
+
         let arity = nodes[index].arity;
         let mut buffer = RowBuffer::new(arity);
         for row in &rows {
             buffer.push_row(row);
         }
+
         Ok(Some(self.store(arity, Trie::from_buffer(buffer))))
     }
 
@@ -113,6 +116,7 @@ impl<'a> QueryEvaluation<'a> {
             let selected = plan.load(selectors, Revision(0)..Revision(1), head_markers.clone());
             node = plan.join(vec![node, selected], head_markers);
         }
+
         let output = plan.output(node);
         let mut results = plan.execute(self.manager, self.dictionary, self.context);
         let rows = std::mem::take(&mut results.outputs[output]);
@@ -125,18 +129,21 @@ impl<'a> QueryEvaluation<'a> {
         let Some((rule_index, head_index, children)) = nodes[index].expansion.clone() else {
             return;
         };
+
         let child_sets = self.child_sets(nodes, rule_index, &children);
         let program = self.program;
         let rule = &program.rules[rule_index];
 
         let mut plan = OperationPlan::new();
         let (mut joined, space) = self.body_join(&mut plan, rule, &child_sets);
+
         // The surviving parent facts constrain the witnesses.
         if let Some(parent) = nodes[index].filtered {
             let head_markers = space.columns(&rule.heads[head_index].columns);
             let survivors = plan.load(parent, Revision(0)..Revision(1), head_markers);
             joined = plan.join(vec![joined, survivors], space.result_columns.clone());
         }
+
         // Each requested child's facts are the witnesses' projection
         // onto its atom.
         let mut outputs = Vec::new();
@@ -145,11 +152,13 @@ impl<'a> QueryEvaluation<'a> {
             let projected = plan.project(joined, space.atom_markers(&rule.body[position]));
             outputs.push((*child, plan.output(projected)));
         }
+
         let mut results = plan.execute(self.manager, self.dictionary, self.context);
         for (child, output) in outputs {
             let rows = std::mem::take(&mut results.outputs[output]);
             nodes[child].filtered = Some(self.store(nodes[child].arity, rows));
         }
+
         for child in children.into_iter().flatten() {
             self.filter(nodes, child);
         }
@@ -164,6 +173,7 @@ impl<'a> QueryEvaluation<'a> {
         children: &[Option<usize>],
     ) -> Vec<Option<TableId>> {
         let rule = &self.program.rules[rule_index];
+
         (0..rule.body.len())
             .map(|position| {
                 children
@@ -188,6 +198,7 @@ impl<'a> QueryEvaluation<'a> {
         if node.selectors.is_empty() {
             return Ok(None);
         }
+
         let mut rows = Vec::with_capacity(node.selectors.len());
         for grounded in self.grounded.get(&index).into_iter().flatten() {
             let row: Option<Vec<StorageValue>> = grounded
@@ -198,10 +209,12 @@ impl<'a> QueryEvaluation<'a> {
                 rows.push(row);
             }
         }
+
         for selector in &node.selectors {
             let EntryQuery::Entry(id) = selector else {
                 continue;
             };
+
             match self.row_at(node.table, *id) {
                 Some(row) => rows.push(row),
                 None => {
@@ -213,6 +226,7 @@ impl<'a> QueryEvaluation<'a> {
                 }
             }
         }
+
         Ok(Some(rows))
     }
 
@@ -261,6 +275,7 @@ impl<'a> QueryEvaluation<'a> {
             };
             inputs.push(input);
         }
+
         let node = space.join(plan, inputs, space.order.clone(), &[]);
         let (node, _) = space.subtract_negations(plan, node, Revision(0)..Revision(self.now));
         (node, space)

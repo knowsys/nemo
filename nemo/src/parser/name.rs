@@ -22,6 +22,7 @@ impl Parser<'_> {
             let token = self.advance();
             return Ok(Identifier::Iri(self.iri_text(&token).into_owned()));
         }
+
         // `:name` resolves against the empty prefix.
         if self.at(&TokenKind::Colon) && self.peek_second() == &TokenKind::Ident {
             let colon = self.advance();
@@ -31,8 +32,10 @@ impl Parser<'_> {
                     name: self.name("a name")?,
                 });
             }
+
             return Err(self.unexpected("a name directly after the `:`"));
         }
+
         let first = self.expect(&TokenKind::Ident, "a name")?;
 
         if self.at(&TokenKind::Colon) && Self::adjacent(first.span, self.peek_span()) {
@@ -44,8 +47,10 @@ impl Parser<'_> {
                         name: self.name("a name")?,
                     });
                 }
+
                 return Err(self.unexpected("a name directly after the `:`"));
             }
+
             // A `:` at the end of a term leaves the local name empty,
             // so that `ex:` names the IRI of the prefix.
             // In an argument list, `ex: +1` is a named argument,
@@ -92,10 +97,12 @@ impl Parser<'_> {
                 if !name.segments.is_empty() {
                     return Err(ParseError::SuperInsideModuleName.at(Some(token.span)));
                 }
+
                 name.parents += 1;
                 self.expect(&TokenKind::DoubleColon, "`::` after `super`")?;
                 continue;
             }
+
             name.segments.push(part.to_owned());
             if self.eat(&TokenKind::DoubleColon).is_none() {
                 return Ok(name);

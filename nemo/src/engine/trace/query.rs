@@ -110,6 +110,7 @@ pub(crate) fn tree_for_table(
         predicate,
         table_entries,
     } = query;
+
     run(
         engine,
         predicate,
@@ -129,6 +130,7 @@ pub(crate) fn table_entries_for_tree_nodes(
         table_entries,
         child_information,
     } = query;
+
     run(
         engine,
         predicate,
@@ -206,6 +208,7 @@ fn run<T>(
     for table in scratch {
         engine.manager.drop_table(table);
     }
+
     result
 }
 
@@ -221,6 +224,7 @@ fn listings(engine: &Engine) -> HashMap<String, Result<(TableId, usize), Diagnos
         let Statement::Rule(rule) = statement else {
             continue;
         };
+
         for atom in negated_literals(rule) {
             // The key is the resolved name, by which the expansion looks up listings.
             let name = engine
@@ -233,6 +237,7 @@ fn listings(engine: &Engine) -> HashMap<String, Result<(TableId, usize), Diagnos
             }
         }
     }
+
     listings
 }
 
@@ -278,10 +283,12 @@ impl QueryEvaluation<'_> {
         } else {
             self.filter(&mut arenas.compiled, 0);
         }
+
         for listing in arenas.listings.clone() {
             self.valid(&mut arenas.compiled, listing)?;
             arenas.compiled[listing].filtered = arenas.compiled[listing].valid;
         }
+
         // Everything that the response reads is arranged in identity order now,
         // so that the assembly can borrow the engine immutably.
         let identity: HashSet<TableId> = arenas
@@ -293,6 +300,7 @@ impl QueryEvaluation<'_> {
                     .flatten()
             })
             .collect();
+
         // Every table's rows lie before `now`.
         // The rows of the scratch tables are at revision 0, which is below `now`.
         for table in identity {
@@ -303,6 +311,7 @@ impl QueryEvaluation<'_> {
                 &ColumnOrder::identity(arity),
             );
         }
+
         Ok(())
     }
 
