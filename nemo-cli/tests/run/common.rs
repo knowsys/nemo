@@ -89,6 +89,25 @@ pub(crate) fn run_with_stdin(directory: &Path, arguments: &[&str], stdin: &str) 
     }
 }
 
+/// Runs the binary inside a workspace with standard output and the error stream writing
+/// into one file, and returns what they wrote, in the order in which they wrote it.
+///
+/// This is what a terminal shows of the run.
+/// Panics unless the run succeeds.
+pub(crate) fn run_on_one_stream(directory: &Path, arguments: &[&str]) -> String {
+    let path = directory.join("streams.txt");
+    let file = fs::File::create(&path).expect("the workspace is writable");
+    let status = command(directory, arguments)
+        .stdout(file.try_clone().expect("the file's handle is duplicable"))
+        .stderr(file)
+        .status()
+        .expect("the binary runs");
+    let shown = fs::read_to_string(&path).expect("the streams are readable");
+    assert!(status.success(), "{shown}");
+
+    shown
+}
+
 /// The program every selection test runs: one given predicate, one
 /// derived, one both.
 pub(crate) const ROLES: &str = "edge(1, 2) . edge(2, 3) .\n\

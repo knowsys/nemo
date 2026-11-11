@@ -18,7 +18,7 @@ use serde::Serialize;
 
 use crate::{
     error::CliError,
-    run::{Run, selection::Reached},
+    run::{Part, Run, selection::Reached},
     stdout,
 };
 
@@ -146,8 +146,7 @@ impl<'a> TraceStream<'a> {
     /// Ends the stream with `named`, the results for the facts given to `--trace` and
     /// `--trace-input`.
     ///
-    /// In a file, the response lists them after its rules,
-    /// and the file's path is printed to the error stream.
+    /// In a file, the response lists them after its rules.
     /// On standard output, a line is printed for each of them that does not hold.
     fn finish(mut self, named: Vec<TracedFact>) -> Result<(), Diagnostic> {
         let Some(path) = self.path else {
@@ -161,9 +160,7 @@ impl<'a> TraceStream<'a> {
         let facts = json(&named);
         write!(self.out, "\n],\"rules\":{rules},\"facts\":{facts}}}\n")
             .and_then(|()| self.out.flush())
-            .map_err(|error| unwritable(path, error))?;
-        eprintln!("trace: {}", path.display());
-        Ok(())
+            .map_err(|error| unwritable(path, error))
     }
 
     /// Ends the stream of a trace that failed, and removes the file with its unfinished
@@ -204,19 +201,22 @@ fn json(value: &impl Serialize) -> String {
 impl Run<'_> {
     /// Traces what the trace options ask for, and writes the results.
     ///
-    /// It traces the facts of `--trace` and `--trace-input`, every derived fact with
-    /// `--trace-all`, and the queries of `--trace-tree` and `--trace-node`.
+    /// It traces `facts`, which are those of `--trace` and `--trace-input`,
+    /// every derived fact with `--trace-all`,
+    /// and the queries of `--trace-tree` and `--trace-node`.
     /// The derivations and responses are printed to standard output,
     /// or written as JSON to the `--trace-output` file.
     /// It does nothing if no trace option is given.
-    pub(super) fn trace(&self, engine: &mut Engine) -> Result<(), Diagnostic> {
-        let facts = self.traced_facts()?;
+    pub(super) fn trace(&self, engine: &mut Engine, facts: &[Fact]) -> Result<(), Diagnostic> {
         if self.arguments.trace_all {
-            self.trace_all(engine, &facts)?;
+            self.trace_all(engine, facts)?;
         } else if !facts.is_empty() {
-            let response = engine.trace(&facts)?;
+            let response = engine.trace(facts)?;
             match &self.arguments.trace_output {
-                None => stdout::write(&response.ascii())?,
+                None => {
+                    self.begin(Part::Trace);
+                    stdout::write(&response.ascii())?
+                }
                 Some(path) => self.write_trace(path, json(&response).as_bytes())?,
             }
         }
@@ -236,7 +236,7 @@ impl Run<'_> {
     /// Returns the parsed facts of `--trace` and of every `--trace-input` file.
     ///
     /// Fails if a file cannot be read, or if a text is not a fact.
-    fn traced_facts(&self) -> Result<Vec<Fact>, Diagnostic> {
+    pub(super) fn traced_facts(&self) -> Result<Vec<Fact>, Diagnostic> {
         let mut texts: Vec<String> = self
             .arguments
             .trace
@@ -286,13 +286,23 @@ impl Run<'_> {
         if let Some(warning) = derived.warning() {
             self.show(&warning);
         }
-        let mut stream = TraceStream::open(self.arguments.trace_output.as_deref())?;
+        let file = self.arguments.trace_output.as_deref();
+        if file.is_none() {
+            self.begin(Part::Trace);
+        }
+        let mut stream = TraceStream::open(file)?;
         let named = engine.trace_predicates(&derived.predicates, facts, |part| stream.take(part));
         if stream.closed {
             return Ok(());
         }
         match named {
-            Ok(named) => stream.finish(named),
+            Ok(named) => {
+                stream.finish(named)?;
+                if let Some(path) = file {
+                    self.note_trace_file(path);
+                }
+                Ok(())
+            }
             Err(problem) => {
                 stream.abandon();
                 Err(problem)
@@ -304,7 +314,10 @@ impl Run<'_> {
     fn write_query_response(&self, response: &impl Serialize) -> Result<(), Diagnostic> {
         let json = json(response);
         match &self.arguments.trace_output {
-            None => stdout::write(&format!("{json}\n")),
+            None => {
+                self.begin(Part::Trace);
+                stdout::write(&format!("{json}\n"))
+            }
             Some(path) => self.write_trace(path, json.as_bytes()),
         }
     }
@@ -313,8 +326,14 @@ impl Run<'_> {
     /// and prints the path to the error stream.
     fn write_trace(&self, path: &Path, bytes: &[u8]) -> Result<(), Diagnostic> {
         std::fs::write(path, bytes).map_err(|error| unwritable(path, error))?;
-        eprintln!("trace: {}", path.display());
+        self.note_trace_file(path);
         Ok(())
+    }
+
+    /// Prints the path of the trace file that the run wrote to the error stream.
+    fn note_trace_file(&self, path: &Path) {
+        self.begin(Part::Summary);
+        eprintln!("trace: {}", path.display());
     }
 }
 

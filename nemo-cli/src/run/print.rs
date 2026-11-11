@@ -7,7 +7,7 @@ use nemo_physical::diagnostics::Diagnostic;
 
 use crate::{
     arguments::Mode,
-    run::{Run, selection::Selection},
+    run::{Part, Run, selection::Selection},
     stdout,
 };
 
@@ -59,6 +59,7 @@ impl Run<'_> {
                         .iter()
                         .map(|value| engine.term_text(value.as_ref()))
                         .collect();
+                    self.begin(Part::Results);
                     if let Err(error) = writeln!(out, "{name}({}) .", terms.join(", ")) {
                         return stdout::interrupted(error);
                     }

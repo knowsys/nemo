@@ -2,7 +2,7 @@
 //!
 //! [Run::perform] runs the stages in order: setting up the engine and its observers,
 //! parsing the program, loading, settling the exports, reasoning, writing the results,
-//! tracing, and reporting.
+//! reporting, and tracing.
 //! Each stage is a method of [Run], defined here or in the submodule for its concern.
 
 mod document;
@@ -31,7 +31,7 @@ use nemo_physical::diagnostics::{Diagnostic, Severity};
 use crate::{
     arguments::{Arguments, Report},
     error::CliError,
-    explain, logging,
+    explain, logging, stdout,
 };
 
 /// The exit code of a run that completed with warnings.
@@ -112,6 +112,36 @@ pub(crate) struct Run<'a> {
     warned: Cell<bool>,
     /// How many of the engine's reports have been shown.
     shown: Cell<usize>,
+    /// Whether standard output and the error stream are both a terminal,
+    /// so that the data and the reports of the run appear on one screen.
+    one_screen: bool,
+    /// The part that the run showed last where the reports appear, if it has shown any.
+    ///
+    /// Apart from [one screen](Self::one_screen), these are the reports alone.
+    last: Cell<Option<Part>>,
+}
+
+/// A part of what a run shows.
+///
+/// Consecutive parts of different kinds are [set apart](Run::begin) by an empty line.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Part {
+    /// The warnings and errors, on the error stream.
+    Diagnostics,
+    /// The results that are printed or exported to standard output.
+    Results,
+    /// The summary, and the notes of the files that the run wrote, on the error stream.
+    Summary,
+    /// A trace on standard output.
+    Trace,
+}
+
+impl Part {
+    /// Returns whether the part is data on standard output,
+    /// rather than a report on the error stream.
+    fn is_data(self) -> bool {
+        matches!(self, Part::Results | Part::Trace)
+    }
 }
 
 impl<'a> Run<'a> {
@@ -122,6 +152,8 @@ impl<'a> Run<'a> {
             sources: SourceTexts::new(),
             warned: Cell::new(false),
             shown: Cell::new(0),
+            one_screen: stdout::shares_terminal(),
+            last: Cell::new(None),
         }
     }
 
@@ -151,6 +183,8 @@ impl<'a> Run<'a> {
         let mut engine = self.engine()?;
         let level = self.arguments.reporting();
         self.reserve_stdout(level)?;
+        // A text that is not a fact fails the run here rather than after the work.
+        let traced = self.traced_facts()?;
         let recorder = self.observe(&mut engine, level)?;
         let dashboard = self.dashboard(recorder.as_ref())?;
 
@@ -161,11 +195,13 @@ impl<'a> Run<'a> {
         let specifications = self.exports(&engine, level)?;
         self.reason(&mut engine, &mut times)?;
         self.write(&mut engine, &specifications, &mut times)?;
-        self.trace(&mut engine)?;
 
+        // The summary and the report document describe the run up to here,
+        // and a trace, which answers a question about the results, is shown last.
         self.summarize(&engine, times, recorder.as_deref());
         let facts = recorder.is_some().then(|| self.facts(&engine, times));
         self.document(level, facts.as_ref(), recorder.as_deref())?;
+        self.trace(&mut engine, &traced)?;
         if let Some(dashboard) = dashboard {
             Self::serve(dashboard, facts);
         }
@@ -362,12 +398,35 @@ impl<'a> Run<'a> {
         let start = Instant::now();
         let written = match self.arguments.printing() {
             Some(mode) => self.print(engine, mode),
-            None => engine.export_specs(&self.arguments.export_dir, specifications),
+            None => {
+                if specifications.iter().any(ExportSpec::is_stdout) {
+                    self.begin(Part::Results);
+                }
+                engine.export_specs(&self.arguments.export_dir, specifications)
+            }
         };
         times.export = start.elapsed();
         times.total = times.started.elapsed();
         self.reports(engine);
         written
+    }
+
+    /// Begins a part of what the run shows.
+    ///
+    /// If the part shown before it is of another kind,
+    /// an empty line on the error stream sets the two apart.
+    /// Standard output never gets the line, since its text is data.
+    /// So data is set apart only where it appears on one screen with the reports.
+    /// Elsewhere, the reports are set apart from each other, as if there were no data.
+    fn begin(&self, part: Part) {
+        if part.is_data() && !self.one_screen {
+            return;
+        }
+
+        let before = self.last.replace(Some(part));
+        if before.is_some_and(|before| before != part) {
+            eprintln!();
+        }
     }
 
     /// Shows the engine's reports that have not been shown yet.
@@ -402,6 +461,7 @@ impl<'a> Run<'a> {
                 return;
             }
         }
+        self.begin(Part::Diagnostics);
         eprint!("{}", Renderer::new(&self.sources).show(diagnostic));
     }
 

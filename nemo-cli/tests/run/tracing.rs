@@ -3,7 +3,7 @@
 
 use std::fs;
 
-use crate::common::{ROLES, run, workspace, write};
+use crate::common::{ROLES, run, run_on_one_stream, workspace, write};
 
 #[test]
 fn a_fact_named_and_derived_prints_once_under_trace_all() {
@@ -192,6 +192,75 @@ fn a_text_that_is_not_a_fact_says_how_to_separate_facts() {
         outcome.stderr.contains("found the end of the input"),
         "{}",
         outcome.stderr
+    );
+}
+
+#[test]
+fn a_text_that_is_not_a_fact_fails_the_run_before_it_starts() {
+    let directory = workspace("not-a-fact-early");
+    write(&directory, "program.rls", ROLES);
+    write(&directory, "lines.txt", "reach(1, 2)\nreach(1, 3)\n");
+
+    // Neither a fact of `--trace` nor one of a `--trace-input` file is left for after the
+    // run, whose exports would then be written before the error is found.
+    for traced in [["--trace", "reach(1, "], ["--trace-input", "lines.txt"]] {
+        let mut arguments = vec!["program.rls", "-e", "idb"];
+        arguments.extend(traced);
+        let outcome = run(&directory, &arguments);
+        assert_eq!(outcome.status, Some(1), "{}", outcome.stderr);
+        assert!(
+            outcome.stderr.contains("[N0905] Error"),
+            "{}",
+            outcome.stderr
+        );
+        assert!(
+            !directory.join("results").exists(),
+            "{traced:?}: nothing is exported"
+        );
+    }
+}
+
+#[test]
+fn a_trace_is_the_last_thing_a_run_shows() {
+    let directory = workspace("trace-last");
+    write(&directory, "program.rls", ROLES);
+
+    // The summary describes the run before the trace, and the tree stands below it.
+    let shown = run_on_one_stream(
+        &directory,
+        &["program.rls", "-P=idb", "--trace", "reach(1, 3)"],
+    );
+    let position = |text: &str| {
+        shown
+            .find(text)
+            .unwrap_or_else(|| panic!("`{text}` is shown: {shown}"))
+    };
+    assert!(
+        position("reach(1, 3) .") < position("Finished in"),
+        "{shown}"
+    );
+    assert!(position("Finished in") < position("reach "), "{shown}");
+    assert!(position("reach ") < position("reach(1, 3) :- "), "{shown}");
+    assert!(shown.ends_with(" └─ edge(2, 3)\n"), "{shown}");
+
+    // The note of a trace file follows the summary and the note of the report page.
+    let shown = run_on_one_stream(
+        &directory,
+        &[
+            "program.rls",
+            "-e",
+            "none",
+            "--report",
+            "html",
+            "--trace-all",
+            "--trace-output",
+            "trace.json",
+        ],
+    );
+    assert!(shown.contains("Finished in"), "{shown}");
+    assert!(
+        shown.ends_with("report: results/report.html\ntrace: trace.json\n"),
+        "{shown}"
     );
 }
 

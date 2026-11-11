@@ -116,9 +116,51 @@ fn warnings_set_the_exit_code_unless_silenced() {
     let outcome = run(&directory, &["program.rls", "-e", "none"]);
     assert_eq!(outcome.status, Some(3), "{}", outcome.stderr);
     assert!(outcome.stderr.contains("Warning"), "{}", outcome.stderr);
+    // An empty line sets the summary apart from the warning before it.
+    assert!(
+        outcome.stderr.contains("\n\nFinished in"),
+        "{}",
+        outcome.stderr
+    );
+
+    // It does so too if results are printed in between, into which no empty line is written.
+    let outcome = run(&directory, &["program.rls", "-P"]);
+    assert_eq!(outcome.stdout, "q(1) .\nq(2) .\n");
+    assert!(
+        outcome.stderr.contains("\n\nFinished in"),
+        "{}",
+        outcome.stderr
+    );
 
     let outcome = run(&directory, &["program.rls", "-e", "none", "--no-warnings"]);
     assert_eq!(outcome.status, Some(0), "{}", outcome.stderr);
     assert!(!outcome.stderr.contains("Warning"), "{}", outcome.stderr);
-    assert!(outcome.stderr.contains("Finished in"), "{}", outcome.stderr);
+    assert!(
+        outcome.stderr.starts_with("Finished in"),
+        "{}",
+        outcome.stderr
+    );
+}
+
+#[test]
+fn an_error_after_the_summary_is_set_apart_from_it() {
+    let directory = workspace("error-after-summary");
+    write(&directory, "program.rls", "p(1) .\nq(?x) :- p(?x) .\n");
+
+    // The fact parses, but the program has no such predicate, which the trace finds.
+    let outcome = run(
+        &directory,
+        &["program.rls", "-e", "none", "--trace", "r(1)"],
+    );
+    assert_eq!(outcome.status, Some(1), "{}", outcome.stderr);
+    assert!(
+        outcome.stderr.starts_with("Finished in"),
+        "{}",
+        outcome.stderr
+    );
+    assert!(
+        outcome.stderr.contains("\n\n[N0486] Error"),
+        "{}",
+        outcome.stderr
+    );
 }

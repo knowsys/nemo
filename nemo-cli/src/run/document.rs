@@ -17,7 +17,7 @@ use crate::{
     arguments::Report,
     dashboard::Dashboard,
     error::CliError,
-    run::{Run, Times},
+    run::{Part, Run, Times},
     stdout,
 };
 
@@ -129,6 +129,7 @@ impl Run<'_> {
                 }
                 .diagnostic()
             })?;
+        self.begin(Part::Summary);
         eprintln!("report: {}", path.display());
         Ok(())
     }

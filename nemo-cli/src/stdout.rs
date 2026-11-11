@@ -1,6 +1,6 @@
 //! Writing a run's data to standard output, where a closed pipe is not an error.
 
-use std::io::{self, Write};
+use std::io::{self, IsTerminal, Write};
 
 use nemo_physical::diagnostics::Diagnostic;
 
@@ -14,6 +14,12 @@ pub(crate) fn write(text: &str) -> Result<(), Diagnostic> {
     out.write_all(text.as_bytes())
         .and_then(|()| out.flush())
         .or_else(interrupted)
+}
+
+/// Returns whether standard output and the error stream are both a terminal,
+/// so that what a run writes to them appears on one screen.
+pub(crate) fn shares_terminal() -> bool {
+    io::stdout().is_terminal() && io::stderr().is_terminal()
 }
 
 /// Returns the outcome of a failed write to standard output.

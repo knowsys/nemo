@@ -12,7 +12,7 @@ use nemo::{
 
 use crate::{
     arguments::Report,
-    run::{Run, Times},
+    run::{Part, Run, Times},
 };
 
 /// The number of rules in the summary's table of rule times, which lists the longest-running
@@ -30,6 +30,8 @@ impl Run<'_> {
         if level == Report::None || level == Report::Json {
             return;
         }
+
+        self.begin(Part::Summary);
 
         let TerminalStyle { strong, reset, .. } = TerminalStyle::detect();
         let derived = engine.derived_facts();
