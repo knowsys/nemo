@@ -14,6 +14,7 @@ use bumpalo::{Bump, collections::Vec as BumpVec};
 use crate::{
     execution::{
         join::{
+            Verdict,
             hooks::{Bind, Hooks},
             intersection::JoinLayer,
         },
@@ -231,6 +232,44 @@ impl<'a, L: JoinLayer<'a>, H: Hooks<L::Value>> Driver<'a, L, H> {
     pub(super) fn drain<S: RowSink>(&mut self, sink: &mut S) {
         while self.advance() {
             sink.accept(&self.emitted_row, self.changed);
+        }
+    }
+
+    /// Offers the remaining rows to `judge` until it accepts one, and returns that row,
+    /// or `None` if it accepts none of them.
+    ///
+    /// `judge` is given each row with the shallowest layer that changed since the row
+    /// offered before it.
+    /// The rows after the returned one remain.
+    ///
+    /// The judge is called through a pointer, so the loop is compiled once per kind of layer
+    /// and hooks, not once per judge. The call costs little next to finding a row.
+    pub(super) fn find(
+        &mut self,
+        judge: &mut dyn FnMut(&[StorageValue], usize) -> Verdict,
+    ) -> Option<&[StorageValue]> {
+        while self.advance() {
+            match judge(&self.emitted_row, self.changed) {
+                Verdict::Accept => return Some(&self.emitted_row),
+                Verdict::Reject { prefix } => self.pass_over(prefix),
+            }
+        }
+
+        None
+    }
+
+    /// Passes over the remaining rows that agree with the current row on its first `prefix`
+    /// layers.
+    ///
+    /// The driver resumes at the deepest of these layers, with that layer's next value,
+    /// so it finds none of the rows below the current value.
+    /// Without such a layer, no row remains.
+    fn pass_over(&mut self, prefix: usize) {
+        match prefix.checked_sub(1) {
+            None => self.exhausted = true,
+            // The driver resumes at the deepest emitted layer after every row.
+            Some(deepest) if deepest + 1 >= self.emitted => {}
+            Some(deepest) => self.current_layer = deepest,
         }
     }
 }

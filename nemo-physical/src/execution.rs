@@ -30,7 +30,7 @@ mod partition;
 mod shape;
 mod sink;
 
-pub use join::JoinArena;
+pub use join::{JoinArena, Verdict};
 pub(crate) use join::{JoinTemplate, TrieJoin};
 pub(crate) use partition::Cells;
 pub(crate) use shape::AggregateKind;

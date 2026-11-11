@@ -125,6 +125,27 @@ impl PlanLayout {
         builder.finish()
     }
 
+    /// Returns whether the joins of a unit emit the rows of its top as a declared output has them.
+    ///
+    /// They do if the top is a declared output whose trie is built from the rows as they
+    /// are produced, and if every member produces the rows that its join emits:
+    /// no sink projects them, and no computed column extends them.
+    pub(crate) fn emits_output(&self, unit: &UnitLayout) -> bool {
+        let materialization = self.materializations[unit.top.index()]
+            .as_ref()
+            .expect("units materialize their tops");
+        let as_produced = materialization
+            .output
+            .is_some_and(|output| materialization.builds[output].is_none());
+
+        as_produced
+            && unit.members.iter().all(|member| match &member.delivery {
+                Delivery::Direct => true,
+                Delivery::RowStage(stage) => stage.delivered.is_empty(),
+                Delivery::Sink(_) => false,
+            })
+    }
+
     /// Returns the number of members of the unit with the given top,
     /// or `None` if no unit has that top.
     #[cfg(test)]

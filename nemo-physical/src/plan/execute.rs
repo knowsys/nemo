@@ -13,6 +13,7 @@
 
 mod aggregate;
 mod blocks;
+mod find;
 mod results;
 mod runs;
 mod unit;
@@ -92,19 +93,7 @@ impl<'a> Execution<'a> {
         context.accounting.timings.order = begun.nanos();
 
         for (position, step) in plan_layout.steps.iter().enumerate() {
-            let materialized = match step {
-                Step::Unit(unit) => execution.unit(unit, &mut context),
-                Step::Aggregate(aggregate) => execution.aggregate(aggregate, &mut context),
-                Step::Concatenate { node, order } => {
-                    execution.concatenated(*node, *order, &mut context)
-                }
-            };
-            execution.results[step.node().index()] = Some(materialized);
-
-            // Release the results this step was the last to read.
-            for done in &plan_layout.released[position] {
-                execution.results[done.index()] = None;
-            }
+            execution.run_step(position, step, &mut context);
         }
 
         let outputs = execution.into_outputs();
@@ -162,6 +151,27 @@ impl<'a> Execution<'a> {
             plan_layout,
             manager,
             results: (0..plan.nodes().len()).map(|_| None).collect(),
+        }
+    }
+
+    /// Runs the step at the given position among the layout's steps:
+    /// materializes its node, and releases the results that it was the last to read.
+    fn run_step(&mut self, position: usize, step: &Step, context: &mut StepContext<'_>) {
+        let materialized = self.materialized(step, context);
+        self.results[step.node().index()] = Some(materialized);
+
+        let plan_layout = self.plan_layout;
+        for done in &plan_layout.released[position] {
+            self.results[done.index()] = None;
+        }
+    }
+
+    /// Materializes the node of a step.
+    fn materialized(&self, step: &Step, context: &mut StepContext<'_>) -> Materialized {
+        match step {
+            Step::Unit(unit) => self.unit(unit, context),
+            Step::Aggregate(aggregate) => self.aggregate(aggregate, context),
+            Step::Concatenate { node, order } => self.concatenated(*node, *order, context),
         }
     }
 

@@ -8,7 +8,7 @@ use crate::{
     function::{OpCode, StackProgram},
     management::ColumnOrder,
     plan::layout::{AggregatePass, Delivery, MemberLayout, Step},
-    storage::StorageValue,
+    storage::{PayloadEncoding, StorageValue},
     testing::{CELL_ROWS, assert_panics, int_buffer, int_rows},
     trie::RowBuffer,
     value::{DataValue, EvaluationError},
@@ -1886,65 +1886,101 @@ fn random_operator(
 }
 
 /// A random chain of operators above a join, or above a union of joins,
+/// with the rows of its top by brute force.
+struct RandomChain {
+    /// The tables that the chain reads.
+    manager: TableManager,
+    /// The plan of the chain, without an output.
+    plan: OperationPlan,
+    /// The top of the chain.
+    node: NodeId,
+    /// The number of operators above the join or the union.
+    operators: usize,
+    /// The rows of the top, with the columns in the order of its markers, in storage order.
+    expected: Vec<Vec<i64>>,
+}
+
+/// Returns a random chain of one to five operators above R(x, y) ⋈ S(y, z),
+/// which is joined in a random order, and half of the time as a union of two joins.
+///
+/// Where the chain projects away a marker of only one input, the marker leaves the descent.
+fn random_chain(rng: &mut StdRng) -> RandomChain {
+    let mut manager = TableManager::new();
+    let r_rows = random_rows(rng, 2);
+    let s_rows = random_rows(rng, 2);
+    let r_halves = r_rows.split_at(r_rows.len() / 2);
+    let r_refs: [Vec<&[i64]>; 2] = [
+        r_halves.0.iter().map(Vec::as_slice).collect(),
+        r_halves.1.iter().map(Vec::as_slice).collect(),
+    ];
+    let r = add_table(&mut manager, 2, &[&r_refs[0], &r_refs[1]]);
+    let s_refs: Vec<&[i64]> = s_rows.iter().map(Vec::as_slice).collect();
+    let s = add_table(&mut manager, 2, &[&s_refs]);
+
+    let mut plan = OperationPlan::new();
+    let [x, y, z] = plan.markers();
+    let mut layers = vec![x, y, z];
+    for index in (1..layers.len()).rev() {
+        layers.swap(index, rng.gen_range(0..=index));
+    }
+    let united = rng.gen_bool(0.5);
+    let ranges = if united {
+        vec![Revision(0)..Revision(2), Revision(2)..Revision(100)]
+    } else {
+        vec![all()]
+    };
+    let mut joins = Vec::new();
+    for range in ranges {
+        let r_load = plan.load(r, range, vec![x, y]);
+        let s_load = plan.load(s, all(), vec![y, z]);
+        joins.push(plan.join(vec![r_load, s_load], layers.clone()));
+    }
+    let mut node = if united { plan.union(joins) } else { joins[0] };
+
+    let to_relation = |rows: &[Vec<i64>], markers: Vec<Marker>| Relation {
+        markers,
+        rows: rows.iter().cloned().collect(),
+    };
+    let joined = natural_join(
+        &to_relation(&r_rows, vec![x, y]),
+        &to_relation(&s_rows, vec![y, z]),
+    );
+    let mut relation = Relation {
+        rows: joined.in_order(&layers).into_iter().collect(),
+        markers: layers.clone(),
+    };
+
+    let operators = rng.gen_range(1..6);
+    for _ in 0..operators {
+        node = random_operator(rng, &mut plan, &mut manager, node, &mut relation);
+    }
+    let expected = relation.in_order(plan.node_markers(node));
+
+    RandomChain {
+        manager,
+        plan,
+        node,
+        operators,
+        expected,
+    }
+}
+
+/// A random chain of operators above a join, or above a union of joins,
 /// delivers the same rows in one unit as with every node an output,
 /// which makes each operator a unit of its own, and both match brute force.
 #[test]
 fn random_chains_match_their_operators_one_by_one() {
-    // Where the chain projects away a marker of only one input, the marker leaves the descent.
     let mut rng = StdRng::seed_from_u64(29);
     let mut fused_chains = 0;
     let mut pruned_descents = 0;
     for round in 0..300 {
-        let mut manager = TableManager::new();
-        let r_rows = random_rows(&mut rng, 2);
-        let s_rows = random_rows(&mut rng, 2);
-        let r_halves = r_rows.split_at(r_rows.len() / 2);
-        let r_refs: [Vec<&[i64]>; 2] = [
-            r_halves.0.iter().map(Vec::as_slice).collect(),
-            r_halves.1.iter().map(Vec::as_slice).collect(),
-        ];
-        let r = add_table(&mut manager, 2, &[&r_refs[0], &r_refs[1]]);
-        let s_refs: Vec<&[i64]> = s_rows.iter().map(Vec::as_slice).collect();
-        let s = add_table(&mut manager, 2, &[&s_refs]);
-
-        let mut plan = OperationPlan::new();
-        let [x, y, z] = plan.markers();
-        let mut layers = vec![x, y, z];
-        for index in (1..layers.len()).rev() {
-            layers.swap(index, rng.gen_range(0..=index));
-        }
-        let united = rng.gen_bool(0.5);
-        let ranges = if united {
-            vec![Revision(0)..Revision(2), Revision(2)..Revision(100)]
-        } else {
-            vec![all()]
-        };
-        let mut joins = Vec::new();
-        for range in ranges {
-            let r_load = plan.load(r, range, vec![x, y]);
-            let s_load = plan.load(s, all(), vec![y, z]);
-            joins.push(plan.join(vec![r_load, s_load], layers.clone()));
-        }
-        let mut node = if united { plan.union(joins) } else { joins[0] };
-
-        let to_relation = |rows: &[Vec<i64>], markers: Vec<Marker>| Relation {
-            markers,
-            rows: rows.iter().cloned().collect(),
-        };
-        let joined = natural_join(
-            &to_relation(&r_rows, vec![x, y]),
-            &to_relation(&s_rows, vec![y, z]),
-        );
-        let mut relation = Relation {
-            rows: joined.in_order(&layers).into_iter().collect(),
-            markers: layers.clone(),
-        };
-
-        let operators = rng.gen_range(1..6);
-        for _ in 0..operators {
-            node = random_operator(&mut rng, &mut plan, &mut manager, node, &mut relation);
-        }
-        let expected = relation.in_order(plan.node_markers(node));
+        let RandomChain {
+            mut manager,
+            mut plan,
+            node,
+            operators,
+            expected,
+        } = random_chain(&mut rng);
 
         plan.output(node);
         let layout = plan.layout();
@@ -2167,4 +2203,414 @@ fn computed_columns_extend_the_empty_row() {
         let results = plan.execute(&mut manager, &mut dictionary, EvaluationContext::now());
         assert_eq!(int_rows(&results.outputs[1]), expected);
     }
+}
+
+/// Returns the integers of a row.
+fn ints(row: &[StorageValue]) -> Vec<i64> {
+    row.iter()
+        .map(|value| i64::from_payload(value.payload))
+        .collect()
+}
+
+/// Returns whether the joins of a plan's last step emit the rows of the plan's output,
+/// so that a search of the output ends them with the row it finds.
+fn output_is_emitted(plan: &OperationPlan) -> bool {
+    let layout = plan.layout();
+    matches!(layout.steps.last(), Some(Step::Unit(unit)) if layout.emits_output(unit))
+}
+
+/// Returns the row that a search of a plan's output finds, as integers,
+/// for a verdict on the integers of a row.
+fn find_judged(
+    plan: &OperationPlan,
+    manager: &mut TableManager,
+    mut judge: impl FnMut(&[i64]) -> Verdict,
+) -> Option<Vec<i64>> {
+    let mut dictionary = Dictionary::new();
+    let context = EvaluationContext::now();
+    let found = plan.find_row(manager, &mut dictionary, context, |_, row| {
+        judge(&ints(row))
+    });
+
+    found.as_deref().map(ints)
+}
+
+/// Returns the row that a search of a plan's output finds, as integers,
+/// for a condition on the integers of a row, which rejects each row alone.
+fn find(
+    plan: &OperationPlan,
+    manager: &mut TableManager,
+    mut fits: impl FnMut(&[i64]) -> bool,
+) -> Option<Vec<i64>> {
+    find_judged(plan, manager, |row| {
+        if fits(row) {
+            Verdict::Accept
+        } else {
+            Verdict::Reject { prefix: row.len() }
+        }
+    })
+}
+
+/// Builds the paths edge(x, y) ⋈ edge(y, z) whose middle node is not blocked,
+/// with their length s = x + z if it is above 6, and returns the plan with that node.
+///
+/// The edges form the chain 1 → 2 → 3 → 4 → 5, and node 2 is blocked,
+/// so the only such path is 3 → 4 → 5, of length 8.
+fn long_open_paths(manager: &mut TableManager) -> (OperationPlan, NodeId, [Marker; 3]) {
+    let edge = add_table(manager, 2, &[&[&[1, 2], &[2, 3], &[3, 4], &[4, 5]]]);
+    let blocked = add_table(manager, 1, &[&[&[2]]]);
+
+    let mut plan = OperationPlan::new();
+    let [x, y, z, s] = plan.markers();
+    let first = plan.load(edge, all(), vec![x, y]);
+    let second = plan.load(edge, all(), vec![y, z]);
+    let paths = plan.join(vec![first, second], vec![x, y, z]);
+    let closed = plan.load(blocked, all(), vec![y]);
+    let open = plan.subtract(paths, closed);
+    let measured = plan.compute(
+        open,
+        computation(
+            vec![x, z],
+            vec![OpCode::Input(0), OpCode::Input(1), OpCode::Add],
+            Vec::new(),
+            s,
+        ),
+    );
+    let long = plan.filter(
+        measured,
+        condition(
+            vec![s],
+            vec![OpCode::Input(0), OpCode::Constant(0), OpCode::Greater],
+            vec![DataValue::integer(6)],
+        ),
+    );
+
+    (plan, long, [x, y, z])
+}
+
+/// A search offers the rows of a join in storage order, with the table manager,
+/// until a row fits, and finds no row if none fits.
+#[test]
+fn a_join_is_searched_until_a_row_fits() {
+    // The pairs of the numbers 1 to 4, of which 2 and 4 are stored at revision 2.
+    let mut manager = TableManager::new();
+    let number = add_table(&mut manager, 1, &[&[&[1], &[3]], &[&[2], &[4]]]);
+    let mut dictionary = Dictionary::new();
+
+    let mut plan = OperationPlan::new();
+    let [x, y] = plan.markers();
+    let first = plan.load(number, all(), vec![x]);
+    let second = plan.load(number, all(), vec![y]);
+    let pairs = plan.join(vec![first, second], vec![x, y]);
+    plan.output(pairs);
+    assert!(output_is_emitted(&plan));
+
+    // The first pair of numbers from revision 2 follows the four pairs that start with 1,
+    // and the pair (2, 1).
+    let mut offered = Vec::new();
+    let context = EvaluationContext::now();
+    let found = plan.find_row(&mut manager, &mut dictionary, context, |manager, row| {
+        offered.push(ints(row));
+        let late = |&value| manager.revision_of(number, &[value]) == Some(Revision(2));
+        Verdict::for_row(row, row.iter().all(late))
+    });
+    assert_eq!(found.as_deref().map(ints), Some(vec![2, 2]));
+    assert_eq!(offered, [[1, 1], [1, 2], [1, 3], [1, 4], [2, 1], [2, 2]]);
+
+    assert_eq!(find(&plan, &mut manager, |_| false), None);
+    assert_eq!(
+        find(&plan, &mut manager, |row| row == [4, 3]),
+        Some(vec![4, 3])
+    );
+
+    // A rejection of a first number passes over the other pairs that start with it.
+    let mut offered = Vec::new();
+    let found = find_judged(&plan, &mut manager, |row| {
+        offered.push(row.to_vec());
+        match row {
+            [1 | 3, _] => Verdict::Reject { prefix: 1 },
+            [_, 2 | 4] => Verdict::Accept,
+            _ => Verdict::Reject { prefix: 2 },
+        }
+    });
+    assert_eq!(found, Some(vec![2, 2]));
+    assert_eq!(offered, [[1, 1], [2, 1], [2, 2]]);
+}
+
+/// Where the joins of a union find the output's rows, each join is searched in turn,
+/// and a rejection of every row ends the search before the next join.
+#[test]
+fn a_union_of_joins_is_searched_join_by_join() {
+    // The pairs of the numbers 1 to 4. One join finds those that start with 1 or 3,
+    // which are stored at revision 1, and the other those that start with 2 or 4.
+    let mut manager = TableManager::new();
+    let number = add_table(&mut manager, 1, &[&[&[1], &[3]], &[&[2], &[4]]]);
+
+    let mut plan = OperationPlan::new();
+    let [x, y] = plan.markers();
+    let mut joins = Vec::new();
+    for range in [Revision(0)..Revision(2), Revision(2)..Revision(100)] {
+        let first = plan.load(number, range, vec![x]);
+        let second = plan.load(number, all(), vec![y]);
+        joins.push(plan.join(vec![first, second], vec![x, y]));
+    }
+    let pairs = plan.union(joins);
+    plan.output(pairs);
+    assert!(output_is_emitted(&plan));
+    assert_eq!(members(&plan.layout()).len(), 2);
+
+    // The first join has no pair that starts with an even number, and the second join has.
+    let mut offered = Vec::new();
+    let found = find_judged(&plan, &mut manager, |row| {
+        offered.push(row.to_vec());
+        match row[0] % 2 {
+            0 => Verdict::Accept,
+            _ => Verdict::Reject { prefix: 1 },
+        }
+    });
+    assert_eq!(found, Some(vec![2, 1]));
+    assert_eq!(offered, [[1, 1], [3, 1], [2, 1]]);
+
+    let mut offered = 0;
+    let found = find_judged(&plan, &mut manager, |_| {
+        offered += 1;
+        Verdict::Reject { prefix: 0 }
+    });
+    assert_eq!((found, offered), (None, 1));
+}
+
+/// A row found in a join has passed the operators above the join:
+/// the subtraction of its descent, and the computed column and the filter of its row stage.
+#[test]
+fn a_found_row_has_passed_the_operators_above_its_join() {
+    let mut manager = TableManager::new();
+    let (mut plan, long, [x, y, z]) = long_open_paths(&mut manager);
+    // Without the computed column, the output's rows are the rows that the join emits.
+    let path = plan.project(long, vec![x, y, z]);
+    plan.output(path);
+    assert!(output_is_emitted(&plan));
+
+    let mut offered = Vec::new();
+    let found = find(&plan, &mut manager, |row| {
+        offered.push(row.to_vec());
+        true
+    });
+    assert_eq!(found, Some(vec![3, 4, 5]));
+    assert_eq!(offered, [[3, 4, 5]], "no other path reaches the search");
+}
+
+/// An output with a computed column is computed before it is searched,
+/// and its rows are offered with the column.
+#[test]
+fn an_output_with_a_computed_column_is_searched_once_computed() {
+    let mut manager = TableManager::new();
+    let (mut plan, long, _) = long_open_paths(&mut manager);
+    plan.output(long);
+    assert!(!output_is_emitted(&plan));
+
+    assert_eq!(find(&plan, &mut manager, |_| true), Some(vec![3, 4, 5, 8]));
+    assert_eq!(find(&plan, &mut manager, |row| row[3] != 8), None);
+}
+
+/// An output that no join emits is searched in storage order once it is computed:
+/// a stored table, an aggregation, and a projection that drops a marker between those it keeps.
+#[test]
+fn outputs_that_no_join_emits_are_searched_once_computed() {
+    // The paths 1 → 2 → 4 and 1 → 3 → 4, and the edge 3 → 5.
+    let mut manager = TableManager::new();
+    let edge = add_table(
+        &mut manager,
+        2,
+        &[&[&[1, 2], &[2, 4]], &[&[1, 3], &[3, 4], &[3, 5]]],
+    );
+
+    let mut stored = OperationPlan::new();
+    let [x, y] = stored.markers();
+    let load = stored.load(edge, all(), vec![x, y]);
+    stored.output(load);
+
+    let mut counted = OperationPlan::new();
+    let [x, y, count] = counted.markers();
+    let load = counted.load(edge, all(), vec![x, y]);
+    let targets = AggregateColumnSpec::new(AggregateFunction::Count, count).per(vec![y]);
+    let counts = counted.aggregate(load, vec![x], vec![targets]);
+    counted.output(counts);
+
+    let mut ends = OperationPlan::new();
+    let [x, y, z] = ends.markers();
+    let first = ends.load(edge, all(), vec![x, y]);
+    let second = ends.load(edge, all(), vec![y, z]);
+    let paths = ends.join(vec![first, second], vec![x, y, z]);
+    let merged = ends.project(paths, vec![x, z]);
+    ends.output(merged);
+
+    // Each search is for the first row with a given last value.
+    let searches: [(&OperationPlan, i64, Vec<i64>); 3] = [
+        (&stored, 4, vec![2, 4]),
+        (&counted, 1, vec![2, 1]),
+        (&ends, 4, vec![1, 4]),
+    ];
+    for (plan, last, expected) in searches {
+        assert!(!output_is_emitted(plan));
+        let found = find(plan, &mut manager, |row| row.last() == Some(&last));
+        assert_eq!(found, Some(expected));
+        assert_eq!(find(plan, &mut manager, |_| false), None);
+    }
+
+    // A rejection of a first value passes over the other rows that start with it.
+    let mut offered = Vec::new();
+    let found = find_judged(&stored, &mut manager, |row| {
+        offered.push(row.to_vec());
+        if row[0] == 3 {
+            Verdict::Accept
+        } else {
+            Verdict::Reject { prefix: 1 }
+        }
+    });
+    assert_eq!(found, Some(vec![3, 4]));
+    assert_eq!(offered, [[1, 2], [2, 4], [3, 4]]);
+
+    // A rejection of every row ends the search.
+    let mut offered = 0;
+    let found = find_judged(&stored, &mut manager, |_| {
+        offered += 1;
+        Verdict::Reject { prefix: 0 }
+    });
+    assert_eq!((found, offered), (None, 1));
+}
+
+/// A search of an output without columns finds the empty row if the output has it.
+#[test]
+fn an_output_without_columns_is_searched_for_the_empty_row() {
+    let mut manager = TableManager::new();
+    let data = add_table(&mut manager, 1, &[&[&[1], &[2]]]);
+    let empty = manager.register("empty", 1);
+
+    for (table, expected) in [(data, Some(Vec::new())), (empty, None)] {
+        let mut plan = OperationPlan::new();
+        let [a] = plan.markers();
+        let loaded = plan.load(table, all(), vec![a]);
+        let exists = plan.project(loaded, Vec::new());
+        plan.output(exists);
+        assert!(output_is_emitted(&plan));
+
+        assert_eq!(find(&plan, &mut manager, |_| true), expected);
+        assert_eq!(find(&plan, &mut manager, |_| false), None);
+    }
+}
+
+/// A row with a computed value that the dictionary cannot store is no row of the output,
+/// so a search does not find it, although the output does not deliver the value.
+#[test]
+fn a_row_whose_computed_value_cannot_be_stored_is_not_found() {
+    let mut manager = TableManager::new();
+    let data = add_table(&mut manager, 1, &[&[&[1], &[2]]]);
+    let mut dictionary = Dictionary::new();
+
+    // The computed column is a null that the dictionary did not mint.
+    let mut plan = OperationPlan::new();
+    let [a, foreign] = plan.markers();
+    let loaded = plan.load(data, all(), vec![a]);
+    let extended = plan.compute(
+        loaded,
+        computation(
+            Vec::new(),
+            vec![OpCode::Constant(0)],
+            vec![DataValue::null(7)],
+            foreign,
+        ),
+    );
+    let kept = plan.project(extended, vec![a]);
+    plan.output(kept);
+    assert!(output_is_emitted(&plan));
+
+    let results = plan.execute(&mut manager, &mut dictionary, EvaluationContext::now());
+    assert!(results.outputs[0].is_empty());
+    assert_eq!(find(&plan, &mut manager, |_| true), None);
+}
+
+/// A search needs a plan with exactly one output.
+#[test]
+fn a_search_needs_exactly_one_output() {
+    let mut manager = TableManager::new();
+    let data = add_table(&mut manager, 1, &[&[&[1]]]);
+
+    let mut plan = OperationPlan::new();
+    let [a] = plan.markers();
+    let loaded = plan.load(data, all(), vec![a]);
+    assert_panics("exactly one output", || find(&plan, &mut manager, |_| true));
+
+    let joined = plan.join(vec![loaded], vec![a]);
+    plan.output(loaded);
+    plan.output(joined);
+    assert_panics("exactly one output", || find(&plan, &mut manager, |_| true));
+}
+
+/// A search of a random chain finds a row of the chain's output that fits,
+/// or no row if none fits, whether the joins emit the output or it is computed first.
+/// It finds the first such row in storage order, unless several joins emit the output.
+/// The search offers no row that a rejection passed over.
+#[test]
+fn rows_found_in_random_chains_are_rows_of_their_outputs() {
+    let mut rng = StdRng::seed_from_u64(31);
+    let mut emitted_outputs = 0;
+    let mut found_rows = 0;
+    let mut passed_over = 0;
+    for round in 0..400 {
+        let RandomChain {
+            mut manager,
+            mut plan,
+            node,
+            expected,
+            ..
+        } = random_chain(&mut rng);
+        plan.output(node);
+
+        let layout = plan.layout();
+        let emitted = output_is_emitted(&plan);
+        let in_order = !emitted || members(&layout).len() == 1;
+        emitted_outputs += usize::from(emitted);
+
+        // A row fits if its first value is not the barred one,
+        // and its values add up to a given remainder.
+        let barred = rng.gen_range(0..5);
+        let remainder = rng.gen_range(0..3);
+        let fits = |row: &[i64]| row[0] != barred && row.iter().sum::<i64>() % 3 == remainder;
+        let fitting: Vec<&Vec<i64>> = expected.iter().filter(|row| fits(row)).collect();
+
+        // A row with the barred first value rejects every row that starts with it.
+        let mut offered: Vec<Vec<i64>> = Vec::new();
+        let found = find_judged(&plan, &mut manager, |row| {
+            offered.push(row.to_vec());
+            if row[0] == barred {
+                Verdict::Reject { prefix: 1 }
+            } else if fits(row) {
+                Verdict::Accept
+            } else {
+                Verdict::Reject { prefix: row.len() }
+            }
+        });
+        match &found {
+            Some(row) if in_order => assert_eq!(Some(&row), fitting.first(), "round {round}"),
+            Some(row) => assert!(fitting.contains(&row), "round {round}: {row:?}"),
+            None => assert!(fitting.is_empty(), "round {round}: {fitting:?}"),
+        }
+        found_rows += usize::from(found.is_some());
+
+        // Each join, or the computed output, offers at most one row with the barred value.
+        let barred_offers = offered.iter().filter(|row| row[0] == barred).count();
+        let joins = if emitted { members(&layout).len() } else { 1 };
+        assert!(barred_offers <= joins, "round {round}: {offered:?}");
+        let barred_rows = expected.iter().filter(|row| row[0] == barred).count();
+        passed_over += usize::from(barred_rows > barred_offers);
+    }
+    assert!(
+        emitted_outputs > 100 && emitted_outputs < 300,
+        "joins emit some outputs and not others: {emitted_outputs}"
+    );
+    assert!(found_rows > 100, "many searches find a row: {found_rows}");
+    assert!(
+        passed_over > 50,
+        "many searches pass over a row: {passed_over}"
+    );
 }

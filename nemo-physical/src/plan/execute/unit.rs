@@ -6,6 +6,7 @@ use crate::{
         Cells, JoinArena, JoinShape, JoinTemplate, PendingRows, ProjectingSink, ProjectionScratch,
         RowEvaluator, RowSink, RowStageShape, TrieJoin,
     },
+    function::EvaluationContext,
     plan::{
         execute::{
             Execution, Materialized, StepContext, blocks::JoinBlocks, results::Accounting,
@@ -35,6 +36,62 @@ impl Execution<'_> {
         let runs = rows.finish(context);
 
         self.materialize(unit.top, runs, &mut context.accounting)
+    }
+}
+
+/// The join of a member over the blocks of its inputs, as far as the blocks decide its rows.
+#[derive(Debug, Clone, Copy)]
+pub(super) enum MemberJoin<'j> {
+    /// The member has no rows.
+    Empty,
+    /// The member has the empty row, since its join has no layers and every input has a row.
+    EmptyRow,
+    /// The member has the rows of the joins that the template builds over its inputs' blocks.
+    Template(JoinTemplate<'j>),
+}
+
+impl<'j> MemberJoin<'j> {
+    /// Returns the join of a member over the blocks of its inputs.
+    ///
+    /// The programs of the join decode their values through `dictionary`,
+    /// and evaluate in `evaluation`.
+    pub(super) fn over(
+        member: &'j MemberLayout,
+        blocks: JoinBlocks<'j>,
+        dictionary: &'j Dictionary,
+        evaluation: EvaluationContext,
+    ) -> Self {
+        // A row of a subtracted relation that shares no layer with the join matches every row,
+        // so it drops them all.
+        if blocks.uncompared.iter().any(|block| !block.is_empty()) {
+            return Self::Empty;
+        }
+
+        // A join without layers reads only relations without columns.
+        // Each has the empty row or nothing, so they are read without a join.
+        if member.layers.is_empty() {
+            let holds = blocks
+                .inputs
+                .iter()
+                .all(|input| input.iter().any(|block| !block.is_empty()));
+            return if holds { Self::EmptyRow } else { Self::Empty };
+        }
+
+        // The shape borrows the layout, so nothing is cloned or validated per execution.
+        let shape = JoinShape {
+            layers: &member.layers,
+            emitted: member.emitted,
+            subtracted: blocks.subtracted_shapes,
+            filters: &member.filters,
+            bound_layers: &member.bound_layers,
+        };
+
+        Self::Template(JoinTemplate {
+            shape,
+            subtracted: blocks.subtracted,
+            dictionary,
+            evaluation,
+        })
     }
 }
 
@@ -80,49 +137,24 @@ impl<'a> UnitRows<'a> {
         accounting.counts.joins += 1;
         accounting.counts.blocks += blocks.count() as u64;
 
-        // A row of a subtracted relation that shares no layer with the join matches every row,
-        // so it drops them all.
-        if blocks.uncompared.iter().any(|block| !block.is_empty()) {
-            return;
-        }
-
-        // A join without layers reads only relations without columns.
-        // Each has the empty row or nothing, so they are read without a join.
-        if member.layers.is_empty() {
-            let holds = blocks
-                .inputs
-                .iter()
-                .all(|input| input.iter().any(|block| !block.is_empty()));
-            if let Delivery::RowStage(stage) = &member.delivery {
-                let mut evaluator =
-                    RowEvaluator::new(stage, member.emitted, dictionary, context.evaluation);
-                if holds {
+        let template = match MemberJoin::over(member, blocks, dictionary, context.evaluation) {
+            MemberJoin::Empty => return,
+            MemberJoin::EmptyRow => {
+                if let Delivery::RowStage(stage) = &member.delivery {
+                    let mut evaluator =
+                        RowEvaluator::new(stage, member.emitted, dictionary, context.evaluation);
                     evaluator.accept(&[], 0);
+                    self.pending.push((stage, evaluator.finish()));
+                } else {
+                    self.runs.begin_segment().push_row(&[]);
                 }
-                self.pending.push((stage, evaluator.finish()));
-            } else if holds {
-                self.runs.begin_segment().push_row(&[]);
+                return;
             }
-            return;
-        }
-
-        // The shape borrows the layout, so nothing is cloned or validated per execution.
-        let shape = JoinShape {
-            layers: &member.layers,
-            emitted: member.emitted,
-            subtracted: blocks.subtracted_shapes,
-            filters: &member.filters,
-            bound_layers: &member.bound_layers,
-        };
-        let template = JoinTemplate {
-            shape,
-            subtracted: blocks.subtracted,
-            dictionary,
-            evaluation: context.evaluation,
+            MemberJoin::Template(template) => template,
         };
 
         let inputs = blocks.inputs;
-        match Cells::partition(&shape, inputs) {
+        match Cells::partition(&template.shape, inputs) {
             Some(cells) => self.run_cells(&cells, inputs, &member.delivery, template, accounting),
             None => self.run_sequentially(inputs, &member.delivery, template, arena, accounting),
         }

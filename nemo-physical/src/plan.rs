@@ -14,6 +14,8 @@
 //!
 //! Some nodes are declared [outputs](OperationPlan::output),
 //! and [executing](OperationPlan::execute) the plan delivers their rows.
+//! A plan with one output can also be executed only until that output
+//! [has a row](OperationPlan::find_row) that the caller accepts.
 
 mod error;
 mod execute;
@@ -36,7 +38,7 @@ pub(crate) use self::marker_order::MarkerOrder;
 
 use std::ops::Range;
 
-pub use crate::execution::JoinArena;
+pub use crate::execution::{JoinArena, Verdict};
 
 use crate::{
     dictionary::Dictionary,
@@ -46,6 +48,7 @@ use crate::{
         execute::Execution,
         node::{AggregateNode, Node},
     },
+    storage::StorageValue,
 };
 
 /// A plan of database operations: a graph of nodes, each producing a relation.
@@ -376,6 +379,98 @@ impl OperationPlan {
         let arena = JoinArena::new();
 
         Execution::run(self, &layout, manager, dictionary, context, &arena)
+    }
+
+    /// Executes the plan until its only output has a row that `judge` accepts,
+    /// and returns that row, or `None` if `judge` accepts no row of the output.
+    ///
+    /// `judge` is given a row with its columns in the order of the output node's markers,
+    /// and the table manager, which the execution borrows.
+    /// It may be given a row more than once, and a row that an earlier rejection included,
+    /// since several joins can find the rows of one output.
+    ///
+    /// The nodes that the output reads are computed in full,
+    /// as [execute](Self::execute) computes them.
+    /// The output itself is not computed in full where one join finds its rows
+    /// in the order of the output's markers.
+    /// This is the case for a join, and for the filters, subtractions and projections
+    /// above a join or above a single relation, unless the output has a computed column,
+    /// or a projection reorders the join's markers or drops one before another that it keeps.
+    /// Each row is then given to `judge` as the join finds it.
+    /// The join ends with the first row accepted,
+    /// and finds none of the rows that a [rejection](Verdict::Reject) passes over.
+    /// Any other output is computed first, and its rows are given to `judge` in storage order.
+    ///
+    /// Evaluation errors are not reported.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the plan does not have exactly one output,
+    /// and in the cases that [execute](Self::execute) lists.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use nemo_physical::{
+    ///     dictionary::Dictionary,
+    ///     function::EvaluationContext,
+    ///     management::{ColumnOrder, Revision, TableManager},
+    ///     plan::{OperationPlan, Verdict},
+    ///     storage::StorageValue,
+    ///     trie::RowBuffer,
+    /// };
+    ///
+    /// // The numbers 1 to 100, of which the even ones are stored at revision 2.
+    /// let mut manager = TableManager::new();
+    /// let number = manager.register("number", 1);
+    /// for (revision, first) in [(1, 1), (2, 2)] {
+    ///     let mut rows = RowBuffer::new(1);
+    ///     for value in (first..=100).step_by(2) {
+    ///         rows.push_row(&[StorageValue::integer(value)]);
+    ///     }
+    ///     manager.add_rows(number, Revision(revision), ColumnOrder::identity(1), rows);
+    /// }
+    ///
+    /// // The pairs of numbers, a hundred times a hundred.
+    /// let mut plan = OperationPlan::new();
+    /// let [x, y] = plan.markers();
+    /// let first = plan.load(number, Revision(0)..Revision(3), vec![x]);
+    /// let second = plan.load(number, Revision(0)..Revision(3), vec![y]);
+    /// let pairs = plan.join(vec![first, second], vec![x, y]);
+    /// plan.output(pairs);
+    ///
+    /// // The first pair of even numbers is wanted.
+    /// // A pair with an odd first number rules out every pair that starts with that number.
+    /// let even = |manager: &TableManager, value: StorageValue| {
+    ///     manager.revision_of(number, &[value]) == Some(Revision(2))
+    /// };
+    /// let mut offered = 0;
+    /// let mut dictionary = Dictionary::new();
+    /// let context = EvaluationContext::now();
+    /// let found = plan.find_row(&mut manager, &mut dictionary, context, |manager, row| {
+    ///     offered += 1;
+    ///     if !even(manager, row[0]) {
+    ///         Verdict::Reject { prefix: 1 }
+    ///     } else {
+    ///         Verdict::for_row(row, even(manager, row[1]))
+    ///     }
+    /// });
+    /// assert_eq!(found, Some(vec![StorageValue::integer(2); 2]));
+    ///
+    /// // The join found the pairs (1, 1), (2, 1) and (2, 2), and none of the other 9,997.
+    /// assert_eq!(offered, 3);
+    /// ```
+    pub fn find_row(
+        &self,
+        manager: &mut TableManager,
+        dictionary: &mut Dictionary,
+        context: EvaluationContext,
+        judge: impl FnMut(&TableManager, &[StorageValue]) -> Verdict,
+    ) -> Option<Vec<StorageValue>> {
+        let layout = PlanLayout::new(self);
+        let arena = JoinArena::new();
+
+        Execution::find(self, &layout, manager, dictionary, context, &arena, judge)
     }
 
     /// Lays out the plan, for reuse across executions.

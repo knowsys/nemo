@@ -20,9 +20,10 @@ mod input;
 mod intersection;
 mod template;
 mod union;
+mod verdict;
 
-pub use self::arena::JoinArena;
 pub(crate) use self::template::JoinTemplate;
+pub use self::{arena::JoinArena, verdict::Verdict};
 
 use bumpalo::{Bump, collections::Vec as BumpVec};
 
@@ -207,6 +208,20 @@ impl<'a> TrieJoin<'a> {
     /// in one loop monomorphized for the core and the sink.
     pub(crate) fn drain<S: RowSink>(&mut self, sink: &mut S) {
         dispatch!(&mut self.core, core => core.drain(sink), ())
+    }
+
+    /// Offers the remaining rows to `judge` until it accepts one, and returns that row,
+    /// or `None` if it accepts none of them.
+    ///
+    /// `judge` is given each row with the shallowest layer that changed since the row
+    /// offered before it.
+    /// The join finds no row after the one it returns,
+    /// and none of the rows that a [rejection](Verdict::Reject) passes over.
+    pub(crate) fn find(
+        &mut self,
+        judge: &mut dyn FnMut(&[StorageValue], usize) -> Verdict,
+    ) -> Option<&[StorageValue]> {
+        dispatch!(&mut self.core, core => core.find(judge), None)
     }
 
     /// Returns whether the filter of the given index runs its integer form.

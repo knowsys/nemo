@@ -125,6 +125,53 @@ impl<'a> RowEvaluator<'a> {
         }
     }
 
+    /// Returns whether a row passes the row stage, without collecting the row.
+    ///
+    /// A row passes if each of its computed columns has a result,
+    /// and every post-filter holds on it.
+    /// Whether the dictionary can store the results is not known yet,
+    /// and [unstored](Self::unstored) returns the results that this depends on.
+    /// The errors of a row that does not pass are not counted.
+    ///
+    /// `changed` is the shallowest layer the row changed since the row checked before it.
+    /// An evaluator either checks rows in this way or collects the rows it
+    /// [accepts](RowSink::accept), since a check keeps only the results of its own row.
+    pub(crate) fn passes(&mut self, row: &[StorageValue], changed: usize) -> bool {
+        debug_assert!(
+            self.prefixes.is_empty(),
+            "an evaluator that collects rows keeps the results of them all"
+        );
+
+        // No row refers to the results of the rows checked before.
+        for results in &mut self.unique {
+            let earlier = results.len().saturating_sub(1);
+            results.drain(..earlier);
+        }
+
+        self.evaluate_columns(row, changed);
+
+        let computed = self
+            .unique
+            .iter()
+            .all(|results| results.last().is_some_and(Result::is_ok));
+
+        computed && matches!(self.check_filters(row), Ok(true))
+    }
+
+    /// Ends the evaluation, and returns the results of the computed columns on the last row
+    /// evaluated that have no storage value yet.
+    ///
+    /// The row is a row of the row stage only if the dictionary can store them all.
+    pub(crate) fn unstored(self) -> Vec<DataValue> {
+        self.unique
+            .into_iter()
+            .filter_map(|mut results| match results.pop() {
+                Some(Ok(Computed::Value(value))) => Some(value),
+                _ => None,
+            })
+            .collect()
+    }
+
     /// Evaluates the computed columns whose results are stale on a row.
     ///
     /// `changed` is the shallowest layer the row changed.

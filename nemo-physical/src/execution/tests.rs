@@ -344,6 +344,114 @@ fn nullary_output_reports_bare_existence() {
     assert!(collect(&mut missing).is_empty());
 }
 
+/// Returns the rows of three values that remain of a join after a search, draining it.
+fn collect_rest(join: &mut TrieJoin<'_>) -> Vec<Vec<StorageValue>> {
+    let mut rest = RowBuffer::new(3);
+    join.drain(&mut rest);
+    (0..rest.len())
+        .map(|index| rest.row(index).to_vec())
+        .collect()
+}
+
+/// A search of a join offers its rows in storage order, each with the layer it changed,
+/// and ends at the row found, so that the rows after it remain.
+#[test]
+fn a_found_row_ends_the_search_of_a_join() {
+    let arena = JoinArena::new();
+    let left = int_trie(2, &[&[1, 2], &[1, 3], &[2, 3]]);
+    let right = int_trie(2, &[&[2, 7], &[3, 8], &[3, 9]]);
+    let shape = chain_shape(3, vec![]);
+    let mut join = join(&shape, &[&left, &right], &[], None, &arena);
+
+    let mut offered = Vec::new();
+    let found = join
+        .find(&mut |row, changed| {
+            offered.push((row.to_vec(), changed));
+            Verdict::for_row(row, row[2] == StorageValue::integer(8))
+        })
+        .map(<[StorageValue]>::to_vec);
+    assert_eq!(found, storage_rows(&[&[1, 3, 8]]).pop());
+    let rows = storage_rows(&[&[1, 2, 7], &[1, 3, 8]]);
+    assert_eq!(offered, [(rows[0].clone(), 0), (rows[1].clone(), 1)]);
+
+    // The search goes on after the row found, and ends without a row once none is left.
+    let rest = storage_rows(&[&[1, 3, 9], &[2, 3, 8], &[2, 3, 9]]);
+    let next = join.find(&mut |row, _| Verdict::for_row(row, row[0] == StorageValue::integer(2)));
+    assert_eq!(next, Some(rest[1].as_slice()));
+    assert_eq!(collect_rest(&mut join), rest[2..]);
+    assert_eq!(join.find(&mut |_, _| Verdict::Accept), None);
+}
+
+/// A rejection with a prefix passes over the rows that share the prefix with the rejected row,
+/// and the next row is offered with the layer that it changed.
+#[test]
+fn rejections_pass_over_the_rows_below_a_prefix() {
+    let left = int_trie(2, &[&[1, 2], &[1, 3], &[2, 3], &[4, 3]]);
+    let right = int_trie(2, &[&[2, 7], &[3, 8], &[3, 9]]);
+    let shape = chain_shape(3, vec![]);
+    let rows = storage_rows(&[
+        &[1, 2, 7],
+        &[1, 3, 8],
+        &[1, 3, 9],
+        &[2, 3, 8],
+        &[2, 3, 9],
+        &[4, 3, 8],
+        &[4, 3, 9],
+    ]);
+
+    // Per prefix of the rejections, the indices of the rows offered, each with its changed layer.
+    // A prefix of all three layers rejects each row alone, and a prefix of none rejects every row.
+    let cases: [(usize, &[(usize, usize)]); 5] = [
+        (3, &[(0, 0), (1, 1), (2, 2), (3, 0), (4, 2), (5, 0), (6, 2)]),
+        (2, &[(0, 0), (1, 1), (3, 0), (5, 0)]),
+        (1, &[(0, 0), (3, 0), (5, 0)]),
+        (0, &[(0, 0)]),
+        (7, &[(0, 0), (1, 1), (2, 2), (3, 0), (4, 2), (5, 0), (6, 2)]),
+    ];
+    for (prefix, expected) in cases {
+        let arena = JoinArena::new();
+        let mut join = join(&shape, &[&left, &right], &[], None, &arena);
+        let mut offered = Vec::new();
+        let found = join.find(&mut |row, changed| {
+            let index = rows.iter().position(|candidate| candidate == row);
+            offered.push((index.expect("a row of the join"), changed));
+            Verdict::Reject { prefix }
+        });
+        assert_eq!(found, None);
+        assert_eq!(offered, expected, "prefix {prefix}");
+    }
+
+    // After a rejection of everything below the first layer's value 1,
+    // the search goes on with the value 2, whose rows remain.
+    let arena = JoinArena::new();
+    let mut join = join(&shape, &[&left, &right], &[], None, &arena);
+    let found = join.find(&mut |row, _| {
+        if row[0] == StorageValue::integer(1) {
+            Verdict::Reject { prefix: 1 }
+        } else {
+            Verdict::Accept
+        }
+    });
+    assert_eq!(found, Some(rows[3].as_slice()));
+    assert_eq!(collect_rest(&mut join), rows[4..]);
+}
+
+/// A search of a join that emits no layer finds the empty row if the join has a match.
+#[test]
+fn a_search_of_a_nullary_join_finds_the_empty_row() {
+    let arena = JoinArena::new();
+    let left = int_trie(2, &[&[1, 2]]);
+    let right = int_trie(2, &[&[2, 7], &[2, 8]]);
+    let shape = chain_shape(0, vec![]);
+    let mut existing = join(&shape, &[&left, &right], &[], None, &arena);
+    assert_eq!(existing.find(&mut |_, _| Verdict::Accept), Some(&[][..]));
+    assert_eq!(existing.find(&mut |_, _| Verdict::Accept), None);
+
+    let empty_right = Trie::empty(2);
+    let mut missing = join(&shape, &[&left, &empty_right], &[], None, &arena);
+    assert_eq!(missing.find(&mut |_, _| Verdict::Accept), None);
+}
+
 /// A subtracted input drops the rows that agree with one of its rows.
 #[test]
 fn subtracted_inputs_block_matching_rows() {
@@ -763,6 +871,72 @@ fn row_stages_extend_and_filter_drained_rows() {
         rows,
         storage_rows(&[&[2, 3, 8, 20, 10], &[2, 3, 9, 20, 11]])
     );
+}
+
+/// A row stage checks a row without collecting it:
+/// the row passes if its computed columns have results and its post-filters hold,
+/// and the results that still need an entry in the dictionary are those of the last row checked.
+#[test]
+fn row_stages_check_single_rows() {
+    // Over rows (key, name), the stage computes the name in upper case and 10 / key,
+    // and keeps the rows whose key is not 2.
+    let program = |operations, constants, arity| {
+        SpecializedProgram::new(StackProgram::new(operations, constants, arity))
+    };
+    let stage = RowStageShape {
+        computed: vec![
+            ComputedShape {
+                inputs: vec![RowInput::Layer(1)],
+                program: program(vec![OpCode::Input(0), OpCode::UpperCase], vec![], 1),
+                deepest: Some(1),
+                volatile: false,
+            },
+            ComputedShape {
+                inputs: vec![RowInput::Layer(0)],
+                program: program(
+                    vec![OpCode::Constant(0), OpCode::Input(0), OpCode::Divide],
+                    vec![DataValue::integer(10)],
+                    1,
+                ),
+                deepest: Some(0),
+                volatile: false,
+            },
+        ],
+        post_filters: vec![PostFilterShape {
+            inputs: vec![RowInput::Layer(0)],
+            program: program(
+                vec![
+                    OpCode::Input(0),
+                    OpCode::Constant(0),
+                    OpCode::Same,
+                    OpCode::Not,
+                ],
+                vec![DataValue::integer(2)],
+                1,
+            ),
+        }],
+        delivered: vec![],
+    };
+
+    let mut dictionary = Dictionary::new();
+    let mut name = |text: &str| {
+        dictionary
+            .encode(DataValue::string(text).as_ref())
+            .expect("strings are representable")
+    };
+    let (alice, bob) = (name("alice"), name("bob"));
+    let key = StorageValue::integer;
+
+    // The division by the key 0 fails, and the post-filter rejects the key 2.
+    let mut evaluator = RowEvaluator::new(&stage, 2, &dictionary, EvaluationContext::now());
+    assert!(!evaluator.passes(&[key(0), alice], 0));
+    assert!(evaluator.passes(&[key(1), alice], 0));
+    assert!(evaluator.passes(&[key(1), bob], 1));
+    assert!(!evaluator.passes(&[key(2), bob], 0));
+    assert!(evaluator.passes(&[key(5), bob], 0));
+
+    // Of the last row's results, the quotient is inline, and the name needs an entry.
+    assert_eq!(evaluator.unstored(), [DataValue::string("BOB")]);
 }
 
 /// Returns a filter from the parts of its program.
