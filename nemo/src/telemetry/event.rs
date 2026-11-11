@@ -103,7 +103,8 @@ pub enum EngineEvent {
         ///
         /// `false` means the run was cancelled and can continue.
         fixpoint: bool,
-        /// The number of facts derived in total, beyond the loaded ones.
+        /// The engine's number of
+        /// [derived facts](crate::engine::Engine::derived_facts) when the run ended.
         derived: u64,
         /// The bytes used by the stored tables and the dictionary.
         memory: u64,

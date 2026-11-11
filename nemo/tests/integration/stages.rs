@@ -9,6 +9,7 @@ use nemo::{
     engine::{Engine, PredicateRole},
     model::{Fact, Identifier, ImportDirective, Literal, Statement, Term},
     pipeline::{Commit, Transformation},
+    telemetry::Recorder,
     trace::query::TreeForTableQuery,
 };
 use nemo_physical::diagnostics::Diagnostic;
@@ -198,6 +199,28 @@ fn a_folded_rule_traces_as_written() {
             .contains("part1"),
         "the folded predicate stays hidden"
     );
+}
+
+/// The total that telemetry reports for a run is the engine's number of derived facts,
+/// which leaves out the rows of a predicate that a stage made.
+#[test]
+fn telemetry_counts_the_derived_facts_of_the_written_program() {
+    let recorder = Arc::new(Recorder::new());
+    let mut engine = Engine::new();
+    engine.stages_mut().push(SplitBodies);
+    engine.set_telemetry(recorder.clone());
+    engine
+        .load(parse(
+            "e(1, 2) . e(2, 3) . f(3) .\np(?x) :- e(?x, ?y), e(?y, ?z), f(?z) .",
+        ))
+        .expect("the program loads");
+    engine.reason().expect("reasoning reaches the fixpoint");
+
+    // The folded predicate holds one row beside the one fact of `p`.
+    assert_eq!(engine.derived_facts(), 1);
+    let snapshot: serde_json::Value =
+        serde_json::from_str(&recorder.snapshot_json()).expect("the snapshot is JSON");
+    assert_eq!(snapshot["derived"], 1, "{snapshot}");
 }
 
 #[test]

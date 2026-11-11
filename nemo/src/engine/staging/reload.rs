@@ -239,7 +239,7 @@ impl Engine {
             self.assert_stored_types(&retranslated.compiled.column_types, table, rows);
         }
         self.store_reloaded(retranslated.facts);
-        self.reset_counters();
+        self.forget_runs();
         self.skeletons.clear();
         self.program = Some(retranslated.compiled);
         self.revision = Some(staged.revision);
@@ -534,18 +534,10 @@ impl Engine {
         }
     }
 
-    /// Resets the counters and the application log after a reload:
-    /// everything stored is loaded, nothing is derived,
-    /// no table is marked as having gained input facts,
-    /// and the log of rule applications is empty.
-    fn reset_counters(&mut self) {
-        self.loaded = 0;
-        for &Registered { table, .. } in self.predicates.values() {
-            self.loaded += self
-                .manager
-                .row_count(table, Revision(0)..Revision(self.step));
-        }
-        self.derived = 0;
+    /// Forgets what the runs of the replaced program left behind:
+    /// no table is marked as having gained input facts, the fixpoint is not reached,
+    /// and the application log, the run contexts and the derivation times are empty.
+    fn forget_runs(&mut self) {
         self.dirty.clear();
         self.fixpoint = false;
         self.applications.clear();

@@ -215,11 +215,6 @@ pub struct Engine {
     ///
     /// A cancelled run leaves it false.
     fixpoint: bool,
-    /// The number of input rows stored: the program's facts, its imports' rows,
-    /// and the rows added through [import_rows](Self::import_rows).
-    loaded: usize,
-    /// The number of rows that reasoning stored, less those dropped again.
-    derived: usize,
     /// The evaluation errors of all rule applications, counted by kind.
     errors: ErrorCounts,
     /// The wall-clock times of the reasoning so far.

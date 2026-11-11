@@ -123,7 +123,6 @@ impl Engine {
         for &table in &dropped {
             removed += self.drop_derived(table);
         }
-        self.derived = self.derived.saturating_sub(removed);
         for (rule, flag) in program.rules.iter_mut().zip(&reset) {
             if *flag {
                 rule.last_applied = 0;

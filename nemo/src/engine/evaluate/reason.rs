@@ -362,12 +362,12 @@ impl Engine {
         if self.telemetry.enabled() {
             self.telemetry.record(&EngineEvent::Finished {
                 fixpoint: !cancelled,
-                derived: self.derived as u64,
+                derived: self.derived_facts() as u64,
                 memory: self.memory_bytes() as u64,
             });
         }
         tracing::info!(
-            derived = self.derived,
+            derived = self.derived_facts(),
             steps = self.step,
             fixpoint = !cancelled,
             "reasoning finished"
@@ -437,7 +437,6 @@ impl Engine {
                 };
                 let (stored, outcome) =
                     self.run_iteration(program, &active, next, context, suspended)?;
-                self.derived += stored;
                 let derived = before + stored;
                 match outcome {
                     IterationOutcome::Completed => {}

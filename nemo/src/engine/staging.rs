@@ -226,24 +226,20 @@ impl Engine {
             self.step = 2;
         }
         self.unloaded_rows = UnloadedRows::default();
-        // Everything stored so far was loaded, not derived.
-        for &Registered { table, .. } in self.predicates.values() {
-            self.loaded += self
-                .manager
-                .row_count(table, Revision(0)..Revision(self.step));
-        }
-        tracing::debug!(
-            rules = compiled.rules.len(),
-            strata = compiled.strata.len(),
-            predicates = self.predicates.len(),
-            loaded = self.loaded,
-            "program loaded"
-        );
 
+        let (rules, strata) = (compiled.rules.len(), compiled.strata.len());
         self.skeletons.clear();
         self.program = Some(compiled);
         self.revision = Some(revision);
         self.written = Some(written);
+
+        tracing::debug!(
+            rules,
+            strata,
+            predicates = self.predicates.len(),
+            loaded = self.loaded_facts(),
+            "program loaded"
+        );
         Ok(Progress::Done)
     }
 
@@ -654,7 +650,6 @@ impl Engine {
                 grew = true;
                 self.record_extensional(table, revision, ExtensionalOrigin::Load);
                 self.dirty.insert(table);
-                self.loaded += stored;
             }
         }
         if grew {
@@ -807,7 +802,6 @@ impl Engine {
             self.record_extensional(table, revision, ExtensionalOrigin::ImportRows);
             self.dirty.insert(table);
             self.fixpoint = false;
-            self.loaded += stored;
         }
         Ok(())
     }
