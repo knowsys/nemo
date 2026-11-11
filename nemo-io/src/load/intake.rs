@@ -77,7 +77,6 @@ impl RowIntake {
 
     /// Counts one row with a missing value that its column's format does not admit,
     /// at `line`, which is `0` if the line is not known.
-    #[cfg(feature = "parquet")]
     pub(crate) fn count_missing(&mut self, line: u64) {
         self.loaded.counts.count_missing(line);
     }

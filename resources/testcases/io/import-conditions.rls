@@ -1,6 +1,6 @@
 % An import's conditions keep the rows they hold for, also where no rule
-% reads the column they test. With conditions, the columns of a JSON
-% import fit a declaration.
+% reads the column they test. A JSON import without formats holds any
+% value in its columns, and with conditions they fit a declaration.
 
 @import person(?name, ?age) from csv { resource = "sources/ages.csv" } where ?age >= 18 .
 

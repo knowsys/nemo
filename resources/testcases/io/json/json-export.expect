@@ -1,4 +1,5 @@
-measurement("alice", 34, true) .
-measurement("bob", 27, false) .
+event(<http://example.org/alice>, "2026-10-18T12:00:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>) .
 
-mixed(1, "a", <http://example.org/x>) .
+item(<http://example.org/bob>, 1.5, "hallo"@de) .
+item("Alice", 34, true) .
+item((1, 2), {"host" = "example.org", "port" = 80}, 2.5d) .

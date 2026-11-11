@@ -240,12 +240,14 @@ fn rdf_and_json_imports_prune_and_filter_too() {
     );
     engine.add_resource(
         "doc.json",
-        r#"{"k": 1, "l": [true, false]}"#.as_bytes().to_vec(),
+        r#"[[1, "kind", "a"], [2, "kind", "b"], [3, "other", "c"], [4, "kind", "a"]]"#
+            .as_bytes()
+            .to_vec(),
     );
     let source = r#"@import g from ntriples { resource = "graph.nt" } .
 @import j from json { resource = "doc.json" } .
 subject(?s) :- g(?s, <http://x/p>, ?o) .
-kind(?t) :- j(?id, <type>, ?t) .
+kind(?t) :- j(?id, "kind", ?t) .
 @output subject, kind .
 "#;
     let program = parse(source);
@@ -257,12 +259,11 @@ kind(?t) :- j(?id, <type>, ?t) .
     assert!(arities(&engine).contains(&(String::from("g"), 3)));
     assert_eq!(stored(&engine, "g"), (1, 2));
     assert_eq!(count(&mut engine, "subject"), 1);
-    // No rule reads the document's node ids, and the key is a constant,
-    // so the table stores two columns of the `type` rows, one per node,
-    // and the five nodes are of four kinds.
+    // No rule reads the first element of the records, and the second is a constant,
+    // so the table stores two columns of the `kind` records, whose three rows become two.
     assert!(arities(&engine).contains(&(String::from("j"), 3)));
-    assert_eq!(stored(&engine, "j"), (4, 2), "object, number, array, bool");
-    assert_eq!(count(&mut engine, "kind"), 4);
+    assert_eq!(stored(&engine, "j"), (2, 2));
+    assert_eq!(count(&mut engine, "kind"), 2);
 }
 
 /// `limit` caps what an import reads and what an export writes,
@@ -633,14 +634,19 @@ _:blank <http://x/p> \"6\"^^<http://www.w3.org/2001/XMLSchema#integer> .
     assert_eq!(refusal.field("format"), Some("string"));
 }
 
-/// A JSON import delivers any value, so only `any` columns can be declared on it.
+/// A JSON import without formats reads terms of any type, which a narrower declaration
+/// refuses. With formats, its columns have the types of the formats,
+/// and a cell that its format does not read makes its row malformed.
 #[test]
-fn declared_json_imports_hold_any_value() {
-    const DOCUMENT: &str = r#"{"name": "alice", "age": 42, "tags": ["x", 1]}"#;
-    let problems = check(
-        "@declare j(node: int, key: iri, value: string) .
-         @import j from json { resource = \"data.json\" } .",
-    );
+fn json_imports_are_typed_by_their_formats() {
+    let source = |options: &str| {
+        format!(
+            "@declare j(name: string, age: int) .
+             @import j from json {{ resource = \"data.json\"{options} }} ."
+        )
+    };
+
+    let problems = check(&source(""));
     assert_eq!(problems.len(), 1, "{problems:?}");
     assert_eq!(
         problems[0].code(),
@@ -648,16 +654,19 @@ fn declared_json_imports_hold_any_value() {
         "{:?}",
         problems[0]
     );
-    let all = load_resources(
-        "@import j from json { resource = \"data.json\" } .",
-        &[("data.json", DOCUMENT)],
+
+    let mut engine = load_resources(
+        &source(", columns = (\"name\", \"age\"), format = (string, int)"),
+        &[(
+            "data.json",
+            r#"[{"name": "alice", "age": 42}, {"name": "bob", "age": "old"}]"#,
+        )],
     );
-    let declared = load_resources(
-        "@declare j(node: any, key: any, value: any) .
-         @import j from json { resource = \"data.json\" } .",
-        &[("data.json", DOCUMENT)],
+    assert_eq!(
+        engine.rows("j").expect("registered"),
+        vec![vec![DataValue::string("alice"), DataValue::integer(42)]]
     );
-    assert_eq!(count(&mut { all }, "j"), count(&mut { declared }, "j"));
+    assert_eq!(reported_count(&engine, codes::MALFORMED_ROWS), Some(1));
 }
 
 /// The conditions of an import's `where` clause keep the rows for which they hold,
@@ -1018,4 +1027,40 @@ fn the_text_format_is_refused_on_an_import() {
          @export p to csv { resource = \"p.csv\", format = (int, text) } .",
     );
     assert!(problems.is_empty(), "{problems:?}");
+}
+
+/// A JSON directive takes `columns`, `format` and `path`, and checks them like any other:
+/// one name per format, no format that only writes on an import,
+/// and no `path` where the resource has one record per line.
+#[test]
+fn json_directives_check_their_options() {
+    let import = |format: &str, options: &str| {
+        let problems = check(&format!(
+            "@import p from {format} {{ resource = \"p.{format}\", {options} }} ."
+        ));
+
+        problems.first().map(Diagnostic::code)
+    };
+
+    assert_eq!(
+        import(
+            "json",
+            "path = \"/items\", columns = (\"a\", \"b\"), format = (int?, term)"
+        ),
+        None
+    );
+    assert_eq!(
+        import("json", "columns = (\"a\", \"b\"), format = (int)"),
+        Some(codes::COLUMN_NAME_COUNT)
+    );
+    assert_eq!(
+        import("json", "format = (text)"),
+        Some(codes::WRITE_ONLY_FORMAT)
+    );
+    assert_eq!(import("json", "path = 5"), Some(codes::OPTION_VALUE_TYPE));
+    assert_eq!(import("jsonl", "limit = 2"), None);
+    assert_eq!(
+        import("jsonl", "path = \"/items\""),
+        Some(codes::UNKNOWN_OPTION)
+    );
 }

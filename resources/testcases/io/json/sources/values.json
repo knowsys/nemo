@@ -1,9 +1,18 @@
-{
-  "name": "Größe",
-  "count": 3,
-  "ratio": 0.5,
-  "active": true,
-  "missing": null,
-  "tags": ["a", "b"],
-  "nested": {"inner": [1, [2, 3]]}
-}
+[
+["string", "Größe"],
+["integer", 2],
+["large", 123456789012345678901234567890],
+["double", 2.0],
+["boolean", true],
+["tuple", ["a", 1]],
+["map", {"inner": [1, [2, 3]]}],
+["iri", {"@iri": "http://example.org/a"}],
+["decimal", {"@decimal": "0.5"}],
+["date", {"@date": "2026-10-18"}],
+["langstring", {"@langstring": "hallo", "@language": "de"}],
+["labeled", {"@tuple": [1, 2], "@label": "point"}],
+["null", {"@null": 5}],
+["same", {"@null": 5}],
+["unknown", {"@unknown": 1}],
+["nothing", null]
+]

@@ -1,0 +1,3 @@
+item(<http://example.org/bob>, 1.5, "hallo"@de) .
+item("Alice", 34, true) .
+item((1, 2), {"host" = "example.org", "port" = 80}, 2.5d) .

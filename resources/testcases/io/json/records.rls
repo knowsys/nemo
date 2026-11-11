@@ -1,0 +1,13 @@
+% The records of another tool are objects. `columns` names the keys of
+% the columns, and `format` their formats. A key that is not named is
+% ignored. `null` and an absent key are missing values: a null of its own
+% under `string?`, and a row that is dropped with a warning under `string`.
+
+@import user from json { resource = "sources/users.json",
+    columns = ("id", "name", "email", "tags"), format = (int, string, string?, term) } .
+@import strict from json { resource = "sources/users.json",
+    columns = ("id", "email"), format = (int, string) } .
+
+profile(?id, ?name, ?email, ?tags) :- user(?id, ?name, ?email, ?tags) .
+withEmail(?id) :- strict(?id, _) .
+firstTag(?id, ?tag) :- user(?id, _, _, ?tags), ?tag = ?tags[0] .

@@ -67,6 +67,11 @@ diagnostic_kinds! {
         NotJson { reason: String }
             => NOT_JSON = 105, error, "invalid JSON: {reason}",
                explain "The document of a JSON import is not valid JSON.";
+        NotRecords { place: String }
+            => NOT_RECORDS = 116, error, "{place} is not an array of records",
+               explain "A JSON import reads an array of records, one record per row. The \
+                        document is not an array, or the value that the `path` option names \
+                        inside it is not one.";
         NotABaseIri { base: String, reason: String }
             => NOT_A_BASE_IRI = 106, error, "`{base}` is not a valid base IRI: {reason}",
                explain "The `base` option of an import is not an absolute IRI that \

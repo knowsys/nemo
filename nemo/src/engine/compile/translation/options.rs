@@ -131,6 +131,41 @@ fn column_names(value: ValueRef<'_>) -> Option<Vec<String>> {
     distinct.then_some(names)
 }
 
+/// Checks the `columns` and `format` options of a directive against each other:
+/// there is one name per format, and an import has no format that only writes.
+fn check_columns(
+    columns: Option<&[String]>,
+    columns_span: Option<Span>,
+    formats: Option<&[ColumnFormat]>,
+    formats_span: Option<Span>,
+    reading: bool,
+) -> Result<(), Diagnostic> {
+    if let (Some(names), Some(formats)) = (columns, formats)
+        && names.len() != formats.len()
+    {
+        return Err(TranslationError::ColumnNameCount {
+            names: names.len().into(),
+            columns: formats.len().into(),
+        }
+        .at(columns_span));
+    }
+
+    // A format that only writes reads no cell of an import.
+    if reading
+        && let Some(written) = formats
+            .into_iter()
+            .flatten()
+            .find(|column| column.value == ValueFormat::Text)
+    {
+        return Err(TranslationError::WriteOnlyFormat {
+            format: written.to_string(),
+        }
+        .at(formats_span));
+    }
+
+    Ok(())
+}
+
 /// Returns, per column of a source of terms, such as RDF statements or SPARQL solutions,
 /// whether a `format` option keeps it.
 ///
@@ -309,6 +344,10 @@ pub(super) struct PlainDirectiveOptions {
     pub(super) formats: Option<Vec<ColumnFormat>>,
     /// The position of the `format` option's value, if given.
     pub(super) formats_span: Option<Span>,
+    /// The column names of the `columns` option, if given and the format accepts them.
+    pub(super) columns: Option<Vec<String>>,
+    /// The place of the records inside a document, if given and the format accepts it.
+    pub(super) path: Option<String>,
 }
 
 impl<'a> Translator<'a> {
@@ -414,28 +453,13 @@ impl<'a> Translator<'a> {
         if let (Some(_), Some((_, span))) = (&columns, ignore_headers) {
             return Err(TranslationError::HeaderOptions.at(span));
         }
-        if let (Some(names), Some(formats)) = (&columns, &formats)
-            && names.len() != formats.len()
-        {
-            return Err(TranslationError::ColumnNameCount {
-                names: names.len().into(),
-                columns: formats.len().into(),
-            }
-            .at(columns_span));
-        }
-
-        // A format that only writes reads no cell of an import.
-        if reading
-            && let Some(written) = formats
-                .iter()
-                .flatten()
-                .find(|column| column.value == ValueFormat::Text)
-        {
-            return Err(TranslationError::WriteOnlyFormat {
-                format: written.to_string(),
-            }
-            .at(formats_span));
-        }
+        check_columns(
+            columns.as_deref(),
+            columns_span,
+            formats.as_deref(),
+            formats_span,
+            reading,
+        )?;
 
         let delimiter = match format {
             FileFormat::Csv => b',',
@@ -478,6 +502,9 @@ impl<'a> Translator<'a> {
         let mut base = None;
         let mut formats = None;
         let mut formats_span = None;
+        let mut columns = None;
+        let mut columns_span = None;
+        let mut path = None;
         for (key, value) in options {
             let name = option_name(key, format.name())?;
             // An option about fetching, which this format's imports accept,
@@ -518,12 +545,40 @@ impl<'a> Translator<'a> {
                         TranslationError::option_type("base", "an IRI or a string").at(value.span)
                     );
                 }
+                ("columns", names) if accepts.columns => {
+                    columns = Some(column_names(names).ok_or_else(|| {
+                        TranslationError::option_type(
+                            "columns",
+                            "a string or a tuple of strings, each of them once",
+                        )
+                        .at(value.span)
+                    })?);
+                    columns_span = value.span;
+                }
+                ("path", ValueRef::String(pointer)) if accepts.path => {
+                    path = Some(pointer.to_owned());
+                }
+                ("path", _) if accepts.path => {
+                    return Err(TranslationError::option_type(
+                        "path",
+                        "a string that holds a JSON Pointer, such as \"/message/items\"",
+                    )
+                    .at(value.span));
+                }
                 _ => {
                     return Err(TranslationError::unknown_option(name, format.name()).at(key.span));
                 }
             }
         }
         common.check_remote()?;
+        check_columns(
+            columns.as_deref(),
+            columns_span,
+            formats.as_deref(),
+            formats_span,
+            reading,
+        )?;
+
         Ok(PlainDirectiveOptions {
             resource: common.resource,
             base,
@@ -531,6 +586,8 @@ impl<'a> Translator<'a> {
             limit: common.limit,
             formats,
             formats_span,
+            columns,
+            path,
         })
     }
 

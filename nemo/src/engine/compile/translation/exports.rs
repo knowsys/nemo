@@ -110,12 +110,16 @@ impl<'a> Translator<'a> {
                     limit: shape.limit,
                 }
             }
-            FileFormat::Json => {
+            FileFormat::Json | FileFormat::Jsonl => {
                 let shape = self.plain_directive(format, &export.options, &bindings, false)?;
                 ExportSpec {
                     predicate,
                     resource: shape.resource,
-                    format: ExportFormat::Json,
+                    format: ExportFormat::Json {
+                        lines: format == FileFormat::Jsonl,
+                        formats: shape.formats,
+                        columns: shape.columns,
+                    },
                     compression: shape.compression,
                     limit: shape.limit,
                 }
@@ -170,6 +174,10 @@ impl<'a> Translator<'a> {
                 ExportFormat::Dsv {
                     formats: Some(formats),
                     ..
+                }
+                | ExportFormat::Json {
+                    formats: Some(formats),
+                    ..
                 } if formats.len() != arity => {
                     problems.push(
                         TranslationError::ExportFormatArity {
@@ -182,6 +190,11 @@ impl<'a> Translator<'a> {
                 }
                 // With formats, the names were counted against them already.
                 ExportFormat::Dsv {
+                    formats: None,
+                    columns: Some(names),
+                    ..
+                }
+                | ExportFormat::Json {
                     formats: None,
                     columns: Some(names),
                     ..

@@ -201,7 +201,7 @@ mod tests {
     use crate::{
         dsv::{DsvWriter, DsvWriterOptions},
         file_format::RdfVariant,
-        json::JsonWriter,
+        json::{JsonWriter, JsonWriterOptions},
         rdf::{RdfWriter, RdfWriterOptions},
         value_format::ValueFormat,
     };
@@ -285,9 +285,11 @@ mod tests {
                 format!("N-Quads, {compression:?}"),
                 export(RdfWriter::new(rdf)),
             ));
+            let mut json = JsonWriterOptions::new(vec![ValueFormat::Term; 4]);
+            json.compression = compression;
             exports.push((
                 format!("JSON, {compression:?}"),
-                export(JsonWriter { compression }),
+                export(JsonWriter::new(json)),
             ));
         }
 

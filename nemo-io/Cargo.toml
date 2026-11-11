@@ -23,8 +23,6 @@ csv = "1.4"
 flate2 = "1.1"
 oxrdf = "0.3"
 oxrdfio = "0.2"
-serde = "1"
-serde_json = "1.0"
 nemo-physical = { path = "../nemo-physical" }
 tracing = { version = "0.1", default-features = false, features = ["std"] }
 reqwest = { version = "0.12", optional = true, default-features = false, features = [
@@ -41,6 +39,9 @@ parquet = { version = "56", optional = true, default-features = false, features 
     "flate2-rust_backened",
     "zstd",
 ] }
+
+[dev-dependencies]
+serde_json = "1.0"
 
 [lints]
 workspace = true

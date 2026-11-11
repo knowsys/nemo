@@ -1,0 +1,5 @@
+[
+  {"id": 1, "name": "Alice", "email": "a@example.org", "tags": ["admin", "dev"]},
+  {"id": 2, "name": "Bob", "email": null, "tags": ["ops"]},
+  {"id": 3, "name": "Carol", "tags": ["dev"], "address": {"city": "Dresden"}}
+]

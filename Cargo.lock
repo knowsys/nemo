@@ -1582,7 +1582,6 @@ dependencies = [
  "oxrdfio",
  "parquet",
  "reqwest",
- "serde",
  "serde_json",
  "spargebra",
  "tracing",

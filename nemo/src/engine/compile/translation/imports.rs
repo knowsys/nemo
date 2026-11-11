@@ -200,7 +200,7 @@ impl<'a> Translator<'a> {
                 .map_err(ImportFailure::from)
                 .and_then(|()| match import.format {
                     FileFormat::Rdf(_) => self.rdf_import(import, fetched),
-                    FileFormat::Json => self.json_import(import, fetched),
+                    FileFormat::Json | FileFormat::Jsonl => self.json_import(import, fetched),
                     FileFormat::Sparql => self.sparql_import(import, fetched),
                     FileFormat::Parquet => self.parquet_import(import),
                     FileFormat::Csv | FileFormat::Tsv | FileFormat::Dsv => self

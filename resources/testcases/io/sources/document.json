@@ -1,1 +1,5 @@
-{"name": "alice", "age": 42, "tags": ["x", 1]}
+[
+[1, {"@iri": "http://example.org/name"}, "alice"],
+[2, {"@iri": "http://example.org/age"}, 42],
+["x", "name", "bob"]
+]

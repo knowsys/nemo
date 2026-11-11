@@ -1,11 +1,16 @@
-% JSON export writes each row as an array of its values: the values JSON
-% has natively, others, such as an IRI, as strings in the export form.
+% An export to JSON writes each row as a record: an array, or an object
+% with `columns`. Without a format, each value says what it is, so the
+% file is read back as the same rows (see the case `read-back`). With
+% formats, a record holds bare forms for other tools, and `text` writes
+% each value as a string. `jsonl` writes one record per line.
 
-measurement("alice", 34, true) .
-measurement("bob", 27, false) .
+item("Alice", 34, true) .
+item(<http://example.org/bob>, 1.5, "hallo"@de) .
+item((1, 2), {"host" = "example.org", "port" = 80}, 2.5E0) .
 
-@export measurement to json { resource = "measurements.json" } .
+@export item to json { resource = "items.json" } .
 
-mixed(1, "a", <http://example.org/x>) .
+event(<http://example.org/alice>, "2026-10-18T12:00:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>) .
 
-@export mixed to json { resource = "mixed.json" } .
+@export event to json { resource = "events.json", columns = ("who", "when"), format = (iri, datetime) } .
+@export event to jsonl { resource = "events.jsonl", columns = ("who", "when"), format = (text, text) } .

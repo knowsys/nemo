@@ -81,8 +81,19 @@ pub enum ExportFormat {
         /// which are written if the serialization abbreviates IRIs.
         prefixes: Vec<(String, String)>,
     },
-    /// A JSON array of row arrays.
-    Json,
+    /// JSON records: each row is one record.
+    Json {
+        /// Whether the records are written one per line (JSON Lines),
+        /// rather than as the elements of one array.
+        lines: bool,
+        /// The column formats, or `None` to write every column in the
+        /// [Term](nemo_io::value_format::ValueFormat::Term) format,
+        /// in which each value says what it is.
+        formats: Option<Vec<nemo_io::value_format::ColumnFormat>>,
+        /// The keys of the columns, with which a record is an object,
+        /// or `None` to write each record as an array.
+        columns: Option<Vec<String>>,
+    },
     /// A Parquet file, with the values mapped to Arrow types.
     Parquet,
 }
@@ -93,7 +104,8 @@ impl ExportFormat {
         match self {
             ExportFormat::Dsv { extension, .. } => extension,
             ExportFormat::Rdf { variant, .. } => variant.extension(),
-            ExportFormat::Json => "json",
+            ExportFormat::Json { lines: false, .. } => "json",
+            ExportFormat::Json { lines: true, .. } => "jsonl",
             ExportFormat::Parquet => "parquet",
         }
     }
@@ -108,6 +120,10 @@ impl ExportSpec {
             ExportFormat::Dsv {
                 formats: Some(formats),
                 ..
+            }
+            | ExportFormat::Json {
+                formats: Some(formats),
+                ..
             } if formats.len() != arity => Err(TranslationError::ExportFormatArity {
                 predicate: self.predicate.clone(),
                 declared: formats.len().into(),
@@ -115,6 +131,10 @@ impl ExportSpec {
             }
             .diagnostic()),
             ExportFormat::Dsv {
+                columns: Some(names),
+                ..
+            }
+            | ExportFormat::Json {
                 columns: Some(names),
                 ..
             } if names.len() != arity => Err(TranslationError::ColumnNameCount {
@@ -417,9 +437,21 @@ impl Engine {
                 options.compression = spec.compression;
                 ExportWriter::Rdf(nemo_io::rdf::RdfWriter::new(options))
             }
-            ExportFormat::Json => ExportWriter::Json(nemo_io::json::JsonWriter {
-                compression: spec.compression,
-            }),
+            ExportFormat::Json {
+                lines,
+                formats,
+                columns,
+            } => {
+                let arity = self.arity_of(&spec.predicate).unwrap_or(0);
+                let formats = formats
+                    .clone()
+                    .unwrap_or_else(|| vec![ColumnFormat::new(ValueFormat::Term); arity]);
+                let mut options = nemo_io::json::JsonWriterOptions::new(formats);
+                options.lines = *lines;
+                options.columns = columns.clone();
+                options.compression = spec.compression;
+                ExportWriter::Json(nemo_io::json::JsonWriter::new(options))
+            }
             #[cfg(feature = "parquet")]
             ExportFormat::Parquet => ExportWriter::Parquet(nemo_io::parquet::ParquetWriter::new(
                 self.arity_of(&spec.predicate).unwrap_or(0),

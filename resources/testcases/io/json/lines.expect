@@ -1,0 +1,6 @@
+early(1) .
+early(3) .
+
+seen(1, "start") .
+seen(3, "reason") .
+seen(4, "export") .

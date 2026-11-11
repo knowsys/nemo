@@ -22,8 +22,10 @@ pub enum FileFormat {
     /// The variant of the generic format is the one that the resource's extension names
     /// ([rdf_variant](Self::rdf_variant)).
     Rdf(Option<RdfVariant>),
-    /// A JSON document when reading, and an array of rows when writing.
+    /// A JSON document that holds an array of records.
     Json,
+    /// JSON Lines: one JSON record per line.
+    Jsonl,
     /// A Parquet file.
     Parquet,
     /// The solutions of a SPARQL query.
@@ -66,6 +68,8 @@ pub struct AcceptedOptions {
     pub format: bool,
     /// Whether the format accepts `columns`, the names of the columns in the resource.
     pub columns: bool,
+    /// Whether the format accepts `path`, the place of the records inside a document.
+    pub path: bool,
 }
 
 /// The name of a format, and its conventional file extension and media type if it has them.
@@ -83,7 +87,7 @@ impl FileFormat {
     /// Every format that has a name, including the generic RDF format.
     ///
     /// The lookups by name and by extension search this list.
-    const ALL: [FileFormat; 12] = [
+    const ALL: [FileFormat; 13] = [
         FileFormat::Csv,
         FileFormat::Tsv,
         FileFormat::Dsv,
@@ -94,6 +98,7 @@ impl FileFormat {
         FileFormat::Rdf(Some(RdfVariant::TriG)),
         FileFormat::Rdf(Some(RdfVariant::RdfXml)),
         FileFormat::Json,
+        FileFormat::Jsonl,
         FileFormat::Parquet,
         FileFormat::Sparql,
     ];
@@ -137,6 +142,11 @@ impl FileFormat {
                 extension: Some("json"),
                 media_type: Some("application/json"),
             },
+            FileFormat::Jsonl => Entry {
+                name: "jsonl",
+                extension: Some("jsonl"),
+                media_type: Some("application/jsonl"),
+            },
             FileFormat::Parquet => Entry {
                 name: "parquet",
                 extension: Some("parquet"),
@@ -166,8 +176,12 @@ impl FileFormat {
     /// after [stripping](Compression::strip_suffix) any compression suffix.
     ///
     /// Returns `None` for a `.dsv` name, which does not say what the delimiter is.
+    /// A `.ndjson` name is JSON Lines, as a `.jsonl` name is.
     pub(crate) fn from_extension(resource: &str) -> Option<Self> {
         let (_, extension) = Compression::strip_suffix(resource).rsplit_once('.')?;
+        if extension == "ndjson" {
+            return Some(FileFormat::Jsonl);
+        }
 
         Self::ALL
             .into_iter()
@@ -192,12 +206,10 @@ impl FileFormat {
 
     /// Returns the number of columns that the format fixes, or `None` if it fixes none.
     ///
-    /// A named RDF variant fixes its [width](RdfVariant::width),
-    /// and JSON fixes three, for the triples that the [JSON reader](crate::json) produces.
+    /// Only a named RDF variant fixes its [width](RdfVariant::width).
     pub fn width(self) -> Option<usize> {
         match self {
             FileFormat::Rdf(Some(variant)) => Some(variant.width()),
-            FileFormat::Json => Some(3),
             _ => None,
         }
     }
@@ -234,6 +246,7 @@ impl FileFormat {
                 limit: true,
                 format: reading,
                 columns: false,
+                path: false,
             },
             // A JSON document is read whole, and its compression is always detected.
             FileFormat::Json => AcceptedOptions {
@@ -241,8 +254,18 @@ impl FileFormat {
                 compression: !reading,
                 http_headers: reading,
                 limit: !reading,
-                format: false,
-                columns: false,
+                format: true,
+                columns: true,
+                path: reading,
+            },
+            FileFormat::Jsonl => AcceptedOptions {
+                base: false,
+                compression: true,
+                http_headers: reading,
+                limit: true,
+                format: true,
+                columns: true,
+                path: false,
             },
             // Parquet has its own compression, and is read from local
             // files only.
@@ -253,6 +276,7 @@ impl FileFormat {
                 limit: !reading,
                 format: false,
                 columns: false,
+                path: false,
             },
             FileFormat::Csv | FileFormat::Tsv | FileFormat::Dsv => AcceptedOptions {
                 base: false,
@@ -261,6 +285,7 @@ impl FileFormat {
                 limit: true,
                 format: true,
                 columns: true,
+                path: false,
             },
             FileFormat::Sparql => AcceptedOptions {
                 base: true,
@@ -269,6 +294,7 @@ impl FileFormat {
                 limit: false,
                 format: true,
                 columns: false,
+                path: false,
             },
         }
     }
@@ -392,7 +418,7 @@ mod tests {
         assert_eq!(FileFormat::Dsv.extension(), Some("dsv"));
         assert_eq!(FileFormat::Sparql.extension(), None);
         assert_eq!(FileFormat::Rdf(Some(RdfVariant::NQuads)).width(), Some(4));
-        assert_eq!(FileFormat::Json.width(), Some(3));
+        assert_eq!(FileFormat::Json.width(), None);
         assert_eq!(FileFormat::Csv.width(), None);
         assert!(FileFormat::Tsv.is_dsv() && !FileFormat::Json.is_dsv());
         assert!(

@@ -1,0 +1,5 @@
+[
+["Alice", 34, true],
+[{"@iri": "http://example.org/bob"}, {"@decimal": "1.5"}, {"@langstring": "hallo", "@language": "de"}],
+[[1, 2], {"host": "example.org", "port": 80}, 2.5]
+]

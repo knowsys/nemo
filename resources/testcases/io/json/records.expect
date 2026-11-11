@@ -1,0 +1,9 @@
+firstTag(1, "admin") .
+firstTag(2, "ops") .
+firstTag(3, "dev") .
+
+profile(1, "Alice", "a@example.org", ("admin", "dev")) .
+profile(2, "Bob", _:0, ("ops",)) .
+profile(3, "Carol", _:1, ("dev",)) .
+
+withEmail(1) .

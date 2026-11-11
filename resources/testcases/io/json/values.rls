@@ -1,23 +1,11 @@
-% A JSON document read as a graph of nodes:
-%   - each node has a type,
-%   - a leaf node has a value,
-%   - object keys and array indices lead to the children.
-% The queries below do not depend on how the nodes are numbered.
+% A JSON file is an array of records, and each record is one row. In a
+% record without a format, each value says what it is: JSON's own kinds
+% are read as they are, an array as a tuple and an object as a map, and
+% every other value is an object with an `@` key that names its format.
+% The spelling of a number decides: `2.0` is a double, and `2` an
+% integer. An object with an unknown `@` key makes its row malformed,
+% and `null` is a missing value, which a column admits only by a `?`.
 
-@import doc from json { resource = "sources/values.json" } .
+@import value from json { resource = "sources/values.json" } .
 
-typeEdge(type) .
-valueEdge(value) .
-
-edge(?p, ?k, ?c) :- doc(?p, ?k, ?c), ~typeEdge(?k), ~valueEdge(?k) .
-typeOf(?n, ?t) :- doc(?n, ?e, ?t), typeEdge(?e) .
-valueOf(?n, ?v) :- doc(?n, ?e, ?v), valueEdge(?e) .
-child(?c) :- edge(_, _, ?c) .
-root(?n) :- typeOf(?n, _), ~child(?n) .
-
-key(?k, ?t) :- root(?r), edge(?r, ?k, ?c), typeOf(?c, ?t) .
-keyValue(?k, ?v) :- root(?r), edge(?r, ?k, ?c), valueOf(?c, ?v) .
-tag(?i, ?v) :- root(?r), edge(?r, "tags", ?a), edge(?a, ?i, ?e), valueOf(?e, ?v) .
-deep(?i, ?v) :- root(?r), edge(?r, "nested", ?o), edge(?o, "inner", ?a), edge(?a, 1, ?b), edge(?b, ?i, ?e), valueOf(?e, ?v) .
-
-@output key, keyValue, tag, deep .
+@output value .

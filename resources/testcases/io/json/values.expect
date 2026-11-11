@@ -1,18 +1,14 @@
-deep(0, 2) .
-deep(1, 3) .
-
-key("active", "bool") .
-key("count", "number") .
-key("missing", "null") .
-key("name", "string") .
-key("nested", "object") .
-key("ratio", "number") .
-key("tags", "array") .
-
-keyValue("active", true) .
-keyValue("count", 3) .
-keyValue("name", "Größe") .
-keyValue("ratio", 0.5d) .
-
-tag(0, "a") .
-tag(1, "b") .
+value("boolean", true) .
+value("date", "2026-10-18"^^<http://www.w3.org/2001/XMLSchema#date>) .
+value("decimal", 0.5) .
+value("double", 2d) .
+value("integer", 2) .
+value("iri", <http://example.org/a>) .
+value("labeled", point(1, 2)) .
+value("langstring", "hallo"@de) .
+value("large", 123456789012345678901234567890) .
+value("map", {"inner" = (1, (2, 3))}) .
+value("null", _:0) .
+value("same", _:0) .
+value("string", "Größe") .
+value("tuple", ("a", 1)) .

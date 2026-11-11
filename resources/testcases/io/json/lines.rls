@@ -1,0 +1,9 @@
+% `jsonl` reads one record per line. A line that is not JSON is one
+% malformed row, an empty line is no record, and `limit` counts the rows
+% that are read.
+
+@import event from jsonl { resource = "sources/events.jsonl", format = (int, string) } .
+@import firstTwo from jsonl { resource = "sources/events.jsonl", format = (int, string), limit = 2 } .
+
+seen(?id, ?what) :- event(?id, ?what) .
+early(?id) :- firstTwo(?id, _) .

@@ -1,0 +1,6 @@
+% An export without formats is read back as the rows that it was written
+% from. The file is the one that the case `json-export` writes.
+
+@import item from json { resource = "json-export/items.json" } .
+
+@output item .
